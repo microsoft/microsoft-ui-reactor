@@ -1126,6 +1126,9 @@ internal static class SelfTestFixtureRegistry
         // Spec 047 §8 — value-diff echo suppression PoC (ControlledPropEntry path).
         "ValueDiff_RadioButton_Drift",
         "ValueDiff_ToggleSplitButton_Drift",
+        "ValueDiff_TextBox_Drift",
+        "ValueDiff_TextBox_SnapBack",
+        "ValueDiff_TextBox_Transition",
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         // The MarqueeHandler is authored in tests/external_proof/
@@ -2245,6 +2248,9 @@ internal static class SelfTestFixtureRegistry
         // Spec 047 §8 — value-diff echo suppression PoC (ControlledPropEntry path).
         "ValueDiff_RadioButton_Drift" => new Spec047ValueDiffEchoFixtures.RadioButtonProgrammaticDrift(harness),
         "ValueDiff_ToggleSplitButton_Drift" => new Spec047ValueDiffEchoFixtures.ToggleSplitButtonProgrammaticDrift(harness),
+        "ValueDiff_TextBox_Drift" => new Spec047ValueDiffEchoFixtures.TextBoxProgrammaticDrift(harness),
+        "ValueDiff_TextBox_SnapBack" => new Spec047ValueDiffEchoFixtures.TextBoxControlledSnapBack(harness),
+        "ValueDiff_TextBox_Transition" => new Spec047ValueDiffEchoFixtures.TextBoxControlledTransitionDrift(harness),
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         "Spec047ExternalProof_Marquee_MountUpdate" => new Spec047ExternalProofFixtures.MarqueeMountUpdate(harness),

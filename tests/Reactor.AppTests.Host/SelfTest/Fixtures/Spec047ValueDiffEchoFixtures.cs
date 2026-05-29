@@ -116,4 +116,142 @@ internal static class Spec047ValueDiffEchoFixtures
             }
         }
     }
+
+    /// <summary>TextBox.Value — hand-coded <c>TextBoxHandler</c> (live dispatched
+    /// path). Programmatic drift: control text "abc", element re-renders to "xyz".
+    /// The synthesized TextChanged must be recognized as the echo of our own
+    /// write (readback == ExpectedEchoText) and dropped.</summary>
+    internal class TextBoxProgrammaticDrift(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = new Reconciler();
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int fireCount = 0;
+            string? lastValue = null;
+            var el1 = new TextBoxElement("abc", v => { fireCount++; lastValue = v; });
+
+            if (rec.Mount(el1, _noOp) is WinUI.TextBox tb)
+            {
+                parent.Children.Add(tb);
+                await Harness.Render();
+                H.Check("ValueDiff_TextBox_MountNoFire", fireCount == 0);
+                H.Check("ValueDiff_TextBox_MountValue", tb.Text == "abc");
+
+                // Programmatic drift: element value changes abc -> xyz.
+                rec.UpdateChild(el1, el1 with { Value = "xyz" }, tb, _noOp);
+                await Harness.Render();
+                H.Check("ValueDiff_TextBox_UpdateAppliedValue", tb.Text == "xyz");
+                H.Check("ValueDiff_TextBox_NoEchoCall", fireCount == 0);
+
+                // Real user input must still fire (one-shot arm was consumed).
+                tb.Text = "user typed";
+                await Harness.Render();
+                H.Check("ValueDiff_TextBox_RealInputFires", fireCount == 1 && lastValue == "user typed");
+
+                rec.UnmountChild(tb);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("ValueDiff_TextBox_Mounted", false);
+            }
+        }
+    }
+
+    /// <summary>TextBox controlled-mode snap-back. User input "ab" is rejected by
+    /// the callback back to the controlled value "a"; the re-write of "a" must NOT
+    /// echo into the callback, but the real input that triggered it must have fired
+    /// exactly once.</summary>
+    internal class TextBoxControlledSnapBack(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = new Reconciler();
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int fireCount = 0;
+            string? lastValue = null;
+            var el1 = new TextBoxElement("a", v => { fireCount++; lastValue = v; });
+
+            if (rec.Mount(el1, _noOp) is WinUI.TextBox tb)
+            {
+                parent.Children.Add(tb);
+                await Harness.Render();
+
+                // Simulate real user input "ab" — fires TextChanged once.
+                tb.Text = "ab";
+                await Harness.Render();
+                H.Check("ValueDiff_TextBox_SnapBack_RealInputFired", fireCount == 1 && lastValue == "ab");
+
+                // Component rejected the edit: element value stays "a" while the
+                // control still holds "ab". A real re-render forces Update through
+                // the ShallowEquals short-circuit via the dirty-ancestor path;
+                // here we force it by also changing a benign field (PlaceholderText)
+                // so Update runs and branch B snaps the control back to "a" under
+                // value-diff suppression — which must NOT re-fire the callback.
+                rec.UpdateChild(el1, el1 with { PlaceholderText = "ph" }, tb, _noOp);
+                await Harness.Render();
+                H.Check("ValueDiff_TextBox_SnapBack_ControlReverted", tb.Text == "a");
+                H.Check("ValueDiff_TextBox_SnapBack_NoEchoCall", fireCount == 1);
+
+                rec.UnmountChild(tb);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("ValueDiff_TextBox_SnapBack_Mounted", false);
+            }
+        }
+    }
+
+    /// <summary>TextBox null→non-null <c>OnChanged</c> transition combined with a
+    /// value change in the same Update. The controlled write happens before
+    /// EnsureTextBoxWiring wires the TextChanged trampoline, so arming must still
+    /// occur (the trampoline goes live before any deferred echo is delivered).
+    /// Regression guard: the legacy counter suppressed this echo regardless of
+    /// subscription timing; value-diff must too.</summary>
+    internal class TextBoxControlledTransitionDrift(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var rec = new Reconciler();
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int fireCount = 0;
+            string? lastValue = null;
+            // Start uncontrolled: no OnChanged wired.
+            var el1 = new TextBoxElement("abc");
+
+            if (rec.Mount(el1, _noOp) is WinUI.TextBox tb)
+            {
+                parent.Children.Add(tb);
+                await Harness.Render();
+                H.Check("ValueDiff_TextBox_Transition_MountValue", tb.Text == "abc");
+
+                // Single Update: gain OnChanged AND change the value abc -> xyz.
+                var el2 = new TextBoxElement("xyz", v => { fireCount++; lastValue = v; });
+                rec.UpdateChild(el1, el2, tb, _noOp);
+                await Harness.Render();
+                H.Check("ValueDiff_TextBox_Transition_UpdateAppliedValue", tb.Text == "xyz");
+                H.Check("ValueDiff_TextBox_Transition_NoEchoCall", fireCount == 0);
+
+                // Real input still fires after the transition.
+                tb.Text = "typed";
+                await Harness.Render();
+                H.Check("ValueDiff_TextBox_Transition_RealInputFires", fireCount == 1 && lastValue == "typed");
+
+                rec.UnmountChild(tb);
+                parent.Children.Clear();
+            }
+            else
+            {
+                H.Check("ValueDiff_TextBox_Transition_Mounted", false);
+            }
+        }
+    }
 }

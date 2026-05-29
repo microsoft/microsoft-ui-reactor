@@ -41,6 +41,13 @@ internal sealed class TextBoxEventPayload
     public Action<Element, Microsoft.UI.Xaml.Controls.TextChangedEventArgs>? CurrentTextChanged;
     public Microsoft.UI.Xaml.RoutedEventHandler? SelectionChangedTrampoline;
     public Action<Element, Microsoft.UI.Xaml.RoutedEventArgs>? CurrentSelectionChanged;
+
+    // Spec 047 §8 value-diff echo suppression (PoC) — see TextBoxHandler. A
+    // programmatic controlled `Text` write arms ExpectedEchoText with the value
+    // it just wrote; the TextChanged trampoline drops the single matching echo
+    // (readback == ExpectedEchoText) once instead of the legacy counter.
+    public string? ExpectedEchoText;
+    public bool HasExpectedEchoText;
 }
 
 internal sealed class ImageEventPayload

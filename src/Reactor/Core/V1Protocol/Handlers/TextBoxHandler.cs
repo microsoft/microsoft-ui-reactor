@@ -53,12 +53,22 @@ internal sealed class TextBoxHandler : IElementHandler<TextBoxElement, WinUI.Tex
         if (el.AcceptsReturn == true) ctrl.AcceptsReturn = true;
         if (el.TextWrapping.HasValue) ctrl.TextWrapping = el.TextWrapping.Value;
 
+        // §8 PoC: clear any value-diff arm left on a pooled payload from a prior
+        // lifecycle so it can't suppress this lifecycle's first real event. The
+        // bare mount write below stays UN-armed (matches the legacy mount write,
+        // which was never echo-suppressed).
+        if (Reconciler.TryGetControlEventPayload<TextBoxEventPayload>(ctrl) is { } pooled)
+        {
+            pooled.HasExpectedEchoText = false;
+            pooled.ExpectedEchoText = null;
+        }
+
         // Bare Text write at mount — the TextChanged subscription below is
         // wired *after* this write on first wire, and reused on pool rents.
         // On first wire the subscription doesn't exist yet, so no echo. On
         // pool rent the trampoline already exists but the GetElementTag
         // lookup returns the new element with the new OnChanged callback;
-        // the controlled-write echo is handled by Update's WriteSuppressed.
+        // the controlled-write echo is handled by Update's WriteTextSuppressed.
         if (ctrl.Text != el.Value)
             ctrl.Text = el.Value;
 
@@ -91,7 +101,36 @@ internal sealed class TextBoxHandler : IElementHandler<TextBoxElement, WinUI.Tex
             payload.TextChangedTrampoline = (s, _) =>
             {
                 var tb = (WinUI.TextBox)s!;
-                if (ChangeEchoSuppressor.ShouldSuppress(tb)) return;
+                var pl = Reconciler.TryGetControlEventPayload<TextBoxEventPayload>(tb);
+
+                // Counter / setter-scope suppression still wins (external public
+                // ReactorBinding.WriteSuppressed + ApplySetters .Set scope keep
+                // the counter). Drain a matching value-diff arm on that branch
+                // too so a counter-suppressed echo can't strand the arm and then
+                // swallow the user's next real edit.
+                if (ChangeEchoSuppressor.ShouldSuppress(tb))
+                {
+                    if (pl is { HasExpectedEchoText: true })
+                    {
+                        pl.HasExpectedEchoText = false;
+                        pl.ExpectedEchoText = null;
+                    }
+                    return;
+                }
+
+                // §8 value-diff echo suppression (PoC): a programmatic controlled
+                // write armed ExpectedEchoText. Consume the one-shot arm; if the
+                // readback equals it, THIS is that echo — drop it. Otherwise the
+                // text genuinely changed (e.g. real input, or WinUI coerced our
+                // write) so fall through and fire the callback.
+                if (pl is { HasExpectedEchoText: true })
+                {
+                    var expected = pl.ExpectedEchoText;
+                    pl.HasExpectedEchoText = false;
+                    pl.ExpectedEchoText = null;
+                    if (string.Equals(tb.Text, expected, StringComparison.Ordinal)) return;
+                }
+
                 var tag = Reconciler.GetElementTag(tb) as TextBoxElement;
                 tag?.OnChanged?.Invoke(tb.Text);
                 // Controlled input: when OnChanged is wired, request a
@@ -108,22 +147,59 @@ internal sealed class TextBoxHandler : IElementHandler<TextBoxElement, WinUI.Tex
         }
     }
 
+    // Spec 047 §8 value-diff echo suppression (PoC). Replaces the legacy
+    // counter-based bind.WriteSuppressed for the controlled `Text` write: arm
+    // ExpectedEchoText with the value we're about to write, then write directly.
+    // The TextChanged trampoline consumes the one-shot arm and drops the single
+    // event whose readback matches (the echo). The arm is left PENDING after the
+    // write (NOT cleared synchronously) because WinUI may raise TextChanged
+    // deferred via the dispatcher rather than inline on the assignment — exactly
+    // like the legacy counter, which also left its suppression elevated for the
+    // event to consume. Stale arms are cleared on the next Mount (pool reuse).
+    //
+    // <paramref name="willWireTrampoline"/> is true when the caller's element has
+    // OnChanged set: EnsureTextBoxWiring runs at the END of Update and wires the
+    // TextChanged trampoline whenever OnChanged is non-null, so even on a
+    // null→non-null transition (trampoline not yet wired at write time) we still
+    // arm — and create the payload if needed — because the trampoline goes live
+    // before any deferred echo is delivered. This matches the legacy counter,
+    // which suppressed regardless of subscription timing. When no trampoline is
+    // or will be wired (e.g. a SelectionChanged-only TextBox) we skip arming so
+    // the arm can't strand with no event to drain it.
+    //
+    // CAVEAT (accepted PoC tradeoff): the legacy counter dropped the next
+    // TextChanged regardless of readback. Value-diff only drops on an exact
+    // readback match, so a write WinUI coerces (e.g. single-line mode stripping
+    // embedded \r\n) is NOT echo-dropped — it surfaces as a real change. If this
+    // proves problematic in practice we migrate this site back to the counter
+    // (spec §8 migrate-back path).
+    private static void WriteTextSuppressed(WinUI.TextBox ctrl, string value, bool willWireTrampoline)
+    {
+        var payload = willWireTrampoline
+            ? Reconciler.GetOrCreateControlEventPayload<TextBoxEventPayload>(ctrl)
+            : Reconciler.TryGetControlEventPayload<TextBoxEventPayload>(ctrl);
+        if (payload is not null && (willWireTrampoline || payload.TextChangedTrampoline is not null))
+        {
+            payload.ExpectedEchoText = value;
+            payload.HasExpectedEchoText = true;
+        }
+        ctrl.Text = value;
+    }
+
     public void Update(UpdateContext ctx, TextBoxElement oldEl, TextBoxElement newEl, WinUI.TextBox ctrl)
     {
-        var bind = ctx.BindFor(ctrl, newEl);
-
         if (oldEl.Value != newEl.Value)
         {
             // Element value changed — always enforce.
             if (ctrl.Text != newEl.Value)
-                bind.WriteSuppressed(() => ctrl.Text = newEl.Value);
+                WriteTextSuppressed(ctrl, newEl.Value, newEl.OnChanged is not null);
         }
         else if (newEl.OnChanged is not null && ctrl.Text != newEl.Value)
         {
             // Controlled mode snap-back: callback filtered the user input back
             // to the same state. Restore the controlled value, preserve caret.
             var caret = ctrl.SelectionStart;
-            bind.WriteSuppressed(() => ctrl.Text = newEl.Value);
+            WriteTextSuppressed(ctrl, newEl.Value, willWireTrampoline: true);
             ctrl.SelectionStart = Math.Min(caret, ctrl.Text.Length);
         }
 
