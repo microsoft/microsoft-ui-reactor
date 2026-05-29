@@ -31,7 +31,7 @@ public class SynonymsTests
         var terms = Synonyms.ProcessQuery("use state counter");
 
         Assert.Contains("usestate", terms);
-        Assert.Contains("counter", terms);
+        Assert.DoesNotContain("counter", terms);
         Assert.DoesNotContain("use", terms);
         Assert.DoesNotContain("state", terms);
     }

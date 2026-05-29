@@ -103,13 +103,8 @@ public class CellRenderersTests
     {
         var r = CellRenderers.Number("N0");
         var el = (TextBlockElement)r(1_234_567);
-        // N0 → thousands separator, zero decimals. Group separator is
-        // culture-dependent (", " in US, ". " in DE) — accept any non-
-        // digit between the digits.
-        Assert.Contains("1", el.Content);
-        Assert.Contains("234", el.Content);
-        Assert.Contains("567", el.Content);
-        Assert.DoesNotContain(".0", el.Content);
+
+        Assert.Equal(1_234_567.ToString("N0", CultureInfo.CurrentCulture), el.Content);
     }
 
     [Fact]
