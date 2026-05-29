@@ -1,0 +1,11 @@
+{
+  "id": "named-styles",
+  "category": "layout",
+  "title": "Named Style Fluents",
+  "intent": "apply theme-aware named styles to buttons, hyperlinks, and InfoBars",
+  "tags": ["styles", "theme", "button", "hyperlink", "infobar"],
+  "factoryAnchors": ["Button", "HyperlinkButton", "InfoBar"],
+  "notesKey": null,
+  "relatedIds": ["hyperlink-button"],
+  "priority": "P0"
+}

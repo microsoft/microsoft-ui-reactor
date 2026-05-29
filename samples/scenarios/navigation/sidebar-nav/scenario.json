@@ -1,0 +1,11 @@
+{
+  "id": "sidebar-nav",
+  "category": "navigation",
+  "title": "Sidebar Navigation",
+  "intent": "typed route navigation with NavigationView, NavigationHost, and UseNavigation",
+  "tags": ["navigation", "sidebar", "route", "navigationview"],
+  "factoryAnchors": ["NavigationView", "NavigationHost", "UseNavigation"],
+  "notesKey": "NavigationView",
+  "relatedIds": [],
+  "priority": "P0"
+}

@@ -1,6 +1,591 @@
 {
   "scenarios": [
     {
+      "id": "appbarbutton-in-commandbar",
+      "category": "buttons",
+      "title": "CommandBar with AppBarButtons",
+      "intent": "command bar with app bar buttons for a toolbar-style action surface",
+      "tags": [
+        "commandbar",
+        "appbarbutton",
+        "toolbar",
+        "actions"
+      ],
+      "factoryAnchors": [
+        "CommandBar",
+        "AppBarButton"
+      ],
+      "notesKey": null,
+      "relatedIds": [],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022AppBarButtonInCommandBar\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (lastAction, setLastAction) = UseState(\u0022(none)\u0022);\r\n        return VStack(12,\r\n            CommandBar(\r\n                primaryCommands: new[]\r\n                {\r\n                    AppBarButton(\u0022Add\u0022, () =\u003E setLastAction(\u0022Add\u0022), icon: \u0022Add\u0022),\r\n                    AppBarButton(\u0022Share\u0022, () =\u003E setLastAction(\u0022Share\u0022), icon: \u0022Share\u0022)\r\n                },\r\n                secondaryCommands: new[]\r\n                {\r\n                    AppBarButton(\u0022Delete\u0022, () =\u003E setLastAction(\u0022Delete\u0022), icon: \u0022Delete\u0022)\r\n                }),\r\n            TextBlock($\u0022Last action: {lastAction}\u0022).Padding(24));\r\n    }\r\n}",
+      "rawCode": "// id: appbarbutton-in-commandbar\n// intent: command bar with app bar buttons\n#:package Microsoft.UI.Reactor@0.0.0-local\n#:property Platform=ARM64\n\nusing Microsoft.UI.Reactor;\nusing Microsoft.UI.Reactor.Core;\nusing static Microsoft.UI.Reactor.Factories;\n\nReactorApp.Run\u003CApp\u003E(\u0022AppBarButtonInCommandBar\u0022, width: 400, height: 300);\n\nclass App : Component\n{\n    public override Element Render()\n    {\n        var (lastAction, setLastAction) = UseState(\u0022(none)\u0022);\n        return VStack(12,\n            CommandBar(\n                primaryCommands: new[]\n                {\n                    AppBarButton(\u0022Add\u0022, () =\u003E setLastAction(\u0022Add\u0022), icon: \u0022Add\u0022),\n                    AppBarButton(\u0022Share\u0022, () =\u003E setLastAction(\u0022Share\u0022), icon: \u0022Share\u0022)\n                },\n                secondaryCommands: new[]\n                {\n                    AppBarButton(\u0022Delete\u0022, () =\u003E setLastAction(\u0022Delete\u0022), icon: \u0022Delete\u0022)\n                }),\n            TextBlock($\u0022Last action: {lastAction}\u0022).Padding(24));\n    }\n}"
+    },
+    {
+      "id": "button-label-onclick",
+      "category": "buttons",
+      "title": "Button click counter",
+      "intent": "basic button with click handler that increments a counter",
+      "tags": [
+        "button",
+        "click",
+        "counter",
+        "onclick"
+      ],
+      "factoryAnchors": [
+        "Button",
+        "UseState"
+      ],
+      "notesKey": "Button",
+      "relatedIds": [],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022ButtonLabelOnClick\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (count, setCount) = UseState(0);\r\n        return VStack(12,\r\n            Heading(\u0022Click counter\u0022),\r\n            TextBlock($\u0022Clicked {count} time{(count == 1 ? \u0022\u0022 : \u0022s\u0022)}.\u0022),\r\n            Button(\u0022Increment\u0022, () =\u003E setCount(count \u002B 1)).AccentButton())\r\n            .Padding(24);\r\n    }\r\n}",
+      "rawCode": "// id: button-label-onclick\n// intent: basic button with click handler\n#:package Microsoft.UI.Reactor@0.0.0-local\n#:property Platform=ARM64\n\nusing Microsoft.UI.Reactor;\nusing Microsoft.UI.Reactor.Core;\nusing static Microsoft.UI.Reactor.Factories;\n\nReactorApp.Run\u003CApp\u003E(\u0022ButtonLabelOnClick\u0022, width: 400, height: 300);\n\nclass App : Component\n{\n    public override Element Render()\n    {\n        var (count, setCount) = UseState(0);\n        return VStack(12,\n            Heading(\u0022Click counter\u0022),\n            TextBlock($\u0022Clicked {count} time{(count == 1 ? \u0022\u0022 : \u0022s\u0022)}.\u0022),\n            Button(\u0022Increment\u0022, () =\u003E setCount(count \u002B 1)).AccentButton())\n            .Padding(24);\n    }\n}"
+    },
+    {
+      "id": "button-with-command",
+      "category": "buttons",
+      "title": "Button with Command",
+      "intent": "command-driven button where label action and enabled state come from a Command",
+      "tags": [
+        "button",
+        "command",
+        "mvvm",
+        "canexecute"
+      ],
+      "factoryAnchors": [
+        "Button"
+      ],
+      "notesKey": "Button",
+      "relatedIds": [],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022ButtonWithCommand\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (runs, setRuns) = UseState(0);\r\n        var save = new Command\r\n        {\r\n            Label = runs \u003C 3 ? $\u0022Save ({3 - runs} left)\u0022 : \u0022Done\u0022,\r\n            Execute = () =\u003E setRuns(runs \u002B 1),\r\n            CanExecute = runs \u003C 3\r\n        };\r\n\r\n        return VStack(12, Button(save), TextBlock($\u0022Executed: {runs}\u0022))\r\n            .Padding(24);\r\n    }\r\n}",
+      "rawCode": "// id: button-with-command\n// intent: button driven by a Command object (label, execute, canExecute)\n#:package Microsoft.UI.Reactor@0.0.0-local\n#:property Platform=ARM64\n\nusing Microsoft.UI.Reactor;\nusing Microsoft.UI.Reactor.Core;\nusing static Microsoft.UI.Reactor.Factories;\n\nReactorApp.Run\u003CApp\u003E(\u0022ButtonWithCommand\u0022, width: 400, height: 300);\n\nclass App : Component\n{\n    public override Element Render()\n    {\n        var (runs, setRuns) = UseState(0);\n        var save = new Command\n        {\n            Label = runs \u003C 3 ? $\u0022Save ({3 - runs} left)\u0022 : \u0022Done\u0022,\n            Execute = () =\u003E setRuns(runs \u002B 1),\n            CanExecute = runs \u003C 3\n        };\n\n        return VStack(12, Button(save), TextBlock($\u0022Executed: {runs}\u0022))\n            .Padding(24);\n    }\n}"
+    },
+    {
+      "id": "button-with-icon",
+      "category": "buttons",
+      "title": "Button with icon",
+      "intent": "button with an icon and text using a symbol icon",
+      "tags": [
+        "button",
+        "icon",
+        "symbol"
+      ],
+      "factoryAnchors": [
+        "Button"
+      ],
+      "notesKey": null,
+      "relatedIds": [],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing Microsoft.UI.Xaml.Controls;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022ButtonWithIcon\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (status, setStatus) = UseState(\u0022Ready\u0022);\r\n        return VStack(12,\r\n            Button(HStack(8, Icon(Symbol.Save), TextBlock(\u0022Save draft\u0022)),\r\n                () =\u003E setStatus(\u0022Draft saved\u0022))\r\n                .AutomationName(\u0022Save draft\u0022)\r\n                .AccentButton(),\r\n            TextBlock(status).Foreground(Theme.SecondaryText))\r\n            .Padding(24);\r\n    }\r\n}",
+      "rawCode": "// id: button-with-icon\n// intent: button with a symbol icon\n#:package Microsoft.UI.Reactor@0.0.0-local\n#:property Platform=ARM64\n\nusing Microsoft.UI.Reactor;\nusing Microsoft.UI.Reactor.Core;\nusing Microsoft.UI.Xaml.Controls;\nusing static Microsoft.UI.Reactor.Factories;\n\nReactorApp.Run\u003CApp\u003E(\u0022ButtonWithIcon\u0022, width: 400, height: 300);\n\nclass App : Component\n{\n    public override Element Render()\n    {\n        var (status, setStatus) = UseState(\u0022Ready\u0022);\n        return VStack(12,\n            Button(HStack(8, Icon(Symbol.Save), TextBlock(\u0022Save draft\u0022)),\n                () =\u003E setStatus(\u0022Draft saved\u0022))\n                .AutomationName(\u0022Save draft\u0022)\n                .AccentButton(),\n            TextBlock(status).Foreground(Theme.SecondaryText))\n            .Padding(24);\n    }\n}"
+    },
+    {
+      "id": "hyperlink-button",
+      "category": "buttons",
+      "title": "Hyperlink button",
+      "intent": "hyperlink-style button for link-like navigation or actions",
+      "tags": [
+        "hyperlink",
+        "link",
+        "button"
+      ],
+      "factoryAnchors": [
+        "HyperlinkButton"
+      ],
+      "notesKey": null,
+      "relatedIds": [],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022HyperlinkButton\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (status, setStatus) = UseState(\u0022Open docs\u0022);\r\n        return VStack(12,\r\n            TextBlock(\u0022Need more details?\u0022),\r\n            HyperlinkButton(\u0022Open docs\u0022, onClick: () =\u003E setStatus(\u0022Navigation requested\u0022))\r\n                .TextLink(),\r\n            TextBlock(status).Foreground(Theme.SecondaryText))\r\n            .Padding(24);\r\n    }\r\n}",
+      "rawCode": "// id: hyperlink-button\n// intent: inline hyperlink-style button\n#:package Microsoft.UI.Reactor@0.0.0-local\n#:property Platform=ARM64\n\nusing Microsoft.UI.Reactor;\nusing Microsoft.UI.Reactor.Core;\nusing static Microsoft.UI.Reactor.Factories;\n\nReactorApp.Run\u003CApp\u003E(\u0022HyperlinkButton\u0022, width: 400, height: 300);\n\nclass App : Component\n{\n    public override Element Render()\n    {\n        var (status, setStatus) = UseState(\u0022Open docs\u0022);\n        return VStack(12,\n            TextBlock(\u0022Need more details?\u0022),\n            HyperlinkButton(\u0022Open docs\u0022, onClick: () =\u003E setStatus(\u0022Navigation requested\u0022))\n                .TextLink(),\n            TextBlock(status).Foreground(Theme.SecondaryText))\n            .Padding(24);\n    }\n}"
+    },
+    {
+      "id": "togglebutton-basic",
+      "category": "buttons",
+      "title": "Basic toggle button",
+      "intent": "toggle button that tracks checked state with UseState",
+      "tags": [
+        "toggle",
+        "togglebutton",
+        "checked",
+        "state"
+      ],
+      "factoryAnchors": [
+        "ToggleButton",
+        "UseState"
+      ],
+      "notesKey": null,
+      "relatedIds": [],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022ToggleButtonBasic\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (isOn, setIsOn) = UseState(false);\r\n        return VStack(12,\r\n            ToggleButton(\u0022Notifications\u0022, isOn, setIsOn),\r\n            TextBlock(isOn ? \u0022Notifications are on\u0022 : \u0022Notifications are off\u0022)\r\n                .Foreground(Theme.SecondaryText))\r\n            .Padding(24);\r\n    }\r\n}",
+      "rawCode": "// id: togglebutton-basic\n// intent: toggle button with checked state\n#:package Microsoft.UI.Reactor@0.0.0-local\n#:property Platform=ARM64\n\nusing Microsoft.UI.Reactor;\nusing Microsoft.UI.Reactor.Core;\nusing static Microsoft.UI.Reactor.Factories;\n\nReactorApp.Run\u003CApp\u003E(\u0022ToggleButtonBasic\u0022, width: 400, height: 300);\n\nclass App : Component\n{\n    public override Element Render()\n    {\n        var (isOn, setIsOn) = UseState(false);\n        return VStack(12,\n            ToggleButton(\u0022Notifications\u0022, isOn, setIsOn),\n            TextBlock(isOn ? \u0022Notifications are on\u0022 : \u0022Notifications are off\u0022)\n                .Foreground(Theme.SecondaryText))\n            .Padding(24);\n    }\n}"
+    },
+    {
+      "id": "form-async-submit",
+      "category": "forms",
+      "title": "Async submit form",
+      "intent": "form submission with loading state",
+      "tags": [
+        "form",
+        "submit",
+        "async",
+        "loading",
+        "state"
+      ],
+      "factoryAnchors": [
+        "Button",
+        "UseState",
+        "ProgressRing"
+      ],
+      "notesKey": null,
+      "relatedIds": [],
+      "priority": "P0",
+      "code": "using System.Threading.Tasks;\r\nusing Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Form async submit\u0022, width: 500, height: 400);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (name, setName) = UseState(\u0022\u0022);\r\n        var (email, setEmail) = UseState(\u0022\u0022);\r\n        var (isSubmitting, setIsSubmitting) = UseState(false, threadSafe: true);\r\n        var (status, setStatus) = UseState(\u0022Fill in the form.\u0022, threadSafe: true);\r\n\r\n        return VStack(12,\r\n            Heading(\u0022Newsletter signup\u0022),\r\n            TextField(name, setName, placeholder: \u0022Full name\u0022, header: \u0022Name\u0022),\r\n            TextField(email, setEmail, placeholder: \u0022you@example.com\u0022, header: \u0022Email\u0022),\r\n            HStack(8,\r\n                Button(isSubmitting ? \u0022Submitting...\u0022 : \u0022Submit\u0022, () =\u003E\r\n                {\r\n                    if (isSubmitting) return;\r\n                    setIsSubmitting(true);\r\n                    setStatus(\u0022Submitting...\u0022);\r\n                    _ = Task.Run(async () =\u003E\r\n                    {\r\n                        await Task.Delay(1200);\r\n                        setStatus($\u0022Saved {name} ({email}).\u0022);\r\n                        setIsSubmitting(false);\r\n                    });\r\n                })\r\n                    .AccentButton()\r\n                    .Set(b =\u003E b.IsEnabled = !isSubmitting \u0026\u0026 !string.IsNullOrWhiteSpace(name) \u0026\u0026 !string.IsNullOrWhiteSpace(email)),\r\n                isSubmitting ? ProgressRing().IsActive(true).Width(20).Height(20) : Empty()),\r\n            TextBlock(status))\r\n            .Padding(24);\r\n    }\r\n}\r\n",
+      "rawCode": "// id: form-async-submit\r\n// intent: form submission with loading state\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing System.Threading.Tasks;\r\nusing Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Form async submit\u0022, width: 500, height: 400);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (name, setName) = UseState(\u0022\u0022);\r\n        var (email, setEmail) = UseState(\u0022\u0022);\r\n        var (isSubmitting, setIsSubmitting) = UseState(false, threadSafe: true);\r\n        var (status, setStatus) = UseState(\u0022Fill in the form.\u0022, threadSafe: true);\r\n\r\n        return VStack(12,\r\n            Heading(\u0022Newsletter signup\u0022),\r\n            TextField(name, setName, placeholder: \u0022Full name\u0022, header: \u0022Name\u0022),\r\n            TextField(email, setEmail, placeholder: \u0022you@example.com\u0022, header: \u0022Email\u0022),\r\n            HStack(8,\r\n                Button(isSubmitting ? \u0022Submitting...\u0022 : \u0022Submit\u0022, () =\u003E\r\n                {\r\n                    if (isSubmitting) return;\r\n                    setIsSubmitting(true);\r\n                    setStatus(\u0022Submitting...\u0022);\r\n                    _ = Task.Run(async () =\u003E\r\n                    {\r\n                        await Task.Delay(1200);\r\n                        setStatus($\u0022Saved {name} ({email}).\u0022);\r\n                        setIsSubmitting(false);\r\n                    });\r\n                })\r\n                    .AccentButton()\r\n                    .Set(b =\u003E b.IsEnabled = !isSubmitting \u0026\u0026 !string.IsNullOrWhiteSpace(name) \u0026\u0026 !string.IsNullOrWhiteSpace(email)),\r\n                isSubmitting ? ProgressRing().IsActive(true).Width(20).Height(20) : Empty()),\r\n            TextBlock(status))\r\n            .Padding(24);\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "form-field-wrapper",
+      "category": "forms",
+      "title": "FormField wrapper",
+      "intent": "FormField wrapper with label and required marker",
+      "tags": [
+        "form",
+        "formfield",
+        "label",
+        "required",
+        "wrapper"
+      ],
+      "factoryAnchors": [
+        "FormField",
+        "TextField"
+      ],
+      "notesKey": "FormField",
+      "relatedIds": [],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Controls.Validation;\r\nusing static Microsoft.UI.Reactor.Controls.Validation.FormFieldDsl;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Form field wrapper\u0022, width: 500, height: 400);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var ctx = this.UseValidationContext();\r\n        var (fullName, setFullName) = UseState(\u0022\u0022);\r\n        var (company, setCompany) = UseState(\u0022\u0022);\r\n        var (role, setRole) = UseState(\u0022\u0022);\r\n\r\n        return VStack(12,\r\n            Heading(\u0022Profile details\u0022),\r\n            FormField(TextField(fullName, v =\u003E { setFullName(v); ctx.MarkTouched(\u0022fullName\u0022); }, placeholder: \u0022Ada Lovelace\u0022)\r\n                    .Validate(\u0022fullName\u0022, fullName, Validate.Required(\u0022Full name is required\u0022)),\r\n                label: \u0022Full name\u0022, required: true, description: \u0022Shown on receipts\u0022),\r\n            FormField(TextField(company, v =\u003E { setCompany(v); ctx.MarkTouched(\u0022company\u0022); }, placeholder: \u0022Contoso\u0022)\r\n                    .Validate(\u0022company\u0022, company, Validate.MinLength(2, \u0022Company name looks too short\u0022)),\r\n                label: \u0022Company\u0022, description: \u0022Optional but useful\u0022),\r\n            FormField(TextField(role, v =\u003E { setRole(v); ctx.MarkTouched(\u0022role\u0022); }, placeholder: \u0022Product manager\u0022),\r\n                label: \u0022Role\u0022, description: \u0022No validation on this field\u0022),\r\n            Button(\u0022Show field state\u0022, () =\u003E ctx.MarkAllTouched()))\r\n            .Padding(24);\r\n    }\r\n}\r\n",
+      "rawCode": "// id: form-field-wrapper\r\n// intent: FormField wrapper with label and required marker\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Controls.Validation;\r\nusing static Microsoft.UI.Reactor.Controls.Validation.FormFieldDsl;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Form field wrapper\u0022, width: 500, height: 400);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var ctx = this.UseValidationContext();\r\n        var (fullName, setFullName) = UseState(\u0022\u0022);\r\n        var (company, setCompany) = UseState(\u0022\u0022);\r\n        var (role, setRole) = UseState(\u0022\u0022);\r\n\r\n        return VStack(12,\r\n            Heading(\u0022Profile details\u0022),\r\n            FormField(TextField(fullName, v =\u003E { setFullName(v); ctx.MarkTouched(\u0022fullName\u0022); }, placeholder: \u0022Ada Lovelace\u0022)\r\n                    .Validate(\u0022fullName\u0022, fullName, Validate.Required(\u0022Full name is required\u0022)),\r\n                label: \u0022Full name\u0022, required: true, description: \u0022Shown on receipts\u0022),\r\n            FormField(TextField(company, v =\u003E { setCompany(v); ctx.MarkTouched(\u0022company\u0022); }, placeholder: \u0022Contoso\u0022)\r\n                    .Validate(\u0022company\u0022, company, Validate.MinLength(2, \u0022Company name looks too short\u0022)),\r\n                label: \u0022Company\u0022, description: \u0022Optional but useful\u0022),\r\n            FormField(TextField(role, v =\u003E { setRole(v); ctx.MarkTouched(\u0022role\u0022); }, placeholder: \u0022Product manager\u0022),\r\n                label: \u0022Role\u0022, description: \u0022No validation on this field\u0022),\r\n            Button(\u0022Show field state\u0022, () =\u003E ctx.MarkAllTouched()))\r\n            .Padding(24);\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "form-submit-gating",
+      "category": "forms",
+      "title": "Submit gating",
+      "intent": "disable submit button until form is valid",
+      "tags": [
+        "form",
+        "submit",
+        "gating",
+        "validation",
+        "enabled"
+      ],
+      "factoryAnchors": [
+        "UseValidationContext",
+        "Button",
+        "FormField"
+      ],
+      "notesKey": null,
+      "relatedIds": [],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Controls.Validation;\r\nusing static Microsoft.UI.Reactor.Controls.Validation.FormFieldDsl;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Form submit gating\u0022, width: 500, height: 400);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var ctx = this.UseValidationContext();\r\n        var (email, setEmail) = UseState(\u0022\u0022);\r\n        var (accessCode, setAccessCode) = UseState(\u0022\u0022);\r\n        var (status, setStatus) = UseState(\u0022Waiting for valid input.\u0022);\r\n\r\n        return VStack(12,\r\n            Heading(\u0022Submit gating\u0022),\r\n            FormField(TextField(email, v =\u003E { setEmail(v); ctx.MarkTouched(\u0022email\u0022); }, placeholder: \u0022you@example.com\u0022)\r\n                    .Validate(\u0022email\u0022, email, Validate.Required(\u0022Email is required\u0022), Validate.Email(\u0022Enter a valid email\u0022)),\r\n                label: \u0022Email\u0022, required: true),\r\n            FormField(TextField(accessCode, v =\u003E { setAccessCode(v); ctx.MarkTouched(\u0022accessCode\u0022); }, placeholder: \u0022ACCESS-123\u0022)\r\n                    .Validate(\u0022accessCode\u0022, accessCode, Validate.Required(\u0022Code is required\u0022), Validate.MinLength(8, \u0022Use at least 8 characters\u0022)),\r\n                label: \u0022Access code\u0022, required: true),\r\n            Button(\u0022Submit\u0022, () =\u003E setStatus($\u0022Submitted for {email}.\u0022))\r\n                .AccentButton()\r\n                .Set(b =\u003E b.IsEnabled = ctx.IsValid()),\r\n            TextBlock(status))\r\n            .Padding(24);\r\n    }\r\n}\r\n",
+      "rawCode": "// id: form-submit-gating\r\n// intent: disable submit button until form is valid\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Controls.Validation;\r\nusing static Microsoft.UI.Reactor.Controls.Validation.FormFieldDsl;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Form submit gating\u0022, width: 500, height: 400);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var ctx = this.UseValidationContext();\r\n        var (email, setEmail) = UseState(\u0022\u0022);\r\n        var (accessCode, setAccessCode) = UseState(\u0022\u0022);\r\n        var (status, setStatus) = UseState(\u0022Waiting for valid input.\u0022);\r\n\r\n        return VStack(12,\r\n            Heading(\u0022Submit gating\u0022),\r\n            FormField(TextField(email, v =\u003E { setEmail(v); ctx.MarkTouched(\u0022email\u0022); }, placeholder: \u0022you@example.com\u0022)\r\n                    .Validate(\u0022email\u0022, email, Validate.Required(\u0022Email is required\u0022), Validate.Email(\u0022Enter a valid email\u0022)),\r\n                label: \u0022Email\u0022, required: true),\r\n            FormField(TextField(accessCode, v =\u003E { setAccessCode(v); ctx.MarkTouched(\u0022accessCode\u0022); }, placeholder: \u0022ACCESS-123\u0022)\r\n                    .Validate(\u0022accessCode\u0022, accessCode, Validate.Required(\u0022Code is required\u0022), Validate.MinLength(8, \u0022Use at least 8 characters\u0022)),\r\n                label: \u0022Access code\u0022, required: true),\r\n            Button(\u0022Submit\u0022, () =\u003E setStatus($\u0022Submitted for {email}.\u0022))\r\n                .AccentButton()\r\n                .Set(b =\u003E b.IsEnabled = ctx.IsValid()),\r\n            TextBlock(status))\r\n            .Padding(24);\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "form-text-fields",
+      "category": "forms",
+      "title": "Basic text fields form",
+      "intent": "basic form with multiple text inputs and labels",
+      "tags": [
+        "form",
+        "textfield",
+        "input",
+        "layout"
+      ],
+      "factoryAnchors": [
+        "TextField",
+        "VStack",
+        "UseState"
+      ],
+      "notesKey": "TextField",
+      "relatedIds": [],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Form text fields\u0022, width: 500, height: 400);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (name, setName) = UseState(\u0022\u0022);\r\n        var (email, setEmail) = UseState(\u0022\u0022);\r\n        var (message, setMessage) = UseState(\u0022\u0022);\r\n\r\n        return VStack(12,\r\n            Heading(\u0022Contact form\u0022),\r\n            TextField(name, setName, placeholder: \u0022Full name\u0022, header: \u0022Name\u0022),\r\n            TextField(email, setEmail, placeholder: \u0022you@example.com\u0022, header: \u0022Email\u0022),\r\n            TextField(message, setMessage, placeholder: \u0022How can we help?\u0022, header: \u0022Message\u0022),\r\n            TextBlock($\u0022Draft: {name} / {email}\u0022))\r\n            .Padding(24);\r\n    }\r\n}\r\n",
+      "rawCode": "// id: form-text-fields\r\n// intent: basic form with multiple text inputs and labels\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Form text fields\u0022, width: 500, height: 400);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (name, setName) = UseState(\u0022\u0022);\r\n        var (email, setEmail) = UseState(\u0022\u0022);\r\n        var (message, setMessage) = UseState(\u0022\u0022);\r\n\r\n        return VStack(12,\r\n            Heading(\u0022Contact form\u0022),\r\n            TextField(name, setName, placeholder: \u0022Full name\u0022, header: \u0022Name\u0022),\r\n            TextField(email, setEmail, placeholder: \u0022you@example.com\u0022, header: \u0022Email\u0022),\r\n            TextField(message, setMessage, placeholder: \u0022How can we help?\u0022, header: \u0022Message\u0022),\r\n            TextBlock($\u0022Draft: {name} / {email}\u0022))\r\n            .Padding(24);\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "form-validation-context",
+      "category": "forms",
+      "title": "Validation context form",
+      "intent": "form validation with UseValidationContext",
+      "tags": [
+        "form",
+        "validation",
+        "required",
+        "email",
+        "error"
+      ],
+      "factoryAnchors": [
+        "UseValidationContext",
+        "FormField",
+        "TextField"
+      ],
+      "notesKey": "UseValidationContext",
+      "relatedIds": [],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Controls.Validation;\r\nusing static Microsoft.UI.Reactor.Controls.Validation.FormFieldDsl;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Form validation context\u0022, width: 500, height: 400);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var ctx = this.UseValidationContext();\r\n        var (name, setName) = UseState(\u0022\u0022);\r\n        var (email, setEmail) = UseState(\u0022\u0022);\r\n        var (password, setPassword) = UseState(\u0022\u0022);\r\n        var (submitted, setSubmitted) = UseState(false);\r\n        var showWhen = submitted ? ShowWhen.Always : ShowWhen.WhenTouched;\r\n\r\n        return VStack(12,\r\n            Heading(\u0022Create account\u0022),\r\n            FormField(TextField(name, v =\u003E { setName(v); ctx.MarkTouched(\u0022name\u0022); }, placeholder: \u0022Full name\u0022)\r\n                    .Validate(\u0022name\u0022, name, Validate.Required(\u0022Name is required\u0022), Validate.MinLength(2, \u0022Use at least 2 characters\u0022)),\r\n                label: \u0022Name\u0022, required: true, showWhen: showWhen),\r\n            FormField(TextField(email, v =\u003E { setEmail(v); ctx.MarkTouched(\u0022email\u0022); }, placeholder: \u0022you@example.com\u0022)\r\n                    .Validate(\u0022email\u0022, email, Validate.Required(\u0022Email is required\u0022), Validate.Email(\u0022Enter a valid email\u0022)),\r\n                label: \u0022Email\u0022, required: true, showWhen: showWhen),\r\n            FormField(TextField(password, v =\u003E { setPassword(v); ctx.MarkTouched(\u0022password\u0022); }, placeholder: \u0022Minimum 8 characters\u0022)\r\n                    .Validate(\u0022password\u0022, password, Validate.Required(\u0022Password is required\u0022), Validate.MinLength(8, \u0022Use at least 8 characters\u0022)),\r\n                label: \u0022Password\u0022, required: true, showWhen: showWhen),\r\n            Button(\u0022Validate\u0022, () =\u003E { setSubmitted(true); ctx.MarkAllTouched(); }).AccentButton(),\r\n            TextBlock(ctx.IsValid() ? \u0022All fields pass validation.\u0022 : \u0022Fix the errors above.\u0022))\r\n            .Padding(24);\r\n    }\r\n}\r\n",
+      "rawCode": "// id: form-validation-context\r\n// intent: form validation with UseValidationContext\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Controls.Validation;\r\nusing static Microsoft.UI.Reactor.Controls.Validation.FormFieldDsl;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Form validation context\u0022, width: 500, height: 400);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var ctx = this.UseValidationContext();\r\n        var (name, setName) = UseState(\u0022\u0022);\r\n        var (email, setEmail) = UseState(\u0022\u0022);\r\n        var (password, setPassword) = UseState(\u0022\u0022);\r\n        var (submitted, setSubmitted) = UseState(false);\r\n        var showWhen = submitted ? ShowWhen.Always : ShowWhen.WhenTouched;\r\n\r\n        return VStack(12,\r\n            Heading(\u0022Create account\u0022),\r\n            FormField(TextField(name, v =\u003E { setName(v); ctx.MarkTouched(\u0022name\u0022); }, placeholder: \u0022Full name\u0022)\r\n                    .Validate(\u0022name\u0022, name, Validate.Required(\u0022Name is required\u0022), Validate.MinLength(2, \u0022Use at least 2 characters\u0022)),\r\n                label: \u0022Name\u0022, required: true, showWhen: showWhen),\r\n            FormField(TextField(email, v =\u003E { setEmail(v); ctx.MarkTouched(\u0022email\u0022); }, placeholder: \u0022you@example.com\u0022)\r\n                    .Validate(\u0022email\u0022, email, Validate.Required(\u0022Email is required\u0022), Validate.Email(\u0022Enter a valid email\u0022)),\r\n                label: \u0022Email\u0022, required: true, showWhen: showWhen),\r\n            FormField(TextField(password, v =\u003E { setPassword(v); ctx.MarkTouched(\u0022password\u0022); }, placeholder: \u0022Minimum 8 characters\u0022)\r\n                    .Validate(\u0022password\u0022, password, Validate.Required(\u0022Password is required\u0022), Validate.MinLength(8, \u0022Use at least 8 characters\u0022)),\r\n                label: \u0022Password\u0022, required: true, showWhen: showWhen),\r\n            Button(\u0022Validate\u0022, () =\u003E { setSubmitted(true); ctx.MarkAllTouched(); }).AccentButton(),\r\n            TextBlock(ctx.IsValid() ? \u0022All fields pass validation.\u0022 : \u0022Fix the errors above.\u0022))\r\n            .Padding(24);\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "form-with-server-errors",
+      "category": "forms",
+      "title": "Server-side field errors",
+      "intent": "display server-side validation errors on form fields",
+      "tags": [
+        "form",
+        "server",
+        "errors",
+        "validation",
+        "api"
+      ],
+      "factoryAnchors": [
+        "UseState",
+        "FormField",
+        "TextField"
+      ],
+      "notesKey": null,
+      "relatedIds": [],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Controls.Validation;\r\nusing static Microsoft.UI.Reactor.Controls.Validation.FormFieldDsl;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Form with server errors\u0022, width: 500, height: 400);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var ctx = this.UseValidationContext();\r\n        var (email, setEmail) = UseState(\u0022\u0022);\r\n        var (inviteCode, setInviteCode) = UseState(\u0022\u0022);\r\n        var (status, setStatus) = UseState(\u0022Submit to simulate API validation.\u0022);\r\n\r\n        return VStack(12,\r\n            Heading(\u0022Invite signup\u0022),\r\n            FormField(TextField(email, v =\u003E { setEmail(v); ctx.MarkTouched(\u0022email\u0022); }, placeholder: \u0022user@contoso.com\u0022)\r\n                    .Validate(\u0022email\u0022, email, Validate.Required(\u0022Email is required\u0022), Validate.Email(\u0022Enter a valid email\u0022)),\r\n                label: \u0022Email\u0022, required: true, showWhen: ShowWhen.Always),\r\n            FormField(TextField(inviteCode, v =\u003E { setInviteCode(v); ctx.MarkTouched(\u0022inviteCode\u0022); }, placeholder: \u0022INVITE-2025\u0022)\r\n                    .Validate(\u0022inviteCode\u0022, inviteCode, Validate.Required(\u0022Invite code is required\u0022), Validate.MinLength(6, \u0022Use at least 6 characters\u0022)),\r\n                label: \u0022Invite code\u0022, required: true, showWhen: ShowWhen.Always),\r\n            Button(\u0022Submit\u0022, () =\u003E\r\n            {\r\n                ctx.ClearExternal(\u0022email\u0022);\r\n                ctx.ClearExternal(\u0022inviteCode\u0022);\r\n                ctx.MarkAllTouched();\r\n                if (!ctx.IsValid())\r\n                {\r\n                    setStatus(\u0022Fix the client-side errors first.\u0022);\r\n                    return;\r\n                }\r\n                if (!email.EndsWith(\u0022@contoso.com\u0022, System.StringComparison.OrdinalIgnoreCase))\r\n                    ctx.AddExternal(\u0022email\u0022, \u0022This email is not allowed by the server.\u0022);\r\n                if (inviteCode != \u0022INVITE-2025\u0022)\r\n                    ctx.AddExternal(\u0022inviteCode\u0022, \u0022That invite code has expired.\u0022);\r\n                setStatus(ctx.IsValid() ? \u0022Server accepted the form.\u0022 : \u0022Server returned field errors.\u0022);\r\n            }).AccentButton(),\r\n            TextBlock(status))\r\n            .Padding(24);\r\n    }\r\n}\r\n",
+      "rawCode": "// id: form-with-server-errors\r\n// intent: display server-side validation errors on form fields\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Controls.Validation;\r\nusing static Microsoft.UI.Reactor.Controls.Validation.FormFieldDsl;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Form with server errors\u0022, width: 500, height: 400);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var ctx = this.UseValidationContext();\r\n        var (email, setEmail) = UseState(\u0022\u0022);\r\n        var (inviteCode, setInviteCode) = UseState(\u0022\u0022);\r\n        var (status, setStatus) = UseState(\u0022Submit to simulate API validation.\u0022);\r\n\r\n        return VStack(12,\r\n            Heading(\u0022Invite signup\u0022),\r\n            FormField(TextField(email, v =\u003E { setEmail(v); ctx.MarkTouched(\u0022email\u0022); }, placeholder: \u0022user@contoso.com\u0022)\r\n                    .Validate(\u0022email\u0022, email, Validate.Required(\u0022Email is required\u0022), Validate.Email(\u0022Enter a valid email\u0022)),\r\n                label: \u0022Email\u0022, required: true, showWhen: ShowWhen.Always),\r\n            FormField(TextField(inviteCode, v =\u003E { setInviteCode(v); ctx.MarkTouched(\u0022inviteCode\u0022); }, placeholder: \u0022INVITE-2025\u0022)\r\n                    .Validate(\u0022inviteCode\u0022, inviteCode, Validate.Required(\u0022Invite code is required\u0022), Validate.MinLength(6, \u0022Use at least 6 characters\u0022)),\r\n                label: \u0022Invite code\u0022, required: true, showWhen: ShowWhen.Always),\r\n            Button(\u0022Submit\u0022, () =\u003E\r\n            {\r\n                ctx.ClearExternal(\u0022email\u0022);\r\n                ctx.ClearExternal(\u0022inviteCode\u0022);\r\n                ctx.MarkAllTouched();\r\n                if (!ctx.IsValid())\r\n                {\r\n                    setStatus(\u0022Fix the client-side errors first.\u0022);\r\n                    return;\r\n                }\r\n                if (!email.EndsWith(\u0022@contoso.com\u0022, System.StringComparison.OrdinalIgnoreCase))\r\n                    ctx.AddExternal(\u0022email\u0022, \u0022This email is not allowed by the server.\u0022);\r\n                if (inviteCode != \u0022INVITE-2025\u0022)\r\n                    ctx.AddExternal(\u0022inviteCode\u0022, \u0022That invite code has expired.\u0022);\r\n                setStatus(ctx.IsValid() ? \u0022Server accepted the form.\u0022 : \u0022Server returned field errors.\u0022);\r\n            }).AccentButton(),\r\n            TextBlock(status))\r\n            .Padding(24);\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "custom-hook-pattern",
+      "category": "hooks",
+      "title": "Reusable custom hook",
+      "intent": "compose hooks into a reusable custom Use extension that debounces input",
+      "tags": [
+        "custom",
+        "hook",
+        "extension",
+        "reuse",
+        "pattern",
+        "naming"
+      ],
+      "factoryAnchors": [
+        "UseState",
+        "UseEffect"
+      ],
+      "notesKey": "UseState",
+      "relatedIds": [
+        "use-effect-deps"
+      ],
+      "priority": "P0",
+      "code": "using System.Threading;\r\nusing System.Threading.Tasks;\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Controls;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\n// Custom hooks should keep the Use* naming convention and compose other hooks internally.\r\nReactorApp.Run\u003CApp\u003E(\u0022CustomHookPattern\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render() =\u003E RenderEachTime(UseDebouncedView);\r\n\r\n    static Element UseDebouncedView(RenderContext ctx)\r\n    {\r\n        var (query, setQuery) = ctx.UseState(\u0022\u0022);\r\n        var debounced = ctx.UseDebouncedValue(query, 400);\r\n\r\n        return VStack(12,\r\n            TextBox(query, setQuery, \u0022Type quickly\u0022, header: \u0022Live query\u0022),\r\n            TextBlock($\u0022Immediate: {query}\u0022),\r\n            TextBlock($\u0022Debounced: {debounced}\u0022));\r\n    }\r\n}\r\n\r\nstatic class DebounceHooks\r\n{\r\n    public static T UseDebouncedValue\u003CT\u003E(this RenderContext ctx, T value, int delayMs)\r\n    {\r\n        var (debounced, setDebounced) = ctx.UseState(value);\r\n        ctx.UseEffect(() =\u003E\r\n        {\r\n            var cts = new CancellationTokenSource();\r\n            _ = Task.Run(async () =\u003E\r\n            {\r\n                try\r\n                {\r\n                    await Task.Delay(delayMs, cts.Token);\r\n                    setDebounced(value);\r\n                }\r\n                catch (TaskCanceledException)\r\n                {\r\n                }\r\n            });\r\n            return () =\u003E cts.Cancel();\r\n        }, value!, delayMs);\r\n        return debounced;\r\n    }\r\n}\r\n",
+      "rawCode": "// id: custom-hook-pattern\r\n// intent: compose hooks into a reusable custom Use* extension that debounces input\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing System.Threading;\r\nusing System.Threading.Tasks;\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Controls;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\n// Custom hooks should keep the Use* naming convention and compose other hooks internally.\r\nReactorApp.Run\u003CApp\u003E(\u0022CustomHookPattern\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render() =\u003E RenderEachTime(UseDebouncedView);\r\n\r\n    static Element UseDebouncedView(RenderContext ctx)\r\n    {\r\n        var (query, setQuery) = ctx.UseState(\u0022\u0022);\r\n        var debounced = ctx.UseDebouncedValue(query, 400);\r\n\r\n        return VStack(12,\r\n            TextBox(query, setQuery, \u0022Type quickly\u0022, header: \u0022Live query\u0022),\r\n            TextBlock($\u0022Immediate: {query}\u0022),\r\n            TextBlock($\u0022Debounced: {debounced}\u0022));\r\n    }\r\n}\r\n\r\nstatic class DebounceHooks\r\n{\r\n    public static T UseDebouncedValue\u003CT\u003E(this RenderContext ctx, T value, int delayMs)\r\n    {\r\n        var (debounced, setDebounced) = ctx.UseState(value);\r\n        ctx.UseEffect(() =\u003E\r\n        {\r\n            var cts = new CancellationTokenSource();\r\n            _ = Task.Run(async () =\u003E\r\n            {\r\n                try\r\n                {\r\n                    await Task.Delay(delayMs, cts.Token);\r\n                    setDebounced(value);\r\n                }\r\n                catch (TaskCanceledException)\r\n                {\r\n                }\r\n            });\r\n            return () =\u003E cts.Cancel();\r\n        }, value!, delayMs);\r\n        return debounced;\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "use-callback",
+      "category": "hooks",
+      "title": "Stable callback identity",
+      "intent": "memoize a callback so child props stay stable across unrelated parent re-renders",
+      "tags": [
+        "callback",
+        "memoize",
+        "stable",
+        "child",
+        "performance"
+      ],
+      "factoryAnchors": [
+        "UseCallback",
+        "UseState",
+        "Button"
+      ],
+      "notesKey": "UseCallback",
+      "relatedIds": [
+        "use-memo"
+      ],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\n// Stable callback identity helps memoized children skip unnecessary updates.\r\nReactorApp.Run\u003CApp\u003E(\u0022UseCallback\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    record ChildProps(Action OnPress);\r\n\r\n    public override Element Render()\r\n    {\r\n        var (parentRenders, setParentRenders) = UseState(0);\r\n        var (clicks, setClicks) = UseState(0);\r\n        var increment = UseCallback(() =\u003E setClicks(clicks \u002B 1), clicks);\r\n\r\n        return VStack(12,\r\n            Heading($\u0022Clicks: {clicks}\u0022),\r\n            Button(\u0022Re-render parent\u0022, () =\u003E setParentRenders(parentRenders \u002B 1)),\r\n            Caption($\u0022Unrelated parent renders: {parentRenders}\u0022),\r\n            Component\u003CChildButton, ChildProps\u003E(new(increment)));\r\n    }\r\n\r\n    class ChildButton : Component\u003CChildProps\u003E\r\n    {\r\n        int _renders;\r\n\r\n        public override Element Render()\r\n        {\r\n            _renders\u002B\u002B;\r\n            return VStack(8,\r\n                Caption($\u0022Child renders: {_renders}\u0022),\r\n                Button(\u0022Increment from child\u0022, Props.OnPress));\r\n        }\r\n    }\r\n}\r\n\r\n",
+      "rawCode": "// id: use-callback\r\n// intent: memoize a callback so child props stay stable across unrelated parent renders\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\n// Stable callback identity helps memoized children skip unnecessary updates.\r\nReactorApp.Run\u003CApp\u003E(\u0022UseCallback\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    record ChildProps(Action OnPress);\r\n\r\n    public override Element Render()\r\n    {\r\n        var (parentRenders, setParentRenders) = UseState(0);\r\n        var (clicks, setClicks) = UseState(0);\r\n        var increment = UseCallback(() =\u003E setClicks(clicks \u002B 1), clicks);\r\n\r\n        return VStack(12,\r\n            Heading($\u0022Clicks: {clicks}\u0022),\r\n            Button(\u0022Re-render parent\u0022, () =\u003E setParentRenders(parentRenders \u002B 1)),\r\n            Caption($\u0022Unrelated parent renders: {parentRenders}\u0022),\r\n            Component\u003CChildButton, ChildProps\u003E(new(increment)));\r\n    }\r\n\r\n    class ChildButton : Component\u003CChildProps\u003E\r\n    {\r\n        int _renders;\r\n\r\n        public override Element Render()\r\n        {\r\n            _renders\u002B\u002B;\r\n            return VStack(8,\r\n                Caption($\u0022Child renders: {_renders}\u0022),\r\n                Button(\u0022Increment from child\u0022, Props.OnPress));\r\n        }\r\n    }\r\n}\r\n\r\n"
+    },
+    {
+      "id": "use-context-basic",
+      "category": "hooks",
+      "title": "Basic context provider",
+      "intent": "provide a context value at the root and consume it in a nested child",
+      "tags": [
+        "context",
+        "provider",
+        "consume",
+        "share"
+      ],
+      "factoryAnchors": [
+        "UseContext",
+        "Provider",
+        "VStack"
+      ],
+      "notesKey": "UseContext",
+      "relatedIds": [
+        "use-context-multi",
+        "use-reducer-with-context"
+      ],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\n// Context removes prop-drilling when several descendants need the same value.\r\nReactorApp.Run\u003CApp\u003E(\u0022UseContextBasic\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    internal static readonly Context\u003Cstring\u003E ThemeContext = new(\u0022Light\u0022);\r\n\r\n    public override Element Render()\r\n    {\r\n        var (theme, setTheme) = UseState(\u0022Light\u0022);\r\n\r\n        return VStack(12,\r\n            Button(theme == \u0022Light\u0022 ? \u0022Switch to dark\u0022 : \u0022Switch to light\u0022,\r\n                () =\u003E setTheme(theme == \u0022Light\u0022 ? \u0022Dark\u0022 : \u0022Light\u0022)).AutomationName(\u0022Toggle theme\u0022),\r\n            Component\u003CThemeBadge\u003E())\r\n            .Provide(ThemeContext, theme);\r\n    }\r\n\r\n    class ThemeBadge : Component\r\n    {\r\n        public override Element Render()\r\n        {\r\n            var theme = UseContext(ThemeContext);\r\n            return TextBlock($\u0022Current theme from context: {theme}\u0022);\r\n        }\r\n    }\r\n}\r\n",
+      "rawCode": "// id: use-context-basic\r\n// intent: provide a value at the root and consume it from a descendant\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\n// Context removes prop-drilling when several descendants need the same value.\r\nReactorApp.Run\u003CApp\u003E(\u0022UseContextBasic\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    internal static readonly Context\u003Cstring\u003E ThemeContext = new(\u0022Light\u0022);\r\n\r\n    public override Element Render()\r\n    {\r\n        var (theme, setTheme) = UseState(\u0022Light\u0022);\r\n\r\n        return VStack(12,\r\n            Button(theme == \u0022Light\u0022 ? \u0022Switch to dark\u0022 : \u0022Switch to light\u0022,\r\n                () =\u003E setTheme(theme == \u0022Light\u0022 ? \u0022Dark\u0022 : \u0022Light\u0022)).AutomationName(\u0022Toggle theme\u0022),\r\n            Component\u003CThemeBadge\u003E())\r\n            .Provide(ThemeContext, theme);\r\n    }\r\n\r\n    class ThemeBadge : Component\r\n    {\r\n        public override Element Render()\r\n        {\r\n            var theme = UseContext(ThemeContext);\r\n            return TextBlock($\u0022Current theme from context: {theme}\u0022);\r\n        }\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "use-context-multi",
+      "category": "hooks",
+      "title": "Composed contexts",
+      "intent": "compose nested providers and consume multiple context values in one child",
+      "tags": [
+        "context",
+        "multi",
+        "compose",
+        "nested",
+        "provider"
+      ],
+      "factoryAnchors": [
+        "UseContext",
+        "Provider",
+        "VStack"
+      ],
+      "notesKey": "UseContext",
+      "relatedIds": [
+        "use-context-basic"
+      ],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\n// Multiple contexts can be layered so consumers read each concern independently.\r\nReactorApp.Run\u003CApp\u003E(\u0022UseContextMulti\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    internal static readonly Context\u003Cstring\u003E ThemeContext = new(\u0022Light\u0022);\r\n    internal static readonly Context\u003Cstring\u003E UserContext = new(\u0022Guest\u0022);\r\n\r\n    public override Element Render()\r\n    {\r\n        return VStack(12,\r\n            Component\u003CProfileCard\u003E())\r\n            .Provide(UserContext, \u0022Ada\u0022)\r\n            .Provide(ThemeContext, \u0022Dark\u0022);\r\n    }\r\n\r\n    class ProfileCard : Component\r\n    {\r\n        public override Element Render()\r\n        {\r\n            var user = UseContext(UserContext);\r\n            var theme = UseContext(ThemeContext);\r\n            return VStack(8,\r\n                Heading($\u0022Hello, {user}\u0022),\r\n                Caption($\u0022Theme from context: {theme}\u0022));\r\n        }\r\n    }\r\n}\r\n",
+      "rawCode": "// id: use-context-multi\r\n// intent: compose multiple nested contexts and read them from the same child\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\n// Multiple contexts can be layered so consumers read each concern independently.\r\nReactorApp.Run\u003CApp\u003E(\u0022UseContextMulti\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    internal static readonly Context\u003Cstring\u003E ThemeContext = new(\u0022Light\u0022);\r\n    internal static readonly Context\u003Cstring\u003E UserContext = new(\u0022Guest\u0022);\r\n\r\n    public override Element Render()\r\n    {\r\n        return VStack(12,\r\n            Component\u003CProfileCard\u003E())\r\n            .Provide(UserContext, \u0022Ada\u0022)\r\n            .Provide(ThemeContext, \u0022Dark\u0022);\r\n    }\r\n\r\n    class ProfileCard : Component\r\n    {\r\n        public override Element Render()\r\n        {\r\n            var user = UseContext(UserContext);\r\n            var theme = UseContext(ThemeContext);\r\n            return VStack(8,\r\n                Heading($\u0022Hello, {user}\u0022),\r\n                Caption($\u0022Theme from context: {theme}\u0022));\r\n        }\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "use-effect-cleanup",
+      "category": "hooks",
+      "title": "Effect cleanup with timer",
+      "intent": "set up a timer in an effect and dispose it from the cleanup callback",
+      "tags": [
+        "effect",
+        "cleanup",
+        "dispose",
+        "timer",
+        "subscription"
+      ],
+      "factoryAnchors": [
+        "UseEffect",
+        "UseState",
+        "TextBlock"
+      ],
+      "notesKey": "UseEffect",
+      "relatedIds": [
+        "use-effect-mount"
+      ],
+      "priority": "P0",
+      "code": "using System;\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing Microsoft.UI.Xaml;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\n// Cleanup returns the timer to a stopped, unsubscribed state when the component leaves.\r\nReactorApp.Run\u003CApp\u003E(\u0022UseEffectCleanup\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (seconds, updateSeconds) = UseReducer(0);\r\n\r\n        UseEffect(() =\u003E\r\n        {\r\n            var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };\r\n            EventHandler\u003Cobject\u003E onTick = (_, _) =\u003E updateSeconds(value =\u003E value \u002B 1);\r\n            timer.Tick \u002B= onTick;\r\n            timer.Start();\r\n\r\n            return () =\u003E\r\n            {\r\n                timer.Tick -= onTick;\r\n                timer.Stop();\r\n            };\r\n        }, Array.Empty\u003Cobject\u003E());\r\n\r\n        return VStack(12,\r\n            Heading($\u0022Elapsed: {seconds}s\u0022),\r\n            Caption(\u0022The cleanup lambda stops the timer when this scenario unmounts.\u0022));\r\n    }\r\n}\r\n\r\n",
+      "rawCode": "// id: use-effect-cleanup\r\n// intent: set up a timer in an effect and clean it up on unmount\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing System;\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing Microsoft.UI.Xaml;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\n// Cleanup returns the timer to a stopped, unsubscribed state when the component leaves.\r\nReactorApp.Run\u003CApp\u003E(\u0022UseEffectCleanup\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (seconds, updateSeconds) = UseReducer(0);\r\n\r\n        UseEffect(() =\u003E\r\n        {\r\n            var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };\r\n            EventHandler\u003Cobject\u003E onTick = (_, _) =\u003E updateSeconds(value =\u003E value \u002B 1);\r\n            timer.Tick \u002B= onTick;\r\n            timer.Start();\r\n\r\n            return () =\u003E\r\n            {\r\n                timer.Tick -= onTick;\r\n                timer.Stop();\r\n            };\r\n        }, Array.Empty\u003Cobject\u003E());\r\n\r\n        return VStack(12,\r\n            Heading($\u0022Elapsed: {seconds}s\u0022),\r\n            Caption(\u0022The cleanup lambda stops the timer when this scenario unmounts.\u0022));\r\n    }\r\n}\r\n\r\n"
+    },
+    {
+      "id": "use-effect-deps",
+      "category": "hooks",
+      "title": "Effect dependencies",
+      "intent": "rerun an effect when a dependency changes by watching the current search query",
+      "tags": [
+        "effect",
+        "deps",
+        "dependency",
+        "rerun"
+      ],
+      "factoryAnchors": [
+        "UseEffect",
+        "UseState",
+        "TextBox",
+        "VStack"
+      ],
+      "notesKey": "UseEffect",
+      "relatedIds": [
+        "use-effect-mount"
+      ],
+      "priority": "P0",
+      "code": "using System;\r\nusing System.Linq;\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Controls;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\n// The effect reruns for each query change and writes the latest derived results.\r\nReactorApp.Run\u003CApp\u003E(\u0022UseEffectDeps\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    static readonly string[] Data = [\u0022Hooks\u0022, \u0022Reducer\u0022, \u0022Memo\u0022, \u0022Context\u0022, \u0022Ref\u0022, \u0022Effect\u0022];\r\n\r\n    public override Element Render()\r\n    {\r\n        var (query, setQuery) = UseState(\u0022\u0022);\r\n        var (runs, bumpRuns) = UseReducer(0);\r\n        var (results, setResults) = UseState(Array.Empty\u003Cstring\u003E());\r\n\r\n        UseEffect(() =\u003E\r\n        {\r\n            bumpRuns(value =\u003E value \u002B 1);\r\n            setResults(query.Length == 0\r\n                ? Array.Empty\u003Cstring\u003E()\r\n                : Data.Where(item =\u003E item.Contains(query, StringComparison.OrdinalIgnoreCase)).ToArray());\r\n        }, query);\r\n\r\n        return VStack(12,\r\n            TextBox(query, setQuery, \u0022Search hooks\u0022, header: \u0022Search query\u0022),\r\n            Caption($\u0022Effect runs: {runs}\u0022),\r\n            ForEach(results, item =\u003E TextBlock(item)));\r\n    }\r\n}\r\n\r\n",
+      "rawCode": "// id: use-effect-deps\r\n// intent: re-run an effect whenever the search query dependency changes\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing System;\r\nusing System.Linq;\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Controls;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\n// The effect reruns for each query change and writes the latest derived results.\r\nReactorApp.Run\u003CApp\u003E(\u0022UseEffectDeps\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    static readonly string[] Data = [\u0022Hooks\u0022, \u0022Reducer\u0022, \u0022Memo\u0022, \u0022Context\u0022, \u0022Ref\u0022, \u0022Effect\u0022];\r\n\r\n    public override Element Render()\r\n    {\r\n        var (query, setQuery) = UseState(\u0022\u0022);\r\n        var (runs, bumpRuns) = UseReducer(0);\r\n        var (results, setResults) = UseState(Array.Empty\u003Cstring\u003E());\r\n\r\n        UseEffect(() =\u003E\r\n        {\r\n            bumpRuns(value =\u003E value \u002B 1);\r\n            setResults(query.Length == 0\r\n                ? Array.Empty\u003Cstring\u003E()\r\n                : Data.Where(item =\u003E item.Contains(query, StringComparison.OrdinalIgnoreCase)).ToArray());\r\n        }, query);\r\n\r\n        return VStack(12,\r\n            TextBox(query, setQuery, \u0022Search hooks\u0022, header: \u0022Search query\u0022),\r\n            Caption($\u0022Effect runs: {runs}\u0022),\r\n            ForEach(results, item =\u003E TextBlock(item)));\r\n    }\r\n}\r\n\r\n"
+    },
+    {
+      "id": "use-effect-mount",
+      "category": "hooks",
+      "title": "Mount-only effect",
+      "intent": "run an effect once after mount by passing an empty dependency array",
+      "tags": [
+        "effect",
+        "mount",
+        "once",
+        "lifecycle"
+      ],
+      "factoryAnchors": [
+        "UseEffect",
+        "VStack",
+        "TextBlock"
+      ],
+      "notesKey": "UseEffect",
+      "relatedIds": [
+        "use-effect-cleanup",
+        "use-effect-deps"
+      ],
+      "priority": "P0",
+      "code": "using System;\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\n// An empty dependency array gives this effect mount-only semantics.\r\nReactorApp.Run\u003CApp\u003E(\u0022UseEffectMount\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (status, setStatus) = UseState(\u0022Mounting...\u0022);\r\n\r\n        UseEffect(() =\u003E\r\n        {\r\n            setStatus(\u0022Loaded initial data on mount.\u0022);\r\n        }, Array.Empty\u003Cobject\u003E());\r\n\r\n        return VStack(12,\r\n            Heading(\u0022Mount effect\u0022),\r\n            TextBlock(status),\r\n            Caption(\u0022This effect runs once after the first render.\u0022));\r\n    }\r\n}\r\n\r\n",
+      "rawCode": "// id: use-effect-mount\r\n// intent: run a fire-once effect after the component mounts\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing System;\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\n// An empty dependency array gives this effect mount-only semantics.\r\nReactorApp.Run\u003CApp\u003E(\u0022UseEffectMount\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (status, setStatus) = UseState(\u0022Mounting...\u0022);\r\n\r\n        UseEffect(() =\u003E\r\n        {\r\n            setStatus(\u0022Loaded initial data on mount.\u0022);\r\n        }, Array.Empty\u003Cobject\u003E());\r\n\r\n        return VStack(12,\r\n            Heading(\u0022Mount effect\u0022),\r\n            TextBlock(status),\r\n            Caption(\u0022This effect runs once after the first render.\u0022));\r\n    }\r\n}\r\n\r\n"
+    },
+    {
+      "id": "use-memo",
+      "category": "hooks",
+      "title": "Derived state with UseMemo",
+      "intent": "memoize a filtered view of data so derived state only recomputes when inputs change",
+      "tags": [
+        "memo",
+        "derived",
+        "computed",
+        "filter",
+        "performance"
+      ],
+      "factoryAnchors": [
+        "UseMemo",
+        "UseState",
+        "TextBox",
+        "ForEach"
+      ],
+      "notesKey": "UseMemo",
+      "relatedIds": [
+        "use-effect-deps"
+      ],
+      "priority": "P0",
+      "code": "using System;\r\nusing System.Linq;\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Controls;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\n// UseMemo is a good fit for derived values that are expensive or noisy to rebuild.\r\nReactorApp.Run\u003CApp\u003E(\u0022UseMemo\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    static readonly string[] Items = [\u0022Apple\u0022, \u0022Apricot\u0022, \u0022Banana\u0022, \u0022Blueberry\u0022, \u0022Cherry\u0022, \u0022Date\u0022];\r\n\r\n    public override Element Render()\r\n    {\r\n        var (filter, setFilter) = UseState(\u0022\u0022);\r\n        var filtered = UseMemo(() =\u003E Items\r\n            .Where(item =\u003E item.Contains(filter, StringComparison.OrdinalIgnoreCase))\r\n            .ToArray(), filter);\r\n\r\n        return VStack(12,\r\n            TextBox(filter, setFilter, \u0022Filter fruit\u0022, header: \u0022Filter\u0022),\r\n            Caption($\u0022Visible items: {filtered.Length}\u0022),\r\n            ForEach(filtered, item =\u003E TextBlock(item)));\r\n    }\r\n}\r\n\r\n",
+      "rawCode": "// id: use-memo\r\n// intent: memoize derived filtered data so it recomputes only when inputs change\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing System;\r\nusing System.Linq;\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Controls;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\n// UseMemo is a good fit for derived values that are expensive or noisy to rebuild.\r\nReactorApp.Run\u003CApp\u003E(\u0022UseMemo\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    static readonly string[] Items = [\u0022Apple\u0022, \u0022Apricot\u0022, \u0022Banana\u0022, \u0022Blueberry\u0022, \u0022Cherry\u0022, \u0022Date\u0022];\r\n\r\n    public override Element Render()\r\n    {\r\n        var (filter, setFilter) = UseState(\u0022\u0022);\r\n        var filtered = UseMemo(() =\u003E Items\r\n            .Where(item =\u003E item.Contains(filter, StringComparison.OrdinalIgnoreCase))\r\n            .ToArray(), filter);\r\n\r\n        return VStack(12,\r\n            TextBox(filter, setFilter, \u0022Filter fruit\u0022, header: \u0022Filter\u0022),\r\n            Caption($\u0022Visible items: {filtered.Length}\u0022),\r\n            ForEach(filtered, item =\u003E TextBlock(item)));\r\n    }\r\n}\r\n\r\n"
+    },
+    {
+      "id": "use-reducer-list",
+      "category": "hooks",
+      "title": "Todo list with UseReducer",
+      "intent": "manage list add delete and toggle operations through an immutable reducer",
+      "tags": [
+        "reducer",
+        "list",
+        "add",
+        "delete",
+        "toggle",
+        "immutable"
+      ],
+      "factoryAnchors": [
+        "UseReducer",
+        "ListView",
+        "Button",
+        "TextBox"
+      ],
+      "notesKey": "UseReducer",
+      "relatedIds": [
+        "use-state-list-pitfall"
+      ],
+      "priority": "P0",
+      "code": "using System;\r\nusing System.Collections.Generic;\r\nusing System.Linq;\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Controls;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\n// UseReducer keeps list updates centralized and immutable.\r\nReactorApp.Run\u003CApp\u003E(\u0022UseReducerList\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    record Item(string Id, string Text, bool Done);\r\n    abstract record TodoAction;\r\n    record AddItem(string Text) : TodoAction;\r\n    record ToggleItem(string Id) : TodoAction;\r\n    record DeleteItem(string Id) : TodoAction;\r\n\r\n    static IReadOnlyList\u003CItem\u003E Reduce(IReadOnlyList\u003CItem\u003E state, TodoAction action) =\u003E action switch\r\n    {\r\n        AddItem { Text: var text } when !string.IsNullOrWhiteSpace(text)\r\n            =\u003E [.. state, new Item(Guid.NewGuid().ToString(\u0022N\u0022), text.Trim(), false)],\r\n        ToggleItem { Id: var id }\r\n            =\u003E state.Select(item =\u003E item.Id == id ? item with { Done = !item.Done } : item).ToArray(),\r\n        DeleteItem { Id: var id }\r\n            =\u003E state.Where(item =\u003E item.Id != id).ToArray(),\r\n        _ =\u003E state\r\n    };\r\n\r\n    public override Element Render()\r\n    {\r\n        var (draft, setDraft) = UseState(\u0022\u0022);\r\n        var (items, dispatch) = UseReducer\u003CIReadOnlyList\u003CItem\u003E, TodoAction\u003E(Reduce, Array.Empty\u003CItem\u003E());\r\n\r\n        return VStack(12,\r\n            Heading(\u0022Todo reducer\u0022),\r\n            HStack(8,\r\n                TextBox(draft, setDraft, \u0022Add a todo\u0022, header: \u0022Todo\u0022),\r\n                Button(\u0022Add\u0022, () =\u003E { dispatch(new AddItem(draft)); setDraft(\u0022\u0022); })),\r\n            ListView(items, item =\u003E item.Id, (item, _) =\u003E HStack(8,\r\n                CheckBox(item.Done, isChecked =\u003E dispatch(new ToggleItem(item.Id)), item.Text),\r\n                Button(\u0022Delete\u0022, () =\u003E dispatch(new DeleteItem(item.Id))))));\r\n    }\r\n}\r\n\r\n",
+      "rawCode": "// id: use-reducer-list\r\n// intent: manage todo items with immutable add, toggle, and delete reducer actions\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing System;\r\nusing System.Collections.Generic;\r\nusing System.Linq;\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Controls;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\n// UseReducer keeps list updates centralized and immutable.\r\nReactorApp.Run\u003CApp\u003E(\u0022UseReducerList\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    record Item(string Id, string Text, bool Done);\r\n    abstract record TodoAction;\r\n    record AddItem(string Text) : TodoAction;\r\n    record ToggleItem(string Id) : TodoAction;\r\n    record DeleteItem(string Id) : TodoAction;\r\n\r\n    static IReadOnlyList\u003CItem\u003E Reduce(IReadOnlyList\u003CItem\u003E state, TodoAction action) =\u003E action switch\r\n    {\r\n        AddItem { Text: var text } when !string.IsNullOrWhiteSpace(text)\r\n            =\u003E [.. state, new Item(Guid.NewGuid().ToString(\u0022N\u0022), text.Trim(), false)],\r\n        ToggleItem { Id: var id }\r\n            =\u003E state.Select(item =\u003E item.Id == id ? item with { Done = !item.Done } : item).ToArray(),\r\n        DeleteItem { Id: var id }\r\n            =\u003E state.Where(item =\u003E item.Id != id).ToArray(),\r\n        _ =\u003E state\r\n    };\r\n\r\n    public override Element Render()\r\n    {\r\n        var (draft, setDraft) = UseState(\u0022\u0022);\r\n        var (items, dispatch) = UseReducer\u003CIReadOnlyList\u003CItem\u003E, TodoAction\u003E(Reduce, Array.Empty\u003CItem\u003E());\r\n\r\n        return VStack(12,\r\n            Heading(\u0022Todo reducer\u0022),\r\n            HStack(8,\r\n                TextBox(draft, setDraft, \u0022Add a todo\u0022, header: \u0022Todo\u0022),\r\n                Button(\u0022Add\u0022, () =\u003E { dispatch(new AddItem(draft)); setDraft(\u0022\u0022); })),\r\n            ListView(items, item =\u003E item.Id, (item, _) =\u003E HStack(8,\r\n                CheckBox(item.Done, isChecked =\u003E dispatch(new ToggleItem(item.Id)), item.Text),\r\n                Button(\u0022Delete\u0022, () =\u003E dispatch(new DeleteItem(item.Id))))));\r\n    }\r\n}\r\n\r\n"
+    },
+    {
+      "id": "use-reducer-typed",
+      "category": "hooks",
+      "title": "Typed reducer actions",
+      "intent": "use strongly typed action records and pattern matching in a reducer",
+      "tags": [
+        "reducer",
+        "typed-actions",
+        "dispatch",
+        "pattern-matching"
+      ],
+      "factoryAnchors": [
+        "UseReducer",
+        "Button",
+        "VStack"
+      ],
+      "notesKey": "UseReducer",
+      "relatedIds": [
+        "use-state-basic"
+      ],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\n// Typed action records make reducer flows explicit and easy to extend.\r\nReactorApp.Run\u003CApp\u003E(\u0022UseReducerTyped\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    abstract record CounterAction;\r\n    record Increment(int Amount) : CounterAction;\r\n    record Decrement(int Amount) : CounterAction;\r\n    record Reset() : CounterAction;\r\n    record SetValue(int Value) : CounterAction;\r\n\r\n    static int Reduce(int state, CounterAction action) =\u003E action switch\r\n    {\r\n        Increment(var amount) =\u003E state \u002B amount,\r\n        Decrement(var amount) =\u003E state - amount,\r\n        Reset =\u003E 0,\r\n        SetValue(var value) =\u003E value,\r\n        _ =\u003E state\r\n    };\r\n\r\n    public override Element Render()\r\n    {\r\n        var (count, dispatch) = UseReducer\u003Cint, CounterAction\u003E(Reduce, 0);\r\n\r\n        return VStack(12,\r\n            Heading($\u0022Count: {count}\u0022),\r\n            HStack(8,\r\n                Button(\u0022\u002B1\u0022, () =\u003E dispatch(new Increment(1))),\r\n                Button(\u0022-1\u0022, () =\u003E dispatch(new Decrement(1))),\r\n                Button(\u0022Set 10\u0022, () =\u003E dispatch(new SetValue(10))),\r\n                Button(\u0022Reset\u0022, () =\u003E dispatch(new Reset()))));\r\n    }\r\n}\r\n\r\n",
+      "rawCode": "// id: use-reducer-typed\r\n// intent: strongly-typed reducer actions with pattern matching\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\n// Typed action records make reducer flows explicit and easy to extend.\r\nReactorApp.Run\u003CApp\u003E(\u0022UseReducerTyped\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    abstract record CounterAction;\r\n    record Increment(int Amount) : CounterAction;\r\n    record Decrement(int Amount) : CounterAction;\r\n    record Reset() : CounterAction;\r\n    record SetValue(int Value) : CounterAction;\r\n\r\n    static int Reduce(int state, CounterAction action) =\u003E action switch\r\n    {\r\n        Increment(var amount) =\u003E state \u002B amount,\r\n        Decrement(var amount) =\u003E state - amount,\r\n        Reset =\u003E 0,\r\n        SetValue(var value) =\u003E value,\r\n        _ =\u003E state\r\n    };\r\n\r\n    public override Element Render()\r\n    {\r\n        var (count, dispatch) = UseReducer\u003Cint, CounterAction\u003E(Reduce, 0);\r\n\r\n        return VStack(12,\r\n            Heading($\u0022Count: {count}\u0022),\r\n            HStack(8,\r\n                Button(\u0022\u002B1\u0022, () =\u003E dispatch(new Increment(1))),\r\n                Button(\u0022-1\u0022, () =\u003E dispatch(new Decrement(1))),\r\n                Button(\u0022Set 10\u0022, () =\u003E dispatch(new SetValue(10))),\r\n                Button(\u0022Reset\u0022, () =\u003E dispatch(new Reset()))));\r\n    }\r\n}\r\n\r\n"
+    },
+    {
+      "id": "use-reducer-with-context",
+      "category": "hooks",
+      "title": "Reducer with shared context",
+      "intent": "combine reducer state and context so nested components can dispatch global actions",
+      "tags": [
+        "reducer",
+        "context",
+        "global",
+        "dispatch",
+        "pattern"
+      ],
+      "factoryAnchors": [
+        "UseReducer",
+        "UseContext",
+        "Provider"
+      ],
+      "notesKey": "UseContext",
+      "relatedIds": [
+        "use-context-basic",
+        "use-reducer-list"
+      ],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\n// Provide both state and dispatch so nested components can read and update shared state.\r\nReactorApp.Run\u003CApp\u003E(\u0022UseReducerWithContext\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    record CounterState(int Count);\r\n    abstract record CounterAction;\r\n    record Increment() : CounterAction;\r\n    record Decrement() : CounterAction;\r\n\r\n    static readonly Context\u003CCounterState\u003E StateContext = new(new CounterState(0));\r\n    static readonly Context\u003CAction\u003CCounterAction\u003E\u003E DispatchContext = new(_ =\u003E { });\r\n\r\n    static CounterState Reduce(CounterState state, CounterAction action) =\u003E action switch\r\n    {\r\n        Increment =\u003E state with { Count = state.Count \u002B 1 },\r\n        Decrement =\u003E state with { Count = state.Count - 1 },\r\n        _ =\u003E state\r\n    };\r\n\r\n    public override Element Render()\r\n    {\r\n        var (state, dispatch) = UseReducer\u003CCounterState, CounterAction\u003E(Reduce, new CounterState(0));\r\n\r\n        return VStack(12,\r\n            Component\u003CCounterValue\u003E(),\r\n            Component\u003CCounterButtons\u003E())\r\n            .Provide(StateContext, state)\r\n            .Provide(DispatchContext, dispatch);\r\n    }\r\n\r\n    class CounterValue : Component\r\n    {\r\n        public override Element Render()\r\n        {\r\n            var state = UseContext(StateContext);\r\n            return Heading($\u0022Global count: {state.Count}\u0022);\r\n        }\r\n    }\r\n\r\n    class CounterButtons : Component\r\n    {\r\n        public override Element Render()\r\n        {\r\n            var dispatch = UseContext(DispatchContext);\r\n            return HStack(8,\r\n                Button(\u0022-1\u0022, () =\u003E dispatch(new Decrement())),\r\n                Button(\u0022\u002B1\u0022, () =\u003E dispatch(new Increment())));\r\n        }\r\n    }\r\n}\r\n",
+      "rawCode": "// id: use-reducer-with-context\r\n// intent: combine reducer state and context to model global app state\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\n// Provide both state and dispatch so nested components can read and update shared state.\r\nReactorApp.Run\u003CApp\u003E(\u0022UseReducerWithContext\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    record CounterState(int Count);\r\n    abstract record CounterAction;\r\n    record Increment() : CounterAction;\r\n    record Decrement() : CounterAction;\r\n\r\n    static readonly Context\u003CCounterState\u003E StateContext = new(new CounterState(0));\r\n    static readonly Context\u003CAction\u003CCounterAction\u003E\u003E DispatchContext = new(_ =\u003E { });\r\n\r\n    static CounterState Reduce(CounterState state, CounterAction action) =\u003E action switch\r\n    {\r\n        Increment =\u003E state with { Count = state.Count \u002B 1 },\r\n        Decrement =\u003E state with { Count = state.Count - 1 },\r\n        _ =\u003E state\r\n    };\r\n\r\n    public override Element Render()\r\n    {\r\n        var (state, dispatch) = UseReducer\u003CCounterState, CounterAction\u003E(Reduce, new CounterState(0));\r\n\r\n        return VStack(12,\r\n            Component\u003CCounterValue\u003E(),\r\n            Component\u003CCounterButtons\u003E())\r\n            .Provide(StateContext, state)\r\n            .Provide(DispatchContext, dispatch);\r\n    }\r\n\r\n    class CounterValue : Component\r\n    {\r\n        public override Element Render()\r\n        {\r\n            var state = UseContext(StateContext);\r\n            return Heading($\u0022Global count: {state.Count}\u0022);\r\n        }\r\n    }\r\n\r\n    class CounterButtons : Component\r\n    {\r\n        public override Element Render()\r\n        {\r\n            var dispatch = UseContext(DispatchContext);\r\n            return HStack(8,\r\n                Button(\u0022-1\u0022, () =\u003E dispatch(new Decrement())),\r\n                Button(\u0022\u002B1\u0022, () =\u003E dispatch(new Increment())));\r\n        }\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "use-ref-dom",
+      "category": "hooks",
+      "title": "Native element ref",
+      "intent": "hand a mounted element reference to native APIs for focus and measurement",
+      "tags": [
+        "ref",
+        "dom",
+        "element",
+        "focus",
+        "native"
+      ],
+      "factoryAnchors": [
+        "UseRef",
+        "UseEffect",
+        "TextBox"
+      ],
+      "notesKey": "UseRef",
+      "relatedIds": [
+        "use-ref-mutable"
+      ],
+      "priority": "P0",
+      "code": "using System;\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Controls;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing Microsoft.UI.Reactor.Hooks;\r\nusing Microsoft.UI.Xaml;\r\nusing Microsoft.UI.Xaml.Controls;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\n// Pair a stable ref with a mount effect when native APIs need the real control instance.\r\nReactorApp.Run\u003CApp\u003E(\u0022UseRefDom\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (text, setText) = UseState(\u0022\u0022);\r\n        var (message, setMessage) = UseState(\u0022Waiting for mount...\u0022);\r\n        var focusAttempts = UseRef(0);\r\n        var inputRef = this.UseElementRef\u003CTextBox\u003E();\r\n\r\n        UseEffect(() =\u003E\r\n        {\r\n            focusAttempts.Current\u002B\u002B;\r\n            if (inputRef.Current is { } box)\r\n            {\r\n                box.Focus(FocusState.Programmatic);\r\n                setMessage($\u0022Focus requested. ActualWidth = {box.ActualWidth:F0}px\u0022);\r\n            }\r\n        }, Array.Empty\u003Cobject\u003E());\r\n\r\n        return VStack(12,\r\n            TextBox(text, setText, \u0022Focused on mount\u0022, header: \u0022Focusable input\u0022).Width(240).Ref(inputRef),\r\n            Caption(message),\r\n            Caption($\u0022Native ref uses: {focusAttempts.Current}\u0022));\r\n    }\r\n}\r\n\r\n",
+      "rawCode": "// id: use-ref-dom\r\n// intent: hand a mounted element reference to native APIs for focus and measurement\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing System;\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Controls;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing Microsoft.UI.Reactor.Hooks;\r\nusing Microsoft.UI.Xaml;\r\nusing Microsoft.UI.Xaml.Controls;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\n// Pair a stable ref with a mount effect when native APIs need the real control instance.\r\nReactorApp.Run\u003CApp\u003E(\u0022UseRefDom\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (text, setText) = UseState(\u0022\u0022);\r\n        var (message, setMessage) = UseState(\u0022Waiting for mount...\u0022);\r\n        var focusAttempts = UseRef(0);\r\n        var inputRef = this.UseElementRef\u003CTextBox\u003E();\r\n\r\n        UseEffect(() =\u003E\r\n        {\r\n            focusAttempts.Current\u002B\u002B;\r\n            if (inputRef.Current is { } box)\r\n            {\r\n                box.Focus(FocusState.Programmatic);\r\n                setMessage($\u0022Focus requested. ActualWidth = {box.ActualWidth:F0}px\u0022);\r\n            }\r\n        }, Array.Empty\u003Cobject\u003E());\r\n\r\n        return VStack(12,\r\n            TextBox(text, setText, \u0022Focused on mount\u0022, header: \u0022Focusable input\u0022).Width(240).Ref(inputRef),\r\n            Caption(message),\r\n            Caption($\u0022Native ref uses: {focusAttempts.Current}\u0022));\r\n    }\r\n}\r\n\r\n"
+    },
+    {
+      "id": "use-ref-mutable",
+      "category": "hooks",
+      "title": "Mutable ref storage",
+      "intent": "store a previous value in a ref so it persists without triggering re-renders",
+      "tags": [
+        "ref",
+        "mutable",
+        "previous",
+        "persist"
+      ],
+      "factoryAnchors": [
+        "UseRef",
+        "UseState",
+        "UseEffect",
+        "VStack"
+      ],
+      "notesKey": "UseRef",
+      "relatedIds": [
+        "use-ref-dom"
+      ],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\n// Refs keep mutable values across renders without participating in diffing.\r\nReactorApp.Run\u003CApp\u003E(\u0022UseRefMutable\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (count, setCount) = UseState(0);\r\n        var previous = UseRef\u003Cint?\u003E(null);\r\n\r\n        UseEffect(() =\u003E\r\n        {\r\n            previous.Current = count;\r\n        }, count);\r\n\r\n        return VStack(12,\r\n            Heading($\u0022Current: {count}\u0022),\r\n            TextBlock($\u0022Previous: {(previous.Current is int value ? value : -1)}\u0022),\r\n            Button(\u0022\u002B1\u0022, () =\u003E setCount(count \u002B 1)));\r\n    }\r\n}\r\n\r\n",
+      "rawCode": "// id: use-ref-mutable\r\n// intent: store previous state in a mutable ref without causing re-renders\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\n// Refs keep mutable values across renders without participating in diffing.\r\nReactorApp.Run\u003CApp\u003E(\u0022UseRefMutable\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (count, setCount) = UseState(0);\r\n        var previous = UseRef\u003Cint?\u003E(null);\r\n\r\n        UseEffect(() =\u003E\r\n        {\r\n            previous.Current = count;\r\n        }, count);\r\n\r\n        return VStack(12,\r\n            Heading($\u0022Current: {count}\u0022),\r\n            TextBlock($\u0022Previous: {(previous.Current is int value ? value : -1)}\u0022),\r\n            Button(\u0022\u002B1\u0022, () =\u003E setCount(count \u002B 1)));\r\n    }\r\n}\r\n\r\n"
+    },
+    {
       "id": "use-state-basic",
       "category": "hooks",
       "title": "Counter with UseState",
@@ -25,7 +610,770 @@
       "priority": "P0",
       "code": "using Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022UseStateBasic\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (count, setCount) = UseState(0);\r\n        return VStack(\r\n            Heading($\u0022Count: {count}\u0022),\r\n            Button(\u0022\u002B1\u0022, () =\u003E setCount(count \u002B 1)));\r\n    }\r\n}\r\n",
       "rawCode": "// id: use-state-basic\r\n// intent: count clicks; demonstrate UseState with primitive value\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022UseStateBasic\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (count, setCount) = UseState(0);\r\n        return VStack(\r\n            Heading($\u0022Count: {count}\u0022),\r\n            Button(\u0022\u002B1\u0022, () =\u003E setCount(count \u002B 1)));\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "use-state-list-pitfall",
+      "category": "hooks",
+      "title": "List mutation anti-pattern",
+      "intent": "demonstrate why mutating a List in place does not trigger a UseState re-render",
+      "tags": [
+        "state",
+        "list",
+        "anti-pattern",
+        "pitfall"
+      ],
+      "factoryAnchors": [
+        "UseState",
+        "Button",
+        "VStack"
+      ],
+      "notesKey": "UseState",
+      "relatedIds": [
+        "use-reducer-list"
+      ],
+      "priority": "P0",
+      "code": "using System.Collections.Generic;\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\n// Mutating the same List\u003CT\u003E instance changes data but not state identity, so no re-render happens.\r\nReactorApp.Run\u003CApp\u003E(\u0022UseStateListPitfall\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (items, _) = UseState(new List\u003Cstring\u003E { \u0022Alpha\u0022 });\r\n        var (rerenders, setRerenders) = UseState(0);\r\n\r\n        return VStack(12,\r\n            Heading($\u0022Visible count: {items.Count}\u0022),\r\n            Caption($\u0022Unrelated renders: {rerenders}\u0022),\r\n            Button(\u0022Mutate list in place (wrong)\u0022, () =\u003E\r\n            {\r\n                // Wrong: UseState still holds the same List\u003CT\u003E reference, so Reactor\r\n                // does not detect a new state value and the UI stays stale.\r\n                items.Add($\u0022Item {items.Count \u002B 1}\u0022);\r\n            }),\r\n            Button(\u0022Force unrelated re-render\u0022, () =\u003E setRerenders(rerenders \u002B 1)),\r\n            ForEach(items, item =\u003E TextBlock(item)));\r\n    }\r\n}\r\n\r\n",
+      "rawCode": "// id: use-state-list-pitfall\r\n// intent: show why mutating List\u003CT\u003E in place is a UseState anti-pattern\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing System.Collections.Generic;\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\n// Mutating the same List\u003CT\u003E instance changes data but not state identity, so no re-render happens.\r\nReactorApp.Run\u003CApp\u003E(\u0022UseStateListPitfall\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (items, _) = UseState(new List\u003Cstring\u003E { \u0022Alpha\u0022 });\r\n        var (rerenders, setRerenders) = UseState(0);\r\n\r\n        return VStack(12,\r\n            Heading($\u0022Visible count: {items.Count}\u0022),\r\n            Caption($\u0022Unrelated renders: {rerenders}\u0022),\r\n            Button(\u0022Mutate list in place (wrong)\u0022, () =\u003E\r\n            {\r\n                // Wrong: UseState still holds the same List\u003CT\u003E reference, so Reactor\r\n                // does not detect a new state value and the UI stays stale.\r\n                items.Add($\u0022Item {items.Count \u002B 1}\u0022);\r\n            }),\r\n            Button(\u0022Force unrelated re-render\u0022, () =\u003E setRerenders(rerenders \u002B 1)),\r\n            ForEach(items, item =\u003E TextBlock(item)));\r\n    }\r\n}\r\n\r\n"
+    },
+    {
+      "id": "use-state-record",
+      "category": "hooks",
+      "title": "Record state with UseState",
+      "intent": "update immutable record state with structural equality and with expressions",
+      "tags": [
+        "state",
+        "record",
+        "immutable",
+        "with-expression"
+      ],
+      "factoryAnchors": [
+        "UseState",
+        "ToggleSwitch",
+        "Slider"
+      ],
+      "notesKey": "UseState",
+      "relatedIds": [
+        "use-state-basic"
+      ],
+      "priority": "P0",
+      "code": "using System;\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\n// Immutable record state stays easy to compare and update with \u0060with\u0060 expressions.\r\nReactorApp.Run\u003CApp\u003E(\u0022UseStateRecord\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    record Settings(bool DarkMode, int FontSize);\r\n\r\n    public override Element Render()\r\n    {\r\n        var (settings, setSettings) = UseState(new Settings(false, 14));\r\n\r\n        return VStack(12,\r\n            Heading(settings.DarkMode ? \u0022Dark mode\u0022 : \u0022Light mode\u0022),\r\n            ToggleSwitch(\r\n                settings.DarkMode,\r\n                isOn =\u003E setSettings(settings with { DarkMode = isOn }),\r\n                onContent: \u0022On\u0022,\r\n                offContent: \u0022Off\u0022,\r\n                header: \u0022Theme\u0022),\r\n            TextBlock($\u0022Font size: {settings.FontSize}\u0022),\r\n            Slider(\r\n                settings.FontSize,\r\n                min: 12,\r\n                max: 24,\r\n                onValueChanged: value =\u003E setSettings(settings with { FontSize = (int)Math.Round(value) })),\r\n            TextBlock(\u0022Preview text\u0022).FontSize(settings.FontSize));\r\n    }\r\n}\r\n\r\n",
+      "rawCode": "// id: use-state-record\r\n// intent: record-shaped state with structural equality and with-expression updates\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing System;\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\n// Immutable record state stays easy to compare and update with \u0060with\u0060 expressions.\r\nReactorApp.Run\u003CApp\u003E(\u0022UseStateRecord\u0022, width: 400, height: 200);\r\n\r\nclass App : Component\r\n{\r\n    record Settings(bool DarkMode, int FontSize);\r\n\r\n    public override Element Render()\r\n    {\r\n        var (settings, setSettings) = UseState(new Settings(false, 14));\r\n\r\n        return VStack(12,\r\n            Heading(settings.DarkMode ? \u0022Dark mode\u0022 : \u0022Light mode\u0022),\r\n            ToggleSwitch(\r\n                settings.DarkMode,\r\n                isOn =\u003E setSettings(settings with { DarkMode = isOn }),\r\n                onContent: \u0022On\u0022,\r\n                offContent: \u0022Off\u0022,\r\n                header: \u0022Theme\u0022),\r\n            TextBlock($\u0022Font size: {settings.FontSize}\u0022),\r\n            Slider(\r\n                settings.FontSize,\r\n                min: 12,\r\n                max: 24,\r\n                onValueChanged: value =\u003E setSettings(settings with { FontSize = (int)Math.Round(value) })),\r\n            TextBlock(\u0022Preview text\u0022).FontSize(settings.FontSize));\r\n    }\r\n}\r\n\r\n"
+    },
+    {
+      "id": "autosuggestbox-typeahead",
+      "category": "inputs",
+      "title": "AutoSuggestBox Typeahead",
+      "intent": "search box with typeahead suggestions filtered from user input",
+      "tags": [
+        "autosuggest",
+        "typeahead",
+        "search",
+        "filter"
+      ],
+      "factoryAnchors": [
+        "AutoSuggestBox",
+        "UseState"
+      ],
+      "notesKey": "AutoSuggestBox",
+      "relatedIds": [],
+      "priority": "P0",
+      "code": "using System;\r\nusing System.Linq;\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022AutoSuggestBox Typeahead\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var allItems = new[] { \u0022Apple\u0022, \u0022Apricot\u0022, \u0022Banana\u0022, \u0022Blueberry\u0022, \u0022Cherry\u0022, \u0022Grape\u0022 };\r\n        var (query, setQuery) = UseState(\u0022\u0022);\r\n        var matches = allItems.Where(x =\u003E x.Contains(query, StringComparison.OrdinalIgnoreCase)).Take(5).ToArray();\r\n        return VStack(12,\r\n            Heading(\u0022AutoSuggestBox\u0022),\r\n            (AutoSuggestBox(query, setQuery) with { Header = \u0022Fruit search\u0022, PlaceholderText = \u0022Start typing\u0022, Suggestions = matches, IsSuggestionListOpen = query.Length \u003E 0 \u0026\u0026 matches.Length \u003E 0 })\r\n                .AutomationName(\u0022Fruit search\u0022),\r\n            TextBlock($\u0022Current value: {query}\u0022))\r\n            .Margin(16);\r\n    }\r\n}\r\n",
+      "rawCode": "// id: autosuggestbox-typeahead\r\n// intent: search box with typeahead suggestions\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing System;\r\nusing System.Linq;\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022AutoSuggestBox Typeahead\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var allItems = new[] { \u0022Apple\u0022, \u0022Apricot\u0022, \u0022Banana\u0022, \u0022Blueberry\u0022, \u0022Cherry\u0022, \u0022Grape\u0022 };\r\n        var (query, setQuery) = UseState(\u0022\u0022);\r\n        var matches = allItems.Where(x =\u003E x.Contains(query, StringComparison.OrdinalIgnoreCase)).Take(5).ToArray();\r\n        return VStack(12,\r\n            Heading(\u0022AutoSuggestBox\u0022),\r\n            (AutoSuggestBox(query, setQuery) with { Header = \u0022Fruit search\u0022, PlaceholderText = \u0022Start typing\u0022, Suggestions = matches, IsSuggestionListOpen = query.Length \u003E 0 \u0026\u0026 matches.Length \u003E 0 })\r\n                .AutomationName(\u0022Fruit search\u0022),\r\n            TextBlock($\u0022Current value: {query}\u0022))\r\n            .Margin(16);\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "calendardatepicker",
+      "category": "inputs",
+      "title": "CalendarDatePicker Selection",
+      "intent": "date selection via calendar popup with current date display",
+      "tags": [
+        "calendar",
+        "date",
+        "picker",
+        "datepicker"
+      ],
+      "factoryAnchors": [
+        "CalendarDatePicker",
+        "UseState"
+      ],
+      "notesKey": "CalendarDatePicker",
+      "relatedIds": [],
+      "priority": "P0",
+      "code": "using System;\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022CalendarDatePicker\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (date, setDate) = UseState\u003CDateTimeOffset?\u003E(DateTimeOffset.Now);\r\n        return VStack(12,\r\n            Heading(\u0022CalendarDatePicker\u0022),\r\n            (CalendarDatePicker(date, setDate) with { Header = \u0022Start date\u0022, DateFormat = \u0022{month.full} {day.integer}, {year.full}\u0022 }),\r\n            TextBlock($\u0022Selected: {(date is null ? \u0022None\u0022 : date.Value.ToString(\u0022D\u0022))}\u0022))\r\n            .Margin(16);\r\n    }\r\n}\r\n",
+      "rawCode": "// id: calendardatepicker\r\n// intent: date selection via calendar popup\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing System;\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022CalendarDatePicker\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (date, setDate) = UseState\u003CDateTimeOffset?\u003E(DateTimeOffset.Now);\r\n        return VStack(12,\r\n            Heading(\u0022CalendarDatePicker\u0022),\r\n            (CalendarDatePicker(date, setDate) with { Header = \u0022Start date\u0022, DateFormat = \u0022{month.full} {day.integer}, {year.full}\u0022 }),\r\n            TextBlock($\u0022Selected: {(date is null ? \u0022None\u0022 : date.Value.ToString(\u0022D\u0022))}\u0022))\r\n            .Margin(16);\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "checkbox-bool",
+      "category": "inputs",
+      "title": "Checkbox Boolean State",
+      "intent": "checkbox bound to boolean state with text feedback",
+      "tags": [
+        "checkbox",
+        "boolean",
+        "toggle"
+      ],
+      "factoryAnchors": [
+        "CheckBox",
+        "UseState"
+      ],
+      "notesKey": "CheckBox",
+      "relatedIds": [],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Checkbox Boolean\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (accepted, setAccepted) = UseState(false);\r\n        return VStack(12,\r\n            Heading(\u0022CheckBox\u0022),\r\n            CheckBox(accepted, setAccepted, \u0022Accept terms\u0022),\r\n            TextBlock($\u0022Accepted: {accepted}\u0022))\r\n            .Margin(16);\r\n    }\r\n}\r\n",
+      "rawCode": "// id: checkbox-bool\r\n// intent: checkbox bound to boolean state\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Checkbox Boolean\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (accepted, setAccepted) = UseState(false);\r\n        return VStack(12,\r\n            Heading(\u0022CheckBox\u0022),\r\n            CheckBox(accepted, setAccepted, \u0022Accept terms\u0022),\r\n            TextBlock($\u0022Accepted: {accepted}\u0022))\r\n            .Margin(16);\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "combobox-from-list",
+      "category": "inputs",
+      "title": "ComboBox from String List",
+      "intent": "dropdown picker from a string array with selected item display",
+      "tags": [
+        "combobox",
+        "dropdown",
+        "select",
+        "picker"
+      ],
+      "factoryAnchors": [
+        "ComboBox",
+        "UseState"
+      ],
+      "notesKey": "ComboBox",
+      "relatedIds": [],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022ComboBox List\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var cities = new[] { \u0022Seattle\u0022, \u0022London\u0022, \u0022Tokyo\u0022, \u0022Sydney\u0022 };\r\n        var (selectedIndex, setSelectedIndex) = UseState(1);\r\n        return VStack(12,\r\n            Heading(\u0022ComboBox\u0022),\r\n            (ComboBox(cities, selectedIndex, setSelectedIndex) with { Header = \u0022Office\u0022, PlaceholderText = \u0022Choose a city\u0022 }),\r\n            TextBlock($\u0022Selected: {cities[selectedIndex]}\u0022))\r\n            .Margin(16);\r\n    }\r\n}\r\n",
+      "rawCode": "// id: combobox-from-list\r\n// intent: dropdown picker from a string array\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022ComboBox List\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var cities = new[] { \u0022Seattle\u0022, \u0022London\u0022, \u0022Tokyo\u0022, \u0022Sydney\u0022 };\r\n        var (selectedIndex, setSelectedIndex) = UseState(1);\r\n        return VStack(12,\r\n            Heading(\u0022ComboBox\u0022),\r\n            (ComboBox(cities, selectedIndex, setSelectedIndex) with { Header = \u0022Office\u0022, PlaceholderText = \u0022Choose a city\u0022 }),\r\n            TextBlock($\u0022Selected: {cities[selectedIndex]}\u0022))\r\n            .Margin(16);\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "combobox-of-elements",
+      "category": "inputs",
+      "title": "ComboBox of Elements",
+      "intent": "dropdown with custom element items and selected value display",
+      "tags": [
+        "combobox",
+        "dropdown",
+        "elements",
+        "custom"
+      ],
+      "factoryAnchors": [
+        "ComboBox",
+        "UseState"
+      ],
+      "notesKey": "ComboBox",
+      "relatedIds": [],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022ComboBox Elements\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var labels = new[] { \u0022Low\u0022, \u0022Medium\u0022, \u0022High\u0022 };\r\n        var items = new Element[] { TextBlock(\u0022\uD83D\uDFE2 Low\u0022), TextBlock(\u0022\uD83D\uDFE1 Medium\u0022), TextBlock(\u0022\uD83D\uDD34 High\u0022) };\r\n        var (selectedIndex, setSelectedIndex) = UseState(0);\r\n        return VStack(12,\r\n            Heading(\u0022ComboBox with Elements\u0022),\r\n            (ComboBox(items, selectedIndex, setSelectedIndex) with { Header = \u0022Priority\u0022 }),\r\n            TextBlock($\u0022Selected: {labels[selectedIndex]}\u0022))\r\n            .Margin(16);\r\n    }\r\n}\r\n",
+      "rawCode": "// id: combobox-of-elements\r\n// intent: dropdown with custom element items\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022ComboBox Elements\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var labels = new[] { \u0022Low\u0022, \u0022Medium\u0022, \u0022High\u0022 };\r\n        var items = new Element[] { TextBlock(\u0022\uD83D\uDFE2 Low\u0022), TextBlock(\u0022\uD83D\uDFE1 Medium\u0022), TextBlock(\u0022\uD83D\uDD34 High\u0022) };\r\n        var (selectedIndex, setSelectedIndex) = UseState(0);\r\n        return VStack(12,\r\n            Heading(\u0022ComboBox with Elements\u0022),\r\n            (ComboBox(items, selectedIndex, setSelectedIndex) with { Header = \u0022Priority\u0022 }),\r\n            TextBlock($\u0022Selected: {labels[selectedIndex]}\u0022))\r\n            .Margin(16);\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "numberbox-validated",
+      "category": "inputs",
+      "title": "NumberBox Validation",
+      "intent": "number input with validation constraints and current value display",
+      "tags": [
+        "numberbox",
+        "number",
+        "input",
+        "validation"
+      ],
+      "factoryAnchors": [
+        "NumberBox",
+        "UseState"
+      ],
+      "notesKey": "NumberBox",
+      "relatedIds": [],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022NumberBox Validation\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (age, setAge) = UseState(21.0);\r\n        return VStack(12,\r\n            Heading(\u0022NumberBox\u0022),\r\n            (NumberBox(age, setAge) with { Header = \u0022Age\u0022, Minimum = 0, Maximum = 120, Description = \u0022Allowed range: 0 to 120\u0022 })\r\n                .AutomationName(\u0022Age\u0022),\r\n            TextBlock($\u0022Current value: {age:0}\u0022))\r\n            .Margin(16);\r\n    }\r\n}\r\n",
+      "rawCode": "// id: numberbox-validated\r\n// intent: number input with validation constraints\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022NumberBox Validation\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (age, setAge) = UseState(21.0);\r\n        return VStack(12,\r\n            Heading(\u0022NumberBox\u0022),\r\n            (NumberBox(age, setAge) with { Header = \u0022Age\u0022, Minimum = 0, Maximum = 120, Description = \u0022Allowed range: 0 to 120\u0022 })\r\n                .AutomationName(\u0022Age\u0022),\r\n            TextBlock($\u0022Current value: {age:0}\u0022))\r\n            .Margin(16);\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "radiobuttons-group",
+      "category": "inputs",
+      "title": "RadioButtons Group Selection",
+      "intent": "radio button group for single selection with selected index tracking",
+      "tags": [
+        "radio",
+        "radiobuttons",
+        "selection",
+        "group"
+      ],
+      "factoryAnchors": [
+        "RadioButtons",
+        "UseState"
+      ],
+      "notesKey": "RadioButtons",
+      "relatedIds": [],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022RadioButtons Group\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var items = new[] { \u0022System\u0022, \u0022Light\u0022, \u0022Dark\u0022 };\r\n        var (selectedIndex, setSelectedIndex) = UseState(0);\r\n        return VStack(12,\r\n            Heading(\u0022RadioButtons\u0022),\r\n            RadioButtons(items, selectedIndex, setSelectedIndex) with { Header = \u0022Theme\u0022 },\r\n            TextBlock($\u0022Selected: {items[selectedIndex]}\u0022))\r\n            .Margin(16);\r\n    }\r\n}\r\n",
+      "rawCode": "// id: radiobuttons-group\r\n// intent: radio button group for single selection\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022RadioButtons Group\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var items = new[] { \u0022System\u0022, \u0022Light\u0022, \u0022Dark\u0022 };\r\n        var (selectedIndex, setSelectedIndex) = UseState(0);\r\n        return VStack(12,\r\n            Heading(\u0022RadioButtons\u0022),\r\n            RadioButtons(items, selectedIndex, setSelectedIndex) with { Header = \u0022Theme\u0022 },\r\n            TextBlock($\u0022Selected: {items[selectedIndex]}\u0022))\r\n            .Margin(16);\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "slider-range",
+      "category": "inputs",
+      "title": "Slider Range Selection",
+      "intent": "slider for numeric range selection with live value display",
+      "tags": [
+        "slider",
+        "range",
+        "numeric"
+      ],
+      "factoryAnchors": [
+        "Slider",
+        "UseState"
+      ],
+      "notesKey": "Slider",
+      "relatedIds": [],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Slider Range\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (volume, setVolume) = UseState(35.0);\r\n        return VStack(12,\r\n            Heading(\u0022Slider\u0022),\r\n            (Slider(volume, 0, 100, setVolume) with { Header = \u0022Volume\u0022, StepFrequency = 5, TickFrequency = 10 }),\r\n            TextBlock($\u0022Current value: {volume:0}\u0022))\r\n            .Margin(16);\r\n    }\r\n}\r\n",
+      "rawCode": "// id: slider-range\r\n// intent: slider for numeric range selection\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Slider Range\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (volume, setVolume) = UseState(35.0);\r\n        return VStack(12,\r\n            Heading(\u0022Slider\u0022),\r\n            (Slider(volume, 0, 100, setVolume) with { Header = \u0022Volume\u0022, StepFrequency = 5, TickFrequency = 10 }),\r\n            TextBlock($\u0022Current value: {volume:0}\u0022))\r\n            .Margin(16);\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "textfield-twoway",
+      "category": "inputs",
+      "title": "TextField Two-Way Binding",
+      "intent": "two-way text input binding with UseState and immediate display updates",
+      "tags": [
+        "textfield",
+        "input",
+        "twoway",
+        "binding",
+        "text"
+      ],
+      "factoryAnchors": [
+        "TextField",
+        "UseState"
+      ],
+      "notesKey": "TextField",
+      "relatedIds": [],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022TextField Two-Way\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (name, setName) = UseState(\u0022Reactor\u0022);\r\n        return VStack(12,\r\n            Heading(\u0022TextField\u0022),\r\n            (TextField(name, setName, placeholder: \u0022Type a name\u0022) with { Header = \u0022Display name\u0022, MaxLength = 24 }),\r\n            TextBlock($\u0022Current value: {name}\u0022))\r\n            .Margin(16);\r\n    }\r\n}\r\n",
+      "rawCode": "// id: textfield-twoway\r\n// intent: two-way text input binding\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022TextField Two-Way\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (name, setName) = UseState(\u0022Reactor\u0022);\r\n        return VStack(12,\r\n            Heading(\u0022TextField\u0022),\r\n            (TextField(name, setName, placeholder: \u0022Type a name\u0022) with { Header = \u0022Display name\u0022, MaxLength = 24 }),\r\n            TextBlock($\u0022Current value: {name}\u0022))\r\n            .Margin(16);\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "toggleswitch",
+      "category": "inputs",
+      "title": "ToggleSwitch Settings Toggle",
+      "intent": "toggle switch for on off settings state",
+      "tags": [
+        "toggle",
+        "switch",
+        "setting",
+        "onoff"
+      ],
+      "factoryAnchors": [
+        "ToggleSwitch",
+        "UseState"
+      ],
+      "notesKey": "ToggleSwitch",
+      "relatedIds": [],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Toggle Switch\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (wifiEnabled, setWifiEnabled) = UseState(true);\r\n        return VStack(12,\r\n            Heading(\u0022ToggleSwitch\u0022),\r\n            (ToggleSwitch(wifiEnabled, setWifiEnabled, \u0022On\u0022, \u0022Off\u0022) with { Header = \u0022Wi-Fi\u0022 }),\r\n            TextBlock($\u0022Wi-Fi is {(wifiEnabled ? \u0022On\u0022 : \u0022Off\u0022)}\u0022))\r\n            .Margin(16);\r\n    }\r\n}\r\n",
+      "rawCode": "// id: toggleswitch\r\n// intent: toggle switch for on/off settings\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Toggle Switch\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (wifiEnabled, setWifiEnabled) = UseState(true);\r\n        return VStack(12,\r\n            Heading(\u0022ToggleSwitch\u0022),\r\n            (ToggleSwitch(wifiEnabled, setWifiEnabled, \u0022On\u0022, \u0022Off\u0022) with { Header = \u0022Wi-Fi\u0022 }),\r\n            TextBlock($\u0022Wi-Fi is {(wifiEnabled ? \u0022On\u0022 : \u0022Off\u0022)}\u0022))\r\n            .Margin(16);\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "border-with-corner",
+      "category": "layout",
+      "title": "Border With Corner Radius",
+      "intent": "bordered content area with padding, rounded corners, and theme-aware surface colors",
+      "tags": [
+        "border",
+        "padding",
+        "corner-radius",
+        "themed"
+      ],
+      "factoryAnchors": [
+        "Border"
+      ],
+      "notesKey": "Border",
+      "relatedIds": [
+        "card-surface"
+      ],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Border With Corner\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        return Border(\r\n            Border(\r\n                VStack(8,\r\n                    Subtitle(\u0022Pinned note\u0022),\r\n                    TextBlock(\u0022Border, padding, and corner radius create a clear content container.\u0022)\r\n                        .Foreground(Theme.SecondaryText),\r\n                    Caption(\u0022Updated just now\u0022).Foreground(Theme.TertiaryText))\r\n                .Padding(16))\r\n            .Background(Theme.CardBackground)\r\n            .WithBorder(Theme.CardStroke, 1)\r\n            .CornerRadius(14)\r\n            .Padding(4)\r\n        )\r\n        .Padding(24)\r\n        .Background(Theme.SolidBackground);\r\n    }\r\n}\r\n",
+      "rawCode": "// id: border-with-corner\r\n// intent: padded border with corner radius\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Border With Corner\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        return Border(\r\n            Border(\r\n                VStack(8,\r\n                    Subtitle(\u0022Pinned note\u0022),\r\n                    TextBlock(\u0022Border, padding, and corner radius create a clear content container.\u0022)\r\n                        .Foreground(Theme.SecondaryText),\r\n                    Caption(\u0022Updated just now\u0022).Foreground(Theme.TertiaryText))\r\n                .Padding(16))\r\n            .Background(Theme.CardBackground)\r\n            .WithBorder(Theme.CardStroke, 1)\r\n            .CornerRadius(14)\r\n            .Padding(4)\r\n        )\r\n        .Padding(24)\r\n        .Background(Theme.SolidBackground);\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "canvas-positioning",
+      "category": "layout",
+      "title": "Canvas Positioning",
+      "intent": "absolute layout with positioned elements, connector lines, and centered shapes",
+      "tags": [
+        "canvas",
+        "absolute",
+        "position",
+        "shapes"
+      ],
+      "factoryAnchors": [
+        "Canvas"
+      ],
+      "notesKey": "Canvas",
+      "relatedIds": [],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Canvas Positioning\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var accent = ThemeResource.Brush(\u0022AccentFillColorDefaultBrush\u0022);\r\n        var stroke = ThemeResource.Brush(\u0022CardStrokeColorDefaultBrush\u0022);\r\n\r\n        return Border(\r\n            Canvas(\r\n                Line(72, 48, 180, 108).Stroke(stroke).StrokeThickness(2),\r\n                Border(TextBlock(\u0022A\u0022).Padding(8))\r\n                    .Background(Theme.CardBackground)\r\n                    .WithBorder(Theme.CardStroke, 1)\r\n                    .CornerRadius(8)\r\n                    .Canvas(left: 48, top: 32),\r\n                Ellipse().Width(24).Height(24).Fill(accent).CenterAt(x: 180, y: 108),\r\n                Line(192, 120, 280, 160).Stroke(accent).StrokeThickness(2),\r\n                Border(TextBlock(\u0022Focus\u0022).Padding(8))\r\n                    .Background(Theme.LayerFill)\r\n                    .WithBorder(Theme.CardStroke, 1)\r\n                    .CornerRadius(8)\r\n                    .Canvas(left: 280, top: 160))\r\n            .Width(340)\r\n            .Height(220)\r\n        )\r\n        .Padding(20)\r\n        .Background(Theme.SolidBackground);\r\n    }\r\n}\r\n",
+      "rawCode": "// id: canvas-positioning\r\n// intent: absolute positioning with Canvas and .Canvas(left, top)\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Canvas Positioning\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var accent = ThemeResource.Brush(\u0022AccentFillColorDefaultBrush\u0022);\r\n        var stroke = ThemeResource.Brush(\u0022CardStrokeColorDefaultBrush\u0022);\r\n\r\n        return Border(\r\n            Canvas(\r\n                Line(72, 48, 180, 108).Stroke(stroke).StrokeThickness(2),\r\n                Border(TextBlock(\u0022A\u0022).Padding(8))\r\n                    .Background(Theme.CardBackground)\r\n                    .WithBorder(Theme.CardStroke, 1)\r\n                    .CornerRadius(8)\r\n                    .Canvas(left: 48, top: 32),\r\n                Ellipse().Width(24).Height(24).Fill(accent).CenterAt(x: 180, y: 108),\r\n                Line(192, 120, 280, 160).Stroke(accent).StrokeThickness(2),\r\n                Border(TextBlock(\u0022Focus\u0022).Padding(8))\r\n                    .Background(Theme.LayerFill)\r\n                    .WithBorder(Theme.CardStroke, 1)\r\n                    .CornerRadius(8)\r\n                    .Canvas(left: 280, top: 160))\r\n            .Width(340)\r\n            .Height(220)\r\n        )\r\n        .Padding(20)\r\n        .Background(Theme.SolidBackground);\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "card-surface",
+      "category": "layout",
+      "title": "Card Surface",
+      "intent": "theme-aware card surface with title, body copy, and an action button",
+      "tags": [
+        "card",
+        "theme",
+        "surface",
+        "win11",
+        "design"
+      ],
+      "factoryAnchors": [
+        "Card",
+        "Border"
+      ],
+      "notesKey": "Card",
+      "relatedIds": [
+        "border-with-corner"
+      ],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Core.Theme;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Card Surface\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        return Border(\r\n            Card(\r\n                VStack(12,\r\n                    Subtitle(\u0022Sprint planning\u0022),\r\n                    TextBlock(\u0022Card() applies the canonical WinUI surface, stroke, radius, and padding.\u0022)\r\n                        .Foreground(SecondaryText),\r\n                    Button(\u0022Open board\u0022)))\r\n            .Width(280)\r\n        )\r\n        .Padding(24)\r\n        .Background(SolidBackground);\r\n    }\r\n}\r\n",
+      "rawCode": "// id: card-surface\r\n// intent: themed card surface following Win11 design\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Core.Theme;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Card Surface\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        return Border(\r\n            Card(\r\n                VStack(12,\r\n                    Subtitle(\u0022Sprint planning\u0022),\r\n                    TextBlock(\u0022Card() applies the canonical WinUI surface, stroke, radius, and padding.\u0022)\r\n                        .Foreground(SecondaryText),\r\n                    Button(\u0022Open board\u0022)))\r\n            .Width(280)\r\n        )\r\n        .Padding(24)\r\n        .Background(SolidBackground);\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "flexcolumn-with-justify",
+      "category": "layout",
+      "title": "Flex Column With Justify",
+      "intent": "full-height column with aligned items spaced across the available height",
+      "tags": [
+        "flex",
+        "flexcolumn",
+        "justify",
+        "align",
+        "page-layout"
+      ],
+      "factoryAnchors": [
+        "FlexColumn"
+      ],
+      "notesKey": "FlexColumn",
+      "relatedIds": [
+        "flexrow-with-grow"
+      ],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Layout;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022FlexColumn Justify\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        return Border(\r\n            (FlexColumn(\r\n                VStack(4,\r\n                    Subtitle(\u0022Welcome\u0022),\r\n                    TextBlock(\u0022Header content stays at the top.\u0022).Foreground(Theme.SecondaryText)),\r\n                Border(TextBlock(\u0022Centered content\u0022).Padding(12))\r\n                    .Background(Theme.CardBackground)\r\n                    .WithBorder(Theme.CardStroke, 1)\r\n                    .CornerRadius(8),\r\n                Caption(\u0022Footer status or actions can sit at the bottom.\u0022)\r\n                    .Foreground(Theme.SecondaryText)) with\r\n            {\r\n                JustifyContent = FlexJustify.SpaceBetween,\r\n                AlignItems = FlexAlign.Center,\r\n            })\r\n            .Height(220)\r\n            .FlexPadding(20)\r\n        )\r\n        .Background(Theme.SolidBackground);\r\n    }\r\n}\r\n",
+      "rawCode": "// id: flexcolumn-with-justify\r\n// intent: flexbox column with alignment and justification\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Layout;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022FlexColumn Justify\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        return Border(\r\n            (FlexColumn(\r\n                VStack(4,\r\n                    Subtitle(\u0022Welcome\u0022),\r\n                    TextBlock(\u0022Header content stays at the top.\u0022).Foreground(Theme.SecondaryText)),\r\n                Border(TextBlock(\u0022Centered content\u0022).Padding(12))\r\n                    .Background(Theme.CardBackground)\r\n                    .WithBorder(Theme.CardStroke, 1)\r\n                    .CornerRadius(8),\r\n                Caption(\u0022Footer status or actions can sit at the bottom.\u0022)\r\n                    .Foreground(Theme.SecondaryText)) with\r\n            {\r\n                JustifyContent = FlexJustify.SpaceBetween,\r\n                AlignItems = FlexAlign.Center,\r\n            })\r\n            .Height(220)\r\n            .FlexPadding(20)\r\n        )\r\n        .Background(Theme.SolidBackground);\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "flexrow-with-grow",
+      "category": "layout",
+      "title": "Flex Row With Grow",
+      "intent": "toolbar layout with a growing spacer that pushes actions to the end",
+      "tags": [
+        "flex",
+        "flexrow",
+        "grow",
+        "toolbar",
+        "spacer"
+      ],
+      "factoryAnchors": [
+        "FlexRow"
+      ],
+      "notesKey": "FlexRow",
+      "relatedIds": [
+        "flexcolumn-with-justify"
+      ],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Layout;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022FlexRow Grow\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        return Border(\r\n            (FlexRow(\r\n                Subtitle(\u0022Files\u0022),\r\n                TextBlock(\u0022\u0022).Flex(grow: 1),\r\n                Button(\u0022Refresh\u0022),\r\n                Button(\u0022Share\u0022)) with\r\n            {\r\n                AlignItems = FlexAlign.Center,\r\n                ColumnGap = 8,\r\n            })\r\n            .Padding(16)\r\n        )\r\n        .Background(Theme.SolidBackground);\r\n    }\r\n}\r\n",
+      "rawCode": "// id: flexrow-with-grow\r\n// intent: CSS-flexbox row with one child growing to fill space\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Layout;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022FlexRow Grow\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        return Border(\r\n            (FlexRow(\r\n                Subtitle(\u0022Files\u0022),\r\n                TextBlock(\u0022\u0022).Flex(grow: 1),\r\n                Button(\u0022Refresh\u0022),\r\n                Button(\u0022Share\u0022)) with\r\n            {\r\n                AlignItems = FlexAlign.Center,\r\n                ColumnGap = 8,\r\n            })\r\n            .Padding(16)\r\n        )\r\n        .Background(Theme.SolidBackground);\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "grid-basic",
+      "category": "layout",
+      "title": "Basic Grid Layout",
+      "intent": "two-column grid using auto and star tracks with explicit child placement",
+      "tags": [
+        "grid",
+        "columns",
+        "rows",
+        "sizing",
+        "placement"
+      ],
+      "factoryAnchors": [
+        "Grid"
+      ],
+      "notesKey": "Grid",
+      "relatedIds": [
+        "grid-spans"
+      ],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Grid Basic\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        return Border(\r\n            (Grid(\r\n                new[] { GridSize.Auto, GridSize.Star() },\r\n                new[] { GridSize.Auto, GridSize.Auto, GridSize.Star() },\r\n                TextBlock(\u0022Name\u0022).Grid(row: 0, column: 0).Foreground(Theme.SecondaryText),\r\n                TextField(\u0022Ada Lovelace\u0022, _ =\u003E { }).Grid(row: 0, column: 1),\r\n                TextBlock(\u0022Team\u0022).Grid(row: 1, column: 0).Foreground(Theme.SecondaryText),\r\n                TextField(\u0022Layout systems\u0022, _ =\u003E { }).Grid(row: 1, column: 1),\r\n                Border(TextBlock(\u0022The bottom row expands because the second column and third row use star sizing.\u0022).Padding(12))\r\n                    .Background(Theme.CardBackground)\r\n                    .WithBorder(Theme.CardStroke, 1)\r\n                    .CornerRadius(8)\r\n                    .Grid(row: 2, column: 0, columnSpan: 2)) with\r\n            {\r\n                ColumnSpacing = 12,\r\n                RowSpacing = 12,\r\n            })\r\n            .Padding(20)\r\n        )\r\n        .Background(Theme.SolidBackground);\r\n    }\r\n}\r\n",
+      "rawCode": "// id: grid-basic\r\n// intent: 2D grid with column and row sizes\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Grid Basic\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        return Border(\r\n            (Grid(\r\n                new[] { GridSize.Auto, GridSize.Star() },\r\n                new[] { GridSize.Auto, GridSize.Auto, GridSize.Star() },\r\n                TextBlock(\u0022Name\u0022).Grid(row: 0, column: 0).Foreground(Theme.SecondaryText),\r\n                TextField(\u0022Ada Lovelace\u0022, _ =\u003E { }).Grid(row: 0, column: 1),\r\n                TextBlock(\u0022Team\u0022).Grid(row: 1, column: 0).Foreground(Theme.SecondaryText),\r\n                TextField(\u0022Layout systems\u0022, _ =\u003E { }).Grid(row: 1, column: 1),\r\n                Border(TextBlock(\u0022The bottom row expands because the second column and third row use star sizing.\u0022).Padding(12))\r\n                    .Background(Theme.CardBackground)\r\n                    .WithBorder(Theme.CardStroke, 1)\r\n                    .CornerRadius(8)\r\n                    .Grid(row: 2, column: 0, columnSpan: 2)) with\r\n            {\r\n                ColumnSpacing = 12,\r\n                RowSpacing = 12,\r\n            })\r\n            .Padding(20)\r\n        )\r\n        .Background(Theme.SolidBackground);\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "grid-spans",
+      "category": "layout",
+      "title": "Grid With Spans",
+      "intent": "dashboard-style grid that uses both row spans and column spans",
+      "tags": [
+        "grid",
+        "span",
+        "columnspan",
+        "rowspan",
+        "dashboard"
+      ],
+      "factoryAnchors": [
+        "Grid"
+      ],
+      "notesKey": "Grid",
+      "relatedIds": [
+        "grid-basic"
+      ],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Grid Spans\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        return Border(\r\n            (Grid(\r\n                new[] { GridSize.Star(2), GridSize.Star(), GridSize.Star() },\r\n                new[] { GridSize.Auto, GridSize.Star() },\r\n                Card(VStack(8,\r\n                    Subtitle(\u0022Overview\u0022),\r\n                    TextBlock(\u0022This tile spans two columns across the top.\u0022).Foreground(Theme.SecondaryText)))\r\n                    .Grid(row: 0, column: 0, columnSpan: 2),\r\n                Card(VStack(8,\r\n                    Subtitle(\u0022Alerts\u0022),\r\n                    Caption(\u00227 items need attention.\u0022).Foreground(Theme.SecondaryText)))\r\n                    .Grid(row: 0, column: 2, rowSpan: 2),\r\n                Card(TextBlock(\u0022Traffic\u0022)).Grid(row: 1, column: 0),\r\n                Card(TextBlock(\u0022Tasks\u0022)).Grid(row: 1, column: 1)) with\r\n            {\r\n                ColumnSpacing = 12,\r\n                RowSpacing = 12,\r\n            })\r\n            .Padding(20)\r\n        )\r\n        .Background(Theme.SolidBackground);\r\n    }\r\n}\r\n",
+      "rawCode": "// id: grid-spans\r\n// intent: grid with row and column spans\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Grid Spans\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        return Border(\r\n            (Grid(\r\n                new[] { GridSize.Star(2), GridSize.Star(), GridSize.Star() },\r\n                new[] { GridSize.Auto, GridSize.Star() },\r\n                Card(VStack(8,\r\n                    Subtitle(\u0022Overview\u0022),\r\n                    TextBlock(\u0022This tile spans two columns across the top.\u0022).Foreground(Theme.SecondaryText)))\r\n                    .Grid(row: 0, column: 0, columnSpan: 2),\r\n                Card(VStack(8,\r\n                    Subtitle(\u0022Alerts\u0022),\r\n                    Caption(\u00227 items need attention.\u0022).Foreground(Theme.SecondaryText)))\r\n                    .Grid(row: 0, column: 2, rowSpan: 2),\r\n                Card(TextBlock(\u0022Traffic\u0022)).Grid(row: 1, column: 0),\r\n                Card(TextBlock(\u0022Tasks\u0022)).Grid(row: 1, column: 1)) with\r\n            {\r\n                ColumnSpacing = 12,\r\n                RowSpacing = 12,\r\n            })\r\n            .Padding(20)\r\n        )\r\n        .Background(Theme.SolidBackground);\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "hstack-basic",
+      "category": "layout",
+      "title": "Horizontal Stack Basics",
+      "intent": "horizontal stack for a label, input, and action button",
+      "tags": [
+        "hstack",
+        "horizontal",
+        "stack",
+        "spacing"
+      ],
+      "factoryAnchors": [
+        "HStack",
+        "TextBlock",
+        "Button"
+      ],
+      "notesKey": "HStack",
+      "relatedIds": [
+        "vstack-basic"
+      ],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022HStack Basic\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        return Border(\r\n            HStack(8,\r\n                TextBlock(\u0022Name\u0022).Width(48),\r\n                TextField(\u0022Ada\u0022, _ =\u003E { }, placeholder: \u0022Display name\u0022).Width(180),\r\n                Button(\u0022Save\u0022))\r\n            .Padding(20)\r\n        )\r\n        .Background(Theme.SolidBackground);\r\n    }\r\n}\r\n",
+      "rawCode": "// id: hstack-basic\r\n// intent: horizontal shrink-wrap stack with spacing\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022HStack Basic\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        return Border(\r\n            HStack(8,\r\n                TextBlock(\u0022Name\u0022).Width(48),\r\n                TextField(\u0022Ada\u0022, _ =\u003E { }, placeholder: \u0022Display name\u0022).Width(180),\r\n                Button(\u0022Save\u0022))\r\n            .Padding(20)\r\n        )\r\n        .Background(Theme.SolidBackground);\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "scrollviewer-vertical",
+      "category": "layout",
+      "title": "Vertical ScrollView",
+      "intent": "scrollable region that wraps a long vertical stack of content cards",
+      "tags": [
+        "scroll",
+        "scrollview",
+        "vertical",
+        "overflow"
+      ],
+      "factoryAnchors": [
+        "ScrollView",
+        "VStack"
+      ],
+      "notesKey": "ScrollView",
+      "relatedIds": [
+        "vstack-basic"
+      ],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022ScrollView Vertical\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    static Element Row(int index) =\u003E\r\n        Border(\r\n            HStack(12,\r\n                Subtitle($\u0022Item {index}\u0022),\r\n                TextBlock(\u0022Scroll to reveal more content.\u0022).Foreground(Theme.SecondaryText))\r\n            .Padding(12))\r\n        .Background(Theme.CardBackground)\r\n        .WithBorder(Theme.CardStroke, 1)\r\n        .CornerRadius(8);\r\n\r\n    public override Element Render()\r\n    {\r\n        return Border(\r\n            ScrollView(\r\n                VStack(12,\r\n                    Subtitle(\u0022Recent activity\u0022),\r\n                    Row(1), Row(2), Row(3), Row(4), Row(5),\r\n                    Row(6), Row(7), Row(8), Row(9), Row(10))\r\n                .Padding(20))\r\n            .Height(220)\r\n        )\r\n        .Background(Theme.SolidBackground);\r\n    }\r\n}\r\n",
+      "rawCode": "// id: scrollviewer-vertical\r\n// intent: scrollable vertical content region\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022ScrollView Vertical\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    static Element Row(int index) =\u003E\r\n        Border(\r\n            HStack(12,\r\n                Subtitle($\u0022Item {index}\u0022),\r\n                TextBlock(\u0022Scroll to reveal more content.\u0022).Foreground(Theme.SecondaryText))\r\n            .Padding(12))\r\n        .Background(Theme.CardBackground)\r\n        .WithBorder(Theme.CardStroke, 1)\r\n        .CornerRadius(8);\r\n\r\n    public override Element Render()\r\n    {\r\n        return Border(\r\n            ScrollView(\r\n                VStack(12,\r\n                    Subtitle(\u0022Recent activity\u0022),\r\n                    Row(1), Row(2), Row(3), Row(4), Row(5),\r\n                    Row(6), Row(7), Row(8), Row(9), Row(10))\r\n                .Padding(20))\r\n            .Height(220)\r\n        )\r\n        .Background(Theme.SolidBackground);\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "vstack-basic",
+      "category": "layout",
+      "title": "Vertical Stack Basics",
+      "intent": "vertical shrink-wrap stack with consistent spacing between actions",
+      "tags": [
+        "vstack",
+        "vertical",
+        "stack",
+        "spacing"
+      ],
+      "factoryAnchors": [
+        "VStack",
+        "TextBlock",
+        "Button"
+      ],
+      "notesKey": "VStack",
+      "relatedIds": [
+        "hstack-basic"
+      ],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022VStack Basic\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        return Border(\r\n            VStack(12,\r\n                Subtitle(\u0022Daily checklist\u0022),\r\n                TextBlock(\u0022Keep related actions grouped in a clean vertical stack.\u0022)\r\n                    .Foreground(Theme.SecondaryText),\r\n                Button(\u0022Review changes\u0022),\r\n                Button(\u0022Run validation\u0022),\r\n                Button(\u0022Ship update\u0022))\r\n            .Padding(20)\r\n        )\r\n        .Background(Theme.SolidBackground);\r\n    }\r\n}\r\n",
+      "rawCode": "// id: vstack-basic\r\n// intent: vertical shrink-wrap stack with spacing\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022VStack Basic\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        return Border(\r\n            VStack(12,\r\n                Subtitle(\u0022Daily checklist\u0022),\r\n                TextBlock(\u0022Keep related actions grouped in a clean vertical stack.\u0022)\r\n                    .Foreground(Theme.SecondaryText),\r\n                Button(\u0022Review changes\u0022),\r\n                Button(\u0022Run validation\u0022),\r\n                Button(\u0022Ship update\u0022))\r\n            .Padding(20)\r\n        )\r\n        .Background(Theme.SolidBackground);\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "list-add-delete-toggle",
+      "category": "lists",
+      "title": "Add, Delete, Toggle Todo List",
+      "intent": "manage a mutable list with UseReducer and immutable updates",
+      "tags": [
+        "list",
+        "add",
+        "delete",
+        "toggle",
+        "todo",
+        "reducer",
+        "crud"
+      ],
+      "factoryAnchors": [
+        "ForEach",
+        "UseReducer"
+      ],
+      "notesKey": "lists",
+      "relatedIds": [
+        "list-with-empty-state"
+      ],
+      "priority": "P0",
+      "code": "using System.Collections.Immutable;\r\nusing System.Linq;\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Todo List\u0022, width: 500, height: 400);\r\n\r\nrecord TodoItem(string Id, string Text, bool Done);\r\nrecord TodoState(ImmutableList\u003CTodoItem\u003E Items);\r\nabstract record TodoAction;\r\nrecord AddAction(string Text) : TodoAction;\r\nrecord ToggleAction(string Id) : TodoAction;\r\nrecord DeleteAction(string Id) : TodoAction;\r\n\r\nclass App : Component\r\n{\r\n    private static TodoState Reduce(TodoState state, TodoAction action) =\u003E action switch\r\n    {\r\n        AddAction add when !string.IsNullOrWhiteSpace(add.Text)\r\n            =\u003E state with { Items = state.Items.Add(new TodoItem(System.Guid.NewGuid().ToString(), add.Text.Trim(), false)) },\r\n        ToggleAction toggle\r\n            =\u003E state with { Items = state.Items.Select(item =\u003E item.Id == toggle.Id ? item with { Done = !item.Done } : item).ToImmutableList() },\r\n        DeleteAction delete\r\n            =\u003E state with { Items = state.Items.RemoveAll(item =\u003E item.Id == delete.Id) },\r\n        _ =\u003E state,\r\n    };\r\n\r\n    public override Element Render()\r\n    {\r\n        var (state, dispatch) = UseReducer\u003CTodoState, TodoAction\u003E(Reduce,\r\n            new TodoState(ImmutableList.Create(new TodoItem(\u00221\u0022, \u0022Write docs\u0022, false), new TodoItem(\u00222\u0022, \u0022Ship sample\u0022, true))));\r\n        var (draft, setDraft) = UseState(\u0022\u0022);\r\n\r\n        return VStack(12,\r\n            Heading($\u0022Todo list ({state.Items.Count(item =\u003E item.Done)}/{state.Items.Count})\u0022),\r\n            HStack(8,\r\n                TextField(draft, setDraft, placeholder: \u0022Add an item\u0022).Width(300),\r\n                Button(\u0022Add\u0022, () =\u003E { dispatch(new AddAction(draft)); setDraft(\u0022\u0022); }).IsEnabled(!string.IsNullOrWhiteSpace(draft))),\r\n            VStack(8,\r\n                ForEach(state.Items, item =\u003E\r\n                    HStack(8,\r\n                        CheckBox(item.Done, _ =\u003E dispatch(new ToggleAction(item.Id))),\r\n                        TextBlock(item.Text).Width(240).Opacity(item.Done ? 0.5 : 1.0),\r\n                        Button(\u0022Delete\u0022, () =\u003E dispatch(new DeleteAction(item.Id))))\r\n                    .WithKey(item.Id))))\r\n            .Padding(16);\r\n    }\r\n}\r\n",
+      "rawCode": "// id: list-add-delete-toggle\r\n// intent: dynamic list with add, delete, and toggle using UseReducer\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n#:property TargetFramework=net10.0-windows10.0.22621.0\r\n#:property UseWinUI=true\r\n#:property WindowsPackageType=None\r\n\r\nusing System.Collections.Immutable;\r\nusing System.Linq;\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Todo List\u0022, width: 500, height: 400);\r\n\r\nrecord TodoItem(string Id, string Text, bool Done);\r\nrecord TodoState(ImmutableList\u003CTodoItem\u003E Items);\r\nabstract record TodoAction;\r\nrecord AddAction(string Text) : TodoAction;\r\nrecord ToggleAction(string Id) : TodoAction;\r\nrecord DeleteAction(string Id) : TodoAction;\r\n\r\nclass App : Component\r\n{\r\n    private static TodoState Reduce(TodoState state, TodoAction action) =\u003E action switch\r\n    {\r\n        AddAction add when !string.IsNullOrWhiteSpace(add.Text)\r\n            =\u003E state with { Items = state.Items.Add(new TodoItem(System.Guid.NewGuid().ToString(), add.Text.Trim(), false)) },\r\n        ToggleAction toggle\r\n            =\u003E state with { Items = state.Items.Select(item =\u003E item.Id == toggle.Id ? item with { Done = !item.Done } : item).ToImmutableList() },\r\n        DeleteAction delete\r\n            =\u003E state with { Items = state.Items.RemoveAll(item =\u003E item.Id == delete.Id) },\r\n        _ =\u003E state,\r\n    };\r\n\r\n    public override Element Render()\r\n    {\r\n        var (state, dispatch) = UseReducer\u003CTodoState, TodoAction\u003E(Reduce,\r\n            new TodoState(ImmutableList.Create(new TodoItem(\u00221\u0022, \u0022Write docs\u0022, false), new TodoItem(\u00222\u0022, \u0022Ship sample\u0022, true))));\r\n        var (draft, setDraft) = UseState(\u0022\u0022);\r\n\r\n        return VStack(12,\r\n            Heading($\u0022Todo list ({state.Items.Count(item =\u003E item.Done)}/{state.Items.Count})\u0022),\r\n            HStack(8,\r\n                TextField(draft, setDraft, placeholder: \u0022Add an item\u0022).Width(300),\r\n                Button(\u0022Add\u0022, () =\u003E { dispatch(new AddAction(draft)); setDraft(\u0022\u0022); }).IsEnabled(!string.IsNullOrWhiteSpace(draft))),\r\n            VStack(8,\r\n                ForEach(state.Items, item =\u003E\r\n                    HStack(8,\r\n                        CheckBox(item.Done, _ =\u003E dispatch(new ToggleAction(item.Id))),\r\n                        TextBlock(item.Text).Width(240).Opacity(item.Done ? 0.5 : 1.0),\r\n                        Button(\u0022Delete\u0022, () =\u003E dispatch(new DeleteAction(item.Id))))\r\n                    .WithKey(item.Id))))\r\n            .Padding(16);\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "list-basic-foreach",
+      "category": "lists",
+      "title": "Basic ForEach",
+      "intent": "render a static list using ForEach with stable keys",
+      "tags": [
+        "list",
+        "foreach",
+        "render",
+        "items",
+        "collection"
+      ],
+      "factoryAnchors": [
+        "ForEach"
+      ],
+      "notesKey": "ForEach",
+      "relatedIds": [
+        "list-add-delete-toggle",
+        "virtualized-large-list"
+      ],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Basic ForEach\u0022, width: 500, height: 400);\r\n\r\nrecord GroceryItem(string Id, string Name, string Aisle);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var items = new[]\r\n        {\r\n            new GroceryItem(\u0022fruit\u0022, \u0022Apples\u0022, \u0022Produce\u0022),\r\n            new GroceryItem(\u0022bread\u0022, \u0022Sourdough\u0022, \u0022Bakery\u0022),\r\n            new GroceryItem(\u0022milk\u0022, \u0022Whole Milk\u0022, \u0022Dairy\u0022),\r\n        };\r\n\r\n        return VStack(12,\r\n            Heading(\u0022Static shopping list\u0022),\r\n            TextBlock(\u0022ForEach maps fixed data into UI rows.\u0022),\r\n            VStack(8,\r\n                ForEach(items, item =\u003E\r\n                    HStack(12,\r\n                        TextBlock(item.Name).Bold().Width(160),\r\n                        TextBlock(item.Aisle).Opacity(0.7))\r\n                    .Padding(8)\r\n                    .WithKey(item.Id))))\r\n            .Padding(16);\r\n    }\r\n}\r\n",
+      "rawCode": "// id: list-basic-foreach\r\n// intent: render a static list using ForEach\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n#:property TargetFramework=net10.0-windows10.0.22621.0\r\n#:property UseWinUI=true\r\n#:property WindowsPackageType=None\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Basic ForEach\u0022, width: 500, height: 400);\r\n\r\nrecord GroceryItem(string Id, string Name, string Aisle);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var items = new[]\r\n        {\r\n            new GroceryItem(\u0022fruit\u0022, \u0022Apples\u0022, \u0022Produce\u0022),\r\n            new GroceryItem(\u0022bread\u0022, \u0022Sourdough\u0022, \u0022Bakery\u0022),\r\n            new GroceryItem(\u0022milk\u0022, \u0022Whole Milk\u0022, \u0022Dairy\u0022),\r\n        };\r\n\r\n        return VStack(12,\r\n            Heading(\u0022Static shopping list\u0022),\r\n            TextBlock(\u0022ForEach maps fixed data into UI rows.\u0022),\r\n            VStack(8,\r\n                ForEach(items, item =\u003E\r\n                    HStack(12,\r\n                        TextBlock(item.Name).Bold().Width(160),\r\n                        TextBlock(item.Aisle).Opacity(0.7))\r\n                    .Padding(8)\r\n                    .WithKey(item.Id))))\r\n            .Padding(16);\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "list-with-empty-state",
+      "category": "lists",
+      "title": "List With Empty State",
+      "intent": "show a placeholder when a list has no items and render rows when data exists",
+      "tags": [
+        "list",
+        "empty",
+        "placeholder",
+        "conditional"
+      ],
+      "factoryAnchors": [
+        "ForEach"
+      ],
+      "notesKey": "lists",
+      "relatedIds": [
+        "list-add-delete-toggle"
+      ],
+      "priority": "P0",
+      "code": "using System;\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Empty State\u0022, width: 500, height: 400);\r\n\r\nrecord Favorite(string Id, string Label);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (showItems, setShowItems) = UseState(false);\r\n        var items = showItems\r\n            ? new[] { new Favorite(\u0022one\u0022, \u0022Design notes\u0022), new Favorite(\u0022two\u0022, \u0022Release checklist\u0022) }\r\n            : Array.Empty\u003CFavorite\u003E();\r\n\r\n        return VStack(12,\r\n            Heading(\u0022Favorites\u0022),\r\n            Button(showItems ? \u0022Clear items\u0022 : \u0022Load sample items\u0022, () =\u003E setShowItems(!showItems)),\r\n            items.Length == 0\r\n                ? Border(TextBlock(\u0022No items yet\u0022).Opacity(0.7)).Padding(16)\r\n                : VStack(8,\r\n                    ForEach(items, item =\u003E\r\n                        TextBlock(item.Label)\r\n                            .Padding(8)\r\n                            .WithKey(item.Id))))\r\n            .Padding(16);\r\n    }\r\n}\r\n",
+      "rawCode": "// id: list-with-empty-state\r\n// intent: list with empty-state placeholder when no items exist\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n#:property TargetFramework=net10.0-windows10.0.22621.0\r\n#:property UseWinUI=true\r\n#:property WindowsPackageType=None\r\n\r\nusing System;\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Empty State\u0022, width: 500, height: 400);\r\n\r\nrecord Favorite(string Id, string Label);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (showItems, setShowItems) = UseState(false);\r\n        var items = showItems\r\n            ? new[] { new Favorite(\u0022one\u0022, \u0022Design notes\u0022), new Favorite(\u0022two\u0022, \u0022Release checklist\u0022) }\r\n            : Array.Empty\u003CFavorite\u003E();\r\n\r\n        return VStack(12,\r\n            Heading(\u0022Favorites\u0022),\r\n            Button(showItems ? \u0022Clear items\u0022 : \u0022Load sample items\u0022, () =\u003E setShowItems(!showItems)),\r\n            items.Length == 0\r\n                ? Border(TextBlock(\u0022No items yet\u0022).Opacity(0.7)).Padding(16)\r\n                : VStack(8,\r\n                    ForEach(items, item =\u003E\r\n                        TextBlock(item.Label)\r\n                            .Padding(8)\r\n                            .WithKey(item.Id))))\r\n            .Padding(16);\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "list-with-loading",
+      "category": "lists",
+      "title": "List With Loading State",
+      "intent": "show a spinner first and then render fetched list items",
+      "tags": [
+        "list",
+        "loading",
+        "spinner",
+        "async",
+        "fetch"
+      ],
+      "factoryAnchors": [
+        "ForEach",
+        "ProgressRing",
+        "UseState"
+      ],
+      "notesKey": null,
+      "relatedIds": [
+        "list-with-empty-state"
+      ],
+      "priority": "P0",
+      "code": "using System;\r\nusing System.Collections.Generic;\r\nusing System.Threading.Tasks;\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Loading List\u0022, width: 500, height: 400);\r\n\r\nrecord Order(string Id, string Label);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (loading, setLoading) = UseState(true, threadSafe: true);\r\n        var (items, setItems) = UseState\u003CIReadOnlyList\u003COrder\u003E\u003E(Array.Empty\u003COrder\u003E(), threadSafe: true);\r\n\r\n        UseEffect(() =\u003E\r\n        {\r\n            _ = Task.Run(async () =\u003E\r\n            {\r\n                await Task.Delay(900);\r\n                setItems(new[] { new Order(\u0022101\u0022, \u0022Order #101\u0022), new Order(\u0022102\u0022, \u0022Order #102\u0022), new Order(\u0022103\u0022, \u0022Order #103\u0022) });\r\n                setLoading(false);\r\n            });\r\n        }, Array.Empty\u003Cobject\u003E());\r\n\r\n        return VStack(12,\r\n            Heading(\u0022Recent orders\u0022),\r\n            loading\r\n                ? HStack(8, ProgressRing().IsActive(true).Width(20).Height(20), TextBlock(\u0022Loading items\u2026\u0022))\r\n                : VStack(8,\r\n                    ForEach(items, item =\u003E\r\n                        TextBlock(item.Label)\r\n                            .Padding(8)\r\n                            .WithKey(item.Id))))\r\n            .Padding(16);\r\n    }\r\n}\r\n",
+      "rawCode": "// id: list-with-loading\r\n// intent: list with loading indicator during async fetch\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n#:property TargetFramework=net10.0-windows10.0.22621.0\r\n#:property UseWinUI=true\r\n#:property WindowsPackageType=None\r\n\r\nusing System;\r\nusing System.Collections.Generic;\r\nusing System.Threading.Tasks;\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Loading List\u0022, width: 500, height: 400);\r\n\r\nrecord Order(string Id, string Label);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var (loading, setLoading) = UseState(true, threadSafe: true);\r\n        var (items, setItems) = UseState\u003CIReadOnlyList\u003COrder\u003E\u003E(Array.Empty\u003COrder\u003E(), threadSafe: true);\r\n\r\n        UseEffect(() =\u003E\r\n        {\r\n            _ = Task.Run(async () =\u003E\r\n            {\r\n                await Task.Delay(900);\r\n                setItems(new[] { new Order(\u0022101\u0022, \u0022Order #101\u0022), new Order(\u0022102\u0022, \u0022Order #102\u0022), new Order(\u0022103\u0022, \u0022Order #103\u0022) });\r\n                setLoading(false);\r\n            });\r\n        }, Array.Empty\u003Cobject\u003E());\r\n\r\n        return VStack(12,\r\n            Heading(\u0022Recent orders\u0022),\r\n            loading\r\n                ? HStack(8, ProgressRing().IsActive(true).Width(20).Height(20), TextBlock(\u0022Loading items\u2026\u0022))\r\n                : VStack(8,\r\n                    ForEach(items, item =\u003E\r\n                        TextBlock(item.Label)\r\n                            .Padding(8)\r\n                            .WithKey(item.Id))))\r\n            .Padding(16);\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "master-detail",
+      "category": "lists",
+      "title": "Master Detail Selection",
+      "intent": "use a selectable list on the left to drive detail content on the right",
+      "tags": [
+        "master-detail",
+        "selection",
+        "list",
+        "detail",
+        "split"
+      ],
+      "factoryAnchors": [
+        "ForEach",
+        "UseState",
+        "HStack"
+      ],
+      "notesKey": null,
+      "relatedIds": [
+        "list-basic-foreach"
+      ],
+      "priority": "P0",
+      "code": "using System.Linq;\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Master Detail\u0022, width: 500, height: 400);\r\n\r\nrecord Topic(string Id, string Title, string Detail);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var topics = new[]\r\n        {\r\n            new Topic(\u0022layout\u0022, \u0022Layout\u0022, \u0022Use stacks to compose responsive UI.\u0022),\r\n            new Topic(\u0022state\u0022, \u0022State\u0022, \u0022Hooks keep selection and local state in sync.\u0022),\r\n            new Topic(\u0022lists\u0022, \u0022Lists\u0022, \u0022ForEach renders rows while state tracks selection.\u0022),\r\n        };\r\n        var (selectedId, setSelectedId) = UseState(topics[0].Id);\r\n        var selected = topics.First(topic =\u003E topic.Id == selectedId);\r\n\r\n        return HStack(16,\r\n            VStack(8,\r\n                Heading(\u0022Topics\u0022),\r\n                ForEach(topics, topic =\u003E\r\n                    Button(topic.Id == selectedId ? $\u0022\u003E {topic.Title}\u0022 : topic.Title, () =\u003E setSelectedId(topic.Id))\r\n                        .Width(180)\r\n                        .WithKey(topic.Id))),\r\n            Border(\r\n                VStack(8,\r\n                    Heading(selected.Title),\r\n                    TextBlock(selected.Detail),\r\n                    TextBlock($\u0022Selected: {selected.Id}\u0022).Opacity(0.7))\r\n            ).Padding(12))\r\n            .Padding(16);\r\n    }\r\n}\r\n",
+      "rawCode": "// id: master-detail\r\n// intent: master-detail layout with list selection\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n#:property TargetFramework=net10.0-windows10.0.22621.0\r\n#:property UseWinUI=true\r\n#:property WindowsPackageType=None\r\n\r\nusing System.Linq;\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Master Detail\u0022, width: 500, height: 400);\r\n\r\nrecord Topic(string Id, string Title, string Detail);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var topics = new[]\r\n        {\r\n            new Topic(\u0022layout\u0022, \u0022Layout\u0022, \u0022Use stacks to compose responsive UI.\u0022),\r\n            new Topic(\u0022state\u0022, \u0022State\u0022, \u0022Hooks keep selection and local state in sync.\u0022),\r\n            new Topic(\u0022lists\u0022, \u0022Lists\u0022, \u0022ForEach renders rows while state tracks selection.\u0022),\r\n        };\r\n        var (selectedId, setSelectedId) = UseState(topics[0].Id);\r\n        var selected = topics.First(topic =\u003E topic.Id == selectedId);\r\n\r\n        return HStack(16,\r\n            VStack(8,\r\n                Heading(\u0022Topics\u0022),\r\n                ForEach(topics, topic =\u003E\r\n                    Button(topic.Id == selectedId ? $\u0022\u003E {topic.Title}\u0022 : topic.Title, () =\u003E setSelectedId(topic.Id))\r\n                        .Width(180)\r\n                        .WithKey(topic.Id))),\r\n            Border(\r\n                VStack(8,\r\n                    Heading(selected.Title),\r\n                    TextBlock(selected.Detail),\r\n                    TextBlock($\u0022Selected: {selected.Id}\u0022).Opacity(0.7))\r\n            ).Padding(12))\r\n            .Padding(16);\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "virtualized-large-list",
+      "category": "lists",
+      "title": "Virtualized Large List",
+      "intent": "render a large data set efficiently with LazyVStack virtualization",
+      "tags": [
+        "virtualized",
+        "lazy",
+        "large-list",
+        "performance"
+      ],
+      "factoryAnchors": [
+        "LazyVStack"
+      ],
+      "notesKey": null,
+      "relatedIds": [
+        "list-basic-foreach"
+      ],
+      "priority": "P0",
+      "code": "using System.Collections.Generic;\r\nusing System.Linq;\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Virtualized List\u0022, width: 500, height: 400);\r\n\r\nrecord LogRow(string Id, string Message);\r\n\r\nclass App : Component\r\n{\r\n    private static readonly IReadOnlyList\u003CLogRow\u003E Rows = Enumerable.Range(1, 1500)\r\n        .Select(i =\u003E new LogRow($\u0022row-{i}\u0022, $\u0022Log entry {i}: visible rows are realized on demand.\u0022))\r\n        .ToArray();\r\n\r\n    public override Element Render()\r\n    {\r\n        return VStack(12,\r\n            Heading($\u0022LazyVStack ({Rows.Count} items)\u0022),\r\n            TextBlock(\u0022Use virtualization for long lists.\u0022),\r\n            LazyVStack\u003CLogRow\u003E(\r\n                Rows,\r\n                row =\u003E row.Id,\r\n                (row, index) =\u003E HStack(12,\r\n                    TextBlock($\u0022{index \u002B 1}\u0022).Width(50),\r\n                    TextBlock(row.Message))\r\n                .Padding(8))\r\n            .Height(300))\r\n            .Padding(16);\r\n    }\r\n}\r\n",
+      "rawCode": "// id: virtualized-large-list\r\n// intent: virtualized list for large datasets using LazyVStack\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n#:property TargetFramework=net10.0-windows10.0.22621.0\r\n#:property UseWinUI=true\r\n#:property WindowsPackageType=None\r\n\r\nusing System.Collections.Generic;\r\nusing System.Linq;\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Reactor.Core;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Virtualized List\u0022, width: 500, height: 400);\r\n\r\nrecord LogRow(string Id, string Message);\r\n\r\nclass App : Component\r\n{\r\n    private static readonly IReadOnlyList\u003CLogRow\u003E Rows = Enumerable.Range(1, 1500)\r\n        .Select(i =\u003E new LogRow($\u0022row-{i}\u0022, $\u0022Log entry {i}: visible rows are realized on demand.\u0022))\r\n        .ToArray();\r\n\r\n    public override Element Render()\r\n    {\r\n        return VStack(12,\r\n            Heading($\u0022LazyVStack ({Rows.Count} items)\u0022),\r\n            TextBlock(\u0022Use virtualization for long lists.\u0022),\r\n            LazyVStack\u003CLogRow\u003E(\r\n                Rows,\r\n                row =\u003E row.Id,\r\n                (row, index) =\u003E HStack(12,\r\n                    TextBlock($\u0022{index \u002B 1}\u0022).Width(50),\r\n                    TextBlock(row.Message))\r\n                .Padding(8))\r\n            .Height(300))\r\n            .Padding(16);\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "body-bodystrong",
+      "category": "text",
+      "title": "Body with BodyStrong Emphasis",
+      "intent": "body text with emphasis using BodyStrong",
+      "tags": [
+        "body",
+        "bodystrong",
+        "emphasis",
+        "paragraph"
+      ],
+      "factoryAnchors": [
+        "Body",
+        "BodyStrong"
+      ],
+      "notesKey": null,
+      "relatedIds": [],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Body and BodyStrong\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        return VStack(\r\n            Body(\u0022Body is useful for longer explanatory text in a layout.\u0022),\r\n            BodyStrong(\u0022BodyStrong highlights the sentence you want readers to notice first.\u0022),\r\n            Body(\u0022Mix them together to keep paragraphs readable while emphasizing key details.\u0022));\r\n    }\r\n}\r\n",
+      "rawCode": "// id: body-bodystrong\r\n// intent: body text with emphasis using BodyStrong\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Body and BodyStrong\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        return VStack(\r\n            Body(\u0022Body is useful for longer explanatory text in a layout.\u0022),\r\n            BodyStrong(\u0022BodyStrong highlights the sentence you want readers to notice first.\u0022),\r\n            Body(\u0022Mix them together to keep paragraphs readable while emphasizing key details.\u0022));\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "heading-subhead-caption",
+      "category": "text",
+      "title": "Heading, Subtitle, and Caption",
+      "intent": "demonstrate the WinUI 3 type ramp (Heading, Subtitle, Caption)",
+      "tags": [
+        "type-ramp",
+        "heading",
+        "subtitle",
+        "caption",
+        "typography"
+      ],
+      "factoryAnchors": [
+        "Heading",
+        "Subtitle",
+        "Caption",
+        "Title",
+        "Body"
+      ],
+      "notesKey": null,
+      "relatedIds": [],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Type Ramp\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        return VStack(\r\n            Title(\u0022Title\u0022),\r\n            Heading(\u0022Heading\u0022),\r\n            SubHeading(\u0022SubHeading\u0022),\r\n            Subtitle(\u0022Subtitle\u0022),\r\n            Body(\u0022Body\u0022),\r\n            BodyLarge(\u0022BodyLarge\u0022),\r\n            BodyStrong(\u0022BodyStrong\u0022),\r\n            Caption(\u0022Caption\u0022));\r\n    }\r\n}\r\n",
+      "rawCode": "// id: heading-subhead-caption\r\n// intent: demonstrate the WinUI 3 type ramp (Heading, Subtitle, Caption)\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Type Ramp\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        return VStack(\r\n            Title(\u0022Title\u0022),\r\n            Heading(\u0022Heading\u0022),\r\n            SubHeading(\u0022SubHeading\u0022),\r\n            Subtitle(\u0022Subtitle\u0022),\r\n            Body(\u0022Body\u0022),\r\n            BodyLarge(\u0022BodyLarge\u0022),\r\n            BodyStrong(\u0022BodyStrong\u0022),\r\n            Caption(\u0022Caption\u0022));\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "localized-text",
+      "category": "text",
+      "title": "Localized Text with LocaleProvider",
+      "intent": "localized text display using LocaleProvider",
+      "tags": [
+        "localization",
+        "locale",
+        "i18n",
+        "text"
+      ],
+      "factoryAnchors": [
+        "LocaleProvider",
+        "TextBlock"
+      ],
+      "notesKey": null,
+      "relatedIds": [],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Localized Text\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        return VStack(\r\n            TextBlock(\u0022LocaleProvider sets locale context for its subtree.\u0022),\r\n            LocaleProvider(\u0022en-US\u0022, TextBlock(\u0022en-US: Hello from Reactor.\u0022)),\r\n            LocaleProvider(\u0022ar-SA\u0022, TextBlock(\u0022ar-SA: \u0645\u0631\u062D\u0628\u0627 \u0645\u0646 Reactor.\u0022)));\r\n    }\r\n}\r\n",
+      "rawCode": "// id: localized-text\r\n// intent: localized text display using LocaleProvider\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Localized Text\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        return VStack(\r\n            TextBlock(\u0022LocaleProvider sets locale context for its subtree.\u0022),\r\n            LocaleProvider(\u0022en-US\u0022, TextBlock(\u0022en-US: Hello from Reactor.\u0022)),\r\n            LocaleProvider(\u0022ar-SA\u0022, TextBlock(\u0022ar-SA: \u0645\u0631\u062D\u0628\u0627 \u0645\u0646 Reactor.\u0022)));\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "rich-text-inlines",
+      "category": "text",
+      "title": "Rich Text Inlines",
+      "intent": "rich text with bold, italic, and hyperlink runs",
+      "tags": [
+        "rich-text",
+        "inline",
+        "bold",
+        "italic",
+        "hyperlink",
+        "run"
+      ],
+      "factoryAnchors": [
+        "RichTextBlock",
+        "Paragraph",
+        "Run",
+        "Hyperlink"
+      ],
+      "notesKey": null,
+      "relatedIds": [],
+      "priority": "P0",
+      "code": "using System;\r\nusing Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Rich Text Inlines\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        return RichTextBlock(new[]\r\n        {\r\n            Paragraph(\r\n                Run(\u0022Rich text can mix \u0022),\r\n                Run(\u0022bold\u0022) with { IsBold = true },\r\n                Run(\u0022, \u0022),\r\n                Run(\u0022italic\u0022) with { IsItalic = true },\r\n                Run(\u0022, and \u0022),\r\n                Hyperlink(\u0022hyperlinks\u0022, new Uri(\u0022https://github.com/microsoft/microsoft-ui-reactor\u0022)),\r\n                Run(\u0022 in one paragraph.\u0022))\r\n        });\r\n    }\r\n}\r\n",
+      "rawCode": "// id: rich-text-inlines\r\n// intent: rich text with bold, italic, and hyperlink runs\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing System;\r\nusing Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Rich Text Inlines\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        return RichTextBlock(new[]\r\n        {\r\n            Paragraph(\r\n                Run(\u0022Rich text can mix \u0022),\r\n                Run(\u0022bold\u0022) with { IsBold = true },\r\n                Run(\u0022, \u0022),\r\n                Run(\u0022italic\u0022) with { IsItalic = true },\r\n                Run(\u0022, and \u0022),\r\n                Hyperlink(\u0022hyperlinks\u0022, new Uri(\u0022https://github.com/microsoft/microsoft-ui-reactor\u0022)),\r\n                Run(\u0022 in one paragraph.\u0022))\r\n        });\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "text-wrap-truncate",
+      "category": "text",
+      "title": "Wrap and Truncate Text",
+      "intent": "text wrapping and trimming with ellipsis",
+      "tags": [
+        "wrap",
+        "truncate",
+        "ellipsis",
+        "maxlines",
+        "overflow"
+      ],
+      "factoryAnchors": [
+        "TextBlock"
+      ],
+      "notesKey": null,
+      "relatedIds": [],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Xaml;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Wrap and Truncate\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var sample = \u0022A longer sentence shows how text behaves when the available width is smaller than the content.\u0022;\r\n\r\n        return VStack(\r\n            TextBlock(sample).TextWrapping(TextWrapping.Wrap).MaxLines(2),\r\n            TextBlock(sample)\r\n                .TextWrapping(TextWrapping.Wrap)\r\n                .TextTrimming(TextTrimming.CharacterEllipsis)\r\n                .MaxLines(1));\r\n    }\r\n}\r\n",
+      "rawCode": "// id: text-wrap-truncate\r\n// intent: text wrapping and trimming with ellipsis\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing Microsoft.UI.Xaml;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022Wrap and Truncate\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        var sample = \u0022A longer sentence shows how text behaves when the available width is smaller than the content.\u0022;\r\n\r\n        return VStack(\r\n            TextBlock(sample).TextWrapping(TextWrapping.Wrap).MaxLines(2),\r\n            TextBlock(sample)\r\n                .TextWrapping(TextWrapping.Wrap)\r\n                .TextTrimming(TextTrimming.CharacterEllipsis)\r\n                .MaxLines(1));\r\n    }\r\n}\r\n"
+    },
+    {
+      "id": "textblock-basic",
+      "category": "text",
+      "title": "Basic TextBlock",
+      "intent": "display a simple text label",
+      "tags": [
+        "text",
+        "textblock",
+        "label",
+        "display"
+      ],
+      "factoryAnchors": [
+        "TextBlock"
+      ],
+      "notesKey": null,
+      "relatedIds": [],
+      "priority": "P0",
+      "code": "using Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022TextBlock Basic\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        return VStack(\r\n            TextBlock(\u0022Hello from Reactor.\u0022),\r\n            TextBlock(\u0022TextBlock displays read-only text content.\u0022),\r\n            TextBlock(\u0022Use it for labels, hints, and short status messages.\u0022));\r\n    }\r\n}\r\n",
+      "rawCode": "// id: textblock-basic\r\n// intent: display a simple text label\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022TextBlock Basic\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        return VStack(\r\n            TextBlock(\u0022Hello from Reactor.\u0022),\r\n            TextBlock(\u0022TextBlock displays read-only text content.\u0022),\r\n            TextBlock(\u0022Use it for labels, hints, and short status messages.\u0022));\r\n    }\r\n}\r\n"
     }
   ],
-  "generatedAt": "2026-05-20T17:33:23.8920168\u002B00:00"
+  "generatedAt": "2026-05-29T16:07:11.3144315\u002B00:00"
 }

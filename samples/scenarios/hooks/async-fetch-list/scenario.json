@@ -1,0 +1,11 @@
+{
+  "id": "async-fetch-list",
+  "category": "hooks",
+  "title": "Async Fetch List",
+  "intent": "fetch async data with UseResource and render loading, error, and reloading states",
+  "tags": ["async", "fetch", "resource", "loading", "error", "reloading"],
+  "factoryAnchors": ["UseResource", "InfoBar", "ProgressRing"],
+  "notesKey": "UseResource",
+  "relatedIds": ["list-with-loading"],
+  "priority": "P0"
+}

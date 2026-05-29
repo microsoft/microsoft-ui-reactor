@@ -1,0 +1,11 @@
+{
+  "id": "calendar-multiselect",
+  "category": "inputs",
+  "title": "Calendar Multi-select",
+  "intent": "select multiple dates in a CalendarView and summarize the chosen days",
+  "tags": ["calendar", "multi-select", "dates", "selection"],
+  "factoryAnchors": ["CalendarView", "UseState"],
+  "notesKey": "CalendarView",
+  "relatedIds": ["calendardatepicker"],
+  "priority": "P0"
+}
