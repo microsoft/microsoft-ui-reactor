@@ -683,7 +683,7 @@ public sealed partial class Reconciler
         }
     }
 
-    private UIElement? UpdateButton(ButtonElement o, ButtonElement n, WinUI.Button b, Action requestRerender)
+    internal UIElement? UpdateButton(ButtonElement o, ButtonElement n, WinUI.Button b, Action requestRerender)
     {
         ApplyButtonEnabledState(b, n);
         if (n.ContentElement is not null && o.ContentElement is not null && b.Content is UIElement existingContent)

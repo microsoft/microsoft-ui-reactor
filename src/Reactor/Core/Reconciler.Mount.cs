@@ -301,7 +301,7 @@ public sealed partial class Reconciler
         return rtb;
     }
 
-    private WinUI.Button MountButton(ButtonElement btn, Action requestRerender)
+    internal WinUI.Button MountButton(ButtonElement btn, Action requestRerender)
     {
         var rented = _pool.TryRent(typeof(WinUI.Button));
         var button = rented as WinUI.Button ?? new WinUI.Button();

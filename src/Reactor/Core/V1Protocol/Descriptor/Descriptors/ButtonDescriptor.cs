@@ -23,11 +23,16 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   <c>IsDisabledFocusable</c> is true (mirrors the legacy guard).</item>
 /// </list></para>
 ///
-/// <para><b>Known gap vs. hand-coded handler:</b> <c>ContentElement</c>
-/// (Button hosting a child Element rather than a string label) is not
-/// expressed here — the descriptor only handles the string-Content fast
-/// path. Authors needing nested-element content fall through to the
-/// legacy arm (V1 OFF) or wire it via setters.</para>
+/// <para><b>Known gap vs. hand-coded handler — and why this descriptor is no
+/// longer the registered engine path:</b> <c>ContentElement</c> (Button
+/// hosting a child Element rather than a string label) is not expressed here —
+/// the descriptor only handles the string-Content fast path. Because dropping
+/// element content is a real regression once the type is registered (the
+/// legacy fall-through is removed), the engine instead registers the delegate
+/// <c>ButtonHandler</c>, which runs the COMPLETE legacy
+/// <c>MountButton</c>/<c>UpdateButton</c> bodies (including
+/// <c>ContentElement</c>). This descriptor is retained for its isolated
+/// selftests and the perf-bench descriptor variant.</para>
 /// </summary>
 [Experimental("REACTOR_V1_PREVIEW")]
 internal static class ButtonDescriptor

@@ -393,6 +393,14 @@ public sealed partial class Reconciler : IDisposable
         RegisterDecoratorHandler<PopupElement>(new V1Protocol.Handlers.PopupHandler());
         RegisterDecoratorHandler<CommandBarFlyoutElement>(new V1Protocol.Handlers.CommandBarFlyoutHandler());
 
+        // Button — delegate to the COMPLETE legacy MountButton/UpdateButton
+        // bodies (the ButtonDescriptor only handles the string-Label fast path
+        // and drops ContentElement; the delegate runs the full legacy impl so
+        // element content round-trips). Decorator shape so unmount falls
+        // through to ContentControl recursion (cleanup parity for an element
+        // child) — see ButtonHandler. Supersedes the registered descriptor.
+        RegisterDecoratorHandler<ButtonElement>(new V1Protocol.Handlers.ButtonHandler());
+
         // TabView — delegate to the COMPLETE legacy MountTabView/UpdateTabView
         // bodies (drag pipeline, pinnable headers, strip header/footer, in-place
         // content reconcile). Distinct from the unregistered TabViewDescriptor,
@@ -423,7 +431,10 @@ public sealed partial class Reconciler : IDisposable
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.AnnounceRegionDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.AutoSuggestBoxDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.BreadcrumbBarDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ButtonDescriptor.Descriptor);
+        // ButtonDescriptor is intentionally NOT registered — superseded by the
+        // delegate ButtonHandler above (ContentElement coverage + unmount
+        // parity). The descriptor type is retained for its isolated selftests
+        // and the perf-bench descriptor variant.
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.CalendarDatePickerDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.CalendarViewDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.CanvasDescriptor.Descriptor);
