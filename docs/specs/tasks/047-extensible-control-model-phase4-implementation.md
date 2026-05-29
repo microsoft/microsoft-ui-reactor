@@ -29,6 +29,20 @@ Derived from: `docs/specs/047-extensible-control-model.md` (§14 "Phase 4 — cl
 > ## 🟢 Progress log (live)
 >
 > **Done & verified (committed):**
+> - **§4.2 (part A)** — Deleted the ~28 orphaned legacy value-control handler
+>   bodies that §4.5 left behind in `Reconciler.Mount.cs`/`Reconciler.Update.cs`
+>   (MountToggleSplitButton/Update…, PasswordBox, NumberBox, AutoSuggestBox,
+>   RadioButton, RadioButtons, ComboBox, Slider, RatingControl, ColorPicker,
+>   CalendarDatePicker, DatePicker, TimePicker, ToggleSwitch, CalendarView + the
+>   dead `EnsureToggleSwitchWiring`/`EnsureTextBoxWiring` helpers). These were
+>   unreachable (controls dispatch via V1 descriptors; only `MountCheckBox`/
+>   `UpdateCheckBox` stay — live via `CheckBoxHandler` Path-B — plus the NumberBox
+>   immediate-mode chain and `SyncSelectedDates`, all preserved). This corrects the
+>   §4.5 log's "0 orphaned private members remain" over-claim and cuts raw
+>   `ChangeEchoSuppressor` refs from ~55 to the live descriptor surface. Validation:
+>   core build 0 err; xunit 9128 pass/0 fail; PrivMount/Echo/NumberBox/CheckBox
+>   selftests 0 fail. Commit `8a67e34a`. *(This is part A of §4.2; the
+>   `ChangeEchoSuppressor` elimination itself — part B — is DEFERRED, see below.)*
 > - **§4.7** — Public V1 author surface **graduated + locked**: removed all 157
 >   `[Experimental("REACTOR_V1_PREVIEW")]` attributes across 110 `src/Reactor`
 >   files and the dead `REACTOR_V1_PREVIEW` `NoWarn` from all six csprojs. KD-4
@@ -101,6 +115,35 @@ Derived from: `docs/specs/047-extensible-control-model.md` (§14 "Phase 4 — cl
 >   items — `[Experimental]` removal, KD-4, external-assembly proof — landed in
 >   the §4.7 commit; see the §4.7 entry above.)
 > - Full solution build (`Reactor.slnx -p:Platform=x64`) = 0 errors.
+>
+> **🟡 Deferred — needs dedicated, spec-author-involved effort (NOT done):**
+> - **§4.2 (part B) — eliminate `ChangeEchoSuppressor`.** NO-GO as a single pass
+>   (independent rubber-duck review concurred). The live surface is ~30 sites
+>   across ~20 descriptors + 3 handlers + `PropEntry` + the KD-1 `OnCustomEvent`
+>   drain + the live CheckBox/NumberBox-immediate/CalendarView bodies + the PUBLIC
+>   `ReactorBinding.WriteSuppressed` API + the `EchoSuppressScopeDepth` setter
+>   scope. The current counter is a **causal** token; the spec's proposed
+>   "expected Y ± tolerance, suppress one echo" value-compare is **causally
+>   weaker** (a real user event landing on the engine-written value/tolerance
+>   would be swallowed → silent state corruption), the `ApplySetters` scope has no
+>   value to compare, and `WriteSuppressed(UIElement, Action)` carries no value/
+>   readback for external authors. The Phase-0 audit CSV is STALE. **Prereqs
+>   before attempting:** refreshed inventory (DONE — see
+>   `docs/specs/047/audits/echo-suppressor-phase4-live-sites.md`), new regression
+>   fixtures for the "real event coincides with expected value" class, and a
+>   per-class migration keeping the counter until each class has a proven
+>   replacement.
+> - **§4.3 — split `EventHandlerState`.** Similar magnitude/risk (pervasive,
+>   pool-lifecycle hazard #114, monolith deletion gated on full migration).
+>   Deferred alongside §4.2 part B.
+> - **§4.4 — bucketed `Element` base + §11.6 hard byte gates.** Large surface
+>   (Element.cs + all factories + ElementExtensions + reconciler pipelines); the
+>   §11.6 byte-gate **measurement** is ARM64-baseline-blocked regardless.
+> - **§4.8 docs / §4.10 close-out.** Blocked: both document/sweep the *post*-§4.2B
+>   (`ChangeEchoSuppressor` gone) + *post*-§4.3 (`EventHandlerState` split) state,
+>   which does not yet exist.
+> - **§4.9 perf ratification.** ARM64 baseline machine (`LAPTOP-4MEP83VI`) only —
+>   cannot run/validate in this x64 environment.
 >
 > **⚠️ Critical context for §4.0.1 / §4.0.3 (the next work):** §4.0 "registration"
 > is currently achieved by **Phase-3 prelude delegate/decorator handlers that call
@@ -405,6 +448,15 @@ Source: spec §14 Phase 4 ("the production swap"). Gated on §4.0 complete.
 ---
 
 ## 4.2 §8 — eliminate `ChangeEchoSuppressor`
+
+> **Status (Phase 4 close-out session):** **Part A landed** (commit `8a67e34a`) —
+> the orphaned legacy value-control handler bodies were deleted (see progress log).
+> **Part B (the actual `ChangeEchoSuppressor` elimination below) is DEFERRED** — it
+> is a ~30-site, correctness-critical, framework-wide echo-semantics rewrite, not a
+> mechanical cleanup; full rationale + the **refreshed live call-site inventory**
+> (the CSV cited below is stale) are in
+> `docs/specs/047/audits/echo-suppressor-phase4-live-sites.md`. The boxes below stay
+> unchecked until that effort lands with new regression coverage.
 
 Source: spec §8 (Resolved §13 Q3) + the audit
 `docs/specs/047/audits/begin-suppress-audit.csv` (**24 call sites**). Phase 1
