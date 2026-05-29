@@ -29,6 +29,20 @@ Derived from: `docs/specs/047-extensible-control-model.md` (§14 "Phase 4 — cl
 > ## 🟢 Progress log (live)
 >
 > **Done & verified (committed):**
+> - **§4.8 — final author-facing documentation (DONE).** Promoted
+>   `docs/guide/extensibility-preview.md` (hand-maintained — no `.md.dt` template;
+>   `mur` unavailable in this env so no generated page touched) from preview to a
+>   stable guide: dropped the `[Experimental]`/flag/breaking-change banner;
+>   replaced "enabling V1 / off by default" with a "Dispatch order" section;
+>   corrected the pool-reset enumeration (`ControlEventState` PRESERVED across
+>   rent/return per #114, not cleared) and the per-control event-state section
+>   (`EventHandlerState` → `ModifierEventHandlerState` + `ControlEventStateBox`,
+>   done); rewrote `WriteSuppressed` to the §8.3 hybrid; replaced the children
+>   table with the final 10 strategies; added a §6.1.1 authoring decision-tree
+>   section. Updated `AGENTS.md`: the new-control authoring path (V1 descriptor
+>   model), the echo-suppression section (§8.3 hybrid — `ChangeEchoSuppressor`
+>   RETAINED, correcting the task's "deleted" premise), and the per-element-state
+>   line. Commit `60d0588c`.
 > - **§4.4 — bucketed `Element` base + §11.6 byte-gate constants (DONE; gate
 >   measurement ARM64-deferred).** Bucketed the 14 cross-cutting nullable base
 >   fields into a value-equality `ElementExtras` record behind one
@@ -871,21 +885,37 @@ Source: spec §14 Phase 4 ("Document the final author-facing surface in
 `docs/guide/`"). Remember the guide docs under `docs/guide/` are generated from
 `docs/_pipeline/templates/*.md.dt` via `mur docs compile` — edit the templates.
 
-- [ ] Promote `docs/guide/extensibility-preview.md` from "provisional" to the
+- [x] Promote `docs/guide/extensibility-preview.md` from "provisional" to the
       stable author guide (or rename to `extensibility.md`): drop the
       breaking-change warning, document V1 as the default/only path, remove the
-      "enabling the V1 path / off by default" section.
-- [ ] Document the final authoring decision tree (§6.1.1): descriptor
+      "enabling the V1 path / off by default" section. *(Done — filename kept
+      (preserves the 9 inbound spec/task links); H1 retitled, provisional/
+      `[Experimental]`/`REACTOR_V1_PREVIEW`/flag banner replaced with a stable
+      intro + a "Dispatch order" section (V1 registry → `_typeRegistry` →
+      composition-primitive switch, no legacy fallthrough). Corrected the
+      pool-reset enumeration (`ControlEventState` PRESERVED across rent/return,
+      not cleared — #114) and the per-control event-state section
+      (`EventHandlerState` split into `ModifierEventHandlerState` +
+      `ControlEventStateBox` — done, not deferred); rewrote `WriteSuppressed` to
+      the §8.3 hybrid. Commit `60d0588c`.)*
+- [x] Document the final authoring decision tree (§6.1.1): descriptor
       `.OneWay` / `.Controlled` / `.HandCodedControlled` / `.HandCodedEvent` /
       the engine shapes (`.Imperative` / `.ImperativeBridged` / `.OneWayBridged`
       / `.CollectionDiffControlled`) vs. hand-coded `IElementHandler<,>`; the
       children strategies (`SingleContent` / `Panel` / `NamedSlots` /
       `ItemsHost` / `TemplatedItems(Erased)` / `TreeChildren` / `TabItemsHost` /
       `PreMountedItems` / `Imperative`); the pool policy (§13 Q18); echo handling
-      via tolerance/coercion metadata (post-§4.2).
-- [ ] If any edits touch generated guide pages, edit the `.md.dt` templates and
-      re-run `mur docs compile`; verify the compiled output matches.
-- [ ] Update `AGENTS.md` for the post-Phase-4 reality: the "Adding a new WinUI
+      via tolerance/coercion metadata (post-§4.2). *(Done — added a "Choosing an
+      authoring shape (decision tree)" section covering the descriptor prop/engine
+      shapes vs hand-coded `IElementHandler<,>`, the final 10-strategy children
+      picker, and brief echo (`.Controlled`/`valueDiffEcho` vs `WriteSuppressed`,
+      per the §8.3 hybrid) + pool-policy notes. Commit `60d0588c`.)*
+- [x] If any edits touch generated guide pages, edit the `.md.dt` templates and
+      re-run `mur docs compile`; verify the compiled output matches. *(N/A — the
+      edited page `extensibility-preview.md` is hand-maintained (no `.md.dt`
+      template exists for it) and `mur` is not available in this x64 env. No
+      generated guide page was touched, so no recompile was needed.)*
+- [x] Update `AGENTS.md` for the post-Phase-4 reality: the "Adding a new WinUI
       control requires four touch points" section (the Element-record +
       Mount/Update-switch instructions describe the deleted legacy path — replace
       with the V1 descriptor model as the primary path), the "Echo suppression
@@ -894,7 +924,16 @@ Source: spec §14 Phase 4 ("Document the final author-facing surface in
       event-state / per-element-state conventions that referenced the monolithic
       `EventHandlerState` (now `ModifierEventHandlerState` + per-control
       `ControlEventStateBox`). Sweep for any other stale guidance pointing at the
-      removed machinery.
+      removed machinery. *(Done — rewrote the "Adding a new WinUI control" section
+      to the V1 descriptor path (Element → `ControlDescriptor`/`IElementHandler` →
+      `RegisterV1BuiltInHandlers` → selftest); rewrote "Echo suppression for value
+      controls" to the §8.3 **hybrid** (NOTE: `ChangeEchoSuppressor` is RETAINED,
+      not deleted — corrected the task's premise to match the settled hybrid);
+      updated the per-element-state line to `ModifierEventHandlerState` +
+      `ControlEventStateBox`. The source-layout bullets naming `MountXxx`/
+      `UpdateXxx` partials are left intact — those internal helpers still exist and
+      V1 handlers delegate into them; the bullets make no authoring claim. Commit
+      `60d0588c`.)*
 
 ## 4.9 Perf validation, ratification, and deferred-gate close-out
 
