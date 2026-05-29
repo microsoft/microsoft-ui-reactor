@@ -3,45 +3,29 @@ using Microsoft.CodeAnalysis;
 namespace Microsoft.UI.Reactor.Compile.Analyzer;
 
 /// <summary>
-/// Spec 047 §13 Q10 / §14 Phase 1 (1.10) — the three diagnostics shipped
-/// by <c>Reactor.Compile.Analyzer</c>.
+/// Spec 047 §13 Q10 / §14 Phase 1 (1.10) — the diagnostics shipped by
+/// <c>Reactor.Compile.Analyzer</c>.
 ///
-/// Two of the three (<see cref="StringEventReference"/> and
-/// <see cref="ControlledReadBackType"/>) are <em>provisional</em>: their
-/// rule bodies are no-ops until Phase 2's descriptor model
-/// (<c>Prop.Controlled(..., changeEvent: nameof(...))</c>) lands. The
-/// descriptors are reserved here so the IDs are stable across phases.
+/// <para><see cref="CustomEventDelegateType"/> (REACTOR1002) is the active
+/// compile-time validation rule, checking that the <c>TArgs</c> of a
+/// <c>ReactorBinding&lt;T&gt;.OnCustomEvent&lt;TArgs&gt;</c> call matches the
+/// <c>EventArgs</c> of the event wired in its subscribe/unsubscribe lambdas.</para>
 ///
-/// <see cref="CustomEventDelegateType"/> is concrete and active in Phase 1
-/// against <c>ReactorBinding&lt;T&gt;.OnCustomEvent&lt;TArgs&gt;</c>.
+/// <para>The provisional REACTOR1001 (string-form event reference) and
+/// REACTOR1003 (<c>Prop.Controlled</c> read-back type) placeholders were
+/// <b>retired in Phase 4 (§4.7)</b>: the final descriptor API is fully
+/// strongly-typed — events wire via typed <c>subscribe</c> lambdas (no string
+/// event names) and <c>Controlled&lt;TValue, TArgs&gt;</c> unifies the <c>set</c>
+/// and <c>readBack</c> value type so the compiler already rejects a mismatch.
+/// Neither rule had a source pattern left to match.</para>
 /// </summary>
 internal static class ReactorCompileDiagnostics
 {
     /// <summary>
-    /// Diagnostic category — all three rules live under the same category
-    /// so consumers can suppress / escalate them as a group.
+    /// Diagnostic category — rules live under the same category so consumers
+    /// can suppress / escalate them as a group.
     /// </summary>
     public const string Category = "Reactor.Compile";
-
-    /// <summary>
-    /// REACTOR1001 — string-form event reference does not resolve to a
-    /// public event on the declared control type. Provisional: activates
-    /// in Phase 2 when the descriptor model ships.
-    /// </summary>
-    public static readonly DiagnosticDescriptor StringEventReference = new(
-        id: "REACTOR1001",
-        title: "String-form event reference does not resolve on the control type",
-        messageFormat: "Event '{0}' is not a public event on '{1}'",
-        category: Category,
-        defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true,
-        description:
-            "Reactor descriptors that take a string event name (e.g. " +
-            "`Prop.Controlled(..., changeEvent: \"Toggled\")`) must name a " +
-            "public event declared on the control type captured by the " +
-            "descriptor's generic parameter. This rule activates when the " +
-            "Phase 2 descriptor model lands; today it is a no-op placeholder " +
-            "so the ID is reserved.");
 
     /// <summary>
     /// REACTOR1002 — the <c>TArgs</c> of a
@@ -70,24 +54,4 @@ internal static class ReactorCompileDiagnostics
             "handler parameter in a delegate creation expression — the " +
             "wrapped form is accepted and only the unwrapped/mismatched " +
             "form is flagged.");
-
-    /// <summary>
-    /// REACTOR1003 — <c>Prop.Controlled</c>'s <c>readBack</c> return type
-    /// does not match the <c>set</c> lambda's value type. Provisional:
-    /// activates in Phase 2 when the descriptor model ships.
-    /// </summary>
-    public static readonly DiagnosticDescriptor ControlledReadBackType = new(
-        id: "REACTOR1003",
-        title: "Prop.Controlled readBack return type does not match set lambda value type",
-        messageFormat:
-            "Prop.Controlled has readBack returning '{0}' but the set lambda " +
-            "takes '{1}'",
-        category: Category,
-        defaultSeverity: DiagnosticSeverity.Error,
-        isEnabledByDefault: true,
-        description:
-            "The Phase 2 descriptor `Prop.Controlled(getValue, set, readBack)` " +
-            "requires readBack's return type to match the value type accepted " +
-            "by set. This rule activates when the Phase 2 descriptor model " +
-            "lands; today it is a no-op placeholder so the ID is reserved.");
 }

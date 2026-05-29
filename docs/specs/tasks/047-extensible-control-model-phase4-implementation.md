@@ -454,7 +454,7 @@ decision) — Phase 2 decided, so Phase 4 locks it. Includes KD-4.
       `InternalsVisibleTo`** on Reactor internals. This is the last gap that
       keeps the external path below first-party quality (and the precondition
       for the §1.1 library split being unblocked).
-- [ ] **Activate / retire the compile-time validation analyzers (§13 Q10).**
+- [x] **Activate / retire the compile-time validation analyzers (§13 Q10).**
       `REACTOR1001` (`StringEventReferenceAnalyzer`) and `REACTOR1003`
       (`ControlledReadBackTypeAnalyzer`) are still documented no-ops "until
       Phase 2" (`src/Reactor.Compile.Analyzer/*.cs`). Q10 requires compile-time
@@ -464,6 +464,21 @@ decision) — Phase 2 decided, so Phase 4 locks it. Includes KD-4.
       **or** prove they are obsolete because the final descriptor API is fully
       strongly-typed (no string-form references remain) and remove the reserved
       no-op rules + their fixtures. Document the decision.
+      **Decision: RETIRED both.** The final descriptor API is fully
+      strongly-typed — there is no `changeEvent: "string"` parameter (events wire
+      via typed `subscribe` lambdas referencing the real CLR event, e.g.
+      `((Slider)fe).ValueChanged += ...`), and `Controlled<TValue, TArgs>`
+      unifies the `set: Action<TControl,TValue>` and `readBack: Func<TControl,TValue>`
+      generic so the C# compiler already rejects a read-back type mismatch at the
+      call site. A repo-wide sweep found zero string-form event references in
+      production descriptors. Both rules had no source pattern left to match.
+      Removed `StringEventReferenceAnalyzer.cs`, `ControlledReadBackTypeAnalyzer.cs`,
+      their `*AnalyzerTests.cs` fixtures, the `StringEventReference` /
+      `ControlledReadBackType` descriptors, and the REACTOR1001/1003 rows from
+      `AnalyzerReleases.Unshipped.md` + the guide table. **REACTOR1002**
+      (`CustomEventDelegateTypeAnalyzer`) remains as the active, real Q10
+      compile-time check (typed-event EventArgs validation). Analyzer tests
+      green (4 pass).
 - [ ] Verify the external-assembly proof (Phase 1 gate item 2) still passes with
       the locked surface: a control hosted in a separate assembly, registered via
       public API, exercising value writes / events / modifiers / setters /
