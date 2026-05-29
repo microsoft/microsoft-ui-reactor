@@ -29,6 +29,14 @@ Derived from: `docs/specs/047-extensible-control-model.md` (§14 "Phase 4 — cl
 > ## 🟢 Progress log (live)
 >
 > **Done & verified (committed):**
+> - **§4.9 — perf ratification (HANDED OFF; ARM64-baseline-blocked).** No code
+>   remained to land — all code the §4.9 gates measure is already in place
+>   (§11.6 target constants §4.4, perf-project consolidation §4.6, EHS split §4.3,
+>   bucketed base §4.4, AOT-clean external proof + CI AOT job §4.7). Speculative
+>   perf-tuning (the KD-3 M1 binder-check fold) was deliberately NOT done — it is
+>   measurement-gated and prior micro-opts went net-negative. Annotated the §4.9
+>   section with a full handoff + baseline-operator runbook; boxes stay unchecked
+>   until the `LAPTOP-4MEP83VI` capture lands. See §4.9 status block.
 > - **§4.8 — final author-facing documentation (DONE).** Promoted
 >   `docs/guide/extensibility-preview.md` (hand-maintained — no `.md.dt` template;
 >   `mur` unavailable in this env so no generated page touched) from preview to a
@@ -939,6 +947,28 @@ Source: spec §14 Phase 4 ("Document the final author-facing surface in
 
 Source: spec §15.6 / §15.7 Phase 4 row, Phase 1 deferrals 1.17 / 1.18 / 1.19,
 and the still-pending ARM64 stable-AC ratification gate (§14 Phase 3 finish).
+
+> **🔴 STATUS: ENTIRELY ARM64-BASELINE-BLOCKED — HANDED OFF (not executable in
+> the x64 dev environment).** Every bullet below is a *measurement/ratification*
+> on the Phase 0/2 baseline machine `LAPTOP-4MEP83VI` (ARM64-native, Release,
+> stable-AC) per the §15.5 runbook; results commit under
+> `docs/specs/047/phase4-results/LAPTOP-4MEP83VI/`. The boxes stay **unchecked**
+> until that capture lands. **All code these gates measure is already in place:**
+> the §11.6 byte-gate TARGET constants (`PerformanceBudgets.cs`, §4.4), the
+> single-`Reactor`-variant perf-project consolidation (§4.6), the
+> `ModifierEventHandlerState`/per-control `ControlEventStateBox` split (§4.3), the
+> bucketed `Element` base (§4.4), and the AOT-clean external-assembly proof
+> (`PublishTrimmed`+`IsAotCompatible`, 0 trim/AOT warnings) + the CI AOT selftest
+> job (§4.7). **No speculative perf-tuning was applied** — the KD-3 "fold the M1
+> leading-`if` binder check into the pattern-switch `case` arm" is explicitly
+> measurement-gated ("if M1 is still above budget after §4.3/§4.4"), and the
+> Phase-3 note already found related micro-opts net-negative (M4/M5), so it must
+> not be done blind. **Runbook for the baseline operator:** run §15.3 M1–M13 with
+> randomized/interleaved variant ordering + cooldowns + CPU-clock telemetry,
+> refresh L2/L3/L4/L6 macros and L13/L14 (AOT, mixed ≥50%-external tree), check
+> all §15.6 budget classes vs the `ReactorToday` historical baseline, then
+> confirm/close KD-3 and (only if M1 is over budget) apply the binder-check fold
+> and re-measure.
 
 - [ ] **ARM64 stable-AC ratification capture.** Run the §15.3 micro suite
       (M1–M13) on `LAPTOP-4MEP83VI` ARM64-native, Release, with **randomized /
