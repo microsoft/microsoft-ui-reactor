@@ -43,12 +43,11 @@ steps:
 
   - pwsh: |
       dotnet tool install --global minver-cli --version 5.0.0 `
-        --add-source "https://github-private.pkgs.visualstudio.com/microsoft/_packaging/microsoft-ui-reactor%40Local/nuget/v3/index.json" `
-        --ignore-failed-sources
+        --configfile "build/pipelines/nuget.internal.config"
     displayName: Install minver-cli
 
   - pwsh: |
-      nuget install Microsoft.CodeAnalysis.BinSkim -Version 4.4.9.9 -Source https://github-private.pkgs.visualstudio.com/microsoft/_packaging/microsoft-ui-reactor%40Local/nuget/v3/index.json -OutputDirectory binskim-pkg -ExcludeVersion -NonInteractive
+      nuget install Microsoft.CodeAnalysis.BinSkim -Version 4.4.9.9 -ConfigFile "build/pipelines/nuget.internal.config" -OutputDirectory binskim-pkg -ExcludeVersion -NonInteractive
       $exe = Get-ChildItem binskim-pkg -Filter BinSkim.exe -Recurse |
         Where-Object { $_.FullName -like '*win-x64*' } |
         Select-Object -First 1 -ExpandProperty FullName
@@ -89,7 +88,7 @@ steps:
     displayName: Resolve version
 
   - pwsh: |
-      dotnet restore Reactor.slnx
+      dotnet restore Reactor.slnx --configfile "build/pipelines/nuget.internal.config"
     displayName: Restore
 
   - pwsh: |
