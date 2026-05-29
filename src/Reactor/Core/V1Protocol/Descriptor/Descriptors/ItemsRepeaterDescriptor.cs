@@ -30,7 +30,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// those are the host control's responsibility), so no
 /// <c>.HandCodedControlled</c> / <c>.HandCodedEvent</c> entries.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class ItemsRepeaterDescriptor
 {
     public static readonly ControlDescriptor<ItemsRepeaterElementBase, WinUI.ItemsRepeater> Descriptor =

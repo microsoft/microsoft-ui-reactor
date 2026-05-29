@@ -45,7 +45,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol;
 /// </code></para>
 /// </summary>
 // <snippet:mount-context>
-[Experimental("REACTOR_V1_PREVIEW")]
 public readonly ref struct MountContext
 {
     private readonly Reconciler _reconciler;
@@ -115,7 +114,6 @@ public readonly ref struct MountContext
 /// updates run against an existing control, so allocation is forbidden on
 /// this path. UI-thread guarantee applies (see <see cref="MountContext"/>).
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 public readonly ref struct UpdateContext
 {
     private readonly Reconciler _reconciler;
@@ -147,7 +145,6 @@ public readonly ref struct UpdateContext
 /// <see cref="ReturnControl{T}"/> to participate in the pool reset
 /// contract; the engine takes care of detaching from the parent tree.
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 public readonly ref struct UnmountContext
 {
     private readonly Reconciler _reconciler;

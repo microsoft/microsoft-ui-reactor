@@ -30,7 +30,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 /// (see <see cref="Reconciler.ApplySetters{T}"/>) takes care of it; this
 /// handler does not add additional suppression around setters.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal sealed class ToggleSwitchHandler : IElementHandler<ToggleSwitchElement, WinUI.ToggleSwitch>
 {
     // Static trampoline — captures nothing. Reads the live element via

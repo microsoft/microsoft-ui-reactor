@@ -45,7 +45,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// the time the SelectedIndex prop setter fires, <c>FlipView.Items</c>
 /// is populated and WinUI accepts the index.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class TemplatedFlipViewDescriptor
 {
     private static readonly WinUI.SelectionChangedEventHandler SelectionChangedTrampoline = (s, _) =>

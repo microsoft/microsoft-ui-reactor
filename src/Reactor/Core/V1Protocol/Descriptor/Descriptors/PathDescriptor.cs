@@ -36,7 +36,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   matches the legacy arm's "set FillRule when we can" treatment.</item>
 /// </list></para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class PathDescriptor
 {
     public static readonly ControlDescriptor<PathElement, WinShapes.Path> Descriptor =

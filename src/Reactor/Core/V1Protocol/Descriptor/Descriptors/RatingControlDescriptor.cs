@@ -19,7 +19,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   <c>Caption ?? ""</c> coercion.</item>
 /// </list></para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class RatingControlDescriptor
 {
     public static readonly ControlDescriptor<RatingControlElement, WinUI.RatingControl> Descriptor =

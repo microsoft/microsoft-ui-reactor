@@ -7,7 +7,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <summary>
 /// Spec 047 §14 Phase 3 completion — decorator-style port of XamlHostElement.
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class XamlHostDescriptor
 {
     public static readonly IDecoratorElementHandler<XamlHostElement> Handler = new XamlHostHandler();

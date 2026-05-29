@@ -8,7 +8,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// Spec 047 §14 Phase 3 deferred specialized controls — descriptor variant of
 /// the hand-coded ParallaxView mount/update arms.
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class ParallaxViewDescriptor
 {
     private static readonly SingleContent<ParallaxViewElement, WinUI.ParallaxView> ChildrenStrategy =

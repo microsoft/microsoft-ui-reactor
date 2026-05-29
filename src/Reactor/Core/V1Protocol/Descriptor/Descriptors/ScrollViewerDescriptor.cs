@@ -23,7 +23,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   descriptor's typed write).</item>
 /// </list></para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class ScrollViewerDescriptor
 {
     private static readonly SingleContent<ScrollViewerElement, WinUI.ScrollViewer> ChildrenStrategy =

@@ -29,7 +29,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 /// <see cref="Update"/> here — which cannot substitute the control — preserves
 /// behavior.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal sealed class NavigationHostHandler : IElementHandler<NavigationHostElement, WinUI.Grid>
 {
     public WinUI.Grid Mount(MountContext ctx, NavigationHostElement el)

@@ -10,7 +10,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <see cref="ItemsViewElementBase"/>. A single base-derived registration
 /// catches every closed <see cref="ItemsViewElement{T}"/> variant.
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class ItemsViewDescriptor
 {
     private static readonly TypedEventHandler<WinUI.ItemsView, WinUI.ItemsViewItemInvokedEventArgs>

@@ -27,7 +27,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <c>MountTemplatedListView</c> body 1:1, including the
 /// <see cref="ReactorRow"/>.Index translation under the OC delta path.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class TemplatedListViewDescriptor
 {
     public static readonly ControlDescriptor<TemplatedListViewElementBase, WinUI.ListView> Descriptor =
@@ -66,7 +65,6 @@ internal static class TemplatedListViewDescriptor
 /// Mirror of <see cref="TemplatedListViewDescriptor"/> targeting
 /// <see cref="WinUI.GridView"/>; same erased strategy + binder path.
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class TemplatedGridViewDescriptor
 {
     public static readonly ControlDescriptor<TemplatedGridViewElementBase, WinUI.GridView> Descriptor =

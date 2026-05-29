@@ -27,7 +27,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// non-keyed (full rebuild on any structural delta). Acceptable for short
 /// ListBoxes (typical 3–15 options).</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class ListBoxDescriptor
 {
     private static readonly global::System.Action<int> NoOpSelectedIndexChanged = static _ => { };

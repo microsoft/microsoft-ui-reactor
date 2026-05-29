@@ -17,7 +17,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <see cref="ControlDescriptor{TElement,TControl}.OneWay"/>. The element
 /// defaults <c>StrokeThickness</c> to <c>1</c>, matching WinUI default.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class LineDescriptor
 {
     public static readonly ControlDescriptor<LineElement, WinShapes.Line> Descriptor =

@@ -30,7 +30,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 // substitutes the control) and otherwise keeps the existing control.
 
 /// <summary>§4.0.1 — ContentDialog (modal placeholder + async ShowAsync).</summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal sealed class ContentDialogHandler : IDecoratorElementHandler<ContentDialogElement>
 {
     public UIElement Mount(MountContext ctx, ContentDialogElement el)
@@ -44,7 +43,6 @@ internal sealed class ContentDialogHandler : IDecoratorElementHandler<ContentDia
 }
 
 /// <summary>§4.0.1 — Flyout (target-wrapping decorator).</summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal sealed class FlyoutHandler : IDecoratorElementHandler<FlyoutElement>
 {
     public UIElement Mount(MountContext ctx, FlyoutElement el)
@@ -58,7 +56,6 @@ internal sealed class FlyoutHandler : IDecoratorElementHandler<FlyoutElement>
 }
 
 /// <summary>§4.0.1 — MenuBar (normal control; plain-WinUI menu items).</summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal sealed class MenuBarHandler : IDecoratorElementHandler<MenuBarElement>
 {
     public UIElement Mount(MountContext ctx, MenuBarElement el)
@@ -72,7 +69,6 @@ internal sealed class MenuBarHandler : IDecoratorElementHandler<MenuBarElement>
 }
 
 /// <summary>§4.0.1 — CommandBar (normal control; Content is a Reactor child).</summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal sealed class CommandBarHandler : IDecoratorElementHandler<CommandBarElement>
 {
     public UIElement Mount(MountContext ctx, CommandBarElement el)
@@ -86,7 +82,6 @@ internal sealed class CommandBarHandler : IDecoratorElementHandler<CommandBarEle
 }
 
 /// <summary>§4.0.1 — MenuFlyout (target-wrapping decorator).</summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal sealed class MenuFlyoutHandler : IDecoratorElementHandler<MenuFlyoutElement>
 {
     public UIElement Mount(MountContext ctx, MenuFlyoutElement el)
@@ -100,7 +95,6 @@ internal sealed class MenuFlyoutHandler : IDecoratorElementHandler<MenuFlyoutEle
 }
 
 /// <summary>§4.0.1 — Popup (StackPanel wrapper hosting a WinUI Popup).</summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal sealed class PopupHandler : IDecoratorElementHandler<PopupElement>
 {
     public UIElement Mount(MountContext ctx, PopupElement el)
@@ -114,7 +108,6 @@ internal sealed class PopupHandler : IDecoratorElementHandler<PopupElement>
 }
 
 /// <summary>§4.0.1 — CommandBarFlyout (target-wrapping decorator).</summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal sealed class CommandBarFlyoutHandler : IDecoratorElementHandler<CommandBarFlyoutElement>
 {
     public UIElement Mount(MountContext ctx, CommandBarFlyoutElement el)

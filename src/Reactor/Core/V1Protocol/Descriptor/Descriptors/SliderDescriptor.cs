@@ -29,7 +29,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// default, so descriptor mounts allocate a fresh control each time
 /// (matches the hand-coded port).</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class SliderDescriptor
 {
     public static readonly ControlDescriptor<SliderElement, WinUI.Slider> Descriptor =

@@ -10,7 +10,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <see cref="GridViewElement"/> arm. The typed templated GridView peer is
 /// handled by <see cref="TemplatedGridViewDescriptor"/>.
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class GridViewDescriptor
 {
     private static readonly global::System.Action<int> NoOpSelectedIndexChanged = static _ => { };

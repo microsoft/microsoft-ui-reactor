@@ -508,7 +508,6 @@ public sealed partial class Reconciler : IDisposable
     /// descriptor-driven ports. Keeps <see cref="RegisterV1BuiltInHandlers"/>
     /// readable as a flat list of descriptors.
     /// </summary>
-    [Experimental("REACTOR_V1_PREVIEW")]
     private void RegisterDescriptor<TElement, TControl>(
         V1Protocol.Descriptor.ControlDescriptor<TElement, TControl> descriptor)
         where TElement : Element
@@ -522,7 +521,6 @@ public sealed partial class Reconciler : IDisposable
     /// base-derived descriptor ports (typed templated lists, lazy stacks,
     /// items hosts).
     /// </summary>
-    [Experimental("REACTOR_V1_PREVIEW")]
     private void RegisterDescriptorForDerivedTypes<TBase, TControl>(
         V1Protocol.Descriptor.ControlDescriptor<TBase, TControl> descriptor)
         where TBase : Element
@@ -659,7 +657,6 @@ public sealed partial class Reconciler : IDisposable
     /// trampolines can resolve the live element on dispatch.
     /// Provisional API; see <c>REACTOR_V1_PREVIEW</c>.
     /// </summary>
-    [Experimental("REACTOR_V1_PREVIEW")]
     public static void SetElementTag(FrameworkElement control, Element? element)
     {
         if (control.GetValue(ReactorAttached.StateProperty) is ReactorState state)
@@ -677,7 +674,6 @@ public sealed partial class Reconciler : IDisposable
     /// element associated with a control, or null.
     /// Provisional API; see <c>REACTOR_V1_PREVIEW</c>.
     /// </summary>
-    [Experimental("REACTOR_V1_PREVIEW")]
     public static Element? GetElementTag(UIElement control) =>
         control is FrameworkElement fe
             ? (fe.GetValue(ReactorAttached.StateProperty) as ReactorState)?.Element
@@ -687,7 +683,6 @@ public sealed partial class Reconciler : IDisposable
     /// Spec 047 §14 Phase 1 (1.3) — promoted from internal.
     /// Provisional API; see <c>REACTOR_V1_PREVIEW</c>.
     /// </summary>
-    [Experimental("REACTOR_V1_PREVIEW")]
     public static Element? GetElementTag(FrameworkElement fe) =>
         (fe.GetValue(ReactorAttached.StateProperty) as ReactorState)?.Element;
 
@@ -783,7 +778,6 @@ public sealed partial class Reconciler : IDisposable
     /// Spec 047 §14 Phase 1 (1.3) — promoted from internal.
     /// Provisional API; see <c>REACTOR_V1_PREVIEW</c>.
     /// </summary>
-    [Experimental("REACTOR_V1_PREVIEW")]
     public static void DetachReactorState(FrameworkElement fe)
     {
         if (fe.GetValue(ReactorAttached.StateProperty) is not ReactorState state)
@@ -953,7 +947,6 @@ public sealed partial class Reconciler : IDisposable
     /// (including across registries) and on open-generic element types
     /// (spec §13 Q17).
     /// </summary>
-    [Experimental("REACTOR_V1_PREVIEW")]
     public void RegisterHandler<TElement, TControl>(V1Protocol.IElementHandler<TElement, TControl> handler)
         where TElement : Element
         where TControl : UIElement
@@ -977,7 +970,6 @@ public sealed partial class Reconciler : IDisposable
     /// derived-type registration. Throws on duplicate base-type
     /// registration.</para>
     /// </summary>
-    [Experimental("REACTOR_V1_PREVIEW")]
     public void RegisterHandlerForDerivedTypes<TBase, TControl>(V1Protocol.IElementHandler<TBase, TControl> handler)
         where TBase : Element
         where TControl : UIElement
@@ -1003,7 +995,6 @@ public sealed partial class Reconciler : IDisposable
     /// <see cref="RegisterHandler{TElement,TControl}"/> — collisions
     /// throw via <see cref="EnsureRegistrableElementType"/>.</para>
     /// </summary>
-    [Experimental("REACTOR_V1_PREVIEW")]
     internal void RegisterDecoratorHandler<TElement>(V1Protocol.IDecoratorElementHandler<TElement> handler)
         where TElement : Element
     {
@@ -1025,7 +1016,6 @@ public sealed partial class Reconciler : IDisposable
     /// engine recurses ScrollViewer → ItemsRepeater → realized rows on
     /// unmount).
     /// </summary>
-    [Experimental("REACTOR_V1_PREVIEW")]
     internal void RegisterDecoratorHandlerForDerivedTypes<TBase>(V1Protocol.IDecoratorElementHandler<TBase> handler)
         where TBase : Element
     {
@@ -1054,7 +1044,6 @@ public sealed partial class Reconciler : IDisposable
     /// or via <paramref name="factory"/> / <c>new T()</c>. Pool key is
     /// <c>typeof(T)</c> only.
     /// </summary>
-    [Experimental("REACTOR_V1_PREVIEW")]
     public T RentControl<T>(PoolPolicy<T>? policy = null, Func<T>? factory = null) where T : class, new()
     {
         // Default = poolable; only skip the pool when the policy explicitly opts out.
@@ -1079,7 +1068,6 @@ public sealed partial class Reconciler : IDisposable
     /// Double-return is safe: <see cref="ElementPool.Return"/> dedupes via
     /// the per-type stack cap (<c>MaxPerType</c>).
     /// </summary>
-    [Experimental("REACTOR_V1_PREVIEW")]
     public void ReturnControl<T>(T control, PoolPolicy<T>? policy = null) where T : class
     {
         ArgumentNullException.ThrowIfNull(control);
@@ -2258,7 +2246,6 @@ public sealed partial class Reconciler : IDisposable
     /// engine-wired OnXChanged callback. Provisional API;
     /// see <c>REACTOR_V1_PREVIEW</c>.
     /// </summary>
-    [Experimental("REACTOR_V1_PREVIEW")]
     public static void ApplySetters<T>(Action<T>[] setters, T control) where T : class
     {
         if (setters.Length == 0) return;
@@ -2301,7 +2288,6 @@ public sealed partial class Reconciler : IDisposable
     /// (not via the peer) still find the name. Provisional API;
     /// see <c>REACTOR_V1_PREVIEW</c>.
     /// </summary>
-    [Experimental("REACTOR_V1_PREVIEW")]
     public static void ApplyDefaultAutomationName(FrameworkElement fe, string? caption)
     {
         if (fe is null) return;
@@ -2324,7 +2310,6 @@ public sealed partial class Reconciler : IDisposable
     /// automation Name only when it matches the previous caption (i.e. the
     /// author hasn't intervened). Provisional API; see <c>REACTOR_V1_PREVIEW</c>.
     /// </summary>
-    [Experimental("REACTOR_V1_PREVIEW")]
     public static void UpdateDefaultAutomationName(FrameworkElement fe, string? oldCaption, string? newCaption)
     {
         if (fe is null) return;
@@ -4168,7 +4153,6 @@ public sealed partial class Reconciler : IDisposable
     /// a synthesized <c>{ThemeResource}</c>-driven Style. Provisional API;
     /// see <c>REACTOR_V1_PREVIEW</c>.
     /// </summary>
-    [Experimental("REACTOR_V1_PREVIEW")]
     public static void ApplyThemeBindings(FrameworkElement fe, IReadOnlyDictionary<string, ThemeRef> bindings)
     {
         var targetType = GetStyleTargetType(fe);
@@ -4276,7 +4260,6 @@ public sealed partial class Reconciler : IDisposable
     /// existing-api-surface.md). Applies per-control resource overrides
     /// (lightweight styling). Provisional API; see <c>REACTOR_V1_PREVIEW</c>.
     /// </summary>
-    [Experimental("REACTOR_V1_PREVIEW")]
     public static void ApplyResourceOverrides(
         FrameworkElement fe,
         Microsoft.UI.Reactor.Elements.ResourceOverrides? oldOverrides,

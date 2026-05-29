@@ -12,7 +12,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <see cref="SingleContent{TElement,TControl}"/> so descendant state is
 /// preserved across wrapper updates.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class SemanticDescriptor
 {
     private static readonly SingleContent<SemanticElement, SemanticPanel> ChildrenStrategy =

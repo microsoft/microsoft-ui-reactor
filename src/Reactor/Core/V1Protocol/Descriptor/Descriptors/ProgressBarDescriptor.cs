@@ -17,7 +17,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// (<c>Value</c>). Mirrors the legacy arm exactly: <c>Value</c> is only
 /// written when <c>HasValue</c>, all others are always written.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class ProgressBarDescriptor
 {
     public static readonly ControlDescriptor<ProgressElement, WinUI.ProgressBar> Descriptor =

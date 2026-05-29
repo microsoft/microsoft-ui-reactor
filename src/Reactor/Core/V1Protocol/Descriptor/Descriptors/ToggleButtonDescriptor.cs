@@ -37,7 +37,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// fast path; mid-stream transitions into three-state remain on the
 /// legacy arm (V1 OFF).</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class ToggleButtonDescriptor
 {
     private static readonly RoutedEventHandler ClickTrampoline = (s, _) =>

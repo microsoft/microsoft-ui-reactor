@@ -11,7 +11,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// Spec 047 §14 Phase 3 completion — decorator-style port of the polymorphic
 /// <c>IconElement</c> mount/update arms.
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class IconDescriptor
 {
     public static readonly IDecoratorElementHandler<IconElement> Handler = new IconHandler();

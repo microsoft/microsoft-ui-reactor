@@ -28,7 +28,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 // isolated selftests.
 
 /// <summary>§14 prelude — typed templated lists (ListView/GridView/FlipView&lt;T&gt;).</summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal sealed class TemplatedListHandler : IDecoratorElementHandler<TemplatedListElementBase>
 {
     public UIElement Mount(MountContext ctx, TemplatedListElementBase el)

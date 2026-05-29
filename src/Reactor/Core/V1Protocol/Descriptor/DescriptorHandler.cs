@@ -30,7 +30,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor;
 ///   <item>Apply setters.</item>
 /// </list></para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 public sealed class DescriptorHandler<TElement, TControl> : IElementHandler<TElement, TControl>
     where TElement : Element
     where TControl : FrameworkElement, new()

@@ -18,7 +18,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// (<c>RightOf</c>, <c>Below</c>, <c>AlignLeftWith</c>, etc.) that
 /// reference siblings by name. Closes the Batch E carve-out.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class RelativePanelDescriptor
 {
     private static readonly Panel<RelativePanelElement, WinUI.RelativePanel> ChildrenStrategy =

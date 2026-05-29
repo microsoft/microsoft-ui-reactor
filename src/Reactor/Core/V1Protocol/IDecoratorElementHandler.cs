@@ -13,7 +13,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol;
 /// return the other dispositions to opt out of pool return / let the
 /// engine continue the default unmount traversal into the wrapped child.
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 public enum V1UnmountDisposition
 {
     /// <summary>Default for standard handlers. The handler created the
@@ -65,7 +64,6 @@ public enum V1UnmountDisposition
 /// shape. External authors continue to use
 /// <see cref="IElementHandler{TElement,TControl}"/>.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 public interface IDecoratorElementHandler<TElement>
     where TElement : Element
 {

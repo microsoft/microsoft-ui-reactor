@@ -17,7 +17,6 @@ namespace Microsoft.UI.Reactor.Core;
 /// Provisional surface — see <see cref="ReactorBinding"/> for the
 /// <c>REACTOR_V1_PREVIEW</c> diagnostic id.
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 public sealed class PoolPolicy<TControl> where TControl : class
 {
     /// <summary>

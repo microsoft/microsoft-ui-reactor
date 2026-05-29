@@ -35,7 +35,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// a "compound-host" descriptor extension. <c>ScrollViewerSetters</c> on
 /// the element is therefore inert under the descriptor port.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class LazyStackDescriptor
 {
     public static readonly ControlDescriptor<LazyStackElementBase, WinUI.ItemsRepeater> Descriptor =

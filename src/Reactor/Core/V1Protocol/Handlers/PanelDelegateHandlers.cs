@@ -29,7 +29,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 // isolated selftests + perf-bench variant (same pattern as ButtonDescriptor).
 
 /// <summary>§14 prelude — Flex (CSS flexbox panel; keyed reconcile + flex attached).</summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal sealed class FlexPanelHandler : IDecoratorElementHandler<FlexElement>
 {
     public UIElement Mount(MountContext ctx, FlexElement el)
@@ -43,7 +42,6 @@ internal sealed class FlexPanelHandler : IDecoratorElementHandler<FlexElement>
 }
 
 /// <summary>§14 prelude — StackPanel (VStack/HStack; keyed reconcile).</summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal sealed class StackPanelHandler : IDecoratorElementHandler<StackElement>
 {
     public UIElement Mount(MountContext ctx, StackElement el)
@@ -57,7 +55,6 @@ internal sealed class StackPanelHandler : IDecoratorElementHandler<StackElement>
 }
 
 /// <summary>§14 prelude — Grid (keyed reconcile on count change + grid placement).</summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal sealed class GridPanelHandler : IDecoratorElementHandler<GridElement>
 {
     public UIElement Mount(MountContext ctx, GridElement el)
@@ -71,7 +68,6 @@ internal sealed class GridPanelHandler : IDecoratorElementHandler<GridElement>
 }
 
 /// <summary>§14 prelude — Canvas (keyed reconcile + Canvas.Left/Top).</summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal sealed class CanvasPanelHandler : IDecoratorElementHandler<CanvasElement>
 {
     public UIElement Mount(MountContext ctx, CanvasElement el)
@@ -85,7 +81,6 @@ internal sealed class CanvasPanelHandler : IDecoratorElementHandler<CanvasElemen
 }
 
 /// <summary>§14 prelude — RelativePanel (sibling-ref attached; Update may substitute the control).</summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal sealed class RelativePanelHandler : IDecoratorElementHandler<RelativePanelElement>
 {
     public UIElement Mount(MountContext ctx, RelativePanelElement el)
@@ -99,7 +94,6 @@ internal sealed class RelativePanelHandler : IDecoratorElementHandler<RelativePa
 }
 
 /// <summary>§14 prelude — VariableSizedWrapGrid (keyed reconcile + spans).</summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal sealed class WrapGridHandler : IDecoratorElementHandler<WrapGridElement>
 {
     public UIElement Mount(MountContext ctx, WrapGridElement el)

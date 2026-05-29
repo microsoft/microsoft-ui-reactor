@@ -14,7 +14,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol;
 /// <see cref="UIElement"/> control. Both lambdas are strongly typed — no
 /// reflection, AOT-compatible.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 public sealed record AttachedPropWriter<TChildElement>(
     string Name,
     Func<TChildElement, object?> Get,

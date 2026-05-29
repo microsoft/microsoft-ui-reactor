@@ -39,7 +39,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   circuits on ReferenceEquals. No behavior delta on rendered output.</item>
 /// </list></para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class RichEditBoxDescriptor
 {
     private static readonly RoutedEventHandler TextChangedTrampoline = (s, _) =>

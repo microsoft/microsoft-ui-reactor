@@ -24,7 +24,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <c>VariableSizedWrapGrid.SetColumnSpan</c> only when the hint is
 /// &gt; 1 (default).</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class WrapGridDescriptor
 {
     private static readonly Panel<WrapGridElement, WinUI.VariableSizedWrapGrid> ChildrenStrategy =

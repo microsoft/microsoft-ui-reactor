@@ -27,7 +27,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   <c>PasswordChar</c> — one-way conditional per the legacy guards.</item>
 /// </list></para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class PasswordBoxDescriptor
 {
     private static readonly RoutedEventHandler PasswordChangedTrampoline = (s, _) =>

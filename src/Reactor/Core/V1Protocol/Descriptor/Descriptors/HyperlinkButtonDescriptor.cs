@@ -20,7 +20,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   on each fire.</item>
 /// </list></para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class HyperlinkButtonDescriptor
 {
     private static readonly RoutedEventHandler ClickTrampoline = (s, _) =>

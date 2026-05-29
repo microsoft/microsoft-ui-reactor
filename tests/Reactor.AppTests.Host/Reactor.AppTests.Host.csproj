@@ -10,9 +10,6 @@
     <Nullable>enable</Nullable>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
-    <!-- Spec 047 §14 Phase 1 (1.3): suppress REACTOR_V1_PREVIEW so in-tree
-         fixture code can call the provisional surface without per-file pragmas. -->
-    <NoWarn>$(NoWarn);REACTOR_V1_PREVIEW</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(PublishAotInternal)' == 'true'">

@@ -37,7 +37,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 /// symmetry — external authors should not have to special-case non-poolable
 /// types at the call site.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal sealed class SliderHandler : IElementHandler<SliderElement, WinUI.Slider>
 {
     // Static trampoline — captures nothing, reads the live element via

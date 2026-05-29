@@ -41,7 +41,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// but the rebuild is observably the same when the click handler reads the
 /// live element tag).</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class InfoBarDescriptor
 {
     private static readonly NamedSlots<InfoBarElement, WinUI.InfoBar> ChildrenStrategy =

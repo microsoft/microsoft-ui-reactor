@@ -31,7 +31,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   write set, slightly different read pattern. No behavior delta.</item>
 /// </list></para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class TextBlockDescriptor
 {
     public static readonly ControlDescriptor<TextBlockElement, WinUI.TextBlock> Descriptor =

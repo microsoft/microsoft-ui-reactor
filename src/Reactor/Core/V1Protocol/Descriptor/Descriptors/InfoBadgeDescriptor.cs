@@ -20,7 +20,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   modifiers / setters.</item>
 /// </list></para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class InfoBadgeDescriptor
 {
     public static readonly ControlDescriptor<InfoBadgeElement, WinUI.InfoBadge> Descriptor =

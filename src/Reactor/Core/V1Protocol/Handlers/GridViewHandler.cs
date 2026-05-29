@@ -23,7 +23,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 /// of <c>ContainerContentChanging</c>, so behavior is identical V1 ON ≡
 /// V1 OFF.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal sealed class GridViewHandler : IElementHandler<GridViewElement, WinUI.GridView>
 {
     public WinUI.GridView Mount(MountContext ctx, GridViewElement el)

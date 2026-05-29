@@ -13,14 +13,12 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol;
 /// keyed-reconcile integration with spec-042 lands in Phase 3.
 /// </summary>
 // <snippet:children-strategies>
-[Experimental("REACTOR_V1_PREVIEW")]
 public abstract record ChildrenStrategy<TElement, TControl>
     where TElement : Element
     where TControl : UIElement;
 
 /// <summary>Leaf — no children. Engine performs no dispatch beyond the
 /// handler's Mount/Update body.</summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 public sealed record None<TElement, TControl>() : ChildrenStrategy<TElement, TControl>
     where TElement : Element
     where TControl : UIElement;
@@ -35,7 +33,6 @@ public sealed record None<TElement, TControl>() : ChildrenStrategy<TElement, TCo
 /// descendant component state across parent re-renders. When left null,
 /// the engine remounts the child on every update (only safe for slots that
 /// are reset every render anyway). All built-in handlers set it.</para></summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 public sealed record SingleContent<TElement, TControl>(
     Func<TElement, Element?> GetChild,
     Action<TControl, UIElement?> SetChild) : ChildrenStrategy<TElement, TControl>
@@ -76,7 +73,6 @@ public sealed record SingleContent<TElement, TControl>(
 /// only one of the two; <c>RelativePanel</c> is the canonical consumer
 /// of the after-all shape.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 public sealed record Panel<TElement, TControl>(
     Func<TElement, IReadOnlyList<Element>> GetChildren,
     Func<TControl, UIElementCollection> GetCollection) : ChildrenStrategy<TElement, TControl>
@@ -106,7 +102,6 @@ public sealed record Panel<TElement, TControl>(
 /// <summary>Named-slot host (SplitView with Pane + Content, NavigationView
 /// with Header + Content + PaneFooter, etc.). Each
 /// <see cref="NamedSlot{TElement,TControl}"/> binds one slot.</summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 public sealed record NamedSlots<TElement, TControl>(
     IReadOnlyList<NamedSlot<TElement, TControl>> Slots) : ChildrenStrategy<TElement, TControl>
     where TElement : Element
@@ -114,7 +109,6 @@ public sealed record NamedSlots<TElement, TControl>(
 
 /// <summary>One named slot on a <see cref="NamedSlots{TElement,TControl}"/>
 /// host. <see cref="Name"/> is informational; binding is by lambda.</summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 public sealed record NamedSlot<TElement, TControl>(
     string Name,
     Func<TElement, Element?> GetChild,
@@ -155,7 +149,6 @@ public sealed record NamedSlot<TElement, TControl>(
 /// (clear + add). Spec-042 keyed-reconcile integration for typed templated
 /// lists lands separately with the
 /// <c>ListView&lt;T&gt;</c>/<c>GridView&lt;T&gt;</c> ports in Batch G2.</para></summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 public sealed record ItemsHost<TElement, TControl>(
     Func<TElement, IReadOnlyList<object>> GetItems,
     Func<TControl, IList<object>> GetCollection) : ChildrenStrategy<TElement, TControl>
@@ -173,7 +166,6 @@ public sealed record ItemsHost<TElement, TControl>(
 /// container template etc.). Phase 1 carries no fields — Phase 3 may add
 /// when more handler authors arrive. Retained for source compat with the
 /// Phase 1 ItemsHost shape.</summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 public sealed record ItemsHostOptions;
 
 /// <summary>§14 Phase 3 finish — single dispatch marker for every
@@ -236,7 +228,6 @@ internal interface IErasedTemplatedItemsStrategy : IItemsBinderStrategy { }
 /// <see cref="Reconciler.BindKeyedItemsSource"/> owns the
 /// <c>ReactorListState</c> + <c>KeyedListDiff</c> + container-realization
 /// pipeline.</para></summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 public sealed record TemplatedItemsErased<TElement, TControl>(
     Func<TElement, Microsoft.UI.Reactor.Core.Internal.IKeyedItemSource> GetSource)
     : ChildrenStrategy<TElement, TControl>, IErasedTemplatedItemsStrategy
@@ -279,7 +270,6 @@ public sealed record TemplatedItemsErased<TElement, TControl>(
 /// large lists never realize all items up front. The returned
 /// <see cref="Element"/> is reconciled into the container's
 /// <c>ContentControl</c>.</para></summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 public sealed record TemplatedItems<TItem, TElement, TControl>(
     Func<TElement, IReadOnlyList<TItem>> GetItems,
     Func<TItem, int, string> KeySelector,
@@ -301,7 +291,6 @@ public sealed record TemplatedItems<TItem, TElement, TControl>(
 /// <summary>Escape hatch — the handler drives child reconciliation
 /// imperatively via <see cref="Reconcile"/>. Use sparingly; the typed
 /// strategies above cover the 95% case.</summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 public sealed record Imperative<TElement, TControl>(
     Action<MountContext, TElement, TElement, TControl> Reconcile) : ChildrenStrategy<TElement, TControl>
     where TElement : Element
@@ -342,7 +331,6 @@ public sealed record Imperative<TElement, TControl>(
 /// inside ContentElement nodes is lost across renders that touch the
 /// tree). Same correctness contract as the legacy
 /// <c>UpdateTreeView</c> arm.</para></summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 public sealed record TreeChildren<TElement, TControl>(
     Func<TElement, IReadOnlyList<TreeViewNodeData>> GetNodes)
     : ChildrenStrategy<TElement, TControl>, IItemsBinderStrategy
@@ -443,7 +431,6 @@ public sealed record TreeChildren<TElement, TControl>(
 /// headers, and the docking drag pipeline. Index-keyed pairing assumes the
 /// item at index <c>i</c> in the old list corresponds to index <c>i</c> in
 /// the new list.</para></summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 public sealed record TabItemsHost<TElement, TControl, TItem>(
     Func<TElement, IReadOnlyList<TItem>> GetItems,
     Func<TControl, IList<object>> GetCollection,
@@ -573,7 +560,6 @@ public sealed record TabItemsHost<TElement, TControl, TItem>(
 /// the previous source's <c>ItemCount</c>. Release builds full-rebuild
 /// when an invariant is violated rather than indexing into a stale
 /// collection.</para></summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 public sealed record PreMountedItems<TElement, TControl>(
     Func<TElement, Microsoft.UI.Reactor.Core.Internal.IItemViewSource> GetSource,
     Func<TControl, IList<object>> GetCollection)

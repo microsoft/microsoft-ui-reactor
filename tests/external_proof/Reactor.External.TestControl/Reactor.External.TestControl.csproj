@@ -46,11 +46,10 @@
     <PublishTrimmed>true</PublishTrimmed>
     <IsAotCompatible>true</IsAotCompatible>
 
-    <!-- External authors consciously opt into the provisional V1 surface
-         by suppressing REACTOR_V1_PREVIEW. This is the same pattern the
-         in-tree fixtures use; the diagnostic still fires for consumers
-         that haven't opted in. -->
-    <NoWarn>$(NoWarn);REACTOR_V1_PREVIEW</NoWarn>
+    <!-- Spec 047 §14 Phase 4 (4.7): the V1 author surface graduated out of
+         [Experimental], so an external assembly consumes it with NO opt-in /
+         suppression — this project deliberately carries no REACTOR_V1_PREVIEW
+         NoWarn, proving the locked surface is first-party quality. -->
   </PropertyGroup>
 
   <ItemGroup>

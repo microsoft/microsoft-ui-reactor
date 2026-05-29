@@ -12,7 +12,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor;
 /// (e.g. <c>TabView.SelectionChanged</c>). Takes <see cref="MountContext"/> by
 /// <c>in</c> to preserve the allocation-free ref-struct contract.
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 public delegate void AfterChildrenMountCallback<TElement, TControl>(
     in MountContext ctx, TElement element, TControl control)
     where TElement : Element
@@ -50,7 +49,6 @@ public delegate void AfterChildrenMountCallback<TElement, TControl>(
 ///             readBack:     c => c.IsOn);
 /// </code></para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 public sealed class ControlDescriptor<TElement, TControl>
     where TElement : Element
     where TControl : FrameworkElement, new()

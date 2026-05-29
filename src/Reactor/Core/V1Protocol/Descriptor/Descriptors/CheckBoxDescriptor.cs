@@ -34,7 +34,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <see cref="TextBoxDescriptor"/>'s snap-back gap) — the bulk-port lands
 /// the common case, follow-up work closes the remaining shape.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class CheckBoxDescriptor
 {
     public static readonly ControlDescriptor<CheckBoxElement, WinUI.CheckBox> Descriptor =

@@ -34,7 +34,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <c>ContentElement</c>). This descriptor is retained for its isolated
 /// selftests and the perf-bench descriptor variant.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class ButtonDescriptor
 {
     private static readonly RoutedEventHandler ClickTrampoline = (s, _) =>

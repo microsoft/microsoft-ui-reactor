@@ -21,7 +21,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   <item><c>Header</c> — one-way conditional.</item>
 /// </list></para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class TimePickerDescriptor
 {
     public static readonly ControlDescriptor<TimePickerElement, WinUI.TimePicker> Descriptor =

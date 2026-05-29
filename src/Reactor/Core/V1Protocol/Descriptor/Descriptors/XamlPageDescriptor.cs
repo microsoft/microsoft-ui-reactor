@@ -8,7 +8,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <summary>
 /// Spec 047 §14 Phase 3 completion — decorator-style port of XamlPageElement.
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class XamlPageDescriptor
 {
     public static readonly IDecoratorElementHandler<XamlPageElement> Handler = new XamlPageHandler();

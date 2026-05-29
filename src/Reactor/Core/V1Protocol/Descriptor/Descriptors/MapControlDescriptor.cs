@@ -7,7 +7,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// Spec 047 §14 Phase 3 deferred specialized controls — descriptor variant of
 /// the hand-coded MapControl mount/update arms.
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class MapControlDescriptor
 {
     public static readonly ControlDescriptor<MapControlElement, WinUI.MapControl> Descriptor =

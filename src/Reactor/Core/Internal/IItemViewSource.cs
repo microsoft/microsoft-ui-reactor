@@ -26,7 +26,6 @@ namespace Microsoft.UI.Reactor.Core.Internal;
 /// legacy <c>TemplatedListElementBase</c> path so descriptor-driven
 /// controls don't need to inherit from the legacy abstract base.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 public interface IItemViewSource
 {
     int ItemCount { get; }
@@ -42,7 +41,6 @@ public interface IItemViewSource
 /// erased binder builds when running on top of
 /// <c>TemplatedItemsErased&lt;TElement,TControl&gt;</c>.
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 public interface IKeyedItemSource : IItemViewSource
 {
     string GetKeyAt(int index);

@@ -23,7 +23,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// touch the tree, matching the legacy <c>UpdateTreeView</c>
 /// rebuild path.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class TreeViewDescriptor
 {
     private static readonly TypedEventHandler<WinUI.TreeView, WinUI.TreeViewItemInvokedEventArgs>

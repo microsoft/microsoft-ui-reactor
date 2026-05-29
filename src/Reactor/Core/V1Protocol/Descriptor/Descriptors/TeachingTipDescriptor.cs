@@ -48,7 +48,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   behavior difference.</item>
 /// </list></para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class TeachingTipDescriptor
 {
     private static readonly NamedSlots<TeachingTipElement, WinUI.TeachingTip> ChildrenStrategy =

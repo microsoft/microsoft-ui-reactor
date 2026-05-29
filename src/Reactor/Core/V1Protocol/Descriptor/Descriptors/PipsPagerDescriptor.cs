@@ -22,7 +22,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   per legacy.</item>
 /// </list></para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class PipsPagerDescriptor
 {
     private static readonly TypedEventHandler<WinUI.PipsPager, WinUI.PipsPagerSelectedIndexChangedEventArgs>

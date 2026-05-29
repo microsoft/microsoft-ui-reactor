@@ -31,7 +31,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 ///         descriptor work.</item>
 /// </list>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal sealed class TextBoxHandler : IElementHandler<TextBoxElement, WinUI.TextBox>
 {
     // Per-control-lifetime trampolines. SelectionChanged is fully static

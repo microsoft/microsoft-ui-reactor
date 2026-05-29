@@ -29,7 +29,6 @@
     <IsTestProject>true</IsTestProject>
     <OutputType>Library</OutputType>
     <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
-    <NoWarn>$(NoWarn);REACTOR_V1_PREVIEW</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

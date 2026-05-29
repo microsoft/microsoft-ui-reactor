@@ -15,7 +15,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// descriptor preserves that gate via
 /// <see cref="ControlDescriptor{TElement,TControl}.OneWayConditional"/>.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class ViewboxDescriptor
 {
     private static readonly SingleContent<ViewboxElement, WinUI.Viewbox> ChildrenStrategy =

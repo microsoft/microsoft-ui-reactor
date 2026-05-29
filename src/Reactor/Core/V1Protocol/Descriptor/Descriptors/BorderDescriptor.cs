@@ -22,7 +22,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// non-null to null. Matches the Phase 1 behavior the existing fixtures
 /// (BorderPortTests, Spec047V1ProtocolFixtures) lock in.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class BorderDescriptor
 {
     private static readonly SingleContent<BorderElement, WinUI.Border> ChildrenStrategy =

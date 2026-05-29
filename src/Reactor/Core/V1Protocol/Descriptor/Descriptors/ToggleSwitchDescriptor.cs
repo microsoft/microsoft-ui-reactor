@@ -36,7 +36,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// is intrinsic interpreter overhead (virtual <c>PropEntry.Mount</c>
 /// dispatch + getter/setter delegate invocations), not the event path.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class ToggleSwitchDescriptor
 {
     public static readonly ControlDescriptor<ToggleSwitchElement, WinUI.ToggleSwitch> Descriptor =

@@ -20,7 +20,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   <c>MonthFormat</c>, <c>YearFormat</c> — one-way conditional.</item>
 /// </list></para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class DatePickerDescriptor
 {
     public static readonly ControlDescriptor<DatePickerElement, WinUI.DatePicker> Descriptor =

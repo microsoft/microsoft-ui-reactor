@@ -8,7 +8,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <see cref="ItemContainerElement"/>, the single-child wrapper required by
 /// <see cref="ItemsViewElementBase"/> item templates.
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class ItemContainerDescriptor
 {
     public static readonly ControlDescriptor<ItemContainerElement, WinUI.ItemContainer> Descriptor =

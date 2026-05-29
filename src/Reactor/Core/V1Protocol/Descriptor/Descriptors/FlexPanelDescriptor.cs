@@ -24,7 +24,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// semantics as the legacy <c>MountFlex</c> arm (the reset is required for
 /// pool-rented controls that could otherwise inherit stale Yoga config).</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class FlexPanelDescriptor
 {
     private static readonly Panel<FlexElement, FlexPanel> ChildrenStrategy =

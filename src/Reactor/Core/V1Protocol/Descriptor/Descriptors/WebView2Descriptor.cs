@@ -9,7 +9,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// Spec 047 §14 Phase 3 deferred specialized controls — descriptor variant of
 /// the hand-coded WebView2 mount/update arms.
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class WebView2Descriptor
 {
     private static readonly TypedEventHandler<WinUI.WebView2, CoreWebView2NavigationStartingEventArgs>

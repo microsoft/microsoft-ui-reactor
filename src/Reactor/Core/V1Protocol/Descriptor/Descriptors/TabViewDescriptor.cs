@@ -40,7 +40,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <see cref="TabItemsHost{TElement,TControl,TItem}"/> pairs by index, matching
 /// the index-positional legacy <c>UpdateTabView</c> arm.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class TabViewDescriptor
 {
     private static readonly WinUI.SelectionChangedEventHandler SelectionChangedTrampoline = (s, _) =>

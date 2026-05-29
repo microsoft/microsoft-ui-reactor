@@ -29,6 +29,19 @@ Derived from: `docs/specs/047-extensible-control-model.md` (§14 "Phase 4 — cl
 > ## 🟢 Progress log (live)
 >
 > **Done & verified (committed):**
+> - **§4.7** — Public V1 author surface **graduated + locked**: removed all 157
+>   `[Experimental("REACTOR_V1_PREVIEW")]` attributes across 110 `src/Reactor`
+>   files and the dead `REACTOR_V1_PREVIEW` `NoWarn` from all six csprojs. KD-4
+>   (external typed-event surface) was already shipped — the external
+>   `MarqueeControl` wires a typed CLR event via public `MountContext.BindFor` →
+>   `ReactorBinding<TElement>.OnCustomEvent<TArgs>` with no IVT; after the
+>   `[Experimental]` removal the `external_proof` project also needs no
+>   `REACTOR_V1_PREVIEW` opt-in (strongest form of the proof). External-assembly
+>   proof re-validated: `Reactor.External.TestControl` builds clean (0 err, no
+>   IL trim/AOT warnings, `PublishTrimmed`+`IsAotCompatible` on); all six
+>   `Spec047ExternalProof_Marquee_*` selftests green. Analyzers already retired
+>   (below). Validation: core build 0 err; xunit 9128/0; ExternalProof selftests
+>   0 fail.
 > - **§4.6** — Removed all A|B / `UseV1Protocol` dead code. `Reconciler` now has a
 >   single `Reconciler(ILogger? logger = null)` ctor (dropped the `useV1Protocol` /
 >   `registerBuiltinHandlers` params, the `public bool UseV1Protocol` property, the
@@ -84,8 +97,9 @@ Derived from: `docs/specs/047-extensible-control-model.md` (§14 "Phase 4 — cl
 >   (≤407/≤1520/≤19200); "Phase 5 cleanup" → "Phase 4". Commit `bfdca920`.
 > - **§4.7 analyzers** — RETIRED REACTOR1001/REACTOR1003 (final descriptor API is
 >   fully strongly-typed, no source pattern to match); REACTOR1002 remains the
->   active Q10 check. Analyzer tests 4/4. Commit `6b772765`. (Other §4.7 items —
->   `[Experimental]` removal, KD-4, external-assembly proof — still open.)
+>   active Q10 check. Analyzer tests 4/4. Commit `6b772765`. (The other §4.7
+>   items — `[Experimental]` removal, KD-4, external-assembly proof — landed in
+>   the §4.7 commit; see the §4.7 entry above.)
 > - Full solution build (`Reactor.slnx -p:Platform=x64`) = 0 errors.
 >
 > **⚠️ Critical context for §4.0.1 / §4.0.3 (the next work):** §4.0 "registration"
@@ -584,19 +598,30 @@ production default and legacy arms deleted, all of it is dead.
 Source: Phase 1 exit gate item 5 (surface marked provisional; lock after Phase 2
 decision) — Phase 2 decided, so Phase 4 locks it. Includes KD-4.
 
-- [ ] Remove `[Experimental("REACTOR_V1_PREVIEW")]` from the public V1 surface
+- [x] Remove `[Experimental("REACTOR_V1_PREVIEW")]` from the public V1 surface
       (`IElementHandler<,>`, `MountContext` / `UpdateContext`,
       `ReactorBinding<T>`, `ControlDescriptor<,>` + builder methods,
       `RegisterType` / `RegisterHandler` / `RegisterHandlerForDerivedTypes`,
       pool-policy API, `WriteSuppressed`, `AddRawRoutedHandler`). The surface is
-      now stable / supported.
-- [ ] **Close KD-4 — external typed-event surface.** Ship the public typed-event
+      now stable / supported. *(Swept all 157 attribute occurrences across 110
+      `src/Reactor` files — public **and** internal — graduating the whole V1
+      feature; dropped the now-dead `REACTOR_V1_PREVIEW` `NoWarn` from all six
+      csprojs: `Reactor.csproj`, `Reactor.Tests`, `Reactor.AppTests.Host`,
+      `PerfBench.ControlModel`, and both `external_proof` projects.)*
+- [x] **Close KD-4 — external typed-event surface.** Ship the public typed-event
       wiring so an external assembly can author a multi-event control (the
       `.HandCodedControlled` / `.HandCodedEvent` per-descriptor `TPayload`
       shape, or `OnCustomEvent` with a pool-safe deduped trampoline) **without
-      `InternalsVisibleTo`** on Reactor internals. This is the last gap that
-      keeps the external path below first-party quality (and the precondition
-      for the §1.1 library split being unblocked).
+      `InternalsVisibleTo`** on Reactor internals. *(Already shipped: the
+      external `MarqueeControl` authors a typed CLR event via
+      `MountContext.BindFor(...)` → `ReactorBinding<TElement>.OnCustomEvent<EventArgs>(...)`
+      — both public — and registers through `Reconciler.RegisterHandler<,>`. The
+      `Reactor.External.TestControl` project has only a plain `ProjectReference`
+      to Reactor (no IVT) and, after the `[Experimental]` removal, no
+      `REACTOR_V1_PREVIEW` opt-in either. `ReactorBinding<TElement>`'s ctor stays
+      internal but is reached via the public `BindFor`, so it is not a gap. The
+      `Spec047ExternalProof_Marquee_WriteSuppressed` fixture exercises the
+      pool-safe deduped trampoline.)*
 - [x] **Activate / retire the compile-time validation analyzers (§13 Q10).**
       `REACTOR1001` (`StringEventReferenceAnalyzer`) and `REACTOR1003`
       (`ControlledReadBackTypeAnalyzer`) are still documented no-ops "until
@@ -622,11 +647,17 @@ decision) — Phase 2 decided, so Phase 4 locks it. Includes KD-4.
       (`CustomEventDelegateTypeAnalyzer`) remains as the active, real Q10
       compile-time check (typed-event EventArgs validation). Analyzer tests
       green (4 pass).
-- [ ] Verify the external-assembly proof (Phase 1 gate item 2) still passes with
+- [x] Verify the external-assembly proof (Phase 1 gate item 2) still passes with
       the locked surface: a control hosted in a separate assembly, registered via
       public API, exercising value writes / events / modifiers / setters /
       pooling / child reconciliation, with `PublishTrimmed=true` +
-      `IsAotCompatible=true` and zero new trim/AOT warnings.
+      `IsAotCompatible=true` and zero new trim/AOT warnings. *(`Reactor.External.TestControl`
+      builds clean — 0 errors, no IL2xxx/IL3xxx trim/AOT warnings, only the
+      pre-existing core doc-comment crefs — with `PublishTrimmed`/`IsAotCompatible`
+      set and **no** `REACTOR_V1_PREVIEW` opt-in. All six
+      `Spec047ExternalProof_Marquee_*` selftests green; the AOT-published run is
+      covered by the existing `.github/workflows/ci.yml` AOT selftest job, which
+      mounts the external handler fixtures.)*
 
 ## 4.8 Documentation — final author-facing surface
 

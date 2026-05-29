@@ -49,7 +49,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   on the callback being present at Mount.</item>
 /// </list></para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class CalendarViewDescriptor
 {
     // ── Trampoline ───────────────────────────────────────────────────

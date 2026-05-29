@@ -38,7 +38,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// transitions are handled by the entry on the next Mount/pool-rent. The
 /// callback-on-mount common case is fully covered.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class FrameDescriptor
 {
     // ── Trampolines ──────────────────────────────────────────────────

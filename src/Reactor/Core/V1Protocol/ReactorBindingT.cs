@@ -23,7 +23,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol;
 /// <para><b>WriteSuppressed</b> wraps the 1.4 primitive so authors can
 /// suppress the next change-event echo on the bound control.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 public readonly struct ReactorBinding<TElement> where TElement : Element
 {
     private readonly Reconciler _reconciler;

@@ -21,7 +21,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// so this is a tighter superset — no behavior delta for round-tripped
 /// elements.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class ProgressRingDescriptor
 {
     public static readonly ControlDescriptor<ProgressRingElement, WinUI.ProgressRing> Descriptor =

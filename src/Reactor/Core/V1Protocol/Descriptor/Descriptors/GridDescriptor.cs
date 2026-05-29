@@ -29,7 +29,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <c>Grid.SetRow</c> / <c>Grid.SetColumn</c> always set; <c>SetRowSpan</c>
 /// / <c>SetColumnSpan</c> only when the hint is &gt; 1 (default).</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class GridDescriptor
 {
     private static readonly Panel<GridElement, WinUI.Grid> ChildrenStrategy =

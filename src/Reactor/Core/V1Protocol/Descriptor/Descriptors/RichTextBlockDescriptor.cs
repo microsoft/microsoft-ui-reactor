@@ -41,7 +41,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// authors hoist a static <c>RichTextParagraph[]</c> at module scope —
 /// re-renders skip the rebuild entirely.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class RichTextBlockDescriptor
 {
     public static readonly ControlDescriptor<RichTextBlockElement, WinUI.RichTextBlock> Descriptor =

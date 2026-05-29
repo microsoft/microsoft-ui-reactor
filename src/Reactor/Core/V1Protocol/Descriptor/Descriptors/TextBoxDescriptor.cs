@@ -47,7 +47,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// hand-coded escape hatch retains nuances the declarative path doesn't
 /// (yet).</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class TextBoxDescriptor
 {
     // Static trampolines — captured-free, allocated once per process.

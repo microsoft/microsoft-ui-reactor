@@ -28,7 +28,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   Flyout element reference actually changes.</item>
 /// </list></para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class SplitButtonDescriptor
 {
     private static readonly TypedEventHandler<WinUI.SplitButton, WinUI.SplitButtonClickEventArgs> ClickTrampoline =

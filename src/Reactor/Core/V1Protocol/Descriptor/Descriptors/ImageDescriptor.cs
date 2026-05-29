@@ -43,7 +43,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   entry below, so the same synchronous-fire path is preserved.</item>
 /// </list></para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class ImageDescriptor
 {
     private static readonly RoutedEventHandler ImageOpenedTrampoline = (s, _) =>

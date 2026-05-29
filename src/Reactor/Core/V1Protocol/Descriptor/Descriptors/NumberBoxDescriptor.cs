@@ -42,7 +42,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   edge until a future entry shape lands.</item>
 /// </list></para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class NumberBoxDescriptor
 {
     private static readonly TypedEventHandler<WinUI.NumberBox, WinUI.NumberBoxValueChangedEventArgs>

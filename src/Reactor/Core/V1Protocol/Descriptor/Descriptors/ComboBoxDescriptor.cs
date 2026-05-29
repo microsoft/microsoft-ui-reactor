@@ -36,7 +36,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// re-renders. Reconciliation is positional (clear + add on structural
 /// delta); keyed reconciliation for templated lists lands in batch G2.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class ComboBoxDescriptor
 {
     private static readonly WinUI.SelectionChangedEventHandler SelectionChangedTrampoline = (s, _) =>

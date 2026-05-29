@@ -25,7 +25,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   writes that mirror the legacy mount/update arms verbatim.</item>
 /// </list></para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class ScrollViewDescriptor
 {
     private static readonly SingleContent<ScrollViewElement, WinUI.ScrollView> ChildrenStrategy =

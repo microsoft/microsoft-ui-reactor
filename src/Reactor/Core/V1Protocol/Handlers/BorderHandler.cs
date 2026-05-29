@@ -24,7 +24,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 /// <c>AttachedProps</c>; for now the shape exists as a compile-time
 /// contract. Phase 3 picks this up when the additional containers port.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal sealed class BorderHandler : IElementHandler<BorderElement, WinUI.Border>
 {
     private static readonly SingleContent<BorderElement, WinUI.Border> ChildrenStrategy =

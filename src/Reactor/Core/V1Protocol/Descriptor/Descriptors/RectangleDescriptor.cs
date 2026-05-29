@@ -21,7 +21,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// zero values keep the visible-output equivalent to the legacy mount for
 /// callers who never set them.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class RectangleDescriptor
 {
     public static readonly ControlDescriptor<RectangleElement, WinShapes.Rectangle> Descriptor =

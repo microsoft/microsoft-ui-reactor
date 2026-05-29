@@ -25,7 +25,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 /// port in Batch G2 with spec-042 keyed reconciliation threaded
 /// through.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal sealed class ListViewHandler : IElementHandler<ListViewElement, WinUI.ListView>
 {
     public WinUI.ListView Mount(MountContext ctx, ListViewElement el)

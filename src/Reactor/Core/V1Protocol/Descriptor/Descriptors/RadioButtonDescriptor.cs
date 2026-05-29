@@ -21,7 +21,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   matches the hand-coded arm).</item>
 /// </list></para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class RadioButtonDescriptor
 {
     public static readonly ControlDescriptor<RadioButtonElement, WinUI.RadioButton> Descriptor =

@@ -13,7 +13,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <c>Interval</c> one-way, <c>Click</c> via
 /// <see cref="ControlDescriptor{TElement,TControl}.HandCodedEvent{TPayload,TDelegate}"/>.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class RepeatButtonDescriptor
 {
     private static readonly RoutedEventHandler ClickTrampoline = (s, _) =>

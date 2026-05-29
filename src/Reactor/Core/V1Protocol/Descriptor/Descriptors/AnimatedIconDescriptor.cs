@@ -20,7 +20,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <c>State</c> property on <c>AnimatedIconElement</c>, so the descriptor
 /// surface is exactly the two source-typed props the legacy arm writes.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class AnimatedIconDescriptor
 {
     public static readonly ControlDescriptor<AnimatedIconElement, WinUI.AnimatedIcon> Descriptor =

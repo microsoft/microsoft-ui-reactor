@@ -17,7 +17,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// (plain <see cref="ControlDescriptor{TElement,TControl}.OneWay"/>); zero
 /// remains the element's default so unset callers observe legacy behavior.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class EllipseDescriptor
 {
     public static readonly ControlDescriptor<EllipseElement, WinShapes.Ellipse> Descriptor =

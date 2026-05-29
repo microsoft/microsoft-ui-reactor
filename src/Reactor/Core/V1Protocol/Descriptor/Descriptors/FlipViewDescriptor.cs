@@ -26,7 +26,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// existing <see cref="ChangeEchoSuppressor"/> drains the programmatic
 /// write echo.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class FlipViewDescriptor
 {
     private static readonly WinUI.SelectionChangedEventHandler SelectionChangedTrampoline = (s, _) =>

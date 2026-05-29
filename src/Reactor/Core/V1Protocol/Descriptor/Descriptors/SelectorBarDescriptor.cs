@@ -27,7 +27,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// for the common prefix. Acceptable for short SelectorBars (typical
 /// 2–5 segments).</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class SelectorBarDescriptor
 {
     private static readonly TypedEventHandler<WinUI.SelectorBar, WinUI.SelectorBarSelectionChangedEventArgs>

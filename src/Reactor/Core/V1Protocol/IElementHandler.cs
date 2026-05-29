@@ -20,7 +20,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol;
 /// construction.</para>
 /// </summary>
 // <snippet:handler-contract>
-[Experimental("REACTOR_V1_PREVIEW")]
 public interface IElementHandler<TElement, TControl>
     where TElement : Element
     where TControl : UIElement

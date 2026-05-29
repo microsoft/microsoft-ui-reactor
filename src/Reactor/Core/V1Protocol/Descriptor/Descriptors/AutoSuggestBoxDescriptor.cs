@@ -46,7 +46,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   gate; the legacy Update arm has the same gap by construction).</item>
 /// </list></para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class AutoSuggestBoxDescriptor
 {
     // ── Trampolines ───────────────────────────────────────────────────

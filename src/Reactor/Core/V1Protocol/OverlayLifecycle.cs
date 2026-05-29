@@ -31,7 +31,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol;
 // unmount recursion runs identically V1 ON ≡ V1 OFF. Reworking overlay teardown
 // (closing/detaching the side object) is deferred to §4.5 where it can change
 // for the V1-only world without breaking the parity bar.
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class OverlayLifecycle
 {
     // ── ContentDialog ───────────────────────────────────────────────────

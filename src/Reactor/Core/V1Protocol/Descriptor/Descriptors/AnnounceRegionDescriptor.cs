@@ -15,7 +15,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <see cref="AnnounceHandle"/> once at Mount. The legacy update arm is static;
 /// the descriptor mirrors that with a no-op Update lambda.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class AnnounceRegionDescriptor
 {
     public static readonly ControlDescriptor<AnnounceRegionElement, WinUI.TextBlock> Descriptor =

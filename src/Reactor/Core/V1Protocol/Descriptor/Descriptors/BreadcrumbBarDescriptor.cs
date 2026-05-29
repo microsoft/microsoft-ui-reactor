@@ -22,7 +22,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   <c>Items[idx]</c> data — matches the legacy hand-coded mapping.</item>
 /// </list></para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class BreadcrumbBarDescriptor
 {
     private static readonly TypedEventHandler<WinUI.BreadcrumbBar, WinUI.BreadcrumbBarItemClickedEventArgs>

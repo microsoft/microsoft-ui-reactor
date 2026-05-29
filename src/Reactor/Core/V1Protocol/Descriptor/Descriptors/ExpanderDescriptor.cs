@@ -41,7 +41,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   escape-hatched via setter when needed).</item>
 /// </list></para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class ExpanderDescriptor
 {
     private static readonly SingleContent<ExpanderElement, WinUI.Expander> ChildrenStrategy =

@@ -26,7 +26,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   <c>MinValue</c>, <c>MaxValue</c>.</item>
 /// </list></para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class ColorPickerDescriptor
 {
     public static readonly ControlDescriptor<ColorPickerElement, WinUI.ColorPicker> Descriptor =

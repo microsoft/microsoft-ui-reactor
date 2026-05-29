@@ -38,7 +38,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 /// always returns <c>null</c> (pure in-place reconcile), so the
 /// null-forgiving <c>?? control</c> keeps the existing control identity.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal sealed class ButtonHandler : IDecoratorElementHandler<ButtonElement>
 {
     public UIElement Mount(MountContext ctx, ButtonElement el)

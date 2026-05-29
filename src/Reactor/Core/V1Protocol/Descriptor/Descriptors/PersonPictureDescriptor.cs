@@ -21,7 +21,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// re-applies the props, so a rented PersonPicture is brought to the same
 /// state as a fresh one.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class PersonPictureDescriptor
 {
     public static readonly ControlDescriptor<PersonPictureElement, WinUI.PersonPicture> Descriptor =

@@ -21,7 +21,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// children share the same anchor-state ConditionalWeakTable + size-change
 /// subscription used by the legacy <c>MountCanvas</c> arm.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class CanvasDescriptor
 {
     private static readonly Panel<CanvasElement, WinUI.Canvas> ChildrenStrategy =

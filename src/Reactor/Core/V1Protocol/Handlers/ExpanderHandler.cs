@@ -19,7 +19,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 // (parity with V1 OFF). Descriptor retained for isolated selftests.
 
 /// <summary>§14 prelude — Expander (header/content + IsExpanded callback wiring).</summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal sealed class ExpanderHandler : IDecoratorElementHandler<ExpanderElement>
 {
     public UIElement Mount(MountContext ctx, ExpanderElement el)

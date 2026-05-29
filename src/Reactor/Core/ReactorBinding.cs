@@ -12,7 +12,6 @@ namespace Microsoft.UI.Reactor.Core;
 /// <c>ReactorBinding&lt;TElement&gt;</c> (per spec §4) lands in 1.6; this
 /// static class is just the primitive entry point.
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 public static class ReactorBinding
 {
     /// <summary>

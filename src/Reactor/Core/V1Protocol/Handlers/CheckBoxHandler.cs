@@ -26,7 +26,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 // isolated selftests.
 
 /// <summary>§14 prelude — CheckBox (value control; legacy echo-suppression).</summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal sealed class CheckBoxHandler : IDecoratorElementHandler<CheckBoxElement>
 {
     public UIElement Mount(MountContext ctx, CheckBoxElement el)

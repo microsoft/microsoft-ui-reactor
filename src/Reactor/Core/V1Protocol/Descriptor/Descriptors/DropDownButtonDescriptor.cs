@@ -29,7 +29,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   produced a structurally-equal Element.</item>
 /// </list></para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class DropDownButtonDescriptor
 {
     public static readonly ControlDescriptor<DropDownButtonElement, WinUI.DropDownButton> Descriptor =

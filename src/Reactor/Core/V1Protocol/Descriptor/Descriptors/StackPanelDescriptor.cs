@@ -20,7 +20,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// per-child attached properties on a <c>StackPanel</c> (Stack has none).
 /// Parity holds.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class StackPanelDescriptor
 {
     private static readonly Panel<StackElement, WinUI.StackPanel> ChildrenStrategy =

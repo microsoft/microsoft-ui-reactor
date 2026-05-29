@@ -35,7 +35,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// PaneBackground update on <c>!ReferenceEquals(o.PaneBackground, n.PaneBackground)</c>;
 /// the descriptor's reference-equality comparer reproduces that gate.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class SplitViewDescriptor
 {
     private static readonly NamedSlots<SplitViewElement, WinUI.SplitView> ChildrenStrategy =

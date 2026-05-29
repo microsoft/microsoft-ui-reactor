@@ -28,7 +28,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor;
 /// On Update, <see cref="Update"/> runs and writes through
 /// <c>ReactorBinding.WriteSuppressed</c> when the entry is controlled.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 public abstract class PropEntry<TElement, TControl>
     where TElement : Element
     where TControl : UIElement
@@ -650,7 +649,6 @@ internal sealed class OneWayBridgedPropEntry<TElement, TControl, TValue> : PropE
 /// <see cref="MountContext"/> / <see cref="UpdateContext"/> doesn't need
 /// to be passed — the entry projects the two pieces a bridge typically
 /// needs (the <see cref="Reconciler"/> and the rerender callback).</summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 public delegate void OneWayBridgedSetter<in TControl, in TValue>(
     TControl ctrl, TValue value, Reconciler reconciler, Action requestRerender)
     where TControl : UIElement;

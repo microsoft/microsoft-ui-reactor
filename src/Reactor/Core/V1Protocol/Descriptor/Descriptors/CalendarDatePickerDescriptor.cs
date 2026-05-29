@@ -33,7 +33,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// these on Update when the element value changes — a behavioral
 /// improvement that surfaces value changes from element re-renders.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal static class CalendarDatePickerDescriptor
 {
     public static readonly ControlDescriptor<CalendarDatePickerElement, WinUI.CalendarDatePicker> Descriptor =

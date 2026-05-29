@@ -27,7 +27,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 // its isolated selftests (same pattern as the panel descriptors).
 
 /// <summary>§14 prelude — Lazy*Stack (ScrollViewer-wrapped virtualizing list).</summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 internal sealed class LazyStackHandler : IDecoratorElementHandler<LazyStackElementBase>
 {
     public UIElement Mount(MountContext ctx, LazyStackElementBase el)
