@@ -1144,6 +1144,15 @@ internal static class SelfTestFixtureRegistry
         "Spec047ExternalProof_Marquee_SetterChain",
         "Spec047ExternalProof_Marquee_PoolRent",
         "Spec047ExternalProof_Marquee_PoolResetContract",
+
+        // Spec 047 §4.3 — EventHandlerState split (§9.2) contract fixtures.
+        // Validate the ModifierEventHandlerState / per-control
+        // ControlEventStateBox split landed in commit 691048bd (issue #114).
+        "EventStateSplit_NoDuplicateSubscriptionAcrossPoolReuse",
+        "EventStateSplit_HandlerTypeMismatchResetsBox",
+        "EventStateSplit_DualReturnIdempotent",
+        "EventStateSplit_ModifierStateLazyForIntrinsicOnly",
+        "EventStateSplit_AddRawRoutedHandler_HandledEventsToo",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -2265,6 +2274,13 @@ internal static class SelfTestFixtureRegistry
         "Spec047ExternalProof_Marquee_SetterChain" => new Spec047ExternalProofFixtures.MarqueeSetterChain(harness),
         "Spec047ExternalProof_Marquee_PoolRent" => new Spec047ExternalProofFixtures.MarqueePoolRentReturn(harness),
         "Spec047ExternalProof_Marquee_PoolResetContract" => new Spec047ExternalProofFixtures.MarqueePoolResetContract(harness),
+
+        // Spec 047 §4.3 — EventHandlerState split (§9.2) contract fixtures.
+        "EventStateSplit_NoDuplicateSubscriptionAcrossPoolReuse" => new Spec047EventStateSplitFixtures.NoDuplicateSubscriptionAcrossPoolReuse(harness),
+        "EventStateSplit_HandlerTypeMismatchResetsBox" => new Spec047EventStateSplitFixtures.HandlerTypeMismatchResetsBox(harness),
+        "EventStateSplit_DualReturnIdempotent" => new Spec047EventStateSplitFixtures.DualReturnIdempotent(harness),
+        "EventStateSplit_ModifierStateLazyForIntrinsicOnly" => new Spec047EventStateSplitFixtures.ModifierStateLazyForIntrinsicOnly(harness),
+        "EventStateSplit_AddRawRoutedHandler_HandledEventsToo" => new Spec047EventStateSplitFixtures.AddRawRoutedHandler_HandledEventsToo(harness),
 
         _ => null,
     };
