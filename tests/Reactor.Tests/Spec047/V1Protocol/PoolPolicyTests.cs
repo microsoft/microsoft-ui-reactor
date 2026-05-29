@@ -14,10 +14,11 @@ namespace Microsoft.UI.Reactor.Tests.Spec047.V1Protocol;
 /// the AppTests.Host fixture; here we exercise the pure-C# parts of the
 /// API contract via a constructible non-WinUI fake type.
 ///
-/// TODO(1.11/1.16): once the WinUI dispatcher fixture lands, add a real
-/// FrameworkElement rent/return cycle that observes the engine reset
-/// contract (EventHandlerState cleared, ControlEventState cleared,
-/// ReactorAttached.StateProperty Tag cleared).
+/// The real FrameworkElement rent/return cycle that observes the engine reset
+/// contract is covered by the AppTests.Host self-test fixtures
+/// (Spec047EventStateSplitFixtures, spec 047 §4.3): ModifierEventHandlerState
+/// Current* user delegates cleared, ControlEventState PRESERVED across
+/// rent/return (issue #114), ReactorAttached.StateProperty Tag cleared.
 /// </summary>
 public class PoolPolicyTests
 {

@@ -1538,14 +1538,31 @@ ARM64 stable-AC re-capture on `LAPTOP-4MEP83VI` remains deferred for the §14 ra
 
 ### Phase 4 — cleanup
 
-- Delete the private switch.
-- Delete `ChangeEchoSuppressor` if §8 audit succeeded (or finalize the §8.1 round-trip implementation if that path won).
-- Split `EventHandlerState` per §9 — implement the per-control struct shapes from §9.2.
-- Land the §11.6 hard byte gates (V2 must hit the measured §11.6 targets
+**Status: code-complete — migration closed; V1 is the unconditional production
+path.** The only outstanding items are baseline-machine-only (ARM64
+`LAPTOP-4MEP83VI`): the stable-AC perf ratification and the §11.6 hard byte-gate
+*measurement/enforcement*. See the close-out tracker
+[`tasks/047-extensible-control-model-phase4-implementation.md`](tasks/047-extensible-control-model-phase4-implementation.md).
+
+- ✅ Delete the private switch. *(Done §4.5 — dispatch is V1 registry →
+  `_typeRegistry` → composition-primitive switch; no legacy fallthrough.)*
+- ✅ ~~Delete `ChangeEchoSuppressor`~~ → **settled as a HYBRID (§8.3).** Full
+  deletion was assessed and ruled NO-GO (causal-token vs value-compare
+  correctness gap, plus the `ApplySetters` scope and public `WriteSuppressed`
+  carry no value to compare). The safe synchronous single-value round-trips
+  migrated to a value-diff arm; the counter is RETAINED as the fallback.
+  `ChangeEchoSuppressor.cs` stays. `WriteSuppressed` keeps its signature.
+- ✅ Split `EventHandlerState` per §9 — implemented the §9.2 shape: the routed
+  family became `ModifierEventHandlerState` (lazy on `ReactorState.Modifiers`) +
+  per-control `ControlEventStateBox` payloads; the monolith is gone (§4.3).
+- 🟡 Land the §11.6 hard byte gates (V2 must hit the measured §11.6 targets
   `Target = min(Direct + 100, ReactorToday × 0.4)` → **≤ 407 / ≤ 1520 / ≤ 19200**
   for no-callback / one-callback / three-callback; the stale `≤100 / ≤320 / ≤500`
-  estimates predate the Phase-0 baseline capture).
-- Document the final author-facing surface in `docs/guide/`.
+  estimates predate the Phase-0 baseline capture). *(Code-complete: the bucketed
+  `Element` base (§11.7, `ElementExtras`) ships and the target constants are
+  landed (`PerformanceBudgets.cs`); the gate **measurement/enforcement** is
+  ARM64-baseline-blocked — §4.4/§4.9 handoff.)*
+- ✅ Document the final author-facing surface in `docs/guide/`. *(Done §4.8.)*
 
 ### Future: source generation (deferred, no committed timeline)
 

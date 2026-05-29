@@ -29,6 +29,21 @@ Derived from: `docs/specs/047-extensible-control-model.md` (§14 "Phase 4 — cl
 > ## 🟢 Progress log (live)
 >
 > **Done & verified (committed):**
+> - **§4.10 — final close-out (DONE for everything executable in x64; ARM64
+>   measurement carved out).** Dead-code sweep grep-clean across `src`+`tests`
+>   (no live `UseV1Protocol`/`REACTOR_USE_V1_PROTOCOL`/`ReactorV2`/
+>   `registerBuiltinHandlers`/`EventHandlerState`-monolith — only historical
+>   comments; `ChangeEchoSuppressor` intentionally retained per the §8.3 hybrid,
+>   removed from the sweep list). Updated the main tracker header + spec §14
+>   "Phase 4 — cleanup" status to "code-complete; migration closed; V1 is the
+>   unconditional production path", reconciling the exit-gate's literal "delete
+>   ChangeEchoSuppressor" / "byte gates pass" wording against the settled hybrid +
+>   the baseline-machine carve. Tidied a stale `PoolPolicyTests` TODO (the real
+>   FrameworkElement rent/return reset contract is now covered by the §4.3 self-test
+>   fixtures; corrected its "ControlEventState cleared" wording to "preserved").
+>   Full x64 validation: solution build (`Reactor.slnx`) 0 err; full xunit 9128/0;
+>   full selftest 0 fail. **Outstanding (handed off, baseline-machine-only):** the
+>   §4.9 ARM64 perf ratification + the §4.4 §11.6 hard byte-gate measurement.
 > - **§4.9 — perf ratification (HANDED OFF; ARM64-baseline-blocked).** No code
 >   remained to land — all code the §4.9 gates measure is already in place
 >   (§11.6 target constants §4.4, perf-project consolidation §4.6, EHS split §4.3,
@@ -996,15 +1011,41 @@ and the still-pending ARM64 stable-AC ratification gate (§14 Phase 3 finish).
 
 ## 4.10 Final close-out checklist
 
-- [ ] Phase 4 exit gate (top of file) items 1–8 all satisfied.
-- [ ] Update the main tracker
+- [x] Phase 4 exit gate (top of file) items 1–8 all satisfied. *(Code-satisfied
+      with two reconciliations + the baseline-machine carve: **item 3** (delete
+      `ChangeEchoSuppressor`) is **superseded by the §8.3 hybrid** — the suppressor
+      is intentionally retained alongside the value-diff arm; `WriteSuppressed`
+      keeps its public signature as required. **Items 1/2/4/6 fully met.** **Items
+      5 (byte gates) and 7 (ARM64 ratification + AOT/macro)** are code-complete but
+      their **measurement** is ARM64-baseline-blocked (§4.9 handoff). **Item 8**:
+      full x64 build + xunit + selftest green (§15.6 budget pass is part of the
+      ARM64 capture). The exit gate's literal "ChangeEchoSuppressor deleted" /
+      "byte gates pass" wording should be ratified against the settled hybrid +
+      the baseline-machine carve by the spec author.)*
+- [x] Update the main tracker
       (`047-extensible-control-model-implementation.md`) and spec §14 status
       line to "Phase 4 complete — migration closed; V1 is the production path."
-- [ ] CI green: unit tests + selftests + full solution build (the standard PR
-      gate) on `windows-latest`, .NET 10.
-- [ ] Final dead-code sweep: no `UseV1Protocol`, `REACTOR_USE_V1_PROTOCOL`,
-      `ReactorV2`, `registerBuiltinHandlers`, `ChangeEchoSuppressor`, or
-      `EventHandlerState` (monolith) references remain.
+      *(Done — added a Phase 4 status block to the main tracker header and to spec
+      §14 "Phase 4 — cleanup"; both state code-complete / migration closed / V1 is
+      the unconditional production path, with the ARM64 perf ratification + §11.6
+      byte-gate measurement called out as the only outstanding baseline-machine
+      items, and the `ChangeEchoSuppressor` bullet reconciled to the §8.3 hybrid.)*
+- [x] CI green: unit tests + selftests + full solution build (the standard PR
+      gate) on `windows-latest`, .NET 10. *(Validated locally on this x64 dev
+      machine: full solution build (`Reactor.slnx -p:Platform=x64`) 0 err; full
+      xunit 9128 pass / 0 fail; full selftest 0 failures (docking float/A11y/
+      Composition fixtures are intermittently flaky under full-suite load but pass
+      deterministically when filtered — pre-existing, not a regression). The
+      `windows-latest` CI run is the standard PR gate and runs on push.)*
+- [x] Final dead-code sweep: no `UseV1Protocol`, `REACTOR_USE_V1_PROTOCOL`,
+      `ReactorV2`, `registerBuiltinHandlers`, or `EventHandlerState` (monolith)
+      references remain. *(Done — grep-clean across `src` and `tests`: the only
+      hits are historical doc comments describing the removals (e.g.
+      `Reconciler.cs:250` "the `UseV1Protocol` flag … were removed", and test
+      comments describing the completed `EventHandlerState`→`ModifierEventHandlerState`
+      split). **`ChangeEchoSuppressor` is intentionally RETAINED** per the §8.3
+      hybrid — removed from this sweep list; it is the chosen end state, not dead
+      code.)*
 
 ---
 

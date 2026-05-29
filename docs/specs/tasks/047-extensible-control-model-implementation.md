@@ -18,6 +18,22 @@ Derived from: `docs/specs/047-extensible-control-model.md`
 > the `2026-05-26-q1-fastpath-3x5-stableac/` capture is authoritative. See
 > "Phase 2 wrap-up" and "Phase 3 prerequisites" sections below.
 >
+> **Phase 3 complete (PR #440); Phase 4 code-complete — V1 is the unconditional
+> production path; migration closed.** The full close-out is tracked in
+> [`047-extensible-control-model-phase4-implementation.md`](047-extensible-control-model-phase4-implementation.md).
+> Landed: 100% V1 registration + the production flip (§4.0/§4.1); legacy
+> `MountXxx`/`UpdateXxx` switch + all A|B/`UseV1Protocol` dead code deleted
+> (§4.5/§4.6); the public author surface graduated out of `[Experimental]` +
+> locked, KD-4 closed (§4.7); the §8 echo path migrated to a value-diff/counter
+> **hybrid** (`ChangeEchoSuppressor` intentionally retained, spec §8.3); the §9
+> `EventHandlerState` split into `ModifierEventHandlerState` + per-control
+> `ControlEventStateBox` (§4.3); the §11.7 bucketed `Element` base
+> (`ElementExtras`) + the §11.6 byte-gate target constants (§4.4); and the final
+> author docs (§4.8). **Outstanding (baseline-machine-only, handed off):** the
+> ARM64 stable-AC perf ratification (§4.9) and the §11.6 hard byte-gate
+> *measurement/enforcement* (§4.4) — both blocked on `LAPTOP-4MEP83VI`. Full
+> x64 validation green throughout (build / xunit 9128 / selftests).
+>
 > Phase 0 below is *spec-process* work — audits, suite infrastructure, baseline
 > measurements, and decision criteria. It cleared its exit gate (PR #414) and
 > Phase 1 (v1 protocol behind a feature flag, 5 ported controls + external
