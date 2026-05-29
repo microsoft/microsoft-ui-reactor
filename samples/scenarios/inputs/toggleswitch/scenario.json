@@ -1,0 +1,11 @@
+{
+  "id": "toggleswitch",
+  "category": "inputs",
+  "title": "ToggleSwitch Settings Toggle",
+  "intent": "toggle switch for on off settings state",
+  "tags": ["toggle", "switch", "setting", "onoff"],
+  "factoryAnchors": ["ToggleSwitch", "UseState"],
+  "notesKey": "ToggleSwitch",
+  "relatedIds": [],
+  "priority": "P0"
+}

@@ -1,0 +1,11 @@
+{
+  "id": "slider-range",
+  "category": "inputs",
+  "title": "Slider Range Selection",
+  "intent": "slider for numeric range selection with live value display",
+  "tags": ["slider", "range", "numeric"],
+  "factoryAnchors": ["Slider", "UseState"],
+  "notesKey": "Slider",
+  "relatedIds": [],
+  "priority": "P0"
+}

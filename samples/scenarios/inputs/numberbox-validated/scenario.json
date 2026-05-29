@@ -1,0 +1,11 @@
+{
+  "id": "numberbox-validated",
+  "category": "inputs",
+  "title": "NumberBox Validation",
+  "intent": "number input with validation constraints and current value display",
+  "tags": ["numberbox", "number", "input", "validation"],
+  "factoryAnchors": ["NumberBox", "UseState"],
+  "notesKey": "NumberBox",
+  "relatedIds": [],
+  "priority": "P0"
+}

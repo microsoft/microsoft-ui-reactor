@@ -1,0 +1,11 @@
+{
+  "id": "combobox-from-list",
+  "category": "inputs",
+  "title": "ComboBox from String List",
+  "intent": "dropdown picker from a string array with selected item display",
+  "tags": ["combobox", "dropdown", "select", "picker"],
+  "factoryAnchors": ["ComboBox", "UseState"],
+  "notesKey": "ComboBox",
+  "relatedIds": [],
+  "priority": "P0"
+}

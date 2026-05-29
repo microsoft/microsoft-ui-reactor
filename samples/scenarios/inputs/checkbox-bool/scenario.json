@@ -1,0 +1,11 @@
+{
+  "id": "checkbox-bool",
+  "category": "inputs",
+  "title": "Checkbox Boolean State",
+  "intent": "checkbox bound to boolean state with text feedback",
+  "tags": ["checkbox", "boolean", "toggle"],
+  "factoryAnchors": ["CheckBox", "UseState"],
+  "notesKey": "CheckBox",
+  "relatedIds": [],
+  "priority": "P0"
+}

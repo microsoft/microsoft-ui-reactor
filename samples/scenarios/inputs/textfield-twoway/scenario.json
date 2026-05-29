@@ -1,0 +1,11 @@
+{
+  "id": "textfield-twoway",
+  "category": "inputs",
+  "title": "TextField Two-Way Binding",
+  "intent": "two-way text input binding with UseState and immediate display updates",
+  "tags": ["textfield", "input", "twoway", "binding", "text"],
+  "factoryAnchors": ["TextField", "UseState"],
+  "notesKey": "TextField",
+  "relatedIds": [],
+  "priority": "P0"
+}

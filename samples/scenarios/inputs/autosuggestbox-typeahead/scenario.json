@@ -1,0 +1,11 @@
+{
+  "id": "autosuggestbox-typeahead",
+  "category": "inputs",
+  "title": "AutoSuggestBox Typeahead",
+  "intent": "search box with typeahead suggestions filtered from user input",
+  "tags": ["autosuggest", "typeahead", "search", "filter"],
+  "factoryAnchors": ["AutoSuggestBox", "UseState"],
+  "notesKey": "AutoSuggestBox",
+  "relatedIds": [],
+  "priority": "P0"
+}

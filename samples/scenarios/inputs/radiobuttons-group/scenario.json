@@ -1,0 +1,11 @@
+{
+  "id": "radiobuttons-group",
+  "category": "inputs",
+  "title": "RadioButtons Group Selection",
+  "intent": "radio button group for single selection with selected index tracking",
+  "tags": ["radio", "radiobuttons", "selection", "group"],
+  "factoryAnchors": ["RadioButtons", "UseState"],
+  "notesKey": "RadioButtons",
+  "relatedIds": [],
+  "priority": "P0"
+}

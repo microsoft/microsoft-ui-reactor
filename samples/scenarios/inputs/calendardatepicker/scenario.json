@@ -1,0 +1,11 @@
+{
+  "id": "calendardatepicker",
+  "category": "inputs",
+  "title": "CalendarDatePicker Selection",
+  "intent": "date selection via calendar popup with current date display",
+  "tags": ["calendar", "date", "picker", "datepicker"],
+  "factoryAnchors": ["CalendarDatePicker", "UseState"],
+  "notesKey": "CalendarDatePicker",
+  "relatedIds": [],
+  "priority": "P0"
+}

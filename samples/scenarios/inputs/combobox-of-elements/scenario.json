@@ -1,0 +1,11 @@
+{
+  "id": "combobox-of-elements",
+  "category": "inputs",
+  "title": "ComboBox of Elements",
+  "intent": "dropdown with custom element items and selected value display",
+  "tags": ["combobox", "dropdown", "elements", "custom"],
+  "factoryAnchors": ["ComboBox", "UseState"],
+  "notesKey": "ComboBox",
+  "relatedIds": [],
+  "priority": "P0"
+}
