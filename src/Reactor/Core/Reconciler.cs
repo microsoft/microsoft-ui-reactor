@@ -526,7 +526,29 @@ public sealed partial class Reconciler : IDisposable
 
         // ── §14 Phase 3 completion decorator-style handlers ──────────────
         RegisterDecoratorHandler<IconElement>(V1Protocol.Descriptor.Descriptors.IconDescriptor.Handler);
+
+        // ── §4.0.5 — XAML interop bridges own their V1 registration ──────
+        // Spec 047 §14 Phase 4 (4.0.5): the two reverse-embedding element
+        // types are now owned by V1 auto-registration. Hosting.XamlInterop.Register
+        // (still a public API for source compat) skips populating _typeRegistry
+        // for any type already registered here, so it no longer clashes with
+        // EnsureRegistrableElementType. The decorator handlers reimplement the
+        // legacy MountXamlHost/MountXamlPage bodies and the UnmountRecursive
+        // intercepts (frame.Content=null + DetachReactorState), so the V1 ON
+        // path is behavior-identical to V1 OFF.
+        RegisterDecoratorHandler<XamlPageElement>(V1Protocol.Descriptor.Descriptors.XamlPageDescriptor.Handler);
+        RegisterDecoratorHandler<XamlHostElement>(V1Protocol.Descriptor.Descriptors.XamlHostDescriptor.Handler);
     }
+
+    /// <summary>
+    /// Spec 047 §14 Phase 4 (4.0.5) — true if an element type already has a
+    /// handler in either the V1 registry or the external type registry. Lets
+    /// idempotent external registrars (e.g. <see cref="Hosting.XamlInterop.Register"/>)
+    /// avoid the <see cref="EnsureRegistrableElementType"/> duplicate throw when
+    /// V1 auto-registration already owns the type.
+    /// </summary>
+    internal bool IsElementTypeRegistered(Type elementType)
+        => _v1Handlers.ContainsKey(elementType) || _typeRegistry.ContainsKey(elementType);
 
     /// <summary>
     /// Spec 047 §14 Phase 3 completion — sugar wrapper around

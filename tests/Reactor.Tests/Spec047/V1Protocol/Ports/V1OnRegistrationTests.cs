@@ -1,6 +1,7 @@
 using System;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
+using Microsoft.UI.Reactor.Hosting;
 using Xunit;
 
 namespace Microsoft.UI.Reactor.Tests.Spec047.V1Protocol.Ports;
@@ -71,5 +72,46 @@ public class V1OnRegistrationTests
         // registration of one of the built-in element types is allowed.
         rec.RegisterHandler<ToggleSwitchElement, Microsoft.UI.Xaml.Controls.ToggleSwitch>(
             new ToggleSwitchHandler());
+    }
+
+    [Fact]
+    public void V1On_Auto_Registers_Xaml_Interop_Bridges()
+    {
+        // Spec 047 §14 Phase 4 (4.0.5): XamlHost/XamlPage are now owned by V1
+        // auto-registration, so a fresh V1-ON reconciler routes them through V1
+        // without the app calling XamlInterop.Register.
+        AppContext.TryGetSwitch(SwitchName, out var prev);
+        AppContext.SetSwitch(SwitchName, true);
+        try
+        {
+            var rec = new Reconciler();
+            Assert.True(rec.UseV1Protocol);
+            Assert.True(rec.IsElementTypeRegistered(typeof(XamlPageElement)));
+            Assert.True(rec.IsElementTypeRegistered(typeof(XamlHostElement)));
+        }
+        finally
+        {
+            AppContext.SetSwitch(SwitchName, prev);
+        }
+    }
+
+    [Fact]
+    public void V1On_XamlInterop_Register_Does_Not_Clash()
+    {
+        // Spec 047 §14 Phase 4 (4.0.5): XamlInterop.Register stays a safe public
+        // API — under V1 ON it skips the already-owned types instead of tripping
+        // the §13 Q17 duplicate-registration guard.
+        AppContext.TryGetSwitch(SwitchName, out var prev);
+        AppContext.SetSwitch(SwitchName, true);
+        try
+        {
+            var rec = new Reconciler();
+            var ex = Record.Exception(() => XamlInterop.Register(rec));
+            Assert.Null(ex);
+        }
+        finally
+        {
+            AppContext.SetSwitch(SwitchName, prev);
+        }
     }
 }

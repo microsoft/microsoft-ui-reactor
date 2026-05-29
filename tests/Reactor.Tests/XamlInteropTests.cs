@@ -231,15 +231,17 @@ public class XamlInteropTests
     }
 
     [Fact]
-    public void Register_Twice_Throws_In_V1()
+    public void Register_Twice_Is_Idempotent()
     {
-        // Spec 047 §13 Q17 / §14 Phase 1 (1.9): duplicate registration is
-        // forbidden. The pre-v1 idempotent-overwrite behavior has been
-        // removed; callers that initialized the interop twice must
-        // refactor to call XamlInterop.Register exactly once per Reconciler.
+        // Spec 047 §14 Phase 4 (4.0.5): XamlInterop.Register now skips any
+        // element type that is already registered (whether by a prior Register
+        // call or by V1 auto-registration), so calling it more than once per
+        // Reconciler is a safe no-op rather than tripping the §13 Q17
+        // duplicate-registration guard.
         var reconciler = new Reconciler();
         XamlInterop.Register(reconciler);
-        Assert.Throws<InvalidOperationException>(() => XamlInterop.Register(reconciler));
+        var ex = Record.Exception(() => XamlInterop.Register(reconciler));
+        Assert.Null(ex);
     }
 
     // ── XamlHostElement record with TypeKey ───────────────────────

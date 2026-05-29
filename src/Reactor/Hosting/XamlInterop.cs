@@ -47,7 +47,13 @@ public static class XamlInterop
 {
     public static void Register(Reconciler reconciler)
     {
+        // Spec 047 §14 Phase 4 (4.0.5): V1 auto-registration owns these two
+        // element types when the V1 protocol is active. Skip any type that is
+        // already registered so this call stays idempotent and never trips the
+        // EnsureRegistrableElementType duplicate-registration guard (whether the
+        // prior registration came from V1 built-ins or an earlier Register call).
         // ── XamlPageElement → Frame ──────────────────────────────────
+        if (!reconciler.IsElementTypeRegistered(typeof(XamlPageElement)))
         reconciler.RegisterType<XamlPageElement, Frame>(
             mount: (r, el, rerender) =>
             {
@@ -71,6 +77,7 @@ public static class XamlInterop
             });
 
         // ── XamlHostElement → FrameworkElement ───────────────────────
+        if (!reconciler.IsElementTypeRegistered(typeof(XamlHostElement)))
         reconciler.RegisterType<XamlHostElement, FrameworkElement>(
             mount: (r, el, rerender) =>
             {
