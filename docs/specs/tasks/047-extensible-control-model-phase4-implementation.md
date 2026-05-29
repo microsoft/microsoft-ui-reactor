@@ -477,12 +477,47 @@ Source: spec §14 Phase 4 ("the production swap"). Gated on §4.0 complete.
 
 > **Status (Phase 4 close-out session):** **Part A landed** (commit `8a67e34a`) —
 > the orphaned legacy value-control handler bodies were deleted (see progress log).
-> **Part B (the actual `ChangeEchoSuppressor` elimination below) is DEFERRED** — it
-> is a ~30-site, correctness-critical, framework-wide echo-semantics rewrite, not a
-> mechanical cleanup; full rationale + the **refreshed live call-site inventory**
-> (the CSV cited below is stale) are in
-> `docs/specs/047/audits/echo-suppressor-phase4-live-sites.md`. The boxes below stay
-> unchecked until that effort lands with new regression coverage.
+> **Part B′ (value-diff migration of the SAFE paths) landed** (commit `c5c1399e`) —
+> a value-diff echo mechanism (`ReactorState.PendingEchoMatch` + `ArmExpectedEcho`/
+> `ClearExpectedEcho`/`ShouldSuppressEcho`, opt-in `valueDiffEcho` on
+> `HandCodedControlledPropEntry`) now handles the synchronous, exact-comparable,
+> single-controlled-value round-trips: ComboBox, FlipView, GridView, ListBox,
+> Pivot, PipsPager, RadioButtons, SelectorBar, TabView, TemplatedFlipView +
+> ToggleSwitchHandler (TextBox/`ControlledPropEntry` migrated earlier in
+> `79e9cc9b`/`a24bb1fa`). See **spec §8.3** for the implemented direction.
+> **Part B (the FULL `ChangeEchoSuppressor` elimination below) remains DEFERRED** —
+> the counter is intentionally RETAINED as the fallback for the sites value-diff
+> cannot model (doubles, coercion, collection batch, deferred/coercion strings,
+> Expander, CheckBox path-B, the `ApplySetters` scope, and the public
+> `WriteSuppressed` primitive — all enumerated in spec §8.3). The end state is a
+> documented **hybrid**, so `ChangeEchoSuppressor.cs` is NOT deleted and there is
+> **no `ReactorState` byte win** (the value-diff arm *adds* one ref field). The
+> original "delete + tolerance metadata + ColorPicker shim" plan below is therefore
+> **superseded by §8.3** and its boxes stay unchecked (full elimination would still
+> need new regression coverage for the coercion/collection/public-API classes). The
+> refreshed live call-site inventory (the CSV cited below is stale) is in
+> `docs/specs/047/audits/echo-suppressor-phase4-live-sites.md`.
+
+**Part B′ — value-diff migration of the safe paths (LANDED, commit `c5c1399e`):**
+
+- [x] Shared value-diff arm on `ReactorState` (`PendingEchoMatch`, one-shot
+      `Func<object?,bool>?`), reset at the same 3 sites as `EchoSuppressCount`.
+- [x] `ChangeEchoSuppressor.ArmExpectedEcho` / `ClearExpectedEcho` /
+      `ShouldSuppressEcho` (counter/scope wins first and clears a coincident arm;
+      else consumes the one-shot predicate). Opt-in `valueDiffEcho` on
+      `HandCodedControlledPropEntry` + the `HandCodedControlled` builder.
+- [x] Migrate the synchronous/exact/single-value descriptors + ToggleSwitchHandler
+      (10 descriptors + 1 handler listed above) to value-diff.
+- [x] Strand-safety fixes (code-review): unconditional arm clear in the
+      counter/scope branch of `ShouldSuppressEcho`; post-write readback clear in
+      `HandCodedControlledPropEntry.Update` for guarded/coerced no-op writes.
+- [x] Document the hybrid + retained-counter rationale in **spec §8.3**.
+- [x] Regression fixtures `ValueDiff_ComboBox_Drift`, `ValueDiff_ToggleSwitch_Drift`,
+      `ValueDiff_GridView_GuardedNoOpStrand` (+ existing TextBox/RadioButton/
+      ToggleSplitButton drift fixtures). Validated x64: build 0 err; xunit 9128/0;
+      ValueDiff + Echo + migrated-control selftests 0 fail; DataGrid E2E pass.
+
+**Part B — full `ChangeEchoSuppressor` elimination (DEFERRED; superseded by §8.3):**
 
 Source: spec §8 (Resolved §13 Q3) + the audit
 `docs/specs/047/audits/begin-suppress-audit.csv` (**24 call sites**). Phase 1
