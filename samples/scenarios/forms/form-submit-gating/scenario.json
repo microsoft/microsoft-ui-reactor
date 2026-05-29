@@ -1,0 +1,11 @@
+{
+  "id": "form-submit-gating",
+  "category": "forms",
+  "title": "Submit gating",
+  "intent": "disable submit button until form is valid",
+  "tags": ["form", "submit", "gating", "validation", "enabled"],
+  "factoryAnchors": ["UseValidationContext", "Button", "FormField"],
+  "notesKey": null,
+  "relatedIds": [],
+  "priority": "P0"
+}

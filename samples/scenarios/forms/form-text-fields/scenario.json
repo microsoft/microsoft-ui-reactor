@@ -1,0 +1,11 @@
+{
+  "id": "form-text-fields",
+  "category": "forms",
+  "title": "Basic text fields form",
+  "intent": "basic form with multiple text inputs and labels",
+  "tags": ["form", "textfield", "input", "layout"],
+  "factoryAnchors": ["TextField", "VStack", "UseState"],
+  "notesKey": "TextField",
+  "relatedIds": [],
+  "priority": "P0"
+}

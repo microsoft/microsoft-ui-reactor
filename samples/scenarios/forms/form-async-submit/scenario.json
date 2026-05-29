@@ -1,0 +1,11 @@
+{
+  "id": "form-async-submit",
+  "category": "forms",
+  "title": "Async submit form",
+  "intent": "form submission with loading state",
+  "tags": ["form", "submit", "async", "loading", "state"],
+  "factoryAnchors": ["Button", "UseState", "ProgressRing"],
+  "notesKey": null,
+  "relatedIds": [],
+  "priority": "P0"
+}

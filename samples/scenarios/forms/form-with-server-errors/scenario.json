@@ -1,0 +1,11 @@
+{
+  "id": "form-with-server-errors",
+  "category": "forms",
+  "title": "Server-side field errors",
+  "intent": "display server-side validation errors on form fields",
+  "tags": ["form", "server", "errors", "validation", "api"],
+  "factoryAnchors": ["UseState", "FormField", "TextField"],
+  "notesKey": null,
+  "relatedIds": [],
+  "priority": "P0"
+}

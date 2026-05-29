@@ -1,0 +1,11 @@
+{
+  "id": "form-validation-context",
+  "category": "forms",
+  "title": "Validation context form",
+  "intent": "form validation with UseValidationContext",
+  "tags": ["form", "validation", "required", "email", "error"],
+  "factoryAnchors": ["UseValidationContext", "FormField", "TextField"],
+  "notesKey": "UseValidationContext",
+  "relatedIds": [],
+  "priority": "P0"
+}

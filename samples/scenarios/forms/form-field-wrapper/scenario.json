@@ -1,0 +1,11 @@
+{
+  "id": "form-field-wrapper",
+  "category": "forms",
+  "title": "FormField wrapper",
+  "intent": "FormField wrapper with label and required marker",
+  "tags": ["form", "formfield", "label", "required", "wrapper"],
+  "factoryAnchors": ["FormField", "TextField"],
+  "notesKey": "FormField",
+  "relatedIds": [],
+  "priority": "P0"
+}
