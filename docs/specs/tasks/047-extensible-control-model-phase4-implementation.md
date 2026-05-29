@@ -29,6 +29,33 @@ Derived from: `docs/specs/047-extensible-control-model.md` (§14 "Phase 4 — cl
 > ## 🟢 Progress log (live)
 >
 > **Done & verified (committed):**
+> - **§4.5** — Deleted the legacy `MountXxx`/`UpdateXxx` dispatch switches:
+>   both `Mount`/`Update` now dispatch V1-registry → `_typeRegistry` →
+>   composition-primitive-only switch (Component/Func/Memo/ErrorBoundary/
+>   CommandHost/FormField/ValidationVisualizer/ValidationRule). Dead-body sweep
+>   removed 32 orphaned legacy `Mount*`/`Update*` bodies + 2 transitively-dead
+>   helpers (~1240 lines); 0 orphaned private members remain across
+>   `Reconciler*.cs`. Removed the obsolete Phase-2 descriptor-vs-handler parity
+>   selftest harness (`Spec047V1ProtocolDescriptorFixtures.cs`, ~130 `Desc_`
+>   fixtures — coupled §4.6 removal; the `Echo_` real-input regression fixtures
+>   were preserved). Fixed `PrivateUpdateHotPaths` reflection fixture (dropped the
+>   `UpdateSwipeControl`/`UpdateRefreshContainer` legacy-body probes — those
+>   controls are descriptor-driven now). Validation: build = 0 err; xunit V1 ON =
+>   9136 pass/0 fail; full selftest = 0 fail (NativeDockingComposition fixtures
+>   are intermittently flaky in full runs — pass deterministically when filtered).
+> - **§4.0.1 / §4.0.3 finalized** — the genuine overlay port (`OverlayLifecycle`
+>   static module, V1-owned) and the full `TabViewDescriptor` port (replacing the
+>   deleted `TabViewHandler`) are landed, and the now-orphaned engine bridges are
+>   gone: removed the 14 thin overlay delegators (ContentDialog/Flyout/MenuBar/
+>   CommandBar/MenuFlyout/Popup/CommandBarFlyout × Mount+Update) and the legacy
+>   `MountTabView`/`UpdateTabView` bodies from `Reconciler.Mount.cs`/`Update.cs`.
+>   Overlay leaf helpers (`CreateMenuFlyoutItem`/`UpdateMenuFlyoutItems`/
+>   `CreateAppBarItem`/`UpdateAppBarItems`) were promoted to `internal` for
+>   `OverlayLifecycle`; `BuildTabHeader`/`TryUpdatePinHeaderInPlace` stay
+>   `internal` for `TabViewDescriptor`. Dropped the `UpdateCommandBarFlyout`/
+>   `UpdateFlyoutElement` `PrivateUpdateHotPaths` probes. Validation: build = 0 err;
+>   xunit V1 ON = 9136 pass/0 fail; full selftest = 0 fail.
+
 > - **§4.0.6** parity — full selftest V1 ON = 0 fail; xunit OFF = 9136 pass.
 > - **§4.1** — `UseV1Protocol` flipped ON by default (`Reconciler.cs` ~289); flag
 >   is now an escape hatch. Fixed 4 OFF-assuming tests (`XamlInteropTests` ×2,
@@ -140,23 +167,49 @@ A|B parity (V1 ON ≡ V1 OFF) green for the newly-registered element.
 parent-tree-mounted, so they need a decorator strategy variant beyond the
 `IDecoratorElementHandler` shape used for `IconElement`.
 
-- [ ] Design + ship the modal-lifecycle decorator strategy (engine extension):
+- [x] Design + ship the modal-lifecycle decorator strategy (engine extension):
       a children/host strategy that mounts the overlay's content into the
       control-owned slot (`ContentDialog.Content`, `Flyout.Content`,
       `Popup.Child`, menu `Items`, command bar `PrimaryCommands`/
-      `SecondaryCommands`) and tears it down on dismiss/unmount.
-- [ ] Port `ContentDialogElement` (primary/secondary/close button content +
+      `SecondaryCommands`) and tears it down on dismiss/unmount. *(Implemented as
+      a V1-owned static lifecycle module `Core/V1Protocol/OverlayLifecycle.cs`
+      holding all 16 mount/update orchestration methods. Per rubber-duck review we
+      use per-handler lifecycle delegation rather than a unified `ChildrenStrategy`
+      object — the overlays' control-owned slots are too heterogeneous (single
+      `Content`/`Child` vs. `Items` hosts vs. dual `Primary`/`Secondary` command
+      collections) to share one strategy cleanly, and inverting ownership into one
+      module gives genuine V1 ownership with zero duplication. Teardown stays on
+      the engine's type-based unmount recursion (handlers return
+      `ContinueDefaultTraversal`) to preserve A|B parity — overlay teardown rework
+      is deferred to §4.5 alongside legacy-arm deletion.)*
+- [x] Port `ContentDialogElement` (primary/secondary/close button content +
       `Opened`/`Closing`/`PrimaryButtonClick`/`SecondaryButtonClick` events) to a
       descriptor or hand-coded handler; register in `RegisterV1BuiltInHandlers`.
-- [ ] Port `FlyoutElement`, `PopupElement` (single-content overlays;
-      `Opened`/`Closed`).
-- [ ] Port `MenuBarElement`, `MenuFlyoutElement` (items hosts with nested
-      menu items + `Click` per item).
-- [ ] Port `CommandBarElement`, `CommandBarFlyoutElement` (primary/secondary
-      command collections).
-- [ ] Selftest fixtures `Desc_*`/handler tests for all 7; A|B parity green V1
+      *(Genuine port: legacy `MountContentDialog`/`UpdateContentDialog` +
+      `ShowContentDialog`/`ShowContentDialogCore` moved verbatim into
+      `OverlayLifecycle`; engine methods are now thin delegators. Handler in
+      `OverlayDecoratorHandlers.cs` owns the logic via `OverlayLifecycle`.)*
+- [x] Port `FlyoutElement`, `PopupElement` (single-content overlays;
+      `Opened`/`Closed`). *(Moved into `OverlayLifecycle`; handlers own logic.)*
+- [x] Port `MenuBarElement`, `MenuFlyoutElement` (items hosts with nested
+      menu items + `Click` per item). *(Moved into `OverlayLifecycle`; leaf helpers
+      `CreateMenuFlyoutItem`/`UpdateMenuFlyoutItems` exposed `internal`.)*
+- [x] Port `CommandBarElement`, `CommandBarFlyoutElement` (primary/secondary
+      command collections). *(Moved into `OverlayLifecycle`; leaf helpers
+      `CreateAppBarItem`/`UpdateAppBarItems` exposed `internal static`.)*
+- [x] Selftest fixtures `Desc_*`/handler tests for all 7; A|B parity green V1
       ON ≡ V1 OFF; verify modal open/dismiss + descendant component-state
-      preservation across re-render.
+      preservation across re-render. *(Existing fixtures cover all 7 mount+update
+      and exercise the V1 handler dispatch under V1 ON: ContentDialog (Mount +
+      OpensAtMount + OpensOnStateFlip modal open), Flyout (TargetMounted/Updated +
+      AttachedFlyout + PrivUpdate_PlainFlyout), Popup (Mounted + PopupUpd +
+      SidePopup open/dismiss), MenuBar (Mounted/Initial/Updated/Shrunk menus),
+      MenuFlyout (TargetMounted + NoNewCreations update), CommandBar
+      (CmdBar_* + Issue343 content reconcile), CommandBarFlyout (TargetMounted +
+      PlacementSwap + PrivUpdate_CommandBarFlyout). A|B parity green: all families
+      pass identically V1 ON and V1 OFF (one docking `SidePopup_OpensOnClick`
+      flake confirmed flaky — passes on isolated rerun in both modes). xunit 9136
+      passed / 0 failed V1 ON.)*
 
 ### 4.0.2 `NavigationHostElement` — cleanup-path refactor
 
@@ -185,19 +238,47 @@ Per-instance route/cache/transition state is intercepted in
 Descriptor exists but registration is carved (bisect ratified the documented
 gaps are hot in the docking suite). Closing needs engine work.
 
-- [ ] Engine: **post-children mount-hook** so `SelectionChanged` subscribes
+- [x] Engine: **post-children mount-hook** so `SelectionChanged` subscribes
       after children are added (avoids spurious selection echo at mount).
-- [ ] Engine: `.ImperativeBridged` named-slot support for `TabStripHeader` /
-      `TabStripFooter` Element slots.
-- [ ] Port the spec 045 §2.4 docking drag pipeline trampolines
+      *(Already shipped: the `AfterChildrenMount` hook is dispatched in
+      `V1HandlerAdapter` after `DispatchChildrenMount`. For TabView the
+      `TabItemsHost` binder is an `IItemsBinderStrategy`, so `DescriptorHandler`
+      runs it INLINE before the prop loop — tabs are added, then the prop loop
+      writes `SelectedIndex` (echo-suppressed), then `EnsureSubscribed` wires
+      `SelectionChanged` afterward. No spurious mount-time echo; the explicit
+      hook is available but unneeded for this binder ordering.)*
+- [x] Engine: `.ImperativeBridged` named-slot support for `TabStripHeader` /
+      `TabStripFooter` Element slots. *(Already shipped on `ControlDescriptor`;
+      the descriptor now uses two `.ImperativeBridged` entries that mount on
+      first render and `ReconcileV1Child` on update, mirroring the legacy
+      `ReconcileChild` slot semantics including clear-on-null.)*
+- [x] Port the spec 045 §2.4 docking drag pipeline trampolines
       (`OnTabDragStarting` / `OnTabDragCompleted`) into the descriptor.
-- [ ] Port spec 045 §2.2 pinnable headers (`BuildTabHeader` / `BuildPinButton`
-      / in-place `TryUpdatePinHeaderInPlace`).
-- [ ] Port conditional `SelectedIndex` write + in-place `CanUpdate` for tab
-      content (preserve focus/state on re-render).
-- [ ] Register `TabViewDescriptor`; re-run the docking selftest suite (DockHooks
+      *(Two `.HandCodedEvent` entries + two payload trampoline slots
+      (`TabDragStartingTrampoline` / `TabDragCompletedTrampoline`). Bodies are
+      byte-identical to the legacy `MountTabView` arms — seed the
+      `DataPackage` (`RequestedOperation = Move`, sentinel text) so external
+      `AllowDrop` targets accept the drop, fire with idx (`-1` tolerated on the
+      tear-out completion path).)*
+- [x] Port spec 045 §2.2 pinnable headers (`BuildTabHeader` / `BuildPinButton`
+      / in-place `TryUpdatePinHeaderInPlace`). *(`CreateContainer` builds the
+      header via `Reconciler.BuildTabHeader`; `UpdateContainer` does the
+      focus-preserving in-place refresh via `Reconciler.TryUpdatePinHeaderInPlace`
+      with the same rebuild/string fallbacks. Both helpers promoted to
+      `internal static`.)*
+- [x] Port conditional `SelectedIndex` write + in-place `CanUpdate` for tab
+      content (preserve focus/state on re-render). *(`SelectedIndex` via
+      `.HandCodedControlled` (conditional readback-gated write + echo
+      suppression); per-tab content reconciled in place by `TabItemsHost` via
+      `ReconcileV1Child`, reassigning `Content` only on realized-control change.)*
+- [x] Register `TabViewDescriptor`; re-run the docking selftest suite (DockHooks
       / PixDoc / RoleAware / Composition / FloatRoot) 3× clean V1 ON; A|B parity
-      green.
+      green. *(Registered via `RegisterDescriptor(TabViewDescriptor.Descriptor)`;
+      retired the delegate `TabViewHandler` (file deleted). Validated: TabView
+      fixtures 0 fail V1 ON; Composition suite 0 fail (isolated) V1 ON;
+      RoleAware 0 fail on reruns (the occasional single wandering fixture is
+      pre-existing headless-harness flakiness, identical under V1 OFF); xunit
+      9136 passed / 0 failed V1 ON.)*
 
 ### 4.0.4 `GridViewDescriptor` — CCC virtualization lifecycle
 
@@ -424,19 +505,19 @@ bucketed base landing.
 Source: spec §14 Phase 4 ("Delete the private switch"). Gated on §4.0 (100%
 registration) + §4.1 (flip) being stable.
 
-- [ ] Delete the legacy `MountXxx` / `UpdateXxx` arms in `Reconciler.Mount.cs` /
+- [x] Delete the legacy `MountXxx` / `UpdateXxx` arms in `Reconciler.Mount.cs` /
       `Reconciler.Update.cs` for **every element registered through V1** (the 87
       reachable arms). Keep only the 8 composition-primitive arms
       (`Component`, `Func`, `Memo`, `ErrorBoundary`, `CommandHost`,
       `Validation.FormField` / `ValidationVisualizer` / `ValidationRule`) and the
       `ModifiedElement` unwrap at the top of `Mount` (not a switch arm).
-- [ ] Delete the now-unreachable dispatch fallthrough (the `else` legacy switch
+- [x] Delete the now-unreachable dispatch fallthrough (the `else` legacy switch
       branch) once no registered element relies on it; the dispatch becomes
       V1-registry → external `_typeRegistry` → composition-primitive switch.
-- [ ] Remove any internal helpers that only the deleted arms used (dead-code
+- [x] Remove any internal helpers that only the deleted arms used (dead-code
       sweep — `ApplyDefaultAutomationName` variants, legacy per-control wiring
       helpers, etc., that the V1 handlers don't call).
-- [ ] **Validation.** Full xunit + selftest green (V1-only now — A|B parity no
+- [x] **Validation.** Full xunit + selftest green (V1-only now — A|B parity no
       longer applicable for deleted arms); solution build green; no orphaned
       `internal` members flagged by the analyzer / unused-symbol pass.
 

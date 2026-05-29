@@ -349,20 +349,15 @@ public sealed partial class Reconciler : IDisposable
     ///   <see cref="UnmountRecursive"/> (fires before the V1 unmount arm), so
     ///   unmount is byte-identical V1 ON ≡ V1 OFF.</item>
     ///
-    ///   <item><b>TabView — PORTED (§14 Phase 3 prelude)</b> —
-    ///   <c>TabViewElement</c> now routes through V1 via the Path B delegate
-    ///   <see cref="V1Protocol.Handlers.TabViewHandler"/>, which calls the
-    ///   COMPLETE legacy <c>MountTabView</c>/<c>UpdateTabView</c> bodies (spec
-    ///   045 §2.4 drag pipeline, §2.2 pinnable headers via BuildTabHeader /
-    ///   BuildPinButton / in-place TryUpdatePinHeaderInPlace, in-place tab
-    ///   content reconcile, conditional SelectedIndex, TabStripHeader /
-    ///   TabStripFooter slots). Distinct from the still-unregistered
-    ///   <c>TabViewDescriptor</c> + <c>TabItemsHost</c> port, which
-    ///   intentionally leaves those features on the legacy arm — the delegate
-    ///   runs the full feature set because it IS the legacy code. Mount/update
-    ///   are unchanged from the previously-carved V1-ON path (which already
-    ///   ran these bodies via the legacy switch); registering the handler only
-    ///   makes the unmount arm fire, which is byte-identical V1 ON ≡ V1 OFF
+    ///   <item><b>TabView — PORTED (§14 Phase 4 §4.0.3)</b> —
+    ///   <c>TabViewElement</c> now routes through V1 via the full
+    ///   <c>TabViewDescriptor</c> + <c>TabItemsHost</c> port, which owns the
+    ///   complete behavior: spec 045 §2.4 drag pipeline, §2.2 pinnable headers
+    ///   (via <c>Reconciler.BuildTabHeader</c> / <c>TryUpdatePinHeaderInPlace</c>),
+    ///   in-place tab content reconcile, conditional SelectedIndex, and
+    ///   TabStripHeader / TabStripFooter Element slots (via
+    ///   <c>.ImperativeBridged</c>). Supersedes the retired delegate
+    ///   <c>TabViewHandler</c>. Unmount is byte-identical V1 ON ≡ V1 OFF
     ///   (a <c>WinUI.TabView</c> is an <c>ItemsControl</c> that pools without
     ///   child recursion in both paths).</item>
     ///   <item><b>Items host — PORTED (§14 Phase 3 prelude)</b> —
@@ -408,14 +403,11 @@ public sealed partial class Reconciler : IDisposable
         // child) — see ButtonHandler. Supersedes the registered descriptor.
         RegisterDecoratorHandler<ButtonElement>(new V1Protocol.Handlers.ButtonHandler());
 
-        // TabView — delegate to the COMPLETE legacy MountTabView/UpdateTabView
-        // bodies (drag pipeline, pinnable headers, strip header/footer, in-place
-        // content reconcile). Distinct from the unregistered TabViewDescriptor,
-        // which leaves those features on the legacy arm. UpdateTabView returns
-        // null (in-place only), so the void-Update IElementHandler shape fits;
-        // unmount is byte-identical V1 ON ≡ V1 OFF (ItemsControl pools without
-        // child recursion in both paths).
-        RegisterHandler<TabViewElement, WinUI.TabView>(new V1Protocol.Handlers.TabViewHandler());
+        // TabView — §4.0.3 full descriptor port. TabViewDescriptor now owns
+        // the complete behavior (drag pipeline, pinnable headers, strip
+        // header/footer slots, in-place content reconcile, conditional
+        // SelectedIndex), so it supersedes the delegate TabViewHandler.
+        // Registered below with the standard concrete descriptors.
 
         // ── §14 Phase 3 base-derived (templated/lazy/items hosts) ────────
         // Each closed-T leaf routes through the same descriptor via the
@@ -503,23 +495,14 @@ public sealed partial class Reconciler : IDisposable
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.SplitViewDescriptor.Descriptor);
         RegisterDecoratorHandler<StackElement>(new V1Protocol.Handlers.StackPanelHandler()); // §14: keyed reconcile — see PanelDelegateHandlers
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.SwipeControlDescriptor.Descriptor);
-        // Spec 047 §14 — TabViewElement is ported via the Path B delegate
-        // TabViewHandler (registered above with the other prelude carve
-        // closures), NOT via TabViewDescriptor. The descriptor + TabItemsHost
-        // strategy stays unregistered: it intentionally leaves the spec 045
-        // §2.4 drag pipeline (OnTabDragStarting / OnTabDragCompleted), §2.2
-        // IsPinnable header rendering (BuildTabHeader + BuildPinButton +
-        // in-place TryUpdatePinHeaderInPlace), in-place CanUpdate for tab
-        // content (preserves focus/state across re-renders), conditional
-        // SelectedIndex write, and TabStripHeader / TabStripFooter Element
-        // slots on the legacy arm — exactly the features that are hot in the
-        // docking suite. The delegate handler runs the COMPLETE legacy
-        // MountTabView/UpdateTabView bodies, so it has none of those gaps and
-        // is byte-identical V1 ON ≡ V1 OFF. Finishing the descriptor port
-        // (post-children mount-hook + ImperativeBridged tab strip slots) is a
-        // separable Phase 4 purity follow-up; it is NOT required for the flag
-        // flip because the delegate already routes TabView through V1.
-        // RegisterDescriptor(V1Protocol.Descriptor.Descriptors.TabViewDescriptor.Descriptor);
+        // Spec 047 §14 Phase 4 (§4.0.3) — TabViewElement routes through V1 via
+        // the full TabViewDescriptor port (drag pipeline, pinnable headers,
+        // in-place content reconcile, conditional SelectedIndex, TabStripHeader
+        // / TabStripFooter Element slots). Supersedes the delegate
+        // TabViewHandler. Unmount is byte-identical V1 ON ≡ V1 OFF (a
+        // WinUI.TabView is an ItemsControl that pools without child recursion in
+        // both paths).
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.TabViewDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.TeachingTipDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.TextBlockDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.TimePickerDescriptor.Descriptor);
@@ -4481,7 +4464,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private void SetFlyoutOnControl(FrameworkElement fe, WinPrim.FlyoutBase flyout)
+    internal void SetFlyoutOnControl(FrameworkElement fe, WinPrim.FlyoutBase flyout)
     {
         // Check SplitButton before Button (SplitButton doesn't inherit from Button,
         // but DropDownButton does, so Button catch-all handles it).

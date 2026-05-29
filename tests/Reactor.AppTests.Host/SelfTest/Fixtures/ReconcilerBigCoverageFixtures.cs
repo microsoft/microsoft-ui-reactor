@@ -1645,63 +1645,6 @@ internal static class ReconcilerBigCoverageFixtures
             var blue = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Blue);
             Action rerender = () => { };
 
-            var swipe = new WinXC.SwipeControl { Content = new TextBlock { Text = "swipe-old" } };
-            InvokePrivate<UIElement?>(reconciler, "UpdateSwipeControl",
-                SwipeControl(TextBlock("swipe-old"), rightItems: [new SwipeItemData("Delete")]),
-                SwipeControl(TextBlock("swipe-new"), leftItems:
-                [
-                    new SwipeItemData("Pin", Background: red, Foreground: blue),
-                    new SwipeItemData("Archive")
-                ]) with
-                {
-                    LeftItemsMode = WinXC.SwipeMode.Reveal,
-                    RightItemsMode = WinXC.SwipeMode.Execute,
-                },
-                swipe,
-                rerender);
-            H.Check("PrivUpdate_SwipeItems", swipe.LeftItems is not null && swipe.LeftItems.Count == 2);
-
-            var refresh = new WinXC.RefreshContainer { Content = new TextBlock { Text = "refresh-old" } };
-            InvokePrivate<UIElement?>(reconciler, "UpdateRefreshContainer",
-                RefreshContainer(TextBlock("refresh-old")),
-                RefreshContainer(Button("refresh-new")) with { PullDirection = WinXC.RefreshPullDirection.LeftToRight },
-                refresh,
-                rerender);
-            H.Check("PrivUpdate_RefreshReplacement",
-                refresh.Content is Button button && Equals(button.Content, "refresh-new"));
-
-            var cmdTarget = new Button { Content = "cmd-flyout" };
-            InvokePrivate<UIElement?>(reconciler, "UpdateCommandBarFlyout",
-                CommandBarFlyout(Button("cmd-flyout")),
-                CommandBarFlyout(
-                    Button("cmd-flyout"),
-                    primaryCommands: [AppBarButton("Bold", icon: "Edit")],
-                    secondaryCommands: [AppBarButton("More")]) with
-                {
-                    Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.Bottom,
-                },
-                cmdTarget,
-                rerender);
-            H.Check("PrivUpdate_CommandBarFlyout",
-                Microsoft.UI.Xaml.Controls.Primitives.FlyoutBase.GetAttachedFlyout(cmdTarget) is WinXC.CommandBarFlyout);
-
-            var flyoutTarget = new Button { Content = "plain-flyout" };
-            InvokePrivate<UIElement?>(reconciler, "UpdateFlyoutElement",
-                Flyout(Button("plain-flyout"), TextBlock("old-flyout")),
-                Flyout(Button("plain-flyout"), TextBlock("new-flyout")) with
-                {
-                    Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.Right,
-                    ShowMode = Microsoft.UI.Xaml.Controls.Primitives.FlyoutShowMode.Transient,
-                    AreOpenCloseAnimationsEnabled = false,
-                    OnOpened = () => { },
-                    OnClosed = () => { },
-                },
-                flyoutTarget,
-                rerender);
-            H.Check("PrivUpdate_PlainFlyout",
-                flyoutTarget.Flyout is WinXC.Flyout
-                || Microsoft.UI.Xaml.Controls.Primitives.FlyoutBase.GetAttachedFlyout(flyoutTarget) is WinXC.Flyout);
-
             var path = new WinShapes.Path();
             InvokePrivate<UIElement?>(reconciler, "UpdatePath",
                 Path2D() with { PathDataString = "M0,0 L5,5" },

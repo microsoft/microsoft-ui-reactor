@@ -58,11 +58,11 @@ public sealed partial class Reconciler
         try
         {
 
-        // Spec 047 §14 Phase 1 (1.1) — V1 handler registry dispatch.
-        // When the feature flag is ON, ported built-in handlers in
-        // `_v1Handlers` win before the external `_typeRegistry`. When the
-        // flag is OFF, this step is skipped entirely and ported controls
-        // fall through to the legacy MountXxx switch.
+        // Spec 047 §14 Phase 4 (§4.5) — dispatch is V1 registry → external
+        // `_typeRegistry` → composition-primitive switch. The 87 V1-reachable
+        // element types route through `_v1Handlers`; the legacy `MountXxx`
+        // switch arms were deleted (V1 is the production path). Only the 8
+        // composition primitives (above the protocol) remain on the switch.
         if (UseV1Protocol && _v1Handlers.TryGet(element.GetType(), out var v1Entry))
         {
             control = v1Entry.Mount(element, requestRerender, this);
@@ -76,101 +76,11 @@ public sealed partial class Reconciler
         {
         control = element switch
         {
-            TextBlockElement text => MountText(text),
-            RichTextBlockElement richText => MountRichTextBlock(richText),
-            ButtonElement btn => MountButton(btn, requestRerender),
-            HyperlinkButtonElement hlBtn => MountHyperlinkButton(hlBtn),
-            RepeatButtonElement repBtn => MountRepeatButton(repBtn),
-            ToggleButtonElement togBtn => MountToggleButton(togBtn),
-            DropDownButtonElement ddBtn => MountDropDownButton(ddBtn, requestRerender),
-            SplitButtonElement spBtn => MountSplitButton(spBtn, requestRerender),
-            ToggleSplitButtonElement tspBtn => MountToggleSplitButton(tspBtn, requestRerender),
-            RichEditBoxElement reb => MountRichEditBox(reb),
-            TextBoxElement textBoxElement => MountTextBox(textBoxElement, requestRerender),
-            PasswordBoxElement pw => MountPasswordBox(pw),
-            NumberBoxElement nb => MountNumberBox(nb),
-            AutoSuggestBoxElement asb => MountAutoSuggestBox(asb),
-            CheckBoxElement cb => MountCheckBox(cb),
-            RadioButtonElement rb => MountRadioButton(rb),
-            RadioButtonsElement rbs => MountRadioButtons(rbs),
-            ComboBoxElement combo => MountComboBox(combo, requestRerender),
-            SliderElement sl => MountSlider(sl),
-            ToggleSwitchElement ts => MountToggleSwitch(ts),
-            RatingControlElement rc => MountRatingControl(rc),
-            ColorPickerElement cp => MountColorPicker(cp),
-            CalendarDatePickerElement cdp => MountCalendarDatePicker(cdp),
-            DatePickerElement dp => MountDatePicker(dp),
-            TimePickerElement tp => MountTimePicker(tp),
-            ProgressElement prog => MountProgress(prog),
-            ProgressRingElement ring => MountProgressRing(ring),
-            ImageElement img => MountImage(img),
-            PersonPictureElement pp => MountPersonPicture(pp),
-            WebView2Element wv => MountWebView2(wv),
-            WrapGridElement wg => MountWrapGrid(wg, requestRerender),
-            StackElement stack => MountStack(stack, requestRerender),
-            GridElement grid => MountGrid(grid, requestRerender),
-            ScrollViewerElement scroll => MountScrollViewer(scroll, requestRerender),
-            ScrollViewElement scroll => MountScrollView(scroll, requestRerender),
-            BorderElement border => MountBorder(border, requestRerender),
-            ExpanderElement exp => MountExpander(exp, requestRerender),
-            SplitViewElement sv => MountSplitView(sv, requestRerender),
-            ViewboxElement vb => MountViewbox(vb, requestRerender),
-            CanvasElement cvs => MountCanvas(cvs, requestRerender),
-            FlexElement flex => MountFlex(flex, requestRerender),
-            NavigationHostElement navHost => MountNavigationHost(navHost, requestRerender),
-            NavigationViewElement nav => MountNavigationView(nav, requestRerender),
-            TitleBarElement tb => MountTitleBar(tb, requestRerender),
-            TabViewElement tab => MountTabView(tab, requestRerender),
-            BreadcrumbBarElement bcb => MountBreadcrumbBar(bcb),
-            PivotElement pvt => MountPivot(pvt, requestRerender),
-            ListViewElement lv => MountListView(lv, requestRerender),
-            GridViewElement gv => MountGridView(gv, requestRerender),
-            TreeViewElement tv => MountTreeView(tv, requestRerender),
-            FlipViewElement fv => MountFlipView(fv, requestRerender),
-            InfoBarElement ib => MountInfoBar(ib, requestRerender),
-            InfoBadgeElement badge => MountInfoBadge(badge),
-            ContentDialogElement cdEl => MountContentDialog(cdEl, requestRerender),
-            FlyoutElement flyEl => MountFlyout(flyEl, requestRerender),
-            TeachingTipElement ttEl => MountTeachingTip(ttEl, requestRerender),
-            MenuBarElement mbEl => MountMenuBar(mbEl),
-            CommandBarElement cmdEl => MountCommandBar(cmdEl, requestRerender),
-            MenuFlyoutElement mfEl => MountMenuFlyout(mfEl, requestRerender),
-            TemplatedListElementBase tl => MountTemplatedList(tl, requestRerender),
-            LazyStackElementBase lazy => MountLazyStack(lazy, requestRerender),
-            ItemsRepeaterElementBase ir => MountItemsRepeater(ir, requestRerender),
-            ItemsViewElementBase iv => MountItemsView(iv, requestRerender),
-            ItemContainerElement ic => MountItemContainer(ic, requestRerender),
-            RectangleElement rect => MountRectangle(rect),
-            EllipseElement ell => MountEllipse(ell),
-            LineElement ln => MountLine(ln),
-            PathElement pa => MountPath(pa),
-            RelativePanelElement rp => MountRelativePanel(rp, requestRerender),
-            MediaPlayerElementElement mpe => MountMediaPlayerElement(mpe),
-            AnimatedVisualPlayerElement avp => MountAnimatedVisualPlayer(avp),
-            SemanticZoomElement sz => MountSemanticZoom(sz, requestRerender),
-            ListBoxElement lb => MountListBox(lb),
-            SelectorBarElement sb => MountSelectorBar(sb),
-            PipsPagerElement pp => MountPipsPager(pp),
-            AnnotatedScrollBarElement asb => MountAnnotatedScrollBar(asb),
-            PopupElement popup => MountPopup(popup, requestRerender),
-            RefreshContainerElement rc => MountRefreshContainer(rc, requestRerender),
-            CommandBarFlyoutElement cbf => MountCommandBarFlyout(cbf, requestRerender),
-            CalendarViewElement cv => MountCalendarView(cv),
-            SwipeControlElement swipe => MountSwipeControl(swipe, requestRerender),
-            AnimatedIconElement ai => MountAnimatedIcon(ai),
-            IconElement ie => MountIcon(ie),
-            ParallaxViewElement pv => MountParallaxView(pv, requestRerender),
-            MapControlElement mc => MountMapControl(mc),
-            FrameElement frame => MountFrame(frame),
             CommandHostElement ch => MountCommandHost(ch, requestRerender),
             ErrorBoundaryElement eb => MountErrorBoundary(eb, requestRerender),
             Validation.FormFieldElement ff => MountFormField(ff, requestRerender),
             Validation.ValidationVisualizerElement vv => MountValidationVisualizer(vv, requestRerender),
             Validation.ValidationRuleElement rule => MountValidationRule(rule),
-            SemanticElement sem => MountSemantic(sem, requestRerender),
-            AnnounceRegionElement ann => MountAnnounceRegion(ann),
-            XamlHostElement host => MountXamlHost(host),
-            XamlPageElement page => MountXamlPage(page),
             ComponentElement comp => MountComponent(comp, requestRerender),
             FuncElement func => MountFuncComponent(func, requestRerender),
             MemoElement memo => MountMemoComponent(memo, requestRerender),
@@ -458,40 +368,6 @@ public sealed partial class Reconciler
         return tsb;
     }
 
-    private TextBox MountTextBox(TextBoxElement textBoxElement, Action requestRerender)
-    {
-        var rented = _pool.TryRent(typeof(TextBox));
-        var textBox = rented as TextBox ?? new TextBox();
-        // SetElementTag BEFORE writing Text: pooled controls retain their
-        // previous tag, and programmatic Text= fires TextChanged on the pooled
-        // event handler. Setting the new tag first ensures the handler reads
-        // this mount's element, not the pool's last owner. The BeginSuppress
-        // guard below is additional belt-and-suspenders against echo.
-        SetElementTag(textBox, textBoxElement);
-        // AcceptsReturn and TextWrapping must be set BEFORE Text. WinUI TextBox
-        // defaults to single-line mode (AcceptsReturn=false); assigning Text
-        // with embedded \r\n while in single-line mode silently strips the
-        // newlines, keeping only the first paragraph. Setting these first
-        // ensures multi-line content round-trips correctly on mount.
-        if (textBoxElement.AcceptsReturn == true) textBox.AcceptsReturn = true;
-        if (textBoxElement.TextWrapping.HasValue) textBox.TextWrapping = textBoxElement.TextWrapping.Value;
-        if (rented is not null && textBox.Text != textBoxElement.Value)
-            ChangeEchoSuppressor.BeginSuppress(textBox);
-        textBox.Text = textBoxElement.Value;
-        textBox.PlaceholderText = textBoxElement.PlaceholderText ?? "";
-        if (textBoxElement.Header is not null) textBox.Header = textBoxElement.Header;
-        if (textBoxElement.IsReadOnly == true) textBox.IsReadOnly = true;
-        if (textBoxElement.SelectionStart.HasValue) textBox.SelectionStart = textBoxElement.SelectionStart.Value;
-        if (textBoxElement.SelectionLength.HasValue) textBox.SelectionLength = textBoxElement.SelectionLength.Value;
-        if (textBoxElement.MaxLength != 0) textBox.MaxLength = textBoxElement.MaxLength;
-        if (textBoxElement.IsSpellCheckEnabled.HasValue) textBox.IsSpellCheckEnabled = textBoxElement.IsSpellCheckEnabled.Value;
-        if (textBoxElement.CharacterCasing != CharacterCasing.Normal) textBox.CharacterCasing = textBoxElement.CharacterCasing;
-        if (textBoxElement.TextAlignment != TextAlignment.Left) textBox.TextAlignment = textBoxElement.TextAlignment;
-        if (textBoxElement.Description is not null) textBox.Description = textBoxElement.Description;
-        EnsureTextBoxWiring(textBox, textBoxElement, requestRerender);
-        ApplySetters(textBoxElement.Setters, textBox);
-        return textBox;
-    }
 
     /// <summary>
     /// Wires TextBox's TextChanged/SelectionChanged trampolines only when the
@@ -813,24 +689,6 @@ public sealed partial class Reconciler
         return slider;
     }
 
-    private WinUI.ToggleSwitch MountToggleSwitch(ToggleSwitchElement ts)
-    {
-        var rented = _pool.TryRent(typeof(WinUI.ToggleSwitch));
-        var toggle = rented as WinUI.ToggleSwitch ?? new WinUI.ToggleSwitch();
-        // SetElementTag BEFORE IsOn= so a pooled control's retained handler
-        // sees this mount's element, not the pool's last owner. Suppress the
-        // echo fired by the programmatic IsOn write when it actually changes.
-        SetElementTag(toggle, ts);
-        if (rented is not null && toggle.IsOn != ts.IsOn)
-            ChangeEchoSuppressor.BeginSuppress(toggle);
-        toggle.IsOn = ts.IsOn;
-        toggle.OnContent = ts.OnContent;
-        toggle.OffContent = ts.OffContent;
-        if (ts.Header is not null) toggle.Header = ts.Header;
-        EnsureToggleSwitchWiring(toggle, ts);
-        ApplySetters(ts.Setters, toggle);
-        return toggle;
-    }
 
     // Dedupe via EventHandlerState (attached on ReactorAttached.StateProperty,
     // keyed by native DependencyObject identity). A plain CWT keyed by managed
@@ -1047,47 +905,6 @@ public sealed partial class Reconciler
         return pic;
     }
 
-    private WinUI.WebView2 MountWebView2(WebView2Element wv)
-    {
-        var webView = new WinUI.WebView2();
-        // Tag + subscribe BEFORE assigning Source — setting Source kicks off
-        // CoreWebView2 initialization and navigation, and a fast init can fire
-        // before subscriptions land otherwise.
-        SetElementTag(webView, wv);
-
-        // Subscribe unconditionally; the trampoline reads the live element via
-        // GetElementTag so a later record-with that attaches a handler picks up
-        // without re-wiring. NavigationStarting/Completed retain the existing
-        // null-checked subscribe-only-on-handler pattern for backwards compat.
-        if (wv.OnNavigationStarting is not null)
-            webView.NavigationStarting += (s, args) =>
-                (GetElementTag((UIElement)s!) as WebView2Element)?.OnNavigationStarting?.Invoke(new Uri(args.Uri));
-        if (wv.OnNavigationCompleted is not null)
-            webView.NavigationCompleted += (s, _) =>
-                (GetElementTag((UIElement)s!) as WebView2Element)?.OnNavigationCompleted?.Invoke(((WinUI.WebView2)s!).Source);
-
-        webView.WebMessageReceived += (s, args) =>
-        {
-            if (GetElementTag((UIElement)s!) is WebView2Element el && el.OnWebMessageReceived is { } h)
-            {
-                // TryGetWebMessageAsString throws if the underlying message
-                // isn't a string (e.g. structured-clone JSON). Fall back to
-                // WebMessageAsJson so handlers always see a string payload.
-                string payload;
-                try { payload = args.TryGetWebMessageAsString(); }
-                catch { payload = args.WebMessageAsJson; }
-                h(payload);
-            }
-        };
-
-        webView.CoreWebView2Initialized += (s, _) =>
-            (GetElementTag((UIElement)s!) as WebView2Element)?.OnCoreWebView2Initialized?.Invoke();
-
-        if (wv.Source is not null) webView.Source = wv.Source;
-
-        ApplySetters(wv.Setters, webView);
-        return webView;
-    }
 
     private WinUI.RichEditBox MountRichEditBox(RichEditBoxElement reb)
     {
@@ -1253,20 +1070,6 @@ public sealed partial class Reconciler
         sv.ViewChanged += state.ScrollViewViewChangedTrampoline;
     }
 
-    private WinUI.Border MountBorder(BorderElement border, Action requestRerender)
-    {
-        var bdr = _pool.TryRent(typeof(WinUI.Border)) as WinUI.Border ?? new WinUI.Border();
-        if (border.CornerRadius.HasValue) bdr.CornerRadius = new Microsoft.UI.Xaml.CornerRadius(border.CornerRadius.Value);
-        if (border.Background is not null) bdr.Background = border.Background;
-        if (border.BorderBrush is not null) bdr.BorderBrush = border.BorderBrush;
-        if (border.BorderThickness.HasValue) bdr.BorderThickness = new Microsoft.UI.Xaml.Thickness(border.BorderThickness.Value);
-        // Apply RequestedTheme before mounting children so that child ThemeRef
-        // bindings resolve against the correct theme variant from the start.
-        bdr.Child = border.Child is not null ? Mount(border.Child, requestRerender) : null;
-        SetElementTag(bdr, border);
-        ApplySetters(border.Setters, bdr);
-        return bdr;
-    }
 
     internal WinUI.Expander MountExpander(ExpanderElement exp, Action requestRerender)
     {
@@ -1425,45 +1228,6 @@ public sealed partial class Reconciler
         return grid;
     }
 
-    private WinUI.NavigationView MountNavigationView(NavigationViewElement nav, Action requestRerender)
-    {
-        var nv = new WinUI.NavigationView
-        {
-            IsPaneOpen = nav.IsPaneOpen, PaneDisplayMode = nav.PaneDisplayMode,
-            IsBackEnabled = nav.IsBackEnabled, IsSettingsVisible = nav.IsSettingsVisible,
-        };
-        if (nav.PaneTitle is not null) nv.PaneTitle = nav.PaneTitle;
-        if (nav.Header is not null) nv.Header = Mount(nav.Header, requestRerender);
-        if (nav.AutoSuggestBox is not null && Mount(nav.AutoSuggestBox, requestRerender) is WinUI.AutoSuggestBox asb)
-            nv.AutoSuggestBox = asb;
-        if (nav.PaneFooter is not null) nv.PaneFooter = Mount(nav.PaneFooter, requestRerender);
-        if (nav.PaneCustomContent is not null) nv.PaneCustomContent = Mount(nav.PaneCustomContent, requestRerender);
-        if (!double.IsNaN(nav.OpenPaneLength)) nv.OpenPaneLength = nav.OpenPaneLength;
-        if (!double.IsNaN(nav.CompactModeThresholdWidth)) nv.CompactModeThresholdWidth = nav.CompactModeThresholdWidth;
-        if (!double.IsNaN(nav.ExpandedModeThresholdWidth)) nv.ExpandedModeThresholdWidth = nav.ExpandedModeThresholdWidth;
-        foreach (var item in nav.MenuItems)
-        {
-            if (item.IsHeader)
-                nv.MenuItems.Add(new WinUI.NavigationViewItemHeader { Content = item.Content });
-            else
-                nv.MenuItems.Add(CreateNavItem(item));
-        }
-        if (nav.Content is not null) nv.Content = Mount(nav.Content, requestRerender);
-        if (nav.SelectedTag is not null)
-            nv.SelectedItem = FindNavItemByTag(nv.MenuItems, nav.SelectedTag);
-        SetElementTag(nv, nav);
-        if (nav.OnSelectedTagChanged is not null)
-            nv.SelectionChanged += (s, args) =>
-            {
-                var selected = args.SelectedItem as WinUI.NavigationViewItem;
-                (GetElementTag((UIElement)s!) as NavigationViewElement)?.OnSelectedTagChanged?.Invoke(selected?.Tag as string);
-            };
-        if (nav.OnBackRequested is not null)
-            nv.BackRequested += (s, _) => (GetElementTag((UIElement)s!) as NavigationViewElement)?.OnBackRequested?.Invoke();
-        ApplySetters(nav.Setters, nv);
-        return nv;
-    }
-
     private static WinUI.NavigationViewItem CreateNavItem(NavigationViewItemData data)
     {
         var item = new WinUI.NavigationViewItem { Content = data.Content, Tag = data.Tag ?? data.Content };
@@ -1474,117 +1238,13 @@ public sealed partial class Reconciler
         return item;
     }
 
-    private WinUI.TitleBar MountTitleBar(TitleBarElement tb, Action requestRerender)
-    {
-        var titleBar = new WinUI.TitleBar
-        {
-            Title = tb.Title,
-            IsBackButtonVisible = tb.IsBackButtonVisible,
-            IsBackButtonEnabled = tb.IsBackButtonEnabled,
-            IsPaneToggleButtonVisible = tb.IsPaneToggleButtonVisible,
-        };
-        if (tb.Subtitle is not null) titleBar.Subtitle = tb.Subtitle;
-        if (tb.Icon is not null) titleBar.IconSource = ResolveIconSource(tb.Icon);
-        if (tb.Content is not null) titleBar.Content = Mount(tb.Content, requestRerender);
-        if (tb.RightHeader is not null) titleBar.RightHeader = Mount(tb.RightHeader, requestRerender);
-        SetElementTag(titleBar, tb);
-        if (tb.OnBackRequested is not null)
-            titleBar.BackRequested += (s, _) => (GetElementTag((UIElement)s!) as TitleBarElement)?.OnBackRequested?.Invoke();
-        if (tb.OnPaneToggleRequested is not null)
-            titleBar.PaneToggleRequested += (s, _) => (GetElementTag((UIElement)s!) as TitleBarElement)?.OnPaneToggleRequested?.Invoke();
-        ApplySetters(tb.Setters, titleBar);
 
-        // Register with the window for drag regions and caption buttons
-        if (Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal is { } host)
-        {
-            host.Window.ExtendsContentIntoTitleBar = true;
-            host.Window.SetTitleBar(titleBar);
-        }
-
-        return titleBar;
-    }
-
-    internal WinUI.TabView MountTabView(TabViewElement tab, Action requestRerender)
-    {
-        var tv = new WinUI.TabView
-        {
-            SelectedIndex = tab.SelectedIndex,
-            IsAddTabButtonVisible = tab.IsAddTabButtonVisible,
-            TabWidthMode = tab.TabWidthMode,
-            CloseButtonOverlayMode = tab.CloseButtonOverlayMode,
-            CanDragTabs = tab.CanDragTabs,
-            CanReorderTabs = tab.CanReorderTabs,
-            AllowDropTabs = tab.AllowDropTabs,
-        };
-        if (tab.TabStripHeader is not null) tv.TabStripHeader = Mount(tab.TabStripHeader, requestRerender);
-        if (tab.TabStripFooter is not null) tv.TabStripFooter = Mount(tab.TabStripFooter, requestRerender);
-        foreach (var tabItem in tab.Tabs)
-        {
-            var tvi = new WinUI.TabViewItem
-            {
-                Header = BuildTabHeader(tabItem),
-                IsClosable = tabItem.IsClosable,
-                Content = Mount(tabItem.Content, requestRerender),
-            };
-            if (tabItem.Icon is not null) tvi.IconSource = ResolveIconSource(tabItem.Icon);
-            tv.TabItems.Add(tvi);
-        }
-        SetElementTag(tv, tab);
-        if (tab.OnSelectedIndexChanged is not null)
-            tv.SelectionChanged += (s, _) =>
-            {
-                var t = (WinUI.TabView)s!;
-                (GetElementTag(t) as TabViewElement)?.OnSelectedIndexChanged?.Invoke(t.SelectedIndex);
-            };
-        if (tab.OnTabCloseRequested is not null)
-            tv.TabCloseRequested += (s, args) =>
-            {
-                var t = (WinUI.TabView)s!;
-                var idx = t.TabItems.IndexOf(args.Tab);
-                (GetElementTag(t) as TabViewElement)?.OnTabCloseRequested?.Invoke(idx);
-            };
-        if (tab.OnAddTabButtonClick is not null)
-            tv.AddTabButtonClick += (s, _) => (GetElementTag((UIElement)s!) as TabViewElement)?.OnAddTabButtonClick?.Invoke();
-        // Spec 045 §2.4 docking drag pipeline hooks. Always wire — element-tag
-        // closures resolve to the current TabViewElement at fire time, so
-        // updates that add/remove the handler don't need a reattach.
-        tv.TabDragStarting += (s, args) =>
-        {
-            var t = (WinUI.TabView)s!;
-            if (GetElementTag(t) is not TabViewElement el || el.OnTabDragStarting is null) return;
-            var idx = t.TabItems.IndexOf(args.Tab);
-            if (idx < 0) return;
-            // WinUI requires a non-empty DataPackage for external
-            // AllowDrop=true targets (e.g. the docking drop-target overlay)
-            // to accept a drop. Without this, Drop simply never fires and
-            // the drag is silently rejected. The actual payload identity
-            // lives in object-ref state (DockDragSession per spec §8.9);
-            // the sentinel text only unblocks WinUI's drop acceptance.
-            args.Data.RequestedOperation = global::Windows.ApplicationModel.DataTransfer.DataPackageOperation.Move;
-            args.Data.SetText("reactor-tabview-tab");
-            el.OnTabDragStarting(idx);
-        };
-        tv.TabDragCompleted += (s, args) =>
-        {
-            var t = (WinUI.TabView)s!;
-            if (GetElementTag(t) is not TabViewElement el || el.OnTabDragCompleted is null) return;
-            // Tab may have been removed from TabItems by WinUI during the
-            // drag (tear-out path) — IndexOf returns -1 there. Fire the
-            // callback with idx=-1 anyway so the consumer can clean up
-            // drag state (otherwise the overlay stays "locked on").
-            var idx = t.TabItems.IndexOf(args.Tab);
-            var wasOutside = args.DropResult == global::Windows.ApplicationModel.DataTransfer.DataPackageOperation.None;
-            el.OnTabDragCompleted(idx, wasOutside);
-        };
-        ApplySetters(tab.Setters, tv);
-        return tv;
-    }
 
     // Spec 045 §2.2 — pin button for ToolWindow tabs. When IsPinnable is
     // true the header becomes a StackPanel { TextBlock(title) , pin Button };
     // otherwise the existing string header path is preserved verbatim so
     // tabs without pin affordance are visually identical to baseline.
-    private static object BuildTabHeader(TabViewItemData tabItem)
+    internal static object BuildTabHeader(TabViewItemData tabItem)
     {
         if (!tabItem.IsPinnable) return tabItem.Header;
         var sp = new WinUI.StackPanel
@@ -1611,7 +1271,7 @@ public sealed partial class Reconciler
     /// the expected shape — the caller should fall back to a full
     /// rebuild. Spec 045 §2.2; called by <c>UpdateTabView</c>.
     /// </summary>
-    private static bool TryUpdatePinHeaderInPlace(
+    internal static bool TryUpdatePinHeaderInPlace(
         WinUI.StackPanel existing,
         TabViewItemData oldTab,
         TabViewItemData newTab)
@@ -2292,146 +1952,7 @@ public sealed partial class Reconciler
         return ib;
     }
 
-    internal UIElement MountContentDialog(ContentDialogElement cdEl, Action requestRerender)
-    {
-        var placeholder = new WinUI.StackPanel { Visibility = Visibility.Collapsed };
-        SetElementTag(placeholder, cdEl);
-        if (cdEl.IsOpen) ShowContentDialog(cdEl, placeholder, requestRerender);
-        return placeholder;
-    }
 
-    private void ShowContentDialog(ContentDialogElement cdEl, FrameworkElement anchor, Action requestRerender)
-    {
-        // Source XamlRoot from the placeholder so the dialog routes to the
-        // window that owns the anchor. If the anchor isn't attached yet
-        // (mount-time IsOpen=true) defer via Loaded — falling back to
-        // PrimaryWindow here would misroute the dialog when the anchor lives
-        // in a secondary window.
-        if (anchor.XamlRoot is null)
-        {
-            void OnLoaded(object sender, RoutedEventArgs _)
-            {
-                anchor.Loaded -= OnLoaded;
-                // Re-read the current element from the anchor's Tag in case
-                // IsOpen was toggled back to false (or the element was
-                // replaced) before Loaded fired.
-                if (GetElementTag(anchor) is not ContentDialogElement current || !current.IsOpen)
-                    return;
-                var deferredRoot = anchor.XamlRoot
-                    ?? ReactorApp.PrimaryWindow?.NativeWindow.Content?.XamlRoot;
-                ShowContentDialogCore(current, deferredRoot, requestRerender);
-            }
-            anchor.Loaded += OnLoaded;
-            return;
-        }
-        ShowContentDialogCore(cdEl, anchor.XamlRoot, requestRerender);
-    }
-
-    private async void ShowContentDialogCore(ContentDialogElement cdEl, XamlRoot? xamlRoot, Action requestRerender)
-    {
-        var dialog = new WinUI.ContentDialog
-        {
-            Title = cdEl.Title, PrimaryButtonText = cdEl.PrimaryButtonText,
-            DefaultButton = cdEl.DefaultButton,
-            IsPrimaryButtonEnabled = cdEl.IsPrimaryButtonEnabled,
-            IsSecondaryButtonEnabled = cdEl.IsSecondaryButtonEnabled,
-        };
-        if (cdEl.SecondaryButtonText is not null) dialog.SecondaryButtonText = cdEl.SecondaryButtonText;
-        if (cdEl.CloseButtonText is not null) dialog.CloseButtonText = cdEl.CloseButtonText;
-        dialog.Content = Mount(cdEl.Content, requestRerender);
-        if (xamlRoot is not null) dialog.XamlRoot = xamlRoot;
-        if (cdEl.OnOpened is not null) dialog.Opened += (_, _) => cdEl.OnOpened?.Invoke();
-        // ApplySetters last so caller .Set(...) wins (including overriding XamlRoot).
-        ApplySetters(cdEl.Setters, dialog);
-        var winUiResult = await dialog.ShowAsync();
-        cdEl.OnClosed?.Invoke(winUiResult);
-    }
-
-    internal UIElement? MountFlyout(FlyoutElement flyEl, Action requestRerender)
-    {
-        var target = Mount(flyEl.Target, requestRerender);
-        if (target is FrameworkElement targetFe)
-        {
-            var flyoutContent = Mount(flyEl.FlyoutContent, requestRerender);
-            var flyout = new WinUI.Flyout
-            {
-                Content = flyoutContent,
-                Placement = flyEl.Placement,
-                ShowMode = flyEl.ShowMode,
-                AreOpenCloseAnimationsEnabled = flyEl.AreOpenCloseAnimationsEnabled,
-            };
-            if (flyEl.OverlayInputPassThroughElement is not null
-                && Mount(flyEl.OverlayInputPassThroughElement, requestRerender) is DependencyObject pt)
-                flyout.OverlayInputPassThroughElement = pt;
-            SetElementTag(targetFe, flyEl);
-            // Route handlers through the target's Tag so Update() refreshing the tag to the
-            // new FlyoutElement causes subsequent Opened/Closed to fire the current delegates —
-            // capturing flyEl directly would freeze handlers to the mount-time element.
-            if (flyEl.OnOpened is not null)
-                flyout.Opened += (_, _) => (GetElementTag(targetFe) as FlyoutElement)?.OnOpened?.Invoke();
-            if (flyEl.OnClosed is not null)
-                flyout.Closed += (_, _) => (GetElementTag(targetFe) as FlyoutElement)?.OnClosed?.Invoke();
-            // SetFlyoutOnControl wires .Flyout on Button/SplitButton targets so
-            // clicking opens the flyout natively; non-button targets fall back
-            // to SetAttachedFlyout metadata (opened only via ShowAttachedFlyout).
-            SetFlyoutOnControl(targetFe, flyout);
-            ApplySetters(flyEl.Setters, flyout);
-            if (flyEl.IsOpen) WinPrim.FlyoutBase.ShowAttachedFlyout(targetFe);
-        }
-        return target;
-    }
-
-    private WinUI.TeachingTip MountTeachingTip(TeachingTipElement ttEl, Action requestRerender)
-    {
-        var tip = new WinUI.TeachingTip
-        {
-            Title = ttEl.Title,
-            Subtitle = ttEl.Subtitle ?? "",
-            IsOpen = ttEl.IsOpen,
-            PlacementMargin = ttEl.PlacementMargin,
-            PreferredPlacement = ttEl.PreferredPlacement,
-        };
-        if (ttEl.Content is not null) tip.Content = Mount(ttEl.Content, requestRerender);
-        if (ttEl.ActionButtonContent is not null) tip.ActionButtonContent = ttEl.ActionButtonContent;
-        if (ttEl.CloseButtonContent is not null) tip.CloseButtonContent = ttEl.CloseButtonContent;
-        if (ttEl.IconSource is not null) tip.IconSource = ResolveIconSource(ttEl.IconSource);
-        if (ttEl.HeroContent is not null) tip.HeroContent = Mount(ttEl.HeroContent, requestRerender);
-        // Tag BEFORE wires so trampolines see the current element from the first tick.
-        SetElementTag(tip, ttEl);
-        // Route through the Tag trampoline (not a captured local) so skip-path
-        // Tag refresh / Update can swap the dispatch target without re-wiring.
-        if (ttEl.OnActionButtonClick is not null)
-            tip.ActionButtonClick += (s, _) => (GetElementTag((UIElement)s!) as TeachingTipElement)?.OnActionButtonClick?.Invoke();
-        if (ttEl.OnClosed is not null)
-            tip.Closed += (s, _) => (GetElementTag((UIElement)s!) as TeachingTipElement)?.OnClosed?.Invoke();
-        ApplySetters(ttEl.Setters, tip);
-        return tip;
-    }
-
-    internal WinUI.MenuBar MountMenuBar(MenuBarElement mbEl)
-    {
-        var menuBar = new WinUI.MenuBar();
-        foreach (var menuItem in mbEl.Items)
-        {
-            var mbi = new WinUI.MenuBarItem { Title = menuItem.Title };
-            foreach (var flyoutItem in menuItem.Items) mbi.Items.Add(CreateMenuFlyoutItem(flyoutItem));
-            menuBar.Items.Add(mbi);
-        }
-        ApplySetters(mbEl.Setters, menuBar);
-        return menuBar;
-    }
-
-    private WinUI.Grid MountCommandHost(CommandHostElement ch, Action requestRerender)
-    {
-        var host = new WinUI.Grid();
-        var child = Mount(ch.Child, requestRerender);
-        if (child is not null) host.Children.Add(child);
-
-        AddCommandHostAccelerators(host, ch.Commands);
-
-        SetElementTag(host, ch);
-        return host;
-    }
 
     private static void AddCommandHostAccelerators(WinUI.Grid host, Command[] commands)
     {
@@ -2485,132 +2006,7 @@ public sealed partial class Reconciler
         return false;
     }
 
-    internal WinUI.CommandBar MountCommandBar(CommandBarElement cmdEl, Action requestRerender)
-    {
-        var commandBar = new WinUI.CommandBar
-        {
-            DefaultLabelPosition = cmdEl.DefaultLabelPosition,
-            IsOpen = cmdEl.IsOpen,
-        };
-        if (cmdEl.Content is not null) commandBar.Content = Mount(cmdEl.Content, requestRerender);
-        if (cmdEl.PrimaryCommands is not null)
-            foreach (var cmd in cmdEl.PrimaryCommands) commandBar.PrimaryCommands.Add(CreateAppBarItem(cmd));
-        if (cmdEl.SecondaryCommands is not null)
-            foreach (var cmd in cmdEl.SecondaryCommands) commandBar.SecondaryCommands.Add(CreateAppBarItem(cmd));
-        SetElementTag(commandBar, cmdEl);
-        ApplySetters(cmdEl.Setters, commandBar);
-        return commandBar;
-    }
 
-    private static WinUI.ICommandBarElement CreateAppBarItem(AppBarItemBase item)
-    {
-        switch (item)
-        {
-            case AppBarButtonData cmd:
-            {
-                var abb = new WinUI.AppBarButton { Label = cmd.Label };
-                abb.IsEnabled = cmd.IsEnabled;
-                abb.Icon = ResolveIcon(cmd.IconElement, cmd.Icon);
-                if (cmd.KeyboardAccelerators is not null)
-                    foreach (var ka in cmd.KeyboardAccelerators)
-                        abb.KeyboardAccelerators.Add(new Microsoft.UI.Xaml.Input.KeyboardAccelerator { Key = ka.Key, Modifiers = ka.Modifiers });
-                if (cmd.AccessKey is not null) abb.AccessKey = cmd.AccessKey;
-                if (cmd.Description is not null)
-                {
-                    WinUI.ToolTipService.SetToolTip(abb, cmd.Description);
-                    Microsoft.UI.Xaml.Automation.AutomationProperties.SetHelpText(abb, cmd.Description);
-                }
-                abb.Tag = cmd;
-                abb.Click += (s, _) => ((AppBarButtonData)((WinUI.AppBarButton)s!).Tag!).OnClick?.Invoke();
-                return abb;
-            }
-            case AppBarToggleButtonData toggle:
-            {
-                var atb = new WinUI.AppBarToggleButton { Label = toggle.Label, IsChecked = toggle.IsChecked };
-                atb.Icon = ResolveIcon(toggle.IconElement, toggle.Icon);
-                atb.Tag = toggle;
-                atb.Checked += (s, _) => ((AppBarToggleButtonData)((WinUI.AppBarToggleButton)s!).Tag!).OnIsCheckedChanged?.Invoke(true);
-                atb.Unchecked += (s, _) => ((AppBarToggleButtonData)((WinUI.AppBarToggleButton)s!).Tag!).OnIsCheckedChanged?.Invoke(false);
-                return atb;
-            }
-            case AppBarSeparatorData:
-                return new WinUI.AppBarSeparator();
-            default:
-                return new WinUI.AppBarSeparator();
-        }
-    }
-
-    internal UIElement? MountMenuFlyout(MenuFlyoutElement mfEl, Action requestRerender)
-    {
-        var target = Mount(mfEl.Target, requestRerender);
-        if (target is FrameworkElement targetFe)
-        {
-            var menuFlyout = new WinUI.MenuFlyout();
-            foreach (var item in mfEl.Items) menuFlyout.Items.Add(CreateMenuFlyoutItem(item));
-            SetElementTag(targetFe, mfEl);
-            // Use SetFlyoutOnControl so clicking a Button/SplitButton target opens
-            // the flyout via .Flyout; non-button targets fall back to attached-flyout
-            // metadata (still requires explicit ShowAttachedFlyout to open).
-            SetFlyoutOnControl(targetFe, menuFlyout);
-            ApplySetters(mfEl.Setters, menuFlyout);
-        }
-        return target;
-    }
-
-    private static WinUI.MenuFlyoutItemBase CreateMenuFlyoutItem(MenuFlyoutItemBase item)
-    {
-        switch (item)
-        {
-            case MenuFlyoutItemData mfi:
-            {
-                var flyoutItem = new WinUI.MenuFlyoutItem { Text = mfi.Text };
-                flyoutItem.IsEnabled = mfi.IsEnabled;
-                flyoutItem.Icon = ResolveIcon(mfi.IconElement, mfi.Icon);
-                if (mfi.KeyboardAccelerators is not null)
-                    foreach (var ka in mfi.KeyboardAccelerators)
-                        flyoutItem.KeyboardAccelerators.Add(new Microsoft.UI.Xaml.Input.KeyboardAccelerator { Key = ka.Key, Modifiers = ka.Modifiers });
-                if (mfi.AccessKey is not null) flyoutItem.AccessKey = mfi.AccessKey;
-                if (mfi.Description is not null)
-                {
-                    WinUI.ToolTipService.SetToolTip(flyoutItem, mfi.Description);
-                    Microsoft.UI.Xaml.Automation.AutomationProperties.SetHelpText(flyoutItem, mfi.Description);
-                }
-                flyoutItem.Tag = mfi;
-                flyoutItem.Click += (s, _) => ((MenuFlyoutItemData)((WinUI.MenuFlyoutItem)s!).Tag!).OnClick?.Invoke();
-                return flyoutItem;
-            }
-            case ToggleMenuFlyoutItemData toggle:
-            {
-                var toggleItem = new WinUI.ToggleMenuFlyoutItem { Text = toggle.Text, IsChecked = toggle.IsChecked };
-                toggleItem.Icon = ResolveIcon(toggle.IconElement, toggle.Icon);
-                toggleItem.Tag = toggle;
-                toggleItem.Click += (s, _) =>
-                {
-                    var ti = (WinUI.ToggleMenuFlyoutItem)s!;
-                    ((ToggleMenuFlyoutItemData)ti.Tag!).OnIsCheckedChanged?.Invoke(ti.IsChecked);
-                };
-                return toggleItem;
-            }
-            case RadioMenuFlyoutItemData radio:
-            {
-                var radioItem = new WinUI.RadioMenuFlyoutItem { Text = radio.Text, GroupName = radio.GroupName, IsChecked = radio.IsChecked };
-                radioItem.Tag = radio;
-                radioItem.Click += (s, _) => ((RadioMenuFlyoutItemData)((WinUI.RadioMenuFlyoutItem)s!).Tag!).OnClick?.Invoke();
-                return radioItem;
-            }
-            case MenuFlyoutSeparatorData:
-                return new WinUI.MenuFlyoutSeparator();
-            case MenuFlyoutSubItemData sub:
-            {
-                var subItem = new WinUI.MenuFlyoutSubItem { Text = sub.Text };
-                subItem.Icon = ResolveIcon(sub.IconElement, sub.Icon);
-                foreach (var child in sub.Items) subItem.Items.Add(CreateMenuFlyoutItem(child));
-                return subItem;
-            }
-            default:
-                return new WinUI.MenuFlyoutSeparator();
-        }
-    }
 
     /// <summary>Descriptor-accessible bridge to <see cref="ResolveIcon"/>
     /// for the icon-bearing controls ported in Phase 3 (e.g.
@@ -3518,40 +2914,6 @@ public sealed partial class Reconciler
 
     // ── MediaPlayerElement ──────────────────────────────────────────────
 
-    private WinUI.MediaPlayerElement MountMediaPlayerElement(MediaPlayerElementElement mpe)
-    {
-        var player = new WinUI.MediaPlayerElement
-        {
-            AreTransportControlsEnabled = mpe.AreTransportControlsEnabled,
-            AutoPlay = mpe.AutoPlay,
-        };
-        // Tag + subscribe BEFORE assigning Source — setting Source starts the
-        // pipeline immediately; a cached / fast-failing URI can raise
-        // MediaOpened / MediaFailed before subscriptions would otherwise land.
-        // MediaPlayer events fire on the player's worker thread; marshal back
-        // to the element's dispatcher so handlers can mutate component state
-        // safely. May fire after unmount — GetElementTag returns null then so
-        // the handler invocation is a no-op.
-        SetElementTag(player, mpe);
-
-        var mp = player.MediaPlayer;
-        if (mp is not null)
-        {
-            mp.MediaOpened += (s, _) => DispatchToElement<MediaPlayerElementElement>(player, el => el.OnMediaOpened?.Invoke());
-            mp.MediaEnded += (s, _) => DispatchToElement<MediaPlayerElementElement>(player, el => el.OnMediaEnded?.Invoke());
-            mp.MediaFailed += (s, args) =>
-            {
-                var msg = args.ErrorMessage ?? args.Error.ToString();
-                DispatchToElement<MediaPlayerElementElement>(player, el => el.OnMediaFailed?.Invoke(msg));
-            };
-        }
-
-        if (mpe.Source is not null)
-            player.Source = global::Windows.Media.Core.MediaSource.CreateFromUri(new Uri(mpe.Source, UriKind.RelativeOrAbsolute));
-
-        ApplySetters(mpe.Setters, player);
-        return player;
-    }
 
     private static void DispatchToElement<TElement>(FrameworkElement fe, Action<TElement> body)
         where TElement : Element
@@ -3566,27 +2928,9 @@ public sealed partial class Reconciler
 
     // ── AnimatedVisualPlayer ────────────────────────────────────────────
 
-    private WinUI.AnimatedVisualPlayer MountAnimatedVisualPlayer(AnimatedVisualPlayerElement avp)
-    {
-        var player = new WinUI.AnimatedVisualPlayer { AutoPlay = avp.AutoPlay };
-        SetElementTag(player, avp);
-        ApplySetters(avp.Setters, player);
-        return player;
-    }
 
     // ── SemanticZoom ────────────────────────────────────────────────────
 
-    private WinUI.SemanticZoom MountSemanticZoom(SemanticZoomElement sz, Action requestRerender)
-    {
-        var zoomedIn = Mount(sz.ZoomedInView, requestRerender);
-        var zoomedOut = Mount(sz.ZoomedOutView, requestRerender);
-        var semanticZoom = new WinUI.SemanticZoom();
-        if (zoomedIn is ISemanticZoomInformation szi) semanticZoom.ZoomedInView = szi;
-        if (zoomedOut is ISemanticZoomInformation szo) semanticZoom.ZoomedOutView = szo;
-        SetElementTag(semanticZoom, sz);
-        ApplySetters(sz.Setters, semanticZoom);
-        return semanticZoom;
-    }
 
     // ── ListBox ─────────────────────────────────────────────────────────
 
@@ -3668,138 +3012,12 @@ public sealed partial class Reconciler
 
     // ── AnnotatedScrollBar ──────────────────────────────────────────────
 
-    private WinUI.AnnotatedScrollBar MountAnnotatedScrollBar(AnnotatedScrollBarElement asb)
-    {
-        var scrollBar = new WinUI.AnnotatedScrollBar();
-        ApplySetters(asb.Setters, scrollBar);
-        return scrollBar;
-    }
 
     // ── Popup ───────────────────────────────────────────────────────────
 
-    internal UIElement MountPopup(PopupElement popup, Action requestRerender)
-    {
-        // Popup is not a UIElement child, so we wrap it in a StackPanel
-        var wrapper = new WinUI.StackPanel();
-        var p = new WinPrim.Popup
-        {
-            IsOpen = popup.IsOpen,
-            IsLightDismissEnabled = popup.IsLightDismissEnabled,
-            HorizontalOffset = popup.HorizontalOffset,
-            VerticalOffset = popup.VerticalOffset,
-        };
-        var child = Mount(popup.Child, requestRerender);
-        p.Child = child as UIElement;
-        SetElementTag(wrapper, popup);
-        p.Opened += (s, _) => (GetElementTag(wrapper) as PopupElement)?.OnOpened?.Invoke();
-        p.Closed += (s, _) => (GetElementTag(wrapper) as PopupElement)?.OnClosed?.Invoke();
-        ApplySetters(popup.Setters, p);
-        wrapper.Children.Add(p);
-        return wrapper;
-    }
-
-    // ── RefreshContainer ────────────────────────────────────────────────
-
-    private WinUI.RefreshContainer MountRefreshContainer(RefreshContainerElement rc, Action requestRerender)
-    {
-        var container = new WinUI.RefreshContainer
-        {
-            PullDirection = rc.PullDirection,
-        };
-        container.Content = Mount(rc.Content, requestRerender);
-        SetElementTag(container, rc);
-        container.RefreshRequested += (s, _) =>
-            (GetElementTag((UIElement)s!) as RefreshContainerElement)?.OnRefreshRequested?.Invoke();
-        ApplySetters(rc.Setters, container);
-        return container;
-    }
-
-    // ── CommandBarFlyout ────────────────────────────────────────────────
-
-    internal UIElement? MountCommandBarFlyout(CommandBarFlyoutElement cbf, Action requestRerender)
-    {
-        var target = Mount(cbf.Target, requestRerender);
-        if (target is FrameworkElement targetFe)
-        {
-            var flyout = new WinUI.CommandBarFlyout { Placement = cbf.Placement };
-            if (cbf.PrimaryCommands is not null)
-                foreach (var cmd in cbf.PrimaryCommands) flyout.PrimaryCommands.Add(CreateAppBarItem(cmd));
-            if (cbf.SecondaryCommands is not null)
-                foreach (var cmd in cbf.SecondaryCommands) flyout.SecondaryCommands.Add(CreateAppBarItem(cmd));
-            SetElementTag(targetFe, cbf);
-            WinPrim.FlyoutBase.SetAttachedFlyout(targetFe, flyout);
-            ApplySetters(cbf.Setters, flyout);
-        }
-        return target;
-    }
-
-    // ── CalendarView ────────────────────────────────────────────────────
-
-    private WinUI.CalendarView MountCalendarView(CalendarViewElement cv)
-    {
-        var calendarView = new WinUI.CalendarView
-        {
-            SelectionMode = cv.SelectionMode,
-            IsGroupLabelVisible = cv.IsGroupLabelVisible,
-            IsOutOfScopeEnabled = cv.IsOutOfScopeEnabled,
-            NumberOfWeeksInView = cv.NumberOfWeeksInView,
-            DisplayMode = cv.DisplayMode,
-        };
-        if (cv.CalendarIdentifier is not null) calendarView.CalendarIdentifier = cv.CalendarIdentifier;
-        if (cv.Language is not null && global::Windows.Globalization.Language.IsWellFormed(cv.Language))
-            calendarView.Language = cv.Language;
-        if (cv.MinDate.HasValue) calendarView.MinDate = cv.MinDate.Value;
-        if (cv.MaxDate.HasValue) calendarView.MaxDate = cv.MaxDate.Value;
-        if (cv.FirstDayOfWeek.HasValue) calendarView.FirstDayOfWeek = cv.FirstDayOfWeek.Value;
-
-        SetElementTag(calendarView, cv);
-
-        // Initial selection set BEFORE subscribing so the declarative state
-        // doesn't echo back into OnSelectedDatesChanged.
-        if (cv.SelectedDates is { Count: > 0 })
-        {
-            foreach (var d in cv.SelectedDates) calendarView.SelectedDates.Add(d);
-        }
-
-        // Subscribe unconditionally so the handler picks up a later-attached
-        // OnSelectedDatesChanged via GetElementTag without re-wiring.
-        calendarView.SelectedDatesChanged += (s, _) =>
-        {
-            var c = (WinUI.CalendarView)s!;
-            if (ChangeEchoSuppressor.ShouldSuppress(c)) return;
-            if (GetElementTag(c) is CalendarViewElement el && el.OnSelectedDatesChanged is { } h)
-                h(c.SelectedDates.ToArray());
-        };
-
-        ApplySetters(cv.Setters, calendarView);
-        return calendarView;
-    }
 
     // ── SwipeControl ──────────────────────────────────────────────────
 
-    private WinUI.SwipeControl MountSwipeControl(SwipeControlElement swipe, Action requestRerender)
-    {
-        var sc = new WinUI.SwipeControl();
-        sc.Content = Mount(swipe.Content, requestRerender);
-
-        if (swipe.LeftItems is { Length: > 0 })
-        {
-            var leftItems = new SwipeItems { Mode = swipe.LeftItemsMode };
-            foreach (var item in swipe.LeftItems) leftItems.Add(CreateSwipeItem(item));
-            sc.LeftItems = leftItems;
-        }
-
-        if (swipe.RightItems is { Length: > 0 })
-        {
-            var rightItems = new SwipeItems { Mode = swipe.RightItemsMode };
-            foreach (var item in swipe.RightItems) rightItems.Add(CreateSwipeItem(item));
-            sc.RightItems = rightItems;
-        }
-
-        SetElementTag(sc, swipe);
-        ApplySetters(swipe.Setters, sc);
-        return sc;
-    }
 
     private static SwipeItem CreateSwipeItem(SwipeItemData data)
     {
@@ -3829,42 +3047,12 @@ public sealed partial class Reconciler
 
     // ── Icon ─────────────────────────────────────────────────────────
 
-    private WinUI.IconElement? MountIcon(IconElement ie)
-    {
-        var icon = ResolveIcon(ie.Data, null);
-        if (icon is not null) ApplySetters(ie.Setters, icon);
-        return icon;
-    }
 
     // ── ParallaxView ──────────────────────────────────────────────────
 
-    private WinUI.ParallaxView MountParallaxView(ParallaxViewElement pv, Action requestRerender)
-    {
-        var parallax = new WinUI.ParallaxView
-        {
-            VerticalShift = pv.VerticalShift,
-            HorizontalShift = pv.HorizontalShift,
-            VerticalSourceStartOffset = pv.VerticalSourceStartOffset,
-            VerticalSourceEndOffset = pv.VerticalSourceEndOffset,
-        };
-        if (pv.Source is not null) parallax.Source = pv.Source;
-        parallax.Child = Mount(pv.Child, requestRerender) as UIElement;
-        ApplySetters(pv.Setters, parallax);
-        return parallax;
-    }
 
     // ── MapControl ────────────────────────────────────────────────────
 
-    private WinUI.MapControl MountMapControl(MapControlElement mc)
-    {
-        var map = new WinUI.MapControl
-        {
-            ZoomLevel = mc.ZoomLevel,
-        };
-        if (mc.MapServiceToken is not null) map.MapServiceToken = mc.MapServiceToken;
-        ApplySetters(mc.Setters, map);
-        return map;
-    }
 
     // ── Frame ─────────────────────────────────────────────────────────
 
@@ -3966,5 +3154,110 @@ public sealed partial class Reconciler
 
         SetElementTag(panel, sem);
         return panel;
+    }
+
+    private WinUI.Grid MountCommandHost(CommandHostElement ch, Action requestRerender)
+    {
+        var host = new WinUI.Grid();
+        var child = Mount(ch.Child, requestRerender);
+        if (child is not null) host.Children.Add(child);
+
+        AddCommandHostAccelerators(host, ch.Commands);
+
+        SetElementTag(host, ch);
+        return host;
+    }
+
+    internal static WinUI.ICommandBarElement CreateAppBarItem(AppBarItemBase item)
+    {
+        switch (item)
+        {
+            case AppBarButtonData cmd:
+            {
+                var abb = new WinUI.AppBarButton { Label = cmd.Label };
+                abb.IsEnabled = cmd.IsEnabled;
+                abb.Icon = ResolveIcon(cmd.IconElement, cmd.Icon);
+                if (cmd.KeyboardAccelerators is not null)
+                    foreach (var ka in cmd.KeyboardAccelerators)
+                        abb.KeyboardAccelerators.Add(new Microsoft.UI.Xaml.Input.KeyboardAccelerator { Key = ka.Key, Modifiers = ka.Modifiers });
+                if (cmd.AccessKey is not null) abb.AccessKey = cmd.AccessKey;
+                if (cmd.Description is not null)
+                {
+                    WinUI.ToolTipService.SetToolTip(abb, cmd.Description);
+                    Microsoft.UI.Xaml.Automation.AutomationProperties.SetHelpText(abb, cmd.Description);
+                }
+                abb.Tag = cmd;
+                abb.Click += (s, _) => ((AppBarButtonData)((WinUI.AppBarButton)s!).Tag!).OnClick?.Invoke();
+                return abb;
+            }
+            case AppBarToggleButtonData toggle:
+            {
+                var atb = new WinUI.AppBarToggleButton { Label = toggle.Label, IsChecked = toggle.IsChecked };
+                atb.Icon = ResolveIcon(toggle.IconElement, toggle.Icon);
+                atb.Tag = toggle;
+                atb.Checked += (s, _) => ((AppBarToggleButtonData)((WinUI.AppBarToggleButton)s!).Tag!).OnIsCheckedChanged?.Invoke(true);
+                atb.Unchecked += (s, _) => ((AppBarToggleButtonData)((WinUI.AppBarToggleButton)s!).Tag!).OnIsCheckedChanged?.Invoke(false);
+                return atb;
+            }
+            case AppBarSeparatorData:
+                return new WinUI.AppBarSeparator();
+            default:
+                return new WinUI.AppBarSeparator();
+        }
+    }
+
+    internal static WinUI.MenuFlyoutItemBase CreateMenuFlyoutItem(MenuFlyoutItemBase item)
+    {
+        switch (item)
+        {
+            case MenuFlyoutItemData mfi:
+            {
+                var flyoutItem = new WinUI.MenuFlyoutItem { Text = mfi.Text };
+                flyoutItem.IsEnabled = mfi.IsEnabled;
+                flyoutItem.Icon = ResolveIcon(mfi.IconElement, mfi.Icon);
+                if (mfi.KeyboardAccelerators is not null)
+                    foreach (var ka in mfi.KeyboardAccelerators)
+                        flyoutItem.KeyboardAccelerators.Add(new Microsoft.UI.Xaml.Input.KeyboardAccelerator { Key = ka.Key, Modifiers = ka.Modifiers });
+                if (mfi.AccessKey is not null) flyoutItem.AccessKey = mfi.AccessKey;
+                if (mfi.Description is not null)
+                {
+                    WinUI.ToolTipService.SetToolTip(flyoutItem, mfi.Description);
+                    Microsoft.UI.Xaml.Automation.AutomationProperties.SetHelpText(flyoutItem, mfi.Description);
+                }
+                flyoutItem.Tag = mfi;
+                flyoutItem.Click += (s, _) => ((MenuFlyoutItemData)((WinUI.MenuFlyoutItem)s!).Tag!).OnClick?.Invoke();
+                return flyoutItem;
+            }
+            case ToggleMenuFlyoutItemData toggle:
+            {
+                var toggleItem = new WinUI.ToggleMenuFlyoutItem { Text = toggle.Text, IsChecked = toggle.IsChecked };
+                toggleItem.Icon = ResolveIcon(toggle.IconElement, toggle.Icon);
+                toggleItem.Tag = toggle;
+                toggleItem.Click += (s, _) =>
+                {
+                    var ti = (WinUI.ToggleMenuFlyoutItem)s!;
+                    ((ToggleMenuFlyoutItemData)ti.Tag!).OnIsCheckedChanged?.Invoke(ti.IsChecked);
+                };
+                return toggleItem;
+            }
+            case RadioMenuFlyoutItemData radio:
+            {
+                var radioItem = new WinUI.RadioMenuFlyoutItem { Text = radio.Text, GroupName = radio.GroupName, IsChecked = radio.IsChecked };
+                radioItem.Tag = radio;
+                radioItem.Click += (s, _) => ((RadioMenuFlyoutItemData)((WinUI.RadioMenuFlyoutItem)s!).Tag!).OnClick?.Invoke();
+                return radioItem;
+            }
+            case MenuFlyoutSeparatorData:
+                return new WinUI.MenuFlyoutSeparator();
+            case MenuFlyoutSubItemData sub:
+            {
+                var subItem = new WinUI.MenuFlyoutSubItem { Text = sub.Text };
+                subItem.Icon = ResolveIcon(sub.IconElement, sub.Icon);
+                foreach (var child in sub.Items) subItem.Items.Add(CreateMenuFlyoutItem(child));
+                return subItem;
+            }
+            default:
+                return new WinUI.MenuFlyoutSeparator();
+        }
     }
 }

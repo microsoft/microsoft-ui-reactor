@@ -335,6 +335,15 @@ internal sealed class TabViewEventPayload
     public global::Windows.Foundation.TypedEventHandler<
         Microsoft.UI.Xaml.Controls.TabView,
         object>? AddTabButtonClickTrampoline;
+    // Spec 045 §2.4 docking drag pipeline — fire-only slots wired by the
+    // §4.0.3 TabViewDescriptor port (replaces the always-subscribed legacy
+    // MountTabView arms).
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.TabView,
+        Microsoft.UI.Xaml.Controls.TabViewTabDragStartingEventArgs>? TabDragStartingTrampoline;
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.TabView,
+        Microsoft.UI.Xaml.Controls.TabViewTabDragCompletedEventArgs>? TabDragCompletedTrampoline;
 }
 
 /// <summary>Spec 047 §14 Phase 3-final Batch B — Frame multi-event payload.
