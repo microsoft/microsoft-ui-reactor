@@ -1,3 +1,18 @@
+---
+title: "The Control Reconciler Protocol"
+app: v1-protocol
+order: 33.5
+audience: advanced
+goal: |
+  How Reactor delegates per-control work to handlers. The
+  IElementHandler contract, ref-struct contexts, descriptors as
+  declarative sugar over handlers, the ChildrenStrategy survey, pool
+  integration, echo suppression, the mount-then-subscribe ordering
+  invariant, and the registry dispatch shape. Reference companion to
+  "Extending Reactor with Native Controls", which walks through adding
+  a new one end-to-end.
+tier: comprehensive
+---
 
 Microsoft.UI.Reactor (Reactor) draws the visible part of a frame by handing
 each immutable element record off to a per-control-type plug-in called a
@@ -12,7 +27,7 @@ every control you add yourself dispatches through the same tight loop.
 Read this page before adding a new native control or before reaching for
 a debugger when an existing one mis-updates.
 
-# The V1 Handler Protocol
+# The Control Reconciler Protocol
 
 This page documents the data path between
 [`Reconciler.Reconcile`](reconciliation.md#reconcile--the-entry-point)
@@ -36,32 +51,7 @@ concrete element type has its own registration. (The one exception,
 [`RegisterHandlerForDerivedTypes`](#registration), exists for the
 T-erased templated-list family and is called out explicitly below.)
 
-```csharp
-public UIElement Mount(Element element, Action requestRerender, Reconciler reconciler)
-{
-    var typedEl = (TElement)element;
-    var ctx = new MountContext(reconciler, requestRerender);
-    var control = _handler.Mount(ctx, typedEl);
-
-    // Anchor element identity on the control via the attached state DP so
-    // event trampolines can re-fetch the live element on each fire.
-    if (control is FrameworkElement fe)
-        Reconciler.SetElementTag(fe, typedEl);
-
-    // Strategy dispatch — only when the handler declares a non-None Children strategy.
-    var strategy = _handler.Children;
-    if (strategy is not null)
-        DispatchChildrenMount(strategy, ctx, typedEl, control);
-
-    // Post-children mount hook. Fires after every child has mounted
-    // (whether via the strategy switch above or an items-binder strategy
-    // the handler dispatched inline before returning). Lets handlers
-    // subscribe events that must wire after children-add. Default no-op
-    // for handlers that don't override it.
-    _handler.AfterChildrenMount(ctx, typedEl, control);
-
-    return control;
-}
+```csharp snippet="source:src/Reactor/Core/V1Protocol/V1HandlerAdapter.cs#adapter-mount"
 ```
 
 The adapter shown above is the engine-side bridge between the typed
@@ -84,53 +74,7 @@ authors.
 
 ## The handler contract
 
-```csharp
-[Experimental("REACTOR_V1_PREVIEW")]
-public interface IElementHandler<TElement, TControl>
-    where TElement : Element
-    where TControl : UIElement
-{
-    /// <summary>Create or rent the WinUI control, apply initial writes,
-    /// and subscribe event trampolines. Returns the control the engine
-    /// places into the parent's children collection.</summary>
-    TControl Mount(MountContext ctx, TElement element);
-
-    /// <summary>Diff <paramref name="oldEl"/> vs <paramref name="newEl"/>
-    /// and apply minimal writes to <paramref name="control"/>. Returns void:
-    /// the control identity is preserved (§13 Q12).</summary>
-    void Update(UpdateContext ctx, TElement oldEl, TElement newEl, TControl control);
-
-    /// <summary>Optional override for handlers with explicit teardown
-    /// (e.g. control-side IDisposable resources). Default no-op — the
-    /// engine still runs the pool reset contract.</summary>
-    void Unmount(UnmountContext ctx, TControl control) { }
-
-    /// <summary>Optional override for handlers that want to drive child
-    /// reconciliation manually instead of through
-    /// <see cref="Children"/>. Phase 1 strategy dispatch routes through
-    /// <see cref="Children"/>; this overload is retained for parity with
-    /// the spec §4 surface and Phase 3 use.</summary>
-    void ReconcileChildren(MountContext ctx, TElement oldEl, TElement newEl, TControl control) { }
-
-    /// <summary>Optional children strategy. Engine dispatches through it
-    /// when non-null (and not <see cref="None{TElement,TControl}"/>);
-    /// otherwise the handler is a leaf for the purposes of child
-    /// reconciliation.</summary>
-    ChildrenStrategy<TElement, TControl>? Children => null;
-
-    /// <summary>Spec 047 §14 Phase 3 prelude (Engine A1) — optional hook the
-    /// engine invokes from <see cref="V1HandlerAdapter{TElement,TControl}"/>
-    /// after the <see cref="Children"/> strategy has mounted/bound every child
-    /// (and after any items-binder strategy the handler dispatched inline).
-    /// Default no-op.
-    ///
-    /// <para>Override this to wire events whose subscription must happen
-    /// strictly after children-add — e.g. <c>TabView.SelectionChanged</c>,
-    /// which WinUI fires spuriously while the first tab is being added if the
-    /// handler subscribes during the prop-apply phase. Subscribing here side-
-    /// steps that first-add echo.</para></summary>
-    void AfterChildrenMount(MountContext ctx, TElement element, TControl control) { }
-}
+```csharp snippet="source:src/Reactor/Core/V1Protocol/IElementHandler.cs#handler-contract"
 ```
 
 `Mount` runs the first time the reconciler sees an element of this
@@ -157,15 +101,17 @@ the reconciler — handler bodies are free to touch control state
 without synchronization, and code that crosses threads is the
 author's responsibility (and a debug-build assert).
 
-> **Caveat:** `Mount` is called exactly once per realized control, but the same
-> control may be passed back to a different handler instance through the
-> pool. If you stash per-control state in a field on the handler
-> instance, it survives pool rent — and that is almost certainly a bug.
-> Per-control state lives on the **control**, either as an attached
-> state DP or as the typed event payload box
-> ([`Reconciler.GetOrCreateControlEventPayload`](#echo-suppression-and-write-suppressed)),
-> both of which the pool reset contract clears. The handler instance is
-> a stateless interpreter.
+<!-- ai:caveat -->
+`Mount` is called exactly once per realized control, but the same
+control may be passed back to a different handler instance through the
+pool. If you stash per-control state in a field on the handler
+instance, it survives pool rent — and that is almost certainly a bug.
+Per-control state lives on the **control**, either as an attached
+state DP or as the typed event payload box
+([`Reconciler.GetOrCreateControlEventPayload`](#echo-suppression-and-write-suppressed)),
+both of which the pool reset contract clears. The handler instance is
+a stateless interpreter.
+<!-- /ai:caveat -->
 
 ## Contexts and bindings
 
@@ -173,67 +119,7 @@ The reconciler passes three contexts into a handler, one per lifecycle
 phase. Each is a `readonly ref struct`, so the context cannot escape
 the call stack, cannot be captured by a closure, and does not allocate.
 
-```csharp
-[Experimental("REACTOR_V1_PREVIEW")]
-public readonly ref struct MountContext
-{
-    private readonly Reconciler _reconciler;
-    private readonly Action _requestRerender;
-
-    internal MountContext(Reconciler reconciler, Action requestRerender)
-    {
-        _reconciler = reconciler;
-        _requestRerender = requestRerender;
-    }
-
-    /// <summary>The rerender callback for the owning component subtree.</summary>
-    public Action RequestRerender => _requestRerender;
-
-    /// <summary>The owning reconciler. Provided as an escape hatch for handlers
-    /// that need to forward a child mount through some non-strategy path.</summary>
-    public Reconciler Reconciler => _reconciler;
-
-    /// <summary>Mount a child element through the reconciler. The returned
-    /// <see cref="UIElement"/> is whatever the reconciler decided to mount
-    /// (possibly null for <c>EmptyElement</c>).</summary>
-    public UIElement? MountChild(Element child) => _reconciler.Mount(child, _requestRerender);
-
-    /// <summary>Apply a setter array to the control. Equivalent to the public
-    /// <see cref="Reconciler.ApplySetters{T}(Action{T}[], T)"/> helper; provided
-    /// on the context for symmetry with handler-authored mount bodies.</summary>
-    public void ApplySetters<T>(Action<T>[] setters, T control) where T : class
-        => Reconciler.ApplySetters(setters, control);
-
-    /// <summary>Construct a per-binding event helper for the given control + element.
-    /// The returned binding closes over the control identity, not the element
-    /// — handlers re-fetch the live element via <c>ReactorState.Element</c> on
-    /// each event fire, so the same binding survives element re-renders.</summary>
-    public ReactorBinding<TElement> BindFor<TElement>(FrameworkElement control, TElement element)
-        where TElement : Element
-        => new ReactorBinding<TElement>(_reconciler, control, element);
-
-    /// <summary>Rent a control instance from the per-type pool, or allocate
-    /// a fresh one if the pool is empty / the policy opts out.</summary>
-    public T RentControl<T>(PoolPolicy<T>? policy = null, Func<T>? factory = null) where T : class, new()
-        => _reconciler.RentControl(policy, factory);
-
-    /// <summary>Push a typed context value for the duration of the returned
-    /// <see cref="IDisposable"/>. Used by handlers that mount children which
-    /// must see an author-supplied context.</summary>
-    public IDisposable PushContext<T>(Context<T> context, T value) => _reconciler.PushContextDisposable(context, value);
-
-    /// <summary>Push a stagger scope; children mounted inside the scope
-    /// consume stagger indices for their enter transitions.</summary>
-    public IDisposable PushStaggerScope(TimeSpan delay) => _reconciler.PushStaggerScopeDisposable(delay);
-
-    /// <summary>Escape hatch (Q11) — attach a raw routed handler directly to
-    /// the control. Handlers should prefer the typed <c>On*</c> family on
-    /// <see cref="ReactorBinding{TElement}"/>; use this only for events the
-    /// binding doesn't cover (e.g. <c>UIElement.PreviewKeyDown</c> on a
-    /// non-FrameworkElement, or app-side custom routed events).</summary>
-    public void AddRawRoutedHandler(UIElement target, RoutedEvent re, Delegate h, bool handledEventsToo)
-        => target.AddHandler(re, h, handledEventsToo);
-}
+```csharp snippet="source:src/Reactor/Core/V1Protocol/MountContext.cs#mount-context"
 ```
 
 `MountContext.RentControl<T>()` is how a handler obtains its WinUI
@@ -274,43 +160,7 @@ value. The descriptor interpreter (and every hand-coded handler that
 follows the same shape) sequences the work in two passes so the race
 cannot happen:
 
-```csharp
-public TControl Mount(MountContext ctx, TElement el)
-{
-    var ctrl = ctx.RentControl(_descriptor.PoolPolicy, _descriptor.Factory);
-
-    // §14 Phase 3-final: when the descriptor declares an ItemsHost,
-    // populate the items collection BEFORE the prop loop. Initial writes
-    // for selection-tracking props (SelectedIndex/SelectedItem) need the
-    // collection populated first — WinUI silently clamps selection
-    // against an empty collection.
-    if (_descriptor.Children is ItemsHost<TElement, TControl> ih)
-        DispatchItemsHostMount(in ctx, el, ctrl, ih);
-    // §14 Phase 3 finish — consolidated dispatch arm: every items-
-    // binder variant uses the same "bind before prop loop" ordering so
-    // SelectedIndex initial writes land against a populated list.
-    else if (_descriptor.Children is IItemsBinderStrategy binder && ctrl is FrameworkElement feBinder)
-        binder.Bind(feBinder, oldElement: null, el, ctx.Reconciler, ctx.RequestRerender, isMount: true);
-
-    // Phase 1: all bare initial writes (no echo possible — subscriptions
-    // not yet live). §14 Phase 3-final: dispatch through the
-    // context-carrying overload so OneWayBridged entries can reach the
-    // reconciler/rerender helpers; existing entries forward to the
-    // parameterless overload via the virtual default on PropEntry.
-    var props = _descriptor.Properties;
-    for (int i = 0; i < props.Count; i++)
-        props[i].Mount(in ctx, ctrl, el);
-
-    // Phase 2: subscribe controlled entries.
-    var binding = ctx.BindFor(ctrl, el);
-    for (int i = 0; i < props.Count; i++)
-        props[i].EnsureSubscribed(binding, ctrl, el);
-
-    var getSetters = _descriptor.GetSetters;
-    if (getSetters is not null)
-        ctx.ApplySetters(getSetters(el), ctrl);
-    return ctrl;
-}
+```csharp snippet="source:src/Reactor/Core/V1Protocol/Descriptor/DescriptorHandler.cs#descriptor-mount"
 ```
 
 The first loop runs the bare initial writes for every entry. The
@@ -338,95 +188,7 @@ get dispatched. The strategy is a sealed record subclass; the
 adapter's switch over the strategy types runs after `Mount` / `Update`
 return, so the handler body itself never has to walk children.
 
-```csharp
-[Experimental("REACTOR_V1_PREVIEW")]
-public abstract record ChildrenStrategy<TElement, TControl>
-    where TElement : Element
-    where TControl : UIElement;
-
-/// <summary>Leaf — no children. Engine performs no dispatch beyond the
-/// handler's Mount/Update body.</summary>
-[Experimental("REACTOR_V1_PREVIEW")]
-public sealed record None<TElement, TControl>() : ChildrenStrategy<TElement, TControl>
-    where TElement : Element
-    where TControl : UIElement;
-
-/// <summary>Single-content host (Border, ContentControl, Viewbox). The
-/// engine mounts <paramref name="GetChild"/>'s result and assigns it via
-/// <paramref name="SetChild"/>.
-///
-/// <para><b>Structural reconcile:</b> set <see cref="GetCurrentChild"/> so
-/// the engine can read the existing slot value during <c>Update</c> and
-/// route through <c>Reconciler.ReconcileV1Child</c> — that preserves
-/// descendant component state across parent re-renders. When left null,
-/// the engine remounts the child on every update (only safe for slots that
-/// are reset every render anyway). All built-in handlers set it.</para></summary>
-[Experimental("REACTOR_V1_PREVIEW")]
-public sealed record SingleContent<TElement, TControl>(
-    Func<TElement, Element?> GetChild,
-    Action<TControl, UIElement?> SetChild) : ChildrenStrategy<TElement, TControl>
-    where TElement : Element
-    where TControl : UIElement
-{
-    /// <summary>Optional: read the current child from the control. Required
-    /// for structural child reconciliation; if null the engine falls back to
-    /// remounting the child every Update.</summary>
-    public Func<TControl, UIElement?>? GetCurrentChild { get; init; }
-}
-
-/// <summary>Panel host (StackPanel, Grid, Canvas). Engine mounts each
-/// child and appends to the panel's <see cref="UIElementCollection"/>.
-///
-/// <para><b>Phase 1 limitation:</b> the dispatch is append-only; structural
-/// diff against the previous render goes through the host's child
-/// collection wholesale. Spec-042 keyed-reconcile integration is a
-/// Phase 3 follow-up.</para>
-///
-/// <para><b>§14 Phase 3-final addition:</b>
-/// <see cref="PerChildAttached"/> — optional callback invoked after each
-/// child mount AND after each child Update. Receives the mounted
-/// <see cref="UIElement"/> alongside the child element so the descriptor
-/// can write WinUI attached DPs (e.g. <c>Grid.SetRow</c>,
-/// <c>Canvas.SetLeft</c>) based on attached-prop hints carried on the
-/// child element. No-op by default.</para>
-///
-/// <para><b>§14 Phase 3 close-out addition:</b>
-/// <see cref="PerChildAttachedAfterAll"/> — optional two-pass callback
-/// invoked once after every child has been mounted (Mount path) or
-/// reconciled (Update path). Receives the full <c>(UIElement, Element)</c>
-/// pair list in collection order so the descriptor can apply attached
-/// DPs that reference OTHER children by name (e.g.
-/// <c>RelativePanel.SetRightOf(b, a)</c>). Distinct from
-/// <see cref="PerChildAttached"/>, which fires per-child mid-pass and
-/// cannot see siblings that haven't mounted yet. Most descriptors set
-/// only one of the two; <c>RelativePanel</c> is the canonical consumer
-/// of the after-all shape.</para>
-/// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
-public sealed record Panel<TElement, TControl>(
-    Func<TElement, IReadOnlyList<Element>> GetChildren,
-    Func<TControl, UIElementCollection> GetCollection) : ChildrenStrategy<TElement, TControl>
-    where TElement : Element
-    where TControl : UIElement
-{
-    /// <summary>Optional per-child attached-prop writer. Called by the
-    /// engine after each child is mounted (Mount path) AND after each child
-    /// is reconciled (Update path). The descriptor reads attached-prop
-    /// hints off the child element (via <c>Element.GetAttached&lt;T&gt;()</c>
-    /// or similar) and writes the corresponding WinUI attached DPs onto
-    /// the mounted <see cref="UIElement"/>. Defaults to <c>null</c> for
-    /// containers that don't carry per-child attached props
-    /// (e.g. <c>StackPanel</c>).</summary>
-    public Action<TControl, UIElement, Element>? PerChildAttached { get; init; }
-
-    /// <summary>Optional two-pass callback fired once after every child has
-    /// been mounted/reconciled, receiving the full ordered list of
-    /// <c>(UIElement, Element)</c> pairs. Use for attached DPs that
-    /// reference siblings by name — e.g. <c>RelativePanel.SetRightOf</c>.
-    /// Defaults to <c>null</c>; only RelativePanel-shaped descriptors set
-    /// it.</summary>
-    public Action<TControl, IReadOnlyList<(UIElement Mounted, Element ChildElement)>>? PerChildAttachedAfterAll { get; init; }
-}
+```csharp snippet="source:src/Reactor/Core/V1Protocol/ChildrenStrategy.cs#children-strategies"
 ```
 
 | Strategy | Shape | Used by |
@@ -534,34 +296,7 @@ hand-coded handler and a descriptor — the dispatch shell is identical,
 and any cost difference is the interpreter's iteration over a small
 list of entries.
 
-```csharp
-// A descriptor declares property bindings against the WinUI control the
-// element targets. The framework's DescriptorHandler interprets the entries
-// during Mount and Update — there is no per-element interpreter overhead
-// beyond a dictionary lookup and the entry-loop iteration.
-public static class LedIndicatorDescriptor
-{
-    public static readonly ControlDescriptor<LedIndicatorElement, WinUI.Border> Descriptor =
-        new ControlDescriptor<LedIndicatorElement, WinUI.Border>
-        {
-            // The descriptor's children strategy says "no children" — this is
-            // a leaf control. See ChildrenStrategy survey in the prose.
-            Children = new None<LedIndicatorElement, WinUI.Border>(),
-        }
-        // OneWay: write on Mount, diff-and-write on Update. Equality skips
-        // the write when the element value didn't change.
-        .OneWay(
-            get: static e => e.Size,
-            set: static (c, v) => { c.Width = v; c.Height = v; c.CornerRadius = new Microsoft.UI.Xaml.CornerRadius(v / 2); })
-        // The IsOn → Background mapping coerces both inputs onto one WinUI
-        // property. A single OneWay entry observes (Color, IsOn) jointly
-        // by reading both off the element in the get/set lambdas.
-        .OneWay(
-            get: static e => (e.Color, e.IsOn),
-            set: static (c, v) =>
-                c.Background = new SolidColorBrush(
-                    v.IsOn ? v.Color : Color.FromArgb(0x40, v.Color.R, v.Color.G, v.Color.B)));
-}
+```csharp snippet="v1-protocol/descriptor"
 ```
 
 The descriptor above declares a single one-way mapping from
@@ -571,7 +306,7 @@ complete extension: every `LedIndicatorElement` the app renders
 flows through this descriptor, including pool rent, prop diff, and
 unmount.
 
-![Four LED indicators rendered by a Reactor app using the custom LedIndicatorElement descriptor](images/v1-protocol/led-indicator.png)
+![Four LED indicators rendered by a Reactor app using the custom LedIndicatorElement descriptor](screenshot://v1-protocol/led-indicator)
 
 ### `PropEntry` shapes — the prop-binding vocabulary
 
@@ -606,20 +341,7 @@ Handlers are registered with a Reactor host's reconciler before the
 first render. The standard call is `Reconciler.RegisterHandler<TElement,
 TControl>(handler)`:
 
-```csharp
-// Registration is one call per Reactor host. RegisterDescriptor wraps
-// RegisterHandler<...>(new DescriptorHandler<...>(descriptor)) — both shapes
-// land on the same dispatch table. Duplicate registrations for the same
-// element type throw.
-public sealed class LedIndicatorRegistration
-{
-    public static void Register(Reconciler reconciler)
-    {
-        reconciler.RegisterHandler<LedIndicatorElement, WinUI.Border>(
-            new DescriptorHandler<LedIndicatorElement, WinUI.Border>(
-                LedIndicatorDescriptor.Descriptor));
-    }
-}
+```csharp snippet="v1-protocol/registration"
 ```
 
 There are two variants worth knowing about:

@@ -11,7 +11,7 @@ that flow. By the end you will have added a `StarMeter` element to a
 Reactor app, wired it to WinUI's `RatingControl`, and matched the
 built-in performance bar without writing a line of imperative
 interpreter code. Read the reference companion
-[The V1 Handler Protocol](v1-protocol.md) for the model the steps here
+[The Control Reconciler Protocol](control-reconciler-protocol.md) for the model the steps here
 plug into.
 
 # Extending Reactor with Native Controls
@@ -100,9 +100,9 @@ shape; keeping the demo focused, the cookbook below omits it.
 ## Step 2 — Choose a shape (descriptor vs hand-coded)
 
 Reactor's handler protocol has two surfaces — declarative
-([`ControlDescriptor`](v1-protocol.md#descriptors--declarative-handlers))
+([`ControlDescriptor`](control-reconciler-protocol.md#descriptors--declarative-handlers))
 and imperative
-([`IElementHandler`](v1-protocol.md#the-handler-contract)) — that
+([`IElementHandler`](control-reconciler-protocol.md#the-handler-contract)) — that
 land on the same dispatch table. New controls should default to a
 descriptor; reach for a hand-coded handler only when the descriptor
 escape hatches (`.Imperative`, `.HandCoded…`) still cannot express
@@ -164,7 +164,7 @@ public static class StarMeterDescriptor
 ```
 
 Each fluent builder call adds one
-[`PropEntry`](v1-protocol.md#propentry-shapes--the-prop-binding-vocabulary)
+[`PropEntry`](control-reconciler-protocol.md#propentry-shapes--the-prop-binding-vocabulary)
 to the descriptor. The interpreter iterates them in declaration order
 during Mount and Update. The descriptor above uses three of the
 common shapes:
@@ -232,7 +232,7 @@ short-circuit for `IsDisabledFocusable` and the
 
 `StarMeterElement` is a leaf, so the descriptor declares
 `Children = new None<…>()`. The dispatch surface is the same as the
-[ChildrenStrategy survey](v1-protocol.md#children-strategies); the
+[ChildrenStrategy survey](control-reconciler-protocol.md#children-strategies); the
 right strategy is whichever matches your WinUI control's structural
 contract:
 
@@ -335,7 +335,7 @@ opt-ins.
 exposes `(Color, IsOn) → Background` is one entry, not two — the
 `get` returns a tuple and the `set` reads both fields. The diff fires
 exactly when either input changes. This is how the LED indicator in
-[the V1 Protocol reference](v1-protocol.md#descriptors--declarative-handlers)
+[the Control Reconciler Protocol reference](control-reconciler-protocol.md#descriptors--declarative-handlers)
 collapses two element fields into one WinUI write.
 
 **Layer in a Reactor-friendly default for an awkward control.** Many
@@ -428,14 +428,14 @@ floating-point tolerance, deliberately imperative entry — capture
 the reason in a comment on the descriptor field, not on the calling
 component. The descriptor is where future maintainers will look.
 
-**Read the V1 Protocol reference once end-to-end.** Steps 1 through 6
-above are the recipe; [the protocol page](v1-protocol.md) is the
+**Read the Control Reconciler Protocol reference once end-to-end.** Steps 1 through 6
+above are the recipe; [the protocol page](control-reconciler-protocol.md) is the
 specification it implements. The two pages together are the complete
 contract — bookmark both.
 
 ## Next Steps
 
-- [The V1 Handler Protocol](v1-protocol.md) — the model the steps on this page plug into.
+- [The Control Reconciler Protocol](control-reconciler-protocol.md) — the model the steps on this page plug into.
 - [Reconciliation](reconciliation.md) — what happens before the registered handler is invoked, and how Mount vs Update vs Unmount get chosen.
 - [Element Pool](element-pool.md) — what `RentControl` actually does, and how the per-type pool keeps `Mount` allocation-free.
 - [Modifier System](modifier-system.md) — how the `Setters` chain a descriptor applies after its own prop loop works.

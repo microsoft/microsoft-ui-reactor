@@ -90,6 +90,8 @@ InfoBadge(int value) → InfoBadgeElement
 InfoBar(string title = null, string message = null) → InfoBarElement
 InterspersedGrid(Orientation orientation, Element[] items, double[] proportions, double separatorSize, Func<int, Element> separatorFactory) → GridElement
 ItemContainer(Element child) → ItemContainerElement
+ItemsRepeater<T>(IReadOnlyList<T> items, Func<T, int, Element> viewBuilder) → ItemsRepeaterElement<T>
+ItemsRepeater<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → ItemsRepeaterElement<T>
 ItemsView<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → ItemsViewElement<T>
 LazyHStack<T>(IReadOnlyList<T> items, Func<T, int, Element> viewBuilder) → LazyHStackElement<T>
 LazyHStack<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → LazyHStackElement<T>
@@ -918,6 +920,7 @@ KeyedListDiagnosticKind { NullKey, DuplicateKey }
 ItemsViewLayoutKind { StackLayout, LinedFlowLayout, UniformGridLayout }
 PersistedScope { Window, Application }
 TemplatedControlKind { ListView, GridView, FlipView }
+V1UnmountDisposition { CollectSelf, ContinueDefaultTraversal, SkipPool }
 BlockStatus { Loading, Loaded, Failed }
 DataSourceCapabilities { None, ServerSort, ServerFilter, ServerSearch, ServerCount, ServerSelect, Mutate, Refresh }
 FilterOperator { Equals, NotEquals, Contains, StartsWith, EndsWith, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Between, In, IsNull, IsNotNull }
