@@ -85,7 +85,7 @@ dotnet run
 
 `bootstrap.ps1` packs `mur` as a `dotnet tool` global install (cross-shell PATH, no per-arch `$env:Path` edits), packs the framework + project templates into `local-nupkgs/`, registers the `dotnet new reactorapp` template, and installs the Reactor agent plugin under `~/.claude/plugins/reactor`. Re-run it (or `mur upgrade` for a lighter refresh) after `git pull`. Verify a working install with `mur doctor`.
 
-Prefer to wire it up by hand? **[docs/guide/getting-started.md](docs/guide/getting-started.md#manual-setup)** has a no-magic walkthrough of the exact `dotnet pack` / `dotnet tool install` / `dotnet new install` calls `bootstrap.ps1` makes, plus the full hello-world → todo → calculator tour.
+Prefer to wire it up by hand? **[Getting Started](https://microsoft.github.io/microsoft-ui-reactor/getting-started/#manual-setup)** has a no-magic walkthrough of the exact `dotnet pack` / `dotnet tool install` / `dotnet new install` calls `bootstrap.ps1` makes, plus the full hello-world → todo → calculator tour.
 
 ---
 
@@ -126,7 +126,7 @@ Reactor spans a core framework and a set of higher-level features. Each area bel
 
 The core framework has been through 13 days of continuous reconciler iteration, a competitive review against React, SwiftUI, and Compose, and a 275-finding code review. It targets the basics every WinUI developer cares about:
 
-- **Performance.** Element pooling, render coalescing, skip-unchanged optimization, native interop that bypasses CsWinRT overhead on hot paths.
+- **Performance.** Element pooling, render coalescing, skip-unchanged optimization. Keyed lists reconcile with a longest-increasing-subsequence diff so reordering moves the fewest possible controls, virtualized lists recycle realized containers instead of rebuilding them on every scroll, and a dedicated allocation-reduction pass trimmed per-render modifier and hook churn.
 - **Stability.** Built as a system component: high reliability bar, structured logging, stress testing.
 - **Developer experience.** Full IntelliSense, refactoring, and compile-time type safety — no XAML string-typing, no binding errors at runtime.
 - **Localization.** ICU message format with pluralization, CLI extraction, and AI-assisted translation.
@@ -245,7 +245,7 @@ dotnet run --project samples/apps/wordpuzzle
 
 | Doc | Description |
 |-----|-------------|
-| [Guide](docs/guide/) | Documentation on how to use Reactor |
+| [Guide](https://microsoft.github.io/microsoft-ui-reactor/) | Documentation on how to use Reactor |
 | [Design Specs](docs/specs/) | Numbered specs covering theming, navigation, animation, data, accessibility |
 | [AOT support matrix](docs/aot-support.md) | Which subsystems work under `PublishAot=true` and which throw at runtime |
 | [Contributing](CONTRIBUTING.md) | Build, test, add features, code style |
