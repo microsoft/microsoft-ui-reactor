@@ -1,0 +1,11 @@
+{
+  "id": "card-surface",
+  "category": "layout",
+  "title": "Card Surface",
+  "intent": "theme-aware card surface with title, body copy, and an action button",
+  "tags": ["card", "theme", "surface", "win11", "design"],
+  "factoryAnchors": ["Card", "Border"],
+  "notesKey": "Card",
+  "relatedIds": ["border-with-corner"],
+  "priority": "P0"
+}

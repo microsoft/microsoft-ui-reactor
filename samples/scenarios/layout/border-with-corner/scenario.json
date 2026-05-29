@@ -1,0 +1,11 @@
+{
+  "id": "border-with-corner",
+  "category": "layout",
+  "title": "Border With Corner Radius",
+  "intent": "bordered content area with padding, rounded corners, and theme-aware surface colors",
+  "tags": ["border", "padding", "corner-radius", "themed"],
+  "factoryAnchors": ["Border"],
+  "notesKey": "Border",
+  "relatedIds": ["card-surface"],
+  "priority": "P0"
+}

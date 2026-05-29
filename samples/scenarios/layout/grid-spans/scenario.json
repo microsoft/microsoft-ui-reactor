@@ -1,0 +1,11 @@
+{
+  "id": "grid-spans",
+  "category": "layout",
+  "title": "Grid With Spans",
+  "intent": "dashboard-style grid that uses both row spans and column spans",
+  "tags": ["grid", "span", "columnspan", "rowspan", "dashboard"],
+  "factoryAnchors": ["Grid"],
+  "notesKey": "Grid",
+  "relatedIds": ["grid-basic"],
+  "priority": "P0"
+}

@@ -1,0 +1,11 @@
+{
+  "id": "flexcolumn-with-justify",
+  "category": "layout",
+  "title": "Flex Column With Justify",
+  "intent": "full-height column with aligned items spaced across the available height",
+  "tags": ["flex", "flexcolumn", "justify", "align", "page-layout"],
+  "factoryAnchors": ["FlexColumn"],
+  "notesKey": "FlexColumn",
+  "relatedIds": ["flexrow-with-grow"],
+  "priority": "P0"
+}

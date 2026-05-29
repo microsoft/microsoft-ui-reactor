@@ -1,0 +1,11 @@
+{
+  "id": "canvas-positioning",
+  "category": "layout",
+  "title": "Canvas Positioning",
+  "intent": "absolute layout with positioned elements, connector lines, and centered shapes",
+  "tags": ["canvas", "absolute", "position", "shapes"],
+  "factoryAnchors": ["Canvas"],
+  "notesKey": "Canvas",
+  "relatedIds": [],
+  "priority": "P0"
+}

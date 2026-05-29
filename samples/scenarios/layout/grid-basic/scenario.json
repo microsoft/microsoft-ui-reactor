@@ -1,0 +1,11 @@
+{
+  "id": "grid-basic",
+  "category": "layout",
+  "title": "Basic Grid Layout",
+  "intent": "two-column grid using auto and star tracks with explicit child placement",
+  "tags": ["grid", "columns", "rows", "sizing", "placement"],
+  "factoryAnchors": ["Grid"],
+  "notesKey": "Grid",
+  "relatedIds": ["grid-spans"],
+  "priority": "P0"
+}

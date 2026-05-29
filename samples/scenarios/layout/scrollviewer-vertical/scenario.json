@@ -1,0 +1,11 @@
+{
+  "id": "scrollviewer-vertical",
+  "category": "layout",
+  "title": "Vertical ScrollView",
+  "intent": "scrollable region that wraps a long vertical stack of content cards",
+  "tags": ["scroll", "scrollview", "vertical", "overflow"],
+  "factoryAnchors": ["ScrollView", "VStack"],
+  "notesKey": "ScrollView",
+  "relatedIds": ["vstack-basic"],
+  "priority": "P0"
+}

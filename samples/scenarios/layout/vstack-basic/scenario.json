@@ -1,0 +1,11 @@
+{
+  "id": "vstack-basic",
+  "category": "layout",
+  "title": "Vertical Stack Basics",
+  "intent": "vertical shrink-wrap stack with consistent spacing between actions",
+  "tags": ["vstack", "vertical", "stack", "spacing"],
+  "factoryAnchors": ["VStack", "TextBlock", "Button"],
+  "notesKey": "VStack",
+  "relatedIds": ["hstack-basic"],
+  "priority": "P0"
+}

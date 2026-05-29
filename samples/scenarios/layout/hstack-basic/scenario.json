@@ -1,0 +1,11 @@
+{
+  "id": "hstack-basic",
+  "category": "layout",
+  "title": "Horizontal Stack Basics",
+  "intent": "horizontal stack for a label, input, and action button",
+  "tags": ["hstack", "horizontal", "stack", "spacing"],
+  "factoryAnchors": ["HStack", "TextBlock", "Button"],
+  "notesKey": "HStack",
+  "relatedIds": ["vstack-basic"],
+  "priority": "P0"
+}

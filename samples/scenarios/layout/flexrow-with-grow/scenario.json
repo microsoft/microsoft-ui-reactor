@@ -1,0 +1,11 @@
+{
+  "id": "flexrow-with-grow",
+  "category": "layout",
+  "title": "Flex Row With Grow",
+  "intent": "toolbar layout with a growing spacer that pushes actions to the end",
+  "tags": ["flex", "flexrow", "grow", "toolbar", "spacer"],
+  "factoryAnchors": ["FlexRow"],
+  "notesKey": "FlexRow",
+  "relatedIds": ["flexcolumn-with-justify"],
+  "priority": "P0"
+}
