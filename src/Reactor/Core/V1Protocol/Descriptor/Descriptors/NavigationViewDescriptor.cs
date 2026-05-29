@@ -175,15 +175,13 @@ internal static class NavigationViewDescriptor
         }
 
         var reusable = new global::System.Collections.Generic.Dictionary<string, WinUI.NavigationViewItem>();
-        foreach (var item in live)
-            if (item is WinUI.NavigationViewItem nvi && nvi.Tag is string tag)
-                reusable[tag] = nvi;
+        foreach (var nvi in live.OfType<WinUI.NavigationViewItem>().Where(x => x.Tag is string))
+            reusable[(string)nvi.Tag] = nvi;
 
         var oldByTag = new global::System.Collections.Generic.Dictionary<string, NavigationViewItemData>();
         if (oldData is not null)
-            foreach (var d in oldData)
-                if (!d.IsHeader)
-                    oldByTag[d.Tag ?? d.Content] = d;
+            foreach (var d in oldData.Where(d => !d.IsHeader))
+                oldByTag[d.Tag ?? d.Content] = d;
 
         live.Clear();
         foreach (var data in newData)
@@ -194,8 +192,10 @@ internal static class NavigationViewDescriptor
                 continue;
             }
 
+            // Consume the reuse entry so duplicate sibling keys fall through to a
+            // fresh container rather than adding the same WinUI item to live twice.
             var key = data.Tag ?? data.Content;
-            if (reusable.TryGetValue(key, out var nvi))
+            if (reusable.Remove(key, out var nvi))
                 UpdateNavItemInPlace(nvi, oldByTag.GetValueOrDefault(key), data);
             else
                 nvi = CreateNavItem(data);
