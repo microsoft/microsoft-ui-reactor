@@ -1894,7 +1894,7 @@ public sealed partial class Reconciler
         }
     }
 
-    private UIElement? UpdateTabView(TabViewElement o, TabViewElement n, WinUI.TabView tabView, Action requestRerender)
+    internal UIElement? UpdateTabView(TabViewElement o, TabViewElement n, WinUI.TabView tabView, Action requestRerender)
     {
         // In-place reconcile so that state changes on descendants don't tear the
         // TabView down (which would re-animate the tab bar in and steal focus

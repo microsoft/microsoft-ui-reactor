@@ -1507,7 +1507,7 @@ public sealed partial class Reconciler
         return titleBar;
     }
 
-    private WinUI.TabView MountTabView(TabViewElement tab, Action requestRerender)
+    internal WinUI.TabView MountTabView(TabViewElement tab, Action requestRerender)
     {
         var tv = new WinUI.TabView
         {

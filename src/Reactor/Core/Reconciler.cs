@@ -342,20 +342,22 @@ public sealed partial class Reconciler : IDisposable
     ///   <see cref="UnmountRecursive"/> (fires before the V1 unmount arm), so
     ///   unmount is byte-identical V1 ON ≡ V1 OFF.</item>
     ///
-    ///   <item><b>Deferred — descriptor with known docking gaps</b> (follow-up
-    ///   PR) — <c>TabViewDescriptor</c>. Bisect of full V1 ON flakes (1–4
-    ///   non-deterministic docking-text-find failures per run across
-    ///   DockHooks / PixDoc / RoleAware / Composition / FloatRoot fixtures,
-    ///   versus a clean V1 OFF baseline) ratifies the descriptor's documented
-    ///   gaps — missing spec 045 §2.4 drag pipeline trampolines, §2.2 pinnable
-    ///   tab headers (BuildTabHeader / BuildPinButton / in-place
-    ///   TryUpdatePinHeaderInPlace), in-place CanUpdate for tab content
-    ///   (preserves focus/state on re-renders), conditional SelectedIndex
-    ///   write, and TabStripHeader / TabStripFooter Element slots — are hot
-    ///   in the docking suite. Closing them requires engine work
-    ///   (post-children mount-hook so SelectionChanged subscribes after
-    ///   children-add, ImperativeBridged for the named tab strip slots)
-    ///   tracked alongside the overlays + NavigationHost in the follow-up.</item>
+    ///   <item><b>TabView — PORTED (§14 Phase 3 prelude)</b> —
+    ///   <c>TabViewElement</c> now routes through V1 via the Path B delegate
+    ///   <see cref="V1Protocol.Handlers.TabViewHandler"/>, which calls the
+    ///   COMPLETE legacy <c>MountTabView</c>/<c>UpdateTabView</c> bodies (spec
+    ///   045 §2.4 drag pipeline, §2.2 pinnable headers via BuildTabHeader /
+    ///   BuildPinButton / in-place TryUpdatePinHeaderInPlace, in-place tab
+    ///   content reconcile, conditional SelectedIndex, TabStripHeader /
+    ///   TabStripFooter slots). Distinct from the still-unregistered
+    ///   <c>TabViewDescriptor</c> + <c>TabItemsHost</c> port, which
+    ///   intentionally leaves those features on the legacy arm — the delegate
+    ///   runs the full feature set because it IS the legacy code. Mount/update
+    ///   are unchanged from the previously-carved V1-ON path (which already
+    ///   ran these bodies via the legacy switch); registering the handler only
+    ///   makes the unmount arm fire, which is byte-identical V1 ON ≡ V1 OFF
+    ///   (a <c>WinUI.TabView</c> is an <c>ItemsControl</c> that pools without
+    ///   child recursion in both paths).</item>
     ///   <item><b>Items host — PORTED (§14 Phase 3 prelude)</b> —
     ///   <c>GridViewElement</c> now routes through V1 via the hand-coded
     ///   <see cref="V1Protocol.Handlers.GridViewHandler"/> (Path B delegate),
@@ -390,6 +392,15 @@ public sealed partial class Reconciler : IDisposable
         RegisterDecoratorHandler<MenuFlyoutElement>(new V1Protocol.Handlers.MenuFlyoutHandler());
         RegisterDecoratorHandler<PopupElement>(new V1Protocol.Handlers.PopupHandler());
         RegisterDecoratorHandler<CommandBarFlyoutElement>(new V1Protocol.Handlers.CommandBarFlyoutHandler());
+
+        // TabView — delegate to the COMPLETE legacy MountTabView/UpdateTabView
+        // bodies (drag pipeline, pinnable headers, strip header/footer, in-place
+        // content reconcile). Distinct from the unregistered TabViewDescriptor,
+        // which leaves those features on the legacy arm. UpdateTabView returns
+        // null (in-place only), so the void-Update IElementHandler shape fits;
+        // unmount is byte-identical V1 ON ≡ V1 OFF (ItemsControl pools without
+        // child recursion in both paths).
+        RegisterHandler<TabViewElement, WinUI.TabView>(new V1Protocol.Handlers.TabViewHandler());
 
         // ── §14 Phase 3 base-derived (templated/lazy/items hosts) ────────
         // Each closed-T leaf routes through the same descriptor via the
@@ -474,23 +485,22 @@ public sealed partial class Reconciler : IDisposable
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.SplitViewDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.StackPanelDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.SwipeControlDescriptor.Descriptor);
-        // Spec 047 §14 Phase 3 completion — TabViewDescriptor stays carved.
-        // Bisect (3× clean V1 ON full selftest with this single line removed,
-        // matching V1 OFF's 4410-ok baseline; with it registered, 1–4 random
-        // docking-text-find checks fail per run across DockHooks / PixDoc /
-        // RoleAware / Composition / FloatRoot fixtures) proves the gap
-        // documented on TabViewDescriptor — missing spec 045 §2.4 drag
-        // pipeline (OnTabDragStarting / OnTabDragCompleted), §2.2 IsPinnable
-        // header rendering (BuildTabHeader + BuildPinButton + in-place
-        // TryUpdatePinHeaderInPlace on update), in-place CanUpdate for tab
+        // Spec 047 §14 — TabViewElement is ported via the Path B delegate
+        // TabViewHandler (registered above with the other prelude carve
+        // closures), NOT via TabViewDescriptor. The descriptor + TabItemsHost
+        // strategy stays unregistered: it intentionally leaves the spec 045
+        // §2.4 drag pipeline (OnTabDragStarting / OnTabDragCompleted), §2.2
+        // IsPinnable header rendering (BuildTabHeader + BuildPinButton +
+        // in-place TryUpdatePinHeaderInPlace), in-place CanUpdate for tab
         // content (preserves focus/state across re-renders), conditional
         // SelectedIndex write, and TabStripHeader / TabStripFooter Element
-        // slots — is hot in the docking suite. Closing those gaps requires
-        // engine work (post-children mount-hook so SelectionChanged subscribes
-        // after children-add, ImperativeBridged for the tab strip named
-        // slots) tracked as the follow-up that takes Phase 3 the rest of
-        // the way to "every element routes through V1." This PR registers
-        // every other Phase 3 descriptor safely.
+        // slots on the legacy arm — exactly the features that are hot in the
+        // docking suite. The delegate handler runs the COMPLETE legacy
+        // MountTabView/UpdateTabView bodies, so it has none of those gaps and
+        // is byte-identical V1 ON ≡ V1 OFF. Finishing the descriptor port
+        // (post-children mount-hook + ImperativeBridged tab strip slots) is a
+        // separable Phase 4 purity follow-up; it is NOT required for the flag
+        // flip because the delegate already routes TabView through V1.
         // RegisterDescriptor(V1Protocol.Descriptor.Descriptors.TabViewDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.TeachingTipDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.TextBlockDescriptor.Descriptor);
