@@ -3177,7 +3177,7 @@ public sealed partial class Reconciler
         return state;
     }
 
-    private UIElement MountLazyStack(LazyStackElementBase lazy, Action requestRerender)
+    internal UIElement MountLazyStack(LazyStackElementBase lazy, Action requestRerender)
     {
         var repeater = new WinUI.ItemsRepeater();
 

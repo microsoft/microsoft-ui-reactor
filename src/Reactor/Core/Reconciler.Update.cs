@@ -3203,7 +3203,7 @@ public sealed partial class Reconciler
         return state;
     }
 
-    private UIElement? UpdateLazyStack(LazyStackElementBase n, WinUI.ScrollViewer sv, Action requestRerender)
+    internal UIElement? UpdateLazyStack(LazyStackElementBase n, WinUI.ScrollViewer sv, Action requestRerender)
     {
         if (sv.Content is WinUI.ItemsRepeater repeater)
         {

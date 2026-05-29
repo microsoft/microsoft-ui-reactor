@@ -420,7 +420,7 @@ public sealed partial class Reconciler : IDisposable
         RegisterDescriptorForDerivedTypes(V1Protocol.Descriptor.Descriptors.TemplatedListViewDescriptor.Descriptor);
         RegisterDescriptorForDerivedTypes(V1Protocol.Descriptor.Descriptors.TemplatedGridViewDescriptor.Descriptor);
         RegisterDescriptorForDerivedTypes(V1Protocol.Descriptor.Descriptors.TemplatedFlipViewDescriptor.Descriptor);
-        RegisterDescriptorForDerivedTypes(V1Protocol.Descriptor.Descriptors.LazyStackDescriptor.Descriptor);
+        RegisterDecoratorHandlerForDerivedTypes<LazyStackElementBase>(new V1Protocol.Handlers.LazyStackHandler()); // §14: ScrollViewer-wrapped — see LazyStackHandler
         RegisterDescriptorForDerivedTypes(V1Protocol.Descriptor.Descriptors.ItemsRepeaterDescriptor.Descriptor);
         RegisterDescriptorForDerivedTypes(V1Protocol.Descriptor.Descriptors.ItemsViewDescriptor.Descriptor);
 
@@ -1047,6 +1047,28 @@ public sealed partial class Reconciler : IDisposable
         ArgumentNullException.ThrowIfNull(handler);
         EnsureRegistrableElementType(typeof(TElement), typeof(UIElement), "RegisterDecoratorHandler");
         _v1Handlers.Add(typeof(TElement), new V1Protocol.V1DecoratorHandlerAdapter<TElement>(handler));
+    }
+
+    /// <summary>
+    /// Spec 047 §14 Phase 3 prelude — register a decorator-style V1 handler
+    /// that catches every closed runtime type whose chain reaches
+    /// <typeparamref name="TBase"/> (the derived-type analogue of
+    /// <see cref="RegisterDecoratorHandler{TElement}"/>). Used by the
+    /// Lazy*Stack family, whose closed-T variants all derive from the
+    /// non-generic <c>LazyStackElementBase</c> and need the decorator
+    /// shape (control identity differs from the descriptor port — the
+    /// legacy mount wraps the ItemsRepeater in a ScrollViewer — and
+    /// <see cref="V1UnmountDisposition.ContinueDefaultTraversal"/> so the
+    /// engine recurses ScrollViewer → ItemsRepeater → realized rows on
+    /// unmount).
+    /// </summary>
+    [Experimental("REACTOR_V1_PREVIEW")]
+    internal void RegisterDecoratorHandlerForDerivedTypes<TBase>(V1Protocol.IDecoratorElementHandler<TBase> handler)
+        where TBase : Element
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        EnsureRegistrableElementType(typeof(TBase), typeof(UIElement), "RegisterDecoratorHandlerForDerivedTypes");
+        _v1Handlers.AddForDerivedTypes(typeof(TBase), new V1Protocol.V1DecoratorHandlerAdapter<TBase>(handler));
     }
 
     // ════════════════════════════════════════════════════════════════════
