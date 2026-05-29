@@ -288,6 +288,83 @@ internal static class TemplatedTreeViewFixtures
         }
     }
 
+    // ── 3e. Constrained-height expand must stick (virtualization race) ───────
+    // Tiny viewport + many children forces container recycling; reproduces the
+    // GUI "expand opens & closes immediately" report.
+    internal sealed class ConstrainedExpandSticks(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var kids = new Node[20];
+            for (int i = 0; i < kids.Length; i++) kids[i] = new Node($"k{i}", $"KID_{i}");
+
+            var host = H.CreateHost();
+            host.Mount(_ => (TreeView<Node>(
+                items: new[] { new Node("root", "ROOT", kids) },
+                childrenSelector: Children,
+                viewBuilder: n => Button(n.Label)) with
+            {
+                IsExpanded = _ => false, // root starts collapsed
+            }).Height(90));
+
+            await Harness.Render();
+            var tv = H.FindControl<TreeView>(_ => true);
+            H.Check("TTV_Constrained_Mounted", tv is not null && tv.RootNodes.Count == 1);
+            if (tv is null || tv.RootNodes.Count == 0)
+            {
+                H.Check("TTV_Constrained_StaysExpanded", false);
+                return;
+            }
+
+            var root = tv.RootNodes[0];
+            root.IsExpanded = true;
+            await Harness.Render();
+            await Harness.Render();
+            await Harness.Render();
+
+            H.Check("TTV_Constrained_StaysExpanded", root.IsExpanded);
+        }
+    }
+
+    // ── Legacy TreeView (TreeViewElement): reconcile must not clobber the
+    //    user's runtime expansion back to the static data value (the
+    //    "expand flashes open then shut" regression — repros on main).
+    internal sealed class LegacyExpansionNotClobbered(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            Action<int>? bump = null;
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (_, set) = ctx.UseState(0);
+                bump = set;
+                // Data default IsExpanded = false (collapsed).
+                return new TreeViewElement(new[]
+                {
+                    new TreeViewNodeData("root", new[] { new TreeViewNodeData("child") }),
+                });
+            });
+
+            await Harness.Render();
+            var tv = H.FindControl<TreeView>(_ => true);
+            H.Check("LegacyTV_Mounted", tv is not null && tv.RootNodes.Count == 1);
+            if (tv is null || tv.RootNodes.Count == 0)
+            {
+                H.Check("LegacyTV_StaysExpanded", false);
+                return;
+            }
+
+            var root = tv.RootNodes[0];
+            root.IsExpanded = true;   // user expands at runtime
+            bump?.Invoke(1);          // unrelated state change → reconcile (data unchanged)
+            await Harness.Render();
+
+            // Old code reset IsExpanded to the data value (false) → collapse.
+            H.Check("LegacyTV_StaysExpanded", root.IsExpanded);
+        }
+    }
+
     // ── 4. Value-type T (exercises the boxing Project path) ──────────────────
     internal sealed class ValueTypeItems(Harness h) : SelfTestFixtureBase(h)
     {

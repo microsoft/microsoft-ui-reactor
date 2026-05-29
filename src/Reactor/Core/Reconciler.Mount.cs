@@ -1990,9 +1990,12 @@ public sealed partial class Reconciler
             CanDragItems = tv.CanDragItems,
             AllowDrop = tv.AllowDrop,
             CanReorderItems = tv.CanReorderItems,
-            // Unbound shell; per-node views are hosted/released through the
-            // internal list's ContainerContentChanging (see Loaded below).
-            ItemTemplate = SharedContentControlTemplate.Value,
+            // Each node's mounted view lives in TreeViewNode.Content and is
+            // surfaced by the {Binding Content} ContentControl template — the
+            // node-mode default template can only stringify (issue #447). A
+            // declarative binding (rather than imperative ContainerContentChanging
+            // hosting) keeps native expand/collapse from being perturbed.
+            ItemTemplate = TreeViewContentElementTemplate.Value,
         };
 
         foreach (var root in tv.GetRoots())
@@ -2005,33 +2008,6 @@ public sealed partial class Reconciler
         if (tv.HasExpanding)
             treeView.Expanding += TemplatedTreeExpanding;
 
-        // The TreeViewList (internal ListView, template part "ListControl")
-        // owns container realization/recycling. Hook its ContainerContentChanging
-        // so a node's mounted view is hosted on realize and its visual parent
-        // released on recycle — the only way to keep a shared live element from
-        // blanking out across collapse/expand under virtualization.
-        treeView.Loaded += static (s, _) =>
-        {
-            var tree = (WinUI.TreeView)s;
-            if (FindInnerList(tree) is not { } list) return;
-            // Idempotent: method-group -= removes the prior subscription if the
-            // tree reloaded, so we never double-host.
-            list.ContainerContentChanging -= TemplatedTreeContainerContentChanging;
-            list.ContainerContentChanging += TemplatedTreeContainerContentChanging;
-
-            // Fill containers already realized before we subscribed.
-            for (int i = 0; i < list.Items.Count; i++)
-                if (list.ContainerFromIndex(i) is WinUI.TreeViewItem tvi
-                    && tvi.ContentTemplateRoot is ContentControl cc
-                    && cc.Content is null
-                    && list.Items[i] is WinUI.TreeViewNode node
-                    && GetTreeNodeView(node) is UIElement view)
-                {
-                    DetachContentHost(view);
-                    cc.Content = view;
-                }
-        };
-
         ApplySetters(tv.SettersErased, treeView);
         return treeView;
     }
@@ -2039,67 +2015,17 @@ public sealed partial class Reconciler
     private WinUI.TreeViewNode BuildTemplatedTreeNode(
         TemplatedTreeViewElementBase tv, object item, Action requestRerender)
     {
-        // Content holds the data item (identity/stringification); the mounted
-        // view rides on an attached property and is hosted on demand by the
-        // ContainerContentChanging handler.
-        var node = new WinUI.TreeViewNode { IsExpanded = tv.GetIsExpanded(item), Content = item };
+        // Content = the mounted view (surfaced by {Binding Content}); the
+        // originating T rides on an attached property for event resolution.
+        var node = new WinUI.TreeViewNode { IsExpanded = tv.GetIsExpanded(item) };
+        node.Content = Mount(tv.BuildView(item), requestRerender);
         SetTreeNodeItem(node, item);
-        SetTreeNodeView(node, Mount(tv.BuildView(item), requestRerender));
 
         var children = tv.GetChildren(item);
         if (children is not null)
             foreach (var child in children)
                 node.Children.Add(BuildTemplatedTreeNode(tv, child, requestRerender));
         return node;
-    }
-
-    // Hosts/releases the per-node mounted view as the internal list realizes
-    // and recycles TreeViewItem containers. Not setting args.Handled so the
-    // TreeViewList still applies its own chrome (expand glyph, indentation).
-    //
-    // The host is DEFERRED to a low-priority dispatch (after the synchronous
-    // prepare/layout pass) because mutating container content mid-prepare
-    // perturbs layout and can recycle/re-prepare the expanding node's own
-    // container with a stale IsExpanded — TreeViewList then enqueues a sync
-    // that snaps the node shut ("expand opens & closes"). The recycle release
-    // stays synchronous (always safe). The deferred host re-validates that the
-    // container still belongs to the same node (cc.DataContext) so a container
-    // recycled to another node in the meantime is never mis-hosted.
-    private static void TemplatedTreeContainerContentChanging(
-        Microsoft.UI.Xaml.Controls.ListViewBase sender,
-        Microsoft.UI.Xaml.Controls.ContainerContentChangingEventArgs args)
-    {
-        if (args.ItemContainer?.ContentTemplateRoot is not ContentControl cc) return;
-        if (args.InRecycleQueue)
-        {
-            cc.Content = null; // release the element's visual parent; view persists on the node
-            return;
-        }
-        if (args.Item is not WinUI.TreeViewNode node) return;
-
-        var dq = cc.DispatcherQueue;
-        if (dq is null) { HostNodeView(cc, node); return; }
-        dq.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => HostNodeView(cc, node));
-    }
-
-    private static void HostNodeView(ContentControl cc, WinUI.TreeViewNode node)
-    {
-        // Container may have been recycled to a different node before this ran.
-        if (!ReferenceEquals(cc.DataContext, node)) return;
-        if (GetTreeNodeView(node) is not UIElement view || ReferenceEquals(cc.Content, view)) return;
-        DetachContentHost(view);
-        cc.Content = view;
-    }
-
-    // Releases a view from whatever ContentControl currently hosts it, so it
-    // can be parented elsewhere (a UIElement may have only one visual parent).
-    private static void DetachContentHost(UIElement view)
-    {
-        DependencyObject? p = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(view);
-        while (p is not null and not ContentControl)
-            p = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(p);
-        if (p is ContentControl host && host.Content is not null)
-            host.Content = null;
     }
 
     private static Microsoft.UI.Xaml.Controls.ListViewBase? FindInnerList(DependencyObject root)

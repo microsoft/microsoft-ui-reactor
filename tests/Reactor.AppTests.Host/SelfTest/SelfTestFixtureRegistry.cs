@@ -1261,6 +1261,8 @@ internal static class SelfTestFixtureRegistry
         "TTV_ExpansionNotClobbered",
         "TTV_CollapseExpandCycle",
         "TTV_ExpandCollapsedNode",
+        "TTV_ConstrainedExpandSticks",
+        "TTV_LegacyExpansionNotClobbered",
         "TTV_ValueTypeItems",
     ];
 
@@ -1273,6 +1275,8 @@ internal static class SelfTestFixtureRegistry
         "TTV_ExpansionNotClobbered" => new TemplatedTreeViewFixtures.ExpansionNotClobbered(harness),
         "TTV_CollapseExpandCycle" => new TemplatedTreeViewFixtures.CollapseExpandCycle(harness),
         "TTV_ExpandCollapsedNode" => new TemplatedTreeViewFixtures.ExpandCollapsedNode(harness),
+        "TTV_ConstrainedExpandSticks" => new TemplatedTreeViewFixtures.ConstrainedExpandSticks(harness),
+        "TTV_LegacyExpansionNotClobbered" => new TemplatedTreeViewFixtures.LegacyExpansionNotClobbered(harness),
         "TTV_ValueTypeItems" => new TemplatedTreeViewFixtures.ValueTypeItems(harness),
         "ErrorBoundary_CatchesRenderError" => new ErrorBoundaryFixtures.CatchesRenderError(harness),
         "ErrorBoundary_Recovery" => new ErrorBoundaryFixtures.Recovery(harness),

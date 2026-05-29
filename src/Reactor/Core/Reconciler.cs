@@ -648,28 +648,6 @@ public sealed partial class Reconciler : IDisposable
     internal static object? GetTreeNodeItem(WinUI.TreeViewNode node) =>
         node.GetValue(TreeNodeItemAttached.ItemProperty);
 
-    // Holds the node's mounted view for the typed TreeView<T>. The view is
-    // mounted ONCE and persists here across collapse/expand (so component
-    // state survives); the internal list's ContainerContentChanging hosts it
-    // into the realized container's ContentControl on realize and releases it
-    // (Content = null) on recycle. Without that release the shared element
-    // keeps a stale visual parent and the next realization renders blank
-    // (issue #447 follow-up: every-other expand/collapse blanked rows).
-    private static class TreeNodeViewAttached
-    {
-        public static readonly DependencyProperty MountedViewProperty =
-            DependencyProperty.RegisterAttached(
-                "ReactorTreeMountedView",
-                typeof(UIElement),
-                typeof(TreeNodeViewAttached),
-                new PropertyMetadata(null));
-    }
-
-    internal static void SetTreeNodeView(WinUI.TreeViewNode node, UIElement? view) =>
-        node.SetValue(TreeNodeViewAttached.MountedViewProperty, view);
-
-    internal static UIElement? GetTreeNodeView(WinUI.TreeViewNode node) =>
-        node.GetValue(TreeNodeViewAttached.MountedViewProperty) as UIElement;
 
     // ════════════════════════════════════════════════════════════════════
     //  ReactorAttached.StateProperty  (ReactorState)
@@ -2043,7 +2021,7 @@ public sealed partial class Reconciler : IDisposable
 
     private void UnmountTemplatedTreeNodeContents(WinUI.TreeViewNode node)
     {
-        if (GetTreeNodeView(node) is UIElement ui) UnmountRecursive(ui);
+        if (node.Content is UIElement ui) UnmountRecursive(ui);
         foreach (var child in node.Children)
             UnmountTemplatedTreeNodeContents(child);
     }

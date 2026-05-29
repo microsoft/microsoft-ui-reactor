@@ -4017,7 +4017,13 @@ public sealed partial class Reconciler
                 var liveNode = match.Node;
                 var oldNodeData = oldData[match.OldIdx];
 
-                if (liveNode.IsExpanded != nd.IsExpanded)
+                // Uncontrolled expansion: only push the data value when it
+                // actually changed between renders. Otherwise leave the node's
+                // IsExpanded alone, so a reconcile triggered AFTER the user
+                // expands/collapses (e.g. OnExpanding lazy-load, or any state
+                // change) doesn't snap the node back to the static data value —
+                // the "expand flashes open then shut" regression.
+                if (oldNodeData.IsExpanded != nd.IsExpanded && liveNode.IsExpanded != nd.IsExpanded)
                     liveNode.IsExpanded = nd.IsExpanded;
 
                 ReconcileTreeNodeContent(liveNode, oldNodeData, nd, requestRerender);
@@ -4168,10 +4174,13 @@ public sealed partial class Reconciler
                 int cur = liveNodes.IndexOf(node);
                 if (cur != i)
                 {
-                    // A move recycles + re-realizes the container; the
-                    // ContainerContentChanging handler re-hosts the view.
+                    // Move: release the live view's parent before re-realizing
+                    // so the bound ContentControl can re-host it at the new slot.
+                    var content = node.Content as UIElement;
+                    if (content is not null) node.Content = null;
                     liveNodes.RemoveAt(cur);
                     liveNodes.Insert(i, node);
+                    if (content is not null) node.Content = content;
                 }
                 ReconcileTemplatedNodeView(node, o, n, newItem, requestRerender);
                 DiffTemplatedTreeNodes(
@@ -4195,28 +4204,18 @@ public sealed partial class Reconciler
         var oldItem = GetTreeNodeItem(node);
         var newView = n.BuildView(newItem);
         var oldView = oldItem is not null ? o.BuildView(oldItem) : null;
-        var existing = GetTreeNodeView(node);
 
-        if (oldView is not null && existing is not null && CanUpdate(oldView, newView))
+        if (oldView is not null && node.Content is UIElement existing && CanUpdate(oldView, newView))
         {
-            // In-place update mutates the live element; a realized container is
-            // already showing it, so nothing else to do unless it's replaced.
             var replacement = Update(oldView, newView, existing, requestRerender);
-            if (replacement is not null && !ReferenceEquals(existing, replacement))
-            {
-                SetTreeNodeView(node, replacement);
-                RehostReplacedView(existing, replacement);
-            }
+            if (replacement is not null && !ReferenceEquals(node.Content, replacement))
+                node.Content = replacement;
         }
         else
         {
-            if (existing is not null) UnmountChild(existing);
-            var mounted = Mount(newView, requestRerender);
-            SetTreeNodeView(node, mounted);
-            RehostReplacedView(existing, mounted);
+            if (node.Content is UIElement stale) UnmountChild(stale);
+            node.Content = Mount(newView, requestRerender);
         }
-
-        node.Content = newItem;
 
         // Expansion is uncontrolled: only push the selector value when it
         // actually CHANGES between renders (developer-driven control). Otherwise
@@ -4230,22 +4229,9 @@ public sealed partial class Reconciler
         SetTreeNodeItem(node, newItem);
     }
 
-    // If a node's view was replaced (CanUpdate false) while its container is
-    // realized, swap the new view into the ContentControl currently hosting the
-    // old one so the change is visible without waiting for a recycle.
-    private static void RehostReplacedView(UIElement? oldView, UIElement newView)
-    {
-        if (oldView is null) return;
-        DependencyObject? p = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(oldView);
-        while (p is not null and not WinUI.ContentControl)
-            p = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(p);
-        if (p is WinUI.ContentControl host && ReferenceEquals(host.Content, oldView))
-            host.Content = newView;
-    }
-
     private void UnmountTemplatedTreeNode(WinUI.TreeViewNode node)
     {
-        if (GetTreeNodeView(node) is UIElement ui) UnmountChild(ui);
+        if (node.Content is UIElement ui) UnmountChild(ui);
         foreach (var child in node.Children)
             UnmountTemplatedTreeNode(child);
     }
