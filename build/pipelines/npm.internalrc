@@ -1,0 +1,2 @@
+registry=https://pkgs.dev.azure.com/github-private/microsoft/_packaging/microsoft-ui-reactor/npm/registry/
+always-auth=true
