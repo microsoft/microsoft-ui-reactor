@@ -253,7 +253,12 @@ public class TypeRegistryTests
     [Fact]
     public void Override_Builtin_Type_Mount_Is_Dispatched()
     {
-        var reconciler = new Reconciler();
+        // §13 Q17 / §14 Phase 4 (§4.1): overriding a built-in element type via
+        // the legacy RegisterType path is a V1-OFF-only capability — under V1
+        // the built-in is already registered as a handler and a duplicate
+        // RegisterType trips the registration guard. Pin to the V1-OFF escape
+        // hatch (removed alongside this capability in §4.6).
+        var reconciler = new Reconciler(logger: null, useV1Protocol: false);
         bool customCalled = false;
 
         // Override built-in TextBlockElement

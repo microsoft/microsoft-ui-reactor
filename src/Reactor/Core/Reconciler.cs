@@ -250,11 +250,15 @@ public sealed partial class Reconciler : IDisposable
     public Reconciler(ILogger? logger) : this(logger, useV1Protocol: null) { }
 
     /// <summary>
-    /// Spec 047 §14 Phase 1 — v1 protocol feature flag (Q1.1).
+    /// Spec 047 §14 Phase 1 — v1 protocol feature flag (Q1.1);
+    /// §14 Phase 4 (§4.1) — flipped ON by default (production path).
     ///
     /// When <paramref name="useV1Protocol"/> is non-null, that value wins per-instance.
     /// When null, falls back to <c>AppContext.SetSwitch("Reactor.UseV1Protocol", …)</c>;
-    /// when that is unset, defaults to OFF.
+    /// when that is unset, defaults to <b>ON</b>. The explicit flag / AppContext
+    /// switch now exist only as an <i>escape hatch to turn V1 OFF</i> during the
+    /// §4.5 legacy-deletion window; once the legacy arms are deleted, OFF is no
+    /// longer a valid runtime state and the flag is removed (§4.6).
     ///
     /// Ports of built-in controls register handlers into the internal
     /// <see cref="V1HandlerRegistry"/>; external <see cref="RegisterType{TElement,TControl}"/>
@@ -286,7 +290,10 @@ public sealed partial class Reconciler : IDisposable
         }
         else
         {
-            UseV1Protocol = false;
+            // §14 Phase 4 (§4.1) — production default is V1 ON. The flag/switch
+            // above remain only as the escape hatch to force V1 OFF during the
+            // §4.5 legacy-deletion window; both are removed in §4.6.
+            UseV1Protocol = true;
         }
 
         // Spec 047 §14 Phase 1 (1.11–1.15) — register the ported built-in

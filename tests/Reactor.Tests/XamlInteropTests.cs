@@ -178,27 +178,25 @@ public class XamlInteropTests
     [Fact]
     public void Register_Adds_XamlPageElement_To_Registry()
     {
+        // §14 Phase 4 (§4.0.5 + §4.1): with V1 ON by default, XamlPage is owned
+        // by V1 auto-registration (the V1 handler registry), so Register is an
+        // idempotent no-op for it. Under the V1-OFF escape hatch, Register
+        // populates the legacy _typeRegistry instead. IsElementTypeRegistered
+        // unifies both, so it is the flag-independent assertion.
         var reconciler = new Reconciler();
         XamlInterop.Register(reconciler);
 
-        var registry = typeof(Reconciler)
-            .GetField("_typeRegistry", global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.Instance)!
-            .GetValue(reconciler) as global::System.Collections.IDictionary;
-
-        Assert.True(registry!.Contains(typeof(XamlPageElement)));
+        Assert.True(reconciler.IsElementTypeRegistered(typeof(XamlPageElement)));
     }
 
     [Fact]
     public void Register_Adds_XamlHostElement_To_Registry()
     {
+        // See Register_Adds_XamlPageElement_To_Registry — flag-independent check.
         var reconciler = new Reconciler();
         XamlInterop.Register(reconciler);
 
-        var registry = typeof(Reconciler)
-            .GetField("_typeRegistry", global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.Instance)!
-            .GetValue(reconciler) as global::System.Collections.IDictionary;
-
-        Assert.True(registry!.Contains(typeof(XamlHostElement)));
+        Assert.True(reconciler.IsElementTypeRegistered(typeof(XamlHostElement)));
     }
 
     [Fact]

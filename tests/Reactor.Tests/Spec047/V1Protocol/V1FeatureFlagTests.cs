@@ -8,8 +8,9 @@ namespace Microsoft.UI.Reactor.Tests.Spec047.V1Protocol;
 /// <summary>
 /// Spec 047 §14 Phase 1 (1.1) — feature-flag transport tests.
 ///
-/// Validates the three transport rules:
-///   1. Default Reconciler has UseV1Protocol == false.
+/// Validates the transport rules (§14 Phase 4 §4.1 — default flipped ON):
+///   1. AppContext switch set false forces UseV1Protocol == false (the escape
+///      hatch retained for the §4.5 legacy-deletion window; removed in §4.6).
 ///   2. Per-instance ctor flag is honored.
 ///   3. AppContext switch "Reactor.UseV1Protocol" is honored as fallback.
 ///   4. Ctor flag wins over AppContext switch when both are set.
@@ -31,11 +32,11 @@ public class V1FeatureFlagTests
     private const string SwitchName = "Reactor.UseV1Protocol";
 
     [Fact]
-    public void Default_Reconciler_Has_V1Protocol_Off()
+    public void Switch_False_Forces_V1Protocol_Off()
     {
-        // Save and clear the switch so this test isn't affected by global state.
-        // AppContext switches can't be removed, only set; the contract is that
-        // unset == false on the consumer side.
+        // §4.1: the production default is now ON; an explicit switch=false is the
+        // escape hatch that forces OFF for the legacy-deletion window. AppContext
+        // switches can't be removed, only set; the consumer reads the set value.
         AppContext.SetSwitch(SwitchName, false);
 
         var rec = new Reconciler();

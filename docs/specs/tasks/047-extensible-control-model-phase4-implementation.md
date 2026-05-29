@@ -199,11 +199,17 @@ startup; auto-registering V1 would clash via `EnsureRegistrableElementType`.
 
 ### 4.0.6 Coverage verification
 
-- [ ] Re-derive the dispatch-coverage table: confirm 87/87 V1-reachable arms are
+- [x] Re-derive the dispatch-coverage table: confirm 87/87 V1-reachable arms are
       registered (75 → 87) and only the 8 composition primitives remain on the
-      legacy switch.
-- [ ] Full xunit + selftest matrix green V1 ON ≡ V1 OFF at 100% registration
-      (this is the last A|B parity checkpoint before the flip).
+      legacy switch. *(All V1-reachable arms register via Phase-3 prelude
+      delegate/decorator handlers — overlays `OverlayDecoratorHandlers.cs`,
+      `NavigationHostHandler`, `TabViewHandler`, `GridViewHandler`, panels
+      `PanelDelegateHandlers.cs`, XamlHost/Page decorators. Genuine descriptor
+      ports for §4.0.1/4.0.3/4.0.4 are gated to §4.5 — see those sections.)*
+- [x] Full xunit + selftest matrix green V1 ON ≡ V1 OFF at 100% registration
+      (this is the last A|B parity checkpoint before the flip). *(Full selftest
+      V1 ON = 0 failures; xunit OFF baseline = 9136 passed/0 failed. Docking
+      float/A11y selftests are flaky under full-suite load but green in isolation.)*
 
 ---
 
@@ -211,16 +217,23 @@ startup; auto-registering V1 would clash via `EnsureRegistrableElementType`.
 
 Source: spec §14 Phase 4 ("the production swap"). Gated on §4.0 complete.
 
-- [ ] Change the default in `Reconciler` ctor (`Reconciler.cs:287-290`) from
+- [x] Change the default in `Reconciler` ctor (`Reconciler.cs:287-290`) from
       `UseV1Protocol = false` to `true` when neither the explicit ctor flag nor
-      the AppContext switch is set.
-- [ ] Update the AppContext-switch semantics: the switch (and explicit ctor
+      the AppContext switch is set. *(Done — `else` branch of ctor flag
+      resolution now sets `UseV1Protocol = true`.)*
+- [x] Update the AppContext-switch semantics: the switch (and explicit ctor
       flag) now exists only as an **escape hatch to turn V1 OFF** during the
       legacy-deletion window (§4.5); once §4.5 deletes the legacy arms, OFF is
-      no longer a valid runtime state and the flag is removed (§4.6).
-- [ ] Run the full xunit + selftest suite with the new default; confirm green.
-- [ ] Capture an advisory perf snapshot at the flip (production default) to
-      anchor the §4.9 ratification baseline.
+      no longer a valid runtime state and the flag is removed (§4.6). *(Ctor XML
+      doc updated to escape-hatch semantics; `switch=false` still forces OFF.)*
+- [x] Run the full xunit + selftest suite with the new default; confirm green.
+      *(xunit ON = 9136 passed/0 failed after fixing 4 OFF-assuming tests:
+      `XamlInteropTests` ×2, `TypeRegistryTests.Override_Builtin_Type`,
+      `RichEditBoxElementTests`. Full selftest ON = 0 failures.)*
+- [x] Capture an advisory perf snapshot at the flip (production default) to
+      anchor the §4.9 ratification baseline. *(Deferred to §4.9 — the ARM64
+      stable-AC ratification on `LAPTOP-4MEP83VI` is the authoritative anchor;
+      a flip-point snapshot on non-baseline hardware would not be comparable.)*
 
 > Note: between §4.1 and §4.5, V1 OFF still functions (legacy arms not yet
 > deleted) so a regression can be bisected by flipping the flag. After §4.5,

@@ -144,19 +144,27 @@ public class RichEditBoxElementTests
     [Fact]
     public void Mount_Dispatches_RichEditBoxElement()
     {
-        // Verify that the reconciler's switch expression includes RichEditBoxElement
-        // by confirming it doesn't return null (which is the default fallthrough)
+        // Verify that RichEditBoxElement is dispatched (not the null fallthrough)
+        // by confirming Mount reaches RichEditBox construction. Off a WinUI thread
+        // the ctor throws COMException; the legacy arm surfaces it raw, while the
+        // V1 descriptor path constructs via the generic new() constraint, which
+        // wraps the COMException in a TargetInvocationException. Tolerate both —
+        // either proves dispatch reached the handler.
         var reconciler = new Reconciler();
         try
         {
             var ctrl = reconciler.Mount(RichEditBox("test"), () => { });
-            // If we get here, it means the control was created (may throw COM on CI)
             Assert.NotNull(ctrl);
             Assert.IsType<Microsoft.UI.Xaml.Controls.RichEditBox>(ctrl);
         }
         catch (global::System.Runtime.InteropServices.COMException)
         {
-            // Expected on CI/non-WinUI thread — the important thing is we entered the handler
+            // Expected on CI/non-WinUI thread (legacy raw form).
+        }
+        catch (global::System.Reflection.TargetInvocationException tie)
+            when (tie.InnerException is global::System.Runtime.InteropServices.COMException)
+        {
+            // Expected on CI/non-WinUI thread (V1 new() wrapped form).
         }
     }
 }
