@@ -1116,7 +1116,7 @@ public sealed partial class Reconciler
         return box;
     }
 
-    private WinUI.VariableSizedWrapGrid MountWrapGrid(WrapGridElement wg, Action requestRerender)
+    internal WinUI.VariableSizedWrapGrid MountWrapGrid(WrapGridElement wg, Action requestRerender)
     {
         var grid = new WinUI.VariableSizedWrapGrid { Orientation = wg.Orientation };
         if (wg.MaximumRowsOrColumns >= 0) grid.MaximumRowsOrColumns = wg.MaximumRowsOrColumns;
@@ -1140,7 +1140,7 @@ public sealed partial class Reconciler
         return grid;
     }
 
-    private WinUI.StackPanel MountStack(StackElement stack, Action requestRerender)
+    internal WinUI.StackPanel MountStack(StackElement stack, Action requestRerender)
     {
         var panel = _pool.TryRent(typeof(WinUI.StackPanel)) as WinUI.StackPanel ?? new WinUI.StackPanel();
         panel.Orientation = stack.Orientation;
@@ -1160,7 +1160,7 @@ public sealed partial class Reconciler
         return panel;
     }
 
-    private WinUI.Grid MountGrid(GridElement grid, Action requestRerender)
+    internal WinUI.Grid MountGrid(GridElement grid, Action requestRerender)
     {
         var g = _pool.TryRent(typeof(WinUI.Grid)) as WinUI.Grid ?? new WinUI.Grid();
         g.RowSpacing = grid.RowSpacing;
@@ -1325,7 +1325,7 @@ public sealed partial class Reconciler
         return viewbox;
     }
 
-    private WinUI.Canvas MountCanvas(CanvasElement cvs, Action requestRerender)
+    internal WinUI.Canvas MountCanvas(CanvasElement cvs, Action requestRerender)
     {
         var canvas = _pool.TryRent(typeof(WinUI.Canvas)) as WinUI.Canvas ?? new WinUI.Canvas();
         if (cvs.Width.HasValue) canvas.Width = cvs.Width.Value;
@@ -1345,7 +1345,7 @@ public sealed partial class Reconciler
         return canvas;
     }
 
-    private Layout.FlexPanel MountFlex(FlexElement flex, Action requestRerender)
+    internal Layout.FlexPanel MountFlex(FlexElement flex, Action requestRerender)
     {
         var panel = _pool.TryRent(typeof(Layout.FlexPanel)) as Layout.FlexPanel ?? new Layout.FlexPanel();
         panel.Direction = flex.Direction;
@@ -3462,7 +3462,7 @@ public sealed partial class Reconciler
 
     // ── RelativePanel ───────────────────────────────────────────────────
 
-    private WinUI.RelativePanel MountRelativePanel(RelativePanelElement rp, Action requestRerender)
+    internal WinUI.RelativePanel MountRelativePanel(RelativePanelElement rp, Action requestRerender)
     {
         var panel = new WinUI.RelativePanel();
         var nameMap = new Dictionary<string, UIElement>();

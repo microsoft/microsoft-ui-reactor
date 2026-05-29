@@ -1316,7 +1316,7 @@ public sealed partial class Reconciler
         return null;
     }
 
-    private UIElement? UpdateWrapGrid(WrapGridElement o, WrapGridElement n, WinUI.VariableSizedWrapGrid wg, Action requestRerender)
+    internal UIElement? UpdateWrapGrid(WrapGridElement o, WrapGridElement n, WinUI.VariableSizedWrapGrid wg, Action requestRerender)
     {
         wg.Orientation = n.Orientation;
         if (n.MaximumRowsOrColumns >= 0) wg.MaximumRowsOrColumns = n.MaximumRowsOrColumns;
@@ -1346,7 +1346,7 @@ public sealed partial class Reconciler
         return null;
     }
 
-    private UIElement? UpdateCanvas(CanvasElement o, CanvasElement n, WinUI.Canvas canvas, Action requestRerender)
+    internal UIElement? UpdateCanvas(CanvasElement o, CanvasElement n, WinUI.Canvas canvas, Action requestRerender)
     {
         if (n.Width.HasValue && n.Width != o.Width) canvas.Width = n.Width.Value;
         if (n.Height.HasValue && n.Height != o.Height) canvas.Height = n.Height.Value;
@@ -1370,7 +1370,7 @@ public sealed partial class Reconciler
         return null;
     }
 
-    private UIElement? UpdateStack(StackElement o, StackElement n, WinUI.StackPanel sp, Action requestRerender)
+    internal UIElement? UpdateStack(StackElement o, StackElement n, WinUI.StackPanel sp, Action requestRerender)
     {
         if (o.Orientation != n.Orientation) sp.Orientation = n.Orientation;
         if (o.Spacing != n.Spacing) sp.Spacing = n.Spacing;
@@ -2325,7 +2325,7 @@ public sealed partial class Reconciler
         return null;
     }
 
-    private UIElement? UpdateRelativePanel(RelativePanelElement o, RelativePanelElement n, WinUI.RelativePanel rp, Action requestRerender)
+    internal UIElement? UpdateRelativePanel(RelativePanelElement o, RelativePanelElement n, WinUI.RelativePanel rp, Action requestRerender)
     {
         // RelativePanel's children reference each other by name for layout.
         // Reconcile in place when the children line up positionally; if the
@@ -3758,7 +3758,7 @@ public sealed partial class Reconciler
                 target.Add(CreateAppBarItem(source[i]));
     }
 
-    private UIElement? UpdateGrid(Core.GridElement o, Core.GridElement n, WinUI.Grid g, Action requestRerender)
+    internal UIElement? UpdateGrid(Core.GridElement o, Core.GridElement n, WinUI.Grid g, Action requestRerender)
     {
         if (o.RowSpacing != n.RowSpacing) g.RowSpacing = n.RowSpacing;
         if (o.ColumnSpacing != n.ColumnSpacing) g.ColumnSpacing = n.ColumnSpacing;
@@ -3877,7 +3877,7 @@ public sealed partial class Reconciler
         return null;
     }
 
-    private UIElement? UpdateFlex(FlexElement o, FlexElement n, Layout.FlexPanel panel, Action requestRerender)
+    internal UIElement? UpdateFlex(FlexElement o, FlexElement n, Layout.FlexPanel panel, Action requestRerender)
     {
         panel.Direction = n.Direction;
         panel.JustifyContent = n.JustifyContent;

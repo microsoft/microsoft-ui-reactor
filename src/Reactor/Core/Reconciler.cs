@@ -437,7 +437,7 @@ public sealed partial class Reconciler : IDisposable
         // and the perf-bench descriptor variant.
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.CalendarDatePickerDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.CalendarViewDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.CanvasDescriptor.Descriptor);
+        RegisterDecoratorHandler<CanvasElement>(new V1Protocol.Handlers.CanvasPanelHandler()); // §14: keyed reconcile — see PanelDelegateHandlers
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.CheckBoxDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ColorPickerDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ComboBoxDescriptor.Descriptor);
@@ -445,10 +445,10 @@ public sealed partial class Reconciler : IDisposable
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.DropDownButtonDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.EllipseDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ExpanderDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.FlexPanelDescriptor.Descriptor);
+        RegisterDecoratorHandler<FlexElement>(new V1Protocol.Handlers.FlexPanelHandler()); // §14: keyed reconcile — see PanelDelegateHandlers
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.FlipViewDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.FrameDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.GridDescriptor.Descriptor);
+        RegisterDecoratorHandler<GridElement>(new V1Protocol.Handlers.GridPanelHandler()); // §14: keyed reconcile — see PanelDelegateHandlers
         // Spec 047 §14 Phase 3 prelude — GridViewElement now routes through V1
         // via the hand-coded V1Protocol.Handlers.GridViewHandler (registered
         // above with the Phase 1 handlers), which preserves the legacy
@@ -483,7 +483,7 @@ public sealed partial class Reconciler : IDisposable
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.RatingControlDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.RectangleDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.RefreshContainerDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.RelativePanelDescriptor.Descriptor);
+        RegisterDecoratorHandler<RelativePanelElement>(new V1Protocol.Handlers.RelativePanelHandler()); // §14: keyed reconcile — see PanelDelegateHandlers
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.RepeatButtonDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.RichEditBoxDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.RichTextBlockDescriptor.Descriptor);
@@ -494,7 +494,7 @@ public sealed partial class Reconciler : IDisposable
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.SemanticZoomDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.SplitButtonDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.SplitViewDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.StackPanelDescriptor.Descriptor);
+        RegisterDecoratorHandler<StackElement>(new V1Protocol.Handlers.StackPanelHandler()); // §14: keyed reconcile — see PanelDelegateHandlers
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.SwipeControlDescriptor.Descriptor);
         // Spec 047 §14 — TabViewElement is ported via the Path B delegate
         // TabViewHandler (registered above with the other prelude carve
@@ -522,7 +522,7 @@ public sealed partial class Reconciler : IDisposable
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.TreeViewDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ViewboxDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.WebView2Descriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.WrapGridDescriptor.Descriptor);
+        RegisterDecoratorHandler<WrapGridElement>(new V1Protocol.Handlers.WrapGridHandler()); // §14: keyed reconcile — see PanelDelegateHandlers
 
         // ── §14 Phase 3 completion decorator-style handlers ──────────────
         RegisterDecoratorHandler<IconElement>(V1Protocol.Descriptor.Descriptors.IconDescriptor.Handler);
