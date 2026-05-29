@@ -1450,10 +1450,7 @@ public sealed partial class Reconciler
         }
         if (nav.Content is not null) nv.Content = Mount(nav.Content, requestRerender);
         if (nav.SelectedTag is not null)
-        {
-            foreach (var mi in nv.MenuItems.OfType<WinUI.NavigationViewItem>())
-                if (mi.Tag as string == nav.SelectedTag) { nv.SelectedItem = mi; break; }
-        }
+            nv.SelectedItem = FindNavItemByTag(nv.MenuItems, nav.SelectedTag);
         SetElementTag(nv, nav);
         if (nav.OnSelectedTagChanged is not null)
             nv.SelectionChanged += (s, args) =>

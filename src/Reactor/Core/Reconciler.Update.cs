@@ -1750,17 +1750,17 @@ public sealed partial class Reconciler
         if (!double.IsNaN(n.CompactModeThresholdWidth) && nv.CompactModeThresholdWidth != n.CompactModeThresholdWidth) nv.CompactModeThresholdWidth = n.CompactModeThresholdWidth;
         if (!double.IsNaN(n.ExpandedModeThresholdWidth) && nv.ExpandedModeThresholdWidth != n.ExpandedModeThresholdWidth) nv.ExpandedModeThresholdWidth = n.ExpandedModeThresholdWidth;
 
+        // Reconcile menu items in place rather than clear-and-rebuild. The old
+        // rebuild recreated every NavigationViewItem on each render, and since
+        // per-item expansion (IsExpanded) lives only on the live container — it
+        // is not modeled in NavigationViewItemData — every re-render snapped all
+        // expanded hierarchical items shut. Because consumers typically pass a
+        // fresh MenuItems array each render (e.g. built via LINQ), the
+        // ReferenceEquals guard never held and the rebuild fired constantly,
+        // producing the "expand then collapse" flash and "child click collapses
+        // parent". Reusing containers by Tag preserves IsExpanded across renders.
         if (!ReferenceEquals(o.MenuItems, n.MenuItems))
-        {
-            nv.MenuItems.Clear();
-            foreach (var item in n.MenuItems)
-            {
-                if (item.IsHeader)
-                    nv.MenuItems.Add(new WinUI.NavigationViewItemHeader { Content = item.Content });
-                else
-                    nv.MenuItems.Add(CreateNavItem(item));
-            }
-        }
+            ReconcileNavMenuItems(nv.MenuItems, o.MenuItems, n.MenuItems);
 
         // AutoSuggestBox / PaneFooter / PaneCustomContent reconcile in place
         // when possible so the controls keep focus / scroll state across re-renders.
@@ -1833,6 +1833,123 @@ public sealed partial class Reconciler
             }
         }
         return null;
+    }
+
+    /// <summary>
+    /// Brings a live NavigationView menu-item collection into agreement with
+    /// <paramref name="newData"/> while reusing existing <see cref="WinUI.NavigationViewItem"/>
+    /// containers (matched by Tag) so their runtime <c>IsExpanded</c>/selection
+    /// state survives the re-render. Recurses into hierarchical children.
+    /// </summary>
+    private void ReconcileNavMenuItems(
+        global::System.Collections.Generic.IList<object> live,
+        NavigationViewItemData[]? oldData,
+        NavigationViewItemData[] newData)
+    {
+        // Fast path: the structure (order of headers + item Tags) is unchanged —
+        // the overwhelmingly common case, since menus are usually static. Update
+        // each container in place without detaching anything, which keeps every
+        // container's expansion, selection and animation state pristine.
+        if (NavStructureMatches(live, newData))
+        {
+            for (int i = 0; i < newData.Length; i++)
+            {
+                var data = newData[i];
+                if (data.IsHeader)
+                {
+                    if (live[i] is WinUI.NavigationViewItemHeader h && !Equals(h.Content, data.Content))
+                        h.Content = data.Content;
+                }
+                else if (live[i] is WinUI.NavigationViewItem nvi)
+                {
+                    var oldItem = oldData is not null && i < oldData.Length ? oldData[i] : null;
+                    UpdateNavItemInPlace(nvi, oldItem, data);
+                }
+            }
+            return;
+        }
+
+        // Structure changed (items added / removed / reordered): snapshot the
+        // existing containers by Tag so matches can be reused, then rebuild the
+        // collection in the new order. Reused containers retain their IsExpanded.
+        var reusable = new global::System.Collections.Generic.Dictionary<string, WinUI.NavigationViewItem>();
+        foreach (var item in live)
+            if (item is WinUI.NavigationViewItem nvi && nvi.Tag is string tag)
+                reusable[tag] = nvi;
+
+        var oldByTag = new global::System.Collections.Generic.Dictionary<string, NavigationViewItemData>();
+        if (oldData is not null)
+            foreach (var d in oldData)
+                if (!d.IsHeader)
+                    oldByTag[d.Tag ?? d.Content] = d;
+
+        live.Clear();
+        foreach (var data in newData)
+        {
+            if (data.IsHeader)
+            {
+                live.Add(new WinUI.NavigationViewItemHeader { Content = data.Content });
+                continue;
+            }
+
+            var key = data.Tag ?? data.Content;
+            if (reusable.TryGetValue(key, out var nvi))
+                UpdateNavItemInPlace(nvi, oldByTag.GetValueOrDefault(key), data);
+            else
+                nvi = CreateNavItem(data);
+            live.Add(nvi);
+        }
+    }
+
+    /// <summary>True when the live collection already matches the new data in
+    /// count and in the sequence of headers / item Tags.</summary>
+    private static bool NavStructureMatches(
+        global::System.Collections.Generic.IList<object> live,
+        NavigationViewItemData[] newData)
+    {
+        if (live.Count != newData.Length) return false;
+        for (int i = 0; i < newData.Length; i++)
+        {
+            var data = newData[i];
+            if (data.IsHeader)
+            {
+                if (live[i] is not WinUI.NavigationViewItemHeader) return false;
+            }
+            else
+            {
+                if (live[i] is not WinUI.NavigationViewItem nvi) return false;
+                if ((nvi.Tag as string) != (data.Tag ?? data.Content)) return false;
+            }
+        }
+        return true;
+    }
+
+    /// <summary>Updates a reused NavigationViewItem's Content/Icon (only when
+    /// changed) and reconciles its children, leaving IsExpanded untouched.</summary>
+    private void UpdateNavItemInPlace(WinUI.NavigationViewItem nvi, NavigationViewItemData? oldData, NavigationViewItemData data)
+    {
+        if (!Equals(nvi.Content, data.Content)) nvi.Content = data.Content;
+
+        var newTag = data.Tag ?? data.Content;
+        if (!Equals(nvi.Tag, newTag)) nvi.Tag = newTag;
+
+        // Re-resolve the icon only when the icon data actually changed (IconData
+        // records compare by value), so the FontIcon/SymbolIcon isn't reallocated
+        // on every render.
+        bool iconChanged = oldData is null
+            || !Equals(oldData.IconElement, data.IconElement)
+            || oldData.Icon != data.Icon;
+        if (iconChanged)
+        {
+            var icon = ResolveIcon(data.IconElement, data.Icon);
+            if (icon is not null) nvi.Icon = icon;
+            else if (nvi.Icon is not null) nvi.Icon = null;
+        }
+
+        if (data.Children is { Length: > 0 } children)
+            ReconcileNavMenuItems(nvi.MenuItems, oldData?.Children, children);
+        else if (nvi.MenuItems.Count > 0)
+            nvi.MenuItems.Clear();
     }
 
     private UIElement? UpdateTitleBar(TitleBarElement o, TitleBarElement n, WinUI.TitleBar titleBar, Action requestRerender)

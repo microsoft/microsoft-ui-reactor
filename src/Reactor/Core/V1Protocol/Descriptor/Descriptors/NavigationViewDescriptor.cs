@@ -123,8 +123,9 @@ internal static class NavigationViewDescriptor
 
     private static void ApplyMenuAndSelection(WinUI.NavigationView control, NavigationViewElement? oldElement, NavigationViewElement element)
     {
-        if (oldElement is null || !ReferenceEquals(oldElement.MenuItems, element.MenuItems))
+        if (oldElement is null)
         {
+            // Mount: build fresh.
             control.MenuItems.Clear();
             foreach (var item in element.MenuItems)
             {
@@ -133,6 +134,13 @@ internal static class NavigationViewDescriptor
                     : CreateNavItem(item));
             }
         }
+        else if (!ReferenceEquals(oldElement.MenuItems, element.MenuItems))
+        {
+            // Update: reconcile in place so reused containers keep IsExpanded.
+            // Mirrors Reconciler.ReconcileNavMenuItems (legacy arm) — see the note
+            // there on why a clear-and-rebuild collapses hierarchical items.
+            ReconcileMenuItems(control.MenuItems, oldElement.MenuItems, element.MenuItems);
+        }
 
         if (oldElement is null
             || oldElement.SelectedTag != element.SelectedTag
@@ -140,6 +148,107 @@ internal static class NavigationViewDescriptor
         {
             control.SelectedItem = FindItemByTag(control.MenuItems, element.SelectedTag);
         }
+    }
+
+    private static void ReconcileMenuItems(
+        global::System.Collections.Generic.IList<object> live,
+        NavigationViewItemData[]? oldData,
+        NavigationViewItemData[] newData)
+    {
+        if (StructureMatches(live, newData))
+        {
+            for (int i = 0; i < newData.Length; i++)
+            {
+                var data = newData[i];
+                if (data.IsHeader)
+                {
+                    if (live[i] is WinUI.NavigationViewItemHeader h && !Equals(h.Content, data.Content))
+                        h.Content = data.Content;
+                }
+                else if (live[i] is WinUI.NavigationViewItem nvi)
+                {
+                    var oldItem = oldData is not null && i < oldData.Length ? oldData[i] : null;
+                    UpdateNavItemInPlace(nvi, oldItem, data);
+                }
+            }
+            return;
+        }
+
+        var reusable = new global::System.Collections.Generic.Dictionary<string, WinUI.NavigationViewItem>();
+        foreach (var item in live)
+            if (item is WinUI.NavigationViewItem nvi && nvi.Tag is string tag)
+                reusable[tag] = nvi;
+
+        var oldByTag = new global::System.Collections.Generic.Dictionary<string, NavigationViewItemData>();
+        if (oldData is not null)
+            foreach (var d in oldData)
+                if (!d.IsHeader)
+                    oldByTag[d.Tag ?? d.Content] = d;
+
+        live.Clear();
+        foreach (var data in newData)
+        {
+            if (data.IsHeader)
+            {
+                live.Add(new WinUI.NavigationViewItemHeader { Content = data.Content });
+                continue;
+            }
+
+            var key = data.Tag ?? data.Content;
+            if (reusable.TryGetValue(key, out var nvi))
+                UpdateNavItemInPlace(nvi, oldByTag.GetValueOrDefault(key), data);
+            else
+                nvi = CreateNavItem(data);
+            live.Add(nvi);
+        }
+    }
+
+    private static bool StructureMatches(
+        global::System.Collections.Generic.IList<object> live,
+        NavigationViewItemData[] newData)
+    {
+        if (live.Count != newData.Length) return false;
+        for (int i = 0; i < newData.Length; i++)
+        {
+            var data = newData[i];
+            if (data.IsHeader)
+            {
+                if (live[i] is not WinUI.NavigationViewItemHeader) return false;
+            }
+            else
+            {
+                if (live[i] is not WinUI.NavigationViewItem nvi) return false;
+                if ((nvi.Tag as string) != (data.Tag ?? data.Content)) return false;
+            }
+        }
+        return true;
+    }
+
+    private static void UpdateNavItemInPlace(WinUI.NavigationViewItem nvi, NavigationViewItemData? oldData, NavigationViewItemData data)
+    {
+        if (!Equals(nvi.Content, data.Content)) nvi.Content = data.Content;
+
+        var newTag = data.Tag ?? data.Content;
+        if (!Equals(nvi.Tag, newTag)) nvi.Tag = newTag;
+
+        bool iconChanged = oldData is null
+            || !Equals(oldData.IconElement, data.IconElement)
+            || oldData.Icon != data.Icon;
+        if (iconChanged)
+        {
+            var icon = data.IconElement is not null
+                ? Reconciler.ResolveIconForDescriptor(data.IconElement)
+                : data.Icon is not null
+                    ? Reconciler.ResolveIconForDescriptor(new SymbolIconData(data.Icon))
+                    : null;
+            if (icon is not null) nvi.Icon = icon;
+            else if (nvi.Icon is not null) nvi.Icon = null;
+        }
+
+        if (data.Children is { Length: > 0 } children)
+            ReconcileMenuItems(nvi.MenuItems, oldData?.Children, children);
+        else if (nvi.MenuItems.Count > 0)
+            nvi.MenuItems.Clear();
     }
 
     private static WinUI.NavigationViewItem CreateNavItem(NavigationViewItemData data)

@@ -61,8 +61,16 @@ internal static class FixtureRegistry
         // Collections
         "ListView_TypedRendering",
 
+        // TreeView expand/collapse (mirrors ReactorGallery Basic TreeView —
+        // E2E repro/guard for the item-body-collapse bug)
+        "TreeView_BasicTextTree",
+
         // Navigation
         "Navigation_TabSwitching",
+
+        // NavigationView hierarchical expand/collapse (E2E repro/guard for the
+        // re-render rebuild-clobber that collapsed expanded categories)
+        "NavigationView_Hierarchical",
 
         // Observable
         "Observable_UseObservable_Rerender",
@@ -205,8 +213,14 @@ internal static class FixtureRegistry
         // Collections
         "ListView_TypedRendering" => CollectionFixtures.ListViewTyped(ctx),
 
+        // TreeView expand/collapse
+        "TreeView_BasicTextTree" => TreeViewE2EFixtures.BasicTextTree(ctx),
+
         // Navigation
         "Navigation_TabSwitching" => NavigationFixtures.TabSwitching(ctx),
+
+        // NavigationView hierarchical expand/collapse
+        "NavigationView_Hierarchical" => NavigationViewE2EFixtures.HierarchicalNav(ctx),
 
         // Observable
         "Observable_UseObservable_Rerender" => ObservableFixtures.UseObservable_Rerender(ctx),
