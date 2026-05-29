@@ -1,0 +1,11 @@
+{
+  "id": "button-with-command",
+  "category": "buttons",
+  "title": "Button with Command",
+  "intent": "command-driven button where label action and enabled state come from a Command",
+  "tags": ["button", "command", "mvvm", "canexecute"],
+  "factoryAnchors": ["Button"],
+  "notesKey": "Button",
+  "relatedIds": [],
+  "priority": "P0"
+}

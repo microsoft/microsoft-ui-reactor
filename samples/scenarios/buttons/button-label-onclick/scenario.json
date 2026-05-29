@@ -1,0 +1,11 @@
+{
+  "id": "button-label-onclick",
+  "category": "buttons",
+  "title": "Button click counter",
+  "intent": "basic button with click handler that increments a counter",
+  "tags": ["button", "click", "counter", "onclick"],
+  "factoryAnchors": ["Button", "UseState"],
+  "notesKey": "Button",
+  "relatedIds": [],
+  "priority": "P0"
+}

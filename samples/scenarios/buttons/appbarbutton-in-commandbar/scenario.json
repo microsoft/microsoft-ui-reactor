@@ -1,0 +1,11 @@
+{
+  "id": "appbarbutton-in-commandbar",
+  "category": "buttons",
+  "title": "CommandBar with AppBarButtons",
+  "intent": "command bar with app bar buttons for a toolbar-style action surface",
+  "tags": ["commandbar", "appbarbutton", "toolbar", "actions"],
+  "factoryAnchors": ["CommandBar", "AppBarButton"],
+  "notesKey": null,
+  "relatedIds": [],
+  "priority": "P0"
+}

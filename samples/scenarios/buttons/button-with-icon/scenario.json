@@ -1,0 +1,11 @@
+{
+  "id": "button-with-icon",
+  "category": "buttons",
+  "title": "Button with icon",
+  "intent": "button with an icon and text using a symbol icon",
+  "tags": ["button", "icon", "symbol"],
+  "factoryAnchors": ["Button"],
+  "notesKey": null,
+  "relatedIds": [],
+  "priority": "P0"
+}

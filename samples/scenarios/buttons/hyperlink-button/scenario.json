@@ -1,0 +1,11 @@
+{
+  "id": "hyperlink-button",
+  "category": "buttons",
+  "title": "Hyperlink button",
+  "intent": "hyperlink-style button for link-like navigation or actions",
+  "tags": ["hyperlink", "link", "button"],
+  "factoryAnchors": ["HyperlinkButton"],
+  "notesKey": null,
+  "relatedIds": [],
+  "priority": "P0"
+}

@@ -1,0 +1,11 @@
+{
+  "id": "togglebutton-basic",
+  "category": "buttons",
+  "title": "Basic toggle button",
+  "intent": "toggle button that tracks checked state with UseState",
+  "tags": ["toggle", "togglebutton", "checked", "state"],
+  "factoryAnchors": ["ToggleButton", "UseState"],
+  "notesKey": null,
+  "relatedIds": [],
+  "priority": "P0"
+}
