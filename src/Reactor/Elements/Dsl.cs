@@ -646,6 +646,32 @@ public static partial class Factories
     public static TreeViewNodeData TreeNode(string content, params TreeViewNodeData[] children) =>
         new(content, children.Length > 0 ? children : null);
 
+    /// <summary>
+    /// Creates a typed, data-driven <see cref="TemplatedTreeViewElement{T}"/> — the
+    /// hierarchical peer of <see cref="ListView{T}(IReadOnlyList{T}, Func{T, string}, Func{T, int, Element})"/>.
+    /// Each node is rendered by <paramref name="viewBuilder"/> (WinUI <c>ItemTemplate</c>
+    /// equivalent); the tree axis comes from <paramref name="childrenSelector"/> and
+    /// identity from <paramref name="keySelector"/>. This is the supported way to put
+    /// rich elements in tree nodes — see issue #447 and the obsolete
+    /// <c>TreeViewNodeData.ContentElement</c>.
+    /// </summary>
+    public static TemplatedTreeViewElement<T> TreeView<T>(
+        IReadOnlyList<T> items,
+        Func<T, string> keySelector,
+        Func<T, IReadOnlyList<T>?> childrenSelector,
+        Func<T, Element> viewBuilder) => new(items, keySelector, childrenSelector, viewBuilder);
+
+    /// <summary>
+    /// <see cref="IReactorKeyed"/>-typed overload of
+    /// <see cref="TreeView{T}(IReadOnlyList{T}, Func{T, string}, Func{T, IReadOnlyList{T}}, Func{T, Element})"/>;
+    /// <c>KeySelector</c> defaults to <c>t =&gt; t.Key</c>.
+    /// </summary>
+    public static TemplatedTreeViewElement<T> TreeView<T>(
+        IReadOnlyList<T> items,
+        Func<T, IReadOnlyList<T>?> childrenSelector,
+        Func<T, Element> viewBuilder) where T : IReactorKeyed =>
+        new(items, static t => t.Key, childrenSelector, viewBuilder);
+
     public static FlipViewElement FlipView(params Element[] items) => new(items);
 
     // ── Dialogs / Overlays ──────────────────────────────────────────

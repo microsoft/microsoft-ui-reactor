@@ -220,6 +220,8 @@ public sealed partial class Reconciler
                 => UpdateGridView(o, n, gv, requestRerender),
             (TreeViewElement o, TreeViewElement n, WinUI.TreeView tv)
                 => UpdateTreeView(o, n, tv, requestRerender),
+            (TemplatedTreeViewElementBase o, TemplatedTreeViewElementBase n, WinUI.TreeView tv)
+                => UpdateTemplatedTreeView(o, n, tv, requestRerender),
             (FlipViewElement o, FlipViewElement n, WinUI.FlipView fv)
                 => UpdateFlipView(o, n, fv, requestRerender),
             (InfoBarElement o, InfoBarElement n, WinUI.InfoBar ib)
@@ -4052,7 +4054,10 @@ public sealed partial class Reconciler
     /// <summary>
     /// Reconciles ContentElement changes on a TreeViewNode.
     /// When ContentElement is used, node.Content holds a mounted UIElement.
+    /// Legacy obsolete path (issue #447) — kept for back-compat; CS0618 is
+    /// suppressed at the intentional internal use site.
     /// </summary>
+#pragma warning disable CS0618
     private void ReconcileTreeNodeContent(
         WinUI.TreeViewNode liveNode,
         TreeViewNodeData? oldData,
@@ -4087,6 +4092,162 @@ public sealed partial class Reconciler
                 Unmount(oldCtrl2);
             liveNode.Content = newData;
         }
+    }
+#pragma warning restore CS0618
+
+    // ── Typed TreeView<T> (TemplatedTreeViewElement<T>) ──────────────────────
+
+    private UIElement? UpdateTemplatedTreeView(
+        TemplatedTreeViewElementBase o, TemplatedTreeViewElementBase n, WinUI.TreeView tv, Action requestRerender)
+    {
+        DiffTemplatedTreeNodes(tv.RootNodes, o, n, n.GetRoots(), requestRerender);
+
+        tv.SelectionMode = n.SelectionMode;
+        tv.CanDragItems = n.CanDragItems;
+        tv.AllowDrop = n.AllowDrop;
+        tv.CanReorderItems = n.CanReorderItems;
+
+        SetElementTag(tv, n);
+
+        // Subscribe trampolines only when a callback newly appears; the
+        // stateless trampolines no-op when a callback is later cleared.
+        if (!o.HasItemInvoked && n.HasItemInvoked)
+            tv.ItemInvoked += TemplatedTreeItemInvoked;
+        if (!o.HasExpanding && n.HasExpanding)
+            tv.Expanding += TemplatedTreeExpanding;
+
+        ApplySetters(n.SettersErased, tv);
+        return null;
+    }
+
+    /// <summary>
+    /// Keyed hierarchical reconcile performed <b>in place</b>: nodes whose key
+    /// survives are kept (and their per-node view reconciled so descendant
+    /// component state survives); vanished keys are removed and unmounted; new
+    /// keys are mounted; surviving nodes are reordered to match
+    /// <paramref name="newItems"/>.
+    ///
+    /// <para>Hosting itself is virtualization-driven (the internal list's
+    /// ContainerContentChanging hosts each node's mounted view on realize and
+    /// releases it on recycle), so this method only maintains the node tree and
+    /// each node's mounted view — it never touches realized containers directly,
+    /// except to swap a container that is currently showing a replaced view.</para>
+    /// </summary>
+    private void DiffTemplatedTreeNodes(
+        IList<WinUI.TreeViewNode> liveNodes,
+        TemplatedTreeViewElementBase o,
+        TemplatedTreeViewElementBase n,
+        IReadOnlyList<object> newItems,
+        Action requestRerender)
+    {
+        // Index surviving nodes by their OLD key.
+        var existing = new Dictionary<string, WinUI.TreeViewNode>(liveNodes.Count);
+        foreach (var ln in liveNodes)
+            if (GetTreeNodeItem(ln) is { } it)
+                existing[o.GetKey(it)] = ln;
+
+        // Remove + unmount nodes whose key disappeared.
+        var newKeys = new HashSet<string>(newItems.Count);
+        foreach (var ni in newItems) newKeys.Add(n.GetKey(ni));
+        for (int i = liveNodes.Count - 1; i >= 0; i--)
+        {
+            var it = GetTreeNodeItem(liveNodes[i]);
+            if (it is null || !newKeys.Contains(o.GetKey(it)))
+            {
+                UnmountTemplatedTreeNode(liveNodes[i]);
+                liveNodes.RemoveAt(i);
+            }
+        }
+
+        // Walk new order: reuse-in-place, move, or create.
+        for (int i = 0; i < newItems.Count; i++)
+        {
+            var newItem = newItems[i];
+            if (existing.TryGetValue(n.GetKey(newItem), out var node))
+            {
+                int cur = liveNodes.IndexOf(node);
+                if (cur != i)
+                {
+                    // A move recycles + re-realizes the container; the
+                    // ContainerContentChanging handler re-hosts the view.
+                    liveNodes.RemoveAt(cur);
+                    liveNodes.Insert(i, node);
+                }
+                ReconcileTemplatedNodeView(node, o, n, newItem, requestRerender);
+                DiffTemplatedTreeNodes(
+                    node.Children, o, n, n.GetChildren(newItem) ?? [], requestRerender);
+            }
+            else
+            {
+                liveNodes.Insert(i, BuildTemplatedTreeNode(n, newItem, requestRerender));
+            }
+        }
+    }
+
+    /// <summary>Reconciles one kept node's mounted view against its new item.</summary>
+    private void ReconcileTemplatedNodeView(
+        WinUI.TreeViewNode node,
+        TemplatedTreeViewElementBase o,
+        TemplatedTreeViewElementBase n,
+        object newItem,
+        Action requestRerender)
+    {
+        var oldItem = GetTreeNodeItem(node);
+        var newView = n.BuildView(newItem);
+        var oldView = oldItem is not null ? o.BuildView(oldItem) : null;
+        var existing = GetTreeNodeView(node);
+
+        if (oldView is not null && existing is not null && CanUpdate(oldView, newView))
+        {
+            // In-place update mutates the live element; a realized container is
+            // already showing it, so nothing else to do unless it's replaced.
+            var replacement = Update(oldView, newView, existing, requestRerender);
+            if (replacement is not null && !ReferenceEquals(existing, replacement))
+            {
+                SetTreeNodeView(node, replacement);
+                RehostReplacedView(existing, replacement);
+            }
+        }
+        else
+        {
+            if (existing is not null) UnmountChild(existing);
+            var mounted = Mount(newView, requestRerender);
+            SetTreeNodeView(node, mounted);
+            RehostReplacedView(existing, mounted);
+        }
+
+        node.Content = newItem;
+
+        // Expansion is uncontrolled: only push the selector value when it
+        // actually CHANGES between renders (developer-driven control). Otherwise
+        // leave node.IsExpanded alone so the user's own expand/collapse is never
+        // clobbered.
+        bool oldExpanded = oldItem is not null && o.GetIsExpanded(oldItem);
+        bool newExpanded = n.GetIsExpanded(newItem);
+        if (oldExpanded != newExpanded && node.IsExpanded != newExpanded)
+            node.IsExpanded = newExpanded;
+
+        SetTreeNodeItem(node, newItem);
+    }
+
+    // If a node's view was replaced (CanUpdate false) while its container is
+    // realized, swap the new view into the ContentControl currently hosting the
+    // old one so the change is visible without waiting for a recycle.
+    private static void RehostReplacedView(UIElement? oldView, UIElement newView)
+    {
+        if (oldView is null) return;
+        DependencyObject? p = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(oldView);
+        while (p is not null and not WinUI.ContentControl)
+            p = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(p);
+        if (p is WinUI.ContentControl host && ReferenceEquals(host.Content, oldView))
+            host.Content = newView;
+    }
+
+    private void UnmountTemplatedTreeNode(WinUI.TreeViewNode node)
+    {
+        if (GetTreeNodeView(node) is UIElement ui) UnmountChild(ui);
+        foreach (var child in node.Children)
+            UnmountTemplatedTreeNode(child);
     }
 
     private UIElement? UpdateRectangle(RectangleElement n, WinShapes.Rectangle r)

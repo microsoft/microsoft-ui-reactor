@@ -362,7 +362,7 @@ public sealed record TreeChildren<TElement, TControl>(
             // node uses ContentElement — mirrors MountTreeView's choice
             // between the text-bound template and the ContentControl shell.
             tree.ItemTemplate = hasContentElements
-                ? Reconciler.SharedContentControlTemplate.Value
+                ? Reconciler.TreeViewContentElementTemplate.Value
                 : Reconciler.TreeViewTextItemTemplate.Value;
         }
         else
@@ -376,7 +376,7 @@ public sealed record TreeChildren<TElement, TControl>(
             // ContentElement. Assigning the same Lazy<DataTemplate> is
             // a no-op identity write.
             tree.ItemTemplate = hasContentElements
-                ? Reconciler.SharedContentControlTemplate.Value
+                ? Reconciler.TreeViewContentElementTemplate.Value
                 : Reconciler.TreeViewTextItemTemplate.Value;
         }
 
@@ -384,6 +384,9 @@ public sealed record TreeChildren<TElement, TControl>(
             tree.RootNodes.Add(CreateTreeNode(nodes[i], hasContentElements, reconciler, requestRerender));
     }
 
+    // Legacy obsolete per-node ContentElement path (issue #447) — kept for
+    // back-compat; CS0618 suppressed at the intentional internal use sites.
+#pragma warning disable CS0618
     private static bool HasAnyContentElement(IReadOnlyList<TreeViewNodeData> nodes)
     {
         for (int i = 0; i < nodes.Count; i++)
@@ -407,6 +410,7 @@ public sealed record TreeChildren<TElement, TControl>(
                 node.Children.Add(CreateTreeNode(data.Children[i], mountElements, reconciler, requestRerender));
         return node;
     }
+#pragma warning restore CS0618
 
     private static void UnmountTreeContent(IList<WinUI.TreeViewNode> nodes, Reconciler reconciler)
     {

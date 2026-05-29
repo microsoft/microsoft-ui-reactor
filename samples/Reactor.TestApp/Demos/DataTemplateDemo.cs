@@ -14,6 +14,40 @@ class DataTemplateDemo : Component
 {
     record Animal(int Id, string Name, string Species, string Emoji);
 
+    // Heterogeneous tree model: group rows and animal rows are distinct C#
+    // shapes, so the TreeView<T> viewBuilder renders each differently and the
+    // childrenSelector reads hierarchy off the shape (see section 4).
+    abstract record PetNode : IReactorKeyed { public abstract string Key { get; } }
+    sealed record PetGroup(string Label, string Glyph, IReadOnlyList<PetNode> Items) : PetNode
+    {
+        public override string Key => "group:" + Label;
+    }
+    sealed record PetLeaf(Animal Animal) : PetNode
+    {
+        public override string Key => "animal:" + Animal.Id;
+    }
+
+    static string EmojiFor(string species) => species switch
+    {
+        "Cat" => "\U0001F431",
+        "Dog" => "\U0001F436",
+        "Rabbit" => "\U0001F430",
+        "Hamster" => "\U0001F439",
+        "Parrot" => "\U0001F99C",
+        _ => "\U0001F43E",
+    };
+
+    static IReadOnlyList<PetNode> BuildPetTree(IReadOnlyList<Animal> animals)
+    {
+        var groups = new[] { "Cat", "Dog", "Rabbit", "Hamster", "Parrot" }
+            .Where(species => animals.Any(a => a.Species == species))
+            .Select(species => (PetNode)new PetGroup(species, EmojiFor(species),
+                animals.Where(a => a.Species == species)
+                       .Select(a => (PetNode)new PetLeaf(a)).ToList()))
+            .ToList();
+        return [new PetGroup("All Pets", "\U0001F3E0", groups)];
+    }
+
     static readonly List<Animal> AllAnimals =
     [
         new(1, "Luna", "Cat", "\U0001F431"),
@@ -44,7 +78,7 @@ class DataTemplateDemo : Component
 
         return ScrollView(VStack(16,
             Heading("DataTemplate Demo"),
-            TextBlock("Typed ListView<T>, GridView<T>, FlipView<T> with viewBuilder, plus TreeView ContentElement."),
+            TextBlock("Typed ListView<T>, GridView<T>, FlipView<T>, and TreeView<T> — all data-driven via a viewBuilder."),
 
             // Filter + add/remove controls
             HStack(12,
@@ -154,48 +188,26 @@ class DataTemplateDemo : Component
 
             TextBlock($"Showing {flipIndex + 1} of {filtered.Count}").Foreground(SecondaryText),
 
-            // 4. TreeView with ContentElement
-            SubHeading("4. TreeView with ContentElement"),
-            TextBlock("Tree nodes render custom Reactor elements instead of plain text."),
+            // 4. TreeView<T> — heterogeneous nodes from the C# data shape
+            SubHeading("4. TreeView<T> (heterogeneous nodes)"),
+            TextBlock("Hierarchy (childrenSelector) and per-node template (viewBuilder) both come from the data shape — group rows and animal rows render differently."),
             Border(
-                TreeView(
-                    new TreeViewNodeData("Pets") { IsExpanded = true,
-                        ContentElement = HStack(8,
-                            TextBlock("\U0001F3E0").FontSize(16),
-                            TextBlock("All Pets").SemiBold()
-                        ),
-                        Children = new[] { "Cat", "Dog", "Rabbit", "Hamster", "Parrot" }
-                            .Where(species => filtered.Any(a => a.Species == species))
-                            .Select(species => new TreeViewNodeData(species)
-                            {
-                                IsExpanded = true,
-                                ContentElement = HStack(8,
-                                    TextBlock(species switch
-                                    {
-                                        "Cat" => "\U0001F431",
-                                        "Dog" => "\U0001F436",
-                                        "Rabbit" => "\U0001F430",
-                                        "Hamster" => "\U0001F439",
-                                        "Parrot" => "\U0001F99C",
-                                        _ => "\U0001F43E"
-                                    }),
-                                    TextBlock(species).SemiBold(),
-                                    TextBlock($"({filtered.Count(a => a.Species == species)})").Foreground(TertiaryText)
-                                ),
-                                Children = filtered
-                                    .Where(a => a.Species == species)
-                                    .Select(a => new TreeViewNodeData(a.Name)
-                                    {
-                                        ContentElement = HStack(8,
-                                            TextBlock(a.Emoji),
-                                            TextBlock(a.Name),
-                                            Caption($"#{a.Id}").Foreground(TertiaryText)
-                                        )
-                                    }).ToArray()
-                            }).ToArray()
-                    }
-                )
-            ).CornerRadius(8).Height(300)
+                TreeView<PetNode>(
+                    items: BuildPetTree(filtered),
+                    childrenSelector: n => n is PetGroup g ? g.Items : null,
+                    viewBuilder: n => n switch
+                    {
+                        PetGroup g => HStack(8,
+                            TextBlock(g.Glyph).FontSize(16),
+                            TextBlock(g.Label).SemiBold(),
+                            Caption($"({g.Items.Count})").Foreground(TertiaryText)),
+                        PetLeaf l => HStack(8,
+                            TextBlock(l.Animal.Emoji),
+                            TextBlock(l.Animal.Name),
+                            Caption($"#{l.Animal.Id}").Foreground(TertiaryText)),
+                        _ => TextBlock(n.Key),
+                    }) with { IsExpanded = _ => true }
+            ).CornerRadius(8).Height(300).Margin(5)
         ));
     }
 }

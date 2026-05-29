@@ -605,6 +605,72 @@ public sealed partial class Reconciler : IDisposable
             "<TextBlock Text='{Binding Content.Content}'/>" +
             "</DataTemplate>"));
 
+    /// <summary>
+    /// TreeView item template that hosts a live <c>UIElement</c> stored in
+    /// <c>TreeViewNode.Content</c>. Used by the typed
+    /// <see cref="TemplatedTreeViewElement{T}"/> (each node's <c>viewBuilder</c>
+    /// output) and by the obsolete per-node <c>ContentElement</c> legacy arm.
+    ///
+    /// <para>Unlike the ListView/GridView <see cref="SharedContentControlTemplate"/>
+    /// — whose <c>ContentControl</c> is filled on demand by a
+    /// <c>ContainerContentChanging</c> handler — TreeView has no such handler,
+    /// so the shell must bind its <c>Content</c> directly. In node mode the
+    /// template's DataContext is the <c>TreeViewNode</c> and <c>Content</c>
+    /// holds the mounted <c>UIElement</c>, so <c>{Binding Content}</c> surfaces
+    /// it through the ContentPresenter (empirically confirmed on native ARM64 —
+    /// the default node-mode template can only stringify, see issue #447).</para>
+    /// </summary>
+    internal static readonly Lazy<DataTemplate> TreeViewContentElementTemplate = new(() =>
+        (DataTemplate)Microsoft.UI.Xaml.Markup.XamlReader.Load(
+            "<DataTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'>" +
+            "<ContentControl Content='{Binding Content}' HorizontalContentAlignment='Stretch' VerticalContentAlignment='Stretch'/>" +
+            "</DataTemplate>"));
+
+    // Carries the originating data item (the developer's T, boxed) on each
+    // TreeViewNode for the typed TreeView<T>. Lives on the native node (a
+    // DependencyObject), so it is duplicate-RCW-safe like ReactorState — the
+    // event trampolines read it from C# to hand T back via OnItemInvoked /
+    // OnExpanding. (Not a XAML binding: Reactor.dll has no XAML metadata for
+    // its own types, so an attached-property binding would not resolve.)
+    private static class TreeNodeItemAttached
+    {
+        public static readonly DependencyProperty ItemProperty =
+            DependencyProperty.RegisterAttached(
+                "ReactorTreeItem",
+                typeof(object),
+                typeof(TreeNodeItemAttached),
+                new PropertyMetadata(null));
+    }
+
+    internal static void SetTreeNodeItem(WinUI.TreeViewNode node, object? item) =>
+        node.SetValue(TreeNodeItemAttached.ItemProperty, item);
+
+    internal static object? GetTreeNodeItem(WinUI.TreeViewNode node) =>
+        node.GetValue(TreeNodeItemAttached.ItemProperty);
+
+    // Holds the node's mounted view for the typed TreeView<T>. The view is
+    // mounted ONCE and persists here across collapse/expand (so component
+    // state survives); the internal list's ContainerContentChanging hosts it
+    // into the realized container's ContentControl on realize and releases it
+    // (Content = null) on recycle. Without that release the shared element
+    // keeps a stale visual parent and the next realization renders blank
+    // (issue #447 follow-up: every-other expand/collapse blanked rows).
+    private static class TreeNodeViewAttached
+    {
+        public static readonly DependencyProperty MountedViewProperty =
+            DependencyProperty.RegisterAttached(
+                "ReactorTreeMountedView",
+                typeof(UIElement),
+                typeof(TreeNodeViewAttached),
+                new PropertyMetadata(null));
+    }
+
+    internal static void SetTreeNodeView(WinUI.TreeViewNode node, UIElement? view) =>
+        node.SetValue(TreeNodeViewAttached.MountedViewProperty, view);
+
+    internal static UIElement? GetTreeNodeView(WinUI.TreeViewNode node) =>
+        node.GetValue(TreeNodeViewAttached.MountedViewProperty) as UIElement;
+
     // ════════════════════════════════════════════════════════════════════
     //  ReactorAttached.StateProperty  (ReactorState)
     // ════════════════════════════════════════════════════════════════════
@@ -1960,10 +2026,26 @@ public sealed partial class Reconciler : IDisposable
         {
             UnmountRecursive(ucChild);
         }
+        else if (control is WinUI.TreeView ttvCtl && GetElementTag(ttvCtl) is TemplatedTreeViewElementBase)
+        {
+            // Typed TreeView<T>: per-node viewBuilder outputs live in
+            // TreeViewNode.Content (some unrealized, so not in the visual
+            // tree). Walk the node tree explicitly so every mounted view's
+            // cleanup hooks run.
+            foreach (var rootNode in ttvCtl.RootNodes)
+                UnmountTemplatedTreeNodeContents(rootNode);
+        }
         else if (control is WinUI.ContentControl cc && cc.Content is UIElement ccChild)
         {
             UnmountRecursive(ccChild);
         }
+    }
+
+    private void UnmountTemplatedTreeNodeContents(WinUI.TreeViewNode node)
+    {
+        if (GetTreeNodeView(node) is UIElement ui) UnmountRecursive(ui);
+        foreach (var child in node.Children)
+            UnmountTemplatedTreeNodeContents(child);
     }
 
     /// <summary>

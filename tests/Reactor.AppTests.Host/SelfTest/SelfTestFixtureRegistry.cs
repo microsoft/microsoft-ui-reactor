@@ -1254,10 +1254,26 @@ internal static class SelfTestFixtureRegistry
         "Spec047ExternalProof_Marquee_SetterChain",
         "Spec047ExternalProof_Marquee_PoolRent",
         "Spec047ExternalProof_Marquee_PoolResetContract",
+        "WinUITreeViewNativeProbe",
+        "TTV_RendersRichContent",
+        "TTV_ResolvesItemForEvents",
+        "TTV_KeyedUpdateReconciles",
+        "TTV_ExpansionNotClobbered",
+        "TTV_CollapseExpandCycle",
+        "TTV_ExpandCollapsedNode",
+        "TTV_ValueTypeItems",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
     {
+        "WinUITreeViewNativeProbe" => new WinUITreeViewNativeProbe(harness),
+        "TTV_RendersRichContent" => new TemplatedTreeViewFixtures.RendersRichContent(harness),
+        "TTV_ResolvesItemForEvents" => new TemplatedTreeViewFixtures.ResolvesItemForEvents(harness),
+        "TTV_KeyedUpdateReconciles" => new TemplatedTreeViewFixtures.KeyedUpdateReconciles(harness),
+        "TTV_ExpansionNotClobbered" => new TemplatedTreeViewFixtures.ExpansionNotClobbered(harness),
+        "TTV_CollapseExpandCycle" => new TemplatedTreeViewFixtures.CollapseExpandCycle(harness),
+        "TTV_ExpandCollapsedNode" => new TemplatedTreeViewFixtures.ExpandCollapsedNode(harness),
+        "TTV_ValueTypeItems" => new TemplatedTreeViewFixtures.ValueTypeItems(harness),
         "ErrorBoundary_CatchesRenderError" => new ErrorBoundaryFixtures.CatchesRenderError(harness),
         "ErrorBoundary_Recovery" => new ErrorBoundaryFixtures.Recovery(harness),
         "Reconciler_MountText" => new ReconcilerFixtures.MountText(harness),

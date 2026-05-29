@@ -701,6 +701,17 @@ public abstract record Element
                 && ta.GetIsItemClickEnabled() == tb.GetIsItemClickEnabled()
                 && !ta.HasSetters && !tb.HasSetters,
 
+            // Typed TreeView<T>: Items/selectors/ViewBuilder are factory inputs
+            // (they drive child reconcile, not parent control properties), so
+            // own-prop equality compares only the WinUI properties the update
+            // path writes back — same rationale as the templated collections.
+            (TemplatedTreeViewElementBase ta, TemplatedTreeViewElementBase tb) =>
+                ta.SelectionMode == tb.SelectionMode
+                && ta.CanDragItems == tb.CanDragItems
+                && ta.AllowDrop == tb.AllowDrop
+                && ta.CanReorderItems == tb.CanReorderItems
+                && ReferenceEquals(ta.SettersErased, tb.SettersErased),
+
             // Lazy (virtualized) stacks: same rationale — Items/ViewBuilder
             // are factory inputs, not control properties.
             (LazyStackElementBase la, LazyStackElementBase lb) =>
@@ -1736,6 +1747,13 @@ public record TreeViewNodeData(string Content, TreeViewNodeData[]? Children = nu
     /// Optional Reactor element to render as the node's visual content.
     /// When null, a TextBlock showing Content is rendered.
     /// </summary>
+    [Obsolete(
+        "Pre-mounting an element into a node renders blank in WinUI node-mode TreeView " +
+        "(issue #447): the default ContentPresenter stringifies the node and cannot host a " +
+        "live UIElement, and per-node events don't resolve. Use the typed " +
+        "TreeView<T>(items, keySelector, childrenSelector, viewBuilder) overload, which renders " +
+        "each node through a viewBuilder (like WinUI's ItemTemplate) and hands your own T back " +
+        "from OnItemInvoked/OnExpanding.")]
     public Element? ContentElement { get; init; }
 }
 
@@ -2812,6 +2830,93 @@ public record TreeViewElement(
     public bool CanReorderItems { get; init; }
     internal Action<WinUI.TreeView>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnItemInvoked is not null || OnExpanding is not null;
+}
+
+/// <summary>
+/// Non-generic base for the typed, data-driven <see cref="TemplatedTreeViewElement{T}"/>,
+/// kept non-generic so the reconciler matches a single type in its mount/update
+/// switch (same erasure pattern as <see cref="TemplatedListElementBase"/>).
+///
+/// <para>Maps to WinUI's native node-mode <c>TreeView</c>: the reconciler builds a
+/// <c>TreeViewNode</c> tree from <see cref="GetRoots"/>/<see cref="GetChildren"/> and
+/// renders each node through the per-node <see cref="BuildView"/> (a real
+/// DataTemplate-style factory) hosted by the <c>{Binding Content}</c> ContentControl
+/// template — rather than pre-mounting a concrete element into <c>Content</c> (which
+/// renders blank, issue #447). The originating <c>T</c> rides on an attached property
+/// of each node so <see cref="InvokeItemInvoked"/>/<see cref="InvokeExpanding"/> hand
+/// the developer's own model back.</para>
+/// </summary>
+public abstract record TemplatedTreeViewElementBase : Element
+{
+    /// <summary>Root data items, erased to <c>object</c> for the reconciler.</summary>
+    internal abstract IReadOnlyList<object> GetRoots();
+    /// <summary>Children of <paramref name="item"/>, or null for a leaf.</summary>
+    internal abstract IReadOnlyList<object>? GetChildren(object item);
+    /// <summary>Stable identity for keyed reconcile + event payloads.</summary>
+    internal abstract string GetKey(object item);
+    /// <summary>The per-node view (the "template/renderer") for <paramref name="item"/>.</summary>
+    internal abstract Element BuildView(object item);
+    /// <summary>Initial expansion state for <paramref name="item"/>.</summary>
+    internal abstract bool GetIsExpanded(object item);
+    internal abstract void InvokeItemInvoked(object item);
+    internal abstract void InvokeExpanding(object item);
+    internal abstract bool HasItemInvoked { get; }
+    internal abstract bool HasExpanding { get; }
+
+    public TreeViewSelectionMode SelectionMode { get; init; } = TreeViewSelectionMode.Single;
+    public bool CanDragItems { get; init; }
+    public bool AllowDrop { get; init; }
+    public bool CanReorderItems { get; init; }
+    internal abstract Action<WinUI.TreeView>[] SettersErased { get; }
+    internal override bool HasCallbacks => HasItemInvoked || HasExpanding;
+}
+
+/// <summary>
+/// Typed, data-driven TreeView — the hierarchical peer of
+/// <see cref="TemplatedListViewElement{T}"/>. Each node's visual is produced by
+/// <see cref="ViewBuilder"/> (WinUI <c>ItemTemplate</c> equivalent); hierarchy comes
+/// from <see cref="ChildrenSelector"/>; identity from <see cref="KeySelector"/>.
+/// Construct via the <c>TreeView&lt;T&gt;</c> factory.
+/// </summary>
+public record TemplatedTreeViewElement<T>(
+    IReadOnlyList<T> Items,
+    Func<T, string> KeySelector,
+    Func<T, IReadOnlyList<T>?> ChildrenSelector,
+    Func<T, Element> ViewBuilder
+) : TemplatedTreeViewElementBase
+{
+    /// <summary>Fires with the developer's own <c>T</c> when a node is invoked.</summary>
+    public Action<T>? OnItemInvoked { get; init; }
+    /// <summary>Fires with the developer's own <c>T</c> when a node begins expanding.</summary>
+    public Action<T>? OnExpanding { get; init; }
+    /// <summary>Per-item initial expansion; defaults to collapsed (WinUI default).</summary>
+    public Func<T, bool>? IsExpanded { get; init; }
+    internal Action<WinUI.TreeView>[] Setters { get; init; } = [];
+
+    internal override IReadOnlyList<object> GetRoots() => Project(Items);
+    internal override IReadOnlyList<object>? GetChildren(object item)
+    {
+        var ch = ChildrenSelector((T)item);
+        return ch is null ? null : Project(ch);
+    }
+    internal override string GetKey(object item) => KeySelector((T)item);
+    internal override Element BuildView(object item) => ViewBuilder((T)item);
+    internal override bool GetIsExpanded(object item) => IsExpanded?.Invoke((T)item) ?? false;
+    internal override void InvokeItemInvoked(object item) => OnItemInvoked?.Invoke((T)item);
+    internal override void InvokeExpanding(object item) => OnExpanding?.Invoke((T)item);
+    internal override bool HasItemInvoked => OnItemInvoked is not null;
+    internal override bool HasExpanding => OnExpanding is not null;
+    internal override Action<WinUI.TreeView>[] SettersErased => Setters;
+
+    // Reference-typed T flows through covariant IReadOnlyList<object> with no
+    // allocation; value-typed T is boxed once per item into a backing array.
+    private static IReadOnlyList<object> Project(IReadOnlyList<T> src)
+    {
+        if (src is IReadOnlyList<object> already) return already;
+        var arr = new object[src.Count];
+        for (int i = 0; i < src.Count; i++) arr[i] = src[i]!;
+        return arr;
+    }
 }
 
 public record FlipViewElement(
