@@ -242,12 +242,15 @@ internal sealed class ControlledPropEntry<TElement, TControl, TValue, TArgs> : P
     public override void Update(TControl ctrl, TElement oldEl, TElement newEl)
     {
         var nv = _get(newEl);
-        var ov = _get(oldEl);
         var current = _readBack(ctrl);
-        // Write when the element prop genuinely changed OR the control has
-        // drifted from the element's authority (e.g. user-typed text the
-        // descriptor is overriding).
-        if (!_comparer.Equals(ov, nv) || !_comparer.Equals(current, nv))
+        // Spec 047 §8 echo-suppression contract: write (under suppression) ONLY
+        // when the control has drifted from the element's authority. Suppressing
+        // a write the control already satisfies raises no change event, so the
+        // token is never consumed — it strands and silently swallows the user's
+        // next real interaction (the cross-state echo class §8 exists to prevent).
+        // The prior `oldEl != newEl` disjunct was redundant and triggered exactly
+        // that stranding on the standard controlled round-trip.
+        if (!_comparer.Equals(current, nv))
             ReactorBinding.WriteSuppressed(ctrl, () => _set(ctrl, nv));
     }
 
@@ -378,9 +381,11 @@ internal sealed class HandCodedControlledPropEntry<TElement, TControl, TPayload,
     public override void Update(TControl ctrl, TElement oldEl, TElement newEl)
     {
         var nv = _get(newEl);
-        var ov = _get(oldEl);
         var current = _readBack(ctrl);
-        if (!_comparer.Equals(ov, nv) || !_comparer.Equals(current, nv))
+        // Spec 047 §8: suppress-write only on real drift (see ControlledPropEntry).
+        // The prior `oldEl != newEl` disjunct stranded the suppress token on the
+        // standard controlled round-trip and swallowed the next real user event.
+        if (!_comparer.Equals(current, nv))
             ReactorBinding.WriteSuppressed(ctrl, () => _set(ctrl, nv));
     }
 

@@ -1131,6 +1131,11 @@ internal static class SelfTestFixtureRegistry
         "Desc_RadioButton_MountUpdate",
         "Desc_RatingControl_MountUpdate",
         "Desc_ToggleSplitButton_MountUpdate",
+        // Spec 047 §8 — real-input echo-stranding regression (CR Finding 1).
+        "Echo_RadioButton_RealInput",
+        "Echo_ToggleSplitButton_RealInput",
+        "Echo_TextBox_RealInput",
+        "Echo_NumberBox_RealInput",
         // Spec 047 §14 Phase 3 (batch 2) — value-bearing date/time/color ports.
         "Desc_ColorPicker_MountUpdate",
         "Desc_CalendarDatePicker_MountUpdate",
@@ -2364,6 +2369,11 @@ internal static class SelfTestFixtureRegistry
         "Desc_RadioButton_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescRadioButtonMountUpdate(harness),
         "Desc_RatingControl_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescRatingControlMountUpdate(harness),
         "Desc_ToggleSplitButton_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescToggleSplitButtonMountUpdate(harness),
+        // Spec 047 §8 — real-input echo-stranding regression (CR Finding 1).
+        "Echo_RadioButton_RealInput" => new Spec047EchoStrandingFixtures.RadioButtonRealInputEcho(harness),
+        "Echo_ToggleSplitButton_RealInput" => new Spec047EchoStrandingFixtures.ToggleSplitButtonRealInputEcho(harness),
+        "Echo_TextBox_RealInput" => new Spec047EchoStrandingFixtures.TextBoxRealInputEcho(harness),
+        "Echo_NumberBox_RealInput" => new Spec047EchoStrandingFixtures.NumberBoxRealInputEcho(harness),
         // Spec 047 §14 Phase 3 (batch 2) — value-bearing date/time/color ports.
         "Desc_ColorPicker_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescColorPickerMountUpdate(harness),
         "Desc_CalendarDatePicker_MountUpdate" => new Spec047V1ProtocolDescriptorFixtures.DescCalendarDatePickerMountUpdate(harness),
