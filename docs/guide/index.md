@@ -184,6 +184,8 @@ does, not just how to use it.
 - **[Reactor vs XAML](reactor-vs-xaml.md)** — (also in §1) the architectural essay
 - **[Hooks Internals](hooks-internals.md)** — Hook slot table, dispatcher, closure capture
 - **[Reconciliation](reconciliation.md)** — Element-record diff, identity, the three phases
+- **[Control Reconciler Protocol](control-reconciler-protocol.md)** — The per-control handler protocol: `IElementHandler`, descriptors, children strategies, pooling
+- **[Extending Reactor Controls](extending-reactor-controls.md)** — Cookbook: add a native control end-to-end with a descriptor
 - **[Element Pool](element-pool.md)** — Allocation reduction under scroll-heavy lists
 - **[Effects Scheduling](effects-scheduling.md)** — When effects run; dep semantics; cleanup ordering
 - **[Threading and Dispatch](threading-and-dispatch.md)** — UI-thread invariants, trampoline, batched renders

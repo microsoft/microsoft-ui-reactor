@@ -286,8 +286,8 @@ jobs:
       - name: Tier-lint
         run: dotnet run --project src/Reactor.Cli -- docs check-tier
 
-  docs-compile:
-    name: Docs compile
+  docs-build:
+    name: Docs build
     needs: changes
     if: needs.changes.outputs.non-md == 'true'
     runs-on: windows-latest
@@ -301,3 +301,21 @@ jobs:
 
       - name: Compile docs
         run: dotnet run --project src/Reactor.Cli -- docs compile --no-screenshots --ci
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: docs/requirements.txt
+
+      - name: Install MkDocs
+        run: pip install -r docs/requirements.txt
+
+      # Strict link/anchor check against the docs just compiled above,
+      # mirroring the Pages publish workflow (.github/workflows/docs.yml).
+      # `--strict` turns a broken cross-link or missing nav file into a
+      # failure, so it fails the PR instead of the post-merge publish (the
+      # only place --strict ran before). Folded into this job so there is a
+      # single docs build.
+      - name: mkdocs build --strict
+        run: python -m mkdocs build --strict
