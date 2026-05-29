@@ -417,9 +417,9 @@ public sealed partial class Reconciler : IDisposable
         // overlap with the Phase 1 ListViewHandler — exact-type wins, so
         // ListView itself uses ListViewHandler; only typed templated
         // variants route through these base-derived registrations.
-        RegisterDescriptorForDerivedTypes(V1Protocol.Descriptor.Descriptors.TemplatedListViewDescriptor.Descriptor);
-        RegisterDescriptorForDerivedTypes(V1Protocol.Descriptor.Descriptors.TemplatedGridViewDescriptor.Descriptor);
-        RegisterDescriptorForDerivedTypes(V1Protocol.Descriptor.Descriptors.TemplatedFlipViewDescriptor.Descriptor);
+        // §14: typed templated lists route through one Path B delegate on the
+        // common base (legacy move/reorder animations) — see TemplatedListHandler.
+        RegisterDecoratorHandlerForDerivedTypes<TemplatedListElementBase>(new V1Protocol.Handlers.TemplatedListHandler());
         RegisterDecoratorHandlerForDerivedTypes<LazyStackElementBase>(new V1Protocol.Handlers.LazyStackHandler()); // §14: ScrollViewer-wrapped — see LazyStackHandler
         RegisterDescriptorForDerivedTypes(V1Protocol.Descriptor.Descriptors.ItemsRepeaterDescriptor.Descriptor);
         RegisterDescriptorForDerivedTypes(V1Protocol.Descriptor.Descriptors.ItemsViewDescriptor.Descriptor);
@@ -438,13 +438,13 @@ public sealed partial class Reconciler : IDisposable
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.CalendarDatePickerDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.CalendarViewDescriptor.Descriptor);
         RegisterDecoratorHandler<CanvasElement>(new V1Protocol.Handlers.CanvasPanelHandler()); // §14: keyed reconcile — see PanelDelegateHandlers
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.CheckBoxDescriptor.Descriptor);
+        RegisterDecoratorHandler<CheckBoxElement>(new V1Protocol.Handlers.CheckBoxHandler()); // §14: value-control echo-suppression — see CheckBoxHandler
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ColorPickerDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ComboBoxDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.DatePickerDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.DropDownButtonDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.EllipseDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ExpanderDescriptor.Descriptor);
+        RegisterDecoratorHandler<ExpanderElement>(new V1Protocol.Handlers.ExpanderHandler()); // §14: callback/template wiring — see ExpanderHandler
         RegisterDecoratorHandler<FlexElement>(new V1Protocol.Handlers.FlexPanelHandler()); // §14: keyed reconcile — see PanelDelegateHandlers
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.FlipViewDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.FrameDescriptor.Descriptor);

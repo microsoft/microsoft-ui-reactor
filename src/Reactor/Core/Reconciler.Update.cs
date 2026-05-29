@@ -979,7 +979,7 @@ public sealed partial class Reconciler
         return null;
     }
 
-    private UIElement? UpdateCheckBox(CheckBoxElement o, CheckBoxElement n, WinUI.CheckBox cb)
+    internal UIElement? UpdateCheckBox(CheckBoxElement o, CheckBoxElement n, WinUI.CheckBox cb)
     {
         SetElementTag(cb, n);
         bool oldWired = o.OnIsCheckedChanged is not null || o.OnCheckedStateChanged is not null;
@@ -1459,7 +1459,7 @@ public sealed partial class Reconciler
         return null;
     }
 
-    private UIElement? UpdateExpander(ExpanderElement o, ExpanderElement n, WinUI.Expander exp, Action requestRerender)
+    internal UIElement? UpdateExpander(ExpanderElement o, ExpanderElement n, WinUI.Expander exp, Action requestRerender)
     {
         exp.IsExpanded = n.IsExpanded;
         exp.ExpandDirection = n.ExpandDirection;
@@ -2950,7 +2950,7 @@ public sealed partial class Reconciler
         }
     }
 
-    private UIElement? UpdateTemplatedListView(TemplatedListElementBase o, TemplatedListElementBase n, WinUI.ListView lv, Action requestRerender)
+    internal UIElement? UpdateTemplatedListView(TemplatedListElementBase o, TemplatedListElementBase n, WinUI.ListView lv, Action requestRerender)
     {
         lv.SelectionMode = n.GetSelectionMode();
         lv.IsItemClickEnabled = n.GetIsItemClickEnabled();
@@ -2976,7 +2976,7 @@ public sealed partial class Reconciler
         return null;
     }
 
-    private UIElement? UpdateTemplatedGridView(TemplatedListElementBase o, TemplatedListElementBase n, WinUI.GridView gv, Action requestRerender)
+    internal UIElement? UpdateTemplatedGridView(TemplatedListElementBase o, TemplatedListElementBase n, WinUI.GridView gv, Action requestRerender)
     {
         gv.SelectionMode = n.GetSelectionMode();
         gv.IsItemClickEnabled = n.GetIsItemClickEnabled();
@@ -3075,7 +3075,7 @@ public sealed partial class Reconciler
         return state;
     }
 
-    private UIElement? UpdateTemplatedFlipView(TemplatedListElementBase o, TemplatedListElementBase n, WinUI.FlipView fv, Action requestRerender)
+    internal UIElement? UpdateTemplatedFlipView(TemplatedListElementBase o, TemplatedListElementBase n, WinUI.FlipView fv, Action requestRerender)
     {
         // FlipView items are pre-mounted directly (no ContainerContentChanging).
         // Build old element array from o, then reconcile like regular items.

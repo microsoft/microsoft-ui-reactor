@@ -675,7 +675,7 @@ public sealed partial class Reconciler
         return box;
     }
 
-    private WinUI.CheckBox MountCheckBox(CheckBoxElement cb)
+    internal WinUI.CheckBox MountCheckBox(CheckBoxElement cb)
     {
         var checkBox = new WinUI.CheckBox { Content = cb.Label };
         if (cb.IsThreeState)
@@ -1268,7 +1268,7 @@ public sealed partial class Reconciler
         return bdr;
     }
 
-    private WinUI.Expander MountExpander(ExpanderElement exp, Action requestRerender)
+    internal WinUI.Expander MountExpander(ExpanderElement exp, Action requestRerender)
     {
         var expander = new WinUI.Expander
         {
@@ -1986,7 +1986,7 @@ public sealed partial class Reconciler
         return flipView;
     }
 
-    private UIElement MountTemplatedList(TemplatedListElementBase el, Action requestRerender)
+    internal UIElement MountTemplatedList(TemplatedListElementBase el, Action requestRerender)
     {
         return el.ControlKind switch
         {
