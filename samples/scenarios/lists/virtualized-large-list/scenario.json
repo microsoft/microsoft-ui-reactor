@@ -1,0 +1,11 @@
+{
+  "id": "virtualized-large-list",
+  "category": "lists",
+  "title": "Virtualized Large List",
+  "intent": "render a large data set efficiently with LazyVStack virtualization",
+  "tags": ["virtualized", "lazy", "large-list", "performance"],
+  "factoryAnchors": ["LazyVStack"],
+  "notesKey": null,
+  "relatedIds": ["list-basic-foreach"],
+  "priority": "P0"
+}

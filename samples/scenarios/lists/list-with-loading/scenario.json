@@ -1,0 +1,11 @@
+{
+  "id": "list-with-loading",
+  "category": "lists",
+  "title": "List With Loading State",
+  "intent": "show a spinner first and then render fetched list items",
+  "tags": ["list", "loading", "spinner", "async", "fetch"],
+  "factoryAnchors": ["ForEach", "ProgressRing", "UseState"],
+  "notesKey": null,
+  "relatedIds": ["list-with-empty-state"],
+  "priority": "P0"
+}

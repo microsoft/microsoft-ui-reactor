@@ -1,0 +1,11 @@
+{
+  "id": "list-add-delete-toggle",
+  "category": "lists",
+  "title": "Add, Delete, Toggle Todo List",
+  "intent": "manage a mutable list with UseReducer and immutable updates",
+  "tags": ["list", "add", "delete", "toggle", "todo", "reducer", "crud"],
+  "factoryAnchors": ["ForEach", "UseReducer"],
+  "notesKey": "lists",
+  "relatedIds": ["list-with-empty-state"],
+  "priority": "P0"
+}

@@ -1,0 +1,11 @@
+{
+  "id": "list-with-empty-state",
+  "category": "lists",
+  "title": "List With Empty State",
+  "intent": "show a placeholder when a list has no items and render rows when data exists",
+  "tags": ["list", "empty", "placeholder", "conditional"],
+  "factoryAnchors": ["ForEach"],
+  "notesKey": "lists",
+  "relatedIds": ["list-add-delete-toggle"],
+  "priority": "P0"
+}

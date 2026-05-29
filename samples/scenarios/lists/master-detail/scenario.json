@@ -1,0 +1,11 @@
+{
+  "id": "master-detail",
+  "category": "lists",
+  "title": "Master Detail Selection",
+  "intent": "use a selectable list on the left to drive detail content on the right",
+  "tags": ["master-detail", "selection", "list", "detail", "split"],
+  "factoryAnchors": ["ForEach", "UseState", "HStack"],
+  "notesKey": null,
+  "relatedIds": ["list-basic-foreach"],
+  "priority": "P0"
+}

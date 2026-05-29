@@ -1,0 +1,11 @@
+{
+  "id": "list-basic-foreach",
+  "category": "lists",
+  "title": "Basic ForEach",
+  "intent": "render a static list using ForEach with stable keys",
+  "tags": ["list", "foreach", "render", "items", "collection"],
+  "factoryAnchors": ["ForEach"],
+  "notesKey": "ForEach",
+  "relatedIds": ["list-add-delete-toggle", "virtualized-large-list"],
+  "priority": "P0"
+}
