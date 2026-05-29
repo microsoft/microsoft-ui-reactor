@@ -58,10 +58,9 @@
     <InternalsVisibleTo Include="Reactor.Tests" />
     <InternalsVisibleTo Include="Reactor.AppTests.Host" />
     <InternalsVisibleTo Include="Reactor.Fuzz" />
-    <!-- Spec 047 §14 Phase 2 (Q1 spike) — PerfBench.ControlModel needs the
-         internal Reconciler(registerBuiltinHandlers:false) ctor to wire its
-         BenchVariant.ReactorDescriptors path; goes away when the surface
-         lock after Phase 2 promotes (or rejects) the descriptor model. -->
+    <!-- Spec 047 — PerfBench.ControlModel benches the V1 control model
+         against the Direct/Bound baselines; it references internal descriptor
+         and handler types to construct representative element trees. -->
     <InternalsVisibleTo Include="PerfBench.ControlModel" />
     <!-- Spec 045 §2.19: the Phase-1 WinUI.Dock XAML wrapper
          (src/Reactor.Docking.Xaml/) and its vendored WinUI.Dock

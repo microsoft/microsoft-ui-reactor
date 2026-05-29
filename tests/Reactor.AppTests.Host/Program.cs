@@ -8,21 +8,6 @@ using Microsoft.UI.Reactor.AppTests.Host;
 using Microsoft.UI.Reactor.AppTests.Host.DevtoolsStress;
 using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 
-// Spec 047 §14 Phase 1 — honor REACTOR_USE_V1_PROTOCOL=true|false at startup so
-// the full selftest suite can be exercised under both V1 ON and V1 OFF on the
-// same binary. Must run before any Reconciler is constructed (Program.Main is
-// the first managed code, so this is safe). Accepts true/1/on (case-insensitive).
-{
-    var v1 = Environment.GetEnvironmentVariable("REACTOR_USE_V1_PROTOCOL");
-    if (!string.IsNullOrWhiteSpace(v1))
-    {
-        var on = v1.Equals("true", StringComparison.OrdinalIgnoreCase)
-              || v1.Equals("1", StringComparison.Ordinal)
-              || v1.Equals("on", StringComparison.OrdinalIgnoreCase);
-        AppContext.SetSwitch("Reactor.UseV1Protocol", on);
-    }
-}
-
 if (args.Contains("--list-fixtures"))
 {
     // Fast path: emit the selftest fixture registry, one name per line, and exit.

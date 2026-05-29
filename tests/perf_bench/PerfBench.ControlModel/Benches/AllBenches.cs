@@ -1,8 +1,7 @@
 // Spec 047 §15.3 — M1 through M13 micro suite.
 //
-// Each bench implements three variants per §15.2. At Phase-0 freeze the
-// `ReactorV2` path delegates to `ReactorToday`; Phase 1+ will diverge as
-// the new control model lands.
+// Each bench implements three variants per §15.2. The `Reactor` path is the
+// production control model compared against the `ReactorToday` baseline.
 //
 // Several benches need real WinUI controls — they're constructed under
 // `BenchContext.Parent` which the host arranges to live on the UI thread.
@@ -35,7 +34,7 @@ public sealed class M01_MountLeafNoCallback : IBench
         }
         else
         {
-            // ReactorToday and ReactorV2 share the same path at Phase-0 freeze.
+            // ReactorToday and Reactor share the same bench flow.
             var el = TextBlock("hi");
             var ui = ctx.Reconciler.Mount(el, NoOp);
             if (ui is not null)
@@ -569,8 +568,8 @@ public sealed class M10_EventHandlerStateAlloc : IBench
         }
         else
         {
-            // ReactorToday allocates EventHandlerState eagerly for the Toggled wiring.
-            // ReactorV2 should split it (per 0.2 audit) — but at Phase-0 freeze, same as Today.
+            // ReactorToday allocates EventHandlerState eagerly for the Toggled wiring;
+            // Reactor is measured against that baseline.
             var el = ToggleSwitch(false, onIsOnChanged: _ => { });
             var ui = ctx.Reconciler.Mount(el, NoOp);
             if (ui is not null)

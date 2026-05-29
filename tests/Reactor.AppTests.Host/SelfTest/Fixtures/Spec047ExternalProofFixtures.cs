@@ -37,14 +37,12 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 ///         observable on a poolable type (Border).</item>
 /// </list>
 ///
-/// <para>All fixtures flip the <c>Reactor.UseV1Protocol</c> AppContext
-/// switch ON, register <see cref="MarqueeHandler"/> through the public
-/// <see cref="Reconciler.RegisterHandler{TElement, TControl}"/>, then
-/// mount a tree containing the external element.</para>
+/// <para>All fixtures register <see cref="MarqueeHandler"/> through the
+/// public <see cref="Reconciler.RegisterHandler{TElement, TControl}"/>,
+/// then mount a tree containing the external element.</para>
 /// </summary>
 internal static class Spec047ExternalProofFixtures
 {
-    private const string V1Switch = "Reactor.UseV1Protocol";
 
     /// <summary>Register the external MarqueeHandler on the host's
     /// Reconciler. The five Phase 1 built-in V1 ports are registered by
@@ -62,36 +60,27 @@ internal static class Spec047ExternalProofFixtures
     {
         public override async Task RunAsync()
         {
-            AppContext.TryGetSwitch(V1Switch, out var prev);
-            AppContext.SetSwitch(V1Switch, true);
-            try
+            var host = H.CreateHost();
+            RegisterMarqueeHandler(host);
+
+            host.Mount(ctx =>
             {
-                var host = H.CreateHost();
-                RegisterMarqueeHandler(host);
+                var (caption, setCaption) = ctx.UseState("initial");
+                return VStack(
+                    new MarqueeElement(caption),
+                    Button("Update", () => setCaption("updated"))
+                );
+            });
 
-                host.Mount(ctx =>
-                {
-                    var (caption, setCaption) = ctx.UseState("initial");
-                    return VStack(
-                        new MarqueeElement(caption),
-                        Button("Update", () => setCaption("updated"))
-                    );
-                });
+            await Harness.Render();
+            var mc = H.FindControl<MarqueeControl>(_ => true);
+            H.Check("ExtProof_Marquee_Mounted", mc is not null);
+            H.Check("ExtProof_Marquee_InitialCaption", mc?.Caption == "initial");
 
-                await Harness.Render();
-                var mc = H.FindControl<MarqueeControl>(_ => true);
-                H.Check("ExtProof_Marquee_Mounted", mc is not null);
-                H.Check("ExtProof_Marquee_InitialCaption", mc?.Caption == "initial");
-
-                H.ClickButton("Update");
-                await Harness.Render();
-                mc = H.FindControl<MarqueeControl>(_ => true);
-                H.Check("ExtProof_Marquee_CaptionUpdated", mc?.Caption == "updated");
-            }
-            finally
-            {
-                AppContext.SetSwitch(V1Switch, prev);
-            }
+            H.ClickButton("Update");
+            await Harness.Render();
+            mc = H.FindControl<MarqueeControl>(_ => true);
+            H.Check("ExtProof_Marquee_CaptionUpdated", mc?.Caption == "updated");
         }
     }
 
@@ -108,50 +97,41 @@ internal static class Spec047ExternalProofFixtures
     {
         public override async Task RunAsync()
         {
-            AppContext.TryGetSwitch(V1Switch, out var prev);
-            AppContext.SetSwitch(V1Switch, true);
-            try
+            int fireCount = 0;
+            var host = H.CreateHost();
+            RegisterMarqueeHandler(host);
+
+            host.Mount(ctx =>
             {
-                int fireCount = 0;
-                var host = H.CreateHost();
-                RegisterMarqueeHandler(host);
+                var (caption, setCaption) = ctx.UseState("a");
+                return VStack(
+                    new MarqueeElement(caption, c => { fireCount++; setCaption(c); }),
+                    Button("Reconcile", () => setCaption("b"))
+                );
+            });
 
-                host.Mount(ctx =>
-                {
-                    var (caption, setCaption) = ctx.UseState("a");
-                    return VStack(
-                        new MarqueeElement(caption, c => { fireCount++; setCaption(c); }),
-                        Button("Reconcile", () => setCaption("b"))
-                    );
-                });
+            await Harness.Render();
+            var mc = H.FindControl<MarqueeControl>(_ => true);
+            H.Check("ExtProof_Marquee_WriteSuppressed_Mounted", mc is not null);
 
-                await Harness.Render();
-                var mc = H.FindControl<MarqueeControl>(_ => true);
-                H.Check("ExtProof_Marquee_WriteSuppressed_Mounted", mc is not null);
+            // Reconcile path — handler's Update writes Caption via
+            // WriteSuppressed. The callback must not fire.
+            int beforeReconcile = fireCount;
+            H.ClickButton("Reconcile");
+            await Harness.Render();
+            H.Check("ExtProof_Marquee_WriteSuppressed_NoEchoOnReconcile",
+                fireCount == beforeReconcile);
+            mc = H.FindControl<MarqueeControl>(_ => true);
+            H.Check("ExtProof_Marquee_WriteSuppressed_ReconcileApplied",
+                mc?.Caption == "b");
 
-                // Reconcile path — handler's Update writes Caption via
-                // WriteSuppressed. The callback must not fire.
-                int beforeReconcile = fireCount;
-                H.ClickButton("Reconcile");
-                await Harness.Render();
-                H.Check("ExtProof_Marquee_WriteSuppressed_NoEchoOnReconcile",
-                    fireCount == beforeReconcile);
-                mc = H.FindControl<MarqueeControl>(_ => true);
-                H.Check("ExtProof_Marquee_WriteSuppressed_ReconcileApplied",
-                    mc?.Caption == "b");
-
-                // Direct write OUTSIDE the suppression scope — simulates a
-                // user-initiated change. Callback must fire exactly once.
-                int beforeDirect = fireCount;
-                if (mc is not null) mc.Caption = "user-typed";
-                await Harness.Render();
-                H.Check("ExtProof_Marquee_WriteSuppressed_FiresOutsideScope",
-                    fireCount == beforeDirect + 1);
-            }
-            finally
-            {
-                AppContext.SetSwitch(V1Switch, prev);
-            }
+            // Direct write OUTSIDE the suppression scope — simulates a
+            // user-initiated change. Callback must fire exactly once.
+            int beforeDirect = fireCount;
+            if (mc is not null) mc.Caption = "user-typed";
+            await Harness.Render();
+            H.Check("ExtProof_Marquee_WriteSuppressed_FiresOutsideScope",
+                fireCount == beforeDirect + 1);
         }
     }
 
@@ -165,28 +145,19 @@ internal static class Spec047ExternalProofFixtures
     {
         public override async Task RunAsync()
         {
-            AppContext.TryGetSwitch(V1Switch, out var prev);
-            AppContext.SetSwitch(V1Switch, true);
-            try
-            {
-                var host = H.CreateHost();
-                RegisterMarqueeHandler(host);
+            var host = H.CreateHost();
+            RegisterMarqueeHandler(host);
 
-                host.Mount(_ => VStack(
-                    new MarqueeElement("modded").Margin(8).Width(120)
-                ));
+            host.Mount(_ => VStack(
+                new MarqueeElement("modded").Margin(8).Width(120)
+            ));
 
-                await Harness.Render();
-                var mc = H.FindControl<MarqueeControl>(_ => true);
-                H.Check("ExtProof_Marquee_Modifier_Mounted", mc is not null);
-                H.Check("ExtProof_Marquee_Margin",
-                    mc?.Margin.Left == 8 && mc?.Margin.Top == 8);
-                H.Check("ExtProof_Marquee_Width", mc?.Width == 120);
-            }
-            finally
-            {
-                AppContext.SetSwitch(V1Switch, prev);
-            }
+            await Harness.Render();
+            var mc = H.FindControl<MarqueeControl>(_ => true);
+            H.Check("ExtProof_Marquee_Modifier_Mounted", mc is not null);
+            H.Check("ExtProof_Marquee_Margin",
+                mc?.Margin.Left == 8 && mc?.Margin.Top == 8);
+            H.Check("ExtProof_Marquee_Width", mc?.Width == 120);
         }
     }
 
@@ -200,36 +171,27 @@ internal static class Spec047ExternalProofFixtures
     {
         public override async Task RunAsync()
         {
-            AppContext.TryGetSwitch(V1Switch, out var prev);
-            AppContext.SetSwitch(V1Switch, true);
-            try
-            {
-                var host = H.CreateHost();
-                RegisterMarqueeHandler(host);
+            var host = H.CreateHost();
+            RegisterMarqueeHandler(host);
 
-                bool setterRan = false;
-                host.Mount(_ => VStack(
-                    new MarqueeElement("set-base")
-                    {
-                        Setters =
-                        [
-                            c => c.Tag = "set-by-author",
-                            c => { setterRan = true; },
-                        ],
-                    }
-                ));
+            bool setterRan = false;
+            host.Mount(_ => VStack(
+                new MarqueeElement("set-base")
+                {
+                    Setters =
+                    [
+                        c => c.Tag = "set-by-author",
+                        c => { setterRan = true; },
+                    ],
+                }
+            ));
 
-                await Harness.Render();
-                var mc = H.FindControl<MarqueeControl>(_ => true);
-                H.Check("ExtProof_Marquee_Setter_Mounted", mc is not null);
-                H.Check("ExtProof_Marquee_Setter_TagApplied",
-                    mc?.Tag is string s && s == "set-by-author");
-                H.Check("ExtProof_Marquee_Setter_LambdaRan", setterRan);
-            }
-            finally
-            {
-                AppContext.SetSwitch(V1Switch, prev);
-            }
+            await Harness.Render();
+            var mc = H.FindControl<MarqueeControl>(_ => true);
+            H.Check("ExtProof_Marquee_Setter_Mounted", mc is not null);
+            H.Check("ExtProof_Marquee_Setter_TagApplied",
+                mc?.Tag is string s && s == "set-by-author");
+            H.Check("ExtProof_Marquee_Setter_LambdaRan", setterRan);
         }
     }
 
@@ -243,43 +205,34 @@ internal static class Spec047ExternalProofFixtures
     {
         public override async Task RunAsync()
         {
-            AppContext.TryGetSwitch(V1Switch, out var prev);
-            AppContext.SetSwitch(V1Switch, true);
+            var host = H.CreateHost();
+            var reconciler = host.Reconciler;
+
+            MarqueeControl? a = null;
+            MarqueeControl? b = null;
+            Exception? rentEx = null;
             try
             {
-                var host = H.CreateHost();
-                var reconciler = host.Reconciler;
-
-                MarqueeControl? a = null;
-                MarqueeControl? b = null;
-                Exception? rentEx = null;
-                try
-                {
-                    a = reconciler.RentControl<MarqueeControl>();
-                    b = reconciler.RentControl<MarqueeControl>();
-                }
-                catch (Exception e) { rentEx = e; }
-
-                H.Check("ExtProof_Marquee_Rent_NoException", rentEx is null);
-                H.Check("ExtProof_Marquee_Rent_FreshInstance",
-                    a is not null && b is not null && !ReferenceEquals(a, b));
-
-                Exception? returnEx = null;
-                try
-                {
-                    if (a is not null) reconciler.ReturnControl(a);
-                    // Idempotency — double return must be safe.
-                    if (a is not null) reconciler.ReturnControl(a);
-                }
-                catch (Exception e) { returnEx = e; }
-                H.Check("ExtProof_Marquee_Return_NoException", returnEx is null);
-
-                await Task.CompletedTask;
+                a = reconciler.RentControl<MarqueeControl>();
+                b = reconciler.RentControl<MarqueeControl>();
             }
-            finally
+            catch (Exception e) { rentEx = e; }
+
+            H.Check("ExtProof_Marquee_Rent_NoException", rentEx is null);
+            H.Check("ExtProof_Marquee_Rent_FreshInstance",
+                a is not null && b is not null && !ReferenceEquals(a, b));
+
+            Exception? returnEx = null;
+            try
             {
-                AppContext.SetSwitch(V1Switch, prev);
+                if (a is not null) reconciler.ReturnControl(a);
+                // Idempotency — double return must be safe.
+                if (a is not null) reconciler.ReturnControl(a);
             }
+            catch (Exception e) { returnEx = e; }
+            H.Check("ExtProof_Marquee_Return_NoException", returnEx is null);
+
+            await Task.CompletedTask;
         }
     }
 
@@ -293,33 +246,24 @@ internal static class Spec047ExternalProofFixtures
     {
         public override async Task RunAsync()
         {
-            AppContext.TryGetSwitch(V1Switch, out var prev);
-            AppContext.SetSwitch(V1Switch, true);
-            try
-            {
-                var host = H.CreateHost();
-                var reconciler = host.Reconciler;
+            var host = H.CreateHost();
+            var reconciler = host.Reconciler;
 
-                // Allocate fresh; pool starts empty. Border IS in
-                // PoolableTypes so the second rent (post-return) MAY return
-                // the same instance — but the assertion is on the tag, not
-                // instance identity, because pool stack capacity / dirty
-                // detach may drop the return silently.
-                var border = reconciler.RentControl<Border>();
-                Reconciler.SetElementTag(border, new MarqueeElement("tagged"));
-                H.Check("ExtProof_Pool_TagSet",
-                    Reconciler.GetElementTag(border) is MarqueeElement m && m.Caption == "tagged");
+            // Allocate fresh; pool starts empty. Border IS in
+            // PoolableTypes so the second rent (post-return) MAY return
+            // the same instance — but the assertion is on the tag, not
+            // instance identity, because pool stack capacity / dirty
+            // detach may drop the return silently.
+            var border = reconciler.RentControl<Border>();
+            Reconciler.SetElementTag(border, new MarqueeElement("tagged"));
+            H.Check("ExtProof_Pool_TagSet",
+                Reconciler.GetElementTag(border) is MarqueeElement m && m.Caption == "tagged");
 
-                reconciler.ReturnControl(border);
-                H.Check("ExtProof_Pool_TagClearedOnReturn",
-                    Reconciler.GetElementTag(border) is null);
+            reconciler.ReturnControl(border);
+            H.Check("ExtProof_Pool_TagClearedOnReturn",
+                Reconciler.GetElementTag(border) is null);
 
-                await Task.CompletedTask;
-            }
-            finally
-            {
-                AppContext.SetSwitch(V1Switch, prev);
-            }
+            await Task.CompletedTask;
         }
     }
 }

@@ -1,14 +1,13 @@
 // Spec 047 §15.3 — PerfBench.ControlModel host.
 //
 // CLI:
-//   PerfBench.ControlModel.exe [--test M1 [M2 ...]] [--variant Direct|ReactorToday|ReactorV2|All]
+//   PerfBench.ControlModel.exe [--test M1 [M2 ...]] [--variant Direct|ReactorToday|Reactor|All]
 //                              [--iterations N] [--reps R] [--out path] [--headless]
 //
 // Defaults: --test=All --variant=All --iterations=10000 --reps=5
 //
-// At Phase 0 the ReactorV2 path delegates to ReactorToday, so V2 numbers
-// ≈ Today numbers. Phase 1+ work shows up as the V2-vs-Today delta in the
-// §15.6 aggregator output.
+// Reactor is the production control model variant compared against the
+// ReactorToday legacy dispatch baseline in the §15.6 aggregator output.
 
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
@@ -89,7 +88,7 @@ internal sealed partial class BenchHostApp : Microsoft.UI.Xaml.Application
             : BenchCatalog.All.ToList();
         var variants = cli.SelectedVariants is { Count: > 0 } sv
             ? sv.ToList()
-            : new List<BenchVariant> { BenchVariant.Direct, BenchVariant.ReactorToday, BenchVariant.ReactorV2 };
+            : new List<BenchVariant> { BenchVariant.Direct, BenchVariant.ReactorToday, BenchVariant.Reactor };
 
         var jobs = new List<(IBench Bench, BenchVariant Variant)>();
         foreach (var b in benches)
@@ -178,8 +177,7 @@ internal sealed partial class BenchHostApp : Microsoft.UI.Xaml.Application
             {
                 BenchVariant.Direct,
                 BenchVariant.ReactorToday,
-                BenchVariant.ReactorV2,
-                BenchVariant.ReactorDescriptors,
+                BenchVariant.Reactor,
             };
 
         // Flatten into a job list of (bench, variant) pairs.
@@ -214,24 +212,9 @@ internal sealed partial class BenchHostApp : Microsoft.UI.Xaml.Application
                 BenchContext Factory()
                 {
                     benchParent.Children.Clear();
-                    // Spec 047 §14 Phase 1 — ReactorV2 exercises the V1 protocol
-                    // path with hand-coded handlers.
-                    // Spec 047 §14 Phase 2 (Q1) — ReactorDescriptors exercises
-                    // V1 with the same three ports re-expressed as descriptors
-                    // (ToggleSwitch / Slider / Border). The remaining ports
-                    // (TextBox / ListView) keep their hand-coded handlers so
-                    // every variant has a working dispatch for every bench;
-                    // M1/M2/M5/M7/M10 land directly on the contested controls.
-                    bool useV1 = variant is BenchVariant.ReactorV2 or BenchVariant.ReactorDescriptors;
-                    Reconciler rec;
-                    if (variant == BenchVariant.ReactorDescriptors)
-                    {
-                        rec = DescriptorVariantFactory.Create();
-                    }
-                    else
-                    {
-                        rec = new Reconciler(logger: null, useV1Protocol: useV1);
-                    }
+                    // The Reactor variant exercises the unconditional production
+                    // protocol path with hand-coded handlers.
+                    Reconciler rec = new Reconciler();
                     if (bench.Id == "M6")
                     {
                         rec.RegisterType<M06_DispatchExternalType.ExtElement, TextBlock>(

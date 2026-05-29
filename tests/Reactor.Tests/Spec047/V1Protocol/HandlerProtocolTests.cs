@@ -56,8 +56,8 @@ public class HandlerProtocolTests
     public void V1_Mount_Path_Dispatches_Through_RegisterHandler()
     {
         // TODO(1.11): with the WinUI dispatcher available, mount a FakeElement
-        // through Reconciler.Reconcile when UseV1Protocol=true and assert the
-        // handler's Mount(ctx, el) ran and returned the expected control.
+        // through Reconciler.Reconcile and assert the registered handler's
+        // Mount(ctx, el) ran and returned the expected control.
     }
 
     [Fact(Skip = "Requires WinUI dispatcher to mount a real UIElement; covered in AppTests.Host fixture site (1.11+)")]

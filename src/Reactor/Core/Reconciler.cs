@@ -245,62 +245,24 @@ public sealed partial class Reconciler : IDisposable
         set => _enableBitmaskDiff = value;
     }
 
-    public Reconciler() : this(null, useV1Protocol: null) { }
-
-    public Reconciler(ILogger? logger) : this(logger, useV1Protocol: null) { }
-
     /// <summary>
-    /// Spec 047 §14 Phase 1 — v1 protocol feature flag (Q1.1);
-    /// §14 Phase 4 (§4.1) — flipped ON by default (production path).
+    /// Spec 047 §14 — the V1 protocol is the unconditional production path.
+    /// The Phase 1 <c>UseV1Protocol</c> feature flag, its AppContext switch,
+    /// and the descriptor-vs-handler A|B harness ctor were all removed in
+    /// §4.6 once the legacy <c>MountXxx</c>/<c>UpdateXxx</c> switch was deleted
+    /// (§4.5).
     ///
-    /// When <paramref name="useV1Protocol"/> is non-null, that value wins per-instance.
-    /// When null, falls back to <c>AppContext.SetSwitch("Reactor.UseV1Protocol", …)</c>;
-    /// when that is unset, defaults to <b>ON</b>. The explicit flag / AppContext
-    /// switch now exist only as an <i>escape hatch to turn V1 OFF</i> during the
-    /// §4.5 legacy-deletion window; once the legacy arms are deleted, OFF is no
-    /// longer a valid runtime state and the flag is removed (§4.6).
-    ///
-    /// Ports of built-in controls register handlers into the internal
-    /// <see cref="V1HandlerRegistry"/>; external <see cref="RegisterType{TElement,TControl}"/>
-    /// callers continue to populate <c>_typeRegistry</c>. Dispatch order when the
-    /// flag is ON is V1 → external → legacy switch; when OFF, V1 is skipped.
+    /// Built-in V1 handlers register automatically into the internal
+    /// <see cref="V1HandlerRegistry"/>; external authors add handlers via
+    /// <see cref="RegisterHandler{TElement,TControl}"/> /
+    /// <see cref="RegisterType{TElement,TControl}"/> (which populate
+    /// <c>_typeRegistry</c>). Dispatch order is V1 → external → the eight
+    /// composition primitives that sit above the protocol.
     /// </summary>
-    public Reconciler(ILogger? logger, bool? useV1Protocol)
-        : this(logger, useV1Protocol, registerBuiltinHandlers: true) { }
-
-    /// <summary>
-    /// Spec 047 §14 Phase 2 (Q1 spike) — internal ctor used by the
-    /// descriptor-vs-handler A|B harness. <paramref name="registerBuiltinHandlers"/>
-    /// suppresses the automatic Phase 1 handler registration so a test or
-    /// bench can plug a descriptor-driven handler in for the same element
-    /// types via <see cref="RegisterHandler{TElement,TControl}"/>. Not part
-    /// of the production surface — flipping this to <c>false</c> in app code
-    /// leaves no built-in V1 dispatch path for the five ported controls.
-    /// </summary>
-    internal Reconciler(ILogger? logger, bool? useV1Protocol, bool registerBuiltinHandlers)
+    public Reconciler(ILogger? logger = null)
     {
         _logger = logger;
-        if (useV1Protocol is bool explicitFlag)
-        {
-            UseV1Protocol = explicitFlag;
-        }
-        else if (AppContext.TryGetSwitch("Reactor.UseV1Protocol", out var switchValue))
-        {
-            UseV1Protocol = switchValue;
-        }
-        else
-        {
-            // §14 Phase 4 (§4.1) — production default is V1 ON. The flag/switch
-            // above remain only as the escape hatch to force V1 OFF during the
-            // §4.5 legacy-deletion window; both are removed in §4.6.
-            UseV1Protocol = true;
-        }
-
-        // Spec 047 §14 Phase 1 (1.11–1.15) — register the ported built-in
-        // handlers when the v1 flag is ON for this reconciler instance.
-        // When OFF, ported controls fall through to the legacy MountXxx switch
-        // (unchanged), so V1 ON vs OFF can be diffed on the same binary.
-        if (UseV1Protocol && registerBuiltinHandlers) RegisterV1BuiltInHandlers();
+        RegisterV1BuiltInHandlers();
     }
 
     /// <summary>
@@ -567,17 +529,6 @@ public sealed partial class Reconciler : IDisposable
         where TControl : FrameworkElement, new()
         => RegisterHandlerForDerivedTypes<TBase, TControl>(
             new V1Protocol.Descriptor.DescriptorHandler<TBase, TControl>(descriptor));
-
-    /// <summary>
-    /// Spec 047 §14 Phase 1 — v1 protocol feature flag (Q1.1). When true,
-    /// <see cref="V1HandlerRegistry"/> is consulted before the external
-    /// <c>_typeRegistry</c> and the legacy <c>MountXxx</c> switch. Set via the
-    /// <see cref="Reconciler(ILogger?, bool?)"/> ctor or the
-    /// <c>Reactor.UseV1Protocol</c> AppContext switch (ctor wins).
-    /// Provisional surface — see <see cref="ReactorBinding"/> for the
-    /// <c>REACTOR_V1_PREVIEW</c> diagnostic id.
-    /// </summary>
-    public bool UseV1Protocol { get; }
 
     // ── V1 handler registry (spec 047 §14 Phase 1, Q1.1) ──────────────
     // Keyed by exact element type, separate from _typeRegistry so that
@@ -998,7 +949,7 @@ public sealed partial class Reconciler : IDisposable
     /// Spec 047 §14 Phase 1 (1.6 / 1.9) — register a v1
     /// <see cref="V1Protocol.IElementHandler{TElement,TControl}"/> for the
     /// given element type. Dispatched ahead of <see cref="RegisterType{T,U}"/>
-    /// callbacks when <see cref="UseV1Protocol"/> is ON. Throws on duplicate
+    /// callbacks. Throws on duplicate
     /// (including across registries) and on open-generic element types
     /// (spec §13 Q17).
     /// </summary>
@@ -1901,27 +1852,15 @@ public sealed partial class Reconciler : IDisposable
 
         _errorBoundaryNodes.Remove(control);
 
-        // Spec 047 §14 Phase 4 (4.0.2): NavigationHost teardown is owned by
-        // NavigationHostHandler.Unmount on the V1 path (the standard V1 unmount
-        // arm below dispatches it and returns CollectSelf). This pre-dispatch
-        // check remains only as the V1-OFF fallback during the migration window
-        // and is deleted together with the V1-OFF escape path in §4.6.
-        if (!UseV1Protocol && _navigationHostNodes.ContainsKey(control))
-        {
-            CleanupNavigationHostNode(control);
-            return; // Children already handled inside cleanup; don't recurse into Grid children again
-        }
-
-        // Spec 047 §14 Phase 1 (1.1) — V1 handler unmount dispatch. Only
-        // active when the feature flag is ON for this reconciler instance.
-        // Standard handlers return CollectSelf (terminate the traversal —
-        // children already torn down by the handler). Phase 3 completion
-        // decorator handlers may return ContinueDefaultTraversal to let
-        // the engine recurse into the wrapped child whose control they
-        // returned (e.g., FlyoutElement returns the Target's mounted
-        // control; the Target's children still need their own unmount).
-        if (UseV1Protocol
-            && control is FrameworkElement v1Fe && GetElementTag(v1Fe) is Element v1TagEl
+        // Spec 047 §14 Phase 1 (1.1) — V1 handler unmount dispatch. Standard
+        // handlers return CollectSelf (terminate the traversal — children
+        // already torn down by the handler; e.g. NavigationHostHandler.Unmount
+        // runs CleanupNavigationHostNode). Phase 3 completion decorator handlers
+        // may return ContinueDefaultTraversal to let the engine recurse into the
+        // wrapped child whose control they returned (e.g., FlyoutElement returns
+        // the Target's mounted control; the Target's children still need their
+        // own unmount).
+        if (control is FrameworkElement v1Fe && GetElementTag(v1Fe) is Element v1TagEl
             && _v1Handlers.TryGet(v1TagEl.GetType(), out var v1Entry) && v1Entry.HasUnmount)
         {
             var v1Disposition = v1Entry.Unmount(control, this);
@@ -2193,8 +2132,7 @@ public sealed partial class Reconciler : IDisposable
         // to the default child traversal (ContinueDefaultTraversal —
         // wrapped child owns the control identity, default recursion
         // reaches the wrapped element's own unmount).
-        if (UseV1Protocol
-            && control is FrameworkElement v1Fe && GetElementTag(v1Fe) is Element v1TagEl
+        if (control is FrameworkElement v1Fe && GetElementTag(v1Fe) is Element v1TagEl
             && _v1Handlers.TryGet(v1TagEl.GetType(), out var v1Entry) && v1Entry.HasUnmount)
         {
             var v1Disposition = v1Entry.Unmount(control, this);

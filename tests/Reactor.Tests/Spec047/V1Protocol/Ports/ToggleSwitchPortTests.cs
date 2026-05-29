@@ -12,38 +12,21 @@ namespace Microsoft.UI.Reactor.Tests.Spec047.V1Protocol.Ports;
 /// live in <c>tests/Reactor.AppTests.Host/SelfTest/Fixtures/Spec047V1ProtocolFixtures.cs</c>.
 /// Here we exercise the registration contract:</para>
 /// <list type="bullet">
-///   <item>The handler registers automatically when <c>UseV1Protocol = true</c>.</item>
-///   <item>Re-registering on the same flag-ON reconciler throws (Q17 dedupe).</item>
-///   <item>With the flag OFF, no V1 handler is registered (legacy path stays).</item>
+///   <item>The built-in handler registers automatically in the ctor.</item>
+///   <item>Re-registering the same element type throws (Q17 dedupe).</item>
 /// </list>
 /// </summary>
 public class ToggleSwitchPortTests
 {
     [Fact]
-    public void Flag_On_Registers_ToggleSwitchHandler_Automatically()
+    public void BuiltIn_Registers_ToggleSwitchHandler_Automatically()
     {
-        var rec = new Reconciler(logger: null, useV1Protocol: true);
-        Assert.True(rec.UseV1Protocol);
+        var rec = new Reconciler();
         // Trying to register the same element type a second time must throw
         // because the ctor already registered it.
         Assert.Throws<InvalidOperationException>(
             () => rec.RegisterHandler<ToggleSwitchElement, Microsoft.UI.Xaml.Controls.ToggleSwitch>(
                 new ToggleSwitchHandler()));
-    }
-
-    [Fact]
-    public void Flag_Off_Skips_Built_In_Registration()
-    {
-        var rec = new Reconciler(logger: null, useV1Protocol: false);
-        Assert.False(rec.UseV1Protocol);
-        // Built-in registration is gated on the flag — when OFF, the v1
-        // dispatch is skipped entirely (the legacy MountToggleSwitch handles
-        // it). Manual RegisterHandler still works as the public author surface,
-        // but it has no effect at dispatch time on a flag-OFF reconciler.
-        rec.RegisterHandler<ToggleSwitchElement, Microsoft.UI.Xaml.Controls.ToggleSwitch>(
-            new ToggleSwitchHandler());
-        // No throw — first registration is allowed (flag-OFF ctor skipped the
-        // automatic registration).
     }
 
     [Fact(Skip = "Requires WinUI dispatcher; covered in AppTests.Host SelfTest/Fixtures/Spec047V1ProtocolFixtures.cs (1.11)")]

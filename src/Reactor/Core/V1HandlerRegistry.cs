@@ -14,7 +14,8 @@ namespace Microsoft.UI.Reactor.Core;
 // cross-registry collisions (RegisterType vs RegisterHandler) are caught.
 
 /// <summary>
-/// Dispatch shape consumed by Reconciler when UseV1Protocol is ON. The
+/// Dispatch shape consumed by Reconciler when routing an element through the
+/// V1 protocol. The
 /// concrete implementations are:
 /// <list type="bullet">
 ///   <item><see cref="V1Protocol.V1HandlerAdapter{TElement,TControl}"/>

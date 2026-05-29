@@ -13,7 +13,7 @@ public class TextBoxPortTests
     [Fact]
     public void Flag_On_Registers_TextBoxHandler_Automatically()
     {
-        var rec = new Reconciler(logger: null, useV1Protocol: true);
+        var rec = new Reconciler();
         Assert.Throws<InvalidOperationException>(
             () => rec.RegisterHandler<TextBoxElement, Microsoft.UI.Xaml.Controls.TextBox>(
                 new TextBoxHandler()));

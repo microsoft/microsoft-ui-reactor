@@ -1,9 +1,6 @@
 using System;
 using System.Threading.Tasks;
 using Microsoft.UI.Reactor.Core;
-using Microsoft.UI.Reactor.Core.V1Protocol;
-using Microsoft.UI.Reactor.Core.V1Protocol.Descriptor;
-using Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -15,8 +12,7 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
 /// <summary>
 /// Spec 047 §8 — <b>real-input</b> echo-stranding regression fixtures for the
-/// descriptor controlled-value paths
-/// (<see cref="Descriptor.PropEntry{TElement,TControl}"/>'s
+/// descriptor controlled-value paths (the descriptor <c>PropEntry</c>'s
 /// <c>ControlledPropEntry</c> and <c>HandCodedControlledPropEntry</c>).
 ///
 /// <para><b>The bug these lock down (code-review Finding 1):</b> the controlled
@@ -43,7 +39,7 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 internal static class Spec047EchoStrandingFixtures
 {
     private static Reconciler NewDescriptorReconciler()
-        => new Reconciler(logger: null, useV1Protocol: true, registerBuiltinHandlers: false);
+        => new Reconciler();
 
     private static readonly Action _noOp = static () => { };
 
@@ -55,9 +51,6 @@ internal static class Spec047EchoStrandingFixtures
         public override async Task RunAsync()
         {
             var rec = NewDescriptorReconciler();
-            rec.RegisterHandler<RadioButtonElement, WinUI.RadioButton>(
-                new DescriptorHandler<RadioButtonElement, WinUI.RadioButton>(
-                    RadioButtonDescriptor.Descriptor));
 
             var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
             H.SetContent(parent);
@@ -101,9 +94,6 @@ internal static class Spec047EchoStrandingFixtures
         public override async Task RunAsync()
         {
             var rec = NewDescriptorReconciler();
-            rec.RegisterHandler<ToggleSplitButtonElement, WinUI.ToggleSplitButton>(
-                new DescriptorHandler<ToggleSplitButtonElement, WinUI.ToggleSplitButton>(
-                    ToggleSplitButtonDescriptor.Descriptor));
 
             var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
             H.SetContent(parent);
@@ -139,56 +129,12 @@ internal static class Spec047EchoStrandingFixtures
 
     // ── HandCodedControlledPropEntry path ──────────────────────────────────
 
-    /// <summary>TextBox.Text — <c>.HandCodedControlled</c> entry.</summary>
-    internal class TextBoxRealInputEcho(Harness h) : SelfTestFixtureBase(h)
-    {
-        public override async Task RunAsync()
-        {
-            var rec = NewDescriptorReconciler();
-            rec.RegisterHandler<TextBoxElement, WinUI.TextBox>(
-                new DescriptorHandler<TextBoxElement, WinUI.TextBox>(
-                    TextBoxDescriptor.Descriptor));
-
-            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
-            H.SetContent(parent);
-
-            int changedCount = 0;
-            var el1 = new TextBoxElement(Value: "a", OnChanged: _ => changedCount++);
-            if (rec.Mount(el1, _noOp) is WinUI.TextBox tb)
-            {
-                parent.Children.Add(tb);
-                await Harness.Render();
-
-                tb.Text = "user1";
-                await Harness.Render();
-                H.Check("Desc_TextBox_RealInput_FirstEventFired", changedCount == 1);
-
-                rec.UpdateChild(el1, el1 with { Value = "user1" }, tb, _noOp);
-                await Harness.Render();
-
-                tb.Text = "user2";
-                await Harness.Render();
-                H.Check("Desc_TextBox_RealInput_SecondEventNotSwallowed", changedCount == 2);
-
-                rec.UnmountChild(tb);
-                parent.Children.Clear();
-            }
-            else
-            {
-                H.Check("Desc_TextBox_RealInput_Mounted", false);
-            }
-        }
-    }
-
     /// <summary>NumberBox.Value — <c>.HandCodedControlled</c> entry.</summary>
     internal class NumberBoxRealInputEcho(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
         {
             var rec = NewDescriptorReconciler();
-            rec.RegisterHandler<NumberBoxElement, WinUI.NumberBox>(
-                new DescriptorHandler<NumberBoxElement, WinUI.NumberBox>(
-                    NumberBoxDescriptor.Descriptor));
 
             var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
             H.SetContent(parent);

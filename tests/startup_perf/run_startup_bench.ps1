@@ -74,12 +74,6 @@ $variants = @(
         BuildArgs = @("build", (Join-Path $root "BlankReactor\BlankReactor.csproj"), "-c", "Release", "-p:Platform=$arch")
     },
     @{
-        Name = "ReactorV2"
-        AppName = "blank_reactor_v2"
-        Exe = Join-Path $root "BlankReactorV2\bin\$arch\Release\$tfm\BlankReactorV2.exe"
-        BuildArgs = @("build", (Join-Path $root "BlankReactorV2\BlankReactorV2.csproj"), "-c", "Release", "-p:Platform=$arch")
-    },
-    @{
         Name = "RNW"
         AppName = "blank_rnw"
         # MSBuild puts the unpackaged exe under windows\<Platform>\Release\

@@ -15,7 +15,7 @@ public class ListViewPortTests
     [Fact]
     public void Flag_On_Registers_ListViewHandler_Automatically()
     {
-        var rec = new Reconciler(logger: null, useV1Protocol: true);
+        var rec = new Reconciler();
         Assert.Throws<InvalidOperationException>(
             () => rec.RegisterHandler<ListViewElement, Microsoft.UI.Xaml.Controls.ListView>(
                 new ListViewHandler()));

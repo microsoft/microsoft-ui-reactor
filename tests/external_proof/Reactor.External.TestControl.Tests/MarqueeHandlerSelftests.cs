@@ -29,7 +29,7 @@ public class MarqueeHandlerSelftests
     [Fact]
     public void RegisterHandler_Succeeds_ForExternalElementType()
     {
-        var reconciler = new Reconciler(logger: null, useV1Protocol: true);
+        var reconciler = new Reconciler();
         // Public RegisterHandler API — author surface only. Compiles
         // because Reactor.dll exposes IElementHandler, MountContext,
         // ReactorBinding<T>, and ChildrenStrategy as public types.
@@ -41,7 +41,7 @@ public class MarqueeHandlerSelftests
     [Fact]
     public void RegisterHandler_Twice_Throws()
     {
-        var reconciler = new Reconciler(logger: null, useV1Protocol: true);
+        var reconciler = new Reconciler();
         reconciler.RegisterHandler<MarqueeElement, MarqueeControl>(new MarqueeHandler());
 
         // V1 semantics per spec §13 Q17 — throw on duplicate. The exception
@@ -55,7 +55,7 @@ public class MarqueeHandlerSelftests
     [Fact]
     public void RegisterHandler_DoesNotCollide_WithUnrelatedV1Handler()
     {
-        var reconciler = new Reconciler(logger: null, useV1Protocol: true);
+        var reconciler = new Reconciler();
         // The five built-in V1 ports are already in the registry via the
         // Reconciler ctor. A fresh element type (MarqueeElement) must be
         // accepted alongside them.
@@ -151,3 +151,4 @@ public class MarqueeHandlerSelftests
         Assert.True(true);
     }
 }
+

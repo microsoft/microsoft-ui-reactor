@@ -114,7 +114,7 @@ public sealed partial class Reconciler
         // a different instance (target-wrapping decorators whose
         // Target changed type). When the returned instance equals
         // `control`, set `result` to null so callers preserve identity.
-        if (UseV1Protocol && _v1Handlers.TryGet(newEl.GetType(), out var v1Entry))
+        if (_v1Handlers.TryGet(newEl.GetType(), out var v1Entry))
         {
             var v1Result = v1Entry.Update(oldEl, newEl, control, requestRerender, this);
             result = ReferenceEquals(v1Result, control) ? null : v1Result;

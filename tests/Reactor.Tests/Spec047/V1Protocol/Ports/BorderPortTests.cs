@@ -14,7 +14,7 @@ public class BorderPortTests
     [Fact]
     public void Flag_On_Registers_BorderHandler_Automatically()
     {
-        var rec = new Reconciler(logger: null, useV1Protocol: true);
+        var rec = new Reconciler();
         Assert.Throws<InvalidOperationException>(
             () => rec.RegisterHandler<BorderElement, Microsoft.UI.Xaml.Controls.Border>(
                 new BorderHandler()));

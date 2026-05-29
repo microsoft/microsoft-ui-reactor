@@ -4,9 +4,9 @@
     streams produced by PerfBench.ControlModel (micro M1–M13) and the
     StressPerf.* macro variants. Emits the three §15.6 tables:
 
-      (a) absolute comparison Direct / ReactorToday / ReactorV2
-      (b) Reactor delta (V2 vs Today, % with 95% CI)
-      (c) WinUI gap (V2 vs Direct, absolute)
+      (a) absolute comparison Direct / ReactorToday / Reactor
+      (b) Reactor delta (Reactor vs Today, % with 95% CI)
+      (c) WinUI gap (Reactor vs Direct, absolute)
 
     Plus a per-PR trend output for CI.
 

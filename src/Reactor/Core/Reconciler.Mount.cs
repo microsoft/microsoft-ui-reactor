@@ -63,7 +63,7 @@ public sealed partial class Reconciler
         // element types route through `_v1Handlers`; the legacy `MountXxx`
         // switch arms were deleted (V1 is the production path). Only the 8
         // composition primitives (above the protocol) remain on the switch.
-        if (UseV1Protocol && _v1Handlers.TryGet(element.GetType(), out var v1Entry))
+        if (_v1Handlers.TryGet(element.GetType(), out var v1Entry))
         {
             control = v1Entry.Mount(element, requestRerender, this);
         }

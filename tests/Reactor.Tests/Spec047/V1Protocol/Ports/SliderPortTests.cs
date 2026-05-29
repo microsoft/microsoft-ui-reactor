@@ -14,7 +14,7 @@ public class SliderPortTests
     [Fact]
     public void Flag_On_Registers_SliderHandler_Automatically()
     {
-        var rec = new Reconciler(logger: null, useV1Protocol: true);
+        var rec = new Reconciler();
         Assert.Throws<InvalidOperationException>(
             () => rec.RegisterHandler<SliderElement, Microsoft.UI.Xaml.Controls.Slider>(
                 new SliderHandler()));

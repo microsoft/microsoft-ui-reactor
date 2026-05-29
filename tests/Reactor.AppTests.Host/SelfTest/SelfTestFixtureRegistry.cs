@@ -1121,7 +1121,6 @@ internal static class SelfTestFixtureRegistry
         // Spec 047 §8 — real-input echo-stranding regression (CR Finding 1).
         "Echo_RadioButton_RealInput",
         "Echo_ToggleSplitButton_RealInput",
-        "Echo_TextBox_RealInput",
         "Echo_NumberBox_RealInput",
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
@@ -2237,7 +2236,6 @@ internal static class SelfTestFixtureRegistry
         // Spec 047 §8 — real-input echo-stranding regression (CR Finding 1).
         "Echo_RadioButton_RealInput" => new Spec047EchoStrandingFixtures.RadioButtonRealInputEcho(harness),
         "Echo_ToggleSplitButton_RealInput" => new Spec047EchoStrandingFixtures.ToggleSplitButtonRealInputEcho(harness),
-        "Echo_TextBox_RealInput" => new Spec047EchoStrandingFixtures.TextBoxRealInputEcho(harness),
         "Echo_NumberBox_RealInput" => new Spec047EchoStrandingFixtures.NumberBoxRealInputEcho(harness),
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.

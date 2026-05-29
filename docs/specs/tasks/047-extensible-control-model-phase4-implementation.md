@@ -29,6 +29,22 @@ Derived from: `docs/specs/047-extensible-control-model.md` (§14 "Phase 4 — cl
 > ## 🟢 Progress log (live)
 >
 > **Done & verified (committed):**
+> - **§4.6** — Removed all A|B / `UseV1Protocol` dead code. `Reconciler` now has a
+>   single `Reconciler(ILogger? logger = null)` ctor (dropped the `useV1Protocol` /
+>   `registerBuiltinHandlers` params, the `public bool UseV1Protocol` property, the
+>   AppContext-switch read, and the NavigationHost pre-dispatch flag guard); both
+>   dispatch sites (`Mount.cs:66`, `Update.cs:117`) and both unmount arms no longer
+>   gate on the flag. Deleted `Program.cs` `REACTOR_USE_V1_PROTOCOL` env-var mapping,
+>   the `selftests-v1` CI job, the perf A|B duplicates (`StressPerf.ReactorV2`,
+>   `BlankReactorV2`, `DescriptorVariantFactory`) + `tools/spec047-phase1-checkpoint/`
+>   (`ReactorV2`→`Reactor` in the aggregator/slnx/scripts), `V1FeatureFlagTests.cs`,
+>   `TypeRegistryTests.Override_Builtin`, and the redundant `TextBox` echo-stranding
+>   fixture; reshaped `V1OnRegistrationTests` + the `Ports/*PortTests` + the
+>   `Spec047V1Protocol`/`Spec047ExternalProof` selftest fixtures to `new Reconciler()`
+>   with the flag-flipping removed. Grep-clean of `UseV1Protocol`/`REACTOR_USE_V1_PROTOCOL`/
+>   `ReactorV2` outside `docs/specs/`. Validation: core build = 0 err; xunit = 9128
+>   pass/0 fail; Echo + V1_* + Spec047ExternalProof_* selftests = 0 fail. *(Perf-project
+>   consolidation measurement deferred to ARM64 — see §4.9.)*
 > - **§4.5** — Deleted the legacy `MountXxx`/`UpdateXxx` dispatch switches:
 >   both `Mount`/`Update` now dispatch V1-registry → `_typeRegistry` →
 >   composition-primitive-only switch (Component/Func/Memo/ErrorBoundary/
@@ -526,36 +542,42 @@ registration) + §4.1 (flip) being stable.
 The A|B harness existed only to diff V1 ON vs V1 OFF on one binary. With V1 the
 production default and legacy arms deleted, all of it is dead.
 
-- [ ] Remove the `Reactor.UseV1Protocol` AppContext switch read, the
+- [x] Remove the `Reactor.UseV1Protocol` AppContext switch read, the
       `public bool UseV1Protocol` property, and the `useV1Protocol` ctor
       parameters from `Reconciler` (`Reconciler.cs:250-296, 568`). V1 is
-      unconditional.
-- [ ] Remove the internal `Reconciler(logger, useV1Protocol, registerBuiltinHandlers)`
+      unconditional. *(Single `Reconciler(ILogger? logger = null)` ctor remains.)*
+- [x] Remove the internal `Reconciler(logger, useV1Protocol, registerBuiltinHandlers)`
       A|B ctor and the `registerBuiltinHandlers` plumbing; built-in handler
-      registration is unconditional. (Verify the Phase 2 descriptor-vs-handler
-      harness that used `registerBuiltinHandlers: false` is also removed — it was
-      a measurement-only path.)
-- [ ] Remove the `REACTOR_USE_V1_PROTOCOL` env-var mapping in
+      registration is unconditional. (The Phase 2 descriptor-vs-handler
+      harness `DescriptorVariantFactory` that used `registerBuiltinHandlers: false`
+      was deleted; the echo-stranding fixtures migrated to `new Reconciler()`
+      against the now-built-in descriptors.)
+- [x] Remove the `REACTOR_USE_V1_PROTOCOL` env-var mapping in
       `tests/Reactor.AppTests.Host/Program.cs:11-22`.
-- [ ] Remove the dual-flag selftest harness (the runner path that executes
-      fixtures under both flags) and any `Desc_`-vs-legacy A|B comparison
-      scaffolding now that there is one path.
-- [ ] Delete the A|B perf project duplicates: `tests/stress_perf/StressPerf.ReactorV2`
-      and `tests/startup_perf/BlankReactorV2` (and `StressPerf.VirtualList.ReactorV2`
-      if it landed for 1.18). Fold their scenarios back into the primary
-      `StressPerf.Reactor` / `BlankReactor` — `ReactorV2` is now `Reactor`.
-      Update the perf aggregator (§15.6) so it compares `Direct` /
+- [x] Remove the dual-flag selftest harness (removed the `selftests-v1` CI job
+      in `.github/workflows/ci.yml`; de-switched `Spec047V1ProtocolFixtures` /
+      `Spec047ExternalProofFixtures` so they no longer flip the AppContext switch;
+      removed the redundant `TextBox` echo-stranding fixture).
+- [x] Delete the A|B perf project duplicates: `tests/stress_perf/StressPerf.ReactorV2`
+      and `tests/startup_perf/BlankReactorV2`. Folded their scenarios back into the
+      primary `StressPerf.Reactor` / `BlankReactor` — `ReactorV2` is now `Reactor`.
+      Updated the perf aggregator (§15.6) so it compares `Direct` /
       `ReactorToday(historical baseline)` / `Reactor(current)` without a live V2
-      variant.
-- [ ] Delete or repurpose the V1-flag-specific test files:
-      `tests/Reactor.Tests/Spec047/V1Protocol/V1FeatureFlagTests.cs`,
-      `Ports/V1OnRegistrationTests.cs` (keep behavior tests that are still
-      meaningful with V1 always-on; delete the ones asserting the flag/OFF
-      behavior).
-- [ ] Remove the `tools/spec047-phase1-checkpoint/` A|B checkpoint runner if it
-      only exercised the flag.
-- [ ] **Validation.** Solution builds with zero references to `UseV1Protocol` /
-      `REACTOR_USE_V1_PROTOCOL` / `ReactorV2` (grep clean); full suite green.
+      variant. *(Code complete; perf measurement/ratification deferred to the
+      ARM64 baseline machine — see §4.9.)*
+- [x] Delete or repurpose the V1-flag-specific test files:
+      deleted `tests/Reactor.Tests/Spec047/V1Protocol/V1FeatureFlagTests.cs`;
+      reshaped `Ports/V1OnRegistrationTests.cs` (kept the registration-shape /
+      XAML-interop behavior tests, dropped the flag/OFF assertions and the
+      `Spec047V1FlagCollection`); migrated the remaining `Ports/*PortTests.cs`
+      to `new Reconciler()` and dropped the `Flag_Off` cases; deleted
+      `TypeRegistryTests.Override_Builtin_Type_Mount_Is_Dispatched` (the V1-OFF
+      legacy-override escape hatch).
+- [x] Remove the `tools/spec047-phase1-checkpoint/` A|B checkpoint runner.
+- [x] **Validation.** Solution builds with zero references to `UseV1Protocol` /
+      `REACTOR_USE_V1_PROTOCOL` / `ReactorV2` outside `docs/specs/` (grep clean);
+      core build green, xunit green (9128 pass / 0 fail), and the affected
+      selftest fixtures green (Echo, V1_*, Spec047ExternalProof_*).
 
 ## 4.7 Graduate + lock the public author surface
 
