@@ -14,14 +14,17 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol;
 /// control's lifetime) plus a Current* user delegate the trampoline reads
 /// on each fire.
 ///
-/// Phase 1 ships only the shape and storage. Legacy MountXxx paths still
-/// use the shared <c>EventHandlerState</c> (Toggled / Click / TextChanged
-/// trampolines); ported V1 controls opt into a per-control payload via
+/// The control-intrinsic events live here in per-control payload boxes; the
+/// routed/modifier input family (pointer / key / focus / etc.) lives in the
+/// shared <c>ModifierEventHandlerState</c>. Ported V1 controls opt into a
+/// per-control payload via
 /// <see cref="ReactorBinding{TElement}.OnCustomEvent{TArgs}"/>.
 ///
 /// Handlers verify the payload type via <see cref="ControlEventStateBox.HandlerType"/>
 /// before unboxing (§9.2 "Why the discriminator matters"). The pool reset
-/// contract clears <c>ReactorState.ControlEventState</c> on return.
+/// contract PRESERVES <c>ReactorState.ControlEventState</c> across rent/return
+/// (issue #114) — trampolines stay subscribed for the control's lifetime and
+/// the box is only dropped on full detach.
 /// </summary>
 internal sealed class ToggleSwitchEventPayload
 {

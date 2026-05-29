@@ -32,7 +32,7 @@ namespace Microsoft.UI.Reactor.Core;
 /// the queued change-event handler runs against a different wrapper, so
 /// ShouldSuppress would miss the token and the echo would fire (issues #86,
 /// #114). The attached DP lives on the native object, so every wrapper sees
-/// the same counter — the same fix shape used for <c>EventHandlerState</c>.
+/// the same counter — the same fix shape used for <c>ModifierEventHandlerState</c>.
 /// </summary>
 internal static class ChangeEchoSuppressor
 {

@@ -11,8 +11,13 @@ namespace Microsoft.UI.Reactor.Core;
 /// initialize a fresh box without trusting stale state.
 ///
 /// The pool reset contract in <see cref="Reconciler.ReturnControl{T}"/>
-/// clears <c>ReactorState.ControlEventState</c> to null on return, so a
-/// stale type is never observable post-rent.
+/// PRESERVES <c>ReactorState.ControlEventState</c> across pool rent/return
+/// (issue #114): the trampolines stay subscribed to the native WinUI events
+/// for the control's lifetime and read live state via GetElementTag, so
+/// clearing the box on return would force re-allocation on every rent and
+/// double-subscribe. The box is only dropped on full detach
+/// (DetachReactorState). A stale type is never observable post-rent because
+/// GetOrCreateControlEventPayload re-creates the box on a HandlerType mismatch.
 /// </summary>
 internal sealed class ControlEventStateBox
 {

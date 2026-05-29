@@ -8,7 +8,7 @@ namespace Microsoft.UI.Reactor.Core;
 public sealed partial class Reconciler
 {
     /// <summary>
-    /// Per-element gesture dispatch state. Mirrors <see cref="EventHandlerState"/>'s
+    /// Per-element gesture dispatch state. Mirrors <see cref="ModifierEventHandlerState"/>'s
     /// trampoline pattern for the three manipulation events, plus per-gesture cursors
     /// that track distance thresholds, start anchors, and inertia flags so callback
     /// contracts stay clean ("<see cref="GesturePhase.Began"/> fires exactly once").

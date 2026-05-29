@@ -682,24 +682,6 @@ public sealed partial class Reconciler
         return null;
     }
 
-    private UIElement? UpdateImage(ImageElement o, ImageElement n, WinUI.Image img)
-    {
-        SetElementTag(img, n);
-        EnsureImageWiring(img);
-        if (o.Source != n.Source)
-        {
-            var uri = new Uri(n.Source, UriKind.RelativeOrAbsolute);
-            img.Source = n.Source.EndsWith(".svg", StringComparison.OrdinalIgnoreCase)
-                ? new SvgImageSource(uri)
-                : new BitmapImage(uri);
-        }
-        if (n.Width.HasValue) img.Width = n.Width.Value;
-        if (n.Height.HasValue) img.Height = n.Height.Value;
-        if (n.NineGrid.HasValue && img.NineGrid != n.NineGrid.Value) img.NineGrid = n.NineGrid.Value;
-        ApplySetters(n.Setters, img);
-        return null;
-    }
-
     private UIElement? UpdatePersonPicture(PersonPictureElement n, WinUI.PersonPicture pp)
     {
         if (n.DisplayName is not null) pp.DisplayName = n.DisplayName;
@@ -797,47 +779,6 @@ public sealed partial class Reconciler
         ReconcileChildren(o.Children, n.Children, sp, requestRerender);
         // No Tag set — StackPanel has no event handlers. Avoids expensive COM call.
         ApplySetters(n.Setters, sp);
-        return null;
-    }
-
-    private UIElement? UpdateScrollViewer(ScrollViewerElement o, ScrollViewerElement n, WinUI.ScrollViewer sv, Element newEl, Action requestRerender)
-    {
-        if (CanUpdate(o.Child, n.Child))
-        {
-            var childRepl = Update(o.Child, n.Child, sv.Content as UIElement ?? new WinUI.Grid(), requestRerender);
-            if (childRepl is not null) return Mount(newEl, requestRerender);
-        }
-        else return Mount(newEl, requestRerender);
-        sv.HorizontalScrollBarVisibility = n.HorizontalScrollBarVisibility;
-        sv.VerticalScrollBarVisibility = n.VerticalScrollBarVisibility;
-        sv.HorizontalScrollMode = (WinUI.ScrollMode)n.HorizontalScrollMode;
-        sv.VerticalScrollMode = (WinUI.ScrollMode)n.VerticalScrollMode;
-        sv.ZoomMode = (WinUI.ZoomMode)n.ZoomMode;
-        SetElementTag(sv, n);
-        ApplySetters(n.Setters, sv);
-        return null;
-    }
-
-    private UIElement? UpdateScrollView(ScrollViewElement o, ScrollViewElement n, WinUI.ScrollView sv, Element newEl, Action requestRerender)
-    {
-        if (CanUpdate(o.Child, n.Child))
-        {
-            var childRepl = Update(o.Child, n.Child, sv.Content ?? new WinUI.Grid(), requestRerender);
-            if (childRepl is not null) return Mount(newEl, requestRerender);
-        }
-        else return Mount(newEl, requestRerender);
-        sv.ContentOrientation = n.ContentOrientation;
-        sv.HorizontalScrollBarVisibility = n.HorizontalScrollBarVisibility;
-        sv.VerticalScrollBarVisibility = n.VerticalScrollBarVisibility;
-        sv.HorizontalScrollMode = n.HorizontalScrollMode;
-        sv.VerticalScrollMode = n.VerticalScrollMode;
-        sv.ZoomMode = n.ZoomMode;
-        sv.MinZoomFactor = n.MinZoomFactor;
-        sv.MaxZoomFactor = n.MaxZoomFactor;
-        sv.HorizontalAnchorRatio = n.HorizontalAnchorRatio;
-        sv.VerticalAnchorRatio = n.VerticalAnchorRatio;
-        SetElementTag(sv, n);
-        ApplySetters(n.Setters, sv);
         return null;
     }
 

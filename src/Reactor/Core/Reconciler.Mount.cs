@@ -260,17 +260,18 @@ public sealed partial class Reconciler
 
     /// <summary>
     /// Wires Button.Click trampoline only when the element has a handler AND
-    /// the control hasn't been wired yet. Dedupe key is the EventHandlerState
-    /// trampoline reference, attached on ReactorAttached.StateProperty (native
-    /// DO identity), so two managed RCWs over the same native Button share one
-    /// trampoline. Survives pool round-trips for the same reason.
+    /// the control hasn't been wired yet. Dedupe key is the per-control
+    /// ButtonEventPayload (ControlEventStateBox) trampoline reference, attached
+    /// on ReactorAttached.StateProperty (native DO identity), so two managed
+    /// RCWs over the same native Button share one trampoline. Survives pool
+    /// round-trips for the same reason.
     /// </summary>
     internal static void EnsureButtonWiring(WinUI.Button button, ButtonElement btn)
     {
         if (btn.OnClick is null) return;
-        var state = GetOrCreateEventState(button);
-        if (state.ButtonClickTrampoline is not null) return;
-        state.ButtonClickTrampoline = (s, _) =>
+        var payload = GetOrCreateControlEventPayload<V1Protocol.ButtonEventPayload>(button);
+        if (payload.ClickTrampoline is not null) return;
+        payload.ClickTrampoline = (s, _) =>
         {
             if (GetElementTag((UIElement)s!) is ButtonElement live)
             {
@@ -278,7 +279,7 @@ public sealed partial class Reconciler
                 live.OnClick?.Invoke();
             }
         };
-        button.Click += state.ButtonClickTrampoline;
+        button.Click += payload.ClickTrampoline;
     }
 
     private WinUI.HyperlinkButton MountHyperlinkButton(HyperlinkButtonElement hlBtn)
@@ -351,18 +352,6 @@ public sealed partial class Reconciler
         return sb;
     }
 
-
-
-    /// <summary>
-    /// Wires TextBox's TextChanged/SelectionChanged trampolines only when the
-    /// element has a corresponding handler AND the control hasn't been wired
-    /// yet. Called from both Mount (fresh or pooled) and Update (null→non-null
-    /// transition). Dedupe through EventHandlerState (native-DO-keyed) so
-    /// pool round-trips and RCW projection both share one trampoline.
-    /// </summary>
-
-
-
     // Spec 047 §14 Phase 3-final Batch B — widened to internal static so
     // NumberBoxDescriptor can register the same captured-free trampolines
     // via the .Immediate entry shape.
@@ -382,14 +371,14 @@ public sealed partial class Reconciler
 
     internal static bool EnsureNumberBoxImmediateTextBoxWiring(WinUI.NumberBox box)
     {
-        var events = GetOrCreateEventState(box);
-        if (events.NumberBoxInnerTextChanged) return true;
+        var payload = GetOrCreateControlEventPayload<V1Protocol.NumberBoxEventPayload>(box);
+        if (payload.ImmediateInnerWired) return true;
 
         box.ApplyTemplate();
         var input = FindDescendant<TextBox>(box);
         if (input is null) return false;
 
-        events.NumberBoxInnerTextChanged = true;
+        payload.ImmediateInnerWired = true;
         input.TextChanged += (_, _) => HandleNumberBoxImmediateTextChanged(box, input.Text);
         return true;
     }
@@ -479,7 +468,7 @@ public sealed partial class Reconciler
 
 
 
-    // Dedupe via EventHandlerState (attached on ReactorAttached.StateProperty,
+    // Dedupe via ModifierEventHandlerState (attached on ReactorAttached.StateProperty,
     // keyed by native DependencyObject identity). A plain CWT keyed by managed
     // RCW identity is unsafe — two RCWs over the same DO miss the dedupe and
     // double-subscribe, fanning one Toggled into multiple user-callback invocations.
@@ -512,54 +501,6 @@ public sealed partial class Reconciler
         if (ring.Value.HasValue) pr.Value = ring.Value.Value;
         ApplySetters(ring.Setters, pr);
         return pr;
-    }
-
-    private WinUI.Image MountImage(ImageElement img)
-    {
-        var image = _pool.TryRent(typeof(WinUI.Image)) as WinUI.Image ?? new WinUI.Image();
-        // Tag + wire BEFORE assigning Source — small/cached images can fire
-        // ImageOpened/ImageFailed synchronously during Source assignment.
-        SetElementTag(image, img);
-        EnsureImageWiring(image);
-        try
-        {
-            var uri = new Uri(img.Source, UriKind.RelativeOrAbsolute);
-            image.Source = img.Source.EndsWith(".svg", StringComparison.OrdinalIgnoreCase)
-                ? new SvgImageSource(uri)
-                : new BitmapImage(uri);
-        }
-        catch (UriFormatException)
-        {
-            // Malformed URI — leave image source empty rather than crashing
-        }
-        if (img.Width.HasValue) image.Width = img.Width.Value;
-        if (img.Height.HasValue) image.Height = img.Height.Value;
-        if (img.NineGrid.HasValue) image.NineGrid = img.NineGrid.Value;
-        ApplySetters(img.Setters, image);
-        return image;
-    }
-
-    /// <summary>
-    /// Wires ImageOpened/ImageFailed trampolines once per pooled Image. The
-    /// handler resolves the live element via GetElementTag so a later
-    /// record-with that attaches a handler picks up without re-subscribing.
-    /// Dedupe through EventHandlerState (native-DO-keyed).
-    /// </summary>
-    internal static void EnsureImageWiring(WinUI.Image image)
-    {
-        var state = GetOrCreateEventState(image);
-        if (state.ImageOpenedTrampoline is null)
-        {
-            state.ImageOpenedTrampoline = (s, _) =>
-                (GetElementTag((UIElement)s!) as ImageElement)?.OnImageOpened?.Invoke();
-            image.ImageOpened += state.ImageOpenedTrampoline;
-        }
-        if (state.ImageFailedTrampoline is null)
-        {
-            state.ImageFailedTrampoline = (s, args) =>
-                (GetElementTag((UIElement)s!) as ImageElement)?.OnImageFailed?.Invoke(args.ErrorMessage);
-            image.ImageFailed += state.ImageFailedTrampoline;
-        }
     }
 
     private WinUI.PersonPicture MountPersonPicture(PersonPictureElement pp)
@@ -672,72 +613,6 @@ public sealed partial class Reconciler
         ApplySetters(grid.Setters, g);
         return g;
     }
-
-    private WinUI.ScrollViewer MountScrollViewer(ScrollViewerElement scroll, Action requestRerender)
-    {
-        var sv = _pool.TryRent(typeof(WinUI.ScrollViewer)) as WinUI.ScrollViewer ?? new WinUI.ScrollViewer();
-        sv.HorizontalScrollBarVisibility = scroll.HorizontalScrollBarVisibility;
-        sv.VerticalScrollBarVisibility = scroll.VerticalScrollBarVisibility;
-        sv.HorizontalScrollMode = (WinUI.ScrollMode)scroll.HorizontalScrollMode;
-        sv.VerticalScrollMode = (WinUI.ScrollMode)scroll.VerticalScrollMode;
-        sv.ZoomMode = (WinUI.ZoomMode)scroll.ZoomMode;
-        sv.Content = Mount(scroll.Child, requestRerender);
-        SetElementTag(sv, scroll);
-        EnsureScrollViewerViewChangedWired(sv);
-        ApplySetters(scroll.Setters, sv);
-        return sv;
-    }
-
-    private static void EnsureScrollViewerViewChangedWired(WinUI.ScrollViewer sv)
-    {
-        // Pooled control: wire the trampoline exactly once. The handler reads
-        // the live element via GetElementTag so a later record-with that
-        // attaches OnViewChanged picks up without re-subscribing. Dedupe
-        // through EventHandlerState (native-DO-keyed).
-        var state = GetOrCreateEventState(sv);
-        if (state.ScrollViewerViewChangedTrampoline is not null) return;
-        state.ScrollViewerViewChangedTrampoline = (s, e) =>
-        {
-            if (GetElementTag((WinUI.ScrollViewer)s!) is ScrollViewerElement el && el.OnViewChanged is { } h)
-                h(e);
-        };
-        sv.ViewChanged += state.ScrollViewerViewChangedTrampoline;
-    }
-
-    private WinUI.ScrollView MountScrollView(ScrollViewElement scroll, Action requestRerender)
-    {
-        var sv = new WinUI.ScrollView
-        {
-            ContentOrientation = scroll.ContentOrientation,
-            HorizontalScrollBarVisibility = scroll.HorizontalScrollBarVisibility,
-            VerticalScrollBarVisibility = scroll.VerticalScrollBarVisibility,
-            HorizontalScrollMode = scroll.HorizontalScrollMode,
-            VerticalScrollMode = scroll.VerticalScrollMode,
-            ZoomMode = scroll.ZoomMode,
-            MinZoomFactor = scroll.MinZoomFactor,
-            MaxZoomFactor = scroll.MaxZoomFactor,
-            HorizontalAnchorRatio = scroll.HorizontalAnchorRatio,
-            VerticalAnchorRatio = scroll.VerticalAnchorRatio,
-            Content = Mount(scroll.Child, requestRerender),
-        };
-        SetElementTag(sv, scroll);
-        EnsureScrollViewViewChangedWired(sv);
-        ApplySetters(scroll.Setters, sv);
-        return sv;
-    }
-
-    private static void EnsureScrollViewViewChangedWired(WinUI.ScrollView sv)
-    {
-        var state = GetOrCreateEventState(sv);
-        if (state.ScrollViewViewChangedTrampoline is not null) return;
-        state.ScrollViewViewChangedTrampoline = (s, _) =>
-        {
-            if (GetElementTag((WinUI.ScrollView)s!) is ScrollViewElement el && el.OnViewChanged is { } h)
-                h();
-        };
-        sv.ViewChanged += state.ScrollViewViewChangedTrampoline;
-    }
-
 
     internal WinUI.Expander MountExpander(ExpanderElement exp, Action requestRerender)
     {

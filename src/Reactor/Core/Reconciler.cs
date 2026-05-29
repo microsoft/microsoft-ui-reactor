@@ -572,13 +572,13 @@ public sealed partial class Reconciler : IDisposable
     //
     // A single attached DP carrying a ReactorState wrapper that bundles
     //   (a) the current Reactor Element for this native element, and
-    //   (b) the per-element EventHandlerState (current user handlers +
+    //   (b) the per-element ModifierEventHandlerState (current user handlers +
     //       stable trampoline delegates).
     //
     // The DP lives on the native DependencyObject, so every C# RCW pointing
     // at the same native element observes the same ReactorState — fixing the
     // duplicate-RCW event-subscription bug where ConditionalWeakTable keyed
-    // per-RCW would return a different EventHandlerState for each wrapper
+    // per-RCW would return a different ModifierEventHandlerState for each wrapper
     // and attach duplicate trampolines on the native event source.
     //
     // Lifecycle:
@@ -594,7 +594,7 @@ public sealed partial class Reconciler : IDisposable
     internal sealed class ReactorState
     {
         public Element? Element;
-        public EventHandlerState? Events;
+        public ModifierEventHandlerState? Modifiers;
         // Per-native-element echo-suppress counter consumed by ChangeEchoSuppressor.
         // Lives here (not in a CWT-by-RCW) so that BeginSuppress on one managed
         // wrapper and ShouldSuppress on a different wrapper for the same native
@@ -641,11 +641,13 @@ public sealed partial class Reconciler : IDisposable
 
         // Spec 047 §9.2 / §14 Phase 1 (1.7) — per-control event payload box.
         // Holds a strongly-typed payload struct (e.g. ToggleSwitchEventPayload)
-        // discriminated by HandlerType. Only populated for ported V1 controls
-        // — legacy MountXxx paths keep using the shared EventHandlerState
-        // (Toggled / Click / TextChanged trampolines on Events) until they
-        // migrate. Cleared by Reconciler.ReturnControl per the Q18 pool reset
-        // contract; that's why a stale type is never observable post-rent.
+        // discriminated by HandlerType. Populated for ported V1 controls and
+        // for the control-intrinsic events (Button.Click, NumberBox immediate
+        // inner-TextBox) that migrated off the routed ModifierEventHandlerState.
+        // PRESERVED across pool rent/return per the Q18 contract (issue #114) —
+        // trampolines stay subscribed for the control's lifetime; a stale type
+        // is never observable post-rent because GetOrCreateControlEventPayload
+        // re-creates the box on a HandlerType mismatch.
         public object? ControlEventState;
     }
 
@@ -752,7 +754,7 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>
-    /// Clears the Element pointer while preserving EventHandlerState. Call on
+    /// Clears the Element pointer while preserving ModifierEventHandlerState. Call on
     /// pool return — attached trampolines stay valid so that rent/re-mount
     /// reuses the same subscriptions (re-attaching would re-introduce the
     /// duplicate-subscription bug).
@@ -765,7 +767,7 @@ public sealed partial class Reconciler : IDisposable
 
     /// <summary>
     /// Clears the Current* user-handler delegates from the per-element
-    /// EventHandlerState while leaving the trampoline subscription on the
+    /// ModifierEventHandlerState while leaving the trampoline subscription on the
     /// underlying control. Call from <see cref="ElementPool.CleanElement"/>
     /// so the next rent doesn't fire the previous component's captured
     /// rerender closure. TASK-060.
@@ -777,7 +779,7 @@ public sealed partial class Reconciler : IDisposable
     {
         if (fe.GetValue(ReactorAttached.StateProperty) is ReactorState state)
         {
-            state.Events?.ClearCurrentHandlers();
+            state.Modifiers?.ClearCurrentHandlers();
             state.EchoSuppressCount = 0;
             state.EchoSuppressScopeDepth = 0;
             state.PendingEchoMatch = null;
@@ -786,7 +788,7 @@ public sealed partial class Reconciler : IDisposable
 
     /// <summary>
     /// Fully detaches reactor state from a control: nulls the Element and
-    /// clears the EventHandlerState's Current* delegates so any already-
+    /// clears the ModifierEventHandlerState's Current* delegates so any already-
     /// attached trampoline on the native event source becomes a no-op if it
     /// fires. Use when the control leaves reactor's ownership for good
     /// (XamlHost / XamlPage unmount) but may remain alive because the app
@@ -802,8 +804,8 @@ public sealed partial class Reconciler : IDisposable
         if (fe.GetValue(ReactorAttached.StateProperty) is not ReactorState state)
             return;
         state.Element = null;
-        state.Events?.ClearCurrentHandlers();
-        state.Events = null;
+        state.Modifiers?.ClearCurrentHandlers();
+        state.Modifiers = null;
         state.EchoSuppressCount = 0;
         state.EchoSuppressScopeDepth = 0;
         state.PendingEchoMatch = null;
@@ -824,14 +826,14 @@ public sealed partial class Reconciler : IDisposable
     // We need a per-control dedupe key that survives pool cycles to avoid
     // double-subscription.
     //
-    // All poolable wiring dedupes through EventHandlerState (attached on
+    // All poolable wiring dedupes through ModifierEventHandlerState (attached on
     // ReactorAttached.StateProperty, which is a DependencyProperty keyed by
     // native DO identity). Two managed RCWs over the same native DependencyObject
-    // resolve to the same EventHandlerState, so the *Trampoline-is-not-null
+    // resolve to the same ModifierEventHandlerState, so the *Trampoline-is-not-null
     // check correctly short-circuits. This was previously split between an
     // unsafe managed-FE-keyed CWT (Button, TextBox, Image, ScrollViewer) and
-    // EventHandlerState (ToggleSwitch); issue #114 unified everything onto
-    // EventHandlerState.
+    // ModifierEventHandlerState (ToggleSwitch); issue #114 unified everything onto
+    // ModifierEventHandlerState.
 
     // ════════════════════════════════════════════════════════════════════
     //  Canvas anchor positioning
@@ -1081,7 +1083,7 @@ public sealed partial class Reconciler : IDisposable
     /// after running the Q18 reset contract:
     /// <list type="bullet">
     ///   <item>Clear <c>ControlEventState</c> (per-control event payload box, §9.2).</item>
-    ///   <item>Clear <c>EventHandlerState</c> (modifier / routed-input handler state).</item>
+    ///   <item>Clear <c>ModifierEventHandlerState</c> (modifier / routed-input handler state).</item>
     ///   <item>Clear <c>ReactorAttached.StateProperty</c> Tag / DataContext set by Reactor.</item>
     ///   <item>Invoke <c>policy.Reset</c> last (author-defined extra cleanup).</item>
     /// </list>
@@ -1100,7 +1102,7 @@ public sealed partial class Reconciler : IDisposable
         {
             if (fe.GetValue(ReactorAttached.StateProperty) is ReactorState rs)
             {
-                rs.Events?.ClearCurrentHandlers();
+                rs.Modifiers?.ClearCurrentHandlers();
                 // Spec 047 §9.2 / Phase 1 KD-3 — typed per-control event
                 // payloads (ToggleSwitch / Slider / TextBox / Button / ...)
                 // are intentionally preserved across pool rent/return cycles.
@@ -1108,7 +1110,7 @@ public sealed partial class Reconciler : IDisposable
                 // the control's lifetime and read live state via GetElementTag
                 // — clearing the box would force re-allocation on every rent
                 // and double-subscribe to the native event. Mirrors the legacy
-                // EventHandlerState contract (ClearCurrentHandlers nulls user
+                // ModifierEventHandlerState contract (ClearCurrentHandlers nulls user
                 // delegates only; trampoline slots stay). The generic-anchor
                 // CustomEventAnchorPayload from V1 OnCustomEvent has the same
                 // shape, so it stays too — handlers that use the generic
@@ -1136,38 +1138,38 @@ public sealed partial class Reconciler : IDisposable
     // Each shim corresponds to an Ensure*Subscribed helper in this file.
     // They exist so ReactorBinding<TElement>.On<Event>(Action<TElement,…>)
     // can update the per-control trampoline without exposing the private
-    // EventHandlerState type. Strongly-typed delegates only — no reflection.
+    // ModifierEventHandlerState type. Strongly-typed delegates only — no reflection.
 
     internal static void BindOnPointerPressed(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
-        => EnsurePointerPressedSubscribed(fe, GetOrCreateEventState(fe), handler);
+        => EnsurePointerPressedSubscribed(fe, GetOrCreateModifierState(fe), handler);
     internal static void BindOnPointerMoved(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
-        => EnsurePointerMovedSubscribed(fe, GetOrCreateEventState(fe), handler);
+        => EnsurePointerMovedSubscribed(fe, GetOrCreateModifierState(fe), handler);
     internal static void BindOnPointerReleased(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
-        => EnsurePointerReleasedSubscribed(fe, GetOrCreateEventState(fe), handler);
+        => EnsurePointerReleasedSubscribed(fe, GetOrCreateModifierState(fe), handler);
     internal static void BindOnPointerEntered(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
-        => EnsurePointerEnteredSubscribed(fe, GetOrCreateEventState(fe), handler);
+        => EnsurePointerEnteredSubscribed(fe, GetOrCreateModifierState(fe), handler);
     internal static void BindOnPointerExited(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
-        => EnsurePointerExitedSubscribed(fe, GetOrCreateEventState(fe), handler);
+        => EnsurePointerExitedSubscribed(fe, GetOrCreateModifierState(fe), handler);
     internal static void BindOnPointerCaptureLost(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
-        => EnsurePointerCaptureLostSubscribed(fe, GetOrCreateEventState(fe), handler);
+        => EnsurePointerCaptureLostSubscribed(fe, GetOrCreateModifierState(fe), handler);
     internal static void BindOnPointerWheelChanged(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
-        => EnsurePointerWheelChangedSubscribed(fe, GetOrCreateEventState(fe), handler);
+        => EnsurePointerWheelChangedSubscribed(fe, GetOrCreateModifierState(fe), handler);
     internal static void BindOnTapped(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs>? handler)
-        => EnsureTappedSubscribed(fe, GetOrCreateEventState(fe), handler, oldHandler: null);
+        => EnsureTappedSubscribed(fe, GetOrCreateModifierState(fe), handler, oldHandler: null);
     internal static void BindOnDoubleTapped(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs>? handler)
-        => EnsureDoubleTappedSubscribed(fe, GetOrCreateEventState(fe), handler, oldHandler: null);
+        => EnsureDoubleTappedSubscribed(fe, GetOrCreateModifierState(fe), handler, oldHandler: null);
     internal static void BindOnRightTapped(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.RightTappedRoutedEventArgs>? handler)
-        => EnsureRightTappedSubscribed(fe, GetOrCreateEventState(fe), handler, oldHandler: null);
+        => EnsureRightTappedSubscribed(fe, GetOrCreateModifierState(fe), handler, oldHandler: null);
     internal static void BindOnHolding(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.HoldingRoutedEventArgs>? handler)
-        => EnsureHoldingSubscribed(fe, GetOrCreateEventState(fe), handler, oldHandler: null);
+        => EnsureHoldingSubscribed(fe, GetOrCreateModifierState(fe), handler, oldHandler: null);
     internal static void BindOnKeyDown(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? handler)
-        => EnsureKeyDownSubscribed(fe, GetOrCreateEventState(fe), handler);
+        => EnsureKeyDownSubscribed(fe, GetOrCreateModifierState(fe), handler);
     internal static void BindOnKeyUp(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? handler)
-        => EnsureKeyUpSubscribed(fe, GetOrCreateEventState(fe), handler);
+        => EnsureKeyUpSubscribed(fe, GetOrCreateModifierState(fe), handler);
     internal static void BindOnGotFocus(FrameworkElement fe, Action<object, RoutedEventArgs>? handler)
-        => EnsureGotFocusSubscribed(fe, GetOrCreateEventState(fe), handler);
+        => EnsureGotFocusSubscribed(fe, GetOrCreateModifierState(fe), handler);
     internal static void BindOnLostFocus(FrameworkElement fe, Action<object, RoutedEventArgs>? handler)
-        => EnsureLostFocusSubscribed(fe, GetOrCreateEventState(fe), handler);
+        => EnsureLostFocusSubscribed(fe, GetOrCreateModifierState(fe), handler);
 
     /// <summary>
     /// Spec 047 §9.2 / §14 Phase 1 (1.7) — anchor a strongly-typed
@@ -1196,7 +1198,7 @@ public sealed partial class Reconciler : IDisposable
     /// Spec 047 §9.2 / §14 Phase 1 — get-or-create a typed per-control event
     /// payload (e.g. <c>ToggleSwitchEventPayload</c>). The payload survives
     /// pool rent/return cycles so trampolines wired once per control lifetime
-    /// stay alive (mirrors the legacy <c>EventHandlerState</c> "stable
+    /// stay alive (mirrors the legacy <c>ModifierEventHandlerState</c> "stable
     /// trampoline + mutable Current* slot" pattern documented in
     /// <c>Reconciler.cs:3266-3289</c>). Authors of built-in ports use this
     /// instead of <see cref="V1Protocol.ReactorBinding{TElement}.OnCustomEvent"/>
@@ -3672,7 +3674,7 @@ public sealed partial class Reconciler : IDisposable
     /// trampoline reads from the mutable <c>Current*</c> field when it fires, so updating
     /// a handler just swaps the field — no WinUI subscribe/unsubscribe churn.
     /// </summary>
-    internal sealed class EventHandlerState
+    internal sealed class ModifierEventHandlerState
     {
         // Current user handlers (mutable; null means "no-op")
         public Action<object, SizeChangedEventArgs>? CurrentSizeChanged;
@@ -3719,19 +3721,7 @@ public sealed partial class Reconciler : IDisposable
         public global::Windows.Foundation.TypedEventHandler<UIElement, Microsoft.UI.Xaml.Input.CharacterReceivedRoutedEventArgs>? CharacterReceivedTrampoline;
         public RoutedEventHandler? GotFocusTrampoline;
         public RoutedEventHandler? LostFocusTrampoline;
-        public RoutedEventHandler? ToggleSwitchToggledTrampoline;
         public global::Windows.Foundation.TypedEventHandler<UIElement, Microsoft.UI.Xaml.Input.AccessKeyDisplayRequestedEventArgs>? AccessKeyDisplayRequestedTrampoline;
-        // Issue #114 — these former PoolableWireFlags entries are now keyed by native DO
-        // identity through ReactorAttached.StateProperty, so two RCWs over the same control
-        // share one trampoline (no double-subscribe).
-        public RoutedEventHandler? ButtonClickTrampoline;
-        public WinUI.TextChangedEventHandler? TextBoxTextChangedTrampoline;
-        public RoutedEventHandler? TextBoxSelectionChangedTrampoline;
-        public RoutedEventHandler? ImageOpenedTrampoline;
-        public Microsoft.UI.Xaml.ExceptionRoutedEventHandler? ImageFailedTrampoline;
-        public global::System.EventHandler<WinUI.ScrollViewerViewChangedEventArgs>? ScrollViewerViewChangedTrampoline;
-        public global::Windows.Foundation.TypedEventHandler<WinUI.ScrollView, object>? ScrollViewViewChangedTrampoline;
-        public bool NumberBoxInnerTextChanged;
 
         /// <summary>
         /// Null out every Current* user delegate so trampolines already attached
@@ -3765,14 +3755,14 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    // EventHandlerState lives on the ReactorState wrapper attached to the
+    // ModifierEventHandlerState lives on the ReactorState wrapper attached to the
     // native DependencyObject via ReactorAttached.StateProperty. That keys
     // on native identity, so two RCWs pointing at the same element share one
-    // EventHandlerState and one set of trampolines — fixing issue #86.
-    private static EventHandlerState GetOrCreateEventState(FrameworkElement fe)
+    // ModifierEventHandlerState and one set of trampolines — fixing issue #86.
+    private static ModifierEventHandlerState GetOrCreateModifierState(FrameworkElement fe)
     {
         var state = GetOrCreateReactorState(fe);
-        return state.Events ??= new EventHandlerState();
+        return state.Modifiers ??= new ModifierEventHandlerState();
     }
 
     private static bool HasAnyEventHandler(ElementModifiers? m)
@@ -3803,7 +3793,7 @@ public sealed partial class Reconciler : IDisposable
         // Fast path: nothing to do
         if (!HasAnyEventHandler(m) && !HasAnyEventHandler(oldM)) return;
 
-        var state = GetOrCreateEventState(fe);
+        var state = GetOrCreateModifierState(fe);
 
         // Trampoline pattern: each Ensure* helper points the current-handler field at
         // the new delegate and, if the trampoline isn't attached yet, attaches it once.
@@ -3848,7 +3838,7 @@ public sealed partial class Reconciler : IDisposable
     //      When the user handler becomes null again, the trampoline dispatches no-op.
 
     // <snippet:event-trampoline>
-    private static void EnsureSizeChangedSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, SizeChangedEventArgs>? handler)
+    private static void EnsureSizeChangedSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, SizeChangedEventArgs>? handler)
     {
         state.CurrentSizeChanged = handler;
         if (state.SizeChangedTrampoline is null && handler is not null)
@@ -3864,7 +3854,7 @@ public sealed partial class Reconciler : IDisposable
     }
     // </snippet:event-trampoline>
 
-    private static void EnsurePointerPressedSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+    private static void EnsurePointerPressedSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
     {
         state.CurrentPointerPressed = handler;
         if (state.PointerPressedTrampoline is null && handler is not null)
@@ -3879,7 +3869,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private static void EnsurePointerMovedSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+    private static void EnsurePointerMovedSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
     {
         state.CurrentPointerMoved = handler;
         if (state.PointerMovedTrampoline is null && handler is not null)
@@ -3894,7 +3884,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private static void EnsurePointerReleasedSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+    private static void EnsurePointerReleasedSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
     {
         state.CurrentPointerReleased = handler;
         if (state.PointerReleasedTrampoline is null && handler is not null)
@@ -3909,7 +3899,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private static void EnsurePointerEnteredSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+    private static void EnsurePointerEnteredSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
     {
         state.CurrentPointerEntered = handler;
         if (state.PointerEnteredTrampoline is null && handler is not null)
@@ -3924,7 +3914,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private static void EnsurePointerExitedSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+    private static void EnsurePointerExitedSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
     {
         state.CurrentPointerExited = handler;
         if (state.PointerExitedTrampoline is null && handler is not null)
@@ -3939,7 +3929,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private static void EnsurePointerCanceledSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+    private static void EnsurePointerCanceledSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
     {
         state.CurrentPointerCanceled = handler;
         if (state.PointerCanceledTrampoline is null && handler is not null)
@@ -3954,7 +3944,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private static void EnsurePointerCaptureLostSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+    private static void EnsurePointerCaptureLostSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
     {
         state.CurrentPointerCaptureLost = handler;
         if (state.PointerCaptureLostTrampoline is null && handler is not null)
@@ -3969,7 +3959,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private static void EnsurePointerWheelChangedSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+    private static void EnsurePointerWheelChangedSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
     {
         state.CurrentPointerWheelChanged = handler;
         if (state.PointerWheelChangedTrampoline is null && handler is not null)
@@ -3984,7 +3974,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private static void EnsureTappedSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs>? handler, Action<object, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs>? oldHandler)
+    private static void EnsureTappedSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs>? handler, Action<object, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs>? oldHandler)
     {
         state.CurrentTapped = handler;
         if (state.TappedTrampoline is null && handler is not null)
@@ -4010,7 +4000,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private static void EnsureDoubleTappedSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs>? handler, Action<object, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs>? oldHandler)
+    private static void EnsureDoubleTappedSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs>? handler, Action<object, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs>? oldHandler)
     {
         state.CurrentDoubleTapped = handler;
         if (state.DoubleTappedTrampoline is null && handler is not null)
@@ -4027,7 +4017,7 @@ public sealed partial class Reconciler : IDisposable
         else if (oldHandler is not null) fe.IsDoubleTapEnabled = false;
     }
 
-    private static void EnsureRightTappedSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.RightTappedRoutedEventArgs>? handler, Action<object, Microsoft.UI.Xaml.Input.RightTappedRoutedEventArgs>? oldHandler)
+    private static void EnsureRightTappedSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.RightTappedRoutedEventArgs>? handler, Action<object, Microsoft.UI.Xaml.Input.RightTappedRoutedEventArgs>? oldHandler)
     {
         state.CurrentRightTapped = handler;
         if (state.RightTappedTrampoline is null && handler is not null)
@@ -4044,7 +4034,7 @@ public sealed partial class Reconciler : IDisposable
         else if (oldHandler is not null) fe.IsRightTapEnabled = false;
     }
 
-    private static void EnsureHoldingSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.HoldingRoutedEventArgs>? handler, Action<object, Microsoft.UI.Xaml.Input.HoldingRoutedEventArgs>? oldHandler)
+    private static void EnsureHoldingSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.HoldingRoutedEventArgs>? handler, Action<object, Microsoft.UI.Xaml.Input.HoldingRoutedEventArgs>? oldHandler)
     {
         state.CurrentHolding = handler;
         if (state.HoldingTrampoline is null && handler is not null)
@@ -4061,7 +4051,7 @@ public sealed partial class Reconciler : IDisposable
         else if (oldHandler is not null) fe.IsHoldingEnabled = false;
     }
 
-    private static void EnsureKeyDownSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? handler)
+    private static void EnsureKeyDownSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? handler)
     {
         state.CurrentKeyDown = handler;
         if (state.KeyDownTrampoline is null && handler is not null)
@@ -4076,7 +4066,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private static void EnsureKeyUpSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? handler)
+    private static void EnsureKeyUpSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? handler)
     {
         state.CurrentKeyUp = handler;
         if (state.KeyUpTrampoline is null && handler is not null)
@@ -4091,7 +4081,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private static void EnsurePreviewKeyDownSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? handler)
+    private static void EnsurePreviewKeyDownSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? handler)
     {
         state.CurrentPreviewKeyDown = handler;
         if (state.PreviewKeyDownTrampoline is null && handler is not null)
@@ -4106,7 +4096,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private static void EnsurePreviewKeyUpSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? handler)
+    private static void EnsurePreviewKeyUpSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? handler)
     {
         state.CurrentPreviewKeyUp = handler;
         if (state.PreviewKeyUpTrampoline is null && handler is not null)
@@ -4121,7 +4111,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private static void EnsureCharacterReceivedSubscribed(FrameworkElement fe, EventHandlerState state, Action<UIElement, Microsoft.UI.Xaml.Input.CharacterReceivedRoutedEventArgs>? handler)
+    private static void EnsureCharacterReceivedSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<UIElement, Microsoft.UI.Xaml.Input.CharacterReceivedRoutedEventArgs>? handler)
     {
         state.CurrentCharacterReceived = handler;
         if (state.CharacterReceivedTrampoline is null && handler is not null)
@@ -4136,7 +4126,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private static void EnsureGotFocusSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, RoutedEventArgs>? handler)
+    private static void EnsureGotFocusSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, RoutedEventArgs>? handler)
     {
         state.CurrentGotFocus = handler;
         if (state.GotFocusTrampoline is null && handler is not null)
@@ -4151,7 +4141,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private static void EnsureLostFocusSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, RoutedEventArgs>? handler)
+    private static void EnsureLostFocusSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, RoutedEventArgs>? handler)
     {
         state.CurrentLostFocus = handler;
         if (state.LostFocusTrampoline is null && handler is not null)
@@ -4166,7 +4156,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private static void EnsureAccessKeyDisplayRequestedSubscribed(FrameworkElement fe, EventHandlerState state, Action<UIElement, Microsoft.UI.Xaml.Input.AccessKeyDisplayRequestedEventArgs>? handler)
+    private static void EnsureAccessKeyDisplayRequestedSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<UIElement, Microsoft.UI.Xaml.Input.AccessKeyDisplayRequestedEventArgs>? handler)
     {
         state.CurrentAccessKeyDisplayRequested = handler;
         if (state.AccessKeyDisplayRequestedTrampoline is null && handler is not null)
