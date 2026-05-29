@@ -1199,6 +1199,27 @@ public sealed partial class Reconciler : IDisposable
         return payload;
     }
 
+    /// <summary>
+    /// Spec 047 §8 — non-allocating sibling of
+    /// <see cref="GetOrCreateControlEventPayload{T}"/>. Returns the existing
+    /// per-control payload of type <typeparamref name="T"/>, or <c>null</c> if
+    /// the control has no <c>ReactorState</c>, no event-state box, or a box of a
+    /// different handler type. Unlike the get-or-create form this never creates
+    /// state, so callers on a hot/read path (e.g. the controlled-prop value-diff
+    /// echo check) can probe without forcing allocation on callback-less or
+    /// unsubscribed controls.
+    /// </summary>
+    internal static T? TryGetControlEventPayload<T>(FrameworkElement fe) where T : class
+    {
+        if (fe.GetValue(ReactorAttached.StateProperty) is ReactorState state
+            && state.ControlEventState is ControlEventStateBox box
+            && box.HandlerType == typeof(T))
+        {
+            return (T)box.Payload;
+        }
+        return null;
+    }
+
     // ════════════════════════════════════════════════════════════════════
     //  Disposable wrappers for V1 MountContext (1.6)
     // ════════════════════════════════════════════════════════════════════

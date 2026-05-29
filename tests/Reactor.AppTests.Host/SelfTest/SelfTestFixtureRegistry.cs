@@ -1123,6 +1123,10 @@ internal static class SelfTestFixtureRegistry
         "Echo_ToggleSplitButton_RealInput",
         "Echo_NumberBox_RealInput",
 
+        // Spec 047 §8 — value-diff echo suppression PoC (ControlledPropEntry path).
+        "ValueDiff_RadioButton_Drift",
+        "ValueDiff_ToggleSplitButton_Drift",
+
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         // The MarqueeHandler is authored in tests/external_proof/
         // Reactor.External.TestControl, references Reactor as a regular
@@ -2237,6 +2241,10 @@ internal static class SelfTestFixtureRegistry
         "Echo_RadioButton_RealInput" => new Spec047EchoStrandingFixtures.RadioButtonRealInputEcho(harness),
         "Echo_ToggleSplitButton_RealInput" => new Spec047EchoStrandingFixtures.ToggleSplitButtonRealInputEcho(harness),
         "Echo_NumberBox_RealInput" => new Spec047EchoStrandingFixtures.NumberBoxRealInputEcho(harness),
+
+        // Spec 047 §8 — value-diff echo suppression PoC (ControlledPropEntry path).
+        "ValueDiff_RadioButton_Drift" => new Spec047ValueDiffEchoFixtures.RadioButtonProgrammaticDrift(harness),
+        "ValueDiff_ToggleSplitButton_Drift" => new Spec047ValueDiffEchoFixtures.ToggleSplitButtonProgrammaticDrift(harness),
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         "Spec047ExternalProof_Marquee_MountUpdate" => new Spec047ExternalProofFixtures.MarqueeMountUpdate(harness),
