@@ -12,6 +12,7 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol;
 /// Mount / Update body has returned. Phase 1 ships shape + dispatch; the
 /// keyed-reconcile integration with spec-042 lands in Phase 3.
 /// </summary>
+// <snippet:children-strategies>
 [Experimental("REACTOR_V1_PREVIEW")]
 public abstract record ChildrenStrategy<TElement, TControl>
     where TElement : Element
@@ -100,6 +101,7 @@ public sealed record Panel<TElement, TControl>(
     /// it.</summary>
     public Action<TControl, IReadOnlyList<(UIElement Mounted, Element ChildElement)>>? PerChildAttachedAfterAll { get; init; }
 }
+// </snippet:children-strategies>
 
 /// <summary>Named-slot host (SplitView with Pane + Content, NavigationView
 /// with Header + Content + PaneFooter, etc.). Each

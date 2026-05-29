@@ -25,6 +25,7 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
 
     public bool HasUnmount => true; // the default-body call is cheap; no point branching.
 
+    // <snippet:adapter-mount>
     public UIElement Mount(Element element, Action requestRerender, Reconciler reconciler)
     {
         var typedEl = (TElement)element;
@@ -41,15 +42,16 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
         if (strategy is not null)
             DispatchChildrenMount(strategy, ctx, typedEl, control);
 
-        // §14 Phase 3 prelude (Engine A1) — post-children mount hook. Fires
-        // after every child has mounted (whether via the strategy switch above
-        // or an items-binder strategy the handler dispatched inline before
-        // returning). Lets handlers subscribe events that must wire after
-        // children-add. Default no-op for handlers that don't override it.
+        // Post-children mount hook. Fires after every child has mounted
+        // (whether via the strategy switch above or an items-binder strategy
+        // the handler dispatched inline before returning). Lets handlers
+        // subscribe events that must wire after children-add. Default no-op
+        // for handlers that don't override it.
         _handler.AfterChildrenMount(ctx, typedEl, control);
 
         return control;
     }
+    // </snippet:adapter-mount>
 
     public UIElement Update(Element oldEl, Element newEl, UIElement control, Action requestRerender, Reconciler reconciler)
     {

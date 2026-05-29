@@ -1,0 +1,459 @@
+---
+title: "The V1 Handler Protocol"
+app: v1-protocol
+order: 33.5
+audience: advanced
+goal: |
+  How Reactor delegates per-control work to handlers. The
+  IElementHandler contract, ref-struct contexts, descriptors as
+  declarative sugar over handlers, the ChildrenStrategy survey, pool
+  integration, echo suppression, the mount-then-subscribe ordering
+  invariant, and the registry dispatch shape. Reference companion to
+  "Extending Reactor with Native Controls", which walks through adding
+  a new one end-to-end.
+tier: comprehensive
+---
+
+Microsoft.UI.Reactor (Reactor) draws the visible part of a frame by handing
+each immutable element record off to a per-control-type plug-in called a
+**handler**. The handler knows two things the [reconciler](reconciliation.md)
+doesn't: which WinUI control to instantiate, and which of that control's
+properties and events to wire to which element fields. The protocol is
+designed so authors do not pay for what they do not use — a handler that
+declares no children does no child dispatch, a controlled prop with no
+callback does not subscribe its event trampoline, a one-way prop whose
+value did not change does not write — and so every built-in control and
+every control you add yourself dispatches through the same tight loop.
+Read this page before adding a new native control or before reaching for
+a debugger when an existing one mis-updates.
+
+# The V1 Handler Protocol
+
+This page documents the data path between
+[`Reconciler.Reconcile`](reconciliation.md#reconcile--the-entry-point)
+and the WinUI control it edits. The audience is anyone extending
+Reactor with a new native control, or anyone debugging why an
+existing element does not update the way it should. The companion
+[Extending Reactor with Native Controls](extending-reactor-controls.md)
+walks through adding a control end-to-end; this page is the
+reference under that recipe.
+
+## Dispatch — one handler per element type
+
+The reconciler holds a dictionary keyed by `System.Type` of the
+element record. When a re-render passes a new element to
+`Reconcile`, the dictionary entry for that element's exact runtime
+type is fetched, and that entry's `Mount` / `Update` / `Unmount`
+methods run against the existing WinUI control. There is no base-class
+fallback for ordinary handlers — registering `ButtonElement` does
+**not** also catch a `MyButtonElement` that inherits from it; each
+concrete element type has its own registration. (The one exception,
+[`RegisterHandlerForDerivedTypes`](#registration), exists for the
+T-erased templated-list family and is called out explicitly below.)
+
+```csharp snippet="source:src/Reactor/Core/V1Protocol/V1HandlerAdapter.cs#adapter-mount"
+```
+
+The adapter shown above is the engine-side bridge between the typed
+`IElementHandler<TElement, TControl>` shape and the type-erased entry
+the registry stores. The hot path is dictionary lookup → interface call
+→ a cast that the JIT folds at monomorphic call sites. The cost is
+measured at one or two nanoseconds per element on warmed paths and is
+the reason the protocol does not expose a switch-on-type dispatcher to
+authors.
+
+| Subsystem | File | What it owns |
+|---|---|---|
+| Handler contract | `src/Reactor/Core/V1Protocol/IElementHandler.cs` | The `Mount` / `Update` / `Unmount` / `Children` surface |
+| Contexts | `src/Reactor/Core/V1Protocol/MountContext.cs` | Ref-struct mount/update/unmount contexts |
+| Adapter | `src/Reactor/Core/V1Protocol/V1HandlerAdapter.cs` | Type-erasure bridge into the registry |
+| Children strategies | `src/Reactor/Core/V1Protocol/ChildrenStrategy.cs` | Declarative child-dispatch shapes |
+| Bindings | `src/Reactor/Core/V1Protocol/ReactorBindingT.cs` | Event helpers + echo suppression |
+| Descriptors | `src/Reactor/Core/V1Protocol/Descriptor/` | Declarative handlers + the interpreter |
+| Pool | `src/Reactor/Core/ElementPool.cs` | `TryRent` / `Return` for poolable controls |
+
+## The handler contract
+
+```csharp snippet="source:src/Reactor/Core/V1Protocol/IElementHandler.cs#handler-contract"
+```
+
+`Mount` runs the first time the reconciler sees an element of this
+type at a given slot. It rents a control from the pool (or allocates
+one), applies initial property writes, subscribes the events it cares
+about, and returns the control the reconciler will install in the
+parent's child collection. `Update` runs every subsequent render where
+the same slot still holds an element of the same type — it diffs the
+old element against the new and applies the minimum writes needed.
+`Unmount` runs when the slot disappears or its element type changes;
+the default body is a no-op because the engine handles pool return
+and child teardown for the standard case. The optional `Children`
+property declares how child elements are dispatched — see
+[Children strategies](#children-strategies) below.
+
+The contract has two deliberate constraints worth pointing out. First,
+`Update` returns `void` — handlers do **not** swap control instances
+across renders. If a re-render genuinely needs a different control
+type (a `Button` becoming a `HyperlinkButton`, for example), it is
+encoded as a different `Element` subclass, and the reconciler's
+type-change path unmounts the old and mounts the new at that slot.
+Second, `Mount` and `Update` run on the dispatcher thread that owns
+the reconciler — handler bodies are free to touch control state
+without synchronization, and code that crosses threads is the
+author's responsibility (and a debug-build assert).
+
+<!-- ai:caveat -->
+`Mount` is called exactly once per realized control, but the same
+control may be passed back to a different handler instance through the
+pool. If you stash per-control state in a field on the handler
+instance, it survives pool rent — and that is almost certainly a bug.
+Per-control state lives on the **control**, either as an attached
+state DP or as the typed event payload box
+([`Reconciler.GetOrCreateControlEventPayload`](#echo-suppression-and-write-suppressed)),
+both of which the pool reset contract clears. The handler instance is
+a stateless interpreter.
+<!-- /ai:caveat -->
+
+## Contexts and bindings
+
+The reconciler passes three contexts into a handler, one per lifecycle
+phase. Each is a `readonly ref struct`, so the context cannot escape
+the call stack, cannot be captured by a closure, and does not allocate.
+
+```csharp snippet="source:src/Reactor/Core/V1Protocol/MountContext.cs#mount-context"
+```
+
+`MountContext.RentControl<T>()` is how a handler obtains its WinUI
+control. By default the engine pools every type that opts in via
+`PoolableTypes` — `Button`, `TextBlock`, `Border`, every common leaf —
+and `RentControl` returns a reset instance from the per-type stack
+when one is available. Authors can override the pool policy or supply
+a custom `Func<T>` factory for controls that need constructor
+arguments or that should never pool. `RentControl` is therefore the
+single place a handler crosses into native land, and the engine
+ensures that every rented control reaches `ReturnControl` on unmount.
+
+`MountContext.BindFor(control, element)` produces a
+[`ReactorBinding<TElement>`](source:src/Reactor/Core/V1Protocol/ReactorBindingT.cs)
+that wires events from the WinUI side back to element callbacks. The
+binding has typed `On…` methods for the WinUI routed-event families
+(pointer, key, tap, focus) and a general `OnCustomEvent<TArgs>` for
+plain CLR events (`Click`, `ValueChanged`, `TextChanged`). The
+critical property of every `On…` method is that the event trampoline
+captures the **control**, not the element — at fire time it re-reads
+the live element from
+[`Reconciler.GetElementTag(control)`](#element-identity-via-the-tag).
+The same subscription therefore survives every re-render without
+re-subscribing.
+
+`UpdateContext` is the same surface as `MountContext` minus
+`RentControl` — update bodies run against an existing control, and
+allocating a new one is forbidden on this path. `UnmountContext` is
+narrower still: it carries only `ReturnControl<T>` for the optional
+pool-return contract.
+
+## The mount-then-subscribe invariant
+
+A controlled property — a property whose value the framework writes
+*and* whose value the user can edit on the WinUI side — would race if
+the handler subscribed to the change event before writing the initial
+value. The descriptor interpreter (and every hand-coded handler that
+follows the same shape) sequences the work in two passes so the race
+cannot happen:
+
+```csharp snippet="source:src/Reactor/Core/V1Protocol/Descriptor/DescriptorHandler.cs#descriptor-mount"
+```
+
+The first loop runs the bare initial writes for every entry. The
+second loop wires the trampolines. Because no trampoline is listening
+during the first loop, the synchronous change events WinUI raises when
+the framework writes `IsOn = true`, `Value = 3.5`, or `Text = "hi"`
+go nowhere — and the user's callback receives no spurious initial
+fire on Mount. On Update the equivalent property writes go through
+`ReactorBinding.WriteSuppressed`, which marks a per-control suppress
+counter that the trampoline drains before invoking the callback. The
+net effect is that the **callback fires exactly when the user
+interacted with the control**, never when the framework wrote a value
+the user did not type.
+
+The same invariant covers pool rent: a control returned to the pool
+keeps its typed event-payload box, and re-mount checks the box's
+`Trampoline` slot to skip re-subscription. A pooled `RatingControl`
+that gets rented out for a fresh `StarMeterElement` does not
+double-subscribe its `ValueChanged` event.
+
+## Children strategies
+
+A handler's `Children` property declares **how** its child elements
+get dispatched. The strategy is a sealed record subclass; the
+adapter's switch over the strategy types runs after `Mount` / `Update`
+return, so the handler body itself never has to walk children.
+
+```csharp snippet="source:src/Reactor/Core/V1Protocol/ChildrenStrategy.cs#children-strategies"
+```
+
+| Strategy | Shape | Used by |
+|---|---|---|
+| `None` | Leaf — no children | `Button`, `TextBlock`, `Slider`, `RatingControl`, every leaf |
+| `SingleContent` | One child slot, `GetCurrentChild` for structural reconcile | `Border`, `ContentControl`, `Viewbox`, `Expander` body |
+| `Panel` | Ordered child list against `UIElementCollection`, optional `PerChildAttached` for attached DPs | `Grid`, `StackPanel`, `Canvas`, `RelativePanel` |
+| `NamedSlots` | Multiple named slots, each binding via a `NamedSlot` record | `SplitView` (Pane + Content), `NavigationView` (Header + Content + PaneFooter) |
+| `ItemsHost` | Flat items collection — `IReadOnlyList<object>` projected into the control's `Items` sink | `ListBox`, `ComboBox`, `RadioButtons`, simple `FlipView` |
+| `TemplatedItems<TItem,…>` | Keyed templated list — routes through `BindKeyedItemsSource` for spec-042 keyed reconcile | `ListView<T>`, `GridView<T>` |
+| `TemplatedItemsErased` | Same shape, T erased via `IKeyedItemSource` for typed-list base types | `TemplatedListViewElement<T>` family |
+| `TreeChildren` | Hierarchical `TreeViewNode` tree, optional per-node `ContentElement` | `TreeView` |
+| `TabItemsHost` | Heterogeneous items (`TabViewItem` / `PivotItem`) with in-place positional reconcile | `TabView`, `Pivot` |
+| `PreMountedItems` | Pre-mounted items against a flat sink with no `ContainerContentChanging` | Templated `FlipView` |
+| `Imperative` | Escape hatch — handler reconciles children itself | Custom containers that span multiple WinUI properties |
+
+The strategy switch is the engine's seam between the handler protocol
+and the rest of the reconciler — `SingleContent` and `NamedSlots`
+route through
+[`Reconciler.ReconcileV1Child`](reconciliation.md#child-reconciler),
+which is the same diff path the rest of Reactor uses; `Panel`
+walks the new and old child lists in lockstep and preserves descendant
+component state across reorderings that do not change identity;
+`TemplatedItems` and `TemplatedItemsErased` route through
+`Reconciler.BindKeyedItemsSource`, which owns the spec-042
+`KeyedListDiff` realization plumbing — and so on. Adding a new
+strategy is a Reactor-internals task; adding a new handler that
+*consumes* one of these strategies is what extension authors do.
+
+## Pool integration
+
+The descriptor's `PoolPolicy` (and the corresponding parameter to
+`MountContext.RentControl<T>`) determines whether the control type
+pools at all and, if so, how to reset its mutable state when it goes
+back into the pool. Most leaf controls — `Button`, `TextBlock`,
+`Border`, `RatingControl`, every input the form catalog covers —
+opt in by default; the per-type entry in `PoolableTypes` declares the
+reset hook (clearing handlers, restoring default property values) so
+a rented instance is observably indistinguishable from a fresh one.
+Authors writing a new handler should generally accept the default and
+let the engine pool the control; the policy escape hatch exists for
+controls whose state is too large or whose teardown is too expensive
+to be worth pooling.
+
+`MountContext.RentControl<T>` is the single rent path. The engine
+guarantees that every rent reaches a `ReturnControl` on unmount — the
+default adapter body calls `Unmount` with a `V1UnmountDisposition`
+result that opts into pool collection, the engine then walks the
+unmounted subtree and returns each control to its per-type stack. An
+author writing `Unmount` does not have to call `ReturnControl`
+themselves unless they rented from the engine via the manual
+`RentControl` overload — the default lifecycle is fully managed.
+
+## Echo suppression and `WriteSuppressed`
+
+When the framework writes the controlled prop, the WinUI control
+raises its change event synchronously. The event trampoline cannot
+distinguish "the user typed this" from "the framework just wrote
+this" without help, and forwarding the framework's own write to the
+element callback would round-trip the same value through the user's
+state setter and trigger a spurious re-render. `ReactorBinding`
+suppresses that echo with a per-control counter:
+
+| Method | When to call | Effect |
+|---|---|---|
+| `binding.WriteSuppressed(mutate)` | Inside `Update` when writing a controlled prop | Increments the suppress counter, runs the mutate, decrements |
+| `ChangeEchoSuppressor.ShouldSuppress(fe)` | Inside an event trampoline | Drains a pending suppress count and returns true; trampoline short-circuits |
+
+The trampolines `ReactorBinding.OnCustomEvent<TArgs>` generates call
+`ShouldSuppress` on entry — every controlled prop in every built-in
+handler is echo-safe without the handler author having to think
+about it. Hand-authored trampolines (the ones that bypass
+`OnCustomEvent` for performance) follow the same shape; see
+`Reconciler.GetOrCreateControlEventPayload` for the per-control
+payload box that anchors the trampoline for the control's lifetime.
+
+## Element identity via the tag
+
+Every framework element record is anchored on its mounted
+`FrameworkElement` via `Reconciler.SetElementTag(fe, element)`, an
+attached state DP. The tag is what makes event trampolines safe across
+re-renders: the trampoline closes over the control instance, calls
+`Reconciler.GetElementTag(control)` at fire time, casts the result to
+the typed element, and invokes the callback. The element value is
+refreshed by `Reconciler.SetElementTag` on every Update, so the
+trampoline always sees the live element — including the live
+callback, the live state captured by the user's component, and any
+intervening prop changes.
+
+Handler authors get the tag wiring for free — the adapter writes it
+after `Mount` returns and after every `Update`. Hand-authored trampolines
+that need to read the tag (e.g. the descriptor's static
+`ClickTrampoline` for `Button`) call `GetElementTag` and pattern-match
+on the expected element type.
+
+## Descriptors — declarative handlers
+
+`IElementHandler` is the imperative shape; `ControlDescriptor` is the
+declarative one. A descriptor is a list of `PropEntry` objects (each
+encoding one property's binding shape) plus an optional children
+strategy, optional factory, and optional pool policy. The
+`DescriptorHandler<TElement, TControl>` interpreter is itself an
+`IElementHandler`, so the registry sees no difference between a
+hand-coded handler and a descriptor — the dispatch shell is identical,
+and any cost difference is the interpreter's iteration over a small
+list of entries.
+
+```csharp snippet="v1-protocol/descriptor"
+```
+
+The descriptor above declares a single one-way mapping from
+`(Color, IsOn)` onto `Border.Background`, plus a size hook that
+writes `Width`, `Height`, and `CornerRadius` in one entry. It is a
+complete extension: every `LedIndicatorElement` the app renders
+flows through this descriptor, including pool rent, prop diff, and
+unmount.
+
+![Four LED indicators rendered by a Reactor app using the custom LedIndicatorElement descriptor](screenshot://v1-protocol/led-indicator)
+
+### `PropEntry` shapes — the prop-binding vocabulary
+
+The fluent builder methods on `ControlDescriptor` add one entry per
+call. The full vocabulary covers the common cases plus the escape
+hatches a hand-coded handler would otherwise need:
+
+| Builder | When to reach for it |
+|---|---|
+| `.OneWay(get, set)` | Plain one-way prop; write on Mount, diff-write on Update. No event subscription. |
+| `.OneWayConditional(get, set, shouldWrite)` | Nullable / optional prop where leaving the control's default is the intent when the element didn't set a value. |
+| `.Initial(get, set)` | Write once at Mount and never again. Use for seed-only props (`TextBox.InitialText`, etc.). |
+| `.Controlled<TValue, TArgs>(get, set, subscribe, unsubscribe, callback, readBack)` | Two-way prop. Framework writes with echo suppression; user input rounds back via the change event. Subscription is gated on `callback` returning non-null. |
+| `.CoercingOneWay(get, set, coercesController)` | One-way prop whose write may coerce a sibling controlled value (e.g. `Slider.Minimum` re-clamping `Slider.Value`); writes through `WriteSuppressed` when the coercion fires. |
+| `.HandCodedControlled<TPayload, TValue, TDelegate>` | Two-way prop with a multi-event control where the standard `Controlled` shape would collide on the per-control event payload (`TextBox.Text` alongside `SelectionChanged`). |
+| `.HandCodedEvent<TPayload, TDelegate>` | Fire-and-forget event with no associated DP (`Button.Click`, `Image.ImageOpened`). |
+| `.CollectionDiffControlled<…>` | Two-way prop whose value is an `IReadOnlyList<TItem>` round-tripped against a control-side `IList<TItem>` (`CalendarView.SelectedDates`). |
+| `.OneWayBridged(get, set, shouldWrite)` | One-way prop whose `set` lambda needs access to the reconciler (used by the button-family flyout port). |
+| `.Imperative(mount, update)` | Property-level escape hatch — the lambdas receive `(control, element)` and `(control, oldEl, newEl)` so an entry can express a diff the standard builders cannot. |
+| `.ImperativeBridged(mount, update)` | Same shape with the `MountContext` / `UpdateContext` available — primary use is a secondary Element slot that needs structural reconcile via `ReconcileV1Child`. |
+
+The entries iterate as a flat list, in declaration order. The
+descriptor's children strategy runs first when it is an items binder
+(so selection-tracking props see the populated collection at Mount);
+otherwise the strategy fires after the entry loop. The mount-then-
+subscribe ordering invariant is preserved by running every entry's
+`Mount` body before any entry's `EnsureSubscribed`.
+
+## Registration
+
+Handlers are registered with a Reactor host's reconciler before the
+first render. The standard call is `Reconciler.RegisterHandler<TElement,
+TControl>(handler)`:
+
+```csharp snippet="v1-protocol/registration"
+```
+
+There are two variants worth knowing about:
+
+| Method | Use when |
+|---|---|
+| `RegisterHandler<TElement, TControl>(handler)` | Standard registration — exact-type dispatch on `element.GetType()`. |
+| `RegisterHandlerForDerivedTypes<TBase, TControl>(handler)` | T-erased registration on a non-generic base type — every closed-T variant whose chain reaches `TBase` routes to the same handler. Used by the typed templated-list family (`TemplatedListViewElement<T>`, etc.). |
+
+Exact-type registrations always win over a derived-type registration
+for the same chain. Duplicate registration for the same element type
+**throws** — there is no last-writer-wins. If you need a different
+mapping for the same element type (e.g., a test harness substituting a
+fake control), build a separate `Reconciler` instance for the scope
+that needs the override.
+
+## Patterns
+
+A handful of recurring patterns cover the long tail of real handlers:
+
+**Map two element fields onto one control property.** Use a single
+`.OneWay` entry whose `get` returns a tuple and whose `set` reads
+both fields. The descriptor's value comparer treats the tuple
+atomically, so the write fires only when either field changes. This
+is how the LED demo collapses `(Color, IsOn)` into a single
+`Background` update.
+
+**Map one element field onto multiple control properties.** Same
+shape: one `.OneWay` entry whose `set` body writes all of them. The
+diff-check still runs only against the element's source field.
+
+**Gate subscription on callback presence.** Pass `e => e.OnXxx` as
+the `callback` parameter to `.Controlled` or `.HandCodedEvent`. When
+the element returns `null` the engine skips subscription entirely —
+callback-less controls pay zero per-fire dispatch cost. This is the
+standard idiom; do not gate manually inside a hand-authored
+trampoline.
+
+**Survive across re-renders.** Hand-authored trampolines that bypass
+`OnCustomEvent` must read the live element via
+`Reconciler.GetElementTag(control)` rather than capturing the element
+in the closure — the closure-captured element goes stale every render
+and the callback observes the wrong state. Every built-in
+`HandCodedEvent` trampoline follows this shape; copy it.
+
+## Common Mistakes
+
+**Subscribing inside `Update`.** Each `Update` call runs against an
+existing control whose subscriptions are already wired from `Mount`.
+Subscribing again in `Update` multiplies the trampolines across
+re-renders. The protocol's contract is: subscribe in `Mount` (or, for
+descriptors, in `EnsureSubscribed` which the interpreter calls after
+the Mount entry loop and lazily on `null → non-null` callback
+transitions).
+
+**Writing without `WriteSuppressed` from `Update`.** A controlled
+prop write from `Update` raises the change event synchronously and
+echoes through the trampoline back into the user's setter. Every
+controlled-shape descriptor entry already wraps the write; hand-coded
+handlers should mirror this. Forgetting it is the most common cause
+of "the value snaps back when I type" bugs.
+
+**Capturing the element in a trampoline closure.** Closures over the
+element observe a stale value on the next render. Re-fetch via
+`Reconciler.GetElementTag(control)` on every fire instead.
+
+**Stashing state on the handler instance.** Handler instances are
+registered once per host and live as long as the reconciler. Per-
+control state needs to live on the control (attached state DP, typed
+event payload box), not on the handler. The handler is a stateless
+interpreter.
+
+**Registering a handler against an open generic.** The dispatch table
+keys on `System.Type`, so an open generic like `typeof(DataGrid<>)`
+has no usable runtime type. Use `RegisterHandlerForDerivedTypes` with
+a non-generic intermediate base when you need to catch every closed
+variant of a generic element family.
+
+## Tips
+
+**Prefer descriptors for new ports.** A descriptor is a declarative
+list that the interpreter executes against the same surface a hand-
+coded handler uses. The dispatch shape is identical; the descriptor
+just reads better. Reach for a hand-coded handler when the prop
+diffing legitimately needs imperative logic (multi-source props,
+template-part trampolines), and use the `.Imperative` /
+`.HandCoded…` escape hatches inside a descriptor before writing a
+full hand-coded handler.
+
+**Read the `RatingControl` descriptor before writing your own.** The
+built-in descriptors in
+`src/Reactor/Core/V1Protocol/Descriptor/Descriptors/` are the
+authoritative examples of every shape. Start from the closest match
+to your control and adapt; copy the comments along with the code so
+future maintainers see the rationale.
+
+**Let the engine handle pool integration.** Default `PoolPolicy`
+covers every leaf control already in `PoolableTypes`. Custom pool
+policies exist for the cases where the default does not fit; do not
+reach for them as a first move.
+
+**Test the controlled-prop round trip with a real pointer driver.**
+The echo-suppression contract is invisible until two writes race. The
+existing `SelfTests` fixtures (in `tests/Reactor.AppTests.Host/SelfTest/Fixtures/`)
+are the template — copy the pattern that drives the control via an
+`AutomationPeer` `IInvokeProvider`/`IValueProvider` and asserts the
+callback fired exactly once.
+
+## Next Steps
+
+- [Extending Reactor with Native Controls](extending-reactor-controls.md) — the cookbook companion to this page.
+- [Reconciliation](reconciliation.md) — how the reconciler decides Mount vs Update vs Unmount, and where `Reconcile` calls into the handler.
+- [Element Pool](element-pool.md) — what `RentControl` and `ReturnControl` actually do.
+- [Hooks Internals](hooks-internals.md) — how the re-render side of the same loop works.
+- [Modifier System](modifier-system.md) — the `Setters` chain a descriptor applies after its own prop loop.

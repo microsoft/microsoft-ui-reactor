@@ -19,6 +19,7 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol;
 /// bodies; the <c>ref struct</c> context types are allocation-free by
 /// construction.</para>
 /// </summary>
+// <snippet:handler-contract>
 [Experimental("REACTOR_V1_PREVIEW")]
 public interface IElementHandler<TElement, TControl>
     where TElement : Element
@@ -65,3 +66,4 @@ public interface IElementHandler<TElement, TControl>
     /// steps that first-add echo.</para></summary>
     void AfterChildrenMount(MountContext ctx, TElement element, TControl control) { }
 }
+// </snippet:handler-contract>

@@ -69,6 +69,7 @@ public sealed class DescriptorHandler<TElement, TControl> : IElementHandler<TEle
             _ => _descriptor.Children,
         };
 
+    // <snippet:descriptor-mount>
     public TControl Mount(MountContext ctx, TElement el)
     {
         var ctrl = ctx.RentControl(_descriptor.PoolPolicy, _descriptor.Factory);
@@ -105,6 +106,7 @@ public sealed class DescriptorHandler<TElement, TControl> : IElementHandler<TEle
             ctx.ApplySetters(getSetters(el), ctrl);
         return ctrl;
     }
+    // </snippet:descriptor-mount>
 
     /// <summary>§14 Phase 3 prelude (Engine A1) — forwards to the descriptor's
     /// optional <see cref="ControlDescriptor{TElement,TControl}.AfterChildrenMount"/>

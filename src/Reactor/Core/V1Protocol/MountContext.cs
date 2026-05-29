@@ -44,6 +44,7 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol;
 /// }
 /// </code></para>
 /// </summary>
+// <snippet:mount-context>
 [Experimental("REACTOR_V1_PREVIEW")]
 public readonly ref struct MountContext
 {
@@ -104,6 +105,7 @@ public readonly ref struct MountContext
     public void AddRawRoutedHandler(UIElement target, RoutedEvent re, Delegate h, bool handledEventsToo)
         => target.AddHandler(re, h, handledEventsToo);
 }
+// </snippet:mount-context>
 
 /// <summary>
 /// Spec 047 §4 / §14 Phase 1 (1.6) — update-time context passed to
