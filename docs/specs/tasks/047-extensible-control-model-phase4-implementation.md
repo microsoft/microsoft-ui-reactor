@@ -123,15 +123,22 @@ parent-tree-mounted, so they need a decorator strategy variant beyond the
 Per-instance route/cache/transition state is intercepted in
 `Reconciler.UnmountRecursive` **before** the V1 dispatch arm.
 
-- [ ] Internal-expose `MountNavigationHost` / `UpdateNavigationHost` and wrap as
+- [x] Internal-expose `MountNavigationHost` / `UpdateNavigationHost` and wrap as
       a V1 handler (route/cache/transition state owned by the handler's
-      per-control payload).
-- [ ] Duplicate (or relocate) the `UnmountRecursive` cleanup logic into the V1
-      handler's Unmount so the pre-dispatch intercept can be removed.
-- [ ] Remove the `UnmountRecursive` intercept; register in
-      `RegisterV1BuiltInHandlers`.
-- [ ] Selftest: navigation push/pop/back-stack + cache eviction parity V1 ON ≡
-      V1 OFF; verify no leaked state across re-mount.
+      per-control payload). *(Already wired as a Phase-3 prelude delegate handler;
+      Mount/Update delegate to the engine bodies which own the per-control
+      `_navigationHostNodes` payload.)*
+- [x] Duplicate (or relocate) the `UnmountRecursive` cleanup logic into the V1
+      handler's Unmount so the pre-dispatch intercept can be removed. *(Extracted
+      `Reconciler.CleanupNavigationHostNode`; added `NavigationHostHandler.Unmount`
+      calling it — adapter returns CollectSelf so no double child recursion.)*
+- [x] Remove the `UnmountRecursive` intercept; register in
+      `RegisterV1BuiltInHandlers`. *(Handler already registered. The flag-independent
+      intercept is now a `!UseV1Protocol` fallback — full removal deferred to §4.6
+      with the V1-OFF escape path, keeping cleanup byte-identical V1 ON ≡ V1 OFF.)*
+- [x] Selftest: navigation push/pop/back-stack + cache eviction parity V1 ON ≡
+      V1 OFF; verify no leaked state across re-mount. *(NavHost selftests 16/16
+      green under both flags; NavigationHostTests+UseNavigationTests 30/30 pass.)*
 
 ### 4.0.3 `TabViewDescriptor` — gap closure
 

@@ -1852,6 +1852,27 @@ public sealed partial class Reconciler : IDisposable
         UnmountRecursive(control);
     }
 
+    /// <summary>
+    /// Spec 047 §14 Phase 4 (4.0.2) — tears down the per-instance navigation
+    /// state (route subscription, cache, current child control) tracked for a
+    /// <see cref="NavigationHostElement"/>'s host Grid. Owned by
+    /// <c>NavigationHostHandler.Unmount</c> on the V1 path; also invoked by the
+    /// V1-OFF fallback in <see cref="UnmountRecursive"/>. No-op if the control
+    /// is not a tracked navigation host.
+    /// </summary>
+    internal void CleanupNavigationHostNode(UIElement control)
+    {
+        if (!_navigationHostNodes.TryGetValue(control, out var navNode))
+            return;
+        if (navNode.RouteChangedHandler is not null)
+            navNode.Handle.RouteChanged -= navNode.RouteChangedHandler;
+        navNode.Handle.Detach();
+        navNode.Cache?.Clear();
+        if (navNode.CurrentChildControl is not null)
+            UnmountRecursive(navNode.CurrentChildControl);
+        _navigationHostNodes.Remove(control);
+    }
+
     private void UnmountRecursive(UIElement control)
     {
         // Capture connected animation snapshot while element is still in the visual tree
@@ -1890,16 +1911,15 @@ public sealed partial class Reconciler : IDisposable
 
         _errorBoundaryNodes.Remove(control);
 
-        if (_navigationHostNodes.TryGetValue(control, out var navNode))
+        // Spec 047 §14 Phase 4 (4.0.2): NavigationHost teardown is owned by
+        // NavigationHostHandler.Unmount on the V1 path (the standard V1 unmount
+        // arm below dispatches it and returns CollectSelf). This pre-dispatch
+        // check remains only as the V1-OFF fallback during the migration window
+        // and is deleted together with the V1-OFF escape path in §4.6.
+        if (!UseV1Protocol && _navigationHostNodes.ContainsKey(control))
         {
-            if (navNode.RouteChangedHandler is not null)
-                navNode.Handle.RouteChanged -= navNode.RouteChangedHandler;
-            navNode.Handle.Detach();
-            navNode.Cache?.Clear();
-            if (navNode.CurrentChildControl is not null)
-                UnmountRecursive(navNode.CurrentChildControl);
-            _navigationHostNodes.Remove(control);
-            return; // Children already handled above; don't recurse into Grid children again
+            CleanupNavigationHostNode(control);
+            return; // Children already handled inside cleanup; don't recurse into Grid children again
         }
 
         // Spec 047 §14 Phase 1 (1.1) — V1 handler unmount dispatch. Only
