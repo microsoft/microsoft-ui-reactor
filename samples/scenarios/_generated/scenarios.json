@@ -1471,5 +1471,5 @@
       "rawCode": "// id: textblock-basic\r\n// intent: display a simple text label\r\n#:package Microsoft.UI.Reactor@0.0.0-local\r\n#:property Platform=ARM64\r\n\r\nusing Microsoft.UI.Reactor;\r\nusing static Microsoft.UI.Reactor.Factories;\r\n\r\nReactorApp.Run\u003CApp\u003E(\u0022TextBlock Basic\u0022, width: 400, height: 300);\r\n\r\nclass App : Component\r\n{\r\n    public override Element Render()\r\n    {\r\n        return VStack(\r\n            TextBlock(\u0022Hello from Reactor.\u0022),\r\n            TextBlock(\u0022TextBlock displays read-only text content.\u0022),\r\n            TextBlock(\u0022Use it for labels, hints, and short status messages.\u0022));\r\n    }\r\n}\r\n"
     }
   ],
-  "generatedAt": "2026-05-29T16:15:05.0370088\u002B00:00"
+  "generatedAt": "2026-05-29T16:19:51.9199352\u002B00:00"
 }
