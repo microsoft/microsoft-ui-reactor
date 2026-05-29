@@ -29,6 +29,22 @@ Derived from: `docs/specs/047-extensible-control-model.md` (§14 "Phase 4 — cl
 > ## 🟢 Progress log (live)
 >
 > **Done & verified (committed):**
+> - **§4.4 — bucketed `Element` base + §11.6 byte-gate constants (DONE; gate
+>   measurement ARM64-deferred).** Bucketed the 14 cross-cutting nullable base
+>   fields into a value-equality `ElementExtras` record behind one
+>   `Element.Extensions` slot, using the proven spec-034 `ElementModifiers` SHIM
+>   pattern: each field name survives as a public get/init shim (copy-on-write
+>   into `Extensions`), so all ~180 readers/`with`-writers compiled & behaved
+>   unchanged — only `Element.cs` changed (zero call-site edits, no public-API
+>   break). Lean case (`Extensions == null`) leaves only Key/Modifiers/Extensions
+>   at the root (the §11.7 byte win). Added an `Extensions is null` fast-path in
+>   `ShallowEquals` for the hot reconcile diff path; record equality preserved.
+>   Renamed the bucket `ElementExtras` (the spec's `ElementExtensions` name clashes
+>   with the existing fluent-modifier static class). Landed the §11.6 TARGET
+>   constants in `PerformanceBudgets.cs` (407/1520/19200); the merge-blocking
+>   ENFORCEMENT/measurement is ARM64-baseline-blocked → §4.9. Validation x64:
+>   build 0 err; xunit 9128/0; Animation/Transition/Theme/Context/Attached/Stagger/
+>   Keyframe/Scroll/ConnectedAnimation/Resource selftests 0 fail. Commit `60f4a908`.
 > - **§4.3 — split `EventHandlerState` (DONE).** Carved the monolithic
 >   per-element `EventHandlerState` into the §9.2 shape. The WinUI true-routed
 >   input family (21 `Current*` + 20 trampolines: pointer/key/tap/focus/
@@ -676,7 +692,7 @@ Source: spec §11.6 / §11.7 + §15.6 ("§11.6 targets become hard gates at
 cleanup"). The byte targets depend on §4.2 (echo) + §4.3 (EHS split) + the
 bucketed base landing.
 
-- [ ] Bucket the 14–16 cross-cutting nullable `Element` base fields
+- [x] Bucket the 14–16 cross-cutting nullable `Element` base fields
       (`Attached`, `ThemeBindings`, `ImplicitTransitions`, `ThemeTransitions`,
       `LayoutAnimation`, `AnimationConfig`, `ElementTransition`,
       `InteractionStates`, `StaggerConfig`, `KeyframeAnimations`,
@@ -684,14 +700,29 @@ bucketed base landing.
       `ContextValues`) into a single nullable `ElementExtensions` sub-record
       (mirroring spec 034's `ElementModifiers`). In the lean case
       (`Extensions == null`) the base shrinks from ~128 B to ~16 B (only `Key`
-      and `Modifiers` survive at the root).
-- [ ] Migrate all readers/writers of the bucketed fields to the sub-record
+      and `Modifiers` survive at the root). *(Done — bucketed into a value-equality
+      `ElementExtras` record (renamed from the spec's `ElementExtensions` to avoid
+      the existing `ElementExtensions` static fluent-modifier class) exposed via
+      one `Element.Extensions` slot; lean case carries only Key/Modifiers/Extensions.
+      Commit `60f4a908`.)*
+- [x] Migrate all readers/writers of the bucketed fields to the sub-record
       (factory methods, fluent modifiers in `ElementExtensions.cs`, reconciler
       apply pipelines). Preserve external behavior; no API break to authors.
+      *(Done via the proven `ElementModifiers` SHIM pattern: each of the 14 field
+      names survives as a public get/init shim on `Element` (`get => Extensions?.X;
+      init => copy-on-write into Extensions`), so all ~180 existing readers and
+      `with`-expression writers — incl. the read-then-write composites — compile
+      and behave UNCHANGED with zero call-site edits; only `Element.cs` changed.
+      Public API preserved. Added an `Extensions is null` fast-path in
+      `ShallowEquals` for the hot reconcile diff path. Commit `60f4a908`.)*
 - [ ] **Land the §11.6 hard byte gates** as merge-blocking on M1/M2/M3, measured
       per §11.6 (`Target = min(Direct + 100, ReactorToday × 0.4)` — i.e. the
       measured ≤407 / ≤1520 / ≤19200, **not** the stale §14 ≤100/≤320/≤500
-      estimates).
+      estimates). *(Code-complete: the §11.6 TARGET constants are landed in
+      `src/Reactor/Core/PerformanceBudgets.cs` (407/1520/19200). The
+      merge-blocking ENFORCEMENT/MEASUREMENT is ARM64-baseline-blocked → deferred
+      to §4.9; box stays open until ratified on `LAPTOP-4MEP83VI`. Commit
+      `60f4a908`.)*
 - [x] **Spec hygiene:** update spec §14 "Phase 4 — cleanup" to cite the measured
       §11.6 targets instead of the stale `≤100 / ≤320 / ≤500`, and fix the
       §15.6 "Phase 5 cleanup" reference to read "Phase 4" (this spec has no
@@ -700,6 +731,10 @@ bucketed base landing.
       "Phase 5 cleanup" reference now reads "Phase 4 cleanup".)*
 - [ ] **Validation.** M1/M2/M3 pass the hard gates on the baseline machine;
       L4/L5 working-set within the §15.6 budgets; M7 (no-change update) ≤ Today.
+      *(ARM64-baseline-blocked — deferred to §4.9. In this x64 env the bucketing is
+      validated for CORRECTNESS: build 0 err; xunit 9128/0; the full
+      animation/transition/theme/context/attached/stagger/keyframe/scroll/
+      connected-animation/resource selftest families 0 fail.)*
 
 ## 4.5 Delete the legacy `MountXxx` / `UpdateXxx` switch
 
