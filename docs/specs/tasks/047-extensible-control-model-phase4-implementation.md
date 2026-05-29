@@ -26,6 +26,46 @@ Derived from: `docs/specs/047-extensible-control-model.md` (§14 "Phase 4 — cl
 > package split §1.1) with rationale — Phase 4 only guarantees both are
 > *unblocked*, not executed.
 
+> ## 🟢 Progress log (live)
+>
+> **Done & verified (committed):**
+> - **§4.0.6** parity — full selftest V1 ON = 0 fail; xunit OFF = 9136 pass.
+> - **§4.1** — `UseV1Protocol` flipped ON by default (`Reconciler.cs` ~289); flag
+>   is now an escape hatch. Fixed 4 OFF-assuming tests (`XamlInteropTests` ×2,
+>   `TypeRegistryTests.Override_Builtin`, `RichEditBoxElementTests`). xunit ON =
+>   9136 pass/0 fail; full selftest ON = 0 fail. Commit `0dee90d8`.
+> - **§4.0.4** GridView — `GridViewHandler` routes through the engine's
+>   virtualizing `MountGridView` body; added `RareControl_GridViewLazy` selftest
+>   (500 items/200px → 96 realized, parity ON≡OFF). Commit `c9e61e39`.
+> - **§4.4 spec-hygiene** — spec now cites measured §11.6 targets
+>   (≤407/≤1520/≤19200); "Phase 5 cleanup" → "Phase 4". Commit `bfdca920`.
+> - **§4.7 analyzers** — RETIRED REACTOR1001/REACTOR1003 (final descriptor API is
+>   fully strongly-typed, no source pattern to match); REACTOR1002 remains the
+>   active Q10 check. Analyzer tests 4/4. Commit `6b772765`. (Other §4.7 items —
+>   `[Experimental]` removal, KD-4, external-assembly proof — still open.)
+> - Full solution build (`Reactor.slnx -p:Platform=x64`) = 0 errors.
+>
+> **⚠️ Critical context for §4.0.1 / §4.0.3 (the next work):** §4.0 "registration"
+> is currently achieved by **Phase-3 prelude delegate/decorator handlers that call
+> back into the legacy `MountXxx`/`UpdateXxx` bodies** — overlays
+> (`Handlers/OverlayDecoratorHandlers.cs`), TabView (`Handlers/TabViewHandler.cs`),
+> GridView (`Handlers/GridViewHandler.cs`), NavHost, panels
+> (`Handlers/PanelDelegateHandlers.cs`). This gives byte-identical V1 ON ≡ V1 OFF
+> parity **but does not let §4.5 delete the legacy bodies** — a genuine port (own
+> the mount/update logic in the handler/descriptor + a new engine strategy) must
+> land first. §4.0.1 needs a **new modal-lifecycle decorator strategy**; §4.0.3
+> needs **3 new engine features** (post-children mount-hook, `ImperativeBridged`
+> named slots, the spec-045 docking drag/pin pipeline). Keep A|B parity green
+> (run selftest with `REACTOR_USE_V1_PROTOCOL=0` as the OFF escape hatch) until
+> §4.5 deletes each arm.
+>
+> **Build/test cmds (verified this env, dotnet 10.0.204):**
+> - xunit (default = V1 ON now): `dotnet test tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64`
+> - selftest V1 ON: `dotnet run --project tests/Reactor.AppTests.Host -p:Platform=x64 -- --self-test [--filter Name]`
+> - selftest V1 OFF (escape hatch): set `$env:REACTOR_USE_V1_PROTOCOL="0"` first.
+> - **Avoid running two `dotnet run` selftest builds concurrently** — they race on
+>   the XamlCompiler DLL and produce spurious failures; run sequentially.
+
 ## Conventions
 
 - Every task is a checkbox; mark `[x]` only when its artifact (code + tests +
