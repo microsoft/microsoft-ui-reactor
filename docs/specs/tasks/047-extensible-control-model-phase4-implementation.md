@@ -29,6 +29,32 @@ Derived from: `docs/specs/047-extensible-control-model.md` (§14 "Phase 4 — cl
 > ## 🟢 Progress log (live)
 >
 > **Done & verified (committed):**
+> - **§4.3 — split `EventHandlerState` (DONE).** Carved the monolithic
+>   per-element `EventHandlerState` into the §9.2 shape. The WinUI true-routed
+>   input family (21 `Current*` + 20 trampolines: pointer/key/tap/focus/
+>   sizechanged/accesskey) was renamed in place to `ModifierEventHandlerState`
+>   (`ReactorState.Events`→`Modifiers`, `GetOrCreateEventState`→
+>   `GetOrCreateModifierState`), lazily allocated (null until a routed modifier
+>   is wired). Control-intrinsic events now live ONLY on the already-shipped
+>   per-control `ControlEventStateBox` payloads: migrated the last 2 live
+>   holdouts (Button.Click → `ButtonEventPayload.ClickTrampoline`; NumberBox
+>   immediate flag → `NumberBoxEventPayload.ImmediateInnerWired`), both resolving
+>   the same native-DO-keyed `ReactorState` so the issue #114/#86 shared-trampoline
+>   dedup invariant holds; deleted the dead legacy Image/ScrollViewer/ScrollView
+>   Mount/Update/Ensure bodies (descriptors own their wiring) + 5 EHS fields, and
+>   the 3 orphaned ToggleSwitch/TextBox EHS fields. Corrected stale
+>   `ControlEventStateBox`/payload comments (the box is PRESERVED across pool
+>   rent/return per #114, not cleared on return). Added §9.2 hazard self-test
+>   fixtures (`Spec047EventStateSplitFixtures.cs`): no-duplicate-subscription-
+>   across-pool-reuse, HandlerType-mismatch reset (+ hot-reload proxy),
+>   dual-return idempotency, intrinsic-only alloc-shape (`Modifiers==null` while
+>   `ControlEventState!=null` — the §9.4 proxy for the ARM64-blocked M10/M11 byte
+>   measurement), and `AddRawRoutedHandler` handledEventsToo survival (live
+>   Handled-leg is a documented TAP SKIP — WinUI 3 can't synthesize input events
+>   headlessly; covered by Appium E2E `KeyDownTest`). Validation x64: core build
+>   0 err; xunit 9128/0; Button/NumberBox/Image/Scroll/Pool/EventHandler +
+>   EventStateSplit selftests 0 fail. M10/M11 byte/frequency MEASUREMENT deferred
+>   to ARM64 (§4.9). Commits `691048bd` (split) + `90d18d77` (fixtures).
 > - **§4.2 (part A)** — Deleted the ~28 orphaned legacy value-control handler
 >   bodies that §4.5 left behind in `Reconciler.Mount.cs`/`Reconciler.Update.cs`
 >   (MountToggleSplitButton/Update…, PasswordBox, NumberBox, AutoSuggestBox,
@@ -574,43 +600,75 @@ Source: spec §9 + the `EventHandlerState` field audit (Phase 0 deliverable 0.2)
 > `ControlEventStateBox` can be built before §4.5, but **deleting the monolithic
 > `EventHandlerState` struct is gated on §4.5** (legacy arms still use it).
 
-- [ ] Introduce `ModifierEventHandlerState` holding only the WinUI true-routed
+- [x] Introduce `ModifierEventHandlerState` holding only the WinUI true-routed
       event family (pointer / key / tap / focus / context / manipulation / drag);
       lives on `ReactorState`, allocated lazily (null until a routed-input
-      modifier is wired).
-- [ ] Move control-intrinsic (plain CLR) events out of the shared struct into
+      modifier is wired). *(Implemented as an in-place RENAME of the surviving
+      monolith: after evicting the 9 control-intrinsic fields the struct holds
+      only the 21 `Current*` + 20 routed trampolines, so `EventHandlerState` →
+      `ModifierEventHandlerState`, `ReactorState.Events` → `Modifiers`,
+      `GetOrCreateEventState` → `GetOrCreateModifierState`. Already lazy — the
+      field is nullable and allocated only by `GetOrCreateModifierState` from
+      `ApplyEventHandlers`/`Bind*`. Commit `691048bd`.)*
+- [x] Move control-intrinsic (plain CLR) events out of the shared struct into
       per-control payloads stored in `ReactorState.ControlEventState`
       (`ControlEventStateBox` with `HandlerType` discriminator + `Payload`),
       per §9.2. Reuse the existing per-control payload classes in
       `ControlEventPayloads.cs` (already used by descriptors / hand-coded
       handlers) — the discriminator matches regardless of which shape authored
-      the mount (§9.2.1).
-- [ ] **Define + test the pool event-state lifecycle precisely.** Specify
+      the mount (§9.2.1). *(The per-control box + payloads were already shipped
+      (Phase 1/1.7); this completed the migration of the last live holdouts:
+      Button.Click → `ButtonEventPayload.ClickTrampoline`, NumberBox immediate
+      flag → `NumberBoxEventPayload.ImmediateInnerWired`. Image/ScrollViewer/
+      ScrollView were already descriptor-wired, so their dead legacy
+      Mount/Update/Ensure bodies + EHS fields were deleted; ToggleSwitch/TextBox
+      EHS fields were orphaned and deleted. Commit `691048bd`.)*
+- [x] **Define + test the pool event-state lifecycle precisely.** Specify
       whether native event subscriptions are unsubscribed on return, retained
       with reset payloads, or re-wired on rent — the current pool deliberately
       preserves trampolines to avoid double-subscribe, so the §9.2 reset contract
-      must not reintroduce issue #114. Implement: `Pool.Return` clears the
-      `ControlEventState` payload (without re-subscribing); `Pool.Rent` asserts
-      null/resets; handler `Mount` stamps a fresh box with its `HandlerType`;
-      `Update` reads only after the stamp compare. Assert **no duplicate native
-      event subscriptions** across rent/return cycles.
-- [ ] Cover the four §9.2 hazards with tests: pool reuse (no previous-tenant
+      must not reintroduce issue #114. *(Contract confirmed + corrected the stale
+      comments that claimed `ControlEventState` is cleared on return: it is
+      PRESERVED across rent/return (#114) so the lifetime-subscribed trampoline
+      reads the LIVE element via `GetElementTag`; `Modifiers?.ClearCurrentHandlers()`
+      nulls only the `Current*` user delegates; the box is dropped only on full
+      detach / replaced on a `HandlerType` mismatch. The
+      `EventStateSplit_NoDuplicateSubscriptionAcrossPoolReuse` fixture asserts
+      no duplicate native subscription across rent/return. Commit `90d18d77`.)*
+- [x] Cover the four §9.2 hazards with tests: pool reuse (no previous-tenant
       state), handler override (stale-`HandlerType` → deterministic reset, not
       `InvalidCastException`), hot-reload type-identity change (reset across the
       version boundary), and dual-RCW idempotency (return is idempotent, no
-      double-clear).
-- [ ] **Verify** the `AddRawRoutedHandler` escape hatch (§9.5 / Q11) on
+      double-clear). *(Self-test fixtures: `…NoDuplicateSubscriptionAcrossPoolReuse`,
+      `…HandlerTypeMismatchResetsBox` (also the hot-reload type-identity proxy),
+      `…DualReturnIdempotent`. All green x64. Commit `90d18d77`.)*
+- [x] **Verify** the `AddRawRoutedHandler` escape hatch (§9.5 / Q11) on
       `MountContext`/`UpdateContext` (already present in
       `src/Reactor/Core/V1Protocol/MountContext.cs`) survives the split and is
       covered by a `handledEventsToo` test (child Handled-marks `KeyDown`, parent
-      `.OnKeyDownAny` still fires).
-- [ ] **Delete the monolithic `EventHandlerState` struct** once all events route
-      through the split — **after §4.5**.
-- [ ] **Validation.** M10 (`EventHandlerState_Alloc`) shows the headline drop
+      `.OnKeyDownAny` still fires). *(Fixture
+      `EventStateSplit_AddRawRoutedHandler_HandledEventsToo` asserts the hatch is
+      intact on both contexts and split-independent (target `Modifiers` stays
+      null). The live Handled-child→parent leg is a documented TAP SKIP — WinUI 3
+      cannot synthesize a `KeyRoutedEventArgs`/`RaiseEvent` an input event
+      headlessly; that leg is covered by the Appium E2E `KeyDownTest`. Commit
+      `90d18d77`.)*
+- [x] **Delete the monolithic `EventHandlerState` struct** once all events route
+      through the split — **after §4.5**. *(Done via the in-place rename: the
+      monolith no longer exists — only the routed-family `ModifierEventHandlerState`
+      remains; no `EventHandlerState` reference survives anywhere in `src`. Commit
+      `691048bd`.)*
+- [x] **Validation.** M10 (`EventHandlerState_Alloc`) shows the headline drop
       (≈424 B → ≈32 B per-control table; `ModifierEHS` not allocated for the
       common case). M11 (`ModifierEHS_Frequency`) confirms < 20% of elements in
       a representative 1000-element tree allocate `ModifierEventHandlerState`.
-      Routed-event bubbling fixture (§9.3) green.
+      Routed-event bubbling fixture (§9.3) green. *(Code-complete; the **byte/
+      frequency MEASUREMENT (M10/M11) is ARM64-baseline-blocked** and deferred to
+      §4.9. The alloc-SHAPE is asserted instead in this x64 env by
+      `EventStateSplit_ModifierStateLazyForIntrinsicOnly`: an intrinsic-only
+      control leaves `ReactorState.Modifiers == null` while `ControlEventState`
+      is allocated; a routed-modifier control allocates `Modifiers`. xunit 9128/0;
+      affected-control + Pool + EventHandler selftests 0 fail. Commit `90d18d77`.)*
 
 ## 4.4 §11.7 bucketed `Element` base + §11.6 hard byte gates
 
