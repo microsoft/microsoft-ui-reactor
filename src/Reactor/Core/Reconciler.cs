@@ -1900,23 +1900,6 @@ public sealed partial class Reconciler : IDisposable
         finally { Diagnostics.ReactorEventSource.Log.ChildReconcileStop(); }
     }
 
-    private void ReconcileItemsChildren(
-        Element[] oldChildren, Element[] newChildren,
-        WinUI.ItemsControl itemsControl, Action requestRerender)
-    {
-        var childCollection = new ItemsControlChildCollection(itemsControl);
-        if (!Diagnostics.ReactorEventSource.Log.IsEnabled(
-                global::System.Diagnostics.Tracing.EventLevel.Informational,
-                Diagnostics.ReactorEventSource.Keywords.Reconcile))
-        {
-            ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender);
-            return;
-        }
-        Diagnostics.ReactorEventSource.Log.ChildReconcileStart(oldChildren.Length, newChildren.Length);
-        try { ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender); }
-        finally { Diagnostics.ReactorEventSource.Log.ChildReconcileStop(); }
-    }
-
     /// <summary>
     /// Updates a single child element. Returns non-null if the child control was replaced.
     /// Public so registered type handlers can recursively reconcile children.

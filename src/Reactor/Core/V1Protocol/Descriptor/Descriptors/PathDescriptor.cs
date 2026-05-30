@@ -118,8 +118,8 @@ internal static class PathDescriptor
             get: static e => e.StrokeDashOffset,
             set: static (c, v) => c.StrokeDashOffset = v);
 
-    /// <summary>Three-strategy Data write — mirrors the legacy
-    /// <see cref="Reconciler.MountPath"/> body verbatim. Strategy 1:
+    /// <summary>Three-strategy Data write — mirrors the former legacy
+    /// <c>Reconciler.MountPath</c> body verbatim. Strategy 1:
     /// XamlReader-load a synthesized <c>&lt;Path Data="..."/&gt;</c> when
     /// <c>PathDataString</c> is set; if it parses, lift the resulting
     /// Geometry off the loaded Path and assign to the live control.
