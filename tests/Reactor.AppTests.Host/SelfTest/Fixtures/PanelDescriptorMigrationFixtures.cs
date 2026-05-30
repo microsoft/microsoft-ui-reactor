@@ -169,7 +169,7 @@ internal static class PanelDescriptorMigrationFixtures
                     Button("Rotate", () => setPhase(1)),
                     Canvas(order.Select((item, idx) =>
                         (Element)Border(TextBlock(item).AutomationId($"pdm_cv_{item}"))
-                            .Canvas(left: idx * 100, top: 0)
+                            .Canvas(left: idx * 100.0, top: 0)
                             .WithKey(item)).ToArray())
                 );
             });
@@ -186,9 +186,9 @@ internal static class PanelDescriptorMigrationFixtures
             var beforeCtrl = keys.ToDictionary(k => k, k => Ctrl(k));
             H.Check("PDM_Canvas_Reorder_AllInitial", beforeCtrl.Values.All(v => v is not null));
             H.Check("PDM_Canvas_Reorder_InitialPositions",
-                beforeCtrl["a"] is { } ca && WinXC.Canvas.GetLeft(ca) == 0 &&
-                beforeCtrl["b"] is { } cb && WinXC.Canvas.GetLeft(cb) == 100 &&
-                beforeCtrl["c"] is { } cc && WinXC.Canvas.GetLeft(cc) == 200);
+                beforeCtrl["a"] is { } ca && Math.Abs(WinXC.Canvas.GetLeft(ca) - 0) < 0.001 &&
+                beforeCtrl["b"] is { } cb && Math.Abs(WinXC.Canvas.GetLeft(cb) - 100) < 0.001 &&
+                beforeCtrl["c"] is { } cc && Math.Abs(WinXC.Canvas.GetLeft(cc) - 200) < 0.001);
 
             H.ClickButton("Rotate");
             await Harness.Render();
@@ -198,9 +198,9 @@ internal static class PanelDescriptorMigrationFixtures
 
             // New order is c,a,b → positions 0,100,200 respectively.
             H.Check("PDM_Canvas_Reorder_PositionFollowsMovedChild",
-                Ctrl("c") is { } c2 && WinXC.Canvas.GetLeft(c2) == 0 &&
-                Ctrl("a") is { } a2 && WinXC.Canvas.GetLeft(a2) == 100 &&
-                Ctrl("b") is { } b2 && WinXC.Canvas.GetLeft(b2) == 200);
+                Ctrl("c") is { } c2 && Math.Abs(WinXC.Canvas.GetLeft(c2) - 0) < 0.001 &&
+                Ctrl("a") is { } a2 && Math.Abs(WinXC.Canvas.GetLeft(a2) - 100) < 0.001 &&
+                Ctrl("b") is { } b2 && Math.Abs(WinXC.Canvas.GetLeft(b2) - 200) < 0.001);
         }
     }
 
@@ -254,8 +254,8 @@ internal static class PanelDescriptorMigrationFixtures
             // no-op rather than re-applying the stale centered position.
             H.Check("PDM_CanvasAnchor_ClearedToZero",
                 after is not null &&
-                WinXC.Canvas.GetLeft(after) == 0 &&
-                WinXC.Canvas.GetTop(after) == 0);
+                Math.Abs(WinXC.Canvas.GetLeft(after)) < 0.001 &&
+                Math.Abs(WinXC.Canvas.GetTop(after)) < 0.001);
         }
     }
 
