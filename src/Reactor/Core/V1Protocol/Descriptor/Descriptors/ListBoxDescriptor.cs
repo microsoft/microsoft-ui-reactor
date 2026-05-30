@@ -26,6 +26,14 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <para><b>Known gaps vs. hand-coded handler:</b> Items reconciliation is
 /// non-keyed (full rebuild on any structural delta). Acceptable for short
 /// ListBoxes (typical 3–15 options).</para>
+///
+/// <para><b>Echo suppression — causal counter (PR #455 CR item #1):</b>
+/// <c>SelectedIndex</c> uses <c>ShouldSuppress</c> / <c>WriteSuppressed</c>,
+/// not the §8 value-diff arm, for the same reason as
+/// <see cref="GridViewDescriptor"/> — see that type for the full rationale and
+/// the empirical findings. The counter gate suppresses the entire trampoline
+/// fire, so it governs the multi-select snapshot <c>OnSelectionChanged</c> too
+/// (CR item #3).</para>
 /// </summary>
 internal static class ListBoxDescriptor
 {
@@ -34,7 +42,7 @@ internal static class ListBoxDescriptor
     private static readonly WinUI.SelectionChangedEventHandler SelectionChangedTrampoline = (s, _) =>
     {
         var lb = (WinUI.ListBox)s!;
-        if (ChangeEchoSuppressor.ShouldSuppressEcho(lb, lb.SelectedIndex)) return;
+        if (ChangeEchoSuppressor.ShouldSuppress(lb)) return;
         if (Reconciler.GetElementTag(lb) is not ListBoxElement el) return;
         el.OnSelectedIndexChanged?.Invoke(lb.SelectedIndex);
         if (el.OnSelectionChanged is { } h)
@@ -82,6 +90,5 @@ internal static class ListBoxDescriptor
                     : (e.OnSelectionChanged is not null ? NoOpSelectedIndexChanged : null),
             trampoline:  SelectionChangedTrampoline,
             slotIsNull:  static p => p.SelectionChangedTrampoline is null,
-            setSlot:     static (p, h) => p.SelectionChangedTrampoline = h,
-            valueDiffEcho: true);
+            setSlot:     static (p, h) => p.SelectionChangedTrampoline = h);
 }

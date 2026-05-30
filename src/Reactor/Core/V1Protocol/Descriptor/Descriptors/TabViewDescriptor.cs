@@ -39,6 +39,14 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <para><b>Still legacy-only:</b> keyed tab reorder — the
 /// <see cref="TabItemsHost{TElement,TControl,TItem}"/> pairs by index, matching
 /// the index-positional legacy <c>UpdateTabView</c> arm.</para>
+///
+/// <para><b>One intentional divergence from "byte-identical V1 ON ≡ V1 OFF"
+/// (PR #455 nit):</b> a freshly-appended <em>pinnable</em> tab is built through
+/// <c>Reconciler.BuildTabHeader</c> in <c>CreateContainer</c>, so its pin
+/// button appears <em>immediately</em>. The legacy <c>UpdateTabView</c> arm
+/// only surfaced the pin button on the <em>next</em> render. This is a fix in
+/// the right direction (the PR already frames TabView as a functional port, not
+/// a byte-for-byte relocation); the icon-update path is verified equivalent.</para>
 /// </summary>
 internal static class TabViewDescriptor
 {

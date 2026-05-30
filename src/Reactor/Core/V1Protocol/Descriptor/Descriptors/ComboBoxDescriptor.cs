@@ -13,9 +13,13 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <para><b>Coverage:</b>
 /// <list type="bullet">
 ///   <item><c>SelectedIndex</c> — <see cref="ControlDescriptor{TElement,TControl}.HandCodedControlled{TPayload,TValue,TDelegate}"/>
-///   with <c>SelectionChangedEventHandler</c> trampoline. Trampoline
-///   gates on <c>ChangeEchoSuppressor.ShouldSuppress</c>; HandCodedControlled
-///   wraps the programmatic write in <c>WriteSuppressed</c>.</item>
+///   with <c>SelectionChangedEventHandler</c> trampoline. ComboBox's
+///   <c>SelectionChanged</c> fires synchronously inside the programmatic
+///   write, so this opts into the §8 value-diff arm (<c>valueDiffEcho: true</c>):
+///   the trampoline gates on <c>ChangeEchoSuppressor.ShouldSuppressEcho</c> and
+///   the write is a bare <c>_set</c> + <c>ArmExpectedEcho</c> (no counter bump).
+///   Contrast GridView/ListBox, which stay on the causal counter — see
+///   <see cref="GridViewDescriptor"/> (PR #455 CR item #1).</item>
 ///   <item><c>DropDownOpened</c> — <see cref="ControlDescriptor{TElement,TControl}.HandCodedEvent{TPayload,TDelegate}"/>
 ///   with <c>EventHandler&lt;object&gt;</c> trampoline (ComboBox's
 ///   DropDownOpened/Closed events are plain <c>EventHandler&lt;object&gt;</c>).</item>

@@ -1034,7 +1034,7 @@ public sealed partial class Reconciler : IDisposable
     /// non-generic <c>LazyStackElementBase</c> and need the decorator
     /// shape (control identity differs from the descriptor port — the
     /// legacy mount wraps the ItemsRepeater in a ScrollViewer — and
-    /// <see cref="V1UnmountDisposition.ContinueDefaultTraversal"/> so the
+    /// <see cref="V1Protocol.V1UnmountDisposition.ContinueDefaultTraversal"/> so the
     /// engine recurses ScrollViewer → ItemsRepeater → realized rows on
     /// unmount).
     /// </summary>

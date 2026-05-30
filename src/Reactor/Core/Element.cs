@@ -70,12 +70,29 @@ public abstract record Element
     /// lazy sub-record (spec 047 §4.4). The common case — a leaf with none of
     /// these — leaves this slot null, so the 14 fields below cost one reference
     /// instead of 14 inline slots on every <see cref="Element"/>.
-    /// Set directly only in perf-critical paths; ordinary code uses the field
-    /// shim properties (Attached, ThemeBindings, AnimationConfig, …) below and
-    /// never observes this slot.
+    /// The setter is <c>internal</c> (PR #455 CR item #6): ordinary code uses
+    /// the field shim properties (Attached, ThemeBindings, AnimationConfig, …)
+    /// below and never observes this slot. Keeping the setter off the public
+    /// surface removes an initializer-ordering footgun — a public
+    /// <c>with { Extensions = X }</c> after a shim write would have silently
+    /// discarded the shim. The engine and perf-critical internal paths may
+    /// still set it directly.
     /// </summary>
     /// <remarks>Spec 047 §4.4.</remarks>
-    public ElementExtras? Extensions { get; init; }
+    public ElementExtras? Extensions { get; internal init; }
+
+    /// <summary>
+    /// Collapses an all-null <see cref="ElementExtras"/> back to a null
+    /// <see cref="Extensions"/> slot (PR #455 CR item #2). The bucketed shim
+    /// setters below route through this so that writing a bucketed field to
+    /// <c>null</c> never materializes (or keeps) a non-null empty bucket — an
+    /// empty bucket is <em>not</em> <c>Equals</c> to <c>null</c>, which would
+    /// otherwise break the synthesized record equality between an extras-free
+    /// element and one that had a field set to null (e.g.
+    /// <c>(x with { Attached = null }) == x</c>).
+    /// </summary>
+    private static ElementExtras? NormalizeExtras(ElementExtras extras)
+        => extras.IsEmpty ? null : extras;
 
     /// <summary>
     /// Attached properties from parent containers (Grid.Row, Canvas.Left, etc.).
@@ -85,7 +102,8 @@ public abstract record Element
     public IReadOnlyDictionary<Type, object>? Attached
     {
         get => Extensions?.Attached;
-        init => Extensions = Extensions is null ? new ElementExtras { Attached = value } : Extensions with { Attached = value };
+        init => Extensions = value is null && Extensions is null ? null
+            : NormalizeExtras(Extensions is null ? new ElementExtras { Attached = value } : Extensions with { Attached = value });
     }
 
     /// <summary>
@@ -97,7 +115,8 @@ public abstract record Element
     public ImplicitTransitions? ImplicitTransitions
     {
         get => Extensions?.ImplicitTransitions;
-        init => Extensions = Extensions is null ? new ElementExtras { ImplicitTransitions = value } : Extensions with { ImplicitTransitions = value };
+        init => Extensions = value is null && Extensions is null ? null
+            : NormalizeExtras(Extensions is null ? new ElementExtras { ImplicitTransitions = value } : Extensions with { ImplicitTransitions = value });
     }
 
     /// <summary>
@@ -107,7 +126,8 @@ public abstract record Element
     public ThemeTransitions? ThemeTransitions
     {
         get => Extensions?.ThemeTransitions;
-        init => Extensions = Extensions is null ? new ElementExtras { ThemeTransitions = value } : Extensions with { ThemeTransitions = value };
+        init => Extensions = value is null && Extensions is null ? null
+            : NormalizeExtras(Extensions is null ? new ElementExtras { ThemeTransitions = value } : Extensions with { ThemeTransitions = value });
     }
 
     /// <summary>
@@ -118,7 +138,8 @@ public abstract record Element
     public IReadOnlyDictionary<string, ThemeRef>? ThemeBindings
     {
         get => Extensions?.ThemeBindings;
-        init => Extensions = Extensions is null ? new ElementExtras { ThemeBindings = value } : Extensions with { ThemeBindings = value };
+        init => Extensions = value is null && Extensions is null ? null
+            : NormalizeExtras(Extensions is null ? new ElementExtras { ThemeBindings = value } : Extensions with { ThemeBindings = value });
     }
 
     /// <summary>
@@ -130,7 +151,8 @@ public abstract record Element
     public LayoutAnimationConfig? LayoutAnimation
     {
         get => Extensions?.LayoutAnimation;
-        init => Extensions = Extensions is null ? new ElementExtras { LayoutAnimation = value } : Extensions with { LayoutAnimation = value };
+        init => Extensions = value is null && Extensions is null ? null
+            : NormalizeExtras(Extensions is null ? new ElementExtras { LayoutAnimation = value } : Extensions with { LayoutAnimation = value });
     }
 
     /// <summary>
@@ -141,7 +163,8 @@ public abstract record Element
     public Microsoft.UI.Reactor.Animation.AnimationConfig? AnimationConfig
     {
         get => Extensions?.AnimationConfig;
-        init => Extensions = Extensions is null ? new ElementExtras { AnimationConfig = value } : Extensions with { AnimationConfig = value };
+        init => Extensions = value is null && Extensions is null ? null
+            : NormalizeExtras(Extensions is null ? new ElementExtras { AnimationConfig = value } : Extensions with { AnimationConfig = value });
     }
 
     /// <summary>
@@ -152,7 +175,8 @@ public abstract record Element
     public Microsoft.UI.Reactor.Animation.ElementTransition? ElementTransition
     {
         get => Extensions?.ElementTransition;
-        init => Extensions = Extensions is null ? new ElementExtras { ElementTransition = value } : Extensions with { ElementTransition = value };
+        init => Extensions = value is null && Extensions is null ? null
+            : NormalizeExtras(Extensions is null ? new ElementExtras { ElementTransition = value } : Extensions with { ElementTransition = value });
     }
 
     /// <summary>
@@ -163,7 +187,8 @@ public abstract record Element
     public Microsoft.UI.Reactor.Animation.InteractionStatesConfig? InteractionStates
     {
         get => Extensions?.InteractionStates;
-        init => Extensions = Extensions is null ? new ElementExtras { InteractionStates = value } : Extensions with { InteractionStates = value };
+        init => Extensions = value is null && Extensions is null ? null
+            : NormalizeExtras(Extensions is null ? new ElementExtras { InteractionStates = value } : Extensions with { InteractionStates = value });
     }
 
     /// <summary>
@@ -174,7 +199,8 @@ public abstract record Element
     public Microsoft.UI.Reactor.Animation.StaggerConfig? StaggerConfig
     {
         get => Extensions?.StaggerConfig;
-        init => Extensions = Extensions is null ? new ElementExtras { StaggerConfig = value } : Extensions with { StaggerConfig = value };
+        init => Extensions = value is null && Extensions is null ? null
+            : NormalizeExtras(Extensions is null ? new ElementExtras { StaggerConfig = value } : Extensions with { StaggerConfig = value });
     }
 
     /// <summary>
@@ -184,7 +210,8 @@ public abstract record Element
     public Microsoft.UI.Reactor.Animation.KeyframeEntry[]? KeyframeAnimations
     {
         get => Extensions?.KeyframeAnimations;
-        init => Extensions = Extensions is null ? new ElementExtras { KeyframeAnimations = value } : Extensions with { KeyframeAnimations = value };
+        init => Extensions = value is null && Extensions is null ? null
+            : NormalizeExtras(Extensions is null ? new ElementExtras { KeyframeAnimations = value } : Extensions with { KeyframeAnimations = value });
     }
 
     /// <summary>
@@ -194,7 +221,8 @@ public abstract record Element
     public Microsoft.UI.Reactor.Animation.ScrollAnimationConfig? ScrollAnimation
     {
         get => Extensions?.ScrollAnimation;
-        init => Extensions = Extensions is null ? new ElementExtras { ScrollAnimation = value } : Extensions with { ScrollAnimation = value };
+        init => Extensions = value is null && Extensions is null ? null
+            : NormalizeExtras(Extensions is null ? new ElementExtras { ScrollAnimation = value } : Extensions with { ScrollAnimation = value });
     }
 
     /// <summary>
@@ -207,7 +235,8 @@ public abstract record Element
     public string? ConnectedAnimationKey
     {
         get => Extensions?.ConnectedAnimationKey;
-        init => Extensions = Extensions is null ? new ElementExtras { ConnectedAnimationKey = value } : Extensions with { ConnectedAnimationKey = value };
+        init => Extensions = value is null && Extensions is null ? null
+            : NormalizeExtras(Extensions is null ? new ElementExtras { ConnectedAnimationKey = value } : Extensions with { ConnectedAnimationKey = value });
     }
 
     /// <summary>
@@ -219,7 +248,8 @@ public abstract record Element
     public Microsoft.UI.Reactor.Elements.ResourceOverrides? ResourceOverrides
     {
         get => Extensions?.ResourceOverrides;
-        init => Extensions = Extensions is null ? new ElementExtras { ResourceOverrides = value } : Extensions with { ResourceOverrides = value };
+        init => Extensions = value is null && Extensions is null ? null
+            : NormalizeExtras(Extensions is null ? new ElementExtras { ResourceOverrides = value } : Extensions with { ResourceOverrides = value });
     }
 
     /// <summary>
@@ -230,7 +260,8 @@ public abstract record Element
     public IReadOnlyDictionary<ContextBase, object?>? ContextValues
     {
         get => Extensions?.ContextValues;
-        init => Extensions = Extensions is null ? new ElementExtras { ContextValues = value } : Extensions with { ContextValues = value };
+        init => Extensions = value is null && Extensions is null ? null
+            : NormalizeExtras(Extensions is null ? new ElementExtras { ContextValues = value } : Extensions with { ContextValues = value });
     }
 
     /// <summary>
@@ -1125,6 +1156,17 @@ public record SemanticElement(Element Child, SemanticDescription Semantics) : El
 /// API change. Value-equality (default record) so equality helpers and
 /// <c>with</c>-writers behave exactly as before. Unlike
 /// <see cref="ElementModifiers"/> nothing merges Extras, so there is no Merge.
+///
+/// <para><b>Construction-cost tradeoff (spec 047 §4.4 / §11.6):</b> the common
+/// no-extras leaf now saves a reference slot (the §4.4 win), but each
+/// extra-setting fluent call (<c>.Grid()</c>, <c>.Background(Theme…)</c>,
+/// <c>.Animate()</c>, <c>.Provide()</c>, …) clones this sub-record <em>in
+/// addition to</em> the <see cref="Element"/> clone — so an element that sets
+/// several extras does N small <c>ElementExtras</c> allocations during
+/// construction where the inline layout did zero. Net win for the common case;
+/// watch the §11.6 byte-gate M2/M3 (callback/modifier-heavy leaves) when it is
+/// measured on the baseline box, as those are the construction-cost-sensitive
+/// scenarios.</para>
 /// </summary>
 /// <remarks>Spec 047 §4.4.</remarks>
 public record ElementExtras
@@ -1228,6 +1270,29 @@ public record ElementExtras
     /// this element's subtree and pops them when leaving.
     /// </summary>
     public IReadOnlyDictionary<ContextBase, object?>? ContextValues { get; init; }
+
+    /// <summary>
+    /// True when every bucketed field is null. The <see cref="Element"/> shim
+    /// setters use this (via <c>Element.NormalizeExtras</c>) to collapse an
+    /// all-null bucket back to a null <c>Extensions</c> slot, so record
+    /// equality between an extras-free element and one whose only "extra" is a
+    /// field explicitly set to null stays symmetric (PR #455 CR item #2).
+    /// </summary>
+    internal bool IsEmpty =>
+        Attached is null
+        && ImplicitTransitions is null
+        && ThemeTransitions is null
+        && ThemeBindings is null
+        && LayoutAnimation is null
+        && AnimationConfig is null
+        && ElementTransition is null
+        && InteractionStates is null
+        && StaggerConfig is null
+        && KeyframeAnimations is null
+        && ScrollAnimation is null
+        && ConnectedAnimationKey is null
+        && ResourceOverrides is null
+        && ContextValues is null;
 }
 
 public record ElementModifiers

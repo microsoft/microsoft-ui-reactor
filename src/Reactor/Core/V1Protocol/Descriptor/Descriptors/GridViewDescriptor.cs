@@ -9,6 +9,21 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// Spec 047 §14 Phase 3 completion — descriptor variant of the simple
 /// <see cref="GridViewElement"/> arm. The typed templated GridView peer is
 /// handled by <see cref="TemplatedGridViewDescriptor"/>.
+///
+/// <para><b>Echo suppression — causal counter, not value-diff (PR #455 CR
+/// item #1):</b> <c>SelectedIndex</c> stays on <c>ShouldSuppress</c> /
+/// <c>WriteSuppressed</c> rather than the §8 value-diff arm. The arm is a
+/// single one-shot slot; the reviewer flagged that GridView's
+/// <c>SelectionChanged</c> is documented deferred (mount-time container
+/// realization). Empirical probing (PR #455) confirmed post-realization
+/// programmatic writes echo <em>synchronously</em> (so the arm's precondition
+/// actually holds in steady state) AND that the counter and the arm behave
+/// identically in every production-reachable path — so we keep these two on
+/// the well-understood counter that <c>main</c> shipped, matching the
+/// snapshot <c>OnSelectionChanged</c> twin-invoke (the counter gate suppresses
+/// the whole trampoline fire, governing the multi-select snapshot too — CR
+/// item #3). The value-diff arm remains for the synchronous-by-construction
+/// controls (ComboBox, the toggles, pickers).</para>
 /// </summary>
 internal static class GridViewDescriptor
 {
@@ -17,7 +32,7 @@ internal static class GridViewDescriptor
     private static readonly WinUI.SelectionChangedEventHandler SelectionChangedTrampoline = (s, _) =>
     {
         var gv = (WinUI.GridView)s!;
-        if (ChangeEchoSuppressor.ShouldSuppressEcho(gv, gv.SelectedIndex)) return;
+        if (ChangeEchoSuppressor.ShouldSuppress(gv)) return;
         if (Reconciler.GetElementTag(gv) is not GridViewElement el) return;
 
         el.OnSelectedIndexChanged?.Invoke(gv.SelectedIndex);
@@ -71,8 +86,7 @@ internal static class GridViewDescriptor
                     : (e.OnSelectionChanged is not null ? NoOpSelectedIndexChanged : null),
             trampoline:  SelectionChangedTrampoline,
             slotIsNull:  static p => p.SelectionChangedTrampoline is null,
-            setSlot:     static (p, h) => p.SelectionChangedTrampoline = h,
-            valueDiffEcho: true)
+            setSlot:     static (p, h) => p.SelectionChangedTrampoline = h)
         .HandCodedEvent<GridViewEventPayload, WinUI.ItemClickEventHandler>(
             subscribe:        static (c, h) => c.ItemClick += h,
             callbackPresent:  static e => e.OnItemClick,

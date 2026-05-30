@@ -346,14 +346,17 @@ internal static class Spec047ValueDiffEchoFixtures
         }
     }
 
-    /// <summary>Regression guard for the guarded-no-op arm strand (code-review
-    /// Issue 2). GridView's controlled setter is <c>if (v &gt;= 0) c.SelectedIndex
-    /// = v;</c>. Drifting the element to <c>SelectedIndex = -1</c> arms the expected
-    /// echo (-1) but the guard drops the write — so no synchronous echo fires to
-    /// consume the arm. The post-write readback check in
-    /// <c>HandCodedControlledPropEntry.Update</c> must clear the stranded arm;
-    /// otherwise a later genuine deselect (readback -1) would be swallowed. This
-    /// fixture asserts that genuine deselect still fires.</summary>
+    /// <summary>Regression guard for the guarded-no-op suppression strand.
+    /// GridView's controlled setter is <c>if (v &gt;= 0) c.SelectedIndex = v;</c>.
+    /// Drifting the element to <c>SelectedIndex = -1</c> exercises a write the
+    /// guard drops. GridView/ListBox <c>SelectedIndex</c> is on the causal
+    /// counter (not the §8 value-diff arm — see PR #455 CR item #1 and
+    /// <see cref="GridViewDescriptor"/>), so the regression this fixture guards
+    /// is a stranded <c>WriteSuppressed</c> token surviving the dropped write
+    /// and swallowing a later genuine deselect. Empirically verified (PR #455):
+    /// the echo-suppress counter returns to 0 before the genuine deselect (the
+    /// dropped write leaves nothing armed), so the real deselect still fires.
+    /// This fixture asserts that genuine deselect fires.</summary>
     internal class GridViewGuardedNoOpStrand(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
@@ -389,14 +392,15 @@ internal static class Spec047ValueDiffEchoFixtures
                 lastIdx = -99;
 
                 // Drift element to -1; the `if (v >= 0)` setter guard drops the
-                // write so the control stays at 0 and no echo fires. The Update
-                // armed for -1 then must self-clear (post-write readback != -1).
+                // write so the control stays at 0. On the causal counter, the
+                // dropped write must not leave a stranded suppress token (the
+                // echo counter ends at 0 — verified in PR #455 probing).
                 rec.UpdateChild(el1, el1 with { SelectedIndex = -1 }, gv, _noOp);
                 await Harness.Render();
                 H.Check("ValueDiff_GridViewStrand_GuardBlockedWrite", gv.SelectedIndex == 0);
                 H.Check("ValueDiff_GridViewStrand_NoEchoCall", fireCount == 0);
 
-                // Genuine user deselect: must NOT be swallowed by a stranded arm.
+                // Genuine user deselect: must NOT be swallowed by a stranded token.
                 gv.SelectedIndex = -1;
                 await Harness.Render();
                 H.Check("ValueDiff_GridViewStrand_RealDeselectFires", fireCount == 1 && lastIdx == -1);

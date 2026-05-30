@@ -94,6 +94,13 @@ internal static class OverlayLifecycle
         // ApplySetters last so caller .Set(...) wins (including overriding XamlRoot).
         Reconciler.ApplySetters(cdEl.Setters, dialog);
         var winUiResult = await dialog.ShowAsync();
+        // FOLLOW-UP (PR #455 nit): this captures the mount-time cdEl directly,
+        // whereas Flyout/Popup route their handlers through the live Tag. A
+        // dialog can be re-rendered while open, so a later render's OnClosed
+        // would not be observed here. Relocated, pre-existing behavior (not a
+        // regression) — but this is now the V1-owned home for it, so routing
+        // OnClosed through Reconciler.GetElementTag(anchor) for consistency is
+        // worth a dedicated follow-up.
         cdEl.OnClosed?.Invoke(winUiResult);
     }
 

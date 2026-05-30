@@ -17,6 +17,10 @@ namespace Microsoft.UI.Reactor.Core;
 /// harness and gate enforcement are ARM64-baseline-blocked and deferred to
 /// spec 047 §4.9 (perf validation); there is no gate-check wired up yet.
 /// </summary>
+// TODO(spec-047 §4.9): these constants are consumed only once the byte-gate
+// harness is wired (ARM64-baseline-blocked). They will read as dead code until
+// then — do not remove in a dead-code sweep; they are the agreed target
+// ceilings the harness asserts against.
 internal static class PerformanceBudgets
 {
     /// <summary>
