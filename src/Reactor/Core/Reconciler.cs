@@ -357,14 +357,6 @@ public sealed partial class Reconciler : IDisposable
         RegisterDecoratorHandler<PopupElement>(new V1Protocol.Handlers.PopupHandler());
         RegisterDecoratorHandler<CommandBarFlyoutElement>(new V1Protocol.Handlers.CommandBarFlyoutHandler());
 
-        // Button — delegate to the COMPLETE legacy MountButton/UpdateButton
-        // bodies (the ButtonDescriptor only handles the string-Label fast path
-        // and drops ContentElement; the delegate runs the full legacy impl so
-        // element content round-trips). Decorator shape so unmount falls
-        // through to ContentControl recursion (cleanup parity for an element
-        // child) — see ButtonHandler. Supersedes the registered descriptor.
-        RegisterDecoratorHandler<ButtonElement>(new V1Protocol.Handlers.ButtonHandler());
-
         // TabView — §4.0.3 full descriptor port. TabViewDescriptor now owns
         // the complete behavior (drag pipeline, pinnable headers, strip
         // header/footer slots, in-place content reconcile, conditional
@@ -392,10 +384,7 @@ public sealed partial class Reconciler : IDisposable
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.AnnounceRegionDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.AutoSuggestBoxDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.BreadcrumbBarDescriptor.Descriptor);
-        // ButtonDescriptor is intentionally NOT registered — superseded by the
-        // delegate ButtonHandler above (ContentElement coverage + unmount
-        // parity). The descriptor type is retained for its isolated selftests
-        // and the perf-bench descriptor variant.
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ButtonDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.CalendarDatePickerDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.CalendarViewDescriptor.Descriptor);
         RegisterDecoratorHandler<CanvasElement>(new V1Protocol.Handlers.CanvasPanelHandler()); // §14: keyed reconcile — see PanelDelegateHandlers

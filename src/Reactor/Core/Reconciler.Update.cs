@@ -501,33 +501,6 @@ public sealed partial class Reconciler
         }
     }
 
-    internal UIElement? UpdateButton(ButtonElement o, ButtonElement n, WinUI.Button b, Action requestRerender)
-    {
-        ApplyButtonEnabledState(b, n);
-        if (n.ContentElement is not null && o.ContentElement is not null && b.Content is UIElement existingContent)
-        {
-            var replacement = UpdateChild(o.ContentElement, n.ContentElement, existingContent, requestRerender);
-            if (replacement is not null && !ReferenceEquals(b.Content, replacement))
-            {
-                UnmountChild(existingContent);
-                b.Content = replacement;
-            }
-        }
-        else if (n.ContentElement is not null)
-        {
-            if (b.Content is UIElement oldContent) UnmountChild(oldContent);
-            b.Content = Mount(n.ContentElement, requestRerender);
-        }
-        else
-        {
-            b.Content = n.Label;
-        }
-        SetElementTag(b, n);
-        EnsureButtonWiring(b, n);
-        ApplySetters(n.Setters, b);
-        return null;
-    }
-
     private UIElement? UpdateHyperlinkButton(HyperlinkButtonElement o, HyperlinkButtonElement n, WinUI.HyperlinkButton hb)
     {
         hb.Content = n.Content;

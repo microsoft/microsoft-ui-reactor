@@ -39,10 +39,12 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// assert observable behaviour (callback fire counts) so the contract is
 /// proven both structurally and end-to-end.</para>
 ///
-/// <para>Each fixture mirrors the engine's real wiring path
-/// (<see cref="Reconciler.MountButton"/> →
-/// <see cref="Reconciler.EnsureButtonWiring"/>) rather than re-implementing
-/// the trampoline, so a regression in the production mount path fails here.</para>
+/// <para>Each fixture mirrors the engine's real wiring path — mounting a
+/// <c>ButtonElement</c> through <c>reconciler.Mount</c>, which dispatches the
+/// registered <c>ButtonDescriptor</c> (its <c>HandCodedEvent</c> entry wires
+/// the Click trampoline into a <c>ButtonEventPayload</c> box) — rather than
+/// re-implementing the trampoline, so a regression in the production mount
+/// path fails here.</para>
 /// </summary>
 internal static class Spec047EventStateSplitFixtures
 {
@@ -75,11 +77,11 @@ internal static class Spec047EventStateSplitFixtures
             int countA = 0;
             int countB = 0;
 
-            // Mount element A through the real engine path. MountButton rents
-            // (pool empty → fresh), stamps the tag, and wires the Click
+            // Mount element A through the real engine path. The ButtonDescriptor
+            // rents (pool empty → fresh), stamps the tag, and wires the Click
             // trampoline into a freshly-created ButtonEventPayload box.
             var elementA = new ButtonElement("A", () => countA++);
-            var control = reconciler.MountButton(elementA, () => { });
+            var control = (WinUI.Button)reconciler.Mount(elementA, () => { })!;
 
             var boxAfterMount = ReadState(control)?.ControlEventState as ControlEventStateBox;
             H.Check("EventStateSplit_Reuse_BoxCreatedOnMount",
@@ -99,11 +101,12 @@ internal static class Spec047EventStateSplitFixtures
             H.Check("EventStateSplit_Reuse_ElementClearedOnReturn",
                 ReadState(control)?.Element is null);
 
-            // Re-rent + re-mount a NEW element B. MountButton must return the
-            // SAME pooled control and EnsureButtonWiring must short-circuit
-            // (trampoline already non-null) → no second Click subscription.
+            // Re-rent + re-mount a NEW element B. The engine must return the
+            // SAME pooled control and the descriptor's Click wiring must
+            // short-circuit (trampoline already non-null) → no second
+            // Click subscription.
             var elementB = new ButtonElement("B", () => countB++);
-            var control2 = reconciler.MountButton(elementB, () => { });
+            var control2 = (WinUI.Button)reconciler.Mount(elementB, () => { })!;
             H.Check("EventStateSplit_Reuse_SamePooledInstance",
                 ReferenceEquals(control2, control));
 
@@ -197,7 +200,7 @@ internal static class Spec047EventStateSplitFixtures
 
             int count = 0;
             var elementA = new ButtonElement("A", () => count++);
-            var control = reconciler.MountButton(elementA, () => { });
+            var control = (WinUI.Button)reconciler.Mount(elementA, () => { })!;
 
             var boxBefore = ReadState(control)?.ControlEventState as ControlEventStateBox;
 
@@ -221,7 +224,7 @@ internal static class Spec047EventStateSplitFixtures
             // proving the double-return left no duplicate subscription behind.
             int count2 = 0;
             var elementB = new ButtonElement("B", () => count2++);
-            var control2 = reconciler.MountButton(elementB, () => { });
+            var control2 = (WinUI.Button)reconciler.Mount(elementB, () => { })!;
             H.Check("EventStateSplit_DualReturn_RentReusesInstance",
                 ReferenceEquals(control2, control));
 
@@ -253,7 +256,7 @@ internal static class Spec047EventStateSplitFixtures
             // .OnKeyDown / .OnGotFocus modifier of any kind.
             int clicks = 0;
             var element = new ButtonElement("intrinsic-only", () => clicks++);
-            var control = reconciler.MountButton(element, () => { });
+            var control = (WinUI.Button)reconciler.Mount(element, () => { })!;
 
             var state = ReadState(control);
             H.Check("EventStateSplit_Shape_StateExists", state is not null);

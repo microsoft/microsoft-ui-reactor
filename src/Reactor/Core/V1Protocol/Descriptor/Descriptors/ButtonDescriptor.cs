@@ -5,13 +5,23 @@ using WinUI = Microsoft.UI.Xaml.Controls;
 namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 
 /// <summary>
-/// Spec 047 §14 Phase 3 (batch 4) — descriptor variant of the hand-coded
-/// <c>MountButton</c> / <c>UpdateButton</c> arms in
-/// <see cref="Reconciler"/>.
+/// Spec 047 §14 — registered descriptor for <see cref="ButtonElement"/>.
+/// Supersedes the hand-coded <c>MountButton</c> / <c>UpdateButton</c> arms
+/// (now removed); this is the live engine path.
 ///
 /// <para><b>Coverage:</b>
 /// <list type="bullet">
-///   <item><c>Label</c> — one-way (Content).</item>
+///   <item><c>Content</c> — polymorphic slot. When <c>ContentElement</c> is
+///   set, the <see cref="SingleContent{TElement,TControl}"/> child strategy
+///   mounts the child Element and assigns it to <c>Button.Content</c> (with
+///   <c>GetCurrentChild</c> so re-renders structurally reconcile and preserve
+///   descendant component state). When <c>ContentElement</c> is null, the
+///   sibling <c>Label</c> <see cref="ControlDescriptor{TElement,TControl}.OneWayConditional{TValue}"/>
+///   (gated on <c>ContentElement is null</c>) writes the string label. The
+///   guarded <c>SetChild</c> never nulls <c>Content</c>, so the string label
+///   written in the prop loop survives the child-slot dispatch — the canonical
+///   "element-or-string content" shape documented on
+///   <see cref="ControlDescriptor{TElement,TControl}.ImperativeBridged"/>.</item>
 ///   <item><c>IsEnabled</c> / <c>IsDisabledFocusable</c> — the legacy
 ///   "focusable-disabled" treatment: when <c>IsDisabledFocusable=true</c>
 ///   force <c>IsEnabled=true</c> and dim Opacity to 0.4 so Tab still reaches
@@ -22,17 +32,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   live element on each fire and short-circuits when
 ///   <c>IsDisabledFocusable</c> is true (mirrors the legacy guard).</item>
 /// </list></para>
-///
-/// <para><b>Known gap vs. hand-coded handler — and why this descriptor is no
-/// longer the registered engine path:</b> <c>ContentElement</c> (Button
-/// hosting a child Element rather than a string label) is not expressed here —
-/// the descriptor only handles the string-Content fast path. Because dropping
-/// element content is a real regression once the type is registered (the
-/// legacy fall-through is removed), the engine instead registers the delegate
-/// <c>ButtonHandler</c>, which runs the COMPLETE legacy
-/// <c>MountButton</c>/<c>UpdateButton</c> bodies (including
-/// <c>ContentElement</c>). This descriptor is retained for its isolated
-/// selftests and the perf-bench descriptor variant.</para>
 /// </summary>
 internal static class ButtonDescriptor
 {
@@ -48,12 +47,22 @@ internal static class ButtonDescriptor
     public static readonly ControlDescriptor<ButtonElement, WinUI.Button> Descriptor =
         new ControlDescriptor<ButtonElement, WinUI.Button>
         {
-            Children = new None<ButtonElement, WinUI.Button>(),
+            // Polymorphic Content: element child via SingleContent, string
+            // Label via the gated OneWayConditional below. The guarded SetChild
+            // only writes a non-null mounted child, so a Label string written
+            // by the prop loop is never clobbered when ContentElement is null.
+            Children = new SingleContent<ButtonElement, WinUI.Button>(
+                GetChild: static e => e.ContentElement,
+                SetChild: static (c, ui) => { if (ui is not null) c.Content = ui; })
+            {
+                GetCurrentChild = static c => c.Content as UIElement,
+            },
             GetSetters = static e => e.Setters,
         }
-        .OneWay(
-            get: static e => e.Label,
-            set: static (c, v) => c.Content = v)
+        .OneWayConditional(
+            get:         static e => e.Label,
+            set:         static (c, v) => c.Content = v,
+            shouldWrite: static e => e.ContentElement is null)
         // IsEnabled — written normally only when NOT in the focusable-
         // disabled dim mode. The OneWayConditional re-writes when the
         // predicate flips false→true (i.e. exiting dim mode) so authors
