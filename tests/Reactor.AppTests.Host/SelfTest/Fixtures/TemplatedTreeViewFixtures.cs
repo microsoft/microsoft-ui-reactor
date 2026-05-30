@@ -500,13 +500,14 @@ internal static class TemplatedTreeViewFixtures
             var tv = H.FindControl<WinXC.TreeView>(_ => true);
             H.Check("TTV_RootRemoval_InitialThreeRoots",
                 tv is not null && tv.RootNodes.Count == 3);
+            if (tv is null) return;
             H.Check("TTV_RootRemoval_MiddleVisible",
                 await WaitFor(() => H.FindTextContaining("Pictures") is not null));
 
             H.ClickButton("Remove");
             await Harness.Render();
 
-            H.Check("TTV_RootRemoval_TwoRootsRemain", tv!.RootNodes.Count == 2);
+            H.Check("TTV_RootRemoval_TwoRootsRemain", tv.RootNodes.Count == 2);
             // The removed subtree's content is gone (both the folder and its leaf).
             H.Check("TTV_RootRemoval_RemovedTextGone",
                 await WaitFor(() => H.FindTextContaining("Pictures") is null
@@ -544,8 +545,9 @@ internal static class TemplatedTreeViewFixtures
             await Harness.Render();
             var tv = H.FindControl<WinXC.TreeView>(_ => true);
             H.Check("TTV_Reorder_TwoRoots", tv is not null && tv.RootNodes.Count == 2);
+            if (tv is null) return;
 
-            var firstNode = tv!.RootNodes[0];   // docs
+            var firstNode = tv.RootNodes[0];   // docs
             var secondNode = tv.RootNodes[1];   // pics
 
             H.ClickButton("Reorder");
@@ -590,8 +592,9 @@ internal static class TemplatedTreeViewFixtures
             var tv = H.FindControl<WinXC.TreeView>(_ => true);
             H.Check("TTV_Props_MountSelectionSingle",
                 tv is not null && tv.SelectionMode == WinXC.TreeViewSelectionMode.Single);
+            if (tv is null) return;
             H.Check("TTV_Props_MountFlagsFalse",
-                !tv!.CanReorderItems && !tv.CanDragItems && !tv.AllowDrop);
+                !tv.CanReorderItems && !tv.CanDragItems && !tv.AllowDrop);
 
             H.ClickButton("Flip");
             await Harness.Render();
@@ -629,11 +632,12 @@ internal static class TemplatedTreeViewFixtures
             await Harness.Render();
             var tv = H.FindControl<WinXC.TreeView>(_ => true);
             H.Check("TTV_Empty_NoRootsInitially", tv is not null && tv.RootNodes.Count == 0);
+            if (tv is null) return;
 
             H.ClickButton("Populate");
             await Harness.Render();
 
-            H.Check("TTV_Empty_RootAddedOnPopulate", tv!.RootNodes.Count == 1);
+            H.Check("TTV_Empty_RootAddedOnPopulate", tv.RootNodes.Count == 1);
             H.Check("TTV_Empty_PopulatedRootRenders",
                 await WaitFor(() => H.FindTextContaining("Documents") is not null));
             H.Check("TTV_Empty_PopulatedChildRenders",
