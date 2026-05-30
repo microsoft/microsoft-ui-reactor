@@ -6,6 +6,13 @@
 **Suite:** micro M1–M13 (`PerfBench.ControlModel`), reps=5, iters matched to baseline
 (M1–M8 @5000, M9 @2000, M10–M13 @1000). 195 rows, 0 errors.
 
+> 📌 **M12 is SUPERSEDED — fix landed.** A post-gate re-capture on `main` at
+> `2f4f0c50` (PR #468, `SetElementTagIfNeeded`) shows **M12 Reactor at 968 B/render
+> (−12.2% vs baseline, −24.9% vs this capture)**. The M12 cells below are kept
+> for historical context. See [`../2026-05-30-arm64-postgate/RESULTS.md`](../2026-05-30-arm64-postgate/RESULTS.md).
+> The **M1 regression flagged below has likely also closed** per PR #468's commit
+> message (M1 → 980 B/render), but is not independently re-captured yet.
+
 > ⚠️ **Scope caveat — this is an INDICATIVE capture, not the formal §4.9 ratification.**
 > The §15.5 environment-isolation requirements (AC power, High-Performance plan, DRR
 > off, foreground non-occluded window) could **not** be enforced from this automated
@@ -52,7 +59,7 @@ EHS split §4.3, echo hybrid §4.2) did to the V1 path's allocation:
 | **M9** | 184,431 | 312,246 | **−40.9%** | ✅ big win (keyed list) |
 | M10 | 3,411 | 3,949 | −13.6% | ✅ |
 | M11 | 1,641 | 1,670 | −1.7% | ✅ (per-element state) |
-| **M12** | 1,273 | 1,088 | **+17.0%** | ❌ pool-reuse regressed |
+| ~~**M12**~~ | ~~1,273~~ | ~~1,088~~ | ~~**+17.0%**~~ | ✅ **fixed by PR #468 — now 968 B/render (−12.2% vs base)** |
 | M13 | 29 | 29 | −0.4% | ≈ flat |
 
 The M1 regression is **deterministic, not noise**: every new rep (6.34–6.51 MB)
@@ -60,6 +67,11 @@ sits uniformly above every baseline rep (5.25–5.42 MB) — a consistent ~+235 
 Likely sources to investigate: the added `Element.Extensions` slot on every element,
 the §4.3 EHS-split, or the `ReactorState.PendingEchoMatch` slot on the mount path.
 M12 (pool rent/return) similarly regressed +17%.
+**Update (2026-05-30):** PR #468 (`SetElementTagIfNeeded`) gates the V1 adapter's
+`SetElementTag` on `_handler.HasCallbacks`, so callback-free leaves no longer
+allocate a `ReactorState` per mount. Post-gate re-capture: M12 Reactor =
+**968 B/render (−12.2% vs baseline)** — regression closed. See
+[`../2026-05-30-arm64-postgate/RESULTS.md`](../2026-05-30-arm64-postgate/RESULTS.md).
 
 ### 3. §11.6 absolute byte-gate (`PerformanceBudgets.cs`) — **M1, M2 FAIL**
 
@@ -97,7 +109,11 @@ timing-budget sign-off.
 - ✅ **Most of the V1 path held or improved** vs the captured baseline on allocation
   (M2/M3/M4/M5/M6/M8/M9/M10/M11), with a standout **−41% on M9** (keyed list).
 - ❌ **Two allocation regressions to fix before claiming the byte-gate pass:**
-  **M1 +20%** (and 3.2× over its 407 B gate) and **M12 +17%**.
+  **M1 +20%** (and 3.2× over its 407 B gate) and ~~**M12 +17%**~~ ✅ M12 fixed
+  by PR #468 (post-gate: 968 B/render, −12.2% vs base; see
+  [`../2026-05-30-arm64-postgate/`](../2026-05-30-arm64-postgate/)). M1 also
+  likely closed per PR #468 (commit reports 980 B/render) — needs an
+  independent re-capture on this box for sign-off.
 - ⛔ **Not a ratification sign-off:** timing axis is environment-throttled, the
   §4.9-mandated randomized/interleaved ordering + CPU-clock telemetry isn't wired,
   and the macro suite (L1–L14) can't run (projects deleted). A real §4.9 close needs
