@@ -34,8 +34,10 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
 
         // Anchor element identity on the control via the attached state DP so
         // event trampolines can re-fetch the live element on each fire.
+        // Gated: callback-free leaves never dispatch into Reactor code, so we
+        // skip the ReactorState allocation for them (§4.4 follow-up).
         if (control is FrameworkElement fe)
-            Reconciler.SetElementTag(fe, typedEl);
+            Reconciler.SetElementTagIfNeeded(fe, typedEl);
 
         // Strategy dispatch — only when the handler declares a non-None Children strategy.
         var strategy = _handler.Children;
@@ -62,7 +64,7 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
         _handler.Update(ctx, typedOld, typedNew, typedControl);
 
         if (control is FrameworkElement fe)
-            Reconciler.SetElementTag(fe, typedNew);
+            Reconciler.SetElementTagIfNeeded(fe, typedNew);
 
         var strategy = _handler.Children;
         if (strategy is not null)

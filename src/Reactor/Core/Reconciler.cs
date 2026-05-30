@@ -709,6 +709,44 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>
+    /// Spec 047 §4.4 follow-up — allocation-gated element tagging for the V1
+    /// dispatch adapter. Refreshes an existing <see cref="ReactorState"/>'s
+    /// element pointer cheaply, but only <em>allocates</em> a new
+    /// <see cref="ReactorState"/> (+ attached-DP write) for elements that
+    /// actually wire a control-intrinsic event trampoline
+    /// (<see cref="Element.HasCallbacks"/>).
+    ///
+    /// <para>Callback-free display leaves (TextBlock / Border / StackPanel /
+    /// Image — the bulk of a real tree) never dispatch into Reactor code, so
+    /// they don't need the tag. This mirrors the legacy reconciler, which
+    /// gated its tag refresh on <c>HasCallbacks</c> in the
+    /// <see cref="Update"/> skip short-circuit and left leaf controls
+    /// untagged. The pre-§4.5 V1 adapter tagged <em>every</em> control
+    /// unconditionally, allocating a ReactorState per leaf mount — the
+    /// per-render byte regression this restores the savings for.</para>
+    ///
+    /// <para>Routed-input modifiers (<c>.OnPointerPressed</c> etc.) dispatch
+    /// through <see cref="ModifierEventHandlerState"/>'s <c>Current*</c>
+    /// fields (refreshed each render by <c>ApplyEventHandlers</c>) and do
+    /// <em>not</em> resolve the element via the tag, so they are
+    /// intentionally not part of the gate.</para>
+    /// </summary>
+    internal static void SetElementTagIfNeeded(FrameworkElement control, Element element)
+    {
+        if (control.GetValue(ReactorAttached.StateProperty) is ReactorState state)
+        {
+            // State already allocated (callback-bearing control, pooled reuse,
+            // or echo/setter scope) — refresh the live element with no alloc.
+            state.Element = element;
+            return;
+        }
+        if (!element.HasCallbacks) return; // no trampoline will read the tag
+        control.SetValue(
+            ReactorAttached.StateProperty,
+            new ReactorState { Element = element });
+    }
+
+    /// <summary>
     /// Spec 047 §14 Phase 1 (1.3) — promoted from internal. Retrieves the
     /// element associated with a control, or null.
     /// Provisional API; see <c>REACTOR_V1_PREVIEW</c>.
