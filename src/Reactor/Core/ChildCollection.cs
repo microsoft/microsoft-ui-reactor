@@ -31,6 +31,15 @@ internal sealed class PanelChildCollection : IChildCollection
         _children = panel.Children;
     }
 
+    // Spec 047 §14 — the V1 descriptor Panel<> strategy resolves the live
+    // collection via Func<TControl, UIElementCollection> rather than holding a
+    // WinUI.Panel reference, so it constructs the wrapper from the collection
+    // directly. Identical semantics to the panel-based ctor.
+    public PanelChildCollection(UIElementCollection children)
+    {
+        _children = children;
+    }
+
     public int Count => _children.Count;
     public UIElement Get(int index) => _children[index];
     public void Insert(int index, UIElement element) => _children.Insert(index, element);

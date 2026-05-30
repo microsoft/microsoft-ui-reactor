@@ -78,6 +78,21 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
         var typedControl = (TControl)control;
         var ctx = new UnmountContext(reconciler);
         _handler.Unmount(ctx, typedControl);
+
+        // Spec 047 §14 — panel-strategy handlers do NOT own child teardown
+        // (their Unmount is a no-op; descriptors never recurse into children).
+        // Returning ContinueDefaultTraversal lets the engine's existing
+        // `control is WinUI.Panel` recursion run in BOTH unmount paths
+        // (UnmountRecursive + UnmountAndCollect), tearing down + pooling each
+        // child — byte-identical to the legacy decorator panel handlers, which
+        // also return ContinueDefaultTraversal. Without this, CollectSelf would
+        // early-return before the panel-child recursion and leak child Component
+        // effect cleanups. All other (non-panel) standard handlers tear down
+        // their own children via SingleContent/NamedSlots/items-binder strategy
+        // dispatch and correctly opt into CollectSelf.
+        if (_handler.Children is Panel<TElement, TControl>)
+            return V1UnmountDisposition.ContinueDefaultTraversal;
+
         // Standard handlers always opt into pool collection — matches
         // the pre-Phase-3-completion behavior.
         return V1UnmountDisposition.CollectSelf;
@@ -232,80 +247,48 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
 
             case Panel<TElement, TControl> panel:
             {
-                // Phase 1 limitation: structural diff per slot, but no
-                // keyed-list reconciliation. Phase 3 integrates with
-                // spec-042's ChildReconciler. Until then we walk by index
-                // and reuse-or-replace at each slot — preserves descendant
-                // state across reorderings that happen by index but not
-                // across keyed moves.
+                // Spec 047 §14 — keyed reconcile via spec-042's ChildReconciler,
+                // mirroring the legacy hand-coded panel Update* methods exactly
+                // (e.g. UpdateFlex: ReconcileChildren then a physical-index
+                // post-pass that re-applies attached props). This preserves
+                // WinUI control identity across keyed reorder/reverse/swap/
+                // remove-middle — the gap the legacy decorator handlers existed
+                // to cover.
                 var collection = panel.GetCollection(control);
-                var newChildren = panel.GetChildren(newEl);
-                var oldChildren = panel.GetChildren(oldEl);
+                var newList = panel.GetChildren(newEl);
+                var oldList = panel.GetChildren(oldEl);
+                // ChildReconciler.Reconcile takes Element[]; avoid a copy when
+                // the descriptor already exposes the backing array.
+                var newChildren = newList as Element[] ?? global::System.Linq.Enumerable.ToArray(newList);
+                var oldChildren = oldList as Element[] ?? global::System.Linq.Enumerable.ToArray(oldList);
+
+                reconciler.ReconcilePanelChildrenInto(oldChildren, newChildren, collection, requestRerender);
+
+                // Re-apply per-child attached props by walking filtered-new
+                // children (null / EmptyElement skipped) in lockstep with the
+                // live collection — ChildReconciler leaves the collection in
+                // filtered-new order. Identical to the legacy Update* post-pass.
                 var attached = panel.PerChildAttached;
                 var afterAll = panel.PerChildAttachedAfterAll;
-                var pairs = afterAll is null
-                    ? null
-                    : new List<(UIElement, Element)>(newChildren.Count);
-                int oldCount = oldChildren.Count;
-                int newCount = newChildren.Count;
-                int common = global::System.Math.Min(oldCount, newCount);
-                int slot = 0;
-                for (int i = 0; i < common; i++)
+                if (attached is not null || afterAll is not null)
                 {
-                    var existing = slot < collection.Count ? collection[slot] : null;
-                    var next = reconciler.ReconcileV1Child(oldChildren[i], newChildren[i], existing, requestRerender);
-                    if (next is null)
+                    var pairs = afterAll is null
+                        ? null
+                        : new List<(UIElement, Element)>(newChildren.Length);
+                    int panelIdx = 0;
+                    for (int i = 0; i < newChildren.Length && panelIdx < collection.Count; i++)
                     {
-                        if (existing is not null) collection.RemoveAt(slot);
+                        var childEl = newChildren[i];
+                        if (childEl is null or EmptyElement) continue;
+                        var live = collection[panelIdx];
+                        attached?.Invoke(control, live, childEl);
+                        pairs?.Add((live, childEl));
+                        panelIdx++;
                     }
-                    else if (existing is null)
-                    {
-                        collection.Insert(slot, next);
-                        attached?.Invoke(control, next, newChildren[i]);
-                        pairs?.Add((next, newChildren[i]));
-                        slot++;
-                    }
-                    else if (!ReferenceEquals(existing, next))
-                    {
-                        collection[slot] = next;
-                        attached?.Invoke(control, next, newChildren[i]);
-                        pairs?.Add((next, newChildren[i]));
-                        slot++;
-                    }
-                    else
-                    {
-                        // Same UIElement instance survived — re-apply attached
-                        // props in case the child element's hints changed
-                        // (e.g. Grid.Row swapped between two existing rows).
-                        attached?.Invoke(control, next, newChildren[i]);
-                        pairs?.Add((next, newChildren[i]));
-                        slot++;
-                    }
+                    // pairs is non-null exactly when afterAll is non-null.
+                    if (afterAll is not null)
+                        afterAll(control, pairs!);
                 }
-                // Trailing removals — reconcile against null newChild to
-                // route through the same Unmount path used by SingleContent.
-                for (int i = common; i < oldCount; i++)
-                {
-                    var existing = slot < collection.Count ? collection[slot] : null;
-                    reconciler.ReconcileV1Child(oldChildren[i], null, existing, requestRerender);
-                    if (slot < collection.Count) collection.RemoveAt(slot);
-                }
-                // Trailing additions.
-                for (int i = common; i < newCount; i++)
-                {
-                    var mounted = reconciler.Mount(newChildren[i], requestRerender);
-                    if (mounted is not null)
-                    {
-                        collection.Add(mounted);
-                        attached?.Invoke(control, mounted, newChildren[i]);
-                        pairs?.Add((mounted, newChildren[i]));
-                    }
-                }
-                // pairs is non-null exactly when afterAll is non-null (see
-                // the conditional allocation above), so the afterAll guard
-                // alone is sufficient.
-                if (afterAll is not null)
-                    afterAll(control, pairs!);
                 return;
             }
 

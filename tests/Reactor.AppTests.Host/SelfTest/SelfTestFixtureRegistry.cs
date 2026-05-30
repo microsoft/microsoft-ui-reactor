@@ -180,6 +180,15 @@ internal static class SelfTestFixtureRegistry
         "KLR_FlexColumn_KeyedChildren_Swap_SurvivorsKeepIdentity",
         "KLR_FlexColumn_KeyedChildren_Reverse_SurvivorsKeepIdentity",
         "KLR_FlexColumn_WithKeyItem_PreservesIdentityAcrossInsert",
+        // Spec 047 §14 — panel descriptor migration: keyed reconcile identity,
+        // lockstep attached-prop reapply, stale-state clears, unmount cleanup.
+        "PDM_Stack_KeyedSwap_PreservesIdentity",
+        "PDM_Grid_KeyedSwap_PreservesIdentity_And_RowFollows",
+        "PDM_Canvas_KeyedReorder_PreservesIdentity_And_PositionFollows",
+        "PDM_Canvas_AnchorClearedOnReuse",
+        "PDM_WrapGrid_KeyedReverse_PreservesIdentity",
+        "PDM_RelativePanel_KeyedReorder_PreservesIdentity_And_StaleClear",
+        "PDM_Panel_Unmount_RunsChildEffectCleanup",
         // ElementFactory<T> + WinUI ItemsRepeater recycle contract — regression
         // for the leak fixed alongside these tests (every realize was Minting
         // a fresh UIElement, orphaning prior ones in Repeater.Children).
@@ -1336,6 +1345,13 @@ internal static class SelfTestFixtureRegistry
         "KLR_FlexColumn_KeyedChildren_Swap_SurvivorsKeepIdentity" => new KeyedListReconciliationFixtures.FlexColumn_KeyedChildren_Swap_SurvivorsKeepIdentity(harness),
         "KLR_FlexColumn_KeyedChildren_Reverse_SurvivorsKeepIdentity" => new KeyedListReconciliationFixtures.FlexColumn_KeyedChildren_Reverse_SurvivorsKeepIdentity(harness),
         "KLR_FlexColumn_WithKeyItem_PreservesIdentityAcrossInsert" => new KeyedListReconciliationFixtures.FlexColumn_WithKeyItem_PreservesIdentityAcrossInsert(harness),
+        "PDM_Stack_KeyedSwap_PreservesIdentity" => new PanelDescriptorMigrationFixtures.Stack_KeyedSwap_PreservesIdentity(harness),
+        "PDM_Grid_KeyedSwap_PreservesIdentity_And_RowFollows" => new PanelDescriptorMigrationFixtures.Grid_KeyedSwap_PreservesIdentity_And_RowFollows(harness),
+        "PDM_Canvas_KeyedReorder_PreservesIdentity_And_PositionFollows" => new PanelDescriptorMigrationFixtures.Canvas_KeyedReorder_PreservesIdentity_And_PositionFollows(harness),
+        "PDM_Canvas_AnchorClearedOnReuse" => new PanelDescriptorMigrationFixtures.Canvas_AnchorClearedOnReuse(harness),
+        "PDM_WrapGrid_KeyedReverse_PreservesIdentity" => new PanelDescriptorMigrationFixtures.WrapGrid_KeyedReverse_PreservesIdentity(harness),
+        "PDM_RelativePanel_KeyedReorder_PreservesIdentity_And_StaleClear" => new PanelDescriptorMigrationFixtures.RelativePanel_KeyedReorder_PreservesIdentity_And_StaleClear(harness),
+        "PDM_Panel_Unmount_RunsChildEffectCleanup" => new PanelDescriptorMigrationFixtures.Panel_Unmount_RunsChildEffectCleanup(harness),
         "EFR_Factory_BoundedDistinctControls_AcrossManyRealizeCycles" => new ElementFactoryRecyclingFixtures.Factory_BoundedDistinctControls_AcrossManyRealizeCycles(harness),
         "EFR_Factory_RecycledControlIsReusedOnNextRealize" => new ElementFactoryRecyclingFixtures.Factory_RecycledControlIsReusedOnNextRealize(harness),
         "EFR_Factory_BookkeepingBoundedAcrossCycles" => new ElementFactoryRecyclingFixtures.Factory_BookkeepingBoundedAcrossCycles(harness),

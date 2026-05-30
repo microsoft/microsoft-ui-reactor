@@ -39,21 +39,32 @@ internal static class RelativePanelDescriptor
         WinUI.RelativePanel panel,
         IReadOnlyList<(UIElement Mounted, Element ChildElement)> pairs)
     {
-        // Pass 1: assign FrameworkElement.Name from RelativePanelAttached.Name
-        // so the second-pass map lookups below resolve. Build the name → control
-        // map at the same time.
+        // Pass 0 (clear): the Panel<> strategy reconciles children with keyed
+        // identity (spec 047 §14), so a control can be reused across renders
+        // with a different — or absent — RelativePanelAttached. Clear every
+        // RelativePanel attached DP and reset Name first so stale sibling refs,
+        // panel-alignment flags, and names from a previous render can't survive.
+        // Legacy UpdateRelativePanel avoided this by rebuilding on any child-count
+        // change and reconciling positionally; the keyed descriptor path must
+        // clear explicitly. Also build the name → control map for pass 1.
         var nameMap = new Dictionary<string, UIElement>(pairs.Count, StringComparer.Ordinal);
         for (int i = 0; i < pairs.Count; i++)
         {
             var (mounted, child) = pairs[i];
+            ClearRelativePanelAttached(mounted);
+
             var rpa = child.GetAttached<RelativePanelAttached>();
-            if (rpa is null) continue;
-            if (mounted is FrameworkElement fe) fe.Name = rpa.Name;
-            nameMap[rpa.Name] = mounted;
+            if (mounted is FrameworkElement fe)
+                fe.Name = rpa?.Name ?? string.Empty;
+            if (rpa is not null)
+                nameMap[rpa.Name] = mounted;
         }
 
-        // Pass 2: walk again and apply sibling-referencing attached DPs.
-        // Mirrors legacy MountRelativePanel (Reconciler.Mount.cs ~:3440).
+        // Pass 1: apply sibling-referencing attached DPs + panel-alignment flags.
+        // Mirrors legacy UpdateRelativePanel (Reconciler.Update.cs ~:1348) — the
+        // six panel-alignment flags are written unconditionally (Pass 0 already
+        // reset them to false, so present-only writes would suffice; unconditional
+        // writes keep the parity with legacy explicit).
         for (int i = 0; i < pairs.Count; i++)
         {
             var (mounted, child) = pairs[i];
@@ -81,12 +92,34 @@ internal static class RelativePanelDescriptor
             if (rpa.AlignVerticalCenterWith is not null && nameMap.TryGetValue(rpa.AlignVerticalCenterWith, out var avcw))
                 WinUI.RelativePanel.SetAlignVerticalCenterWith(mounted, avcw);
 
-            if (rpa.AlignLeftWithPanel) WinUI.RelativePanel.SetAlignLeftWithPanel(mounted, true);
-            if (rpa.AlignRightWithPanel) WinUI.RelativePanel.SetAlignRightWithPanel(mounted, true);
-            if (rpa.AlignTopWithPanel) WinUI.RelativePanel.SetAlignTopWithPanel(mounted, true);
-            if (rpa.AlignBottomWithPanel) WinUI.RelativePanel.SetAlignBottomWithPanel(mounted, true);
-            if (rpa.AlignHorizontalCenterWithPanel) WinUI.RelativePanel.SetAlignHorizontalCenterWithPanel(mounted, true);
-            if (rpa.AlignVerticalCenterWithPanel) WinUI.RelativePanel.SetAlignVerticalCenterWithPanel(mounted, true);
+            WinUI.RelativePanel.SetAlignLeftWithPanel(mounted, rpa.AlignLeftWithPanel);
+            WinUI.RelativePanel.SetAlignRightWithPanel(mounted, rpa.AlignRightWithPanel);
+            WinUI.RelativePanel.SetAlignTopWithPanel(mounted, rpa.AlignTopWithPanel);
+            WinUI.RelativePanel.SetAlignBottomWithPanel(mounted, rpa.AlignBottomWithPanel);
+            WinUI.RelativePanel.SetAlignHorizontalCenterWithPanel(mounted, rpa.AlignHorizontalCenterWithPanel);
+            WinUI.RelativePanel.SetAlignVerticalCenterWithPanel(mounted, rpa.AlignVerticalCenterWithPanel);
         }
+    }
+
+    // Reset every RelativePanel attached DP to its default so a pool-rented or
+    // keyed-reused control never inherits stale positioning from a prior render.
+    private static void ClearRelativePanelAttached(UIElement ctrl)
+    {
+        ctrl.ClearValue(WinUI.RelativePanel.RightOfProperty);
+        ctrl.ClearValue(WinUI.RelativePanel.BelowProperty);
+        ctrl.ClearValue(WinUI.RelativePanel.LeftOfProperty);
+        ctrl.ClearValue(WinUI.RelativePanel.AboveProperty);
+        ctrl.ClearValue(WinUI.RelativePanel.AlignLeftWithProperty);
+        ctrl.ClearValue(WinUI.RelativePanel.AlignRightWithProperty);
+        ctrl.ClearValue(WinUI.RelativePanel.AlignTopWithProperty);
+        ctrl.ClearValue(WinUI.RelativePanel.AlignBottomWithProperty);
+        ctrl.ClearValue(WinUI.RelativePanel.AlignHorizontalCenterWithProperty);
+        ctrl.ClearValue(WinUI.RelativePanel.AlignVerticalCenterWithProperty);
+        ctrl.ClearValue(WinUI.RelativePanel.AlignLeftWithPanelProperty);
+        ctrl.ClearValue(WinUI.RelativePanel.AlignRightWithPanelProperty);
+        ctrl.ClearValue(WinUI.RelativePanel.AlignTopWithPanelProperty);
+        ctrl.ClearValue(WinUI.RelativePanel.AlignBottomWithPanelProperty);
+        ctrl.ClearValue(WinUI.RelativePanel.AlignHorizontalCenterWithPanelProperty);
+        ctrl.ClearValue(WinUI.RelativePanel.AlignVerticalCenterWithPanelProperty);
     }
 }

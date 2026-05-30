@@ -34,8 +34,7 @@ internal static class CanvasDescriptor
                 var ca = childEl.GetAttached<CanvasAttached>();
                 if (ca is null)
                 {
-                    fe.ClearValue(WinUI.Canvas.LeftProperty);
-                    fe.ClearValue(WinUI.Canvas.TopProperty);
+                    Reconciler.ClearCanvasPosition(fe);
                     return;
                 }
                 Reconciler.ApplyCanvasPosition(fe, ca);

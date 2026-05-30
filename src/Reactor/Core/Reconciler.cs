@@ -398,7 +398,7 @@ public sealed partial class Reconciler : IDisposable
         // and the perf-bench descriptor variant.
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.CalendarDatePickerDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.CalendarViewDescriptor.Descriptor);
-        RegisterDecoratorHandler<CanvasElement>(new V1Protocol.Handlers.CanvasPanelHandler()); // §14: keyed reconcile — see PanelDelegateHandlers
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.CanvasDescriptor.Descriptor); // §14: keyed reconcile via Panel<> Update arm
         RegisterDecoratorHandler<CheckBoxElement>(new V1Protocol.Handlers.CheckBoxHandler()); // §14: value-control echo-suppression — see CheckBoxHandler
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ColorPickerDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ComboBoxDescriptor.Descriptor);
@@ -406,10 +406,10 @@ public sealed partial class Reconciler : IDisposable
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.DropDownButtonDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.EllipseDescriptor.Descriptor);
         RegisterDecoratorHandler<ExpanderElement>(new V1Protocol.Handlers.ExpanderHandler()); // §14: callback/template wiring — see ExpanderHandler
-        RegisterDecoratorHandler<FlexElement>(new V1Protocol.Handlers.FlexPanelHandler()); // §14: keyed reconcile — see PanelDelegateHandlers
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.FlexPanelDescriptor.Descriptor); // §14: keyed reconcile via Panel<> Update arm
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.FlipViewDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.FrameDescriptor.Descriptor);
-        RegisterDecoratorHandler<GridElement>(new V1Protocol.Handlers.GridPanelHandler()); // §14: keyed reconcile — see PanelDelegateHandlers
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.GridDescriptor.Descriptor); // §14: keyed reconcile via Panel<> Update arm
         // Spec 047 §14 Phase 3 prelude — GridViewElement now routes through V1
         // via the hand-coded V1Protocol.Handlers.GridViewHandler (registered
         // above with the Phase 1 handlers), which preserves the legacy
@@ -444,7 +444,7 @@ public sealed partial class Reconciler : IDisposable
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.RatingControlDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.RectangleDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.RefreshContainerDescriptor.Descriptor);
-        RegisterDecoratorHandler<RelativePanelElement>(new V1Protocol.Handlers.RelativePanelHandler()); // §14: keyed reconcile — see PanelDelegateHandlers
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.RelativePanelDescriptor.Descriptor); // §14: keyed reconcile via Panel<> Update arm
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.RepeatButtonDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.RichEditBoxDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.RichTextBlockDescriptor.Descriptor);
@@ -455,7 +455,7 @@ public sealed partial class Reconciler : IDisposable
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.SemanticZoomDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.SplitButtonDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.SplitViewDescriptor.Descriptor);
-        RegisterDecoratorHandler<StackElement>(new V1Protocol.Handlers.StackPanelHandler()); // §14: keyed reconcile — see PanelDelegateHandlers
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.StackPanelDescriptor.Descriptor); // §14: keyed reconcile via Panel<> Update arm
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.SwipeControlDescriptor.Descriptor);
         // Spec 047 §14 Phase 4 (§4.0.3) — TabViewElement routes through V1 via
         // the full TabViewDescriptor port (drag pipeline, pinnable headers,
@@ -474,7 +474,7 @@ public sealed partial class Reconciler : IDisposable
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.TreeViewDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ViewboxDescriptor.Descriptor);
         RegisterDescriptor(V1Protocol.Descriptor.Descriptors.WebView2Descriptor.Descriptor);
-        RegisterDecoratorHandler<WrapGridElement>(new V1Protocol.Handlers.WrapGridHandler()); // §14: keyed reconcile — see PanelDelegateHandlers
+        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.WrapGridDescriptor.Descriptor); // §14: keyed reconcile via Panel<> Update arm
 
         // ── §14 Phase 3 completion decorator-style handlers ──────────────
         RegisterDecoratorHandler<IconElement>(V1Protocol.Descriptor.Descriptors.IconDescriptor.Handler);
@@ -908,6 +908,21 @@ public sealed partial class Reconciler : IDisposable
     {
         WinUI.Canvas.SetLeft(fe, ca.Left - ca.AnchorX * fe.ActualWidth);
         WinUI.Canvas.SetTop(fe, ca.Top - ca.AnchorY * fe.ActualHeight);
+    }
+
+    // Spec 047 §14 — clears Canvas positioning for a child that no longer
+    // carries CanvasAttached. With keyed reconcile a control can be reused
+    // across renders, so we must also reset any retained anchor state: a
+    // previously-installed SizeChanged/Loaded handler reads
+    // CanvasAnchorState.Current, and without this the stale anchored position
+    // would be re-applied on the next layout pass. Resetting Current to a
+    // default (non-anchored, 0,0) makes those retained handlers a no-op.
+    internal static void ClearCanvasPosition(FrameworkElement fe)
+    {
+        fe.ClearValue(WinUI.Canvas.LeftProperty);
+        fe.ClearValue(WinUI.Canvas.TopProperty);
+        if (_canvasAnchorStates.TryGetValue(fe, out var existing))
+            existing.Current = new CanvasAttached();
     }
 
     // ════════════════════════════════════════════════════════════════════
@@ -1789,6 +1804,29 @@ public sealed partial class Reconciler : IDisposable
     {
         var childCollection = new PanelChildCollection(panel);
         // Skip the try/finally and event emit when the Reconcile keyword is off.
+        if (!Diagnostics.ReactorEventSource.Log.IsEnabled(
+                global::System.Diagnostics.Tracing.EventLevel.Informational,
+                Diagnostics.ReactorEventSource.Keywords.Reconcile))
+        {
+            ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender);
+            return;
+        }
+        Diagnostics.ReactorEventSource.Log.ChildReconcileStart(oldChildren.Length, newChildren.Length);
+        try { ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender); }
+        finally { Diagnostics.ReactorEventSource.Log.ChildReconcileStop(); }
+    }
+
+    // Spec 047 §14 — keyed-reconcile entrypoint for the V1 descriptor Panel<>
+    // strategy. The descriptor resolves the live collection as a
+    // UIElementCollection (not a WinUI.Panel), so this overload wraps that
+    // collection directly. Behavior — including the diagnostics ChildReconcile
+    // event scope — is identical to the WinUI.Panel-based ReconcileChildren so
+    // descriptor panels match the legacy hand-coded Update* methods byte-for-byte.
+    internal void ReconcilePanelChildrenInto(
+        Element[] oldChildren, Element[] newChildren,
+        UIElementCollection collection, Action requestRerender)
+    {
+        var childCollection = new PanelChildCollection(collection);
         if (!Diagnostics.ReactorEventSource.Log.IsEnabled(
                 global::System.Diagnostics.Tracing.EventLevel.Informational,
                 Diagnostics.ReactorEventSource.Keywords.Reconcile))
