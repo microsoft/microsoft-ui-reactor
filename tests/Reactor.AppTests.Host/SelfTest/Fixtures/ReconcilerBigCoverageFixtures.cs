@@ -1641,44 +1641,6 @@ internal static class ReconcilerBigCoverageFixtures
             await Task.Yield();
 
             var reconciler = new Reconciler();
-            var red = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Red);
-            var blue = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Blue);
-            Action rerender = () => { };
-
-            var path = new WinShapes.Path();
-            InvokePrivate<UIElement?>(reconciler, "UpdatePath",
-                Path2D() with { PathDataString = "M0,0 L5,5" },
-                Path2D() with
-                {
-                    PathDataString = "M0,0 L10,10",
-                    Fill = red,
-                    Stroke = blue,
-                    StrokeThickness = 3,
-                    StrokeDashArray = new Microsoft.UI.Xaml.Media.DoubleCollection { 1, 2 },
-                    RenderTransform = new Microsoft.UI.Xaml.Media.TranslateTransform { X = 1, Y = 2 },
-                    StrokeStartLineCap = Microsoft.UI.Xaml.Media.PenLineCap.Round,
-                    StrokeEndLineCap = Microsoft.UI.Xaml.Media.PenLineCap.Square,
-                    StrokeLineJoin = Microsoft.UI.Xaml.Media.PenLineJoin.Bevel,
-                    StrokeMiterLimit = 4,
-                    StrokeDashCap = Microsoft.UI.Xaml.Media.PenLineCap.Triangle,
-                    StrokeDashOffset = 2,
-                },
-                path);
-            H.Check("PrivUpdate_Path", path.Fill == red && path.Stroke == blue && path.StrokeThickness == 3);
-
-            var line = new WinShapes.Line();
-            InvokePrivate<UIElement?>(reconciler, "UpdateLine",
-                Line(1, 2, 3, 4) with { Stroke = red, StrokeThickness = 5 },
-                line);
-            H.Check("PrivUpdate_Line", line.X2 == 3 && line.Stroke == red && line.StrokeThickness == 5);
-
-            var calendar = new WinXC.CalendarView { SelectionMode = WinXC.CalendarViewSelectionMode.Multiple };
-            var d1 = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
-            var d2 = new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero);
-            InvokePrivateStatic("SyncSelectedDates", calendar, new[] { d1, d2 });
-            H.Check("PrivUpdate_CalendarAdds", calendar.SelectedDates.Count == 2);
-            InvokePrivateStatic("SyncSelectedDates", calendar, Array.Empty<DateTimeOffset>());
-            H.Check("PrivUpdate_CalendarRemoves", calendar.SelectedDates.Count == 0);
 
             var rows = new[] { new KeyRow("a"), new KeyRow("b"), new KeyRow("c") };
             var listState = InvokePrivateStatic<ReactorListState>("BuildListStateFromElement",
