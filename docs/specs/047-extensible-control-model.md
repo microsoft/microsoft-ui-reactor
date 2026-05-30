@@ -1530,7 +1530,7 @@ ARM64 stable-AC re-capture on `LAPTOP-4MEP83VI` remains deferred for the §14 ra
 - **New regressions vs close-out:** M8 +21.8% (+2.9pp — Lazy*Stack base-derived registration's added is-check in the Update path), M12 +30.7% (+12.2pp — Cloud-PC volatile; M12 has trended ±15pp across the last three captures and should be confirmed on stable AC).
 - **Net headline:** no bench exceeds the §13 Q1 reopen threshold. The structural wins (dispatch consolidation, single `IItemsBinderStrategy` arm) are in place; the absolute Cloud-PC numbers track the close-out baseline.
 
-**ARM64 stable-AC ratification gate** — **still pending; first capture attempt was inconclusive.** An ARM64-native 3×5 capture on `LAPTOP-4MEP83VI` (the Phase 0/2 baseline machine) landed under [`docs/specs/047/phase3-results/LAPTOP-4MEP83VI/2026-05-28-phase3-completion-3x5-stableac/`](047/phase3-results/LAPTOP-4MEP83VI/2026-05-28-phase3-completion-3x5-stableac/README.md) but **does not ratify the gate**: the fixed variant-ordering run drifted under sustained load (suspected thermal throttling — `ReactorDescriptors` always runs last and so against the hottest core), inflating long-bench deltas (M2 +23.4%, M3 +175.3%, M12 +44.2% vs Today). A controlled **order-swap re-run** (Descriptors first/cold) proves the contamination: M2's Descriptors-vs-Today delta flips from +23.4% to −30.5% (a 54pp position swing), and Descriptors-vs-ReactorV2 collapses from +36.1% to +1.1% — i.e. no real M2 regression. The thermally-insensitive fast benches confirm descriptors ≈ hand-coded V1 (M1/M7/M8/M11/M13 within ±5% vs ReactorV2), and M1's order-robust +30% vs Today is the known V1-protocol-vs-legacy mount overhead, not descriptor-specific. **A thermally-clean ARM64 re-run** (randomized/interleaved variant order, cooldowns, and/or CPU-clock telemetry) is still required to close the gate; until then it remains pending with a named owner + date to be appended. See the capture README for the full drift evidence and reproduction steps.
+**ARM64 stable-AC ratification gate** — **still pending; first capture attempt was inconclusive.** An ARM64-native 3×5 capture on `LAPTOP-4MEP83VI` (the Phase 0/2 baseline machine) landed under [`docs/specs/047/phase3-results/LAPTOP-4MEP83VI/2026-05-28-phase3-completion-3x5-stableac/`](047/phase3-results/LAPTOP-4MEP83VI/2026-05-28-phase3-completion-3x5-stableac/README.md) but **does not ratify the gate**: the fixed variant-ordering run drifted under sustained load (suspected thermal throttling — `ReactorDescriptors` always runs last and so against the hottest core), inflating long-bench deltas (M2 +23.4%, M3 +175.3%, M12 +44.2% vs Today). A controlled **order-swap re-run** (Descriptors first/cold) proves the contamination: M2's Descriptors-vs-Today delta flips from +23.4% to −30.5% (a 54pp position swing), and Descriptors-vs-ReactorV2 collapses from +36.1% to +1.1% — i.e. no real M2 regression. The thermally-insensitive fast benches confirm descriptors ≈ hand-coded V1 (M1/M7/M8/M11/M13 within ±5% vs ReactorV2), and M1's order-robust +30% vs Today is the known V1-protocol-vs-legacy mount overhead, not descriptor-specific. **A thermally-clean ARM64 re-run** (randomized/interleaved variant order, cooldowns, and/or CPU-clock telemetry) is still required to close the gate; until then it remains pending with a named owner + date to be appended. See the capture README for the full drift evidence and reproduction steps. **Phase-4 update (PR #465):** a post-Phase-4 capture landed under [`docs/specs/047/phase4-results/LAPTOP-4MEP83VI/2026-05-29-arm64/`](047/phase4-results/LAPTOP-4MEP83VI/2026-05-29-arm64/RESULTS.md); it **still does not close the gate** (same gap — fixed ordering, no §15.5 isolation, so the timing axis is throttled and the macro suite is unrunnable post-Phase-4). Its value is the deterministic **allocation** axis: most benches held/improved vs the 2026-05-25 baseline (M9 −41%), but **M1 regressed +20%** (3.2× over its 407 B gate) and **M12 +17%** — so the M1 leaf-alloc work (KD-3 fold + bucketing-regression investigation) is now confirmed as required, ahead of the thermally-clean re-run.
 
 **Carry-forward known defects from Phase 1:**
 - **KD-3** — dispatch fast-path for the ported built-ins (M4 was +88.9% V1 vs Today at Phase 1; final advisory shows M4 −21.2% / M5 −24.3% at amortized scope — KD-3 has materially closed at the batch-11 registration set).
@@ -1541,7 +1541,14 @@ ARM64 stable-AC re-capture on `LAPTOP-4MEP83VI` remains deferred for the §14 ra
 **Status: code-complete — migration closed; V1 is the unconditional production
 path.** The only outstanding items are baseline-machine-only (ARM64
 `LAPTOP-4MEP83VI`): the stable-AC perf ratification and the §11.6 hard byte-gate
-*measurement/enforcement*. See the close-out tracker
+*measurement/enforcement*. An **indicative ARM64 capture has landed** (PR #465,
+`047/phase4-results/LAPTOP-4MEP83VI/2026-05-29-arm64/`): the deterministic
+**allocation** axis is measured — M2/M3 meet the §15.6 "≤ Today" budget, **M1
+regressed +20%** (and M1/M2 miss the absolute 407/1,520 B gates; M3 passes), plus
+an **M12 +17%** pool-reuse regression. The **timing** axis (no §15.5 isolation)
+and the **macro suite** (its projects were deleted in Phase 4) remain unratified,
+so the gate is **not yet closed** — it needs an isolated stable-AC re-capture and
+the M1/M12 alloc fix. See the close-out tracker
 [`tasks/047-extensible-control-model-phase4-implementation.md`](tasks/047-extensible-control-model-phase4-implementation.md).
 
 - ✅ Delete the private switch. *(Done §4.5 — dispatch is V1 registry →
@@ -1560,8 +1567,11 @@ path.** The only outstanding items are baseline-machine-only (ARM64
   for no-callback / one-callback / three-callback; the stale `≤100 / ≤320 / ≤500`
   estimates predate the Phase-0 baseline capture). *(Code-complete: the bucketed
   `Element` base (§11.7, `ElementExtras`) ships and the target constants are
-  landed (`PerformanceBudgets.cs`); the gate **measurement/enforcement** is
-  ARM64-baseline-blocked — §4.4/§4.9 handoff.)*
+  landed (`PerformanceBudgets.cs`); the gate has now been **MEASURED** on
+  `LAPTOP-4MEP83VI` ARM64 (PR #465): **M1 1,289 B (FAIL, 3.2×), M2 3,687 B
+  (FAIL, 2.4×), M3 8,530 B (PASS)** per-render. The gates do **not** pass for
+  M1/M2 — enforcement stays open pending the M1 leaf-alloc fix + an isolated
+  re-capture. §4.4/§4.9 handoff.)*
 - ✅ Document the final author-facing surface in `docs/guide/`. *(Done §4.8.)*
 
 ### Future: source generation (deferred, no committed timeline)
