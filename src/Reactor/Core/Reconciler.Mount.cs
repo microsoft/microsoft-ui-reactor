@@ -547,77 +547,8 @@ public sealed partial class Reconciler
         return box;
     }
 
-    internal WinUI.VariableSizedWrapGrid MountWrapGrid(WrapGridElement wg, Action requestRerender)
-    {
-        var grid = new WinUI.VariableSizedWrapGrid { Orientation = wg.Orientation };
-        if (wg.MaximumRowsOrColumns >= 0) grid.MaximumRowsOrColumns = wg.MaximumRowsOrColumns;
-        if (!double.IsNaN(wg.ItemWidth)) grid.ItemWidth = wg.ItemWidth;
-        if (!double.IsNaN(wg.ItemHeight)) grid.ItemHeight = wg.ItemHeight;
-        foreach (var child in wg.Children)
-        {
-            if (child is null or EmptyElement) continue;
-            var childControl = Mount(child, requestRerender);
-            if (childControl is null) continue;
-            var wga = child.GetAttached<WrapGridAttached>();
-            if (wga is not null && childControl is FrameworkElement fe)
-            {
-                if (wga.RowSpan > 1) WinUI.VariableSizedWrapGrid.SetRowSpan(fe, wga.RowSpan);
-                if (wga.ColumnSpan > 1) WinUI.VariableSizedWrapGrid.SetColumnSpan(fe, wga.ColumnSpan);
-            }
-            grid.Children.Add(childControl);
-        }
-        SetElementTag(grid, wg);
-        ApplySetters(wg.Setters, grid);
-        return grid;
-    }
 
-    internal WinUI.StackPanel MountStack(StackElement stack, Action requestRerender)
-    {
-        var panel = _pool.TryRent(typeof(WinUI.StackPanel)) as WinUI.StackPanel ?? new WinUI.StackPanel();
-        panel.Orientation = stack.Orientation;
-        panel.Spacing = stack.Spacing;
-        if (stack.HorizontalAlignment.HasValue) panel.HorizontalAlignment = stack.HorizontalAlignment.Value;
-        if (stack.VerticalAlignment.HasValue) panel.VerticalAlignment = stack.VerticalAlignment.Value;
-        // Apply RequestedTheme before mounting children so that child ThemeRef
-        // bindings resolve against the correct theme variant from the start.
-        foreach (var child in stack.Children)
-        {
-            if (child is null or EmptyElement) continue;
-            var childControl = Mount(child, requestRerender);
-            if (childControl is not null) panel.Children.Add(childControl);
-        }
-        SetElementTag(panel, stack);
-        ApplySetters(stack.Setters, panel);
-        return panel;
-    }
 
-    internal WinUI.Grid MountGrid(GridElement grid, Action requestRerender)
-    {
-        var g = _pool.TryRent(typeof(WinUI.Grid)) as WinUI.Grid ?? new WinUI.Grid();
-        g.RowSpacing = grid.RowSpacing;
-        g.ColumnSpacing = grid.ColumnSpacing;
-        g.ColumnDefinitions.Clear();
-        g.RowDefinitions.Clear();
-        foreach (var col in grid.Definition.Columns) g.ColumnDefinitions.Add(ParseColumnDef(col));
-        foreach (var row in grid.Definition.Rows) g.RowDefinitions.Add(ParseRowDef(row));
-        foreach (var child in grid.Children)
-        {
-            var ctrl = Mount(child, requestRerender);
-            if (ctrl is null) continue;
-            var ga = child.GetAttached<GridAttached>();
-            if (ga is not null && ctrl is FrameworkElement fe)
-            {
-                WinUI.Grid.SetRow(fe, ga.Row);
-                WinUI.Grid.SetColumn(fe, ga.Column);
-                if (ga.RowSpan > 1) WinUI.Grid.SetRowSpan(fe, ga.RowSpan);
-                if (ga.ColumnSpan > 1) WinUI.Grid.SetColumnSpan(fe, ga.ColumnSpan);
-            }
-            g.Children.Add(ctrl);
-        }
-        SetElementTag(g, grid);
-        ApplySetters(grid.Setters, g);
-        return g;
-    }
 
     internal WinUI.Expander MountExpander(ExpanderElement exp, Action requestRerender)
     {
@@ -676,49 +607,7 @@ public sealed partial class Reconciler
         return viewbox;
     }
 
-    internal WinUI.Canvas MountCanvas(CanvasElement cvs, Action requestRerender)
-    {
-        var canvas = _pool.TryRent(typeof(WinUI.Canvas)) as WinUI.Canvas ?? new WinUI.Canvas();
-        if (cvs.Width.HasValue) canvas.Width = cvs.Width.Value;
-        if (cvs.Height.HasValue) canvas.Height = cvs.Height.Value;
-        if (cvs.Background is not null) canvas.Background = cvs.Background;
-        foreach (var child in cvs.Children)
-        {
-            var ctrl = Mount(child, requestRerender);
-            if (ctrl is null) continue;
-            var ca = child.GetAttached<CanvasAttached>();
-            if (ca is not null && ctrl is FrameworkElement fe)
-                ApplyCanvasPosition(fe, ca);
-            canvas.Children.Add(ctrl);
-        }
-        SetElementTag(canvas, cvs);
-        ApplySetters(cvs.Setters, canvas);
-        return canvas;
-    }
 
-    internal Layout.FlexPanel MountFlex(FlexElement flex, Action requestRerender)
-    {
-        var panel = _pool.TryRent(typeof(Layout.FlexPanel)) as Layout.FlexPanel ?? new Layout.FlexPanel();
-        panel.Direction = flex.Direction;
-        panel.JustifyContent = flex.JustifyContent;
-        panel.AlignItems = flex.AlignItems;
-        panel.AlignContent = flex.AlignContent;
-        panel.Wrap = flex.Wrap;
-        panel.ColumnGap = flex.ColumnGap;
-        panel.RowGap = flex.RowGap;
-        panel.FlexPadding = flex.FlexPadding;
-        foreach (var child in flex.Children)
-        {
-            var ctrl = Mount(child, requestRerender);
-            if (ctrl is null) continue;
-            // Always apply flex properties — clears stale values on pool-rented controls.
-            ApplyFlexAttached(child, ctrl);
-            panel.Children.Add(ctrl);
-        }
-        SetElementTag(panel, flex);
-        ApplySetters(flex.Setters, panel);
-        return panel;
-    }
 
     internal WinUI.Grid MountNavigationHost(NavigationHostElement element, Action requestRerender)
     {
@@ -2585,62 +2474,6 @@ public sealed partial class Reconciler
 
     // ── RelativePanel ───────────────────────────────────────────────────
 
-    internal WinUI.RelativePanel MountRelativePanel(RelativePanelElement rp, Action requestRerender)
-    {
-        var panel = new WinUI.RelativePanel();
-        var nameMap = new Dictionary<string, UIElement>();
-
-        // First pass: mount all children and register names
-        foreach (var child in rp.Children)
-        {
-            var ctrl = Mount(child, requestRerender);
-            if (ctrl is null) continue;
-            var rpa = child.GetAttached<RelativePanelAttached>();
-            if (rpa is not null && ctrl is FrameworkElement fe) fe.Name = rpa.Name;
-            if (rpa is not null) nameMap[rpa.Name] = ctrl;
-            panel.Children.Add(ctrl);
-        }
-
-        // Second pass: apply attached properties using name references
-        foreach (var child in rp.Children)
-        {
-            var rpa = child.GetAttached<RelativePanelAttached>();
-            if (rpa is null) continue;
-            if (!nameMap.TryGetValue(rpa.Name, out var ctrl)) continue;
-
-            if (rpa.RightOf is not null && nameMap.TryGetValue(rpa.RightOf, out var rightOf))
-                WinUI.RelativePanel.SetRightOf(ctrl, rightOf);
-            if (rpa.Below is not null && nameMap.TryGetValue(rpa.Below, out var below))
-                WinUI.RelativePanel.SetBelow(ctrl, below);
-            if (rpa.LeftOf is not null && nameMap.TryGetValue(rpa.LeftOf, out var leftOf))
-                WinUI.RelativePanel.SetLeftOf(ctrl, leftOf);
-            if (rpa.Above is not null && nameMap.TryGetValue(rpa.Above, out var above))
-                WinUI.RelativePanel.SetAbove(ctrl, above);
-            if (rpa.AlignLeftWith is not null && nameMap.TryGetValue(rpa.AlignLeftWith, out var alw))
-                WinUI.RelativePanel.SetAlignLeftWith(ctrl, alw);
-            if (rpa.AlignRightWith is not null && nameMap.TryGetValue(rpa.AlignRightWith, out var arw))
-                WinUI.RelativePanel.SetAlignRightWith(ctrl, arw);
-            if (rpa.AlignTopWith is not null && nameMap.TryGetValue(rpa.AlignTopWith, out var atw))
-                WinUI.RelativePanel.SetAlignTopWith(ctrl, atw);
-            if (rpa.AlignBottomWith is not null && nameMap.TryGetValue(rpa.AlignBottomWith, out var abw))
-                WinUI.RelativePanel.SetAlignBottomWith(ctrl, abw);
-            if (rpa.AlignHorizontalCenterWith is not null && nameMap.TryGetValue(rpa.AlignHorizontalCenterWith, out var ahcw))
-                WinUI.RelativePanel.SetAlignHorizontalCenterWith(ctrl, ahcw);
-            if (rpa.AlignVerticalCenterWith is not null && nameMap.TryGetValue(rpa.AlignVerticalCenterWith, out var avcw))
-                WinUI.RelativePanel.SetAlignVerticalCenterWith(ctrl, avcw);
-
-            if (rpa.AlignLeftWithPanel) WinUI.RelativePanel.SetAlignLeftWithPanel(ctrl, true);
-            if (rpa.AlignRightWithPanel) WinUI.RelativePanel.SetAlignRightWithPanel(ctrl, true);
-            if (rpa.AlignTopWithPanel) WinUI.RelativePanel.SetAlignTopWithPanel(ctrl, true);
-            if (rpa.AlignBottomWithPanel) WinUI.RelativePanel.SetAlignBottomWithPanel(ctrl, true);
-            if (rpa.AlignHorizontalCenterWithPanel) WinUI.RelativePanel.SetAlignHorizontalCenterWithPanel(ctrl, true);
-            if (rpa.AlignVerticalCenterWithPanel) WinUI.RelativePanel.SetAlignVerticalCenterWithPanel(ctrl, true);
-        }
-
-        SetElementTag(panel, rp);
-        ApplySetters(rp.Setters, panel);
-        return panel;
-    }
 
     // ── MediaPlayerElement ──────────────────────────────────────────────
 
