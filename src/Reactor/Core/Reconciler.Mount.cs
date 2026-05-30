@@ -76,11 +76,6 @@ public sealed partial class Reconciler
         {
         control = element switch
         {
-            // Typed, data-driven TreeView<T> uses hand-coded per-container
-            // hosting (ContainerContentChanging on the internal TreeViewList),
-            // so it stays on the composition-primitive switch rather than the
-            // V1 descriptor registry. (#447)
-            TemplatedTreeViewElementBase ttv => MountTemplatedTreeView(ttv, requestRerender),
             CommandHostElement ch => MountCommandHost(ch, requestRerender),
             ErrorBoundaryElement eb => MountErrorBoundary(eb, requestRerender),
             Validation.FormFieldElement ff => MountFormField(ff, requestRerender),
@@ -694,7 +689,7 @@ public sealed partial class Reconciler
     /// expand/collapse robust under container recycling. <c>node.Content</c>
     /// holds the developer's data item.
     /// </summary>
-    private WinUI.TreeView MountTemplatedTreeView(TemplatedTreeViewElementBase el, Action requestRerender)
+    internal WinUI.TreeView MountTemplatedTreeView(TemplatedTreeViewElementBase el, Action requestRerender)
     {
         var treeView = new WinUI.TreeView
         {

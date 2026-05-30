@@ -403,4 +403,318 @@ internal static class TemplatedTreeViewFixtures
             H.Check("TTV_Unmount_ReplacementShown", H.FindText("gone") is not null);
         }
     }
+
+    // ── 8. Unmount runs the hosted view's component cleanup ────────────────
+    // The decorator handler returns ContinueDefaultTraversal on unmount, so the
+    // engine's default visual-tree recursion still reaches each node's hosted
+    // view (in ContentControl.Content) and runs its component UseEffect cleanup.
+    // This is the load-bearing equivalence guarantee of the V1 port (#447) —
+    // a regression here would silently leak hosted components.
+    private static int s_cleanupCount;
+
+    private sealed class CleanupLeaf : Component
+    {
+        public override Element Render()
+        {
+            UseEffect(() => () => global::System.Threading.Interlocked.Increment(ref s_cleanupCount));
+            return TextBlock("leaf-rich");
+        }
+    }
+
+    internal class UnmountRunsChildCleanup(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            global::System.Threading.Interlocked.Exchange(ref s_cleanupCount, 0);
+
+            // Single root whose view is a component with UseEffect cleanup, so it
+            // realizes immediately (no expansion needed) and its teardown is
+            // observable.
+            string[] items = ["root"];
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (show, set) = ctx.UseState(true);
+                return VStack(
+                    Button("Hide", () => set(false)),
+                    show
+                        ? TreeView(items,
+                            keySelector: s => s,
+                            childrenSelector: _ => null,
+                            viewBuilder: _ => Component<CleanupLeaf>())
+                        : TextBlock("gone")
+                );
+            });
+
+            await Harness.Render();
+            H.Check("TTV_UnmountCleanup_ViewHosted",
+                await WaitFor(() => H.FindText("leaf-rich") is not null));
+            H.Check("TTV_UnmountCleanup_NotYetCleaned",
+                global::System.Threading.Volatile.Read(ref s_cleanupCount) == 0);
+
+            H.ClickButton("Hide");
+            await Harness.Render();
+
+            H.Check("TTV_UnmountCleanup_TreeRemoved", H.FindControl<WinXC.TreeView>(_ => true) is null);
+            // ContinueDefaultTraversal reached the hosted component and ran its
+            // cleanup exactly once.
+            H.Check("TTV_UnmountCleanup_CleanupRan",
+                await WaitFor(() => global::System.Threading.Volatile.Read(ref s_cleanupCount) == 1));
+        }
+    }
+
+    // ── 9. Structural root removal — a realized root subtree drops ─────────
+    // The keyed diff drops unmatched root keys from the live TreeViewNode
+    // collection; survivors keep rendering, the removed node's text is gone.
+    internal class StructuralRootRemoval(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, set) = ctx.UseState(0);
+                FsNode[] tree = phase == 0
+                    ?
+                    [
+                        new FsFolder("docs", "Documents", [new FsFile("readme", "readme", "md")]),
+                        new FsFolder("pics", "Pictures", [new FsFile("logo", "logo", "png")]),
+                        new FsFolder("vids", "Videos", [new FsFile("clip", "clip", "mp4")]),
+                    ]
+                    :
+                    [
+                        new FsFolder("docs", "Documents", [new FsFile("readme", "readme", "md")]),
+                        new FsFolder("vids", "Videos", [new FsFile("clip", "clip", "mp4")]),
+                    ];
+                return VStack(
+                    Button("Remove", () => set(1)),
+                    TreeView(tree,
+                        keySelector: n => n.Id,
+                        childrenSelector: ChildrenOf,
+                        viewBuilder: BuildNodeView)
+                        with { IsExpanded = _ => true }
+                );
+            });
+
+            await Harness.Render();
+            var tv = H.FindControl<WinXC.TreeView>(_ => true);
+            H.Check("TTV_RootRemoval_InitialThreeRoots",
+                tv is not null && tv.RootNodes.Count == 3);
+            H.Check("TTV_RootRemoval_MiddleVisible",
+                await WaitFor(() => H.FindTextContaining("Pictures") is not null));
+
+            H.ClickButton("Remove");
+            await Harness.Render();
+
+            H.Check("TTV_RootRemoval_TwoRootsRemain", tv!.RootNodes.Count == 2);
+            // The removed subtree's content is gone (both the folder and its leaf).
+            H.Check("TTV_RootRemoval_RemovedTextGone",
+                await WaitFor(() => H.FindTextContaining("Pictures") is null
+                    && H.FindTextContaining("logo.png") is null));
+            // Survivors keep rendering.
+            H.Check("TTV_RootRemoval_SurvivorsPreserved",
+                await WaitFor(() => H.FindTextContaining("Documents") is not null
+                    && H.FindTextContaining("Videos") is not null));
+        }
+    }
+
+    // ── 10. Keyed root reorder preserves TreeViewNode identity ────────────
+    // The keyed diff reuses matched nodes and only reorders the live collection,
+    // so the exact same TreeViewNode instances survive a reorder (just swapped).
+    internal class KeyedRootReorder(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, set) = ctx.UseState(0);
+                FsNode a = new FsFolder("docs", "Documents", [new FsFile("readme", "readme", "md")]);
+                FsNode b = new FsFolder("pics", "Pictures", [new FsFile("logo", "logo", "png")]);
+                FsNode[] tree = phase == 0 ? [a, b] : [b, a];
+                return VStack(
+                    Button("Reorder", () => set(1)),
+                    TreeView(tree,
+                        keySelector: n => n.Id,
+                        childrenSelector: ChildrenOf,
+                        viewBuilder: BuildNodeView)
+                );
+            });
+
+            await Harness.Render();
+            var tv = H.FindControl<WinXC.TreeView>(_ => true);
+            H.Check("TTV_Reorder_TwoRoots", tv is not null && tv.RootNodes.Count == 2);
+
+            var firstNode = tv!.RootNodes[0];   // docs
+            var secondNode = tv.RootNodes[1];   // pics
+
+            H.ClickButton("Reorder");
+            await Harness.Render();
+
+            H.Check("TTV_Reorder_CountStable", tv.RootNodes.Count == 2);
+            // Same instances, swapped order — the keyed diff reused both nodes.
+            H.Check("TTV_Reorder_NodeIdentityPreserved",
+                ReferenceEquals(tv.RootNodes[0], secondNode)
+                && ReferenceEquals(tv.RootNodes[1], firstNode));
+        }
+    }
+
+    // ── 11. Control props applied on mount and updated on a state flip ─────
+    internal class ControlPropsMountAndUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, set) = ctx.UseState(0);
+                return VStack(
+                    Button("Flip", () => set(1)),
+                    TreeView(SampleTree(),
+                        keySelector: n => n.Id,
+                        childrenSelector: ChildrenOf,
+                        viewBuilder: BuildNodeView)
+                        with
+                        {
+                            SelectionMode = phase == 0
+                                ? WinXC.TreeViewSelectionMode.Single
+                                : WinXC.TreeViewSelectionMode.Multiple,
+                            CanReorderItems = phase != 0,
+                            CanDragItems = phase != 0,
+                            AllowDrop = phase != 0,
+                        }
+                );
+            });
+
+            await Harness.Render();
+            var tv = H.FindControl<WinXC.TreeView>(_ => true);
+            H.Check("TTV_Props_MountSelectionSingle",
+                tv is not null && tv.SelectionMode == WinXC.TreeViewSelectionMode.Single);
+            H.Check("TTV_Props_MountFlagsFalse",
+                !tv!.CanReorderItems && !tv.CanDragItems && !tv.AllowDrop);
+
+            H.ClickButton("Flip");
+            await Harness.Render();
+
+            // The update body wrote the new values onto the same control.
+            H.Check("TTV_Props_UpdateSelectionMultiple",
+                tv.SelectionMode == WinXC.TreeViewSelectionMode.Multiple);
+            H.Check("TTV_Props_UpdateFlagsTrue",
+                tv.CanReorderItems && tv.CanDragItems && tv.AllowDrop);
+        }
+    }
+
+    // ── 12. Empty tree → populate via state ───────────────────────────────
+    internal class EmptyThenPopulate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, set) = ctx.UseState(0);
+                FsNode[] tree = phase == 0
+                    ? []
+                    : [new FsFolder("docs", "Documents", [new FsFile("readme", "readme", "md")])];
+                return VStack(
+                    Button("Populate", () => set(1)),
+                    TreeView(tree,
+                        keySelector: n => n.Id,
+                        childrenSelector: ChildrenOf,
+                        viewBuilder: BuildNodeView)
+                        with { IsExpanded = _ => true }
+                );
+            });
+
+            await Harness.Render();
+            var tv = H.FindControl<WinXC.TreeView>(_ => true);
+            H.Check("TTV_Empty_NoRootsInitially", tv is not null && tv.RootNodes.Count == 0);
+
+            H.ClickButton("Populate");
+            await Harness.Render();
+
+            H.Check("TTV_Empty_RootAddedOnPopulate", tv!.RootNodes.Count == 1);
+            H.Check("TTV_Empty_PopulatedRootRenders",
+                await WaitFor(() => H.FindTextContaining("Documents") is not null));
+            H.Check("TTV_Empty_PopulatedChildRenders",
+                await WaitFor(() => H.FindTextContaining("readme.md") is not null));
+        }
+    }
+
+    // ── 13. Deep 3-level nesting renders at every depth ───────────────────
+    internal class DeepNestingRenders(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            FsNode[] deep =
+            [
+                new FsFolder("L1", "Level1",
+                [
+                    new FsFolder("L2", "Level2",
+                    [
+                        new FsFile("L3", "Level3", "txt"),
+                    ]),
+                ]),
+            ];
+
+            var host = H.CreateHost();
+            host.Mount(_ =>
+                VStack(
+                    TreeView(deep,
+                        keySelector: n => n.Id,
+                        childrenSelector: ChildrenOf,
+                        viewBuilder: BuildNodeView)
+                        with { IsExpanded = _ => true }
+                ).Height(400)
+            );
+
+            await Harness.Render();
+            H.Check("TTV_Deep_Level1", await WaitFor(() => H.FindTextContaining("Level1") is not null));
+            H.Check("TTV_Deep_Level2", await WaitFor(() => H.FindTextContaining("Level2") is not null));
+            H.Check("TTV_Deep_Level3Leaf", await WaitFor(() => H.FindTextContaining("Level3.txt") is not null));
+        }
+    }
+
+    // ── 14. Two independent trees stay isolated across an update ───────────
+    internal class TwoIndependentTrees(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, set) = ctx.UseState(0);
+                FsNode[] left =
+                [
+                    new FsFolder("la", phase == 0 ? "LeftAlpha" : "LeftAlpha-renamed",
+                        [new FsFile("lf", "leftfile", "txt")]),
+                ];
+                FsNode[] right = [new FsFolder("ra", "RightAlpha", [new FsFile("rf", "rightfile", "txt")])];
+                return VStack(
+                    Button("MutateLeft", () => set(1)),
+                    (TreeView(left, keySelector: n => n.Id, childrenSelector: ChildrenOf, viewBuilder: BuildNodeView)
+                        with { IsExpanded = _ => true }),
+                    (TreeView(right, keySelector: n => n.Id, childrenSelector: ChildrenOf, viewBuilder: BuildNodeView)
+                        with { IsExpanded = _ => true })
+                ).Height(600);
+            });
+
+            await Harness.Render();
+            H.Check("TTV_TwoTrees_BothMounted",
+                H.FindControl<WinXC.TreeView>(_ => true) is not null
+                && await WaitFor(() => H.FindTextContaining("LeftAlpha") is not null
+                    && H.FindTextContaining("RightAlpha") is not null));
+
+            H.ClickButton("MutateLeft");
+            await Harness.Render();
+
+            // Left tree updated…
+            H.Check("TTV_TwoTrees_LeftUpdated",
+                await WaitFor(() => H.FindTextContaining("LeftAlpha-renamed") is not null));
+            // …while the right tree is untouched.
+            H.Check("TTV_TwoTrees_RightUntouched",
+                await WaitFor(() => H.FindTextContaining("RightAlpha") is not null
+                    && H.FindTextContaining("rightfile.txt") is not null));
+        }
+    }
 }

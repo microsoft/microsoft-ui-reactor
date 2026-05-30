@@ -128,10 +128,6 @@ public sealed partial class Reconciler
         {
         result = (oldEl, newEl, control) switch
         {
-            // Typed, data-driven TreeView<T> — hand-coded escape-hatch path
-            // (per-container hosting), so it stays on the switch. (#447)
-            (TemplatedTreeViewElementBase o, TemplatedTreeViewElementBase n, WinUI.TreeView ttv)
-                => UpdateTemplatedTreeView(o, n, ttv, requestRerender),
             (CommandHostElement o, CommandHostElement n, WinUI.Grid chGrid)
                 => UpdateCommandHost(o, n, chGrid, requestRerender),
             (ErrorBoundaryElement oldEb, ErrorBoundaryElement newEb, Border)
@@ -1351,7 +1347,7 @@ public sealed partial class Reconciler
     /// <c>GetElementTag</c>, so refreshing the element tag is all that's needed
     /// to pick up new callbacks — no re-subscription.
     /// </summary>
-    private UIElement? UpdateTemplatedTreeView(TemplatedTreeViewElementBase o, TemplatedTreeViewElementBase n, WinUI.TreeView tv, Action requestRerender)
+    internal UIElement? UpdateTemplatedTreeView(TemplatedTreeViewElementBase o, TemplatedTreeViewElementBase n, WinUI.TreeView tv, Action requestRerender)
     {
         // Diff the node hierarchy (structure + each node's data item). The view
         // reconcile is a separate flat pass over the realized containers below —

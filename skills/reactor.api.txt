@@ -186,6 +186,8 @@ ToggleSplitButton(string label, bool isChecked = false, Action<bool> onIsChecked
 ToggleSwitch(bool isOn, Action<bool> onIsOnChanged = null, string onContent = null, string offContent = null, string header = null) → ToggleSwitchElement
 TreeNode(string content, TreeViewNodeData[] children) → TreeViewNodeData
 TreeView(TreeViewNodeData[] nodes) → TreeViewElement
+TreeView<T>(IReadOnlyList<T> items, Func<T, IReadOnlyList<T>> childrenSelector, Func<T, Element> viewBuilder) → TemplatedTreeViewElement<T>
+TreeView<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, IReadOnlyList<T>> childrenSelector, Func<T, Element> viewBuilder) → TemplatedTreeViewElement<T>
 UniformGrid(Orientation orientation, Element[] items) → GridElement
 VStack(Element[] children) → StackElement
 VStack(double spacing, Element[] children) → StackElement
@@ -708,6 +710,8 @@ TemplatedListViewElement<T>.ItemClick<T>(Action<T> handler) → TemplatedListVie
 TemplatedListViewElement<T>.SelectedIndexChanged<T>(Action<int> handler) → TemplatedListViewElement<T>
 TemplatedListViewElement<T>.SelectionChanged<T>(Action<IReadOnlyList<T>> handler) → TemplatedListViewElement<T>
 TemplatedListViewElement<T>.Set<T>(Action<ListView> configure) → TemplatedListViewElement<T>
+TemplatedTreeViewElement<T>.Expanding<T>(Action<T> handler) → TemplatedTreeViewElement<T>
+TemplatedTreeViewElement<T>.ItemInvoked<T>(Action<T> handler) → TemplatedTreeViewElement<T>
 TextBlockElement.Bold() → TextBlockElement
 TextBlockElement.CharacterSpacing(int spacing) → TextBlockElement
 TextBlockElement.FontFamily(FontFamily family) → TextBlockElement

@@ -374,6 +374,10 @@ public sealed partial class Reconciler : IDisposable
         // common base (legacy move/reorder animations) — see TemplatedListHandler.
         RegisterDecoratorHandlerForDerivedTypes<TemplatedListElementBase>(new V1Protocol.Handlers.TemplatedListHandler());
         RegisterDecoratorHandlerForDerivedTypes<LazyStackElementBase>(new V1Protocol.Handlers.LazyStackHandler()); // §14: ScrollViewer-wrapped — see LazyStackHandler
+        // §14: typed, data-driven TreeView<T> routes through one Path B delegate
+        // on the non-generic base (hand-coded per-container hosting) — see
+        // TemplatedTreeViewHandler / issue #447.
+        RegisterDecoratorHandlerForDerivedTypes<TemplatedTreeViewElementBase>(new V1Protocol.Handlers.TemplatedTreeViewHandler());
         RegisterDescriptorForDerivedTypes(V1Protocol.Descriptor.Descriptors.ItemsRepeaterDescriptor.Descriptor);
         RegisterDescriptorForDerivedTypes(V1Protocol.Descriptor.Descriptors.ItemsViewDescriptor.Descriptor);
 
