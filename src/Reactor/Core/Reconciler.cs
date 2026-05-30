@@ -712,24 +712,47 @@ public sealed partial class Reconciler : IDisposable
     /// Spec 047 §4.4 follow-up — allocation-gated element tagging for the V1
     /// dispatch adapter. Refreshes an existing <see cref="ReactorState"/>'s
     /// element pointer cheaply, but only <em>allocates</em> a new
-    /// <see cref="ReactorState"/> (+ attached-DP write) for elements that
-    /// actually wire a control-intrinsic event trampoline
-    /// (<see cref="Element.HasCallbacks"/>).
+    /// <see cref="ReactorState"/> (+ attached-DP write) for elements whose
+    /// downstream code actually reads the element back via
+    /// <see cref="GetElementTag(FrameworkElement)"/>.
     ///
-    /// <para>Callback-free display leaves (TextBlock / Border / StackPanel /
-    /// Image — the bulk of a real tree) never dispatch into Reactor code, so
-    /// they don't need the tag. This mirrors the legacy reconciler, which
-    /// gated its tag refresh on <c>HasCallbacks</c> in the
-    /// <see cref="Update"/> skip short-circuit and left leaf controls
-    /// untagged. The pre-§4.5 V1 adapter tagged <em>every</em> control
-    /// unconditionally, allocating a ReactorState per leaf mount — the
-    /// per-render byte regression this restores the savings for.</para>
+    /// <para>Three things require a live element pointer on the control:</para>
+    /// <list type="bullet">
+    ///   <item>
+    ///     <b>Event trampolines</b> — <see cref="Element.HasCallbacks"/>.
+    ///     Routed-input modifiers (<c>.OnPointerPressed</c> etc.) dispatch
+    ///     through <see cref="ModifierEventHandlerState"/>'s <c>Current*</c>
+    ///     fields refreshed each render by <c>ApplyEventHandlers</c> and do
+    ///     <em>not</em> resolve via the tag, so they are intentionally not
+    ///     part of the gate.
+    ///   </item>
+    ///   <item>
+    ///     <b>Keyed child reconciliation</b> — <see cref="Element.Key"/>.
+    ///     <see cref="ChildReconciler"/> reads the child's tag to extract the
+    ///     stable key during keyed reorders (see <c>ChildReconciler.cs:303</c>
+    ///     and <c>:392</c>). A keyed callback-free element (e.g.
+    ///     <c>Border(...).WithKey("a")</c>) loses its identity across reorders
+    ///     without the tag.
+    ///   </item>
+    ///   <item>
+    ///     <b>Element-extras readback</b> — <see cref="Element.Extensions"/>.
+    ///     Several bucketed extras have engine paths that read the live
+    ///     element via the tag — exit transitions
+    ///     (<c>ElementTransition</c>), connected-animation snapshots
+    ///     (<c>ConnectedAnimationKey</c>), <c>InteractionStates</c>,
+    ///     <c>KeyframeAnimations</c>, and friends. The bucket being null is
+    ///     spec 047 §4.4's "truly inert leaf" signal, so we tag whenever any
+    ///     extra is present rather than enumerating each feature.
+    ///   </item>
+    /// </list>
     ///
-    /// <para>Routed-input modifiers (<c>.OnPointerPressed</c> etc.) dispatch
-    /// through <see cref="ModifierEventHandlerState"/>'s <c>Current*</c>
-    /// fields (refreshed each render by <c>ApplyEventHandlers</c>) and do
-    /// <em>not</em> resolve the element via the tag, so they are
-    /// intentionally not part of the gate.</para>
+    /// <para>Callback-free display leaves with no key and no extras
+    /// (TextBlock / Border / StackPanel / Image — the bulk of a real tree)
+    /// never dispatch into Reactor code and have nothing reading the tag, so
+    /// they stay untagged. This mirrors the legacy reconciler discipline. The
+    /// pre-§4.5 V1 adapter tagged <em>every</em> control unconditionally,
+    /// allocating a ReactorState per leaf mount — the per-render byte
+    /// regression this restores the savings for.</para>
     /// </summary>
     internal static void SetElementTagIfNeeded(FrameworkElement control, Element element)
     {
@@ -740,11 +763,22 @@ public sealed partial class Reconciler : IDisposable
             state.Element = element;
             return;
         }
-        if (!element.HasCallbacks) return; // no trampoline will read the tag
+        if (!NeedsTag(element)) return;
         control.SetValue(
             ReactorAttached.StateProperty,
             new ReactorState { Element = element });
     }
+
+    /// <summary>
+    /// Predicate companion to <see cref="SetElementTagIfNeeded"/>. Returns
+    /// true when downstream code will read the element back through
+    /// <see cref="GetElementTag(FrameworkElement)"/> — see the helper's
+    /// summary for the three categories.
+    /// </summary>
+    private static bool NeedsTag(Element element) =>
+        element.HasCallbacks
+        || element.Key is not null
+        || element.Extensions is not null;
 
     /// <summary>
     /// Spec 047 §14 Phase 1 (1.3) — promoted from internal. Retrieves the
