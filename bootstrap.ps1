@@ -318,13 +318,21 @@ if (-not (Test-Path $templateNupkg)) {
 # exit code becomes a terminating error under $ErrorActionPreference = 'Stop'
 # in PS 7.4+, which `2>$null` doesn't intercept).
 Write-Dbg "Probing installed templates via 'dotnet new uninstall' (no args)"
-$installedTemplates = & dotnet new uninstall 2>&1 | Out-String
 if ($script:VerboseOn) {
+    # Capture the full listing so we can both echo each line as a debug
+    # breadcrumb AND substring-match for our template id below.
+    $installedTemplates = & dotnet new uninstall 2>&1 | Out-String
     foreach ($line in ($installedTemplates -split "`r?`n")) {
         if ($line.Trim()) { Write-Dbg "  templates> $line" }
     }
+    $hasReactorTemplate = $installedTemplates -match 'Microsoft\.UI\.Reactor\.ProjectTemplates'
+} else {
+    # Quiet path: stream through Select-String -Quiet so we never materialize
+    # the multi-KB listing for what is, semantically, a single boolean test.
+    $hasReactorTemplate = [bool](& dotnet new uninstall 2>&1 |
+        Select-String -SimpleMatch 'Microsoft.UI.Reactor.ProjectTemplates' -Quiet)
 }
-if ($installedTemplates -match 'Microsoft\.UI\.Reactor\.ProjectTemplates') {
+if ($hasReactorTemplate) {
     Write-Dbg "Existing Microsoft.UI.Reactor.ProjectTemplates detected; uninstalling stale copy"
     if ($script:VerboseOn) {
         & dotnet new uninstall Microsoft.UI.Reactor.ProjectTemplates
