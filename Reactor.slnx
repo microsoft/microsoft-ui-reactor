@@ -217,6 +217,12 @@
       <Platform Solution="*|x64" Project="x64" />
     </Project>
   </Folder>
+  <Folder Name="/samples/apps/blank-reactor/">
+    <Project Path="samples/apps/blank-reactor/BlankReactor.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
   <Folder Name="/samples/apps/chat/">
     <Project Path="samples/apps/chat/Chat.Model/Chat.Model.csproj" />
     <Project Path="samples/apps/chat/Chat.UI/Chat.UI.csproj" />

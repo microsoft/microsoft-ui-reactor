@@ -1,0 +1,83 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <Platforms>x64;ARM64</Platforms>
+    <RootNamespace>BlankReactor</RootNamespace>
+    <!--
+      The K2 perf-gates harness (AppLifeCycleWorkload) keys off ProcessName,
+      so the produced binary must be named "BlankReactor" regardless of the
+      csproj filename. Keep this in sync with Package.appxmanifest Identity Name.
+    -->
+    <AssemblyName>BlankReactor</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWinUI>true</UseWinUI>
+
+    <!--
+      MSIX packaging — required so the perf-gates harness can deploy the app
+      the same way it deploys the BlankWPF / BlankWinForms / BlankWinUI3
+      siblings in wui\Samples\FrameworkBenchmarkBlankApps.
+    -->
+    <WindowsPackageType>MSIX</WindowsPackageType>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <GenerateAppxPackageOnBuild>true</GenerateAppxPackageOnBuild>
+
+    <!--
+      Self-contained .NET 10 so the perf-test VMs (which carry .NET 8 for
+      BlankWPF / BlankWinForms but not .NET 10) don't need a separate runtime
+      install. WindowsAppSDKSelfContained stays false so we share the
+      Microsoft.WindowsAppRuntime.2.msix already deployed by the
+      AppLifeCycleSyntheticApps spkg. This overrides the repo-root default
+      (Directory.Build.props) which sets WindowsAppSDKSelfContained=true.
+    -->
+    <SelfContained>true</SelfContained>
+    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <AppxBundle>Never</AppxBundle>
+    <AppxAutoIncrementPackageRevision>False</AppxAutoIncrementPackageRevision>
+    <AppxSymbolPackageEnabled>False</AppxSymbolPackageEnabled>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <GenerateAppInstallerFile>False</GenerateAppInstallerFile>
+    <GenerateTestArtifacts>False</GenerateTestArtifacts>
+    <HoursBetweenUpdateChecks>0</HoursBetweenUpdateChecks>
+
+    <!--
+      Signing is OFF by default so a fresh clone builds without requiring a
+      developer cert. To produce a deployable MSIX, pass on the command line:
+        /p:AppxPackageSigningEnabled=true
+        /p:PackageCertificateKeyFile=<path-to-your.pfx>
+      The cert subject (CN=...) must match the Package.appxmanifest
+      <Identity Publisher="..."> value. See README.md for details.
+    -->
+    <AppxPackageSigningEnabled Condition="'$(AppxPackageSigningEnabled)' == ''">False</AppxPackageSigningEnabled>
+    <AppxPackageSigningTimestampDigestAlgorithm>SHA256</AppxPackageSigningTimestampDigestAlgorithm>
+  </PropertyGroup>
+
+  <!-- Pick a default RID based on the build Platform so SelfContained
+       publishing doesn't error out when no -r is passed. -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == '' and '$(Platform)' == 'x64'">
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == '' and '$(Platform)' == 'ARM64'">
+    <RuntimeIdentifier>win-arm64</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AppxManifest Include="Package.appxmanifest">
+      <SubType>Designer</SubType>
+    </AppxManifest>
+    <Content Include="Images\*.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Reactor\Reactor.csproj" />
+  </ItemGroup>
+
+</Project>
