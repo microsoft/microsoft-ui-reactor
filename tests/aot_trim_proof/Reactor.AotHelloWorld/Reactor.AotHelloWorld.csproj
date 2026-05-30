@@ -1,0 +1,94 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Spec 048 §11 / §13.2 — AOT/trim verification app.
+
+    This is the smallest possible Reactor app: a single TextBlock and a single
+    Button, mounted via `ReactorApp.Run<App>`. The body of the App.Render()
+    method touches NO other catalog factories — no Marquee, no TreeView, no
+    GridView, no TabView, no Image, no CalendarView — so when the trimmer
+    follows reachability from `Main`, the handlers + WinUI controls for those
+    unused factories must NOT appear in the published binary.
+
+    Companion assertion project: ../Reactor.AotHelloWorld.TrimAssertions/
+    scans the publish output and fails loudly if any forbidden symbol surfaces.
+    A failure is a Reactor-side regression: something re-rooted a handler that
+    spec 048's lazy registration was supposed to leave dead.
+
+    Caveat (spec §11): this guard checks Reactor-side rooting, not the WinUI
+    SDK's own internal types. SDK trim regressions are out of scope.
+  -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <Platforms>x64;ARM64</Platforms>
+    <RootNamespace>Reactor.AotHelloWorld</RootNamespace>
+    <AssemblyName>Reactor.AotHelloWorld</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <IsPackable>false</IsPackable>
+
+    <!--
+      Trim/AOT analyzer warnings: errors. This catches a re-rooting
+      regression at compile time, before the publish even runs. Always on
+      so a `dotnet build` (no publish) still surfaces analyzer issues.
+    -->
+    <IsAotCompatible>true</IsAotCompatible>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <!--
+    AOT is opt-in via `-p:PublishAotInternal=true`, NOT unconditional on
+    the csproj. Reason: setting `<PublishAot>true</PublishAot>` at the
+    project level propagates AOT requirements to every transitively-
+    referenced project via the SDK graph, including analyzer-only
+    references (OutputItemType="Analyzer", ReferenceOutputAssembly="false").
+    Those analyzers target netstandard2.0 and trip NETSDK1207 ("AOT not
+    supported for the target framework"). The same workaround as
+    Reactor.AppTests.Host: gate the property behind a build flag the CI
+    publish step sets explicitly.
+  -->
+  <PropertyGroup Condition="'$(PublishAotInternal)' == 'true'">
+    <PublishAot>true</PublishAot>
+  </PropertyGroup>
+
+  <!--
+    Workaround for WindowsAppSDK#6394 — same as Reactor.AppTests.Host: copy
+    the generated .pri (and any .xbf) into $(PublishDir) so MRT lookups
+    succeed when the unpackaged AOT-published exe boots. Remove once the
+    upstream WindowsAppSDK fix ships.
+  -->
+  <Target Name="_CopyWinUIResourcesForAot" AfterTargets="Publish"
+          Condition="'$(PublishAot)' == 'true' and '$(AppxPackage)' != 'true'">
+    <ItemGroup>
+      <_WinUIResourcesForAot Include="$(OutputPath)**\*.xbf" />
+      <_WinUIResourcesForAot Include="$(OutputPath)$(AssemblyName).pri" Condition="Exists('$(OutputPath)$(AssemblyName).pri')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_WinUIResourcesForAot)"
+          DestinationFiles="@(_WinUIResourcesForAot->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      The whole point: reference Reactor.External.TestControl so the Marquee
+      handler / control type metadata is available for the trimmer's
+      reachability analysis. The app NEVER calls Marquee.Of(...), so the
+      trimmer must conclude that MarqueeHandler and MarqueeControl are
+      unreachable and remove their symbols from the published exe.
+    -->
+    <ProjectReference Include="..\..\..\src\Reactor\Reactor.csproj" />
+    <ProjectReference Include="..\..\external_proof\Reactor.External.TestControl\Reactor.External.TestControl.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -558,6 +558,42 @@ public sealed partial class Reconciler : IDisposable
     internal readonly V1HandlerRegistry _v1Handlers = new();
 
     /// <summary>
+    /// Spec 048 §8 — arm 3 of the dispatch precedence: on a per-host
+    /// <c>_v1Handlers</c> and per-host <c>_typeRegistry</c> miss, consult
+    /// the global lazy <see cref="V1Protocol.ControlRegistry"/>. On a hit
+    /// the factory is invoked exactly once and the resulting adapter is
+    /// cached into per-host <c>_v1Handlers</c> so steady-state dispatch
+    /// short-circuits in arm 1 (the existing fast per-host lookup) on the
+    /// next call for this element type on this host.
+    ///
+    /// <para>Precedence enforced at the call sites (Mount / Update):
+    /// (1) per-host <c>_v1Handlers</c> →
+    /// (2) per-host <c>_typeRegistry</c> →
+    /// (3) global <see cref="V1Protocol.ControlRegistry"/> →
+    /// (4) composition-primitive switch.</para>
+    /// </summary>
+    /// <param name="elementType">Exact runtime element type
+    /// (<c>element.GetType()</c>); not a base type. Dispatch is exact-match
+    /// (spec 047 §13 Q17).</param>
+    /// <param name="entry">On hit, the type-erased adapter to dispatch
+    /// through (and now cached in <c>_v1Handlers</c>).</param>
+    internal bool TryResolveFromControlRegistry(Type elementType, out IV1HandlerEntry entry)
+    {
+        if (V1Protocol.ControlRegistry.TryResolve(elementType, out var factory))
+        {
+            entry = factory();
+            // _v1Handlers is UI-thread-only; the caller has already verified
+            // there is no per-host entry for this element type, so the Add
+            // can never see a duplicate it didn't itself just plant.
+            _v1Handlers.Add(elementType, entry);
+            return true;
+        }
+
+        entry = null!;
+        return false;
+    }
+
+    /// <summary>
     /// Associates a control with its current element via Tag.
     /// Only call for interactive controls that need the Tag-based event handler pattern.
     /// Layout-only controls (Border, StackPanel, TextBlock, etc.) should NOT set Tag

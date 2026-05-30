@@ -104,9 +104,9 @@ public sealed partial class Reconciler
         try
         {
 
-        // Spec 047 §14 Phase 4 (§4.5) — dispatch is V1 registry → external
-        // `_typeRegistry` → composition-primitive switch (legacy `UpdateXxx`
-        // arms deleted; V1 is the production path).
+        // Spec 048 §8 — four-arm dispatch precedence (matches Mount):
+        //   (1) per-host `_v1Handlers`, (2) per-host `_typeRegistry`,
+        //   (3) global `ControlRegistry`, (4) composition-primitive switch.
         // V1 Update returns the UIElement to install in the parent's
         // slot. Standard handlers always return `control` unchanged
         // (§13 Q12 — no substitution on the public author surface);
@@ -123,6 +123,11 @@ public sealed partial class Reconciler
         else if (_typeRegistry.TryGetValue(newEl.GetType(), out var reg))
         {
             result = reg.Update(oldEl, newEl, control, requestRerender, this);
+        }
+        else if (TryResolveFromControlRegistry(newEl.GetType(), out v1Entry))
+        {
+            var v1Result = v1Entry.Update(oldEl, newEl, control, requestRerender, this);
+            result = ReferenceEquals(v1Result, control) ? null : v1Result;
         }
         else
         {

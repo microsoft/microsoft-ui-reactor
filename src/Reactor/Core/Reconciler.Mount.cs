@@ -58,10 +58,14 @@ public sealed partial class Reconciler
         try
         {
 
-        // Spec 047 §14 Phase 4 — dispatch is V1 registry → external
-        // `_typeRegistry` → composition-primitive switch. The V1-reachable
-        // element types route through `_v1Handlers`; only the 4 composition
-        // primitives (above the protocol) remain on the switch.
+        // Spec 048 §8 — four-arm dispatch precedence:
+        //   (1) per-host `_v1Handlers` (explicit RegisterHandler + cached
+        //       global registry hits),
+        //   (2) per-host `_typeRegistry` (legacy RegisterType callbacks),
+        //   (3) global `ControlRegistry` (lazy factory-as-registration table),
+        //   (4) composition-primitive switch (Func/Memo/Error boundary…).
+        // Arm 1 is the fast steady-state path; arm 3 caches into
+        // _v1Handlers on first hit so arm 1 catches it next time.
         if (_v1Handlers.TryGet(element.GetType(), out var v1Entry))
         {
             control = v1Entry.Mount(element, requestRerender, this);
@@ -70,6 +74,10 @@ public sealed partial class Reconciler
         else if (_typeRegistry.TryGetValue(element.GetType(), out var reg))
         {
             control = reg.Mount(element, requestRerender, this);
+        }
+        else if (TryResolveFromControlRegistry(element.GetType(), out v1Entry))
+        {
+            control = v1Entry.Mount(element, requestRerender, this);
         }
         else
         {

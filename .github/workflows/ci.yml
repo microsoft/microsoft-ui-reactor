@@ -261,6 +261,53 @@ jobs:
           path: aot-selftest-output.tap
           if-no-files-found: ignore
 
+  aot-trim-proof:
+    name: AOT Trim Proof
+    needs: changes
+    if: needs.changes.outputs.non-md == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5.3.0
+        with:
+          dotnet-version: 10.0.x
+
+      # Spec 048 §13.2 — AOT/trim proof. Publishes the minimal Hello-World
+      # app (TextBlock + Button only) with NativeAOT, then asserts the
+      # produced binary does NOT contain symbols that lazy registration
+      # was supposed to leave dead (MarqueeControl/MarqueeHandler in
+      # Phase 2; expanded to built-ins in Phase 3).
+      # See tests/aot_trim_proof/README.md for the local runbook.
+      - name: Publish AOT Hello-World
+        run: >
+          dotnet publish tests/aot_trim_proof/Reactor.AotHelloWorld
+          -p:PublishAotInternal=true
+          -p:Platform=x64
+          -r win-x64
+          -c Release
+          -o ${{ runner.temp }}/aot-hello-world
+          --nologo
+
+      - name: Run trim assertions
+        shell: pwsh
+        env:
+          REACTOR_AOT_PUBLISH_DIR: ${{ runner.temp }}/aot-hello-world
+        run: |
+          dotnet test tests/aot_trim_proof/Reactor.AotHelloWorld.TrimAssertions `
+            --nologo `
+            --logger "console;verbosity=normal"
+
+      - name: Upload published binary on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: aot-hello-world-publish
+          path: ${{ runner.temp }}/aot-hello-world
+          if-no-files-found: ignore
+
   docs-check-tier:
     name: Docs tier-drift
     needs: changes

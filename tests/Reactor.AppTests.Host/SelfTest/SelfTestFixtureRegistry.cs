@@ -1196,6 +1196,15 @@ internal static class SelfTestFixtureRegistry
         "EventStateSplit_DualReturnIdempotent",
         "EventStateSplit_ModifierStateLazyForIntrinsicOnly",
         "EventStateSplit_AddRawRoutedHandler_HandledEventsToo",
+
+        // Spec 048 §8 — global ControlRegistry dispatch precedence fixtures.
+        // Validate that handlers registered via ControlRegistry.Register
+        // resolve via the new arm-3 fallback in Reconciler.Mount/Update,
+        // and that per-host caching / shadow precedence work end-to-end
+        // against a live WinUI control.
+        "Spec048_GlobalRegistry_Mount_DispatchesThroughArm3",
+        "Spec048_GlobalRegistry_FactoryCachedAfterFirstHit",
+        "Spec048_PerHost_RegisterHandler_ShadowsGlobal",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -2361,6 +2370,11 @@ internal static class SelfTestFixtureRegistry
         "EventStateSplit_DualReturnIdempotent" => new Spec047EventStateSplitFixtures.DualReturnIdempotent(harness),
         "EventStateSplit_ModifierStateLazyForIntrinsicOnly" => new Spec047EventStateSplitFixtures.ModifierStateLazyForIntrinsicOnly(harness),
         "EventStateSplit_AddRawRoutedHandler_HandledEventsToo" => new Spec047EventStateSplitFixtures.AddRawRoutedHandler_HandledEventsToo(harness),
+
+        // Spec 048 §8 — global ControlRegistry dispatch precedence fixtures.
+        "Spec048_GlobalRegistry_Mount_DispatchesThroughArm3" => new Spec048ControlRegistryFixtures.GlobalRegistry_Mount_DispatchesThroughArm3(harness),
+        "Spec048_GlobalRegistry_FactoryCachedAfterFirstHit" => new Spec048ControlRegistryFixtures.GlobalRegistry_FactoryCachedAfterFirstHit(harness),
+        "Spec048_PerHost_RegisterHandler_ShadowsGlobal" => new Spec048ControlRegistryFixtures.PerHost_RegisterHandler_ShadowsGlobal(harness),
 
         _ => null,
     };
