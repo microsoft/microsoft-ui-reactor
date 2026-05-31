@@ -48,6 +48,17 @@ internal sealed class ReconcileHighlightOverlay : IDisposable
     /// <summary>Max live sprites in the container — skip adding new ones if exceeded.</summary>
     private const int MaxLiveSprites = 500;
 
+    /// <summary>
+    /// Tolerance (in DIPs) for "is this offset effectively at the host origin"
+    /// checks. <see cref="UIElement.TransformToVisual"/> returns exact 0 for
+    /// both legitimately-at-host-origin elements and stale-arrange elements,
+    /// but WinUI sub-pixel rounding can produce values like 0.0003f for the
+    /// former; the small tolerance keeps the heuristic robust without ever
+    /// mis-classifying a real layout offset (smallest visible layout
+    /// movement is ~1 DIP).
+    /// </summary>
+    private const float OriginEpsilonDip = 0.5f;
+
     private static readonly global::Windows.UI.Color MountedColor =
         global::Windows.UI.Color.FromArgb(255, 220, 40, 40);   // red — mounted
     private static readonly global::Windows.UI.Color ModifiedColor =
@@ -181,7 +192,9 @@ internal sealed class ReconcileHighlightOverlay : IDisposable
         // Both cases are transient — one more layout pass on the target
         // (Loaded + LayoutUpdated) gives the real position. Defer the
         // initial paint to that pass instead of stamping a (0, 0) ghost.
-        if (offset.X == 0f && offset.Y == 0f && !IsAnchoredAtHostOrigin(target, host))
+        if (MathF.Abs(offset.X) <= OriginEpsilonDip
+            && MathF.Abs(offset.Y) <= OriginEpsilonDip
+            && !IsAnchoredAtHostOrigin(target, host))
         {
             // Count the deferred sprite against the per-flush budget too —
             // otherwise a flush with many newly-mounted stale-(0,0) targets
@@ -216,10 +229,14 @@ internal sealed class ReconcileHighlightOverlay : IDisposable
                 // Canvas.Left/Top dominate when the parent is a Canvas; any
                 // non-zero attached value means this node is offset within
                 // its parent — so (0,0) transform from below is the stale arm.
+                // Use a tolerance instead of exact `!= 0` so subpixel layout
+                // values don't slip through (default unset is NaN, guarded
+                // separately).
+                const double canvasEpsilon = 1e-6;
                 var left = Canvas.GetLeft(fe);
                 var top = Canvas.GetTop(fe);
-                if (!double.IsNaN(left) && left != 0) return false;
-                if (!double.IsNaN(top) && top != 0) return false;
+                if (!double.IsNaN(left) && Math.Abs(left) > canvasEpsilon) return false;
+                if (!double.IsNaN(top) && Math.Abs(top) > canvasEpsilon) return false;
             }
             node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node);
         }
@@ -260,7 +277,10 @@ internal sealed class ReconcileHighlightOverlay : IDisposable
                 offset = new Vector3((float)pos.X, (float)pos.Y, 0);
             }
             catch (ArgumentException) { fe.LayoutUpdated -= handler; return; }
-            if (!forcePaint && offset.X == 0f && offset.Y == 0f && !IsAnchoredAtHostOrigin(target, host))
+            if (!forcePaint
+                && MathF.Abs(offset.X) <= OriginEpsilonDip
+                && MathF.Abs(offset.Y) <= OriginEpsilonDip
+                && !IsAnchoredAtHostOrigin(target, host))
                 return;
             fe.LayoutUpdated -= handler;
             if (_container.Children.Count >= MaxLiveSprites) return;
