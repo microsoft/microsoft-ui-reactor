@@ -1715,27 +1715,55 @@ public static partial class Factories
 
     public static ImageIconData ImageIcon(global::System.Uri source) => new(source);
 
+    /// <summary>
+    /// Spec 048 §3.4 — one-shot registration latch for the Icon decorator
+    /// family. The handler is a private nested singleton
+    /// (<c>Desc.IconDescriptor.Handler</c>) and therefore cannot satisfy
+    /// the <c>new()</c> constraint that
+    /// <see cref="V1.RegDecorator{TElement, THandler}"/> requires, so this
+    /// shim hand-rolls the same closed-generic cctor pattern: every Icon
+    /// factory overload touches <see cref="Done"/>, but only the first
+    /// touch per process incurs the
+    /// <see cref="V1.ControlRegistry.RegisterDecorator{TElement}"/> call
+    /// (with its <c>adapterFactory</c> closure allocation and
+    /// <c>TryAdd</c> insertion). Steady-state cost is one indirect load
+    /// matching the <see cref="V1.Reg{TElement, TControl, THandler}.Done"/>
+    /// cost model.
+    /// </summary>
+    private static class IconRegistration
+    {
+        // Explicit (empty) static constructor — disables `beforefieldinit`
+        // so Init() runs precisely on the first read of Done (the factory
+        // touch), not earlier. Matches the Reg<>/RegDecorator<> shape.
+        static IconRegistration() { }
+
+        internal static readonly byte Done = Init();
+
+        private static byte Init()
+        {
+            V1.ControlRegistry.RegisterDecorator<Core.IconElement>(static () => Desc.IconDescriptor.Handler);
+            return 1;
+        }
+    }
+
     /// <summary>Creates a standalone icon element from an <see cref="IconData"/> instance.</summary>
     public static Core.IconElement Icon(IconData data)
     {
-        // Spec 048 §3.4 — singleton-handler decorator: bypass RegDecorator<>
-        // (handler isn't `new()`-constructible because it's a private nested
-        // type exposed only via Desc.IconDescriptor.Handler).
-        V1.ControlRegistry.RegisterDecorator<Core.IconElement>(static () => Desc.IconDescriptor.Handler);
+        _ = IconRegistration.Done;
         return new(data);
     }
 
     /// <summary>Creates a standalone symbol icon element from a <see cref="Symbol"/> enum value.</summary>
     public static Core.IconElement Icon(Symbol symbol)
     {
-        V1.ControlRegistry.RegisterDecorator<Core.IconElement>(static () => Desc.IconDescriptor.Handler);
+        _ = IconRegistration.Done;
         return new(new SymbolIconData(symbol.ToString()));
     }
 
     /// <summary>Creates a standalone symbol icon element (e.g. <c>Icon("Home")</c>).</summary>
     public static Core.IconElement Icon(string symbol)
     {
-        V1.ControlRegistry.RegisterDecorator<Core.IconElement>(static () => Desc.IconDescriptor.Handler);
+        _ = IconRegistration.Done;
         return new(new SymbolIconData(symbol));
     }
 

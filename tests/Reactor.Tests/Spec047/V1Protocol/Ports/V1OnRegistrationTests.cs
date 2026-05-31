@@ -35,8 +35,11 @@ public class V1OnRegistrationTests
     {
         // XamlPageElement / XamlHostElement install themselves into the
         // global ControlRegistry from their static ctors (see XamlInterop.cs).
-        // Constructing one (or touching the type) is enough; the test bootstrap
-        // also primes them.
+        // The test bootstrap explicitly primes these entries — note that
+        // a bare `typeof(XamlPageElement)` is NOT sufficient to trigger
+        // the type initializer; only constructing an instance or
+        // accessing a static member does. The assertion below passes
+        // because of the bootstrap-driven registration, not the typeof.
         Assert.True(ControlRegistry.TryResolve(typeof(XamlPageElement), out _));
         Assert.True(ControlRegistry.TryResolve(typeof(XamlHostElement), out _));
     }

@@ -95,12 +95,18 @@ public sealed class TrimAssertionTests
         // (§3.4), each handler is rooted only by its factory's Reg<>.Done
         // touch; an uncalled factory means a cold closed-generic Reg<> slot
         // and a trimmable handler type.
-        "TreeViewHandler",
+        //
+        // NOTE: descriptor-backed controls compile to *DescriptorHandler
+        // (e.g. TreeViewDescriptorHandler), not bare *Handler — the trim
+        // assertion must use the real class names or a positive substring
+        // match will never trigger and the guard becomes vacuous for those
+        // entries.
+        "TreeViewDescriptorHandler",
         "GridViewHandler",
-        "TabViewHandler",
+        "TabViewDescriptorHandler",
         "ListViewHandler",
-        "FlipViewHandler",
-        "PivotHandler",
+        "FlipViewDescriptorHandler",
+        "PivotDescriptorHandler",
         "NavigationViewDescriptorHandler",
         "CalendarViewDescriptorHandler",
         "CalendarDatePickerDescriptorHandler",

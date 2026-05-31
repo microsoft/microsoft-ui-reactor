@@ -37,12 +37,17 @@ internal static partial class Factories
 internal static class Reg<TElement, TControl, THandler>
     where THandler : IElementHandler<TElement, TControl>, new()
 {
+    // Explicit (empty) static constructor — disables `beforefieldinit` so
+    // Init() runs precisely on the first read of Done (the factory touch),
+    // not earlier.
+    static Reg() { }
+
     internal static readonly byte Done = Init();
 
     private static byte Init()
     {
         ControlRegistry.Register<TElement, TControl>(static () => new THandler());
-        return 0;
+        return 1;
     }
 }
 ```
@@ -167,7 +172,8 @@ per process — at first-touch of `Done`. That single call:
 1. Allocates one delegate (`static () => new THandler()`).
 2. Calls `ControlRegistry.Register<TElement, TControl>` → one
    `ConcurrentDictionary.TryAdd` over a closed key type.
-3. Returns `0`.
+3. Returns `1` (a non-zero sentinel asserted by the unit tests in
+   `RegTests`).
 
 This is *not* measured here (it's a one-shot per type per process — the
 bench drives 100M iterations against an already-warm slot). The full

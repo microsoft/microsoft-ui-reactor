@@ -79,14 +79,19 @@ internal static class RegDecorator<TElement, THandler>
     where TElement : Element
     where THandler : IDecoratorElementHandler<TElement>, new()
 {
+    // Explicit (empty) static constructor — disables `beforefieldinit` so
+    // Init() runs precisely on the first read of Done (the factory touch),
+    // not earlier. See Reg<>.cctor for the full rationale.
+    static RegDecorator() { }
+
     /// <summary>
     /// The static-field touch that drives the decorator registration path.
     /// Reading this field once on a fresh closed-generic instantiation
-    /// triggers the CLR's beforefieldinit cctor, which runs <see cref="Init"/>
-    /// and registers the decorator handler factory with the global
-    /// <see cref="ControlRegistry"/>. The actual <see cref="byte"/> value
-    /// is unused — the field is a side-effect carrier sized for minimum
-    /// per-closed-generic static-data footprint.
+    /// triggers the closed generic's precise before-first-use cctor, which
+    /// runs <see cref="Init"/> and registers the decorator handler factory
+    /// with the global <see cref="ControlRegistry"/>. The actual
+    /// <see cref="byte"/> value is unused — the field is a side-effect
+    /// carrier sized for minimum per-closed-generic static-data footprint.
     /// </summary>
     internal static readonly byte Done = Init();
 

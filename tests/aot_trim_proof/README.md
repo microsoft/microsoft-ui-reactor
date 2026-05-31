@@ -27,11 +27,13 @@ The body of `App.Render()` touches no other catalog factories.
 
 `Reactor.AotHelloWorld.TrimAssertions` is the **empirical guard**. It
 binary-scans the AOT-published output for forbidden symbols
-(`Marquee*`, `TreeViewHandler`, `GridViewHandler`, `TabViewHandler`,
-the descriptor-backed `*DescriptorHandler` set, and the Reactor-owned
-element-record names for the same controls) and fails loudly if any
-survive. It also asserts a positive control (the entry point name) so a
-future trimmer that strips everything cannot silently pass.
+(`Marquee*`, `GridViewHandler`, `ListViewHandler`, the descriptor-backed
+`*DescriptorHandler` set such as `TreeViewDescriptorHandler` /
+`TabViewDescriptorHandler` / `PivotDescriptorHandler`, and the
+Reactor-owned element-record names for the same controls) and fails
+loudly if any survive. It also asserts a positive control (the entry
+point name) so a future trimmer that strips everything cannot silently
+pass.
 
 > **§11 caveat applied.** Earlier drafts of the forbidden list also probed
 > WinUI control type names (`Microsoft.UI.Xaml.Controls.{TreeView, GridView,
@@ -90,10 +92,11 @@ the final empirical proof.
 
 ## CI runbook
 
-The `aot-trim-proof` job in `.github/workflows/ci.yml` runs after
-`aot-selftests`, publishes the Hello-World app with `-r win-x64
--p:PublishAot=true`, sets `REACTOR_AOT_PUBLISH_DIR` to the publish
-folder, and runs the assertion test project.
+The `aot-trim-proof` job in `.github/workflows/ci.yml` runs in parallel
+with the other CI jobs (gated only by the `changes` filter, not chained
+after `aot-selftests`), publishes the Hello-World app with
+`-r win-x64 -p:PublishAotInternal=true`, sets `REACTOR_AOT_PUBLISH_DIR`
+to the publish folder, and runs the assertion test project.
 
 A failure means **the trim contract broke**. Either:
 
@@ -104,12 +107,15 @@ A failure means **the trim contract broke**. Either:
    reachability chain in the published binary — `ILLink` warnings
    during `dotnet publish` are the first place to look.
 2. **A WinAppSDK SDK uplift re-rooted an internal type.** The
-   assertion's forbidden list intentionally includes a couple of
-   fully-qualified WinUI control names so this surfaces, but if a SDK
-   regression re-roots its own types and nothing in Reactor can
-   prevent it, the right fix is either to wait for the SDK to fix or
-   to remove that specific symbol from the forbidden list with a
-   citation to the SDK bug. **Do NOT** simply delete the assertion.
+   forbidden list intentionally scopes itself to *Reactor-owned*
+   class names (per the §11 caveat above — fully-qualified WinUI
+   control names like `Microsoft.UI.Xaml.Controls.TreeView` survive
+   in the published binary regardless of which Reactor factories are
+   reachable, so probing for them would produce false positives).
+   If a SDK regression re-roots Reactor-owned handler/element types
+   transitively, the right fix is either to wait for the SDK to fix
+   or to investigate why the Reactor-side closure no longer trims.
+   **Do NOT** simply delete the assertion.
 
 ## Failing-loud test
 

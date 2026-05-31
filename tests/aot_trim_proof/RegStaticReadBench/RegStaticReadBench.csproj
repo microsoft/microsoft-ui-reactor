@@ -10,15 +10,17 @@
         internal static class Reg<TElement, TControl, THandler>
             where THandler : IElementHandler<TElement, TControl>, new()
         {
+            static Reg() { }                                  // disables `beforefieldinit`
             internal static readonly byte Done = Init();
-            private static byte Init() { ControlRegistry.Register(...); return 0; }
+            private static byte Init() { ControlRegistry.Register(...); return 1; }
         }
 
     The factory just touches `_ = Reg<E, C, H>.Done;` — at JIT time, the
-    cctor is precise (no `beforefieldinit` because the static field has an
-    initializer that calls a method), but on each subsequent read the JIT
-    elides the cctor check (the runtime tracks "cctor has run" per closed
-    generic). The steady-state cost is one indirect load.
+    cctor is precise before-first-use (the explicit empty static
+    constructor disables the `beforefieldinit` flag a type without an
+    explicit cctor would otherwise carry), but on each subsequent read the
+    JIT elides the cctor check (the runtime tracks "cctor has run" per
+    closed generic). The steady-state cost is one indirect load.
 
     This bench drives that pattern with a single closed-generic helper
     type and a paired empty-loop control. The delta should be near-zero

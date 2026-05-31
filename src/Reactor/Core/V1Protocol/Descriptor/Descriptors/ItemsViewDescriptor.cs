@@ -91,6 +91,11 @@ internal static class ItemsViewDescriptor
     /// </summary>
     internal static class Registration
     {
+        // Explicit (empty) static constructor — disables `beforefieldinit`
+        // so Init() runs precisely on the first read of Done (the factory
+        // touch), not earlier. Matches the Reg<>/RegDecorator<> shape.
+        static Registration() { }
+
         internal static readonly byte Done = Init();
 
         private static byte Init()

@@ -366,9 +366,17 @@ initialization rules mean the registration is in place before any
 | `ControlRegistry.RegisterDecoratorForDerivedTypes<TBase>(...)` | Same as above for decorator handlers. |
 
 The built-in controls themselves register through `ControlRegistry`
-from their own factory holders — see
-`src/Reactor/Hosting/XamlInterop.cs` and the per-element-record
-`RegisterDecorator` cctors for the production shape. The
+via per-factory `Reg<>.Done` / `RegDecorator<>.Done` touches in
+`src/Reactor/Elements/Dsl.cs` (the closed-generic-cctor latch shape
+described in
+[Extending Reactor — Step 3](extending-reactor-controls.md#the-four-step-playbook)).
+A few cases use other shapes: the XAML interop bridges register from
+element-record static constructors in `src/Reactor/Hosting/XamlInterop.cs`,
+the Icon decorator family uses a private nested registration latch
+inside the `Icon(...)` factories (singleton handler can't satisfy the
+`new()` constraint), and the typed templated-list/items-repeater/items-view
+families use base-derived registration latches nested under their
+descriptor types. The
 [Hello-World AOT trim proof](https://github.com/microsoft/microsoft-ui-reactor/tree/main/tests/aot_trim_proof)
 is the authoritative test that this story holds end-to-end: an app
 whose `Render()` references only `TextBlock` and `Button` publishes
@@ -441,9 +449,17 @@ consults four sources in order; the first hit wins:
    `RegisterForDerivedTypes` / `RegisterDecoratorForDerivedTypes`,
    typically through a factory-holder's static constructor. This is
    the path every shipping control (built-in or custom) takes.
-4. **Composition primitives** — `VStack`, `HStack`, `Grid`, and the
-   other structural elements that compose into the reconciler's
-   internal panel handlers. These are not user-registrable.
+4. **Composition primitives** — the structural element records still
+   served by the reconciler's hand-coded switch arm after every
+   registry lookup misses. These are the component/host wrappers
+   (`ComponentElement`, `FuncElement`, `MemoElement`,
+   `ErrorBoundaryElement`), the validation helpers
+   (`FormFieldElement`, `ValidationVisualizerElement`,
+   `ValidationRuleElement`), the typed templated-tree host
+   (`TemplatedTreeViewElementBase`), and the command-host wrapper.
+   They are not user-registrable. (Panels like `VStack`/`HStack`/`Grid`
+   no longer land here — they register their handlers through source 3
+   like every other shipping control.)
 
 The Pattern A factory-holder shape (Step 3 of the
 [Extending Reactor playbook](extending-reactor-controls.md#the-four-step-playbook))

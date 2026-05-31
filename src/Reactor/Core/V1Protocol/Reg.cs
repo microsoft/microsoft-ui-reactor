@@ -68,14 +68,23 @@ internal static class Reg<TElement, TControl, THandler>
     where TControl : UIElement
     where THandler : IElementHandler<TElement, TControl>, new()
 {
+    // Explicit (empty) static constructor — disables the C# compiler's
+    // `beforefieldinit` flag and binds initialization to "precise
+    // before-first-use" semantics (ECMA-335 §I.8.9.5). Without this, the
+    // CLR is free to run Init() at any time before the first read of
+    // Done — including during the JIT of an unrelated method that merely
+    // references this closed generic — which would weaken the documented
+    // "first factory touch triggers registration" guarantee below.
+    static Reg() { }
+
     /// <summary>
     /// Spec §7 — the static-field touch that drives Pattern B registration.
     /// Reading this field once on a fresh closed-generic instantiation
-    /// triggers the CLR's beforefieldinit cctor, which runs <see cref="Init"/>
-    /// and registers the handler factory with the global
-    /// <see cref="ControlRegistry"/>. The actual <see cref="byte"/> value
-    /// is unused — the field is a side-effect carrier sized for minimum
-    /// per-closed-generic static-data footprint.
+    /// triggers the closed generic's precise before-first-use cctor, which
+    /// runs <see cref="Init"/> and registers the handler factory with the
+    /// global <see cref="ControlRegistry"/>. The actual <see cref="byte"/>
+    /// value is unused — the field is a side-effect carrier sized for
+    /// minimum per-closed-generic static-data footprint.
     /// </summary>
     internal static readonly byte Done = Init();
 

@@ -269,8 +269,15 @@ The facade stays intact — **`Factories` is not split** — because ILLink trim
 static methods member-by-member: an uncalled `Factories.TreeView()` (and the
 `Reg<>` touch in its body) is removed even though `Factories.Button()` is kept.
 
-This pattern is also available to 3P authors with large control libraries; Pattern A
-is just the lower-ceremony choice for one or two controls.
+The `Reg<>` / `RegDecorator<>` / `RegBase<>` / `RegBaseDecorator<>` shims that
+power this pattern are **`internal`** to the Reactor assembly — they are an
+implementation detail of how the built-in catalog registers, not a public
+extensibility surface. Third-party authors should use the Pattern A factory
+holder shape documented in
+[`docs/guide/extending-reactor-controls.md`](../guide/extending-reactor-controls.md);
+it produces an equivalent closed-generic-cctor latch using only public APIs
+(`ControlRegistry.Register` with a `static` lambda), at the cost of one
+hand-written holder per control instead of one parameterised generic frame.
 
 ### §7.1 Descriptor-backed built-ins — the thin-handler template
 

@@ -183,24 +183,29 @@ internal static class Sink
 
 // ─── The Reg<> shape under measurement ─────────────────────────────────────
 
-// Mirrors the spec §7 shape exactly — `static readonly byte Done = Init();`
-// is precise-cctor (not beforefieldinit) because the static field has an
-// initializer that calls a method. The runtime elides the cctor check on
-// subsequent reads of any closed generic whose cctor has already run, so
-// steady-state cost is one indirect load.
+// Mirrors the spec §7 shape exactly — the explicit (empty) static
+// constructor disables the C# compiler's `beforefieldinit` flag and binds
+// initialization to "precise before-first-use" semantics (ECMA-335
+// §I.8.9.5), so Init() runs on the first read of Done and not earlier.
+// The runtime elides the cctor check on subsequent reads of any closed
+// generic whose cctor has already run, so steady-state cost is one
+// indirect load.
 internal static class Reg<TElement, TControl, THandler>
     where TElement : new()
     where TControl : new()
     where THandler : new()
 {
+    static Reg() { }
+
     internal static readonly byte Done = Init();
 
     private static byte Init()
     {
-        // The real Reg<> calls ControlRegistry.Register(...). For the bench
-        // we just return 0 — the cost of the static-field READ is what we
-        // measure, not the one-shot Init.
-        return 0;
+        // The real Reg<> calls ControlRegistry.Register(...) and returns 1
+        // (the non-zero sentinel asserted by RegTests). For the bench we
+        // just return 1 to match — the cost of the static-field READ is
+        // what we measure, not the one-shot Init.
+        return 1;
     }
 }
 

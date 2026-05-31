@@ -1,0 +1,78 @@
+Address PR #489 Copilot review feedback
+
+Triaged the 29 inline comments from copilot-pull-request-reviewer and
+landed targeted fixes for the actionable findings. Skipped pure style
+nits and false positives.
+
+Correctness fixes
+- Trim-assertion forbidden list (TrimAssertionTests.cs): rename
+  TreeViewHandler / TabViewHandler / FlipViewHandler / PivotHandler to
+  the real *DescriptorHandler class names. The old strings would never
+  match any symbol in the published binary, silently making the trim
+  guard vacuous for those four descriptor-backed controls. Real
+  correctness bug.
+- Icon DSL overloads (Dsl.cs): replace the per-call
+  ControlRegistry.RegisterDecorator with a one-shot IconRegistration
+  latch. The singleton-handler decorator can't satisfy RegDecorator<>'s
+  new() constraint, so we hand-roll the same closed-generic cctor
+  pattern. Steady-state cost is now one indirect load, matching the
+  Reg<>.Done cost model instead of allocating an adapterFactory closure
+  and hitting ConcurrentDictionary.TryAdd on every Icon(...) call.
+
+Registration timing — explicit static constructors
+- Add explicit (empty) static constructors to Reg<>, RegDecorator<>,
+  RegBase<>, RegBaseDecorator<>, ItemsRepeaterDescriptor.Registration,
+  ItemsViewDescriptor.Registration, and the bench Reg<> shim. C#
+  emits these types with the beforefieldinit flag otherwise, which
+  lets the CLR run Init() at any point before the first Done read
+  (including during JIT of an unrelated method). The explicit cctor
+  binds initialization to precise before-first-use (ECMA-335 §I.8.9.5),
+  matching the documented "first factory touch triggers registration"
+  guarantee.
+- Update XML comments / inline comments / bench csproj / phase2-baseline
+  snippet to say "precise before-first-use" instead of "beforefieldinit".
+
+Doc/comment accuracy fixes
+- aot_trim_proof/README.md: CI runbook now correctly states the
+  aot-trim-proof job runs gated only by the changes filter (not
+  chained after aot-selftests) and publishes with PublishAotInternal=true
+  (not PublishAot=true). Troubleshooting bullet no longer claims the
+  forbidden list includes fully-qualified WinUI control names — it
+  doesn't, per the §11 caveat (WinAppSDK's CsWinRT projection table
+  keeps those names regardless of Reactor-side rooting).
+- Bench Program.cs / csproj comments / phase2-baseline.md: Reg<>.Init
+  returns 1 (the non-zero sentinel RegTests assert), not 0.
+- control-reconciler-protocol.md.dt: Built-ins primarily register
+  through per-factory Reg<>.Done / RegDecorator<>.Done touches in
+  Dsl.cs — not per-element-record cctors. Also clarify the
+  dispatch-precedence arm 4 list: VStack/HStack/Grid go through global
+  ControlRegistry (arm 3); arm 4 is the component/host/validation
+  wrapper set (ComponentElement, FuncElement, MemoElement,
+  ErrorBoundaryElement, FormFieldElement, ValidationVisualizerElement,
+  ValidationRuleElement, TemplatedTreeViewElementBase, CommandHostElement).
+- V1OnRegistrationTests.cs: drop the claim that typeof(XamlPageElement)
+  triggers the type initializer — it doesn't; only constructing an
+  instance or accessing a static member does. The test passes because
+  the bootstrap explicitly primes registration.
+- spec 048 §7: Reg<>/RegDecorator<>/RegBase<>/RegBaseDecorator<> are
+  internal to the Reactor assembly; Pattern A is the only third-party
+  authoring surface. Update the prose so external authors aren't
+  directed at an inaccessible API.
+
+Skipped (false positives / style nits)
+- "Use .Where instead of foreach+if" in TrimAssertionTests:244 —
+  semantically equivalent, no behavior change.
+- "Path.Combine may silently drop earlier arguments" — segments are
+  compile-time string literals; rooted-input branch can't fire.
+- github-code-quality bot's "static field write from instance ctor"
+  comments on test counter helpers — standard idiomatic pattern for
+  per-handler-construction counting; wrapping the Interlocked.Increment
+  in a private static helper adds indirection without changing whether
+  the static write happens inside the instance call graph.
+
+Tests
+- dotnet build src/Reactor — 0 errors
+- dotnet test tests/Reactor.Tests — 9176 passed / 0 failed / 62 skipped
+- mur docs compile — clean (control-reconciler-protocol.md regenerated)
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>

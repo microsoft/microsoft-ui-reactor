@@ -39,12 +39,18 @@ internal static class RegBase<TBase, TControl, THandler>
     where TControl : UIElement
     where THandler : IElementHandler<TBase, TControl>, new()
 {
+    // Explicit (empty) static constructor — disables `beforefieldinit` so
+    // Init() runs precisely on the first read of Done (the factory touch),
+    // not earlier. See Reg<>.cctor for the full rationale.
+    static RegBase() { }
+
     /// <summary>
     /// The static-field touch that drives base-derived registration. Reading
     /// this field once on a fresh closed-generic instantiation triggers the
-    /// CLR's beforefieldinit cctor, which runs <see cref="Init"/> and
-    /// registers the handler factory under <typeparamref name="TBase"/> in
-    /// the global <see cref="ControlRegistry"/>.
+    /// closed generic's precise before-first-use cctor, which runs
+    /// <see cref="Init"/> and registers the handler factory under
+    /// <typeparamref name="TBase"/> in the global
+    /// <see cref="ControlRegistry"/>.
     /// </summary>
     internal static readonly byte Done = Init();
 
