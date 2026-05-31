@@ -27,6 +27,11 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 /// <summary>§14 prelude — typed templated lists (ListView/GridView/FlipView&lt;T&gt;).</summary>
 internal sealed class TemplatedListHandler : IDecoratorElementHandler<TemplatedListElementBase>
 {
+    // Public ctor required by the `new()` constraint on
+    // `RegBaseDecorator<TBase, THandler>.Done` (spec-048 §3.4 base-derived
+    // global registration path).
+    public TemplatedListHandler() { }
+
     public UIElement Mount(MountContext ctx, TemplatedListElementBase el)
         => TemplatedListLifecycle.Mount(ctx.Reconciler, el, ctx.RequestRerender);
 

@@ -29,6 +29,11 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 /// <summary>§14 prelude — Lazy*Stack (ScrollViewer-wrapped virtualizing list).</summary>
 internal sealed class LazyStackHandler : IDecoratorElementHandler<LazyStackElementBase>
 {
+    // Public ctor required by the `new()` constraint on
+    // `RegBaseDecorator<TBase, THandler>.Done` (spec-048 §3.4 base-derived
+    // global registration path).
+    public LazyStackHandler() { }
+
     public UIElement Mount(MountContext ctx, LazyStackElementBase el)
         => LazyStackLifecycle.Mount(ctx.Reconciler, el, ctx.RequestRerender);
 

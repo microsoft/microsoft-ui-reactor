@@ -633,7 +633,7 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                 splitterDiagnosticSink: splitterTraceSink),
             DockTabGroup grp => RenderTabGroup(grp, path),
             DockableContent leaf => WrapLeafWithPaneContext(leaf),
-            _ => new BorderElement(null),
+            _ => Border(null),
         };
 
         // §2.10 — tab-group render wrapper. Applies the selected-index
@@ -912,7 +912,7 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         }
 
         Element body = effectiveLayout is null
-            ? new BorderElement(null)
+            ? Border(null)
             : BuildNode(effectiveLayout, path: "0");
 
         // ── Side strips + side popup (§2.5). Elide entirely when no
@@ -1359,8 +1359,8 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
         // Tool windows in upstream don't carry the same padding; §2.8
         // splits ToolWindow into a separate type — when the renderer
         // distinguishes them we can drop padding on the tool variant.
-        var content = leaf.Content ?? (Element)new BorderElement(null);
-        var padded = new BorderElement(content)
+        var content = leaf.Content ?? (Element)Border(null);
+        var padded = Border(content) with
         {
             Background = null,
             BorderThickness = 0,
@@ -1510,7 +1510,7 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                 {
                     if (ReferenceEquals(children[i], node)) { idx = i; break; }
                 }
-                return idx >= 0 ? ChildAt(idx) : new BorderElement(null);
+                return idx >= 0 ? ChildAt(idx) : Border(null);
             },
             onSplitterDelta: (idx, delta, hostExtent, isFinal) =>
             {

@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using WinUI = Microsoft.UI.Xaml.Controls;
+using static Microsoft.UI.Reactor.Factories;
 
 namespace Microsoft.UI.Reactor.Core;
 
@@ -73,8 +74,8 @@ internal static class ErrorFallback
     /// the stack trace remains visible/copyable.
     /// </summary>
     public static Element BuildElement(Exception ex) =>
-        new ScrollViewerElement(
-            new TextBlockElement($"⚠ Render error: {ex.GetType().Name}: {ex.Message}\n\n{ex}")
+        ScrollViewer(
+            TextBlock($"⚠ Render error: {ex.GetType().Name}: {ex.Message}\n\n{ex}") with
             {
                 TextWrapping = TextWrapping.Wrap,
                 IsTextSelectionEnabled = true,

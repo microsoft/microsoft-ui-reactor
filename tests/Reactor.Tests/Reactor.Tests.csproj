@@ -30,6 +30,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\_shared\BuiltInHandlerBootstrap.cs" Link="BuiltInHandlerBootstrap.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Reactor\Reactor.csproj" />
     <ProjectReference Include="..\..\src\Reactor.Localization.Generator\Reactor.Localization.Generator.csproj" />
     <ProjectReference Include="..\..\src\Reactor.Cli\Reactor.Cli.csproj" />

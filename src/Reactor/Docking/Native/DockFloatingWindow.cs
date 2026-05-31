@@ -269,7 +269,7 @@ public static class DockFloatingWindow
         // WinUI OLE drag with the cross-window session begin handler.
         var rendered = (TabViewElement)DockTabGroupRenderer.Render(
             tabGroup,
-            renderLeafContent: doc => doc.Content ?? (Element)new BorderElement(null),
+            renderLeafContent: doc => doc.Content ?? (Element)Border(null),
             onSelectedIndexChanged: null,
             onTabClosing: onTabClosing,
             onTabDragStarting: onTabImmediateTearOff is null ? (doc, idx) =>
@@ -314,7 +314,7 @@ public static class DockFloatingWindow
         // assigned at the end of the reconcile pass — so at OnMount
         // time the Border lives in a detached subtree and SetTitleBar
         // silently no-ops.
-        var dragRegion = new BorderElement(null)
+        var dragRegion = Border(null)
             .HAlign(HorizontalAlignment.Stretch)
             .VAlign(VerticalAlignment.Stretch)
             .MinWidth(180)

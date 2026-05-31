@@ -287,7 +287,7 @@ public abstract record Element
     /// Convenience: implicitly convert a string to a TextBlockElement.
     /// Allows writing: VStack("Hello", "World") instead of VStack(Text("Hello"), Text("World"))
     /// </summary>
-    public static implicit operator Element(string text) => new TextBlockElement(text);
+    public static implicit operator Element(string text) => Microsoft.UI.Reactor.Factories.TextBlock(text);
 
     // ════════════════════════════════════════════════════════════════════════
     //  Fast structural comparison for reconciler short-circuit

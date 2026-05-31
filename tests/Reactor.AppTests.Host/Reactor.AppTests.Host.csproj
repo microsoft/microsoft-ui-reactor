@@ -50,6 +50,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\_shared\BuiltInHandlerBootstrap.cs" Link="BuiltInHandlerBootstrap.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Reactor\Reactor.csproj" />
     <!-- Standalone library used by Issue142_ThirdPartyControlPrivateDp_Renders to
          simulate a 3P control NuGet referenced from a Reactor app that has its

@@ -80,4 +80,24 @@ internal static class ItemsViewDescriptor
         },
         _ => new WinUI.StackLayout { Spacing = 4 },
     };
+
+    /// <summary>
+    /// Spec 048 §3.4 — closed-generic registration latch. Reading
+    /// <see cref="Done"/> from inside the <c>ItemsView&lt;T&gt;</c> factory
+    /// runs this cctor exactly once per process, which registers the
+    /// descriptor against <see cref="ItemsViewElementBase"/> in the
+    /// global <see cref="ControlRegistry"/>. Every closed-T variant
+    /// dispatches via the base-derived fallback.
+    /// </summary>
+    internal static class Registration
+    {
+        internal static readonly byte Done = Init();
+
+        private static byte Init()
+        {
+            ControlRegistry.RegisterForDerivedTypes<ItemsViewElementBase, WinUI.ItemsView>(
+                static () => new DescriptorHandler<ItemsViewElementBase, WinUI.ItemsView>(Descriptor));
+            return 1;
+        }
+    }
 }

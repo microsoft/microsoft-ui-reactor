@@ -561,7 +561,7 @@ internal sealed class MarkdownBuilder
         else
         {
             element = Border(
-                new RichTextBlockElement("")
+                RichTextBlock("") with
                 {
                     Paragraphs = [new RichTextParagraph([
                         new RichTextRun(code) { FontFamily = _options.CodeFontFamily }
@@ -909,7 +909,7 @@ internal sealed class MarkdownBuilder
 
     private static RichTextBlockElement MakeRichText(RichTextInline[] inlines, double? fontSize = null)
     {
-        return new RichTextBlockElement("")
+        return RichTextBlock("") with
         {
             Paragraphs = [new RichTextParagraph(inlines)],
             FontSize = fontSize,

@@ -1,5 +1,6 @@
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Xaml.Controls;
+using static Microsoft.UI.Reactor.Factories;
 
 namespace Microsoft.UI.Reactor.Docking.Native;
 
@@ -95,7 +96,7 @@ internal static class DockTabGroupRenderer
             // group means the caller is responsible for elision; the
             // renderer always produces *something* so the tree never has
             // a null child.
-            return new BorderElement(null);
+            return Border(null);
         }
 
         // §2.8 — apply default tab styling based on content type when the
@@ -124,7 +125,7 @@ internal static class DockTabGroupRenderer
         for (int i = 0; i < documents.Count; i++)
         {
             var doc = documents[i];
-            var body = renderLeafContent(doc) ?? new BorderElement(null);
+            var body = renderLeafContent(doc) ?? Border(null);
             var data = new TabViewItemData(doc.Title ?? string.Empty, body)
             {
                 IsClosable = doc.CanClose,
@@ -156,7 +157,7 @@ internal static class DockTabGroupRenderer
             ? group.SelectedIndex
             : 0;
 
-        var element = new TabViewElement(tabs)
+        var element = TabView(tabs) with
         {
             SelectedIndex = selected,
             OnSelectedIndexChanged = onSelectedIndexChanged,

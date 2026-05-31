@@ -695,15 +695,91 @@ hitting `Reg<TextBlockElement, …>` is silently absorbed — spec §10.3.)
 
 ### 3.4 Delete `RegisterV1BuiltInHandlers`
 
-- [ ] Remove the body of `RegisterV1BuiltInHandlers()` in
+- [x] Remove the body of `RegisterV1BuiltInHandlers()` in
       `src/Reactor/Core/Reconciler.cs:335`; remove the call from the
       ctor at `Reconciler.cs:265`. The Reconciler ctor no longer roots
       any handler or control type.
-- [ ] Confirm via `dotnet build Reactor.slnx -p:Platform=x64` that the
+- [x] Confirm via `dotnet build Reactor.slnx -p:Platform=x64` that the
       build is clean — i.e., no remaining call sites reference the
       removed method.
 
-> **§3.4 progress note — decorator global path landed (primitive only):**
+> **§3.4 close-out — pure option A (delete bootstrap; tests register
+> separately).**
+>
+> The Reconciler ctor and `RegisterV1BuiltInHandlers()` body are gone.
+> The two `RegisterDescriptor` / `RegisterDescriptorForDerivedTypes`
+> sugar wrappers were deleted along with the body (the only callers
+> were inside the deleted method). `IsElementTypeRegistered` is
+> preserved — it's still on the public `XamlInterop.Register` path
+> (legacy compat).
+>
+> **Registration semantics post-§3.4** — three precedence arms,
+> exactly as designed in spec §8:
+>
+> 1. **Per-host `_v1Handlers`** — populated only by an explicit
+>    `RegisterHandler<,>` / `RegisterDecoratorHandler<>` call.
+> 2. **Per-host `_typeRegistry`** — populated only by an explicit
+>    `RegisterType<,>` call (e.g. `XamlInterop.Register(reconciler)`
+>    on the legacy path).
+> 3. **Global `ControlRegistry`** — populated lazily by the
+>    closed-generic `Reg<>` / `RegDecorator<>` / `RegBase<>` /
+>    `RegBaseDecorator<>` cctor latches in `Dsl.cs`. A factory call
+>    runs the latch exactly once per process; manual callers can use
+>    `ControlRegistry.Register<,>` directly.
+>
+> Apps that construct an element record directly (e.g.
+> `new TextBlockElement("hi")`) without ever touching the matching
+> factory will throw on first mount with a diagnostic pointing at
+> issue #486 (defensive throw landed in commit `c8d1cd41`).
+>
+> **Issue #486 (deferred to future work)** — the direct-record-ctor
+> performance idiom (used by `StressPerf.ReactorOptimized` for a 4%
+> win) requires a one-time factory touch at app startup before the
+> hot loop runs. The optimized stress-perf benchmark was updated to
+> call `_ = Factories.TextBlock(string.Empty);` in `Main` before
+> `ReactorApp.Run`; the hot loop's `new TextBlockElement(...)` still
+> wins 4% because the registration cost has already been paid. A
+> future Roslyn analyzer could mechanise this (warn on
+> `new XxxElement(...)` if the matching factory isn't called from the
+> assembly); for now issue #486 documents the trade-off and the throw
+> guides users to the fix.
+>
+> **Test bootstrap** — `tests/_shared/BuiltInHandlerBootstrap.cs`
+> mirrors the deleted `RegisterV1BuiltInHandlers` body 1:1 against the
+> global `ControlRegistry`, gated by `[ModuleInitializer]`. Linked
+> (via `<Compile Include="..\_shared\..." Link="..."/>`) from
+> `Reactor.Tests.csproj` and `Reactor.AppTests.Host.csproj` so every
+> test assembly auto-registers all built-ins before any test runs.
+> This is allowed in test assemblies per spec §132-141 — only the
+> shipping `Reactor.dll` is forbidden from rooting handlers via
+> `[ModuleInitializer]`. The bootstrap is the only "manual" list left
+> in the codebase; when a new built-in handler is added it must be
+> wired both in `Dsl.cs` (production fan-out) and in this file
+> (test convenience).
+>
+> **Internal direct-record-ctor sites** that previously relied on the
+> Reconciler ctor bootstrap were converted to factory calls (~30
+> edits across `src/Reactor/Core`, `src/Reactor/Charting`,
+> `src/Reactor/Markdown`, `src/Reactor/Controls/DataGrid`,
+> `src/Reactor/Docking/Native/*`, and the `samples/` tree). One site
+> (`DataGridComponent.cs:953`'s `new GridElement(GridDefinition, …)`)
+> retained the direct ctor because no matching `Grid(...)` factory
+> overload exists; other `Grid(…)` calls in the same file register
+> the type, so the direct ctor is safe.
+>
+> **Verification** — `dotnet build Reactor.slnx -p:Platform=x64` 0
+> errors; `dotnet test tests/Reactor.Tests` 9176 passed / 0 failed;
+> `dotnet run --project tests/Reactor.AppTests.Host -- --self-test`
+> 0 failures (77 Spec048 checks + full WinUI selftest suite).
+>
+> **Failing-tests rewrite.** Seven xunit tests under
+> `Spec047/V1Protocol/Ports/*PortTests.cs` and `V1OnRegistrationTests.cs`
+> previously asserted that re-registering a built-in throws (because
+> the ctor had already registered it per-host). Under spec-048 §3.4
+> the per-host `_v1Handlers` is empty until the app explicitly
+> registers, so those throws no longer fire. Assertions were
+> rewritten to verify the global `ControlRegistry.TryResolve` finds
+> the handler — which is the post-§3.4 ground truth.
 >
 > Resolved the §3.3 "decorator-global-path" blocker that prevented every
 > decorator-backed element type from wiring `Reg<>.Done` registrations.

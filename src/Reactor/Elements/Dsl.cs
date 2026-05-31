@@ -1268,7 +1268,11 @@ public static partial class Factories
     public static TemplatedListViewElement<T> ListView<T>(
         IReadOnlyList<T> items,
         Func<T, string> keySelector,
-        Func<T, int, Element> viewBuilder) => new(items, keySelector, viewBuilder);
+        Func<T, int, Element> viewBuilder)
+    {
+        _ = V1.RegBaseDecorator<TemplatedListElementBase, V1.Handlers.TemplatedListHandler>.Done;
+        return new(items, keySelector, viewBuilder);
+    }
 
     /// <summary>
     /// Creates a typed, data-driven <see cref="TemplatedListViewElement{T}"/>
@@ -1278,8 +1282,11 @@ public static partial class Factories
     /// </summary>
     public static TemplatedListViewElement<T> ListView<T>(
         IReadOnlyList<T> items,
-        Func<T, int, Element> viewBuilder) where T : IReactorKeyed =>
-        new(items, static t => t.Key, viewBuilder);
+        Func<T, int, Element> viewBuilder) where T : IReactorKeyed
+    {
+        _ = V1.RegBaseDecorator<TemplatedListElementBase, V1.Handlers.TemplatedListHandler>.Done;
+        return new(items, static t => t.Key, viewBuilder);
+    }
 
     /// <summary>
     /// Creates a typed, data-driven <see cref="TemplatedGridViewElement{T}"/>
@@ -1292,7 +1299,11 @@ public static partial class Factories
     public static TemplatedGridViewElement<T> GridView<T>(
         IReadOnlyList<T> items,
         Func<T, string> keySelector,
-        Func<T, int, Element> viewBuilder) => new(items, keySelector, viewBuilder);
+        Func<T, int, Element> viewBuilder)
+    {
+        _ = V1.RegBaseDecorator<TemplatedListElementBase, V1.Handlers.TemplatedListHandler>.Done;
+        return new(items, keySelector, viewBuilder);
+    }
 
     /// <summary>
     /// <see cref="IReactorKeyed"/>-typed overload of
@@ -1301,8 +1312,11 @@ public static partial class Factories
     /// </summary>
     public static TemplatedGridViewElement<T> GridView<T>(
         IReadOnlyList<T> items,
-        Func<T, int, Element> viewBuilder) where T : IReactorKeyed =>
-        new(items, static t => t.Key, viewBuilder);
+        Func<T, int, Element> viewBuilder) where T : IReactorKeyed
+    {
+        _ = V1.RegBaseDecorator<TemplatedListElementBase, V1.Handlers.TemplatedListHandler>.Done;
+        return new(items, static t => t.Key, viewBuilder);
+    }
 
     /// <summary>
     /// Creates a typed, data-driven <see cref="TemplatedFlipViewElement{T}"/>
@@ -1315,7 +1329,11 @@ public static partial class Factories
     public static TemplatedFlipViewElement<T> FlipView<T>(
         IReadOnlyList<T> items,
         Func<T, string> keySelector,
-        Func<T, int, Element> viewBuilder) => new(items, keySelector, viewBuilder);
+        Func<T, int, Element> viewBuilder)
+    {
+        _ = V1.RegBaseDecorator<TemplatedListElementBase, V1.Handlers.TemplatedListHandler>.Done;
+        return new(items, keySelector, viewBuilder);
+    }
 
     /// <summary>
     /// <see cref="IReactorKeyed"/>-typed overload of
@@ -1324,8 +1342,11 @@ public static partial class Factories
     /// </summary>
     public static TemplatedFlipViewElement<T> FlipView<T>(
         IReadOnlyList<T> items,
-        Func<T, int, Element> viewBuilder) where T : IReactorKeyed =>
-        new(items, static t => t.Key, viewBuilder);
+        Func<T, int, Element> viewBuilder) where T : IReactorKeyed
+    {
+        _ = V1.RegBaseDecorator<TemplatedListElementBase, V1.Handlers.TemplatedListHandler>.Done;
+        return new(items, static t => t.Key, viewBuilder);
+    }
 
     // ── Virtualized collections ───────────────────────────────────
 
@@ -1343,7 +1364,11 @@ public static partial class Factories
     public static LazyVStackElement<T> LazyVStack<T>(
         IReadOnlyList<T> items,
         Func<T, string> keySelector,
-        Func<T, int, Element> viewBuilder) => new(items, keySelector, viewBuilder);
+        Func<T, int, Element> viewBuilder)
+    {
+        _ = V1.RegBaseDecorator<LazyStackElementBase, V1.Handlers.LazyStackHandler>.Done;
+        return new(items, keySelector, viewBuilder);
+    }
 
     /// <summary>
     /// <see cref="IReactorKeyed"/>-typed overload of
@@ -1352,8 +1377,11 @@ public static partial class Factories
     /// </summary>
     public static LazyVStackElement<T> LazyVStack<T>(
         IReadOnlyList<T> items,
-        Func<T, int, Element> viewBuilder) where T : IReactorKeyed =>
-        new(items, static t => t.Key, viewBuilder);
+        Func<T, int, Element> viewBuilder) where T : IReactorKeyed
+    {
+        _ = V1.RegBaseDecorator<LazyStackElementBase, V1.Handlers.LazyStackHandler>.Done;
+        return new(items, static t => t.Key, viewBuilder);
+    }
 
     /// <summary>
     /// Creates a virtualized horizontal stack of templated items — the horizontal
@@ -1366,7 +1394,11 @@ public static partial class Factories
     public static LazyHStackElement<T> LazyHStack<T>(
         IReadOnlyList<T> items,
         Func<T, string> keySelector,
-        Func<T, int, Element> viewBuilder) => new(items, keySelector, viewBuilder);
+        Func<T, int, Element> viewBuilder)
+    {
+        _ = V1.RegBaseDecorator<LazyStackElementBase, V1.Handlers.LazyStackHandler>.Done;
+        return new(items, keySelector, viewBuilder);
+    }
 
     /// <summary>
     /// <see cref="IReactorKeyed"/>-typed overload of
@@ -1375,8 +1407,11 @@ public static partial class Factories
     /// </summary>
     public static LazyHStackElement<T> LazyHStack<T>(
         IReadOnlyList<T> items,
-        Func<T, int, Element> viewBuilder) where T : IReactorKeyed =>
-        new(items, static t => t.Key, viewBuilder);
+        Func<T, int, Element> viewBuilder) where T : IReactorKeyed
+    {
+        _ = V1.RegBaseDecorator<LazyStackElementBase, V1.Handlers.LazyStackHandler>.Done;
+        return new(items, static t => t.Key, viewBuilder);
+    }
 
     /// <summary>
     /// Creates a virtualized <see cref="ItemsRepeaterElement{T}"/> — a bare
@@ -1392,7 +1427,11 @@ public static partial class Factories
     public static ItemsRepeaterElement<T> ItemsRepeater<T>(
         IReadOnlyList<T> items,
         Func<T, string> keySelector,
-        Func<T, int, Element> viewBuilder) => new(items, keySelector, viewBuilder);
+        Func<T, int, Element> viewBuilder)
+    {
+        _ = Desc.ItemsRepeaterDescriptor.Registration.Done;
+        return new(items, keySelector, viewBuilder);
+    }
 
     /// <summary>
     /// <see cref="IReactorKeyed"/>-typed overload of
@@ -1401,8 +1440,11 @@ public static partial class Factories
     /// </summary>
     public static ItemsRepeaterElement<T> ItemsRepeater<T>(
         IReadOnlyList<T> items,
-        Func<T, int, Element> viewBuilder) where T : IReactorKeyed =>
-        new(items, static t => t.Key, viewBuilder);
+        Func<T, int, Element> viewBuilder) where T : IReactorKeyed
+    {
+        _ = Desc.ItemsRepeaterDescriptor.Registration.Done;
+        return new(items, static t => t.Key, viewBuilder);
+    }
 
     // ── Shapes ───────────────────────────────────────────────────────
 
@@ -1580,7 +1622,11 @@ public static partial class Factories
     public static ItemsViewElement<T> ItemsView<T>(
         IReadOnlyList<T> items,
         Func<T, string> keySelector,
-        Func<T, int, Element> viewBuilder) => new(items, keySelector, viewBuilder);
+        Func<T, int, Element> viewBuilder)
+    {
+        _ = Desc.ItemsViewDescriptor.Registration.Done;
+        return new(items, keySelector, viewBuilder);
+    }
 
     // ── Rich text helpers ───────────────────────────────────────────
 

@@ -13,12 +13,13 @@ namespace Microsoft.UI.Reactor.Tests.Spec047.V1Protocol.Ports;
 public class ListViewPortTests
 {
     [Fact]
-    public void Flag_On_Registers_ListViewHandler_Automatically()
+    public void BuiltIn_ListViewHandler_In_Global_Registry()
     {
-        var rec = new Reconciler();
-        Assert.Throws<InvalidOperationException>(
-            () => rec.RegisterHandler<ListViewElement, Microsoft.UI.Xaml.Controls.ListView>(
-                new ListViewHandler()));
+        // Spec 048 §3.4 — test-only BuiltInHandlerBootstrap module
+        // initializer has touched Reg<ListViewElement, ListView, ListViewHandler>.Done,
+        // installing the closed-generic handler in the global ControlRegistry.
+        Assert.True(Microsoft.UI.Reactor.Core.V1Protocol.ControlRegistry.TryResolve(
+            typeof(ListViewElement), out _));
     }
 
     [Fact]
