@@ -164,7 +164,18 @@ Conventions for contributors:
   retired after the `TextFieldElement` → `TextBoxElement` rename. Use
   `TextBox(...)`.
 
+- **`MaskedTextFieldElement` renamed to `MaskedTextBoxElement`.** The
+  Reactor-original masked text input record was renamed to align with
+  WinUI's `TextBox` naming and Reactor's `TextBox()` factory (follow-on
+  to the `TextField` → `TextBox` rename). The fluent `.Changed(...)`
+  modifier now extends `MaskedTextBoxElement`. (issue #389)
+
 ### Deprecated
+
+- **`Microsoft.UI.Reactor.Controls.MaskedTextFieldDsl.MaskedTextField(...)`**
+  renamed to `MaskedTextBoxDsl.MaskedTextBox(...)`. Old name preserved as
+  an `[Obsolete]` forwarding alias for one release; slated for removal in
+  the next minor release. (issue #389)
 
 - **`Microsoft.UI.Reactor.Factories.Grid(string[], string[], …)`** —
   use the strongly-typed `Grid(GridSize[], GridSize[], …)` overload

@@ -376,7 +376,7 @@ ListViewElement.SelectionChanged(Action<IReadOnlyList<int>> handler) → ListVie
 ListViewElement.SelectionMode(ListViewSelectionMode mode) → ListViewElement
 ListViewElement.Set(Action<ListView> configure) → ListViewElement
 MapControlElement.Set(Action<MapControl> configure) → MapControlElement
-MaskedTextFieldElement.Changed(Action<string> handler) → MaskedTextFieldElement
+MaskedTextBoxElement.Changed(Action<string> handler) → MaskedTextBoxElement
 MediaPlayerElementElement.MediaEnded(Action handler) → MediaPlayerElementElement
 MediaPlayerElementElement.MediaFailed(Action<string> handler) → MediaPlayerElementElement
 MediaPlayerElementElement.MediaOpened(Action handler) → MediaPlayerElementElement

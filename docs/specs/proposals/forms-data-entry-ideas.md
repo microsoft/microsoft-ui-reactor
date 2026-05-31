@@ -472,11 +472,11 @@ SSN `___-__-____`, credit cards, dates, postal codes, IP addresses.
 
 ```csharp
 // Reactor
-MaskedTextField(phone, setPhone, mask: "(000) 000-0000",
+MaskedTextBox(phone, setPhone, mask: "(000) 000-0000",
     header: "Phone Number")
     .Validate(Required())
 
-MaskedTextField(ssn, setSsn, mask: "000-00-0000",
+MaskedTextBox(ssn, setSsn, mask: "000-00-0000",
     placeholder: '_')
 ```
 
@@ -796,7 +796,7 @@ class RegistrationForm : Component
                             .Focus(focus, "email", autoFocus: true)),
 
                     FormField("Phone",
-                        content: MaskedTextField(phone, setPhone,
+                        content: MaskedTextBox(phone, setPhone,
                             mask: "(000) 000-0000")),
 
                     FormField("Password", required: true,

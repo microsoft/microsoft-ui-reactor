@@ -455,7 +455,7 @@ public static partial class ElementExtensions
         el with { OnSelected = handler };
 
     /// <summary>Wires the text-changed handler. Passing <c>null</c> clears.</summary>
-    public static MaskedTextFieldElement Changed(this MaskedTextFieldElement el, Action<string>? handler) =>
+    public static MaskedTextBoxElement Changed(this MaskedTextBoxElement el, Action<string>? handler) =>
         el with { OnChanged = handler };
 
     /// <summary>Wires the root-changed handler (fired when an immutable root object is replaced). Passing <c>null</c> clears.</summary>
