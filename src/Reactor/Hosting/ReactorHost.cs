@@ -543,6 +543,38 @@ public sealed class ReactorHost : IDisposable
         }
     }
 
+    /// <summary>
+    /// Hot Reload state migration entry point (spec 049 §6). Runs once at the
+    /// start of a hot-reload render pass, before any component re-renders. Reads
+    /// the set of edited types from <see cref="HotReloadService.UpdatedTypes"/>
+    /// and asks every live <see cref="RenderContext"/> to value-swap matching
+    /// hook cells. The root component/function context is not registered with
+    /// the reconciler, so it is migrated explicitly here; child contexts are
+    /// reached via <see cref="Reconciler.ForEachLiveContext"/>. Never throws out
+    /// — a migration failure must not abort the reload render.
+    /// </summary>
+    private void MigrateHotReloadState()
+    {
+        // Route through IsHotReloadLive (MetadataUpdater.IsSupported) so the
+        // reflection-bearing migration call graph is statically dead and trims
+        // away under NativeAOT (spec 049 §8).
+        if (!HotReloadService.IsHotReloadLive) return;
+
+        var updatedTypes = HotReloadService.UpdatedTypes;
+        if (updatedTypes is null || updatedTypes.Count == 0) return;
+
+        try
+        {
+            _rootComponent?.Context.MigrateHooksForHotReload(updatedTypes);
+            _funcContext?.MigrateHooksForHotReload(updatedTypes);
+            _reconciler.ForEachLiveContext(ctx => ctx.MigrateHooksForHotReload(updatedTypes));
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Hot reload: state migration pass failed; continuing with re-render");
+        }
+    }
+
     private void Render()
     {
         _isRendering = true;
@@ -550,6 +582,24 @@ public sealed class ReactorHost : IDisposable
         // UpdateApplication call — see the matching block in
         // ReactorHostControl.Render() for the full rationale.
         bool hotReloadRender = HotReloadService.ConsumeUpdatePending();
+
+        // Open a tree-wide hot-reload pass for the duration of this render so
+        // the reconciler can recover hook-order changes in non-root children
+        // (Reconciler.UpdateComponent reads HotReloadService.WithinUpdatePass).
+        // The using disposes on every exit path, clearing the flag.
+        using IDisposable? hotReloadPass = hotReloadRender
+            ? HotReloadService.BeginUpdatePass()
+            : null;
+
+        // Hot Reload state migration (spec 049 §6). Before any component
+        // re-renders, walk every live RenderContext (root + reconciler-tracked
+        // children) and value-swap hook cells whose stored type was edited, so
+        // adding/removing a field on a record used in UseState/UseReducer/etc.
+        // preserves surviving values instead of resetting to the initializer.
+        // Gated on the pass being live + the runtime reporting updated types;
+        // a plain force-render (UpdatedTypes == null) is a no-op.
+        if (hotReloadRender)
+            MigrateHotReloadState();
 
         // Multi-window: hooks (UseWindow, UseDpi, UseWindowState, UseIsActive,
         // UseClosingGuard, parameterless UseWindowSize) resolve "the rendering

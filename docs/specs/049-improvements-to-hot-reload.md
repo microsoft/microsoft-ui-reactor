@@ -6,6 +6,27 @@
 `Microsoft.UI.Reactor.Hosting.HotReloadService` and `RenderContext.ResetForHotReload`,
 which already deliver the baseline edit-Render-body experience.
 
+### Resolved open questions (Phase 0)
+
+The §11 open questions are settled as follows (decided 2026-05-30):
+
+1. **Q1 — `UseEffect` during Phase 2 migration:** an effect whose deps array
+   referenced a migrated state value **re-runs**, because the migrated value
+   is a new instance and therefore a different reference under `Equals`. This
+   matches normal `SetState` semantics; no new HR-specific effect behavior.
+2. **Q2 — Components without a parameterless / record-primary ctor:** Phase 3
+   **re-invokes the new element's component factory** to instantiate the
+   migrated component. `ComponentElement` already carries an
+   `internal Func<Component>? _factory` closure (used by `CreateInstance()`,
+   `Element.cs:1090-1093`) that captures the author's real constructor args,
+   so migration no longer requires a parameterless ctor. Only when the new
+   element has **no** usable factory **and** no parameterless ctor does Phase 3
+   fall through to unmount/mount.
+3. **Q3 — Devtools migrated-vs-fresh annotation:** **included** in this work.
+   `MigrateHooksForHotReload` tags each migrated hook cell; `reactor.state`
+   (`DevtoolsStateTool`) surfaces a per-cell `migrated` flag for the most
+   recent HR pass.
+
 ---
 
 ## Table of Contents

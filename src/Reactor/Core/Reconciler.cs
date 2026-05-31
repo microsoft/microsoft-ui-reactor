@@ -1603,6 +1603,15 @@ public sealed partial class Reconciler : IDisposable
             return replacement ?? existingControl;
         }
 
+        // Hot Reload: an edited component subclass mints a new Type token, so
+        // CanUpdate is false above. Migrate the subtree in place (preserving
+        // descendant state) instead of unmount/mount. Gated on IsHotReloadLive
+        // (MetadataUpdater.IsSupported) so the reflection-bearing path is
+        // statically dead under NativeAOT (spec 049 §7/§8).
+        if (HotReloadService.IsHotReloadLive
+            && TryHotReloadMigrateComponent(oldElement, newElement, existingControl, requestRerender))
+            return existingControl;
+
         Unmount(existingControl);
         return Mount(newElement, requestRerender);
     }
@@ -1695,51 +1704,78 @@ public sealed partial class Reconciler : IDisposable
         }
 
         Element newChildElement;
-        try
+        // The RenderContext backing whichever branch we render (component or
+        // func/memo). Used to recover an in-flight hook-order change during a
+        // hot-reload pass: reset this context's hook state and re-render once.
+        RenderContext? renderCtx = node.Component?.Context ?? node.Context;
+        bool hotReloadRetried = false;
+        while (true)
         {
-            if (node.Component is not null)
+            try
             {
-                // Update props before re-rendering so the component sees fresh data
-                if (newEl is ComponentElement compEl && compEl.Props is not null
-                    && node.Component is IPropsReceiver receiver)
+                if (node.Component is not null)
                 {
-                    receiver.SetProps(compEl.Props);
-                }
+                    // Update props before re-rendering so the component sees fresh data
+                    if (newEl is ComponentElement compEl && compEl.Props is not null
+                        && node.Component is IPropsReceiver receiver)
+                    {
+                        receiver.SetProps(compEl.Props);
+                    }
 
-                node.Component.Context.BeginRender(componentRerender, _contextScope);
-                newChildElement = node.Component.Render();
-                FlushEffectsTraced(node.Component.Context, componentName);
+                    node.Component.Context.BeginRender(componentRerender, _contextScope);
+                    newChildElement = node.Component.Render();
+                    FlushEffectsTraced(node.Component.Context, componentName);
+                }
+                else if (node.Context is not null && newEl is FuncElement func)
+                {
+                    node.Context.BeginRender(componentRerender, _contextScope);
+                    newChildElement = func.RenderFunc(node.Context);
+                    FlushEffectsTraced(node.Context, componentName);
+                }
+                else if (node.Context is not null && newEl is MemoElement memo)
+                {
+                    node.Context.BeginRender(componentRerender, _contextScope);
+                    newChildElement = memo.RenderFunc(node.Context);
+                    FlushEffectsTraced(node.Context, componentName);
+                }
+                else
+                {
+                    if (traceRender)
+                        Diagnostics.ReactorEventSource.Log.ComponentRenderStop(componentName!, 0);
+                    return;
+                }
             }
-            else if (node.Context is not null && newEl is FuncElement func)
+            // Tree-wide hot-reload hook-order recovery: when an edit reorders or
+            // retypes hooks in a *non-root* child, its Render() throws here.
+            // Inside a hot-reload pass we reset that child's hook state and
+            // re-render once (matching the root recovery in the host), so the
+            // edit applies and the subtree's descendant state is preserved,
+            // instead of falling through to the error-fallback path below.
+            catch (HookOrderException ex) when (!hotReloadRetried
+                && renderCtx is not null
+                && HotReloadService.WithinUpdatePass)
             {
-                node.Context.BeginRender(componentRerender, _contextScope);
-                newChildElement = func.RenderFunc(node.Context);
-                FlushEffectsTraced(node.Context, componentName);
+                _logger?.LogWarning(ex,
+                    "Hot reload: hook order/type changed in child component — " +
+                    "resetting state and re-rendering: {ComponentName}",
+                    componentName ?? newEl.GetType().Name);
+                hotReloadRetried = true;
+                renderCtx.ResetForHotReload();
+                continue;
             }
-            else if (node.Context is not null && newEl is MemoElement memo)
+            catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
             {
-                node.Context.BeginRender(componentRerender, _contextScope);
-                newChildElement = memo.RenderFunc(node.Context);
-                FlushEffectsTraced(node.Context, componentName);
+                _logger?.LogError(ex, "Component Render() threw: {ComponentName}", newEl.GetType().Name);
+                if (Diagnostics.ReactorEventSource.Log.IsEnabled(
+                        global::System.Diagnostics.Tracing.EventLevel.Error,
+                        Diagnostics.ReactorEventSource.Keywords.Errors))
+                {
+                    Diagnostics.ReactorEventSource.Log.RenderError(
+                        componentName ?? newEl.GetType().Name, ex.GetType().Name, ex.Message);
+                }
+                newChildElement = ErrorFallback.BuildElement(ex);
             }
-            else
-            {
-                if (traceRender)
-                    Diagnostics.ReactorEventSource.Log.ComponentRenderStop(componentName!, 0);
-                return;
-            }
-        }
-        catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
-        {
-            _logger?.LogError(ex, "Component Render() threw: {ComponentName}", newEl.GetType().Name);
-            if (Diagnostics.ReactorEventSource.Log.IsEnabled(
-                    global::System.Diagnostics.Tracing.EventLevel.Error,
-                    Diagnostics.ReactorEventSource.Keywords.Errors))
-            {
-                Diagnostics.ReactorEventSource.Log.RenderError(
-                    componentName ?? newEl.GetType().Name, ex.GetType().Name, ex.Message);
-            }
-            newChildElement = ErrorFallback.BuildElement(ex);
+            break;
         }
 
         if (traceRender)
@@ -2402,6 +2438,109 @@ public sealed partial class Reconciler : IDisposable
         return true;
     }
 
+    // ════════════════════════════════════════════════════════════════════
+    //  Hot Reload — subtree migration on component type identity change
+    //  (spec 049 §7 / Phase 3)
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// When a <see cref="Component"/> subclass is edited under Hot Reload the
+    /// runtime mints a <em>new</em> <see cref="Type"/> token, so
+    /// <see cref="CanUpdate"/> returns false and the steady-state path would
+    /// unmount the whole subtree — discarding every descendant's
+    /// <c>UseState</c>. This migrates the node in place instead: it constructs
+    /// the post-edit component via the element's factory closure (so
+    /// parameterized constructors work — spec §7 Q2), copies surviving instance
+    /// fields old → new via <see cref="Microsoft.UI.Reactor.Hosting.ReactorHotReloadCopier"/>,
+    /// transfers the live <see cref="RenderContext"/> (hooks + cleanups stay
+    /// alive), swaps <see cref="ComponentNode.Component"/>, and re-renders
+    /// through the normal <see cref="ReconcileComponent"/> path so prop-set,
+    /// Phase-1 hook-order recovery, child reconciliation, tracing and node
+    /// bookkeeping all run exactly as a regular update would. The wrapper
+    /// <see cref="UIElement"/> is preserved, so <see cref="FrameworkElement"/>
+    /// identity (and any running compositor animations on descendant visuals)
+    /// survives the edit.
+    ///
+    /// <para>Returns false — and the caller falls through to unmount/mount —
+    /// when the elements are not both class <see cref="ComponentElement"/>s of
+    /// the same <c>FullName</c>+assembly, when the keys differ, when the node is
+    /// not found, or when the post-edit instance cannot be constructed (no
+    /// factory and no parameterless ctor). Only ever reached inside a hot-reload
+    /// pass, so it is statically dead under NativeAOT (spec §8).</para>
+    /// </summary>
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Reachable only via HotReloadService.IsHotReloadLive; dead under NativeAOT (spec 049 §8).")]
+    [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "Reachable only via HotReloadService.IsHotReloadLive; dead under NativeAOT (spec 049 §8).")]
+    internal bool TryHotReloadMigrateComponent(Element oldEl, Element newEl, UIElement existingControl, Action requestRerender)
+    {
+        // Only a class ComponentElement whose Type token changed but whose
+        // logical identity (FullName + assembly) and key are unchanged is an
+        // edit we migrate. Anything else (different component, different key,
+        // a base-class swap that changes the name) is a genuine identity
+        // change the author asked to discard.
+        if (oldEl is not ComponentElement oldComp || newEl is not ComponentElement newComp)
+            return false;
+        if (oldEl.Key != newEl.Key) return false;
+
+        Type oldType = oldComp.ComponentType;
+        Type newType = newComp.ComponentType;
+        if (oldType.FullName is null || oldType.FullName != newType.FullName) return false;
+        if (oldType.Assembly.GetName().Name != newType.Assembly.GetName().Name) return false;
+
+        if (!_componentNodes.TryGetValue(existingControl, out var node) || node.Component is null)
+            return false;
+
+        Component newComponent;
+        try
+        {
+            newComponent = newComp.CreateInstance();
+        }
+        catch
+        {
+            // Factory closure threw or no usable constructor — let the caller
+            // unmount/mount so the edit still takes effect (state is lost).
+            return false;
+        }
+
+        Component oldComponent = node.Component;
+
+        // Copy surviving instance fields old → new (added fields keep their
+        // default, removed fields drop, native/visual handles are block-listed).
+        // Contain reflection faults on pathological user fields so a copy failure
+        // falls back to unmount/mount rather than aborting the hot-reload pass.
+        try
+        {
+            Microsoft.UI.Reactor.Hosting.ReactorHotReloadCopier.TryMigrate(
+                oldComponent, newComponent,
+                new HashSet<object>(ReferenceEqualityComparer.Instance));
+        }
+        catch
+        {
+            return false;
+        }
+
+        // Transfer the live render context explicitly (deterministic regardless
+        // of copier field-copy order) so hooks and pending cleanups survive.
+        // KNOWN LIMITATION (spec 049 §7): UseEffect cleanup closures captured the
+        // OLD instance; effects whose deps are unchanged do not re-run, so their
+        // cleanups still reference the pre-edit instance until deps change or the
+        // subtree unmounts. This matches React's component-identity semantics
+        // (preserved state ⇒ effects don't re-fire); most effects close over
+        // state values rather than `this`, so this is benign in practice.
+        newComponent.Context = oldComponent.Context;
+
+        // Swap the instance and force a render past the memo gate, then delegate
+        // to the normal component reconcile path. ReconcileComponent re-sets
+        // props from newEl, applies Phase-1 hook-order recovery if the edit
+        // changed the hook shape, reconciles the child element against the
+        // preserved wrapper, and updates node.Element / node.PreviousProps.
+        node.Component = newComponent;
+        node.SelfTriggered = true;
+        ReconcileComponent(oldEl, newEl, existingControl, requestRerender);
+
+        Diagnostics.ReactorEventSource.Log.HotReloadStateMigrated(newType.FullName ?? newType.Name);
+        return true;
+    }
+
     /// <summary>
     /// Spec 047 §14 Phase 1 — child-slot reconciliation used by the V1
     /// <c>ChildrenStrategy</c> dispatch (SingleContent, NamedSlots). Mirrors
@@ -2430,6 +2569,12 @@ public sealed partial class Reconciler : IDisposable
             var replacement = Update(oldChild, newChild, existing, requestRerender);
             return replacement ?? existing;
         }
+        // Hot Reload component-identity migration (spec 049 §7) — preserve the
+        // child subtree's state across an edit instead of unmount/mount.
+        if (oldChild is not null && existing is not null
+            && HotReloadService.IsHotReloadLive
+            && TryHotReloadMigrateComponent(oldChild, newChild, existing, requestRerender))
+            return existing;
         if (existing is not null) Unmount(existing);
         return Mount(newChild, requestRerender);
     }
@@ -4864,6 +5009,24 @@ public sealed partial class Reconciler : IDisposable
         else if (root is WinUI.ContentControl cc && cc.Content is UIElement content)
         {
             InvokeNavigatingFrom(content, ctx);
+        }
+    }
+
+    /// <summary>
+    /// Hot Reload (spec 049 §6 step 3). Invokes <paramref name="action"/> once for
+    /// every live <see cref="RenderContext"/> tracked by this reconciler — both
+    /// function-component contexts (<see cref="ComponentNode.Context"/>) and
+    /// class-component contexts (<see cref="Component.Context"/>). The host calls
+    /// this at the start of a hot-reload pass to migrate hook state tree-wide
+    /// before any component re-renders. The root component's context is NOT in
+    /// <c>_componentNodes</c>, so the host migrates it separately.
+    /// </summary>
+    internal void ForEachLiveContext(Action<RenderContext> action)
+    {
+        foreach (var node in _componentNodes.Values)
+        {
+            if (node.Context is { } funcCtx) action(funcCtx);
+            if (node.Component?.Context is { } classCtx) action(classCtx);
         }
     }
 

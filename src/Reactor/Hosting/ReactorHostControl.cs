@@ -359,6 +359,33 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         }
     }
 
+    /// <summary>
+    /// Hot Reload state migration entry point (spec 049 §6). Mirror of
+    /// <c>ReactorHost.MigrateHotReloadState</c> for the in-XAML host control.
+    /// Runs once at the start of a hot-reload render pass, before any component
+    /// re-renders, value-swapping hook cells of edited types. Never throws out.
+    /// </summary>
+    private void MigrateHotReloadState()
+    {
+        // See ReactorHost.MigrateHotReloadState — gate on IsHotReloadLive so the
+        // reflection path is statically dead under NativeAOT (spec 049 §8).
+        if (!HotReloadService.IsHotReloadLive) return;
+
+        var updatedTypes = HotReloadService.UpdatedTypes;
+        if (updatedTypes is null || updatedTypes.Count == 0) return;
+
+        try
+        {
+            _rootComponent?.Context.MigrateHooksForHotReload(updatedTypes);
+            _funcContext?.MigrateHooksForHotReload(updatedTypes);
+            _reconciler.ForEachLiveContext(ctx => ctx.MigrateHooksForHotReload(updatedTypes));
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Hot reload: state migration pass failed; continuing with re-render");
+        }
+    }
+
     private void Render()
     {
         _isRendering = true;
@@ -384,7 +411,20 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         // raises the flag in the window between the read and the write.
         bool hotReloadRender = HotReloadService.ConsumeUpdatePending();
 
-        // Local helper centralizes the recovery sequence (log → reset
+        // Open a tree-wide hot-reload pass for the duration of this render so
+        // the reconciler can recover hook-order changes in non-root children
+        // (see the matching block in ReactorHost.Render). The using disposes
+        // on every exit path, clearing the flag.
+        using IDisposable? hotReloadPass = hotReloadRender
+            ? HotReloadService.BeginUpdatePass()
+            : null;
+
+        // Hot Reload state migration (spec 049 §6) — see ReactorHost.Render for
+        // the full rationale. Value-swaps hook cells of edited types before any
+        // component re-renders; a plain force-render (no UpdatedTypes) no-ops.
+        if (hotReloadRender)
+            MigrateHotReloadState();
+
         // RenderContext → request a fresh render). Both component-mode
         // and function-mode catches share it; future tweaks (telemetry,
         // additional reset steps, throttling) only need editing here.

@@ -57,6 +57,7 @@ internal sealed class ReactorEventSource : EventSource
         public const EventKeywords Intl = (EventKeywords)0x400;         // missing keys, fallback, format
         public const EventKeywords Theme = (EventKeywords)0x800;        // theme apply, bindings
         public const EventKeywords Shell = (EventKeywords)0x1000;       // JumpList/Tray/ThumbnailToolbar
+        public const EventKeywords HotReload = (EventKeywords)0x2000;   // spec 049 — state migration across edits
     }
     // </snippet:etw-keywords>
 
@@ -463,11 +464,31 @@ internal sealed class ReactorEventSource : EventSource
             WriteEvent(36, category ?? string.Empty);
     }
 
+    // ── Hot reload state migration (spec 049 §6) ────────────────────────
+
+    [Event(37, Level = EventLevel.Verbose, Keywords = Keywords.HotReload,
+        Message = "Hot reload dropped field {ownerType}.{fieldName}: incompatible type change {fromType} -> {toType}")]
+    public void HotReloadFieldDropped(string ownerType, string fieldName, string fromType, string toType)
+    {
+        if (IsEnabled(EventLevel.Verbose, Keywords.HotReload))
+            WriteEvent(37, ownerType ?? string.Empty, fieldName ?? string.Empty,
+                fromType ?? string.Empty, toType ?? string.Empty);
+    }
+
+    [Event(38, Level = EventLevel.Informational, Keywords = Keywords.HotReload,
+        Message = "Hot reload migrated hook state (type={valueType})")]
+    public void HotReloadStateMigrated(string valueType)
+    {
+        if (IsEnabled(EventLevel.Informational, Keywords.HotReload))
+            WriteEvent(38, valueType ?? string.Empty);
+    }
+
     // ── EventId allocation ──────────────────────────────────────────────
     //
     // Used: 1-15 (original surface), 16-17 (spec 044 Phase A generics),
     //       18-32 (spec 044 Phase B subsystem coverage),
     //       33-35 (spec 044 Phase C §4.2 navigation transition + deep link),
-    //       36    (spec 045 §2.7 docking layout load fallback).
-    // Next free EventId: 37.
+    //       36    (spec 045 §2.7 docking layout load fallback),
+    //       37-38 (spec 049 §6 hot reload state migration).
+    // Next free EventId: 39.
 }

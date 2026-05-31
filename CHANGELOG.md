@@ -28,6 +28,52 @@ Conventions for contributors:
 
 ### Added
 
+- **Hot reload: tree-wide hook-order recovery (spec 049 §5, Phase 1).**
+  Editing a **non-root** component under .NET Hot Reload to add, remove,
+  or reorder a hook now recovers in a single re-render instead of replacing
+  that component's subtree with the render-error fallback. The reconciler,
+  while inside a hot-reload pass, catches the resulting `HookOrderException`,
+  resets just that child's hook state, and re-renders it once — so the edit
+  applies and sibling/descendant state is preserved. Steady-state
+  (non-hot-reload) rendering is byte-for-byte unchanged: the new recovery arm
+  is gated on a `HotReloadService.WithinUpdatePass` filter that is only true
+  during a hot-reload-triggered render. Also fixes a latent effect-cleanup
+  leak where a staged `PendingCleanup` (from an effect whose deps changed in
+  the same render that later threw) was not drained on context teardown.
+
+- **Hot reload: live state migration across record/class shape changes
+  (spec 049 §6, Phase 2).** Editing a record or class that a hook stores
+  (`UseState` / `UseReducer` / `UseRef` / `UseMemo` / `UsePersisted`) now
+  migrates the live value onto the new shape instead of resetting it. At the
+  start of each hot-reload pass — before any `Render()` runs — every live
+  `RenderContext` value-swaps the hook cells whose stored type the runtime
+  reported as updated, copying fields by name onto a freshly-constructed
+  instance (`ReactorHotReloadCopier`); fields that can't be mapped are dropped
+  with a log line rather than throwing. Cycle-guarded and block-listed against
+  native handles (`IntPtr` / `Compositor` / `Visual` / `UIElement`). Devtools
+  hook snapshots carry a `Migrated` flag so the inspector can show which cells
+  were value-swapped.
+
+- **Hot reload: subtree migration on component-identity change (spec 049 §7,
+  Phase 3).** Renaming a component type or otherwise changing its identity
+  under hot reload now migrates the existing subtree onto the new component
+  instance — preserving its hook state, its live `RenderContext`, and the
+  underlying WinUI controls — instead of unmounting and remounting from
+  scratch. Triggered from the reconciler's `!CanUpdate` boundary
+  (`TryHotReloadMigrateComponent`): it constructs the new instance, copies
+  fields with the same `ReactorHotReloadCopier`, transfers the render context,
+  swaps the component on the node, and re-renders once into the preserved
+  wrapper control. Adds a `HotReloadService.ResetAllContexts()` escape hatch
+  for a forced "lose everything, remount fresh" reload when targeted migration
+  misbehaves.
+
+- **Hot reload: NativeAOT no-op gating (spec 049 §8).** All reflection-bearing
+  migration branches (Phase 2 value swap, Phase 3 subtree migration, the host
+  `MigrateHotReloadState` entry points) route through
+  `HotReloadService.IsHotReloadLive` (= `MetadataUpdater.IsSupported &&`
+  in-pass), so under NativeAOT the entire migration subsystem is statically
+  dead and trims away with zero retail overhead.
+
 - **Docking content types & reserved document area (spec 046).**
   Additive amendment to spec 045's `DockNode` algebra so apps can
   express the IDE-class document-area / tool-window-strip distinction:

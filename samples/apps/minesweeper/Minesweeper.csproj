@@ -13,6 +13,19 @@
          default but be explicit so binaries built on a preview SDK still
          launch on a stable runtime install. -->
     <RollForward>LatestMajor</RollForward>
+
+    <!--
+      `dotnet run` and `dotnet watch` evaluate this project with Platform=AnyCPU
+      and no RuntimeIdentifier, which fails the Windows App SDK self-contained
+      architecture check ("requires a supported Windows architecture") — and,
+      under watch, breaks hot reload entirely (ENC1008 "stale project", no edits
+      apply). Default a host-matching RID in exactly that case so every
+      evaluation context — including watch's internal hot-reload project load —
+      can resolve a native architecture. Explicit `-p:Platform=x64|ARM64` builds
+      (e.g. CI, `dotnet build -p:Platform=x64`) leave this unset and resolve the
+      architecture from Platform instead, so this is a no-op for them.
+    -->
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' And ('$(Platform)' == '' Or '$(Platform)' == 'AnyCPU' Or '$(Platform)' == 'Any CPU')">$(NETCoreSdkPortableRuntimeIdentifier)</RuntimeIdentifier>
   </PropertyGroup>
 
   <ItemGroup>

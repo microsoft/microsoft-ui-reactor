@@ -58,8 +58,9 @@ dotnet watch run
 <!-- /ai:lock -->
 
 This launches the app and watches your `.cs` files for changes. When you
-save, `dotnet watch` recompiles and Reactor reloads the component tree.
-Your app state resets, but the window stays open.
+save, `dotnet watch` recompiles and Reactor re-renders the component tree
+in place — the same window, the same process. For most edits your live
+state survives the reload.
 
 Here's what the preview app looks like running:
 
@@ -90,13 +91,56 @@ class DevToolingApp : Component
 Edit the `message` default value or add a new element, save the file, and
 watch the window update.
 
-> **Caveat:** Hot reload **resets state on every recompile**. `UseState`, `UseReducer`,
-> and `UsePersisted` (Application scope) all reinitialize. For state you
-> want to survive a reload, use `UsePersisted` with `PersistedScope.Window`
-> or store the value in an `Observable<T>` field — see
-> [persistence](persistence.md). Avoid wiring critical app state through a
-> plain `UseState` if your loop depends on the value staying put across
-> saves.
+### What state survives a reload
+
+Reactor migrates live state across a hot reload instead of resetting it.
+When you save, the runtime re-runs `Render()` against the existing
+[`RenderContext`](hooks.md) and reconciles the result onto the live
+controls. Hook cells are matched **by call order**, so `UseState`,
+`UseReducer`, `UseRef`, `UseMemo`, and `UsePersisted` keep their values
+as long as the hook sequence is unchanged. When you edit a record or
+class that a hook stores, the runtime migrates the value field-by-field
+onto the new shape; fields it can't map are dropped (with a log line)
+rather than throwing. When you rename or change the type of a component,
+Reactor migrates the subtree onto the new component instance, preserving
+its hook state and the underlying WinUI controls.
+
+| Edit you make | What happens to state |
+|---|---|
+| Change a `Render()` body, add/remove/reorder elements | Preserved — controls patched in place |
+| Edit a value-type or record stored in a hook | Preserved — migrated field-by-field; unmappable fields dropped |
+| Rename a component type / change its identity | Preserved — subtree migrated onto the new instance |
+| **Add, remove, or reorder hook calls** | Reset — the hook list is cleared and re-mounted fresh |
+
+The last row is the unavoidable case: changing the hook *shape* means the
+old values can't be re-keyed onto the new layout, so Reactor runs pending
+cleanups and re-mounts hooks from scratch to keep the loop alive instead
+of leaving you at an error fallback.
+
+> **Caveat:** Effects whose dependencies didn't change across a reload keep the cleanup
+> closure they captured from the previous instance. This matches React's
+> identity semantics and is harmless for state-capturing effects, but if an
+> effect must re-run on every reload, give it a dependency that changes. For
+> state you explicitly want to survive even a hook-shape change, use
+> `UsePersisted` with `PersistedScope.Window` or store the value in an
+> `Observable<T>` field — see [persistence](persistence.md).
+
+### When migration misbehaves
+
+State migration is best-effort. If an unusual edit leaves a component in a
+bad state, force a clean "lose everything, remount fresh" reload from your
+app: call `HotReloadService.ResetAllContexts()`, which runs every live
+context's pending cleanups, clears its hook list, and re-renders so hooks
+re-mount from scratch. Reach for it only when the targeted migration above
+doesn't produce the result you expect.
+
+### NativeAOT builds
+
+State migration relies on .NET Hot Reload, which is only available in
+JIT debug builds. Under NativeAOT (`PublishAot=true`)
+`MetadataUpdater.IsSupported` is `false`, so the whole migration subsystem
+is statically dead and trims away — there is no hot-reload loop and no
+overhead in a published app.
 
 ## Function Component Entry Point
 
