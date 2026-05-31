@@ -202,8 +202,10 @@ internal interface IItemsBinderStrategy
     /// Component <c>UseEffect</c> cleanups fire. Keyed-state binders
     /// (templated lists) no-op here because the reconciler-side keyed
     /// pipeline (<c>BindKeyedItemsSource</c>) owns container teardown.
-    /// Default no-op so legacy strategies that haven't been audited keep
-    /// today's behavior (no extra teardown).</summary>
+    /// Default no-op is reserved for binders whose realized children are
+    /// torn down elsewhere; positional / hierarchical binders that own
+    /// realization (TabItemsHost, PreMountedItems, TreeChildren) override
+    /// it.</summary>
     void Unbind(FrameworkElement control, Reconciler reconciler) { }
 }
 
@@ -419,6 +421,20 @@ public sealed record TreeChildren<TElement, TControl>(
             if (node.Content is UIElement ui) reconciler.UnmountChild(ui);
             UnmountTreeContent(node.Children, reconciler);
         }
+    }
+
+    void IItemsBinderStrategy.Unbind(FrameworkElement control, Reconciler reconciler)
+    {
+        // Issue #375 — tear down every mounted TreeViewNodeData.ContentElement
+        // subtree so descendant Component UseEffect cleanups fire on host
+        // unmount. Without this hook the V1HandlerAdapter dispatcher would
+        // fall into the default no-op Unbind for TreeChildren (it's an
+        // IItemsBinderStrategy but neither ITemplatedItemsStrategy nor
+        // IErasedTemplatedItemsStrategy), leaking the same class of cleanups
+        // the issue tracked under DockableContent. Reuses the same
+        // UnmountTreeContent helper the bind-update path already invokes.
+        var tree = (TControl)control;
+        UnmountTreeContent(tree.RootNodes, reconciler);
     }
 }
 
