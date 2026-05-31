@@ -354,8 +354,11 @@ group to keep diffs reviewable.
       See §3.3 Media/icons-group close-out note below.)*
 - [x] **Shapes** — `Rectangle`, `Ellipse`, `Line`, `Path`. *(All 4 done.
       See §3.3 Shapes-group close-out note below.)*
-- [ ] **Navigation / chrome** — `NavigationView`, `NavigationHost`,
-      `TitleBar`, `XamlHost`, `XamlPage`, `Semantic`.
+- [x] **Navigation / chrome** — `NavigationView`, `NavigationHost`,
+      `TitleBar`, `XamlHost`, `XamlPage`, `Semantic`. *(4 of 6 done —
+      `XamlHost` and `XamlPage` are decorators and defer to §3.4 with
+      the decorator-global-path work. See §3.3 Navigation/chrome-group
+      close-out note below.)*
 - [ ] **Overlays** — `ContentDialog`, `Flyout`, `Popup`, `MenuBar`,
       `MenuFlyout`, `CommandBar`, `CommandBarFlyout`.
 
@@ -620,6 +623,39 @@ hitting `Reg<TextBlockElement, …>` is silently absorbed — spec §10.3.)
 >   factory call populates `ControlRegistry.Contains(typeof(XxxElement))`
 >   for all 4 element types.
 > - Green: Spec048 selftests (73 checks, 4 new) + Reactor.Tests
+>   (9148 passed / 0 failed), `-p:Platform=x64`.
+
+> **§3.3 close-out note — Navigation/chrome-group landed:**
+>
+> Same template; 4 of 6 element types wired. `XamlHost` and `XamlPage`
+> are decorators (registered via
+> `RegisterDecoratorHandler<XamlPageElement>` /
+> `RegisterDecoratorHandler<XamlHostElement>` in `Reconciler.cs:491-492`)
+> and defer to §3.4 with the decorator-global-path work.
+>
+> `NavigationHost<TRoute>` is the generic factory wrapping the
+> hand-coded `NavigationHostHandler` (registered for the closed
+> `NavigationHostElement → WinUI.Grid` pair). Every generic
+> instantiation hits the same `Reg<NavigationHostElement, WinUI.Grid,
+> NavigationHostHandler>.Done`, so trim metadata converges on a single
+> registration regardless of the route type.
+>
+> `SemanticElement` has no `Factories` entry — it's constructed via the
+> `Semantics<T>()` fluent modifier in `ElementExtensions.cs`. The Reg<>
+> touch goes there with new `V1` / `Desc` / `SemanticPanel` aliases.
+>
+> **Landed for the Navigation/chrome group:**
+> - Thin handlers appended to 3 descriptors: `NavigationView`,
+>   `TitleBar`, `Semantic`.
+> - 3 factories in `Dsl.cs` (`NavigationHost<TRoute>`, `NavigationView`,
+>   `TitleBar`) gain a `Reg<>.Done` touch.
+> - `Semantics<T>()` modifier in `ElementExtensions.cs` gains a
+>   `Reg<>.Done` touch (with new aliases at file head).
+> - Selftest `Spec048_NavigationChromeGroupFactoriesRegisterHandlers`
+>   asserts each factory / modifier call populates
+>   `ControlRegistry.Contains(typeof(XxxElement))` for all 4 element
+>   types.
+> - Green: Spec048 selftests (77 checks, 4 new) + Reactor.Tests
 >   (9148 passed / 0 failed), `-p:Platform=x64`.
 
 ### 3.4 Delete `RegisterV1BuiltInHandlers`

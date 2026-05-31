@@ -336,4 +336,28 @@ internal static class Spec048RegistrationFixtures
             return Task.CompletedTask;
         }
     }
+
+    internal class NavigationChromeGroupFactoriesRegisterHandlers(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            var stack = new Microsoft.UI.Reactor.Navigation.NavigationStack<string>("home");
+            var nav = new Microsoft.UI.Reactor.Navigation.NavigationHandle<string>(stack);
+            _ = NavigationHost(nav, static _ => TextBlock("probe"));
+            _ = NavigationView([NavItem("home")]);
+            _ = TitleBar("probe");
+            _ = TextBlock("probe").Semantics(role: "text");
+
+            H.Check("Spec048_Reg_NavigationHost",
+                ControlRegistry.Contains(typeof(NavigationHostElement)));
+            H.Check("Spec048_Reg_NavigationView",
+                ControlRegistry.Contains(typeof(NavigationViewElement)));
+            H.Check("Spec048_Reg_TitleBar",
+                ControlRegistry.Contains(typeof(TitleBarElement)));
+            H.Check("Spec048_Reg_Semantic",
+                ControlRegistry.Contains(typeof(SemanticElement)));
+
+            return Task.CompletedTask;
+        }
+    }
 }

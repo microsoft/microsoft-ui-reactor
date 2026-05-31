@@ -92,3 +92,11 @@ internal static class TitleBarDescriptor
         }
     }
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <see cref="DescriptorHandler{TElement,TControl}"/>
+/// subclass so the Reactor.Factories DSL can reach this descriptor via
+/// the <c>Reg&lt;&gt;</c> registration touch without leaking
+/// <c>DescriptorHandler&lt;,&gt;</c> as a public surface.
+/// </summary>
+internal sealed class TitleBarDescriptorHandler() : DescriptorHandler<TitleBarElement, WinUI.TitleBar>(TitleBarDescriptor.Descriptor);

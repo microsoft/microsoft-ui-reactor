@@ -769,12 +769,16 @@ public static partial class Factories
         Navigation.NavigationHandle<TRoute> nav,
         Func<TRoute, Element> routeMap) where TRoute : notnull
     {
+        _ = V1.Reg<NavigationHostElement, WinUI.Grid, V1.Handlers.NavigationHostHandler>.Done;
         return new NavigationHostElement(nav, route => routeMap((TRoute)route))
             .Provide(Navigation.NavigationContext<TRoute>.Instance, nav);
     }
 
-    public static NavigationViewElement NavigationView(NavigationViewItemData[] menuItems, Element? content = null) =>
-        new(menuItems, content);
+    public static NavigationViewElement NavigationView(NavigationViewItemData[] menuItems, Element? content = null)
+    {
+        _ = V1.Reg<NavigationViewElement, WinUI.NavigationView, Desc.NavigationViewDescriptorHandler>.Done;
+        return new(menuItems, content);
+    }
 
     public static NavigationViewItemData NavItem(string content, string? icon = null, string? tag = null) =>
         new(content, icon, tag);
@@ -782,7 +786,11 @@ public static partial class Factories
     public static NavigationViewItemData NavItemHeader(string content) =>
         new(content) { IsHeader = true };
 
-    public static TitleBarElement TitleBar(string title) => new(title);
+    public static TitleBarElement TitleBar(string title)
+    {
+        _ = V1.Reg<TitleBarElement, WinUI.TitleBar, Desc.TitleBarDescriptorHandler>.Done;
+        return new(title);
+    }
 
     public static TabViewElement TabView(params TabViewItemData[] tabs)
     {

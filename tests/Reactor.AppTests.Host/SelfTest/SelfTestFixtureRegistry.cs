@@ -1216,6 +1216,7 @@ internal static class SelfTestFixtureRegistry
         "Spec048_StatusInfoGroupFactoriesRegisterHandlers",
         "Spec048_MediaIconsGroupFactoriesRegisterHandlers",
         "Spec048_ShapesGroupFactoriesRegisterHandlers",
+        "Spec048_NavigationChromeGroupFactoriesRegisterHandlers",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -2394,6 +2395,7 @@ internal static class SelfTestFixtureRegistry
         "Spec048_StatusInfoGroupFactoriesRegisterHandlers" => new Spec048RegistrationFixtures.StatusInfoGroupFactoriesRegisterHandlers(harness),
         "Spec048_MediaIconsGroupFactoriesRegisterHandlers" => new Spec048RegistrationFixtures.MediaIconsGroupFactoriesRegisterHandlers(harness),
         "Spec048_ShapesGroupFactoriesRegisterHandlers" => new Spec048RegistrationFixtures.ShapesGroupFactoriesRegisterHandlers(harness),
+        "Spec048_NavigationChromeGroupFactoriesRegisterHandlers" => new Spec048RegistrationFixtures.NavigationChromeGroupFactoriesRegisterHandlers(harness),
 
         _ => null,
     };
