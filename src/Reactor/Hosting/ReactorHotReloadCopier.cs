@@ -105,7 +105,14 @@ internal static class ReactorHotReloadCopier
     /// constructor invoked with each parameter's default (covers positional
     /// records, whose primary ctor has no parameterless form — every field is
     /// overwritten by name afterwards anyway, so the placeholder args are
-    /// transient). Returns <c>null</c> when no usable constructor exists.
+    /// transient). Returns <c>null</c> when no usable constructor exists or when
+    /// construction faults on a non-fatal reflection error; callers treat
+    /// <c>null</c> as "cannot migrate" and fall back to a clean recreate
+    /// (component path: unmount/mount; hook path: keep the pre-edit value)
+    /// rather than proceeding with a half-built instance. Fatal process-level
+    /// exceptions (<see cref="OutOfMemoryException"/>,
+    /// <see cref="StackOverflowException"/>) are never swallowed — they
+    /// propagate so a corrupt process is not masked as a benign migration miss.
     /// </summary>
     [UnconditionalSuppressMessage("Trimming", "IL2067", Justification = "Reachable only via HotReloadService.IsHotReloadLive; dead under NativeAOT (spec 049 §8).")]
     [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = "Reachable only via HotReloadService.IsHotReloadLive; dead under NativeAOT (spec 049 §8).")]
@@ -133,8 +140,12 @@ internal static class ReactorHotReloadCopier
                 args[i] = ps[i].HasDefaultValue ? ps[i].DefaultValue : DefaultOf(ps[i].ParameterType);
             return widest.Invoke(args);
         }
-        catch
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
         {
+            // A pathological user ctor threw (or the type isn't constructible):
+            // signal "cannot migrate" so the caller does a clean recreate rather
+            // than handing back a partially-initialized instance. Fatal
+            // process-level exceptions deliberately escape this filter.
             return null;
         }
     }

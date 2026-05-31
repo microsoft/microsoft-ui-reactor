@@ -2494,10 +2494,12 @@ public sealed partial class Reconciler : IDisposable
         {
             newComponent = newComp.CreateInstance();
         }
-        catch
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
         {
             // Factory closure threw or no usable constructor — let the caller
-            // unmount/mount so the edit still takes effect (state is lost).
+            // unmount/mount so the edit still takes effect (state is lost). A
+            // clean recreate is strictly better than migrating onto a
+            // half-built instance. Fatal exceptions deliberately propagate.
             return false;
         }
 
@@ -2506,15 +2508,18 @@ public sealed partial class Reconciler : IDisposable
         // Copy surviving instance fields old → new (added fields keep their
         // default, removed fields drop, native/visual handles are block-listed).
         // Contain reflection faults on pathological user fields so a copy failure
-        // falls back to unmount/mount rather than aborting the hot-reload pass.
+        // falls back to unmount/mount rather than aborting the hot-reload pass —
+        // a clean recreate beats proceeding with a partially-migrated instance.
         try
         {
             Microsoft.UI.Reactor.Hosting.ReactorHotReloadCopier.TryMigrate(
                 oldComponent, newComponent,
                 new HashSet<object>(ReferenceEqualityComparer.Instance));
         }
-        catch
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
         {
+            // Field copy faulted midway: discard the partially-migrated instance
+            // and recreate the component cleanly. Fatal exceptions propagate.
             return false;
         }
 
