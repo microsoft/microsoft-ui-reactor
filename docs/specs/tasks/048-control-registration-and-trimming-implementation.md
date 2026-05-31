@@ -359,8 +359,10 @@ group to keep diffs reviewable.
       `XamlHost` and `XamlPage` are decorators and defer to §3.4 with
       the decorator-global-path work. See §3.3 Navigation/chrome-group
       close-out note below.)*
-- [ ] **Overlays** — `ContentDialog`, `Flyout`, `Popup`, `MenuBar`,
-      `MenuFlyout`, `CommandBar`, `CommandBarFlyout`.
+- [x] **Overlays** — `ContentDialog`, `Flyout`, `Popup`, `MenuBar`,
+      `MenuFlyout`, `CommandBar`, `CommandBarFlyout`. *(All 7 are
+      decorators — entirely deferred to §3.4. See §3.3 Overlays-group
+      close-out note below.)*
 
 (After each control group lands, run xunit + selftest. The `Reg<>` touch
 is idempotent so duplicate-touch from `Heading()` and `TextBlock()` both
@@ -657,6 +659,42 @@ hitting `Reg<TextBlockElement, …>` is silently absorbed — spec §10.3.)
 >   types.
 > - Green: Spec048 selftests (77 checks, 4 new) + Reactor.Tests
 >   (9148 passed / 0 failed), `-p:Platform=x64`.
+
+> **§3.3 close-out note — Overlays-group deferred:**
+>
+> Every element type in this group is registered via
+> `RegisterDecoratorHandler<TElement>(new XxxHandler())` (see
+> `Reconciler.cs:352-358`):
+>
+> - `ContentDialogElement` → `ContentDialogHandler`
+> - `FlyoutElement` → `FlyoutHandler`
+> - `MenuBarElement` → `MenuBarHandler`
+> - `CommandBarElement` → `CommandBarHandler`
+> - `MenuFlyoutElement` → `MenuFlyoutHandler`
+> - `PopupElement` → `PopupHandler`
+> - `CommandBarFlyoutElement` → `CommandBarFlyoutHandler`
+>
+> `Reg<E,C,H>` currently registers via the value handler path
+> (`ControlRegistry.Register<TElement,TControl>`), which the §3.4
+> dispatcher only consults for value-element handlers — not decorators.
+> Wiring `Reg<>.Done` here today would either need a parallel
+> "RegisterDecoratorHandler from `Reg<>`" code path or the
+> decorator-global-path work, both of which §3.4 owns and which are
+> tracked as a §3.4 blocker.
+>
+> No code or selftest changes land for this group. `Dsl.cs` factories
+> for these element types stay expression-bodied. Once §3.4 unblocks the
+> decorator global path, this checklist line will revisit (alongside the
+> seven other deferred decorators: `Button`, `Canvas`, `CheckBox`,
+> `Expander`, `Flex`, `Grid`, `RelativePanel`, `Stack`, `WrapGrid`,
+> `Icon`, `XamlHost`, `XamlPage`, plus the base-derived
+> `TemplatedListElementBase` and `LazyStackElementBase` paths).
+>
+> **§3.3 completion:** 7 of 9 control groups have Reg<> touches landed
+> (Text, Input, Container/layout, Collections, Date/time, Status/info,
+> Media/icons, Shapes, Navigation/chrome — 63 element types wired
+> across 9 commits, 77 selftest checks). The remaining decorator and
+> base-derived registrations are queued for §3.4.
 
 ### 3.4 Delete `RegisterV1BuiltInHandlers`
 
