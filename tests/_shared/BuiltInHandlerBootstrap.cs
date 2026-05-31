@@ -58,9 +58,16 @@ internal static class BuiltInHandlerBootstrap
         _ = V1.RegDecorator<CommandBarFlyoutElement, V1.Handlers.CommandBarFlyoutHandler>.Done;
         _ = V1.Reg<ButtonElement, WinUI.Button, Desc.ButtonDescriptorHandler>.Done;
 
-        // ── Base-derived (typed templated lists / lazy stacks / items hosts) ──
+        // ── Composite / validation decorators ──
+        _ = V1.RegDecorator<Microsoft.UI.Reactor.Core.CommandHostElement, V1.Handlers.CommandHostHandler>.Done;
+        _ = V1.RegDecorator<Microsoft.UI.Reactor.Controls.Validation.FormFieldElement, V1.Handlers.FormFieldHandler>.Done;
+        _ = V1.RegDecorator<Microsoft.UI.Reactor.Controls.Validation.ValidationVisualizerElement, V1.Handlers.ValidationVisualizerHandler>.Done;
+        _ = V1.RegDecorator<Microsoft.UI.Reactor.Controls.Validation.ValidationRuleElement, V1.Handlers.ValidationRuleHandler>.Done;
+
+        // ── Base-derived (typed templated lists / lazy stacks / typed templated tree views / items hosts) ──
         _ = V1.RegBaseDecorator<TemplatedListElementBase, V1.Handlers.TemplatedListHandler>.Done;
         _ = V1.RegBaseDecorator<LazyStackElementBase, V1.Handlers.LazyStackHandler>.Done;
+        _ = V1.RegBaseDecorator<TemplatedTreeViewElementBase, V1.Handlers.TemplatedTreeViewHandler>.Done;
         _ = Desc.ItemsRepeaterDescriptor.Registration.Done;
         _ = Desc.ItemsViewDescriptor.Registration.Done;
 

@@ -916,7 +916,13 @@ public static partial class Factories
         IReadOnlyList<T> items,
         Func<T, string> keySelector,
         Func<T, IReadOnlyList<T>?> childrenSelector,
-        Func<T, Element> viewBuilder) => new(items, keySelector, childrenSelector, viewBuilder);
+        Func<T, Element> viewBuilder)
+    {
+        // Spec 048 §3.4 — per-factory registration touch. All closed TreeView<T>
+        // factories share the TemplatedTreeViewElementBase registry entry.
+        _ = V1.RegBaseDecorator<TemplatedTreeViewElementBase, V1.Handlers.TemplatedTreeViewHandler>.Done;
+        return new(items, keySelector, childrenSelector, viewBuilder);
+    }
 
     /// <summary>
     /// <see cref="IReactorKeyed"/>-typed overload of
@@ -927,8 +933,11 @@ public static partial class Factories
     public static TemplatedTreeViewElement<T> TreeView<T>(
         IReadOnlyList<T> items,
         Func<T, IReadOnlyList<T>?> childrenSelector,
-        Func<T, Element> viewBuilder) where T : IReactorKeyed =>
-        new(items, static t => t.Key, childrenSelector, viewBuilder);
+        Func<T, Element> viewBuilder) where T : IReactorKeyed
+    {
+        _ = V1.RegBaseDecorator<TemplatedTreeViewElementBase, V1.Handlers.TemplatedTreeViewHandler>.Done;
+        return new(items, static t => t.Key, childrenSelector, viewBuilder);
+    }
 
     public static FlipViewElement FlipView(params Element[] items)
     {
@@ -1134,8 +1143,12 @@ public static partial class Factories
     /// Scopes keyboard accelerators from the given commands to the child subtree.
     /// Only commands with an Accelerator produce keyboard accelerators on the host element.
     /// </summary>
-    public static Core.CommandHostElement CommandHost(Core.Command[] commands, Element child) =>
-        new(commands, child);
+    public static Core.CommandHostElement CommandHost(Core.Command[] commands, Element child)
+    {
+        // Spec 048 §3.4 — per-factory registration touch.
+        _ = V1.RegDecorator<Core.CommandHostElement, V1.Handlers.CommandHostHandler>.Done;
+        return new(commands, child);
+    }
 
     // ── Conditional helpers ─────────────────────────────────────────
 

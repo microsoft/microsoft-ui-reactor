@@ -1,4 +1,5 @@
 using Microsoft.UI.Reactor.Core;
+using V1 = Microsoft.UI.Reactor.Core.V1Protocol;
 
 namespace Microsoft.UI.Reactor.Controls.Validation;
 
@@ -38,8 +39,12 @@ public static class ValidationRuleDsl
         Func<bool> predicate,
         string message,
         string field,
-        Severity severity = Severity.Error) =>
-        new(field, predicate, message, severity);
+        Severity severity = Severity.Error)
+    {
+        // Spec 048 §3.4 — per-factory registration touch.
+        _ = V1.RegDecorator<ValidationRuleElement, V1.Handlers.ValidationRuleHandler>.Done;
+        return new(field, predicate, message, severity);
+    }
 
     /// <summary>
     /// Creates an async cross-field validation rule.
@@ -48,8 +53,11 @@ public static class ValidationRuleDsl
         Func<Task<bool>> asyncPredicate,
         string message,
         string field,
-        Severity severity = Severity.Error) =>
-        new(field, () => true, message, severity) { AsyncPredicate = asyncPredicate };
+        Severity severity = Severity.Error)
+    {
+        _ = V1.RegDecorator<ValidationRuleElement, V1.Handlers.ValidationRuleHandler>.Done;
+        return new(field, () => true, message, severity) { AsyncPredicate = asyncPredicate };
+    }
 
     /// <summary>
     /// Evaluates the validation rule against a ValidationContext.
