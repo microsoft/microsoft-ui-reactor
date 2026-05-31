@@ -89,3 +89,12 @@ internal static class RichTextBlockDescriptor
             set:         static (c, v) => c.CharacterSpacing = v,
             shouldWrite: static e => e.CharacterSpacing != 0);
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <c>new()</c>-able registration shim for
+/// <see cref="RichTextBlockDescriptor"/>; touched via
+/// <c>_ = Reg&lt;RichTextBlockElement, WinUI.RichTextBlock, RichTextBlockDescriptorHandler&gt;.Done</c>
+/// from the <c>RichTextBlock</c> factory.
+/// </summary>
+internal sealed class RichTextBlockDescriptorHandler()
+    : DescriptorHandler<RichTextBlockElement, WinUI.RichTextBlock>(RichTextBlockDescriptor.Descriptor);

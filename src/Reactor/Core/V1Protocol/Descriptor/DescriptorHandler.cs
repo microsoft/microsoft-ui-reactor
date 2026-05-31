@@ -30,7 +30,18 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor;
 ///   <item>Apply setters.</item>
 /// </list></para>
 /// </summary>
-public sealed class DescriptorHandler<TElement, TControl> : IElementHandler<TElement, TControl>
+/// <remarks>
+/// Spec 048 §7 — <b>unsealed</b> so the built-in catalog can expose a thin,
+/// <c>new()</c>-constructible registration subclass per descriptor (e.g.
+/// <c>TextBlockDescriptorHandler() : DescriptorHandler&lt;…&gt;(TextBlockDescriptor.Descriptor)</c>).
+/// That subclass is what the <see cref="Reg{TElement,TControl,THandler}"/> shim
+/// instantiates via its <c>static () =&gt; new THandler()</c> lambda, so the
+/// descriptor path registers through the exact same zero-closure mechanism as a
+/// hand-coded handler. The base interpreter has no virtual members the subclass
+/// overrides; unsealing carries no dispatch cost (calls already route through the
+/// <see cref="IElementHandler{TElement,TControl}"/> interface via the adapter).
+/// </remarks>
+public class DescriptorHandler<TElement, TControl> : IElementHandler<TElement, TControl>
     where TElement : Element
     where TControl : FrameworkElement, new()
 {

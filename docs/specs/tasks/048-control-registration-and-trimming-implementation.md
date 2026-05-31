@@ -319,9 +319,9 @@ group to keep diffs reviewable.
       `CheckBox`, `RadioButton`, `RadioButtons`, `ToggleSwitch`,
       `Slider`, `NumberBox`, `Rating` / `RatingControl`, `PipsPager`,
       `ColorPicker`, `SelectorBar`.
-- [ ] **Text controls** — `TextBlock`, `Heading`, `Subheading`,
+- [x] **Text controls** — `TextBlock`, `Heading`, `Subheading`,
       `RichTextBlock`, `TextBox`, `PasswordBox`, `RichEditBox`,
-      `AutoSuggestBox`.
+      `AutoSuggestBox`. *(Done — see §3.3 close-out note below.)*
 - [ ] **Container / layout** — `Border`, `StackPanel` and `VStack` /
       `HStack` / `ZStack` / `Stack`, `Grid`, `Canvas`, `RelativePanel`,
       `WrapGrid`, `ScrollViewer`, `ScrollView`, `Viewbox`, `Expander`,
@@ -347,6 +347,60 @@ group to keep diffs reviewable.
 (After each control group lands, run xunit + selftest. The `Reg<>` touch
 is idempotent so duplicate-touch from `Heading()` and `TextBlock()` both
 hitting `Reg<TextBlockElement, …>` is silently absorbed — spec §10.3.)
+
+> **§3.3 close-out note — descriptor-backed controls & the thin-handler template (Text group landed):**
+>
+> The `Reg<TElement, TControl, THandler>` shim from §3.1 requires
+> `THandler : …, new()`. That covers the ~13 hand-coded handlers directly
+> (e.g. `TextBox` → `Reg<TextBoxElement, TextBox, TextBoxHandler>.Done`), but
+> **not** the ~75 descriptor-backed built-ins, whose production handler is
+> `new DescriptorHandler<E,C>(XxxDescriptor.Descriptor)` — not `new()`-able.
+>
+> **Decision (validated via rubber-duck):** do *not* hang a registration
+> sentinel off the descriptor holder — any `.Descriptor` access would then
+> auto-register, which is wrong for *carved* descriptors whose retained
+> descriptor is **not** their production handler (Button → `ButtonHandler`
+> decorator, GridView → `GridViewHandler`, TextBox → `TextBoxHandler`). Each
+> descriptor-backed control instead gets a thin, `new()`-able subclass:
+>
+> ```csharp
+> // appended to XxxDescriptor.cs
+> internal sealed class XxxDescriptorHandler()
+>     : DescriptorHandler<XxxElement, WinUI.Xxx>(XxxDescriptor.Descriptor);
+> ```
+>
+> This required unsealing `DescriptorHandler<TElement,TControl>`
+> (`public sealed class` → `public class`, see its `<remarks>`). The factory
+> then touches `_ = Reg<XxxElement, WinUI.Xxx, XxxDescriptorHandler>.Done;`,
+> unifying **all** registration (hand-coded + descriptor) on the single
+> `Reg<>` mechanism with zero closure (static lambda). The thin handler is
+> only rooted via its own `Reg<>` touch, so `XxxDescriptor.Descriptor` stays
+> private to it — carved descriptors are never accidentally registered.
+>
+> **Landed for the Text group:**
+> - Unsealed `DescriptorHandler` (`Descriptor/DescriptorHandler.cs`).
+> - Thin handlers appended to `TextBlockDescriptor`, `RichTextBlockDescriptor`,
+>   `RichEditBoxDescriptor`, `PasswordBoxDescriptor`, `AutoSuggestBoxDescriptor`.
+> - Aliases (`V1`, `Desc`, `WinUI = Microsoft.UI.Xaml.Controls`) added to
+>   `Dsl.cs`; the bare `Controls.` prefix resolves to
+>   `Microsoft.UI.Reactor.Controls`, so the `WinUI` alias is required for the
+>   control type argument.
+> - 10 Text factories touched: `TextBlock`/`Heading`/`SubHeading`/`Caption`
+>   (all → `TextBlockElement`), `RichTextBlock(string)` + `RichTextBlock(RichTextParagraph[])`,
+>   `RichEditBox`, `TextBox` (hand-coded `TextBoxHandler`), `PasswordBox`,
+>   `AutoSuggestBox`.
+> - Selftest `Spec048_TextGroupFactoriesRegisterHandlers`
+>   (`Fixtures/Spec048RegistrationFixtures.cs`) asserts each factory call
+>   populates `ControlRegistry.Contains(typeof(XxxElement))`. **Must** be a
+>   selftest, not xunit: the registry unit tests call `ResetForTesting()`,
+>   and the registration cctor runs at most once per process.
+> - Green: Spec048 selftests (16 checks) + Spec048 xunit (16 tests),
+>   `-p:Platform=x64`.
+>
+> **Safety:** dormant while `RegisterV1BuiltInHandlers` is intact — built-ins
+> still resolve via per-host arm 1, so these global registrations are never
+> reached. Zero observable behavior change. Remaining control groups fan out
+> with this same template before §3.4.
 
 ### 3.4 Delete `RegisterV1BuiltInHandlers`
 

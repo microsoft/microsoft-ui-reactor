@@ -126,3 +126,12 @@ internal static class AutoSuggestBoxDescriptor
             get: static e => e.IsSuggestionListOpen,
             set: static (c, v) => c.IsSuggestionListOpen = v);
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <c>new()</c>-able registration shim for
+/// <see cref="AutoSuggestBoxDescriptor"/>; touched via
+/// <c>_ = Reg&lt;AutoSuggestBoxElement, WinUI.AutoSuggestBox, AutoSuggestBoxDescriptorHandler&gt;.Done</c>
+/// from the <c>AutoSuggestBox</c> factory.
+/// </summary>
+internal sealed class AutoSuggestBoxDescriptorHandler()
+    : DescriptorHandler<AutoSuggestBoxElement, WinUI.AutoSuggestBox>(AutoSuggestBoxDescriptor.Descriptor);

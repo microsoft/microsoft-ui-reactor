@@ -7,6 +7,10 @@ using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Text;
 using Windows.UI.Text;
 using MenuFlyoutItemBase = Microsoft.UI.Reactor.Core.MenuFlyoutItemBase;
+// Spec 048 §7 — aliases for the per-factory `Reg<>` registration touch.
+using V1 = Microsoft.UI.Reactor.Core.V1Protocol;
+using Desc = Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
+using WinUI = Microsoft.UI.Xaml.Controls;
 
 namespace Microsoft.UI.Reactor;
 
@@ -42,7 +46,15 @@ public static partial class Factories
 
     // ── Text ────────────────────────────────────────────────────────
 
-    public static TextBlockElement TextBlock(string content) => new(content);
+    public static TextBlockElement TextBlock(string content)
+    {
+        // Spec 048 §7 — register TextBlockElement's handler into the global
+        // ControlRegistry the first time any TextBlock-producing factory runs.
+        // Dormant while RegisterV1BuiltInHandlers is intact (per-host arm 1 wins);
+        // becomes the live dispatch path once §3.4 deletes the eager registrar.
+        _ = V1.Reg<TextBlockElement, WinUI.TextBlock, Desc.TextBlockDescriptorHandler>.Done;
+        return new(content);
+    }
 
     /// <summary>
     /// Creates a heading-styled <see cref="TextBlockElement"/> (28px, bold,
@@ -55,12 +67,15 @@ public static partial class Factories
     /// landmark. Prefer this over hand-styled <see cref="TextBlock(string)"/>
     /// for page / section titles. (spec 039 §0.3)
     /// </remarks>
-    public static TextBlockElement Heading(string content) =>
-        new(content) { FontSize = 28, Weight = new global::Windows.UI.Text.FontWeight(700),
+    public static TextBlockElement Heading(string content)
+    {
+        _ = V1.Reg<TextBlockElement, WinUI.TextBlock, Desc.TextBlockDescriptorHandler>.Done;
+        return new(content) { FontSize = 28, Weight = new global::Windows.UI.Text.FontWeight(700),
             Modifiers = new Core.ElementModifiers
             {
                 HeadingLevel = Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level1
             } };
+    }
 
     /// <summary>
     /// Creates a sub-heading styled <see cref="TextBlockElement"/> (20px,
@@ -72,12 +87,15 @@ public static partial class Factories
     /// secondary section level; sized for the WinUI Subtitle type-ramp slot.
     /// (spec 039 §0.3)
     /// </remarks>
-    public static TextBlockElement SubHeading(string content) =>
-        new(content) { FontSize = 20, Weight = new global::Windows.UI.Text.FontWeight(600),
+    public static TextBlockElement SubHeading(string content)
+    {
+        _ = V1.Reg<TextBlockElement, WinUI.TextBlock, Desc.TextBlockDescriptorHandler>.Done;
+        return new(content) { FontSize = 20, Weight = new global::Windows.UI.Text.FontWeight(600),
             Modifiers = new Core.ElementModifiers
             {
                 HeadingLevel = Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level2
             } };
+    }
 
     /// <summary>
     /// Creates a caption-styled <see cref="TextBlockElement"/> (12px).
@@ -88,8 +106,11 @@ public static partial class Factories
     /// secondary metadata (timestamps, helper text, hints) below primary copy.
     /// (spec 039 §0.3)
     /// </remarks>
-    public static TextBlockElement Caption(string content) =>
-        new(content) { FontSize = 12 };
+    public static TextBlockElement Caption(string content)
+    {
+        _ = V1.Reg<TextBlockElement, WinUI.TextBlock, Desc.TextBlockDescriptorHandler>.Done;
+        return new(content) { FontSize = 12 };
+    }
 
     /// <summary>
     /// Creates a <see cref="RichTextBlockElement"/> wrapping a single string of
@@ -100,7 +121,11 @@ public static partial class Factories
     /// Named for parity with WinUI's <c>Microsoft.UI.Xaml.Controls.RichTextBlock</c>.
     /// (spec 039 §1.3 / §14 #8)
     /// </remarks>
-    public static RichTextBlockElement RichTextBlock(string text) => new(text);
+    public static RichTextBlockElement RichTextBlock(string text)
+    {
+        _ = V1.Reg<RichTextBlockElement, WinUI.RichTextBlock, Desc.RichTextBlockDescriptorHandler>.Done;
+        return new(text);
+    }
 
     /// <summary>
     /// Deprecated forwarding alias for <see cref="RichTextBlock(string)"/>.
@@ -111,8 +136,11 @@ public static partial class Factories
         error: false)]
     public static RichTextBlockElement RichText(string text) => RichTextBlock(text);
 
-    public static RichEditBoxElement RichEditBox(string text = "", Action<string>? onTextChanged = null) =>
-        new(text) { OnTextChanged = onTextChanged };
+    public static RichEditBoxElement RichEditBox(string text = "", Action<string>? onTextChanged = null)
+    {
+        _ = V1.Reg<RichEditBoxElement, WinUI.RichEditBox, Desc.RichEditBoxDescriptorHandler>.Done;
+        return new(text) { OnTextChanged = onTextChanged };
+    }
 
     // ── Buttons ─────────────────────────────────────────────────────
 
@@ -213,17 +241,27 @@ public static partial class Factories
     /// Creates a <see cref="TextBoxElement"/> wrapping WinUI's
     /// <c>Microsoft.UI.Xaml.Controls.TextBox</c>.
     /// </summary>
-    public static TextBoxElement TextBox(string value, Action<string>? onChanged = null, string? placeholderText = null, string? header = null) =>
-        new(value, onChanged, placeholderText) { Header = header };
+    public static TextBoxElement TextBox(string value, Action<string>? onChanged = null, string? placeholderText = null, string? header = null)
+    {
+        // Hand-coded handler (not descriptor-backed) — touch its Reg<> directly.
+        _ = V1.Reg<TextBoxElement, WinUI.TextBox, V1.Handlers.TextBoxHandler>.Done;
+        return new(value, onChanged, placeholderText) { Header = header };
+    }
 
-    public static PasswordBoxElement PasswordBox(string password, Action<string>? onPasswordChanged = null, string? placeholderText = null) =>
-        new(password, onPasswordChanged, placeholderText);
+    public static PasswordBoxElement PasswordBox(string password, Action<string>? onPasswordChanged = null, string? placeholderText = null)
+    {
+        _ = V1.Reg<PasswordBoxElement, WinUI.PasswordBox, Desc.PasswordBoxDescriptorHandler>.Done;
+        return new(password, onPasswordChanged, placeholderText);
+    }
 
     public static NumberBoxElement NumberBox(double value, Action<double>? onValueChanged = null, string? header = null) =>
         new(value, onValueChanged, header);
 
-    public static AutoSuggestBoxElement AutoSuggestBox(string text, Action<string>? onTextChanged = null, Action<string>? onQuerySubmitted = null) =>
-        new(text, onTextChanged, onQuerySubmitted);
+    public static AutoSuggestBoxElement AutoSuggestBox(string text, Action<string>? onTextChanged = null, Action<string>? onQuerySubmitted = null)
+    {
+        _ = V1.Reg<AutoSuggestBoxElement, WinUI.AutoSuggestBox, Desc.AutoSuggestBoxDescriptorHandler>.Done;
+        return new(text, onTextChanged, onQuerySubmitted);
+    }
 
     public static CheckBoxElement CheckBox(bool isChecked, Action<bool>? onIsCheckedChanged = null, string? label = null) =>
         new(isChecked, onIsCheckedChanged, label);
@@ -1230,8 +1268,11 @@ public static partial class Factories
     /// Named for parity with WinUI's <c>Microsoft.UI.Xaml.Controls.RichTextBlock</c>.
     /// (spec 039 §1.3 / §14 #8)
     /// </remarks>
-    public static RichTextBlockElement RichTextBlock(RichTextParagraph[] paragraphs) =>
-        new("") { Paragraphs = paragraphs };
+    public static RichTextBlockElement RichTextBlock(RichTextParagraph[] paragraphs)
+    {
+        _ = V1.Reg<RichTextBlockElement, WinUI.RichTextBlock, Desc.RichTextBlockDescriptorHandler>.Done;
+        return new("") { Paragraphs = paragraphs };
+    }
 
     /// <summary>
     /// Deprecated forwarding alias for <see cref="RichTextBlock(RichTextParagraph[])"/>.

@@ -1205,6 +1205,8 @@ internal static class SelfTestFixtureRegistry
         "Spec048_GlobalRegistry_Mount_DispatchesThroughArm3",
         "Spec048_GlobalRegistry_FactoryCachedAfterFirstHit",
         "Spec048_PerHost_RegisterHandler_ShadowsGlobal",
+        // Spec 048 §3.3 — Text-group factory `Reg<>.Done` registration touch.
+        "Spec048_TextGroupFactoriesRegisterHandlers",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -2375,6 +2377,7 @@ internal static class SelfTestFixtureRegistry
         "Spec048_GlobalRegistry_Mount_DispatchesThroughArm3" => new Spec048ControlRegistryFixtures.GlobalRegistry_Mount_DispatchesThroughArm3(harness),
         "Spec048_GlobalRegistry_FactoryCachedAfterFirstHit" => new Spec048ControlRegistryFixtures.GlobalRegistry_FactoryCachedAfterFirstHit(harness),
         "Spec048_PerHost_RegisterHandler_ShadowsGlobal" => new Spec048ControlRegistryFixtures.PerHost_RegisterHandler_ShadowsGlobal(harness),
+        "Spec048_TextGroupFactoriesRegisterHandlers" => new Spec048RegistrationFixtures.TextGroupFactoriesRegisterHandlers(harness),
 
         _ => null,
     };

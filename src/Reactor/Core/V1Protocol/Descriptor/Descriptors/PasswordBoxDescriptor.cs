@@ -69,3 +69,12 @@ internal static class PasswordBoxDescriptor
             set:         static (c, v) => c.PasswordChar = v,
             shouldWrite: static e => e.PasswordChar is not null);
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <c>new()</c>-able registration shim for
+/// <see cref="PasswordBoxDescriptor"/>; touched via
+/// <c>_ = Reg&lt;PasswordBoxElement, WinUI.PasswordBox, PasswordBoxDescriptorHandler&gt;.Done</c>
+/// from the <c>PasswordBox</c> factory.
+/// </summary>
+internal sealed class PasswordBoxDescriptorHandler()
+    : DescriptorHandler<PasswordBoxElement, WinUI.PasswordBox>(PasswordBoxDescriptor.Descriptor);

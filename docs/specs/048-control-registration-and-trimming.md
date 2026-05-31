@@ -27,6 +27,7 @@ final shape.
 - [§5 Resolution — the factory is the registration link](#5-resolution--the-factory-is-the-registration-link)
 - [§6 Pattern A — the 3P / hand-authored control](#6-pattern-a--the-3p--hand-authored-control)
 - [§7 Pattern B — the scale pattern for the built-in catalog](#7-pattern-b--the-scale-pattern-for-the-built-in-catalog)
+  - [§7.1 Descriptor-backed built-ins — the thin-handler template](#71-descriptor-backed-built-ins--the-thin-handler-template)
 - [§8 The `ControlRegistry` contract](#8-the-controlregistry-contract)
 - [§9 Cost model — the hot path](#9-cost-model--the-hot-path)
 - [§10 Built-in migration — dismantling the central registrar](#10-built-in-migration--dismantling-the-central-registrar)
@@ -263,6 +264,48 @@ static methods member-by-member: an uncalled `Factories.TreeView()` (and the
 
 This pattern is also available to 3P authors with large control libraries; Pattern A
 is just the lower-ceremony choice for one or two controls.
+
+### §7.1 Descriptor-backed built-ins — the thin-handler template
+
+`Reg<TElement, TControl, THandler>` constrains `THandler : …, new()`. That fits the
+hand-coded handlers directly (e.g. `Reg<TextBoxElement, WinUI.TextBox, TextBoxHandler>`),
+but **not** the ~75 descriptor-backed built-ins, whose production handler is
+`new DescriptorHandler<E, C>(XxxDescriptor.Descriptor)` — parameterised, hence not
+`new()`-constructible. Two non-options and the chosen template:
+
+- ✗ **Sentinel on the descriptor holder.** Hanging a "registered" side effect off
+  `XxxDescriptor.Descriptor` is wrong: any `.Descriptor` access would auto-register,
+  but several descriptors are *carved* — their retained `ControlDescriptor` is **not**
+  the control's production handler (Button → `ButtonHandler` decorator, GridView →
+  `GridViewHandler`, TextBox → `TextBoxHandler`). Auto-registering on descriptor
+  access would bind the wrong handler.
+- ✗ **A second `new()`-relaxed `Reg<>` overload taking a factory delegate.** Adds a
+  parallel registration path and a per-call closure, defeating §9's zero-closure goal.
+- ✓ **A thin, `new()`-able handler subclass per descriptor-backed control.** Unseal
+  `DescriptorHandler<TElement, TControl>` (`sealed` → open) and append one line beside
+  each descriptor:
+
+  ```csharp
+  // beside XxxDescriptor (e.g. TextBlockDescriptor.cs)
+  internal sealed class XxxDescriptorHandler()
+      : DescriptorHandler<XxxElement, WinUI.Xxx>(XxxDescriptor.Descriptor);
+  ```
+
+  The factory then uses the **single** `Reg<>` mechanism unchanged:
+
+  ```csharp
+  public static TextBlockElement TextBlock(string content)
+  {
+      _ = Reg<TextBlockElement, WinUI.TextBlock, TextBlockDescriptorHandler>.Done;
+      return new(content);
+  }
+  ```
+
+  `XxxDescriptor.Descriptor` is referenced **only** by `XxxDescriptorHandler`, which is
+  rooted only by its own `Reg<>` touch — so a carved descriptor is never registered by
+  the act of reading it, and each thin handler shares the per-closed-generic trim fate
+  of its factory. Hand-coded and descriptor-backed controls thus register through one
+  uniform path with zero registration-time closure.
 
 ---
 
