@@ -67,3 +67,11 @@ internal static class PivotDescriptor
             setSlot:     static (p, h) => p.SelectionChangedTrampoline = h,
             valueDiffEcho: true);
 }
+
+/// <summary>
+/// Spec 048 §3.3 thin handler — instantiated lazily by
+/// <see cref="ControlRegistry"/> when the global path needs the
+/// descriptor-backed <see cref="PivotDescriptor"/>.
+/// </summary>
+internal sealed class PivotDescriptorHandler()
+    : DescriptorHandler<PivotElement, WinUI.Pivot>(PivotDescriptor.Descriptor);

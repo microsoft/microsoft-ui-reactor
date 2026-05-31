@@ -23,3 +23,11 @@ internal static class ItemContainerDescriptor
         }
         .OneWay(get: static e => e.IsSelected, set: static (c, v) => c.IsSelected = v);
 }
+
+/// <summary>
+/// Spec 048 §3.3 thin handler — instantiated lazily by
+/// <see cref="ControlRegistry"/> when the global path needs the
+/// descriptor-backed <see cref="ItemContainerDescriptor"/>.
+/// </summary>
+internal sealed class ItemContainerDescriptorHandler()
+    : DescriptorHandler<ItemContainerElement, WinUI.ItemContainer>(ItemContainerDescriptor.Descriptor);

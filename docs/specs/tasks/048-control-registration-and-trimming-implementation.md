@@ -337,7 +337,11 @@ group to keep diffs reviewable.
 - [ ] **Collections** — `ListView`, `GridView`, `ListBox`, `ComboBox`,
       `Pivot`, `FlipView`, `TabView`, `BreadcrumbBar`, `ItemsRepeater`,
       `ItemsView`, `ItemContainer`, `TreeView`, `LazyStack`,
-      `TemplatedListView<T>`, `TemplatedFlipView<T>`.
+      `TemplatedListView<T>`, `TemplatedFlipView<T>`. *(10 of 15 element
+      types done — see §3.3 Collections-group close-out note below.
+      `ItemsRepeater` and `ItemsView` use the base-derived global path,
+      and `LazyStack` / `TemplatedListView<T>` / `TemplatedFlipView<T>`
+      combine base-derived AND decorator paths — all defer to §3.4.)*
 - [ ] **Date / time** — `DatePicker`, `CalendarDatePicker`, `TimePicker`,
       `CalendarView`.
 - [ ] **Status / info** — `ProgressBar`, `ProgressRing`, `InfoBar`,
@@ -492,6 +496,37 @@ hitting `Reg<TextBlockElement, …>` is silently absorbed — spec §10.3.)
 >   populates `ControlRegistry.Contains(typeof(XxxElement))` for all 10
 >   element types.
 > - Green: Spec048 selftests (41 checks, 10 new) + Reactor.Tests
+>   (9148 passed / 0 failed), `-p:Platform=x64`.
+
+> **§3.3 close-out note — Collections-group landed:**
+>
+> Same template; 10 of 15 element types wired. Five element types defer
+> to §3.4:
+> - `ItemsRepeater`, `ItemsView` use the base-derived global path
+>   (`RegisterDescriptorForDerivedTypes` in
+>   `src/Reactor/Core/Reconciler.cs:385-386`); `Reg<>` only knows about
+>   closed exact types, so derived-type fan-out needs its own §3.4 work.
+> - `LazyStack`, `TemplatedListView<T>`, `TemplatedFlipView<T>` combine
+>   `IDecoratorElementHandler<TElement>` with the base-derived
+>   `RegisterDecoratorHandlerForDerivedTypes` walk
+>   (`Reconciler.cs:383-384`) and defer with the same decorator-global-
+>   path + base-derived rationale.
+>
+> **Landed for the Collections group:**
+> - Thin handlers appended to 8 descriptors: `ComboBox`, `ListBox`,
+>   `Pivot`, `FlipView`, `TabView`, `BreadcrumbBar`, `ItemContainer`,
+>   `TreeView`.
+> - 10 factories in `Dsl.cs` gain a `Reg<>.Done` touch: `ListView` and
+>   `GridView` use the hand-coded `V1.Handlers.ListViewHandler` /
+>   `GridViewHandler`; the rest reference the new descriptor subclasses.
+>   `ComboBox(string[])`, `ListBox`, `Pivot`, `FlipView`, `TabView`,
+>   `BreadcrumbBar`, `ItemContainer`, `TreeView(TreeViewNodeData[])`
+>   converted from expression-bodied to block form to host the touch.
+> - Selftest `Spec048_CollectionsGroupFactoriesRegisterHandlers`
+>   (`Fixtures/Spec048RegistrationFixtures.cs`) asserts each factory call
+>   populates `ControlRegistry.Contains(typeof(XxxElement))` for all 10
+>   element types.
+> - Green: Spec048 selftests (51 checks, 10 new) + Reactor.Tests
 >   (9148 passed / 0 failed), `-p:Platform=x64`.
 
 ### 3.4 Delete `RegisterV1BuiltInHandlers`

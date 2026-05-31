@@ -324,8 +324,11 @@ public static partial class Factories
         return new(items, selectedIndex, onSelectedIndexChanged);
     }
 
-    public static ComboBoxElement ComboBox(string[] items, int selectedIndex = -1, Action<int>? onSelectedIndexChanged = null) =>
-        new(items, selectedIndex, onSelectedIndexChanged);
+    public static ComboBoxElement ComboBox(string[] items, int selectedIndex = -1, Action<int>? onSelectedIndexChanged = null)
+    {
+        _ = V1.Reg<ComboBoxElement, WinUI.ComboBox, Desc.ComboBoxDescriptorHandler>.Done;
+        return new(items, selectedIndex, onSelectedIndexChanged);
+    }
 
     public static ComboBoxElement ComboBox(Element[] itemElements, int selectedIndex, Action<int>? onSelectedIndexChanged) =>
         new([], selectedIndex, onSelectedIndexChanged) { ItemElements = itemElements };
@@ -743,26 +746,49 @@ public static partial class Factories
 
     public static TitleBarElement TitleBar(string title) => new(title);
 
-    public static TabViewElement TabView(params TabViewItemData[] tabs) => new(tabs);
+    public static TabViewElement TabView(params TabViewItemData[] tabs)
+    {
+        _ = V1.Reg<TabViewElement, WinUI.TabView, Desc.TabViewDescriptorHandler>.Done;
+        return new(tabs);
+    }
 
     public static TabViewItemData Tab(string header, Element content) => new(header, content);
 
-    public static BreadcrumbBarElement BreadcrumbBar(BreadcrumbBarItemData[] items, Action<BreadcrumbBarItemData>? onItemClicked = null) =>
-        new(items, onItemClicked);
+    public static BreadcrumbBarElement BreadcrumbBar(BreadcrumbBarItemData[] items, Action<BreadcrumbBarItemData>? onItemClicked = null)
+    {
+        _ = V1.Reg<BreadcrumbBarElement, WinUI.BreadcrumbBar, Desc.BreadcrumbBarDescriptorHandler>.Done;
+        return new(items, onItemClicked);
+    }
 
     public static BreadcrumbBarItemData Breadcrumb(string label, object? tag = null) => new(label, tag);
 
-    public static PivotElement Pivot(params PivotItemData[] items) => new(items);
+    public static PivotElement Pivot(params PivotItemData[] items)
+    {
+        _ = V1.Reg<PivotElement, WinUI.Pivot, Desc.PivotDescriptorHandler>.Done;
+        return new(items);
+    }
 
     public static PivotItemData PivotItem(string header, Element content) => new(header, content);
 
     // ── Collections ─────────────────────────────────────────────────
 
-    public static ListViewElement ListView(params Element[] items) => new(items);
+    public static ListViewElement ListView(params Element[] items)
+    {
+        _ = V1.Reg<ListViewElement, WinUI.ListView, V1.Handlers.ListViewHandler>.Done;
+        return new(items);
+    }
 
-    public static GridViewElement GridView(params Element[] items) => new(items);
+    public static GridViewElement GridView(params Element[] items)
+    {
+        _ = V1.Reg<GridViewElement, WinUI.GridView, V1.Handlers.GridViewHandler>.Done;
+        return new(items);
+    }
 
-    public static TreeViewElement TreeView(params TreeViewNodeData[] nodes) => new(nodes);
+    public static TreeViewElement TreeView(params TreeViewNodeData[] nodes)
+    {
+        _ = V1.Reg<TreeViewElement, WinUI.TreeView, Desc.TreeViewDescriptorHandler>.Done;
+        return new(nodes);
+    }
 
     public static TreeViewNodeData TreeNode(string content, params TreeViewNodeData[] children) =>
         new(content, children.Length > 0 ? children : null);
@@ -799,7 +825,11 @@ public static partial class Factories
         Func<T, Element> viewBuilder) where T : IReactorKeyed =>
         new(items, static t => t.Key, childrenSelector, viewBuilder);
 
-    public static FlipViewElement FlipView(params Element[] items) => new(items);
+    public static FlipViewElement FlipView(params Element[] items)
+    {
+        _ = V1.Reg<FlipViewElement, WinUI.FlipView, Desc.FlipViewDescriptorHandler>.Done;
+        return new(items);
+    }
 
     // ── Dialogs / Overlays ──────────────────────────────────────────
 
@@ -1268,8 +1298,11 @@ public static partial class Factories
         return new(zoomedInView, zoomedOutView);
     }
 
-    public static ListBoxElement ListBox(string[] items, int selectedIndex = -1, Action<int>? onSelectedIndexChanged = null) =>
-        new(items) { SelectedIndex = selectedIndex, OnSelectedIndexChanged = onSelectedIndexChanged };
+    public static ListBoxElement ListBox(string[] items, int selectedIndex = -1, Action<int>? onSelectedIndexChanged = null)
+    {
+        _ = V1.Reg<ListBoxElement, WinUI.ListBox, Desc.ListBoxDescriptorHandler>.Done;
+        return new(items) { SelectedIndex = selectedIndex, OnSelectedIndexChanged = onSelectedIndexChanged };
+    }
 
     // ── Additional navigation ───────────────────────────────────────
 
@@ -1350,8 +1383,11 @@ public static partial class Factories
     /// view builder — ItemsView's selection / focus / animation
     /// infrastructure depends on it.
     /// </summary>
-    public static ItemContainerElement ItemContainer(Element? child) =>
-        new(child);
+    public static ItemContainerElement ItemContainer(Element? child)
+    {
+        _ = V1.Reg<ItemContainerElement, WinUI.ItemContainer, Desc.ItemContainerDescriptorHandler>.Done;
+        return new(child);
+    }
 
     // ── ItemsView ───────────────────────────────────────────────────
 

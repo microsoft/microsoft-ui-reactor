@@ -67,3 +67,11 @@ internal static class TreeViewDescriptor
             slotIsNull:       static p => p.ExpandingTrampoline is null,
             setSlot:          static (p, h) => p.ExpandingTrampoline = h);
 }
+
+/// <summary>
+/// Spec 048 §3.3 thin handler — instantiated lazily by
+/// <see cref="ControlRegistry"/> when the global path needs the
+/// descriptor-backed <see cref="TreeViewDescriptor"/>.
+/// </summary>
+internal sealed class TreeViewDescriptorHandler()
+    : DescriptorHandler<TreeViewElement, WinUI.TreeView>(TreeViewDescriptor.Descriptor);

@@ -184,4 +184,44 @@ internal static class Spec048RegistrationFixtures
             return Task.CompletedTask;
         }
     }
+
+    internal class CollectionsGroupFactoriesRegisterHandlers(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            _ = ListView(TextBlock("probe"));
+            _ = GridView(TextBlock("probe"));
+            _ = ListBox(new[] { "a", "b" });
+            _ = ComboBox(new[] { "a", "b" });
+            _ = Pivot(PivotItem("h", TextBlock("c")));
+            _ = FlipView(TextBlock("probe"));
+            _ = TabView(Tab("h", TextBlock("c")));
+            _ = BreadcrumbBar(new[] { Breadcrumb("a") });
+            _ = ItemContainer(TextBlock("probe"));
+            _ = TreeView(TreeNode("root"));
+
+            H.Check("Spec048_Reg_ListView",
+                ControlRegistry.Contains(typeof(ListViewElement)));
+            H.Check("Spec048_Reg_GridView",
+                ControlRegistry.Contains(typeof(GridViewElement)));
+            H.Check("Spec048_Reg_ListBox",
+                ControlRegistry.Contains(typeof(ListBoxElement)));
+            H.Check("Spec048_Reg_ComboBox",
+                ControlRegistry.Contains(typeof(ComboBoxElement)));
+            H.Check("Spec048_Reg_Pivot",
+                ControlRegistry.Contains(typeof(PivotElement)));
+            H.Check("Spec048_Reg_FlipView",
+                ControlRegistry.Contains(typeof(FlipViewElement)));
+            H.Check("Spec048_Reg_TabView",
+                ControlRegistry.Contains(typeof(TabViewElement)));
+            H.Check("Spec048_Reg_BreadcrumbBar",
+                ControlRegistry.Contains(typeof(BreadcrumbBarElement)));
+            H.Check("Spec048_Reg_ItemContainer",
+                ControlRegistry.Contains(typeof(ItemContainerElement)));
+            H.Check("Spec048_Reg_TreeView",
+                ControlRegistry.Contains(typeof(TreeViewElement)));
+
+            return Task.CompletedTask;
+        }
+    }
 }

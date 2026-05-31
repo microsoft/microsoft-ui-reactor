@@ -1211,6 +1211,7 @@ internal static class SelfTestFixtureRegistry
         "Spec048_InputGroupFactoriesRegisterHandlers",
         // Spec 048 §3.3 — Container/layout-group factory `Reg<>.Done` registration touch.
         "Spec048_ContainerGroupFactoriesRegisterHandlers",
+        "Spec048_CollectionsGroupFactoriesRegisterHandlers",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -2384,6 +2385,7 @@ internal static class SelfTestFixtureRegistry
         "Spec048_TextGroupFactoriesRegisterHandlers" => new Spec048RegistrationFixtures.TextGroupFactoriesRegisterHandlers(harness),
         "Spec048_InputGroupFactoriesRegisterHandlers" => new Spec048RegistrationFixtures.InputGroupFactoriesRegisterHandlers(harness),
         "Spec048_ContainerGroupFactoriesRegisterHandlers" => new Spec048RegistrationFixtures.ContainerGroupFactoriesRegisterHandlers(harness),
+        "Spec048_CollectionsGroupFactoriesRegisterHandlers" => new Spec048RegistrationFixtures.CollectionsGroupFactoriesRegisterHandlers(harness),
 
         _ => null,
     };
