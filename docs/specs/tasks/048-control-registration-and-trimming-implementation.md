@@ -349,7 +349,9 @@ group to keep diffs reviewable.
       *(Done — see §3.3 close-out note below.)*
 - [ ] **Media / icons** — `Image`, `MediaPlayerElement`,
       `PersonPicture`, `Icon` / `AnimatedIcon`, `AnimatedVisualPlayer`,
-      `WebView2`, `MapControl`.
+      `WebView2`, `MapControl`. *(7 of 8 element types done — `Icon` is a
+      decorator and defers to §3.4 with the decorator-global-path work.
+      See §3.3 Media/icons-group close-out note below.)*
 - [ ] **Shapes** — `Rectangle`, `Ellipse`, `Line`, `Path`.
 - [ ] **Navigation / chrome** — `NavigationView`, `NavigationHost`,
       `TitleBar`, `XamlHost`, `XamlPage`, `Semantic`.
@@ -576,6 +578,26 @@ hitting `Reg<TextBlockElement, …>` is silently absorbed — spec §10.3.)
 >   7 element types; it instantiates `AnnounceHandle` directly (visible via
 >   `InternalsVisibleTo Reactor.AppTests.Host`) to exercise that path.
 > - Green: Spec048 selftests (62 checks, 7 new) + Reactor.Tests
+>   (9148 passed / 0 failed), `-p:Platform=x64`.
+
+> **§3.3 close-out note — Media/icons-group landed:**
+>
+> Same template; 7 of 8 element types wired. `Icon` is a decorator
+> (`IconHandler` registered via `RegisterDecoratorHandler<IconElement>` in
+> `Reconciler.cs:480`) and defers to §3.4 with the decorator-global-path
+> work. The remaining 7 are descriptor-backed with no decorator or
+> base-derived variants.
+>
+> **Landed for the Media/icons group:**
+> - Thin handlers appended to 7 descriptors: `Image`,
+>   `MediaPlayerElement`, `PersonPicture`, `AnimatedIcon`,
+>   `AnimatedVisualPlayer`, `WebView2`, `MapControl`.
+> - 7 factories in `Dsl.cs` gain a `Reg<>.Done` touch (all converted from
+>   expression-bodied to block form to host the touch).
+> - Selftest `Spec048_MediaIconsGroupFactoriesRegisterHandlers` asserts
+>   each factory call populates
+>   `ControlRegistry.Contains(typeof(XxxElement))` for all 7 element types.
+> - Green: Spec048 selftests (69 checks, 7 new) + Reactor.Tests
 >   (9148 passed / 0 failed), `-p:Platform=x64`.
 
 ### 3.4 Delete `RegisterV1BuiltInHandlers`

@@ -963,11 +963,23 @@ public static partial class Factories
 
     // ── Media ───────────────────────────────────────────────────────
 
-    public static ImageElement Image(string source) => new(source);
+    public static ImageElement Image(string source)
+    {
+        _ = V1.Reg<ImageElement, WinUI.Image, Desc.ImageDescriptorHandler>.Done;
+        return new(source);
+    }
 
-    public static PersonPictureElement PersonPicture() => new();
+    public static PersonPictureElement PersonPicture()
+    {
+        _ = V1.Reg<PersonPictureElement, WinUI.PersonPicture, Desc.PersonPictureDescriptorHandler>.Done;
+        return new();
+    }
 
-    public static WebView2Element WebView2(Uri? source = null) => new(source);
+    public static WebView2Element WebView2(Uri? source = null)
+    {
+        _ = V1.Reg<WebView2Element, WinUI.WebView2, Desc.WebView2DescriptorHandler>.Done;
+        return new(source);
+    }
 
     // ── Components ──────────────────────────────────────────────────
 
@@ -1326,9 +1338,17 @@ public static partial class Factories
 
     // ── Additional media ────────────────────────────────────────────
 
-    public static MediaPlayerElementElement MediaPlayerElement(string? source = null) => new(source);
+    public static MediaPlayerElementElement MediaPlayerElement(string? source = null)
+    {
+        _ = V1.Reg<MediaPlayerElementElement, WinUI.MediaPlayerElement, Desc.MediaPlayerElementDescriptorHandler>.Done;
+        return new(source);
+    }
 
-    public static AnimatedVisualPlayerElement AnimatedVisualPlayer() => new();
+    public static AnimatedVisualPlayerElement AnimatedVisualPlayer()
+    {
+        _ = V1.Reg<AnimatedVisualPlayerElement, WinUI.AnimatedVisualPlayer, Desc.AnimatedVisualPlayerDescriptorHandler>.Done;
+        return new();
+    }
 
     // ── Additional collections ──────────────────────────────────────
 
@@ -1399,8 +1419,11 @@ public static partial class Factories
 
     // ── AnimatedIcon ────────────────────────────────────────────────
 
-    public static AnimatedIconElement AnimatedIcon(object? source = null, IconSource? fallbackIconSource = null) =>
-        new() { Source = source, FallbackIconSource = fallbackIconSource };
+    public static AnimatedIconElement AnimatedIcon(object? source = null, IconSource? fallbackIconSource = null)
+    {
+        _ = V1.Reg<AnimatedIconElement, WinUI.AnimatedIcon, Desc.AnimatedIconDescriptorHandler>.Done;
+        return new() { Source = source, FallbackIconSource = fallbackIconSource };
+    }
 
     // ── ParallaxView ────────────────────────────────────────────────
 
@@ -1412,8 +1435,11 @@ public static partial class Factories
 
     // ── MapControl ──────────────────────────────────────────────────
 
-    public static MapControlElement MapControl(string? mapServiceToken = null, double zoomLevel = 1) =>
-        new() { MapServiceToken = mapServiceToken, ZoomLevel = zoomLevel };
+    public static MapControlElement MapControl(string? mapServiceToken = null, double zoomLevel = 1)
+    {
+        _ = V1.Reg<MapControlElement, WinUI.MapControl, Desc.MapControlDescriptorHandler>.Done;
+        return new() { MapServiceToken = mapServiceToken, ZoomLevel = zoomLevel };
+    }
 
     // ── Frame ───────────────────────────────────────────────────────
 

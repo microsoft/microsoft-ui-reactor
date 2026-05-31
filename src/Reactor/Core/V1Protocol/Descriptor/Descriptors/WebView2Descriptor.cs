@@ -75,3 +75,11 @@ internal static class WebView2Descriptor
             set:         static (c, v) => c.Source = v!,
             shouldWrite: static e => e.Source is not null);
 }
+
+/// <summary>
+/// Spec 048 §3.3 thin handler — instantiated lazily by
+/// <see cref="ControlRegistry"/> when the global path needs the
+/// descriptor-backed <see cref="WebView2Descriptor"/>.
+/// </summary>
+internal sealed class WebView2DescriptorHandler()
+    : DescriptorHandler<WebView2Element, WinUI.WebView2>(WebView2Descriptor.Descriptor);

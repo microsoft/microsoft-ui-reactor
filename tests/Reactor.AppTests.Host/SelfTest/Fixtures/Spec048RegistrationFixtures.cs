@@ -283,4 +283,35 @@ internal static class Spec048RegistrationFixtures
             return Task.CompletedTask;
         }
     }
+
+    internal class MediaIconsGroupFactoriesRegisterHandlers(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            _ = Image("ms-appx:///probe.png");
+            _ = MediaPlayerElement();
+            _ = PersonPicture();
+            _ = AnimatedIcon();
+            _ = AnimatedVisualPlayer();
+            _ = WebView2();
+            _ = MapControl();
+
+            H.Check("Spec048_Reg_Image",
+                ControlRegistry.Contains(typeof(ImageElement)));
+            H.Check("Spec048_Reg_MediaPlayerElement",
+                ControlRegistry.Contains(typeof(MediaPlayerElementElement)));
+            H.Check("Spec048_Reg_PersonPicture",
+                ControlRegistry.Contains(typeof(PersonPictureElement)));
+            H.Check("Spec048_Reg_AnimatedIcon",
+                ControlRegistry.Contains(typeof(AnimatedIconElement)));
+            H.Check("Spec048_Reg_AnimatedVisualPlayer",
+                ControlRegistry.Contains(typeof(AnimatedVisualPlayerElement)));
+            H.Check("Spec048_Reg_WebView2",
+                ControlRegistry.Contains(typeof(WebView2Element)));
+            H.Check("Spec048_Reg_MapControl",
+                ControlRegistry.Contains(typeof(MapControlElement)));
+
+            return Task.CompletedTask;
+        }
+    }
 }

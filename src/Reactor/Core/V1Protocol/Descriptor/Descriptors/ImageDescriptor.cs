@@ -99,3 +99,11 @@ internal static class ImageDescriptor
             set:         static (c, v) => c.NineGrid = v!.Value,
             shouldWrite: static e => e.NineGrid.HasValue);
 }
+
+/// <summary>
+/// Spec 048 §3.3 thin handler — instantiated lazily by
+/// <see cref="ControlRegistry"/> when the global path needs the
+/// descriptor-backed <see cref="ImageDescriptor"/>.
+/// </summary>
+internal sealed class ImageDescriptorHandler()
+    : DescriptorHandler<ImageElement, WinUI.Image>(ImageDescriptor.Descriptor);

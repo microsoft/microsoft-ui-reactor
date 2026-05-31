@@ -23,3 +23,11 @@ internal static class MapControlDescriptor
             set:         static (c, v) => c.MapServiceToken = v!,
             shouldWrite: static e => e.MapServiceToken is not null);
 }
+
+/// <summary>
+/// Spec 048 §3.3 thin handler — instantiated lazily by
+/// <see cref="ControlRegistry"/> when the global path needs the
+/// descriptor-backed <see cref="MapControlDescriptor"/>.
+/// </summary>
+internal sealed class MapControlDescriptorHandler()
+    : DescriptorHandler<MapControlElement, WinUI.MapControl>(MapControlDescriptor.Descriptor);
