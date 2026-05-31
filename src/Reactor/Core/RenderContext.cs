@@ -1452,23 +1452,28 @@ public sealed class RenderContext
     /// migrated value re-run on the following render because the new instance is
     /// a different reference (spec §11 Q1) — matching normal SetState semantics.
     ///
-    /// <para>Always resets every cell's <see cref="HookState.Migrated"/> flag at
-    /// the top so the devtools annotation reflects only the most recent pass,
-    /// even when there is nothing to migrate. Reflection-bearing; reachable only
-    /// inside a hot-reload pass, so it is statically dead under NativeAOT (spec
-    /// §8).</para>
+    /// <para>Within a hot-reload pass it always resets every cell's
+    /// <see cref="HookState.Migrated"/> flag first so the devtools annotation
+    /// reflects only the most recent pass, even when there is nothing to
+    /// migrate. Outside a pass it is a complete no-op (the guard is checked
+    /// before the reset) so a stray call never wipes the prior pass's
+    /// annotations. Reflection-bearing; reachable only inside a hot-reload
+    /// pass, so it is statically dead under NativeAOT (spec §8).</para>
     /// </summary>
     [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Reachable only inside a hot-reload pass; dead under NativeAOT (spec 049 §8).")]
     [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = "Reachable only inside a hot-reload pass; dead under NativeAOT (spec 049 §8).")]
     [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Reachable only inside a hot-reload pass; dead under NativeAOT (spec 049 §8).")]
     internal void MigrateHooksForHotReload(IReadOnlySet<Type>? updatedTypes)
     {
-        // Clear stale per-pass annotations regardless of whether there's work.
+        // Outside a hot-reload pass this is a complete no-op so a stray call
+        // never disturbs the devtools Migrated annotations from the last pass.
+        if (!Microsoft.UI.Reactor.Hosting.HotReloadService.WithinUpdatePass) return;
+
+        // Within a pass, clear stale per-pass annotations regardless of work.
         for (int i = 0; i < _hooks.Count; i++)
             _hooks[i].Migrated = false;
 
         if (updatedTypes is null || updatedTypes.Count == 0) return;
-        if (!Microsoft.UI.Reactor.Hosting.HotReloadService.WithinUpdatePass) return;
 
         for (int i = 0; i < _hooks.Count; i++)
         {

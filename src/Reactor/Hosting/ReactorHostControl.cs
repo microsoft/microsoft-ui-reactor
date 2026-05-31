@@ -425,6 +425,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         if (hotReloadRender)
             MigrateHotReloadState();
 
+        // Local helper centralizes the recovery sequence (log → reset
         // RenderContext → request a fresh render). Both component-mode
         // and function-mode catches share it; future tweaks (telemetry,
         // additional reset steps, throttling) only need editing here.

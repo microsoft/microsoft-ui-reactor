@@ -138,6 +138,17 @@ internal static class SelfTestRunner
         // before they can be re-enabled under AOT. --
         "Issue142_CustomControlPrivateDp_Renders",
         "Issue142_ThirdPartyControlPrivateDp_Renders",
+
+        // -- Spec 049 Phase 3 component state migration is reflection-based and
+        // JIT-only by design: the production entry point is gated on
+        // HotReloadService.IsHotReloadLive (MetadataUpdater.IsSupported), which
+        // is always false under NativeAOT, so the whole migration subsystem is
+        // statically dead and trims away (spec 049 §8). This fixture bypasses
+        // that gate to exercise the copier directly, but the reflective
+        // field-copy cannot preserve state once the metadata is trimmed, so the
+        // migration-success assertions only hold under JIT. The child
+        // hook-order recovery fixture needs no reflection and still runs. --
+        "HotReload_ComponentMigratesState",
     };
 
     private static string[] GetAotSkipPatterns()

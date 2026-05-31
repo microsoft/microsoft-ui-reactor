@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -47,7 +48,7 @@ internal static class ReactorHotReloadCopier
         Type destType = dest.GetType();
         Type srcType = source.GetType();
 
-        foreach (FieldInfo destField in destType.GetFields(InstanceFields))
+        foreach (FieldInfo destField in GetInstanceFieldsRecursive(destType))
         {
             if (IsBlockListed(destField.FieldType)) continue;
 
@@ -157,6 +158,23 @@ internal static class ReactorHotReloadCopier
         return null;
     }
 
+    /// <summary>
+    /// Enumerates every instance field declared anywhere in the type hierarchy.
+    /// <see cref="Type.GetFields(BindingFlags)"/> with <c>NonPublic</c> only
+    /// returns private fields from the most-derived type, so a plain call would
+    /// silently skip inherited private base-class fields. We walk
+    /// <see cref="Type.BaseType"/> with <c>DeclaredOnly</c> at each level so
+    /// those fields migrate too (mirrors <see cref="FindField"/> on the source).
+    /// </summary>
+    [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = "Reachable only via HotReloadService.IsHotReloadLive; dead under NativeAOT (spec 049 §8).")]
+    [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Reachable only via HotReloadService.IsHotReloadLive; dead under NativeAOT (spec 049 §8).")]
+    private static IEnumerable<FieldInfo> GetInstanceFieldsRecursive(Type type)
+    {
+        for (Type? t = type; t is not null; t = t.BaseType)
+            foreach (FieldInfo f in t.GetFields(InstanceFields | BindingFlags.DeclaredOnly))
+                yield return f;
+    }
+
     private static bool SameFullNameDifferentType(Type a, Type b) =>
         !ReferenceEquals(a, b) && a.FullName is not null && a.FullName == b.FullName;
 
@@ -169,8 +187,9 @@ internal static class ReactorHotReloadCopier
     /// </summary>
     private static bool IsBlockListed(Type fieldType)
     {
-        if (fieldType == typeof(nint) || fieldType == typeof(nuint) ||
-            fieldType == typeof(IntPtr) || fieldType == typeof(UIntPtr))
+        // nint/nuint are aliases for IntPtr/UIntPtr (same Type), so checking the
+        // framework types covers the keyword forms too.
+        if (fieldType == typeof(IntPtr) || fieldType == typeof(UIntPtr))
             return true;
 
         for (Type? t = fieldType; t is not null; t = t.BaseType)
