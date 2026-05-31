@@ -417,6 +417,225 @@ public class ControlRegistryTests : IDisposable
         Assert.True(rec._v1Handlers.TryGet(typeof(DecoratorProbeElement), out var entry2));
         Assert.Same(entry1, entry2);
     }
+
+    // ═════════════════════════════════════════════════════════════════
+    // Spec 048 §3.4 — RegisterForDerivedTypes / RegisterDecoratorForDerivedTypes
+    // contract. Mirrors the per-host V1HandlerRegistry._baseEntries +
+    // _baseCache pattern: a single base registration catches every concrete
+    // element type whose runtime type derives from the base (T-erasure
+    // pattern used by TemplatedListElementBase, LazyStackElementBase,
+    // ItemsRepeaterElement, ItemsViewElement). Exact-type registrations
+    // still win at dispatch.
+    // ═════════════════════════════════════════════════════════════════
+
+    public abstract record BaseProbeElement(string Tag) : Element;
+    public record DerivedProbeElement(string Tag) : BaseProbeElement(Tag);
+    public record DerivedProbeElement2(string Tag) : BaseProbeElement(Tag);
+    public record UnrelatedProbeElement(string Tag) : Element;
+
+    public sealed class BaseProbeHandler : IElementHandler<BaseProbeElement, UIElement>
+    {
+        public string? Identity { get; set; }
+        public UIElement Mount(MountContext ctx, BaseProbeElement element) => null!;
+        public void Update(UpdateContext ctx, BaseProbeElement oldEl, BaseProbeElement newEl, UIElement control) { }
+    }
+
+    public sealed class BaseProbeDecoratorHandler : IDecoratorElementHandler<BaseProbeElement>
+    {
+        public string? Identity { get; set; }
+        public UIElement Mount(MountContext ctx, BaseProbeElement element) => null!;
+        public UIElement Update(UpdateContext ctx, BaseProbeElement oldEl, BaseProbeElement newEl, UIElement control) => control;
+        public V1UnmountDisposition Unmount(UnmountContext ctx, BaseProbeElement? element, UIElement control)
+            => V1UnmountDisposition.CollectSelf;
+    }
+
+    public sealed class ExactDerivedHandler : IElementHandler<DerivedProbeElement, UIElement>
+    {
+        public string? Identity { get; set; }
+        public UIElement Mount(MountContext ctx, DerivedProbeElement element) => null!;
+        public void Update(UpdateContext ctx, DerivedProbeElement oldEl, DerivedProbeElement newEl, UIElement control) { }
+    }
+
+    [Fact]
+    public void RegisterForDerivedTypes_Resolves_Derived_Element_Type_To_Base_Handler()
+    {
+        ControlRegistry.RegisterForDerivedTypes<BaseProbeElement, UIElement>(
+            static () => new BaseProbeHandler());
+
+        Assert.Equal(0, ControlRegistry.Count);
+        Assert.Equal(1, ControlRegistry.BaseCount);
+        Assert.False(ControlRegistry.Contains(typeof(DerivedProbeElement)));
+        Assert.True(ControlRegistry.ContainsBase(typeof(BaseProbeElement)));
+        Assert.True(ControlRegistry.ContainsForType(typeof(DerivedProbeElement)));
+        Assert.True(ControlRegistry.ContainsForType(typeof(DerivedProbeElement2)));
+
+        var rec = new Reconciler();
+        Assert.True(rec.TryResolveFromControlRegistry(typeof(DerivedProbeElement), out _));
+        Assert.True(rec.TryResolveFromControlRegistry(typeof(DerivedProbeElement2), out _));
+    }
+
+    [Fact]
+    public void RegisterForDerivedTypes_Exact_Registration_Wins_Over_Base()
+    {
+        var baseHandlerCalls = 0;
+        var exactHandlerCalls = 0;
+
+        ControlRegistry.RegisterForDerivedTypes<BaseProbeElement, UIElement>(() =>
+        {
+            Interlocked.Increment(ref baseHandlerCalls);
+            return new BaseProbeHandler { Identity = "base" };
+        });
+        ControlRegistry.Register<DerivedProbeElement, UIElement>(() =>
+        {
+            Interlocked.Increment(ref exactHandlerCalls);
+            return new ExactDerivedHandler { Identity = "exact" };
+        });
+
+        var rec = new Reconciler();
+        // DerivedProbeElement → exact hit (one factory call, exact)
+        Assert.True(rec.TryResolveFromControlRegistry(typeof(DerivedProbeElement), out _));
+        Assert.Equal(0, baseHandlerCalls);
+        Assert.Equal(1, exactHandlerCalls);
+
+        // DerivedProbeElement2 → base hit (the only path)
+        var rec2 = new Reconciler();
+        Assert.True(rec2.TryResolveFromControlRegistry(typeof(DerivedProbeElement2), out _));
+        Assert.Equal(1, baseHandlerCalls);
+        Assert.Equal(1, exactHandlerCalls);
+    }
+
+    [Fact]
+    public void RegisterForDerivedTypes_Returns_False_For_Unrelated_Type()
+    {
+        ControlRegistry.RegisterForDerivedTypes<BaseProbeElement, UIElement>(
+            static () => new BaseProbeHandler());
+
+        var rec = new Reconciler();
+        Assert.False(rec.TryResolveFromControlRegistry(typeof(UnrelatedProbeElement), out _));
+        Assert.False(ControlRegistry.ContainsForType(typeof(UnrelatedProbeElement)));
+    }
+
+    [Fact]
+    public void RegisterForDerivedTypes_Walk_Result_Is_Cached_For_Subsequent_Lookups()
+    {
+        var factoryCalls = 0;
+        ControlRegistry.RegisterForDerivedTypes<BaseProbeElement, UIElement>(() =>
+        {
+            Interlocked.Increment(ref factoryCalls);
+            return new BaseProbeHandler();
+        });
+
+        // First lookup walks the BaseType chain and caches the resolved
+        // adapter factory under the derived key. The second lookup hits
+        // the cache and returns the SAME Func instance (registry-level
+        // identity — distinct from the per-host adapter cache, which
+        // creates one fresh adapter per host).
+        Assert.True(ControlRegistry.TryResolve(typeof(DerivedProbeElement), out var factory1));
+        Assert.True(ControlRegistry.TryResolve(typeof(DerivedProbeElement), out var factory2));
+        Assert.Same(factory1, factory2);
+
+        // No factory invocation occurs during TryResolve — it returns the
+        // Func without calling it. Only Reconciler.TryResolveFromControlRegistry
+        // invokes the factory (once per host, on cache miss).
+        Assert.Equal(0, factoryCalls);
+
+        var rec = new Reconciler();
+        Assert.True(rec.TryResolveFromControlRegistry(typeof(DerivedProbeElement), out _));
+        var rec2 = new Reconciler();
+        Assert.True(rec2.TryResolveFromControlRegistry(typeof(DerivedProbeElement), out _));
+        // One factory invocation per host hit; the per-host _v1Handlers
+        // cache absorbs all subsequent dispatches on the same host.
+        Assert.Equal(2, factoryCalls);
+    }
+
+    [Fact]
+    public void RegisterForDerivedTypes_Negative_Cache_Is_Invalidated_When_Later_Base_Registered()
+    {
+        // First lookup misses → null marker cached.
+        var rec = new Reconciler();
+        Assert.False(rec.TryResolveFromControlRegistry(typeof(DerivedProbeElement), out _));
+
+        // Now register a base. The null marker for DerivedProbeElement
+        // must be invalidated so the next lookup walks again and finds
+        // the new base entry.
+        ControlRegistry.RegisterForDerivedTypes<BaseProbeElement, UIElement>(
+            static () => new BaseProbeHandler());
+
+        var rec2 = new Reconciler();
+        Assert.True(rec2.TryResolveFromControlRegistry(typeof(DerivedProbeElement), out _));
+    }
+
+    [Fact]
+    public void RegisterForDerivedTypes_Twice_For_Same_Base_Is_Silent_NoOp_First_Wins()
+    {
+        var firstCalls = 0;
+        var secondCalls = 0;
+
+        ControlRegistry.RegisterForDerivedTypes<BaseProbeElement, UIElement>(() =>
+        {
+            Interlocked.Increment(ref firstCalls);
+            return new BaseProbeHandler { Identity = "first" };
+        });
+        ControlRegistry.RegisterForDerivedTypes<BaseProbeElement, UIElement>(() =>
+        {
+            Interlocked.Increment(ref secondCalls);
+            return new BaseProbeHandler { Identity = "second" };
+        });
+
+        Assert.Equal(1, ControlRegistry.BaseCount);
+
+        var rec = new Reconciler();
+        Assert.True(rec.TryResolveFromControlRegistry(typeof(DerivedProbeElement), out _));
+        Assert.Equal(1, firstCalls);
+        Assert.Equal(0, secondCalls);
+    }
+
+    [Fact]
+    public void RegisterDecoratorForDerivedTypes_Resolves_Derived_Element_Type_To_Base_Handler()
+    {
+        ControlRegistry.RegisterDecoratorForDerivedTypes<BaseProbeElement>(
+            static () => new BaseProbeDecoratorHandler());
+
+        Assert.Equal(0, ControlRegistry.Count);
+        Assert.Equal(1, ControlRegistry.BaseCount);
+        Assert.True(ControlRegistry.ContainsBase(typeof(BaseProbeElement)));
+        Assert.True(ControlRegistry.ContainsForType(typeof(DerivedProbeElement)));
+        Assert.True(ControlRegistry.ContainsForType(typeof(DerivedProbeElement2)));
+
+        var rec = new Reconciler();
+        Assert.True(rec.TryResolveFromControlRegistry(typeof(DerivedProbeElement), out _));
+        Assert.True(rec.TryResolveFromControlRegistry(typeof(DerivedProbeElement2), out _));
+    }
+
+    [Fact]
+    public void RegisterDecoratorForDerivedTypes_Value_And_Decorator_FirstWins_For_Same_Base()
+    {
+        ControlRegistry.RegisterForDerivedTypes<BaseProbeElement, UIElement>(
+            static () => new BaseProbeHandler());
+        // Second decorator-flavoured registration for the same base must
+        // be a silent no-op (single s_baseEntries slot per type, first
+        // wins regardless of value vs. decorator shim).
+        ControlRegistry.RegisterDecoratorForDerivedTypes<BaseProbeElement>(
+            static () => new BaseProbeDecoratorHandler());
+
+        Assert.Equal(1, ControlRegistry.BaseCount);
+        var rec = new Reconciler();
+        Assert.True(rec.TryResolveFromControlRegistry(typeof(DerivedProbeElement), out _));
+    }
+
+    [Fact]
+    public void RegisterForDerivedTypes_Throws_On_Null_Factory()
+    {
+        Assert.Throws<ArgumentNullException>(() =>
+            ControlRegistry.RegisterForDerivedTypes<BaseProbeElement, UIElement>(null!));
+    }
+
+    [Fact]
+    public void RegisterDecoratorForDerivedTypes_Throws_On_Null_Factory()
+    {
+        Assert.Throws<ArgumentNullException>(() =>
+            ControlRegistry.RegisterDecoratorForDerivedTypes<BaseProbeElement>(null!));
+    }
 }
 
 [CollectionDefinition(nameof(ControlRegistryTestCollection), DisableParallelization = true)]

@@ -50,6 +50,16 @@ public static class ControlRegistry
     // type from any path the trimmer can see outside that generic frame.
     private static readonly ConcurrentDictionary<Type, Func<IV1HandlerEntry>> s_entries = new();
 
+    // Spec 048 §3.4 — base-derived global path. Mirrors V1HandlerRegistry's
+    // _baseEntries / _baseCache pair so a single registration on a non-generic
+    // intermediate base routes every closed-T variant (the T-erasure pattern
+    // used by TemplatedListElementBase, LazyStackElementBase, ItemsRepeater,
+    // and ItemsView). Lookup falls back to a BaseType walk after exact-match
+    // miss; results are memoised (including null markers) so steady-state is
+    // O(1) per derived type.
+    private static readonly ConcurrentDictionary<Type, Func<IV1HandlerEntry>> s_baseEntries = new();
+    private static readonly ConcurrentDictionary<Type, Func<IV1HandlerEntry>?> s_baseCache = new();
+
     /// <summary>
     /// Spec §8 — register a handler factory for <typeparamref name="TElement"/>.
     /// Idempotent first-wins: if an entry already exists for
@@ -172,6 +182,62 @@ public static class ControlRegistry
     }
 
     /// <summary>
+    /// Spec 048 §3.4 — base-derived sibling of <see cref="Register{TElement,TControl}"/>.
+    /// Registers a handler for <typeparamref name="TBase"/> that also catches
+    /// every concrete element type whose runtime <see cref="Type"/> derives
+    /// from <typeparamref name="TBase"/>. Exact-type registrations (via
+    /// <see cref="Register{TElement,TControl}"/> /
+    /// <see cref="RegisterDecorator{TElement}"/>) take precedence over a
+    /// base-derived registration, matching the per-host
+    /// <c>V1HandlerRegistry.TryGet</c> precedence.
+    ///
+    /// <para>Used for the four cases that registered through
+    /// <c>Reconciler.RegisterDescriptorForDerivedTypes</c> on the per-host
+    /// path: <c>TemplatedListElementBase</c>, <c>LazyStackElementBase</c>,
+    /// <c>ItemsRepeaterElement</c>, and <c>ItemsViewElement</c> — each is a
+    /// non-generic intermediate base whose closed-T variants
+    /// (<c>TemplatedListViewElement&lt;Person&gt;</c>, etc.) should all share
+    /// the same handler.</para>
+    /// </summary>
+    public static void RegisterForDerivedTypes<TBase, TControl>(
+        Func<IElementHandler<TBase, TControl>> handlerFactory)
+        where TBase : Element
+        where TControl : UIElement
+    {
+        ArgumentNullException.ThrowIfNull(handlerFactory);
+
+        Func<IV1HandlerEntry> adapterFactory = () =>
+            new V1HandlerAdapter<TBase, TControl>(handlerFactory());
+
+        if (s_baseEntries.TryAdd(typeof(TBase), adapterFactory))
+        {
+            // Invalidate any prior "no base match" cache entries so a
+            // derived type that previously missed will pick this base up
+            // on its next dispatch. Exact-match cache entries don't apply
+            // here (s_entries is consulted before s_baseCache).
+            s_baseCache.Clear();
+        }
+    }
+
+    /// <summary>
+    /// Spec 048 §3.4 — decorator sibling of <see cref="RegisterForDerivedTypes{TBase,TControl}"/>.
+    /// </summary>
+    public static void RegisterDecoratorForDerivedTypes<TBase>(
+        Func<IDecoratorElementHandler<TBase>> handlerFactory)
+        where TBase : Element
+    {
+        ArgumentNullException.ThrowIfNull(handlerFactory);
+
+        Func<IV1HandlerEntry> adapterFactory = () =>
+            new V1DecoratorHandlerAdapter<TBase>(handlerFactory());
+
+        if (s_baseEntries.TryAdd(typeof(TBase), adapterFactory))
+        {
+            s_baseCache.Clear();
+        }
+    }
+
+    /// <summary>
     /// Spec §8 — internal resolution hatch the <see cref="Reconciler"/>
     /// consults when its per-host <c>_v1Handlers</c> and per-host
     /// <c>_typeRegistry</c> both miss. On a hit, the caller is responsible
@@ -189,14 +255,56 @@ public static class ControlRegistry
     internal static bool TryResolve(
         Type elementType,
         [NotNullWhen(true)] out Func<IV1HandlerEntry>? entry)
-        => s_entries.TryGetValue(elementType, out entry);
+    {
+        if (s_entries.TryGetValue(elementType, out entry)) return true;
+        // §3.4 base-derived fallback. Skip the walk fast-path when no
+        // base-derived entries have ever been registered.
+        if (s_baseEntries.IsEmpty) { entry = null; return false; }
+        if (s_baseCache.TryGetValue(elementType, out var cached))
+        {
+            entry = cached;
+            return cached is not null;
+        }
+        for (var t = elementType.BaseType; t is not null && t != typeof(object); t = t.BaseType)
+        {
+            if (s_baseEntries.TryGetValue(t, out var found))
+            {
+                s_baseCache.TryAdd(elementType, found);
+                entry = found;
+                return true;
+            }
+        }
+        // Cache the negative result so subsequent dispatches don't walk
+        // the inheritance chain again.
+        s_baseCache.TryAdd(elementType, null);
+        entry = null;
+        return false;
+    }
 
     /// <summary>
     /// Spec §8 — true if a global registration exists for the given element
     /// type. Used by diagnostics; the Reconciler's dispatch path uses
-    /// <see cref="TryResolve"/> directly.
+    /// <see cref="TryResolve"/> directly. Reports <i>exact-type</i> entries
+    /// only — for the §3.4 base-derived effective-dispatch check use
+    /// <see cref="ContainsForType"/>.
     /// </summary>
     internal static bool Contains(Type elementType) => s_entries.ContainsKey(elementType);
+
+    /// <summary>
+    /// Spec 048 §3.4 — true if dispatch is wired for <paramref name="elementType"/>
+    /// either by an exact-type registration OR by a base-derived registration
+    /// on one of its ancestors. Test/diagnostic surface mirroring the
+    /// effective behaviour of <see cref="TryResolve"/>.
+    /// </summary>
+    internal static bool ContainsForType(Type elementType)
+        => TryResolve(elementType, out _);
+
+    /// <summary>
+    /// Spec 048 §3.4 — true if <paramref name="baseType"/> itself was
+    /// registered via <see cref="RegisterForDerivedTypes{TBase,TControl}"/> /
+    /// <see cref="RegisterDecoratorForDerivedTypes{TBase}"/>.
+    /// </summary>
+    internal static bool ContainsBase(Type baseType) => s_baseEntries.ContainsKey(baseType);
 
     /// <summary>
     /// Test-only hatch — clear the global registry. Production code <b>must
@@ -205,7 +313,12 @@ public static class ControlRegistry
     /// Exposed via <c>InternalsVisibleTo</c> for the registry unit tests
     /// that need a clean slate per case.
     /// </summary>
-    internal static void ResetForTesting() => s_entries.Clear();
+    internal static void ResetForTesting()
+    {
+        s_entries.Clear();
+        s_baseEntries.Clear();
+        s_baseCache.Clear();
+    }
 
     /// <summary>
     /// Test-only diagnostic — number of registered element types. Used by
@@ -213,4 +326,10 @@ public static class ControlRegistry
     /// grow on repeat <see cref="Register{TElement,TControl}"/> calls).
     /// </summary>
     internal static int Count => s_entries.Count;
+
+    /// <summary>
+    /// Spec 048 §3.4 — number of registered base-derived element types.
+    /// Used by the §3.4 primitive's xunit tests.
+    /// </summary>
+    internal static int BaseCount => s_baseEntries.Count;
 }
