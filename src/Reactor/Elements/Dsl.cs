@@ -495,8 +495,12 @@ public static partial class Factories
     /// shorter names reduce DSL noise. The SwiftUI / React Native names are
     /// load-bearing for cross-platform agent familiarity. (spec 039 §0.3)
     /// </remarks>
-    public static StackElement VStack(params Element?[] children) =>
-        new(Orientation.Vertical, FilterChildren(children));
+    public static StackElement VStack(params Element?[] children)
+    {
+        // Spec 048 §3.4 — decorator-global-path fan-out (Containers group).
+        _ = V1.RegDecorator<StackElement, V1.Handlers.StackPanelHandler>.Done;
+        return new(Orientation.Vertical, FilterChildren(children));
+    }
 
     /// <summary>
     /// Creates a vertical <see cref="StackElement"/> with an explicit
@@ -506,8 +510,11 @@ public static partial class Factories
     /// Reactor-original convenience overload — see <see cref="VStack(Element?[])"/>
     /// for the naming rationale.
     /// </remarks>
-    public static StackElement VStack(double spacing, params Element?[] children) =>
-        new(Orientation.Vertical, FilterChildren(children)) { Spacing = spacing };
+    public static StackElement VStack(double spacing, params Element?[] children)
+    {
+        _ = V1.RegDecorator<StackElement, V1.Handlers.StackPanelHandler>.Done;
+        return new(Orientation.Vertical, FilterChildren(children)) { Spacing = spacing };
+    }
 
     /// <summary>
     /// Creates a horizontal <see cref="StackElement"/> (WinUI <c>StackPanel</c>
@@ -518,8 +525,11 @@ public static partial class Factories
     /// Reactor-original name — see <see cref="VStack(Element?[])"/> for the
     /// naming rationale. (spec 039 §0.3)
     /// </remarks>
-    public static StackElement HStack(params Element?[] children) =>
-        new(Orientation.Horizontal, FilterChildren(children));
+    public static StackElement HStack(params Element?[] children)
+    {
+        _ = V1.RegDecorator<StackElement, V1.Handlers.StackPanelHandler>.Done;
+        return new(Orientation.Horizontal, FilterChildren(children));
+    }
 
     /// <summary>
     /// Creates a horizontal <see cref="StackElement"/> with an explicit
@@ -529,14 +539,23 @@ public static partial class Factories
     /// Reactor-original convenience overload — see <see cref="VStack(Element?[])"/>
     /// for the naming rationale.
     /// </remarks>
-    public static StackElement HStack(double spacing, params Element?[] children) =>
-        new(Orientation.Horizontal, FilterChildren(children)) { Spacing = spacing };
+    public static StackElement HStack(double spacing, params Element?[] children)
+    {
+        _ = V1.RegDecorator<StackElement, V1.Handlers.StackPanelHandler>.Done;
+        return new(Orientation.Horizontal, FilterChildren(children)) { Spacing = spacing };
+    }
 
-    public static WrapGridElement WrapGrid(params Element?[] children) =>
-        new(FilterChildren(children));
+    public static WrapGridElement WrapGrid(params Element?[] children)
+    {
+        _ = V1.RegDecorator<WrapGridElement, V1.Handlers.WrapGridHandler>.Done;
+        return new(FilterChildren(children));
+    }
 
-    public static WrapGridElement WrapGrid(int maxRowsOrColumns, params Element?[] children) =>
-        new(FilterChildren(children)) { MaximumRowsOrColumns = maxRowsOrColumns };
+    public static WrapGridElement WrapGrid(int maxRowsOrColumns, params Element?[] children)
+    {
+        _ = V1.RegDecorator<WrapGridElement, V1.Handlers.WrapGridHandler>.Done;
+        return new(FilterChildren(children)) { MaximumRowsOrColumns = maxRowsOrColumns };
+    }
 
     /// <summary>
     /// Creates a <see cref="ScrollViewerElement"/> wrapping <paramref name="child"/>
@@ -592,8 +611,11 @@ public static partial class Factories
         return new(child!);
     }
 
-    public static ExpanderElement Expander(string header, Element content, bool isExpanded = false, Action<bool>? onIsExpandedChanged = null) =>
-        new(header, content, isExpanded, onIsExpandedChanged);
+    public static ExpanderElement Expander(string header, Element content, bool isExpanded = false, Action<bool>? onIsExpandedChanged = null)
+    {
+        _ = V1.RegDecorator<ExpanderElement, V1.Handlers.ExpanderHandler>.Done;
+        return new(header, content, isExpanded, onIsExpandedChanged);
+    }
 
     public static SplitViewElement SplitView(Element? pane = null, Element? content = null)
     {
@@ -607,7 +629,11 @@ public static partial class Factories
         return new(child);
     }
 
-    public static CanvasElement Canvas(params Element?[] children) => new(FilterChildren(children));
+    public static CanvasElement Canvas(params Element?[] children)
+    {
+        _ = V1.RegDecorator<CanvasElement, V1.Handlers.CanvasPanelHandler>.Done;
+        return new(FilterChildren(children));
+    }
 
     // ── Flex ────────────────────────────────────────────────────────
 
@@ -624,8 +650,11 @@ public static partial class Factories
     /// you need wrap, justify-content / align-items, or per-child grow/shrink.
     /// (spec 039 §0.3)
     /// </remarks>
-    public static FlexElement Flex(params Element?[] children) =>
-        new(FilterChildren(children));
+    public static FlexElement Flex(params Element?[] children)
+    {
+        _ = V1.RegDecorator<FlexElement, V1.Handlers.FlexPanelHandler>.Done;
+        return new(FilterChildren(children));
+    }
 
     /// <summary>
     /// Creates a Yoga flexbox container with an explicit direction.
@@ -633,8 +662,11 @@ public static partial class Factories
     /// <remarks>
     /// Reactor-original — see <see cref="Flex(Element?[])"/> for the rationale.
     /// </remarks>
-    public static FlexElement Flex(Microsoft.UI.Reactor.Layout.FlexDirection direction, params Element?[] children) =>
-        new(FilterChildren(children)) { Direction = direction };
+    public static FlexElement Flex(Microsoft.UI.Reactor.Layout.FlexDirection direction, params Element?[] children)
+    {
+        _ = V1.RegDecorator<FlexElement, V1.Handlers.FlexPanelHandler>.Done;
+        return new(FilterChildren(children)) { Direction = direction };
+    }
 
     /// <summary>
     /// Creates a Yoga flexbox container with
@@ -644,8 +676,11 @@ public static partial class Factories
     /// Reactor-original convenience for the row-direction flex case — see
     /// <see cref="Flex(Element?[])"/> for the rationale. (spec 039 §0.3)
     /// </remarks>
-    public static FlexElement FlexRow(params Element?[] children) =>
-        new(FilterChildren(children)) { Direction = Microsoft.UI.Reactor.Layout.FlexDirection.Row };
+    public static FlexElement FlexRow(params Element?[] children)
+    {
+        _ = V1.RegDecorator<FlexElement, V1.Handlers.FlexPanelHandler>.Done;
+        return new(FilterChildren(children)) { Direction = Microsoft.UI.Reactor.Layout.FlexDirection.Row };
+    }
 
     /// <summary>
     /// Creates a Yoga flexbox container with
@@ -655,8 +690,11 @@ public static partial class Factories
     /// Reactor-original convenience for the column-direction flex case — see
     /// <see cref="Flex(Element?[])"/> for the rationale. (spec 039 §0.3)
     /// </remarks>
-    public static FlexElement FlexColumn(params Element?[] children) =>
-        new(FilterChildren(children)) { Direction = Microsoft.UI.Reactor.Layout.FlexDirection.Column };
+    public static FlexElement FlexColumn(params Element?[] children)
+    {
+        _ = V1.RegDecorator<FlexElement, V1.Handlers.FlexPanelHandler>.Done;
+        return new(FilterChildren(children)) { Direction = Microsoft.UI.Reactor.Layout.FlexDirection.Column };
+    }
 
     // ── Grid ────────────────────────────────────────────────────────
 
@@ -676,6 +714,7 @@ public static partial class Factories
     {
         if (columns is null) throw new ArgumentNullException(nameof(columns));
         if (rows is null) throw new ArgumentNullException(nameof(rows));
+        _ = V1.RegDecorator<GridElement, V1.Handlers.GridPanelHandler>.Done;
         return new(new GridDefinition(columns, rows), FilterChildren(children));
     }
 
@@ -689,8 +728,11 @@ public static partial class Factories
         error: false)]
     public static GridElement Grid(
         string[] columns, string[] rows,
-        params Element?[] children) =>
-        new(new GridDefinition(columns, rows), FilterChildren(children));
+        params Element?[] children)
+    {
+        _ = V1.RegDecorator<GridElement, V1.Handlers.GridPanelHandler>.Done;
+        return new(new GridDefinition(columns, rows), FilterChildren(children));
+    }
 
     // ── Grid layout builders ────────────────────────────────────────
 
@@ -1394,7 +1436,11 @@ public static partial class Factories
 
     // ── Additional layout ───────────────────────────────────────────
 
-    public static RelativePanelElement RelativePanel(params Element?[] children) => new(FilterChildren(children));
+    public static RelativePanelElement RelativePanel(params Element?[] children)
+    {
+        _ = V1.RegDecorator<RelativePanelElement, V1.Handlers.RelativePanelHandler>.Done;
+        return new(FilterChildren(children));
+    }
 
     // ── Additional media ────────────────────────────────────────────
 

@@ -151,10 +151,10 @@ internal static class Spec048RegistrationFixtures
     /// descriptor-backed ScrollViewer, ScrollView, Viewbox, Frame, SplitView,
     /// RefreshContainer, ParallaxView, SwipeControl, SemanticZoom).
     ///
-    /// <para><b>Excluded:</b> the seven panel/expander decorators
-    /// (Stack/Grid/Canvas/RelativePanel/WrapGrid/FlexPanel/Expander) use
-    /// <c>IDecoratorElementHandler&lt;TElement&gt;</c> and remain on the
-    /// per-host registrar until §3.4's decorator-global-path work.</para>
+    /// <para>Spec 048 §3.4 — also extends to the seven panel/expander
+    /// decorators (Stack/Grid/Canvas/RelativePanel/WrapGrid/Flex/Expander) which
+    /// use <c>IDecoratorElementHandler&lt;TElement&gt;</c> and now register
+    /// globally via <c>RegDecorator&lt;TElement, THandler&gt;.Done</c>.</para>
     /// </summary>
     internal class ContainerGroupFactoriesRegisterHandlers(Harness h) : SelfTestFixtureBase(h)
     {
@@ -170,6 +170,15 @@ internal static class Spec048RegistrationFixtures
             _ = ParallaxView(TextBlock("probe"));
             _ = SwipeControl(TextBlock("probe"));
             _ = SemanticZoom(TextBlock("a"), TextBlock("b"));
+            // Spec 048 §3.4 — panel/expander decorator factories.
+            _ = VStack();
+            _ = HStack();
+            _ = Grid(Array.Empty<GridSize>(), Array.Empty<GridSize>());
+            _ = Canvas();
+            _ = RelativePanel();
+            _ = WrapGrid();
+            _ = Flex();
+            _ = Expander("h", TextBlock("c"));
 
             H.Check("Spec048_Reg_Border",
                 ControlRegistry.Contains(typeof(BorderElement)));
@@ -191,6 +200,20 @@ internal static class Spec048RegistrationFixtures
                 ControlRegistry.Contains(typeof(SwipeControlElement)));
             H.Check("Spec048_Reg_SemanticZoom",
                 ControlRegistry.Contains(typeof(SemanticZoomElement)));
+            H.Check("Spec048_RegDecorator_Stack",
+                ControlRegistry.Contains(typeof(StackElement)));
+            H.Check("Spec048_RegDecorator_Grid",
+                ControlRegistry.Contains(typeof(GridElement)));
+            H.Check("Spec048_RegDecorator_Canvas",
+                ControlRegistry.Contains(typeof(CanvasElement)));
+            H.Check("Spec048_RegDecorator_RelativePanel",
+                ControlRegistry.Contains(typeof(RelativePanelElement)));
+            H.Check("Spec048_RegDecorator_WrapGrid",
+                ControlRegistry.Contains(typeof(WrapGridElement)));
+            H.Check("Spec048_RegDecorator_Flex",
+                ControlRegistry.Contains(typeof(FlexElement)));
+            H.Check("Spec048_RegDecorator_Expander",
+                ControlRegistry.Contains(typeof(ExpanderElement)));
 
             return Task.CompletedTask;
         }
