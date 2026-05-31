@@ -451,6 +451,7 @@ internal static class SelfTestFixtureRegistry
         // Core coverage tests — targeting uncovered Reconciler/RenderContext paths
         "CoreCov_RichTextBlockParagraphUpdate",
         "CoreCov_RichTextBlockInlineReconciliation",
+        "CoreCov_RichTextInlineUIMountAndUpdate",
         "CoreCov_TemplatedGridViewMountUpdate",
         "CoreCov_TemplatedFlipViewMountUpdate",
         "CoreCov_LazyVStackMountUpdate",
@@ -1616,6 +1617,7 @@ internal static class SelfTestFixtureRegistry
         // Core coverage tests
         "CoreCov_RichTextBlockParagraphUpdate" => new CoreCoverageFixtures.RichTextBlockParagraphUpdate(harness),
         "CoreCov_RichTextBlockInlineReconciliation" => new CoreCoverageFixtures.RichTextBlockInlineReconciliation(harness),
+        "CoreCov_RichTextInlineUIMountAndUpdate" => new CoreCoverageFixtures.RichTextInlineUIMountAndUpdate(harness),
         "CoreCov_TemplatedGridViewMountUpdate" => new CoreCoverageFixtures.TemplatedGridViewMountUpdate(harness),
         "CoreCov_TemplatedFlipViewMountUpdate" => new CoreCoverageFixtures.TemplatedFlipViewMountUpdate(harness),
         "CoreCov_LazyVStackMountUpdate" => new CoreCoverageFixtures.LazyVStackMountUpdate(harness),

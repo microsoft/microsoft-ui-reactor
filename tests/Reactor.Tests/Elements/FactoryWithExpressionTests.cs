@@ -491,6 +491,33 @@ public class FactoryWithExpressionTests
     [Fact] public void Hyperlink_WithExpr_Sets_Property()
         => Assert.Equal("new", (Hyperlink("t", new Uri("https://x")) with { Text = "new" }).Text);
 
+    [Fact] public void InlineUI_Factory_Returns_RichTextInlineUI()
+    {
+        Func<Microsoft.UI.Xaml.FrameworkElement> f = () => null!;
+        var inline = InlineUI(f);
+        Assert.IsType<RichTextInlineUI>(inline);
+        Assert.Same(f, inline.ChildFactory);
+    }
+
+    [Fact] public void InlineUI_Equality_By_Factory_Reference()
+    {
+        Func<Microsoft.UI.Xaml.FrameworkElement> f = () => null!;
+        // Same delegate instance → records compare equal (record equality
+        // delegates to Func.Equals → reference equality for closures).
+        Assert.Equal(InlineUI(f), InlineUI(f));
+        // Different closure instances → not equal → triggers RichTextBlock rebuild.
+        Assert.NotEqual(InlineUI(() => null!), InlineUI(() => null!));
+    }
+
+    [Fact] public void InlineUI_WithExpr_Replaces_Factory()
+    {
+        Func<Microsoft.UI.Xaml.FrameworkElement> f1 = () => null!;
+        Func<Microsoft.UI.Xaml.FrameworkElement> f2 = () => null!;
+        var a = InlineUI(f1);
+        var b = a with { ChildFactory = f2 };
+        Assert.Same(f2, b.ChildFactory);
+    }
+
     // ════════════════════════════════════════════════════════════════
     //  Icons
     // ════════════════════════════════════════════════════════════════

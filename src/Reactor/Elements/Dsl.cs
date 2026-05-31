@@ -1249,6 +1249,29 @@ public static partial class Factories
 
     public static RichTextHyperlink Hyperlink(string text, Uri navigateUri) => new(text, navigateUri);
 
+    /// <summary>
+    /// Creates a <see cref="RichTextInlineUI"/> — a rich-text inline that embeds an arbitrary
+    /// <see cref="Microsoft.UI.Xaml.FrameworkElement"/> within a <see cref="RichTextBlockElement"/>
+    /// paragraph flow. Mirrors WinUI's <c>Microsoft.UI.Xaml.Documents.InlineUIContainer</c>.
+    /// </summary>
+    /// <param name="factory">
+    /// A factory that produces a fresh, unparented control each time the enclosing rich-text
+    /// block is rebuilt. Prefer a <c>static</c> (non-capturing) lambda so the inline compares
+    /// equal across renders and avoids unnecessary rebuilds.
+    /// </param>
+    /// <example>
+    /// <code>
+    /// RichTextBlock(new[]
+    /// {
+    ///     Paragraph(
+    ///         Run("Press "),
+    ///         InlineUI(static () => new Microsoft.UI.Xaml.Controls.Button { Content = "OK" }),
+    ///         Run(" to continue."))
+    /// });
+    /// </code>
+    /// </example>
+    public static RichTextInlineUI InlineUI(Func<Microsoft.UI.Xaml.FrameworkElement> factory) => new(factory);
+
     // ── Markdown ─────────────────────────────────────────────────────
 
     /// <summary>

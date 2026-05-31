@@ -2201,6 +2201,26 @@ public record RichTextHyperlink(string Text, Uri NavigateUri) : RichTextInline;
 
 public record RichTextLineBreak() : RichTextInline;
 
+/// <summary>
+/// Embeds an arbitrary <see cref="FrameworkElement"/> (UserControl, Button, custom control, etc.)
+/// inline within a <see cref="RichTextBlockElement"/>'s paragraph flow. Mirrors WinUI's
+/// <see cref="Microsoft.UI.Xaml.Documents.InlineUIContainer"/>.
+///
+/// <para>The <paramref name="ChildFactory"/> is invoked each time the block is (re)built — i.e.
+/// whenever the enclosing <see cref="RichTextBlockElement"/> rebuilds its blocks because
+/// the <c>Paragraphs</c> array changed or any inline within it was unequal. Two
+/// <c>RichTextInlineUI</c> records compare equal iff their factory delegates compare equal
+/// (Func.Equals = same target + method), so non-capturing <c>static</c> lambdas naturally
+/// short-circuit unnecessary rebuilds while capturing lambdas force a rebuild each render —
+/// which is the correct behaviour because captured state may have changed.</para>
+///
+/// <para>The factory should return a fresh, unparented control each invocation: each rebuild
+/// constructs a brand-new <see cref="Microsoft.UI.Xaml.Documents.InlineUIContainer"/> and
+/// assigns the returned element as its <c>Child</c>. Returning a shared instance that is
+/// already parented elsewhere will throw at WinUI write time.</para>
+/// </summary>
+public record RichTextInlineUI(Func<FrameworkElement> ChildFactory) : RichTextInline;
+
 // ════════════════════════════════════════════════════════════════════════
 //  Button elements
 // ════════════════════════════════════════════════════════════════════════

@@ -251,6 +251,20 @@ public sealed partial class Reconciler
                 return hl;
             case RichTextLineBreak:
                 return new Microsoft.UI.Xaml.Documents.LineBreak();
+            case RichTextInlineUI uiInline:
+                var container = new Microsoft.UI.Xaml.Documents.InlineUIContainer();
+                try
+                {
+                    var fe = uiInline.ChildFactory?.Invoke();
+                    if (fe is not null) container.Child = fe;
+                }
+                catch
+                {
+                    // Defensive: a faulty factory must not poison the whole
+                    // paragraph rebuild. Mirrors the legacy Hyperlink path
+                    // which falls back to an empty inline rather than throwing.
+                }
+                return container;
             default:
                 return new Microsoft.UI.Xaml.Documents.Run { Text = "" };
         }

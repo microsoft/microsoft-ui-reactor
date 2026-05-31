@@ -155,6 +155,93 @@ internal static class CoreCoverageFixtures
     }
 
     // ════════════════════════════════════════════════════════════════════════
+    //  Issue #480 — RichTextInlineUI / InlineUI() factory
+    //  Verifies the embedded FrameworkElement is mounted inside the
+    //  InlineUIContainer produced by MountInline() and that subsequent
+    //  rebuilds replace the embedded child rather than leaking the old one.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class RichTextInlineUIMountAndUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, set) = ctx.UseState(0);
+                var paragraphs = phase switch
+                {
+                    0 => new[] { Paragraph(
+                        Run("Before "),
+                        InlineUI(() => new Button { Content = "InlineBtnA", Tag = "InlineUI_A" }),
+                        Run(" after")) },
+                    _ => new[] { Paragraph(
+                        Run("Before "),
+                        InlineUI(() => new TextBox { Text = "edit me", Tag = "InlineUI_B" }),
+                        Run(" after"),
+                        new RichTextLineBreak(),
+                        Run("line2 "),
+                        InlineUI(() => new CheckBox { Content = "ok", Tag = "InlineUI_C" })) },
+                };
+                return VStack(
+                    Button("Next", () => set(phase + 1)),
+                    RichTextBlock(paragraphs)
+                );
+            });
+
+            await Harness.Render();
+
+            var rtb = H.FindControl<RichTextBlock>(_ => true);
+            H.Check("InlineUI_Mounted_Block", rtb is not null && rtb.Blocks.Count == 1);
+
+            // The embedded Button should be reachable as a descendant once
+            // the InlineUIContainer is hosted inside the RichTextBlock.
+            var btnA = H.FindControl<Button>(b => (b.Tag as string) == "InlineUI_A");
+            H.Check("InlineUI_EmbeddedButton_Present", btnA is not null);
+            H.Check("InlineUI_EmbeddedButton_Content", (btnA?.Content as string) == "InlineBtnA");
+
+            // Verify the inline container is the parent of the embedded FE.
+            var container = btnA is null
+                ? null
+                : Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(btnA) as Microsoft.UI.Xaml.Documents.InlineUIContainer
+                  ?? FindInlineContainerHostingChild(rtb, btnA);
+            H.Check("InlineUI_HostedByInlineUIContainer", container is not null);
+
+            // Phase 1: factory swap from Button → TextBox + extra inlines —
+            // old Button should be gone, new TextBox + CheckBox should appear.
+            H.ClickButton("Next");
+            await Harness.Render();
+
+            var oldBtn = H.FindControl<Button>(b => (b.Tag as string) == "InlineUI_A");
+            H.Check("InlineUI_RebuiltRemovedOldChild", oldBtn is null);
+
+            var tb = H.FindControl<TextBox>(t => (t.Tag as string) == "InlineUI_B");
+            var cb = H.FindControl<CheckBox>(c => (c.Tag as string) == "InlineUI_C");
+            H.Check("InlineUI_RebuiltAddedNewTextBox", tb is not null && tb.Text == "edit me");
+            H.Check("InlineUI_RebuiltAddedNewCheckBox", cb is not null);
+        }
+
+        private static Microsoft.UI.Xaml.Documents.InlineUIContainer? FindInlineContainerHostingChild(
+            RichTextBlock? rtb, Microsoft.UI.Xaml.FrameworkElement child)
+        {
+            if (rtb is null) return null;
+            foreach (var block in rtb.Blocks)
+            {
+                if (block is not Microsoft.UI.Xaml.Documents.Paragraph p) continue;
+                foreach (var inline in p.Inlines)
+                {
+                    if (inline is Microsoft.UI.Xaml.Documents.InlineUIContainer iuc
+                        && ReferenceEquals(iuc.Child, child))
+                    {
+                        return iuc;
+                    }
+                }
+            }
+            return null;
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
     //  2. TemplatedGridView — mount + update + item count change
     //     Targets: Reconciler.Mount.cs lines 1415-1448, Reconciler.Update.cs lines 1388-1406
     // ════════════════════════════════════════════════════════════════════════
