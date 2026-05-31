@@ -58,7 +58,7 @@ registers the handler.
 | 1 | An `Element` record subclass with one field per prop and one field per event callback, primary constructor `internal` so callers must reach it through the factory | App code, next to the component that uses it |
 | 2 | A `ControlDescriptor<TElement, TControl>` (or `IElementHandler<TElement, TControl>`) wiring each field to a WinUI property or event | A `static class` in the same file or a sibling |
 | 3 | A `public static class` factory holder whose **static constructor** calls `ControlRegistry.Register<TElement, TControl>(static () => new MyHandler())` and whose `Of(...)` method is the sole construction path for the element | Co-located with the element record |
-| 4 | A component that calls `MyControl.Of(...)` like any other factory in the [DSL](dsl.md) | Anywhere — usage shape is up to you |
+| 4 | A component that calls `MyControl.Of(...)` like any other factory in the [DSL](controls.md) | Anywhere — usage shape is up to you |
 
 A fifth step — `ControlRegistry.RegisterForDerivedTypes` against a
 non-generic intermediate base — lets one registration catch every
