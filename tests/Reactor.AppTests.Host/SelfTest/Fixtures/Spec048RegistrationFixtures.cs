@@ -370,4 +370,44 @@ internal static class Spec048RegistrationFixtures
             return Task.CompletedTask;
         }
     }
+
+    /// <summary>
+    /// Spec 048 §3.4 — decorator-global-path fan-out for the Overlays group
+    /// (deferred from §3.3 close-out note as the universal decorator-deferral
+    /// case). The 7 element types
+    /// (ContentDialog/Flyout/MenuBar/CommandBar/MenuFlyout/Popup/CommandBarFlyout)
+    /// all use <c>IDecoratorElementHandler&lt;TElement&gt;</c> and now register
+    /// via <c>RegDecorator&lt;TElement, THandler&gt;.Done</c> from their Dsl.cs
+    /// factories.
+    /// </summary>
+    internal class OverlaysGroupFactoriesRegisterHandlers(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            _ = ContentDialog("title", TextBlock("probe"));
+            _ = Flyout(TextBlock("target"), TextBlock("content"));
+            _ = MenuBar(Menu("File"));
+            _ = CommandBar();
+            _ = MenuFlyout(TextBlock("target"));
+            _ = Popup(TextBlock("probe"));
+            _ = CommandBarFlyout(TextBlock("target"));
+
+            H.Check("Spec048_RegDecorator_ContentDialog",
+                ControlRegistry.Contains(typeof(ContentDialogElement)));
+            H.Check("Spec048_RegDecorator_Flyout",
+                ControlRegistry.Contains(typeof(FlyoutElement)));
+            H.Check("Spec048_RegDecorator_MenuBar",
+                ControlRegistry.Contains(typeof(MenuBarElement)));
+            H.Check("Spec048_RegDecorator_CommandBar",
+                ControlRegistry.Contains(typeof(CommandBarElement)));
+            H.Check("Spec048_RegDecorator_MenuFlyout",
+                ControlRegistry.Contains(typeof(MenuFlyoutElement)));
+            H.Check("Spec048_RegDecorator_Popup",
+                ControlRegistry.Contains(typeof(PopupElement)));
+            H.Check("Spec048_RegDecorator_CommandBarFlyout",
+                ControlRegistry.Contains(typeof(CommandBarFlyoutElement)));
+
+            return Task.CompletedTask;
+        }
+    }
 }

@@ -897,11 +897,18 @@ public static partial class Factories
 
     // ── Dialogs / Overlays ──────────────────────────────────────────
 
-    public static ContentDialogElement ContentDialog(string title, Element content, string primaryButtonText = "OK") =>
-        new(title, content, primaryButtonText);
+    public static ContentDialogElement ContentDialog(string title, Element content, string primaryButtonText = "OK")
+    {
+        // Spec 048 §3.4 — decorator-global-path fan-out (Overlays group).
+        _ = V1.RegDecorator<ContentDialogElement, V1.Handlers.ContentDialogHandler>.Done;
+        return new(title, content, primaryButtonText);
+    }
 
-    public static FlyoutElement Flyout(Element target, Element flyoutContent) =>
-        new(target, flyoutContent);
+    public static FlyoutElement Flyout(Element target, Element flyoutContent)
+    {
+        _ = V1.RegDecorator<FlyoutElement, V1.Handlers.FlyoutHandler>.Done;
+        return new(target, flyoutContent);
+    }
 
     public static TeachingTipElement TeachingTip(string title, string? subtitle = null)
     {
@@ -920,7 +927,11 @@ public static partial class Factories
 
     // ── Menus ───────────────────────────────────────────────────────
 
-    public static MenuBarElement MenuBar(params MenuBarItemData[] items) => new(items);
+    public static MenuBarElement MenuBar(params MenuBarItemData[] items)
+    {
+        _ = V1.RegDecorator<MenuBarElement, V1.Handlers.MenuBarHandler>.Done;
+        return new(items);
+    }
 
     public static MenuBarItemData Menu(string title, params MenuFlyoutItemBase[] items) => new(title, items);
 
@@ -962,10 +973,17 @@ public static partial class Factories
 
     public static MenuFlyoutSubItemData MenuSubItem(string text, params MenuFlyoutItemBase[] items) => new(text, items);
 
-    public static MenuFlyoutElement MenuFlyout(Element target, params MenuFlyoutItemBase[] items) => new(target, items);
+    public static MenuFlyoutElement MenuFlyout(Element target, params MenuFlyoutItemBase[] items)
+    {
+        _ = V1.RegDecorator<MenuFlyoutElement, V1.Handlers.MenuFlyoutHandler>.Done;
+        return new(target, items);
+    }
 
-    public static CommandBarElement CommandBar(AppBarItemBase[]? primaryCommands = null, AppBarItemBase[]? secondaryCommands = null) =>
-        new(primaryCommands, secondaryCommands);
+    public static CommandBarElement CommandBar(AppBarItemBase[]? primaryCommands = null, AppBarItemBase[]? secondaryCommands = null)
+    {
+        _ = V1.RegDecorator<CommandBarElement, V1.Handlers.CommandBarHandler>.Done;
+        return new(primaryCommands, secondaryCommands);
+    }
 
     public static AppBarButtonData AppBarButton(string label, Action? onClick = null, string? icon = null) => new(label, onClick, icon);
 
@@ -1430,8 +1448,11 @@ public static partial class Factories
 
     // ── Additional overlays / containers ────────────────────────────
 
-    public static PopupElement Popup(Element child, bool isOpen = false, Action? onClosed = null) =>
-        new(child) { IsOpen = isOpen, OnClosed = onClosed };
+    public static PopupElement Popup(Element child, bool isOpen = false, Action? onClosed = null)
+    {
+        _ = V1.RegDecorator<PopupElement, V1.Handlers.PopupHandler>.Done;
+        return new(child) { IsOpen = isOpen, OnClosed = onClosed };
+    }
 
     public static RefreshContainerElement RefreshContainer(Element content, Action? onRefreshRequested = null)
     {
@@ -1439,8 +1460,11 @@ public static partial class Factories
         return new(content) { OnRefreshRequested = onRefreshRequested };
     }
 
-    public static CommandBarFlyoutElement CommandBarFlyout(Element target, AppBarItemBase[]? primaryCommands = null, AppBarItemBase[]? secondaryCommands = null) =>
-        new(target, primaryCommands, secondaryCommands);
+    public static CommandBarFlyoutElement CommandBarFlyout(Element target, AppBarItemBase[]? primaryCommands = null, AppBarItemBase[]? secondaryCommands = null)
+    {
+        _ = V1.RegDecorator<CommandBarFlyoutElement, V1.Handlers.CommandBarFlyoutHandler>.Done;
+        return new(target, primaryCommands, secondaryCommands);
+    }
 
     // ── Additional date / time ──────────────────────────────────────
 
