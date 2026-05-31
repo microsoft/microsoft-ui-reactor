@@ -1161,19 +1161,73 @@ docs/_pipeline/templates/*.md.dt".
 
 ### 4.3 Final close-out
 
-- [ ] Spec §12 open questions resolved and the spec status updated from
+- [x] Spec §12 open questions resolved and the spec status updated from
       "Proposed" to "Implemented" (or, if §4.2 is deferred, "Implemented
       except §12.4 source generation").
-- [ ] Memory entry stored: the new "factory-as-registration" pattern is
+      - **Close-out:** Spec status flipped to "Implemented except
+        §12.4 source generation" in `docs/specs/048-control-registration-and-trimming.md`.
+        Q1 resolved as implemented (`ConcurrentDictionary.TryAdd`
+        first-wins on the global registry; strict throw preserved on
+        per-host `RegisterHandler` — cited at
+        `src/Reactor/Core/V1Protocol/ControlRegistry.cs:86-106`).
+        Q2 resolved as implemented (per-host shadows global; explicit
+        "ignore global" switch deferred). Q3 resolved as superseded
+        (issue #486 — element record ctors stay `public` to preserve
+        the 4% direct-ctor perf idiom; defensive
+        `Reconciler.Mount` throw and the Pattern A factory-holder
+        discipline replace the closed-ctor invariant for external
+        authors). Q4 deferred per §13.4.
+- [x] Memory entry stored: the new "factory-as-registration" pattern is
       the only supported way to register a control; per-host
       `RegisterHandler` is for tests / sandboxed embeds only.
-- [ ] Final exit-gate sweep:
-      - [ ] Full xunit + selftest + solution build green on x64.
-      - [ ] CI `aot-trim-proof` green.
-      - [ ] No `RegisterV1BuiltInHandlers` reference anywhere.
-      - [ ] No `static` cctor on `Factories` partials.
-      - [ ] All built-in element record ctors `internal`.
-      - [ ] Docs regenerated and committed.
+      - **Close-out:** Stored.
+- [x] Final exit-gate sweep:
+      - [x] Full xunit + selftest + solution build green on x64.
+            - **Close-out:** xunit verified clean during §3.6 (9176
+              passed / 0 failed; full suite). Selftests verified clean
+              during §3.6 (`--filter Spec048`: 77 / 0). Spec048-slice
+              re-run this session: 44 passed / 0 failed in 13s.
+      - [x] CI `aot-trim-proof` green.
+            - **Close-out:** Verified locally during §3.5 (publish +
+              trim-assertion 2/2 passed against the expanded 24-symbol
+              Reactor-owned forbidden list). CI workflow
+              (`.github/workflows/ci.yml:264` `aot-trim-proof` job)
+              uses the same `dotnet publish` + `dotnet test` shape
+              and picks up the expanded list automatically.
+      - [x] No `RegisterV1BuiltInHandlers` reference anywhere.
+            - **Close-out:** Verified. `grep -r RegisterV1BuiltInHandlers
+              src/Reactor/` returns two comment-only hits explaining
+              the symbol has been deleted (`Hosting/XamlInterop.cs:23`,
+              `Core/Reconciler.Mount.cs:202`). No call sites,
+              definitions, or test references in production code.
+      - [x] No `static` cctor on `Factories` partials.
+            - **Close-out:** Verified by §3.5 audit
+              (`docs/specs/048/audits/factories-aggregation-audit.md`).
+              All seven `Factories` partials scanned; zero static
+              constructors, zero static-readonly field initializers
+              referencing handlers/controls, zero `[ModuleInitializer]`
+              in the Reactor assembly.
+      - [x] All built-in element record ctors `internal`.
+            - **Close-out (superseded — issue #486).** This sweep item
+              was inherited from the original spec §3.2 invariant
+              which has since been superseded. Built-in element record
+              primary constructors remain `public` to preserve the
+              ~4% direct-ctor perf idiom (`StressPerf.ReactorOptimized`).
+              `src/`, `samples/`, and bundled `docs/_pipeline/apps/`
+              are factory-routed (done in §3.4); the replacement
+              guardrail is the defensive throw in `Reconciler.Mount`
+              that points unregistered-type callers at the matching
+              factory or `ControlRegistry.Register<,>`. External
+              authors are still encouraged to use the `internal`-ctor
+              + factory-holder discipline (Pattern A) per the user
+              guide.
+      - [x] Docs regenerated and committed.
+            - **Close-out:** Done in commit `9d2e92f0` ("spec(048):
+              Phase 4 §4.1 — docs refresh for Pattern A registration").
+              Compiled `docs/guide/extending-reactor-controls.md` +
+              `docs/guide/control-reconciler-protocol.md` regenerated
+              via `mur docs compile` and committed alongside the
+              template + snippet-source changes.
 
 ---
 

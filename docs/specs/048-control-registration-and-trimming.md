@@ -2,7 +2,14 @@
 
 ## Status
 
-**Proposed — design converged, not yet implemented.** This spec is the follow-on
+**Implemented except §12.4 source generation.** Phases 1–3 landed
+(runtime contract, external-proof migration, built-in migration); Phase
+4 §4.1 landed (documentation refresh). The optional §12.4 source
+generator and the optional dedicated `control-registration-and-
+trimming.md.dt` guide page are explicitly deferred — neither is a
+gate requirement and the runtime contract does not depend on either.
+
+This spec is the follow-on
 to [spec 047](047-extensible-control-model.md), which delivered the V1 handler
 protocol (`IElementHandler<TElement, TControl>`, descriptors, the
 `Reconciler.RegisterHandler` author surface) and proved an external assembly can
@@ -428,6 +435,9 @@ entire "no type-level aggregation" rule and should land with the migration.
 
 ## §12 Open questions
 
+> **Resolution status (close-out).** Q1, Q2, and Q3 are resolved as
+> implemented; Q4 is deferred (spec §13.4 ergonomic layer).
+
 1. **Duplicate policy for the global table vs. 047 §13 Q17.** 047 mandates
    throw-on-duplicate. Under the lazy global table a hard throw is the wrong
    behavior: multiple factories legitimately register the same element type (§10.3),
@@ -436,18 +446,50 @@ entire "no type-level aggregation" rule and should land with the migration.
    global `ControlRegistry.Register` is idempotent *first-wins, no throw*; the
    explicit per-host `RegisterHandler` keeps the strict throw (deterministic,
    greppable). This needs ratification as a §13 Q17 amendment.
+   - **Resolved (implemented).** `ControlRegistry.Register` /
+     `RegisterDecorator` use `ConcurrentDictionary<Type, …>.TryAdd`
+     (first-wins, lock-free, no throw) — see
+     `src/Reactor/Core/V1Protocol/ControlRegistry.cs:86-106` and the
+     class-level XML comment on `ControlRegistry`. Per-host
+     `Reconciler.RegisterHandler` retains the strict throw-on-
+     duplicate path (047 §13 Q17 preserved on that surface). Documented
+     in the user guide as a caveat block on
+     `docs/_pipeline/templates/control-reconciler-protocol.md.dt`
+     under "Registration".
 
 2. **Can a different host override a globally-registered control?** Step 1 of the
    precedence order (§8) says yes — a per-host `RegisterHandler` shadows the global
    default. Confirm this is the desired isolation primitive for XAML-island /
    sandboxed embeds, and whether a host needs an explicit "ignore global defaults"
    switch.
+   - **Resolved (implemented).** Per-host `RegisterHandler` shadows
+     the global registry for that reconciler — the dispatch precedence
+     (per-host exact → per-host derived → global `ControlRegistry` →
+     composition primitives) makes this unambiguous. Documented in
+     the user guide as the new "Dispatch precedence" subsection in
+     `control-reconciler-protocol.md.dt`. The explicit "ignore global
+     defaults" switch is deferred until a real consuming scenario asks
+     for it (see "Explicitly out of scope" in the implementation
+     tracker).
 
 3. **Closing element constructors.** Pattern A/B both rely on the factory being the
    sole construction path (no fallback resolver). That implies built-in element
    records move to `internal` constructors. Audit for current call sites that
    `new` an element record directly (tests, samples) and route them through
    factories.
+   - **Resolved (superseded — issue #486).** Built-in element record
+     primary constructors remain `public` because direct construction
+     is a supported ~4% perf idiom (`StressPerf.ReactorOptimized`).
+     `src/`, `samples/`, and bundled `docs/_pipeline/apps/` were
+     converted to factory-routed calls in §3.4 — the relaxation is
+     for *external* callers and perf-sensitive test fixtures. The
+     replacement guardrail is a defensive throw in `Reconciler.Mount`
+     that points unregistered-type callers at the matching factory
+     or `ControlRegistry.Register<,>`. The Pattern A guidance in the
+     user guide and external-author template
+     (`tests/external_proof/Reactor.External.TestControl/MarqueeElement.cs`)
+     continues to teach the `internal` ctor + factory-holder
+     discipline as the recommended shape for new authors.
 
 4. **Source-generated `Reg<>` touches.** The `Reg<>` line is mechanical; a source
    generator could emit it (and the closed-ctor) from each `IElementHandler<E, C>`
@@ -455,6 +497,12 @@ entire "no type-level aggregation" rule and should land with the migration.
    exists ⇒ its factory registers it" a compile-time guarantee. This is the 047 §7
    source-gen surface; it is an additive ergonomic layer over the same runtime
    contract, not a prerequisite.
+   - **Deferred (out of scope).** Per spec §13.4 the source generator
+     is an optional ergonomic layer; the runtime contract does not
+     depend on it and the Pattern A factory-holder shape is already
+     trim-clean today. If a future pain point asks for it, the
+     generator can be added without disturbing any of the runtime
+     surface this spec defined.
 
 ---
 
