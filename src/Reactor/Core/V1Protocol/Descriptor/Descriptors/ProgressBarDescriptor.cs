@@ -44,3 +44,11 @@ internal static class ProgressBarDescriptor
             set:         static (c, v) => c.Value = v!.Value,
             shouldWrite: static e => e.Value.HasValue);
 }
+
+/// <summary>
+/// Spec 048 §3.3 thin handler — instantiated lazily by
+/// <see cref="ControlRegistry"/> when the global path needs the
+/// descriptor-backed <see cref="ProgressBarDescriptor"/>.
+/// </summary>
+internal sealed class ProgressBarDescriptorHandler()
+    : DescriptorHandler<ProgressElement, WinUI.ProgressBar>(ProgressBarDescriptor.Descriptor);

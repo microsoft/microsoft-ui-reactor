@@ -16,3 +16,11 @@ internal static class AnnotatedScrollBarDescriptor
             GetSetters = static e => e.Setters,
         };
 }
+
+/// <summary>
+/// Spec 048 §3.3 thin handler — instantiated lazily by
+/// <see cref="ControlRegistry"/> when the global path needs the
+/// descriptor-backed <see cref="AnnotatedScrollBarDescriptor"/>.
+/// </summary>
+internal sealed class AnnotatedScrollBarDescriptorHandler()
+    : DescriptorHandler<AnnotatedScrollBarElement, WinUI.AnnotatedScrollBar>(AnnotatedScrollBarDescriptor.Descriptor);

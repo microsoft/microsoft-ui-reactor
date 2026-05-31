@@ -344,8 +344,9 @@ group to keep diffs reviewable.
       combine base-derived AND decorator paths — all defer to §3.4.)*
 - [x] **Date / time** — `DatePicker`, `CalendarDatePicker`, `TimePicker`,
       `CalendarView`. *(Done — see §3.3 close-out note below.)*
-- [ ] **Status / info** — `ProgressBar`, `ProgressRing`, `InfoBar`,
+- [x] **Status / info** — `ProgressBar`, `ProgressRing`, `InfoBar`,
       `InfoBadge`, `TeachingTip`, `AnnounceRegion`, `AnnotatedScrollBar`.
+      *(Done — see §3.3 close-out note below.)*
 - [ ] **Media / icons** — `Image`, `MediaPlayerElement`,
       `PersonPicture`, `Icon` / `AnimatedIcon`, `AnimatedVisualPlayer`,
       `WebView2`, `MapControl`.
@@ -547,6 +548,34 @@ hitting `Reg<TextBlockElement, …>` is silently absorbed — spec §10.3.)
 > - Selftest `Spec048_DateTimeGroupFactoriesRegisterHandlers` asserts each
 >   factory call populates `ControlRegistry.Contains(typeof(XxxElement))`.
 > - Green: Spec048 selftests (55 checks, 4 new) + Reactor.Tests
+>   (9148 passed / 0 failed), `-p:Platform=x64`.
+
+> **§3.3 close-out note — Status/info-group landed:**
+>
+> Same template; all 7 element types wired. `AnnounceRegion` has no public
+> `Factories` entry — it's constructed inside `AnnounceHandle.ctor`
+> (reached via the `UseAnnounce` hook), so the `Reg<>.Done` touch lives
+> there instead of in `Dsl.cs`. `Progress` is the canonical name for
+> `ProgressElement` (renders WinUI `ProgressBar`); the deprecated
+> `ProgressBar()` overloads forward to `Progress(double)` /
+> `ProgressIndeterminate()` and inherit the touch transitively.
+>
+> **Landed for the Status/info group:**
+> - Thin handlers appended to 7 descriptors: `ProgressBar`, `ProgressRing`,
+>   `InfoBar`, `InfoBadge`, `TeachingTip`, `AnnounceRegion`,
+>   `AnnotatedScrollBar`. `ProgressBarDescriptorHandler` is typed
+>   `DescriptorHandler<ProgressElement, WinUI.ProgressBar>` (matches the
+>   descriptor's actual element type, not the WinUI name).
+> - 6 factory groups in `Dsl.cs` gain a `Reg<>.Done` touch (`Progress`,
+>   `ProgressIndeterminate`, `ProgressRing` ×2, `InfoBar`, `InfoBadge` ×2,
+>   `TeachingTip`, `AnnotatedScrollBar`).
+> - `AnnounceHandle.ctor` in `src/Reactor/Hooks/UseAnnounce.cs` touches
+>   `Reg<AnnounceRegionElement, WinUI.TextBlock, AnnounceRegionDescriptorHandler>`
+>   before constructing the element.
+> - Selftest `Spec048_StatusInfoGroupFactoriesRegisterHandlers` covers all
+>   7 element types; it instantiates `AnnounceHandle` directly (visible via
+>   `InternalsVisibleTo Reactor.AppTests.Host`) to exercise that path.
+> - Green: Spec048 selftests (62 checks, 7 new) + Reactor.Tests
 >   (9148 passed / 0 failed), `-p:Platform=x64`.
 
 ### 3.4 Delete `RegisterV1BuiltInHandlers`

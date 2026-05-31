@@ -45,3 +45,11 @@ internal static class ProgressRingDescriptor
             set:         static (c, v) => c.Value = v!.Value,
             shouldWrite: static e => e.Value.HasValue);
 }
+
+/// <summary>
+/// Spec 048 §3.3 thin handler — instantiated lazily by
+/// <see cref="ControlRegistry"/> when the global path needs the
+/// descriptor-backed <see cref="ProgressRingDescriptor"/>.
+/// </summary>
+internal sealed class ProgressRingDescriptorHandler()
+    : DescriptorHandler<ProgressRingElement, WinUI.ProgressRing>(ProgressRingDescriptor.Descriptor);

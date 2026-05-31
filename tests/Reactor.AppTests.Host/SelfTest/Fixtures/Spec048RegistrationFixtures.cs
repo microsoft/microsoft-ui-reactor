@@ -247,4 +247,40 @@ internal static class Spec048RegistrationFixtures
             return Task.CompletedTask;
         }
     }
+
+    internal class StatusInfoGroupFactoriesRegisterHandlers(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            _ = Progress(0.5);
+            _ = ProgressRing();
+            _ = InfoBar();
+            _ = InfoBadge();
+            _ = TeachingTip("title");
+            _ = AnnotatedScrollBar();
+            // AnnounceRegion has no public factory — the Reg<> touch lives in
+            // the AnnounceHandle ctor (which is reached from the UseAnnounce
+            // hook). Constructing the handle directly exercises the same
+            // registration path. Internal ctor is visible via
+            // InternalsVisibleTo Reactor.AppTests.Host.
+            _ = new Microsoft.UI.Reactor.Hooks.AnnounceHandle();
+
+            H.Check("Spec048_Reg_Progress",
+                ControlRegistry.Contains(typeof(ProgressElement)));
+            H.Check("Spec048_Reg_ProgressRing",
+                ControlRegistry.Contains(typeof(ProgressRingElement)));
+            H.Check("Spec048_Reg_InfoBar",
+                ControlRegistry.Contains(typeof(InfoBarElement)));
+            H.Check("Spec048_Reg_InfoBadge",
+                ControlRegistry.Contains(typeof(InfoBadgeElement)));
+            H.Check("Spec048_Reg_TeachingTip",
+                ControlRegistry.Contains(typeof(TeachingTipElement)));
+            H.Check("Spec048_Reg_AnnotatedScrollBar",
+                ControlRegistry.Contains(typeof(AnnotatedScrollBarElement)));
+            H.Check("Spec048_Reg_AnnounceRegion",
+                ControlRegistry.Contains(typeof(Microsoft.UI.Reactor.Hooks.AnnounceRegionElement)));
+
+            return Task.CompletedTask;
+        }
+    }
 }

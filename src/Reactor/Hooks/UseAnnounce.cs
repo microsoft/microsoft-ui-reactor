@@ -2,6 +2,9 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Controls;
+using V1 = Microsoft.UI.Reactor.Core.V1Protocol;
+using Desc = Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
+using WinUI = Microsoft.UI.Xaml.Controls;
 
 namespace Microsoft.UI.Reactor.Hooks;
 
@@ -23,6 +26,11 @@ public sealed class AnnounceHandle
 
     internal AnnounceHandle()
     {
+        // Spec 048 §3.3 — AnnounceRegion has no public Factories entry; it's
+        // constructed here in the UseAnnounce hook. Touch the Reg<> registrar
+        // at the same construction site so the global path knows about the
+        // descriptor-backed handler.
+        _ = V1.Reg<AnnounceRegionElement, WinUI.TextBlock, Desc.AnnounceRegionDescriptorHandler>.Done;
         Region = new AnnounceRegionElement(this);
     }
 

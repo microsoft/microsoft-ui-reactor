@@ -122,3 +122,11 @@ internal static class InfoBarDescriptor
             => global::System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
     }
 }
+
+/// <summary>
+/// Spec 048 §3.3 thin handler — instantiated lazily by
+/// <see cref="ControlRegistry"/> when the global path needs the
+/// descriptor-backed <see cref="InfoBarDescriptor"/>.
+/// </summary>
+internal sealed class InfoBarDescriptorHandler()
+    : DescriptorHandler<InfoBarElement, WinUI.InfoBar>(InfoBarDescriptor.Descriptor);

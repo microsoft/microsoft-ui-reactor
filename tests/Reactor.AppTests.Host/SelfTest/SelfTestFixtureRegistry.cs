@@ -1213,6 +1213,7 @@ internal static class SelfTestFixtureRegistry
         "Spec048_ContainerGroupFactoriesRegisterHandlers",
         "Spec048_CollectionsGroupFactoriesRegisterHandlers",
         "Spec048_DateTimeGroupFactoriesRegisterHandlers",
+        "Spec048_StatusInfoGroupFactoriesRegisterHandlers",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -2388,6 +2389,7 @@ internal static class SelfTestFixtureRegistry
         "Spec048_ContainerGroupFactoriesRegisterHandlers" => new Spec048RegistrationFixtures.ContainerGroupFactoriesRegisterHandlers(harness),
         "Spec048_CollectionsGroupFactoriesRegisterHandlers" => new Spec048RegistrationFixtures.CollectionsGroupFactoriesRegisterHandlers(harness),
         "Spec048_DateTimeGroupFactoriesRegisterHandlers" => new Spec048RegistrationFixtures.DateTimeGroupFactoriesRegisterHandlers(harness),
+        "Spec048_StatusInfoGroupFactoriesRegisterHandlers" => new Spec048RegistrationFixtures.StatusInfoGroupFactoriesRegisterHandlers(harness),
 
         _ => null,
     };

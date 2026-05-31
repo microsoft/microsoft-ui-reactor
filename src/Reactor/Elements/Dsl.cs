@@ -393,7 +393,11 @@ public static partial class Factories
     /// WinUI name. <see cref="ProgressRing(double)"/> is the circular variant.
     /// (spec 039 §5 / §16)
     /// </remarks>
-    public static ProgressElement Progress(double value) => new(value);
+    public static ProgressElement Progress(double value)
+    {
+        _ = V1.Reg<ProgressElement, WinUI.ProgressBar, Desc.ProgressBarDescriptorHandler>.Done;
+        return new(value);
+    }
 
     /// <summary>
     /// Creates an indeterminate <see cref="ProgressElement"/> (animated bar with
@@ -403,7 +407,11 @@ public static partial class Factories
     /// Reactor-original convenience for the indeterminate-bar case; see
     /// <see cref="Progress(double)"/> for the naming rationale. (spec 039 §5 / §16)
     /// </remarks>
-    public static ProgressElement ProgressIndeterminate() => new(null);
+    public static ProgressElement ProgressIndeterminate()
+    {
+        _ = V1.Reg<ProgressElement, WinUI.ProgressBar, Desc.ProgressBarDescriptorHandler>.Done;
+        return new(null);
+    }
 
     /// <summary>
     /// Deprecated forwarding alias for <see cref="Progress(double)"/>.
@@ -423,15 +431,35 @@ public static partial class Factories
         error: false)]
     public static ProgressElement ProgressBar() => ProgressIndeterminate();
 
-    public static ProgressRingElement ProgressRing() => new(null);
-    public static ProgressRingElement ProgressRing(double value) => new(value);
+    public static ProgressRingElement ProgressRing()
+    {
+        _ = V1.Reg<ProgressRingElement, WinUI.ProgressRing, Desc.ProgressRingDescriptorHandler>.Done;
+        return new(null);
+    }
+    public static ProgressRingElement ProgressRing(double value)
+    {
+        _ = V1.Reg<ProgressRingElement, WinUI.ProgressRing, Desc.ProgressRingDescriptorHandler>.Done;
+        return new(value);
+    }
 
     // ── Status / Info ───────────────────────────────────────────────
 
-    public static InfoBarElement InfoBar(string? title = null, string? message = null) => new(title, message);
+    public static InfoBarElement InfoBar(string? title = null, string? message = null)
+    {
+        _ = V1.Reg<InfoBarElement, WinUI.InfoBar, Desc.InfoBarDescriptorHandler>.Done;
+        return new(title, message);
+    }
 
-    public static InfoBadgeElement InfoBadge() => new();
-    public static InfoBadgeElement InfoBadge(int value) => new() { Value = value };
+    public static InfoBadgeElement InfoBadge()
+    {
+        _ = V1.Reg<InfoBadgeElement, WinUI.InfoBadge, Desc.InfoBadgeDescriptorHandler>.Done;
+        return new();
+    }
+    public static InfoBadgeElement InfoBadge(int value)
+    {
+        _ = V1.Reg<InfoBadgeElement, WinUI.InfoBadge, Desc.InfoBadgeDescriptorHandler>.Done;
+        return new() { Value = value };
+    }
 
     // ── Layout ──────────────────────────────────────────────────────
 
@@ -848,8 +876,11 @@ public static partial class Factories
     public static FlyoutElement Flyout(Element target, Element flyoutContent) =>
         new(target, flyoutContent);
 
-    public static TeachingTipElement TeachingTip(string title, string? subtitle = null) =>
-        new(title, subtitle);
+    public static TeachingTipElement TeachingTip(string title, string? subtitle = null)
+    {
+        _ = V1.Reg<TeachingTipElement, WinUI.TeachingTip, Desc.TeachingTipDescriptorHandler>.Done;
+        return new(title, subtitle);
+    }
 
     public static ContentFlyoutElement ContentFlyout(Element content, FlyoutPlacementMode placement = FlyoutPlacementMode.Auto) =>
         new(content) { Placement = placement };
@@ -1329,7 +1360,11 @@ public static partial class Factories
         return new(numberOfPages) { SelectedPageIndex = selectedPageIndex, OnSelectedPageIndexChanged = onSelectedPageIndexChanged };
     }
 
-    public static AnnotatedScrollBarElement AnnotatedScrollBar() => new();
+    public static AnnotatedScrollBarElement AnnotatedScrollBar()
+    {
+        _ = V1.Reg<AnnotatedScrollBarElement, WinUI.AnnotatedScrollBar, Desc.AnnotatedScrollBarDescriptorHandler>.Done;
+        return new();
+    }
 
     // ── Additional overlays / containers ────────────────────────────
 
