@@ -758,12 +758,6 @@ hitting `Reg<TextBlockElement, …>` is silently absorbed — spec §10.3.)
 > `ControlRegistry.RegisterDecorator` and `RegDecorator` XML.
 >
 > **Remaining §3.4 blockers** (still queued):
-> - Base-derived global path — `RegBase<TBase,TControl,THandler>` +
->   decorator variant; requires `ControlRegistry` to grow a base map
->   mirroring `V1HandlerRegistry._baseEntries` with cached base walk.
->   Needed for `ItemsRepeater`, `ItemsView` (base-derived descriptor) and
->   `LazyStackElementBase`, `TemplatedListElementBase` (base-derived
->   decorator).
 > - Test-reset strategy — `ControlRegistry.ResetForTesting()` strips
 >   cctor-set entries, so the §3.4 deletion of
 >   `RegisterV1BuiltInHandlers` will silently break the xunit suite
@@ -776,12 +770,59 @@ hitting `Reg<TextBlockElement, …>` is silently absorbed — spec §10.3.)
 >
 > **Decorator fan-out** (the actual wiring of Button/CheckBox/Canvas/
 > Expander/Flex/Grid/RelativePanel/Stack/WrapGrid + 6 Overlays + Icon/
-> XamlHost/XamlPage) is **not** part of this slice; it lands in
-> follow-on commits like the §3.3 group fan-outs, but is now structurally
-> unblocked. Per the one-shim rule each decorator-backed element type
-> must use either the new `RegDecorator<…>` shim or (for singleton
-> handlers) the direct `ControlRegistry.RegisterDecorator` call, never
-> both alongside a `Reg<>`.
+> XamlHost/XamlPage) **landed** in four follow-on commits matching the
+> §3.3 group fan-outs:
+>
+> - **Input**: Button×3, CheckBox, ThreeStateCheckBox factories now touch
+>   `RegDecorator<ButtonElement|CheckBoxElement, …Handler>.Done`.
+> - **Overlays** (7 types): ContentDialog, Flyout, MenuBar, CommandBar,
+>   MenuFlyout, Popup, CommandBarFlyout.
+> - **Panels** (7 types): VStack/HStack/WrapGrid/Canvas/Flex/Grid/
+>   RelativePanel + Expander.
+> - **Singletons** (3 types): Icon×3 factories call
+>   `ControlRegistry.RegisterDecorator<Core.IconElement>(static () => Desc.IconDescriptor.Handler)`
+>   directly (cannot use `RegDecorator<>` because the handler is a
+>   private nested type). `XamlHostElement`/`XamlPageElement` have no
+>   factories — registration is wired through a `static` type ctor on
+>   each record so the first reference triggers global registration.
+>
+> Selftest coverage: 17 new `Spec048_RegDecorator_*` checks distributed
+> across the existing InputGroup, ContainerGroup, and two new fixtures
+> (OverlaysGroupFactoriesRegisterHandlers,
+> IconAndInteropGroupFactoriesRegisterHandlers).
+>
+> **§3.4 base-derived global path landed (primitive only, no fan-out):**
+>
+> - `ControlRegistry` grew a base map +  cached base walk mirroring
+>   `V1HandlerRegistry._baseEntries`/`_baseCache`. `TryResolve` falls
+>   back to a `BaseType` walk after exact-match miss; results
+>   (including negative null markers) are memoised, and the negative
+>   cache is invalidated when a later `RegisterForDerivedTypes` call
+>   succeeds so a derived type that previously missed picks up the new
+>   base on its next dispatch.
+> - New public API:
+>   - `ControlRegistry.RegisterForDerivedTypes<TBase, TControl>(Func<IElementHandler<TBase, TControl>>)`
+>   - `ControlRegistry.RegisterDecoratorForDerivedTypes<TBase>(Func<IDecoratorElementHandler<TBase>>)`
+>   - `ContainsBase(Type)` / `ContainsForType(Type)` / `BaseCount`
+>     diagnostics (`ResetForTesting` now clears both maps + cache).
+> - New per-control authoring shims (sibling of
+>   `Reg<>`/`RegDecorator<>`):
+>   `RegBase<TBase, TControl, THandler>.Done` (value) and
+>   `RegBaseDecorator<TBase, THandler>.Done` (decorator).
+> - Xunit coverage: 11 new tests — 4 registry-contract tests in
+>   `ControlRegistryTests` (exact-wins-over-base, negative-cache
+>   invalidation, first-wins, null-argument guards) and 6 shim tests in
+>   `Spec048/V1Protocol/RegBaseTests.cs` (closed-generic cctor
+>   one-shot, repeated-touch idempotence, multi-derived-type
+>   resolution). Tests use abstract record `TBase` to mirror real
+>   callers; each shim test uses a unique element/handler pair so the
+>   CLR's once-per-process cctor invariant holds across the suite.
+> - Fan-out (wiring `TemplatedListElementBase`, `LazyStackElementBase`,
+>   `ItemsRepeaterElement`, `ItemsViewElement` through the new shims so
+>   their factories register globally instead of via the per-host
+>   `RegisterDescriptorForDerivedTypes` arm) is a follow-on slice — the
+>   primitive is in place but the four callers still register through
+>   the per-host registrar.
 
 ### 3.5 Enforce the "no type-level aggregation on `Factories`" invariant (spec §10.2, §10.4)
 
