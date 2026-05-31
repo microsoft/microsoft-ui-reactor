@@ -194,6 +194,17 @@ internal interface IItemsBinderStrategy
     /// <see cref="Reconciler.ReconcileV1Child"/>.
     /// </summary>
     void Bind(FrameworkElement control, Element? oldElement, Element element, Reconciler reconciler, Action requestRerender, bool isMount);
+
+    /// <summary>Issue #375 — teardown hook the engine invokes from
+    /// <c>V1HandlerAdapter</c>'s unmount-side child walk. Implementations
+    /// iterate their realized children and call
+    /// <see cref="Reconciler.UnmountChild"/> on each so descendant
+    /// Component <c>UseEffect</c> cleanups fire. Keyed-state binders
+    /// (templated lists) no-op here because the reconciler-side keyed
+    /// pipeline (<c>BindKeyedItemsSource</c>) owns container teardown.
+    /// Default no-op so legacy strategies that haven't been audited keep
+    /// today's behavior (no extra teardown).</summary>
+    void Unbind(FrameworkElement control, Reconciler reconciler) { }
 }
 
 /// <summary>Non-generic marker the engine dispatcher uses to reach an
@@ -528,6 +539,22 @@ public sealed record TabItemsHost<TElement, TControl, TItem>(
         for (int i = 0; i < items.Count; i++)
             collection.Add(CreateContainer(items[i], MountContent(items[i], reconciler, requestRerender)));
     }
+
+    void IItemsBinderStrategy.Unbind(FrameworkElement control, Reconciler reconciler)
+    {
+        // Issue #375 — tear down every realized container's content so
+        // descendant Component UseEffect cleanups fire on host unmount.
+        // The host control owns the container list (e.g. TabView.TabItems
+        // — NOT TabView.Items), so we reach it through the strategy's own
+        // GetCollection accessor rather than ItemsControl.Items.
+        var typedCtrl = (TControl)control;
+        var collection = GetCollection(typedCtrl);
+        for (int i = collection.Count - 1; i >= 0; i--)
+        {
+            if (collection[i] is WinUI.ContentControl cc && cc.Content is UIElement ui)
+                reconciler.UnmountChild(ui);
+        }
+    }
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -682,6 +709,19 @@ public sealed record PreMountedItems<TElement, TControl>(
                 throw new global::System.InvalidOperationException(
                     "PreMountedItems<>: item Element at index " + i + " mounted to a null UIElement.");
             items.Add(ctrl);
+        }
+    }
+
+    void IItemsBinderStrategy.Unbind(FrameworkElement control, Reconciler reconciler)
+    {
+        // Issue #375 — tear down realized item controls so descendant
+        // Component UseEffect cleanups fire on host unmount.
+        var typedCtrl = (TControl)control;
+        var items = GetCollection(typedCtrl);
+        for (int i = items.Count - 1; i >= 0; i--)
+        {
+            if (items[i] is UIElement ctrl)
+                reconciler.UnmountChild(ctrl);
         }
     }
 }

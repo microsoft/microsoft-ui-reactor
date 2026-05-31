@@ -173,21 +173,20 @@ internal static class NativeDockingReliabilityFixtures
     /// programmatically closes the pane via <c>model.Close</c>. Asserts:
     /// (a) the close drains through the §2.16 mutation queue, (b) the
     /// component's body is removed from the visual tree, (c) the
-    /// component's mount effect ran exactly once. Spec §8.10 reliability
-    /// invariant on the visual unmount.
+    /// component's mount effect ran exactly once, and (d) the component's
+    /// UseEffect cleanup fired exactly once on pane close. Spec §8.10
+    /// reliability invariant on the visual unmount.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Open follow-up (tracked as §2.25): when a <see cref="DockableContent.Content"/>
-    /// holds a <see cref="ComponentElement"/>, the reconciler removes the
-    /// element from the visual tree on pane close but does not fire the
-    /// component's <c>UseEffect</c> cleanup. This fixture intentionally
-    /// does NOT assert that cleanup ran — a perpetual SKIP rotted
-    /// because nothing ever forced anyone to look at it. The cleanup-
-    /// fires-on-close contract is tracked separately in
-    /// <c>docs/specs/045-docking-windows-implementation.md §2.25</c>;
-    /// when the underlying reconciler gap is closed, add a fresh
-    /// assertion here.
+    /// Issue #375 — the UseEffect cleanup assertion is the regression
+    /// test for the V1HandlerAdapter unmount-side strategy dispatch:
+    /// when a <see cref="DockableContent.Content"/> holds a
+    /// <see cref="ComponentElement"/> nested under the docking host's
+    /// Border wrapper (<c>WrapLeafWithPaneContext</c>), the SingleContent
+    /// strategy must walk its live child on Unmount so the component
+    /// wrapper Border that anchors the <c>_componentNodes</c> lookup is
+    /// reached and <c>RunCleanups()</c> fires.
     /// </para>
     /// </remarks>
     internal class UseEffectCleanup_BodyRemovedOnPaneClose(Harness h) : SelfTestFixtureBase(h)
@@ -245,11 +244,14 @@ internal static class NativeDockingReliabilityFixtures
             H.Check("Reliability_Effect_BodyGoneFromTree",
                 H.FindText("effect-body-p1") is null);
 
-            // The matching cleanup-fires-on-close assertion is
-            // deliberately not emitted here. See class docstring for
-            // the §2.25 follow-up; cleanupCount stays wired so a fresh
-            // assertion can land here without reshape.
-            _ = cleanupCount;
+            // Issue #375 regression — the cleanup must fire when the pane
+            // is closed. Before the V1HandlerAdapter unmount-side strategy
+            // dispatch landed, this counter stayed at 0 because the docking
+            // host's BorderElement wrapper around the pane Content was
+            // unmounted via the V1 arm returning CollectSelf — which short-
+            // circuited before the engine could recurse into the component
+            // wrapper Border that anchors RunCleanups().
+            H.Check("Reliability_Effect_CleanupRanOnClose", cleanupCount == 1);
 
             host.Mount(_ => TextBlock("effect-cleanup-done"));
             await Harness.Render();

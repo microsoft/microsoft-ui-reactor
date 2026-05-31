@@ -68,6 +68,16 @@ public sealed class DescriptorHandler<TElement, TControl> : IElementHandler<TEle
             _ => _descriptor.Children,
         };
 
+    /// <summary>Issue #375 — on Unmount the bind-before-props ordering
+    /// constraint that motivates hiding <see cref="ItemsHost{TElement,TControl}"/>
+    /// / <see cref="IItemsBinderStrategy"/> strategies from
+    /// <see cref="Children"/> no longer applies, so expose the descriptor's
+    /// real strategy here. Lets <c>V1HandlerAdapter</c>'s unmount-side
+    /// dispatch walk descendant items (e.g. <c>TabView</c> tabs whose
+    /// content holds Components) and fire their <c>UseEffect</c>
+    /// cleanups.</summary>
+    public ChildrenStrategy<TElement, TControl>? ChildrenForUnmount => _descriptor.Children;
+
     // <snippet:descriptor-mount>
     public TControl Mount(MountContext ctx, TElement el)
     {

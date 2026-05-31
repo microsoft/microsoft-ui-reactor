@@ -89,11 +89,30 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
         // child — byte-identical to the legacy decorator panel handlers, which
         // also return ContinueDefaultTraversal. Without this, CollectSelf would
         // early-return before the panel-child recursion and leak child Component
-        // effect cleanups. All other (non-panel) standard handlers tear down
-        // their own children via SingleContent/NamedSlots/items-binder strategy
-        // dispatch and correctly opt into CollectSelf.
-        if (_handler.Children is Panel<TElement, TControl>)
+        // effect cleanups.
+        if (_handler.ChildrenForUnmount is Panel<TElement, TControl>)
             return V1UnmountDisposition.ContinueDefaultTraversal;
+
+        // Issue #375 — strategy-driven child teardown on Unmount. Without
+        // this, a Component nested under a SingleContent / NamedSlots /
+        // ItemsHost / IItemsBinderStrategy parent (e.g. Border, SplitView,
+        // ListBox, TabView) leaks its UseEffect cleanups when the parent
+        // unmounts: the engine's V1 arm early-returns on CollectSelf before
+        // the legacy `border.Child` / `cc.Content` recursion can reach the
+        // component wrapper Border that anchors the component-node lookup
+        // in _componentNodes. Walk the strategy's live children and run
+        // UnmountChild on each — the recursive UnmountRecursive call
+        // surfaces every nested component wrapper and fires RunCleanups.
+        //
+        // We consult ChildrenForUnmount (not Children) because descriptor
+        // handlers hide ItemsHost / IItemsBinderStrategy strategies from
+        // Children (they dispatch those inline during Mount/Update so the
+        // collection is populated before SelectedIndex initial writes
+        // land); on Unmount the ordering constraint doesn't apply, so the
+        // descriptor exposes the real strategy here for the teardown walk.
+        var strategy = _handler.ChildrenForUnmount;
+        if (strategy is not null)
+            DispatchChildrenUnmount(strategy, reconciler, typedControl);
 
         // Standard handlers always opt into pool collection — matches
         // the pre-Phase-3-completion behavior.
@@ -360,6 +379,104 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
                 }
                 return;
             }
+        }
+    }
+
+    // ── Unmount strategy dispatch (issue #375) ───────────────────────
+    //
+    // When a parent control is unmounted, walk its children strategy and
+    // tear down the live child(ren) so descendant Component UseEffect
+    // cleanups run. Before this dispatch existed, only Panel strategy
+    // was covered (via ContinueDefaultTraversal + the legacy
+    // `control is WinUI.Panel` recursion); SingleContent / NamedSlots /
+    // ItemsHost / IItemsBinderStrategy parents silently leaked any
+    // nested component cleanups because CollectSelf early-returned in
+    // the engine's V1 arm before the legacy `border.Child` / `cc.Content`
+    // recursion could reach the inner component wrapper.
+    //
+    // The teardown delegates to <c>reconciler.UnmountChild</c> (which
+    // runs the full <c>UnmountRecursive</c> path on each child), so any
+    // depth of nesting is handled — including a component nested deep
+    // under multiple Border / SplitView / TabView layers.
+    private static void DispatchChildrenUnmount(
+        ChildrenStrategy<TElement, TControl> strategy,
+        Reconciler reconciler, TControl control)
+    {
+        // IItemsBinderStrategy covers templated lists (keyed item realization
+        // owned by the reconciler-side BindKeyedItemsSource pipeline) plus
+        // TabItemsHost / PreMountedItems (positional containers whose
+        // realized content lives in TabViewItem / PivotItem / FlipViewItem
+        // ContentControl slots). Keyed-templated strategies tear down their
+        // realized containers via the reconciler-side pipeline; the
+        // positional binder strategies need explicit per-container teardown.
+        //
+        // Issue #375 — dispatch through the strategy's own Unbind hook
+        // rather than iterating ItemsControl.Items. TabView populates
+        // TabItems (not Items), so a blanket .Items walk would miss tabs
+        // entirely. Each concrete strategy reaches its real collection via
+        // GetCollection (TabView.TabItems / FlipView.Items / etc).
+        if (strategy is IItemsBinderStrategy binder)
+        {
+            if (strategy is ITemplatedItemsStrategy or IErasedTemplatedItemsStrategy)
+            {
+                // Keyed templated strategies — reconciler-side teardown of
+                // the realization channel runs out-of-band on container
+                // recycle; nothing to do here.
+                return;
+            }
+            if (control is FrameworkElement fe)
+                binder.Unbind(fe, reconciler);
+            return;
+        }
+
+        switch (strategy)
+        {
+            case None<TElement, TControl>:
+                return;
+
+            case SingleContent<TElement, TControl> single:
+            {
+                if (single.GetCurrentChild is { } getCur
+                    && getCur(control) is UIElement child)
+                {
+                    reconciler.UnmountChild(child);
+                }
+                return;
+            }
+
+            case NamedSlots<TElement, TControl> ns:
+            {
+                for (int i = 0; i < ns.Slots.Count; i++)
+                {
+                    var slot = ns.Slots[i];
+                    if (slot.GetCurrentChild is { } getCur
+                        && getCur(control) is UIElement child)
+                    {
+                        reconciler.UnmountChild(child);
+                    }
+                }
+                return;
+            }
+
+            case ItemsHost<TElement, TControl> ih:
+            {
+                var collection = ih.GetCollection(control);
+                // Walk top-down so we don't surprise an inner unmount with
+                // a sibling already collected by the strategy's flat sink.
+                for (int i = 0; i < collection.Count; i++)
+                {
+                    if (collection[i] is UIElement childCtrl)
+                        reconciler.UnmountChild(childCtrl);
+                }
+                return;
+            }
+
+            case Imperative<TElement, TControl>:
+                // The handler owns reconciliation and child identity for
+                // an Imperative strategy; its own Unmount body is
+                // responsible for teardown (no generic walk possible
+                // because the engine has no view onto the slots).
+                return;
         }
     }
 }

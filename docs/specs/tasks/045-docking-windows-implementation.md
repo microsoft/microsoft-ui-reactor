@@ -1576,20 +1576,29 @@ integration.*
   (b) `DockDragSession.ResetForTest` (simulating process exit) clears
   the slot, (c) the reloaded layout has the same root shape and
   key set as the pre-drag tree.
-- [~] `useEffect` cleanup on pane close runs in dependency order
+- [x] `useEffect` cleanup on pane close runs in dependency order
   (Reactor invariant; selftest with effect-counter pattern verifies
   for docking). Selftest
-  `NativeDocking_Reliability_UseEffectCleanup_RunsOnPaneClose` lands
-  the visual-unmount half — `model.Close(pane)` drains and the
-  component's body disappears from the rendered tree. The matching
-  cleanup-fires-on-close assertion surfaced a Reactor-side gap:
-  `ComponentElement` instances embedded under
-  `DockableContent.Content` (i.e. wrapped through the host's
-  `WrapLeafWithPaneContext` Border + Padding + Provide chain) do
-  not get their `UseEffect` cleanups fired when the leaf
-  disappears. The known-failing assertion is left commented in the
-  fixture with a pointer to this gap; closes when the reconciler
-  drops to that case.
+  `NativeDocking_Reliability_UseEffectCleanup_BodyRemovedOnPaneClose`
+  asserts the visual-unmount half — `model.Close(pane)` drains and
+  the component's body disappears from the rendered tree — and the
+  cleanup-fires-on-close half (`Reliability_Effect_CleanupRanOnClose`).
+  Issue #375 — the cleanup-half landed via a Reactor-side fix that
+  added an unmount-side strategy dispatch to `V1HandlerAdapter`: when
+  a `ComponentElement` is embedded under `DockableContent.Content`
+  (i.e. wrapped through the host's `WrapLeafWithPaneContext`
+  Border + Padding + Provide chain), the engine's V1 arm previously
+  early-returned on `CollectSelf` before recursing into the parent
+  strategy's live children, so the component-wrapper `Border` that
+  anchors the `_componentNodes` lookup was never visited. The fix
+  walks `SingleContent` / `NamedSlots` / `ItemsHost` /
+  `IItemsBinderStrategy` strategies on unmount via the new
+  `IElementHandler.ChildrenForUnmount` accessor (which descriptor
+  handlers override to surface items-binder strategies hidden from
+  `Children` for ordering reasons) and the new
+  `IItemsBinderStrategy.Unbind` teardown hook (implemented by
+  `TabItemsHost` / `PreMountedItems` to walk their own
+  `GetCollection` — TabView populates `TabItems`, not `Items`).
 - [x] Floating window outliving its host: `DockingNativeInterop`'s
   registered unmount handler iterates `DockFloatingTracker.SnapshotFor(manager)`
   and calls `Close()` on each floating window opened from that host,
