@@ -314,4 +314,26 @@ internal static class Spec048RegistrationFixtures
             return Task.CompletedTask;
         }
     }
+
+    internal class ShapesGroupFactoriesRegisterHandlers(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            _ = Rectangle();
+            _ = Ellipse();
+            _ = Line(0, 0, 10, 10);
+            _ = Path2D();
+
+            H.Check("Spec048_Reg_Rectangle",
+                ControlRegistry.Contains(typeof(RectangleElement)));
+            H.Check("Spec048_Reg_Ellipse",
+                ControlRegistry.Contains(typeof(EllipseElement)));
+            H.Check("Spec048_Reg_Line",
+                ControlRegistry.Contains(typeof(LineElement)));
+            H.Check("Spec048_Reg_Path",
+                ControlRegistry.Contains(typeof(PathElement)));
+
+            return Task.CompletedTask;
+        }
+    }
 }

@@ -46,3 +46,11 @@ internal static class RectangleDescriptor
             get: static e => e.RadiusY,
             set: static (c, v) => c.RadiusY = v);
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <see cref="DescriptorHandler{TElement,TControl}"/>
+/// subclass so the Reactor.Factories DSL can reach this descriptor via
+/// the <c>Reg&lt;&gt;</c> registration touch without leaking
+/// <c>DescriptorHandler&lt;,&gt;</c> as a public surface.
+/// </summary>
+internal sealed class RectangleDescriptorHandler() : DescriptorHandler<RectangleElement, WinShapes.Rectangle>(RectangleDescriptor.Descriptor);

@@ -36,3 +36,11 @@ internal static class EllipseDescriptor
             get: static e => e.StrokeThickness,
             set: static (c, v) => c.StrokeThickness = v);
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <see cref="DescriptorHandler{TElement,TControl}"/>
+/// subclass so the Reactor.Factories DSL can reach this descriptor via
+/// the <c>Reg&lt;&gt;</c> registration touch without leaking
+/// <c>DescriptorHandler&lt;,&gt;</c> as a public surface.
+/// </summary>
+internal sealed class EllipseDescriptorHandler() : DescriptorHandler<EllipseElement, WinShapes.Ellipse>(EllipseDescriptor.Descriptor);

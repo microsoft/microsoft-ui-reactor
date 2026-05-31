@@ -12,6 +12,7 @@ using V1 = Microsoft.UI.Reactor.Core.V1Protocol;
 using Desc = Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 using WinUI = Microsoft.UI.Xaml.Controls;
 using WinPrim = Microsoft.UI.Xaml.Controls.Primitives;
+using WinShapes = Microsoft.UI.Xaml.Shapes;
 
 namespace Microsoft.UI.Reactor;
 
@@ -1319,18 +1320,33 @@ public static partial class Factories
 
     // ── Shapes ───────────────────────────────────────────────────────
 
-    public static RectangleElement Rectangle() => new();
+    public static RectangleElement Rectangle()
+    {
+        _ = V1.Reg<RectangleElement, WinShapes.Rectangle, Desc.RectangleDescriptorHandler>.Done;
+        return new();
+    }
 
-    public static EllipseElement Ellipse() => new();
+    public static EllipseElement Ellipse()
+    {
+        _ = V1.Reg<EllipseElement, WinShapes.Ellipse, Desc.EllipseDescriptorHandler>.Done;
+        return new();
+    }
 
-    public static LineElement Line(double x1, double y1, double x2, double y2) =>
-        new() { X1 = x1, Y1 = y1, X2 = x2, Y2 = y2 };
+    public static LineElement Line(double x1, double y1, double x2, double y2)
+    {
+        _ = V1.Reg<LineElement, WinShapes.Line, Desc.LineDescriptorHandler>.Done;
+        return new() { X1 = x1, Y1 = y1, X2 = x2, Y2 = y2 };
+    }
 
     // Named `Path2D` (not `Path`) to avoid colliding with `System.IO.Path`.
     // Models reach for both in the same file and the bare name causes
     // CS0119 cascades. Borrows the Web Canvas API's `Path2D` spelling for the
     // vector-geometry primitive — collision-free and familiar from JS/SVG.
-    public static PathElement Path2D() => new();
+    public static PathElement Path2D()
+    {
+        _ = V1.Reg<PathElement, WinShapes.Path, Desc.PathDescriptorHandler>.Done;
+        return new();
+    }
 
     // ── Additional layout ───────────────────────────────────────────
 

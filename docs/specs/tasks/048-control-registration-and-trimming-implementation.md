@@ -352,7 +352,8 @@ group to keep diffs reviewable.
       `WebView2`, `MapControl`. *(7 of 8 element types done — `Icon` is a
       decorator and defers to §3.4 with the decorator-global-path work.
       See §3.3 Media/icons-group close-out note below.)*
-- [ ] **Shapes** — `Rectangle`, `Ellipse`, `Line`, `Path`.
+- [x] **Shapes** — `Rectangle`, `Ellipse`, `Line`, `Path`. *(All 4 done.
+      See §3.3 Shapes-group close-out note below.)*
 - [ ] **Navigation / chrome** — `NavigationView`, `NavigationHost`,
       `TitleBar`, `XamlHost`, `XamlPage`, `Semantic`.
 - [ ] **Overlays** — `ContentDialog`, `Flyout`, `Popup`, `MenuBar`,
@@ -598,6 +599,27 @@ hitting `Reg<TextBlockElement, …>` is silently absorbed — spec §10.3.)
 >   each factory call populates
 >   `ControlRegistry.Contains(typeof(XxxElement))` for all 7 element types.
 > - Green: Spec048 selftests (69 checks, 7 new) + Reactor.Tests
+>   (9148 passed / 0 failed), `-p:Platform=x64`.
+
+> **§3.3 close-out note — Shapes-group landed:**
+>
+> Same template; all 4 element types in the group are descriptor-backed
+> with no decorator or base-derived variants. `Dsl.cs` gains a
+> `WinShapes = Microsoft.UI.Xaml.Shapes` alias so the touches can name
+> the WinUI control type cleanly. The `Path2D()` factory (renamed from
+> `Path` to avoid the `System.IO.Path` collision documented inline)
+> still touches `Reg<PathElement, WinShapes.Path, …>` so trim metadata
+> tracks the actual element / WinUI type pair.
+>
+> **Landed for the Shapes group:**
+> - Thin handlers appended to 4 descriptors: `Rectangle`, `Ellipse`,
+>   `Line`, `Path`.
+> - 4 factories in `Dsl.cs` gain a `Reg<>.Done` touch (all converted
+>   from expression-bodied to block form to host the touch).
+> - Selftest `Spec048_ShapesGroupFactoriesRegisterHandlers` asserts each
+>   factory call populates `ControlRegistry.Contains(typeof(XxxElement))`
+>   for all 4 element types.
+> - Green: Spec048 selftests (73 checks, 4 new) + Reactor.Tests
 >   (9148 passed / 0 failed), `-p:Platform=x64`.
 
 ### 3.4 Delete `RegisterV1BuiltInHandlers`
