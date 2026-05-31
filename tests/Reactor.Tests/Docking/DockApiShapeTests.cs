@@ -26,7 +26,9 @@ public class DockApiShapeTests
         Assert.Null(dm.BottomSide);
         Assert.Null(dm.ActiveDocument);
         Assert.Null(dm.Adapter);
+#pragma warning disable CS0618 // intentional coverage of obsolete Behavior surface
         Assert.Null(dm.Behavior);
+#pragma warning restore CS0618
         Assert.Null(dm.PersistenceId);
         Assert.Equal(1, dm.LayoutSchemaVersion);
     }
@@ -175,6 +177,7 @@ public class DockApiShapeTests
     public void DockManager_With_PreservesAdapterAndBehavior()
     {
         var adapter = new TestAdapter();
+#pragma warning disable CS0618 // intentional coverage of obsolete Behavior/IDockBehavior surface
         var behavior = new TestBehavior();
         var dm = new DockManager { Adapter = adapter, Behavior = behavior };
 
@@ -182,6 +185,7 @@ public class DockApiShapeTests
 
         Assert.Same(adapter, renamed.Adapter);
         Assert.Same(behavior, renamed.Behavior);
+#pragma warning restore CS0618
         Assert.Equal("main", renamed.PersistenceId);
     }
 
@@ -192,9 +196,11 @@ public class DockApiShapeTests
         public Element? GetFloatingWindowTitleBar(DockableContent? draggedSource) => null;
     }
 
+#pragma warning disable CS0618 // intentional implementation of obsolete IDockBehavior for coverage
     private sealed class TestBehavior : IDockBehavior
     {
         public void OnDocked(DockableContent src, DockTarget target) { }
         public void OnFloating(DockableContent content) { }
     }
+#pragma warning restore CS0618
 }

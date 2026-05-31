@@ -36,6 +36,7 @@ internal static class ReconcilerBigCoverageFixtures
         public override async Task RunAsync()
         {
             var host = H.CreateHost();
+#pragma warning disable CS0618 // exercises obsolete .AccessKeyDisplayRequested → OnAccessKeyDisplayRequested bridge
             host.Mount(ctx => VStack(
                 TextBlock("evt-target")
                     .OnSizeChanged((_, _) => { })
@@ -60,6 +61,7 @@ internal static class ReconcilerBigCoverageFixtures
                     .OnLostFocus((_, _) => { })
                     .AccessKeyDisplayRequested(() => { })
             ));
+#pragma warning restore CS0618
 
             await Harness.Render();
             var tb = H.FindText("evt-target");

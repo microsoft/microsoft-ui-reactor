@@ -16,7 +16,7 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor;
 ///
 /// <para><b>Phase ordering inside Mount:</b>
 /// <list type="number">
-///   <item><see cref="Mount"/> runs once per entry. Controlled entries write
+///   <item><see cref="Mount(TControl, TElement)"/> runs once per entry. Controlled entries write
 ///   their initial value bare — event subscription has not yet been wired,
 ///   so a synchronous change event has no trampoline to fire (no echo).
 ///   Mirrors the KD-1b fix on the hand-coded handlers.</item>
@@ -25,7 +25,7 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor;
 ///   <see cref="DescriptorHandler{TElement,TControl}"/>'s per-control
 ///   subscription gate (so pool-reused controls do not double-subscribe).</item>
 /// </list>
-/// On Update, <see cref="Update"/> runs and writes through
+/// On Update, <see cref="Update(TControl, TElement, TElement)"/> runs and writes through
 /// <c>ReactorBinding.WriteSuppressed</c> when the entry is controlled.</para>
 /// </summary>
 public abstract class PropEntry<TElement, TControl>
@@ -58,7 +58,7 @@ public abstract class PropEntry<TElement, TControl>
     /// <summary>Event subscription hook. Default = no-op (one-way / initial
     /// entries do not subscribe to events). Controlled entries override.
     ///
-    /// <para>The interpreter calls this after every <see cref="Mount"/> in
+    /// <para>The interpreter calls this after every <see cref="Mount(TControl, TElement)"/> in
     /// the entry list so all bare initial writes complete before any event
     /// trampoline goes live (KD-1b ordering invariant).</para></summary>
     public virtual void EnsureSubscribed(

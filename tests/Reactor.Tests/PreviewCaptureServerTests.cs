@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
@@ -23,6 +24,11 @@ namespace Microsoft.UI.Reactor.Tests;
 /// </summary>
 public class PreviewCaptureServerTests
 {
+    [DynamicallyAccessedMembers(
+        DynamicallyAccessedMemberTypes.PublicConstructors
+        | DynamicallyAccessedMemberTypes.NonPublicConstructors
+        | DynamicallyAccessedMemberTypes.NonPublicMethods
+        | DynamicallyAccessedMemberTypes.NonPublicFields)]
     private static readonly Type ServerType = typeof(PreviewCaptureServer);
 
     // ══════════════════════════════════════════════════════════════

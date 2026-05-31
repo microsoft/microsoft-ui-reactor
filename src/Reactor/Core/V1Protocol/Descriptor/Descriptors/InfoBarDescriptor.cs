@@ -34,7 +34,7 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <c>.OneWayBridged&lt;string?&gt;</c> entry whose set lambda creates the
 /// <c>Button</c>, wires <c>Click</c> via a closure over the parent InfoBar
 /// reference (which is rooted by the InfoBar's Tag — Click resolves
-/// <c>OnActionButtonClick</c> through <see cref="Reconciler.GetElementTag"/>
+///   <c>OnActionButtonClick</c> through <see cref="Reconciler.GetElementTag(Microsoft.UI.Xaml.FrameworkElement)"/>
 /// so a record-with that updates the callback picks up automatically). The
 /// gate matches the legacy "set when non-null" treatment: a non-null →
 /// non-null content swap rebuilds the inner button (legacy doesn't rebuild,

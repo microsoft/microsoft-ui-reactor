@@ -21,8 +21,9 @@
     <PackageReference Include="GitHub.Copilot.SDK" Version="0.3.0" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
     <!-- Pin the transitive Nerdbank.MessagePack (via GitHub.Copilot.SDK → StreamJsonRpc)
-         to a version that includes the GHSA-2cwq-pwfr-wcw3 / CVE-2026-44375 fix. -->
-    <PackageReference Include="Nerdbank.MessagePack" Version="1.1.62" />
+         to 1.2.4 — picks up GHSA-92vj-hp7m-gwcj and GHSA-qjvr-435c-5fjh fixes
+         beyond the original 1.1.62 (which covered only GHSA-2cwq-pwfr-wcw3). -->
+    <PackageReference Include="Nerdbank.MessagePack" Version="1.2.4" />
   </ItemGroup>
 
   <ItemGroup>

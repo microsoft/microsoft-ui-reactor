@@ -25,11 +25,16 @@ namespace Microsoft.UI.Reactor.Tests.HotReload;
 public class HotReloadStateMigrationTests
 {
     // Distinct "before"/"after" shapes used to exercise the copier directly.
+    // CS0649 suppression: the "after" types are intentionally never assigned
+    // in test code — the copier itself populates them from the "before"
+    // instance, which is exactly the behavior under test.
+#pragma warning disable CS0649
     private class StateV1 { public int Count; public string? Name; }
     private class StateV2 { public int Count; public bool Flag; }      // Name removed, Flag added
     private class StateRetyped { public string? Count; }               // Count int -> string (incompatible)
     private class WithHandle { public int Keep; public nint Handle; }  // native handle must not copy
     private class SelfRef { public int V; public SelfRef? Next; }
+#pragma warning restore CS0649
 
     private static HashSet<object> FreshVisited() =>
         new(ReferenceEqualityComparer.Instance);

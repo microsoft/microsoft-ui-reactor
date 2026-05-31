@@ -66,6 +66,14 @@ internal static class DockTabGroupRenderer
     /// signal). Caller is responsible for opening a floating window
     /// and removing the pane from the source layout on tear-out.
     /// </param>
+    /// <param name="onTabImmediateTearOff">
+    /// Spec 045 §2.6 immediate tear-off. When supplied, the renderer
+    /// asks the host to spawn the floating tear-off preview as soon
+    /// as the drag crosses the rip threshold; the returned
+    /// <see cref="DockTabTearOff.TearOffActive"/> tracks pointer
+    /// updates until drop. When null, the renderer falls back to the
+    /// classic <c>onTabDragCompleted</c>-only sequence.
+    /// </param>
     public static Element Render(
         DockTabGroup group,
         Func<DockableContent, Element?> renderLeafContent,

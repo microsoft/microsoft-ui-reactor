@@ -21,7 +21,7 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor;
 /// <list type="number">
 ///   <item>Rent the control via <see cref="MountContext.RentControl{T}"/>.</item>
 ///   <item>Iterate <see cref="ControlDescriptor{TElement,TControl}.Properties"/>
-///   and invoke <see cref="PropEntry{TElement,TControl}.Mount"/> on each —
+///   and invoke <see cref="PropEntry{TElement,TControl}.Mount(TControl, TElement)"/> on each —
 ///   all bare initial writes happen first.</item>
 ///   <item>Iterate again and invoke
 ///   <see cref="PropEntry{TElement,TControl}.EnsureSubscribed"/> — controlled

@@ -23,21 +23,21 @@ class InfoBarPage : Component
                     VStack(8,
                         InfoBar("Informational", "This is an informational message.")
                             .Informational()
-                            .Closable(false),
+                            .IsClosable(false),
                         InfoBar("Success", "Operation completed successfully.")
                             .Success()
-                            .Closable(false),
+                            .IsClosable(false),
                         InfoBar("Warning", "Please review before proceeding.")
                             .Warning()
-                            .Closable(false),
+                            .IsClosable(false),
                         InfoBar("Error", "Something went wrong.")
                             .Error()
-                            .Closable(false)
+                            .IsClosable(false)
                     ),
-                    @"InfoBar(""Success"", ""Completed!"").Success().Closable(false)
-InfoBar(""Warning"", ""Review..."").Warning().Closable(false)
-InfoBar(""Error"",   ""Failed!""  ).Error()  .Closable(false)
-InfoBar(""Info"",    ""FYI…""     ).Informational().Closable(false)"),
+                    @"InfoBar(""Success"", ""Completed!"").Success().IsClosable(false)
+InfoBar(""Warning"", ""Review..."").Warning().IsClosable(false)
+InfoBar(""Error"",   ""Failed!""  ).Error()  .IsClosable(false)
+InfoBar(""Info"",    ""FYI…""     ).Informational().IsClosable(false)"),
 
                 SampleCard("Closable InfoBar",
                     VStack(8,

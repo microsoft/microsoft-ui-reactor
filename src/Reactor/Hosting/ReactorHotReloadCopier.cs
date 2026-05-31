@@ -29,6 +29,9 @@ internal static class ReactorHotReloadCopier
     /// the inputs (null source/dest); a successful walk — even one that copies
     /// zero fields — returns <c>true</c>.
     /// </summary>
+    /// <param name="source">The pre-edit instance whose field values are read.</param>
+    /// <param name="dest">The freshly-constructed post-edit instance that
+    /// receives the by-name field values from <paramref name="source"/>.</param>
     /// <param name="visited">Cycle guard keyed on source reference identity.
     /// Pass <c>new HashSet&lt;object&gt;(ReferenceEqualityComparer.Instance)</c>.</param>
     [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Reachable only via HotReloadService.IsHotReloadLive; dead under NativeAOT (spec 049 §8).")]
