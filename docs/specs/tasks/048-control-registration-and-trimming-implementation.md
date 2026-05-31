@@ -314,7 +314,7 @@ This is mechanical but high-cardinality (~120 factory methods across the
 partial `Factories` class). Execute as a single PR per logical control
 group to keep diffs reviewable.
 
-- [ ] **Input controls** — `Button`, `RepeatButton`, `HyperlinkButton`,
+- [x] **Input controls** — `Button`, `RepeatButton`, `HyperlinkButton`,
       `DropDownButton`, `SplitButton`, `ToggleSplitButton`, `ToggleButton`,
       `CheckBox`, `RadioButton`, `RadioButtons`, `ToggleSwitch`,
       `Slider`, `NumberBox`, `Rating` / `RatingControl`, `PipsPager`,
@@ -325,7 +325,7 @@ group to keep diffs reviewable.
 - [x] **Text controls** — `TextBlock`, `Heading`, `Subheading`,
       `RichTextBlock`, `TextBox`, `PasswordBox`, `RichEditBox`,
       `AutoSuggestBox`. *(Done — see §3.3 close-out note below.)*
-- [ ] **Container / layout** — `Border`, `StackPanel` and `VStack` /
+- [x] **Container / layout** — `Border`, `StackPanel` and `VStack` /
       `HStack` / `ZStack` / `Stack`, `Grid`, `Canvas`, `RelativePanel`,
       `WrapGrid`, `ScrollViewer`, `ScrollView`, `Viewbox`, `Expander`,
       `FlexPanel`, `Frame`, `SplitView`, `RefreshContainer`,
@@ -334,7 +334,7 @@ group to keep diffs reviewable.
       The 7 panel/expander decorators (Stack/Grid/Canvas/RelativePanel/
       WrapGrid/FlexPanel/Expander) defer to §3.4 with the decorator-global-
       path work.)*
-- [ ] **Collections** — `ListView`, `GridView`, `ListBox`, `ComboBox`,
+- [x] **Collections** — `ListView`, `GridView`, `ListBox`, `ComboBox`,
       `Pivot`, `FlipView`, `TabView`, `BreadcrumbBar`, `ItemsRepeater`,
       `ItemsView`, `ItemContainer`, `TreeView`, `LazyStack`,
       `TemplatedListView<T>`, `TemplatedFlipView<T>`. *(10 of 15 element
@@ -347,7 +347,7 @@ group to keep diffs reviewable.
 - [x] **Status / info** — `ProgressBar`, `ProgressRing`, `InfoBar`,
       `InfoBadge`, `TeachingTip`, `AnnounceRegion`, `AnnotatedScrollBar`.
       *(Done — see §3.3 close-out note below.)*
-- [ ] **Media / icons** — `Image`, `MediaPlayerElement`,
+- [x] **Media / icons** — `Image`, `MediaPlayerElement`,
       `PersonPicture`, `Icon` / `AnimatedIcon`, `AnimatedVisualPlayer`,
       `WebView2`, `MapControl`. *(7 of 8 element types done — `Icon` is a
       decorator and defers to §3.4 with the decorator-global-path work.
