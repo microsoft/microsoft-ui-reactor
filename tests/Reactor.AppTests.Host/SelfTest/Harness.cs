@@ -224,37 +224,65 @@ internal sealed class Harness
     /// </summary>
     public static async Task Render(int ms = 0)
     {
-        // Wait for Reactor's render loop to go idle (all pending + re-renders done)
-        if (ReactorApp.PrimaryWindow?.Host is { } host)
+        // Bounded convergence loop. A single (WaitForIdle → UpdateLayout →
+        // Low-yield → UpdateLayout) pass drains one wave of WinUI's lazy
+        // realization: TabView selecting a pane → its ContentPresenter
+        // realizes → the pane's body mounts. But composed surfaces (a Reactor
+        // DockManager whose pane content is another DockManager, or a TabView
+        // inside a TabView) need MULTIPLE waves because each wave's mount
+        // schedules the next wave's Normal-priority realization message.
+        //
+        // We loop until Reactor reports idle AND we've done at least
+        // `minPasses` rounds (so purely WinUI-driven multi-wave realization
+        // — which doesn't necessarily touch Reactor's renderPending flag —
+        // still gets enough dispatcher drain). Steady state (one-wave trees)
+        // exits after pass 2 with no real cost: WaitForIdleAsync short-
+        // circuits when Reactor was already idle and UpdateLayout is a no-op
+        // when nothing's dirty.
+        //
+        // The single Low-yield + 16ms Delay combo was previously load-
+        // bearing for ~98.4% of fixtures; the multi-wave NativeDocking sites
+        // (TabView → nested DockManager → nested TabView) were the remaining
+        // ~1.6% flake source observed in 1000-iteration stress runs.
+        var host = ReactorApp.PrimaryWindow?.Host;
+        var dq = DispatcherQueue.GetForCurrentThread();
+        const int minPasses = 2;
+        const int maxPasses = 4;
+
+        int pass = 0;
+        for (; pass < maxPasses; pass++)
         {
-            await host.WaitForIdleAsync();
+            if (host is not null) await host.WaitForIdleAsync();
+
+            // Re-read window content each pass — an async mount may have
+            // replaced it between passes.
+            (_currentWindow?.Content as UIElement)?.UpdateLayout();
+
+            // Yield once at Low priority AFTER UpdateLayout so any
+            // Normal-priority TabView content-realization messages scheduled
+            // by the layout pass drain before we probe.
+            var yieldTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            if (!dq.TryEnqueue(DispatcherQueuePriority.Low, () => yieldTcs.SetResult()))
+                yieldTcs.SetResult();
+            await yieldTcs.Task;
+
+            // Re-run layout in case the just-realized content needs an
+            // arrangement pass (e.g. a Memo body that mounted during the
+            // yield needs to size its TextBlocks before FindText can match
+            // by exact-text).
+            (_currentWindow?.Content as UIElement)?.UpdateLayout();
+
+            // Stability gate: at least `minPasses` rounds AND Reactor idle.
+            // A nested sub-host that bumpTicks during realization flips
+            // IsIdle false → loop until it settles or we hit the cap.
+            if (pass + 1 >= minPasses && (host is null || host.IsIdle)) break;
         }
 
-        var dq = DispatcherQueue.GetForCurrentThread();
-
-        // Force synchronous layout so ActualWidth/ActualHeight are ready.
-        // This is also what triggers TabView's selected-tab content presenter
-        // to schedule its content-realization work onto the dispatcher.
-        (_currentWindow?.Content as UIElement)?.UpdateLayout();
-
-        // Yield once at Low priority AFTER UpdateLayout. WaitForIdleAsync
-        // short-circuits when Reactor reports idle; that left callers racing
-        // the WinUI side because TabView lazy-realizes the selected pane's
-        // body via Normal-priority dispatcher messages SCHEDULED BY the
-        // layout pass we just forced. A Low-priority yield here guarantees
-        // those messages have drained — without it, a 16ms wall-clock delay
-        // is enough on CI but flakes on contended local machines (visible
-        // in NativeDocking_* fixtures where the pane Memo subtree probes
-        // returned null ~30–60% of the time on local 10x sweeps).
-        var yieldTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        if (!dq.TryEnqueue(DispatcherQueuePriority.Low, () => yieldTcs.SetResult()))
-            yieldTcs.SetResult();
-        await yieldTcs.Task;
-
-        // Re-run layout in case the just-realized content needs an arrangement
-        // pass (e.g. a Memo body that mounted during the yield needs to size
-        // its TextBlocks before FindText can match by exact-text).
-        (_currentWindow?.Content as UIElement)?.UpdateLayout();
+        // Diagnostic: if we exited at the cap and the host is still
+        // non-idle, surface a TAP comment so the next flake is greppable
+        // instead of silent. Mirrors WaitForIdleAsync's yield-cap log.
+        if (pass >= maxPasses && host is not null && !host.IsIdle)
+            Console.WriteLine("# Harness.Render exited at maxPasses while host was still non-idle");
 
         // Small breathing room for the compositor to finish processing
         // visual tree changes. Without this, rapid fixture transitions can

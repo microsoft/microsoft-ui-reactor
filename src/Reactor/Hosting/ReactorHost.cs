@@ -876,6 +876,20 @@ public sealed class ReactorHost : IDisposable
     }
 
     /// <summary>
+    /// True when the render loop has no pending or in-flight render and no
+    /// re-render queued for the next tick. Mirrors the early-out predicate
+    /// inside <see cref="WaitForIdleAsync"/>; exposed so test harnesses can
+    /// drive bounded-convergence wait loops without polling the same fields
+    /// reflectively. The renderPending read uses Volatile.Read so off-thread
+    /// callers see a stable snapshot of the Interlocked-managed field.
+    /// </summary>
+    public bool IsIdle =>
+        !_disposed &&
+        Volatile.Read(ref _renderPending) == 0 &&
+        !_isRendering &&
+        !_needsRerender;
+
+    /// <summary>
     /// Awaits until the render loop is idle (no pending or in-flight renders).
     /// Yields to the dispatcher at Low priority in a loop so that Normal-priority
     /// RenderLoop callbacks and Low-priority re-renders all complete before returning.
