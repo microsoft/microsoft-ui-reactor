@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using Microsoft.UI.Xaml;
 using WinUI = Microsoft.UI.Xaml.Controls;
 using WinPrim = Microsoft.UI.Xaml.Controls.Primitives;
@@ -158,22 +159,16 @@ internal sealed class PopupHandler : IDecoratorElementHandler<PopupElement>
         // here and close the otherwise-orphaned free-floating popup. Clear the
         // wrapper tag before closing so the Closed handler — which resolves
         // OnClosed via the tag — does not spuriously fire during teardown.
-        if (control is WinUI.StackPanel wrapper)
+        if (control is WinUI.StackPanel wrapper
+            && wrapper.Children.OfType<WinPrim.Popup>().FirstOrDefault() is { } popup)
         {
-            foreach (var winChild in wrapper.Children)
+            if (popup.Child is UIElement popupChild)
+                ctx.Reconciler.UnmountChild(popupChild);
+            popup.Child = null;
+            if (popup.IsOpen)
             {
-                if (winChild is WinPrim.Popup popup)
-                {
-                    if (popup.Child is UIElement popupChild)
-                        ctx.Reconciler.UnmountChild(popupChild);
-                    popup.Child = null;
-                    if (popup.IsOpen)
-                    {
-                        Reconciler.ClearElementTag(wrapper);
-                        popup.IsOpen = false;
-                    }
-                    break;
-                }
+                Reconciler.ClearElementTag(wrapper);
+                popup.IsOpen = false;
             }
         }
         return V1UnmountDisposition.ContinueDefaultTraversal;
