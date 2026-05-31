@@ -98,3 +98,10 @@ internal static class FrameDescriptor
             slotIsNull:       static p => p.NavigationFailedTrampoline is null,
             setSlot:          static (p, h) => p.NavigationFailedTrampoline = h);
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <c>new()</c>-able registration shim for
+/// <see cref="FrameDescriptor"/>.
+/// </summary>
+internal sealed class FrameDescriptorHandler()
+    : DescriptorHandler<FrameElement, WinUI.Frame>(FrameDescriptor.Descriptor);

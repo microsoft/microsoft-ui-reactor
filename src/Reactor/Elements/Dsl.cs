@@ -502,7 +502,11 @@ public static partial class Factories
     /// <c>global::Microsoft.UI.Xaml.Controls.ScrollViewer.SetVerticalScrollMode(...)</c>
     /// (or introduce a type alias) to disambiguate.
     /// </remarks>
-    public static ScrollViewerElement ScrollViewer(Element child) => new(child);
+    public static ScrollViewerElement ScrollViewer(Element child)
+    {
+        _ = V1.Reg<ScrollViewerElement, WinUI.ScrollViewer, Desc.ScrollViewerDescriptorHandler>.Done;
+        return new(child);
+    }
 
     /// <summary>
     /// Creates a <see cref="ScrollViewElement"/> wrapping <paramref name="child"/>
@@ -516,17 +520,33 @@ public static partial class Factories
     /// For the classic control, use <see cref="ScrollViewer(Element)"/>.
     /// Issue #348.
     /// </remarks>
-    public static ScrollViewElement ScrollView(Element child) => new(child);
+    public static ScrollViewElement ScrollView(Element child)
+    {
+        _ = V1.Reg<ScrollViewElement, WinUI.ScrollView, Desc.ScrollViewDescriptorHandler>.Done;
+        return new(child);
+    }
 
-    public static BorderElement Border(Element? child) => new(child!);
+    public static BorderElement Border(Element? child)
+    {
+        // Hand-coded handler (not descriptor-backed) — touch its Reg<> directly.
+        _ = V1.Reg<BorderElement, WinUI.Border, V1.Handlers.BorderHandler>.Done;
+        return new(child!);
+    }
 
     public static ExpanderElement Expander(string header, Element content, bool isExpanded = false, Action<bool>? onIsExpandedChanged = null) =>
         new(header, content, isExpanded, onIsExpandedChanged);
 
-    public static SplitViewElement SplitView(Element? pane = null, Element? content = null) =>
-        new(pane, content);
+    public static SplitViewElement SplitView(Element? pane = null, Element? content = null)
+    {
+        _ = V1.Reg<SplitViewElement, WinUI.SplitView, Desc.SplitViewDescriptorHandler>.Done;
+        return new(pane, content);
+    }
 
-    public static ViewboxElement Viewbox(Element child) => new(child);
+    public static ViewboxElement Viewbox(Element child)
+    {
+        _ = V1.Reg<ViewboxElement, WinUI.Viewbox, Desc.ViewboxDescriptorHandler>.Done;
+        return new(child);
+    }
 
     public static CanvasElement Canvas(params Element?[] children) => new(FilterChildren(children));
 
@@ -1242,8 +1262,11 @@ public static partial class Factories
 
     // ── Additional collections ──────────────────────────────────────
 
-    public static SemanticZoomElement SemanticZoom(Element zoomedInView, Element zoomedOutView) =>
-        new(zoomedInView, zoomedOutView);
+    public static SemanticZoomElement SemanticZoom(Element zoomedInView, Element zoomedOutView)
+    {
+        _ = V1.Reg<SemanticZoomElement, WinUI.SemanticZoom, Desc.SemanticZoomDescriptorHandler>.Done;
+        return new(zoomedInView, zoomedOutView);
+    }
 
     public static ListBoxElement ListBox(string[] items, int selectedIndex = -1, Action<int>? onSelectedIndexChanged = null) =>
         new(items) { SelectedIndex = selectedIndex, OnSelectedIndexChanged = onSelectedIndexChanged };
@@ -1271,8 +1294,11 @@ public static partial class Factories
     public static PopupElement Popup(Element child, bool isOpen = false, Action? onClosed = null) =>
         new(child) { IsOpen = isOpen, OnClosed = onClosed };
 
-    public static RefreshContainerElement RefreshContainer(Element content, Action? onRefreshRequested = null) =>
-        new(content) { OnRefreshRequested = onRefreshRequested };
+    public static RefreshContainerElement RefreshContainer(Element content, Action? onRefreshRequested = null)
+    {
+        _ = V1.Reg<RefreshContainerElement, WinUI.RefreshContainer, Desc.RefreshContainerDescriptorHandler>.Done;
+        return new(content) { OnRefreshRequested = onRefreshRequested };
+    }
 
     public static CommandBarFlyoutElement CommandBarFlyout(Element target, AppBarItemBase[]? primaryCommands = null, AppBarItemBase[]? secondaryCommands = null) =>
         new(target, primaryCommands, secondaryCommands);
@@ -1284,8 +1310,11 @@ public static partial class Factories
     // ── SwipeControl ────────────────────────────────────────────────
 
     public static SwipeControlElement SwipeControl(Element content,
-        SwipeItemData[]? leftItems = null, SwipeItemData[]? rightItems = null) =>
-        new(content) { LeftItems = leftItems, RightItems = rightItems };
+        SwipeItemData[]? leftItems = null, SwipeItemData[]? rightItems = null)
+    {
+        _ = V1.Reg<SwipeControlElement, WinUI.SwipeControl, Desc.SwipeControlDescriptorHandler>.Done;
+        return new(content) { LeftItems = leftItems, RightItems = rightItems };
+    }
 
     // ── AnimatedIcon ────────────────────────────────────────────────
 
@@ -1294,8 +1323,11 @@ public static partial class Factories
 
     // ── ParallaxView ────────────────────────────────────────────────
 
-    public static ParallaxViewElement ParallaxView(Element child, double verticalShift = 0, double horizontalShift = 0) =>
-        new(child) { VerticalShift = verticalShift, HorizontalShift = horizontalShift };
+    public static ParallaxViewElement ParallaxView(Element child, double verticalShift = 0, double horizontalShift = 0)
+    {
+        _ = V1.Reg<ParallaxViewElement, WinUI.ParallaxView, Desc.ParallaxViewDescriptorHandler>.Done;
+        return new(child) { VerticalShift = verticalShift, HorizontalShift = horizontalShift };
+    }
 
     // ── MapControl ──────────────────────────────────────────────────
 
@@ -1304,8 +1336,11 @@ public static partial class Factories
 
     // ── Frame ───────────────────────────────────────────────────────
 
-    public static FrameElement Frame(Type? sourcePageType = null, object? navigationParameter = null) =>
-        new() { SourcePageType = sourcePageType, NavigationParameter = navigationParameter };
+    public static FrameElement Frame(Type? sourcePageType = null, object? navigationParameter = null)
+    {
+        _ = V1.Reg<FrameElement, WinUI.Frame, Desc.FrameDescriptorHandler>.Done;
+        return new() { SourcePageType = sourcePageType, NavigationParameter = navigationParameter };
+    }
 
     // ── ItemContainer ───────────────────────────────────────────────
 

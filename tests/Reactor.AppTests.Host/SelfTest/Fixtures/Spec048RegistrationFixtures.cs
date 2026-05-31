@@ -132,4 +132,56 @@ internal static class Spec048RegistrationFixtures
             return Task.CompletedTask;
         }
     }
+
+    /// <summary>
+    /// Spec 048 §3.3 — Container/layout-group factory <c>Reg&lt;&gt;.Done</c>
+    /// registration touch. Covers the 10 element types whose handler is
+    /// <c>IElementHandler&lt;TElement,TControl&gt;</c> (hand-coded Border;
+    /// descriptor-backed ScrollViewer, ScrollView, Viewbox, Frame, SplitView,
+    /// RefreshContainer, ParallaxView, SwipeControl, SemanticZoom).
+    ///
+    /// <para><b>Excluded:</b> the seven panel/expander decorators
+    /// (Stack/Grid/Canvas/RelativePanel/WrapGrid/FlexPanel/Expander) use
+    /// <c>IDecoratorElementHandler&lt;TElement&gt;</c> and remain on the
+    /// per-host registrar until §3.4's decorator-global-path work.</para>
+    /// </summary>
+    internal class ContainerGroupFactoriesRegisterHandlers(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            _ = Border(null);
+            _ = ScrollViewer(TextBlock("probe"));
+            _ = ScrollView(TextBlock("probe"));
+            _ = Viewbox(TextBlock("probe"));
+            _ = Frame();
+            _ = SplitView();
+            _ = RefreshContainer(TextBlock("probe"));
+            _ = ParallaxView(TextBlock("probe"));
+            _ = SwipeControl(TextBlock("probe"));
+            _ = SemanticZoom(TextBlock("a"), TextBlock("b"));
+
+            H.Check("Spec048_Reg_Border",
+                ControlRegistry.Contains(typeof(BorderElement)));
+            H.Check("Spec048_Reg_ScrollViewer",
+                ControlRegistry.Contains(typeof(ScrollViewerElement)));
+            H.Check("Spec048_Reg_ScrollView",
+                ControlRegistry.Contains(typeof(ScrollViewElement)));
+            H.Check("Spec048_Reg_Viewbox",
+                ControlRegistry.Contains(typeof(ViewboxElement)));
+            H.Check("Spec048_Reg_Frame",
+                ControlRegistry.Contains(typeof(FrameElement)));
+            H.Check("Spec048_Reg_SplitView",
+                ControlRegistry.Contains(typeof(SplitViewElement)));
+            H.Check("Spec048_Reg_RefreshContainer",
+                ControlRegistry.Contains(typeof(RefreshContainerElement)));
+            H.Check("Spec048_Reg_ParallaxView",
+                ControlRegistry.Contains(typeof(ParallaxViewElement)));
+            H.Check("Spec048_Reg_SwipeControl",
+                ControlRegistry.Contains(typeof(SwipeControlElement)));
+            H.Check("Spec048_Reg_SemanticZoom",
+                ControlRegistry.Contains(typeof(SemanticZoomElement)));
+
+            return Task.CompletedTask;
+        }
+    }
 }

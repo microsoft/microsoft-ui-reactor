@@ -122,3 +122,10 @@ internal static class SplitViewDescriptor
             => global::System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
     }
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <c>new()</c>-able registration shim for
+/// <see cref="SplitViewDescriptor"/>.
+/// </summary>
+internal sealed class SplitViewDescriptorHandler()
+    : DescriptorHandler<SplitViewElement, WinUI.SplitView>(SplitViewDescriptor.Descriptor);

@@ -40,3 +40,10 @@ internal static class RefreshContainerDescriptor
             slotIsNull:       static p => p.RefreshRequestedTrampoline is null,
             setSlot:          static (p, h) => p.RefreshRequestedTrampoline = h);
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <c>new()</c>-able registration shim for
+/// <see cref="RefreshContainerDescriptor"/>.
+/// </summary>
+internal sealed class RefreshContainerDescriptorHandler()
+    : DescriptorHandler<RefreshContainerElement, WinUI.RefreshContainer>(RefreshContainerDescriptor.Descriptor);

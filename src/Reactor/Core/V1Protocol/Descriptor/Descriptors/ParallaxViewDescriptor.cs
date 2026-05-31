@@ -50,3 +50,10 @@ internal static class ParallaxViewDescriptor
             => global::System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
     }
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <c>new()</c>-able registration shim for
+/// <see cref="ParallaxViewDescriptor"/>.
+/// </summary>
+internal sealed class ParallaxViewDescriptorHandler()
+    : DescriptorHandler<ParallaxViewElement, WinUI.ParallaxView>(ParallaxViewDescriptor.Descriptor);
