@@ -1159,6 +1159,7 @@ internal static class SelfTestFixtureRegistry
         "ValueDiff_ComboBox_Drift",
         "ValueDiff_ToggleSwitch_Drift",
         "ValueDiff_GridView_GuardedNoOpStrand",
+        "Issue464_GridView_RapidDoubleWriteEcho",
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         // The MarqueeHandler is authored in tests/external_proof/
@@ -2317,6 +2318,7 @@ internal static class SelfTestFixtureRegistry
         "ValueDiff_ComboBox_Drift" => new Spec047ValueDiffEchoFixtures.ComboBoxProgrammaticDrift(harness),
         "ValueDiff_ToggleSwitch_Drift" => new Spec047ValueDiffEchoFixtures.ToggleSwitchProgrammaticDrift(harness),
         "ValueDiff_GridView_GuardedNoOpStrand" => new Spec047ValueDiffEchoFixtures.GridViewGuardedNoOpStrand(harness),
+        "Issue464_GridView_RapidDoubleWriteEcho" => new Spec047ValueDiffEchoFixtures.GridViewRapidDoubleWriteEcho(harness),
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         "Spec047ExternalProof_Marquee_MountUpdate" => new Spec047ExternalProofFixtures.MarqueeMountUpdate(harness),

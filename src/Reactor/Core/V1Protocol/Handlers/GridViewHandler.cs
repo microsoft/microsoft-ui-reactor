@@ -65,6 +65,13 @@ internal sealed class GridViewHandler : IElementHandler<GridViewElement, WinUI.G
         gridView.SelectionChanged += (s, _) =>
         {
             var g = (WinUI.GridView)s!;
+            // Issue #464 — consume any pending echo-suppress token before
+            // dispatching to the user callback. The trampoline must check
+            // ShouldSuppress in the same shape as every other value-control
+            // (CheckBox/Slider/TextBox/etc.) so the programmatic SelectedIndex
+            // writes below in Mount / Update don't echo back into
+            // OnSelectedIndexChanged.
+            if (ChangeEchoSuppressor.ShouldSuppress(g)) return;
             if (Reconciler.GetElementTag(g) is not GridViewElement el) return;
             el.OnSelectedIndexChanged?.Invoke(g.SelectedIndex);
             if (el.OnSelectionChanged is { } h)
@@ -82,7 +89,16 @@ internal sealed class GridViewHandler : IElementHandler<GridViewElement, WinUI.G
 
         gridView.ItemsSource = Enumerable.Range(0, gv.Items.Length).ToList();
 
-        if (gv.SelectedIndex >= 0) gridView.SelectedIndex = gv.SelectedIndex;
+        // Issue #464 — wrap the initial SelectedIndex write so the deferred
+        // SelectionChanged that GridView fires after container realization is
+        // suppressed instead of leaking into OnSelectedIndexChanged. Only
+        // arm when the value would actually drift (a no-op write raises no
+        // echo and would strand a token that swallows the next real input).
+        if (gv.SelectedIndex >= 0 && gridView.SelectedIndex != gv.SelectedIndex)
+        {
+            ChangeEchoSuppressor.BeginSuppress(gridView);
+            gridView.SelectedIndex = gv.SelectedIndex;
+        }
         Reconciler.ApplySetters(gv.Setters, gridView);
         return gridView;
     }
@@ -113,7 +129,19 @@ internal sealed class GridViewHandler : IElementHandler<GridViewElement, WinUI.G
                     (Reconciler.GetElementTag(g) as GridViewElement)?.OnItemClick?.Invoke(idx);
             };
 
-        if (n.SelectedIndex >= 0) gv.SelectedIndex = n.SelectedIndex;
+        // Issue #464 — wrap the SelectedIndex write so the deferred
+        // SelectionChanged GridView fires after the property set doesn't echo
+        // back into OnSelectedIndexChanged. Only arm on real drift to avoid
+        // stranding a token for a no-op write (see Mount comment, and
+        // ChangeEchoSuppressor.BeginSuppress / ShouldSuppress in
+        // src/Reactor/Core/ChangeEchoSuppressor.cs — BeginSuppress always
+        // increments, ShouldSuppress only consumes on a real event, so an
+        // unconsumed token swallows the next user input).
+        if (n.SelectedIndex >= 0 && gv.SelectedIndex != n.SelectedIndex)
+        {
+            ChangeEchoSuppressor.BeginSuppress(gv);
+            gv.SelectedIndex = n.SelectedIndex;
+        }
         Reconciler.ApplySetters(n.Setters, gv);
     }
 

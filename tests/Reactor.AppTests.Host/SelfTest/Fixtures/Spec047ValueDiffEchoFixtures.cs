@@ -414,4 +414,98 @@ internal static class Spec047ValueDiffEchoFixtures
             }
         }
     }
+
+    /// <summary>Probe / regression guard for issue #464 — GridView raised
+    /// duplicate <c>OnSelectedIndexChanged</c> echoes for two same-frame
+    /// programmatic <c>SelectedIndex</c> writes (no render/drain between
+    /// them). Asserts the production-reachable single-write path (1 fire,
+    /// suppressed → 0) AND the rapid-double-write path (2 fires →
+    /// suppressed → 0). ListBox is included as the negative control —
+    /// it never exhibited the regression and must stay clean.</summary>
+    internal class GridViewRapidDoubleWriteEcho(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            await ProbeAsync<WinUI.GridView>(static items => new GridViewElement(items)
+                {
+                    SelectedIndex = 0,
+                },
+                static (el, cb) => ((GridViewElement)el) with { OnSelectedIndexChanged = cb },
+                static (el, i) => ((GridViewElement)el) with { SelectedIndex = i },
+                static gv => gv.SelectedIndex,
+                "GridView");
+
+            await ProbeAsync<WinUI.ListBox>(static items =>
+                {
+                    // ListBox carries items as string[]; map element labels.
+                    var labels = new string[items.Length];
+                    for (int i = 0; i < items.Length; i++) labels[i] = $"i{i}";
+                    return new ListBoxElement(labels) { SelectedIndex = 0 };
+                },
+                static (el, cb) => ((ListBoxElement)el) with { OnSelectedIndexChanged = cb },
+                static (el, i) => ((ListBoxElement)el) with { SelectedIndex = i },
+                static lb => lb.SelectedIndex,
+                "ListBox");
+        }
+
+        private async Task ProbeAsync<TCtrl>(
+            Func<Element[], Element> seedFactory,
+            Func<Element, Action<int>, Element> withCallback,
+            Func<Element, int, Element> withSelectedIndex,
+            Func<TCtrl, int> readIndex,
+            string label) where TCtrl : WinUI.Control
+        {
+            var rec = new Reconciler();
+            var parent = new Grid { Background = new SolidColorBrush(Colors.Transparent) };
+            H.SetContent(parent);
+
+            int fireCount = 0;
+            var items = new Element[]
+            {
+                new TextBlockElement("i0"), new TextBlockElement("i1"),
+                new TextBlockElement("i2"), new TextBlockElement("i3"),
+            };
+            var elBase = seedFactory(items);
+            var el = withCallback(elBase, _ => fireCount++);
+
+            if (rec.Mount(el, _noOp) is not TCtrl ctrl)
+            {
+                H.Check($"Issue464_{label}_Mounted", false);
+                return;
+            }
+            parent.Children.Add(ctrl);
+            await Harness.Render();
+            await Harness.Render(); // realize containers
+
+            // ── Single-write per render: must not leak. ──
+            fireCount = 0;
+            var elNext = withSelectedIndex(el, 2);
+            rec.UpdateChild(el, elNext, ctrl, _noOp);
+            await Harness.Render();
+            H.Check($"Issue464_{label}_SingleWrite_Index", readIndex(ctrl) == 2);
+            H.Check($"Issue464_{label}_SingleWrite_NoEcho", fireCount == 0);
+            el = elNext;
+
+            // ── Two writes in the same frame (no render between): must not leak. ──
+            fireCount = 0;
+            var elTwo = withSelectedIndex(el, 1);
+            rec.UpdateChild(el, elTwo, ctrl, _noOp);
+            var elThree = withSelectedIndex(elTwo, 3);
+            rec.UpdateChild(elTwo, elThree, ctrl, _noOp);
+            await Harness.Render();
+            H.Check($"Issue464_{label}_DoubleWrite_FinalIndex", readIndex(ctrl) == 3);
+            H.Check($"Issue464_{label}_DoubleWrite_NoEcho", fireCount == 0);
+
+            // ── Real user interaction must still fire after the suppression
+            // tokens have been drained. ──
+            fireCount = 0;
+            if (ctrl is WinUI.GridView gv) gv.SelectedIndex = 0;
+            else if (ctrl is WinUI.ListBox lb) lb.SelectedIndex = 0;
+            await Harness.Render();
+            H.Check($"Issue464_{label}_RealUserStillFires", fireCount == 1);
+
+            rec.UnmountChild(ctrl);
+            parent.Children.Clear();
+        }
+    }
 }
