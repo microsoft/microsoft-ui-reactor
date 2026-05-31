@@ -19,8 +19,9 @@ Derived from: [`docs/specs/048-control-registration-and-trimming.md`](../048-con
 > - Order matters: Phase 1 lands the runtime contract with no behavior change;
 >   Phase 2 proves the mechanism end-to-end on a single external control; Phase
 >   3 is the high-risk built-in migration that deletes `RegisterV1BuiltInHandlers`
->   and closes ~50 element constructors; Phase 4 is the optional ergonomic
->   layer.
+>   (constructor closure was dropped — see §3.2 supersession + issue
+>   [#486](https://github.com/microsoft/microsoft-ui-reactor/issues/486)); Phase
+>   4 is the optional ergonomic layer.
 
 ## Exit gate (all must hold to declare 048 done)
 
@@ -32,10 +33,18 @@ Derived from: [`docs/specs/048-control-registration-and-trimming.md`](../048-con
    (spec §7); `Factories` has **no** static constructor and **no** static
    field initializer that references a handler or WinUI control type (spec
    §10.2).
-3. Built-in element record constructors are `internal` so the factory is the
+3. ~~Built-in element record constructors are `internal` so the factory is the
    sole construction path (spec §6 construction discipline, §12.3); all
    call sites in `src/`, `tests/`, `samples/`, and `docs/_pipeline/apps/` are
-   routed through factories.
+   routed through factories.~~ **Superseded — see §3.2 close-out and issue
+   [#486](https://github.com/microsoft/microsoft-ui-reactor/issues/486).**
+   Element record constructors remain `public` because direct construction
+   is a supported ~4% perf idiom (`StressPerf.ReactorOptimized`). The
+   replacement guardrail is a defensive throw in `Reconciler.Mount` that
+   points unregistered-type callers at the matching factory or
+   `ControlRegistry.Register<,>`. `src/`, `samples/`, and bundled
+   `docs/_pipeline/apps/` are still factory-routed (done in §3.4) — the
+   relaxation is for *external* callers and perf-sensitive test fixtures.
 4. A CI trim-regression test publishes a minimal app calling only `Button()` +
    `TextBlock()` with `PublishAot=true` (or `PublishTrimmed` + `TrimMode=full`)
    and asserts the produced binary contains **no** `TreeView`, `GridView`, or
@@ -294,19 +303,44 @@ registration touch into each of the ~120 factory methods in
 >   when §3.4 deletes `RegisterV1BuiltInHandlers`, which removes the
 >   descriptor cctor chain that triggers the activation.
 
-### 3.2 Inventory + close built-in element constructors (spec §12.3)
+### 3.2 Inventory + close built-in element constructors (spec §12.3) — **SUPERSEDED**
 
-- [ ] Grep `src/`, `tests/`, `samples/`, and `docs/_pipeline/apps/` for
-      direct `new XxxElement(...)` constructions of built-in element
-      records. Build an inventory under
-      `docs/specs/048/audits/element-ctor-call-sites.md`.
-- [ ] For each built-in element record in `src/Reactor/Core/Element.cs`
-      (and split-out element files): change the public constructor to
-      `internal`. The factory in `Dsl.cs` is the sole construction path.
-- [ ] Update every call site in the inventory to use the corresponding
-      factory. For tests that need a one-off element-record fixture, prefer
-      `internal` + `InternalsVisibleTo("Reactor.Tests")` over re-opening
-      the ctor publicly.
+> **Status: superseded by §3.4 close-out (option A) — see issue
+> [#486](https://github.com/microsoft/microsoft-ui-reactor/issues/486).**
+>
+> The originally-proposed plan was to close every built-in element-record
+> constructor to `internal` so that the factory in `Dsl.cs` (which carries
+> the `Reg<>.Done` registration touch) is the *sole* construction path,
+> guaranteeing that every reachable element type has a registered handler.
+>
+> User feedback during §3.4 implementation rejected this approach:
+> direct `new XxxElement(...)` is a **supported performance idiom** —
+> `tests/stress_perf/StressPerf.ReactorOptimized` relies on hot-loop
+> direct construction for a measured ~4% throughput win versus the
+> factory call. Closing the ctors would either eliminate that idiom or
+> force every perf-sensitive caller through `InternalsVisibleTo`, both of
+> which were judged worse than the alternative.
+>
+> **Replacement mechanism (landed):**
+>
+> 1. `Reconciler.Mount` throws a descriptive `InvalidOperationException`
+>    when it encounters an element record whose runtime type has no
+>    registered handler. The message points the caller at the factory
+>    method *or* an explicit `ControlRegistry.Register<,>` call (see
+>    commit `c8d1cd41`).
+> 2. Callers using the direct-ctor idiom must "prime" the registration
+>    once per process — by calling the matching factory at startup
+>    (`_ = Factories.TextBlock("");` is the canonical pattern, used by
+>    `StressPerf.ReactorOptimized.Program`) or by calling
+>    `ControlRegistry.Register<TElement, TControl>(handler)` directly.
+> 3. Issue [#486](https://github.com/microsoft/microsoft-ui-reactor/issues/486)
+>    tracks a possible future Roslyn analyzer that would flag direct
+>    `new XxxElement(...)` constructions without a matching factory
+>    touch in the same assembly, mechanising the priming requirement at
+>    build time rather than at first-mount.
+>
+> No action required against the original three checkboxes; they are
+> intentionally left unchecked and superseded by the above.
 
 ### 3.3 Convert factories — one `Reg<>` touch per factory (spec §7)
 
