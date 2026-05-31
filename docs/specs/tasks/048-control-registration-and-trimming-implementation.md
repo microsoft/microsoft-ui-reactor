@@ -342,8 +342,8 @@ group to keep diffs reviewable.
       `ItemsRepeater` and `ItemsView` use the base-derived global path,
       and `LazyStack` / `TemplatedListView<T>` / `TemplatedFlipView<T>`
       combine base-derived AND decorator paths — all defer to §3.4.)*
-- [ ] **Date / time** — `DatePicker`, `CalendarDatePicker`, `TimePicker`,
-      `CalendarView`.
+- [x] **Date / time** — `DatePicker`, `CalendarDatePicker`, `TimePicker`,
+      `CalendarView`. *(Done — see §3.3 close-out note below.)*
 - [ ] **Status / info** — `ProgressBar`, `ProgressRing`, `InfoBar`,
       `InfoBadge`, `TeachingTip`, `AnnounceRegion`, `AnnotatedScrollBar`.
 - [ ] **Media / icons** — `Image`, `MediaPlayerElement`,
@@ -527,6 +527,26 @@ hitting `Reg<TextBlockElement, …>` is silently absorbed — spec §10.3.)
 >   populates `ControlRegistry.Contains(typeof(XxxElement))` for all 10
 >   element types.
 > - Green: Spec048 selftests (51 checks, 10 new) + Reactor.Tests
+>   (9148 passed / 0 failed), `-p:Platform=x64`.
+
+> **§3.3 close-out note — Date/time-group landed:**
+>
+> Same template; all 4 element types wired (no deferrals — every Date/time
+> control is descriptor-backed with no decorator or base-derived variants).
+>
+> **Landed for the Date/time group:**
+> - Thin handlers appended to 4 descriptors: `DatePicker`,
+>   `CalendarDatePicker`, `TimePicker`, `CalendarView`.
+> - 4 factories in `Dsl.cs` gain a `Reg<>.Done` touch (all converted from
+>   expression-bodied to block form to host the touch).
+> - `using System;` added to `Spec048RegistrationFixtures.cs` so the new
+>   fixture's `DateTimeOffset` / `TimeSpan` literals resolve unambiguously
+>   (otherwise C# resolves `System` against
+>   `Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures` and falls through
+>   to `Microsoft.UI.System`, which has no `DateTimeOffset`).
+> - Selftest `Spec048_DateTimeGroupFactoriesRegisterHandlers` asserts each
+>   factory call populates `ControlRegistry.Contains(typeof(XxxElement))`.
+> - Green: Spec048 selftests (55 checks, 4 new) + Reactor.Tests
 >   (9148 passed / 0 failed), `-p:Platform=x64`.
 
 ### 3.4 Delete `RegisterV1BuiltInHandlers`

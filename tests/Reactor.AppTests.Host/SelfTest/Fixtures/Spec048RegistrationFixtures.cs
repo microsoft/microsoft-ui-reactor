@@ -1,3 +1,4 @@
+using System;
 using System.Threading.Tasks;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Core.V1Protocol;
@@ -220,6 +221,28 @@ internal static class Spec048RegistrationFixtures
                 ControlRegistry.Contains(typeof(ItemContainerElement)));
             H.Check("Spec048_Reg_TreeView",
                 ControlRegistry.Contains(typeof(TreeViewElement)));
+
+            return Task.CompletedTask;
+        }
+    }
+
+    internal class DateTimeGroupFactoriesRegisterHandlers(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            _ = DatePicker(DateTimeOffset.Now);
+            _ = CalendarDatePicker();
+            _ = TimePicker(TimeSpan.FromHours(12));
+            _ = CalendarView();
+
+            H.Check("Spec048_Reg_DatePicker",
+                ControlRegistry.Contains(typeof(DatePickerElement)));
+            H.Check("Spec048_Reg_CalendarDatePicker",
+                ControlRegistry.Contains(typeof(CalendarDatePickerElement)));
+            H.Check("Spec048_Reg_TimePicker",
+                ControlRegistry.Contains(typeof(TimePickerElement)));
+            H.Check("Spec048_Reg_CalendarView",
+                ControlRegistry.Contains(typeof(CalendarViewElement)));
 
             return Task.CompletedTask;
         }

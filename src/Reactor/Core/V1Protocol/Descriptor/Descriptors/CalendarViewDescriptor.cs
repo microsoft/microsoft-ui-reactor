@@ -127,3 +127,11 @@ internal static class CalendarViewDescriptor
             slotIsNull:      static p => p.SelectedDatesChangedTrampoline is null,
             setSlot:         static (p, h) => p.SelectedDatesChangedTrampoline = h);
 }
+
+/// <summary>
+/// Spec 048 §3.3 thin handler — instantiated lazily by
+/// <see cref="ControlRegistry"/> when the global path needs the
+/// descriptor-backed <see cref="CalendarViewDescriptor"/>.
+/// </summary>
+internal sealed class CalendarViewDescriptorHandler()
+    : DescriptorHandler<CalendarViewElement, WinUI.CalendarView>(CalendarViewDescriptor.Descriptor);

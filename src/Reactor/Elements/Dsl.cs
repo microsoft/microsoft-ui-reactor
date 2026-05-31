@@ -361,14 +361,23 @@ public static partial class Factories
 
     // ── Date / Time ─────────────────────────────────────────────────
 
-    public static CalendarDatePickerElement CalendarDatePicker(DateTimeOffset? date = null, Action<DateTimeOffset?>? onDateChanged = null) =>
-        new(date, onDateChanged);
+    public static CalendarDatePickerElement CalendarDatePicker(DateTimeOffset? date = null, Action<DateTimeOffset?>? onDateChanged = null)
+    {
+        _ = V1.Reg<CalendarDatePickerElement, WinUI.CalendarDatePicker, Desc.CalendarDatePickerDescriptorHandler>.Done;
+        return new(date, onDateChanged);
+    }
 
-    public static DatePickerElement DatePicker(DateTimeOffset date, Action<DateTimeOffset>? onDateChanged = null) =>
-        new(date, onDateChanged);
+    public static DatePickerElement DatePicker(DateTimeOffset date, Action<DateTimeOffset>? onDateChanged = null)
+    {
+        _ = V1.Reg<DatePickerElement, WinUI.DatePicker, Desc.DatePickerDescriptorHandler>.Done;
+        return new(date, onDateChanged);
+    }
 
-    public static TimePickerElement TimePicker(TimeSpan time, Action<TimeSpan>? onTimeChanged = null) =>
-        new(time, onTimeChanged);
+    public static TimePickerElement TimePicker(TimeSpan time, Action<TimeSpan>? onTimeChanged = null)
+    {
+        _ = V1.Reg<TimePickerElement, WinUI.TimePicker, Desc.TimePickerDescriptorHandler>.Done;
+        return new(time, onTimeChanged);
+    }
 
     // ── Progress ────────────────────────────────────────────────────
 
@@ -1338,7 +1347,11 @@ public static partial class Factories
 
     // ── Additional date / time ──────────────────────────────────────
 
-    public static CalendarViewElement CalendarView() => new();
+    public static CalendarViewElement CalendarView()
+    {
+        _ = V1.Reg<CalendarViewElement, WinUI.CalendarView, Desc.CalendarViewDescriptorHandler>.Done;
+        return new();
+    }
 
     // ── SwipeControl ────────────────────────────────────────────────
 

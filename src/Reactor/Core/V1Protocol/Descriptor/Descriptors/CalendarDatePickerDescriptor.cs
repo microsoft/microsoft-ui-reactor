@@ -78,3 +78,11 @@ internal static class CalendarDatePickerDescriptor
             get: static e => e.IsCalendarOpen,
             set: static (c, v) => c.IsCalendarOpen = v);
 }
+
+/// <summary>
+/// Spec 048 §3.3 thin handler — instantiated lazily by
+/// <see cref="ControlRegistry"/> when the global path needs the
+/// descriptor-backed <see cref="CalendarDatePickerDescriptor"/>.
+/// </summary>
+internal sealed class CalendarDatePickerDescriptorHandler()
+    : DescriptorHandler<CalendarDatePickerElement, WinUI.CalendarDatePicker>(CalendarDatePickerDescriptor.Descriptor);
