@@ -75,10 +75,7 @@ internal sealed class ListViewHandler : IElementHandler<ListViewElement, WinUI.L
             if (el.OnSelectionChanged is { } h)
             {
                 // SelectedItems is List<object> of int — copy into a typed snapshot.
-                var snapshot = new List<int>(l.SelectedItems.Count);
-                foreach (var item in l.SelectedItems)
-                    if (item is int i) snapshot.Add(i);
-                h(snapshot);
+                h(l.SelectedItems.OfType<int>().ToList());
             }
         };
         if (lv.OnItemClick is not null)

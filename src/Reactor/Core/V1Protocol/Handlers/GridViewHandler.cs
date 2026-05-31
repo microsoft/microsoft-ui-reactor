@@ -69,10 +69,7 @@ internal sealed class GridViewHandler : IElementHandler<GridViewElement, WinUI.G
             el.OnSelectedIndexChanged?.Invoke(g.SelectedIndex);
             if (el.OnSelectionChanged is { } h)
             {
-                var snapshot = new List<int>(g.SelectedItems.Count);
-                foreach (var item in g.SelectedItems)
-                    if (item is int i) snapshot.Add(i);
-                h(snapshot);
+                h(g.SelectedItems.OfType<int>().ToList());
             }
         };
         if (gv.OnItemClick is not null)

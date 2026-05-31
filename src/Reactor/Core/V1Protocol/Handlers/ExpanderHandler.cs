@@ -26,10 +26,9 @@ internal sealed class ExpanderHandler : IDecoratorElementHandler<ExpanderElement
         // Element header wins over the string slot (matches the spec
         // "HeaderTemplate" slot semantics — strings are still supported as
         // the default header content).
-        if (el.HeaderTemplate is not null)
-            expander.Header = ctx.Reconciler.Mount(el.HeaderTemplate, requestRerender);
-        else
-            expander.Header = el.Header;
+        expander.Header = el.HeaderTemplate is not null
+            ? ctx.Reconciler.Mount(el.HeaderTemplate, requestRerender)
+            : el.Header;
         if (el.ContentTransitions is not null) expander.ContentTransitions = el.ContentTransitions;
         expander.Content = ctx.Reconciler.Mount(el.Content, requestRerender);
         Reconciler.SetElementTag(expander, el);
