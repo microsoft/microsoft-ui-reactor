@@ -2210,17 +2210,24 @@ public record RichTextLineBreak() : RichTextInline;
 ///   <item><b>Route A — Reactor element (<see cref="Child"/>):</b> the
 ///   embedded UI is described declaratively as any other Reactor
 ///   <see cref="Element"/> (e.g. <c>Button("+", () =&gt; ...)</c>) and is mounted
-///   through the reconciler. Re-renders that produce a structurally-equal
-///   parent paragraph tree (so the descriptor's reference-equality fast
-///   path keeps the existing inline) leave the child untouched; renders
-///   that swap the parent <c>Paragraphs</c> array tear down and remount
-///   the child along with the rest of the block.</item>
+///   through the reconciler. The descriptor uses an incremental rich-text
+///   update path: re-renders of the owning <c>RichTextBlock</c> preserve
+///   the existing inline UIElement and reconcile the Reactor child via
+///   the standard child-reconciliation pipeline, so embedded interactive
+///   controls (sliders, buttons, etc.) keep their drag focus and
+///   component state across renders. A structural change to the
+///   surrounding paragraph tree (different paragraph count, mismatched
+///   inline shape) falls back to a full rebuild that tears down and
+///   remounts the child along with the rest of the block.</item>
 ///   <item><b>Route B — imperative native factory (<see cref="Factory"/>):</b>
 ///   the embedded UI is produced by a caller-supplied lambda returning a
 ///   raw WinUI <see cref="Microsoft.UI.Xaml.FrameworkElement"/>. Useful as
 ///   an escape hatch for native controls that have no Reactor element
-///   counterpart. The control is rebuilt each time the surrounding
-///   <c>RichTextBlock</c> rebuilds; no reconciliation is attempted.</item>
+///   counterpart. The factory is opaque to the reconciler, so the
+///   incremental path re-invokes it only when the delegate identity
+///   itself changes (capture-equal lambdas are treated as unchanged) —
+///   pass a stable delegate reference if you want the native UIElement
+///   to survive renders.</item>
 /// </list></para>
 ///
 /// <para>Exactly one of <see cref="Child"/> / <see cref="Factory"/> should

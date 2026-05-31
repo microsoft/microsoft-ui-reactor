@@ -47,17 +47,16 @@ internal static class RichTextBlockDescriptor
         .ImperativeBridged(
             mount: static (ctx, c, e) =>
                 ctx.Reconciler.RebuildRichTextBlocks(e, c, ctx.RequestRerender),
+            // Always delegate to UpdateRichTextBlocks — even when prev/next
+            // Paragraphs are reference-equal. A reference-equal Paragraphs
+            // array (e.g. memoized at the parent) can still contain a Route A
+            // InlineUIContainer whose embedded Reactor child has pending
+            // state-driven renders to apply. UpdateRichTextBlocks does the
+            // cheap per-paragraph ref-skip itself and still walks Route A
+            // inlines for reconciliation, so adding a top-level fast path
+            // would silently strand inner Component state updates.
             update: static (ctx, c, prev, next) =>
-            {
-                // Fast path: identical Paragraphs reference AND identical
-                // Text → nothing for the block-list path to do. Other
-                // descriptor entries (FontSize, IsTextSelectionEnabled,
-                // etc.) still run their own diffs.
-                if (ReferenceEquals(prev.Paragraphs, next.Paragraphs)
-                    && string.Equals(prev.Text, next.Text, global::System.StringComparison.Ordinal))
-                    return;
-                ctx.Reconciler.UpdateRichTextBlocks(c, prev, next, ctx.RequestRerender);
-            })
+                ctx.Reconciler.UpdateRichTextBlocks(c, prev, next, ctx.RequestRerender))
         .OneWay(
             get: static e => e.IsTextSelectionEnabled,
             set: static (c, v) => c.IsTextSelectionEnabled = v)

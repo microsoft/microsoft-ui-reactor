@@ -183,7 +183,14 @@ internal sealed class ReconcileHighlightOverlay : IDisposable
         // initial paint to that pass instead of stamping a (0, 0) ghost.
         if (offset.X == 0f && offset.Y == 0f && !IsAnchoredAtHostOrigin(target, host))
         {
+            // Count the deferred sprite against the per-flush budget too —
+            // otherwise a flush with many newly-mounted stale-(0,0) targets
+            // (e.g. a chart that just grew its bar count) can attach
+            // hundreds of LayoutUpdated handlers and later add up to the
+            // global MaxLiveSprites cap. The immediate path decrements
+            // newBudget below; do the same here so both arms share one cap.
             DeferInitialPaint(host, target, brush, opacity);
+            newBudget--;
             return;
         }
 

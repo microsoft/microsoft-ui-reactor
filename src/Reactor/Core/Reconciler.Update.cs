@@ -449,8 +449,27 @@ public sealed partial class Reconciler
         {
             var prevPara = prevPs[pi];
             var nextPara = nextPs[pi];
-            if (ReferenceEquals(prevPara, nextPara)) continue;
             var winPara = (Microsoft.UI.Xaml.Documents.Paragraph)rtb.Blocks[pi];
+            if (ReferenceEquals(prevPara, nextPara))
+            {
+                // Paragraph object is unchanged at the structural level, but
+                // a Route A InlineUIContainer inside it may still own an
+                // inner Reactor Component whose state has updated since
+                // the last reconcile. Walk just those — every other inline
+                // (Run / Hyperlink / LineBreak) is a pure value type and has
+                // no out-of-band update path.
+                for (int ii = 0; ii < nextPara.Inlines.Length; ii++)
+                {
+                    if (nextPara.Inlines[ii] is RichTextInlineUIContainer rinl
+                        && rinl.Child is not null
+                        && winPara.Inlines[ii] is Microsoft.UI.Xaml.Documents.InlineUIContainer wc)
+                    {
+                        if (UpdateInlineUIContainerInPlace(rinl, rinl, wc, requestRerender))
+                            anyMutation = true;
+                    }
+                }
+                continue;
+            }
             for (int ii = 0; ii < nextPara.Inlines.Length; ii++)
             {
                 var prevInline = prevPara.Inlines[ii];
@@ -629,19 +648,35 @@ public sealed partial class Reconciler
             }
             return false; // child reconciled in place; no container-level mutation
         }
-        // Route B both — re-invoke factory only when the delegate identity
-        // changes (factories are opaque; reference equality is the closest
-        // signal authors have to "the inline UI source actually changed").
-        if (prev.Factory is not null && next.Factory is not null)
+        // Route B / empty branches. Preflight (CanUpdateInlineUIContainerInPlace)
+        // accepts any combination of {Factory, null} for both sides as "same
+        // shape" so we must handle every transition here — otherwise a
+        // factory→empty leaves the old child attached and an empty→factory
+        // never mounts the new child.
+        if (prev.Factory is null && next.Factory is null)
+            return false; // both empty — nothing to do
+        if (prev.Factory is not null && next.Factory is null)
         {
-            if (ReferenceEquals(prev.Factory, next.Factory)) return false;
+            container.Child = null;
+            return true;
+        }
+        if (prev.Factory is null && next.Factory is not null)
+        {
             UIElement? mounted = null;
             try { mounted = next.Factory(); }
             catch { mounted = null; }
             container.Child = mounted;
             return true;
         }
-        return false; // both null — nothing to mount
+        // Both factories non-null — re-invoke only when the delegate identity
+        // changes (factories are opaque; reference equality is the closest
+        // signal authors have to "the inline UI source actually changed").
+        if (ReferenceEquals(prev.Factory, next.Factory)) return false;
+        UIElement? rebuilt = null;
+        try { rebuilt = next.Factory!(); }
+        catch { rebuilt = null; }
+        container.Child = rebuilt;
+        return true;
     }
 
     private void MarkRichTextBlockModified(WinUI.RichTextBlock rtb)
