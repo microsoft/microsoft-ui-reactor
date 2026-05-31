@@ -196,6 +196,12 @@ internal static class SelfTestFixtureRegistry
         "PDM_WrapGrid_KeyedReverse_PreservesIdentity",
         "PDM_RelativePanel_KeyedReorder_PreservesIdentity_And_StaleClear",
         "PDM_Panel_Unmount_RunsChildEffectCleanup",
+        // Spec 047 §4.5 — overlay handler-owned Unmount tears down side-mounted
+        // Reactor subtrees (Flyout content, Popup child) the generic recursion
+        // cannot reach.
+        "OverlayTeardown_Flyout_Unmount_RunsFlyoutContentCleanup",
+        "OverlayTeardown_Flyout_Unmount_RunsPassThroughCleanup",
+        "OverlayTeardown_Popup_Unmount_RunsChildCleanup",
         // ElementFactory<T> + WinUI ItemsRepeater recycle contract — regression
         // for the leak fixed alongside these tests (every realize was Minting
         // a fresh UIElement, orphaning prior ones in Repeater.Children).
@@ -1367,6 +1373,9 @@ internal static class SelfTestFixtureRegistry
         "PDM_WrapGrid_KeyedReverse_PreservesIdentity" => new PanelDescriptorMigrationFixtures.WrapGrid_KeyedReverse_PreservesIdentity(harness),
         "PDM_RelativePanel_KeyedReorder_PreservesIdentity_And_StaleClear" => new PanelDescriptorMigrationFixtures.RelativePanel_KeyedReorder_PreservesIdentity_And_StaleClear(harness),
         "PDM_Panel_Unmount_RunsChildEffectCleanup" => new PanelDescriptorMigrationFixtures.Panel_Unmount_RunsChildEffectCleanup(harness),
+        "OverlayTeardown_Flyout_Unmount_RunsFlyoutContentCleanup" => new OverlayTeardownFixtures.Flyout_Unmount_RunsFlyoutContentCleanup(harness),
+        "OverlayTeardown_Flyout_Unmount_RunsPassThroughCleanup" => new OverlayTeardownFixtures.Flyout_Unmount_RunsPassThroughCleanup(harness),
+        "OverlayTeardown_Popup_Unmount_RunsChildCleanup" => new OverlayTeardownFixtures.Popup_Unmount_RunsChildCleanup(harness),
         "EFR_Factory_BoundedDistinctControls_AcrossManyRealizeCycles" => new ElementFactoryRecyclingFixtures.Factory_BoundedDistinctControls_AcrossManyRealizeCycles(harness),
         "EFR_Factory_RecycledControlIsReusedOnNextRealize" => new ElementFactoryRecyclingFixtures.Factory_RecycledControlIsReusedOnNextRealize(harness),
         "EFR_Factory_BookkeepingBoundedAcrossCycles" => new ElementFactoryRecyclingFixtures.Factory_BookkeepingBoundedAcrossCycles(harness),

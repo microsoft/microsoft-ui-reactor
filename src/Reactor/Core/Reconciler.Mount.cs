@@ -58,11 +58,10 @@ public sealed partial class Reconciler
         try
         {
 
-        // Spec 047 §14 Phase 4 (§4.5) — dispatch is V1 registry → external
-        // `_typeRegistry` → composition-primitive switch. The 87 V1-reachable
-        // element types route through `_v1Handlers`; the legacy `MountXxx`
-        // switch arms were deleted (V1 is the production path). Only the 8
-        // composition primitives (above the protocol) remain on the switch.
+        // Spec 047 §14 Phase 4 — dispatch is V1 registry → external
+        // `_typeRegistry` → composition-primitive switch. The V1-reachable
+        // element types route through `_v1Handlers`; only the 4 composition
+        // primitives (above the protocol) remain on the switch.
         if (_v1Handlers.TryGet(element.GetType(), out var v1Entry))
         {
             control = v1Entry.Mount(element, requestRerender, this);
@@ -76,11 +75,7 @@ public sealed partial class Reconciler
         {
         control = element switch
         {
-            CommandHostElement ch => MountCommandHost(ch, requestRerender),
             ErrorBoundaryElement eb => MountErrorBoundary(eb, requestRerender),
-            Validation.FormFieldElement ff => MountFormField(ff, requestRerender),
-            Validation.ValidationVisualizerElement vv => MountValidationVisualizer(vv, requestRerender),
-            Validation.ValidationRuleElement rule => MountValidationRule(rule),
             ComponentElement comp => MountComponent(comp, requestRerender),
             FuncElement func => MountFuncComponent(func, requestRerender),
             MemoElement memo => MountMemoComponent(memo, requestRerender),
@@ -678,7 +673,7 @@ public sealed partial class Reconciler
     //  Validation elements
     // ════════════════════════════════════════════════════════════════
 
-    private WinUI.StackPanel MountFormField(FormFieldElement ff, Action requestRerender)
+    internal WinUI.StackPanel MountFormField(FormFieldElement ff, Action requestRerender)
     {
         var panel = new WinUI.StackPanel { Orientation = Orientation.Vertical, Spacing = 4 };
 
@@ -792,7 +787,7 @@ public sealed partial class Reconciler
         }
     }
 
-    private WinUI.StackPanel MountValidationVisualizer(
+    internal WinUI.StackPanel MountValidationVisualizer(
         ValidationVisualizerElement vv, Action requestRerender)
     {
         var panel = new WinUI.StackPanel { Orientation = Orientation.Vertical, Spacing = 4 };
@@ -889,7 +884,7 @@ public sealed partial class Reconciler
         return panel;
     }
 
-    private UIElement MountValidationRule(ValidationRuleElement rule)
+    internal UIElement MountValidationRule(ValidationRuleElement rule)
     {
         // Evaluate the rule against the nearest ValidationContext
         var valCtx = _contextScope.Read(ValidationContexts.Current);
@@ -1154,7 +1149,7 @@ public sealed partial class Reconciler
         return si;
     }
 
-    private WinUI.Grid MountCommandHost(CommandHostElement ch, Action requestRerender)
+    internal WinUI.Grid MountCommandHost(CommandHostElement ch, Action requestRerender)
     {
         var host = new WinUI.Grid();
         var child = Mount(ch.Child, requestRerender);

@@ -128,16 +128,8 @@ public sealed partial class Reconciler
         {
         result = (oldEl, newEl, control) switch
         {
-            (CommandHostElement o, CommandHostElement n, WinUI.Grid chGrid)
-                => UpdateCommandHost(o, n, chGrid, requestRerender),
             (ErrorBoundaryElement oldEb, ErrorBoundaryElement newEb, Border)
                 => UpdateErrorBoundary(oldEb, newEb, control, requestRerender),
-            (FormFieldElement oldFf, FormFieldElement newFf, WinUI.StackPanel sp)
-                => UpdateFormField(oldFf, newFf, sp, requestRerender),
-            (ValidationVisualizerElement oldVv, ValidationVisualizerElement newVv, WinUI.StackPanel sp)
-                => UpdateValidationVisualizer(oldVv, newVv, sp, requestRerender),
-            (ValidationRuleElement, ValidationRuleElement n, WinUI.StackPanel)
-                => UpdateValidationRule(n),
             (ComponentElement, ComponentElement, _)
                 => UpdateComponent(oldEl, newEl, control, requestRerender),
             (FuncElement, FuncElement, _)
@@ -530,7 +522,7 @@ public sealed partial class Reconciler
     }
 
 
-    private UIElement? UpdateCommandHost(CommandHostElement o, CommandHostElement n, WinUI.Grid host, Action requestRerender)
+    internal UIElement? UpdateCommandHost(CommandHostElement o, CommandHostElement n, WinUI.Grid host, Action requestRerender)
     {
         // Update child element
         if (host.Children.Count > 0 && host.Children[0] is UIElement existingChild)
@@ -696,7 +688,7 @@ public sealed partial class Reconciler
     // ── Typed, data-driven TreeView<T> ───────────────────────────────────
     // Mount/Update bodies relocated to Reconciler.TemplatedTree.cs (spec 047 §14).
 
-    private UIElement? UpdateFormField(
+    internal UIElement? UpdateFormField(
         FormFieldElement oldFf, FormFieldElement newFf,
         WinUI.StackPanel panel, Action requestRerender)
     {
@@ -761,7 +753,7 @@ public sealed partial class Reconciler
         return null; // patched in-place
     }
 
-    private UIElement? UpdateValidationVisualizer(
+    internal UIElement? UpdateValidationVisualizer(
         ValidationVisualizerElement oldVv, ValidationVisualizerElement newVv,
         WinUI.StackPanel panel, Action requestRerender)
     {
@@ -779,7 +771,7 @@ public sealed partial class Reconciler
         return Mount(newVv, requestRerender);
     }
 
-    private UIElement? UpdateValidationRule(ValidationRuleElement rule)
+    internal UIElement? UpdateValidationRule(ValidationRuleElement rule)
     {
         var valCtx = _contextScope.Read(ValidationContexts.Current);
         if (valCtx is not null)

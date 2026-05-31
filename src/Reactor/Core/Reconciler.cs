@@ -262,7 +262,7 @@ public sealed partial class Reconciler : IDisposable
     /// <see cref="V1HandlerRegistry"/>; external authors add handlers via
     /// <see cref="RegisterHandler{TElement,TControl}"/> /
     /// <see cref="RegisterType{TElement,TControl}"/> (which populate
-    /// <c>_typeRegistry</c>). Dispatch order is V1 → external → the eight
+    /// <c>_typeRegistry</c>). Dispatch order is V1 → external → the four
     /// composition primitives that sit above the protocol.
     /// </summary>
     public Reconciler(ILogger? logger = null)
@@ -282,13 +282,23 @@ public sealed partial class Reconciler : IDisposable
     /// <list type="bullet">
     ///   <item><b>Composition primitives</b> — <see cref="ComponentElement"/>,
     ///   <see cref="FuncElement"/>, <see cref="MemoElement"/>,
-    ///   <see cref="ErrorBoundaryElement"/>, <c>CommandHostElement</c>,
+    ///   <see cref="ErrorBoundaryElement"/>. These sit <i>above</i> the V1
+    ///   handler protocol (they orchestrate child reconciliation rather than
+    ///   wrap a single WinUI control), so Phase 4 cleanup keeps their legacy
+    ///   arms.</item>
+    ///   <item><b>Composites — PORTED (§14 Phase 4)</b> —
+    ///   <c>CommandHostElement</c>,
     ///   <see cref="Controls.Validation.FormFieldElement"/>,
     ///   <see cref="Controls.Validation.ValidationVisualizerElement"/>,
-    ///   <see cref="Controls.Validation.ValidationRuleElement"/>. These sit
-    ///   <i>above</i> the V1 handler protocol (they orchestrate child
-    ///   reconciliation rather than wrap a single WinUI control), so Phase 4
-    ///   cleanup keeps their legacy arms.</item>
+    ///   <see cref="Controls.Validation.ValidationRuleElement"/> now route
+    ///   through V1 via decorator handlers in <c>V1Protocol.Handlers</c>
+    ///   (<c>CompositeHandlers.cs</c>) that delegate to the engine
+    ///   <c>MountXxx</c>/<c>UpdateXxx</c> bodies and return
+    ///   <see cref="V1Protocol.V1UnmountDisposition.ContinueDefaultTraversal"/>
+    ///   on unmount — each builds a single Grid/StackPanel root whose mounted
+    ///   Reactor children are torn down by the same
+    ///   <see cref="UnmountRecursive"/> Panel recursion the legacy arms relied
+    ///   on.</item>
     ///   <item><b>Interop bridges</b> — <see cref="Hosting.XamlHostElement"/>,
     ///   <see cref="Hosting.XamlPageElement"/>. V1 descriptors exist
     ///   (<c>XamlHostDescriptor</c>, <c>XamlPageDescriptor</c>) but stay
@@ -350,6 +360,18 @@ public sealed partial class Reconciler : IDisposable
         // ── §14 Phase 3 prelude carve-closures (delegate to engine bodies) ──
         RegisterHandler<NavigationHostElement, WinUI.Grid>(new V1Protocol.Handlers.NavigationHostHandler());
         RegisterHandler<GridViewElement, WinUI.GridView>(new V1Protocol.Handlers.GridViewHandler());
+
+        // Composites — CommandHost + the three Validation elements. Each builds a
+        // single Grid/StackPanel root and mounts Reactor children into it, so they
+        // route through V1 via decorator handlers that delegate to the engine
+        // bodies and return ContinueDefaultTraversal on unmount (the generic Panel
+        // recursion in UnmountRecursive tears the children down). Distinct from the
+        // four genuine composition primitives below, which produce no control of
+        // their own and stay on the legacy switch.
+        RegisterDecoratorHandler<CommandHostElement>(new V1Protocol.Handlers.CommandHostHandler());
+        RegisterDecoratorHandler<Controls.Validation.FormFieldElement>(new V1Protocol.Handlers.FormFieldHandler());
+        RegisterDecoratorHandler<Controls.Validation.ValidationVisualizerElement>(new V1Protocol.Handlers.ValidationVisualizerHandler());
+        RegisterDecoratorHandler<Controls.Validation.ValidationRuleElement>(new V1Protocol.Handlers.ValidationRuleHandler());
 
         // Overlays — decorator-style ports. Each delegates to the legacy
         // MountXxx/UpdateXxx body and returns ContinueDefaultTraversal on
