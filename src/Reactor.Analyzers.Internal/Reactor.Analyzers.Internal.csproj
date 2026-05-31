@@ -6,20 +6,25 @@
     <Nullable>enable</Nullable>
     <IsRoslynComponent>true</IsRoslynComponent>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
-    <AssemblyName>Reactor.Analyzers</AssemblyName>
+    <AssemblyName>Reactor.Analyzers.Internal</AssemblyName>
     <RootNamespace>Microsoft.UI.Reactor.Analyzers</RootNamespace>
 
     <!-- Roslyn loads analyzers into the in-process csc compiler, so the DLL
          must be architecture-neutral regardless of the consuming project's
-         $(Platform). Without these, an x64/ARM64 build (e.g. `mur
-         pack-local`) drops the analyzer in bin\x64\... and csc raises
-         CS8034 "assembly architecture is not compatible with the current
-         process" on the consumer side. -->
+         $(Platform). Without these, an x64/ARM64 build of Reactor.csproj
+         drops the analyzer in bin\x64\... and csc raises CS8034
+         "assembly architecture is not compatible with the current process". -->
     <PlatformTarget>AnyCPU</PlatformTarget>
     <AppendPlatformToOutputPath>false</AppendPlatformToOutputPath>
 
-    <!-- Bundled into Microsoft.UI.Reactor.nupkg — does not ship as its own
-         package. See docs/specs/022-packaging-and-distribution.md §5. -->
+    <!-- Framework-internal analyzers only. Never packed into the
+         Microsoft.UI.Reactor.nupkg — these rules (REACTOR_DOC_001 / _002)
+         exist to keep the Reactor SDK's own public-API XML doc honest so
+         the spec 041 reference-doc generator stays accurate. They have no
+         purpose on consumer code and used to leak there when bundled into
+         Reactor.Analyzers.dll; see the corresponding `<None Pack="true">`
+         block in src/Reactor/Reactor.csproj which only ships the public
+         Reactor.Analyzers.dll. -->
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 

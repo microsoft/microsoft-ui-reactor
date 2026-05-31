@@ -46,8 +46,12 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <!-- Suppress missing-XML-doc warnings on public API. The .xml doc file
          still ships whatever comments do exist; we just don't gate the
-         build on documenting every public member. -->
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
+         build on documenting every public member. REACTOR_DOC_001 / _002
+         are the Reactor-specific equivalents (spec 041 §10.4) — same
+         policy applies. The analyzer is still wired in via the
+         Reactor.Analyzers.Internal ProjectReference below so any project
+         that wants stricter doc enforcement can re-enable per-rule. -->
+    <NoWarn>$(NoWarn);CS1591;REACTOR_DOC_001;REACTOR_DOC_002</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -86,9 +90,20 @@
                       ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\Reactor.Analyzers\Reactor.Analyzers.csproj"
                       ReferenceOutputAssembly="false" />
-    <!-- Reactor.Analyzers is not referenced as an analyzer here — we don't want its
-         rules running on the framework itself, only on consumer code, but it's a dependency 
-         in order to pack the analyzer's output -->
+    <!-- Reactor.Analyzers (the customer-facing analyzer bundle) is NOT
+         registered as an analyzer here: its rules target consumer code
+         patterns (hook usage, accessibility, missing list keys, etc.)
+         and would fire spuriously on framework internals. We only depend
+         on it so its build output is available for the <None Pack="true">
+         block below that ships the DLL inside the nupkg. -->
+    <ProjectReference Include="..\Reactor.Analyzers.Internal\Reactor.Analyzers.Internal.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+    <!-- Reactor.Analyzers.Internal IS registered as an analyzer: it carries
+         the REACTOR_DOC_001 / _002 rules that police public-API XML doc on
+         this assembly (spec 041 §10.4). It must never be packed into the
+         nupkg — these rules have no purpose on consumer code and used to
+         leak there when bundled into Reactor.Analyzers.dll. -->
   </ItemGroup>
 
   <!-- Bundle the analyzer + source-generator DLLs into the framework package
@@ -97,18 +112,13 @@
        against the framework itself), so their build outputs must already
        exist before pack — verified by the AssertAnalyzerDllsExist target
        below. -->
-  <!-- Resolve the per-build output dir of the analyzer ProjectReferences.
-       MSBuild propagates $(Platform) to transitive builds: with no
-       -p:Platform (e.g. plain `dotnet build`), the analyzer lands at
-       bin\$(Configuration)\netstandard2.0\; with -p:Platform=x64/ARM64
-       (e.g. `mur pack-local`), it lands at bin\$(Platform)\$(Configuration)\
-       netstandard2.0\ because <AppendPlatformToOutputPath> defaults to
-       true. Compute the path accordingly so pack finds the DLL in either
-       layout — without this, pack-local on a clean machine fails with
-       NU3168/CS2012 because the platform-less path has nothing in it. -->
+  <!-- Analyzer ProjectReferences pin themselves to AnyCPU
+       (AppendPlatformToOutputPath=false), so their output always lands at
+       bin\$(Configuration)\netstandard2.0\ regardless of the consuming
+       project's $(Platform). This keeps the DLL architecture-neutral so
+       Roslyn can load it into csc — without it, consumers see CS8034. -->
   <PropertyGroup>
-    <_ReactorAnalyzerBinDir Condition="'$(Platform)' == '' or '$(Platform)' == 'AnyCPU'">bin\$(Configuration)\netstandard2.0</_ReactorAnalyzerBinDir>
-    <_ReactorAnalyzerBinDir Condition="'$(_ReactorAnalyzerBinDir)' == ''">bin\$(Platform)\$(Configuration)\netstandard2.0</_ReactorAnalyzerBinDir>
+    <_ReactorAnalyzerBinDir>bin\$(Configuration)\netstandard2.0</_ReactorAnalyzerBinDir>
   </PropertyGroup>
 
   <ItemGroup>

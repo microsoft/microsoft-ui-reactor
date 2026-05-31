@@ -34,6 +34,7 @@
     <ProjectReference Include="..\..\src\Reactor.Localization.Generator\Reactor.Localization.Generator.csproj" />
     <ProjectReference Include="..\..\src\Reactor.Cli\Reactor.Cli.csproj" />
     <ProjectReference Include="..\..\src\Reactor.Analyzers\Reactor.Analyzers.csproj" />
+    <ProjectReference Include="..\..\src\Reactor.Analyzers.Internal\Reactor.Analyzers.Internal.csproj" />
     <!-- spec 045 §2.19: XAML wrapper unhooked at P2 review gate; the
          BehaviorBridgeMappingTests + DockingSmokeFixture tests retire
          alongside. WinUI.Dock vendored source stays in repo per §5.6 for
