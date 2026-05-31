@@ -1218,6 +1218,7 @@ internal static class SelfTestFixtureRegistry
         "Spec048_ShapesGroupFactoriesRegisterHandlers",
         "Spec048_NavigationChromeGroupFactoriesRegisterHandlers",
         "Spec048_OverlaysGroupFactoriesRegisterHandlers",
+        "Spec048_IconAndInteropGroupFactoriesRegisterHandlers",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -2398,6 +2399,7 @@ internal static class SelfTestFixtureRegistry
         "Spec048_ShapesGroupFactoriesRegisterHandlers" => new Spec048RegistrationFixtures.ShapesGroupFactoriesRegisterHandlers(harness),
         "Spec048_NavigationChromeGroupFactoriesRegisterHandlers" => new Spec048RegistrationFixtures.NavigationChromeGroupFactoriesRegisterHandlers(harness),
         "Spec048_OverlaysGroupFactoriesRegisterHandlers" => new Spec048RegistrationFixtures.OverlaysGroupFactoriesRegisterHandlers(harness),
+        "Spec048_IconAndInteropGroupFactoriesRegisterHandlers" => new Spec048RegistrationFixtures.IconAndInteropGroupFactoriesRegisterHandlers(harness),
 
         _ => null,
     };

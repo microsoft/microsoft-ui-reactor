@@ -433,4 +433,40 @@ internal static class Spec048RegistrationFixtures
             return Task.CompletedTask;
         }
     }
+
+    /// <summary>
+    /// Spec 048 §3.4 — singleton-handler decorator fan-out. Covers the three
+    /// element types whose handler is a singleton (private nested class exposed
+    /// via <c>Descriptor.Handler</c> — does not satisfy the <c>new()</c>
+    /// constraint of the <c>RegDecorator&lt;&gt;</c> shim) and therefore wires
+    /// global registration by calling <c>ControlRegistry.RegisterDecorator&lt;T&gt;</c>
+    /// directly:
+    /// <list type="bullet">
+    ///   <item><c>IconElement</c> — touched by the three <c>Icon(...)</c> factories.</item>
+    ///   <item><c>XamlHostElement</c> / <c>XamlPageElement</c> — no factory exists
+    ///     (users construct directly via <c>new</c>); registration is wired
+    ///     through a static type ctor on each record so first-use triggers it.</item>
+    /// </list>
+    /// </summary>
+    internal class IconAndInteropGroupFactoriesRegisterHandlers(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            _ = Icon(Microsoft.UI.Xaml.Controls.Symbol.Home);
+            // Direct construction triggers the static cctor on each record.
+            _ = new Microsoft.UI.Reactor.Hosting.XamlPageElement(
+                typeof(Microsoft.UI.Xaml.Controls.Page), null);
+            _ = new Microsoft.UI.Reactor.Hosting.XamlHostElement(
+                static () => new Microsoft.UI.Xaml.Controls.TextBlock());
+
+            H.Check("Spec048_RegDecorator_Icon",
+                ControlRegistry.Contains(typeof(Microsoft.UI.Reactor.Core.IconElement)));
+            H.Check("Spec048_RegDecorator_XamlPage",
+                ControlRegistry.Contains(typeof(Microsoft.UI.Reactor.Hosting.XamlPageElement)));
+            H.Check("Spec048_RegDecorator_XamlHost",
+                ControlRegistry.Contains(typeof(Microsoft.UI.Reactor.Hosting.XamlHostElement)));
+
+            return Task.CompletedTask;
+        }
+    }
 }

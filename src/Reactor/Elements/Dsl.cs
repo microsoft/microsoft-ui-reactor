@@ -1671,13 +1671,28 @@ public static partial class Factories
     public static ImageIconData ImageIcon(global::System.Uri source) => new(source);
 
     /// <summary>Creates a standalone icon element from an <see cref="IconData"/> instance.</summary>
-    public static Core.IconElement Icon(IconData data) => new(data);
+    public static Core.IconElement Icon(IconData data)
+    {
+        // Spec 048 §3.4 — singleton-handler decorator: bypass RegDecorator<>
+        // (handler isn't `new()`-constructible because it's a private nested
+        // type exposed only via Desc.IconDescriptor.Handler).
+        V1.ControlRegistry.RegisterDecorator<Core.IconElement>(static () => Desc.IconDescriptor.Handler);
+        return new(data);
+    }
 
     /// <summary>Creates a standalone symbol icon element from a <see cref="Symbol"/> enum value.</summary>
-    public static Core.IconElement Icon(Symbol symbol) => new(new SymbolIconData(symbol.ToString()));
+    public static Core.IconElement Icon(Symbol symbol)
+    {
+        V1.ControlRegistry.RegisterDecorator<Core.IconElement>(static () => Desc.IconDescriptor.Handler);
+        return new(new SymbolIconData(symbol.ToString()));
+    }
 
     /// <summary>Creates a standalone symbol icon element (e.g. <c>Icon("Home")</c>).</summary>
-    public static Core.IconElement Icon(string symbol) => new(new SymbolIconData(symbol));
+    public static Core.IconElement Icon(string symbol)
+    {
+        V1.ControlRegistry.RegisterDecorator<Core.IconElement>(static () => Desc.IconDescriptor.Handler);
+        return new(new SymbolIconData(symbol));
+    }
 
     // ── Keyboard Accelerators ───────────────────────────────────────
 
