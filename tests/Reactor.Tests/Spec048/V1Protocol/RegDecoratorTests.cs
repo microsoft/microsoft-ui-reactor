@@ -14,7 +14,8 @@ namespace Microsoft.UI.Reactor.Tests.Spec048.V1Protocol;
 /// <see cref="RegTests"/>; same one-shot cctor invariant, same
 /// per-test unique closed-generic instantiation discipline (every test
 /// uses a fresh nested element + handler pair so the cctor under test
-/// fires fresh).
+/// fires fresh), same delta-style registry assertions (no absolute
+/// counts — the global registry is intentionally monotonic).
 ///
 /// <para>Joins the same <c>ControlRegistryTestCollection</c> as
 /// <see cref="ControlRegistryTests"/> and <see cref="RegTests"/> so the
@@ -22,11 +23,8 @@ namespace Microsoft.UI.Reactor.Tests.Spec048.V1Protocol;
 /// execution.</para>
 /// </summary>
 [Collection(nameof(ControlRegistryTestCollection))]
-public class RegDecoratorTests : IDisposable
+public class RegDecoratorTests
 {
-    public RegDecoratorTests() => ControlRegistry.ResetForTesting();
-    public void Dispose() => ControlRegistry.ResetForTesting();
-
     // ─────────────────────────────────────────────────────────────────
     // §3.4 — first touch registers the decorator handler exactly once
     // for the closed-generic instantiation.
@@ -46,11 +44,11 @@ public class RegDecoratorTests : IDisposable
     [Fact]
     public void First_Touch_Registers_Decorator_Element_Type_Exactly_Once()
     {
-        Assert.Equal(0, ControlRegistry.Count);
+        Assert.False(ControlRegistry.Contains(typeof(FirstTouchElement)));
 
         _ = RegDecorator<FirstTouchElement, FirstTouchHandler>.Done;
 
-        Assert.Equal(1, ControlRegistry.Count);
+        Assert.True(ControlRegistry.Contains(typeof(FirstTouchElement)));
         Assert.True(ControlRegistry.TryResolve(typeof(FirstTouchElement), out _));
 
         // Registry stores the factory; does not invoke it. Handler ctor
@@ -77,15 +75,17 @@ public class RegDecoratorTests : IDisposable
     [Fact]
     public void Repeated_Reads_Of_Done_Do_Not_Re_Register()
     {
-        Assert.Equal(0, ControlRegistry.Count);
+        Assert.False(ControlRegistry.Contains(typeof(RepeatTouchElement)));
 
         for (var i = 0; i < 100; i++)
         {
             _ = RegDecorator<RepeatTouchElement, RepeatTouchHandler>.Done;
         }
 
-        Assert.Equal(1, ControlRegistry.Count);
-        Assert.True(ControlRegistry.TryResolve(typeof(RepeatTouchElement), out _));
+        Assert.True(ControlRegistry.Contains(typeof(RepeatTouchElement)));
+        Assert.True(ControlRegistry.TryResolve(typeof(RepeatTouchElement), out var factoryA));
+        Assert.True(ControlRegistry.TryResolve(typeof(RepeatTouchElement), out var factoryB));
+        Assert.Same(factoryA, factoryB);
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -107,7 +107,7 @@ public class RegDecoratorTests : IDisposable
     {
         var value = RegDecorator<SentinelElement, SentinelHandler>.Done;
         Assert.NotEqual((byte)0, value);
-        Assert.Equal(1, ControlRegistry.Count);
+        Assert.True(ControlRegistry.Contains(typeof(SentinelElement)));
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -144,8 +144,10 @@ public class RegDecoratorTests : IDisposable
         _ = AliasedFactoryTwo("b");
         _ = AliasedFactoryOne("c");
 
-        Assert.Equal(1, ControlRegistry.Count);
-        Assert.True(ControlRegistry.TryResolve(typeof(AliasedElement), out _));
+        Assert.True(ControlRegistry.Contains(typeof(AliasedElement)));
+        Assert.True(ControlRegistry.TryResolve(typeof(AliasedElement), out var factoryA));
+        Assert.True(ControlRegistry.TryResolve(typeof(AliasedElement), out var factoryB));
+        Assert.Same(factoryA, factoryB);
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -166,7 +168,7 @@ public class RegDecoratorTests : IDisposable
     [Fact]
     public async Task Concurrent_First_Touches_Register_Exactly_Once()
     {
-        Assert.Equal(0, ControlRegistry.Count);
+        Assert.False(ControlRegistry.Contains(typeof(ConcurrentElement)));
 
         const int threadCount = 32;
         const int touchesPerThread = 50;
@@ -188,8 +190,10 @@ public class RegDecoratorTests : IDisposable
         gate.Set();
         await Task.WhenAll(tasks);
 
-        Assert.Equal(1, ControlRegistry.Count);
-        Assert.True(ControlRegistry.TryResolve(typeof(ConcurrentElement), out _));
+        Assert.True(ControlRegistry.Contains(typeof(ConcurrentElement)));
+        Assert.True(ControlRegistry.TryResolve(typeof(ConcurrentElement), out var factoryA));
+        Assert.True(ControlRegistry.TryResolve(typeof(ConcurrentElement), out var factoryB));
+        Assert.Same(factoryA, factoryB);
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -219,15 +223,16 @@ public class RegDecoratorTests : IDisposable
     [Fact]
     public void Distinct_Closed_Generics_Register_Independently()
     {
+        Assert.False(ControlRegistry.Contains(typeof(DistinctElementA)));
+        Assert.False(ControlRegistry.Contains(typeof(DistinctElementB)));
+
         _ = RegDecorator<DistinctElementA, DistinctHandlerA>.Done;
-        Assert.Equal(1, ControlRegistry.Count);
-        Assert.True(ControlRegistry.TryResolve(typeof(DistinctElementA), out _));
-        Assert.False(ControlRegistry.TryResolve(typeof(DistinctElementB), out _));
+        Assert.True(ControlRegistry.Contains(typeof(DistinctElementA)));
+        Assert.False(ControlRegistry.Contains(typeof(DistinctElementB)));
 
         _ = RegDecorator<DistinctElementB, DistinctHandlerB>.Done;
-        Assert.Equal(2, ControlRegistry.Count);
-        Assert.True(ControlRegistry.TryResolve(typeof(DistinctElementA), out _));
-        Assert.True(ControlRegistry.TryResolve(typeof(DistinctElementB), out _));
+        Assert.True(ControlRegistry.Contains(typeof(DistinctElementA)));
+        Assert.True(ControlRegistry.Contains(typeof(DistinctElementB)));
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -268,13 +273,13 @@ public class RegDecoratorTests : IDisposable
     [Fact]
     public void Resolved_Entry_Dispatches_Through_Decorator_Handler()
     {
-        // Per-test counter reset — DispatchHandler is unique to this
-        // [Fact] so resetting its static fields is safe (no cross-test
-        // contention; the ControlRegistryTestCollection serializes
-        // tests within this assembly).
-        DispatchHandler.MountCalls = 0;
-        DispatchHandler.UpdateCalls = 0;
-        DispatchHandler.UnmountCalls = 0;
+        // Per-test counter snapshot — DispatchHandler is unique to this
+        // [Fact] so the static fields are only touched here. The
+        // ControlRegistryTestCollection serializes tests so no other
+        // case can race against these counters.
+        var mountBaseline = DispatchHandler.MountCalls;
+        var updateBaseline = DispatchHandler.UpdateCalls;
+        var unmountBaseline = DispatchHandler.UnmountCalls;
 
         _ = RegDecorator<DispatchElement, DispatchHandler>.Done;
 
@@ -286,13 +291,13 @@ public class RegDecoratorTests : IDisposable
         // adapter type is internal and not part of the contract).
         var el = new DispatchElement("probe");
         _ = entry.Mount(el, requestRerender: static () => { }, reconciler: rec);
-        Assert.Equal(1, DispatchHandler.MountCalls);
+        Assert.Equal(mountBaseline + 1, DispatchHandler.MountCalls);
 
         var el2 = new DispatchElement("probe2");
         _ = entry.Update(el, el2, control: null!, requestRerender: static () => { }, reconciler: rec);
-        Assert.Equal(1, DispatchHandler.UpdateCalls);
+        Assert.Equal(updateBaseline + 1, DispatchHandler.UpdateCalls);
 
         _ = entry.Unmount(control: null!, reconciler: rec);
-        Assert.Equal(1, DispatchHandler.UnmountCalls);
+        Assert.Equal(unmountBaseline + 1, DispatchHandler.UnmountCalls);
     }
 }

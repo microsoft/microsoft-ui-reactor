@@ -411,9 +411,7 @@ hitting `Reg<TextBlockElement, …>` is silently absorbed — spec §10.3.)
 >   `AutoSuggestBox`.
 > - Selftest `Spec048_TextGroupFactoriesRegisterHandlers`
 >   (`Fixtures/Spec048RegistrationFixtures.cs`) asserts each factory call
->   populates `ControlRegistry.Contains(typeof(XxxElement))`. **Must** be a
->   selftest, not xunit: the registry unit tests call `ResetForTesting()`,
->   and the registration cctor runs at most once per process.
+>   populates `ControlRegistry.Contains(typeof(XxxElement))`.
 > - Green: Spec048 selftests (16 checks) + Spec048 xunit (16 tests),
 >   `-p:Platform=x64`.
 >
@@ -463,8 +461,7 @@ hitting `Reg<TextBlockElement, …>` is silently absorbed — spec §10.3.)
 > - Selftest `Spec048_InputGroupFactoriesRegisterHandlers`
 >   (`Fixtures/Spec048RegistrationFixtures.cs`) asserts each factory call
 >   populates `ControlRegistry.Contains(typeof(XxxElement))` for all 15
->   element types. Same selftest-not-xunit rationale as the Text group
->   (registry unit tests `ResetForTesting()`; cctor runs once per process).
+>   element types.
 > - Green: Spec048 selftests (31 checks, 15 new) + Spec048 xunit (16 tests)
 >   + Reactor.Tests (9148 passed / 0 failed), `-p:Platform=x64`.
 >
@@ -758,15 +755,23 @@ hitting `Reg<TextBlockElement, …>` is silently absorbed — spec §10.3.)
 > `ControlRegistry.RegisterDecorator` and `RegDecorator` XML.
 >
 > **Remaining §3.4 blockers** (still queued):
-> - Test-reset strategy — `ControlRegistry.ResetForTesting()` strips
->   cctor-set entries, so the §3.4 deletion of
->   `RegisterV1BuiltInHandlers` will silently break the xunit suite
->   unless reset semantics change (e.g., re-trigger registrations on a
->   subsequent factory call, or scope reset to test-scoped element types
->   only).
 > - Closing element ctors — make built-in element record ctors
 >   `internal` so external callers must go through factories (force the
 >   `Reg<…>.Done` touch). Trim-proof correctness depends on this.
+>
+> **Resolved: test-reset strategy is no longer a blocker.** The
+> `ControlRegistry.ResetForTesting` API and the `Count`/`BaseCount`
+> diagnostics have been removed entirely (commit follows the
+> base-derived primitive). The unit tests in
+> `tests/Reactor.Tests/Spec048/V1Protocol/` were rewritten to use
+> unique per-test probe element + handler types and delta-style
+> assertions (`Contains(typeof(MyUniqueProbe))` rather than
+> `Assert.Equal(N, ControlRegistry.Count)`). This matches the
+> production semantic — the global registry is intentionally
+> monotonic and process-wide, same model as WinUI's "once a type is
+> loaded it stays loaded". With reset gone the §3.4 deletion of
+> `RegisterV1BuiltInHandlers` can no longer "silently break the xunit
+> suite", because no test depends on starting with an empty registry.
 >
 > **Decorator fan-out** (the actual wiring of Button/CheckBox/Canvas/
 > Expander/Flex/Grid/RelativePanel/Stack/WrapGrid + 6 Overlays + Icon/
@@ -803,8 +808,7 @@ hitting `Reg<TextBlockElement, …>` is silently absorbed — spec §10.3.)
 > - New public API:
 >   - `ControlRegistry.RegisterForDerivedTypes<TBase, TControl>(Func<IElementHandler<TBase, TControl>>)`
 >   - `ControlRegistry.RegisterDecoratorForDerivedTypes<TBase>(Func<IDecoratorElementHandler<TBase>>)`
->   - `ContainsBase(Type)` / `ContainsForType(Type)` / `BaseCount`
->     diagnostics (`ResetForTesting` now clears both maps + cache).
+>   - `ContainsBase(Type)` / `ContainsForType(Type)` diagnostics.
 > - New per-control authoring shims (sibling of
 >   `Reg<>`/`RegDecorator<>`):
 >   `RegBase<TBase, TControl, THandler>.Done` (value) and

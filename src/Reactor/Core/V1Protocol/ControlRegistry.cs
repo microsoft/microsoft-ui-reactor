@@ -306,30 +306,4 @@ public static class ControlRegistry
     /// </summary>
     internal static bool ContainsBase(Type baseType) => s_baseEntries.ContainsKey(baseType);
 
-    /// <summary>
-    /// Test-only hatch — clear the global registry. Production code <b>must
-    /// not</b> call this; the global registry is process-wide and its
-    /// idempotent first-wins semantics depend on it never being reset.
-    /// Exposed via <c>InternalsVisibleTo</c> for the registry unit tests
-    /// that need a clean slate per case.
-    /// </summary>
-    internal static void ResetForTesting()
-    {
-        s_entries.Clear();
-        s_baseEntries.Clear();
-        s_baseCache.Clear();
-    }
-
-    /// <summary>
-    /// Test-only diagnostic — number of registered element types. Used by
-    /// the registry unit tests to assert idempotence (the count must not
-    /// grow on repeat <see cref="Register{TElement,TControl}"/> calls).
-    /// </summary>
-    internal static int Count => s_entries.Count;
-
-    /// <summary>
-    /// Spec 048 §3.4 — number of registered base-derived element types.
-    /// Used by the §3.4 primitive's xunit tests.
-    /// </summary>
-    internal static int BaseCount => s_baseEntries.Count;
 }

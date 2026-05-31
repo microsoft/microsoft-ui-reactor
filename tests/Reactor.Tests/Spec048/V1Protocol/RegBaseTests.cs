@@ -15,14 +15,15 @@ namespace Microsoft.UI.Reactor.Tests.Spec048.V1Protocol;
 /// <see cref="RegDecoratorTests"/>; every test uses a fresh element/handler
 /// pair so the closed-generic cctor under test fires fresh (the CLR runs
 /// each closed generic's cctor at most once per process, so reusing the
-/// same shim instantiation across tests would silently no-op after Reset).
+/// same shim instantiation across tests would silently no-op the second
+/// touch). Assertions are <i>deltas</i> on the base/derived slot the test
+/// owns (<see cref="ControlRegistry.ContainsBase"/> /
+/// <see cref="ControlRegistry.ContainsForType"/>) rather than absolute
+/// registry counts.
 /// </summary>
 [Collection(nameof(ControlRegistryTestCollection))]
-public class RegBaseTests : IDisposable
+public class RegBaseTests
 {
-    public RegBaseTests() => ControlRegistry.ResetForTesting();
-    public void Dispose() => ControlRegistry.ResetForTesting();
-
     // ── Value-handler shim (RegBase) ─────────────────────────────────
 
     public abstract record FirstTouchBaseElement(string Tag) : Element;
@@ -39,11 +40,10 @@ public class RegBaseTests : IDisposable
     [Fact]
     public void RegBase_First_Touch_Registers_Base_Exactly_Once()
     {
-        Assert.Equal(0, ControlRegistry.BaseCount);
+        Assert.False(ControlRegistry.ContainsBase(typeof(FirstTouchBaseElement)));
 
         _ = RegBase<FirstTouchBaseElement, UIElement, FirstTouchBaseHandler>.Done;
 
-        Assert.Equal(1, ControlRegistry.BaseCount);
         Assert.True(ControlRegistry.ContainsBase(typeof(FirstTouchBaseElement)));
         Assert.True(ControlRegistry.ContainsForType(typeof(FirstTouchDerivedElement)));
 
@@ -63,11 +63,15 @@ public class RegBaseTests : IDisposable
     [Fact]
     public void RegBase_Repeated_Reads_Of_Done_Do_Not_Re_Register()
     {
+        Assert.False(ControlRegistry.ContainsBase(typeof(RepeatBaseElement)));
+
         for (var i = 0; i < 50; i++)
         {
             _ = RegBase<RepeatBaseElement, UIElement, RepeatBaseHandler>.Done;
         }
-        Assert.Equal(1, ControlRegistry.BaseCount);
+
+        Assert.True(ControlRegistry.ContainsBase(typeof(RepeatBaseElement)));
+        Assert.True(ControlRegistry.ContainsForType(typeof(RepeatDerivedElement)));
     }
 
     public abstract record DispatchBaseElement(string Tag) : Element;
@@ -112,11 +116,10 @@ public class RegBaseTests : IDisposable
     [Fact]
     public void RegBaseDecorator_First_Touch_Registers_Base_Exactly_Once()
     {
-        Assert.Equal(0, ControlRegistry.BaseCount);
+        Assert.False(ControlRegistry.ContainsBase(typeof(FirstTouchBaseDecoratorElement)));
 
         _ = RegBaseDecorator<FirstTouchBaseDecoratorElement, FirstTouchBaseDecoratorHandler>.Done;
 
-        Assert.Equal(1, ControlRegistry.BaseCount);
         Assert.True(ControlRegistry.ContainsBase(typeof(FirstTouchBaseDecoratorElement)));
         Assert.True(ControlRegistry.ContainsForType(typeof(FirstTouchDerivedDecoratorElement)));
         Assert.Equal(0, FirstTouchBaseDecoratorHandler.CtorCalls);
@@ -135,11 +138,15 @@ public class RegBaseTests : IDisposable
     [Fact]
     public void RegBaseDecorator_Repeated_Reads_Of_Done_Do_Not_Re_Register()
     {
+        Assert.False(ControlRegistry.ContainsBase(typeof(RepeatBaseDecoratorElement)));
+
         for (var i = 0; i < 50; i++)
         {
             _ = RegBaseDecorator<RepeatBaseDecoratorElement, RepeatBaseDecoratorHandler>.Done;
         }
-        Assert.Equal(1, ControlRegistry.BaseCount);
+
+        Assert.True(ControlRegistry.ContainsBase(typeof(RepeatBaseDecoratorElement)));
+        Assert.True(ControlRegistry.ContainsForType(typeof(RepeatDerivedDecoratorElement)));
     }
 
     public abstract record DispatchBaseDecoratorElement(string Tag) : Element;

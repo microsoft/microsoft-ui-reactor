@@ -27,10 +27,7 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// each type initializer at most once per process. If these fixtures
 /// shared the <c>MarqueeElement</c> slot in the global table they would
 /// fight the Pattern A registration (the counted factories below would
-/// race the static lambda), and worse, calling
-/// <see cref="ControlRegistry.ResetForTesting"/> would silently strip the
-/// Marquee registration for the rest of the test session because the
-/// cctor cannot re-run. Each fixture below therefore declares its own
+/// race the static lambda). Each fixture below therefore declares its own
 /// nested element + handler pair, registered directly via
 /// <see cref="ControlRegistry.Register{TElement,TControl}"/>; this keeps
 /// every fixture hermetic and independent of test ordering.</para>

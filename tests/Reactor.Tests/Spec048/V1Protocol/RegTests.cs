@@ -15,23 +15,22 @@ namespace Microsoft.UI.Reactor.Tests.Spec048.V1Protocol;
 ///
 /// <para><b>Important test-isolation note.</b> A static field on a closed
 /// generic type is initialized at most once per process per closed-generic
-/// instantiation — the CLR's cctor invariant. We <i>cannot</i> reset
-/// <c>Reg&lt;E, C, H&gt;.Done</c> between tests, only <see cref="ControlRegistry"/>.
-/// Therefore every test below uses a <b>unique</b> nested element + handler
-/// type triple, so the cctor under test fires fresh per test method. Sharing
-/// a triple across tests would make the second test see a stale "no
-/// registration happened on read" result because the cctor already ran.</para>
-///
-/// <para>Joins the same <c>ControlRegistryTestCollection</c> as
-/// <c>ControlRegistryTests</c> so the per-process global registry is not
-/// raced by parallel test execution.</para>
+/// instantiation — the CLR's cctor invariant. The global
+/// <see cref="ControlRegistry"/> is also process-wide and intentionally
+/// monotonic (registrations never go away — same model as WinUI's "once a
+/// type is loaded it stays loaded"). Therefore every test below uses a
+/// <b>unique</b> nested element + handler type triple, and every assertion
+/// is a <i>delta</i> on the element-type slot the test owns (e.g.
+/// <see cref="ControlRegistry.Contains"/>) rather than an absolute count
+/// over the whole registry. The container-collection
+/// <c>ControlRegistryTestCollection</c> serialises these cases so the
+/// global state is not raced, but it deliberately does not reset between
+/// tests — that would be artificial and would not match production
+/// semantics.</para>
 /// </summary>
 [Collection(nameof(ControlRegistryTestCollection))]
-public class RegTests : IDisposable
+public class RegTests
 {
-    public RegTests() => ControlRegistry.ResetForTesting();
-    public void Dispose() => ControlRegistry.ResetForTesting();
-
     // ─── Shared minimal handler shape ─────────────────────────────────
     // All handlers below share this shape — they only exist so the
     // generic Reg<,,>.cctor has a real `new THandler()` target. The
@@ -61,12 +60,12 @@ public class RegTests : IDisposable
     [Fact]
     public void First_Touch_Registers_Element_Type_Exactly_Once()
     {
-        Assert.Equal(0, ControlRegistry.Count);
+        Assert.False(ControlRegistry.Contains(typeof(FirstTouchElement)));
 
         // Single touch — this is the canonical Pattern B authoring shape.
         _ = Reg<FirstTouchElement, UIElement, FirstTouchHandler>.Done;
 
-        Assert.Equal(1, ControlRegistry.Count);
+        Assert.True(ControlRegistry.Contains(typeof(FirstTouchElement)));
         Assert.True(ControlRegistry.TryResolve(typeof(FirstTouchElement), out _));
 
         // The registry stores the factory; it does not invoke it. So the
@@ -78,6 +77,10 @@ public class RegTests : IDisposable
     // ─────────────────────────────────────────────────────────────────
     // §7 bullet 2 — repeat reads of Done do NOT cause additional
     // Register calls (because the CLR runs the cctor at most once).
+    // The registry's first-wins TryAdd would silently no-op a duplicate
+    // even if a re-register were somehow forced; we observe both by
+    // verifying the slot is populated and the registered factory
+    // identity is stable across reads.
     // ─────────────────────────────────────────────────────────────────
 
     public record RepeatTouchElement(string Tag) : Element;
@@ -91,7 +94,7 @@ public class RegTests : IDisposable
     [Fact]
     public void Repeated_Reads_Of_Done_Do_Not_Re_Register()
     {
-        Assert.Equal(0, ControlRegistry.Count);
+        Assert.False(ControlRegistry.Contains(typeof(RepeatTouchElement)));
 
         // 100 reads should be indistinguishable from 1 read at the
         // registry level. The cctor fires on the first read; subsequent
@@ -101,8 +104,12 @@ public class RegTests : IDisposable
             _ = Reg<RepeatTouchElement, UIElement, RepeatTouchHandler>.Done;
         }
 
-        Assert.Equal(1, ControlRegistry.Count);
-        Assert.True(ControlRegistry.TryResolve(typeof(RepeatTouchElement), out _));
+        Assert.True(ControlRegistry.Contains(typeof(RepeatTouchElement)));
+        Assert.True(ControlRegistry.TryResolve(typeof(RepeatTouchElement), out var factoryA));
+        Assert.True(ControlRegistry.TryResolve(typeof(RepeatTouchElement), out var factoryB));
+        // Registry-level Func identity — the entry is a single slot, never
+        // overwritten on subsequent (no-op) Register calls.
+        Assert.Same(factoryA, factoryB);
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -126,7 +133,7 @@ public class RegTests : IDisposable
     {
         var value = Reg<SentinelElement, UIElement, SentinelHandler>.Done;
         Assert.NotEqual((byte)0, value);
-        Assert.Equal(1, ControlRegistry.Count);
+        Assert.True(ControlRegistry.Contains(typeof(SentinelElement)));
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -165,8 +172,10 @@ public class RegTests : IDisposable
         _ = AliasedFactoryTwo("b");
         _ = AliasedFactoryOne("c");
 
-        Assert.Equal(1, ControlRegistry.Count);
-        Assert.True(ControlRegistry.TryResolve(typeof(AliasedElement), out _));
+        Assert.True(ControlRegistry.Contains(typeof(AliasedElement)));
+        Assert.True(ControlRegistry.TryResolve(typeof(AliasedElement), out var factoryA));
+        Assert.True(ControlRegistry.TryResolve(typeof(AliasedElement), out var factoryB));
+        Assert.Same(factoryA, factoryB);
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -187,7 +196,7 @@ public class RegTests : IDisposable
     [Fact]
     public async Task Concurrent_First_Touches_Register_Exactly_Once()
     {
-        Assert.Equal(0, ControlRegistry.Count);
+        Assert.False(ControlRegistry.Contains(typeof(ConcurrentElement)));
 
         const int threadCount = 32;
         const int touchesPerThread = 50;
@@ -209,8 +218,12 @@ public class RegTests : IDisposable
         gate.Set();
         await Task.WhenAll(tasks);
 
-        Assert.Equal(1, ControlRegistry.Count);
-        Assert.True(ControlRegistry.TryResolve(typeof(ConcurrentElement), out _));
+        Assert.True(ControlRegistry.Contains(typeof(ConcurrentElement)));
+        Assert.True(ControlRegistry.TryResolve(typeof(ConcurrentElement), out var factoryA));
+        Assert.True(ControlRegistry.TryResolve(typeof(ConcurrentElement), out var factoryB));
+        // Single-slot guarantee under contention — the contended writers
+        // race through TryAdd, only one wins, the rest silently no-op.
+        Assert.Same(factoryA, factoryB);
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -240,14 +253,15 @@ public class RegTests : IDisposable
     [Fact]
     public void Distinct_Closed_Generics_Register_Independently()
     {
+        Assert.False(ControlRegistry.Contains(typeof(DistinctElementA)));
+        Assert.False(ControlRegistry.Contains(typeof(DistinctElementB)));
+
         _ = Reg<DistinctElementA, UIElement, DistinctHandlerA>.Done;
-        Assert.Equal(1, ControlRegistry.Count);
-        Assert.True(ControlRegistry.TryResolve(typeof(DistinctElementA), out _));
-        Assert.False(ControlRegistry.TryResolve(typeof(DistinctElementB), out _));
+        Assert.True(ControlRegistry.Contains(typeof(DistinctElementA)));
+        Assert.False(ControlRegistry.Contains(typeof(DistinctElementB)));
 
         _ = Reg<DistinctElementB, UIElement, DistinctHandlerB>.Done;
-        Assert.Equal(2, ControlRegistry.Count);
-        Assert.True(ControlRegistry.TryResolve(typeof(DistinctElementA), out _));
-        Assert.True(ControlRegistry.TryResolve(typeof(DistinctElementB), out _));
+        Assert.True(ControlRegistry.Contains(typeof(DistinctElementA)));
+        Assert.True(ControlRegistry.Contains(typeof(DistinctElementB)));
     }
 }

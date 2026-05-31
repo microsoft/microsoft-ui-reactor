@@ -14,12 +14,14 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// per process, which calls
 /// <see cref="ControlRegistry.Register{TElement,TControl}"/>.
 ///
-/// <para>This must be a <b>selftest</b> (separate process), not an xunit test:
-/// the registration cctor runs at most once per process, and the registry
-/// unit tests under <c>tests/Reactor.Tests/Spec048/V1Protocol/</c> call
-/// <see cref="ControlRegistry.ResetForTesting"/>, which would strip these
-/// built-in entries for the rest of that process. The selftest host never
-/// resets the registry, so the touch is observable end-to-end.</para>
+/// <para>This is exposed as a <b>selftest</b> rather than an xunit test
+/// because the same Reactor.Tests host that exercises the registry
+/// primitive also contains the larger Reactor surface (samples, etc.) and
+/// the production factories under test may be touched indirectly via
+/// other tests' transitive references. Running these checks in a
+/// separate process keeps the assertion "the factory call touched
+/// <c>ControlRegistry.Register</c>" causal: the only path that could
+/// have populated the slot in this process is the factory call itself.</para>
 ///
 /// <para>While <c>RegisterV1BuiltInHandlers</c> is still intact these global
 /// registrations are dormant (per-host arm 1 wins dispatch); this fixture
