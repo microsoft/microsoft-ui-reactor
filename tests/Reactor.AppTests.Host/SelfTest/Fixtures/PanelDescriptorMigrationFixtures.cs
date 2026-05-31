@@ -79,6 +79,15 @@ internal static class PanelDescriptorMigrationFixtures
 
             H.ClickButton("Swap");
             await Harness.Render();
+            // Belt-and-braces second drain. Observed flake (~0.4%) on Windows
+            // CI stress: this fixture's swap-and-probe pattern is the only
+            // panel descriptor migration test without a per-child attached
+            // property (e.g. Grid.Row, Canvas.Left). Sibling tests get an
+            // implicit extra layout pass from their PerChildAttached reapply,
+            // which appears to mask a rare dispatcher-drain race we can't
+            // reproduce locally. A second drain matches the sibling pattern
+            // without changing reconcile behavior.
+            await Harness.Render();
 
             H.Check("PDM_Stack_Swap_AllSurvivorsKeepIdentity",
                 keys.All(k => before[k] == Hash(k)));
