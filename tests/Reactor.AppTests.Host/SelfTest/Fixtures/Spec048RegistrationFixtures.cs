@@ -59,4 +59,77 @@ internal static class Spec048RegistrationFixtures
             return Task.CompletedTask;
         }
     }
+
+    /// <summary>
+    /// Spec 048 §3.3 — Input-group factory <c>Reg&lt;&gt;.Done</c> registration
+    /// touch. Mirrors the Text-group fixture pattern. Covers the 15 element
+    /// types whose handler is <c>IElementHandler&lt;TElement,TControl&gt;</c>
+    /// (hand-coded ToggleSwitch / Slider; descriptor-backed RepeatButton,
+    /// HyperlinkButton, DropDownButton, SplitButton, ToggleSplitButton,
+    /// ToggleButton, RadioButton, RadioButtons, NumberBox, RatingControl,
+    /// PipsPager, ColorPicker, SelectorBar).
+    ///
+    /// <para><b>Excluded:</b> <c>Button</c> and <c>CheckBox</c> use
+    /// <c>IDecoratorElementHandler&lt;TElement&gt;</c> which is not assignable
+    /// to <c>Reg&lt;&gt;</c>'s <c>THandler : IElementHandler&lt;…&gt;</c>
+    /// constraint; the global-registry decorator path is a §3.4 blocker
+    /// tracked separately.</para>
+    /// </summary>
+    internal class InputGroupFactoriesRegisterHandlers(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            // Invoke each Input-group factory once. The factory body's
+            // Reg<>.Done touch runs the closed-generic cctor exactly once
+            // per process and registers the handler.
+            _ = HyperlinkButton("probe");
+            _ = RepeatButton("probe");
+            _ = ToggleButton("probe");
+            _ = DropDownButton("probe");
+            _ = SplitButton("probe");
+            _ = ToggleSplitButton("probe");
+            _ = NumberBox(0);
+            _ = RadioButton("probe");
+            _ = RadioButtons(["a"]);
+            _ = Slider(0);
+            _ = ToggleSwitch(false);
+            _ = RatingControl();
+            _ = ColorPicker(default);
+            _ = SelectorBar([SelectorBarItem("a")]);
+            _ = PipsPager(1);
+
+            H.Check("Spec048_Reg_HyperlinkButton",
+                ControlRegistry.Contains(typeof(HyperlinkButtonElement)));
+            H.Check("Spec048_Reg_RepeatButton",
+                ControlRegistry.Contains(typeof(RepeatButtonElement)));
+            H.Check("Spec048_Reg_ToggleButton",
+                ControlRegistry.Contains(typeof(ToggleButtonElement)));
+            H.Check("Spec048_Reg_DropDownButton",
+                ControlRegistry.Contains(typeof(DropDownButtonElement)));
+            H.Check("Spec048_Reg_SplitButton",
+                ControlRegistry.Contains(typeof(SplitButtonElement)));
+            H.Check("Spec048_Reg_ToggleSplitButton",
+                ControlRegistry.Contains(typeof(ToggleSplitButtonElement)));
+            H.Check("Spec048_Reg_NumberBox",
+                ControlRegistry.Contains(typeof(NumberBoxElement)));
+            H.Check("Spec048_Reg_RadioButton",
+                ControlRegistry.Contains(typeof(RadioButtonElement)));
+            H.Check("Spec048_Reg_RadioButtons",
+                ControlRegistry.Contains(typeof(RadioButtonsElement)));
+            H.Check("Spec048_Reg_Slider",
+                ControlRegistry.Contains(typeof(SliderElement)));
+            H.Check("Spec048_Reg_ToggleSwitch",
+                ControlRegistry.Contains(typeof(ToggleSwitchElement)));
+            H.Check("Spec048_Reg_RatingControl",
+                ControlRegistry.Contains(typeof(RatingControlElement)));
+            H.Check("Spec048_Reg_ColorPicker",
+                ControlRegistry.Contains(typeof(ColorPickerElement)));
+            H.Check("Spec048_Reg_SelectorBar",
+                ControlRegistry.Contains(typeof(SelectorBarElement)));
+            H.Check("Spec048_Reg_PipsPager",
+                ControlRegistry.Contains(typeof(PipsPagerElement)));
+
+            return Task.CompletedTask;
+        }
+    }
 }

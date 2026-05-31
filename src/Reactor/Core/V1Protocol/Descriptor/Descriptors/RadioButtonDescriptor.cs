@@ -49,3 +49,10 @@ internal static class RadioButtonDescriptor
             set:         static (c, v) => c.GroupName = v,
             shouldWrite: static e => e.GroupName is not null);
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <c>new()</c>-able registration shim for
+/// <see cref="RadioButtonDescriptor"/>.
+/// </summary>
+internal sealed class RadioButtonDescriptorHandler()
+    : DescriptorHandler<RadioButtonElement, WinUI.RadioButton>(RadioButtonDescriptor.Descriptor);

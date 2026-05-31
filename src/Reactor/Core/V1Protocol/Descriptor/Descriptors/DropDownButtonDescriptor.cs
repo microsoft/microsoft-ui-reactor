@@ -47,3 +47,10 @@ internal static class DropDownButtonDescriptor
             comparer:    ElementReferenceComparer.Instance);
 
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <c>new()</c>-able registration shim for
+/// <see cref="DropDownButtonDescriptor"/>.
+/// </summary>
+internal sealed class DropDownButtonDescriptorHandler()
+    : DescriptorHandler<DropDownButtonElement, WinUI.DropDownButton>(DropDownButtonDescriptor.Descriptor);

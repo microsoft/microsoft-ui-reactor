@@ -318,7 +318,10 @@ group to keep diffs reviewable.
       `DropDownButton`, `SplitButton`, `ToggleSplitButton`, `ToggleButton`,
       `CheckBox`, `RadioButton`, `RadioButtons`, `ToggleSwitch`,
       `Slider`, `NumberBox`, `Rating` / `RatingControl`, `PipsPager`,
-      `ColorPicker`, `SelectorBar`.
+      `ColorPicker`, `SelectorBar`. *(15 of 17 element types done — see
+      §3.3 Input-group close-out note below. `Button` and `CheckBox` are
+      deferred to §3.4 along with the decorator-global-registration path
+      they depend on.)*
 - [x] **Text controls** — `TextBlock`, `Heading`, `Subheading`,
       `RichTextBlock`, `TextBox`, `PasswordBox`, `RichEditBox`,
       `AutoSuggestBox`. *(Done — see §3.3 close-out note below.)*
@@ -401,6 +404,65 @@ hitting `Reg<TextBlockElement, …>` is silently absorbed — spec §10.3.)
 > still resolve via per-host arm 1, so these global registrations are never
 > reached. Zero observable behavior change. Remaining control groups fan out
 > with this same template before §3.4.
+
+> **§3.3 close-out note — Input-group landed:**
+>
+> Fanned out the Text-group thin-handler template to the Input controls.
+> 15 of 17 element types are wired; the two decorator-based types (`Button` /
+> `CheckBox`) are deferred to §3.4 with the decorator-global-path work.
+>
+> **Why decorator deferral is unavoidable in §3.3.** `Reg<TElement, TControl, THandler>`
+> constrains `THandler : IElementHandler<TElement, TControl>, new()` and
+> `ControlRegistry.Register<TElement, TControl>` takes a
+> `Func<IElementHandler<TElement, TControl>>`. `ButtonHandler` and
+> `CheckBoxHandler` implement `IDecoratorElementHandler<TElement>` — a
+> separate, non-inheriting interface (see
+> `src/Reactor/Core/V1Protocol/IDecoratorElementHandler.cs:67`,
+> `src/Reactor/Core/V1Protocol/IElementHandler.cs:23`). Wiring them now
+> would require either (a) extending `ControlRegistry` + `Reg<>` with a
+> decorator-aware overload, or (b) wrapping the decorator in a synthetic
+> `IElementHandler<TElement,TControl>` that delegates to the underlying
+> decorator. Both are §3.4 work — neither belongs in a no-behavior-change
+> §3.3 fan-out commit. Documented as a §3.4 blocker.
+>
+> **Landed for the Input group:**
+> - Thin handlers appended to 13 descriptors: `RepeatButton`,
+>   `HyperlinkButton`, `DropDownButton`, `SplitButton`, `ToggleSplitButton`,
+>   `ToggleButton`, `RadioButton`, `RadioButtons`, `NumberBox`,
+>   `RatingControl`, `PipsPager`, `ColorPicker`, `SelectorBar`.
+> - Added `using WinPrim = Microsoft.UI.Xaml.Controls.Primitives;` to
+>   `Dsl.cs` since `RepeatButton` and `ToggleButton` live in the Primitives
+>   namespace (the `WinUI = Microsoft.UI.Xaml.Controls;` alias does not
+>   cover them) — matches the existing `WinPrim` alias convention in those
+>   descriptor files.
+> - 22 Input factories touched (15 unique `Reg<>` closed generics):
+>   `HyperlinkButton`×2, `RepeatButton`×2, `ToggleButton`×2 +
+>   `ThreeStateToggleButton`, `DropDownButton`, `SplitButton`×2,
+>   `ToggleSplitButton`×2, `NumberBox`, `RadioButton`, `RadioButtons`,
+>   `Slider` (hand-coded `SliderHandler`), `ToggleSwitch` (hand-coded
+>   `ToggleSwitchHandler`), `RatingControl`, `ColorPicker`, `SelectorBar`,
+>   `PipsPager`. All factories converted from expression-bodied to block
+>   form where required to host the touch line.
+> - Selftest `Spec048_InputGroupFactoriesRegisterHandlers`
+>   (`Fixtures/Spec048RegistrationFixtures.cs`) asserts each factory call
+>   populates `ControlRegistry.Contains(typeof(XxxElement))` for all 15
+>   element types. Same selftest-not-xunit rationale as the Text group
+>   (registry unit tests `ResetForTesting()`; cctor runs once per process).
+> - Green: Spec048 selftests (31 checks, 15 new) + Spec048 xunit (16 tests)
+>   + Reactor.Tests (9148 passed / 0 failed), `-p:Platform=x64`.
+>
+> **NumberBox cctor safety.** `NumberBoxDescriptor.cctor` activates
+> `WinUI.NumberBox.TextProperty` (the existing xunit `ControlRegistryTests`
+> failure noted in §3.1). The thin `NumberBoxDescriptorHandler` does NOT
+> trigger that cctor on the `Reg<>` touch — the touch only invokes
+> `ControlRegistry.Register(static () => new THandler())`, which captures
+> the factory delegate without instantiating `THandler` (see `Reg.Init()`
+> in `src/Reactor/Core/V1Protocol/Reg.cs:96`). The handler ctor — and with
+> it the `NumberBoxDescriptor.Descriptor` field access that triggers the
+> descriptor cctor — fires only on first dispatch hit, which is dormant
+> while `RegisterV1BuiltInHandlers` owns per-host arm 1 dispatch. The
+> selftest exercises factory call + registry membership only, not dispatch,
+> so it stays green without any WinUI activation.
 
 ### 3.4 Delete `RegisterV1BuiltInHandlers`
 

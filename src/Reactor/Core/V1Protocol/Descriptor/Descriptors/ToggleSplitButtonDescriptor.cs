@@ -55,3 +55,10 @@ internal static class ToggleSplitButtonDescriptor
             comparer:    ElementReferenceComparer.Instance);
 
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <c>new()</c>-able registration shim for
+/// <see cref="ToggleSplitButtonDescriptor"/>.
+/// </summary>
+internal sealed class ToggleSplitButtonDescriptorHandler()
+    : DescriptorHandler<ToggleSplitButtonElement, WinUI.ToggleSplitButton>(ToggleSplitButtonDescriptor.Descriptor);

@@ -40,3 +40,12 @@ internal static class RepeatButtonDescriptor
             slotIsNull:       static p => p.ClickTrampoline is null,
             setSlot:          static (p, h) => p.ClickTrampoline = h);
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <c>new()</c>-able registration shim that lets the
+/// <see cref="Reg{TElement,TControl,THandler}"/> mechanism register the
+/// descriptor-backed <see cref="RepeatButtonDescriptor"/> the same way it
+/// registers a hand-coded handler.
+/// </summary>
+internal sealed class RepeatButtonDescriptorHandler()
+    : DescriptorHandler<RepeatButtonElement, WinPrim.RepeatButton>(RepeatButtonDescriptor.Descriptor);

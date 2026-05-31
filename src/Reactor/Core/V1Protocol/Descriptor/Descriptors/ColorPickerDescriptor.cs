@@ -82,3 +82,10 @@ internal static class ColorPickerDescriptor
             get: static e => e.MaxValue,
             set: static (c, v) => c.MaxValue = v);
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <c>new()</c>-able registration shim for
+/// <see cref="ColorPickerDescriptor"/>.
+/// </summary>
+internal sealed class ColorPickerDescriptorHandler()
+    : DescriptorHandler<ColorPickerElement, WinUI.ColorPicker>(ColorPickerDescriptor.Descriptor);

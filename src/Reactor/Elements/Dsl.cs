@@ -11,6 +11,7 @@ using MenuFlyoutItemBase = Microsoft.UI.Reactor.Core.MenuFlyoutItemBase;
 using V1 = Microsoft.UI.Reactor.Core.V1Protocol;
 using Desc = Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 using WinUI = Microsoft.UI.Xaml.Controls;
+using WinPrim = Microsoft.UI.Xaml.Controls.Primitives;
 
 namespace Microsoft.UI.Reactor;
 
@@ -164,76 +165,115 @@ public static partial class Factories
             Setters = [b => Core.CommandBindings.ApplyButtonBaseCommon(b, command)],
         };
 
-    public static HyperlinkButtonElement HyperlinkButton(string content, Uri? navigateUri = null, Action? onClick = null) =>
-        new(content, navigateUri, onClick);
+    public static HyperlinkButtonElement HyperlinkButton(string content, Uri? navigateUri = null, Action? onClick = null)
+    {
+        // Spec 048 §3.3 — register HyperlinkButtonElement's handler into the
+        // global ControlRegistry on first HyperlinkButton-producing factory use.
+        // Dormant while RegisterV1BuiltInHandlers is intact (per-host arm 1 wins).
+        _ = V1.Reg<HyperlinkButtonElement, WinUI.HyperlinkButton, Desc.HyperlinkButtonDescriptorHandler>.Done;
+        return new(content, navigateUri, onClick);
+    }
 
     /// <summary>
     /// Creates a HyperlinkButton driven by a Command. Maps Label → Content, Execute →
     /// Click. For external navigation, chain <see cref="ElementExtensions.NavigateUri(HyperlinkButtonElement, Uri)"/>:
     /// <c>HyperlinkButton(cmd).NavigateUri(new Uri("https://..."))</c>.
     /// </summary>
-    public static HyperlinkButtonElement HyperlinkButton(Core.Command command) =>
-        new HyperlinkButtonElement(command.Label, null, () => Core.CommandBindings.Invoke(command))
+    public static HyperlinkButtonElement HyperlinkButton(Core.Command command)
+    {
+        _ = V1.Reg<HyperlinkButtonElement, WinUI.HyperlinkButton, Desc.HyperlinkButtonDescriptorHandler>.Done;
+        return new HyperlinkButtonElement(command.Label, null, () => Core.CommandBindings.Invoke(command))
         {
             Setters = [b => Core.CommandBindings.ApplyButtonBaseCommon(b, command)],
         };
+    }
 
-    public static RepeatButtonElement RepeatButton(string label, Action? onClick = null) =>
-        new(label, onClick);
+    public static RepeatButtonElement RepeatButton(string label, Action? onClick = null)
+    {
+        _ = V1.Reg<RepeatButtonElement, WinPrim.RepeatButton, Desc.RepeatButtonDescriptorHandler>.Done;
+        return new(label, onClick);
+    }
 
     /// <summary>Creates a RepeatButton driven by a Command. Click auto-repeats while held.</summary>
-    public static RepeatButtonElement RepeatButton(Core.Command command) =>
-        new RepeatButtonElement(command.Label, () => Core.CommandBindings.Invoke(command))
+    public static RepeatButtonElement RepeatButton(Core.Command command)
+    {
+        _ = V1.Reg<RepeatButtonElement, WinPrim.RepeatButton, Desc.RepeatButtonDescriptorHandler>.Done;
+        return new RepeatButtonElement(command.Label, () => Core.CommandBindings.Invoke(command))
         {
             Setters = [b => Core.CommandBindings.ApplyButtonBaseCommon(b, command)],
         };
+    }
 
-    public static ToggleButtonElement ToggleButton(string label, bool isChecked = false, Action<bool>? onIsCheckedChanged = null) =>
-        new(label, isChecked, onIsCheckedChanged);
+    public static ToggleButtonElement ToggleButton(string label, bool isChecked = false, Action<bool>? onIsCheckedChanged = null)
+    {
+        _ = V1.Reg<ToggleButtonElement, WinPrim.ToggleButton, Desc.ToggleButtonDescriptorHandler>.Done;
+        return new(label, isChecked, onIsCheckedChanged);
+    }
 
     /// <summary>
     /// Creates a ToggleButton driven by a Command. The command fires on each toggle
     /// (both check and uncheck) — per the spec's "Option A" semantics. Use the
     /// <c>isChecked</c> parameter to seed the initial state.
     /// </summary>
-    public static ToggleButtonElement ToggleButton(Core.Command command, bool isChecked = false) =>
-        new ToggleButtonElement(command.Label, isChecked, _ => Core.CommandBindings.Invoke(command))
+    public static ToggleButtonElement ToggleButton(Core.Command command, bool isChecked = false)
+    {
+        _ = V1.Reg<ToggleButtonElement, WinPrim.ToggleButton, Desc.ToggleButtonDescriptorHandler>.Done;
+        return new ToggleButtonElement(command.Label, isChecked, _ => Core.CommandBindings.Invoke(command))
         {
             Setters = [b => Core.CommandBindings.ApplyButtonBaseCommon(b, command)],
         };
+    }
 
     /// <summary>
     /// Three-state toggle button (true → false → null → ...). Matches the
     /// established <c>ThreeStateCheckBox</c> factory pattern from spec 039 §2.4.
     /// </summary>
-    public static ToggleButtonElement ThreeStateToggleButton(string label, bool? checkedState = null, Action<bool?>? onCheckedStateChanged = null) =>
-        new(label, checkedState == true) { IsThreeState = true, CheckedState = checkedState, OnCheckedStateChanged = onCheckedStateChanged };
+    public static ToggleButtonElement ThreeStateToggleButton(string label, bool? checkedState = null, Action<bool?>? onCheckedStateChanged = null)
+    {
+        _ = V1.Reg<ToggleButtonElement, WinPrim.ToggleButton, Desc.ToggleButtonDescriptorHandler>.Done;
+        return new(label, checkedState == true) { IsThreeState = true, CheckedState = checkedState, OnCheckedStateChanged = onCheckedStateChanged };
+    }
 
-    public static DropDownButtonElement DropDownButton(string label, Element? flyout = null) =>
-        new(label, flyout);
+    public static DropDownButtonElement DropDownButton(string label, Element? flyout = null)
+    {
+        _ = V1.Reg<DropDownButtonElement, WinUI.DropDownButton, Desc.DropDownButtonDescriptorHandler>.Done;
+        return new(label, flyout);
+    }
 
-    public static SplitButtonElement SplitButton(string label, Action? onClick = null, Element? flyout = null) =>
-        new(label, onClick, flyout);
+    public static SplitButtonElement SplitButton(string label, Action? onClick = null, Element? flyout = null)
+    {
+        _ = V1.Reg<SplitButtonElement, WinUI.SplitButton, Desc.SplitButtonDescriptorHandler>.Done;
+        return new(label, onClick, flyout);
+    }
 
     /// <summary>
     /// Creates a SplitButton driven by a Command for the primary action. The flyout
     /// (dropdown portion) is independent and supplied separately.
     /// </summary>
-    public static SplitButtonElement SplitButton(Core.Command command, Element? flyout = null) =>
-        new SplitButtonElement(command.Label, () => Core.CommandBindings.Invoke(command), flyout)
+    public static SplitButtonElement SplitButton(Core.Command command, Element? flyout = null)
+    {
+        _ = V1.Reg<SplitButtonElement, WinUI.SplitButton, Desc.SplitButtonDescriptorHandler>.Done;
+        return new SplitButtonElement(command.Label, () => Core.CommandBindings.Invoke(command), flyout)
         {
             Setters = [b => Core.CommandBindings.ApplyButtonBaseCommon(b, command)],
         };
+    }
 
-    public static ToggleSplitButtonElement ToggleSplitButton(string label, bool isChecked = false, Action<bool>? onIsCheckedChanged = null, Element? flyout = null) =>
-        new(label, isChecked, onIsCheckedChanged, flyout);
+    public static ToggleSplitButtonElement ToggleSplitButton(string label, bool isChecked = false, Action<bool>? onIsCheckedChanged = null, Element? flyout = null)
+    {
+        _ = V1.Reg<ToggleSplitButtonElement, WinUI.ToggleSplitButton, Desc.ToggleSplitButtonDescriptorHandler>.Done;
+        return new(label, isChecked, onIsCheckedChanged, flyout);
+    }
 
     /// <summary>Creates a ToggleSplitButton driven by a Command (fires on each toggle).</summary>
-    public static ToggleSplitButtonElement ToggleSplitButton(Core.Command command, bool isChecked = false, Element? flyout = null) =>
-        new ToggleSplitButtonElement(command.Label, isChecked, _ => Core.CommandBindings.Invoke(command), flyout)
+    public static ToggleSplitButtonElement ToggleSplitButton(Core.Command command, bool isChecked = false, Element? flyout = null)
+    {
+        _ = V1.Reg<ToggleSplitButtonElement, WinUI.ToggleSplitButton, Desc.ToggleSplitButtonDescriptorHandler>.Done;
+        return new ToggleSplitButtonElement(command.Label, isChecked, _ => Core.CommandBindings.Invoke(command), flyout)
         {
             Setters = [b => Core.CommandBindings.ApplyButtonBaseCommon(b, command)],
         };
+    }
 
     // ── Input controls ──────────────────────────────────────────────
 
@@ -254,8 +294,11 @@ public static partial class Factories
         return new(password, onPasswordChanged, placeholderText);
     }
 
-    public static NumberBoxElement NumberBox(double value, Action<double>? onValueChanged = null, string? header = null) =>
-        new(value, onValueChanged, header);
+    public static NumberBoxElement NumberBox(double value, Action<double>? onValueChanged = null, string? header = null)
+    {
+        _ = V1.Reg<NumberBoxElement, WinUI.NumberBox, Desc.NumberBoxDescriptorHandler>.Done;
+        return new(value, onValueChanged, header);
+    }
 
     public static AutoSuggestBoxElement AutoSuggestBox(string text, Action<string>? onTextChanged = null, Action<string>? onQuerySubmitted = null)
     {
@@ -269,11 +312,17 @@ public static partial class Factories
     public static CheckBoxElement ThreeStateCheckBox(bool? checkedState, Action<bool?>? onCheckedStateChanged = null, string? label = null) =>
         new(checkedState == true, Label: label) { IsThreeState = true, CheckedState = checkedState, OnCheckedStateChanged = onCheckedStateChanged };
 
-    public static RadioButtonElement RadioButton(string label, bool isChecked = false, Action<bool>? onIsCheckedChanged = null, string? groupName = null) =>
-        new(label, isChecked, onIsCheckedChanged, groupName);
+    public static RadioButtonElement RadioButton(string label, bool isChecked = false, Action<bool>? onIsCheckedChanged = null, string? groupName = null)
+    {
+        _ = V1.Reg<RadioButtonElement, WinUI.RadioButton, Desc.RadioButtonDescriptorHandler>.Done;
+        return new(label, isChecked, onIsCheckedChanged, groupName);
+    }
 
-    public static RadioButtonsElement RadioButtons(string[] items, int selectedIndex = -1, Action<int>? onSelectedIndexChanged = null) =>
-        new(items, selectedIndex, onSelectedIndexChanged);
+    public static RadioButtonsElement RadioButtons(string[] items, int selectedIndex = -1, Action<int>? onSelectedIndexChanged = null)
+    {
+        _ = V1.Reg<RadioButtonsElement, WinUI.RadioButtons, Desc.RadioButtonsDescriptorHandler>.Done;
+        return new(items, selectedIndex, onSelectedIndexChanged);
+    }
 
     public static ComboBoxElement ComboBox(string[] items, int selectedIndex = -1, Action<int>? onSelectedIndexChanged = null) =>
         new(items, selectedIndex, onSelectedIndexChanged);
@@ -281,17 +330,31 @@ public static partial class Factories
     public static ComboBoxElement ComboBox(Element[] itemElements, int selectedIndex, Action<int>? onSelectedIndexChanged) =>
         new([], selectedIndex, onSelectedIndexChanged) { ItemElements = itemElements };
 
-    public static SliderElement Slider(double value, double min = 0, double max = 100, Action<double>? onValueChanged = null) =>
-        new(value, min, max, onValueChanged);
+    public static SliderElement Slider(double value, double min = 0, double max = 100, Action<double>? onValueChanged = null)
+    {
+        // Hand-coded handler (not descriptor-backed) — touch its Reg<> directly.
+        _ = V1.Reg<SliderElement, WinUI.Slider, V1.Handlers.SliderHandler>.Done;
+        return new(value, min, max, onValueChanged);
+    }
 
-    public static ToggleSwitchElement ToggleSwitch(bool isOn, Action<bool>? onIsOnChanged = null, string? onContent = null, string? offContent = null, string? header = null) =>
-        new(isOn, onIsOnChanged, onContent, offContent) { Header = header };
+    public static ToggleSwitchElement ToggleSwitch(bool isOn, Action<bool>? onIsOnChanged = null, string? onContent = null, string? offContent = null, string? header = null)
+    {
+        // Hand-coded handler (not descriptor-backed) — touch its Reg<> directly.
+        _ = V1.Reg<ToggleSwitchElement, WinUI.ToggleSwitch, V1.Handlers.ToggleSwitchHandler>.Done;
+        return new(isOn, onIsOnChanged, onContent, offContent) { Header = header };
+    }
 
-    public static RatingControlElement RatingControl(double value = 0, Action<double>? onValueChanged = null) =>
-        new(value, onValueChanged);
+    public static RatingControlElement RatingControl(double value = 0, Action<double>? onValueChanged = null)
+    {
+        _ = V1.Reg<RatingControlElement, WinUI.RatingControl, Desc.RatingControlDescriptorHandler>.Done;
+        return new(value, onValueChanged);
+    }
 
-    public static ColorPickerElement ColorPicker(global::Windows.UI.Color color, Action<global::Windows.UI.Color>? onColorChanged = null) =>
-        new(color, onColorChanged);
+    public static ColorPickerElement ColorPicker(global::Windows.UI.Color color, Action<global::Windows.UI.Color>? onColorChanged = null)
+    {
+        _ = V1.Reg<ColorPickerElement, WinUI.ColorPicker, Desc.ColorPickerDescriptorHandler>.Done;
+        return new(color, onColorChanged);
+    }
 
     // ── Date / Time ─────────────────────────────────────────────────
 
@@ -1187,13 +1250,19 @@ public static partial class Factories
 
     // ── Additional navigation ───────────────────────────────────────
 
-    public static SelectorBarElement SelectorBar(SelectorBarItemData[] items, int selectedIndex = 0, Action<int>? onSelectedIndexChanged = null) =>
-        new(items) { SelectedIndex = selectedIndex, OnSelectedIndexChanged = onSelectedIndexChanged };
+    public static SelectorBarElement SelectorBar(SelectorBarItemData[] items, int selectedIndex = 0, Action<int>? onSelectedIndexChanged = null)
+    {
+        _ = V1.Reg<SelectorBarElement, WinUI.SelectorBar, Desc.SelectorBarDescriptorHandler>.Done;
+        return new(items) { SelectedIndex = selectedIndex, OnSelectedIndexChanged = onSelectedIndexChanged };
+    }
 
     public static SelectorBarItemData SelectorBarItem(string text, string? icon = null) => new(text, icon);
 
-    public static PipsPagerElement PipsPager(int numberOfPages, int selectedPageIndex = 0, Action<int>? onSelectedPageIndexChanged = null) =>
-        new(numberOfPages) { SelectedPageIndex = selectedPageIndex, OnSelectedPageIndexChanged = onSelectedPageIndexChanged };
+    public static PipsPagerElement PipsPager(int numberOfPages, int selectedPageIndex = 0, Action<int>? onSelectedPageIndexChanged = null)
+    {
+        _ = V1.Reg<PipsPagerElement, WinUI.PipsPager, Desc.PipsPagerDescriptorHandler>.Done;
+        return new(numberOfPages) { SelectedPageIndex = selectedPageIndex, OnSelectedPageIndexChanged = onSelectedPageIndexChanged };
+    }
 
     public static AnnotatedScrollBarElement AnnotatedScrollBar() => new();
 

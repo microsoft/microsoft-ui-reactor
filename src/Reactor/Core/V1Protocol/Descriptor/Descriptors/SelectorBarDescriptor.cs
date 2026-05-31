@@ -98,3 +98,10 @@ internal static class SelectorBarDescriptor
         public int GetHashCode(SelectorBarItemData[] obj) => obj.Length;
     }
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <c>new()</c>-able registration shim for
+/// <see cref="SelectorBarDescriptor"/>.
+/// </summary>
+internal sealed class SelectorBarDescriptorHandler()
+    : DescriptorHandler<SelectorBarElement, WinUI.SelectorBar>(SelectorBarDescriptor.Descriptor);

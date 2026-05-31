@@ -51,3 +51,10 @@ internal static class RatingControlDescriptor
             get: static e => e.InitialSetValue,
             set: static (c, v) => c.InitialSetValue = v);
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <c>new()</c>-able registration shim for
+/// <see cref="RatingControlDescriptor"/>.
+/// </summary>
+internal sealed class RatingControlDescriptorHandler()
+    : DescriptorHandler<RatingControlElement, WinUI.RatingControl>(RatingControlDescriptor.Descriptor);

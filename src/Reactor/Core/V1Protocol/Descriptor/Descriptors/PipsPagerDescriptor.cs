@@ -69,3 +69,10 @@ internal static class PipsPagerDescriptor
             get: static e => e.NextButtonVisibility,
             set: static (c, v) => c.NextButtonVisibility = v);
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <c>new()</c>-able registration shim for
+/// <see cref="PipsPagerDescriptor"/>.
+/// </summary>
+internal sealed class PipsPagerDescriptorHandler()
+    : DescriptorHandler<PipsPagerElement, WinUI.PipsPager>(PipsPagerDescriptor.Descriptor);

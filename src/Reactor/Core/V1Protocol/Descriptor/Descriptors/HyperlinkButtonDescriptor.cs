@@ -48,3 +48,10 @@ internal static class HyperlinkButtonDescriptor
             slotIsNull:       static p => p.ClickTrampoline is null,
             setSlot:          static (p, h) => p.ClickTrampoline = h);
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <c>new()</c>-able registration shim for
+/// <see cref="HyperlinkButtonDescriptor"/>.
+/// </summary>
+internal sealed class HyperlinkButtonDescriptorHandler()
+    : DescriptorHandler<HyperlinkButtonElement, WinUI.HyperlinkButton>(HyperlinkButtonDescriptor.Descriptor);
