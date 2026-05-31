@@ -1,0 +1,80 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <Platforms>x64;ARM64</Platforms>
+    <RootNamespace>HelloWorldAot</RootNamespace>
+    <AssemblyName>HelloWorldAot</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <RollForward>LatestMajor</RollForward>
+
+    <!--
+      Smallest-binary configuration:
+        * PublishAot=true            → native AOT, no JIT, implicit full trimming
+        * InvariantGlobalization=true → skip ICU data (recommended pairing with AOT)
+        * WindowsAppSDKSelfContained=false → framework-reference the Windows App
+          Runtime (must be installed separately) instead of bundling it. This drops
+          the WinUI runtime (~150 MB) from the publish output.
+    -->
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
+
+    <!-- Drop the ~70 MB .pdb and ~2 MB Reactor.xml from publish output. -->
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <CopyDocumentationFilesFromPackages>false</CopyDocumentationFilesFromPackages>
+    <AllowedReferenceRelatedFileExtensions>none</AllowedReferenceRelatedFileExtensions>
+    <StripSymbols>true</StripSymbols>
+    <!-- Drop managed stack-trace metadata (method names in exceptions). -->
+    <StackTraceSupport>false</StackTraceSupport>
+    <!-- Emit AOT compile-time size diagnostics (consumed by sizoscope tool). -->
+    <IlcGenerateMstatFile>true</IlcGenerateMstatFile>
+    <IlcGenerateDgmlFile>true</IlcGenerateDgmlFile>
+
+    <!--
+      `dotnet run` / `dotnet build` without Platform default to AnyCPU which fails
+      the Windows App SDK arch check. Mirror minesweeper's host-RID default so
+      bare `dotnet build` works.
+    -->
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' And ('$(Platform)' == '' Or '$(Platform)' == 'AnyCPU' Or '$(Platform)' == 'Any CPU')">$(NETCoreSdkPortableRuntimeIdentifier)</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <!--
+    WindowsAppSDK#6394 workaround: NativeAOT publish of an unpackaged
+    (WindowsPackageType=None) WinUI 3 app does not copy the generated project
+    .pri (and .xbf files) into the publish output. Without the .pri, MRT
+    lookups fail and theme resolution breaks. Copy them post-Publish.
+    Remove this target once WindowsAppSDK#6394 ships a fix.
+  -->
+  <Target Name="_CopyWinUIResourcesForAot" AfterTargets="Publish"
+          Condition="'$(PublishAot)' == 'true' and '$(AppxPackage)' != 'true'">
+    <ItemGroup>
+      <_WinUIResourcesForAot Include="$(OutputPath)**\*.xbf" />
+      <_WinUIResourcesForAot Include="$(OutputPath)$(AssemblyName).pri" Condition="Exists('$(OutputPath)$(AssemblyName).pri')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_WinUIResourcesForAot)"
+          DestinationFiles="@(_WinUIResourcesForAot->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
+    <!--
+      Suppress the Microsoft.WindowsAppSDK.ML transitive (onnxruntime ~22 MB +
+      DirectML ~19 MB). Pulled in by WindowsAppSDK 2.0 for the Windows AI /
+      Phi Silica APIs; not needed for an app that doesn't use ML inference.
+    -->
+    <PackageReference Include="Microsoft.WindowsAppSDK.ML" Version="2.0.300" ExcludeAssets="all" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Windows.AI.MachineLearning" Version="2.0.300" ExcludeAssets="all" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Reactor\Reactor.csproj" />
+  </ItemGroup>
+
+</Project>
