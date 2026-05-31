@@ -89,7 +89,7 @@ public class SlopeChart : GallerySample
              }),
 
              // Legend
-             .. D3Legend(canvasW / 2 - 80, canvasH - 22, [("Improved", Brush(Palette[2])), ("Declined", Brush(Palette[3]))]),
+             .. D3Legend(canvasW / 2 - 80, canvasH - 22, ((string, Microsoft.UI.Xaml.Media.SolidColorBrush)[])[("Improved", Brush(Palette[2])), ("Declined", Brush(Palette[3]))]),
             ]
         )
             .AutomationName("Department Performance: Before vs After")

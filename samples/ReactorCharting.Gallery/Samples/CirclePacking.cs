@@ -106,7 +106,7 @@ public sealed class CirclePackingSample : GallerySample
                         };
                     }
 
-                    return [circle];
+                    return (Element[])[circle];
                 }
                 else
                 {

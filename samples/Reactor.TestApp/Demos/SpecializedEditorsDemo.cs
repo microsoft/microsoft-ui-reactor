@@ -252,7 +252,7 @@ class SpecializedEditorsDemo : Component
         // Explicit: only offer three of the four enum values here.
         TypedColumns.ComboBoxColumn<Gizmo, GizmoPriority>(
             "Priority", g => g.Priority,
-            choices: [GizmoPriority.Low, GizmoPriority.Medium, GizmoPriority.High],
+            choices: (GizmoPriority[])[GizmoPriority.Low, GizmoPriority.Medium, GizmoPriority.High],
             width: 110),
         TypedColumns.HyperlinkColumn<Gizmo>("Website", g => g.Website, width: 200),
         TypedColumns.ColorColumn<Gizmo>("AccentColor", g => g.AccentColor,

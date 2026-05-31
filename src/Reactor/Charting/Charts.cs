@@ -394,7 +394,7 @@ public sealed class ChartElement<T> : IChartAccessibilityData
                 return new ChartPointDescriptor(xLabel, yVal, label);
             }).ToArray();
 
-            return [new ChartSeriesDescriptor(seriesName, points)];
+            return (ChartSeriesDescriptor[])[new ChartSeriesDescriptor(seriesName, points)];
         }
     }
 
@@ -407,7 +407,7 @@ public sealed class ChartElement<T> : IChartAccessibilityData
             var (xMin, xMax) = D3Extent.Extent(Data, XAccessor);
             var (yMin, yMax) = D3Extent.Extent(Data, YAccessor);
 
-            return [
+            return (ChartAxisDescriptor[])[
                 new ChartAxisDescriptor(ChartAxisType.X, _xAxisLabel, xMin, xMax, _xUnits),
                 new ChartAxisDescriptor(ChartAxisType.Y, _yAxisLabel, yMin, yMax, _yUnits),
             ];
@@ -707,7 +707,7 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
             }).ToArray();
 
             var seriesName = _seriesNames?.Length > 0 ? _seriesNames[0] : "Slices";
-            return [new ChartSeriesDescriptor(seriesName, points)];
+            return (ChartSeriesDescriptor[])[new ChartSeriesDescriptor(seriesName, points)];
         }
     }
 

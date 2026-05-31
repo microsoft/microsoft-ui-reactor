@@ -105,7 +105,7 @@ public class DivergingBarChartSample : GallerySample
                  TextRight(2, top + band.Map(item) + band.Bandwidth / 2 - 7, item, left - 6, 10, ChartMutedForeground)),
 
              // Legend
-             .. D3Legend(left + plotW - 120, top + 2, [("Positive", posBrush), ("Negative", negBrush)]),
+             .. D3Legend(left + plotW - 120, top + 2, ((string, Microsoft.UI.Xaml.Media.SolidColorBrush)[])[("Positive", posBrush), ("Negative", negBrush)]),
 
              D3Charts.Text(left, 4, "Customer Sentiment Scores", 13, ChartForeground),
             ]

@@ -51,21 +51,21 @@ static class TodoReducer
         AddItem when !string.IsNullOrWhiteSpace(state.NewItemText) =>
             state with
             {
-                Items = [.. state.Items, new(Guid.NewGuid().ToString(), state.NewItemText.Trim(), false)],
+                Items = (TodoItem[])[.. state.Items, new(Guid.NewGuid().ToString(), state.NewItemText.Trim(), false)],
                 NewItemText = ""
             },
         ToggleItem t => state with
         {
-            Items = [.. state.Items.Select(i =>
+            Items = (TodoItem[])[.. state.Items.Select(i =>
                 i.Id == t.Id ? i with { IsCompleted = !i.IsCompleted } : i)]
         },
         DeleteItem d => state with
         {
-            Items = [.. state.Items.Where(i => i.Id != d.Id)]
+            Items = (TodoItem[])[.. state.Items.Where(i => i.Id != d.Id)]
         },
         SetNewItemText s => state with { NewItemText = s.Text },
         SetFilter f => state with { Filter = f.Filter },
-        ClearCompleted => state with { Items = [.. state.Items.Where(i => !i.IsCompleted)] },
+        ClearCompleted => state with { Items = (TodoItem[])[.. state.Items.Where(i => !i.IsCompleted)] },
         _ => state
     };
 }
