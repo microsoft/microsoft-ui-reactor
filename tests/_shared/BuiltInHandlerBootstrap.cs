@@ -56,7 +56,7 @@ internal static class BuiltInHandlerBootstrap
         _ = V1.RegDecorator<MenuFlyoutElement, V1.Handlers.MenuFlyoutHandler>.Done;
         _ = V1.RegDecorator<PopupElement, V1.Handlers.PopupHandler>.Done;
         _ = V1.RegDecorator<CommandBarFlyoutElement, V1.Handlers.CommandBarFlyoutHandler>.Done;
-        _ = V1.RegDecorator<ButtonElement, V1.Handlers.ButtonHandler>.Done;
+        _ = V1.Reg<ButtonElement, WinUI.Button, Desc.ButtonDescriptorHandler>.Done;
 
         // ── Base-derived (typed templated lists / lazy stacks / items hosts) ──
         _ = V1.RegBaseDecorator<TemplatedListElementBase, V1.Handlers.TemplatedListHandler>.Done;
@@ -73,7 +73,7 @@ internal static class BuiltInHandlerBootstrap
         _ = V1.Reg<BreadcrumbBarElement, WinUI.BreadcrumbBar, Desc.BreadcrumbBarDescriptorHandler>.Done;
         _ = V1.Reg<CalendarDatePickerElement, WinUI.CalendarDatePicker, Desc.CalendarDatePickerDescriptorHandler>.Done;
         _ = V1.Reg<CalendarViewElement, WinUI.CalendarView, Desc.CalendarViewDescriptorHandler>.Done;
-        _ = V1.RegDecorator<CanvasElement, V1.Handlers.CanvasPanelHandler>.Done;
+        _ = V1.Reg<CanvasElement, WinUI.Canvas, Desc.CanvasDescriptorHandler>.Done;
         _ = V1.RegDecorator<CheckBoxElement, V1.Handlers.CheckBoxHandler>.Done;
         _ = V1.Reg<ColorPickerElement, WinUI.ColorPicker, Desc.ColorPickerDescriptorHandler>.Done;
         _ = V1.Reg<ComboBoxElement, WinUI.ComboBox, Desc.ComboBoxDescriptorHandler>.Done;
@@ -81,10 +81,10 @@ internal static class BuiltInHandlerBootstrap
         _ = V1.Reg<DropDownButtonElement, WinUI.DropDownButton, Desc.DropDownButtonDescriptorHandler>.Done;
         _ = V1.Reg<EllipseElement, WinShapes.Ellipse, Desc.EllipseDescriptorHandler>.Done;
         _ = V1.RegDecorator<ExpanderElement, V1.Handlers.ExpanderHandler>.Done;
-        _ = V1.RegDecorator<FlexElement, V1.Handlers.FlexPanelHandler>.Done;
+        _ = V1.Reg<FlexElement, Microsoft.UI.Reactor.Layout.FlexPanel, Desc.FlexPanelDescriptorHandler>.Done;
         _ = V1.Reg<FlipViewElement, WinUI.FlipView, Desc.FlipViewDescriptorHandler>.Done;
         _ = V1.Reg<FrameElement, WinUI.Frame, Desc.FrameDescriptorHandler>.Done;
-        _ = V1.RegDecorator<GridElement, V1.Handlers.GridPanelHandler>.Done;
+        _ = V1.Reg<GridElement, WinUI.Grid, Desc.GridDescriptorHandler>.Done;
         _ = V1.Reg<HyperlinkButtonElement, WinUI.HyperlinkButton, Desc.HyperlinkButtonDescriptorHandler>.Done;
         _ = V1.Reg<ImageElement, WinUI.Image, Desc.ImageDescriptorHandler>.Done;
         _ = V1.Reg<InfoBadgeElement, WinUI.InfoBadge, Desc.InfoBadgeDescriptorHandler>.Done;
@@ -109,7 +109,7 @@ internal static class BuiltInHandlerBootstrap
         _ = V1.Reg<RatingControlElement, WinUI.RatingControl, Desc.RatingControlDescriptorHandler>.Done;
         _ = V1.Reg<RectangleElement, WinShapes.Rectangle, Desc.RectangleDescriptorHandler>.Done;
         _ = V1.Reg<RefreshContainerElement, WinUI.RefreshContainer, Desc.RefreshContainerDescriptorHandler>.Done;
-        _ = V1.RegDecorator<RelativePanelElement, V1.Handlers.RelativePanelHandler>.Done;
+        _ = V1.Reg<RelativePanelElement, WinUI.RelativePanel, Desc.RelativePanelDescriptorHandler>.Done;
         _ = V1.Reg<RepeatButtonElement, WinPrim.RepeatButton, Desc.RepeatButtonDescriptorHandler>.Done;
         _ = V1.Reg<RichEditBoxElement, WinUI.RichEditBox, Desc.RichEditBoxDescriptorHandler>.Done;
         _ = V1.Reg<RichTextBlockElement, WinUI.RichTextBlock, Desc.RichTextBlockDescriptorHandler>.Done;
@@ -120,7 +120,7 @@ internal static class BuiltInHandlerBootstrap
         _ = V1.Reg<SemanticZoomElement, WinUI.SemanticZoom, Desc.SemanticZoomDescriptorHandler>.Done;
         _ = V1.Reg<SplitButtonElement, WinUI.SplitButton, Desc.SplitButtonDescriptorHandler>.Done;
         _ = V1.Reg<SplitViewElement, WinUI.SplitView, Desc.SplitViewDescriptorHandler>.Done;
-        _ = V1.RegDecorator<StackElement, V1.Handlers.StackPanelHandler>.Done;
+        _ = V1.Reg<StackElement, WinUI.StackPanel, Desc.StackPanelDescriptorHandler>.Done;
         _ = V1.Reg<SwipeControlElement, WinUI.SwipeControl, Desc.SwipeControlDescriptorHandler>.Done;
         _ = V1.Reg<TabViewElement, WinUI.TabView, Desc.TabViewDescriptorHandler>.Done;
         _ = V1.Reg<TeachingTipElement, WinUI.TeachingTip, Desc.TeachingTipDescriptorHandler>.Done;
@@ -132,7 +132,7 @@ internal static class BuiltInHandlerBootstrap
         _ = V1.Reg<TreeViewElement, WinUI.TreeView, Desc.TreeViewDescriptorHandler>.Done;
         _ = V1.Reg<ViewboxElement, WinUI.Viewbox, Desc.ViewboxDescriptorHandler>.Done;
         _ = V1.Reg<WebView2Element, WinUI.WebView2, Desc.WebView2DescriptorHandler>.Done;
-        _ = V1.RegDecorator<WrapGridElement, V1.Handlers.WrapGridHandler>.Done;
+        _ = V1.Reg<WrapGridElement, WinUI.VariableSizedWrapGrid, Desc.WrapGridDescriptorHandler>.Done;
 
         // IconElement / XamlPageElement / XamlHostElement: fully-qualified
         // because the namespace contains other types of the same short name

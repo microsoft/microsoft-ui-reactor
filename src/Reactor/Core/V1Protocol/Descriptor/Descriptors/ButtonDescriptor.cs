@@ -95,3 +95,11 @@ internal static class ButtonDescriptor
             slotIsNull:       static p => p.ClickTrampoline is null,
             setSlot:          static (p, h) => p.ClickTrampoline = h);
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <see cref="DescriptorHandler{TElement,TControl}"/>
+/// subclass so the Reactor.Factories DSL can reach this descriptor via
+/// the <c>Reg&lt;&gt;</c> registration touch without leaking
+/// <c>DescriptorHandler&lt;,&gt;</c> as a public surface.
+/// </summary>
+internal sealed class ButtonDescriptorHandler() : DescriptorHandler<ButtonElement, WinUI.Button>(ButtonDescriptor.Descriptor);

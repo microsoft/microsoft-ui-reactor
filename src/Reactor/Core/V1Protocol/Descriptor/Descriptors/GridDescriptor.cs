@@ -92,3 +92,11 @@ internal static class GridDescriptor
         public int GetHashCode(GridDefinition obj) => global::System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
     }
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <see cref="DescriptorHandler{TElement,TControl}"/>
+/// subclass so the Reactor.Factories DSL can reach this descriptor via
+/// the <c>Reg&lt;&gt;</c> registration touch without leaking
+/// <c>DescriptorHandler&lt;,&gt;</c> as a public surface.
+/// </summary>
+internal sealed class GridDescriptorHandler() : DescriptorHandler<GridElement, WinUI.Grid>(GridDescriptor.Descriptor);

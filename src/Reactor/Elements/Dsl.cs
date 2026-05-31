@@ -147,15 +147,15 @@ public static partial class Factories
 
     public static ButtonElement Button(string label, Action? onClick = null)
     {
-        // Spec 048 §3.4 — decorator-global-path fan-out (see RegDecorator XML).
+        // Spec 048 §3.4 — per-factory `Reg<>` registration touch.
         // Live dispatch path post-§3.4 (the eager registrar is gone).
-        _ = V1.RegDecorator<ButtonElement, V1.Handlers.ButtonHandler>.Done;
+        _ = V1.Reg<ButtonElement, WinUI.Button, Desc.ButtonDescriptorHandler>.Done;
         return new(label, onClick);
     }
 
     public static ButtonElement Button(Element content, Action? onClick = null)
     {
-        _ = V1.RegDecorator<ButtonElement, V1.Handlers.ButtonHandler>.Done;
+        _ = V1.Reg<ButtonElement, WinUI.Button, Desc.ButtonDescriptorHandler>.Done;
         return new("", onClick) { ContentElement = content };
     }
 
@@ -168,7 +168,7 @@ public static partial class Factories
     /// </summary>
     public static ButtonElement Button(Core.Command command)
     {
-        _ = V1.RegDecorator<ButtonElement, V1.Handlers.ButtonHandler>.Done;
+        _ = V1.Reg<ButtonElement, WinUI.Button, Desc.ButtonDescriptorHandler>.Done;
         return new ButtonElement(command.Label, () => Core.CommandBindings.Invoke(command))
         {
             IsEnabled = command.IsEnabled,
@@ -496,8 +496,8 @@ public static partial class Factories
     /// </remarks>
     public static StackElement VStack(params Element?[] children)
     {
-        // Spec 048 §3.4 — decorator-global-path fan-out (Containers group).
-        _ = V1.RegDecorator<StackElement, V1.Handlers.StackPanelHandler>.Done;
+        // Spec 048 §3.4 — per-factory `Reg<>` registration touch (Containers group).
+        _ = V1.Reg<StackElement, WinUI.StackPanel, Desc.StackPanelDescriptorHandler>.Done;
         return new(Orientation.Vertical, FilterChildren(children));
     }
 
@@ -511,7 +511,7 @@ public static partial class Factories
     /// </remarks>
     public static StackElement VStack(double spacing, params Element?[] children)
     {
-        _ = V1.RegDecorator<StackElement, V1.Handlers.StackPanelHandler>.Done;
+        _ = V1.Reg<StackElement, WinUI.StackPanel, Desc.StackPanelDescriptorHandler>.Done;
         return new(Orientation.Vertical, FilterChildren(children)) { Spacing = spacing };
     }
 
@@ -526,7 +526,7 @@ public static partial class Factories
     /// </remarks>
     public static StackElement HStack(params Element?[] children)
     {
-        _ = V1.RegDecorator<StackElement, V1.Handlers.StackPanelHandler>.Done;
+        _ = V1.Reg<StackElement, WinUI.StackPanel, Desc.StackPanelDescriptorHandler>.Done;
         return new(Orientation.Horizontal, FilterChildren(children));
     }
 
@@ -540,19 +540,19 @@ public static partial class Factories
     /// </remarks>
     public static StackElement HStack(double spacing, params Element?[] children)
     {
-        _ = V1.RegDecorator<StackElement, V1.Handlers.StackPanelHandler>.Done;
+        _ = V1.Reg<StackElement, WinUI.StackPanel, Desc.StackPanelDescriptorHandler>.Done;
         return new(Orientation.Horizontal, FilterChildren(children)) { Spacing = spacing };
     }
 
     public static WrapGridElement WrapGrid(params Element?[] children)
     {
-        _ = V1.RegDecorator<WrapGridElement, V1.Handlers.WrapGridHandler>.Done;
+        _ = V1.Reg<WrapGridElement, WinUI.VariableSizedWrapGrid, Desc.WrapGridDescriptorHandler>.Done;
         return new(FilterChildren(children));
     }
 
     public static WrapGridElement WrapGrid(int maxRowsOrColumns, params Element?[] children)
     {
-        _ = V1.RegDecorator<WrapGridElement, V1.Handlers.WrapGridHandler>.Done;
+        _ = V1.Reg<WrapGridElement, WinUI.VariableSizedWrapGrid, Desc.WrapGridDescriptorHandler>.Done;
         return new(FilterChildren(children)) { MaximumRowsOrColumns = maxRowsOrColumns };
     }
 
@@ -630,7 +630,7 @@ public static partial class Factories
 
     public static CanvasElement Canvas(params Element?[] children)
     {
-        _ = V1.RegDecorator<CanvasElement, V1.Handlers.CanvasPanelHandler>.Done;
+        _ = V1.Reg<CanvasElement, WinUI.Canvas, Desc.CanvasDescriptorHandler>.Done;
         return new(FilterChildren(children));
     }
 
@@ -651,7 +651,7 @@ public static partial class Factories
     /// </remarks>
     public static FlexElement Flex(params Element?[] children)
     {
-        _ = V1.RegDecorator<FlexElement, V1.Handlers.FlexPanelHandler>.Done;
+        _ = V1.Reg<FlexElement, Microsoft.UI.Reactor.Layout.FlexPanel, Desc.FlexPanelDescriptorHandler>.Done;
         return new(FilterChildren(children));
     }
 
@@ -663,7 +663,7 @@ public static partial class Factories
     /// </remarks>
     public static FlexElement Flex(Microsoft.UI.Reactor.Layout.FlexDirection direction, params Element?[] children)
     {
-        _ = V1.RegDecorator<FlexElement, V1.Handlers.FlexPanelHandler>.Done;
+        _ = V1.Reg<FlexElement, Microsoft.UI.Reactor.Layout.FlexPanel, Desc.FlexPanelDescriptorHandler>.Done;
         return new(FilterChildren(children)) { Direction = direction };
     }
 
@@ -677,7 +677,7 @@ public static partial class Factories
     /// </remarks>
     public static FlexElement FlexRow(params Element?[] children)
     {
-        _ = V1.RegDecorator<FlexElement, V1.Handlers.FlexPanelHandler>.Done;
+        _ = V1.Reg<FlexElement, Microsoft.UI.Reactor.Layout.FlexPanel, Desc.FlexPanelDescriptorHandler>.Done;
         return new(FilterChildren(children)) { Direction = Microsoft.UI.Reactor.Layout.FlexDirection.Row };
     }
 
@@ -691,7 +691,7 @@ public static partial class Factories
     /// </remarks>
     public static FlexElement FlexColumn(params Element?[] children)
     {
-        _ = V1.RegDecorator<FlexElement, V1.Handlers.FlexPanelHandler>.Done;
+        _ = V1.Reg<FlexElement, Microsoft.UI.Reactor.Layout.FlexPanel, Desc.FlexPanelDescriptorHandler>.Done;
         return new(FilterChildren(children)) { Direction = Microsoft.UI.Reactor.Layout.FlexDirection.Column };
     }
 
@@ -713,7 +713,7 @@ public static partial class Factories
     {
         if (columns is null) throw new ArgumentNullException(nameof(columns));
         if (rows is null) throw new ArgumentNullException(nameof(rows));
-        _ = V1.RegDecorator<GridElement, V1.Handlers.GridPanelHandler>.Done;
+        _ = V1.Reg<GridElement, WinUI.Grid, Desc.GridDescriptorHandler>.Done;
         return new(new GridDefinition(columns, rows), FilterChildren(children));
     }
 
@@ -729,7 +729,7 @@ public static partial class Factories
         string[] columns, string[] rows,
         params Element?[] children)
     {
-        _ = V1.RegDecorator<GridElement, V1.Handlers.GridPanelHandler>.Done;
+        _ = V1.Reg<GridElement, WinUI.Grid, Desc.GridDescriptorHandler>.Done;
         return new(new GridDefinition(columns, rows), FilterChildren(children));
     }
 
@@ -1479,7 +1479,7 @@ public static partial class Factories
 
     public static RelativePanelElement RelativePanel(params Element?[] children)
     {
-        _ = V1.RegDecorator<RelativePanelElement, V1.Handlers.RelativePanelHandler>.Done;
+        _ = V1.Reg<RelativePanelElement, WinUI.RelativePanel, Desc.RelativePanelDescriptorHandler>.Done;
         return new(FilterChildren(children));
     }
 
