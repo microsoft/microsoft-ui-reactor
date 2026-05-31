@@ -87,7 +87,13 @@ public sealed partial class Reconciler
             ComponentElement comp => MountComponent(comp, requestRerender),
             FuncElement func => MountFuncComponent(func, requestRerender),
             MemoElement memo => MountMemoComponent(memo, requestRerender),
-            _ => null,
+            // EmptyElement is a no-op sentinel — callers (Reconcile, panel
+            // children loops, ChildReconciler) already filter it before
+            // reaching Mount, but MountContext.MountChild does not, so a V1
+            // handler that forwards an EmptyElement child must still land
+            // here as null rather than tripping the unregistered-type throw.
+            EmptyElement => null,
+            _ => ThrowNoHandlerRegistered(element),
         };
         }
 
@@ -171,6 +177,55 @@ public sealed partial class Reconciler
         }
 
         return control;
+    }
+
+    /// <summary>
+    /// Final dispatch arm: the four resolution arms in <see cref="Mount"/>
+    /// (per-host <c>_v1Handlers</c>, per-host <c>_typeRegistry</c>, global
+    /// <see cref="V1Protocol.ControlRegistry"/>, and the composition-primitive
+    /// switch) have all missed. Throw with an actionable message instead of
+    /// silently returning null — silent-null lets a misconfigured tree mount
+    /// as if the element didn't exist, which is one of the hardest classes of
+    /// Reactor bugs to diagnose.
+    /// </summary>
+    /// <remarks>
+    /// The most common cause (after spec-048 §3.4 deletes
+    /// <c>RegisterV1BuiltInHandlers</c>) is that the caller bypassed the
+    /// factory method (e.g. <c>Factories.TextBlock(...)</c>) and constructed
+    /// the element record directly (<c>new TextBlockElement(...)</c>). The
+    /// factory body contains the <c>Reg&lt;TElement, TControl, THandler&gt;.Done</c>
+    /// touch that registers the handler on first call; direct-record
+    /// construction skips that touch. See issue
+    /// <see href="https://github.com/microsoft/microsoft-ui-reactor/issues/486"/>
+    /// for the full discussion of the trade-off.
+    /// </remarks>
+    [global::System.Diagnostics.CodeAnalysis.DoesNotReturn]
+    private static UIElement? ThrowNoHandlerRegistered(Element element)
+    {
+        var elementTypeName = element.GetType().FullName ?? element.GetType().Name;
+        throw new InvalidOperationException(
+            $"No handler is registered for element type '{elementTypeName}'. " +
+            "The reconciler tried all four dispatch arms (per-host _v1Handlers, " +
+            "per-host _typeRegistry, global ControlRegistry, and the composition-" +
+            "primitive switch) and none of them knew how to mount this element.\n\n" +
+            "Most common cause: the element record was constructed directly " +
+            $"(e.g. `new {element.GetType().Name}(...)`) instead of through its " +
+            "factory method. Factory methods carry the registration touch (a " +
+            "`_ = Reg<TElement, TControl, THandler>.Done;` statement) that " +
+            "registers the handler on first call; bypassing the factory skips " +
+            "that touch.\n\n" +
+            "Fixes:\n" +
+            $"  (1) Call the factory method at least once before mounting (e.g. " +
+            "`Factories.TextBlock(\"\")` for built-ins) so the handler registers, " +
+            "then continue using the direct-record idiom for the hot path.\n" +
+            "  (2) Register the handler explicitly up front: " +
+            $"`Microsoft.UI.Reactor.Core.V1Protocol.ControlRegistry.Register" +
+            $"<{element.GetType().Name}, TControl>(static () => new YourHandler())`.\n" +
+            "  (3) For custom controls authored by your project, follow the " +
+            "Pattern A factory-as-registration recipe in " +
+            "docs/_pipeline/templates/extending-reactor-controls.md.dt.\n\n" +
+            "See https://github.com/microsoft/microsoft-ui-reactor/issues/486 " +
+            "for background.");
     }
 
     // Spec 047 §14 Phase 3-final Batch B — widened to internal static so
