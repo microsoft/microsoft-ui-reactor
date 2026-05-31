@@ -8,20 +8,28 @@ using Microsoft.UI.Xaml.Media;
 using WinUI = Microsoft.UI.Xaml.Controls;
 using Windows.UI;
 
-System.AppContext.SetSwitch("Reactor.UseV1Protocol", true);
+// Pattern A (spec 048 §6): no app-bootstrap registration call. The
+// first reference to `LedIndicator` (via .Of) triggers its static cctor
+// which calls ControlRegistry.Register globally.
 ReactorApp.Run<V1ProtocolApp>(
-    "V1 Protocol Demo", width: 520, height: 360, devtools: true,
-    configure: host => LedIndicatorRegistration.Register(host.Reconciler));
+    "V1 Protocol Demo", width: 520, height: 360, devtools: true);
 
 // <snippet:element-record>
 // An Element record describes what you want on screen — no WinUI types, no
 // mutable state. The reconciler diffs Element values across renders;
 // records get value-equality for free, so unchanged subtrees skip Update.
+// Primary ctor is `internal` so the only external construction path is
+// LedIndicator.Of(...), whose cctor installs the global registration.
 public sealed record LedIndicatorElement : Element
 {
-    public required Color Color { get; init; }
+    public Color Color { get; init; }
     public bool IsOn { get; init; } = true;
     public double Size { get; init; } = 16;
+
+    internal LedIndicatorElement(Color color)
+    {
+        Color = color;
+    }
 }
 // </snippet:element-record>
 
@@ -52,29 +60,38 @@ public static class LedIndicatorDescriptor
             set: static (c, v) =>
                 c.Background = new SolidColorBrush(
                     v.IsOn ? v.Color : Color.FromArgb(0x40, v.Color.R, v.Color.G, v.Color.B)));
+
+    internal sealed class Handler : DescriptorHandler<LedIndicatorElement, WinUI.Border>
+    {
+        public Handler() : base(LedIndicatorDescriptor.Descriptor) { }
+    }
 }
 // </snippet:descriptor>
 
 // <snippet:registration>
-// Registration is one call per Reactor host. RegisterDescriptor wraps
-// RegisterHandler<...>(new DescriptorHandler<...>(descriptor)) — both shapes
-// land on the same dispatch table. Duplicate registrations for the same
-// element type throw.
-public sealed class LedIndicatorRegistration
+// Spec 048 §6 Pattern A — the factory holder *is* the registration trigger.
+// The static cctor runs the first time any member of `LedIndicator` is
+// touched (CLR-guaranteed precise init), which installs the global
+// ControlRegistry entry before the first Of() call returns. The `static`
+// keyword on the lambda is mandatory: it caches the delegate in a static
+// field and lets the trimmer drop the holder→handler→control chain when
+// no component references LedIndicator.
+public static class LedIndicator
 {
-    public static void Register(Reconciler reconciler)
-    {
-        reconciler.RegisterHandler<LedIndicatorElement, WinUI.Border>(
-            new DescriptorHandler<LedIndicatorElement, WinUI.Border>(
-                LedIndicatorDescriptor.Descriptor));
-    }
+    static LedIndicator() =>
+        ControlRegistry.Register<LedIndicatorElement, WinUI.Border>(
+            static () => new LedIndicatorDescriptor.Handler());
+
+    public static LedIndicatorElement Of(Color color, bool isOn = true, double size = 16) =>
+        new(color) { IsOn = isOn, Size = size };
 }
 // </snippet:registration>
 
 // <snippet:usage>
-// Once registered, the element is used the same way as any built-in. The
-// reconciler dispatches LedIndicatorElement to the registered handler;
-// every other element type continues to flow through the built-in path.
+// Once the LedIndicator factory exists, the element is used the same way as
+// any built-in. The reconciler dispatches LedIndicatorElement to the handler
+// registered through Pattern A; every other element type flows through the
+// built-in path.
 class V1ProtocolApp : Component
 {
     public override Element Render()
@@ -94,23 +111,10 @@ class V1ProtocolApp : Component
                 TextBlock($"level = {level}").VAlign(VerticalAlignment.Center))
         ).Padding(20);
 
-        Element Led(Color c, bool isOn) =>
-            new LedIndicatorElement { Color = c, IsOn = isOn, Size = 28 };
+        Element Led(Color c, bool isOn) => LedIndicator.Of(c, isOn, size: 28);
     }
 }
 // </snippet:usage>
-
-// Bootstrap: register the descriptor against the host's reconciler once,
-// before the first render. ReactorApp.Run exposes the host via a startup
-// callback; we use the simpler ConfigureHost extension that matches the
-// pattern most app authors will follow.
-//
-// (In a real app this lives next to other interop registrations, e.g.
-// DockingNativeInterop.Register. The doc-app shape keeps it inline.)
-public static class Bootstrap
-{
-    static Bootstrap() { /* registration happens via app callback below */ }
-}
 
 public static class Colors
 {
@@ -119,3 +123,6 @@ public static class Colors
     public static readonly Color Yellow = Color.FromArgb(0xFF, 0xFA, 0xCC, 0x15);
     public static readonly Color Green  = Color.FromArgb(0xFF, 0x22, 0xC5, 0x5E);
 }
+
+
+

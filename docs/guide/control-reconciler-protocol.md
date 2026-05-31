@@ -33,7 +33,7 @@ methods run against the existing WinUI control. There is no base-class
 fallback for ordinary handlers — registering `ButtonElement` does
 **not** also catch a `MyButtonElement` that inherits from it; each
 concrete element type has its own registration. (The one exception,
-[`RegisterHandlerForDerivedTypes`](#registration), exists for the
+[`RegisterForDerivedTypes`](#registration), exists for the
 T-erased templated-list family and is called out explicitly below.)
 
 ```csharp
@@ -85,7 +85,6 @@ authors.
 ## The handler contract
 
 ```csharp
-[Experimental("REACTOR_V1_PREVIEW")]
 public interface IElementHandler<TElement, TControl>
     where TElement : Element
     where TControl : UIElement
@@ -174,7 +173,6 @@ phase. Each is a `readonly ref struct`, so the context cannot escape
 the call stack, cannot be captured by a closure, and does not allocate.
 
 ```csharp
-[Experimental("REACTOR_V1_PREVIEW")]
 public readonly ref struct MountContext
 {
     private readonly Reconciler _reconciler;
@@ -339,14 +337,12 @@ adapter's switch over the strategy types runs after `Mount` / `Update`
 return, so the handler body itself never has to walk children.
 
 ```csharp
-[Experimental("REACTOR_V1_PREVIEW")]
 public abstract record ChildrenStrategy<TElement, TControl>
     where TElement : Element
     where TControl : UIElement;
 
 /// <summary>Leaf — no children. Engine performs no dispatch beyond the
 /// handler's Mount/Update body.</summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 public sealed record None<TElement, TControl>() : ChildrenStrategy<TElement, TControl>
     where TElement : Element
     where TControl : UIElement;
@@ -361,7 +357,6 @@ public sealed record None<TElement, TControl>() : ChildrenStrategy<TElement, TCo
 /// descendant component state across parent re-renders. When left null,
 /// the engine remounts the child on every update (only safe for slots that
 /// are reset every render anyway). All built-in handlers set it.</para></summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 public sealed record SingleContent<TElement, TControl>(
     Func<TElement, Element?> GetChild,
     Action<TControl, UIElement?> SetChild) : ChildrenStrategy<TElement, TControl>
@@ -402,7 +397,6 @@ public sealed record SingleContent<TElement, TControl>(
 /// only one of the two; <c>RelativePanel</c> is the canonical consumer
 /// of the after-all shape.</para>
 /// </summary>
-[Experimental("REACTOR_V1_PREVIEW")]
 public sealed record Panel<TElement, TControl>(
     Func<TElement, IReadOnlyList<Element>> GetChildren,
     Func<TControl, UIElementCollection> GetCollection) : ChildrenStrategy<TElement, TControl>
@@ -561,6 +555,11 @@ public static class LedIndicatorDescriptor
             set: static (c, v) =>
                 c.Background = new SolidColorBrush(
                     v.IsOn ? v.Color : Color.FromArgb(0x40, v.Color.R, v.Color.G, v.Color.B)));
+
+    internal sealed class Handler : DescriptorHandler<LedIndicatorElement, WinUI.Border>
+    {
+        public Handler() : base(LedIndicatorDescriptor.Descriptor) { }
+    }
 }
 ```
 
@@ -603,38 +602,116 @@ subscribe ordering invariant is preserved by running every entry's
 ## Registration
 
 Handlers are registered with a Reactor host's reconciler before the
-first render. The standard call is `Reconciler.RegisterHandler<TElement,
-TControl>(handler)`:
+first render. There are two paths — a global `ControlRegistry`
+(the standard path for shipping a new control) and a per-host
+`Reconciler.RegisterHandler` (the explicit-override escape hatch used
+by tests and host substitution). The reconciler's lookup tries both
+on every Mount; precedence is documented in
+[Dispatch precedence](#dispatch-precedence) below.
 
-```csharp
-// Registration is one call per Reactor host. RegisterDescriptor wraps
-// RegisterHandler<...>(new DescriptorHandler<...>(descriptor)) — both shapes
-// land on the same dispatch table. Duplicate registrations for the same
-// element type throw.
-public sealed class LedIndicatorRegistration
-{
-    public static void Register(Reconciler reconciler)
-    {
-        reconciler.RegisterHandler<LedIndicatorElement, WinUI.Border>(
-            new DescriptorHandler<LedIndicatorElement, WinUI.Border>(
-                LedIndicatorDescriptor.Descriptor));
-    }
-}
-```
+### `ControlRegistry` (standard path)
 
-There are two variants worth knowing about:
+`ControlRegistry.Register<TElement, TControl>(Func<IElementHandler<TElement,TControl>>)`
+is the surface custom-control authors target. The recommended shape
+is the *factory holder* described in
+[Extending Reactor — Step 6](extending-reactor-controls.md#step-6--wrap-the-constructor-in-a-factory-holder-then-use-it):
+a `static class` whose static constructor calls
+`ControlRegistry.Register` with a `static () => new MyHandler()`
+lambda, paired with an `Of(...)` factory that is the sole
+construction path for the element record. The CLR-guaranteed precise-
+initialization rules mean the registration is in place before any
+`Of(...)` call can return, with no app-bootstrap step required.
 
 | Method | Use when |
 |---|---|
-| `RegisterHandler<TElement, TControl>(handler)` | Standard registration — exact-type dispatch on `element.GetType()`. |
-| `RegisterHandlerForDerivedTypes<TBase, TControl>(handler)` | T-erased registration on a non-generic base type — every closed-T variant whose chain reaches `TBase` routes to the same handler. Used by the typed templated-list family (`TemplatedListViewElement<T>`, etc.). |
+| `ControlRegistry.Register<TElement, TControl>(static () => new MyHandler())` | Standard global registration — exact-type dispatch on `element.GetType()`. The `static` lambda is mandatory: it caches the delegate in a static field (one allocation, ever) and is what lets the trimmer drop the holder→handler→control chain when unreachable. |
+| `ControlRegistry.RegisterDecorator<TElement>(static () => new MyDecorator())` | Decorator handlers (`IDecoratorElementHandler<TElement>`), e.g. for control wrappers that don't follow the standard `Mount(control)` shape. |
+| `ControlRegistry.RegisterForDerivedTypes<TBase, TControl>(static () => new MyHandler())` | T-erased registration on a non-generic base type — every closed-T variant whose chain reaches `TBase` routes to the same handler. Used by the typed templated-list family (`TemplatedListViewElement<T>`, etc.). |
+| `ControlRegistry.RegisterDecoratorForDerivedTypes<TBase>(...)` | Same as above for decorator handlers. |
 
-Exact-type registrations always win over a derived-type registration
-for the same chain. Duplicate registration for the same element type
-**throws** — there is no last-writer-wins. If you need a different
-mapping for the same element type (e.g., a test harness substituting a
-fake control), build a separate `Reconciler` instance for the scope
-that needs the override.
+The built-in controls themselves register through `ControlRegistry`
+from their own factory holders — see
+`src/Reactor/Hosting/XamlInterop.cs` and the per-element-record
+`RegisterDecorator` cctors for the production shape. The
+[Hello-World AOT trim proof](https://github.com/microsoft/microsoft-ui-reactor/tree/main/tests/aot_trim_proof)
+is the authoritative test that this story holds end-to-end: an app
+whose `Render()` references only `TextBlock` and `Button` publishes
+without any of the other built-in handler classes or element records.
+
+### `Reconciler.RegisterHandler` (explicit override / escape hatch)
+
+`Reconciler.RegisterHandler<TElement, TControl>(handler)` registers a
+handler on a single `Reconciler` instance. It exists for two
+scenarios — both narrow:
+
+- **Tests.** A test harness substituting a fake control for a built-in
+  one (e.g., replacing `Button`'s handler with a record-only stub
+  that tracks click counts without rendering a real WinUI button)
+  builds a fresh `Reconciler`, calls `RegisterHandler` to install
+  the fake, and dispatches against it. The per-host registration
+  shadows the global one for the lifetime of that `Reconciler`.
+- **Host substitution.** Authoring a non-WinUI Reactor host
+  (a test surface, a hosted-runtime sandbox) where the global
+  `ControlRegistry`'s handlers reference WinUI types that should not
+  be loaded. Register host-specific handlers per-instance to bypass
+  the global registry entirely.
+
+Custom-control authors should reach for the
+[`ControlRegistry`](#controlregistry-standard-path) path instead. A
+manual per-host `RegisterHandler` call at app bootstrap roots every
+custom control unconditionally and defeats the trim story — see
+[Extending Reactor — playbook caveat](extending-reactor-controls.md#the-four-step-playbook)
+for why the factory-holder shape is the recommended one.
+
+Duplicate registration for the same element type on the same
+reconciler **throws** — there is no last-writer-wins. Exact-type
+registrations always win over a derived-type registration for the
+same chain.
+
+> **Caveat:** **Duplicate-registration semantics differ between the two paths.**
+> The global `ControlRegistry` uses `TryAdd` and is **first-wins
+> idempotent** — a duplicate `ControlRegistry.Register<TElement, …>`
+> call silently no-ops, because surfacing a throw from a factory
+> holder's class-init would manifest as a non-deterministic
+> `TypeInitializationException` at first-use, dependent on which cctor
+> the JIT/AOT runtime ran first. The strict throw-on-duplicate policy
+> (originally from spec 047 §13 Q17) is preserved on the explicit
+> per-host `Reconciler.RegisterHandler` path, where the caller is in
+> control of registration order and a duplicate is unambiguously a
+> mistake. Within a *single* host, the precedence list above means a
+> per-host `RegisterHandler` registration shadows a global
+> `ControlRegistry` registration for the same element type — that
+> asymmetry is by design (test substitution requires shadowing, not
+> throwing). See `src/Reactor/Core/V1Protocol/ControlRegistry.cs` for
+> the canonical comment on the trade-off.
+
+### Dispatch precedence
+
+When the reconciler looks up the handler for an element type, it
+consults four sources in order; the first hit wins:
+
+1. **Per-host exact-type registrations** — entries installed via
+   `Reconciler.RegisterHandler<TElement, TControl>(handler)` on this
+   reconciler instance. These shadow the global registry for this
+   host (the test-substitution shape above).
+2. **Per-host derived-type registrations** — entries installed via
+   `Reconciler.RegisterHandlerForDerivedTypes<TBase, TControl>(handler)`
+   on this reconciler. Caught when the element's chain reaches
+   `TBase` and no exact-type entry matched in step 1.
+3. **Global `ControlRegistry` registrations** — entries installed via
+   `ControlRegistry.Register` / `RegisterDecorator` /
+   `RegisterForDerivedTypes` / `RegisterDecoratorForDerivedTypes`,
+   typically through a factory-holder's static constructor. This is
+   the path every shipping control (built-in or custom) takes.
+4. **Composition primitives** — `VStack`, `HStack`, `Grid`, and the
+   other structural elements that compose into the reconciler's
+   internal panel handlers. These are not user-registrable.
+
+The Pattern A factory-holder shape (Step 3 of the
+[Extending Reactor playbook](extending-reactor-controls.md#the-four-step-playbook))
+lands in source 3 — global `ControlRegistry`. The per-host
+`RegisterHandler` calls in test code land in source 1 and shadow
+whatever the production registration installed.
 
 ## Patterns
 
@@ -694,8 +771,9 @@ interpreter.
 
 **Registering a handler against an open generic.** The dispatch table
 keys on `System.Type`, so an open generic like `typeof(DataGrid<>)`
-has no usable runtime type. Use `RegisterHandlerForDerivedTypes` with
-a non-generic intermediate base when you need to catch every closed
+has no usable runtime type. Use `ControlRegistry.RegisterForDerivedTypes`
+(or the per-host `Reconciler.RegisterHandlerForDerivedTypes`) with a
+non-generic intermediate base when you need to catch every closed
 variant of a generic element family.
 
 ## Tips

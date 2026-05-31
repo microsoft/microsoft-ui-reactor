@@ -211,7 +211,7 @@ Reactor swap your handler closure between renders without
 detaching from the WinUI event:
 
 ```csharp
-private static void EnsureSizeChangedSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, SizeChangedEventArgs>? handler)
+private static void EnsureSizeChangedSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, SizeChangedEventArgs>? handler)
 {
     state.CurrentSizeChanged = handler;
     if (state.SizeChangedTrampoline is null && handler is not null)

@@ -1047,7 +1047,7 @@ docs compile`; **edit the templates, not the compiled output**. The
 relevant memory citation: "User docs under docs/guide are generated from
 docs/_pipeline/templates/*.md.dt".
 
-- [ ] `docs/_pipeline/templates/extending-reactor-controls.md.dt`:
+- [x] `docs/_pipeline/templates/extending-reactor-controls.md.dt`:
       - Replace the "five-step playbook" table (lines ~36–47) with a
         four-step playbook that drops step 3 (the `Register` extension)
         and step 4 (the explicit per-host `RegisterHandler` call). The
@@ -1064,7 +1064,26 @@ docs/_pipeline/templates/*.md.dt".
         passed to `ControlRegistry.Register`.
       - Cross-link to the new `aot-trim-proof` Hello-World app as the
         canonical "prove your control trims" recipe.
-- [ ] `docs/_pipeline/templates/control-reconciler-protocol.md.dt`:
+      - **Close-out (commit `<this-commit>`):** Rewrote the playbook
+        table to four steps (drops the old per-host `Register`
+        extension + startup-call rows); split-and-rewrote the body
+        "Step 6 — Register and use" into a single Pattern A section
+        showing the `StarMeter` factory holder with a `static () =>
+        new Handler()` lambda, an `Of(...)` factory, and an `internal`
+        primary ctor. Rewrote Step 1 prose to explain the construction
+        discipline (`internal` ctor, public `init` props, `with`
+        expressions). Replaced the "Registering against the wrong
+        reconciler" common mistake with three new ones — non-`static`
+        lambda, bypassing the factory with `new MyElement(...)`, and
+        registering on a per-host reconciler when the global registry
+        was meant. Added a cross-link to
+        `tests/aot_trim_proof/Reactor.AotHelloWorld` as the
+        authoritative "prove your control trims" recipe. Updated the
+        live `docs/_pipeline/apps/extending-reactor-controls/App.cs`
+        snippet source to Pattern A (built clean against the snippet
+        compiler). Anchors verified via `mur docs compile --pages
+        extending-reactor-controls,control-reconciler-protocol`.
+- [x] `docs/_pipeline/templates/control-reconciler-protocol.md.dt`:
       - Add a "Dispatch precedence" section enumerating the four-step
         order (spec §8 precedence list).
       - Document the global `ControlRegistry` as the standard
@@ -1074,20 +1093,55 @@ docs/_pipeline/templates/*.md.dt".
       - Add a Caveat block explaining the open-question §12.1 amendment:
         global registry is **first-wins idempotent**, per-host
         `RegisterHandler` keeps the strict throw-on-duplicate.
-- [ ] `docs/_pipeline/templates/controls.md.dt` (and any other guide page
+      - **Close-out (commit `<this-commit>`):** Rewrote the "Registration"
+        section wholesale into three subsections: `ControlRegistry`
+        (standard path) with a 4-row method table covering
+        `Register` / `RegisterDecorator` / `RegisterForDerivedTypes` /
+        `RegisterDecoratorForDerivedTypes`; `Reconciler.RegisterHandler`
+        (explicit override / escape hatch) with the test-substitution
+        and host-substitution scenarios called out as the only intended
+        uses; and a new "Dispatch precedence" subsection enumerating
+        the four-source order (per-host exact → per-host derived →
+        global `ControlRegistry` → composition primitives). Added the
+        §12.1 caveat block contrasting `TryAdd`/first-wins (global) vs
+        strict throw-on-duplicate (per-host) with the rationale (cctor
+        throws are non-deterministic at first-use). Updated the
+        "Registering a handler against an open generic" common mistake
+        to point at `ControlRegistry.RegisterForDerivedTypes`. Updated
+        the early "Dispatch — one handler per element type" section's
+        anchor reference from `RegisterHandlerForDerivedTypes` to
+        `RegisterForDerivedTypes`. Also brought the
+        `docs/_pipeline/apps/v1-protocol/App.cs` snippet source onto
+        Pattern A (LedIndicator factory holder) for consistency.
+- [x] `docs/_pipeline/templates/controls.md.dt` (and any other guide page
       that mentions registration): scrub for now-stale references to
       `RegisterV1BuiltInHandlers` or "register the handler at startup".
+      - **Close-out:** Searched all `docs/_pipeline/templates/*.md.dt`
+        for `RegisterV1BuiltInHandlers`, `RegisterHandler`,
+        `register .* at startup`, and `reconciler.Register`. All
+        remaining matches are in the two templates updated above and
+        sit inside the intentional "explicit override / escape hatch"
+        prose; no other guide page references the old shape.
 - [ ] Add a new `docs/_pipeline/templates/control-registration-and-trimming.md.dt`
       page (tier: `solid`) that teaches the trim story end-to-end:
       Pattern A for a single control, Pattern B (the `Reg<>` helper) for
       a control library, the Hello-World AOT app as the verification
       recipe. Doc app under `docs/_pipeline/apps/control-registration-and-trimming/`.
-- [ ] Run `mur docs compile` and verify the compiled
+- [x] Run `mur docs compile` and verify the compiled
       `docs/guide/extending-reactor-controls.md` /
       `control-reconciler-protocol.md` / new
       `control-registration-and-trimming.md` are well-formed. If `mur` is
       unavailable in the current env, document the regeneration
       requirement in the PR description so a reviewer with `mur` runs it.
+      - **Close-out:** Ran `mur docs compile --pages
+        extending-reactor-controls,control-reconciler-protocol` twice
+        (initial pass + after §12.1 caveat addition). Both passes
+        compiled cleanly; cross-link analyzer reported only the
+        pre-existing `REACTOR_DOC_XLINK_001` warnings unrelated to
+        spec-048 (UseState/UseEffect/etc. in index/getting-started).
+        New anchor `#step-6--wrap-the-constructor-in-a-factory-holder-then-use-it`
+        resolves; `#controlregistry-standard-path` and
+        `#dispatch-precedence` resolve in the protocol page.
 
 ### 4.2 Source generator (optional)
 

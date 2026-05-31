@@ -6,10 +6,11 @@ using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 using WinUI = Microsoft.UI.Xaml.Controls;
 
-System.AppContext.SetSwitch("Reactor.UseV1Protocol", true);
+// No reconciler-side registration call — Pattern A (spec 048 §6) wires
+// StarMeter's handler into the global ControlRegistry on the first
+// StarMeter.Of() call (whose class-init runs the static cctor below).
 ReactorApp.Run<ExtendingApp>(
-    "Extending Reactor", width: 540, height: 360, devtools: true,
-    configure: host => StarMeterInterop.Register(host.Reconciler));
+    "Extending Reactor", width: 540, height: 360, devtools: true);
 
 // ════════════════════════════════════════════════════════════════════════
 //  Step 1 — Define the Element record
@@ -20,6 +21,13 @@ ReactorApp.Run<ExtendingApp>(
 // props (MaxRating, Caption, IsClearEnabled), and one callback (OnValueChanged).
 // Records give the reconciler value-equality for free — two StarMeterElement
 // instances with identical fields compare equal and Update becomes a no-op.
+//
+// The primary constructor is `internal` (spec 048 §6 construction discipline):
+// external callers cannot `new StarMeterElement(...)` directly, so the only
+// reachable construction path is `StarMeter.Of(...)` below — whose class-init
+// installs the global handler registration. Init properties stay `public` so
+// `Of(...)` and its callers can configure the optional fields, and `with`
+// expressions still work across the assembly boundary.
 public sealed record StarMeterElement : Element
 {
     public double Value { get; init; }
@@ -27,6 +35,12 @@ public sealed record StarMeterElement : Element
     public string? Caption { get; init; }
     public bool IsClearEnabled { get; init; } = true;
     public System.Action<double>? OnValueChanged { get; init; }
+
+    internal StarMeterElement(double value, System.Action<double>? onValueChanged = null)
+    {
+        Value = value;
+        OnValueChanged = onValueChanged;
+    }
 }
 // </snippet:star-meter-element>
 
@@ -71,24 +85,56 @@ public static class StarMeterDescriptor
             unsubscribe: static (fe, h) => { /* trampoline anchored for control lifetime */ },
             callback:    static e => e.OnValueChanged,
             readBack:    static c => c.Value);
+
+    // The thin `new()`-able handler subclass that the `static` lambda in
+    // StarMeter's cctor instantiates. Subclassing DescriptorHandler keeps
+    // the descriptor accessible *only* through this handler — the trimmer
+    // can drop both if the StarMeter factory is never called.
+    internal sealed class Handler : DescriptorHandler<StarMeterElement, WinUI.RatingControl>
+    {
+        public Handler() : base(StarMeterDescriptor.Descriptor) { }
+    }
 }
 // </snippet:star-meter-descriptor>
 
 // ════════════════════════════════════════════════════════════════════════
-//  Step 3 — Register
+//  Step 3 — Wrap the constructor in a factory holder
 // ════════════════════════════════════════════════════════════════════════
 
 // <snippet:star-meter-registration>
-public static class StarMeterInterop
+// Spec 048 §6 Pattern A — the factory holder *is* the registration trigger.
+// The static cctor runs the first time any member of `StarMeter` is touched
+// (CLR-guaranteed precise-init), which means the global ControlRegistry
+// entry is in place before the first Of() call returns its element.
+//
+// The `static` keyword on the lambda is MANDATORY (not stylistic): it
+// guarantees the delegate is cached in a static field (one allocation,
+// ever) and captures nothing. A non-static lambda compiles but allocates
+// a closure per Register call AND defeats the trimmer's ability to follow
+// the holder→handler→control chain. The static lambda is what makes
+// Pattern A trim-clean.
+public static class StarMeter
 {
-    // One call per Reactor host. RegisterHandler accepts any IElementHandler,
-    // and DescriptorHandler<TElement,TControl> is the canonical interpreter
-    // for a ControlDescriptor. Duplicate registration for the same element
-    // type throws — register exactly once on each host you mount.
-    public static void Register(Reconciler reconciler) =>
-        reconciler.RegisterHandler<StarMeterElement, WinUI.RatingControl>(
-            new DescriptorHandler<StarMeterElement, WinUI.RatingControl>(
-                StarMeterDescriptor.Descriptor));
+    static StarMeter() =>
+        ControlRegistry.Register<StarMeterElement, WinUI.RatingControl>(
+            static () => new StarMeterDescriptor.Handler());
+
+    // Sole construction path for StarMeterElement (spec §6 construction
+    // discipline). Calling Of() guarantees the handler is registered before
+    // the returned element is mounted — the cctor above runs before any
+    // member of this type, including Of, can be invoked.
+    public static StarMeterElement Of(
+        double value,
+        System.Action<double>? onValueChanged = null,
+        int maxRating = 5,
+        string? caption = null,
+        bool isClearEnabled = true) =>
+        new(value, onValueChanged)
+        {
+            MaxRating = maxRating,
+            Caption = caption,
+            IsClearEnabled = isClearEnabled,
+        };
 }
 // </snippet:star-meter-registration>
 
@@ -107,13 +153,11 @@ class ExtendingApp : Component
             TextBlock("StarMeter — custom element wrapping WinUI RatingControl")
                 .FontSize(14).SemiBold(),
 
-            new StarMeterElement
-            {
-                Value = rating,
-                MaxRating = 5,
-                Caption = "Rate this page",
-                OnValueChanged = setRating,
-            },
+            // StarMeter.Of(...) is the sole construction path: it returns a
+            // StarMeterElement AND ensures (via its cctor) that the global
+            // ControlRegistry has the handler. No reconciler.RegisterHandler
+            // call lives anywhere in this app.
+            StarMeter.Of(rating, setRating, caption: "Rate this page"),
 
             TextBlock($"current rating: {rating:0.0}"),
 
@@ -124,3 +168,4 @@ class ExtendingApp : Component
     }
 }
 // </snippet:star-meter-usage>
+
