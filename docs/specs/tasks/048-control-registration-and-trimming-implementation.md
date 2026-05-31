@@ -706,6 +706,83 @@ hitting `Reg<TextBlockElement, …>` is silently absorbed — spec §10.3.)
       build is clean — i.e., no remaining call sites reference the
       removed method.
 
+> **§3.4 progress note — decorator global path landed (primitive only):**
+>
+> Resolved the §3.3 "decorator-global-path" blocker that prevented every
+> decorator-backed element type from wiring `Reg<>.Done` registrations.
+> The dispatcher arm 3 (`Reconciler.TryResolveFromControlRegistry`)
+> already consumes the type-erased `IV1HandlerEntry`, and
+> `V1DecoratorHandlerAdapter<TElement>` already implements it, so no
+> dispatch changes were required. Only the registration entry point and
+> a sibling generic shim were missing.
+>
+> **Landed:**
+> - `ControlRegistry.RegisterDecorator<TElement>(Func<IDecoratorElementHandler<TElement>>)`
+>   in `src/Reactor/Core/V1Protocol/ControlRegistry.cs` — mirrors
+>   `Register<TElement,TControl>`, first-wins TryAdd, wraps the handler
+>   factory in a `V1DecoratorHandlerAdapter<TElement>` factory.
+> - `RegDecorator<TElement, THandler>` 2-arity static class in
+>   `src/Reactor/Core/V1Protocol/RegDecorator.cs` — `Done` byte field
+>   touch triggers the closed-generic cctor that calls
+>   `ControlRegistry.RegisterDecorator<TElement>(static () => new THandler())`.
+>   Constraints: `THandler : IDecoratorElementHandler<TElement>, new()`.
+>   The CLR distinguishes `Reg<E,C,H>` (3-arity) from
+>   `RegDecorator<E,H>` (2-arity) by arity, so authors get two clear
+>   shims with no ambiguity.
+> - Xunit coverage: 6 new tests in `Spec048/V1Protocol/RegDecoratorTests.cs`
+>   (first-touch / repeat-read / sentinel / aliased-factory / concurrent /
+>   distinct-closed-generic / dispatch smoke), 5 new tests in
+>   `ControlRegistryTests.cs` (RegisterDecorator add / null-factory /
+>   first-wins / cross-path collision / per-host cache hop). Total
+>   9160 passed / 0 failed (up from 9148), `-p:Platform=x64`.
+> - Selftest: full `--self-test` suite still green; the existing 77
+>   Spec048 checks unaffected (no fan-out lands in this slice).
+>
+> **One-shim authoring rule (documented in both XML doc blocks).** For any
+> given TElement, factories must touch *exactly one* of `Reg<…>.Done` or
+> `RegDecorator<…>.Done`. `ControlRegistry`'s first-wins TryAdd silently
+> drops the second registration, which is correct for the alias case
+> (multiple factories on the *same* closed-generic shim) but dangerous if
+> two distinct shims target the same TElement. The
+> `RegisterDecorator_And_Register_Are_FirstWins_For_Same_Element_Type`
+> xunit pins this semantic so a future contributor sees the silent-drop
+> is intentional, not a bug to "fix" by throwing.
+>
+> **Singleton-handler decorators (Icon/XamlHost/XamlPage)** cannot
+> satisfy the `new()` constraint because their underlying
+> `IDecoratorElementHandler<T>` types are private nested classes (e.g.
+> `IconDescriptor.Handler = new IconHandler();` where `IconHandler` is
+> `private sealed`). Those three factories will use
+> `ControlRegistry.RegisterDecorator<E>(static () => Descriptor.Handler)`
+> directly in their fan-out commit. Documented in
+> `ControlRegistry.RegisterDecorator` and `RegDecorator` XML.
+>
+> **Remaining §3.4 blockers** (still queued):
+> - Base-derived global path — `RegBase<TBase,TControl,THandler>` +
+>   decorator variant; requires `ControlRegistry` to grow a base map
+>   mirroring `V1HandlerRegistry._baseEntries` with cached base walk.
+>   Needed for `ItemsRepeater`, `ItemsView` (base-derived descriptor) and
+>   `LazyStackElementBase`, `TemplatedListElementBase` (base-derived
+>   decorator).
+> - Test-reset strategy — `ControlRegistry.ResetForTesting()` strips
+>   cctor-set entries, so the §3.4 deletion of
+>   `RegisterV1BuiltInHandlers` will silently break the xunit suite
+>   unless reset semantics change (e.g., re-trigger registrations on a
+>   subsequent factory call, or scope reset to test-scoped element types
+>   only).
+> - Closing element ctors — make built-in element record ctors
+>   `internal` so external callers must go through factories (force the
+>   `Reg<…>.Done` touch). Trim-proof correctness depends on this.
+>
+> **Decorator fan-out** (the actual wiring of Button/CheckBox/Canvas/
+> Expander/Flex/Grid/RelativePanel/Stack/WrapGrid + 6 Overlays + Icon/
+> XamlHost/XamlPage) is **not** part of this slice; it lands in
+> follow-on commits like the §3.3 group fan-outs, but is now structurally
+> unblocked. Per the one-shim rule each decorator-backed element type
+> must use either the new `RegDecorator<…>` shim or (for singleton
+> handlers) the direct `ControlRegistry.RegisterDecorator` call, never
+> both alongside a `Reg<>`.
+
 ### 3.5 Enforce the "no type-level aggregation on `Factories`" invariant (spec §10.2, §10.4)
 
 - [ ] Audit all `Dsl*.cs` partials for: (a) any `static` constructor on

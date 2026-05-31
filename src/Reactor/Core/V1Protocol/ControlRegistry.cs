@@ -96,6 +96,82 @@ public static class ControlRegistry
     }
 
     /// <summary>
+    /// Spec 048 §3.4 — decorator sibling of <see cref="Register{TElement,TControl}"/>
+    /// for handlers that implement
+    /// <see cref="IDecoratorElementHandler{TElement}"/> (a separate,
+    /// non-inheriting interface from <see cref="IElementHandler{TElement,TControl}"/>).
+    /// Decorator handlers cover target-wrapping flyouts, modal lifecycle
+    /// wrappers, polymorphic mounts (IconElement), interop bridges
+    /// (XamlHost/XamlPage), and the keyed-reconcile panels (Stack/Grid/
+    /// Canvas/RelativePanel/WrapGrid/Flex) + Button/CheckBox/Expander — see
+    /// <see cref="IDecoratorElementHandler{TElement}"/> for the full
+    /// use-case list.
+    ///
+    /// <para>Stores the same <see cref="Func{IV1HandlerEntry}"/> shape as
+    /// the value-handler path, so <see cref="Reconciler.TryResolveFromControlRegistry"/>
+    /// (dispatch arm 3) consumes both uniformly — no dispatch changes
+    /// required. The adapter wrapping is the only difference:
+    /// <see cref="V1DecoratorHandlerAdapter{TElement}"/> versus
+    /// <see cref="V1HandlerAdapter{TElement,TControl}"/>.</para>
+    ///
+    /// <para><b>One-shim invariant (§3.4 authoring rule).</b> For any given
+    /// element type, factories must touch <i>exactly one</i> of
+    /// <c>Reg&lt;…&gt;.Done</c> or <c>RegDecorator&lt;…&gt;.Done</c> —
+    /// never both. The first-wins TryAdd silently keeps whichever path's
+    /// cctor fires first; mixing them creates a non-deterministic
+    /// dispatch outcome that depends on factory call order across the
+    /// app's startup graph. This contrasts with the harmless aliasing
+    /// case where multiple factories share the <i>same</i> closed-generic
+    /// shim (spec §10.3 Heading/Subheading both touching
+    /// <c>Reg&lt;TextBlockElement, TextBlock, TextBlockHandler&gt;</c>).</para>
+    ///
+    /// <para><b>Singleton-handler factories.</b> Decorator handlers exposed
+    /// as <c>public static readonly</c> singletons (e.g.
+    /// <c>IconDescriptor.Handler</c>, <c>XamlHostDescriptor.Handler</c>,
+    /// <c>XamlPageDescriptor.Handler</c>) cannot satisfy
+    /// <c>RegDecorator</c>'s <c>new()</c> constraint because the underlying
+    /// handler types are private nested classes. Those factories register
+    /// directly via this method with a <c>static</c> lambda returning the
+    /// singleton:
+    /// <code>
+    /// public static IconElement Icon(IconKind kind)
+    /// {
+    ///     ControlRegistry.RegisterDecorator&lt;IconElement&gt;(
+    ///         static () =&gt; IconDescriptor.Handler);
+    ///     return new IconElement(kind);
+    /// }
+    /// </code>
+    /// This is functionally equivalent to <c>RegDecorator&lt;…&gt;.Done</c>
+    /// — the static lambda still has no captures, the TryAdd still
+    /// first-wins, and the trim story still routes every reference to the
+    /// private handler type through the factory call-site path the
+    /// trimmer can see.</para>
+    /// </summary>
+    /// <typeparam name="TElement">The element record type the decorator
+    /// handler dispatches against. Used as the dispatch key
+    /// (<see cref="Type"/>).</typeparam>
+    /// <param name="handlerFactory">A factory that, when invoked, returns
+    /// a fresh decorator handler. Strongly recommended to be a
+    /// <c>static</c> lambda (e.g.
+    /// <c>static () =&gt; new ButtonHandler()</c>) so the delegate is
+    /// cached in a static field and no closure is allocated.</param>
+    public static void RegisterDecorator<TElement>(
+        Func<IDecoratorElementHandler<TElement>> handlerFactory)
+        where TElement : Element
+    {
+        ArgumentNullException.ThrowIfNull(handlerFactory);
+
+        // Same closed-generic capture pattern as Register<E,C> — the
+        // TElement frame is statically visible to the JIT/AOT compiler at
+        // every call site. Allocated once per (element type) on
+        // registration, not per dispatch.
+        Func<IV1HandlerEntry> adapterFactory = () =>
+            new V1DecoratorHandlerAdapter<TElement>(handlerFactory());
+
+        s_entries.TryAdd(typeof(TElement), adapterFactory);
+    }
+
+    /// <summary>
     /// Spec §8 — internal resolution hatch the <see cref="Reconciler"/>
     /// consults when its per-host <c>_v1Handlers</c> and per-host
     /// <c>_typeRegistry</c> both miss. On a hit, the caller is responsible

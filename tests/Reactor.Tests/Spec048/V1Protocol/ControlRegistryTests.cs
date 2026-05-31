@@ -290,6 +290,133 @@ public class ControlRegistryTests : IDisposable
         Assert.True(ControlRegistry.Contains(typeof(ProbeElement)));
         Assert.True(ControlRegistry.Contains(typeof(OtherProbeElement)));
     }
+
+    // ═════════════════════════════════════════════════════════════════
+    // Spec 048 §3.4 — RegisterDecorator contract. Decorator handlers
+    // implement the SEPARATE IDecoratorElementHandler<TElement>
+    // interface and need a parallel registration entry point that
+    // bridges to V1DecoratorHandlerAdapter<TElement>.
+    // ═════════════════════════════════════════════════════════════════
+
+    public record DecoratorProbeElement(string Tag) : Element;
+
+    public sealed class DecoratorProbeHandler : IDecoratorElementHandler<DecoratorProbeElement>
+    {
+        public string? Identity { get; set; }
+        public UIElement Mount(MountContext ctx, DecoratorProbeElement element) => null!;
+        public UIElement Update(UpdateContext ctx, DecoratorProbeElement oldEl, DecoratorProbeElement newEl, UIElement control) => control;
+        public V1UnmountDisposition Unmount(UnmountContext ctx, DecoratorProbeElement? element, UIElement control)
+            => V1UnmountDisposition.CollectSelf;
+    }
+
+    [Fact]
+    public void RegisterDecorator_Adds_Element_Type_To_Registry()
+    {
+        Assert.Equal(0, ControlRegistry.Count);
+
+        ControlRegistry.RegisterDecorator<DecoratorProbeElement>(static () => new DecoratorProbeHandler());
+
+        Assert.Equal(1, ControlRegistry.Count);
+        Assert.True(ControlRegistry.Contains(typeof(DecoratorProbeElement)));
+        Assert.True(ControlRegistry.TryResolve(typeof(DecoratorProbeElement), out _));
+    }
+
+    [Fact]
+    public void RegisterDecorator_Throws_On_Null_Factory()
+    {
+        Assert.Throws<ArgumentNullException>(() =>
+            ControlRegistry.RegisterDecorator<DecoratorProbeElement>(null!));
+    }
+
+    [Fact]
+    public void RegisterDecorator_Twice_Is_Silent_NoOp_First_Wins()
+    {
+        var firstFactoryCalls = 0;
+        var secondFactoryCalls = 0;
+
+        ControlRegistry.RegisterDecorator<DecoratorProbeElement>(() =>
+        {
+            Interlocked.Increment(ref firstFactoryCalls);
+            return new DecoratorProbeHandler { Identity = "first" };
+        });
+
+        ControlRegistry.RegisterDecorator<DecoratorProbeElement>(() =>
+        {
+            Interlocked.Increment(ref secondFactoryCalls);
+            return new DecoratorProbeHandler { Identity = "second" };
+        });
+
+        Assert.Equal(1, ControlRegistry.Count);
+
+        // Resolve to invoke the winning factory and confirm it's the first.
+        var rec = new Reconciler();
+        Assert.True(rec.TryResolveFromControlRegistry(typeof(DecoratorProbeElement), out _));
+
+        Assert.Equal(1, firstFactoryCalls);
+        Assert.Equal(0, secondFactoryCalls);
+    }
+
+    [Fact]
+    public void RegisterDecorator_And_Register_Are_FirstWins_For_Same_Element_Type()
+    {
+        // Mixing Reg<> (value) and RegDecorator (decorator) for the same
+        // TElement is the §3.4 authoring rule violation. The registry
+        // itself doesn't reject the mix — it's first-wins TryAdd, same as
+        // any other dup. This test pins that semantic so a future
+        // contributor sees the silent-drop behavior is intentional and
+        // not a bug to "fix" by throwing.
+
+        var valueFactoryCalls = 0;
+        var decoratorFactoryCalls = 0;
+
+        // Reusing DecoratorProbeElement as a fake "value-path" element
+        // type just for this collision test; the value-path handler is a
+        // throwaway no-op shape.
+        ControlRegistry.Register<DecoratorProbeElement, UIElement>(() =>
+        {
+            Interlocked.Increment(ref valueFactoryCalls);
+            return new ValueAdapterShim();
+        });
+
+        ControlRegistry.RegisterDecorator<DecoratorProbeElement>(() =>
+        {
+            Interlocked.Increment(ref decoratorFactoryCalls);
+            return new DecoratorProbeHandler();
+        });
+
+        Assert.Equal(1, ControlRegistry.Count);
+
+        var rec = new Reconciler();
+        Assert.True(rec.TryResolveFromControlRegistry(typeof(DecoratorProbeElement), out _));
+
+        // Value path registered first → its factory ran on resolve.
+        // Decorator factory was silently dropped.
+        Assert.Equal(1, valueFactoryCalls);
+        Assert.Equal(0, decoratorFactoryCalls);
+    }
+
+    private sealed class ValueAdapterShim : IElementHandler<DecoratorProbeElement, UIElement>
+    {
+        public UIElement Mount(MountContext ctx, DecoratorProbeElement element) => null!;
+        public void Update(UpdateContext ctx, DecoratorProbeElement oldEl, DecoratorProbeElement newEl, UIElement control) { }
+    }
+
+    [Fact]
+    public void RegisterDecorator_Resolved_Entry_Is_Cached_Into_Host_V1Handlers()
+    {
+        ControlRegistry.RegisterDecorator<DecoratorProbeElement>(static () => new DecoratorProbeHandler());
+
+        var rec = new Reconciler();
+        Assert.False(rec._v1Handlers.TryGet(typeof(DecoratorProbeElement), out _));
+
+        Assert.True(rec.TryResolveFromControlRegistry(typeof(DecoratorProbeElement), out var entry1));
+
+        // After a registry hit the per-host cache holds the adapter, so a
+        // second TryGet on _v1Handlers short-circuits without re-walking
+        // the registry. This is the documented arm 3 → arm 1 cache hop.
+        Assert.True(rec._v1Handlers.TryGet(typeof(DecoratorProbeElement), out var entry2));
+        Assert.Same(entry1, entry2);
+    }
 }
 
 [CollectionDefinition(nameof(ControlRegistryTestCollection), DisableParallelization = true)]
