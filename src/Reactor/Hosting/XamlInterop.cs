@@ -20,7 +20,8 @@ public record XamlPageElement(Type PageType, object? Parameter = null) : Element
         // type load. Provides the global ControlRegistry entry that legacy
         // XamlInterop.Register also installs per-host, so callers that
         // construct `new XamlPageElement(...)` directly (no Register call) are
-        // also covered once RegisterV1BuiltInHandlers is deleted.
+        // also covered now that the eager registrar (RegisterV1BuiltInHandlers)
+        // has been deleted.
         Microsoft.UI.Reactor.Core.V1Protocol.ControlRegistry.RegisterDecorator<XamlPageElement>(
             static () => Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors.XamlPageDescriptor.Handler);
     }

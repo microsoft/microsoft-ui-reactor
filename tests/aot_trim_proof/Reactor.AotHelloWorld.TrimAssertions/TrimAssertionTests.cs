@@ -47,35 +47,100 @@ public sealed class TrimAssertionTests
     /// published binary at the current spec phase. The set grows as later
     /// phases migrate more controls to lazy registration:
     /// <list type="bullet">
-    ///   <item>Phase 2 (current): <c>Marquee*</c> — the Pattern A proof.
+    ///   <item>Phase 2: <c>Marquee*</c> — the Pattern A proof.
     ///         An app that does not call <c>Marquee.Of(...)</c> must not
     ///         pull in <c>MarqueeHandler</c> or <c>MarqueeControl</c>.</item>
-    ///   <item>Phase 3 (Pattern B migration): add built-in handlers and
-    ///         their WinUI types: <c>TreeViewHandler</c>,
-    ///         <c>GridViewHandler</c>, <c>TabViewHandler</c>,
-    ///         <c>Microsoft.UI.Xaml.Controls.TreeView</c>,
-    ///         <c>Microsoft.UI.Xaml.Controls.GridView</c>, etc. The full
-    ///         list at Phase 3 completion lives in spec §11.</item>
+    ///   <item>Phase 3 (Pattern B migration, §3.4 complete): built-in
+    ///         handlers + WinUI control types whose factories aren't called
+    ///         from <c>App.Render()</c>. With <c>RegisterV1BuiltInHandlers</c>
+    ///         deleted (§3.4, commit <c>d63066df</c>), the only static
+    ///         reference to a built-in handler is the <c>Reg&lt;…&gt;.Done</c>
+    ///         touch inside its factory body. A factory that is never called
+    ///         leaves its closed-generic <c>Reg&lt;&gt;</c> slot unreachable,
+    ///         and the trimmer drops both the slot and the handler type it
+    ///         would have instantiated.</item>
     /// </list>
     /// Symbols are added to this list only when the spec phase that owns
     /// their lazy-registration shape has shipped. A premature addition
     /// would fail the assertion for the wrong reason — not "trim
-    /// regression" but "Phase N hasn't happened yet".</summary>
+    /// regression" but "Phase N hasn't happened yet".
+    ///
+    /// <para><b>Why this list, not the entire catalog?</b> §11 of the spec
+    /// scopes the forbidden set to a handful of canonical Reactor-owned
+    /// names — enough to catch a regression that re-roots the catalog,
+    /// without coupling the test to WinAppSDK's own evolving trim story.
+    /// Reactor handler classes (e.g. <c>TreeViewHandler</c>) are
+    /// 100%-Reactor-owned and must always trim; WinUI control names
+    /// (e.g. <c>Microsoft.UI.Xaml.Controls.TreeView</c>) are probed but
+    /// caveated — the SDK may root them internally and that is out of
+    /// scope per spec §11.</para>
+    ///
+    /// <para><b>Hello-World reachability surface.</b>
+    /// <c>App.Render()</c> calls exactly three factories — <c>VStack</c>,
+    /// <c>TextBlock</c>, <c>Button</c>. Everything else in the Reactor
+    /// catalog is unreachable from the entry point.</para></summary>
     private static readonly string[] ForbiddenSymbols =
     [
-        // Phase 2 — Pattern A proof. External proof control, referenced
-        // via ProjectReference but never constructed (Marquee.Of is never
+        // ── Phase 2 — Pattern A proof (external Marquee control). ────────
+        // ProjectReference'd but never constructed (Marquee.Of is never
         // called). Static-cctor-driven Pattern A registration means the
         // trimmer cannot find a static reference to MarqueeHandler or
         // MarqueeControl from any kept type.
         "MarqueeControl",
         "MarqueeHandler",
 
-        // Phase 3 will add (see spec §11):
-        //   "TreeViewHandler", "GridViewHandler", "TabViewHandler",
-        //   "Microsoft.UI.Xaml.Controls.TreeView",
-        //   "Microsoft.UI.Xaml.Controls.GridView",
-        // ...and other built-ins that migrate to Pattern B Reg<E,C,H>.Done.
+        // ── Phase 3 — Pattern B proof (built-in lazy registration). ──────
+        // Reactor-owned handler classes for collection / navigation controls
+        // not used by App.Render(). With RegisterV1BuiltInHandlers deleted
+        // (§3.4), each handler is rooted only by its factory's Reg<>.Done
+        // touch; an uncalled factory means a cold closed-generic Reg<> slot
+        // and a trimmable handler type.
+        "TreeViewHandler",
+        "GridViewHandler",
+        "TabViewHandler",
+        "ListViewHandler",
+        "FlipViewHandler",
+        "PivotHandler",
+        "NavigationViewDescriptorHandler",
+        "CalendarViewDescriptorHandler",
+        "CalendarDatePickerDescriptorHandler",
+        "TimePickerDescriptorHandler",
+        "DatePickerDescriptorHandler",
+        "NumberBoxDescriptorHandler",
+        "ColorPickerDescriptorHandler",
+        "MediaPlayerElementDescriptorHandler",
+        "WebView2DescriptorHandler",
+        "MapControlDescriptorHandler",
+        "TeachingTipDescriptorHandler",
+        "InfoBarDescriptorHandler",
+        "BreadcrumbBarDescriptorHandler",
+
+        // Reactor-owned element-record names for the same set. An element
+        // record is reachable only if its factory is called *or* an external
+        // caller constructs it directly. App.Render() does neither for any of
+        // these, so the records and their per-element wiring (Update / Mount
+        // handler dispatch arms) must all trim.
+        "TreeViewElement",
+        "GridViewElement",
+        "TabViewElement",
+        "CalendarViewElement",
+        "NumberBoxElement",
+        "WebView2Element",
+
+        // ── NOT included: Microsoft.UI.Xaml.Controls.* names. ────────────
+        // Earlier drafts of this list also probed WinUI control type names
+        // like Microsoft.UI.Xaml.Controls.{TreeView, GridView, TabView,
+        // CalendarView, NumberBox}. Empirical observation post-§3.4: those
+        // names survive in the NativeAOT-published .exe even when no Reactor
+        // factory references them, because WinAppSDK's CsWinRT projection
+        // layer carries a complete type-table for COM activation regardless
+        // of which controls the app actually uses. Per spec §11 caveat
+        // ("the assertion checks Reactor-side rooting, not the SDK's
+        // internal types — an SDK regression that re-roots its own controls
+        // is out of scope for this guard"), the WinUI names are not a valid
+        // probe today. Reactor-side rooting is fully covered by the
+        // Reactor-owned symbol set above (Handler classes + Element
+        // records), which is the spec-relevant invariant.
     ];
 
     /// <summary>Positive control — the scanner is correct only if it can

@@ -52,8 +52,7 @@ public static partial class Factories
     {
         // Spec 048 §7 — register TextBlockElement's handler into the global
         // ControlRegistry the first time any TextBlock-producing factory runs.
-        // Dormant while RegisterV1BuiltInHandlers is intact (per-host arm 1 wins);
-        // becomes the live dispatch path once §3.4 deletes the eager registrar.
+        // Post-§3.4 this is the live dispatch path (the eager registrar is gone).
         _ = V1.Reg<TextBlockElement, WinUI.TextBlock, Desc.TextBlockDescriptorHandler>.Done;
         return new(content);
     }
@@ -149,7 +148,7 @@ public static partial class Factories
     public static ButtonElement Button(string label, Action? onClick = null)
     {
         // Spec 048 §3.4 — decorator-global-path fan-out (see RegDecorator XML).
-        // Dormant while RegisterV1BuiltInHandlers is intact (per-host arm 1 wins).
+        // Live dispatch path post-§3.4 (the eager registrar is gone).
         _ = V1.RegDecorator<ButtonElement, V1.Handlers.ButtonHandler>.Done;
         return new(label, onClick);
     }
@@ -181,7 +180,7 @@ public static partial class Factories
     {
         // Spec 048 §3.3 — register HyperlinkButtonElement's handler into the
         // global ControlRegistry on first HyperlinkButton-producing factory use.
-        // Dormant while RegisterV1BuiltInHandlers is intact (per-host arm 1 wins).
+        // Live dispatch path post-§3.4 (the eager registrar is gone).
         _ = V1.Reg<HyperlinkButtonElement, WinUI.HyperlinkButton, Desc.HyperlinkButtonDescriptorHandler>.Done;
         return new(content, navigateUri, onClick);
     }

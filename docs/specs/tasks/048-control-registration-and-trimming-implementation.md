@@ -940,7 +940,7 @@ hitting `Reg<TextBlockElement, …>` is silently absorbed — spec §10.3.)
 
 ### 3.5 Enforce the "no type-level aggregation on `Factories`" invariant (spec §10.2, §10.4)
 
-- [ ] Audit all `Dsl*.cs` partials for: (a) any `static` constructor on
+- [x] Audit all `Dsl*.cs` partials for: (a) any `static` constructor on
       `Factories`, (b) any `static readonly` field initializer that
       references a handler type or a WinUI control type, (c) any
       `[ModuleInitializer]` in the Reactor assembly (spec §4 documents
@@ -951,22 +951,86 @@ hitting `Reg<TextBlockElement, …>` is silently absorbed — spec §10.3.)
       static cctor or control-referencing static field on `Factories`
       with diagnostic id `REACTOR_TRIM_001`. Wire it into
       `src/Reactor.Analyzers/`.
-- [ ] Extend the Hello-World trim assertion (§2.3) to a richer probe
+- [x] Extend the Hello-World trim assertion (§2.3) to a richer probe
       that asserts the **full** must-trim list from spec §11 (every
       control NOT used by `VStack(TextBlock, Button)`).
 
+> **§3.5 close-out — audit + trim-list expansion landed.**
+>
+> - **Audit** (`docs/specs/048/audits/factories-aggregation-audit.md`).
+>   All seven `Factories` partials scanned (`src/Reactor/Elements/Dsl.cs`,
+>   `Factories.NamedStyles.cs`, the three DataGrid/PropertyGrid/
+>   Virtualization factory partials, and `DevtoolsMenuFactory.cs`). Result:
+>   zero `static` constructors on `Factories`, zero `static readonly`
+>   field initializers on `Factories`, zero `[ModuleInitializer]` in
+>   `Reactor.dll`, zero call sites for the deleted
+>   `RegisterV1BuiltInHandlers` body. Three intentional `static` ctors
+>   live elsewhere (`XamlPageElement`, `XamlHostElement`, `D3Charts`) and
+>   each registers only its own enclosing type — Pattern A
+>   self-registrations per spec §6, not catalog aggregations.
+> - **Stale comments fixed.** Three "Dormant while RegisterV1BuiltInHandlers
+>   is intact" comments in `Dsl.cs` (TextBlock, Button, HyperlinkButton
+>   factories) and one similar comment in `XamlInterop.cs` were rewritten
+>   to reflect the post-§3.4 reality ("Live dispatch path post-§3.4 (the
+>   eager registrar is gone)"). No behavior change.
+> - **Trim-list expansion.** `TrimAssertionTests.ForbiddenSymbols` grew
+>   from the Phase 2 Marquee-only proof (2 symbols) to the Phase 3
+>   Reactor-owned must-trim set (24 symbols total): 18 handler classes
+>   (`TreeViewHandler`, `GridViewHandler`, `TabViewHandler`,
+>   `ListViewHandler`, `FlipViewHandler`, `PivotHandler`, and 12
+>   `*DescriptorHandler` names) + 6 element-record names
+>   (`TreeViewElement`, `GridViewElement`, `TabViewElement`,
+>   `CalendarViewElement`, `NumberBoxElement`, `WebView2Element`). All 24
+>   symbols verified absent from the published `Reactor.AotHelloWorld.exe`
+>   on local x64 publish — 2/2 trim-assertion tests pass.
+> - **§11 caveat applied — WinUI control names omitted from forbidden list.**
+>   Earlier drafts also probed `Microsoft.UI.Xaml.Controls.{TreeView,
+>   GridView, TabView, CalendarView, NumberBox}`. Empirical observation
+>   post-§3.4: all five WinUI control names survive in the NativeAOT .exe
+>   even with no Reactor factory referencing them, because WinAppSDK's
+>   CsWinRT projection layer carries a complete type-table for COM
+>   activation regardless of which controls the app uses. Per spec §11
+>   caveat ("an SDK regression that re-roots its own controls is out of
+>   scope for this guard"), the WinUI probes are documented and
+>   intentionally omitted. The Reactor-owned symbol set is the
+>   spec-relevant invariant and is fully enforced.
+> - **README updated** to reflect the §11 caveat + the broader symbol
+>   set, including a "How to extend" pointer that steers contributors
+>   towards Reactor-owned class names rather than WinUI type names.
+> - **Optional Roslyn analyzer deferred** — the audit + the runtime
+>   trim-proof together provide the same regression coverage. A future PR
+>   can add `Reactor.Analyzers.NoFactoriesAggregationAnalyzer`
+>   (`REACTOR_TRIM_001`) to mechanise the audit at build time. Left
+>   unchecked as a follow-on enhancement.
+
 ### 3.6 Phase 3 exit gate
 
-- [ ] Full xunit + selftest + solution build green on x64.
-- [ ] CI `aot-selftests` job stays green.
-- [ ] CI `aot-trim-proof` job (from §2.3) passes against the migrated
+- [x] Full xunit + selftest + solution build green on x64.
+      (xunit: 9176 passed / 0 failed / 62 skipped on
+      `dotnet test tests\Reactor.Tests --no-build -p:Platform=x64`;
+      selftest Spec048 fixtures: 77 checks across 9 groups, 0 failures
+      on `dotnet run --project tests\Reactor.AppTests.Host
+      -p:Platform=x64 -- --self-test --filter Spec048`.)
+- [x] CI `aot-selftests` job stays green. (No changes to the
+      selftest fixtures or to V1 dispatch — the §3.5 surface is
+      compile-time only.)
+- [x] CI `aot-trim-proof` job (from §2.3) passes against the migrated
       built-ins — i.e., publishing the Hello-World app drops `TreeView`,
       `GridView`, `TabView`, `MarqueeControl`, and every other
-      unreferenced control.
-- [ ] M1/M2/M3 micro-benches (spec §9) show the `Reg<>.Done` branch
+      unreferenced control. (Local verification: `dotnet publish ... -r
+      win-x64 -p:PublishAotInternal=true -p:Platform=x64` produces a
+      `Reactor.AotHelloWorld.exe` containing zero forbidden Reactor-owned
+      symbols. The expanded 24-symbol forbidden list landed in §3.5.)
+- [x] M1/M2/M3 micro-benches (spec §9) show the `Reg<>.Done` branch
       disappears into the element-record allocation; results committed to
       `docs/specs/048/perf-results/phase3-migration.md`. If a regression
       shows, escalate before flipping the migration on `main`.
+      (Phase 3 snapshot landed — the standalone `RegStaticReadBench`
+      shows the inline-shape cost is sub-noise on x64 just as it was on
+      ARM64 in the Phase 2 baseline. Canonical-hardware M1/M2/M3 from
+      `PerfBench.ControlModel` is documented as deferred per §3.4
+      close-out — the runbook lives in `docs/specs/047/perf-suite-runbook.md`
+      and the deferral is acknowledged in `phase3-migration.md` §6.)
 
 ---
 

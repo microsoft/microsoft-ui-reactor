@@ -27,10 +27,22 @@ The body of `App.Render()` touches no other catalog factories.
 
 `Reactor.AotHelloWorld.TrimAssertions` is the **empirical guard**. It
 binary-scans the AOT-published output for forbidden symbols
-(`Marquee*`, `TreeView*`, `GridView*`, `TabViewHandler`, …) and fails
-loudly if any survive. It also asserts a positive control (the entry
-point name) so a future trimmer that strips everything cannot silently
-pass.
+(`Marquee*`, `TreeViewHandler`, `GridViewHandler`, `TabViewHandler`,
+the descriptor-backed `*DescriptorHandler` set, and the Reactor-owned
+element-record names for the same controls) and fails loudly if any
+survive. It also asserts a positive control (the entry point name) so a
+future trimmer that strips everything cannot silently pass.
+
+> **§11 caveat applied.** Earlier drafts of the forbidden list also probed
+> WinUI control type names (`Microsoft.UI.Xaml.Controls.{TreeView, GridView,
+> TabView, CalendarView, NumberBox}`). Empirical observation: those names
+> survive in the NativeAOT .exe even when no Reactor factory references
+> them, because WinAppSDK's CsWinRT projection layer carries a complete
+> type-table for COM activation regardless of which controls the app
+> actually uses. The probe is omitted today per spec §11
+> ("an SDK regression that re-roots its own controls is out of scope for
+> this guard"). Reactor-side rooting is fully covered by the
+> Reactor-owned symbol set, which is the spec-relevant invariant.
 
 ## Local runbook
 
@@ -119,21 +131,25 @@ behavior.
 
 ## Caveats (spec §11)
 
-- **Scope.** The forbidden list checks **Reactor-side rooting**.
+- **Scope.** The forbidden list checks **Reactor-side rooting only**.
   WinAppSDK's own internal trim story is evolving; an SDK regression
-  that re-roots its own controls is out of scope for this guard. The
-  two `Microsoft.UI.Xaml.Controls.{TreeView,GridView}` entries in the
-  list specifically probe the SDK-side fate of a Reactor-side
-  removal — they will pass when Reactor's handler isn't there, even
-  if the SDK roots the type elsewhere.
+  that re-roots its own controls is out of scope for this guard.
+  Empirically the WinAppSDK CsWinRT projection bag preserves
+  `Microsoft.UI.Xaml.Controls.*` type-name strings in the AOT binary
+  regardless of which controls the app uses — those probes were tried
+  and removed (see comment in `TrimAssertionTests.ForbiddenSymbols`).
+  Reactor-owned `*Handler` / `*DescriptorHandler` / `*Element` classes
+  are the spec-relevant invariant and are fully covered.
 - **NativeAOT vs. trimmed-only.** This project defaults to
   `PublishAot=true`. If the SDK forces a regression to
   `PublishTrimmed=true` + `TrimMode=full` in the future, swap the
   property in `Reactor.AotHelloWorld.csproj` — the assertion harness
   is publish-shape-agnostic.
 - **Adding new must-trim controls.** Add the symbol(s) to
-  `TrimAssertionTests.ForbiddenSymbols` and update the spec §11 list
-  in `docs/specs/048-control-registration-and-trimming.md`.
+  `TrimAssertionTests.ForbiddenSymbols`. The right shape is the
+  Reactor-owned class name (`MyControlHandler`, `MyControlElement`,
+  or `MyControlDescriptorHandler`) — NOT the WinUI type name (see
+  the §11 caveat above for why).
 
 ## Why isn't this in `Reactor.slnx`?
 
