@@ -334,4 +334,83 @@ internal static class NavigationFixtures
 
         public Element AsElement() => Component<NestedNavComponent>();
     }
+
+    // ── Page caching: round-trips the cached control on navigate-back ─────
+    //
+    // Exercises the Update body's cache branches: a page leaving the host is
+    // stored (FinalizeOldPage cache arm) instead of unmounted, and navigating
+    // back to its route restores the SAME mounted control (cache-hit arm in
+    // place of a fresh Mount). State held in the cached page's component tree
+    // (UseState counter) survives the round-trip — proof it was restored from
+    // cache rather than remounted (a fresh mount would reset the counter to 0).
+
+    internal class NavHostCacheMode(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var nav = ctx.UseNavigation<string>("home");
+
+                return VStack(
+                    HStack(8,
+                        Button("Go Other", () => nav.Navigate("other")),
+                        Button("Go Home", () => nav.Navigate("home"))
+                    ),
+                    NavigationHost(nav, route => route switch
+                    {
+                        "home" => Component<CacheCounterPage>(),
+                        "other" => TextBlock("Other Page"),
+                        _ => TextBlock("Unknown"),
+                    }) with
+                    {
+                        Transition = NavigationTransition.None,
+                        CacheMode = NavigationCacheMode.Required,
+                        CacheSize = 5,
+                    }
+                );
+            });
+
+            await Harness.Render();
+            H.Check("NavHost_Cache_InitialCountZero",
+                H.FindText("Count: 0") is not null);
+
+            // Bump the home page's local state to a non-default value
+            H.ClickButton("Increment");
+            await Harness.Render();
+            H.ClickButton("Increment");
+            await Harness.Render();
+            H.Check("NavHost_Cache_CountIncremented",
+                H.FindText("Count: 2") is not null);
+
+            // Navigate away — the home page is cached, not unmounted
+            H.ClickButton("Go Other");
+            await Harness.Render();
+            H.Check("NavHost_Cache_OtherShown",
+                H.FindText("Other Page") is not null);
+            H.Check("NavHost_Cache_HomeRemovedFromTree",
+                H.FindText("Count: 2") is null);
+
+            // Navigate back — cache hit restores the same control with state intact
+            H.ClickButton("Go Home");
+            await Harness.Render();
+            H.Check("NavHost_Cache_RestoredFromCache_StatePreserved",
+                H.FindText("Count: 2") is not null);
+            H.Check("NavHost_Cache_OtherRemoved",
+                H.FindText("Other Page") is null);
+        }
+    }
+
+    class CacheCounterPage : Component
+    {
+        public override Element Render()
+        {
+            var (count, setCount) = UseState(0);
+            return VStack(
+                TextBlock($"Count: {count}"),
+                Button("Increment", () => setCount(count + 1))
+            );
+        }
+    }
 }

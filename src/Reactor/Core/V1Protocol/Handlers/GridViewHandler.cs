@@ -1,35 +1,124 @@
-using System.Diagnostics.CodeAnalysis;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using WinUI = Microsoft.UI.Xaml.Controls;
 
 namespace Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 
 /// <summary>
-/// Spec 047 §14 Phase 3 prelude — GridView port (closes the deferred dispatch
-/// carve so <see cref="GridViewElement"/> routes through V1).
-///
-/// <para><b>Path B (delegate, no children strategy):</b> mirrors the Phase 1
-/// <see cref="ListViewHandler"/> exactly. Delegates Mount / Update to the
-/// engine's internal <see cref="Reconciler.MountGridView"/> /
-/// <see cref="Reconciler.UpdateGridView"/> bodies, which install the same
+/// Spec 047 §14 — GridView host (V1-owned). Mirrors
+/// <see cref="ListViewHandler"/>: installs the same
 /// <c>ItemsSource = Range(0..N) + shared ItemTemplate + ContainerContentChanging</c>
-/// lazy container-realization contract as ListView (the
-/// <c>GridViewDescriptor</c>'s <c>ItemsHost&lt;&gt;</c> strategy is
-/// intentionally <i>not</i> registered — it pre-mounts every item with no
-/// virtualization, diverging from this legacy behavior).</para>
+/// lazy container-realization contract (the <c>GridViewDescriptor</c>'s
+/// <c>ItemsHost&lt;&gt;</c> strategy is intentionally <i>not</i> registered — it
+/// pre-mounts every item with no virtualization, diverging from this behavior).
 ///
-/// <para><c>Children = null</c> because the delegate body fully owns child
-/// realization. Unmount uses the default <c>CollectSelf</c> disposition
-/// (matching ListView): realized containers are torn down by the recycle arm
-/// of <c>ContainerContentChanging</c>, so behavior is identical V1 ON ≡
-/// V1 OFF.</para>
+/// <para><c>Children = null</c> because this handler fully owns child
+/// realization. Realized containers are torn down by the recycle arm of
+/// <c>ContainerContentChanging</c>, so the default unmount disposition
+/// suffices.</para>
 /// </summary>
 internal sealed class GridViewHandler : IElementHandler<GridViewElement, WinUI.GridView>
 {
-    public WinUI.GridView Mount(MountContext ctx, GridViewElement el)
-        => ctx.Reconciler.MountGridView(el, ctx.RequestRerender);
+    public WinUI.GridView Mount(MountContext ctx, GridViewElement gv)
+    {
+        var reconciler = ctx.Reconciler;
+        var requestRerender = ctx.RequestRerender;
+        var gridView = new WinUI.GridView
+        {
+            SelectionMode = gv.SelectionMode,
+            IsItemClickEnabled = gv.OnItemClick is not null,
+            IncrementalLoadingTrigger = gv.IncrementalLoadingTrigger,
+        };
+        if (gv.Header is not null) gridView.Header = gv.Header;
+        if (gv.ItemContainerStyle is not null) gridView.ItemContainerStyle = gv.ItemContainerStyle;
 
-    public void Update(UpdateContext ctx, GridViewElement oldEl, GridViewElement newEl, WinUI.GridView ctrl)
-        => ctx.Reconciler.UpdateGridView(oldEl, newEl, ctrl, ctx.RequestRerender);
+        Reconciler.SetElementTag(gridView, gv);
+
+        gridView.ItemTemplate = Reconciler.SharedContentControlTemplate.Value;
+
+        gridView.ContainerContentChanging += (sender, args) =>
+        {
+            if (args.InRecycleQueue)
+            {
+                if (args.ItemContainer.ContentTemplateRoot is ContentControl oldCc)
+                {
+                    if (oldCc.Content is UIElement oldCtrl)
+                        reconciler.UnmountChild(oldCtrl);
+                    oldCc.Content = null;
+                }
+                return;
+            }
+
+            args.Handled = true;
+            var items = (Reconciler.GetElementTag((UIElement)sender!) as GridViewElement)?.Items;
+            if (items is not null && args.ItemIndex >= 0 && args.ItemIndex < items.Length
+                && args.ItemContainer.ContentTemplateRoot is ContentControl cc)
+            {
+                var ctrl = reconciler.Mount(items[args.ItemIndex], requestRerender);
+                cc.Content = ctrl;
+            }
+        };
+
+        gridView.SelectionChanged += (s, _) =>
+        {
+            var g = (WinUI.GridView)s!;
+            if (Reconciler.GetElementTag(g) is not GridViewElement el) return;
+            el.OnSelectedIndexChanged?.Invoke(g.SelectedIndex);
+            if (el.OnSelectionChanged is { } h)
+            {
+                var snapshot = new List<int>(g.SelectedItems.Count);
+                foreach (var item in g.SelectedItems)
+                    if (item is int i) snapshot.Add(i);
+                h(snapshot);
+            }
+        };
+        if (gv.OnItemClick is not null)
+            gridView.ItemClick += (s, args) =>
+            {
+                var g = (WinUI.GridView)s!;
+                if (args.ClickedItem is int idx)
+                    (Reconciler.GetElementTag(g) as GridViewElement)?.OnItemClick?.Invoke(idx);
+            };
+
+        gridView.ItemsSource = Enumerable.Range(0, gv.Items.Length).ToList();
+
+        if (gv.SelectedIndex >= 0) gridView.SelectedIndex = gv.SelectedIndex;
+        Reconciler.ApplySetters(gv.Setters, gridView);
+        return gridView;
+    }
+
+    public void Update(UpdateContext ctx, GridViewElement o, GridViewElement n, WinUI.GridView gv)
+    {
+        gv.SelectionMode = n.SelectionMode;
+        gv.IsItemClickEnabled = n.OnItemClick is not null;
+        if (n.Header is not null) gv.Header = n.Header;
+        if (gv.IncrementalLoadingTrigger != n.IncrementalLoadingTrigger)
+            gv.IncrementalLoadingTrigger = n.IncrementalLoadingTrigger;
+        if (!ReferenceEquals(o.ItemContainerStyle, n.ItemContainerStyle) && n.ItemContainerStyle is not null)
+            gv.ItemContainerStyle = n.ItemContainerStyle;
+
+        if (!ReferenceEquals(o.Items, n.Items))
+            gv.ItemsSource = Enumerable.Range(0, n.Items.Length).ToList();
+
+        Reconciler.SetElementTag(gv, n);
+
+        // SelectionChanged is wired unconditionally in Mount (see comment in
+        // ListViewHandler.Update). Tag refresh suffices to pick up a later-attached
+        // OnSelectedIndexChanged / OnSelectionChanged.
+        if (o.OnItemClick is null && n.OnItemClick is not null)
+            gv.ItemClick += (s, args) =>
+            {
+                var g = (WinUI.GridView)s!;
+                if (args.ClickedItem is int idx)
+                    (Reconciler.GetElementTag(g) as GridViewElement)?.OnItemClick?.Invoke(idx);
+            };
+
+        if (n.SelectedIndex >= 0) gv.SelectedIndex = n.SelectedIndex;
+        Reconciler.ApplySetters(n.Setters, gv);
+    }
 
     public ChildrenStrategy<GridViewElement, WinUI.GridView>? Children => null;
 }

@@ -1643,10 +1643,16 @@ internal static class ReconcilerBigCoverageFixtures
             var reconciler = new Reconciler();
 
             var rows = new[] { new KeyRow("a"), new KeyRow("b"), new KeyRow("c") };
-            var listState = InvokePrivateStatic<ReactorListState>("BuildListStateFromElement",
-                ListView(rows, r => r.Key, (r, _) => TextBlock(r.Key)));
-            var lazyState = InvokePrivateStatic<ReactorListState>("BuildListStateFromLazy",
-                LazyVStack(rows, r => r.Key, (r, _) => TextBlock(r.Key)));
+            var buildListState = typeof(global::Microsoft.UI.Reactor.Core.V1Protocol.TemplatedListLifecycle)
+                .GetMethod("BuildListState", BindingFlags.Static | BindingFlags.NonPublic)
+                ?? throw new MissingMethodException("TemplatedListLifecycle", "BuildListState");
+            var listState = (ReactorListState)buildListState.Invoke(null,
+                new object?[] { ListView(rows, r => r.Key, (r, _) => TextBlock(r.Key)) })!;
+            var lazyBuild = typeof(global::Microsoft.UI.Reactor.Core.V1Protocol.LazyStackLifecycle)
+                .GetMethod("BuildListState", BindingFlags.Static | BindingFlags.NonPublic)
+                ?? throw new MissingMethodException("LazyStackLifecycle", "BuildListState");
+            var lazyState = (ReactorListState)lazyBuild.Invoke(null,
+                new object?[] { LazyVStack(rows, r => r.Key, (r, _) => TextBlock(r.Key)) })!;
             H.Check("PrivUpdate_ListStates", listState.Source.Count == 3 && lazyState.Source.Count == 3);
 
             var repeater = new WinXC.ItemsRepeater();
@@ -1692,7 +1698,7 @@ internal static class ReconcilerBigCoverageFixtures
                 OnSelectionChanged = items => multi = items,
                 OnItemClick = item => clicked = item,
             };
-            var list = InvokePrivate<WinXC.ListView>(reconciler, "MountTemplatedListView", listEl, rerender);
+            var list = global::Microsoft.UI.Reactor.Core.V1Protocol.TemplatedListLifecycle.MountListView(reconciler, listEl, rerender);
             if (list.ItemsSource is IList<ReactorRow> listRows)
             {
                 list.SelectedItems.Add(listRows[0]);
@@ -1708,7 +1714,7 @@ internal static class ReconcilerBigCoverageFixtures
                 OnSelectionChanged = items => multi = items,
                 OnItemClick = item => clicked = item,
             };
-            var grid = InvokePrivate<WinXC.GridView>(reconciler, "MountTemplatedGridView", gridEl, rerender);
+            var grid = global::Microsoft.UI.Reactor.Core.V1Protocol.TemplatedListLifecycle.MountGridView(reconciler, gridEl, rerender);
             if (grid.ItemsSource is IList<ReactorRow> gridRows)
             {
                 grid.SelectedItems.Add(gridRows[1]);

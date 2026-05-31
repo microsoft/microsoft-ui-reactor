@@ -30,10 +30,10 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 internal sealed class LazyStackHandler : IDecoratorElementHandler<LazyStackElementBase>
 {
     public UIElement Mount(MountContext ctx, LazyStackElementBase el)
-        => ctx.Reconciler.MountLazyStack(el, ctx.RequestRerender);
+        => LazyStackLifecycle.Mount(ctx.Reconciler, el, ctx.RequestRerender);
 
     public UIElement Update(UpdateContext ctx, LazyStackElementBase oldEl, LazyStackElementBase newEl, UIElement control)
-        => ctx.Reconciler.UpdateLazyStack(newEl, (WinUI.ScrollViewer)control, ctx.RequestRerender) ?? control;
+        => LazyStackLifecycle.Update(ctx.Reconciler, newEl, (WinUI.ScrollViewer)control, ctx.RequestRerender) ?? control;
 
     public V1UnmountDisposition Unmount(UnmountContext ctx, LazyStackElementBase? element, UIElement control)
         => V1UnmountDisposition.ContinueDefaultTraversal;

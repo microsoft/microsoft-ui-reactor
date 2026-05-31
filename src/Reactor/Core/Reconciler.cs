@@ -30,13 +30,19 @@ public sealed partial class Reconciler : IDisposable
 {
     private readonly Dictionary<UIElement, ComponentNode> _componentNodes = new();
     private readonly Dictionary<UIElement, ErrorBoundaryNode> _errorBoundaryNodes = new();
-    private readonly Dictionary<UIElement, NavigationHostNode> _navigationHostNodes = new();
-    private readonly ElementPool _pool = new();
+    // internal so NavigationHostLifecycle (V1-owned mount/update) can record and
+    // look up per-instance navigation state; teardown stays here (Dispose loop +
+    // CleanupNavigationHostNode).
+    internal readonly Dictionary<UIElement, NavigationHostNode> _navigationHostNodes = new();
+    // Internal so V1-owned lifecycle classes (e.g. LazyStackLifecycle) can rent
+    // pooled controls and pass the pool into element factories.
+    internal readonly ElementPool _pool = new();
     private readonly Dictionary<Type, ITypeRegistration> _typeRegistry = new();
     // Null when no caller-supplied logger and no devtools logger is published.
     // All call sites use null-conditional access so the M.E.Logging code path
     // doesn't run (and stays JIT-cold) for default apps.
-    private readonly ILogger? _logger;
+    // Internal so V1-owned lifecycle classes can pass it into shared keyed-diff helpers.
+    internal readonly ILogger? _logger;
     private readonly List<(ConnectedAnimation Animation, UIElement Target)> _pendingConnectedAnimationStarts = new();
     private readonly ContextScope _contextScope = new();
     private int _errorBoundaryDepth;
