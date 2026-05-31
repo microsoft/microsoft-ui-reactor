@@ -46,9 +46,10 @@
 
     <!--
       Signing is OFF by default so a fresh clone builds without requiring a
-      developer cert. To produce a deployable MSIX, pass on the command line:
-        /p:AppxPackageSigningEnabled=true
-        /p:PackageCertificateKeyFile=<path-to-your.pfx>
+      developer cert. To produce a signed deployable MSIX, set both properties
+      below — either on the command line:
+        /p:AppxPackageSigningEnabled=true /p:PackageCertificateKeyFile=<path-to.pfx>
+      or persistently in BlankReactor.csproj.user (gitignored).
       The cert subject (CN=...) must match the Package.appxmanifest
       <Identity Publisher="..."> value. See README.md for details.
     -->
