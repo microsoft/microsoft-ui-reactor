@@ -146,11 +146,19 @@ public static partial class Factories
 
     // ── Buttons ─────────────────────────────────────────────────────
 
-    public static ButtonElement Button(string label, Action? onClick = null) =>
-        new(label, onClick);
+    public static ButtonElement Button(string label, Action? onClick = null)
+    {
+        // Spec 048 §3.4 — decorator-global-path fan-out (see RegDecorator XML).
+        // Dormant while RegisterV1BuiltInHandlers is intact (per-host arm 1 wins).
+        _ = V1.RegDecorator<ButtonElement, V1.Handlers.ButtonHandler>.Done;
+        return new(label, onClick);
+    }
 
-    public static ButtonElement Button(Element content, Action? onClick = null) =>
-        new("", onClick) { ContentElement = content };
+    public static ButtonElement Button(Element content, Action? onClick = null)
+    {
+        _ = V1.RegDecorator<ButtonElement, V1.Handlers.ButtonHandler>.Done;
+        return new("", onClick) { ContentElement = content };
+    }
 
     /// <summary>
     /// Creates a Button driven by a Command. Maps Label → Content, Execute → Click,
@@ -159,12 +167,15 @@ public static partial class Factories
     /// <c>Button(saveCommand).IsEnabled(canSave)</c> or
     /// <c>.Set(b =&gt; b.FlowDirection = FlowDirection.RightToLeft)</c>.
     /// </summary>
-    public static ButtonElement Button(Core.Command command) =>
-        new ButtonElement(command.Label, () => Core.CommandBindings.Invoke(command))
+    public static ButtonElement Button(Core.Command command)
+    {
+        _ = V1.RegDecorator<ButtonElement, V1.Handlers.ButtonHandler>.Done;
+        return new ButtonElement(command.Label, () => Core.CommandBindings.Invoke(command))
         {
             IsEnabled = command.IsEnabled,
             Setters = [b => Core.CommandBindings.ApplyButtonBaseCommon(b, command)],
         };
+    }
 
     public static HyperlinkButtonElement HyperlinkButton(string content, Uri? navigateUri = null, Action? onClick = null)
     {
@@ -307,11 +318,18 @@ public static partial class Factories
         return new(text, onTextChanged, onQuerySubmitted);
     }
 
-    public static CheckBoxElement CheckBox(bool isChecked, Action<bool>? onIsCheckedChanged = null, string? label = null) =>
-        new(isChecked, onIsCheckedChanged, label);
+    public static CheckBoxElement CheckBox(bool isChecked, Action<bool>? onIsCheckedChanged = null, string? label = null)
+    {
+        // Spec 048 §3.4 — decorator-global-path fan-out (see RegDecorator XML).
+        _ = V1.RegDecorator<CheckBoxElement, V1.Handlers.CheckBoxHandler>.Done;
+        return new(isChecked, onIsCheckedChanged, label);
+    }
 
-    public static CheckBoxElement ThreeStateCheckBox(bool? checkedState, Action<bool?>? onCheckedStateChanged = null, string? label = null) =>
-        new(checkedState == true, Label: label) { IsThreeState = true, CheckedState = checkedState, OnCheckedStateChanged = onCheckedStateChanged };
+    public static CheckBoxElement ThreeStateCheckBox(bool? checkedState, Action<bool?>? onCheckedStateChanged = null, string? label = null)
+    {
+        _ = V1.RegDecorator<CheckBoxElement, V1.Handlers.CheckBoxHandler>.Done;
+        return new(checkedState == true, Label: label) { IsThreeState = true, CheckedState = checkedState, OnCheckedStateChanged = onCheckedStateChanged };
+    }
 
     public static RadioButtonElement RadioButton(string label, bool isChecked = false, Action<bool>? onIsCheckedChanged = null, string? groupName = null)
     {

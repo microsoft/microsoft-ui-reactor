@@ -70,11 +70,12 @@ internal static class Spec048RegistrationFixtures
     /// ToggleButton, RadioButton, RadioButtons, NumberBox, RatingControl,
     /// PipsPager, ColorPicker, SelectorBar).
     ///
-    /// <para><b>Excluded:</b> <c>Button</c> and <c>CheckBox</c> use
-    /// <c>IDecoratorElementHandler&lt;TElement&gt;</c> which is not assignable
-    /// to <c>Reg&lt;&gt;</c>'s <c>THandler : IElementHandler&lt;…&gt;</c>
-    /// constraint; the global-registry decorator path is a §3.4 blocker
-    /// tracked separately.</para>
+    /// <para>Spec 048 §3.4 added <c>Button</c> and <c>CheckBox</c> via the
+    /// decorator-global-path fan-out: both implement
+    /// <c>IDecoratorElementHandler&lt;TElement&gt;</c> and now register
+    /// through <c>RegDecorator&lt;TElement,THandler&gt;.Done</c> instead
+    /// of <c>Reg&lt;&gt;.Done</c>. <c>ThreeStateCheckBox</c> also produces
+    /// <c>CheckBoxElement</c> (aliased factory; same registration shim).</para>
     /// </summary>
     internal class InputGroupFactoriesRegisterHandlers(Harness h) : SelfTestFixtureBase(h)
     {
@@ -98,6 +99,11 @@ internal static class Spec048RegistrationFixtures
             _ = ColorPicker(default);
             _ = SelectorBar([SelectorBarItem("a")]);
             _ = PipsPager(1);
+
+            // Spec 048 §3.4 — decorator-global-path fan-out: Button + CheckBox.
+            _ = Button("probe");
+            _ = CheckBox(false);
+            _ = ThreeStateCheckBox(null);
 
             H.Check("Spec048_Reg_HyperlinkButton",
                 ControlRegistry.Contains(typeof(HyperlinkButtonElement)));
@@ -129,6 +135,10 @@ internal static class Spec048RegistrationFixtures
                 ControlRegistry.Contains(typeof(SelectorBarElement)));
             H.Check("Spec048_Reg_PipsPager",
                 ControlRegistry.Contains(typeof(PipsPagerElement)));
+            H.Check("Spec048_RegDecorator_Button",
+                ControlRegistry.Contains(typeof(ButtonElement)));
+            H.Check("Spec048_RegDecorator_CheckBox",
+                ControlRegistry.Contains(typeof(CheckBoxElement)));
 
             return Task.CompletedTask;
         }
