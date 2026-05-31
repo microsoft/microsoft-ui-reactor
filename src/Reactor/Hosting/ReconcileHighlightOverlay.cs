@@ -159,6 +159,113 @@ internal sealed class ReconcileHighlightOverlay : IDisposable
         if (newBudget <= 0) return;
         if (_container.Children.Count >= MaxLiveSprites) return;
 
+        // Suspicious-position guard: TransformToVisual returns the element's
+        // CURRENT post-arrange offset relative to host. For elements that
+        // were just mounted into a parent that hasn't been re-arranged yet
+        // (e.g. a new BarChart Rectangle added when the sampleCount slider
+        // grows the point count), ActualWidth/Height may already reflect
+        // the element's explicitly-set Width/Height while its CONTAINER
+        // (the chart's Canvas) is still mid-arrange, so the transform
+        // walks up an ancestor chain whose offsets haven't been applied
+        // yet — giving back (0, 0) and painting the sprite at the host's
+        // top-left corner instead of where the bar actually ends up.
+        //
+        // For elements briefly detached from the visual tree (WinUI's
+        // RichTextBlock paragraph re-measure calls RemoveEmbeddedElements
+        // on every paragraph mutation — see
+        //   microsoft-ui-xaml-lift\dxaml\xcp\core\text\BlockLayout\
+        //       ParagraphNode.cpp:470  →  RemoveEmbeddedElements();
+        // ), TransformToVisual likewise returns (0, 0) during the detached
+        // window.
+        //
+        // Both cases are transient — one more layout pass on the target
+        // (Loaded + LayoutUpdated) gives the real position. Defer the
+        // initial paint to that pass instead of stamping a (0, 0) ghost.
+        if (offset.X == 0f && offset.Y == 0f && !IsAnchoredAtHostOrigin(target, host))
+        {
+            DeferInitialPaint(host, target, brush, opacity);
+            return;
+        }
+
+        AddNewSprite(target, brush, opacity, size, offset);
+        newBudget--;
+    }
+
+    /// <summary>
+    /// True when <paramref name="target"/> is genuinely at the host's
+    /// top-left corner (so a (0, 0) transform is the real answer, not a
+    /// stale-arrange artifact). We walk the visual ancestor chain and
+    /// confirm every link in the chain is itself anchored at (0, 0) of
+    /// its parent — anything else means the (0, 0) transform must come
+    /// from an un-arranged intermediate ancestor.
+    /// </summary>
+    private static bool IsAnchoredAtHostOrigin(UIElement target, UIElement host)
+    {
+        var node = target as DependencyObject;
+        while (node is not null && !ReferenceEquals(node, host))
+        {
+            if (node is FrameworkElement fe)
+            {
+                // Canvas.Left/Top dominate when the parent is a Canvas; any
+                // non-zero attached value means this node is offset within
+                // its parent — so (0,0) transform from below is the stale arm.
+                var left = Canvas.GetLeft(fe);
+                var top = Canvas.GetTop(fe);
+                if (!double.IsNaN(left) && left != 0) return false;
+                if (!double.IsNaN(top) && top != 0) return false;
+            }
+            node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node);
+        }
+        return ReferenceEquals(node, host);
+    }
+
+    /// <summary>
+    /// One-shot LayoutUpdated hook on the target — re-snapshot its position
+    /// after the next layout pass and paint then. If the target never lays
+    /// out (e.g. it gets unmounted before the next pass), the handler
+    /// detaches itself and no sprite is ever created.
+    /// </summary>
+    private void DeferInitialPaint(UIElement host, UIElement target,
+        CompositionBrush brush, float opacity)
+    {
+        if (target is not FrameworkElement fe) return;
+        EventHandler<object>? handler = null;
+        int attempts = 0;
+        handler = (s, e) =>
+        {
+            attempts++;
+            // Bail after a few attempts — the target may legitimately stay
+            // at (0,0) (e.g. its parent IS at host origin and our heuristic
+            // was wrong), in which case we still want to paint SOMETHING.
+            bool forcePaint = attempts >= 3;
+            if (fe.ActualWidth <= 0 || fe.ActualHeight <= 0)
+            {
+                if (forcePaint) { fe.LayoutUpdated -= handler; return; }
+                return;
+            }
+            Vector3 offset;
+            Vector2 size;
+            try
+            {
+                var transform = target.TransformToVisual(host);
+                var pos = transform.TransformPoint(default);
+                size = new Vector2((float)fe.ActualWidth, (float)fe.ActualHeight);
+                offset = new Vector3((float)pos.X, (float)pos.Y, 0);
+            }
+            catch (ArgumentException) { fe.LayoutUpdated -= handler; return; }
+            if (!forcePaint && offset.X == 0f && offset.Y == 0f && !IsAnchoredAtHostOrigin(target, host))
+                return;
+            fe.LayoutUpdated -= handler;
+            if (_container.Children.Count >= MaxLiveSprites) return;
+            if (_active.ContainsKey(target)) return; // a refresh beat us to it
+            AddNewSprite(target, brush, opacity, size, offset);
+        };
+        fe.LayoutUpdated += handler;
+    }
+
+    private void AddNewSprite(UIElement target, CompositionBrush brush, float opacity,
+        Vector2 size, Vector3 offset)
+    {
         var sprite = _compositor.CreateSpriteVisual();
         sprite.Size = size;
         sprite.Offset = offset;
@@ -171,7 +278,6 @@ internal sealed class ReconcileHighlightOverlay : IDisposable
         entry.Timer = timer;
         _active[target] = entry;
         timer.Start();
-        newBudget--;
     }
 
     private DispatcherQueueTimer CreateExpiryTimer(UIElement capturedTarget, ActiveHighlight owner)

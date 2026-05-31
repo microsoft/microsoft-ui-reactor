@@ -221,7 +221,7 @@ public sealed partial class Reconciler
         return result;
     }
 
-    private static Microsoft.UI.Xaml.Documents.Inline MountInline(RichTextInline inline)
+    private Microsoft.UI.Xaml.Documents.Inline MountInline(RichTextInline inline, Action requestRerender)
     {
         switch (inline)
         {
@@ -243,29 +243,124 @@ public sealed partial class Reconciler
                 return hl;
             case RichTextLineBreak:
                 return new Microsoft.UI.Xaml.Documents.LineBreak();
+            case RichTextInlineUIContainer iuc:
+                return MountInlineUIContainer(iuc, requestRerender);
             default:
                 return new Microsoft.UI.Xaml.Documents.Run { Text = "" };
         }
     }
 
-    private static Microsoft.UI.Xaml.Documents.Paragraph MountParagraph(RichTextParagraph para)
+    /// <summary>
+    /// Issue #480 — mount a <see cref="RichTextInlineUIContainer"/> as a real
+    /// WinUI <see cref="Microsoft.UI.Xaml.Documents.InlineUIContainer"/>.
+    /// Route A: <c>Child</c> is mounted through the reconciler so descendant
+    /// hooks (UseState/UseEffect) and event wiring run normally. Route B:
+    /// <c>Factory</c> produces a raw native <see cref="FrameworkElement"/>
+    /// scoped to this rebuild. The mounted <c>UIElement</c> reference is
+    /// stashed on the container so the surrounding RichTextBlock's unmount /
+    /// rebuild paths can walk and tear it down before <c>Blocks.Clear()</c>.
+    /// </summary>
+    private Microsoft.UI.Xaml.Documents.InlineUIContainer MountInlineUIContainer(
+        RichTextInlineUIContainer iuc, Action requestRerender)
+    {
+        var container = new Microsoft.UI.Xaml.Documents.InlineUIContainer();
+        UIElement? mounted = null;
+        if (iuc.Child is not null)
+        {
+            mounted = Mount(iuc.Child, requestRerender);
+        }
+        else if (iuc.Factory is not null)
+        {
+            try { mounted = iuc.Factory(); }
+            catch { mounted = null; }
+        }
+        if (mounted is not null)
+        {
+            container.Child = mounted;
+            // Mark the mounted control so RichTextBlock teardown knows whether
+            // to dispatch the reactor unmount path (Route A) or just drop the
+            // reference (Route B = factory). RichTextBlock has no Reactor
+            // element of its own per inline UI, so we encode the route here.
+            if (iuc.Child is not null && mounted is FrameworkElement childFe)
+                childFe.SetValue(s_inlineUIRouteAProperty, true);
+        }
+        return container;
+    }
+
+    // Attached DP used by RichTextBlock teardown / rebuild to distinguish
+    // Reactor-mounted inline UI children (Route A — needs UnmountChild) from
+    // raw native factory results (Route B — just drop the reference; GC
+    // reclaims). Booleans on a DP avoid an extra CWT just for this.
+    private static readonly DependencyProperty s_inlineUIRouteAProperty =
+        DependencyProperty.RegisterAttached(
+            "ReactorInlineUIRouteA",
+            typeof(bool),
+            typeof(Reconciler),
+            new PropertyMetadata(false));
+
+    /// <summary>
+    /// Walks an existing <see cref="WinUI.RichTextBlock"/>'s blocks and
+    /// unmounts any Reactor-managed (Route A) inline UI children before the
+    /// caller clears <c>Blocks</c>. No-op for blocks that contain only
+    /// regular runs / hyperlinks / line breaks, or for Route B (native
+    /// factory) inline UI children.
+    /// </summary>
+    internal void UnmountInlineUIChildren(WinUI.RichTextBlock rtb)
+    {
+        foreach (var block in rtb.Blocks)
+        {
+            if (block is Microsoft.UI.Xaml.Documents.Paragraph para)
+                UnmountInlineUIChildrenInInlines(para.Inlines);
+        }
+    }
+
+    private void UnmountInlineUIChildrenInInlines(
+        Microsoft.UI.Xaml.Documents.InlineCollection inlines)
+    {
+        foreach (var inline in inlines)
+        {
+            switch (inline)
+            {
+                case Microsoft.UI.Xaml.Documents.InlineUIContainer iuc:
+                    if (iuc.Child is FrameworkElement childFe
+                        && (bool)childFe.GetValue(s_inlineUIRouteAProperty))
+                    {
+                        UnmountChild(iuc.Child);
+                    }
+                    iuc.Child = null;
+                    break;
+                case Microsoft.UI.Xaml.Documents.Span span:
+                    UnmountInlineUIChildrenInInlines(span.Inlines);
+                    break;
+            }
+        }
+    }
+
+    private Microsoft.UI.Xaml.Documents.Paragraph MountParagraph(RichTextParagraph para, Action requestRerender)
     {
         var p = new Microsoft.UI.Xaml.Documents.Paragraph();
         foreach (var inline in para.Inlines)
-            p.Inlines.Add(MountInline(inline));
+            p.Inlines.Add(MountInline(inline, requestRerender));
         return p;
     }
 
-    // Spec 047 §14 Phase 3-final Batch B — widened to internal static so the
-    // legacy MountRichTextBlock arm AND RichTextBlockDescriptor's .OneWay set
-    // lambda call the same rebuild path.
-    internal static void RebuildRichTextBlocks(RichTextBlockElement n, WinUI.RichTextBlock rtb)
+    // Spec 047 §14 Phase 3-final Batch B — widened to internal so the
+    // legacy MountRichTextBlock arm AND RichTextBlockDescriptor's bridged
+    // set lambda call the same rebuild path. Issue #480 widened the
+    // signature to take a rerender callback so InlineUIContainer Route A
+    // children can be mounted through the reconciler.
+    internal void RebuildRichTextBlocks(RichTextBlockElement n, WinUI.RichTextBlock rtb, Action requestRerender)
     {
+        // Tear down any Route A inline UI children before clearing the
+        // block collection — otherwise their Reactor state (hooks, event
+        // trampolines, pooled descendants) leaks when WinUI silently
+        // drops the InlineUIContainer references.
+        UnmountInlineUIChildren(rtb);
         rtb.Blocks.Clear();
         if (n.Paragraphs is not null)
         {
             foreach (var para in n.Paragraphs)
-                rtb.Blocks.Add(MountParagraph(para));
+                rtb.Blocks.Add(MountParagraph(para, requestRerender));
         }
         else
         {
@@ -273,6 +368,291 @@ public sealed partial class Reconciler
             p.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = n.Text });
             rtb.Blocks.Add(p);
         }
+    }
+
+    /// <summary>
+    /// Issue #480 follow-up — incremental update path for RichTextBlock that
+    /// preserves WinUI document identity AND embedded Reactor child state
+    /// (e.g. Slider drag position, Button click identity) across re-renders
+    /// where the parent paragraph array reference changes but the document
+    /// shape is the same. Falls back to <see cref="RebuildRichTextBlocks"/>
+    /// when the shape changed.
+    ///
+    /// <para><b>Why this exists:</b> the previous always-rebuild path tore
+    /// down + remounted every <see cref="RichTextInlineUIContainer"/> child
+    /// on every state change of the owning component. That made inline
+    /// interactive controls effectively unusable (drag canceled, focus
+    /// lost) and defeated the reconcile-highlight overlay (the whole RTB
+    /// flashed instead of just the changed run).</para>
+    /// </summary>
+    internal void UpdateRichTextBlocks(
+        WinUI.RichTextBlock rtb,
+        RichTextBlockElement prev,
+        RichTextBlockElement next,
+        Action requestRerender)
+    {
+        if (TryIncrementalUpdateRichTextBlocks(rtb, prev, next, requestRerender))
+            return;
+        RebuildRichTextBlocks(next, rtb, requestRerender);
+    }
+
+    private bool TryIncrementalUpdateRichTextBlocks(
+        WinUI.RichTextBlock rtb,
+        RichTextBlockElement prev,
+        RichTextBlockElement next,
+        Action requestRerender)
+    {
+        // Case A — both .Paragraphs null: text-only fallback path.
+        if (prev.Paragraphs is null && next.Paragraphs is null)
+        {
+            if (rtb.Blocks.Count != 1) return false;
+            if (rtb.Blocks[0] is not Microsoft.UI.Xaml.Documents.Paragraph p1) return false;
+            if (p1.Inlines.Count != 1) return false;
+            if (p1.Inlines[0] is not Microsoft.UI.Xaml.Documents.Run r1) return false;
+            if (string.Equals(prev.Text, next.Text, global::System.StringComparison.Ordinal))
+                return true;
+            r1.Text = next.Text ?? string.Empty;
+            MarkRichTextBlockModified(rtb);
+            return true;
+        }
+
+        // Mode mismatch (text → paragraphs or vice-versa) → full rebuild.
+        if (prev.Paragraphs is null || next.Paragraphs is null) return false;
+
+        var prevPs = prev.Paragraphs;
+        var nextPs = next.Paragraphs;
+        if (prevPs.Length != nextPs.Length) return false;
+        if (rtb.Blocks.Count != prevPs.Length) return false;
+
+        // Preflight pass — validate the entire tree is incrementally
+        // updatable BEFORE mutating anything. Avoids partial Reactor child
+        // update churn (running component updates, scheduling effects,
+        // etc.) only to discover later we have to tear everything down.
+        for (int pi = 0; pi < nextPs.Length; pi++)
+        {
+            if (rtb.Blocks[pi] is not Microsoft.UI.Xaml.Documents.Paragraph winPara)
+                return false;
+            var prevInlines = prevPs[pi].Inlines;
+            var nextInlines = nextPs[pi].Inlines;
+            if (prevInlines.Length != nextInlines.Length) return false;
+            if (winPara.Inlines.Count != prevInlines.Length) return false;
+            for (int ii = 0; ii < nextInlines.Length; ii++)
+            {
+                if (!CanUpdateInlineInPlace(prevInlines[ii], nextInlines[ii], winPara.Inlines[ii]))
+                    return false;
+            }
+        }
+
+        // Mutation pass.
+        bool anyMutation = false;
+        for (int pi = 0; pi < nextPs.Length; pi++)
+        {
+            var prevPara = prevPs[pi];
+            var nextPara = nextPs[pi];
+            if (ReferenceEquals(prevPara, nextPara)) continue;
+            var winPara = (Microsoft.UI.Xaml.Documents.Paragraph)rtb.Blocks[pi];
+            for (int ii = 0; ii < nextPara.Inlines.Length; ii++)
+            {
+                var prevInline = prevPara.Inlines[ii];
+                var nextInline = nextPara.Inlines[ii];
+                // Always recurse for Route A InlineUIContainer — the embedded
+                // Reactor child may have its own state that wants to render
+                // even when the parent inline record is structurally equal.
+                if (prevInline is not RichTextInlineUIContainer && prevInline.Equals(nextInline))
+                    continue;
+                if (UpdateInlineInPlace(prevInline, nextInline, winPara.Inlines[ii], requestRerender))
+                    anyMutation = true;
+            }
+        }
+
+        if (anyMutation)
+            MarkRichTextBlockModified(rtb);
+        return true;
+    }
+
+    private static bool CanUpdateInlineInPlace(
+        RichTextInline prev,
+        RichTextInline next,
+        Microsoft.UI.Xaml.Documents.Inline existing)
+    {
+        return (prev, next, existing) switch
+        {
+            (RichTextRun, RichTextRun, Microsoft.UI.Xaml.Documents.Run) => true,
+            (RichTextHyperlink, RichTextHyperlink, Microsoft.UI.Xaml.Documents.Hyperlink hl)
+                => hl.Inlines.Count == 1 && hl.Inlines[0] is Microsoft.UI.Xaml.Documents.Run,
+            (RichTextLineBreak, RichTextLineBreak, Microsoft.UI.Xaml.Documents.LineBreak) => true,
+            (RichTextInlineUIContainer p, RichTextInlineUIContainer n, Microsoft.UI.Xaml.Documents.InlineUIContainer)
+                => CanUpdateInlineUIContainerInPlace(p, n),
+            _ => false,
+        };
+    }
+
+    private static bool CanUpdateInlineUIContainerInPlace(
+        RichTextInlineUIContainer prev,
+        RichTextInlineUIContainer next)
+    {
+        bool prevRouteA = prev.Child is not null;
+        bool nextRouteA = next.Child is not null;
+        // Route swap (A↔B) or null swap → full rebuild for clarity.
+        if (prevRouteA != nextRouteA) return false;
+        if (!prevRouteA)
+        {
+            // Both Route B: factory swap or null → handled in mutation pass
+            // (just re-invoke). Both null is a no-op.
+            return true;
+        }
+        // Both Route A. The reconciler's ReconcileV1Child handles either
+        // structural Update (CanUpdate true) or unmount-and-mount (CanUpdate
+        // false), so we can always claim incremental success here.
+        return true;
+    }
+
+    private bool UpdateInlineInPlace(
+        RichTextInline prev,
+        RichTextInline next,
+        Microsoft.UI.Xaml.Documents.Inline existing,
+        Action requestRerender)
+    {
+        switch (prev, next, existing)
+        {
+            case (RichTextRun p, RichTextRun n, Microsoft.UI.Xaml.Documents.Run wr):
+                return UpdateRunInPlace(p, n, wr);
+            case (RichTextHyperlink p, RichTextHyperlink n, Microsoft.UI.Xaml.Documents.Hyperlink wh):
+                return UpdateHyperlinkInPlace(p, n, wh);
+            case (RichTextLineBreak, RichTextLineBreak, _):
+                return false;
+            case (RichTextInlineUIContainer p, RichTextInlineUIContainer n,
+                  Microsoft.UI.Xaml.Documents.InlineUIContainer wc):
+                return UpdateInlineUIContainerInPlace(p, n, wc, requestRerender);
+            default:
+                return false; // unreachable per preflight
+        }
+    }
+
+    private static bool UpdateRunInPlace(RichTextRun prev, RichTextRun next, Microsoft.UI.Xaml.Documents.Run wr)
+    {
+        bool any = false;
+        if (!string.Equals(prev.Text, next.Text, global::System.StringComparison.Ordinal))
+        {
+            wr.Text = next.Text ?? string.Empty;
+            any = true;
+        }
+        if (prev.IsBold != next.IsBold)
+        {
+            wr.FontWeight = next.IsBold
+                ? Microsoft.UI.Text.FontWeights.Bold
+                : Microsoft.UI.Text.FontWeights.Normal;
+            any = true;
+        }
+        if (prev.IsItalic != next.IsItalic)
+        {
+            wr.FontStyle = next.IsItalic
+                ? global::Windows.UI.Text.FontStyle.Italic
+                : global::Windows.UI.Text.FontStyle.Normal;
+            any = true;
+        }
+        if (prev.IsStrikethrough != next.IsStrikethrough)
+        {
+            wr.TextDecorations = next.IsStrikethrough
+                ? global::Windows.UI.Text.TextDecorations.Strikethrough
+                : global::Windows.UI.Text.TextDecorations.None;
+            any = true;
+        }
+        if (prev.FontSize != next.FontSize)
+        {
+            if (next.FontSize.HasValue) wr.FontSize = next.FontSize.Value;
+            else wr.ClearValue(Microsoft.UI.Xaml.Documents.TextElement.FontSizeProperty);
+            any = true;
+        }
+        if (!string.Equals(prev.FontFamily, next.FontFamily, global::System.StringComparison.Ordinal))
+        {
+            if (next.FontFamily is not null)
+                wr.FontFamily = WinRTCache.GetFontFamily(next.FontFamily);
+            else
+                wr.ClearValue(Microsoft.UI.Xaml.Documents.TextElement.FontFamilyProperty);
+            any = true;
+        }
+        if (!ReferenceEquals(prev.Foreground, next.Foreground))
+        {
+            if (next.Foreground is not null) wr.Foreground = next.Foreground;
+            else wr.ClearValue(Microsoft.UI.Xaml.Documents.TextElement.ForegroundProperty);
+            any = true;
+        }
+        return any;
+    }
+
+    private static bool UpdateHyperlinkInPlace(
+        RichTextHyperlink prev,
+        RichTextHyperlink next,
+        Microsoft.UI.Xaml.Documents.Hyperlink wh)
+    {
+        bool any = false;
+        if (prev.NavigateUri != next.NavigateUri)
+        {
+            // Mirror MountInline's normalization: fall back to about:blank
+            // on null/empty/invalid URIs.
+            var uri = next.NavigateUri ?? new Uri("about:blank");
+            if (uri.ToString().Length < 1) uri = new Uri("about:blank");
+            try { wh.NavigateUri = uri; }
+            catch { try { wh.NavigateUri = new Uri("about:blank"); } catch { } }
+            any = true;
+        }
+        if (!string.Equals(prev.Text, next.Text, global::System.StringComparison.Ordinal))
+        {
+            if (wh.Inlines.Count > 0
+                && wh.Inlines[0] is Microsoft.UI.Xaml.Documents.Run innerRun)
+            {
+                innerRun.Text = next.Text ?? string.Empty;
+                any = true;
+            }
+        }
+        return any;
+    }
+
+    private bool UpdateInlineUIContainerInPlace(
+        RichTextInlineUIContainer prev,
+        RichTextInlineUIContainer next,
+        Microsoft.UI.Xaml.Documents.InlineUIContainer container,
+        Action requestRerender)
+    {
+        // Route A both (preflight already confirmed Child ↔ Child).
+        if (prev.Child is not null && next.Child is not null)
+        {
+            var existing = container.Child;
+            var replacement = ReconcileV1Child(prev.Child, next.Child, existing, requestRerender);
+            if (!ReferenceEquals(replacement, existing))
+            {
+                container.Child = replacement;
+                if (replacement is FrameworkElement newFe)
+                    newFe.SetValue(s_inlineUIRouteAProperty, true);
+                return true;
+            }
+            return false; // child reconciled in place; no container-level mutation
+        }
+        // Route B both — re-invoke factory only when the delegate identity
+        // changes (factories are opaque; reference equality is the closest
+        // signal authors have to "the inline UI source actually changed").
+        if (prev.Factory is not null && next.Factory is not null)
+        {
+            if (ReferenceEquals(prev.Factory, next.Factory)) return false;
+            UIElement? mounted = null;
+            try { mounted = next.Factory(); }
+            catch { mounted = null; }
+            container.Child = mounted;
+            return true;
+        }
+        return false; // both null — nothing to mount
+    }
+
+    private void MarkRichTextBlockModified(WinUI.RichTextBlock rtb)
+    {
+        // WinUI Run / Hyperlink / LineBreak are TextElement, not UIElement,
+        // so the highlight overlay can't paint them directly. Mark the
+        // containing RichTextBlock so authors still see *something* flash
+        // when inline mutations occur — matches the existing reconciler
+        // convention of recording per-control modifications.
+        if (ReactorFeatureFlags.HighlightReconcileChanges && _highlightModified is not null)
+            _highlightModified.Add(rtb);
     }
 
 

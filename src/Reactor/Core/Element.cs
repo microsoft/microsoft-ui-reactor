@@ -2201,6 +2201,41 @@ public record RichTextHyperlink(string Text, Uri NavigateUri) : RichTextInline;
 
 public record RichTextLineBreak() : RichTextInline;
 
+/// <summary>
+/// Mirrors WinUI's <c>Microsoft.UI.Xaml.Documents.InlineUIContainer</c> — an
+/// inline that embeds a UIElement inside a flowing <see cref="RichTextBlockElement"/>.
+///
+/// <para><b>Two embedding routes</b> (issue #480):
+/// <list type="bullet">
+///   <item><b>Route A — Reactor element (<see cref="Child"/>):</b> the
+///   embedded UI is described declaratively as any other Reactor
+///   <see cref="Element"/> (e.g. <c>Button("+", () =&gt; ...)</c>) and is mounted
+///   through the reconciler. Re-renders that produce a structurally-equal
+///   parent paragraph tree (so the descriptor's reference-equality fast
+///   path keeps the existing inline) leave the child untouched; renders
+///   that swap the parent <c>Paragraphs</c> array tear down and remount
+///   the child along with the rest of the block.</item>
+///   <item><b>Route B — imperative native factory (<see cref="Factory"/>):</b>
+///   the embedded UI is produced by a caller-supplied lambda returning a
+///   raw WinUI <see cref="Microsoft.UI.Xaml.FrameworkElement"/>. Useful as
+///   an escape hatch for native controls that have no Reactor element
+///   counterpart. The control is rebuilt each time the surrounding
+///   <c>RichTextBlock</c> rebuilds; no reconciliation is attempted.</item>
+/// </list></para>
+///
+/// <para>Exactly one of <see cref="Child"/> / <see cref="Factory"/> should
+/// be non-null. If both are null the inline expands to a zero-size empty
+/// container; if both are set, <see cref="Child"/> wins.</para>
+/// </summary>
+public record RichTextInlineUIContainer : RichTextInline
+{
+    /// <summary>Reactor element to mount as the inline UI (Route A).</summary>
+    public Element? Child { get; init; }
+    /// <summary>Imperative factory producing a native <see cref="FrameworkElement"/>
+    /// (Route B). Invoked once per rebuild of the owning <c>RichTextBlock</c>.</summary>
+    public Func<FrameworkElement>? Factory { get; init; }
+}
+
 // ════════════════════════════════════════════════════════════════════════
 //  Button elements
 // ════════════════════════════════════════════════════════════════════════

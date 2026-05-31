@@ -202,6 +202,13 @@ internal static class SelfTestFixtureRegistry
         "OverlayTeardown_Flyout_Unmount_RunsFlyoutContentCleanup",
         "OverlayTeardown_Flyout_Unmount_RunsPassThroughCleanup",
         "OverlayTeardown_Popup_Unmount_RunsChildCleanup",
+        // Issue #480 — InlineUIContainer rich-text inline (Route A + Route B + unmount)
+        "InlineUI_RouteA_ReactorChild",
+        "InlineUI_RouteB_NativeFactory",
+        "InlineUI_Unmount_TearsDownReactorChild",
+        // Issue #480 follow-up — incremental RTB update preserves child identity
+        "InlineUI_IncrementalUpdate_PreservesChildIdentity",
+        "InlineUI_IncrementalUpdate_RunMutatedInPlace",
         // ElementFactory<T> + WinUI ItemsRepeater recycle contract — regression
         // for the leak fixed alongside these tests (every realize was Minting
         // a fresh UIElement, orphaning prior ones in Repeater.Children).
@@ -1379,6 +1386,13 @@ internal static class SelfTestFixtureRegistry
         "OverlayTeardown_Flyout_Unmount_RunsFlyoutContentCleanup" => new OverlayTeardownFixtures.Flyout_Unmount_RunsFlyoutContentCleanup(harness),
         "OverlayTeardown_Flyout_Unmount_RunsPassThroughCleanup" => new OverlayTeardownFixtures.Flyout_Unmount_RunsPassThroughCleanup(harness),
         "OverlayTeardown_Popup_Unmount_RunsChildCleanup" => new OverlayTeardownFixtures.Popup_Unmount_RunsChildCleanup(harness),
+        // Issue #480 — InlineUIContainer rich-text inline.
+        "InlineUI_RouteA_ReactorChild" => new InlineUIContainerFixtures.InlineUI_RouteA_ReactorChild(harness),
+        "InlineUI_RouteB_NativeFactory" => new InlineUIContainerFixtures.InlineUI_RouteB_NativeFactory(harness),
+        "InlineUI_Unmount_TearsDownReactorChild" => new InlineUIContainerFixtures.InlineUI_Unmount_TearsDownReactorChild(harness),
+        // Issue #480 follow-up — incremental RTB update preserves child identity.
+        "InlineUI_IncrementalUpdate_PreservesChildIdentity" => new InlineUIContainerFixtures.InlineUI_IncrementalUpdate_PreservesChildIdentity(harness),
+        "InlineUI_IncrementalUpdate_RunMutatedInPlace" => new InlineUIContainerFixtures.InlineUI_IncrementalUpdate_RunMutatedInPlace(harness),
         "EFR_Factory_BoundedDistinctControls_AcrossManyRealizeCycles" => new ElementFactoryRecyclingFixtures.Factory_BoundedDistinctControls_AcrossManyRealizeCycles(harness),
         "EFR_Factory_RecycledControlIsReusedOnNextRealize" => new ElementFactoryRecyclingFixtures.Factory_RecycledControlIsReusedOnNextRealize(harness),
         "EFR_Factory_BookkeepingBoundedAcrossCycles" => new ElementFactoryRecyclingFixtures.Factory_BookkeepingBoundedAcrossCycles(harness),

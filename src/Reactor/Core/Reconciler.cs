@@ -2147,6 +2147,15 @@ public sealed partial class Reconciler : IDisposable
             UnmountTypedTreeViewContainers(typedTree);
             _typedTreeListControls.Remove(typedTree);
         }
+        else if (control is WinUI.RichTextBlock rtb)
+        {
+            // Issue #480 — RichTextBlock is neither a Panel nor a
+            // ContentControl, so the branches above don't recurse into its
+            // flow document. Any Route A (Reactor element) inline UI
+            // children must be torn down here or their hook cleanups +
+            // pooled descendants leak when the block goes away.
+            UnmountInlineUIChildren(rtb);
+        }
     }
 
     /// <summary>
@@ -2448,6 +2457,16 @@ public sealed partial class Reconciler : IDisposable
         {
             UnmountAndCollect(ccChild, toPool);
             cc.Content = null; // Detach so pooled child has no parent
+        }
+        else if (control is WinUI.RichTextBlock rtb)
+        {
+            // Issue #480 — mirror UnmountRecursive's RichTextBlock arm so
+            // Route A (Reactor element) inline UI children are torn down
+            // before the block is recycled to the pool. ElementPool.Reset
+            // calls rtb.Blocks.Clear() which drops the InlineUIContainer
+            // references; without this, descendant hooks / event trampolines
+            // would leak.
+            UnmountInlineUIChildren(rtb);
         }
 
         if (control is FrameworkElement poolCandidate)

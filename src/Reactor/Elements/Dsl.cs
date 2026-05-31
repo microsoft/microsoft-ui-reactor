@@ -1249,6 +1249,32 @@ public static partial class Factories
 
     public static RichTextHyperlink Hyperlink(string text, Uri navigateUri) => new(text, navigateUri);
 
+    /// <summary>
+    /// Issue #480 — embeds a Reactor <paramref name="child"/> element inline
+    /// inside a <see cref="RichTextBlock(RichTextParagraph[])"/>. Mirrors
+    /// WinUI's <c>InlineUIContainer</c>. The child is reconciled as any
+    /// other Reactor element — descendant hooks, event wiring, and
+    /// pooling all work as expected. Re-renders use the incremental update
+    /// path: structurally compatible inlines are mutated in place and
+    /// embedded children retain their WinUI control identity (Slider drag,
+    /// focus, and animation state survive). Only structural changes
+    /// (paragraph count change, inline type change, Route A↔B swap) fall
+    /// back to a full block rebuild.
+    /// </summary>
+    public static RichTextInlineUIContainer InlineUI(Element child) =>
+        new() { Child = child };
+
+    /// <summary>
+    /// Issue #480 — embeds a native WinUI control (produced by
+    /// <paramref name="factory"/>) inline inside a
+    /// <see cref="RichTextBlock(RichTextParagraph[])"/>. Escape hatch for
+    /// controls without a Reactor element counterpart. The factory is
+    /// re-invoked only when its delegate identity changes; passing the
+    /// same factory across renders preserves the control instance.
+    /// </summary>
+    public static RichTextInlineUIContainer InlineUI(Func<FrameworkElement> factory) =>
+        new() { Factory = factory };
+
     // ── Markdown ─────────────────────────────────────────────────────
 
     /// <summary>

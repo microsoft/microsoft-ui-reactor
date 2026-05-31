@@ -57,6 +57,26 @@ public record MarkdownOptions
     /// the cap throw at <see cref="MarkdownBuilder.Build"/>. TASK-049.
     /// </summary>
     public int MaxInputBytes { get; init; } = 4 * 1024 * 1024;
+
+    /// <summary>
+    /// When true, render the entire document as a SINGLE <see cref="RichTextBlockElement"/>
+    /// with one <see cref="RichTextParagraph"/> per markdown block. Flow content
+    /// (paragraphs, headings) becomes native paragraphs so WinUI's text
+    /// selection works seamlessly across them; block content that doesn't fit
+    /// the flow model (lists, code blocks, block quotes, tables, thematic
+    /// breaks, raw HTML, standalone images) is embedded via
+    /// <see cref="RichTextInlineUIContainer"/> as its own paragraph.
+    ///
+    /// <para>Default <c>false</c> preserves the historical
+    /// <c>VStack(per-block elements)</c> shape so existing apps and tests are
+    /// unchanged. Apps that render long prose (e.g. assistant chat replies)
+    /// should opt-in: it enables drag-selection across the whole reply, a
+    /// shared baseline rhythm, and a single rich-text accessibility surface.
+    /// Adjacent block-level elements (lists/code/tables) still break selection
+    /// where they appear, but consecutive paragraphs and headings before and
+    /// after them remain selectable as continuous text.</para>
+    /// </summary>
+    public bool UnifiedRichText { get; init; } = false;
 }
 
 /// <summary>
@@ -285,7 +305,75 @@ internal sealed class MarkdownBuilder
     private void LeaveDoc()
     {
         var frame = _blockStack.Pop();
+
+        if (_options.UnifiedRichText)
+        {
+            _result = BuildUnifiedDocument(frame.Children);
+            return;
+        }
+
         _result = VStack(8, frame.Children.ToArray());
+    }
+
+    /// <summary>
+    /// Collapse a document's top-level block children into a single
+    /// <see cref="RichTextBlockElement"/> with one paragraph per block.
+    /// Flow-compatible children (<see cref="RichTextBlockElement"/>) lift
+    /// their paragraphs directly; everything else is wrapped in
+    /// <see cref="RichTextInlineUIContainer"/> as a single-inline paragraph.
+    /// </summary>
+    private static Element BuildUnifiedDocument(List<Element> children)
+    {
+        if (children.Count == 0)
+        {
+            return new RichTextBlockElement("")
+            {
+                IsTextSelectionEnabled = true,
+            };
+        }
+
+        var paragraphs = new List<RichTextParagraph>(children.Count);
+        foreach (var child in children)
+        {
+            if (child is RichTextBlockElement rtb && rtb.Paragraphs is { Length: > 0 } ps)
+            {
+                // Headings carry their size on the per-block FontSize; the unified
+                // RichTextBlock has only one root FontSize so the per-block size
+                // must be propagated down to each run (where unset).
+                if (rtb.FontSize is double size)
+                {
+                    foreach (var p in ps)
+                    {
+                        var newInlines = new RichTextInline[p.Inlines.Length];
+                        for (int i = 0; i < p.Inlines.Length; i++)
+                        {
+                            newInlines[i] = p.Inlines[i] switch
+                            {
+                                RichTextRun run when run.FontSize is null
+                                    => run with { FontSize = size },
+                                _ => p.Inlines[i],
+                            };
+                        }
+                        paragraphs.Add(new RichTextParagraph(newInlines));
+                    }
+                }
+                else
+                {
+                    paragraphs.AddRange(ps);
+                }
+            }
+            else
+            {
+                paragraphs.Add(new RichTextParagraph(
+                    [new RichTextInlineUIContainer { Child = child }]));
+            }
+        }
+
+        return new RichTextBlockElement("")
+        {
+            Paragraphs = paragraphs.ToArray(),
+            IsTextSelectionEnabled = true,
+        };
     }
 
     private void LeaveParagraph()
