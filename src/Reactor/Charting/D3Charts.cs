@@ -10,6 +10,12 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using static Microsoft.UI.Reactor.Factories;
+// Spec 048 §7 — direct `Reg<>` touch alias for chart hot-path factories
+// that build element records by hand (avoids the extra clone-via-`with`
+// that routing through Factories.Line()/Path2D() would incur).
+using V1 = Microsoft.UI.Reactor.Core.V1Protocol;
+using Desc = Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
+using WinShapes = Microsoft.UI.Xaml.Shapes;
 
 namespace Microsoft.UI.Reactor.Charting;
 
@@ -231,16 +237,23 @@ public static class D3Charts
             .Canvas(cx - r, cy - r);
 
     /// <summary>Creates a line between two points.</summary>
-    public static LineElement D3Line(double x1, double y1, double x2, double y2) =>
-        // Route through Line(...) factory so the LineElement handler is
-        // registered before first mount (spec 048 §3.3). Constructing
-        // `new LineElement(...)` directly skips the registration touch and
-        // crashes the reconciler with "No handler is registered".
-        Line(x1, y1, x2, y2);
+    public static LineElement D3Line(double x1, double y1, double x2, double y2)
+    {
+        // Spec 048 registration touch — fires once on first call, idempotent
+        // thereafter. Constructing `new LineElement(...)` without this skips
+        // the global ControlRegistry installation and crashes the reconciler
+        // with "No handler is registered". Direct touch + single allocation
+        // avoids the `Line(x1,y1,x2,y2) with { ... }` double-allocation that
+        // would otherwise be required to keep this on the registration path.
+        _ = V1.Reg<LineElement, WinShapes.Line, Desc.LineDescriptorHandler>.Done;
+        return new() { X1 = x1, Y1 = y1, X2 = x2, Y2 = y2 };
+    }
 
     /// <summary>Creates a path from SVG path data string.  Accepts null pathData gracefully (renders nothing).</summary>
-    public static PathElement D3Path(string? pathData, Brush? stroke = null, Brush? fill = null, double strokeWidth = 1.5) =>
-        Path2D() with
+    public static PathElement D3Path(string? pathData, Brush? stroke = null, Brush? fill = null, double strokeWidth = 1.5)
+    {
+        _ = V1.Reg<PathElement, WinShapes.Path, Desc.PathDescriptorHandler>.Done;
+        return new()
         {
             Data = pathData != null ? PathDataParser.Parse(pathData) : null,
             PathDataString = pathData,
@@ -248,10 +261,13 @@ public static class D3Charts
             Fill = fill,
             StrokeThickness = strokeWidth,
         };
+    }
 
     /// <summary>Creates a path from SVG path data with a translate transform.  Accepts null pathData gracefully (renders nothing).</summary>
-    public static PathElement D3PathTranslated(string? pathData, double translateX, double translateY, Brush? stroke = null, Brush? fill = null, double strokeWidth = 1.5) =>
-        Path2D() with
+    public static PathElement D3PathTranslated(string? pathData, double translateX, double translateY, Brush? stroke = null, Brush? fill = null, double strokeWidth = 1.5)
+    {
+        _ = V1.Reg<PathElement, WinShapes.Path, Desc.PathDescriptorHandler>.Done;
+        return new()
         {
             Data = pathData != null ? PathDataParser.Parse(pathData) : null,
             PathDataString = pathData,
@@ -260,6 +276,7 @@ public static class D3Charts
             StrokeThickness = strokeWidth,
             RenderTransform = new TranslateTransform { X = translateX, Y = translateY },
         };
+    }
 
     // ── Text ────────────────────────────────────────────────────────────
 
