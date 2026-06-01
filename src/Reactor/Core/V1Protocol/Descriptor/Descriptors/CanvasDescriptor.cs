@@ -16,13 +16,19 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <para><b>§14 Phase 3-final Batch E:</b> per-child
 /// <see cref="CanvasAttached"/> (Canvas.Left / Canvas.Top, plus the
 /// AnchorX / AnchorY post-layout offset) is now applied via
-/// <see cref="Panel{TElement,TControl}.PerChildAttached"/>. The callback
-/// delegates to <see cref="Reconciler.ApplyCanvasPosition"/> so descriptor
-/// children share the same anchor-state ConditionalWeakTable + size-change
-/// subscription used by the legacy <c>MountCanvas</c> arm.</para>
+/// <see cref="Panel{TElement,TControl}.PerChildAttached"/> using descriptor-owned
+/// anchor state and size-change subscription.</para>
 /// </summary>
 internal static class CanvasDescriptor
 {
+    private sealed class CanvasAnchorState
+    {
+        public CanvasAttached Current = new();
+        public bool Subscribed;
+    }
+
+    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<FrameworkElement, CanvasAnchorState> _canvasAnchorStates = new();
+
     private static readonly Panel<CanvasElement, WinUI.Canvas> ChildrenStrategy =
         new Panel<CanvasElement, WinUI.Canvas>(
             GetChildren: static e => e.Children,
@@ -34,10 +40,10 @@ internal static class CanvasDescriptor
                 var ca = childEl.GetAttached<CanvasAttached>();
                 if (ca is null)
                 {
-                    Reconciler.ClearCanvasPosition(fe);
+                    ClearCanvasPosition(fe);
                     return;
                 }
-                Reconciler.ApplyCanvasPosition(fe, ca);
+                ApplyCanvasPosition(fe, ca);
             },
         };
 
@@ -59,6 +65,51 @@ internal static class CanvasDescriptor
             get:         static e => e.Background,
             set:         static (c, v) => c.Background = v,
             shouldWrite: static e => e.Background is not null);
+
+    private static void ApplyCanvasPosition(FrameworkElement fe, CanvasAttached ca)
+    {
+        if (ca.AnchorX == 0 && ca.AnchorY == 0)
+        {
+            WinUI.Canvas.SetLeft(fe, ca.Left);
+            WinUI.Canvas.SetTop(fe, ca.Top);
+            if (_canvasAnchorStates.TryGetValue(fe, out var existing))
+                existing.Current = ca;
+            return;
+        }
+
+        var state = _canvasAnchorStates.GetValue(fe, static _ => new CanvasAnchorState());
+        state.Current = ca;
+        RecomputeCanvasAnchor(fe, state.Current);
+
+        if (state.Subscribed) return;
+        state.Subscribed = true;
+
+        fe.SizeChanged += (_, _) =>
+        {
+            if (_canvasAnchorStates.TryGetValue(fe, out var s))
+                RecomputeCanvasAnchor(fe, s.Current);
+        };
+        fe.Loaded += (_, _) =>
+        {
+            if (_canvasAnchorStates.TryGetValue(fe, out var s))
+                RecomputeCanvasAnchor(fe, s.Current);
+        };
+    }
+
+    private static void RecomputeCanvasAnchor(FrameworkElement fe, CanvasAttached ca)
+    {
+        WinUI.Canvas.SetLeft(fe, ca.Left - ca.AnchorX * fe.ActualWidth);
+        WinUI.Canvas.SetTop(fe, ca.Top - ca.AnchorY * fe.ActualHeight);
+    }
+
+    // Reset retained anchor state when a reused child no longer carries CanvasAttached.
+    private static void ClearCanvasPosition(FrameworkElement fe)
+    {
+        fe.ClearValue(WinUI.Canvas.LeftProperty);
+        fe.ClearValue(WinUI.Canvas.TopProperty);
+        if (_canvasAnchorStates.TryGetValue(fe, out var existing))
+            existing.Current = new CanvasAttached();
+    }
 }
 
 /// <summary>

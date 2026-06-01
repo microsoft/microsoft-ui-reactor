@@ -725,77 +725,6 @@ public sealed partial class Reconciler : IDisposable
     // ModifierEventHandlerState.
 
     // ════════════════════════════════════════════════════════════════════
-    //  Canvas anchor positioning
-    // ════════════════════════════════════════════════════════════════════
-    //  CanvasAttached.AnchorX/AnchorY express positioning as a fraction of
-    //  the element's rendered size (0,0 = top-left, 0.5,0.5 = centered).
-    //  Final position depends on ActualWidth/ActualHeight, which is unknown
-    //  at mount time, so we recompute on Loaded + SizeChanged. The current
-    //  CanvasAttached is held in per-FE state so updates can swap anchor
-    //  values without re-subscribing.
-
-    private sealed class CanvasAnchorState
-    {
-        public CanvasAttached Current = new();
-        public bool Subscribed;
-    }
-
-    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<FrameworkElement, CanvasAnchorState> _canvasAnchorStates = new();
-
-    internal static void ApplyCanvasPosition(FrameworkElement fe, CanvasAttached ca)
-    {
-        if (ca.AnchorX == 0 && ca.AnchorY == 0)
-        {
-            WinUI.Canvas.SetLeft(fe, ca.Left);
-            WinUI.Canvas.SetTop(fe, ca.Top);
-            // If anchor handlers were previously installed (e.g. element re-used after
-            // a different anchor), keep them but update Current so they become a no-op.
-            if (_canvasAnchorStates.TryGetValue(fe, out var existing))
-                existing.Current = ca;
-            return;
-        }
-
-        var state = _canvasAnchorStates.GetValue(fe, static _ => new CanvasAnchorState());
-        state.Current = ca;
-        RecomputeCanvasAnchor(fe, state.Current);
-
-        if (state.Subscribed) return;
-        state.Subscribed = true;
-
-        fe.SizeChanged += (_, _) =>
-        {
-            if (_canvasAnchorStates.TryGetValue(fe, out var s))
-                RecomputeCanvasAnchor(fe, s.Current);
-        };
-        fe.Loaded += (_, _) =>
-        {
-            if (_canvasAnchorStates.TryGetValue(fe, out var s))
-                RecomputeCanvasAnchor(fe, s.Current);
-        };
-    }
-
-    private static void RecomputeCanvasAnchor(FrameworkElement fe, CanvasAttached ca)
-    {
-        WinUI.Canvas.SetLeft(fe, ca.Left - ca.AnchorX * fe.ActualWidth);
-        WinUI.Canvas.SetTop(fe, ca.Top - ca.AnchorY * fe.ActualHeight);
-    }
-
-    // Spec 047 §14 — clears Canvas positioning for a child that no longer
-    // carries CanvasAttached. With keyed reconcile a control can be reused
-    // across renders, so we must also reset any retained anchor state: a
-    // previously-installed SizeChanged/Loaded handler reads
-    // CanvasAnchorState.Current, and without this the stale anchored position
-    // would be re-applied on the next layout pass. Resetting Current to a
-    // default (non-anchored, 0,0) makes those retained handlers a no-op.
-    internal static void ClearCanvasPosition(FrameworkElement fe)
-    {
-        fe.ClearValue(WinUI.Canvas.LeftProperty);
-        fe.ClearValue(WinUI.Canvas.TopProperty);
-        if (_canvasAnchorStates.TryGetValue(fe, out var existing))
-            existing.Current = new CanvasAttached();
-    }
-
-    // ════════════════════════════════════════════════════════════════════
     //  Extensible type registry (Feature 1: RegisterType API)
     // ════════════════════════════════════════════════════════════════════
 
@@ -1872,11 +1801,14 @@ public sealed partial class Reconciler : IDisposable
     }
 
     private static void ForEachReactorChildControl(UIElement control, Action<UIElement> visit)
+        => ForEachReactorChildControl(control, child => { visit(child); return true; });
+
+    private static void ForEachReactorChildControl(UIElement control, Func<UIElement, bool> visit)
     {
         if (control is WinUI.Panel panel)
         {
             foreach (var child in panel.Children)
-                visit(child);
+                if (!visit(child)) return;
         }
         else if (control is WinUI.ItemsRepeater repeater)
         {
@@ -1885,8 +1817,8 @@ public sealed partial class Reconciler : IDisposable
             int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(repeater);
             for (int i = 0; i < count; i++)
             {
-                if (Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(repeater, i) is UIElement child)
-                    visit(child);
+                if (Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(repeater, i) is UIElement child && !visit(child))
+                    return;
             }
         }
         else if (control is WinUI.Border border && border.Child is not null)
@@ -4575,28 +4507,6 @@ public sealed partial class Reconciler : IDisposable
 
     // ── Enum conversions removed — Reactor now uses WinUI types directly ──
 
-    // ── Grid definition parsing ─────────────────────────────────────
-
-    internal static ColumnDefinition ParseColumnDef(string def) => def switch
-    {
-        "*" => new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
-        "Auto" or "auto" => new ColumnDefinition { Width = GridLength.Auto },
-        _ when double.TryParse(def, global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture, out var px) => new ColumnDefinition { Width = new GridLength(px) },
-        _ when def.EndsWith('*') && double.TryParse(def[..^1], global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture, out var stars) =>
-            new ColumnDefinition { Width = new GridLength(stars, GridUnitType.Star) },
-        _ => new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
-    };
-
-    internal static RowDefinition ParseRowDef(string def) => def switch
-    {
-        "*" => new RowDefinition { Height = new GridLength(1, GridUnitType.Star) },
-        "Auto" or "auto" => new RowDefinition { Height = GridLength.Auto },
-        _ when double.TryParse(def, global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture, out var px) => new RowDefinition { Height = new GridLength(px) },
-        _ when def.EndsWith('*') && double.TryParse(def[..^1], global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture, out var stars) =>
-            new RowDefinition { Height = new GridLength(stars, GridUnitType.Star) },
-        _ => new RowDefinition { Height = new GridLength(1, GridUnitType.Star) },
-    };
-
     /// <summary>
     /// Tracks the state of a mounted component in the tree.
     /// </summary>
@@ -4693,20 +4603,7 @@ public sealed partial class Reconciler : IDisposable
                 hooks.Add(hook);
         }
 
-        // Recurse into children (Border wraps components, Panel/Grid wraps layouts)
-        if (control is WinUI.Panel panel)
-        {
-            foreach (UIElement child in panel.Children)
-                CollectLifecycleHooksRecursive(child, hooks);
-        }
-        else if (control is WinUI.Border border && border.Child is not null)
-        {
-            CollectLifecycleHooksRecursive(border.Child, hooks);
-        }
-        else if (control is WinUI.ContentControl cc && cc.Content is UIElement content)
-        {
-            CollectLifecycleHooksRecursive(content, hooks);
-        }
+        ForEachReactorChildControl(control, child => CollectLifecycleHooksRecursive(child, hooks));
     }
 
     /// <summary>
@@ -4777,22 +4674,11 @@ public sealed partial class Reconciler : IDisposable
             if (ctx.IsCancelled) return;
         }
 
-        if (root is WinUI.Panel panel)
+        ForEachReactorChildControl(root, child =>
         {
-            foreach (UIElement child in panel.Children)
-            {
-                InvokeNavigatingFrom(child, ctx);
-                if (ctx.IsCancelled) return;
-            }
-        }
-        else if (root is WinUI.Border border && border.Child is not null)
-        {
-            InvokeNavigatingFrom(border.Child, ctx);
-        }
-        else if (root is WinUI.ContentControl cc && cc.Content is UIElement content)
-        {
-            InvokeNavigatingFrom(content, ctx);
-        }
+            InvokeNavigatingFrom(child, ctx);
+            return !ctx.IsCancelled;
+        });
     }
 
     /// <summary>

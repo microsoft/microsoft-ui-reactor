@@ -18,11 +18,10 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <para><b>§14 Phase 3-final Batch E:</b> per-child
 /// <see cref="FlexAttached"/> (Grow / Shrink / Basis / MinWidth / MinHeight
 /// / AlignSelf / Position / Left / Top / Right / Bottom) is now applied via
-/// <see cref="Panel{TElement,TControl}.PerChildAttached"/>. The callback
-/// delegates to <see cref="Reconciler.ApplyFlexAttached"/> so descriptor
-/// children share the same "always apply — reset to defaults when no hint"
-/// semantics as the legacy <c>MountFlex</c> arm (the reset is required for
-/// pool-rented controls that could otherwise inherit stale Yoga config).</para>
+/// <see cref="Panel{TElement,TControl}.PerChildAttached"/> with the same
+/// "always apply — reset to defaults when no hint" semantics as the legacy
+/// <c>MountFlex</c> arm (the reset is required for pool-rented controls that
+/// could otherwise inherit stale Yoga config).</para>
 /// </summary>
 internal static class FlexPanelDescriptor
 {
@@ -31,8 +30,7 @@ internal static class FlexPanelDescriptor
             GetChildren: static e => e.Children,
             GetCollection: static c => c.Children)
         {
-            PerChildAttached = static (panel, ui, childEl) =>
-                Microsoft.UI.Reactor.Core.Reconciler.ApplyFlexAttached(childEl, ui),
+            PerChildAttached = static (panel, ui, childEl) => ApplyFlexAttached(childEl, ui),
         };
 
     public static readonly ControlDescriptor<FlexElement, FlexPanel> Descriptor =
@@ -65,6 +63,32 @@ internal static class FlexPanelDescriptor
         .OneWay(
             get: static e => e.FlexPadding,
             set: static (c, v) => c.FlexPadding = v);
+
+    private static void ApplyFlexAttached(Element child, Microsoft.UI.Xaml.UIElement ctrl)
+    {
+        var fa = child.GetAttached<FlexAttached>();
+        // Always apply — reset to defaults when no FlexAttached, so stale values
+        // from pool-rented or reconciler-reused controls are cleared.
+        FlexPanel.SetGrow(ctrl, fa?.Grow ?? 0);
+        FlexPanel.SetShrink(ctrl, fa?.Shrink ?? 1);
+        if (fa is { Basis: { } basis }) FlexPanel.SetBasis(ctrl, basis);
+        else ctrl.ClearValue(FlexPanel.BasisProperty);
+        if (fa is { MinWidth: { } minWidth }) FlexPanel.SetMinWidth(ctrl, minWidth);
+        else ctrl.ClearValue(FlexPanel.FlexMinWidthProperty);
+        if (fa is { MinHeight: { } minHeight }) FlexPanel.SetMinHeight(ctrl, minHeight);
+        else ctrl.ClearValue(FlexPanel.FlexMinHeightProperty);
+        if (fa is { AlignSelf: { } alignSelf }) FlexPanel.SetAlignSelf(ctrl, alignSelf);
+        else ctrl.ClearValue(FlexPanel.AlignSelfProperty);
+        FlexPanel.SetPosition(ctrl, fa?.Position ?? FlexPositionType.Relative);
+        if (fa is { Left: { } left }) FlexPanel.SetLeft(ctrl, left);
+        else ctrl.ClearValue(FlexPanel.LeftProperty);
+        if (fa is { Top: { } top }) FlexPanel.SetTop(ctrl, top);
+        else ctrl.ClearValue(FlexPanel.TopProperty);
+        if (fa is { Right: { } right }) FlexPanel.SetRight(ctrl, right);
+        else ctrl.ClearValue(FlexPanel.RightProperty);
+        if (fa is { Bottom: { } bottom }) FlexPanel.SetBottom(ctrl, bottom);
+        else ctrl.ClearValue(FlexPanel.BottomProperty);
+    }
 }
 
 /// <summary>

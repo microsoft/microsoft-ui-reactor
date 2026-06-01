@@ -413,4 +413,57 @@ internal static class NavigationFixtures
             );
         }
     }
+
+    // ── NavigatingFrom descends through ScrollViewer content ──────────────
+
+    internal class NavHostScrollViewerNestedNavigatingFromCancels(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            LifecycleEvents.Clear();
+
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var nav = ctx.UseNavigation<string>("guarded");
+
+                return VStack(
+                    Button("Try Other", () => nav.Navigate("other")),
+                    NavigationHost(nav, route => route switch
+                    {
+                        "guarded" => ScrollViewer(Component<ScrollViewerGuardPage>()),
+                        "other" => TextBlock("Other Target"),
+                        _ => TextBlock("Unknown"),
+                    }) with { Transition = NavigationTransition.None }
+                );
+            });
+
+            await Harness.Render();
+            H.Check("NavHost_ScrollViewerGuard_Initial",
+                H.FindText("Guarded Inside ScrollViewer") is not null);
+
+            H.ClickButton("Try Other");
+            await Harness.Render();
+
+            H.Check("NavHost_ScrollViewerGuard_HookInvoked",
+                LifecycleEvents.Contains("scrollViewer:navigatingFrom"));
+            H.Check("NavHost_ScrollViewerGuard_Cancelled",
+                H.FindText("Guarded Inside ScrollViewer") is not null &&
+                H.FindText("Other Target") is null);
+        }
+    }
+
+    class ScrollViewerGuardPage : Component
+    {
+        public override Element Render()
+        {
+            UseNavigationLifecycle(onNavigatingFrom: ctx =>
+            {
+                LifecycleEvents.Add("scrollViewer:navigatingFrom");
+                ctx.Cancel();
+            });
+
+            return TextBlock("Guarded Inside ScrollViewer");
+        }
+    }
 }

@@ -13,9 +13,8 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// one-way numeric props (<c>RowSpacing</c>, <c>ColumnSpacing</c>) plus a
 /// reference-keyed <c>OneWay&lt;GridDefinition&gt;</c> entry whose set
 /// lambda clears + rebuilds the WinUI <c>RowDefinitions</c> /
-/// <c>ColumnDefinitions</c> collections through
-/// <see cref="Reconciler.ParseRowDef"/> / <see cref="Reconciler.ParseColumnDef"/>.
-/// The comparer is <see cref="ReferenceEqualityComparer.Instance"/> so the
+/// <c>ColumnDefinitions</c> collections through descriptor-owned parsers.
+/// The comparer is <see cref="GridDefinitionReferenceComparer.Instance"/> so the
 /// rebuild only fires when the element's <c>Definition</c> instance changes
 /// (mirrors the legacy <c>!ReferenceEquals(o.Definition, n.Definition)</c>
 /// gate). Children are dispatched through the
@@ -79,11 +78,31 @@ internal static class GridDescriptor
                 c.RowDefinitions.Clear();
                 if (v is null) return;
                 foreach (var col in v.Columns)
-                    c.ColumnDefinitions.Add(Reconciler.ParseColumnDef(col));
+                    c.ColumnDefinitions.Add(ParseColumnDef(col));
                 foreach (var row in v.Rows)
-                    c.RowDefinitions.Add(Reconciler.ParseRowDef(row));
+                    c.RowDefinitions.Add(ParseRowDef(row));
             },
             comparer: GridDefinitionReferenceComparer.Instance);
+
+    private static WinUI.ColumnDefinition ParseColumnDef(string def) => def switch
+    {
+        "*" => new WinUI.ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
+        "Auto" or "auto" => new WinUI.ColumnDefinition { Width = GridLength.Auto },
+        _ when double.TryParse(def, global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture, out var px) => new WinUI.ColumnDefinition { Width = new GridLength(px) },
+        _ when def.EndsWith('*') && double.TryParse(def[..^1], global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture, out var stars) =>
+            new WinUI.ColumnDefinition { Width = new GridLength(stars, GridUnitType.Star) },
+        _ => new WinUI.ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
+    };
+
+    private static WinUI.RowDefinition ParseRowDef(string def) => def switch
+    {
+        "*" => new WinUI.RowDefinition { Height = new GridLength(1, GridUnitType.Star) },
+        "Auto" or "auto" => new WinUI.RowDefinition { Height = GridLength.Auto },
+        _ when double.TryParse(def, global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture, out var px) => new WinUI.RowDefinition { Height = new GridLength(px) },
+        _ when def.EndsWith('*') && double.TryParse(def[..^1], global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture, out var stars) =>
+            new WinUI.RowDefinition { Height = new GridLength(stars, GridUnitType.Star) },
+        _ => new WinUI.RowDefinition { Height = new GridLength(1, GridUnitType.Star) },
+    };
 
     private sealed class GridDefinitionReferenceComparer : IEqualityComparer<GridDefinition>
     {

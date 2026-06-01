@@ -998,32 +998,6 @@ public sealed partial class Reconciler
     }
 
 
-    internal static void ApplyFlexAttached(Element child, Microsoft.UI.Xaml.UIElement ctrl)
-    {
-        var fa = child.GetAttached<FlexAttached>();
-        // Always apply — reset to defaults when no FlexAttached, so stale values
-        // from pool-rented or reconciler-reused controls are cleared.
-        Layout.FlexPanel.SetGrow(ctrl, fa?.Grow ?? 0);
-        Layout.FlexPanel.SetShrink(ctrl, fa?.Shrink ?? 1);
-        if (fa is { Basis: { } basis }) Layout.FlexPanel.SetBasis(ctrl, basis);
-        else ctrl.ClearValue(Layout.FlexPanel.BasisProperty);
-        if (fa is { MinWidth: { } minWidth }) Layout.FlexPanel.SetMinWidth(ctrl, minWidth);
-        else ctrl.ClearValue(Layout.FlexPanel.FlexMinWidthProperty);
-        if (fa is { MinHeight: { } minHeight }) Layout.FlexPanel.SetMinHeight(ctrl, minHeight);
-        else ctrl.ClearValue(Layout.FlexPanel.FlexMinHeightProperty);
-        if (fa is { AlignSelf: { } alignSelf }) Layout.FlexPanel.SetAlignSelf(ctrl, alignSelf);
-        else ctrl.ClearValue(Layout.FlexPanel.AlignSelfProperty);
-        Layout.FlexPanel.SetPosition(ctrl, fa?.Position ?? Layout.FlexPositionType.Relative);
-        if (fa is { Left: { } left }) Layout.FlexPanel.SetLeft(ctrl, left);
-        else ctrl.ClearValue(Layout.FlexPanel.LeftProperty);
-        if (fa is { Top: { } top }) Layout.FlexPanel.SetTop(ctrl, top);
-        else ctrl.ClearValue(Layout.FlexPanel.TopProperty);
-        if (fa is { Right: { } right }) Layout.FlexPanel.SetRight(ctrl, right);
-        else ctrl.ClearValue(Layout.FlexPanel.RightProperty);
-        if (fa is { Bottom: { } bottom }) Layout.FlexPanel.SetBottom(ctrl, bottom);
-        else ctrl.ClearValue(Layout.FlexPanel.BottomProperty);
-    }
-
     /// <summary>
     /// Recursively diff TreeViewNode lists, reusing existing nodes where Content matches.
     /// Only adds/removes/updates nodes that actually changed, minimizing COM interop calls.
