@@ -239,6 +239,12 @@
       <Platform Solution="*|x64" Project="x64" />
     </Project>
   </Folder>
+  <Folder Name="/samples/apps/hello-world-aot/">
+    <Project Path="samples/apps/hello-world-aot/HelloWorldAot.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
   <Folder Name="/samples/apps/monaco-editor/">
     <Project Path="samples/apps/monaco-editor/MonacoEditorApp.csproj">
       <Platform Solution="*|ARM64" Project="ARM64" />
