@@ -1,5 +1,11 @@
 # Layout Cost Overlay Implementation Tasks
 
+> **REMOVED** — 2026-06-01 (PR #507). The layout-cost overlay was
+> removed from the codebase; this task list is preserved alongside
+> [the design spec](../032-layout-cost-overlay-design.md) for
+> historical context. See that spec's *REMOVED* banner for the
+> rationale.
+
 Derived from: `docs/specs/032-layout-cost-overlay-design.md`
 
 Scope reminder: Phases 1–3 are v1 shipping scope. Phases 4–5 are fast-follow.

@@ -192,10 +192,10 @@ does, not just how to use it.
 - **[Source Mapping](source-mapping.md)** — How stack traces and devtools attribute work back to user source
 - **[Modifier System](modifier-system.md)** — How `.FontSize(24).Bold()` actually works
 - **[Analyzer Architecture](analyzer-architecture.md)** — Roslyn analyzers shipped with Reactor; authoring your own
-- **[DevTools Internals](devtools-internals.md)** — Dev menu, reconcile-highlight, layout-cost overlay, MCP protocol
+- **[DevTools Internals](devtools-internals.md)** — Dev menu, reconcile-highlight overlay, MCP protocol
 - **[Animation Pipeline](animation-pipeline.md)** — Composition API end-to-end; 4 animation systems
 - **[Focus and Input Internals](focus-and-input-internals.md)** — `UseFocus` dispatcher, `FocusTrap` container, pointer event flow
-- **[Perf Instrumentation](perf-instrumentation.md)** — ETW sources, frame-aligned sampling, layout-cost attribution
+- **[Perf Instrumentation](perf-instrumentation.md)** — ETW sources, frame-aligned sampling
 
 ### 10. API Reference
 

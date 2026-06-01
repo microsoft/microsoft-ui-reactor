@@ -1,8 +1,6 @@
 using System.Diagnostics;
 using Microsoft.UI.Reactor.Animation;
 using Microsoft.UI.Reactor.Core;
-using Microsoft.UI.Reactor.Hosting.Etw;
-using Microsoft.UI.Reactor.Hosting.LayoutCost;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
@@ -74,14 +72,6 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
 
     // ── Single shared overlay surface (see OverlayHostWiring) ──
     private OverlayHostWiring? _overlayWiring;
-
-    // ── Layout cost data pipeline (attribution + ETW) ──
-    private LayoutEtwConsumer? _etwConsumer;
-    private EventPairing? _eventPairing;
-    private LayoutEventRing? _eventRing;
-    private PointerMap? _pointerMap;
-    private SpatialIndex? _spatialIndex;
-    private LayoutCostAttribution? _attribution;
 
     // Render phase timing instrumentation
     private readonly Stopwatch _phaseSw = new();
@@ -155,89 +145,11 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         // Register built-in custom element types
         Controls.ResizeGripRegistration.Register(_reconciler);
 
-        if (ReactorFeatureFlags.ShowLayoutCost)
-            StartEtwPipeline();
-
         if (component is not null)
             Mount(component);
     }
 
-    /// <summary>Build attribution + subscribe the reconciler + attach it to the overlay wiring. Idempotent.</summary>
-    private void EnsureLayoutCostPipeline()
-    {
-        if (_etwConsumer is null)
-            StartEtwPipeline();
-        else if (_attribution is null)
-        {
-            _pointerMap ??= new PointerMap();
-            _spatialIndex ??= new SpatialIndex();
-            _attribution = new LayoutCostAttribution(_eventRing!, _pointerMap, _spatialIndex);
-            _attribution.BindReconciler(_reconciler);
-        }
-        _overlayWiring ??= new OverlayHostWiring(_dispatcherQueue);
-        if (_attribution is not null)
-            _overlayWiring.AttachLayoutCostAttribution(_attribution);
-    }
-
-    private bool AnyOverlayFlagOn =>
-        ReactorFeatureFlags.HighlightReconcileChanges || ReactorFeatureFlags.ShowLayoutCost;
-
-    private bool _lastLayoutCostFlagState;
-
-    /// <summary>
-    /// Stop the ETW session when ShowLayoutCost goes off; restart on flag-on.
-    /// Mirrors <see cref="ReactorHost"/>.
-    /// </summary>
-    private void ApplyEtwSessionState()
-    {
-        bool on = ReactorFeatureFlags.ShowLayoutCost;
-        if (on == _lastLayoutCostFlagState) return;
-        _lastLayoutCostFlagState = on;
-
-        if (_etwConsumer is null) return;
-        try
-        {
-            if (on) _etwConsumer.Start();
-            else _etwConsumer.Stop();
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[Reactor.LayoutCost] ETW session toggle ({(on ? "Start" : "Stop")}) failed: {ex.Message}");
-        }
-    }
-
-    private void StartEtwPipeline()
-    {
-        if (_etwConsumer is not null) return;
-        _eventPairing ??= new EventPairing();
-        _eventRing ??= new LayoutEventRing();
-        _etwConsumer = new LayoutEtwConsumer();
-        var pairing = _eventPairing;
-        var ring = _eventRing;
-        _eventPairing.Paired += paired => ring.Publish(paired);
-        _etwConsumer.EventReceived += raw => pairing.OnEvent(raw);
-
-        _pointerMap ??= new PointerMap();
-        _spatialIndex ??= new SpatialIndex();
-        _attribution ??= new LayoutCostAttribution(_eventRing, _pointerMap, _spatialIndex);
-        _attribution.BindReconciler(_reconciler);
-
-        try
-        {
-            _etwConsumer.Start();
-            if (_etwConsumer.IsUnavailable)
-            {
-                _attribution.IsEtwUnavailable = true;
-                Debug.WriteLine(
-                    $"[Reactor.LayoutCost] ETW unavailable: {_etwConsumer.UnavailableReason}");
-            }
-        }
-        catch (Exception ex)
-        {
-            _attribution.IsEtwUnavailable = true;
-            Debug.WriteLine($"[Reactor.LayoutCost] StartLayoutCostPipeline failed: {ex.Message}");
-        }
-    }
+    private bool AnyOverlayFlagOn => ReactorFeatureFlags.HighlightReconcileChanges;
 
     /// <summary>
     /// Mount a Component instance directly. Starts the render loop immediately.
@@ -518,18 +430,12 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
 
             bool anyOverlayOn = AnyOverlayFlagOn;
 
-            // Always ensure the LC pipeline is plumbed whenever its flag is
-            // on, even when the wrapper was previously installed for some
-            // other overlay. Idempotent. See matching note in ReactorHost.
-            if (ReactorFeatureFlags.ShowLayoutCost)
-                EnsureLayoutCostPipeline();
             if (anyOverlayOn)
                 _overlayWiring ??= new OverlayHostWiring(_dispatcherQueue);
 
             // Per-feature teardown for the case where one flag flipped off
             // while another is still on.
             _overlayWiring?.ApplyFlagState();
-            ApplyEtwSessionState();
 
             if (newControl != _currentControl)
             {
@@ -574,10 +480,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
             // Start any connected animations now that the new tree is in the visual tree
             _reconciler.FlushConnectedAnimations();
 
-            // Schedule overlay flushes after layout; each is a no-op when its
-            // own flag is off.
+            // Schedule the highlight overlay flush after layout; no-op when
+            // the flag is off.
             _overlayWiring?.ScheduleHighlightFlush(_reconciler);
-            _overlayWiring?.ScheduleLayoutCostFlush();
 
             double reconcileMs = _phaseSw.Elapsed.TotalMilliseconds;
 
@@ -706,14 +611,6 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         _currentControl = null;
         try { _overlayWiring?.Dispose(); } catch { /* best effort */ }
         _overlayWiring = null;
-        try { _attribution?.UnbindReconciler(); } catch { /* best effort */ }
-        _attribution = null;
-        _pointerMap = null;
-        _spatialIndex = null;
-        try { _etwConsumer?.Dispose(); } catch { /* best effort */ }
-        _etwConsumer = null;
-        _eventPairing = null;
-        _eventRing = null;
 
         Content = null;
     }

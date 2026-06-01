@@ -890,13 +890,6 @@ internal static class SelfTestFixtureRegistry
         "TemplatedListHL_LazyHStack_NoHighlightOnSiblingStateChange",
         "TemplatedListHL_LazyVStack_SpacingChangeFlagsControl",
 
-        // Layout-cost overlay (spec 032)
-        "LayoutCost_FlagOn_BackFillsExistingComponents",
-        "LayoutCost_MountWhileOn_AddsRollup",
-        "LayoutCost_UnmountWhileOn_DropsRollup",
-        "LayoutCost_ToggleOffOn_NewComponentsStillRegister",
-        "LayoutCost_BoundsRefreshFromVisualTree",
-
         // ReconcilerBigCoverage — targets uncovered Reconciler/Mount/Update branches
         "RBC_AllEventHandlersAttached",
         "RBC_TapHandlersRemovedDisablesFlags",
@@ -2106,13 +2099,6 @@ internal static class SelfTestFixtureRegistry
         "TemplatedListHL_LazyVStack_NoHighlightOnSiblingStateChange" => new TemplatedListHighlightTests.LazyVStack_NoHighlightOnSiblingStateChange(harness),
         "TemplatedListHL_LazyHStack_NoHighlightOnSiblingStateChange" => new TemplatedListHighlightTests.LazyHStack_NoHighlightOnSiblingStateChange(harness),
         "TemplatedListHL_LazyVStack_SpacingChangeFlagsControl" => new TemplatedListHighlightTests.LazyVStack_SpacingChangeFlagsControl(harness),
-
-        // Layout-cost overlay
-        "LayoutCost_FlagOn_BackFillsExistingComponents" => new LayoutCostOverlayTests.FlagOn_BackFillsExistingComponents(harness),
-        "LayoutCost_MountWhileOn_AddsRollup" => new LayoutCostOverlayTests.MountWhileOn_AddsRollup(harness),
-        "LayoutCost_UnmountWhileOn_DropsRollup" => new LayoutCostOverlayTests.UnmountWhileOn_DropsRollup(harness),
-        "LayoutCost_ToggleOffOn_NewComponentsStillRegister" => new LayoutCostOverlayTests.ToggleOffOn_NewComponentsStillRegister(harness),
-        "LayoutCost_BoundsRefreshFromVisualTree" => new LayoutCostOverlayTests.BoundsRefreshFromVisualTree(harness),
 
         // ReconcilerBigCoverage
         "RBC_AllEventHandlersAttached" => new ReconcilerBigCoverageFixtures.AllEventHandlersAttached(harness),

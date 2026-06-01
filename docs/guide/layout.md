@@ -348,8 +348,7 @@ internally.
 > the first layout pass — once with `Available = Infinity` to determine
 > the natural content size, and once with `Available = ActualWidth` to
 > resolve the star tracks. The double pass is fast for ≤100 children and
-> visible above ~500 (the layout-cost overlay reports the extra
-> measure-pass cost — see [dev-tooling](dev-tooling.md)). For large
+> visible above ~500. For large
 > lists rendered into a star-sized cell, wrap the content in
 > [`VirtualList`](collections.md) or `LazyVStack` so the panel only
 > materializes the visible window; the host star track measures the
@@ -608,5 +607,4 @@ non-standard radius).
 - **[Styling and Theming](styling.md)** — Apply colors, typography, and themes to your layouts
 - **[Collections](collections.md)** — `VirtualList` for large data sets that overflow `ScrollView`
 - **[Forms and Input](forms.md)** — Build data entry forms with text fields, checkboxes, and validation
-- **[Dev Tooling](dev-tooling.md)** — Layout-cost overlay surfaces double-measure passes and other layout hot spots
 - **[Modifier System](modifier-system.md)** — How `.Width()`, `.Margin()`, and friends chain internally

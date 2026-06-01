@@ -5,7 +5,7 @@ every reconcile, every effect, every dispatcher hop — through a small
 set of dedicated tools so you can see, attribute, and reason about
 what your app is doing without a profiler. The `mur` CLI, preview
 mode under `dotnet watch`, the MCP server, the VS Code panel, the
-in-app dev menu, and the reconcile-highlight / layout-cost overlays
+in-app dev menu, and the reconcile-highlight overlay
 are all variants of the same idea: the runtime publishes its work,
 and the inner loop lets you read it. The cost is zero in retail —
 every devtools entry point lives behind a build-time opt-in
@@ -298,19 +298,15 @@ story.
 
 ## Runtime Overlays
 
-Two overlays attach to a running app when devtools are on:
+The reconcile-highlight overlay attaches to a running app when devtools are on:
 
 - **Reconcile-highlight overlay.** Flashes a rectangle around any
   element that the reconciler patched on the most recent render. Useful
   for catching unintended re-renders (the [Rules of Reactor](rules-of-reactor.md)
   page covers the most common causes).
-- **Layout-cost overlay.** Tints elements by the cost of their last
-  measure / arrange pass, sourced from ETW. The deeper attribution
-  story is in [Perf Instrumentation](perf-instrumentation.md).
 
-Both overlays render under the `DevtoolsMenu` toggle group. They are
-zero-cost when off — they consume an ETW listener registration only
-when their flag is true.
+The overlay renders under the `DevtoolsMenu` toggle group. It is
+zero-cost when off.
 
 ## The Iteration Cycle
 

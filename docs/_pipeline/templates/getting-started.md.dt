@@ -433,10 +433,9 @@ side effects, `UseRef` for non-rendering bookkeeping).
 
 Launch with `dotnet run -c Debug` and Reactor mounts the in-app dev
 menu (Ctrl+Shift+D by default). The reconcile-highlight overlay flashes
-on every commit, the layout-cost overlay attributes per-component time,
-and the [dev tooling](dev-tooling.md) page covers the full menu. The
-overlays are no-cost in Release builds — the dev menu compiles out
-under `#if DEBUG`.
+on every commit, and the [dev tooling](dev-tooling.md) page covers the
+full menu. The overlay is no-cost in Release builds — the dev menu
+compiles out under `#if DEBUG`.
 
 ## Common Mistakes
 

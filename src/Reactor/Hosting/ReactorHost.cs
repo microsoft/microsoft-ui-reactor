@@ -1,8 +1,6 @@
 using System.Diagnostics;
 using Microsoft.UI.Reactor.Animation;
 using Microsoft.UI.Reactor.Core;
-using Microsoft.UI.Reactor.Hosting.Etw;
-using Microsoft.UI.Reactor.Hosting.LayoutCost;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
@@ -91,17 +89,6 @@ public sealed class ReactorHost : IDisposable
 
     /// <summary>Test-only: access the live overlay-host wiring (null if not constructed).</summary>
     internal OverlayHostWiring? OverlayWiring => _overlayWiring;
-
-    // ── Layout cost overlay data pipeline (gated by ReactorFeatureFlags.ShowLayoutCost) ──
-    // Owned by the host so the ETW session lifetime matches the host's lifetime.
-    // Constructed lazily on first observed flag-on; never torn down except on Dispose
-    // (flag flips post-init require a host restart per the flag's contract).
-    private LayoutEtwConsumer? _etwConsumer;
-    private EventPairing? _eventPairing;
-    private LayoutEventRing? _eventRing;
-    private PointerMap? _pointerMap;
-    private SpatialIndex? _spatialIndex;
-    private LayoutCostAttribution? _attribution;
 
     // Render phase timing instrumentation
     private readonly Stopwatch _phaseSw = new();
@@ -241,134 +228,10 @@ public sealed class ReactorHost : IDisposable
         // may still call setState after this, but RequestRender will bail out.
         _closedHandler = (_, _) => Dispose();
         _window.Closed += _closedHandler;
-
-        // Start the ETW leg of the pipeline eagerly when the flag is on at
-        // host construction — ETW session creation is privileged and has
-        // long-lived OS state, so we don't retry it mid-session. The overlay
-        // wiring (wrapper + compositor visuals) is built lazily via
-        // EnsureLayoutCostPipeline so flipping the menu toggle shows a
-        // sanity-wash overlay even without a running ETW session.
-        if (ReactorFeatureFlags.ShowLayoutCost)
-            StartEtwPipeline();
-    }
-
-    /// <summary>Build attribution + subscribe the reconciler + attach it to the overlay wiring. Idempotent.</summary>
-    private void EnsureLayoutCostPipeline()
-    {
-        // Try to start the ETW pipeline live — gives us layoutMs data without
-        // a host restart when the user flips the flag. If the user doesn't have
-        // Performance Log Users / admin rights, the consumer flips IsUnavailable
-        // and the overlay still works (just without the top ms bar).
-        if (_etwConsumer is null)
-            StartEtwPipeline();
-        else if (_attribution is null)
-        {
-            _pointerMap ??= new PointerMap();
-            _spatialIndex ??= new SpatialIndex();
-            _attribution = new LayoutCostAttribution(_eventRing!, _pointerMap, _spatialIndex);
-            _attribution.BindReconciler(_reconciler);
-        }
-        _overlayWiring ??= new OverlayHostWiring(_dispatcherQueue);
-        if (_attribution is not null)
-            _overlayWiring.AttachLayoutCostAttribution(_attribution);
-    }
-
-    private void StartEtwPipeline()
-    {
-        if (_etwConsumer is not null) return;
-        _eventPairing ??= new EventPairing();
-        _eventRing ??= new LayoutEventRing();
-        _etwConsumer = new LayoutEtwConsumer();
-        var pairing = _eventPairing;
-        var ring = _eventRing;
-        _eventPairing.Paired += paired => ring.Publish(paired);
-        _etwConsumer.EventReceived += raw => pairing.OnEvent(raw);
-
-        // Build attribution here, not via EnsureLayoutCostPipeline (which
-        // would re-enter this method).
-        _pointerMap ??= new PointerMap();
-        _spatialIndex ??= new SpatialIndex();
-        _attribution ??= new LayoutCostAttribution(_eventRing, _pointerMap, _spatialIndex);
-        _attribution.BindReconciler(_reconciler);
-
-        try
-        {
-            _etwConsumer.Start();
-            if (_etwConsumer.IsUnavailable)
-            {
-                _attribution.IsEtwUnavailable = true;
-                Debug.WriteLine(
-                    $"[Reactor.LayoutCost] ETW unavailable: {_etwConsumer.UnavailableReason}");
-            }
-        }
-        catch (Exception ex)
-        {
-            _attribution.IsEtwUnavailable = true;
-            Debug.WriteLine($"[Reactor.LayoutCost] StartLayoutCostPipeline failed: {ex.Message}");
-        }
     }
 
     /// <summary>Ensure the overlay wrapper exists whenever any dev overlay flag is on.</summary>
-    private bool AnyOverlayFlagOn =>
-        ReactorFeatureFlags.HighlightReconcileChanges || ReactorFeatureFlags.ShowLayoutCost;
-
-    // Tracks the last observed value of ShowLayoutCost so we only act on
-    // off↔on transitions, not on every render.
-    private bool _lastLayoutCostFlagState;
-
-    /// <summary>
-    /// Stop the ETW session when ShowLayoutCost goes off and restart it
-    /// when it goes back on. Keeps the consumer object alive across
-    /// transitions so the session-name + leak-guard stay consistent.
-    /// </summary>
-    private void ApplyEtwSessionState()
-    {
-        bool on = ReactorFeatureFlags.ShowLayoutCost;
-        if (on == _lastLayoutCostFlagState) return;
-        _lastLayoutCostFlagState = on;
-
-        if (_etwConsumer is null) return; // pipeline never started, nothing to toggle.
-        try
-        {
-            if (on) _etwConsumer.Start();
-            else _etwConsumer.Stop();
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[Reactor.LayoutCost] ETW session toggle ({(on ? "Start" : "Stop")}) failed: {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// Internal debug hook — exposed for self-tests. Returns the running ETW
-    /// consumer (or null when the flag was off at host init).
-    /// </summary>
-    internal LayoutEtwConsumer? EtwConsumer => _etwConsumer;
-
-    /// <summary>
-    /// Internal hook: the layout-cost reporter (attribution aggregator),
-    /// or null when <see cref="ReactorFeatureFlags.ShowLayoutCost"/> hasn't
-    /// been observed on. Used by selftest fixtures to inspect rollup state.
-    /// </summary>
-    internal LayoutCost.ILayoutCostReporter? LayoutCostReporter => _attribution;
-
-    /// <summary>
-    /// Internal hook: trigger an immediate layout-cost flush, bypassing the
-    /// throttle. Selftest fixtures use this to deterministically wait for
-    /// the attribution layer to refresh per-Component bounds via the visual
-    /// tree walk after a tree change.
-    /// </summary>
-    internal void FlushLayoutCostNow()
-    {
-        if (_overlayWiring is null || _attribution is null) return;
-        // Direct call on the UI thread — selftests run on the dispatcher.
-        _attribution.RefreshComponentMetricsFromVisualTree(
-            _overlayWiring.OverlayCanvas ?? (Microsoft.UI.Xaml.UIElement)_window.Content);
-        _attribution.Drain();
-    }
-
-    /// <summary>Internal debug hook — paired-event ring buffer (or null when flag was off).</summary>
-    internal LayoutEventRing? EventRing => _eventRing;
+    private bool AnyOverlayFlagOn => ReactorFeatureFlags.HighlightReconcileChanges;
 
     /// <summary>
     /// Called by chart elements (via <see cref="ChartingActivation.RequestActivation"/>)
@@ -724,14 +587,6 @@ public sealed class ReactorHost : IDisposable
             // via OverlayHostWiring's root ContainerVisual.
             bool anyOverlayOn = AnyOverlayFlagOn;
 
-            // Always ensure the LC pipeline is plumbed whenever its flag is
-            // on — even if the wrapper was already installed for the highlight
-            // overlay alone. Without this, a sequence of (highlight on →
-            // highlight off → LC on) leaves the wiring instance without an
-            // attribution reference, so ScheduleLayoutCostFlush silently
-            // returns. EnsureLayoutCostPipeline is idempotent.
-            if (ReactorFeatureFlags.ShowLayoutCost)
-                EnsureLayoutCostPipeline();
             if (anyOverlayOn)
                 _overlayWiring ??= new OverlayHostWiring(_dispatcherQueue);
 
@@ -739,7 +594,6 @@ public sealed class ReactorHost : IDisposable
             // still on, dispose just that sub-overlay. The shared wrapper
             // stays put for the remaining overlay.
             _overlayWiring?.ApplyFlagState();
-            ApplyEtwSessionState();
 
             if (newControl != _currentControl)
             {
@@ -796,10 +650,8 @@ public sealed class ReactorHost : IDisposable
             _reconciler.FlushConnectedAnimations();
 
             // Schedule overlay flushes after layout so elements have final
-            // bounds. Both overlays share the same wrapper; each flush method
-            // is a no-op when its own flag is off.
+            // bounds. The flush is a no-op when the highlight flag is off.
             _overlayWiring?.ScheduleHighlightFlush(_reconciler);
-            _overlayWiring?.ScheduleLayoutCostFlush();
 
             double reconcileMs = _phaseSw.Elapsed.TotalMilliseconds;
 
@@ -1034,14 +886,6 @@ public sealed class ReactorHost : IDisposable
 
         try { _overlayWiring?.Dispose(); } catch { /* best effort */ }
         _overlayWiring = null;
-        try { _attribution?.UnbindReconciler(); } catch { /* best effort */ }
-        _attribution = null;
-        _pointerMap = null;
-        _spatialIndex = null;
-        try { _etwConsumer?.Dispose(); } catch { /* best effort */ }
-        _etwConsumer = null;
-        _eventPairing = null;
-        _eventRing = null;
 
         ReactorApp.ActiveHostInternal = null;
     }

@@ -35,7 +35,7 @@ static class AppFlags
 
 // ─── Root application component ────────────────────────────────────────────────
 
-enum Tab { Counter, TodoList, ConditionalUI, Form, DynamicList, PerfStress, Virtualization, ItemsView, Flyout, DataTemplate, FlexPanel, Transitions, PropertyGrid, DataSystem, DataGrid, IntegratedData, AsyncValueSamples, Context, Memo, Persisted, Slots, Navigation, Commanding, InputGestures, SpecializedEditors, LayoutCost, Windows, Docking, RichText }
+enum Tab { Counter, TodoList, ConditionalUI, Form, DynamicList, PerfStress, Virtualization, ItemsView, Flyout, DataTemplate, FlexPanel, Transitions, PropertyGrid, DataSystem, DataGrid, IntegratedData, AsyncValueSamples, Context, Memo, Persisted, Slots, Navigation, Commanding, InputGestures, SpecializedEditors, Windows, Docking, RichText }
 
 class DemoApp : Component
 {
@@ -72,7 +72,6 @@ class DemoApp : Component
             Tab.Commanding => ("Commanding", "commanding"),
             Tab.InputGestures => ("Input & Gestures", "counter"),
             Tab.SpecializedEditors => ("Specialized Editors", "propertygrid"),
-            Tab.LayoutCost => ("Layout Cost", "perfstress"),
             Tab.Windows => ("Windows & Tray", "navigation"),
             Tab.Docking => ("Docking", "flexpanel"),
             Tab.RichText => ("Rich Text", "datatemplate"),
@@ -153,7 +152,6 @@ class DemoApp : Component
                     Tab.Commanding => Component<CommandingTestDemo>(),
                     Tab.InputGestures => Component<InputGesturesDemo>(),
                     Tab.SpecializedEditors => Component<SpecializedEditorsDemo>(),
-                    Tab.LayoutCost => Component<LayoutCostDemo>(),
                     Tab.Windows => Component<WindowsDemo>(),
                     Tab.Docking => Component<DockingDemo>(),
                     Tab.RichText => Component<RichTextDemo>(),

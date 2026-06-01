@@ -59,20 +59,7 @@ public static partial class Factories
             {
                 ReactorFeatureFlags.HighlightReconcileChanges = v;
                 // Nudge a render so wrapper install / teardown happens
-                // immediately, mirroring the layout-cost toggle.
-                ReactorApp.ActiveHostInternal?.RequestRender();
-            });
-
-        // Layout-cost overlay toggle (spec 032). The overlay wiring builds
-        // lazily on the next render pass after the flag flips, so we nudge
-        // the active host to re-render immediately — otherwise the overlay
-        // wouldn't appear until the next unrelated state change. The ETW
-        // leg stays init-dependent (see ShowLayoutCost doc comment).
-        var layoutCostToggle = ToggleMenuItem("Show layout cost overlay",
-            ReactorFeatureFlags.ShowLayoutCost,
-            v =>
-            {
-                ReactorFeatureFlags.ShowLayoutCost = v;
+                // immediately.
                 ReactorApp.ActiveHostInternal?.RequestRender();
             });
 
@@ -91,8 +78,8 @@ public static partial class Factories
 
         // Separator only makes sense when there are user items to separate from.
         var builtInItems = userItems.Length > 0
-            ? new MenuFlyoutItemBase[] { MenuSeparator(), builtInToggle, layoutCostToggle, keyedListItem }
-            : new MenuFlyoutItemBase[] { builtInToggle, layoutCostToggle, keyedListItem };
+            ? new MenuFlyoutItemBase[] { MenuSeparator(), builtInToggle, keyedListItem }
+            : new MenuFlyoutItemBase[] { builtInToggle, keyedListItem };
 
         var materialized = userItems.Concat(builtInItems).ToArray();
 
