@@ -24,7 +24,7 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   <c>Closed</c>.</item>
 ///   <item><c>IconSource</c> — <c>.OneWayConditional</c> with reference
 ///   comparer (mirrors legacy <c>!ReferenceEquals</c> gate). Resolved via
-///   <see cref="Reconciler.ResolveIconSource(IconData?)"/>.</item>
+///   <see cref="IconResolver.ResolveIconSource(IconData?)"/>.</item>
 /// </list></para>
 ///
 /// <para><b>ActionButton + <c>OnActionButtonClick</c> (Phase 3-final Batch F):</b>
@@ -82,7 +82,7 @@ internal static class InfoBarDescriptor
             set: static (c, v) => c.IsClosable = v)
         .OneWayConditional(
             get:         static e => e.IconSource,
-            set:         static (c, v) => c.IconSource = Reconciler.ResolveIconSource(v),
+            set:         static (c, v) => c.IconSource = IconResolver.ResolveIconSource(v),
             shouldWrite: static e => e.IconSource is not null,
             comparer:    IconDataReferenceComparer.Instance)
         // ActionButton (Phase 3-final Batch F). Dynamically construct the inner

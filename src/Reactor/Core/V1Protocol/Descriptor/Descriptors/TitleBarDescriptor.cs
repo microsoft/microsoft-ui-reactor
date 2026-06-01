@@ -62,7 +62,7 @@ internal static class TitleBarDescriptor
             set: static (c, v) => c.IsPaneToggleButtonVisible = v)
         .OneWay(
             get: static e => e.Icon,
-            set: static (c, v) => c.IconSource = Reconciler.ResolveIconSource(v))
+            set: static (c, v) => c.IconSource = IconResolver.ResolveIconSource(v))
         .Imperative(
             mount: static (c, _) => c.Loaded += RegisterWindowTitleBarOnLoaded,
             update: static (_, _, _) => { })

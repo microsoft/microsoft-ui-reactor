@@ -59,7 +59,7 @@ internal static class SelectorBarDescriptor
                 {
                     var sbi = new WinUI.SelectorBarItem { Text = item.Text };
                     if (item.Icon is not null)
-                        sbi.Icon = Reconciler.ResolveIconForDescriptor(new SymbolIconData(item.Icon));
+                        sbi.Icon = IconResolver.ResolveIconForDescriptor(new SymbolIconData(item.Icon));
                     c.Items.Add(sbi);
                 }
             },

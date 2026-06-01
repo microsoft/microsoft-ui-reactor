@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using Microsoft.UI.Reactor.Animation;
 using Microsoft.UI.Reactor.Core.Diagnostics;
+using Microsoft.UI.Reactor.Core.V1Protocol;
 using Microsoft.UI.Reactor.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -4493,7 +4494,7 @@ public sealed partial class Reconciler : IDisposable
         if (newEl is MenuFlyoutContentElement newMf && existingFlyout is WinUI.MenuFlyout menuFlyout)
         {
             menuFlyout.Items.Clear();
-            foreach (var item in newMf.Items) menuFlyout.Items.Add(CreateMenuFlyoutItem(item));
+            foreach (var item in newMf.Items) menuFlyout.Items.Add(MenuCommandFactory.CreateMenuFlyoutItem(item));
             if (newMf.Placement != WinPrim.FlyoutPlacementMode.Auto)
                 menuFlyout.Placement = newMf.Placement;
             return;
@@ -4549,7 +4550,7 @@ public sealed partial class Reconciler : IDisposable
                 // Only set Placement if explicitly specified (Auto can cause assertions on MenuFlyout)
                 if (mf.Placement != WinPrim.FlyoutPlacementMode.Auto)
                     menuFlyout.Placement = mf.Placement;
-                foreach (var item in mf.Items) menuFlyout.Items.Add(CreateMenuFlyoutItem(item));
+                foreach (var item in mf.Items) menuFlyout.Items.Add(MenuCommandFactory.CreateMenuFlyoutItem(item));
                 return menuFlyout;
             }
             default:
@@ -4563,7 +4564,7 @@ public sealed partial class Reconciler : IDisposable
     /// <summary>
     /// Spec 047 §14 Phase 3-final — descriptor-facing sibling of
     /// <see cref="CreateFlyoutFromElement"/>. Same shape as
-    /// <see cref="ResolveIconForDescriptor"/>: a thin forwarder that tolerates
+    /// <see cref="IconResolver.ResolveIconForDescriptor"/>: a thin forwarder that tolerates
     /// <see langword="null"/> input so a <c>.OneWayBridged</c> entry on a
     /// button-family descriptor can wire
     /// <c>(c, v, rec, rr) =&gt; c.Flyout = rec.CreateFlyoutForDescriptor(v, rr)</c>
@@ -4573,12 +4574,6 @@ public sealed partial class Reconciler : IDisposable
         => flyoutEl is null ? null : CreateFlyoutFromElement(flyoutEl, requestRerender);
 
     // ── Enum conversions removed — Reactor now uses WinUI types directly ──
-
-    internal static Symbol ParseSymbol(string name)
-    {
-        if (Enum.TryParse<Symbol>(name, ignoreCase: true, out var symbol)) return symbol;
-        return Symbol.Placeholder;
-    }
 
     // ── Grid definition parsing ─────────────────────────────────────
 

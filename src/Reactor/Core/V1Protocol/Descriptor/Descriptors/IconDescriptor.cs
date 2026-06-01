@@ -19,7 +19,7 @@ internal static class IconDescriptor
     {
         public UIElement Mount(MountContext ctx, IconElement element)
         {
-            var icon = Reconciler.ResolveIconForDescriptor(element.Data);
+            var icon = IconResolver.ResolveIconForDescriptor(element.Data);
             if (icon is null)
                 return EmptySentinel();
 
@@ -30,7 +30,7 @@ internal static class IconDescriptor
 
         public UIElement Update(UpdateContext ctx, IconElement oldEl, IconElement newEl, UIElement control)
         {
-            var fresh = Reconciler.ResolveIconForDescriptor(newEl.Data);
+            var fresh = IconResolver.ResolveIconForDescriptor(newEl.Data);
             if (fresh is null)
                 return control is WinUI.IconElement ? EmptySentinel() : control;
 

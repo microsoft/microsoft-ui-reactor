@@ -1,5 +1,6 @@
 using Microsoft.UI.Reactor.Animation;
 using Microsoft.UI.Reactor.Core.Internal;
+using Microsoft.UI.Reactor.Core.V1Protocol;
 using Microsoft.UI.Reactor.Hooks;
 using Microsoft.UI.Reactor.Hosting;
 using Microsoft.Extensions.Logging;
@@ -303,7 +304,7 @@ public sealed partial class Reconciler
     private static WinUI.NavigationViewItem CreateNavItem(NavigationViewItemData data)
     {
         var item = new WinUI.NavigationViewItem { Content = data.Content, Tag = data.Tag ?? data.Content };
-        var icon = ResolveIcon(data.IconElement, data.Icon);
+        var icon = IconResolver.ResolveIcon(data.IconElement, data.Icon);
         if (icon is not null) item.Icon = icon;
         if (data.Children is not null)
             foreach (var child in data.Children) item.MenuItems.Add(CreateNavItem(child));
@@ -560,122 +561,6 @@ public sealed partial class Reconciler
         }
     }
 
-    /// <summary>Descriptor-accessible bridge to <see cref="ResolveIcon"/>
-    /// for the icon-bearing controls ported in Phase 3 (e.g.
-    /// AutoSuggestBox.QueryIcon). Static so it can be invoked from a
-    /// descriptor lambda without a Reconciler instance.</summary>
-    internal static WinUI.IconElement? ResolveIconForDescriptor(IconData? iconData)
-        => ResolveIcon(iconData, null);
-
-    private static WinUI.IconElement? ResolveIcon(IconData? iconData, string? iconSymbol)
-    {
-        if (iconData is not null)
-        {
-            return iconData switch
-            {
-                SymbolIconData sym => ResolveIconString(sym.Symbol) ?? new WinUI.SymbolIcon(Symbol.Placeholder),
-                FontIconData fi => CreateFontIcon(fi),
-                BitmapIconData bi => new WinUI.BitmapIcon { UriSource = bi.Source, ShowAsMonochrome = bi.ShowAsMonochrome },
-                PathIconData pi => CreatePathIcon(pi),
-                ImageIconData ii => new WinUI.ImageIcon { Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(ii.Source) },
-                _ => null,
-            };
-        }
-        if (iconSymbol is not null) return ResolveIconString(iconSymbol);
-        return null;
-    }
-
-    // Handles both Symbol enum names ("Home", "Edit") and raw Segoe Fluent
-    // glyphs (""). A Symbol enum mismatch used to collapse to
-    // Symbol.Placeholder, which rendered as a diamond — fall through to a
-    // FontIcon with SymbolThemeFontFamily so glyph strings render correctly.
-    private static WinUI.IconElement? ResolveIconString(string iconSymbol)
-    {
-        if (string.IsNullOrEmpty(iconSymbol)) return null;
-        if (Enum.TryParse<Symbol>(iconSymbol, ignoreCase: true, out var symbol))
-            return new WinUI.SymbolIcon(symbol);
-        // Treat as a Segoe Fluent / MDL2 glyph codepoint.
-        return new WinUI.FontIcon
-        {
-            Glyph = iconSymbol,
-            FontFamily = Microsoft.UI.Xaml.Application.Current?.Resources["SymbolThemeFontFamily"] as Microsoft.UI.Xaml.Media.FontFamily
-                         ?? new Microsoft.UI.Xaml.Media.FontFamily("Segoe Fluent Icons"),
-        };
-    }
-
-    // IconSource counterpart for controls (TabView, etc.) that take an
-    // IconSource instead of IconElement. Same glyph-fallback semantics as
-    // ResolveIconString.
-    internal static WinUI.IconSource? ResolveIconSource(string? iconSymbol)
-    {
-        if (string.IsNullOrEmpty(iconSymbol)) return null;
-        if (Enum.TryParse<Symbol>(iconSymbol, ignoreCase: true, out var symbol))
-            return new WinUI.SymbolIconSource { Symbol = symbol };
-        return new WinUI.FontIconSource
-        {
-            Glyph = iconSymbol,
-            FontFamily = Microsoft.UI.Xaml.Application.Current?.Resources["SymbolThemeFontFamily"] as Microsoft.UI.Xaml.Media.FontFamily
-                         ?? new Microsoft.UI.Xaml.Media.FontFamily("Segoe Fluent Icons"),
-        };
-    }
-
-    /// <summary>
-    /// Strongly-typed <see cref="IconData"/> → <see cref="WinUI.IconSource"/>
-    /// projection. Used by controls that expose an <c>IconSource</c> slot
-    /// (TitleBar, TabView, etc.). Returns null on unknown subtypes so the
-    /// caller can fall through to the string-glyph overload.
-    /// </summary>
-    internal static WinUI.IconSource? ResolveIconSource(IconData? iconData) => iconData switch
-    {
-        null => null,
-        SymbolIconData sym => ResolveIconSource(sym.Symbol),
-        FontIconData fi => new WinUI.FontIconSource
-        {
-            Glyph = fi.Glyph,
-            FontFamily = fi.FontFamily is null ? null! : WinRTCache.GetFontFamily(fi.FontFamily),
-            FontSize = fi.FontSize ?? double.NaN,
-        },
-        BitmapIconData bi => new WinUI.BitmapIconSource { UriSource = bi.Source, ShowAsMonochrome = bi.ShowAsMonochrome },
-        PathIconData pi => CreatePathIconSource(pi),
-        ImageIconData ii => new WinUI.ImageIconSource
-        {
-            ImageSource = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(ii.Source),
-        },
-        _ => null,
-    };
-
-    private static WinUI.PathIconSource? CreatePathIconSource(PathIconData pi)
-    {
-        var src = new WinUI.PathIconSource();
-        if (Microsoft.UI.Xaml.Markup.XamlReader.Load(
-            $"<Geometry xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'>{pi.Data}</Geometry>")
-            is Microsoft.UI.Xaml.Media.Geometry geo)
-        {
-            src.Data = geo;
-        }
-        return src;
-    }
-
-    private static WinUI.FontIcon CreateFontIcon(FontIconData fi)
-    {
-        var icon = new WinUI.FontIcon { Glyph = fi.Glyph };
-        if (fi.FontFamily is not null) icon.FontFamily = WinRTCache.GetFontFamily(fi.FontFamily);
-        if (fi.FontSize.HasValue) icon.FontSize = fi.FontSize.Value;
-        return icon;
-    }
-
-    private static WinUI.PathIcon CreatePathIcon(PathIconData pi)
-    {
-        var icon = new WinUI.PathIcon();
-        if (Microsoft.UI.Xaml.Markup.XamlReader.Load(
-            $"<Geometry xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'>{pi.Data}</Geometry>")
-            is Microsoft.UI.Xaml.Media.Geometry geo)
-        {
-            icon.Data = geo;
-        }
-        return icon;
-    }
-
     private UIElement MountErrorBoundary(ErrorBoundaryElement eb, Action requestRerender)
     {
         var wrapper = new Border();
@@ -928,96 +813,5 @@ public sealed partial class Reconciler
         return si;
     }
 
-    internal static WinUI.ICommandBarElement CreateAppBarItem(AppBarItemBase item)
-    {
-        switch (item)
-        {
-            case AppBarButtonData cmd:
-            {
-                var abb = new WinUI.AppBarButton { Label = cmd.Label };
-                abb.IsEnabled = cmd.IsEnabled;
-                abb.Icon = ResolveIcon(cmd.IconElement, cmd.Icon);
-                if (cmd.KeyboardAccelerators is not null)
-                    foreach (var ka in cmd.KeyboardAccelerators)
-                        abb.KeyboardAccelerators.Add(new Microsoft.UI.Xaml.Input.KeyboardAccelerator { Key = ka.Key, Modifiers = ka.Modifiers });
-                if (cmd.AccessKey is not null) abb.AccessKey = cmd.AccessKey;
-                if (cmd.Description is not null)
-                {
-                    WinUI.ToolTipService.SetToolTip(abb, cmd.Description);
-                    Microsoft.UI.Xaml.Automation.AutomationProperties.SetHelpText(abb, cmd.Description);
-                }
-                abb.Tag = cmd;
-                abb.Click += (s, _) => ((AppBarButtonData)((WinUI.AppBarButton)s!).Tag!).OnClick?.Invoke();
-                return abb;
-            }
-            case AppBarToggleButtonData toggle:
-            {
-                var atb = new WinUI.AppBarToggleButton { Label = toggle.Label, IsChecked = toggle.IsChecked };
-                atb.Icon = ResolveIcon(toggle.IconElement, toggle.Icon);
-                atb.Tag = toggle;
-                atb.Checked += (s, _) => ((AppBarToggleButtonData)((WinUI.AppBarToggleButton)s!).Tag!).OnIsCheckedChanged?.Invoke(true);
-                atb.Unchecked += (s, _) => ((AppBarToggleButtonData)((WinUI.AppBarToggleButton)s!).Tag!).OnIsCheckedChanged?.Invoke(false);
-                return atb;
-            }
-            case AppBarSeparatorData:
-                return new WinUI.AppBarSeparator();
-            default:
-                return new WinUI.AppBarSeparator();
-        }
-    }
 
-    internal static WinUI.MenuFlyoutItemBase CreateMenuFlyoutItem(MenuFlyoutItemBase item)
-    {
-        switch (item)
-        {
-            case MenuFlyoutItemData mfi:
-            {
-                var flyoutItem = new WinUI.MenuFlyoutItem { Text = mfi.Text };
-                flyoutItem.IsEnabled = mfi.IsEnabled;
-                flyoutItem.Icon = ResolveIcon(mfi.IconElement, mfi.Icon);
-                if (mfi.KeyboardAccelerators is not null)
-                    foreach (var ka in mfi.KeyboardAccelerators)
-                        flyoutItem.KeyboardAccelerators.Add(new Microsoft.UI.Xaml.Input.KeyboardAccelerator { Key = ka.Key, Modifiers = ka.Modifiers });
-                if (mfi.AccessKey is not null) flyoutItem.AccessKey = mfi.AccessKey;
-                if (mfi.Description is not null)
-                {
-                    WinUI.ToolTipService.SetToolTip(flyoutItem, mfi.Description);
-                    Microsoft.UI.Xaml.Automation.AutomationProperties.SetHelpText(flyoutItem, mfi.Description);
-                }
-                flyoutItem.Tag = mfi;
-                flyoutItem.Click += (s, _) => ((MenuFlyoutItemData)((WinUI.MenuFlyoutItem)s!).Tag!).OnClick?.Invoke();
-                return flyoutItem;
-            }
-            case ToggleMenuFlyoutItemData toggle:
-            {
-                var toggleItem = new WinUI.ToggleMenuFlyoutItem { Text = toggle.Text, IsChecked = toggle.IsChecked };
-                toggleItem.Icon = ResolveIcon(toggle.IconElement, toggle.Icon);
-                toggleItem.Tag = toggle;
-                toggleItem.Click += (s, _) =>
-                {
-                    var ti = (WinUI.ToggleMenuFlyoutItem)s!;
-                    ((ToggleMenuFlyoutItemData)ti.Tag!).OnIsCheckedChanged?.Invoke(ti.IsChecked);
-                };
-                return toggleItem;
-            }
-            case RadioMenuFlyoutItemData radio:
-            {
-                var radioItem = new WinUI.RadioMenuFlyoutItem { Text = radio.Text, GroupName = radio.GroupName, IsChecked = radio.IsChecked };
-                radioItem.Tag = radio;
-                radioItem.Click += (s, _) => ((RadioMenuFlyoutItemData)((WinUI.RadioMenuFlyoutItem)s!).Tag!).OnClick?.Invoke();
-                return radioItem;
-            }
-            case MenuFlyoutSeparatorData:
-                return new WinUI.MenuFlyoutSeparator();
-            case MenuFlyoutSubItemData sub:
-            {
-                var subItem = new WinUI.MenuFlyoutSubItem { Text = sub.Text };
-                subItem.Icon = ResolveIcon(sub.IconElement, sub.Icon);
-                foreach (var child in sub.Items) subItem.Items.Add(CreateMenuFlyoutItem(child));
-                return subItem;
-            }
-            default:
-                return new WinUI.MenuFlyoutSeparator();
-        }
-    }
 }

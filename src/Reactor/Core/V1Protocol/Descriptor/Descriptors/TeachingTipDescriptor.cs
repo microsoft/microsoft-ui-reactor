@@ -23,7 +23,7 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   <c>.OneWay</c> / <c>.OneWayConditional</c> writes.</item>
 ///   <item><c>IconSource</c> — <c>.OneWayConditional</c> with reference
 ///   comparer (mirrors legacy <c>!ReferenceEquals</c> gate). Resolved via
-///   <see cref="Reconciler.ResolveIconSource(IconData?)"/>.</item>
+///   <see cref="IconResolver.ResolveIconSource(IconData?)"/>.</item>
 ///   <item><c>OnActionButtonClick</c>, <c>OnClosed</c> — fire-only
 ///   <c>.HandCodedEvent</c>s. ActionButtonClick fires when the user taps
 ///   the in-tip action button (which only exists when
@@ -110,7 +110,7 @@ internal static class TeachingTipDescriptor
             shouldWrite: static e => e.CloseButtonContent is not null)
         .OneWayConditional(
             get:         static e => e.IconSource,
-            set:         static (c, v) => c.IconSource = Reconciler.ResolveIconSource(v),
+            set:         static (c, v) => c.IconSource = IconResolver.ResolveIconSource(v),
             shouldWrite: static e => e.IconSource is not null,
             comparer:    IconDataReferenceComparer.Instance)
         .HandCodedEvent<TeachingTipEventPayload,

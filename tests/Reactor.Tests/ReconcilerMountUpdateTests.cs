@@ -1,4 +1,5 @@
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.V1Protocol;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Xunit;
@@ -117,21 +118,21 @@ public class ReconcilerMountUpdateTests
     [Fact]
     public void ParseSymbol_Known_Name()
     {
-        var symbol = Reconciler.ParseSymbol("Accept");
+        var symbol = IconResolver.ParseSymbol("Accept");
         Assert.Equal(Symbol.Accept, symbol);
     }
 
     [Fact]
     public void ParseSymbol_CaseInsensitive()
     {
-        var symbol = Reconciler.ParseSymbol("accept");
+        var symbol = IconResolver.ParseSymbol("accept");
         Assert.Equal(Symbol.Accept, symbol);
     }
 
     [Fact]
     public void ParseSymbol_Unknown_Returns_Placeholder()
     {
-        var symbol = Reconciler.ParseSymbol("NonExistentSymbol");
+        var symbol = IconResolver.ParseSymbol("NonExistentSymbol");
         Assert.Equal(Symbol.Placeholder, symbol);
     }
 }

@@ -120,7 +120,7 @@ internal static class AutoSuggestBoxDescriptor
             shouldWrite: static e => e.Header is not null)
         .OneWayConditional(
             get:         static e => e.QueryIcon,
-            set:         static (c, v) => c.QueryIcon = Reconciler.ResolveIconForDescriptor(v),
+            set:         static (c, v) => c.QueryIcon = IconResolver.ResolveIconForDescriptor(v),
             shouldWrite: static e => e.QueryIcon is not null)
         .OneWay(
             get: static e => e.IsSuggestionListOpen,

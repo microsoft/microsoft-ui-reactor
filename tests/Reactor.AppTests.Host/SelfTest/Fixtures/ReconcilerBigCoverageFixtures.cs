@@ -1,6 +1,7 @@
 using System.Reflection;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.V1Protocol;
 using Microsoft.UI.Reactor.Core.Internal;
 using Microsoft.UI.Reactor.Hooks;
 using Microsoft.UI.Reactor.Controls.Validation;
@@ -1681,13 +1682,13 @@ internal static class ReconcilerBigCoverageFixtures
 
             var iconSources = new WinXC.IconSource?[]
             {
-                Reconciler.ResolveIconSource(new SymbolIconData("Edit")),
-                Reconciler.ResolveIconSource(new SymbolIconData("DefinitelyNotASymbol")),
-                Reconciler.ResolveIconSource(new FontIconData("\uE700", "Segoe Fluent Icons", 18)),
-                Reconciler.ResolveIconSource(new BitmapIconData(new Uri("ms-appx:///Assets/StoreLogo.png"), false)),
-                Reconciler.ResolveIconSource(new PathIconData("M0,0 L8,8")),
-                Reconciler.ResolveIconSource(new ImageIconData(new Uri("ms-appx:///Assets/StoreLogo.png"))),
-                Reconciler.ResolveIconSource("DefinitelyNotASymbol"),
+                IconResolver.ResolveIconSource(new SymbolIconData("Edit")),
+                IconResolver.ResolveIconSource(new SymbolIconData("DefinitelyNotASymbol")),
+                IconResolver.ResolveIconSource(new FontIconData("\uE700", "Segoe Fluent Icons", 18)),
+                IconResolver.ResolveIconSource(new BitmapIconData(new Uri("ms-appx:///Assets/StoreLogo.png"), false)),
+                IconResolver.ResolveIconSource(new PathIconData("M0,0 L8,8")),
+                IconResolver.ResolveIconSource(new ImageIconData(new Uri("ms-appx:///Assets/StoreLogo.png"))),
+                IconResolver.ResolveIconSource("DefinitelyNotASymbol"),
             };
             H.Check("PrivMount_IconSources", iconSources.Take(6).All(i => i is not null));
 
