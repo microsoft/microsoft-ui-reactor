@@ -661,15 +661,15 @@ public static class ReactorApp
     /// </summary>
     private static bool TryRunDevtools(string title, double width, double height, bool fullScreen, Action<ReactorHost>? configure, Type? hostRoot = null, Func<RenderContext, Element>? rootRenderFunc = null)
     {
-        return TryRunDevtoolsCore(Environment.GetCommandLineArgs(), title, width, height, fullScreen, configure, hostRoot, rootRenderFunc);
+        return TryRunDevtoolsCore(Environment.GetCommandLineArgs(), title, width, height, fullScreen, configure, hostRoot, rootRenderFunc, exitOnUnavailable: true);
     }
 
     internal static bool TryRunDevtoolsForTest(string[] args, string title, double width, double height, Action<ReactorHost>? configure = null, Type? hostRoot = null)
     {
-        return TryRunDevtoolsCore(args, title, width, height, fullScreen: false, configure, hostRoot, rootRenderFunc: null);
+        return TryRunDevtoolsCore(args, title, width, height, fullScreen: false, configure, hostRoot, rootRenderFunc: null, exitOnUnavailable: false);
     }
 
-    private static bool TryRunDevtoolsCore(string[] args, string title, double width, double height, bool fullScreen, Action<ReactorHost>? configure, Type? hostRoot = null, Func<RenderContext, Element>? rootRenderFunc = null)
+    private static bool TryRunDevtoolsCore(string[] args, string title, double width, double height, bool fullScreen, Action<ReactorHost>? configure, Type? hostRoot = null, Func<RenderContext, Element>? rootRenderFunc = null, bool exitOnUnavailable = false)
     {
         var options = DevtoolsCliParser.Parse(args);
 
@@ -696,6 +696,8 @@ public static class ReactorApp
         }
 
         EmitDevtoolsNotAvailableMessage();
+        Environment.ExitCode = 2;
+        if (exitOnUnavailable) Environment.Exit(2);
         return true;
     }
 

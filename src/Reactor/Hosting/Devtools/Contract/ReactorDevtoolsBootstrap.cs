@@ -20,11 +20,26 @@ public static class ReactorDevtoolsBootstrap
 
             if (Interlocked.CompareExchange(ref _loadAttempted, 1, 0) == 0)
             {
-                try { _ = global::System.Reflection.Assembly.Load("Microsoft.UI.Reactor.Devtools"); }
-                catch { }
+                TryLoadOptionalDevtoolsPackage();
             }
 
             return Volatile.Read(ref _host);
+        }
+    }
+
+    private static void TryLoadOptionalDevtoolsPackage()
+    {
+        try
+        {
+            var assembly = global::System.Reflection.Assembly.Load("Microsoft.UI.Reactor.Devtools");
+            if (Volatile.Read(ref _host) is not null) return;
+
+            // Assembly.Load does not guarantee module initializers have executed;
+            // explicitly running the module constructor makes the optional package self-register.
+            global::System.Runtime.CompilerServices.RuntimeHelpers.RunModuleConstructor(assembly.ManifestModule.ModuleHandle);
+        }
+        catch
+        {
         }
     }
 }

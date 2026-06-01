@@ -332,6 +332,27 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Build Reactor framework
+        run: dotnet build src\Reactor\Reactor.csproj -p:Platform=x64 -c Release --nologo
+
+      - name: Verify Reactor.dll has no devtools implementation IL
+        shell: pwsh
+        run: |
+          $reactorDll = Get-ChildItem src\Reactor\bin -Recurse -Filter Reactor.dll |
+            Where-Object { $_.FullName -like '*\Release\*' } |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+          if (-not $reactorDll) {
+            Write-Error "No built Reactor.dll found."
+            exit 1
+          }
+          dotnet run --project tools\Reactor.MstatVerifier\Reactor.MstatVerifier.csproj -c Release -- reactor-il $reactorDll.FullName
+
+      - name: Verify devtools implementation types require package reference
+        run: >
+          dotnet run --project tools\Reactor.MstatVerifier\Reactor.MstatVerifier.csproj -c Release --
+          negative-resolution tools\Reactor.DevtoolsNegativeResolutionFixture\Reactor.DevtoolsNegativeResolutionFixture.csproj
+
       - name: Publish switch-off app
         run: >
           dotnet publish samples/apps/hello-world-aot/HelloWorldAot.csproj

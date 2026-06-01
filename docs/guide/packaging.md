@@ -191,7 +191,10 @@ in the template covers both — the missing piece is the second
 option is a capability gate that nothing user-visible depends on at
 runtime — but the code path it enables walks `Assembly.GetTypes()`.
 Leaving it off for Release/AOT builds drops the devtools trim warning
-and lets the linker remove that path.
+and lets the linker remove that path. Devtools implementation types ship
+in the optional, same-version `Microsoft.UI.Reactor.Devtools` package;
+only add that package to app projects that intentionally expose
+`--devtools`.
 
 **`Reactor.dll` is in your publish output as a managed assembly,
 not a tucked-away framework package.** Reactor ships as

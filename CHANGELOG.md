@@ -28,6 +28,8 @@ Conventions for contributors:
 
 ### Added
 
+- New optional package `Microsoft.UI.Reactor.Devtools` for the `--devtools` runtime surface (spec 051 Phase 2).
+
 - **Hot reload: tree-wide hook-order recovery (spec 049 §5, Phase 1).**
   Editing a **non-root** component under .NET Hot Reload to add, remove,
   or reorder a hook now recovers in a single re-render instead of replacing
