@@ -3,6 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Reactor.Controls.Validation;
 using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -208,11 +209,40 @@ internal static class CoverageBoostFixtures2
                     RightHeader = TextBlock("RH").AutomationName("TitleBarRH"),
                 }));
 
-                // Pump the dispatcher so mount + first layout pass complete.
-                await Task.Delay(50);
-                await Harness.Render();
+                // Drive the isolated host's render loop directly — Harness.Render
+                // only pumps ReactorApp.PrimaryWindow's host (the shared harness
+                // window), not the one we just created here, so it can't tell
+                // us when *our* host has finished. host.WaitForIdleAsync is the
+                // bounded-convergence wait Reactor exposes for exactly this
+                // case. See TESTING.md → "Selftest waiting patterns".
+                await host.WaitForIdleAsync();
+                ((UIElement?)window.Content)?.UpdateLayout();
 
-                var titleBar = FindFirst<Microsoft.UI.Xaml.Controls.TitleBar>(window.Content);
+                // WinUI 3 TitleBar realizes its template + runs UpdatePadding
+                // via Normal-priority dispatcher messages scheduled by the
+                // first layout pass. Drain them with one Low-priority yield
+                // (mirrors Harness.Render's wave pattern) and re-layout so
+                // the probe sees the final RightPaddingColumn width.
+                var dq = DispatcherQueue.GetForCurrentThread();
+                var yieldTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                if (!dq.TryEnqueue(DispatcherQueuePriority.Low, () => yieldTcs.SetResult()))
+                    yieldTcs.SetResult();
+                await yieldTcs.Task;
+                ((UIElement?)window.Content)?.UpdateLayout();
+
+                // Pump until the TitleBar materializes in the visual tree
+                // (template + content realization can take an extra dispatcher
+                // wave on contended runners). Re-queries each pass — never
+                // captures a stale snapshot. Bounded so a real regression
+                // still fails instead of hanging.
+                Microsoft.UI.Xaml.Controls.TitleBar? titleBar = null;
+                for (int pass = 0; pass < 8; pass++)
+                {
+                    titleBar = FindFirst<Microsoft.UI.Xaml.Controls.TitleBar>(window.Content);
+                    if (titleBar is not null) break;
+                    await host.WaitForIdleAsync();
+                    ((UIElement?)window.Content)?.UpdateLayout();
+                }
                 H.Check("TBInset_TitleBarFound", titleBar is not null);
                 if (titleBar is null) return;
 
