@@ -661,7 +661,16 @@ public static class ReactorApp
     /// </summary>
     private static bool TryRunDevtools(string title, double width, double height, Action<ReactorHost>? configure, Type? hostRoot = null)
     {
-        var args = Environment.GetCommandLineArgs();
+        return TryRunDevtoolsCore(Environment.GetCommandLineArgs(), title, width, height, configure, hostRoot);
+    }
+
+    internal static bool TryRunDevtoolsForTest(string[] args, string title, double width, double height, Action<ReactorHost>? configure = null, Type? hostRoot = null)
+    {
+        return TryRunDevtoolsCore(args, title, width, height, configure, hostRoot);
+    }
+
+    private static bool TryRunDevtoolsCore(string[] args, string title, double width, double height, Action<ReactorHost>? configure, Type? hostRoot = null)
+    {
         var options = DevtoolsCliParser.Parse(args);
 
         if (options.PreviewAndDevtoolsConflict)

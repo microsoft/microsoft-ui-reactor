@@ -822,6 +822,10 @@ internal static class SelfTestFixtureRegistry
         "DevtoolsUx_MenuHiddenWhenDisabled",
         "DevtoolsUx_MenuVisibleWhenEnabled",
         "DevtoolsUx_ObservableToggleRerendersSubscribers",
+        "Spec051_DevtoolsMenu_SwitchOff_RendersEmpty",
+        "Spec051_DevtoolsMenu_SwitchOn_RendersTrigger",
+        "Spec051_UseDevtools_SwitchOff_ReturnsFalse",
+        "Spec051_UseDevtools_SwitchOn_PlusCli_ReturnsTrue",
 
         // Selection-event wiring (Tier 2 gap closure)
         "SelectionEvt_ComboBox",
@@ -2038,6 +2042,10 @@ internal static class SelfTestFixtureRegistry
         "DevtoolsUx_MenuHiddenWhenDisabled" => new DevtoolsUxTests.MenuHiddenWhenDisabled(harness),
         "DevtoolsUx_MenuVisibleWhenEnabled" => new DevtoolsUxTests.MenuVisibleWhenEnabled(harness),
         "DevtoolsUx_ObservableToggleRerendersSubscribers" => new DevtoolsUxTests.ObservableToggleRerendersSubscribers(harness),
+        "Spec051_DevtoolsMenu_SwitchOff_RendersEmpty" => new Spec051DevtoolsTrimmabilityFixtures.DevtoolsMenu_SwitchOff_RendersEmpty(harness),
+        "Spec051_DevtoolsMenu_SwitchOn_RendersTrigger" => new Spec051DevtoolsTrimmabilityFixtures.DevtoolsMenu_SwitchOn_RendersTrigger(harness),
+        "Spec051_UseDevtools_SwitchOff_ReturnsFalse" => new Spec051DevtoolsTrimmabilityFixtures.UseDevtools_SwitchOff_ReturnsFalse(harness),
+        "Spec051_UseDevtools_SwitchOn_PlusCli_ReturnsTrue" => new Spec051DevtoolsTrimmabilityFixtures.UseDevtools_SwitchOn_PlusCli_ReturnsTrue(harness),
 
         // Selection-event wiring
         "SelectionEvt_ComboBox" => new SelectionEventFixtures.ComboBoxSelectionFires(harness),
