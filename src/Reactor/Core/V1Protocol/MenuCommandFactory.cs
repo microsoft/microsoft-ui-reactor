@@ -194,7 +194,7 @@ internal static class MenuCommandFactory
                 case AppBarToggleButtonData toggle when target[i] is WinUI.AppBarToggleButton atb:
                     atb.Label = toggle.Label;
                     atb.IsChecked = toggle.IsChecked;
-                    if (toggle.Icon is not null) atb.Icon = new WinUI.SymbolIcon(IconResolver.ParseSymbol(toggle.Icon));
+                    atb.Icon = IconResolver.ResolveIcon(toggle.IconElement, toggle.Icon);
                     atb.Tag = toggle;
                     break;
                 case AppBarSeparatorData when target[i] is WinUI.AppBarSeparator:

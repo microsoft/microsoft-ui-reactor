@@ -548,6 +548,55 @@ internal static class ReconcilerBigCoverageFixtures
     }
 
     // ════════════════════════════════════════════════════════════════════
+    //  11b. CommandBar AppBarToggleButton icon update — regression.
+    //     The toggle update path must route through IconResolver (so it honors
+    //     IconElement + glyph fallback and clears a stale icon when the new data
+    //     drops it), mirroring the mount path and the AppBarButton update arm.
+    //     Previously it only did `if (Icon is not null) SymbolIcon(ParseSymbol)`,
+    //     which ignored IconElement and stranded a stale SymbolIcon.
+    // ════════════════════════════════════════════════════════════════════
+    internal class CmdBarToggleIconUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, set) = ctx.UseState(0);
+                AppBarItemBase[] primary = phase == 0
+                    ? [new AppBarToggleButtonData("Tgl", Icon: "Pin")]
+                    : [new AppBarToggleButtonData("Tgl") { IconElement = new FontIconData("\uE734") }];
+                return VStack(
+                    Button("TglIconPhase", () => set(1)),
+                    CommandBar(primary)
+                );
+            });
+
+            await Harness.Render();
+            H.Check("TglIcon_InitialSymbol",
+                FindFirstToggle()?.Icon is Microsoft.UI.Xaml.Controls.SymbolIcon);
+
+            H.ClickButton("TglIconPhase");
+            await Harness.Render();
+
+            // Under the old narrow `if (Icon is not null)` write the toggle would
+            // retain its stale SymbolIcon; IconResolver honors IconElement instead.
+            H.Check("TglIcon_UpdatedToFontIcon",
+                FindFirstToggle()?.Icon is Microsoft.UI.Xaml.Controls.FontIcon);
+        }
+
+        private Microsoft.UI.Xaml.Controls.AppBarToggleButton? FindFirstToggle()
+        {
+            var cb = H.FindControl<Microsoft.UI.Xaml.Controls.CommandBar>(_ => true);
+            if (cb is null) return null;
+            foreach (var c in cb.PrimaryCommands)
+                if (c is Microsoft.UI.Xaml.Controls.AppBarToggleButton atb)
+                    return atb;
+            return null;
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
     //  12. Frame mount (rarely-used element).
     //     Targets Mount.cs MountFrame. MapControl is intentionally not exercised
     //     here because it crashes natively without a map service token.

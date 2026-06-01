@@ -31,7 +31,12 @@ internal static class CompositeLifecycle
             if (replacement is not null)
             {
                 reconciler.UnmountChild(existingChild);
-                host.Children[0] = replacement;
+                // Explicit RemoveAt+Insert instead of indexer assignment — WinUI's
+                // Children[i] = x can leave the old element's internal parent state
+                // attached, causing a COMException when it is later reused from the
+                // pool (mirrors PanelChildCollection.Replace).
+                host.Children.RemoveAt(0);
+                host.Children.Insert(0, replacement);
             }
         }
         else
