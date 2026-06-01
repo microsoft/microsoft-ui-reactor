@@ -64,7 +64,7 @@ internal static class TitleBarDescriptor
             get: static e => e.Icon,
             set: static (c, v) => c.IconSource = IconResolver.ResolveIconSource(v))
         .Imperative(
-            mount: static (c, _) => c.Loaded += RegisterWindowTitleBarOnLoaded,
+            mount: static (c, _) => RegisterWindowTitleBar(c),
             update: static (_, _, _) => { })
         .HandCodedEvent<TitleBarEventPayload,
             TypedEventHandler<WinUI.TitleBar, object>>(
@@ -81,10 +81,16 @@ internal static class TitleBarDescriptor
             slotIsNull:       static p => p.PaneToggleRequestedTrampoline is null,
             setSlot:          static (p, h) => p.PaneToggleRequestedTrampoline = h);
 
-    private static void RegisterWindowTitleBarOnLoaded(object sender, RoutedEventArgs _)
+    // Issue #511 / regression from PR #455: ExtendsContentIntoTitleBar must
+    // flip BEFORE the WinUI TitleBar's own Loaded handler runs
+    // UpdatePaddingsForCaptionButtons() — otherwise AppWindow.TitleBar.RightInset
+    // is still 0 when it's queried, RightPaddingColumn stays at 0 width, and
+    // RightHeader content draws on top of the system caption buttons.
+    // The legacy MountTitleBar path applied these synchronously before tree
+    // attach; mirror that here in the Imperative mount lambda rather than
+    // deferring to Loaded.
+    private static void RegisterWindowTitleBar(WinUI.TitleBar titleBar)
     {
-        if (sender is not WinUI.TitleBar titleBar) return;
-        titleBar.Loaded -= RegisterWindowTitleBarOnLoaded;
         if (Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal is { } host)
         {
             host.Window.ExtendsContentIntoTitleBar = true;
