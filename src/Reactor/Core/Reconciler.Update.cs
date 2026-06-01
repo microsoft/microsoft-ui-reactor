@@ -250,11 +250,11 @@ public sealed partial class Reconciler
                 }
                 else
                 {
-                    var l = link?.NavigateUri ?? new Uri("about:blank");
-                    l = l.ToString().Length < 1 ? l = new Uri("about:blank") : l;
+                    var l = link.NavigateUri ?? new Uri("about:blank");
+                    if (l.ToString().Length < 1) l = new Uri("about:blank");
                     try { hl.NavigateUri = l; } catch { hl.NavigateUri = new Uri("about:blank"); }
                 }
-                hl.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = link?.Text ?? ""});
+                hl.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = link.Text ?? ""});
                 return hl;
             case RichTextLineBreak:
                 return new Microsoft.UI.Xaml.Documents.LineBreak();
@@ -650,11 +650,14 @@ public sealed partial class Reconciler
             if (prevControlled || prev.NavigateUri != next.NavigateUri)
             {
                 // Mirror MountInline's normalization: fall back to about:blank
-                // on null/empty/invalid URIs.
+                // on null/empty/invalid URIs. The fallback assignment is not
+                // wrapped — `about:blank` always parses and a `NavigateUri =`
+                // assignment for it should never throw; if it ever did, that
+                // is a real bug we want to surface, not silently swallow.
                 var uri = next.NavigateUri ?? new Uri("about:blank");
                 if (uri.ToString().Length < 1) uri = new Uri("about:blank");
                 try { wh.NavigateUri = uri; }
-                catch { try { wh.NavigateUri = new Uri("about:blank"); } catch { } }
+                catch { wh.NavigateUri = new Uri("about:blank"); }
                 any = true;
             }
         }
