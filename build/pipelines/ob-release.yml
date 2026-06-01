@@ -204,8 +204,48 @@ steps:
       $files += Get-ChildItem artifacts/nupkg/*.snupkg -File | Select-Object -ExpandProperty FullName
       $files += Get-ChildItem artifacts/kit/*.zip -File | Select-Object -ExpandProperty FullName
 
+      $notesPath = Join-Path $PWD 'artifacts/release-notes.md'
+      @"
+**Reactor $version**
+
+> Interim distribution — see [spec 022](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/022-packaging-and-distribution.md) for the rollout plan.
+
+## Two assets
+
+### `Microsoft.UI.Reactor.$version.nupkg` — the framework
+
+Drop into a folder and add a NuGet source pointing at it:
+
+```xml
+<!-- nuget.config -->
+<configuration>
+  <packageSources>
+    <add key="reactor-local" value="C:\path\to\folder\with\nupkg" />
+  </packageSources>
+</configuration>
+```
+
+Then in your `.csproj`:
+
+```xml
+<PackageReference Include="Microsoft.UI.Reactor" Version="$version" />
+```
+
+### `reactor-skill-kit-$version.zip` — agent skill bundle + `mur` CLI
+
+Extract, then run:
+
+```powershell
+cd reactor
+.\install-skill-kit.ps1
+```
+
+Installs to `~/.claude/skills/reactor/` and adds `bin/<arch>` to your user PATH. After a new shell, `mur --version` should resolve.
+"@ | Set-Content -Path $notesPath -Encoding UTF8
+
       $env:GH_TOKEN = '$(GH_TOKEN)'
       $cmd = @('release', 'create', $tag, '--repo', 'microsoft/microsoft-ui-reactor', '--title', "Reactor $version", '--generate-notes')
+      $cmd += @('--notes-file', $notesPath)
       if ($preFlag) { $cmd += $preFlag }
       $cmd += $files
 
