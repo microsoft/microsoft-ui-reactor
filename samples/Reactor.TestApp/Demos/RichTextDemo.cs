@@ -146,8 +146,13 @@ class RichTextDemo : Component
                         Run("preserves the WinUI identity of every embedded control across re-renders. ")
                             with { IsItalic = true },
                         Run("That is what lets the slider thumb above stay smooth while you drag — " +
-                            "and lets you press "),
-                        InlineUI(Button("this inline button", () => setSeed(seed + 1))),
+                            "and lets you click "),
+                        // Issue #479 — clickable inline hyperlink: lighter than
+                        // an InlineUI(Button(...)) because no UIElement is hosted
+                        // inside the RichTextBlock; the click is just a Hyperlink
+                        // Click event wired to a Reactor Action with NavigateUri
+                        // suppressed.
+                        Hyperlink("this inline link", () => setSeed(seed + 1)),
                         Run(" to re-roll noise without losing any control state. ")),
 
                     // A purely static paragraph — under the highlight overlay

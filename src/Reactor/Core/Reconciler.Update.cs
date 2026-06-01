@@ -240,10 +240,20 @@ public sealed partial class Reconciler
                 if (run.Foreground is not null) r.Foreground = run.Foreground;
                 return r;
             case RichTextHyperlink link:
-                var l = link?.NavigateUri ?? new Uri("about:blank");
-                l = l.ToString().Length < 1 ? l = new Uri("about:blank") : l;
                 var hl = new Microsoft.UI.Xaml.Documents.Hyperlink();
-                try { hl.NavigateUri = l; } catch { hl.NavigateUri = new Uri("about:blank"); }
+                if (link.OnClick is not null)
+                {
+                    // Issue #479 click mode: fire delegate, suppress platform
+                    // navigation by leaving NavigateUri unset.
+                    s_hyperlinkClickActions.AddOrUpdate(hl, link.OnClick);
+                    hl.Click += OnHyperlinkClick;
+                }
+                else
+                {
+                    var l = link?.NavigateUri ?? new Uri("about:blank");
+                    l = l.ToString().Length < 1 ? l = new Uri("about:blank") : l;
+                    try { hl.NavigateUri = l; } catch { hl.NavigateUri = new Uri("about:blank"); }
+                }
                 hl.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = link?.Text ?? ""});
                 return hl;
             case RichTextLineBreak:
@@ -611,15 +621,42 @@ public sealed partial class Reconciler
         Microsoft.UI.Xaml.Documents.Hyperlink wh)
     {
         bool any = false;
-        if (prev.NavigateUri != next.NavigateUri)
+        // Issue #479 — handle OnClick attach/detach + NavigateUri transitions.
+        bool prevControlled = prev.OnClick is not null;
+        bool nextControlled = next.OnClick is not null;
+        if (nextControlled)
         {
-            // Mirror MountInline's normalization: fall back to about:blank
-            // on null/empty/invalid URIs.
-            var uri = next.NavigateUri ?? new Uri("about:blank");
-            if (uri.ToString().Length < 1) uri = new Uri("about:blank");
-            try { wh.NavigateUri = uri; }
-            catch { try { wh.NavigateUri = new Uri("about:blank"); } catch { } }
-            any = true;
+            // AddOrUpdate keeps the existing static event subscription pointing
+            // at the latest delegate without detach/attach churn — important
+            // because authors typically pass a fresh closure per render.
+            s_hyperlinkClickActions.AddOrUpdate(wh, next.OnClick!);
+            if (!prevControlled)
+            {
+                wh.Click += OnHyperlinkClick;
+                // Clear any URI from navigate mode so the platform does not
+                // also fire its own navigation on the same click.
+                wh.ClearValue(Microsoft.UI.Xaml.Documents.Hyperlink.NavigateUriProperty);
+                any = true;
+            }
+        }
+        else
+        {
+            if (prevControlled)
+            {
+                wh.Click -= OnHyperlinkClick;
+                s_hyperlinkClickActions.Remove(wh);
+                any = true;
+            }
+            if (prevControlled || prev.NavigateUri != next.NavigateUri)
+            {
+                // Mirror MountInline's normalization: fall back to about:blank
+                // on null/empty/invalid URIs.
+                var uri = next.NavigateUri ?? new Uri("about:blank");
+                if (uri.ToString().Length < 1) uri = new Uri("about:blank");
+                try { wh.NavigateUri = uri; }
+                catch { try { wh.NavigateUri = new Uri("about:blank"); } catch { } }
+                any = true;
+            }
         }
         if (!string.Equals(prev.Text, next.Text, global::System.StringComparison.Ordinal))
         {
@@ -631,6 +668,23 @@ public sealed partial class Reconciler
             }
         }
         return any;
+    }
+
+    // Issue #479 — backing storage for the static Click handler. CWT keys are
+    // weak references so entries die when the WinUI Hyperlink is collected
+    // (e.g. after RichTextBlock.Blocks.Clear() during a full rebuild). Using
+    // one static handler + a per-Hyperlink action mapping means OnClick swaps
+    // across renders are a cheap dictionary update, never an event detach +
+    // re-attach.
+    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<
+        Microsoft.UI.Xaml.Documents.Hyperlink, Action> s_hyperlinkClickActions = new();
+
+    private static void OnHyperlinkClick(
+        Microsoft.UI.Xaml.Documents.Hyperlink sender,
+        Microsoft.UI.Xaml.Documents.HyperlinkClickEventArgs args)
+    {
+        if (s_hyperlinkClickActions.TryGetValue(sender, out var action))
+            action?.Invoke();
     }
 
     private bool UpdateInlineUIContainerInPlace(

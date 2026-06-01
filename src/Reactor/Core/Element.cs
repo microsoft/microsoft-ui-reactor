@@ -2197,7 +2197,31 @@ public record RichTextRun(string Text) : RichTextInline
     public Brush? Foreground { get; init; }
 }
 
-public record RichTextHyperlink(string Text, Uri NavigateUri) : RichTextInline;
+/// <summary>
+/// Inline hyperlink fragment inside a <see cref="RichTextBlockElement"/>.
+///
+/// <para><b>Two modes</b> (issue #479):
+/// <list type="bullet">
+///   <item><b>Navigate mode</b> — when <see cref="OnClick"/> is <c>null</c>
+///   the WinUI <c>Hyperlink</c> is mounted with <see cref="NavigateUri"/>
+///   set and clicks open the URI via the platform launcher.</item>
+///   <item><b>Click mode</b> — when <see cref="OnClick"/> is non-null the
+///   delegate fires on click and the WinUI <c>NavigateUri</c> is left
+///   unset, so the platform does not navigate. Use this for clickable
+///   inline fragments (open a menu, enter edit mode, dispatch an action)
+///   without escaping to a hosted native subtree.</item>
+/// </list></para>
+/// </summary>
+public record RichTextHyperlink(string Text, Uri NavigateUri) : RichTextInline
+{
+    /// <summary>
+    /// Optional click handler. When non-null, fires on every click and
+    /// suppresses navigation (the underlying WinUI <c>Hyperlink</c> is
+    /// mounted with no <c>NavigateUri</c>). When null, the inline behaves
+    /// as a pure navigation link using <see cref="NavigateUri"/>.
+    /// </summary>
+    public Action? OnClick { get; init; }
+}
 
 public record RichTextLineBreak() : RichTextInline;
 

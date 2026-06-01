@@ -1675,6 +1675,21 @@ public static partial class Factories
     public static RichTextHyperlink Hyperlink(string text, Uri navigateUri) => new(text, navigateUri);
 
     /// <summary>
+    /// Issue #479 — clickable inline hyperlink: fires <paramref name="onClick"/>
+    /// on click and suppresses platform navigation. Use for in-flow interactive
+    /// fragments (open a flyout, enter edit mode) inside a virtualized list of
+    /// <see cref="RichTextBlock(RichTextParagraph[])"/> rows where giving each
+    /// fragment its own <c>UIElement</c> would be too heavy.
+    /// </summary>
+    public static RichTextHyperlink Hyperlink(string text, Action onClick)
+    {
+        global::System.ArgumentNullException.ThrowIfNull(onClick);
+        // Sentinel URI: ignored at mount time when OnClick is non-null
+        // (Reconciler skips NavigateUri assignment in click mode).
+        return new(text, new Uri("about:blank")) { OnClick = onClick };
+    }
+
+    /// <summary>
     /// Issue #480 — embeds a Reactor <paramref name="child"/> element inline
     /// inside a <see cref="RichTextBlock(RichTextParagraph[])"/>. Mirrors
     /// WinUI's <c>InlineUIContainer</c>. The child is reconciled as any

@@ -155,6 +155,97 @@ internal static class CoreCoverageFixtures
     }
 
     // ════════════════════════════════════════════════════════════════════════
+    //  Issue #479 — clickable inline RichTextHyperlink (OnClick mode).
+    //  Verifies the structural NavigateUri toggle across navigate↔click mode
+    //  transitions and identity preservation during incremental updates.
+    // ════════════════════════════════════════════════════════════════════════
+    internal class RichTextHyperlink_OnClickMode(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            int fired = 0;
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, set) = ctx.UseState(0);
+                var hyperlink = phase switch
+                {
+                    // Click mode (fresh closure per render is the realistic shape).
+                    0 => Hyperlink("clickable", () => fired++),
+                    // Click mode w/ a different captured closure — should keep same
+                    // WinUI Hyperlink instance, just update the action mapping.
+                    1 => Hyperlink("clickable", () => { fired += 2; }),
+                    // Transition to URI mode: NavigateUri must come back.
+                    2 => Hyperlink("link-mode", new Uri("https://example.com")),
+                    // Back to click mode: NavigateUri must clear again.
+                    _ => Hyperlink("clickable-again", () => fired++),
+                };
+                return VStack(
+                    Button("Next", () => set(phase + 1)),
+                    RichTextBlock(new[] { Paragraph(Run("prefix "), hyperlink, Run(" suffix")) })
+                );
+            });
+
+            await Harness.Render();
+
+            var rtb = H.FindControl<Microsoft.UI.Xaml.Controls.RichTextBlock>(_ => true);
+            H.Check("RTH_OnClick_RTBMounted", rtb is not null);
+
+            var hl0 = FindHyperlink(rtb!);
+            H.Check("RTH_OnClick_HyperlinkPresent", hl0 is not null);
+            // Click mode: NavigateUri left unset so the platform does not also navigate.
+            H.Check("RTH_OnClick_NoNavigateUriInClickMode",
+                hl0 is not null
+                && hl0.ReadLocalValue(Microsoft.UI.Xaml.Documents.Hyperlink.NavigateUriProperty)
+                    == Microsoft.UI.Xaml.DependencyProperty.UnsetValue);
+
+            // Phase 1: same controlled state, different closure — incremental
+            // path should keep the same WinUI Hyperlink instance.
+            H.ClickButton("Next");
+            await Harness.Render();
+            var rtb1 = H.FindControl<Microsoft.UI.Xaml.Controls.RichTextBlock>(_ => true);
+            var hl1 = FindHyperlink(rtb1!);
+            H.Check("RTH_OnClick_IdentityPreservedAcrossClosureSwap",
+                hl1 is not null && ReferenceEquals(hl1, hl0));
+            H.Check("RTH_OnClick_StillNoNavigateUri",
+                hl1 is not null
+                && hl1.ReadLocalValue(Microsoft.UI.Xaml.Documents.Hyperlink.NavigateUriProperty)
+                    == Microsoft.UI.Xaml.DependencyProperty.UnsetValue);
+
+            // Phase 2: transition click → navigate mode. NavigateUri must be set.
+            H.ClickButton("Next");
+            await Harness.Render();
+            var rtb2 = H.FindControl<Microsoft.UI.Xaml.Controls.RichTextBlock>(_ => true);
+            var hl2 = FindHyperlink(rtb2!);
+            H.Check("RTH_OnClick_NavigateUriRestoredOnTransition",
+                hl2 is not null
+                && hl2.NavigateUri == new Uri("https://example.com"));
+
+            // Phase 3: transition navigate → click mode. NavigateUri must be cleared.
+            H.ClickButton("Next");
+            await Harness.Render();
+            var rtb3 = H.FindControl<Microsoft.UI.Xaml.Controls.RichTextBlock>(_ => true);
+            var hl3 = FindHyperlink(rtb3!);
+            H.Check("RTH_OnClick_NavigateUriClearedOnReturn",
+                hl3 is not null
+                && hl3.ReadLocalValue(Microsoft.UI.Xaml.Documents.Hyperlink.NavigateUriProperty)
+                    == Microsoft.UI.Xaml.DependencyProperty.UnsetValue);
+        }
+
+        private static Microsoft.UI.Xaml.Documents.Hyperlink? FindHyperlink(
+            Microsoft.UI.Xaml.Controls.RichTextBlock rtb)
+        {
+            foreach (var block in rtb.Blocks)
+            {
+                if (block is not Microsoft.UI.Xaml.Documents.Paragraph p) continue;
+                foreach (var inline in p.Inlines)
+                    if (inline is Microsoft.UI.Xaml.Documents.Hyperlink hl) return hl;
+            }
+            return null;
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
     //  2. TemplatedGridView — mount + update + item count change
     //     Targets: Reconciler.Mount.cs lines 1415-1448, Reconciler.Update.cs lines 1388-1406
     // ════════════════════════════════════════════════════════════════════════
