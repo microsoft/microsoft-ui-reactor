@@ -4,9 +4,6 @@ using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
 ReactorApp.Run<StatusAndInfoApp>("Status and Info", width: 640, height: 1000
-#if DEBUG
-    , preview: true
-#endif
 );
 
 // <snippet:infobar-severities>

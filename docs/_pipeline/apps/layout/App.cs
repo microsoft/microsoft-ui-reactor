@@ -4,9 +4,6 @@ using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
 ReactorApp.Run<LayoutApp>("Layout Demo", width: 700, height: 650
-#if DEBUG
-    , preview: true
-#endif
 );
 
 // <snippet:vstack-hstack>

@@ -1,0 +1,9 @@
+<Project>
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)..\..\..\'))" />
+
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
+                                    Value="true"
+                                    Trim="true" />
+  </ItemGroup>
+</Project>

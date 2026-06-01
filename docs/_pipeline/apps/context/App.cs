@@ -4,9 +4,6 @@ using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
 ReactorApp.Run<ContextApp>("Context", width: 600, height: 600
-#if DEBUG
-    , preview: true
-#endif
 );
 
 // <snippet:create-context>

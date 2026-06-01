@@ -10,4 +10,7 @@
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
   </PropertyGroup>
 
+  <Import Project="$(MSBuildThisFileDirectory)src\Reactor\build\Reactor.targets"
+          Condition="Exists('$(MSBuildThisFileDirectory)src\Reactor\build\Reactor.targets')" />
+
 </Project>

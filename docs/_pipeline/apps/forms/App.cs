@@ -8,9 +8,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
 ReactorApp.Run<FormsApp>("Forms", width: 600, height: 900
-#if DEBUG
-    , preview: true
-#endif
 );
 
 // <snippet:controlled-input>

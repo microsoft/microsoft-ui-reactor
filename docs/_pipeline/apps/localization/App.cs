@@ -5,9 +5,6 @@ using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
 ReactorApp.Run<LocalizationApp>("Localization", width: 650, height: 700
-#if DEBUG
-    , preview: true
-#endif
 );
 
 // <snippet:resource-provider>

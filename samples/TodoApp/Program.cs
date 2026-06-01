@@ -12,9 +12,6 @@ using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.Core.Theme;
 
 ReactorApp.Run<TodoApp>("Todos", width: 900, height: 720
-#if DEBUG
-    , devtools: true
-#endif
 );
 
 // ─── State ───────────────────────────────────────────────────────────────────

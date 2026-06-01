@@ -1,0 +1,13 @@
+<Project>
+  <ItemGroup>
+    <!-- Default: devtools subsystem is trimmed out of AOT publishes.
+         Apps that need devtools override by adding their own
+         <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
+                                          Value="true" Trim="true" />.
+         SDK uses last-write-wins for duplicate Include keys on
+         RuntimeHostConfigurationOption. -->
+    <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
+                                    Value="false"
+                                    Trim="true" />
+  </ItemGroup>
+</Project>

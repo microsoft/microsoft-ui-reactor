@@ -6,9 +6,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
 ReactorApp.Run<NavigationApp>("Navigation", width: 800, height: 700
-#if DEBUG
-    , preview: true
-#endif
 );
 
 internal sealed partial class DocsFrameDemoPage : Page

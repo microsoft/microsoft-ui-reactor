@@ -119,6 +119,7 @@
     <None Include="..\Reactor.Localization.Generator\$(_ReactorAnalyzerBinDir)\Reactor.Localization.Generator.dll"
           Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="" Visible="false" />
+    <None Include="build\Reactor.targets" Pack="true" PackagePath="build\" Visible="false" />
     <!-- Agent kit packed into the NuGet at `agentkit/`: SKILL.md, every
          skills/*.md sub-skill, the recipes folder, and the generated
          signatures index. Mirrors the source-tree layout. Discoverable from

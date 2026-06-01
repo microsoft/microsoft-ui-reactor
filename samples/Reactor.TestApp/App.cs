@@ -14,9 +14,6 @@ using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.Core.Theme;
 
 ReactorApp.Run<DemoApp>("Reactor Demo", width: 1200, height: 800
-#if DEBUG
-    , devtools: true
-#endif
     // Spec 045 — register the native docking renderer once at the
     // root host. Lets any component in the app (e.g. the DockingDemo
     // tab) instantiate a `DockManager` element directly.
@@ -26,7 +23,7 @@ ReactorApp.Run<DemoApp>("Reactor Demo", width: 1200, height: 800
 // ─── Global dev flags ──────────────────────────────────────────────────────────
 // Declared as static Observable<T> cells so any component can read/write without
 // prop-drilling. Toggled from the Dev menu in the titlebar when the app is
-// launched with `--devtools app` (and built with devtools: true).
+// launched with `--devtools app` (and built with Reactor.DevtoolsSupport enabled).
 static class AppFlags
 {
     public static readonly Observable<bool> DebugUI = new(false);

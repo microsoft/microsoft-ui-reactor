@@ -45,6 +45,12 @@
   </Target>
 
   <ItemGroup>
+    <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
+                                    Value="true"
+                                    Trim="true" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
     <PackageReference Include="MessageFormat" Version="8.0.0" />
   </ItemGroup>

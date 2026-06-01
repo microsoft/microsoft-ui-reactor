@@ -4,9 +4,6 @@ using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
 ReactorApp.Run<DevToolingApp>("Dev Tooling Demo", width: 600, height: 450
-#if DEBUG
-    , preview: true
-#endif
 );
 
 // <snippet:preview-app>

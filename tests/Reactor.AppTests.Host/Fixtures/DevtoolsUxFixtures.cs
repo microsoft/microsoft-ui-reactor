@@ -76,7 +76,7 @@ internal static class DevtoolsUxFixtures
         // Fixture-scoped side effect: turn on the in-app devtools UI for just this
         // fixture, so tests don't need to launch the host with `--devtools app`.
         // The AND gate is satisfied: DevtoolsEnabled is set here, and in production
-        // would only be reached when both Run(devtools:true) AND `--devtools app`
+        // would only be reached when Reactor.DevtoolsSupport AND `--devtools app`
         // CLI were present.
         ReactorApp.DevtoolsEnabled = true;
         return Component<DevtoolsUxTestComponent>();

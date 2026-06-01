@@ -8,9 +8,6 @@ using Microsoft.UI.Text;
 using static Microsoft.UI.Reactor.Factories;
 
 ReactorApp.Run<WordPuzzleApp>("Reactor Word Puzzle", width: 520, height: 680
-#if DEBUG
-    , devtools: true
-#endif
 );
 
 // ─── Main game component ───────────────────────────────────────────────────────

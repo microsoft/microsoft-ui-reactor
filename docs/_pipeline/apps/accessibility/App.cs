@@ -6,9 +6,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation.Peers;
 
 ReactorApp.Run<AccessibilityApp>("Accessibility", width: 650, height: 700
-#if DEBUG
-    , preview: true
-#endif
 );
 
 // <snippet:tier1-modifiers>

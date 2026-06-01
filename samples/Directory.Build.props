@@ -26,4 +26,10 @@
     <ApplicationIcon Condition="'$(ApplicationIcon)' == ''">$(MSBuildThisFileDirectory)Assets\WinUI.ico</ApplicationIcon>
   </PropertyGroup>
 
+  <ItemGroup Condition="'$(Configuration)' == 'Debug' And '$(ReactorDevtoolsManaged)' != 'false' And !$([System.String]::Copy('$(MSBuildProjectDirectory)').Contains('\samples\apps\hello-world-aot'))">
+    <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
+                                    Value="true"
+                                    Trim="true" />
+  </ItemGroup>
+
 </Project>

@@ -9,9 +9,6 @@ using Microsoft.UI.Reactor.Hooks;
 using static Microsoft.UI.Reactor.Factories;
 
 ReactorApp.Run<PaginatedListApp>("Paginated List Recipe", width: 420, height: 520
-#if DEBUG
-    , preview: true
-#endif
 );
 
 class PaginatedListApp : Component

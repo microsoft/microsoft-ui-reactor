@@ -5,9 +5,6 @@ using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
 ReactorApp.Run<FlexLayoutApp>("Flex Layout", width: 700, height: 600
-#if DEBUG
-    , preview: true
-#endif
 );
 
 // <snippet:flex-direction>

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Net;
@@ -56,6 +57,7 @@ internal sealed class PreviewCaptureServer : IDisposable
     /// <summary>Switches to a different component by name. Returns true on success.</summary>
     public Func<string, bool>? SwitchComponent { get; set; }
 
+    [RequiresUnreferencedCode("Devtools subsystem; gated by Reactor.DevtoolsSupport.")]
     public PreviewCaptureServer(DispatcherQueue dispatcherQueue, Window window, int fps = 10)
     {
         _dispatcherQueue = dispatcherQueue;

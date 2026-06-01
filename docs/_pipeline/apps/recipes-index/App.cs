@@ -3,9 +3,6 @@ using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 
 ReactorApp.Run<RecipesIndexApp>("Recipes Gallery", width: 520, height: 320
-#if DEBUG
-    , preview: true
-#endif
 );
 
 // <snippet:app>

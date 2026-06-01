@@ -4,9 +4,6 @@ using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
 ReactorApp.Run<HooksApp>("Hooks Demo", width: 650, height: 600
-#if DEBUG
-    , preview: true
-#endif
 );
 
 // <snippet:usestate>

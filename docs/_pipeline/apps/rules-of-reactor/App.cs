@@ -8,9 +8,6 @@ using static Microsoft.UI.Reactor.Factories;
 // suppressed in the csproj because these examples deliberately violate
 // the rules (the comment in each snippet names the analyzer code).
 ReactorApp.Run<RulesApp>("Rules of Reactor", width: 360, height: 220
-#if DEBUG
-    , preview: true
-#endif
 );
 
 class RulesApp : Component

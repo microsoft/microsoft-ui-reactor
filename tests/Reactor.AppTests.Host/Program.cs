@@ -37,12 +37,12 @@ else if (args.Contains("--devtools-stress-e2e"))
 else if (args.Contains("--stress-child"))
 {
     // Child process spawned by the E2E stress parent. Goes through the real
-    // ReactorApp.Run<T>(devtools: true) path so that --devtools run on the
-    // command line triggers TryRunDevtools → RunRunSubverb → full MCP init
+    // ReactorApp.Run<T> path with Reactor.DevtoolsSupport enabled so that
+    // --devtools run triggers TryRunDevtools → RunRunSubverb → full MCP init
     // (tool registration + AnnounceReady). That is the same code the
     // customer hits when they launch their app with --devtools.
     ReactorApp.Run<Microsoft.UI.Reactor.AppTests.Host.DevtoolsStress.StressChild>(
-        "Stress Child", width: 320, height: 160, devtools: true);
+        "Stress Child", width: 320, height: 160);
 }
 else
     ReactorApp.Run<TestHost>(

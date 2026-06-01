@@ -181,8 +181,6 @@ public static class ReactorApp
         set => Volatile.Write(ref _appLogger, value);
     }
 
-    private static int _previewParamDeprecationWarned;
-
     // ── XAML control-assembly registration ─────────────────────────────────
     //
     // The lifted XAML loader resolves `local:` namespaces and Generic.xaml type
@@ -203,7 +201,7 @@ public static class ReactorApp
     /// XAML loader for this process. Required when a third-party control library
     /// is referenced from a Reactor app that has no XAML files of its own (and
     /// therefore no compiler-generated provider that would auto-chain to the
-    /// library). Call before <see cref="Run{TRoot}(string, double, double, bool, bool, bool, Action{ReactorHost}?)"/>.
+    /// library). Call before <see cref="Run{TRoot}(string, double, double, bool, Action{ReactorHost}?)"/>.
     /// Idempotent (same instance is added at most once) and thread-safe.
     /// See https://github.com/microsoft/microsoft-ui-reactor/issues/142.
     /// </summary>
@@ -267,9 +265,9 @@ public static class ReactorApp
         => Volatile.Read(ref _registeredXamlMetadataProviders);
 
     // Session-scoped flag. True iff the process was launched with a devtools
-    // subverb (--devtools app / --devtools run) AND the developer passed
-    // devtools: true to Run. Frozen after startup; read by UseDevtools() and
-    // by the DevtoolsMenu component to decide whether to render themselves.
+    // subverb (--devtools app / --devtools run) and the binary was built with
+    // Reactor.DevtoolsSupport enabled. Frozen after startup; read by UseDevtools()
+    // and by the DevtoolsMenu component to decide whether to render themselves.
     private static int _devtoolsEnabled;
     public static bool DevtoolsEnabled
     {
@@ -287,30 +285,21 @@ public static class ReactorApp
     private static readonly nint DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4;
 
     /// <summary>
-    /// Launches the app. Set <c>devtools: true</c> in DEBUG builds to enable the
-    /// <c>mur devtools</c> / <c>--devtools</c> surface: component switching via VS Code,
-    /// MCP agent tools (Phase 2+), and component listing.
+    /// Launches the app. Enable the <c>Reactor.DevtoolsSupport</c> runtime host
+    /// configuration switch in DEBUG builds to allow the <c>mur devtools</c> /
+    /// <c>--devtools</c> surface: component switching via VS Code, MCP agent tools,
+    /// and component listing.
     /// </summary>
-    /// <remarks>
-    /// The <c>preview</c> parameter is deprecated and is kept for one release. When both are
-    /// passed, <c>devtools</c> wins.
-    /// </remarks>
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Devtools uses Assembly.GetTypes(); non-devtools code paths are trim-safe.")]
     public static void Run<TRoot>(
         string title = "Reactor App",
         double width = 1024,
         double height = 768,
         bool fullScreen = false,
-        bool devtools = false,
-        // DEPRECATED: use 'devtools:'. Kept for one release. The runtime emits a
-        // one-shot stderr warning when this is set without 'devtools:'.
-        bool preview = false,
         Action<ReactorHost>? configure = null)
         where TRoot : Component, new()
     {
         EmitDipBehaviorChangeNoticeOnce();
-        var effectiveDevtools = ResolveDevtoolsParam(devtools, preview);
-        if (effectiveDevtools && TryRunDevtools(title, width, height, configure, hostRoot: typeof(TRoot))) return;
+        if (TryRunDevtools(title, width, height, configure, hostRoot: typeof(TRoot))) return;
 
         RunOnSta(() =>
         {
@@ -334,24 +323,18 @@ public static class ReactorApp
 
     /// <summary>
     /// Launches the app with a render function instead of a Component subclass.
-    /// See the generic overload for <c>devtools</c> semantics.
+    /// See the generic overload for devtools activation semantics.
     /// </summary>
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Devtools uses Assembly.GetTypes(); non-devtools code paths are trim-safe.")]
     public static void Run(
         string title,
         Func<RenderContext, Element> rootRender,
         double width = 1024,
         double height = 768,
         bool fullScreen = false,
-        bool devtools = false,
-        // DEPRECATED: use 'devtools:'. Kept for one release. The runtime emits a
-        // one-shot stderr warning when this is set without 'devtools:'.
-        bool preview = false,
         Action<ReactorHost>? configure = null)
     {
         EmitDipBehaviorChangeNoticeOnce();
-        var effectiveDevtools = ResolveDevtoolsParam(devtools, preview);
-        if (effectiveDevtools && TryRunDevtools(title, width, height, configure)) return;
+        if (TryRunDevtools(title, width, height, configure)) return;
 
         RunOnSta(() =>
         {
@@ -409,7 +392,7 @@ public static class ReactorApp
     /// Use it for pre-mount setup that needs the live <see cref="ReactorHost"/>
     /// (logger wiring, custom reconciler registrations, host-level event
     /// hooks). Mirror of the <c>configure</c> parameter on the legacy
-    /// <see cref="Run{TRoot}(string, double, double, bool, bool, bool, Action{ReactorHost}?)"/>
+    /// <see cref="Run{TRoot}(string, double, double, bool, Action{ReactorHost}?)"/>
     /// entry — secondary windows now have the same escape hatch as the
     /// primary.
     /// </param>
@@ -671,25 +654,11 @@ public static class ReactorApp
     }
 
     /// <summary>
-    /// Reconciles the deprecated <c>preview:</c> parameter with the new <c>devtools:</c>.
-    /// If only <c>preview</c> is set, emit a one-time deprecation warning to stderr.
-    /// </summary>
-    internal static bool ResolveDevtoolsParam(bool devtools, bool preview)
-    {
-        if (preview && !devtools && Interlocked.Exchange(ref _previewParamDeprecationWarned, 1) == 0)
-        {
-            Console.Error.WriteLine("[reactor] 'preview:' is deprecated; use 'devtools:'.");
-        }
-        return devtools || preview;
-    }
-
-    /// <summary>
     /// Checks the process command-line for <c>--devtools</c> or the deprecated <c>--preview</c>.
     /// If a devtools subverb is selected, launches the corresponding flow (list, run, etc.).
-    /// With <c>--vscode</c>, starts the capture server for the VS Code preview panel. Only
-    /// active when the caller passes <c>devtools: true</c>.
+    /// With <c>--vscode</c>, starts the capture server for the VS Code preview panel. Devtools
+    /// dispatch requires the build-time <c>Reactor.DevtoolsSupport</c> switch.
     /// </summary>
-    [RequiresUnreferencedCode("Devtools uses Assembly.GetTypes() for component discovery.")]
     private static bool TryRunDevtools(string title, double width, double height, Action<ReactorHost>? configure, Type? hostRoot = null)
     {
         var args = Environment.GetCommandLineArgs();
@@ -703,6 +672,21 @@ public static class ReactorApp
 
         if (options.Subverb is null) return false;
 
+        if (ReactorFeatures.IsDevtoolsSupported)
+            return DispatchDevtoolsSubverb(options, title, width, height, configure, hostRoot);
+
+        Console.Error.WriteLine(
+            "[reactor] --devtools requested but this binary was built without Reactor.DevtoolsSupport. " +
+            "Devtools must be enabled at build time. Add the following to your csproj and rebuild:");
+        Console.Error.WriteLine(
+            "  <RuntimeHostConfigurationOption Include=\"Reactor.DevtoolsSupport\" Value=\"true\" Trim=\"true\" />");
+        return true;
+    }
+
+    [RequiresDynamicCode("Devtools subsystem; gated by Reactor.DevtoolsSupport.")]
+    [RequiresUnreferencedCode("Devtools subsystem; gated by Reactor.DevtoolsSupport.")]
+    private static bool DispatchDevtoolsSubverb(DevtoolsCliOptions options, string title, double width, double height, Action<ReactorHost>? configure, Type? hostRoot = null)
+    {
         // Install log capture as the very first side-effect after we know
         // devtools is active. Runs before component reflection, before any
         // Application.Start, so startup Debug/Trace/Console output is caught
@@ -1113,11 +1097,6 @@ public static class ReactorApp
         return null;
     }
 
-    internal static void ResetDeprecationWarningForTests()
-    {
-        Interlocked.Exchange(ref _previewParamDeprecationWarned, 0);
-    }
-
     internal static void ResetDevtoolsEnabledForTests()
     {
         Interlocked.Exchange(ref _devtoolsEnabled, 0);
@@ -1125,8 +1104,7 @@ public static class ReactorApp
 
     /// <summary>
     /// Test-only reset for the once-per-process DIP behavior notice flag.
-    /// Mirrors <see cref="ResetDeprecationWarningForTests"/> so the unit-test
-    /// suite can drive <see cref="EmitDipBehaviorChangeNoticeOnce"/> through
+    /// Lets the unit-test suite drive <see cref="EmitDipBehaviorChangeNoticeOnce"/> through
     /// both branches deterministically.
     /// </summary>
     internal static void ResetDipBehaviorChangeNoticeForTests()

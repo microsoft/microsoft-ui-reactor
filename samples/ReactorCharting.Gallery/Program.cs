@@ -16,9 +16,6 @@ if (args.Contains("--self-test"))
 else
 {
     ReactorApp.Run<GalleryApp>("Reactor Charting Gallery", width: 1400, height: 900,
-#if DEBUG
-        devtools: true,
-#endif
         configure: host => XamlInterop.Register(host.Reconciler));
 }
 
