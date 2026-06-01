@@ -9,11 +9,11 @@ using Windows.Foundation;
 using static Microsoft.UI.Reactor.Factories;
 
 // ── Perf instrumentation ────────────────────────────────────────────────
-// Mirrors the BlankWPF / BlankWinForms samples in
-// C:\wui\Samples\FrameworkBenchmarkBlankApps so this app emits the same
-// "BenchmarkSyntheticApps" ETW provider regions (WinMainEntry, WindowLoaded,
-// FirstRender, FirstIdle, ProcessStop) that the K2 perf-gates harness
-// (AppLifeCycleWorkload) and WPA analyzers key off of.
+// Synthetic blank app for measuring Reactor + WinUI 3 cold-launch cost.
+// Emits the "BenchmarkSyntheticApps" ETW provider regions (WinMainEntry,
+// WindowLoaded, FirstRender, FirstIdle, ProcessStop) so the same WPA
+// regions resolve here as in the WinUI3 / RNW siblings under
+// tests/startup_perf/, enabling apples-to-apples cross-stack comparison.
 //
 //   Provider Name : BenchmarkSyntheticApps
 //   Provider GUID : FD80D616-E92B-4B2B-9BED-131ADA36A8FD
@@ -23,7 +23,7 @@ using static Microsoft.UI.Reactor.Factories;
 //   wWinMainEntry  → before ReactorApp.Run          (≈ WPF App.Main entry)
 //   WindowLoaded   → Window.Activated (first fire)  (≈ WPF Window.Loaded)
 //   FirstRender    → CompositionTarget.Rendered     (≈ WPF Window.ContentRendered)
-//                    first fire after activation (post-paint, matches -lift)
+//                    first fire after activation (post-paint)
 //   FirstIdle      → DispatcherQueuePriority.Low    (≈ WPF DispatcherPriority.
 //                    enqueue after FirstRender         ApplicationIdle)
 //   ProcessStop    → after ReactorApp.Run returns   (≈ WPF App.OnExit)
@@ -52,9 +52,8 @@ try
                 // FirstRender: the first composition frame after activation.
                 // CompositionTarget.Rendered fires after each frame has been
                 // composed and presented (post-paint) — the right marker for
-                // "first frame on screen". Matches -lift's WinUI3 baseline
-                // (RootGrid.Loaded → CompositionTarget::Rendered). Capture the
-                // first fire then unhook to avoid per-frame noise.
+                // "first frame on screen". Capture the first fire then unhook
+                // to avoid per-frame noise.
                 EventHandler<RenderedEventArgs>? onRendered = null;
                 onRendered = (s, e) =>
                 {
@@ -85,10 +84,10 @@ finally
 
 class GettingStartedApp : Component
 {
-    // Shared metrics + a one-shot listener so the component can re-render with
-    // the final values once FirstIdle fires. Matches the on-screen
-    // "First Frame: X ms | Interactive: Y ms" status bar in the BlankWPF /
-    // BlankWinForms samples.
+    // Shared metrics + a one-shot listener so the component can re-render
+    // with the final values once FirstIdle fires. Surfaces an on-screen
+    // "First Frame: X ms | Interactive: Y ms" status bar for quick visual
+    // verification.
     internal static readonly BlankPerfMetrics Metrics = new();
     private static event Action? MetricsReady;
     internal static void NotifyMetricsReady() => MetricsReady?.Invoke();

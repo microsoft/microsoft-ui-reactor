@@ -1,10 +1,11 @@
 # BlankReactor — Reactor perf-gate synthetic blank app
 
-`BlankReactor` is the Reactor (Microsoft.UI.Reactor) counterpart to the
-**FrameworkBenchmarkBlankApps** family at `wui\Samples\FrameworkBenchmarkBlankApps`
-(`BlankWPF`, `BlankWinForms`, `BlankWinUI3`, …). It is consumed by the K2
-perf-gates harness (`AppLifeCycleWorkload`) and exists to measure cold-launch
-costs of the Reactor + WinUI 3 stack against the other UI frameworks.
+`BlankReactor` is a synthetic blank app for measuring Reactor
+(Microsoft.UI.Reactor) + WinUI 3 cold-launch cost. It complements the
+in-repo `tests/startup_perf/BlankWinUI3` and `tests/startup_perf/BlankRNW`
+siblings: all three emit the same `BenchmarkSyntheticApps` ETW regions so
+the same WPA analysis resolves across stacks, enabling apples-to-apples
+comparison of the Reactor + WinUI 3 stack against the other UI frameworks.
 
 It is **not** a feature demo — see `samples/Reactor.TestApp` for that — and
 it is **not** a microbenchmark — see `tests/perf_bench/` for those. It is a
@@ -35,16 +36,15 @@ verification.
 
 ## Project shape
 
-- `AssemblyName` is **`BlankReactor`** so the harness's `ProcessName` matches.
-- `WindowsPackageType=MSIX` so the harness can deploy/install it.
-- `SelfContained=true` so the perf-test VMs (which only ship the .NET 8
-  runtime used by `BlankWPF` / `BlankWinForms`) don't need a separate .NET 10
+- `AssemblyName` is **`BlankReactor`** so a perf harness's `ProcessName` filter matches.
+- `WindowsPackageType=MSIX` so a perf harness can deploy/install it the standard way.
+- `SelfContained=true` so perf-test machines (which may only carry an older
+  .NET runtime for sibling baseline apps) don't need a separate .NET 10
   install.
-- `WindowsAppSDKSelfContained=false` because the VMs already have
-  `Microsoft.WindowsAppRuntime.2.msix` deployed by the
-  `AppLifeCycleSyntheticApps` spkg — the project intentionally overrides the
-  repo-root default (`Directory.Build.props`) which is `true` for the other
-  Reactor samples.
+- `WindowsAppSDKSelfContained=false` because the perf-test environment is
+  expected to provide `Microsoft.WindowsAppRuntime.2.msix` — the project
+  intentionally overrides the repo-root default (`Directory.Build.props`)
+  which is `true` for the other Reactor samples.
 
 ## Building
 
