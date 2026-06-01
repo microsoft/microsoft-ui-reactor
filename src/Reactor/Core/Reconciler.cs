@@ -484,7 +484,7 @@ public sealed partial class Reconciler : IDisposable
     // ListView subclass) per TreeView so Update can reconcile realized
     // containers, and so the ContainerContentChanging subscription is attached
     // exactly once.
-    private readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<WinUI.TreeView, WinUI.ListView> _typedTreeListControls = new();
+    internal readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<WinUI.TreeView, WinUI.ListView> _typedTreeListControls = new();
 
     /// <summary>
     /// Spec 047 §14 Phase 1 (1.3) — promoted from internal. Associates a
@@ -1857,84 +1857,52 @@ public sealed partial class Reconciler : IDisposable
             return;
         }
 
-        // XamlHostElement children were created outside Reactor's tree —
-        // do NOT recurse into them (they may have stale parent references
-        // or be types Reactor doesn't know how to clean). Fully detach
-        // reactor state so retained-by-app references can't fire stale
-        // callbacks through orphaned trampolines.
-        if (control is FrameworkElement hostFe && GetElementTag(hostFe) is XamlHostElement)
+        if (control is WinUI.RichTextBlock rtb)
         {
-            DetachReactorState(hostFe);
-            return;
+            // Issue #480 — RichTextBlock is neither a Panel nor a ContentControl,
+            // so ForEachReactorChildControl doesn't recurse into its flow
+            // document. Route A (Reactor element) inline UI children must be torn
+            // down here or their hook cleanups + pooled descendants leak when the
+            // block goes away.
+            UnmountInlineUIChildren(rtb);
         }
 
-        // XamlPageElement — clear content to trigger Page.OnNavigatedFrom cleanup
-        if (control is WinUI.Frame pageFrame && GetElementTag(pageFrame) is XamlPageElement)
-        {
-            pageFrame.Content = null;
-            DetachReactorState(pageFrame);
-            return;
-        }
+        ForEachReactorChildControl(control, UnmountRecursive);
+    }
 
+    private static void ForEachReactorChildControl(UIElement control, Action<UIElement> visit)
+    {
         if (control is WinUI.Panel panel)
         {
             foreach (var child in panel.Children)
-                UnmountRecursive(child);
+                visit(child);
         }
         else if (control is WinUI.ItemsRepeater repeater)
         {
-            // ItemsRepeater projects to C# as a FrameworkElement (not a
-            // Panel — see microsoft-ui-xaml-lift/.../ItemsRepeater.idl), so
-            // the Panel branch above doesn't catch it even though the
-            // framework keeps both realized and recycled containers in
-            // its visual subtree. Without this branch, row Components'
-            // UseEffect cleanups would never run when the LazyStack is
-            // unmounted (e.g., on navigation), leaking any in-flight
-            // timers / subscriptions / async loops. We walk via
-            // VisualTreeHelper because the public ItemsRepeater surface
-            // doesn't expose a Children collection. (PR #324 review)
+            // ItemsRepeater does not expose a Children collection; realized and
+            // recycled row hosts live in its visual subtree.
             int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(repeater);
             for (int i = 0; i < count; i++)
             {
                 if (Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(repeater, i) is UIElement child)
-                    UnmountRecursive(child);
+                    visit(child);
             }
         }
         else if (control is WinUI.Border border && border.Child is not null)
         {
-            UnmountRecursive(border.Child);
+            visit(border.Child);
         }
         else if (control is WinUI.ScrollViewer sv && sv.Content is UIElement svChild)
         {
-            UnmountRecursive(svChild);
+            visit(svChild);
         }
         else if (control is WinUI.UserControl uc && uc.Content is UIElement ucChild)
         {
-            UnmountRecursive(ucChild);
+            visit(ucChild);
         }
         else if (control is WinUI.ContentControl cc && cc.Content is UIElement ccChild)
         {
-            UnmountRecursive(ccChild);
-        }
-        else if (control is WinUI.TreeView typedTree && GetElementTag(typedTree) is TemplatedTreeViewElementBase)
-        {
-            // Typed TreeView<T> hosts each node's view in a per-container
-            // ContentControl (populated on realization — see _typedTreeListControls).
-            // WinUI.TreeView is a Control (not a Panel / ContentControl), so the
-            // branches above don't recurse into it; walk its realized containers
-            // and tear down the mounted views, or their Components' cleanups
-            // (UseEffect, timers, subscriptions) would leak on unmount.
-            UnmountTypedTreeViewContainers(typedTree);
-            _typedTreeListControls.Remove(typedTree);
-        }
-        else if (control is WinUI.RichTextBlock rtb)
-        {
-            // Issue #480 — RichTextBlock is neither a Panel nor a
-            // ContentControl, so the branches above don't recurse into its
-            // flow document. Any Route A (Reactor element) inline UI
-            // children must be torn down here or their hook cleanups +
-            // pooled descendants leak when the block goes away.
-            UnmountInlineUIChildren(rtb);
+            visit(ccChild);
         }
     }
 
@@ -1944,14 +1912,14 @@ public sealed partial class Reconciler : IDisposable
     /// (recycle of individual containers is handled by the
     /// ContainerContentChanging recycle path).
     /// </summary>
-    private void UnmountTypedTreeViewContainers(WinUI.TreeView treeView)
+    internal void UnmountTypedTreeViewContainers(WinUI.TreeView treeView)
     {
         int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(treeView);
         for (int i = 0; i < count; i++)
             UnmountTypedTreeViewContainersRecursive(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(treeView, i));
     }
 
-    private void UnmountTypedTreeViewContainersRecursive(DependencyObject node)
+    internal void UnmountTypedTreeViewContainersRecursive(DependencyObject node)
     {
         // Our node-view hosts are ContentControls tagged with the view Element.
         if (node is WinUI.ContentControl cc && cc.Content is UIElement view && GetElementTag(cc) is not null)
@@ -2215,27 +2183,11 @@ public sealed partial class Reconciler : IDisposable
             return;
         }
 
-        // Recurse into children.
-        if (control is WinUI.Panel panel)
+        // Recurse into children. The shared child walk includes ItemsRepeater,
+        // so pooled removals now tear down realized LazyStack rows too.
+        ForEachReactorChildControl(control, child => UnmountAndCollect(child, toPool));
+        if (control is WinUI.ContentControl cc && cc.Content is UIElement)
         {
-            foreach (var child in panel.Children)
-                UnmountAndCollect(child, toPool);
-        }
-        else if (control is WinUI.Border border && border.Child is not null)
-        {
-            UnmountAndCollect(border.Child, toPool);
-        }
-        else if (control is WinUI.ScrollViewer sv && sv.Content is UIElement svChild)
-        {
-            UnmountAndCollect(svChild, toPool);
-        }
-        else if (control is WinUI.UserControl uc && uc.Content is UIElement ucChild)
-        {
-            UnmountAndCollect(ucChild, toPool);
-        }
-        else if (control is WinUI.ContentControl cc && cc.Content is UIElement ccChild)
-        {
-            UnmountAndCollect(ccChild, toPool);
             cc.Content = null; // Detach so pooled child has no parent
         }
         else if (control is WinUI.RichTextBlock rtb)

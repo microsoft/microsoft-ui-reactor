@@ -10,10 +10,10 @@ namespace Microsoft.UI.Reactor.Core;
 // relocated verbatim out of the shared Reconciler.Mount.cs / Reconciler.Update.cs
 // partials to declutter the reconciler core. These remain Reconciler instance
 // members (this is a pure same-class move, not a lifecycle extraction) because
-// the subsystem's teardown is coupled to the core unmount path: the
-// `_typedTreeListControls` CWT subscription marker is cleared in
-// Reconciler.UnmountRecursive, and FindTypedTreeListControl/FindDescendantListView
-// live in Reconciler.cs. TemplatedTreeViewHandler delegates here via
+// the subsystem's teardown uses core helpers: TemplatedTreeViewHandler clears
+// the `_typedTreeListControls` CWT subscription marker, and
+// FindTypedTreeListControl/FindDescendantListView live in Reconciler.cs.
+// TemplatedTreeViewHandler delegates here via
 // ctx.Reconciler.MountTemplatedTreeView / UpdateTemplatedTreeView.
 public sealed partial class Reconciler
 {

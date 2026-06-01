@@ -17,12 +17,9 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 // walk — same mechanism as TemplatedListHandler / LazyStackHandler).
 //
 // Mount/Update delegate to the unchanged legacy bodies, so behavior is
-// identical to the pre-port switch path. ContinueDefaultTraversal on unmount
-// matches the prior unregistered behavior exactly: the hosted node views live
-// in ContentControl.Content in the visual tree and are reached by the engine's
-// default type-based recursion either way, so their component teardown
-// (UseEffect cleanup) still runs. The internal _typedTreeListControls CWT is
-// GC-keyed on the TreeView, so no explicit teardown is required.
+// identical to the pre-port switch path. Unmount owns the per-container hosted
+// view teardown because WinUI.TreeView is a Control, not a generic container
+// shape the core child walk can recurse through.
 
 /// <summary>§14 — typed, data-driven <c>TreeView&lt;T&gt;</c> (issue #447).</summary>
 internal sealed class TemplatedTreeViewHandler : IDecoratorElementHandler<TemplatedTreeViewElementBase>
@@ -34,5 +31,10 @@ internal sealed class TemplatedTreeViewHandler : IDecoratorElementHandler<Templa
         => ctx.Reconciler.UpdateTemplatedTreeView(oldEl, newEl, (WinUI.TreeView)control, ctx.RequestRerender) ?? control;
 
     public V1UnmountDisposition Unmount(UnmountContext ctx, TemplatedTreeViewElementBase? element, UIElement control)
-        => V1UnmountDisposition.ContinueDefaultTraversal;
+    {
+        var treeView = (WinUI.TreeView)control;
+        ctx.Reconciler.UnmountTypedTreeViewContainers(treeView);
+        ctx.Reconciler._typedTreeListControls.Remove(treeView);
+        return V1UnmountDisposition.CollectSelf;
+    }
 }

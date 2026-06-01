@@ -399,11 +399,9 @@ internal static class TemplatedTreeViewFixtures
     }
 
     // ── 8. Unmount runs the hosted view's component cleanup ────────────────
-    // The decorator handler returns ContinueDefaultTraversal on unmount, so the
-    // engine's default visual-tree recursion still reaches each node's hosted
-    // view (in ContentControl.Content) and runs its component UseEffect cleanup.
-    // This is the load-bearing equivalence guarantee of the V1 port (#447) —
-    // a regression here would silently leak hosted components.
+    // The decorator handler owns the typed TreeView container walk, so hosted
+    // node views (in ContentControl.Content) run component UseEffect cleanup on
+    // both recursive and pooled unmount paths.
     private static int s_cleanupCount;
 
     private sealed class CleanupLeaf : Component
@@ -450,9 +448,44 @@ internal static class TemplatedTreeViewFixtures
             await Harness.Render();
 
             H.Check("TTV_UnmountCleanup_TreeRemoved", H.FindControl<WinXC.TreeView>(_ => true) is null);
-            // ContinueDefaultTraversal reached the hosted component and ran its
-            // cleanup exactly once.
             H.Check("TTV_UnmountCleanup_CleanupRan",
+                await WaitFor(() => global::System.Threading.Volatile.Read(ref s_cleanupCount) == 1));
+        }
+    }
+
+    internal class UnmountAndPoolRunsChildCleanup(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            global::System.Threading.Interlocked.Exchange(ref s_cleanupCount, 0);
+
+            string[] items = ["root"];
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (show, set) = ctx.UseState(true);
+                return VStack(
+                    Button("Remove", () => set(false)),
+                    show
+                        ? TreeView(items,
+                            keySelector: s => s,
+                            childrenSelector: _ => null,
+                            viewBuilder: _ => Component<CleanupLeaf>())
+                        : null
+                );
+            });
+
+            await Harness.Render();
+            H.Check("TTV_PooledUnmountCleanup_ViewHosted",
+                await WaitFor(() => H.FindText("leaf-rich") is not null));
+            H.Check("TTV_PooledUnmountCleanup_NotYetCleaned",
+                global::System.Threading.Volatile.Read(ref s_cleanupCount) == 0);
+
+            H.ClickButton("Remove");
+            await Harness.Render();
+
+            H.Check("TTV_PooledUnmountCleanup_TreeRemoved", H.FindControl<WinXC.TreeView>(_ => true) is null);
+            H.Check("TTV_PooledUnmountCleanup_CleanupRan",
                 await WaitFor(() => global::System.Threading.Volatile.Read(ref s_cleanupCount) == 1));
         }
     }
