@@ -1179,6 +1179,8 @@ internal static class SelfTestFixtureRegistry
         "Issue495_GridViewLoop_StateBound_NoLoopAfterSelection",
         "Issue495_TypedListViewLoop_StateBound_NoLoopAfterSelection",
         "Issue495_TypedGridViewLoop_StateBound_NoLoopAfterSelection",
+        "Issue495_ListView_SameLengthContentChange_RefreshesContainers",
+        "Issue495_GridView_SameLengthContentChange_RefreshesContainers",
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         // The MarqueeHandler is authored in tests/external_proof/
@@ -2377,6 +2379,8 @@ internal static class SelfTestFixtureRegistry
         "Issue495_GridViewLoop_StateBound_NoLoopAfterSelection" => new ListViewLoopReproFixtures.GridView_StateBound_NoLoopAfterSelection(harness),
         "Issue495_TypedListViewLoop_StateBound_NoLoopAfterSelection" => new ListViewLoopReproFixtures.TypedListView_StateBound_NoLoopAfterSelection(harness),
         "Issue495_TypedGridViewLoop_StateBound_NoLoopAfterSelection" => new ListViewLoopReproFixtures.TypedGridView_StateBound_NoLoopAfterSelection(harness),
+        "Issue495_ListView_SameLengthContentChange_RefreshesContainers" => new ListViewLoopReproFixtures.ListView_SameLengthContentChange_RefreshesContainers(harness),
+        "Issue495_GridView_SameLengthContentChange_RefreshesContainers" => new ListViewLoopReproFixtures.GridView_SameLengthContentChange_RefreshesContainers(harness),
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         "Spec047ExternalProof_Marquee_MountUpdate" => new Spec047ExternalProofFixtures.MarqueeMountUpdate(harness),

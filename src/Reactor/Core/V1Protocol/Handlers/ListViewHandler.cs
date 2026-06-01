@@ -125,17 +125,30 @@ internal sealed class ListViewHandler : IElementHandler<ListViewElement, WinUI.L
         if (!ReferenceEquals(o.ItemContainerStyle, n.ItemContainerStyle) && n.ItemContainerStyle is not null)
             lv.ItemContainerStyle = n.ItemContainerStyle;
 
-        // Issue #495 — only rebuild ItemsSource when the item count actually
-        // changes. The previous ReferenceEquals check forced a full container
-        // realization cycle on every render because idiomatic Reactor authors
-        // allocate `new Element[] { ... }` literals (no memoization). The
-        // rebuild transiently drops SelectedIndex to -1 and fires a stray
-        // SelectionChanged(-1) — the trigger of the issue-#495 re-render
-        // storm. Already-realized containers re-read their item from the
-        // element tag via SetElementTag below; new realizations follow the
-        // same path through ContainerContentChanging.
-        if (o.Items.Length != n.Items.Length)
+        // Issue #495 — when the Items array changes (idiomatic Reactor authors
+        // allocate `new Element[] { ... }` literals on every render), rebuild
+        // ItemsSource so WinUI recycles + re-realizes its containers and
+        // ContainerContentChanging re-fires `reconciler.Mount` with the new
+        // per-item element. The handler has `Children = null` and never
+        // reconciles realized child controls itself, so skipping the rebuild
+        // would silently freeze visible items when only their content changes
+        // (see Issue495_ListView_SameLengthContentChange_RefreshesContainers).
+        //
+        // WinUI synchronously drops SelectedIndex to -1 on ItemsSource
+        // reassignment when there's an active selection, and fires
+        // SelectionChanged(-1). Arm BeginSuppress immediately before the
+        // swap so that transient event is consumed by the trampoline's
+        // ShouldSuppress gate instead of looping back through
+        // OnSelectedIndexChanged → setState → re-render → swap → … (the
+        // 50+-render storm reported in #495). Only arm when there's actually
+        // a selection to clear — otherwise the token strands and swallows
+        // the next real user input.
+        if (!ReferenceEquals(o.Items, n.Items))
+        {
+            if (lv.SelectedIndex >= 0)
+                ChangeEchoSuppressor.BeginSuppress(lv);
             lv.ItemsSource = Enumerable.Range(0, n.Items.Length).ToList();
+        }
 
         Reconciler.SetElementTag(lv, n);
 

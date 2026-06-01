@@ -335,4 +335,109 @@ internal static class ListViewLoopReproFixtures
             H.Check("TypedGridViewLoop_StateMatchesControl", gv.SelectedIndex == 1);
         }
     }
+
+    // ───────────────────────────────────────────────────────────────────────
+    //  Regression guard: same-length content updates must refresh containers.
+    //
+    //  The naïve "fix" for #495 — gate ItemsSource rebuild on length only —
+    //  would silently freeze visible items when the customer's array stays the
+    //  same length but the per-item content changes (e.g. a list of names where
+    //  the names change but the row count is stable). The hand-coded
+    //  ListView/GridView handlers have `Children = null` and never reconcile
+    //  realized child controls; ContainerContentChanging only re-fires on
+    //  realize/recycle. So if we skip the ItemsSource rebuild, already-realized
+    //  containers keep showing the old TextBlocks.
+    //
+    //  The actual fix wraps the ItemsSource swap (and the subsequent
+    //  SelectedIndex write) in `ChangeEchoSuppressor.BeginSuppress` so the
+    //  transient `SelectionChanged(-1)` doesn't leak back into user state.
+    //  These fixtures lock that contract down.
+    // ───────────────────────────────────────────────────────────────────────
+
+    private class SameLengthContentChangeListViewComponent : Component
+    {
+        public static int LabelGeneration;
+
+        public override Element Render()
+        {
+            int gen = LabelGeneration;
+            return new ListViewElement(new Element[]
+            {
+                TextBlock($"row0-gen{gen}"),
+                TextBlock($"row1-gen{gen}"),
+                TextBlock($"row2-gen{gen}"),
+            }).Set(l => l.Name = "lvSameLen");
+        }
+    }
+
+    internal class ListView_SameLengthContentChange_RefreshesContainers(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            SameLengthContentChangeListViewComponent.LabelGeneration = 0;
+            var component = new SameLengthContentChangeListViewComponent();
+
+            var host = H.CreateHost();
+            host.Mount(component);
+            await Harness.Render();
+
+            var lv = H.FindControl<ListView>(l => l.Name == "lvSameLen");
+            H.Check("SameLenContent_ListView_Mounted", lv is not null);
+            if (lv is null) return;
+
+            H.Check("SameLenContent_ListView_InitialGen0Visible", H.FindTextContaining("row0-gen0") is not null);
+
+            // Bump generation and force a re-render. Same length, different
+            // content. With the length-only "fix" this would leave the
+            // realized containers showing "row0-gen0" forever.
+            SameLengthContentChangeListViewComponent.LabelGeneration = 1;
+            host.RequestRender(force: true);
+            await Harness.Render();
+
+            H.Check("SameLenContent_ListView_Gen1Visible", H.FindTextContaining("row0-gen1") is not null);
+            H.Check("SameLenContent_ListView_Gen0Replaced", H.FindTextContaining("row0-gen0") is null);
+        }
+    }
+
+    private class SameLengthContentChangeGridViewComponent : Component
+    {
+        public static int LabelGeneration;
+
+        public override Element Render()
+        {
+            int gen = LabelGeneration;
+            return new GridViewElement(new Element[]
+            {
+                TextBlock($"gv-row0-gen{gen}"),
+                TextBlock($"gv-row1-gen{gen}"),
+                TextBlock($"gv-row2-gen{gen}"),
+            }).Set(g => g.Name = "gvSameLen");
+        }
+    }
+
+    internal class GridView_SameLengthContentChange_RefreshesContainers(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            SameLengthContentChangeGridViewComponent.LabelGeneration = 0;
+            var component = new SameLengthContentChangeGridViewComponent();
+
+            var host = H.CreateHost();
+            host.Mount(component);
+            await Harness.Render();
+
+            var gv = H.FindControl<GridView>(g => g.Name == "gvSameLen");
+            H.Check("SameLenContent_GridView_Mounted", gv is not null);
+            if (gv is null) return;
+
+            H.Check("SameLenContent_GridView_InitialGen0Visible", H.FindTextContaining("gv-row0-gen0") is not null);
+
+            SameLengthContentChangeGridViewComponent.LabelGeneration = 1;
+            host.RequestRender(force: true);
+            await Harness.Render();
+
+            H.Check("SameLenContent_GridView_Gen1Visible", H.FindTextContaining("gv-row0-gen1") is not null);
+            H.Check("SameLenContent_GridView_Gen0Replaced", H.FindTextContaining("gv-row0-gen0") is null);
+        }
+    }
 }
