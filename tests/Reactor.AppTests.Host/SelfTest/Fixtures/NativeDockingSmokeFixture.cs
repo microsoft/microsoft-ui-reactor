@@ -177,7 +177,7 @@ internal static class NativeDockingSmokeFixtures
             await Harness.Render();
 
             H.Check("DockHooks_Host_Resolved",
-                H.FindText("alpha-host:ok") is not null);
+                await Harness.WaitFor(() => H.FindText("alpha-host:ok") is not null));
             H.Check("DockHooks_Pane_TitleResolved",
                 H.FindText("alpha-pane-title:Alpha") is not null);
             H.Check("DockHooks_Pane_KeyResolved",
@@ -482,12 +482,16 @@ internal static class NativeDockingSmokeFixtures
             host.Mount(_ => Build());
             await Harness.Render();
 
+            // First body lazy-realizes inside the TabView one or more
+            // dispatcher waves after mount; pump until it appears before
+            // snapshotting the tabs so both probes see a realized tree.
+            bool firstBodyRendered = await Harness.WaitFor(() => H.FindText("body-first") is not null);
+
             // Baseline: two tabs visible, both bodies in the tree.
             var initialTabs = H.FindAllControls<TabView>(_ => true);
             H.Check("DocsByComposition_InitialTwoTabs",
                 initialTabs.Count == 1 && initialTabs[0].TabItems.Count == 2);
-            H.Check("DocsByComposition_InitialFirstBodyRendered",
-                H.FindText("body-first") is not null);
+            H.Check("DocsByComposition_InitialFirstBodyRendered", firstBodyRendered);
 
             // Capture the TabView reference for identity comparison after
             // the state change.

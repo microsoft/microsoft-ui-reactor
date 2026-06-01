@@ -167,7 +167,8 @@ internal static class NativeDockingRoleAwareFixtures
             H.Check("RoleAware_CloseAll_RevivalNoFallback", fb is null);
             host.Mount(_ => new DockManager { Layout = layout });
             await Harness.Render();
-            H.Check("RoleAware_CloseAll_RevivedDocVisible", H.FindText("body:d-revived") is not null);
+            H.Check("RoleAware_CloseAll_RevivedDocVisible",
+                await Harness.WaitFor(() => H.FindText("body:d-revived") is not null));
 
             host.Mount(_ => TextBlock("close-all-done"));
             await Harness.Render();

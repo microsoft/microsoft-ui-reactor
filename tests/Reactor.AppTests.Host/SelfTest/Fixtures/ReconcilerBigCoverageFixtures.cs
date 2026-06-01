@@ -1050,8 +1050,12 @@ internal static class ReconcilerBigCoverageFixtures
             H.Check("CondExit_Initial", H.FindText("cond-exit-child") is not null);
 
             H.ClickButton("CondExit");
-            await Harness.Render(450);
-            H.Check("CondExit_Removed", H.FindText("cond-exit-child") is null);
+            // The child plays a Fade exit transition before it leaves the
+            // tree; poll with per-pass wall-clock time so we converge as soon
+            // as the transition completes rather than betting on one fixed wait.
+            H.Check("CondExit_Removed",
+                await Harness.WaitFor(() => H.FindText("cond-exit-child") is null,
+                    maxPasses: 12, perPassMs: 100));
         }
     }
 

@@ -290,6 +290,36 @@ internal sealed class Harness
         await Task.Delay(16 + ms);
     }
 
+    /// <summary>
+    /// Pumps render passes until <paramref name="condition"/> holds, re-evaluating
+    /// it on the live visual tree after each pass. Returns true once it holds, or
+    /// false if it never does within <paramref name="maxPasses"/>.
+    ///
+    /// This is the contention-proof alternative to asserting against a one-shot
+    /// snapshot taken right after a single <see cref="Render"/>. WinUI surfaces
+    /// like nested DockManager/TabView realize their inner content over multiple
+    /// dispatcher waves that Reactor's idle predicate cannot observe, so a fixed
+    /// wave count can be outpaced on a contended CI runner. Looping a re-queried
+    /// predicate against real pumps converges regardless of how many waves the
+    /// runtime takes (the NativeAOT host consistently needs one more than JIT).
+    ///
+    /// The predicate MUST re-query the tree each call (e.g. call
+    /// <see cref="FindText"/>/<see cref="FindControl{T}"/> inside it) — passing a
+    /// value captured from an earlier snapshot defeats the loop.
+    ///
+    /// Pass a non-zero <paramref name="perPassMs"/> for conditions that need
+    /// wall-clock time per pass (e.g. waiting for an exit transition to play out).
+    /// </summary>
+    public static async Task<bool> WaitFor(Func<bool> condition, int maxPasses = 15, int perPassMs = 0)
+    {
+        for (int i = 0; i < maxPasses; i++)
+        {
+            if (condition()) return true;
+            await Render(perPassMs);
+        }
+        return condition();
+    }
+
     private static Window? _currentWindow;
 
     // -- VisualTree query helpers ----------------------------------------

@@ -52,7 +52,8 @@ internal static class NativeDockingCompositionFixtures
             });
             await Harness.Render();
 
-            H.Check("Composition_InitialCountVisible", H.FindText("count=0") is not null);
+            H.Check("Composition_InitialCountVisible",
+                await Harness.WaitFor(() => H.FindText("count=0") is not null));
 
             // Click the inc button and re-render — the pane body should
             // re-render with the new state.

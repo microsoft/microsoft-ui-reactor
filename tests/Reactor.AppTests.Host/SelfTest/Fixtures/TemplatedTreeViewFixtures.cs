@@ -52,15 +52,9 @@ internal static class TemplatedTreeViewFixtures
     // many pump cycles that takes (the NativeAOT host consistently needs one more
     // than JIT). Pump render passes until the condition holds rather than
     // asserting after a single Render(); returns false if it never does.
-    private static async Task<bool> WaitFor(Func<bool> condition, int maxPasses = 15)
-    {
-        for (int i = 0; i < maxPasses; i++)
-        {
-            if (condition()) return true;
-            await Harness.Render();
-        }
-        return condition();
-    }
+    // Delegates to the shared Harness.WaitFor so the polling logic lives in one place.
+    private static Task<bool> WaitFor(Func<bool> condition, int maxPasses = 15)
+        => Harness.WaitFor(condition, maxPasses);
 
     // ── 1. Rich content actually renders (the core #447 win) ──────────────
     internal class RendersRichContent(Harness h) : SelfTestFixtureBase(h)
