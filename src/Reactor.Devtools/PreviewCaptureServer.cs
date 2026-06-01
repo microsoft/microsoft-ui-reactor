@@ -11,7 +11,7 @@ using System.Text.Json.Nodes;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 
-namespace Microsoft.UI.Reactor.Hosting;
+namespace Microsoft.UI.Reactor.Hosting.Devtools;
 
 /// <summary>
 /// Captures frames from the WinUI preview window and serves them over a local HTTP endpoint.

@@ -58,6 +58,7 @@
     <InternalsVisibleTo Include="Reactor.Tests" />
     <InternalsVisibleTo Include="Reactor.AppTests.Host" />
     <InternalsVisibleTo Include="Reactor.Fuzz" />
+    <InternalsVisibleTo Include="Microsoft.UI.Reactor.Devtools" />
     <!-- Spec 047 — PerfBench.ControlModel benches the V1 control model
          against the Direct/Bound baselines; it references internal descriptor
          and handler types to construct representative element trees. -->

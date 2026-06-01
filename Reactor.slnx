@@ -393,5 +393,6 @@
     <Platform Solution="*|x64" Project="x64" />
   </Project>
   <Project Path="src/Reactor.Localization.Generator/Reactor.Localization.Generator.csproj" />
+  <Project Path="src/Reactor.Devtools/Reactor.Devtools.csproj" />
   <Project Path="src/Reactor/Reactor.csproj" />
 </Solution>

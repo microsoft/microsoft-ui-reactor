@@ -49,6 +49,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\Reactor\Reactor.csproj" />
+    <ProjectReference Include="..\..\..\src\Reactor.Devtools\Reactor.Devtools.csproj" />
   </ItemGroup>
 
 </Project>

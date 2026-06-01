@@ -1,9 +1,10 @@
 <Project>
   <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)..\'))" />
 
-  <ItemGroup Condition="'$(Configuration)' == 'Debug' And '$(ReactorDevtoolsManaged)' != 'false' And ('$(MSBuildProjectName)' == 'Reactor.AppTests.Host' Or '$(MSBuildProjectName)' == 'Reactor.WinFormsTests.Host')">
+  <ItemGroup Condition="'$(Configuration)' == 'Debug' And '$(ReactorDevtoolsManaged)' != 'false' And ('$(MSBuildProjectName)' == 'Reactor.Tests' Or '$(MSBuildProjectName)' == 'Reactor.AppTests.Host' Or '$(MSBuildProjectName)' == 'Reactor.WinFormsTests.Host')">
     <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
                                     Value="true"
                                     Trim="true" />
+    <ProjectReference Include="$(MSBuildThisFileDirectory)..\src\Reactor.Devtools\Reactor.Devtools.csproj" />
   </ItemGroup>
 </Project>
