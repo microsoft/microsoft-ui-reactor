@@ -1175,6 +1175,10 @@ internal static class SelfTestFixtureRegistry
         "ValueDiff_ToggleSwitch_Drift",
         "ValueDiff_GridView_GuardedNoOpStrand",
         "Issue464_GridView_RapidDoubleWriteEcho",
+        "Issue495_ListViewLoop_StateBound_NoLoopAfterSelection",
+        "Issue495_GridViewLoop_StateBound_NoLoopAfterSelection",
+        "Issue495_TypedListViewLoop_StateBound_NoLoopAfterSelection",
+        "Issue495_TypedGridViewLoop_StateBound_NoLoopAfterSelection",
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         // The MarqueeHandler is authored in tests/external_proof/
@@ -2369,6 +2373,10 @@ internal static class SelfTestFixtureRegistry
         "ValueDiff_ToggleSwitch_Drift" => new Spec047ValueDiffEchoFixtures.ToggleSwitchProgrammaticDrift(harness),
         "ValueDiff_GridView_GuardedNoOpStrand" => new Spec047ValueDiffEchoFixtures.GridViewGuardedNoOpStrand(harness),
         "Issue464_GridView_RapidDoubleWriteEcho" => new Spec047ValueDiffEchoFixtures.GridViewRapidDoubleWriteEcho(harness),
+        "Issue495_ListViewLoop_StateBound_NoLoopAfterSelection" => new ListViewLoopReproFixtures.StateBound_NoLoopAfterSelection(harness),
+        "Issue495_GridViewLoop_StateBound_NoLoopAfterSelection" => new ListViewLoopReproFixtures.GridView_StateBound_NoLoopAfterSelection(harness),
+        "Issue495_TypedListViewLoop_StateBound_NoLoopAfterSelection" => new ListViewLoopReproFixtures.TypedListView_StateBound_NoLoopAfterSelection(harness),
+        "Issue495_TypedGridViewLoop_StateBound_NoLoopAfterSelection" => new ListViewLoopReproFixtures.TypedGridView_StateBound_NoLoopAfterSelection(harness),
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         "Spec047ExternalProof_Marquee_MountUpdate" => new Spec047ExternalProofFixtures.MarqueeMountUpdate(harness),

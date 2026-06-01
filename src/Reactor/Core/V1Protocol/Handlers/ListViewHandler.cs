@@ -70,6 +70,15 @@ internal sealed class ListViewHandler : IElementHandler<ListViewElement, WinUI.L
         listView.SelectionChanged += (s, _) =>
         {
             var l = (WinUI.ListView)s!;
+            // Issue #495 — consume any pending echo-suppress token before
+            // dispatching to the user callback (mirrors the GridView trampoline
+            // wired in issue #464). The programmatic SelectedIndex writes
+            // below in Mount / Update arm the suppressor with BeginSuppress so
+            // their synthesized SelectionChanged is dropped here instead of
+            // looping back through OnSelectedIndexChanged → setIndex →
+            // re-render → … which previously caused a 50+-render storm when
+            // the callback was bound to UseState.
+            if (ChangeEchoSuppressor.ShouldSuppress(l)) return;
             if (Reconciler.GetElementTag(l) is not ListViewElement el) return;
             el.OnSelectedIndexChanged?.Invoke(l.SelectedIndex);
             if (el.OnSelectionChanged is { } h)
@@ -89,7 +98,19 @@ internal sealed class ListViewHandler : IElementHandler<ListViewElement, WinUI.L
         // Set ItemsSource LAST — triggers container creation which needs the handler above
         listView.ItemsSource = Enumerable.Range(0, lv.Items.Length).ToList();
 
-        if (lv.SelectedIndex >= 0) listView.SelectedIndex = lv.SelectedIndex;
+        // Issue #495 — wrap the initial SelectedIndex write so the deferred
+        // SelectionChanged ListView fires after container realization is
+        // suppressed instead of leaking into OnSelectedIndexChanged. Only arm
+        // on real drift to avoid stranding a token for a no-op write — see
+        // ChangeEchoSuppressor.BeginSuppress / ShouldSuppress in
+        // src/Reactor/Core/ChangeEchoSuppressor.cs: BeginSuppress always
+        // increments, ShouldSuppress only consumes on a real event, so an
+        // unconsumed token would swallow the next real user input.
+        if (lv.SelectedIndex >= 0 && listView.SelectedIndex != lv.SelectedIndex)
+        {
+            ChangeEchoSuppressor.BeginSuppress(listView);
+            listView.SelectedIndex = lv.SelectedIndex;
+        }
         Reconciler.ApplySetters(lv.Setters, listView);
         return listView;
     }
@@ -104,9 +125,16 @@ internal sealed class ListViewHandler : IElementHandler<ListViewElement, WinUI.L
         if (!ReferenceEquals(o.ItemContainerStyle, n.ItemContainerStyle) && n.ItemContainerStyle is not null)
             lv.ItemContainerStyle = n.ItemContainerStyle;
 
-        // Update ItemsSource — ContainerContentChanging re-mounts visible items via Tag.
-        // Always set a new list when items differ (even same count) so WinUI re-realizes containers.
-        if (!ReferenceEquals(o.Items, n.Items))
+        // Issue #495 — only rebuild ItemsSource when the item count actually
+        // changes. The previous ReferenceEquals check forced a full container
+        // realization cycle on every render because idiomatic Reactor authors
+        // allocate `new Element[] { ... }` literals (no memoization). The
+        // rebuild transiently drops SelectedIndex to -1 and fires a stray
+        // SelectionChanged(-1) — the trigger of the issue-#495 re-render
+        // storm. Already-realized containers re-read their item from the
+        // element tag via SetElementTag below; new realizations follow the
+        // same path through ContainerContentChanging.
+        if (o.Items.Length != n.Items.Length)
             lv.ItemsSource = Enumerable.Range(0, n.Items.Length).ToList();
 
         Reconciler.SetElementTag(lv, n);
@@ -123,7 +151,15 @@ internal sealed class ListViewHandler : IElementHandler<ListViewElement, WinUI.L
                     (Reconciler.GetElementTag(l) as ListViewElement)?.OnItemClick?.Invoke(idx);
             };
 
-        if (n.SelectedIndex >= 0) lv.SelectedIndex = n.SelectedIndex;
+        // Issue #495 — wrap the SelectedIndex write so the SelectionChanged
+        // ListView fires after the property set doesn't echo back into
+        // OnSelectedIndexChanged. Only arm on real drift (see Mount comment
+        // above and the GridView analog wired for issue #464).
+        if (n.SelectedIndex >= 0 && lv.SelectedIndex != n.SelectedIndex)
+        {
+            ChangeEchoSuppressor.BeginSuppress(lv);
+            lv.SelectedIndex = n.SelectedIndex;
+        }
         Reconciler.ApplySetters(n.Setters, lv);
     }
 

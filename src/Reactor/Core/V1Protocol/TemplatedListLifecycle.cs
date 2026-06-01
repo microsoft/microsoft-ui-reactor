@@ -60,6 +60,13 @@ internal static class TemplatedListLifecycle
         listView.SelectionChanged += (s, _) =>
         {
             var l = (WinUI.ListView)s!;
+            // Issue #495 — consume any pending echo-suppress token before
+            // dispatching to the user callback (mirrors the GridView/ListView
+            // hand-coded handlers wired in issues #464/#495). Mount/Update
+            // arm BeginSuppress around the SelectedIndex writes below so the
+            // synthesized SelectionChanged is dropped here instead of looping
+            // back through OnSelectedIndexChanged → setState → re-render.
+            if (ChangeEchoSuppressor.ShouldSuppress(l)) return;
             if (Reconciler.GetElementTag(l) is not TemplatedListElementBase tel) return;
             tel.InvokeSelectionChanged(l.SelectedIndex);
             if (tel.HasMultiSelectionCallback)
@@ -101,7 +108,14 @@ internal static class TemplatedListLifecycle
         listView.ItemsSource = listState.Source;
 
         var selectedIndex = el.GetSelectedIndex();
-        if (selectedIndex >= 0) listView.SelectedIndex = selectedIndex;
+        // Issue #495 — wrap initial SelectedIndex write so the deferred
+        // SelectionChanged (after container realization) is suppressed.
+        // Drift check avoids stranding a token for a no-op write.
+        if (selectedIndex >= 0 && listView.SelectedIndex != selectedIndex)
+        {
+            ChangeEchoSuppressor.BeginSuppress(listView);
+            listView.SelectedIndex = selectedIndex;
+        }
         el.ApplyControlSetters(listView);
         return listView;
     }
@@ -125,6 +139,8 @@ internal static class TemplatedListLifecycle
         gridView.SelectionChanged += (s, _) =>
         {
             var g = (WinUI.GridView)s!;
+            // Issue #495 — see ListView trampoline above.
+            if (ChangeEchoSuppressor.ShouldSuppress(g)) return;
             if (Reconciler.GetElementTag(g) is not TemplatedListElementBase tel) return;
             tel.InvokeSelectionChanged(g.SelectedIndex);
             if (tel.HasMultiSelectionCallback)
@@ -156,7 +172,12 @@ internal static class TemplatedListLifecycle
         gridView.ItemsSource = gridState.Source;
 
         var selectedIndex = el.GetSelectedIndex();
-        if (selectedIndex >= 0) gridView.SelectedIndex = selectedIndex;
+        // Issue #495 — see MountListView.
+        if (selectedIndex >= 0 && gridView.SelectedIndex != selectedIndex)
+        {
+            ChangeEchoSuppressor.BeginSuppress(gridView);
+            gridView.SelectedIndex = selectedIndex;
+        }
         el.ApplyControlSetters(gridView);
         return gridView;
     }
@@ -179,11 +200,18 @@ internal static class TemplatedListLifecycle
         flipView.SelectionChanged += (s, _) =>
         {
             var f = (WinUI.FlipView)s!;
+            // Issue #495 — see ListView trampoline above.
+            if (ChangeEchoSuppressor.ShouldSuppress(f)) return;
             (Reconciler.GetElementTag(f) as TemplatedListElementBase)?.InvokeSelectionChanged(f.SelectedIndex);
         };
 
         var selectedIndex = el.GetSelectedIndex();
-        if (selectedIndex >= 0) flipView.SelectedIndex = selectedIndex;
+        // Issue #495 — see MountListView.
+        if (selectedIndex >= 0 && flipView.SelectedIndex != selectedIndex)
+        {
+            ChangeEchoSuppressor.BeginSuppress(flipView);
+            flipView.SelectedIndex = selectedIndex;
+        }
         el.ApplyControlSetters(flipView);
         return flipView;
     }
@@ -209,7 +237,14 @@ internal static class TemplatedListLifecycle
         reconciler.RefreshRealizedContainers(lv, n, requestRerender);
 
         var selectedIndex = n.GetSelectedIndex();
-        if (selectedIndex >= 0) lv.SelectedIndex = selectedIndex;
+        // Issue #495 — wrap SelectedIndex write so the deferred
+        // SelectionChanged doesn't echo into the user callback. Drift check
+        // avoids stranding a token on a no-op write.
+        if (selectedIndex >= 0 && lv.SelectedIndex != selectedIndex)
+        {
+            ChangeEchoSuppressor.BeginSuppress(lv);
+            lv.SelectedIndex = selectedIndex;
+        }
         n.ApplyControlSetters(lv);
         return null;
     }
@@ -226,7 +261,12 @@ internal static class TemplatedListLifecycle
         reconciler.RefreshRealizedContainers(gv, n, requestRerender);
 
         var selectedIndex = n.GetSelectedIndex();
-        if (selectedIndex >= 0) gv.SelectedIndex = selectedIndex;
+        // Issue #495 — see UpdateListView.
+        if (selectedIndex >= 0 && gv.SelectedIndex != selectedIndex)
+        {
+            ChangeEchoSuppressor.BeginSuppress(gv);
+            gv.SelectedIndex = selectedIndex;
+        }
         n.ApplyControlSetters(gv);
         return null;
     }
@@ -341,7 +381,17 @@ internal static class TemplatedListLifecycle
             if (ctrl is not null) fv.Items.Add(ctrl);
         }
 
-        fv.SelectedIndex = n.GetSelectedIndex();
+        // Issue #495 — drift-guarded, suppressed write. Previously
+        // unconditional, which would write -1 when n.GetSelectedIndex() == -1
+        // (the default for TemplatedFlipViewElement<T> is 0, so the prior
+        // unconditional write usually matched, but a `with { SelectedIndex = -1 }`
+        // would clear silently).
+        var fvSelectedIndex = n.GetSelectedIndex();
+        if (fv.SelectedIndex != fvSelectedIndex)
+        {
+            ChangeEchoSuppressor.BeginSuppress(fv);
+            fv.SelectedIndex = fvSelectedIndex;
+        }
         Reconciler.SetElementTag(fv, n);
         n.ApplyControlSetters(fv);
         return null;

@@ -113,7 +113,20 @@ internal sealed class GridViewHandler : IElementHandler<GridViewElement, WinUI.G
         if (!ReferenceEquals(o.ItemContainerStyle, n.ItemContainerStyle) && n.ItemContainerStyle is not null)
             gv.ItemContainerStyle = n.ItemContainerStyle;
 
-        if (!ReferenceEquals(o.Items, n.Items))
+        // Issue #495 / #464 — only rebuild ItemsSource when the item count
+        // actually changes. The previous ReferenceEquals check forced a full
+        // container realization cycle on every render because idiomatic
+        // Reactor authors allocate `new Element[] { ... }` literals (no
+        // memoization). The rebuild transiently drops SelectedIndex to -1
+        // and synchronously fires SelectionChanged(-1) — leaking through to
+        // the user callback (whose trampoline only suppresses ONE echo, set
+        // up below to suppress the *intended* write). With the state-binding
+        // pattern this produced a wrong final value (the transient -1 wins).
+        // Already-realized containers re-read their item from the element
+        // tag via SetElementTag below; new realizations follow the same
+        // path through ContainerContentChanging. Matches the ListView fix
+        // in ListViewHandler.Update.
+        if (o.Items.Length != n.Items.Length)
             gv.ItemsSource = Enumerable.Range(0, n.Items.Length).ToList();
 
         Reconciler.SetElementTag(gv, n);
