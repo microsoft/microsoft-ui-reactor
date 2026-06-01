@@ -22,8 +22,8 @@ using static Microsoft.UI.Reactor.Factories;
 // Lifecycle mapping (Reactor ↔ WPF):
 //   wWinMainEntry  → before ReactorApp.Run          (≈ WPF App.Main entry)
 //   WindowLoaded   → Window.Activated (first fire)  (≈ WPF Window.Loaded)
-//   FirstRender    → CompositionTarget.Rendering    (≈ WPF Window.ContentRendered)
-//                    first fire after activation
+//   FirstRender    → CompositionTarget.Rendered     (≈ WPF Window.ContentRendered)
+//                    first fire after activation (post-paint, matches -lift)
 //   FirstIdle      → DispatcherQueuePriority.Low    (≈ WPF DispatcherPriority.
 //                    enqueue after FirstRender         ApplicationIdle)
 //   ProcessStop    → after ReactorApp.Run returns   (≈ WPF App.OnExit)
@@ -50,12 +50,15 @@ try
                 BenchmarkTracing.Log.TraceWindowLoaded();
 
                 // FirstRender: the first composition frame after activation.
-                // CompositionTarget.Rendering fires once per frame on the UI
-                // thread; capture the first one then unhook to avoid noise.
-                EventHandler<object>? onRendering = null;
-                onRendering = (s, e) =>
+                // CompositionTarget.Rendered fires after each frame has been
+                // composed and presented (post-paint) — the right marker for
+                // "first frame on screen". Matches -lift's WinUI3 baseline
+                // (RootGrid.Loaded → CompositionTarget::Rendered). Capture the
+                // first fire then unhook to avoid per-frame noise.
+                EventHandler<RenderedEventArgs>? onRendered = null;
+                onRendered = (s, e) =>
                 {
-                    CompositionTarget.Rendering -= onRendering;
+                    CompositionTarget.Rendered -= onRendered;
                     GettingStartedApp.Metrics.RecordFirstFrame();
 
                     // FirstIdle / RTI: schedule on the UI dispatcher at Low
@@ -69,7 +72,7 @@ try
                         GettingStartedApp.NotifyMetricsReady();
                     });
                 };
-                CompositionTarget.Rendering += onRendering;
+                CompositionTarget.Rendered += onRendered;
             };
             host.Window.Activated += onActivated;
         });

@@ -22,7 +22,7 @@ every framework's trace:
 | --------------- | -------------------------------------- | ---------------------------------------------------------------- |
 | `wWinMainEntry` | WPF `App.Main` entry                   | Before `ReactorApp.Run<>(...)`                                   |
 | `WindowLoaded`  | WPF `Window.Loaded`                    | First `Window.Activated`                                         |
-| `FirstRender`   | WPF `Window.ContentRendered`           | First `CompositionTarget.Rendering` after activation             |
+| `FirstRender`   | WPF `Window.ContentRendered`           | First `CompositionTarget.Rendered` after activation (post-paint) |
 | `FirstIdle`     | WPF `DispatcherPriority.ApplicationIdle` | `DispatcherQueuePriority.Low` enqueue after `FirstRender`      |
 | `ProcessStop`   | WPF `App.OnExit`                       | After `ReactorApp.Run<>(...)` returns                            |
 
