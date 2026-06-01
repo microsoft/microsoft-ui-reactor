@@ -338,11 +338,11 @@ using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<MyApp>("Title", width: 600, height: 400, devtools: true);
+ReactorApp.Run<MyApp>("Title", width: 600, height: 400);
 ```
 
-- Always include `devtools: true` — this enables the screenshot capture system.
-  (The older `preview:` parameter is deprecated; the compiler will warn.)
+- Do not pass `devtools:` or `preview:` to `ReactorApp.Run`; those parameters no longer exist.
+- Screenshot capture is enabled by the doc-app project switch. New doc apps under `docs/_pipeline/apps/` inherit `<RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport" Value="true" Trim="true" />` from `docs/_pipeline/apps/Directory.Build.props`.
 - Each component class in the file can be wrapped in snippet markers.
 - The app should display a reasonable default state on launch (the screenshots
   are captured after `startup-delay` ms with no interaction).

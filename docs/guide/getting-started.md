@@ -283,7 +283,7 @@ using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<GettingStartedApp>("Getting Started", width: 600, height: 400, devtools: true);
+ReactorApp.Run<GettingStartedApp>("Getting Started", width: 600, height: 400);
 
 class GettingStartedApp : Component
 {
@@ -306,9 +306,11 @@ Run it with `dotnet run` and you'll see this:
 Here's what's happening:
 
 - **`ReactorApp.Run<T>`** launches a window and mounts your root component.
-- **`devtools: true`** enables the in-app dev menu and screenshot capture. In a
-  real app you'd normally guard this under `#if DEBUG` so release builds don't
-  ship the dev surface; we skip the conditional here for brevity.
+- **Devtools support** is enabled by the app project's
+  `Reactor.DevtoolsSupport` switch, not by a `Run` parameter. The doc apps
+  inherit that switch from `docs/_pipeline/apps/Directory.Build.props` so the
+  screenshot pipeline can launch them with `--devtools`; real apps usually make
+  the switch Debug-only so release builds stay trimmed.
 - **[`UseState`](hooks.md)** returns the current value and a setter. When you call the
   setter, Reactor re-renders the component with the new value.
 - **[`VStack`](layout.md)** stacks children vertically. The number `16` is the pixel spacing.
@@ -465,7 +467,7 @@ using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<TodoApp>("Todo App", width: 550, height: 600, devtools: true);
+ReactorApp.Run<TodoApp>("Todo App", width: 550, height: 600);
 
 class TodoApp : Component
 {
@@ -560,7 +562,7 @@ using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<CalculatorApp>("Calculator", width: 380, height: 500, devtools: true);
+ReactorApp.Run<CalculatorApp>("Calculator", width: 380, height: 500);
 
 class CalculatorApp : Component
 {

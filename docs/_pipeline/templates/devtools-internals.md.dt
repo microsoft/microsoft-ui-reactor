@@ -59,7 +59,7 @@ the lockfile, present the token, and call tools.
 
 | Subsystem | Owner type | Source | Gate |
 |---|---|---|---|
-| Gate hook | `UseDevtools()` | `src/Reactor/Hooks/UseDevtools.cs` | Build-time `devtools: true` AND session-time `--devtools app` |
+| Gate hook | `UseDevtools()` | `src/Reactor/Hooks/UseDevtools.cs` | Build-time `Reactor.DevtoolsSupport` AND session-time `--devtools app` |
 | MCP server | `DevtoolsMcpServer` | `src/Reactor/Hosting/Devtools/DevtoolsMcpServer.cs` | Bearer token + project lockfile |
 | Tool registry | `McpToolRegistry` | `src/Reactor/Hosting/Devtools/McpToolRegistry.cs` | Per-tool input-schema validation |
 | JSON-RPC dispatch | `McpDispatcher` | `src/Reactor/Hosting/Devtools/McpDispatcher.cs` | Method allowlist + `tools/call` routing |
@@ -74,9 +74,9 @@ the lockfile, present the token, and call tools.
 
 `UseDevtools()` returns `ReactorApp.DevtoolsEnabled` — the AND of two
 independent signals captured at process startup. The build-time signal
-is the `devtools: true` argument to `ReactorApp.Run<TRoot>(...)`; ship
-a release binary without it and the AND is false no matter what flags
-the user passes. The session-time signal is the `--devtools app` (or
+is the `Reactor.DevtoolsSupport` runtime host configuration switch in
+the app project; ship a release binary without it and the AND is false
+no matter what flags the user passes. The session-time signal is the `--devtools app` (or
 `--devtools run`) command-line argument the user supplies. Both must
 hold for the gate to open.
 

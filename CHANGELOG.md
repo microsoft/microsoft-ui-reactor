@@ -193,6 +193,12 @@ Conventions for contributors:
 
 ### Changed (breaking)
 
+- **`ReactorApp.Run` devtools parameters removed (spec 051 §13).** The
+  `devtools:` and `preview:` overload parameters are gone. Enable devtools
+  capability in the app project with `<RuntimeHostConfigurationOption
+  Include="Reactor.DevtoolsSupport" Value="true" Trim="true" />`, then launch
+  with `--devtools` to activate a session.
+
 - **`.Margin(double, double)` and `.Padding(double, double)` parameter
   order swapped** from `(horizontal, vertical)` to `(vertical, horizontal)`
   to match CSS shorthand convention. Use the named-arg form

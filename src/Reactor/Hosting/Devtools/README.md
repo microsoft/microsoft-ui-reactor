@@ -12,13 +12,14 @@ Reference specs: [024-ai-agent-devtools.md](../../Docs/specs/024-ai-agent-devtoo
 The devtools surface is **developer-loop only**. It is not designed to be a
 production endpoint and ships with three hard gates:
 
-1. **Opt-in at the app level.** `ReactorApp.Run(..., devtools: true)` is the
-   only way to start the MCP server, the capture server, or the logger. When
-   `devtools: false` (the default), no extra listeners are created.
-2. **`#if DEBUG` in the scaffold.** `mur new` generates a call with
-   `, devtools: true` wrapped in `#if DEBUG`, so a Release build of the
-   template has no devtools surface at all.
-3. **Loopback-only binding.** The MCP `HttpListener` binds to
+1. **Opt in at build time and launch time.**
+   `<RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport" Value="true" Trim="true" />`
+   is the build-time capability gate; `--devtools run` / `--devtools app` is the
+   session-time activation gate. Both must be present before the MCP server,
+   capture server, logger, or in-app dev menu is enabled. Samples keep the
+   MSBuild switch Debug-conditional so Release/AOT builds have no devtools
+   surface at all.
+2. **Loopback-only binding.** The MCP `HttpListener` binds to
    `http://127.0.0.1:{port}/`. It is never exposed on any non-loopback adapter
    and the `ScreenshotCapture` path only reads the local window.
 
@@ -34,8 +35,8 @@ with an agent in the same terminal session), but it means:
 - **Do not run `mur devtools` in an environment with untrusted local
   processes.** `reactor.fire` can reach any handler on the live component;
   `reactor.state` can enumerate hook shapes; `reactor.click` can drive the UI.
-- **Do not enable `devtools: true` in Release builds that ship to end users.**
-  The scaffold's `#if DEBUG` guard makes this hard to do by accident.
+- **Do not enable `Reactor.DevtoolsSupport` in Release builds that ship to end users.**
+  The Debug-conditional MSBuild convention makes this hard to do by accident.
 - **Do not assume the MCP surface is safe to expose beyond localhost** — e.g.
   via a reverse proxy, SSH tunnel with remote binding, or container port
   forwarding to 0.0.0.0. Loopback is the only supported deployment.

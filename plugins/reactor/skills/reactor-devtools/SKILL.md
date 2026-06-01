@@ -37,15 +37,16 @@ If `mur --version` doesn't resolve, neither path was set up; commands below assu
 
 ## Attaching to a running app
 
-The app author enables devtools in their `Program.cs`:
+The app author enables devtools capability in the app project, usually only for Debug builds:
 
-```csharp
-ReactorApp.Run<MyApp>("Title", width: 1200, height: 800
-#if DEBUG
-    , devtools: true
-#endif
-);
+```xml
+<ItemGroup Condition="'$(Configuration)' == 'Debug'">
+  <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
+                                  Value="true" Trim="true" />
+</ItemGroup>
 ```
+
+`ReactorApp.Run` takes no `devtools:` or `preview:` argument.
 
 **Prefer attaching to an app that's already running.** Any devtools-enabled
 app writes a lockfile to `%TEMP%/reactor-devtools/` on first render, and
@@ -320,7 +321,7 @@ supervisor return 0 so the `mur.exe` binary frees up.
 
 ## Gotchas
 
-1. **Both the build-time flag and a devtools launch are required.** The MCP server only starts if the app was compiled with `devtools: true` passed to `ReactorApp.Run(...)` (usually wrapped in `#if DEBUG`) **and** launched with either `mur devtools …` or `dotnet run -- --devtools run` directly. Either launch mode works — the supervisor is optional. Miss both legs (build flag + launch flag) and the app boots normally with no MCP port, no lockfile, no banner. If `mur devtools session list` reports exit 4 indefinitely, this is almost always why — check `Program.cs` first, then the launch command.
+1. **Both the build-time switch and a devtools launch are required.** The MCP server only starts if the app was compiled with `<RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport" Value="true" Trim="true" />` (samples use a Debug-conditional shared props convention so Release/AOT stays trimmed) **and** launched with either `mur devtools …` or `dotnet run -- --devtools run` directly. Either launch mode works — the supervisor is optional. Miss both legs (switch + launch flag) and the app boots normally with no MCP port, no lockfile, no banner. If `mur devtools session list` reports exit 4 indefinitely, check the csproj/props switch first, then the launch command.
 2. **`switch` and `reload` invalidate every node id.** Re-walk the tree after them; do not cache `r:…` ids across swaps.
 3. **Popups aren't in the main visual tree.** `tree` walks `window.Content` — ComboBox dropdown items, flyouts, and context menus live in separate popup roots and won't show up. `select` auto-expands the container but item resolution through the main tree will still miss them. Prefer `ISelectionItemProvider` via a node-id that `tree` emitted while the popup was open, or switch to a selector that targets the SelectorItem ancestor directly.
 4. **`fire` only sees declared methods.** Inline lambdas (`Button("+1", () => setCount(...))`) are unreachable. Hoist the handler to a method on the Component class when you need `fire` access.

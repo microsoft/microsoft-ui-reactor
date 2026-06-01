@@ -8,10 +8,9 @@ mode under `dotnet watch`, the MCP server, the VS Code panel, the
 in-app dev menu, and the reconcile-highlight overlay
 are all variants of the same idea: the runtime publishes its work,
 and the inner loop lets you read it. The cost is zero in retail —
-every devtools entry point lives behind a build-time opt-in
-([`devtools: true`](components.md)) plus a session-time opt-in
-(`--devtools app`) so end users never see anything you don't intend
-to ship.
+every devtools entry point lives behind a build-time capability switch
+(`Reactor.DevtoolsSupport`) plus a session-time opt-in (`--devtools app`)
+so end users never see anything you don't intend to ship.
 
 # Dev Tooling
 
@@ -26,26 +25,24 @@ when you ask for it.
 
 ## Preview Mode
 
-Pass `preview: true` to `ReactorApp.Run` to enable preview mode. This
-connects your app to the Reactor hot reload pipeline:
+Launch the app from `dotnet watch` to use Reactor's hot-reload-friendly
+preview workflow:
 
 ```csharp
 // Program entry point — this is the entire App.cs file:
 // ReactorApp.Run<DevToolingApp>("Dev Tooling Demo",
 //     width: 600, height: 450
-// #if DEBUG
-//     , preview: true
-// #endif
 // );
 //
-// The preview flag enables hot reload via dotnet watch.
-// In Release builds, preview is omitted entirely.
+// Hot reload works when the app is launched under dotnet watch. Devtools
+// screenshot capture is enabled by the app project's Reactor.DevtoolsSupport
+// switch and activated by launching with --devtools.
 ```
 
-The `#if DEBUG` guard ensures preview mode is only active in debug builds.
-Release builds skip it entirely — no overhead, no extra dependencies. Inside
-a [function component](components.md), the same flag is forwarded by
-`ReactorApp.Run("Title", ctx => ...)`.
+The app entry point is an ordinary `ReactorApp.Run` call; there is no
+`preview:` or `devtools:` argument. Devtools-specific screenshot capture is
+enabled by the app project's `Reactor.DevtoolsSupport` switch and activated
+at launch with `--devtools`.
 
 ## Running with Hot Reload
 
@@ -225,15 +222,18 @@ Reactor exposes three small primitives: `UseDevtools()`,
 `DevtoolsMenu(...)`, and `Observable<T>`. Two independent signals
 combine:
 
-1. **Build-time opt-in** — pass `devtools: true` to `ReactorApp.Run`:
+1. **Build-time capability** — add the feature switch to the app project:
 
-   ```csharp
-   ReactorApp.Run<App>("My App", devtools: true);
+   ```xml
+   <ItemGroup>
+     <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
+                                     Value="true" Trim="true" />
+   </ItemGroup>
    ```
 
    This is a capability gate — it does **not** by itself show any dev
-   UI. Ship retail binaries with `devtools: true` safely; end users
-   don't see anything unless they ask for it.
+   UI. Samples typically enable it only in Debug builds so Release/AOT
+   binaries keep the devtools code trimmed.
 
 2. **Session opt-in** — run the app with `--devtools app`:
 
@@ -368,9 +368,10 @@ to a dozen flags without a config UI.
 
 ### Headless screenshot capture for docs
 
-The same preview-mode plumbing the doc pipeline uses is available to
-your own app: pass `preview: true` to `ReactorApp.Run` and the doc-
-pipeline screenshot harness can capture the window. See
+The same devtools plumbing the doc pipeline uses is available to
+your own app: enable `Reactor.DevtoolsSupport` in the app project and
+launch the app with `--devtools run` so the screenshot harness can
+capture the window. See
 [`docs/contributing/doc-pipeline.md`](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/contributing/doc-pipeline.md)
 for the harness contract. This is how every page in the docset gets
 its screenshots automatically without an author launching the app by
@@ -378,14 +379,13 @@ hand.
 
 ## Common Mistakes
 
-### Shipping with `devtools: true` and no session gate
+### Enabling the switch without a session gate
 
-Forgetting that `devtools: true` is the **capability** gate and
-`--devtools app` is the **activation** gate is the most common
-mistake. A retail binary built with `devtools: true` shows no dev UI
-to a user — the session-time flag does. If you want dev tools off in
-retail, leave `devtools: true` in your `ReactorApp.Run` call; remove
-the `--devtools app` flag from your shortcuts.
+Forgetting that `Reactor.DevtoolsSupport` is the **capability** gate
+and `--devtools app` is the **activation** gate is the most common
+mistake. A binary built with the switch enabled shows no dev UI to a
+user — the session-time flag does. If you want devtools trimmed out of
+retail, keep the switch Debug-only instead of enabling it for Release/AOT.
 
 ### Wiring real app state through `UseState` during inner-loop work
 
@@ -400,10 +400,10 @@ without resetting your state.
 The `mur devtools serve` MCP server and the VS Code panel are
 **separate** surfaces from the in-app menu. They observe a running
 app from the outside; the in-app menu observes the runtime from
-inside the app itself. Build-time opt-in (`devtools: true`) is enough
-for the in-app menu, but the MCP server requires a separate
-`mur devtools serve` invocation — don't expect it to start
-automatically.
+inside the app itself. Build-time capability (`Reactor.DevtoolsSupport`)
+plus `--devtools app` opens the in-app menu, while the external MCP
+server still requires a separate `mur devtools serve` invocation — don't
+expect it to start automatically.
 
 ## Tips
 

@@ -32,13 +32,11 @@ class DevToolingApp : Component
 // Program entry point — this is the entire App.cs file:
 // ReactorApp.Run<DevToolingApp>("Dev Tooling Demo",
 //     width: 600, height: 450
-// #if DEBUG
-//     , preview: true
-// #endif
 // );
 //
-// The preview flag enables hot reload via dotnet watch.
-// In Release builds, preview is omitted entirely.
+// Hot reload works when the app is launched under dotnet watch. Devtools
+// screenshot capture is enabled by the app project's Reactor.DevtoolsSupport
+// switch and activated by launching with --devtools.
 // </snippet:entry-point>
 
 // <snippet:function-entry>
