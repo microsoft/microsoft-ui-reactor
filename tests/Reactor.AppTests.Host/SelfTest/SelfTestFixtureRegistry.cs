@@ -571,6 +571,7 @@ internal static class SelfTestFixtureRegistry
         "ValCov_BuiltInValidators",
         "ValCov_ValidateExtensions",
         "ValCov_FormFieldRendering",
+        "ValCov_ValidationCompositeLifecycleUpdateAndCleanup",
         "ValCov_ValidationRule",
         "ValCov_FormFieldHelpers",
         // Controls coverage — MaskEngine, InputFormatter, AutoSuggest
@@ -1778,6 +1779,7 @@ internal static class SelfTestFixtureRegistry
         "ValCov_BuiltInValidators" => new ValidationCoverageFixtures.BuiltInValidatorsExercise(harness),
         "ValCov_ValidateExtensions" => new ValidationCoverageFixtures.ValidateExtensionsExercise(harness),
         "ValCov_FormFieldRendering" => new ValidationCoverageFixtures.FormFieldRendering(harness),
+        "ValCov_ValidationCompositeLifecycleUpdateAndCleanup" => new ValidationCoverageFixtures.CompositeLifecycleUpdateAndCleanup(harness),
         "ValCov_ValidationRule" => new ValidationCoverageFixtures.ValidationRuleExercise(harness),
         "ValCov_FormFieldHelpers" => new ValidationCoverageFixtures.FormFieldHelpersExercise(harness),
         // Controls coverage

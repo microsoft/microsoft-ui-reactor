@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.Controls.Validation.FormFieldDsl;
 using static Microsoft.UI.Reactor.Controls.Validation.ValidationRuleDsl;
+using static Microsoft.UI.Reactor.Controls.Validation.ValidationVisualizerDsl;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
@@ -278,6 +279,74 @@ internal static class ValidationCoverageFixtures
     //  5. ValidationRule — sync and async evaluation
     //     Targets: ValidationRuleDsl.ValidationRule, Evaluate, EvaluateAsync
     // ════════════════════════════════════════════════════════════════════════
+
+    internal class CompositeLifecycleUpdateAndCleanup(Harness h) : SelfTestFixtureBase(h)
+    {
+        private static int s_cleanupCount;
+
+        private sealed class CleanupChild : Component
+        {
+            public override Element Render()
+            {
+                UseEffect(() => () => global::System.Threading.Interlocked.Increment(ref s_cleanupCount));
+                return TextBlock("cleanup-child");
+            }
+        }
+
+        public override async Task RunAsync()
+        {
+            s_cleanupCount = 0;
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (label, setLabel) = ctx.UseState("Name");
+                var (buttonContent, setButtonContent) = ctx.UseState(false);
+                return VStack(
+                    FormField(
+                        buttonContent ? Button("field-button") : TextBox("stable"),
+                        label: label,
+                        description: "desc"),
+                    Button("ChangeFormLabel", () => setLabel("Display Name")),
+                    Button("SwapFormContent", () => setButtonContent(true)));
+            });
+
+            await Harness.Render();
+            var originalTextBox = H.FindControl<TextBox>(tb => tb.Text == "stable");
+            H.Check("Composite_FormField_Mounted", originalTextBox is not null);
+
+            H.ClickButton("ChangeFormLabel");
+            await Harness.Render();
+            H.Check("Composite_FormField_UpdatedLabel", H.FindText("Display Name") is not null);
+            H.Check("Composite_FormField_UpdatePreservesContent", ReferenceEquals(originalTextBox, H.FindControl<TextBox>(tb => tb.Text == "stable")));
+
+            H.ClickButton("SwapFormContent");
+            await Harness.Render();
+            H.Check("Composite_FormField_SubstitutedContent", H.FindButton("field-button") is not null);
+
+            host.Mount(_ => FormField(Component<CleanupChild>(), label: "Cleanup"));
+            await Harness.Render();
+            H.Check("Composite_FormField_NoCleanupBeforeUnmount", s_cleanupCount == 0);
+            host.Mount(_ => TextBlock("formfield-gone"));
+            await Harness.Render();
+            H.Check("Composite_FormField_CleanupRan", s_cleanupCount == 1);
+
+            s_cleanupCount = 0;
+            var vizHost = H.CreateHost();
+            vizHost.Mount(ctx =>
+            {
+                var (title, setTitle) = ctx.UseState("Before");
+                return VStack(
+                    ValidationVisualizer(VisualizerStyle.Inline, Component<CleanupChild>(), title: title),
+                    Button("RerenderVisualizer", () => setTitle("After")));
+            });
+
+            await Harness.Render();
+            H.ClickButton("RerenderVisualizer");
+            await Harness.Render();
+            H.Check("Composite_ValidationVisualizer_SubstitutionCleanup", s_cleanupCount == 1);
+            H.Check("Composite_ValidationVisualizer_RemountedContent", H.FindText("cleanup-child") is not null);
+        }
+    }
 
     internal class ValidationRuleExercise(Harness h) : SelfTestFixtureBase(h)
     {

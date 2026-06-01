@@ -1,7 +1,6 @@
 using Microsoft.UI.Reactor.Animation;
 using Microsoft.UI.Reactor.Core.Internal;
 using Microsoft.UI.Reactor.Hosting;
-using Microsoft.UI.Reactor.Controls.Validation;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -999,35 +998,6 @@ public sealed partial class Reconciler
     }
 
 
-    internal UIElement? UpdateCommandHost(CommandHostElement o, CommandHostElement n, WinUI.Grid host, Action requestRerender)
-    {
-        // Update child element
-        if (host.Children.Count > 0 && host.Children[0] is UIElement existingChild)
-        {
-            var replacement = UpdateChild(o.Child, n.Child, existingChild, requestRerender);
-            if (replacement is not null)
-            {
-                UnmountChild(existingChild);
-                host.Children[0] = replacement;
-            }
-        }
-        else
-        {
-            var child = Mount(n.Child, requestRerender);
-            if (child is not null) host.Children.Add(child);
-        }
-
-        // Rebuild accelerators — clear and re-add (commands may have changed enabled state or handlers)
-        host.KeyboardAccelerators.Clear();
-        AddCommandHostAccelerators(host, n.Commands);
-
-        SetElementTag(host, n);
-        return null;
-    }
-
-
-
-
     internal static void ApplyFlexAttached(Element child, Microsoft.UI.Xaml.UIElement ctrl)
     {
         var fa = child.GetAttached<FlexAttached>();
@@ -1164,97 +1134,6 @@ public sealed partial class Reconciler
 
     // ── Typed, data-driven TreeView<T> ───────────────────────────────────
     // Mount/Update bodies relocated to Reconciler.TemplatedTree.cs (spec 047 §14).
-
-    internal UIElement? UpdateFormField(
-        FormFieldElement oldFf, FormFieldElement newFf,
-        WinUI.StackPanel panel, Action requestRerender)
-    {
-        // Fixed 3-child layout: [0] label, [1] content, [2] description/error
-        if (panel.Children.Count != 3)
-            return Mount(newFf, requestRerender);
-
-        var fieldName = FormFieldHelpers.ResolveFieldName(newFf.FieldName, newFf.Content);
-
-        // Auto-validate
-        var attached = newFf.Content.GetAttached<ValidationAttached>();
-        var valCtx = _contextScope.Read(ValidationContexts.Current);
-        if (valCtx is not null && attached is not null && attached.Validators.Length > 0)
-        {
-            ValidationReconciler.ValidateAttached(valCtx, attached, attached.Value);
-        }
-
-        // [0] Update label
-        if (panel.Children[0] is TextBlock labelTb)
-        {
-            var displayLabel = FormFieldHelpers.GetDisplayLabel(newFf.Label, newFf.Required);
-            labelTb.Text = displayLabel;
-            labelTb.Visibility = displayLabel.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
-        }
-
-        // [1] Patch content in-place (preserves caret position and focus)
-        var existingContent = panel.Children[1];
-        if (CanUpdate(oldFf.Content, newFf.Content))
-        {
-            var replacement = Update(oldFf.Content, newFf.Content, existingContent, requestRerender);
-            if (replacement is not null)
-            {
-                // WinUI indexer assignment doesn't fully disconnect the old element's
-                // parent state — use RemoveAt+Insert (see ChildCollection.Replace).
-                Unmount(existingContent);
-                panel.Children.RemoveAt(1);
-                panel.Children.Insert(1, replacement);
-                existingContent = replacement;
-            }
-        }
-        else
-        {
-            // Content element type changed — must remount
-            Unmount(existingContent);
-            panel.Children.RemoveAt(1);
-            var newContent = Mount(newFf.Content, requestRerender)
-                ?? new WinUI.StackPanel { Visibility = Visibility.Collapsed };
-            panel.Children.Insert(1, newContent);
-            existingContent = newContent;
-        }
-
-        ApplyFormFieldAutomation(existingContent, newFf.Label);
-        ApplyFormFieldErrorStyling(existingContent, valCtx, fieldName, newFf.ShowWhen);
-
-        // [2] Update description/error text
-        if (panel.Children[2] is TextBlock descTb)
-        {
-            ApplyFormFieldDescription(descTb, valCtx, fieldName, newFf.Description, newFf.ShowWhen);
-        }
-
-        SetElementTag(panel, newFf);
-        return null; // patched in-place
-    }
-
-    internal UIElement? UpdateValidationVisualizer(
-        ValidationVisualizerElement oldVv, ValidationVisualizerElement newVv,
-        WinUI.StackPanel panel, Action requestRerender)
-    {
-        // The visualizer layout varies by style and message state, so a full in-place
-        // patch is complex. However, we can at least reconcile the content child when
-        // styles match and the content element is updatable.
-        if (oldVv.Style != newVv.Style)
-            return Mount(newVv, requestRerender);
-
-        // Find the content child — it's the form control, not the error display chrome.
-        // In MountValidationVisualizer, content is added after style-specific elements,
-        // except for Inline where error text comes after content.
-        // For simplicity and correctness, remount the visualizer but reconcile the
-        // content subtree to preserve control state.
-        return Mount(newVv, requestRerender);
-    }
-
-    internal UIElement? UpdateValidationRule(ValidationRuleElement rule)
-    {
-        var valCtx = _contextScope.Read(ValidationContexts.Current);
-        if (valCtx is not null)
-            rule.Evaluate(valCtx);
-        return null; // keep existing collapsed placeholder
-    }
 
     private UIElement? UpdateErrorBoundary(
         ErrorBoundaryElement oldEb, ErrorBoundaryElement newEb,

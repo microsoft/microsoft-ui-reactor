@@ -1163,6 +1163,10 @@ public sealed partial class Reconciler : IDisposable
         return new PopOnDispose(_contextScope, 1);
     }
 
+    // Internal so V1-owned lifecycle classes can read ambient Context<T> values
+    // without exposing the traversal stack itself.
+    internal T ReadContext<T>(Context<T> context) => _contextScope.Read(context);
+
     /// <summary>
     /// Spec 047 §14 Phase 1 (1.6) — push a stagger scope for child enter
     /// transitions. Returns an <see cref="IDisposable"/> that pops the
