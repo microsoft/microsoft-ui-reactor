@@ -116,7 +116,7 @@ internal static class NativeDockingSmokeFixtures
 
             // The selected (first) tab's content is rendered into the visual tree.
             H.Check("NativeDock_TabView_FirstBodyRendered",
-                H.FindText("native-body-alpha") is not null);
+                await Harness.WaitFor(() => H.FindText("native-body-alpha") is not null));
 
             host.Mount(_ => TextBlock("native-tabs-unmounted"));
             await Harness.Render();
@@ -245,7 +245,7 @@ internal static class NativeDockingSmokeFixtures
             // Click → popup opens.
             H.ClickButton("Outline");
             await Harness.Render();
-            H.Check("SidePopup_OpensOnClick", OpenCount() >= 1);
+            H.Check("SidePopup_OpensOnClick", await Harness.WaitFor(() => OpenCount() >= 1));
 
             // Click again → toggles closed.
             H.ClickButton("Outline");

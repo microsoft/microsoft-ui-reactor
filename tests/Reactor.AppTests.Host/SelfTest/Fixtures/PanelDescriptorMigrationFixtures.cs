@@ -81,14 +81,14 @@ internal static class PanelDescriptorMigrationFixtures
             await Harness.Render();
             // After the swap, the survivor TextBlocks re-realize over one or
             // more dispatcher waves; Hash() returns null until a child is back
-            // in the tree. Pump until every survivor is found again, then
-            // compare identity. This replaces the previous fixed extra drain
-            // (which could be outpaced by a rare dispatcher-drain race on CI)
-            // with a convergence gate that re-queries the live tree each pass.
-            await Harness.WaitFor(() => keys.All(k => Hash(k) is not null));
-
+            // in the tree. Gate on the identity assertion itself so we converge
+            // as soon as every survivor is back with its original Border
+            // instance. This is stricter than the previous presence-only gate
+            // (keys.All(k => Hash(k) is not null)) which let a rare 1/1000
+            // dispatcher-drain drift slip through before identity stabilized; a
+            // genuine identity break never satisfies the predicate and fails.
             H.Check("PDM_Stack_Swap_AllSurvivorsKeepIdentity",
-                keys.All(k => before[k] == Hash(k)));
+                await Harness.WaitFor(() => keys.All(k => before[k] == Hash(k))));
         }
     }
 
@@ -303,8 +303,12 @@ internal static class PanelDescriptorMigrationFixtures
             H.ClickButton("Reverse");
             await Harness.Render();
 
+            // The survivors re-realize over one or more dispatcher waves; gate
+            // on the identity assertion itself so we converge as soon as every
+            // survivor is back with its original Border instance. A genuine
+            // identity break never satisfies the predicate and still fails.
             H.Check("PDM_WrapGrid_Reverse_AllSurvivorsKeepIdentity",
-                keys.All(k => before[k] == Hash(k)));
+                await Harness.WaitFor(() => keys.All(k => before[k] == Hash(k))));
         }
     }
 

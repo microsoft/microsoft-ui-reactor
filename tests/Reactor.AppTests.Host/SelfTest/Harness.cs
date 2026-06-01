@@ -310,7 +310,7 @@ internal sealed class Harness
     /// Pass a non-zero <paramref name="perPassMs"/> for conditions that need
     /// wall-clock time per pass (e.g. waiting for an exit transition to play out).
     /// </summary>
-    public static async Task<bool> WaitFor(Func<bool> condition, int maxPasses = 15, int perPassMs = 0)
+    public static async Task<bool> WaitFor(Func<bool> condition, int maxPasses = 25, int perPassMs = 0)
     {
         for (int i = 0; i < maxPasses; i++)
         {

@@ -327,7 +327,7 @@ internal static class NativeDockingCoverageFloatingFixtures
             H.Check("FloatRoot_TabViewMounted",
                 H.FindAllControls<TabView>(_ => true).Count >= 1);
             H.Check("FloatRoot_PaneBodyRendered",
-                H.FindText("body-tree") is not null);
+                await Harness.WaitFor(() => H.FindText("body-tree") is not null));
 
             host.Mount(_ => TextBlock("float-root-done"));
             await Harness.Render();

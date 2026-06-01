@@ -115,6 +115,14 @@ internal static class NativeDockingCompositionFixtures
             });
             await Harness.Render();
 
+            // Both pane wrappers lazy-realize over one or more dispatcher
+            // waves after mount (more under NativeAOT); pump until both are
+            // in the tree before snapshotting their identities.
+            await Harness.WaitFor(() =>
+                H.FindAllControls<Border>(b =>
+                    Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(b)
+                        is "pane:comp:left" or "pane:comp:right").Count == 2);
+
             // Snapshot the realized Border identities so we can verify
             // the pane wrappers stay the same instance across re-renders
             // (keyed-reconciliation preserves them).
@@ -152,8 +160,10 @@ internal static class NativeDockingCompositionFixtures
             }
             H.Check("Composition_PaneWrapperIdentityPreserved", identityPreserved);
 
-            H.Check("Composition_LeftBodyUpdated", H.FindText("left-tick=1") is not null);
-            H.Check("Composition_RightBodyUpdated", H.FindText("right-tick=1") is not null);
+            H.Check("Composition_LeftBodyUpdated",
+                await Harness.WaitFor(() => H.FindText("left-tick=1") is not null));
+            H.Check("Composition_RightBodyUpdated",
+                await Harness.WaitFor(() => H.FindText("right-tick=1") is not null));
 
             host.Mount(_ => TextBlock("composition-sibling-done"));
             await Harness.Render();
@@ -225,9 +235,9 @@ internal static class NativeDockingCompositionFixtures
             await Harness.Render();
 
             H.Check("Rehydration_LeftBodyRendered",
-                H.FindText("rehy-body-rehy:left") is not null);
+                await Harness.WaitFor(() => H.FindText("rehy-body-rehy:left") is not null));
             H.Check("Rehydration_RightBodyRendered",
-                H.FindText("rehy-body-rehy:right") is not null);
+                await Harness.WaitFor(() => H.FindText("rehy-body-rehy:right") is not null));
 
             // Both pane wrappers should carry the original `pane:<key>`
             // AutomationId so AT addresses survive save / restore.

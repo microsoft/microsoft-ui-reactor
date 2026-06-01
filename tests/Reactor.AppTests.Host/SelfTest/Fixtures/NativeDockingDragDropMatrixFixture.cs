@@ -201,7 +201,7 @@ internal static class NativeDockingDragDropMatrixFixtures
             await Harness.Render();
 
             H.Check("M03_HorizontalSplitAppeared", SplitCount(H) == 1);
-            H.Check("M03_BodyBReachable", H.FindText("body-b") is not null);
+            H.Check("M03_BodyBReachable", await Harness.WaitFor(() => H.FindText("body-b") is not null));
 
             var panel = RootSplitPanel(H);
             H.Check("M03_FlexPanelIsRow",

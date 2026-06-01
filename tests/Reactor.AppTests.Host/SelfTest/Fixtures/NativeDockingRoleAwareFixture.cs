@@ -84,8 +84,10 @@ internal static class NativeDockingRoleAwareFixtures
 
             // Baseline — the empty DocumentArea is present (rendered as a
             // placeholder Border per DockTabGroupRenderer.cs §empty path).
-            H.Check("RoleAware_Initial_GalleryTool",  H.FindText("tool:gallery")  is not null);
-            H.Check("RoleAware_Initial_ConfigTool",   H.FindText("tool:config")   is not null);
+            H.Check("RoleAware_Initial_GalleryTool",
+                await Harness.WaitFor(() => H.FindText("tool:gallery") is not null));
+            H.Check("RoleAware_Initial_ConfigTool",
+                await Harness.WaitFor(() => H.FindText("tool:config") is not null));
             H.Check("RoleAware_Initial_NoDocsYet",    H.FindText("body:d0")       is null);
 
             // Add docs one at a time via DockLayoutOps.InsertPaneAtTarget,
@@ -277,7 +279,7 @@ internal static class NativeDockingRoleAwareFixtures
             await Harness.Render();
 
             // d1 visible, d2 gone, split collapsed.
-            H.Check("RoleAware_CollapseSplit_D1Visible", H.FindText("body:d1") is not null);
+            H.Check("RoleAware_CollapseSplit_D1Visible", await Harness.WaitFor(() => H.FindText("body:d1") is not null));
             H.Check("RoleAware_CollapseSplit_D2Gone",    H.FindText("body:d2") is null);
             var arms = AllDocAreaGroups(layout);
             H.Check("RoleAware_CollapseSplit_OneArmAfter", arms.Count == 1);
@@ -375,14 +377,14 @@ internal static class NativeDockingRoleAwareFixtures
             host.Mount(_ => new DockManager { Layout = layout });
             await Harness.Render();
 
-            H.Check("RoleAware_EdgeSynth_DocVisible", H.FindText("body:d1") is not null);
+            H.Check("RoleAware_EdgeSynth_DocVisible", await Harness.WaitFor(() => H.FindText("body:d1") is not null));
 
             // Drop a tool on the bottom edge.
             layout = DockLayoutOps.InsertPaneAtTarget(layout, Tool("errors"), DockTarget.DockBottom, out _);
             host.Mount(_ => new DockManager { Layout = layout });
             await Harness.Render();
 
-            H.Check("RoleAware_EdgeSynth_ToolVisible", H.FindText("tool:errors") is not null);
+            H.Check("RoleAware_EdgeSynth_ToolVisible", await Harness.WaitFor(() => H.FindText("tool:errors") is not null));
             // Verify the resulting structure has a ToolWindowStrip-roled group.
             var stripExists = layout is DockSplit s
                 && s.Children.OfType<DockTabGroup>().Any(g => g.Role == DockGroupRole.ToolWindowStrip);

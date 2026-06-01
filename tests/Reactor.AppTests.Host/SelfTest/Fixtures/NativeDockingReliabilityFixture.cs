@@ -78,7 +78,7 @@ internal static class NativeDockingReliabilityFixtures
             });
             await Harness.Render();
             H.Check("Reliability_CorruptLoad_FallbackPaneMounted",
-                H.FindText("body-fallback") is not null);
+                await Harness.WaitFor(() => H.FindText("body-fallback") is not null));
 
             host.Mount(_ => TextBlock("corrupt-fallback-done"));
             await Harness.Render();
@@ -222,7 +222,7 @@ internal static class NativeDockingReliabilityFixtures
             H.Check("Reliability_Effect_MountedOnce", mountedCount == 1);
             H.Check("Reliability_Effect_NoCleanupBeforeClose", cleanupCount == 0);
             H.Check("Reliability_Effect_BodyRendered",
-                H.FindText("effect-body-p1") is not null);
+                await Harness.WaitFor(() => H.FindText("effect-body-p1") is not null));
 
             var model = DockHostModelBridge.Get(managerEl);
             H.Check("Reliability_Effect_BridgeYieldsModel", model is not null);

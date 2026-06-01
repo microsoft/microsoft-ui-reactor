@@ -462,7 +462,8 @@ internal static class NativeDockingDynamicContentFixtures
             host.Mount(_ => managerEl);
             await Harness.Render();
             H.Check("PixDoc_ToolbarMounted",
-                H.FindControl<Button>(b => b.Name == "PixDoc_ToolbarOpenWelcome") is not null);
+                await Harness.WaitFor(() =>
+                    H.FindControl<Button>(b => b.Name == "PixDoc_ToolbarOpenWelcome") is not null));
             H.Check("PixDoc_ModelRefPublished", modelRef.Current is not null);
 
             // Dispatch the Dock as the gallery does — through the
