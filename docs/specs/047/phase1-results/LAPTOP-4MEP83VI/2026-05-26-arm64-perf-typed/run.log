@@ -1,0 +1,243 @@
+=== M1-M8 ===
+[PerfBench.ControlModel] writing C:\Users\andersonch\Code\reactor3\docs\specs\047\phase1-results\LAPTOP-4MEP83VI\2026-05-26-arm64-perf-typed\perfbench-controlmodel-m1-m8.jsonl
+[run] M1 Mount_Leaf_NoCallback Direct
+  rep=0 mean=43781.0ns alloc=3771824B gen0=1 
+  rep=1 mean=39733.7ns alloc=3772088B gen0=1 
+  rep=2 mean=37306.8ns alloc=3771824B gen0=1 
+  rep=3 mean=35246.3ns alloc=3771824B gen0=1 
+  rep=4 mean=38398.7ns alloc=3771824B gen0=1 
+[run] M1 Mount_Leaf_NoCallback ReactorToday
+  rep=0 mean=34121.6ns alloc=5255112B gen0=2 
+  rep=1 mean=34981.2ns alloc=5419320B gen0=2 
+  rep=2 mean=39706.1ns alloc=5255112B gen0=2 
+  rep=3 mean=39581.6ns alloc=5419320B gen0=2 
+  rep=4 mean=47965.1ns alloc=5419056B gen0=2 
+[run] M1 Mount_Leaf_NoCallback ReactorV2
+  rep=0 mean=33710.1ns alloc=5419320B gen0=2 
+  rep=1 mean=37378.2ns alloc=5419056B gen0=2 
+  rep=2 mean=41285.9ns alloc=5255376B gen0=2 
+  rep=3 mean=40372.4ns alloc=5419056B gen0=2 
+  rep=4 mean=43285.2ns alloc=5419056B gen0=2 
+[run] M2 Mount_Leaf_OneCallback Direct
+  rep=0 mean=43542.4ns alloc=13393168B gen0=3 
+  rep=1 mean=55940.7ns alloc=13441560B gen0=4 
+  rep=2 mean=45719.5ns alloc=13143864B gen0=3 
+  rep=3 mean=70534.8ns alloc=13557376B gen0=3 
+  rep=4 mean=65680.1ns alloc=13393168B gen0=3 
+[run] M2 Mount_Leaf_OneCallback ReactorToday
+  rep=0 mean=100123.3ns alloc=18364376B gen0=3 
+  rep=1 mean=130952.8ns alloc=18352984B gen0=6 
+  rep=2 mean=121215.9ns alloc=18988960B gen0=5 
+  rep=3 mean=122072.2ns alloc=20879256B gen0=4 
+  rep=4 mean=91739.3ns alloc=19633928B gen0=3 
+[run] M2 Mount_Leaf_OneCallback ReactorV2
+  rep=0 mean=134888.3ns alloc=15548352B gen0=3 
+  rep=1 mean=71481.5ns alloc=17937888B gen0=2 
+  rep=2 mean=74824.9ns alloc=16844544B gen0=2 
+  rep=3 mean=83599.2ns alloc=20783824B gen0=2 
+  rep=4 mean=79602.7ns alloc=25517016B gen0=2 
+[run] M3 Mount_Leaf_ThreeCallbacks Direct
+  rep=0 mean=259929.3ns alloc=25849624B gen0=7 
+  rep=1 mean=310442.6ns alloc=31355880B gen0=7 
+  rep=2 mean=340354.4ns alloc=27159600B gen0=7 
+  rep=3 mean=370213.3ns alloc=25850352B gen0=7 
+  rep=4 mean=347298.7ns alloc=26367024B gen0=7 
+[run] M3 Mount_Leaf_ThreeCallbacks ReactorToday
+  rep=0 mean=635372.6ns alloc=47056080B gen0=7 
+  rep=1 mean=607522.9ns alloc=64455424B gen0=7 
+  rep=2 mean=703916.8ns alloc=43109520B gen0=6 
+  rep=3 mean=594316.5ns alloc=44420344B gen0=6 
+  rep=4 mean=790938.8ns alloc=49401312B gen0=6 
+[run] M3 Mount_Leaf_ThreeCallbacks ReactorV2
+  rep=0 mean=717233.0ns alloc=52291208B gen0=6 
+  rep=1 mean=974086.9ns alloc=85200120B gen0=7 
+  rep=2 mean=996766.6ns alloc=41798696B gen0=6 
+  rep=3 mean=1206745.4ns alloc=44420240B gen0=6 
+  rep=4 mean=1198123.6ns alloc=41798696B gen0=6 
+[run] M4 Dispatch_Switch_Cold Direct
+  rep=0 mean=162409.8ns alloc=4932800B gen0=1 
+  rep=1 mean=247759.3ns alloc=4932800B gen0=1 
+  rep=2 mean=163021.6ns alloc=7554608B gen0=1 
+  rep=3 mean=167102.1ns alloc=4932800B gen0=1 
+  rep=4 mean=171954.3ns alloc=4932800B gen0=1 
+[run] M4 Dispatch_Switch_Cold ReactorToday
+  rep=0 mean=94190.1ns alloc=9689856B gen0=1 
+  rep=1 mean=147675.4ns alloc=9747528B gen0=3 
+  rep=2 mean=153063.5ns alloc=12287056B gen0=3 
+  rep=3 mean=132804.3ns alloc=9689856B gen0=2 
+  rep=4 mean=177215.8ns alloc=9764168B gen0=3 
+[run] M4 Dispatch_Switch_Cold ReactorV2
+  rep=0 mean=126636.7ns alloc=12003888B gen0=3 
+  rep=1 mean=123404.4ns alloc=11987880B gen0=3 
+  rep=2 mean=154530.9ns alloc=12003808B gen0=3 
+  rep=3 mean=160225.0ns alloc=11995848B gen0=3 
+  rep=4 mean=111524.8ns alloc=12118976B gen0=3 
+[run] M5 Dispatch_Switch_Warm Direct
+  rep=0 mean=23781.3ns alloc=4932192B gen0=0 
+  rep=1 mean=25377.9ns alloc=4932192B gen0=0 
+  rep=2 mean=25747.0ns alloc=4932192B gen0=0 
+  rep=3 mean=32342.3ns alloc=4932192B gen0=0 
+  rep=4 mean=28549.2ns alloc=4932192B gen0=0 
+[run] M5 Dispatch_Switch_Warm ReactorToday
+  rep=0 mean=84401.9ns alloc=9714416B gen0=3 
+  rep=1 mean=109283.1ns alloc=9706256B gen0=4 
+  rep=2 mean=115330.1ns alloc=9657544B gen0=3 
+  rep=3 mean=132541.5ns alloc=9698608B gen0=3 
+  rep=4 mean=125839.8ns alloc=9708384B gen0=3 
+[run] M5 Dispatch_Switch_Warm ReactorV2
+  rep=0 mean=88065.2ns alloc=11946816B gen0=3 
+  rep=1 mean=102262.6ns alloc=12040632B gen0=3 
+  rep=2 mean=112457.6ns alloc=11995712B gen0=3 
+  rep=3 mean=113546.9ns alloc=12224992B gen0=3 
+  rep=4 mean=127386.0ns alloc=12002544B gen0=3 
+[run] M6 Dispatch_ExternalType Direct
+  rep=0 mean=34901.9ns alloc=3607192B gen0=0 
+  rep=1 mean=34636.3ns alloc=3607192B gen0=0 
+  rep=2 mean=37939.6ns alloc=3607192B gen0=0 
+  rep=3 mean=35922.1ns alloc=3607192B gen0=0 
+  rep=4 mean=35643.0ns alloc=3607192B gen0=0 
+[run] M6 Dispatch_ExternalType ReactorToday
+  rep=0 mean=45973.9ns alloc=4687800B gen0=1 
+  rep=1 mean=57371.1ns alloc=4687800B gen0=1 
+  rep=2 mean=47025.6ns alloc=4687800B gen0=1 
+  rep=3 mean=62075.3ns alloc=7309344B gen0=1 
+  rep=4 mean=47737.1ns alloc=4687800B gen0=1 
+[run] M6 Dispatch_ExternalType ReactorV2
+  rep=0 mean=50630.8ns alloc=4687800B gen0=1 
+  rep=1 mean=55002.2ns alloc=4687800B gen0=1 
+  rep=2 mean=45439.7ns alloc=4687800B gen0=1 
+  rep=3 mean=46607.0ns alloc=4687800B gen0=1 
+  rep=4 mean=46608.7ns alloc=4687800B gen0=1 
+[run] M7 Update_NoChange Direct
+  rep=0 mean=2010628.9ns alloc=122687136B gen0=28 
+  rep=1 mean=1514941.9ns alloc=122687136B gen0=28 
+  rep=2 mean=1779309.9ns alloc=122687136B gen0=28 
+  rep=3 mean=1967638.6ns alloc=122687136B gen0=28 
+  rep=4 mean=2111937.7ns alloc=122687136B gen0=28 
+[run] M7 Update_NoChange ReactorToday
+  rep=0 mean=20586.8ns alloc=779584B gen0=0 
+  rep=1 mean=23144.3ns alloc=779584B gen0=0 
+  rep=2 mean=21279.2ns alloc=779584B gen0=0 
+  rep=3 mean=21373.6ns alloc=779584B gen0=0 
+  rep=4 mean=22980.5ns alloc=779584B gen0=0 
+[run] M7 Update_NoChange ReactorV2
+  rep=0 mean=20578.2ns alloc=779584B gen0=0 
+  rep=1 mean=20801.1ns alloc=779584B gen0=0 
+  rep=2 mean=20872.0ns alloc=779584B gen0=0 
+  rep=3 mean=20974.5ns alloc=779584B gen0=0 
+  rep=4 mean=19000.0ns alloc=779584B gen0=0 
+[run] M8 Update_OneLeafChanged Direct
+  rep=0 mean=8422.0ns alloc=1019536B gen0=0 
+  rep=1 mean=8714.4ns alloc=1019536B gen0=0 
+  rep=2 mean=7891.9ns alloc=1019536B gen0=0 
+  rep=3 mean=8553.9ns alloc=1019536B gen0=0 
+  rep=4 mean=8078.2ns alloc=1019536B gen0=0 
+[run] M8 Update_OneLeafChanged ReactorToday
+  rep=0 mean=9838.4ns alloc=2123320B gen0=0 
+  rep=1 mean=8215.8ns alloc=2123320B gen0=0 
+  rep=2 mean=7455.8ns alloc=2123320B gen0=0 
+  rep=3 mean=8012.2ns alloc=2123320B gen0=0 
+  rep=4 mean=8325.0ns alloc=2123320B gen0=0 
+[run] M8 Update_OneLeafChanged ReactorV2
+  rep=0 mean=6827.2ns alloc=2123320B gen0=0 
+  rep=1 mean=8614.6ns alloc=2123320B gen0=0 
+  rep=2 mean=8450.9ns alloc=2123320B gen0=0 
+  rep=3 mean=8102.2ns alloc=2123320B gen0=0 
+  rep=4 mean=8291.3ns alloc=2123320B gen0=0 
+[done] C:\Users\andersonch\Code\reactor3\docs\specs\047\phase1-results\LAPTOP-4MEP83VI\2026-05-26-arm64-perf-typed\perfbench-controlmodel-m1-m8.jsonl
+=== M9 ===
+[PerfBench.ControlModel] writing C:\Users\andersonch\Code\reactor3\docs\specs\047\phase1-results\LAPTOP-4MEP83VI\2026-05-26-arm64-perf-typed\perfbench-controlmodel-m9.jsonl
+[run] M9 Update_AllChanged Direct
+  rep=0 mean=1470676.9ns alloc=96782016B gen0=22 
+  rep=1 mean=1571988.3ns alloc=96782016B gen0=22 
+  rep=2 mean=1521794.9ns alloc=96782016B gen0=22 
+  rep=3 mean=1493384.7ns alloc=96740952B gen0=22 
+  rep=4 mean=1567111.1ns alloc=96782016B gen0=22 
+[run] M9 Update_AllChanged ReactorToday
+  rep=0 mean=2704325.4ns alloc=624508688B gen0=133 
+  rep=1 mean=2708913.1ns alloc=624508688B gen0=133 
+  rep=2 mean=2761157.5ns alloc=624467624B gen0=134 
+  rep=3 mean=2778051.9ns alloc=624508688B gen0=133 
+  rep=4 mean=2828545.5ns alloc=624467624B gen0=133 
+[run] M9 Update_AllChanged ReactorV2
+  rep=0 mean=2919343.4ns alloc=624508952B gen0=133 
+  rep=1 mean=2893304.3ns alloc=624467624B gen0=134 
+  rep=2 mean=2885344.0ns alloc=624508688B gen0=133 
+  rep=3 mean=2887658.9ns alloc=624467624B gen0=133 
+  rep=4 mean=2879530.2ns alloc=624508688B gen0=133 
+[done] C:\Users\andersonch\Code\reactor3\docs\specs\047\phase1-results\LAPTOP-4MEP83VI\2026-05-26-arm64-perf-typed\perfbench-controlmodel-m9.jsonl
+=== M10-M13 ===
+[PerfBench.ControlModel] writing C:\Users\andersonch\Code\reactor3\docs\specs\047\phase1-results\LAPTOP-4MEP83VI\2026-05-26-arm64-perf-typed\perfbench-controlmodel-m10-m13.jsonl
+[run] M10 EventHandlerState_Alloc Direct
+  rep=0 mean=34159.1ns alloc=2999272B gen0=0 
+  rep=1 mean=34681.2ns alloc=2917248B gen0=0 
+  rep=2 mean=35476.4ns alloc=2999272B gen0=0 
+  rep=3 mean=34444.9ns alloc=2917248B gen0=0 
+  rep=4 mean=41393.6ns alloc=2999536B gen0=0 
+[run] M10 EventHandlerState_Alloc ReactorToday
+  rep=0 mean=47384.3ns alloc=4350520B gen0=0 
+  rep=1 mean=46096.7ns alloc=3817520B gen0=0 
+  rep=2 mean=48790.0ns alloc=4186472B gen0=0 
+  rep=3 mean=44480.8ns alloc=3817520B gen0=0 
+  rep=4 mean=51968.0ns alloc=4186472B gen0=0 
+[run] M10 EventHandlerState_Alloc ReactorV2
+  rep=0 mean=41304.5ns alloc=3552896B gen0=0 
+  rep=1 mean=42441.4ns alloc=3347888B gen0=0 
+  rep=2 mean=39176.6ns alloc=3225008B gen0=0 
+  rep=3 mean=41879.7ns alloc=3497720B gen0=0 
+  rep=4 mean=44667.0ns alloc=3292952B gen0=0 
+[run] M11 ModifierEHS_Frequency Direct
+  rep=0 mean=81.4ns alloc=40B gen0=0 
+  rep=1 mean=25.0ns alloc=40B gen0=0 
+  rep=2 mean=22.0ns alloc=40B gen0=0 
+  rep=3 mean=21.4ns alloc=40B gen0=0 
+  rep=4 mean=25.2ns alloc=40B gen0=0 
+[run] M11 ModifierEHS_Frequency ReactorToday
+  rep=0 mean=33697.6ns alloc=1910376B gen0=0 counter[ModifierEHSAllocations]=-1
+  rep=1 mean=33858.0ns alloc=1569048B gen0=0 counter[ModifierEHSAllocations]=-1
+  rep=2 mean=33245.9ns alloc=1738216B gen0=0 counter[ModifierEHSAllocations]=-1
+  rep=3 mean=38854.8ns alloc=1585456B gen0=0 counter[ModifierEHSAllocations]=-1
+  rep=4 mean=35826.7ns alloc=1574272B gen0=0 counter[ModifierEHSAllocations]=-1
+[run] M11 ModifierEHS_Frequency ReactorV2
+  rep=0 mean=40844.8ns alloc=2815168B gen0=0 counter[ModifierEHSAllocations]=-1
+  rep=1 mean=45675.7ns alloc=2340560B gen0=0 counter[ModifierEHSAllocations]=-1
+  rep=2 mean=51442.4ns alloc=2323600B gen0=0 counter[ModifierEHSAllocations]=-1
+  rep=3 mean=88611.1ns alloc=2348832B gen0=0 counter[ModifierEHSAllocations]=-1
+  rep=4 mean=92082.8ns alloc=2487280B gen0=0 counter[ModifierEHSAllocations]=-1
+[run] M12 Pool_Rent_HotPath Direct
+  rep=0 mean=48979.9ns alloc=727272B gen0=0 
+  rep=1 mean=50290.8ns alloc=727272B gen0=0 
+  rep=2 mean=56040.5ns alloc=727272B gen0=0 
+  rep=3 mean=61779.8ns alloc=727272B gen0=0 
+  rep=4 mean=59858.8ns alloc=891480B gen0=0 
+[run] M12 Pool_Rent_HotPath ReactorToday
+  rep=0 mean=69271.5ns alloc=1055272B gen0=0 
+  rep=1 mean=67221.4ns alloc=1055272B gen0=0 
+  rep=2 mean=64242.8ns alloc=1055272B gen0=0 
+  rep=3 mean=77466.4ns alloc=1055272B gen0=0 
+  rep=4 mean=75138.4ns alloc=1055272B gen0=0 
+[run] M12 Pool_Rent_HotPath ReactorV2
+  rep=0 mean=66863.9ns alloc=1055536B gen0=0 
+  rep=1 mean=55248.1ns alloc=1055272B gen0=0 
+  rep=2 mean=75634.0ns alloc=1055192B gen0=0 
+  rep=3 mean=69223.1ns alloc=1055192B gen0=0 
+  rep=4 mean=66988.8ns alloc=1055192B gen0=0 
+[run] M13 Setters_Suppression_Scope Direct
+  rep=0 mean=162.0ns alloc=24040B gen0=0 
+  rep=1 mean=40.6ns alloc=24040B gen0=0 
+  rep=2 mean=60.5ns alloc=24040B gen0=0 
+  rep=3 mean=58.4ns alloc=24040B gen0=0 
+  rep=4 mean=61.5ns alloc=24040B gen0=0 
+[run] M13 Setters_Suppression_Scope ReactorToday
+  rep=0 mean=536.3ns alloc=29400B gen0=0 
+  rep=1 mean=344.4ns alloc=29400B gen0=0 
+  rep=2 mean=390.5ns alloc=29664B gen0=0 
+  rep=3 mean=335.4ns alloc=29400B gen0=0 
+  rep=4 mean=266.1ns alloc=29400B gen0=0 
+[run] M13 Setters_Suppression_Scope ReactorV2
+  rep=0 mean=300.1ns alloc=29488B gen0=0 
+  rep=1 mean=346.6ns alloc=29488B gen0=0 
+  rep=2 mean=273.9ns alloc=29488B gen0=0 
+  rep=3 mean=294.3ns alloc=29488B gen0=0 
+  rep=4 mean=620.5ns alloc=29488B gen0=0 
+[done] C:\Users\andersonch\Code\reactor3\docs\specs\047\phase1-results\LAPTOP-4MEP83VI\2026-05-26-arm64-perf-typed\perfbench-controlmodel-m10-m13.jsonl

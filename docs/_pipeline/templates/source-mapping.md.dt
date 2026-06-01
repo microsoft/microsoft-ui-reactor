@@ -137,7 +137,7 @@ flow native providers.
 
 **Watch the design before designing around it.** Spec 010 owns the
 per-element story and several Phase 4 surfaces (preview inspector,
-layout-cost overlay, reconcile-highlight) wait on it. Don't fork a
+reconcile-highlight) wait on it. Don't fork a
 parallel attribution scheme; track the spec.
 
 ## Next Steps

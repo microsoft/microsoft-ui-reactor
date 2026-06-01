@@ -1,5 +1,6 @@
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Layout;
+using static Microsoft.UI.Reactor.Factories;
 
 namespace Microsoft.UI.Reactor.Docking.Native;
 
@@ -76,7 +77,7 @@ internal static class DockSplitRenderer
         // reference once we confirm the splitter stays mounted.
         Action<FlexPanel>[] setters = [];
         if (n == 0)
-            return new FlexElement([]) { Direction = direction, Setters = setters };
+            return Flex([]) with { Direction = direction, Setters = setters };
 
         // Children interleaved with splitters: [c0, s0, c1, s1, ..., c(n-1)].
         var composed = new List<Element>(2 * n - 1);
@@ -110,7 +111,7 @@ internal static class DockSplitRenderer
             }
         }
 
-        return new FlexElement(composed.ToArray())
+        return Flex(composed.ToArray()) with
         {
             Direction = direction,
             AlignItems = FlexAlign.Stretch,

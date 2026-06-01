@@ -83,24 +83,24 @@ internal static class DockSideStripRenderer
         var bottomStrip = BuildHorizontalStrip(effectiveBottomSide, DockSide.Bottom, expandedPaneKey, setExpandedPaneKey);
 
         // Middle row: [left | center | right]
-        var middleRow = new FlexElement(FilterNonNull(new Element?[]
+        var middleRow = Flex(FilterNonNull(new Element?[]
         {
             leftStrip,
             center.Flex(grow: 1),
             rightStrip,
-        }))
+        })) with
         {
             Direction = FlexDirection.Row,
             AlignItems = FlexAlign.Stretch,
         };
 
         // Outer column: [top / middle / bottom]
-        var outerStack = new FlexElement(FilterNonNull(new Element?[]
+        var outerStack = Flex(FilterNonNull(new Element?[]
         {
             topStrip,
             middleRow.Flex(grow: 1),
             bottomStrip,
-        }))
+        })) with
         {
             Direction = FlexDirection.Column,
             AlignItems = FlexAlign.Stretch,
@@ -150,7 +150,7 @@ internal static class DockSideStripRenderer
             var isExpanded = expandedPaneKey is not null && Equals(pane.Key, expandedPaneKey);
             buttons[i] = SidePinButton(pane, side, isExpanded, setExpandedPaneKey);
         }
-        return new FlexElement(buttons)
+        return Flex(buttons) with
         {
             Direction = FlexDirection.Column,
             AlignItems = FlexAlign.Stretch,
@@ -172,7 +172,7 @@ internal static class DockSideStripRenderer
             var isExpanded = expandedPaneKey is not null && Equals(pane.Key, expandedPaneKey);
             buttons[i] = SidePinButton(pane, side, isExpanded, setExpandedPaneKey);
         }
-        return new FlexElement(buttons)
+        return Flex(buttons) with
         {
             Direction = FlexDirection.Row,
             AlignItems = FlexAlign.Stretch,
@@ -203,14 +203,14 @@ internal static class DockSideStripRenderer
         // so the WinUI control persists across renders (no remount churn).
         if (pane is null)
         {
-            return new PopupElement(new BorderElement(null))
+            return Popup(Border(null)) with
             {
                 IsOpen = false,
                 IsLightDismissEnabled = false,
             };
         }
 
-        var content = pane.Content ?? (Element)new BorderElement(null);
+        var content = pane.Content ?? (Element)Border(null);
         // Wrap content with the same pane-context envelope used by the
         // docked tree so hooks (UsePane, UseDockState) resolve inside an
         // auto-hidden popup too. PaneState reflects the AutoHiddenExpanded
@@ -226,13 +226,13 @@ internal static class DockSideStripRenderer
         // at element-tree construction time; use a reasonable default and
         // let the user resize via the host frame later (§2.5 sizer item).
         const double Default = 320;
-        var box = new BorderElement(paneSubtree)
+        var box = (Border(paneSubtree) with
         {
             Background = new SolidColorBrush(Color.FromArgb(0xFF, 0x20, 0x20, 0x20)),
             BorderBrush = new SolidColorBrush(Color.FromArgb(0xFF, 0x50, 0x50, 0x50)),
             BorderThickness = 1,
             CornerRadius = 4,
-        }.Width(side is DockSide.Top or DockSide.Bottom ? 600 : Default)
+        }).Width(side is DockSide.Top or DockSide.Bottom ? 600 : Default)
          .Height(side is DockSide.Top or DockSide.Bottom ? Default : 480);
 
         // For Phase 2 the popup dismisses via repeat-click on the side
@@ -248,7 +248,7 @@ internal static class DockSideStripRenderer
         // Loaded handler attached via Setters. This is the same pattern
         // upstream WinUI.Dock's SidePopup uses — its `Show()` method runs
         // after the popup has been attached to its container.
-        return new PopupElement(box)
+        return Popup(box) with
         {
             IsOpen = false,
             IsLightDismissEnabled = false,

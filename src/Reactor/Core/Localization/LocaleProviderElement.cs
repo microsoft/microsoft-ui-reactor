@@ -1,5 +1,6 @@
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Xaml;
+using static Microsoft.UI.Reactor.Factories;
 
 namespace Microsoft.UI.Reactor.Localization;
 
@@ -61,9 +62,9 @@ internal sealed class LocaleProviderComponent : Component<LocaleProviderElement>
         // layout automatically when the locale changes.
         // Provide the IntlAccessor via Context so descendants can UseContext(IntlContexts.Locale).
         var direction = accessor.Direction;
-        return new BorderElement(Props.Child)
+        return (Border(Props.Child) with
         {
             Setters = [b => b.FlowDirection = direction]
-        }.Provide(IntlContexts.Locale, accessor);
+        }).Provide(IntlContexts.Locale, accessor);
     }
 }

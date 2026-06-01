@@ -7,6 +7,12 @@ using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Text;
 using Windows.UI.Text;
 using MenuFlyoutItemBase = Microsoft.UI.Reactor.Core.MenuFlyoutItemBase;
+// Spec 048 §7 — aliases for the per-factory `Reg<>` registration touch.
+using V1 = Microsoft.UI.Reactor.Core.V1Protocol;
+using Desc = Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
+using WinUI = Microsoft.UI.Xaml.Controls;
+using WinPrim = Microsoft.UI.Xaml.Controls.Primitives;
+using WinShapes = Microsoft.UI.Xaml.Shapes;
 
 namespace Microsoft.UI.Reactor;
 
@@ -42,7 +48,14 @@ public static partial class Factories
 
     // ── Text ────────────────────────────────────────────────────────
 
-    public static TextBlockElement TextBlock(string content) => new(content);
+    public static TextBlockElement TextBlock(string content)
+    {
+        // Spec 048 §7 — register TextBlockElement's handler into the global
+        // ControlRegistry the first time any TextBlock-producing factory runs.
+        // Post-§3.4 this is the live dispatch path (the eager registrar is gone).
+        _ = V1.Reg<TextBlockElement, WinUI.TextBlock, Desc.TextBlockDescriptorHandler>.Done;
+        return new(content);
+    }
 
     /// <summary>
     /// Creates a heading-styled <see cref="TextBlockElement"/> (28px, bold,
@@ -55,12 +68,15 @@ public static partial class Factories
     /// landmark. Prefer this over hand-styled <see cref="TextBlock(string)"/>
     /// for page / section titles. (spec 039 §0.3)
     /// </remarks>
-    public static TextBlockElement Heading(string content) =>
-        new(content) { FontSize = 28, Weight = new global::Windows.UI.Text.FontWeight(700),
+    public static TextBlockElement Heading(string content)
+    {
+        _ = V1.Reg<TextBlockElement, WinUI.TextBlock, Desc.TextBlockDescriptorHandler>.Done;
+        return new(content) { FontSize = 28, Weight = new global::Windows.UI.Text.FontWeight(700),
             Modifiers = new Core.ElementModifiers
             {
                 HeadingLevel = Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level1
             } };
+    }
 
     /// <summary>
     /// Creates a sub-heading styled <see cref="TextBlockElement"/> (20px,
@@ -72,12 +88,15 @@ public static partial class Factories
     /// secondary section level; sized for the WinUI Subtitle type-ramp slot.
     /// (spec 039 §0.3)
     /// </remarks>
-    public static TextBlockElement SubHeading(string content) =>
-        new(content) { FontSize = 20, Weight = new global::Windows.UI.Text.FontWeight(600),
+    public static TextBlockElement SubHeading(string content)
+    {
+        _ = V1.Reg<TextBlockElement, WinUI.TextBlock, Desc.TextBlockDescriptorHandler>.Done;
+        return new(content) { FontSize = 20, Weight = new global::Windows.UI.Text.FontWeight(600),
             Modifiers = new Core.ElementModifiers
             {
                 HeadingLevel = Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level2
             } };
+    }
 
     /// <summary>
     /// Creates a caption-styled <see cref="TextBlockElement"/> (12px).
@@ -88,8 +107,11 @@ public static partial class Factories
     /// secondary metadata (timestamps, helper text, hints) below primary copy.
     /// (spec 039 §0.3)
     /// </remarks>
-    public static TextBlockElement Caption(string content) =>
-        new(content) { FontSize = 12 };
+    public static TextBlockElement Caption(string content)
+    {
+        _ = V1.Reg<TextBlockElement, WinUI.TextBlock, Desc.TextBlockDescriptorHandler>.Done;
+        return new(content) { FontSize = 12 };
+    }
 
     /// <summary>
     /// Creates a <see cref="RichTextBlockElement"/> wrapping a single string of
@@ -100,7 +122,11 @@ public static partial class Factories
     /// Named for parity with WinUI's <c>Microsoft.UI.Xaml.Controls.RichTextBlock</c>.
     /// (spec 039 §1.3 / §14 #8)
     /// </remarks>
-    public static RichTextBlockElement RichTextBlock(string text) => new(text);
+    public static RichTextBlockElement RichTextBlock(string text)
+    {
+        _ = V1.Reg<RichTextBlockElement, WinUI.RichTextBlock, Desc.RichTextBlockDescriptorHandler>.Done;
+        return new(text);
+    }
 
     /// <summary>
     /// Deprecated forwarding alias for <see cref="RichTextBlock(string)"/>.
@@ -111,16 +137,27 @@ public static partial class Factories
         error: false)]
     public static RichTextBlockElement RichText(string text) => RichTextBlock(text);
 
-    public static RichEditBoxElement RichEditBox(string text = "", Action<string>? onTextChanged = null) =>
-        new(text) { OnTextChanged = onTextChanged };
+    public static RichEditBoxElement RichEditBox(string text = "", Action<string>? onTextChanged = null)
+    {
+        _ = V1.Reg<RichEditBoxElement, WinUI.RichEditBox, Desc.RichEditBoxDescriptorHandler>.Done;
+        return new(text) { OnTextChanged = onTextChanged };
+    }
 
     // ── Buttons ─────────────────────────────────────────────────────
 
-    public static ButtonElement Button(string label, Action? onClick = null) =>
-        new(label, onClick);
+    public static ButtonElement Button(string label, Action? onClick = null)
+    {
+        // Spec 048 §3.4 — per-factory `Reg<>` registration touch.
+        // Live dispatch path post-§3.4 (the eager registrar is gone).
+        _ = V1.Reg<ButtonElement, WinUI.Button, Desc.ButtonDescriptorHandler>.Done;
+        return new(label, onClick);
+    }
 
-    public static ButtonElement Button(Element content, Action? onClick = null) =>
-        new("", onClick) { ContentElement = content };
+    public static ButtonElement Button(Element content, Action? onClick = null)
+    {
+        _ = V1.Reg<ButtonElement, WinUI.Button, Desc.ButtonDescriptorHandler>.Done;
+        return new("", onClick) { ContentElement = content };
+    }
 
     /// <summary>
     /// Creates a Button driven by a Command. Maps Label → Content, Execute → Click,
@@ -129,83 +166,125 @@ public static partial class Factories
     /// <c>Button(saveCommand).IsEnabled(canSave)</c> or
     /// <c>.Set(b =&gt; b.FlowDirection = FlowDirection.RightToLeft)</c>.
     /// </summary>
-    public static ButtonElement Button(Core.Command command) =>
-        new ButtonElement(command.Label, () => Core.CommandBindings.Invoke(command))
+    public static ButtonElement Button(Core.Command command)
+    {
+        _ = V1.Reg<ButtonElement, WinUI.Button, Desc.ButtonDescriptorHandler>.Done;
+        return new ButtonElement(command.Label, () => Core.CommandBindings.Invoke(command))
         {
             IsEnabled = command.IsEnabled,
             Setters = [b => Core.CommandBindings.ApplyButtonBaseCommon(b, command)],
         };
+    }
 
-    public static HyperlinkButtonElement HyperlinkButton(string content, Uri? navigateUri = null, Action? onClick = null) =>
-        new(content, navigateUri, onClick);
+    public static HyperlinkButtonElement HyperlinkButton(string content, Uri? navigateUri = null, Action? onClick = null)
+    {
+        // Spec 048 §3.3 — register HyperlinkButtonElement's handler into the
+        // global ControlRegistry on first HyperlinkButton-producing factory use.
+        // Live dispatch path post-§3.4 (the eager registrar is gone).
+        _ = V1.Reg<HyperlinkButtonElement, WinUI.HyperlinkButton, Desc.HyperlinkButtonDescriptorHandler>.Done;
+        return new(content, navigateUri, onClick);
+    }
 
     /// <summary>
     /// Creates a HyperlinkButton driven by a Command. Maps Label → Content, Execute →
     /// Click. For external navigation, chain <see cref="ElementExtensions.NavigateUri(HyperlinkButtonElement, Uri)"/>:
     /// <c>HyperlinkButton(cmd).NavigateUri(new Uri("https://..."))</c>.
     /// </summary>
-    public static HyperlinkButtonElement HyperlinkButton(Core.Command command) =>
-        new HyperlinkButtonElement(command.Label, null, () => Core.CommandBindings.Invoke(command))
+    public static HyperlinkButtonElement HyperlinkButton(Core.Command command)
+    {
+        _ = V1.Reg<HyperlinkButtonElement, WinUI.HyperlinkButton, Desc.HyperlinkButtonDescriptorHandler>.Done;
+        return new HyperlinkButtonElement(command.Label, null, () => Core.CommandBindings.Invoke(command))
         {
             Setters = [b => Core.CommandBindings.ApplyButtonBaseCommon(b, command)],
         };
+    }
 
-    public static RepeatButtonElement RepeatButton(string label, Action? onClick = null) =>
-        new(label, onClick);
+    public static RepeatButtonElement RepeatButton(string label, Action? onClick = null)
+    {
+        _ = V1.Reg<RepeatButtonElement, WinPrim.RepeatButton, Desc.RepeatButtonDescriptorHandler>.Done;
+        return new(label, onClick);
+    }
 
     /// <summary>Creates a RepeatButton driven by a Command. Click auto-repeats while held.</summary>
-    public static RepeatButtonElement RepeatButton(Core.Command command) =>
-        new RepeatButtonElement(command.Label, () => Core.CommandBindings.Invoke(command))
+    public static RepeatButtonElement RepeatButton(Core.Command command)
+    {
+        _ = V1.Reg<RepeatButtonElement, WinPrim.RepeatButton, Desc.RepeatButtonDescriptorHandler>.Done;
+        return new RepeatButtonElement(command.Label, () => Core.CommandBindings.Invoke(command))
         {
             Setters = [b => Core.CommandBindings.ApplyButtonBaseCommon(b, command)],
         };
+    }
 
-    public static ToggleButtonElement ToggleButton(string label, bool isChecked = false, Action<bool>? onIsCheckedChanged = null) =>
-        new(label, isChecked, onIsCheckedChanged);
+    public static ToggleButtonElement ToggleButton(string label, bool isChecked = false, Action<bool>? onIsCheckedChanged = null)
+    {
+        _ = V1.Reg<ToggleButtonElement, WinPrim.ToggleButton, Desc.ToggleButtonDescriptorHandler>.Done;
+        return new(label, isChecked, onIsCheckedChanged);
+    }
 
     /// <summary>
     /// Creates a ToggleButton driven by a Command. The command fires on each toggle
     /// (both check and uncheck) — per the spec's "Option A" semantics. Use the
     /// <c>isChecked</c> parameter to seed the initial state.
     /// </summary>
-    public static ToggleButtonElement ToggleButton(Core.Command command, bool isChecked = false) =>
-        new ToggleButtonElement(command.Label, isChecked, _ => Core.CommandBindings.Invoke(command))
+    public static ToggleButtonElement ToggleButton(Core.Command command, bool isChecked = false)
+    {
+        _ = V1.Reg<ToggleButtonElement, WinPrim.ToggleButton, Desc.ToggleButtonDescriptorHandler>.Done;
+        return new ToggleButtonElement(command.Label, isChecked, _ => Core.CommandBindings.Invoke(command))
         {
             Setters = [b => Core.CommandBindings.ApplyButtonBaseCommon(b, command)],
         };
+    }
 
     /// <summary>
     /// Three-state toggle button (true → false → null → ...). Matches the
     /// established <c>ThreeStateCheckBox</c> factory pattern from spec 039 §2.4.
     /// </summary>
-    public static ToggleButtonElement ThreeStateToggleButton(string label, bool? checkedState = null, Action<bool?>? onCheckedStateChanged = null) =>
-        new(label, checkedState == true) { IsThreeState = true, CheckedState = checkedState, OnCheckedStateChanged = onCheckedStateChanged };
+    public static ToggleButtonElement ThreeStateToggleButton(string label, bool? checkedState = null, Action<bool?>? onCheckedStateChanged = null)
+    {
+        _ = V1.Reg<ToggleButtonElement, WinPrim.ToggleButton, Desc.ToggleButtonDescriptorHandler>.Done;
+        return new(label, checkedState == true) { IsThreeState = true, CheckedState = checkedState, OnCheckedStateChanged = onCheckedStateChanged };
+    }
 
-    public static DropDownButtonElement DropDownButton(string label, Element? flyout = null) =>
-        new(label, flyout);
+    public static DropDownButtonElement DropDownButton(string label, Element? flyout = null)
+    {
+        _ = V1.Reg<DropDownButtonElement, WinUI.DropDownButton, Desc.DropDownButtonDescriptorHandler>.Done;
+        return new(label, flyout);
+    }
 
-    public static SplitButtonElement SplitButton(string label, Action? onClick = null, Element? flyout = null) =>
-        new(label, onClick, flyout);
+    public static SplitButtonElement SplitButton(string label, Action? onClick = null, Element? flyout = null)
+    {
+        _ = V1.Reg<SplitButtonElement, WinUI.SplitButton, Desc.SplitButtonDescriptorHandler>.Done;
+        return new(label, onClick, flyout);
+    }
 
     /// <summary>
     /// Creates a SplitButton driven by a Command for the primary action. The flyout
     /// (dropdown portion) is independent and supplied separately.
     /// </summary>
-    public static SplitButtonElement SplitButton(Core.Command command, Element? flyout = null) =>
-        new SplitButtonElement(command.Label, () => Core.CommandBindings.Invoke(command), flyout)
+    public static SplitButtonElement SplitButton(Core.Command command, Element? flyout = null)
+    {
+        _ = V1.Reg<SplitButtonElement, WinUI.SplitButton, Desc.SplitButtonDescriptorHandler>.Done;
+        return new SplitButtonElement(command.Label, () => Core.CommandBindings.Invoke(command), flyout)
         {
             Setters = [b => Core.CommandBindings.ApplyButtonBaseCommon(b, command)],
         };
+    }
 
-    public static ToggleSplitButtonElement ToggleSplitButton(string label, bool isChecked = false, Action<bool>? onIsCheckedChanged = null, Element? flyout = null) =>
-        new(label, isChecked, onIsCheckedChanged, flyout);
+    public static ToggleSplitButtonElement ToggleSplitButton(string label, bool isChecked = false, Action<bool>? onIsCheckedChanged = null, Element? flyout = null)
+    {
+        _ = V1.Reg<ToggleSplitButtonElement, WinUI.ToggleSplitButton, Desc.ToggleSplitButtonDescriptorHandler>.Done;
+        return new(label, isChecked, onIsCheckedChanged, flyout);
+    }
 
     /// <summary>Creates a ToggleSplitButton driven by a Command (fires on each toggle).</summary>
-    public static ToggleSplitButtonElement ToggleSplitButton(Core.Command command, bool isChecked = false, Element? flyout = null) =>
-        new ToggleSplitButtonElement(command.Label, isChecked, _ => Core.CommandBindings.Invoke(command), flyout)
+    public static ToggleSplitButtonElement ToggleSplitButton(Core.Command command, bool isChecked = false, Element? flyout = null)
+    {
+        _ = V1.Reg<ToggleSplitButtonElement, WinUI.ToggleSplitButton, Desc.ToggleSplitButtonDescriptorHandler>.Done;
+        return new ToggleSplitButtonElement(command.Label, isChecked, _ => Core.CommandBindings.Invoke(command), flyout)
         {
             Setters = [b => Core.CommandBindings.ApplyButtonBaseCommon(b, command)],
         };
+    }
 
     // ── Input controls ──────────────────────────────────────────────
 
@@ -213,58 +292,110 @@ public static partial class Factories
     /// Creates a <see cref="TextBoxElement"/> wrapping WinUI's
     /// <c>Microsoft.UI.Xaml.Controls.TextBox</c>.
     /// </summary>
-    public static TextBoxElement TextBox(string value, Action<string>? onChanged = null, string? placeholderText = null, string? header = null) =>
-        new(value, onChanged, placeholderText) { Header = header };
+    public static TextBoxElement TextBox(string value, Action<string>? onChanged = null, string? placeholderText = null, string? header = null)
+    {
+        // Hand-coded handler (not descriptor-backed) — touch its Reg<> directly.
+        _ = V1.Reg<TextBoxElement, WinUI.TextBox, V1.Handlers.TextBoxHandler>.Done;
+        return new(value, onChanged, placeholderText) { Header = header };
+    }
 
-    public static PasswordBoxElement PasswordBox(string password, Action<string>? onPasswordChanged = null, string? placeholderText = null) =>
-        new(password, onPasswordChanged, placeholderText);
+    public static PasswordBoxElement PasswordBox(string password, Action<string>? onPasswordChanged = null, string? placeholderText = null)
+    {
+        _ = V1.Reg<PasswordBoxElement, WinUI.PasswordBox, Desc.PasswordBoxDescriptorHandler>.Done;
+        return new(password, onPasswordChanged, placeholderText);
+    }
 
-    public static NumberBoxElement NumberBox(double value, Action<double>? onValueChanged = null, string? header = null) =>
-        new(value, onValueChanged, header);
+    public static NumberBoxElement NumberBox(double value, Action<double>? onValueChanged = null, string? header = null)
+    {
+        _ = V1.Reg<NumberBoxElement, WinUI.NumberBox, Desc.NumberBoxDescriptorHandler>.Done;
+        return new(value, onValueChanged, header);
+    }
 
-    public static AutoSuggestBoxElement AutoSuggestBox(string text, Action<string>? onTextChanged = null, Action<string>? onQuerySubmitted = null) =>
-        new(text, onTextChanged, onQuerySubmitted);
+    public static AutoSuggestBoxElement AutoSuggestBox(string text, Action<string>? onTextChanged = null, Action<string>? onQuerySubmitted = null)
+    {
+        _ = V1.Reg<AutoSuggestBoxElement, WinUI.AutoSuggestBox, Desc.AutoSuggestBoxDescriptorHandler>.Done;
+        return new(text, onTextChanged, onQuerySubmitted);
+    }
 
-    public static CheckBoxElement CheckBox(bool isChecked, Action<bool>? onIsCheckedChanged = null, string? label = null) =>
-        new(isChecked, onIsCheckedChanged, label);
+    public static CheckBoxElement CheckBox(bool isChecked, Action<bool>? onIsCheckedChanged = null, string? label = null)
+    {
+        // Spec 048 §3.4 — decorator-global-path fan-out (see RegDecorator XML).
+        _ = V1.RegDecorator<CheckBoxElement, V1.Handlers.CheckBoxHandler>.Done;
+        return new(isChecked, onIsCheckedChanged, label);
+    }
 
-    public static CheckBoxElement ThreeStateCheckBox(bool? checkedState, Action<bool?>? onCheckedStateChanged = null, string? label = null) =>
-        new(checkedState == true, Label: label) { IsThreeState = true, CheckedState = checkedState, OnCheckedStateChanged = onCheckedStateChanged };
+    public static CheckBoxElement ThreeStateCheckBox(bool? checkedState, Action<bool?>? onCheckedStateChanged = null, string? label = null)
+    {
+        _ = V1.RegDecorator<CheckBoxElement, V1.Handlers.CheckBoxHandler>.Done;
+        return new(checkedState == true, Label: label) { IsThreeState = true, CheckedState = checkedState, OnCheckedStateChanged = onCheckedStateChanged };
+    }
 
-    public static RadioButtonElement RadioButton(string label, bool isChecked = false, Action<bool>? onIsCheckedChanged = null, string? groupName = null) =>
-        new(label, isChecked, onIsCheckedChanged, groupName);
+    public static RadioButtonElement RadioButton(string label, bool isChecked = false, Action<bool>? onIsCheckedChanged = null, string? groupName = null)
+    {
+        _ = V1.Reg<RadioButtonElement, WinUI.RadioButton, Desc.RadioButtonDescriptorHandler>.Done;
+        return new(label, isChecked, onIsCheckedChanged, groupName);
+    }
 
-    public static RadioButtonsElement RadioButtons(string[] items, int selectedIndex = -1, Action<int>? onSelectedIndexChanged = null) =>
-        new(items, selectedIndex, onSelectedIndexChanged);
+    public static RadioButtonsElement RadioButtons(string[] items, int selectedIndex = -1, Action<int>? onSelectedIndexChanged = null)
+    {
+        _ = V1.Reg<RadioButtonsElement, WinUI.RadioButtons, Desc.RadioButtonsDescriptorHandler>.Done;
+        return new(items, selectedIndex, onSelectedIndexChanged);
+    }
 
-    public static ComboBoxElement ComboBox(string[] items, int selectedIndex = -1, Action<int>? onSelectedIndexChanged = null) =>
-        new(items, selectedIndex, onSelectedIndexChanged);
+    public static ComboBoxElement ComboBox(string[] items, int selectedIndex = -1, Action<int>? onSelectedIndexChanged = null)
+    {
+        _ = V1.Reg<ComboBoxElement, WinUI.ComboBox, Desc.ComboBoxDescriptorHandler>.Done;
+        return new(items, selectedIndex, onSelectedIndexChanged);
+    }
 
     public static ComboBoxElement ComboBox(Element[] itemElements, int selectedIndex, Action<int>? onSelectedIndexChanged) =>
         new([], selectedIndex, onSelectedIndexChanged) { ItemElements = itemElements };
 
-    public static SliderElement Slider(double value, double min = 0, double max = 100, Action<double>? onValueChanged = null) =>
-        new(value, min, max, onValueChanged);
+    public static SliderElement Slider(double value, double min = 0, double max = 100, Action<double>? onValueChanged = null)
+    {
+        // Hand-coded handler (not descriptor-backed) — touch its Reg<> directly.
+        _ = V1.Reg<SliderElement, WinUI.Slider, V1.Handlers.SliderHandler>.Done;
+        return new(value, min, max, onValueChanged);
+    }
 
-    public static ToggleSwitchElement ToggleSwitch(bool isOn, Action<bool>? onIsOnChanged = null, string? onContent = null, string? offContent = null, string? header = null) =>
-        new(isOn, onIsOnChanged, onContent, offContent) { Header = header };
+    public static ToggleSwitchElement ToggleSwitch(bool isOn, Action<bool>? onIsOnChanged = null, string? onContent = null, string? offContent = null, string? header = null)
+    {
+        // Hand-coded handler (not descriptor-backed) — touch its Reg<> directly.
+        _ = V1.Reg<ToggleSwitchElement, WinUI.ToggleSwitch, V1.Handlers.ToggleSwitchHandler>.Done;
+        return new(isOn, onIsOnChanged, onContent, offContent) { Header = header };
+    }
 
-    public static RatingControlElement RatingControl(double value = 0, Action<double>? onValueChanged = null) =>
-        new(value, onValueChanged);
+    public static RatingControlElement RatingControl(double value = 0, Action<double>? onValueChanged = null)
+    {
+        _ = V1.Reg<RatingControlElement, WinUI.RatingControl, Desc.RatingControlDescriptorHandler>.Done;
+        return new(value, onValueChanged);
+    }
 
-    public static ColorPickerElement ColorPicker(global::Windows.UI.Color color, Action<global::Windows.UI.Color>? onColorChanged = null) =>
-        new(color, onColorChanged);
+    public static ColorPickerElement ColorPicker(global::Windows.UI.Color color, Action<global::Windows.UI.Color>? onColorChanged = null)
+    {
+        _ = V1.Reg<ColorPickerElement, WinUI.ColorPicker, Desc.ColorPickerDescriptorHandler>.Done;
+        return new(color, onColorChanged);
+    }
 
     // ── Date / Time ─────────────────────────────────────────────────
 
-    public static CalendarDatePickerElement CalendarDatePicker(DateTimeOffset? date = null, Action<DateTimeOffset?>? onDateChanged = null) =>
-        new(date, onDateChanged);
+    public static CalendarDatePickerElement CalendarDatePicker(DateTimeOffset? date = null, Action<DateTimeOffset?>? onDateChanged = null)
+    {
+        _ = V1.Reg<CalendarDatePickerElement, WinUI.CalendarDatePicker, Desc.CalendarDatePickerDescriptorHandler>.Done;
+        return new(date, onDateChanged);
+    }
 
-    public static DatePickerElement DatePicker(DateTimeOffset date, Action<DateTimeOffset>? onDateChanged = null) =>
-        new(date, onDateChanged);
+    public static DatePickerElement DatePicker(DateTimeOffset date, Action<DateTimeOffset>? onDateChanged = null)
+    {
+        _ = V1.Reg<DatePickerElement, WinUI.DatePicker, Desc.DatePickerDescriptorHandler>.Done;
+        return new(date, onDateChanged);
+    }
 
-    public static TimePickerElement TimePicker(TimeSpan time, Action<TimeSpan>? onTimeChanged = null) =>
-        new(time, onTimeChanged);
+    public static TimePickerElement TimePicker(TimeSpan time, Action<TimeSpan>? onTimeChanged = null)
+    {
+        _ = V1.Reg<TimePickerElement, WinUI.TimePicker, Desc.TimePickerDescriptorHandler>.Done;
+        return new(time, onTimeChanged);
+    }
 
     // ── Progress ────────────────────────────────────────────────────
 
@@ -280,7 +411,11 @@ public static partial class Factories
     /// WinUI name. <see cref="ProgressRing(double)"/> is the circular variant.
     /// (spec 039 §5 / §16)
     /// </remarks>
-    public static ProgressElement Progress(double value) => new(value);
+    public static ProgressElement Progress(double value)
+    {
+        _ = V1.Reg<ProgressElement, WinUI.ProgressBar, Desc.ProgressBarDescriptorHandler>.Done;
+        return new(value);
+    }
 
     /// <summary>
     /// Creates an indeterminate <see cref="ProgressElement"/> (animated bar with
@@ -290,7 +425,11 @@ public static partial class Factories
     /// Reactor-original convenience for the indeterminate-bar case; see
     /// <see cref="Progress(double)"/> for the naming rationale. (spec 039 §5 / §16)
     /// </remarks>
-    public static ProgressElement ProgressIndeterminate() => new(null);
+    public static ProgressElement ProgressIndeterminate()
+    {
+        _ = V1.Reg<ProgressElement, WinUI.ProgressBar, Desc.ProgressBarDescriptorHandler>.Done;
+        return new(null);
+    }
 
     /// <summary>
     /// Deprecated forwarding alias for <see cref="Progress(double)"/>.
@@ -310,15 +449,35 @@ public static partial class Factories
         error: false)]
     public static ProgressElement ProgressBar() => ProgressIndeterminate();
 
-    public static ProgressRingElement ProgressRing() => new(null);
-    public static ProgressRingElement ProgressRing(double value) => new(value);
+    public static ProgressRingElement ProgressRing()
+    {
+        _ = V1.Reg<ProgressRingElement, WinUI.ProgressRing, Desc.ProgressRingDescriptorHandler>.Done;
+        return new(null);
+    }
+    public static ProgressRingElement ProgressRing(double value)
+    {
+        _ = V1.Reg<ProgressRingElement, WinUI.ProgressRing, Desc.ProgressRingDescriptorHandler>.Done;
+        return new(value);
+    }
 
     // ── Status / Info ───────────────────────────────────────────────
 
-    public static InfoBarElement InfoBar(string? title = null, string? message = null) => new(title, message);
+    public static InfoBarElement InfoBar(string? title = null, string? message = null)
+    {
+        _ = V1.Reg<InfoBarElement, WinUI.InfoBar, Desc.InfoBarDescriptorHandler>.Done;
+        return new(title, message);
+    }
 
-    public static InfoBadgeElement InfoBadge() => new();
-    public static InfoBadgeElement InfoBadge(int value) => new() { Value = value };
+    public static InfoBadgeElement InfoBadge()
+    {
+        _ = V1.Reg<InfoBadgeElement, WinUI.InfoBadge, Desc.InfoBadgeDescriptorHandler>.Done;
+        return new();
+    }
+    public static InfoBadgeElement InfoBadge(int value)
+    {
+        _ = V1.Reg<InfoBadgeElement, WinUI.InfoBadge, Desc.InfoBadgeDescriptorHandler>.Done;
+        return new() { Value = value };
+    }
 
     // ── Layout ──────────────────────────────────────────────────────
 
@@ -335,8 +494,12 @@ public static partial class Factories
     /// shorter names reduce DSL noise. The SwiftUI / React Native names are
     /// load-bearing for cross-platform agent familiarity. (spec 039 §0.3)
     /// </remarks>
-    public static StackElement VStack(params Element?[] children) =>
-        new(Orientation.Vertical, FilterChildren(children));
+    public static StackElement VStack(params Element?[] children)
+    {
+        // Spec 048 §3.4 — per-factory `Reg<>` registration touch (Containers group).
+        _ = V1.Reg<StackElement, WinUI.StackPanel, Desc.StackPanelDescriptorHandler>.Done;
+        return new(Orientation.Vertical, FilterChildren(children));
+    }
 
     /// <summary>
     /// Creates a vertical <see cref="StackElement"/> with an explicit
@@ -346,8 +509,11 @@ public static partial class Factories
     /// Reactor-original convenience overload — see <see cref="VStack(Element?[])"/>
     /// for the naming rationale.
     /// </remarks>
-    public static StackElement VStack(double spacing, params Element?[] children) =>
-        new(Orientation.Vertical, FilterChildren(children)) { Spacing = spacing };
+    public static StackElement VStack(double spacing, params Element?[] children)
+    {
+        _ = V1.Reg<StackElement, WinUI.StackPanel, Desc.StackPanelDescriptorHandler>.Done;
+        return new(Orientation.Vertical, FilterChildren(children)) { Spacing = spacing };
+    }
 
     /// <summary>
     /// Creates a horizontal <see cref="StackElement"/> (WinUI <c>StackPanel</c>
@@ -358,8 +524,11 @@ public static partial class Factories
     /// Reactor-original name — see <see cref="VStack(Element?[])"/> for the
     /// naming rationale. (spec 039 §0.3)
     /// </remarks>
-    public static StackElement HStack(params Element?[] children) =>
-        new(Orientation.Horizontal, FilterChildren(children));
+    public static StackElement HStack(params Element?[] children)
+    {
+        _ = V1.Reg<StackElement, WinUI.StackPanel, Desc.StackPanelDescriptorHandler>.Done;
+        return new(Orientation.Horizontal, FilterChildren(children));
+    }
 
     /// <summary>
     /// Creates a horizontal <see cref="StackElement"/> with an explicit
@@ -369,14 +538,23 @@ public static partial class Factories
     /// Reactor-original convenience overload — see <see cref="VStack(Element?[])"/>
     /// for the naming rationale.
     /// </remarks>
-    public static StackElement HStack(double spacing, params Element?[] children) =>
-        new(Orientation.Horizontal, FilterChildren(children)) { Spacing = spacing };
+    public static StackElement HStack(double spacing, params Element?[] children)
+    {
+        _ = V1.Reg<StackElement, WinUI.StackPanel, Desc.StackPanelDescriptorHandler>.Done;
+        return new(Orientation.Horizontal, FilterChildren(children)) { Spacing = spacing };
+    }
 
-    public static WrapGridElement WrapGrid(params Element?[] children) =>
-        new(FilterChildren(children));
+    public static WrapGridElement WrapGrid(params Element?[] children)
+    {
+        _ = V1.Reg<WrapGridElement, WinUI.VariableSizedWrapGrid, Desc.WrapGridDescriptorHandler>.Done;
+        return new(FilterChildren(children));
+    }
 
-    public static WrapGridElement WrapGrid(int maxRowsOrColumns, params Element?[] children) =>
-        new(FilterChildren(children)) { MaximumRowsOrColumns = maxRowsOrColumns };
+    public static WrapGridElement WrapGrid(int maxRowsOrColumns, params Element?[] children)
+    {
+        _ = V1.Reg<WrapGridElement, WinUI.VariableSizedWrapGrid, Desc.WrapGridDescriptorHandler>.Done;
+        return new(FilterChildren(children)) { MaximumRowsOrColumns = maxRowsOrColumns };
+    }
 
     /// <summary>
     /// Creates a <see cref="ScrollViewerElement"/> wrapping <paramref name="child"/>
@@ -401,7 +579,11 @@ public static partial class Factories
     /// <c>global::Microsoft.UI.Xaml.Controls.ScrollViewer.SetVerticalScrollMode(...)</c>
     /// (or introduce a type alias) to disambiguate.
     /// </remarks>
-    public static ScrollViewerElement ScrollViewer(Element child) => new(child);
+    public static ScrollViewerElement ScrollViewer(Element child)
+    {
+        _ = V1.Reg<ScrollViewerElement, WinUI.ScrollViewer, Desc.ScrollViewerDescriptorHandler>.Done;
+        return new(child);
+    }
 
     /// <summary>
     /// Creates a <see cref="ScrollViewElement"/> wrapping <paramref name="child"/>
@@ -415,19 +597,42 @@ public static partial class Factories
     /// For the classic control, use <see cref="ScrollViewer(Element)"/>.
     /// Issue #348.
     /// </remarks>
-    public static ScrollViewElement ScrollView(Element child) => new(child);
+    public static ScrollViewElement ScrollView(Element child)
+    {
+        _ = V1.Reg<ScrollViewElement, WinUI.ScrollView, Desc.ScrollViewDescriptorHandler>.Done;
+        return new(child);
+    }
 
-    public static BorderElement Border(Element? child) => new(child!);
+    public static BorderElement Border(Element? child)
+    {
+        // Hand-coded handler (not descriptor-backed) — touch its Reg<> directly.
+        _ = V1.Reg<BorderElement, WinUI.Border, V1.Handlers.BorderHandler>.Done;
+        return new(child!);
+    }
 
-    public static ExpanderElement Expander(string header, Element content, bool isExpanded = false, Action<bool>? onIsExpandedChanged = null) =>
-        new(header, content, isExpanded, onIsExpandedChanged);
+    public static ExpanderElement Expander(string header, Element content, bool isExpanded = false, Action<bool>? onIsExpandedChanged = null)
+    {
+        _ = V1.RegDecorator<ExpanderElement, V1.Handlers.ExpanderHandler>.Done;
+        return new(header, content, isExpanded, onIsExpandedChanged);
+    }
 
-    public static SplitViewElement SplitView(Element? pane = null, Element? content = null) =>
-        new(pane, content);
+    public static SplitViewElement SplitView(Element? pane = null, Element? content = null)
+    {
+        _ = V1.Reg<SplitViewElement, WinUI.SplitView, Desc.SplitViewDescriptorHandler>.Done;
+        return new(pane, content);
+    }
 
-    public static ViewboxElement Viewbox(Element child) => new(child);
+    public static ViewboxElement Viewbox(Element child)
+    {
+        _ = V1.Reg<ViewboxElement, WinUI.Viewbox, Desc.ViewboxDescriptorHandler>.Done;
+        return new(child);
+    }
 
-    public static CanvasElement Canvas(params Element?[] children) => new(FilterChildren(children));
+    public static CanvasElement Canvas(params Element?[] children)
+    {
+        _ = V1.Reg<CanvasElement, WinUI.Canvas, Desc.CanvasDescriptorHandler>.Done;
+        return new(FilterChildren(children));
+    }
 
     // ── Flex ────────────────────────────────────────────────────────
 
@@ -444,8 +649,11 @@ public static partial class Factories
     /// you need wrap, justify-content / align-items, or per-child grow/shrink.
     /// (spec 039 §0.3)
     /// </remarks>
-    public static FlexElement Flex(params Element?[] children) =>
-        new(FilterChildren(children));
+    public static FlexElement Flex(params Element?[] children)
+    {
+        _ = V1.Reg<FlexElement, Microsoft.UI.Reactor.Layout.FlexPanel, Desc.FlexPanelDescriptorHandler>.Done;
+        return new(FilterChildren(children));
+    }
 
     /// <summary>
     /// Creates a Yoga flexbox container with an explicit direction.
@@ -453,8 +661,11 @@ public static partial class Factories
     /// <remarks>
     /// Reactor-original — see <see cref="Flex(Element?[])"/> for the rationale.
     /// </remarks>
-    public static FlexElement Flex(Microsoft.UI.Reactor.Layout.FlexDirection direction, params Element?[] children) =>
-        new(FilterChildren(children)) { Direction = direction };
+    public static FlexElement Flex(Microsoft.UI.Reactor.Layout.FlexDirection direction, params Element?[] children)
+    {
+        _ = V1.Reg<FlexElement, Microsoft.UI.Reactor.Layout.FlexPanel, Desc.FlexPanelDescriptorHandler>.Done;
+        return new(FilterChildren(children)) { Direction = direction };
+    }
 
     /// <summary>
     /// Creates a Yoga flexbox container with
@@ -464,8 +675,11 @@ public static partial class Factories
     /// Reactor-original convenience for the row-direction flex case — see
     /// <see cref="Flex(Element?[])"/> for the rationale. (spec 039 §0.3)
     /// </remarks>
-    public static FlexElement FlexRow(params Element?[] children) =>
-        new(FilterChildren(children)) { Direction = Microsoft.UI.Reactor.Layout.FlexDirection.Row };
+    public static FlexElement FlexRow(params Element?[] children)
+    {
+        _ = V1.Reg<FlexElement, Microsoft.UI.Reactor.Layout.FlexPanel, Desc.FlexPanelDescriptorHandler>.Done;
+        return new(FilterChildren(children)) { Direction = Microsoft.UI.Reactor.Layout.FlexDirection.Row };
+    }
 
     /// <summary>
     /// Creates a Yoga flexbox container with
@@ -475,8 +689,11 @@ public static partial class Factories
     /// Reactor-original convenience for the column-direction flex case — see
     /// <see cref="Flex(Element?[])"/> for the rationale. (spec 039 §0.3)
     /// </remarks>
-    public static FlexElement FlexColumn(params Element?[] children) =>
-        new(FilterChildren(children)) { Direction = Microsoft.UI.Reactor.Layout.FlexDirection.Column };
+    public static FlexElement FlexColumn(params Element?[] children)
+    {
+        _ = V1.Reg<FlexElement, Microsoft.UI.Reactor.Layout.FlexPanel, Desc.FlexPanelDescriptorHandler>.Done;
+        return new(FilterChildren(children)) { Direction = Microsoft.UI.Reactor.Layout.FlexDirection.Column };
+    }
 
     // ── Grid ────────────────────────────────────────────────────────
 
@@ -496,6 +713,7 @@ public static partial class Factories
     {
         if (columns is null) throw new ArgumentNullException(nameof(columns));
         if (rows is null) throw new ArgumentNullException(nameof(rows));
+        _ = V1.Reg<GridElement, WinUI.Grid, Desc.GridDescriptorHandler>.Done;
         return new(new GridDefinition(columns, rows), FilterChildren(children));
     }
 
@@ -509,8 +727,11 @@ public static partial class Factories
         error: false)]
     public static GridElement Grid(
         string[] columns, string[] rows,
-        params Element?[] children) =>
-        new(new GridDefinition(columns, rows), FilterChildren(children));
+        params Element?[] children)
+    {
+        _ = V1.Reg<GridElement, WinUI.Grid, Desc.GridDescriptorHandler>.Done;
+        return new(new GridDefinition(columns, rows), FilterChildren(children));
+    }
 
     // ── Grid layout builders ────────────────────────────────────────
 
@@ -607,12 +828,16 @@ public static partial class Factories
         Navigation.NavigationHandle<TRoute> nav,
         Func<TRoute, Element> routeMap) where TRoute : notnull
     {
+        _ = V1.Reg<NavigationHostElement, WinUI.Grid, V1.Handlers.NavigationHostHandler>.Done;
         return new NavigationHostElement(nav, route => routeMap((TRoute)route))
             .Provide(Navigation.NavigationContext<TRoute>.Instance, nav);
     }
 
-    public static NavigationViewElement NavigationView(NavigationViewItemData[] menuItems, Element? content = null) =>
-        new(menuItems, content);
+    public static NavigationViewElement NavigationView(NavigationViewItemData[] menuItems, Element? content = null)
+    {
+        _ = V1.Reg<NavigationViewElement, WinUI.NavigationView, Desc.NavigationViewDescriptorHandler>.Done;
+        return new(menuItems, content);
+    }
 
     public static NavigationViewItemData NavItem(string content, string? icon = null, string? tag = null) =>
         new(content, icon, tag);
@@ -620,44 +845,126 @@ public static partial class Factories
     public static NavigationViewItemData NavItemHeader(string content) =>
         new(content) { IsHeader = true };
 
-    public static TitleBarElement TitleBar(string title) => new(title);
+    public static TitleBarElement TitleBar(string title)
+    {
+        _ = V1.Reg<TitleBarElement, WinUI.TitleBar, Desc.TitleBarDescriptorHandler>.Done;
+        return new(title);
+    }
 
-    public static TabViewElement TabView(params TabViewItemData[] tabs) => new(tabs);
+    public static TabViewElement TabView(params TabViewItemData[] tabs)
+    {
+        _ = V1.Reg<TabViewElement, WinUI.TabView, Desc.TabViewDescriptorHandler>.Done;
+        return new(tabs);
+    }
 
     public static TabViewItemData Tab(string header, Element content) => new(header, content);
 
-    public static BreadcrumbBarElement BreadcrumbBar(BreadcrumbBarItemData[] items, Action<BreadcrumbBarItemData>? onItemClicked = null) =>
-        new(items, onItemClicked);
+    public static BreadcrumbBarElement BreadcrumbBar(BreadcrumbBarItemData[] items, Action<BreadcrumbBarItemData>? onItemClicked = null)
+    {
+        _ = V1.Reg<BreadcrumbBarElement, WinUI.BreadcrumbBar, Desc.BreadcrumbBarDescriptorHandler>.Done;
+        return new(items, onItemClicked);
+    }
 
     public static BreadcrumbBarItemData Breadcrumb(string label, object? tag = null) => new(label, tag);
 
-    public static PivotElement Pivot(params PivotItemData[] items) => new(items);
+    public static PivotElement Pivot(params PivotItemData[] items)
+    {
+        _ = V1.Reg<PivotElement, WinUI.Pivot, Desc.PivotDescriptorHandler>.Done;
+        return new(items);
+    }
 
     public static PivotItemData PivotItem(string header, Element content) => new(header, content);
 
     // ── Collections ─────────────────────────────────────────────────
 
-    public static ListViewElement ListView(params Element[] items) => new(items);
+    public static ListViewElement ListView(params Element[] items)
+    {
+        _ = V1.Reg<ListViewElement, WinUI.ListView, V1.Handlers.ListViewHandler>.Done;
+        return new(items);
+    }
 
-    public static GridViewElement GridView(params Element[] items) => new(items);
+    public static GridViewElement GridView(params Element[] items)
+    {
+        _ = V1.Reg<GridViewElement, WinUI.GridView, V1.Handlers.GridViewHandler>.Done;
+        return new(items);
+    }
 
-    public static TreeViewElement TreeView(params TreeViewNodeData[] nodes) => new(nodes);
+    public static TreeViewElement TreeView(params TreeViewNodeData[] nodes)
+    {
+        _ = V1.Reg<TreeViewElement, WinUI.TreeView, Desc.TreeViewDescriptorHandler>.Done;
+        return new(nodes);
+    }
 
     public static TreeViewNodeData TreeNode(string content, params TreeViewNodeData[] children) =>
         new(content, children.Length > 0 ? children : null);
 
-    public static FlipViewElement FlipView(params Element[] items) => new(items);
+    /// <summary>
+    /// Creates a typed, data-driven <see cref="TemplatedTreeViewElement{T}"/> —
+    /// the hierarchical peer of <see cref="ListView{T}(IReadOnlyList{T}, Func{T, string}, Func{T, int, Element})"/>.
+    /// The reconciler builds a WinUI <c>TreeView</c> from <paramref name="items"/>,
+    /// walks the hierarchy via <paramref name="childrenSelector"/>, and renders
+    /// each node via <paramref name="viewBuilder"/> (the <c>ItemTemplate</c>
+    /// equivalent — a <c>data → Element</c> function).
+    /// </summary>
+    /// <remarks>
+    /// Heterogeneous nodes with per-shape visuals are expressed as a
+    /// <c>switch</c> inside <paramref name="viewBuilder"/> (the C# equivalent of
+    /// WinUI's <c>ItemTemplateSelector</c>). This supersedes the deprecated
+    /// <see cref="TreeViewNodeData.ContentElement"/> (issue #447). (spec 039 §0.3)
+    /// </remarks>
+    public static TemplatedTreeViewElement<T> TreeView<T>(
+        IReadOnlyList<T> items,
+        Func<T, string> keySelector,
+        Func<T, IReadOnlyList<T>?> childrenSelector,
+        Func<T, Element> viewBuilder)
+    {
+        // Spec 048 §3.4 — per-factory registration touch. All closed TreeView<T>
+        // factories share the TemplatedTreeViewElementBase registry entry.
+        _ = V1.RegBaseDecorator<TemplatedTreeViewElementBase, V1.Handlers.TemplatedTreeViewHandler>.Done;
+        return new(items, keySelector, childrenSelector, viewBuilder);
+    }
+
+    /// <summary>
+    /// <see cref="IReactorKeyed"/>-typed overload of
+    /// <see cref="TreeView{T}(IReadOnlyList{T}, Func{T, string}, Func{T, IReadOnlyList{T}}, Func{T, Element})"/>;
+    /// <c>KeySelector</c> defaults to <c>t =&gt; t.Key</c> so call sites can omit
+    /// it. (spec 042 §5)
+    /// </summary>
+    public static TemplatedTreeViewElement<T> TreeView<T>(
+        IReadOnlyList<T> items,
+        Func<T, IReadOnlyList<T>?> childrenSelector,
+        Func<T, Element> viewBuilder) where T : IReactorKeyed
+    {
+        _ = V1.RegBaseDecorator<TemplatedTreeViewElementBase, V1.Handlers.TemplatedTreeViewHandler>.Done;
+        return new(items, static t => t.Key, childrenSelector, viewBuilder);
+    }
+
+    public static FlipViewElement FlipView(params Element[] items)
+    {
+        _ = V1.Reg<FlipViewElement, WinUI.FlipView, Desc.FlipViewDescriptorHandler>.Done;
+        return new(items);
+    }
 
     // ── Dialogs / Overlays ──────────────────────────────────────────
 
-    public static ContentDialogElement ContentDialog(string title, Element content, string primaryButtonText = "OK") =>
-        new(title, content, primaryButtonText);
+    public static ContentDialogElement ContentDialog(string title, Element content, string primaryButtonText = "OK")
+    {
+        // Spec 048 §3.4 — decorator-global-path fan-out (Overlays group).
+        _ = V1.RegDecorator<ContentDialogElement, V1.Handlers.ContentDialogHandler>.Done;
+        return new(title, content, primaryButtonText);
+    }
 
-    public static FlyoutElement Flyout(Element target, Element flyoutContent) =>
-        new(target, flyoutContent);
+    public static FlyoutElement Flyout(Element target, Element flyoutContent)
+    {
+        _ = V1.RegDecorator<FlyoutElement, V1.Handlers.FlyoutHandler>.Done;
+        return new(target, flyoutContent);
+    }
 
-    public static TeachingTipElement TeachingTip(string title, string? subtitle = null) =>
-        new(title, subtitle);
+    public static TeachingTipElement TeachingTip(string title, string? subtitle = null)
+    {
+        _ = V1.Reg<TeachingTipElement, WinUI.TeachingTip, Desc.TeachingTipDescriptorHandler>.Done;
+        return new(title, subtitle);
+    }
 
     public static ContentFlyoutElement ContentFlyout(Element content, FlyoutPlacementMode placement = FlyoutPlacementMode.Auto) =>
         new(content) { Placement = placement };
@@ -670,7 +977,11 @@ public static partial class Factories
 
     // ── Menus ───────────────────────────────────────────────────────
 
-    public static MenuBarElement MenuBar(params MenuBarItemData[] items) => new(items);
+    public static MenuBarElement MenuBar(params MenuBarItemData[] items)
+    {
+        _ = V1.RegDecorator<MenuBarElement, V1.Handlers.MenuBarHandler>.Done;
+        return new(items);
+    }
 
     public static MenuBarItemData Menu(string title, params MenuFlyoutItemBase[] items) => new(title, items);
 
@@ -712,10 +1023,17 @@ public static partial class Factories
 
     public static MenuFlyoutSubItemData MenuSubItem(string text, params MenuFlyoutItemBase[] items) => new(text, items);
 
-    public static MenuFlyoutElement MenuFlyout(Element target, params MenuFlyoutItemBase[] items) => new(target, items);
+    public static MenuFlyoutElement MenuFlyout(Element target, params MenuFlyoutItemBase[] items)
+    {
+        _ = V1.RegDecorator<MenuFlyoutElement, V1.Handlers.MenuFlyoutHandler>.Done;
+        return new(target, items);
+    }
 
-    public static CommandBarElement CommandBar(AppBarItemBase[]? primaryCommands = null, AppBarItemBase[]? secondaryCommands = null) =>
-        new(primaryCommands, secondaryCommands);
+    public static CommandBarElement CommandBar(AppBarItemBase[]? primaryCommands = null, AppBarItemBase[]? secondaryCommands = null)
+    {
+        _ = V1.RegDecorator<CommandBarElement, V1.Handlers.CommandBarHandler>.Done;
+        return new(primaryCommands, secondaryCommands);
+    }
 
     public static AppBarButtonData AppBarButton(string label, Action? onClick = null, string? icon = null) => new(label, onClick, icon);
 
@@ -740,11 +1058,23 @@ public static partial class Factories
 
     // ── Media ───────────────────────────────────────────────────────
 
-    public static ImageElement Image(string source) => new(source);
+    public static ImageElement Image(string source)
+    {
+        _ = V1.Reg<ImageElement, WinUI.Image, Desc.ImageDescriptorHandler>.Done;
+        return new(source);
+    }
 
-    public static PersonPictureElement PersonPicture() => new();
+    public static PersonPictureElement PersonPicture()
+    {
+        _ = V1.Reg<PersonPictureElement, WinUI.PersonPicture, Desc.PersonPictureDescriptorHandler>.Done;
+        return new();
+    }
 
-    public static WebView2Element WebView2(Uri? source = null) => new(source);
+    public static WebView2Element WebView2(Uri? source = null)
+    {
+        _ = V1.Reg<WebView2Element, WinUI.WebView2, Desc.WebView2DescriptorHandler>.Done;
+        return new(source);
+    }
 
     // ── Components ──────────────────────────────────────────────────
 
@@ -813,8 +1143,12 @@ public static partial class Factories
     /// Scopes keyboard accelerators from the given commands to the child subtree.
     /// Only commands with an Accelerator produce keyboard accelerators on the host element.
     /// </summary>
-    public static Core.CommandHostElement CommandHost(Core.Command[] commands, Element child) =>
-        new(commands, child);
+    public static Core.CommandHostElement CommandHost(Core.Command[] commands, Element child)
+    {
+        // Spec 048 §3.4 — per-factory registration touch.
+        _ = V1.RegDecorator<Core.CommandHostElement, V1.Handlers.CommandHostHandler>.Done;
+        return new(commands, child);
+    }
 
     // ── Conditional helpers ─────────────────────────────────────────
 
@@ -946,7 +1280,11 @@ public static partial class Factories
     public static TemplatedListViewElement<T> ListView<T>(
         IReadOnlyList<T> items,
         Func<T, string> keySelector,
-        Func<T, int, Element> viewBuilder) => new(items, keySelector, viewBuilder);
+        Func<T, int, Element> viewBuilder)
+    {
+        _ = V1.RegBaseDecorator<TemplatedListElementBase, V1.Handlers.TemplatedListHandler>.Done;
+        return new(items, keySelector, viewBuilder);
+    }
 
     /// <summary>
     /// Creates a typed, data-driven <see cref="TemplatedListViewElement{T}"/>
@@ -956,8 +1294,11 @@ public static partial class Factories
     /// </summary>
     public static TemplatedListViewElement<T> ListView<T>(
         IReadOnlyList<T> items,
-        Func<T, int, Element> viewBuilder) where T : IReactorKeyed =>
-        new(items, static t => t.Key, viewBuilder);
+        Func<T, int, Element> viewBuilder) where T : IReactorKeyed
+    {
+        _ = V1.RegBaseDecorator<TemplatedListElementBase, V1.Handlers.TemplatedListHandler>.Done;
+        return new(items, static t => t.Key, viewBuilder);
+    }
 
     /// <summary>
     /// Creates a typed, data-driven <see cref="TemplatedGridViewElement{T}"/>
@@ -970,7 +1311,11 @@ public static partial class Factories
     public static TemplatedGridViewElement<T> GridView<T>(
         IReadOnlyList<T> items,
         Func<T, string> keySelector,
-        Func<T, int, Element> viewBuilder) => new(items, keySelector, viewBuilder);
+        Func<T, int, Element> viewBuilder)
+    {
+        _ = V1.RegBaseDecorator<TemplatedListElementBase, V1.Handlers.TemplatedListHandler>.Done;
+        return new(items, keySelector, viewBuilder);
+    }
 
     /// <summary>
     /// <see cref="IReactorKeyed"/>-typed overload of
@@ -979,8 +1324,11 @@ public static partial class Factories
     /// </summary>
     public static TemplatedGridViewElement<T> GridView<T>(
         IReadOnlyList<T> items,
-        Func<T, int, Element> viewBuilder) where T : IReactorKeyed =>
-        new(items, static t => t.Key, viewBuilder);
+        Func<T, int, Element> viewBuilder) where T : IReactorKeyed
+    {
+        _ = V1.RegBaseDecorator<TemplatedListElementBase, V1.Handlers.TemplatedListHandler>.Done;
+        return new(items, static t => t.Key, viewBuilder);
+    }
 
     /// <summary>
     /// Creates a typed, data-driven <see cref="TemplatedFlipViewElement{T}"/>
@@ -993,7 +1341,11 @@ public static partial class Factories
     public static TemplatedFlipViewElement<T> FlipView<T>(
         IReadOnlyList<T> items,
         Func<T, string> keySelector,
-        Func<T, int, Element> viewBuilder) => new(items, keySelector, viewBuilder);
+        Func<T, int, Element> viewBuilder)
+    {
+        _ = V1.RegBaseDecorator<TemplatedListElementBase, V1.Handlers.TemplatedListHandler>.Done;
+        return new(items, keySelector, viewBuilder);
+    }
 
     /// <summary>
     /// <see cref="IReactorKeyed"/>-typed overload of
@@ -1002,8 +1354,11 @@ public static partial class Factories
     /// </summary>
     public static TemplatedFlipViewElement<T> FlipView<T>(
         IReadOnlyList<T> items,
-        Func<T, int, Element> viewBuilder) where T : IReactorKeyed =>
-        new(items, static t => t.Key, viewBuilder);
+        Func<T, int, Element> viewBuilder) where T : IReactorKeyed
+    {
+        _ = V1.RegBaseDecorator<TemplatedListElementBase, V1.Handlers.TemplatedListHandler>.Done;
+        return new(items, static t => t.Key, viewBuilder);
+    }
 
     // ── Virtualized collections ───────────────────────────────────
 
@@ -1021,7 +1376,11 @@ public static partial class Factories
     public static LazyVStackElement<T> LazyVStack<T>(
         IReadOnlyList<T> items,
         Func<T, string> keySelector,
-        Func<T, int, Element> viewBuilder) => new(items, keySelector, viewBuilder);
+        Func<T, int, Element> viewBuilder)
+    {
+        _ = V1.RegBaseDecorator<LazyStackElementBase, V1.Handlers.LazyStackHandler>.Done;
+        return new(items, keySelector, viewBuilder);
+    }
 
     /// <summary>
     /// <see cref="IReactorKeyed"/>-typed overload of
@@ -1030,8 +1389,11 @@ public static partial class Factories
     /// </summary>
     public static LazyVStackElement<T> LazyVStack<T>(
         IReadOnlyList<T> items,
-        Func<T, int, Element> viewBuilder) where T : IReactorKeyed =>
-        new(items, static t => t.Key, viewBuilder);
+        Func<T, int, Element> viewBuilder) where T : IReactorKeyed
+    {
+        _ = V1.RegBaseDecorator<LazyStackElementBase, V1.Handlers.LazyStackHandler>.Done;
+        return new(items, static t => t.Key, viewBuilder);
+    }
 
     /// <summary>
     /// Creates a virtualized horizontal stack of templated items — the horizontal
@@ -1044,7 +1406,11 @@ public static partial class Factories
     public static LazyHStackElement<T> LazyHStack<T>(
         IReadOnlyList<T> items,
         Func<T, string> keySelector,
-        Func<T, int, Element> viewBuilder) => new(items, keySelector, viewBuilder);
+        Func<T, int, Element> viewBuilder)
+    {
+        _ = V1.RegBaseDecorator<LazyStackElementBase, V1.Handlers.LazyStackHandler>.Done;
+        return new(items, keySelector, viewBuilder);
+    }
 
     /// <summary>
     /// <see cref="IReactorKeyed"/>-typed overload of
@@ -1053,94 +1419,201 @@ public static partial class Factories
     /// </summary>
     public static LazyHStackElement<T> LazyHStack<T>(
         IReadOnlyList<T> items,
-        Func<T, int, Element> viewBuilder) where T : IReactorKeyed =>
-        new(items, static t => t.Key, viewBuilder);
+        Func<T, int, Element> viewBuilder) where T : IReactorKeyed
+    {
+        _ = V1.RegBaseDecorator<LazyStackElementBase, V1.Handlers.LazyStackHandler>.Done;
+        return new(items, static t => t.Key, viewBuilder);
+    }
+
+    /// <summary>
+    /// Creates a virtualized <see cref="ItemsRepeaterElement{T}"/> — a bare
+    /// <c>WinUI.ItemsRepeater</c> driven through the spec-042 keyed
+    /// realization pipeline (same machinery LazyVStack/LazyHStack use, but
+    /// without the implicit <c>ScrollViewer</c> wrap and with no hard-coded
+    /// <c>StackLayout</c>). Author supplies a <see cref="Microsoft.UI.Xaml.Controls.Layout"/>
+    /// instance via the <c>Layout</c> init-property (typically
+    /// <c>UniformGridLayout</c> or <c>LinedFlowLayout</c>); host the result
+    /// in a <c>ScrollViewer</c> / <c>ScrollView</c> / <c>RefreshContainer</c>
+    /// for scrolling. Spec 047 §14 Phase 3 finish — Port (7).
+    /// </summary>
+    public static ItemsRepeaterElement<T> ItemsRepeater<T>(
+        IReadOnlyList<T> items,
+        Func<T, string> keySelector,
+        Func<T, int, Element> viewBuilder)
+    {
+        _ = Desc.ItemsRepeaterDescriptor.Registration.Done;
+        return new(items, keySelector, viewBuilder);
+    }
+
+    /// <summary>
+    /// <see cref="IReactorKeyed"/>-typed overload of
+    /// <see cref="ItemsRepeater{T}(IReadOnlyList{T}, Func{T, string}, Func{T, int, Element})"/>;
+    /// <c>KeySelector</c> defaults to <c>t =&gt; t.Key</c>.
+    /// </summary>
+    public static ItemsRepeaterElement<T> ItemsRepeater<T>(
+        IReadOnlyList<T> items,
+        Func<T, int, Element> viewBuilder) where T : IReactorKeyed
+    {
+        _ = Desc.ItemsRepeaterDescriptor.Registration.Done;
+        return new(items, static t => t.Key, viewBuilder);
+    }
 
     // ── Shapes ───────────────────────────────────────────────────────
 
-    public static RectangleElement Rectangle() => new();
+    public static RectangleElement Rectangle()
+    {
+        _ = V1.Reg<RectangleElement, WinShapes.Rectangle, Desc.RectangleDescriptorHandler>.Done;
+        return new();
+    }
 
-    public static EllipseElement Ellipse() => new();
+    public static EllipseElement Ellipse()
+    {
+        _ = V1.Reg<EllipseElement, WinShapes.Ellipse, Desc.EllipseDescriptorHandler>.Done;
+        return new();
+    }
 
-    public static LineElement Line(double x1, double y1, double x2, double y2) =>
-        new() { X1 = x1, Y1 = y1, X2 = x2, Y2 = y2 };
+    public static LineElement Line(double x1, double y1, double x2, double y2)
+    {
+        _ = V1.Reg<LineElement, WinShapes.Line, Desc.LineDescriptorHandler>.Done;
+        return new() { X1 = x1, Y1 = y1, X2 = x2, Y2 = y2 };
+    }
 
     // Named `Path2D` (not `Path`) to avoid colliding with `System.IO.Path`.
     // Models reach for both in the same file and the bare name causes
     // CS0119 cascades. Borrows the Web Canvas API's `Path2D` spelling for the
     // vector-geometry primitive — collision-free and familiar from JS/SVG.
-    public static PathElement Path2D() => new();
+    public static PathElement Path2D()
+    {
+        _ = V1.Reg<PathElement, WinShapes.Path, Desc.PathDescriptorHandler>.Done;
+        return new();
+    }
 
     // ── Additional layout ───────────────────────────────────────────
 
-    public static RelativePanelElement RelativePanel(params Element?[] children) => new(FilterChildren(children));
+    public static RelativePanelElement RelativePanel(params Element?[] children)
+    {
+        _ = V1.Reg<RelativePanelElement, WinUI.RelativePanel, Desc.RelativePanelDescriptorHandler>.Done;
+        return new(FilterChildren(children));
+    }
 
     // ── Additional media ────────────────────────────────────────────
 
-    public static MediaPlayerElementElement MediaPlayerElement(string? source = null) => new(source);
+    public static MediaPlayerElementElement MediaPlayerElement(string? source = null)
+    {
+        _ = V1.Reg<MediaPlayerElementElement, WinUI.MediaPlayerElement, Desc.MediaPlayerElementDescriptorHandler>.Done;
+        return new(source);
+    }
 
-    public static AnimatedVisualPlayerElement AnimatedVisualPlayer() => new();
+    public static AnimatedVisualPlayerElement AnimatedVisualPlayer()
+    {
+        _ = V1.Reg<AnimatedVisualPlayerElement, WinUI.AnimatedVisualPlayer, Desc.AnimatedVisualPlayerDescriptorHandler>.Done;
+        return new();
+    }
 
     // ── Additional collections ──────────────────────────────────────
 
-    public static SemanticZoomElement SemanticZoom(Element zoomedInView, Element zoomedOutView) =>
-        new(zoomedInView, zoomedOutView);
+    public static SemanticZoomElement SemanticZoom(Element zoomedInView, Element zoomedOutView)
+    {
+        _ = V1.Reg<SemanticZoomElement, WinUI.SemanticZoom, Desc.SemanticZoomDescriptorHandler>.Done;
+        return new(zoomedInView, zoomedOutView);
+    }
 
-    public static ListBoxElement ListBox(string[] items, int selectedIndex = -1, Action<int>? onSelectedIndexChanged = null) =>
-        new(items) { SelectedIndex = selectedIndex, OnSelectedIndexChanged = onSelectedIndexChanged };
+    public static ListBoxElement ListBox(string[] items, int selectedIndex = -1, Action<int>? onSelectedIndexChanged = null)
+    {
+        _ = V1.Reg<ListBoxElement, WinUI.ListBox, Desc.ListBoxDescriptorHandler>.Done;
+        return new(items) { SelectedIndex = selectedIndex, OnSelectedIndexChanged = onSelectedIndexChanged };
+    }
 
     // ── Additional navigation ───────────────────────────────────────
 
-    public static SelectorBarElement SelectorBar(SelectorBarItemData[] items, int selectedIndex = 0, Action<int>? onSelectedIndexChanged = null) =>
-        new(items) { SelectedIndex = selectedIndex, OnSelectedIndexChanged = onSelectedIndexChanged };
+    public static SelectorBarElement SelectorBar(SelectorBarItemData[] items, int selectedIndex = 0, Action<int>? onSelectedIndexChanged = null)
+    {
+        _ = V1.Reg<SelectorBarElement, WinUI.SelectorBar, Desc.SelectorBarDescriptorHandler>.Done;
+        return new(items) { SelectedIndex = selectedIndex, OnSelectedIndexChanged = onSelectedIndexChanged };
+    }
 
     public static SelectorBarItemData SelectorBarItem(string text, string? icon = null) => new(text, icon);
 
-    public static PipsPagerElement PipsPager(int numberOfPages, int selectedPageIndex = 0, Action<int>? onSelectedPageIndexChanged = null) =>
-        new(numberOfPages) { SelectedPageIndex = selectedPageIndex, OnSelectedPageIndexChanged = onSelectedPageIndexChanged };
+    public static PipsPagerElement PipsPager(int numberOfPages, int selectedPageIndex = 0, Action<int>? onSelectedPageIndexChanged = null)
+    {
+        _ = V1.Reg<PipsPagerElement, WinUI.PipsPager, Desc.PipsPagerDescriptorHandler>.Done;
+        return new(numberOfPages) { SelectedPageIndex = selectedPageIndex, OnSelectedPageIndexChanged = onSelectedPageIndexChanged };
+    }
 
-    public static AnnotatedScrollBarElement AnnotatedScrollBar() => new();
+    public static AnnotatedScrollBarElement AnnotatedScrollBar()
+    {
+        _ = V1.Reg<AnnotatedScrollBarElement, WinUI.AnnotatedScrollBar, Desc.AnnotatedScrollBarDescriptorHandler>.Done;
+        return new();
+    }
 
     // ── Additional overlays / containers ────────────────────────────
 
-    public static PopupElement Popup(Element child, bool isOpen = false, Action? onClosed = null) =>
-        new(child) { IsOpen = isOpen, OnClosed = onClosed };
+    public static PopupElement Popup(Element child, bool isOpen = false, Action? onClosed = null)
+    {
+        _ = V1.RegDecorator<PopupElement, V1.Handlers.PopupHandler>.Done;
+        return new(child) { IsOpen = isOpen, OnClosed = onClosed };
+    }
 
-    public static RefreshContainerElement RefreshContainer(Element content, Action? onRefreshRequested = null) =>
-        new(content) { OnRefreshRequested = onRefreshRequested };
+    public static RefreshContainerElement RefreshContainer(Element content, Action? onRefreshRequested = null)
+    {
+        _ = V1.Reg<RefreshContainerElement, WinUI.RefreshContainer, Desc.RefreshContainerDescriptorHandler>.Done;
+        return new(content) { OnRefreshRequested = onRefreshRequested };
+    }
 
-    public static CommandBarFlyoutElement CommandBarFlyout(Element target, AppBarItemBase[]? primaryCommands = null, AppBarItemBase[]? secondaryCommands = null) =>
-        new(target, primaryCommands, secondaryCommands);
+    public static CommandBarFlyoutElement CommandBarFlyout(Element target, AppBarItemBase[]? primaryCommands = null, AppBarItemBase[]? secondaryCommands = null)
+    {
+        _ = V1.RegDecorator<CommandBarFlyoutElement, V1.Handlers.CommandBarFlyoutHandler>.Done;
+        return new(target, primaryCommands, secondaryCommands);
+    }
 
     // ── Additional date / time ──────────────────────────────────────
 
-    public static CalendarViewElement CalendarView() => new();
+    public static CalendarViewElement CalendarView()
+    {
+        _ = V1.Reg<CalendarViewElement, WinUI.CalendarView, Desc.CalendarViewDescriptorHandler>.Done;
+        return new();
+    }
 
     // ── SwipeControl ────────────────────────────────────────────────
 
     public static SwipeControlElement SwipeControl(Element content,
-        SwipeItemData[]? leftItems = null, SwipeItemData[]? rightItems = null) =>
-        new(content) { LeftItems = leftItems, RightItems = rightItems };
+        SwipeItemData[]? leftItems = null, SwipeItemData[]? rightItems = null)
+    {
+        _ = V1.Reg<SwipeControlElement, WinUI.SwipeControl, Desc.SwipeControlDescriptorHandler>.Done;
+        return new(content) { LeftItems = leftItems, RightItems = rightItems };
+    }
 
     // ── AnimatedIcon ────────────────────────────────────────────────
 
-    public static AnimatedIconElement AnimatedIcon(object? source = null, IconSource? fallbackIconSource = null) =>
-        new() { Source = source, FallbackIconSource = fallbackIconSource };
+    public static AnimatedIconElement AnimatedIcon(object? source = null, IconSource? fallbackIconSource = null)
+    {
+        _ = V1.Reg<AnimatedIconElement, WinUI.AnimatedIcon, Desc.AnimatedIconDescriptorHandler>.Done;
+        return new() { Source = source, FallbackIconSource = fallbackIconSource };
+    }
 
     // ── ParallaxView ────────────────────────────────────────────────
 
-    public static ParallaxViewElement ParallaxView(Element child, double verticalShift = 0, double horizontalShift = 0) =>
-        new(child) { VerticalShift = verticalShift, HorizontalShift = horizontalShift };
+    public static ParallaxViewElement ParallaxView(Element child, double verticalShift = 0, double horizontalShift = 0)
+    {
+        _ = V1.Reg<ParallaxViewElement, WinUI.ParallaxView, Desc.ParallaxViewDescriptorHandler>.Done;
+        return new(child) { VerticalShift = verticalShift, HorizontalShift = horizontalShift };
+    }
 
     // ── MapControl ──────────────────────────────────────────────────
 
-    public static MapControlElement MapControl(string? mapServiceToken = null, double zoomLevel = 1) =>
-        new() { MapServiceToken = mapServiceToken, ZoomLevel = zoomLevel };
+    public static MapControlElement MapControl(string? mapServiceToken = null, double zoomLevel = 1)
+    {
+        _ = V1.Reg<MapControlElement, WinUI.MapControl, Desc.MapControlDescriptorHandler>.Done;
+        return new() { MapServiceToken = mapServiceToken, ZoomLevel = zoomLevel };
+    }
 
     // ── Frame ───────────────────────────────────────────────────────
 
-    public static FrameElement Frame(Type? sourcePageType = null, object? navigationParameter = null) =>
-        new() { SourcePageType = sourcePageType, NavigationParameter = navigationParameter };
+    public static FrameElement Frame(Type? sourcePageType = null, object? navigationParameter = null)
+    {
+        _ = V1.Reg<FrameElement, WinUI.Frame, Desc.FrameDescriptorHandler>.Done;
+        return new() { SourcePageType = sourcePageType, NavigationParameter = navigationParameter };
+    }
 
     // ── ItemContainer ───────────────────────────────────────────────
 
@@ -1150,15 +1623,22 @@ public static partial class Factories
     /// view builder — ItemsView's selection / focus / animation
     /// infrastructure depends on it.
     /// </summary>
-    public static ItemContainerElement ItemContainer(Element? child) =>
-        new(child);
+    public static ItemContainerElement ItemContainer(Element? child)
+    {
+        _ = V1.Reg<ItemContainerElement, WinUI.ItemContainer, Desc.ItemContainerDescriptorHandler>.Done;
+        return new(child);
+    }
 
     // ── ItemsView ───────────────────────────────────────────────────
 
     public static ItemsViewElement<T> ItemsView<T>(
         IReadOnlyList<T> items,
         Func<T, string> keySelector,
-        Func<T, int, Element> viewBuilder) => new(items, keySelector, viewBuilder);
+        Func<T, int, Element> viewBuilder)
+    {
+        _ = Desc.ItemsViewDescriptor.Registration.Done;
+        return new(items, keySelector, viewBuilder);
+    }
 
     // ── Rich text helpers ───────────────────────────────────────────
 
@@ -1172,8 +1652,11 @@ public static partial class Factories
     /// Named for parity with WinUI's <c>Microsoft.UI.Xaml.Controls.RichTextBlock</c>.
     /// (spec 039 §1.3 / §14 #8)
     /// </remarks>
-    public static RichTextBlockElement RichTextBlock(RichTextParagraph[] paragraphs) =>
-        new("") { Paragraphs = paragraphs };
+    public static RichTextBlockElement RichTextBlock(RichTextParagraph[] paragraphs)
+    {
+        _ = V1.Reg<RichTextBlockElement, WinUI.RichTextBlock, Desc.RichTextBlockDescriptorHandler>.Done;
+        return new("") { Paragraphs = paragraphs };
+    }
 
     /// <summary>
     /// Deprecated forwarding alias for <see cref="RichTextBlock(RichTextParagraph[])"/>.
@@ -1190,6 +1673,47 @@ public static partial class Factories
     public static RichTextRun Run(string text) => new(text);
 
     public static RichTextHyperlink Hyperlink(string text, Uri navigateUri) => new(text, navigateUri);
+
+    /// <summary>
+    /// Issue #479 — clickable inline hyperlink: fires <paramref name="onClick"/>
+    /// on click and suppresses platform navigation. Use for in-flow interactive
+    /// fragments (open a flyout, enter edit mode) inside a virtualized list of
+    /// <see cref="RichTextBlock(RichTextParagraph[])"/> rows where giving each
+    /// fragment its own <c>UIElement</c> would be too heavy.
+    /// </summary>
+    public static RichTextHyperlink Hyperlink(string text, Action onClick)
+    {
+        global::System.ArgumentNullException.ThrowIfNull(onClick);
+        // Sentinel URI: ignored at mount time when OnClick is non-null
+        // (Reconciler skips NavigateUri assignment in click mode).
+        return new(text, new Uri("about:blank")) { OnClick = onClick };
+    }
+
+    /// <summary>
+    /// Issue #480 — embeds a Reactor <paramref name="child"/> element inline
+    /// inside a <see cref="RichTextBlock(RichTextParagraph[])"/>. Mirrors
+    /// WinUI's <c>InlineUIContainer</c>. The child is reconciled as any
+    /// other Reactor element — descendant hooks, event wiring, and
+    /// pooling all work as expected. Re-renders use the incremental update
+    /// path: structurally compatible inlines are mutated in place and
+    /// embedded children retain their WinUI control identity (Slider drag,
+    /// focus, and animation state survive). Only structural changes
+    /// (paragraph count change, inline type change, Route A↔B swap) fall
+    /// back to a full block rebuild.
+    /// </summary>
+    public static RichTextInlineUIContainer InlineUI(Element child) =>
+        new() { Child = child };
+
+    /// <summary>
+    /// Issue #480 — embeds a native WinUI control (produced by
+    /// <paramref name="factory"/>) inline inside a
+    /// <see cref="RichTextBlock(RichTextParagraph[])"/>. Escape hatch for
+    /// controls without a Reactor element counterpart. The factory is
+    /// re-invoked only when its delegate identity changes; passing the
+    /// same factory across renders preserves the control instance.
+    /// </summary>
+    public static RichTextInlineUIContainer InlineUI(Func<FrameworkElement> factory) =>
+        new() { Factory = factory };
 
     // ── Markdown ─────────────────────────────────────────────────────
 
@@ -1219,14 +1743,57 @@ public static partial class Factories
 
     public static ImageIconData ImageIcon(global::System.Uri source) => new(source);
 
+    /// <summary>
+    /// Spec 048 §3.4 — one-shot registration latch for the Icon decorator
+    /// family. The handler is a private nested singleton
+    /// (<c>Desc.IconDescriptor.Handler</c>) and therefore cannot satisfy
+    /// the <c>new()</c> constraint that
+    /// <see cref="V1.RegDecorator{TElement, THandler}"/> requires, so this
+    /// shim hand-rolls the same closed-generic cctor pattern: every Icon
+    /// factory overload touches <see cref="Done"/>, but only the first
+    /// touch per process incurs the
+    /// <see cref="V1.ControlRegistry.RegisterDecorator{TElement}"/> call
+    /// (with its <c>adapterFactory</c> closure allocation and
+    /// <c>TryAdd</c> insertion). Steady-state cost is one indirect load
+    /// matching the <see cref="V1.Reg{TElement, TControl, THandler}.Done"/>
+    /// cost model.
+    /// </summary>
+    private static class IconRegistration
+    {
+        // Explicit (empty) static constructor — disables `beforefieldinit`
+        // so Init() runs precisely on the first read of Done (the factory
+        // touch), not earlier. Matches the Reg<>/RegDecorator<> shape.
+        static IconRegistration() { }
+
+        internal static readonly byte Done = Init();
+
+        private static byte Init()
+        {
+            V1.ControlRegistry.RegisterDecorator<Core.IconElement>(static () => Desc.IconDescriptor.Handler);
+            return 1;
+        }
+    }
+
     /// <summary>Creates a standalone icon element from an <see cref="IconData"/> instance.</summary>
-    public static Core.IconElement Icon(IconData data) => new(data);
+    public static Core.IconElement Icon(IconData data)
+    {
+        _ = IconRegistration.Done;
+        return new(data);
+    }
 
     /// <summary>Creates a standalone symbol icon element from a <see cref="Symbol"/> enum value.</summary>
-    public static Core.IconElement Icon(Symbol symbol) => new(new SymbolIconData(symbol.ToString()));
+    public static Core.IconElement Icon(Symbol symbol)
+    {
+        _ = IconRegistration.Done;
+        return new(new SymbolIconData(symbol.ToString()));
+    }
 
     /// <summary>Creates a standalone symbol icon element (e.g. <c>Icon("Home")</c>).</summary>
-    public static Core.IconElement Icon(string symbol) => new(new SymbolIconData(symbol));
+    public static Core.IconElement Icon(string symbol)
+    {
+        _ = IconRegistration.Done;
+        return new(new SymbolIconData(symbol));
+    }
 
     // ── Keyboard Accelerators ───────────────────────────────────────
 

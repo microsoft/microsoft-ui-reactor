@@ -1,0 +1,13 @@
+app:
+  title: "V1 Protocol Demo"
+  width: 520
+  height: 360
+  startup-delay: 1500
+
+screenshots:
+  - id: led-indicator
+    description: "Custom LED indicator element registered via a descriptor and rendered alongside built-in controls."
+    component: V1ProtocolApp
+    region: client
+    crop: none
+    format: png

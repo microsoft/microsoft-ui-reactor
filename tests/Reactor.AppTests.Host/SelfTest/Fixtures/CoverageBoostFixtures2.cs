@@ -3,6 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Reactor.Controls.Validation;
 using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -167,6 +168,136 @@ internal static class CoverageBoostFixtures2
             H.ClickButton("UpdateTitle");
             await Harness.Render();
             H.Check("TitleBar_Updated", H.FindText("TitlePhase:1") is not null);
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  3b. TitleBar RightHeader caption-button inset — regression for #511.
+    //
+    //  WinUI 3 TitleBar.OnApplyTemplate calls UpdatePadding(), which reads
+    //  AppWindow.TitleBar.RightInset to size RightPaddingColumn (the column
+    //  that pads RightHeader away from the system min/max/close buttons).
+    //  RightInset is non-zero only when Window.ExtendsContentIntoTitleBar is
+    //  true at template-apply time. PR #455 moved the
+    //  ExtendsContentIntoTitleBar/SetTitleBar write into the descriptor's
+    //  Loaded handler, which fires AFTER OnApplyTemplate — so the column
+    //  stayed at width 0 and RightHeader overlapped the caption buttons.
+    //  The fix restores the legacy mount-time (pre-tree-attach) write; this
+    //  fixture pins that ordering by checking RightPaddingColumn.Width > 0
+    //  after one render.
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class TitleBarRightHeaderInset(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            // Use a separate window so this regression check doesn't mutate
+            // the shared selftest harness window's ExtendsContentIntoTitleBar
+            // / SetTitleBar registration. The TitleBar descriptor reads
+            // ReactorApp.ActiveHostInternal at mount-time, so we host the
+            // probe inside an isolated ReactorHost on a fresh Window.
+            var prevActiveHost = ReactorApp.ActiveHostInternal;
+            var window = new Window { Title = "TitleBar Inset Probe" };
+            window.AppWindow.Resize(new global::Windows.Graphics.SizeInt32(600, 200));
+            window.Activate();
+
+            try
+            {
+                var host = new ReactorHost(window);
+                host.Mount(_ => (TitleBar("InsetProbe") with
+                {
+                    RightHeader = TextBlock("RH").AutomationName("TitleBarRH"),
+                }));
+
+                // Drive the isolated host's render loop directly — Harness.Render
+                // only pumps ReactorApp.PrimaryWindow's host (the shared harness
+                // window), not the one we just created here, so it can't tell
+                // us when *our* host has finished. host.WaitForIdleAsync is the
+                // bounded-convergence wait Reactor exposes for exactly this
+                // case. See TESTING.md → "Selftest waiting patterns".
+                await host.WaitForIdleAsync();
+                ((UIElement?)window.Content)?.UpdateLayout();
+
+                // WinUI 3 TitleBar realizes its template + runs UpdatePadding
+                // via Normal-priority dispatcher messages scheduled by the
+                // first layout pass. Drain them with one Low-priority yield
+                // (mirrors Harness.Render's wave pattern) and re-layout so
+                // the probe sees the final RightPaddingColumn width.
+                var dq = DispatcherQueue.GetForCurrentThread();
+                var yieldTcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                if (!dq.TryEnqueue(DispatcherQueuePriority.Low, () => yieldTcs.SetResult()))
+                    yieldTcs.SetResult();
+                await yieldTcs.Task;
+                ((UIElement?)window.Content)?.UpdateLayout();
+
+                // Pump until the TitleBar materializes in the visual tree
+                // (template + content realization can take an extra dispatcher
+                // wave on contended runners). Re-queries each pass — never
+                // captures a stale snapshot. Bounded so a real regression
+                // still fails instead of hanging.
+                Microsoft.UI.Xaml.Controls.TitleBar? titleBar = null;
+                for (int pass = 0; pass < 8; pass++)
+                {
+                    titleBar = FindFirst<Microsoft.UI.Xaml.Controls.TitleBar>(window.Content);
+                    if (titleBar is not null) break;
+                    await host.WaitForIdleAsync();
+                    ((UIElement?)window.Content)?.UpdateLayout();
+                }
+                H.Check("TBInset_TitleBarFound", titleBar is not null);
+                if (titleBar is null) return;
+
+                // Force template application + layout so the template parts
+                // exist and UpdatePadding() has run.
+                titleBar.ApplyTemplate();
+                titleBar.UpdateLayout();
+
+                var rightPaddingColumn = FindRightPaddingColumn(titleBar);
+                H.Check("TBInset_RightPaddingColumnFound", rightPaddingColumn is not null);
+                if (rightPaddingColumn is null) return;
+
+                // Caption buttons exist on every WinUI 3 OverlappedPresenter
+                // window → RightInset is always > 0, so a 0-width
+                // RightPaddingColumn is unambiguous evidence of the #511
+                // timing regression.
+                H.Check(
+                    $"TBInset_RightPaddingColumnNonZero (width={rightPaddingColumn.Width.Value})",
+                    rightPaddingColumn.Width.Value > 0);
+
+                H.Check("TBInset_WindowExtended", window.ExtendsContentIntoTitleBar);
+
+                host.Dispose();
+            }
+            finally
+            {
+                window.Close();
+                // Restore the harness host as ActiveHostInternal so subsequent
+                // fixtures see the shared host they expect.
+                if (prevActiveHost is not null)
+                    ReactorApp.ActiveHostInternal = prevActiveHost;
+            }
+        }
+
+        private static T? FindFirst<T>(DependencyObject? root) where T : class
+        {
+            if (root is null) return null;
+            if (root is T match) return match;
+            int n = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < n; i++)
+            {
+                var hit = FindFirst<T>(VisualTreeHelper.GetChild(root, i));
+                if (hit is not null) return hit;
+            }
+            return null;
+        }
+
+        private static ColumnDefinition? FindRightPaddingColumn(Microsoft.UI.Xaml.Controls.TitleBar titleBar)
+        {
+            // The "RightPaddingColumn" template part lives on the root Grid of
+            // the TitleBar template; reach it via the standard FindName lookup
+            // against the visual tree root.
+            if (VisualTreeHelper.GetChildrenCount(titleBar) == 0) return null;
+            var templateRoot = VisualTreeHelper.GetChild(titleBar, 0) as FrameworkElement;
+            return templateRoot?.FindName("RightPaddingColumn") as ColumnDefinition;
         }
     }
 

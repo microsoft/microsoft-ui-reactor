@@ -135,5 +135,10 @@ public static class PackLocalCommand
         return null;
     }
 
-    static string? FindRepoRoot() => RepoRootFinder.FindRepoRoot();
+    // Prefer CWD so a globally-installed `mur` (under ~/.dotnet/tools) still
+    // discovers the source checkout the user is sitting in. Fall back to the
+    // tool's own location for the legacy `bin/<arch>/mur.exe` install layout.
+    static string? FindRepoRoot()
+        => RepoRootFinder.FindRepoRoot(Directory.GetCurrentDirectory())
+        ?? RepoRootFinder.FindRepoRoot();
 }

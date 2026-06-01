@@ -1,0 +1,194 @@
+name: Bootstrap
+
+# Exercises bootstrap.ps1 end-to-end on a fresh windows-latest runner to
+# validate the source-checkout developer flow (`git clone` → `bootstrap.ps1`
+# → `dotnet new reactorapp`). The script is invoked non-interactively via
+# `-InstallWinAppSdk -SkipPlugin`, which also exercises the winget install
+# path for the Windows App Runtime when the runner image doesn't already
+# have it.
+
+on:
+  pull_request:
+    paths:
+      - 'bootstrap.ps1'
+      - 'src/Reactor.Cli/**'
+      - 'tools/Templates/**'
+      - 'Directory.Build.props'
+      - '.github/workflows/bootstrap.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'bootstrap.ps1'
+      - 'src/Reactor.Cli/**'
+      - 'tools/Templates/**'
+      - 'Directory.Build.props'
+      - '.github/workflows/bootstrap.yml'
+  workflow_dispatch:
+
+# Cancel in-progress runs against the same ref when a new push arrives.
+concurrency:
+  group: bootstrap-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  bootstrap:
+    name: bootstrap.ps1 (windows-latest)
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      # NOTE: deliberately *not* running actions/setup-dotnet here. We want
+      # bootstrap.ps1 to detect the SDK situation on the runner and, if
+      # necessary, winget-install .NET 10 itself. If the runner image
+      # already has 10.x the install branch is a silent no-op and we
+      # still exercise the rest of the pipeline.
+
+      - name: Pre-flight — show toolchain baseline
+        shell: pwsh
+        run: |
+          # Diagnostic-only step. Reset $LASTEXITCODE on exit so a non-zero
+          # winget status (which is common — "not installed" returns
+          # -1978335166) doesn't fail the workflow before bootstrap.ps1 even
+          # starts.
+          Write-Host "=== dotnet --list-sdks ==="
+          if (Get-Command dotnet -ErrorAction SilentlyContinue) {
+              dotnet --list-sdks
+          } else {
+              Write-Host "(dotnet not on PATH)"
+          }
+          Write-Host ""
+          Write-Host "=== winget --version ==="
+          winget --version
+          Write-Host ""
+          Write-Host "=== Windows App Runtime 2.0 (winget list) ==="
+          # --accept-source-agreements: a fresh runner hasn't accepted the
+          # msstore source terms. Without it, winget prompts and fails on a
+          # non-interactive shell.
+          winget list --id Microsoft.WindowsAppRuntime.2.0 --exact --accept-source-agreements 2>&1
+          Write-Host "exit=$LASTEXITCODE"
+          $global:LASTEXITCODE = 0
+
+      - name: Run bootstrap.ps1 (non-interactive)
+        shell: pwsh
+        run: |
+          ./bootstrap.ps1 -InstallWinAppSdk -SkipPlugin
+          if ($LASTEXITCODE -ne 0) { throw "bootstrap.ps1 exited $LASTEXITCODE" }
+
+      - name: Verify mur resolves from a fresh shell
+        shell: pwsh
+        run: |
+          # A new step gets a fresh process with its own $env:Path snapshot.
+          # `dotnet tool install -g` updates the *User* PATH, which fresh
+          # processes pick up at start. If GH Actions doesn't propagate that
+          # (varies by image), prepend defensively.
+          $toolsDir = Join-Path $env:USERPROFILE '.dotnet\tools'
+          if (-not (($env:Path -split ';') -contains $toolsDir)) {
+              $env:Path = "$toolsDir;$env:Path"
+          }
+          $cmd = Get-Command mur -ErrorAction SilentlyContinue
+          if (-not $cmd) { throw "mur is not resolvable on PATH after bootstrap" }
+          Write-Host "mur resolved at: $($cmd.Source)"
+          mur --version
+          if ($LASTEXITCODE -ne 0) { throw "mur --version exited $LASTEXITCODE" }
+
+      - name: Run mur doctor (must report all checks PASS / info-only)
+        shell: pwsh
+        run: |
+          $env:Path = "$env:USERPROFILE\.dotnet\tools;$env:Path"
+          mur doctor
+          if ($LASTEXITCODE -ne 0) { throw "mur doctor failed (exit $LASTEXITCODE)" }
+
+      - name: Verify local-nupkgs/ produced
+        shell: pwsh
+        run: |
+          $expected = @(
+              'local-nupkgs/Microsoft.UI.Reactor.0.0.0-local.nupkg',
+              'local-nupkgs/Microsoft.UI.Reactor.ProjectTemplates.0.0.0-local.nupkg',
+              'local-nupkgs/Microsoft.UI.Reactor.Cli.1.0.0.nupkg'
+          )
+          $missing = @()
+          foreach ($p in $expected) {
+              if (Test-Path $p) {
+                  $size = (Get-Item $p).Length
+                  Write-Host "  [ok] $p ($size bytes)"
+              } else {
+                  Write-Host "  [missing] $p" -ForegroundColor Red
+                  # Microsoft.UI.Reactor.Cli is versioned from MinVer/etc and
+                  # may not match the literal "1.0.0" filename. Don't fail on
+                  # it specifically — just on the two 0.0.0-local nupkgs.
+                  if ($p -notlike '*Microsoft.UI.Reactor.Cli*') { $missing += $p }
+              }
+          }
+          if ($missing.Count -gt 0) { throw "Missing nupkgs: $($missing -join ', ')" }
+          # Sanity: at least one *.Cli.*.nupkg under local-nupkgs/.
+          $cliPkgs = @(Get-ChildItem local-nupkgs -Filter 'Microsoft.UI.Reactor.Cli.*.nupkg')
+          if ($cliPkgs.Count -eq 0) { throw "No Microsoft.UI.Reactor.Cli.*.nupkg found in local-nupkgs/" }
+          Write-Host "  [ok] CLI tool nupkg: $($cliPkgs[0].Name)"
+
+      - name: Verify dotnet new reactorapp template registered
+        shell: pwsh
+        run: |
+          $listing = dotnet new list reactorapp 2>&1
+          $rc = $LASTEXITCODE
+          Write-Host $listing
+          if ($rc -ne 0) { throw "dotnet new list reactorapp exited $rc" }
+          # `dotnet new list` writes a multi-line table; PowerShell stores the
+          # output as a [string[]]. -match / -notmatch against an array filter
+          # element-wise, so `-notmatch 'reactorapp'` returns the non-matching
+          # lines (header, separator) which evaluates truthy even when the
+          # template is present. Join + match to do a whole-output substring
+          # check instead.
+          if (($listing -join "`n") -notmatch 'reactorapp') {
+              throw "reactorapp template not found in `dotnet new list` output"
+          }
+
+      - name: Scaffold a TestApp and restore against the local feed
+        shell: pwsh
+        run: |
+          # Inside the repo so the root nuget.config (which maps local-nupkgs/)
+          # is picked up by NuGet's parent-dir walk.
+          New-Item -ItemType Directory -Path TestProjects | Out-Null
+          Push-Location TestProjects
+          try {
+              dotnet new reactorapp -n TestApp
+              if ($LASTEXITCODE -ne 0) { throw "dotnet new reactorapp exited $LASTEXITCODE" }
+              if (-not (Test-Path 'TestApp/TestApp.csproj')) { throw "TestApp/TestApp.csproj not produced" }
+
+              dotnet restore TestApp/TestApp.csproj --nologo -v:m
+              if ($LASTEXITCODE -ne 0) { throw "dotnet restore for TestApp exited $LASTEXITCODE" }
+          } finally {
+              Pop-Location
+          }
+
+      - name: Build TestApp (default WindowsAppSDKSelfContained=true)
+        shell: pwsh
+        run: |
+          # WindowsAppSDKSelfContained=true (inherited from
+          # Directory.Build.props) requires a concrete arch to embed the
+          # runtime under — AnyCPU is rejected by the SelfContained
+          # target. Pass the host arch explicitly.
+          $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'ARM64' } else { 'x64' }
+          dotnet build TestProjects/TestApp/TestApp.csproj `
+              -c Release `
+              "-p:Platform=$arch" `
+              --nologo -v:m
+          if ($LASTEXITCODE -ne 0) { throw "TestApp build exited $LASTEXITCODE" }
+
+      - name: Verify mur upgrade is idempotent
+        shell: pwsh
+        run: |
+          # `mur upgrade` should succeed against an already-bootstrapped tree:
+          # re-pack, re-install template (uninstall-first), refresh plugin.
+          $env:Path = "$env:USERPROFILE\.dotnet\tools;$env:Path"
+          mur upgrade --skip-plugin
+          if ($LASTEXITCODE -ne 0) { throw "mur upgrade exited $LASTEXITCODE" }
+
+      - name: Re-run bootstrap.ps1 (idempotence check)
+        shell: pwsh
+        run: |
+          # Re-running on the same machine should be a clean no-op for any
+          # already-correct piece (winget detects already-installed runtimes,
+          # dotnet tool update is a no-op when up to date, etc.).
+          ./bootstrap.ps1 -InstallWinAppSdk -SkipPlugin
+          if ($LASTEXITCODE -ne 0) { throw "bootstrap.ps1 re-run exited $LASTEXITCODE" }

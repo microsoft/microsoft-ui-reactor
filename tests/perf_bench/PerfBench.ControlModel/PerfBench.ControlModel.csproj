@@ -2,9 +2,9 @@
   <!--
     Spec 047 §15.3 Phase 0 micro suite scaffold.
 
-    Hosts M1 through M13 across three variants (Direct, ReactorToday, ReactorV2).
-    At Phase 0 freeze, ReactorV2 mirrors ReactorToday so the V2 path delegates;
-    Phase 1+ work shows up as the V2 vs Today delta.
+    Hosts M1 through M13 across three variants (Direct, ReactorToday, Reactor).
+    Reactor is the single production control model variant measured against
+    the ReactorToday legacy baseline.
 
     Shape: WinUI app (some benches construct UIElements which require a
     DispatcherQueue), driven by a CLI switch:

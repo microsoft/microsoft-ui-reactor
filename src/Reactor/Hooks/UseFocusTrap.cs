@@ -37,6 +37,11 @@ public sealed class FocusTrapHandle
         if (_isActive) Attach();
     }
 
+    // Test-only accessor (InternalsVisibleTo Reactor.Tests / Reactor.AppTests.Host).
+    // Lets selftests assert SetContainer wired the FE without exposing the
+    // backing field on the public surface.
+    internal UIElement? Container => _container;
+
     private void Attach()
     {
         if (_container is null) return;

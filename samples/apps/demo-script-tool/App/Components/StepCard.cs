@@ -455,7 +455,7 @@ public sealed class StepCard : Component<StepCardProps>
                 }
             ]);
         }
-        return new RichTextBlockElement("")
+        return RichTextBlock("") with
         {
             Paragraphs = paragraphs,
             IsTextSelectionEnabled = true,

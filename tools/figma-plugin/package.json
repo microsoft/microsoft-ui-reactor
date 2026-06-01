@@ -1,0 +1,13 @@
+{
+  "name": "reactor-figma-sync",
+  "version": "0.2.0",
+  "description": "Figma plugin for generating Reactor WinUI apps from selected frames",
+  "scripts": {
+    "build": "tsc && node build-ui.mjs",
+    "watch": "tsc --watch"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.100.0",
+    "typescript": "^5.5.0"
+  }
+}

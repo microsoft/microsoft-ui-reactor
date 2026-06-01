@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "target": "ES6",
+    "module": "None",
+    "lib": ["ES2020"],
+    "outDir": "dist",
+    "rootDir": "src",
+    "strict": true,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.ts"],
+  "files": ["node_modules/@figma/plugin-typings/index.d.ts"]
+}

@@ -4,22 +4,18 @@ using Microsoft.UI.Reactor.Core;
 namespace PerfBench.ControlModel.Variants;
 
 /// <summary>
-/// Spec 047 §15.2 three-way baselining contract. Every M-series bench
+/// Spec 047 §15.2 baselining contract. Every M-series bench
 /// exists in three implementations:
 ///
-///  - <see cref="Direct"/>      — raw WinUI hand-written, no Reactor.
-///  - <see cref="ReactorToday"/> — current `main`-branch Reactor dispatch.
-///  - <see cref="ReactorV2"/>   — work-in-progress new control model.
-///
-/// At Phase-0 freeze, ReactorV2 ≡ ReactorToday; the V2 implementation
-/// delegates so V2 numbers ≈ Today numbers and Phase 1+ work shows up as
-/// the delta.
+///  - <see cref="Direct"/>       — raw WinUI hand-written, no Reactor.
+///  - <see cref="ReactorToday"/> — legacy Reactor dispatch baseline.
+///  - <see cref="Reactor"/>      — production Reactor control model.
 /// </summary>
 public enum BenchVariant
 {
     Direct,
     ReactorToday,
-    ReactorV2,
+    Reactor,
 }
 
 /// <summary>
@@ -58,7 +54,7 @@ public interface IBench
 
 /// <summary>
 /// Per-bench context — a parent panel, a reconciler (for ReactorToday /
-/// ReactorV2 paths), and a scratch state slot.
+/// Reactor paths), and a scratch state slot.
 /// </summary>
 public sealed class BenchContext
 {

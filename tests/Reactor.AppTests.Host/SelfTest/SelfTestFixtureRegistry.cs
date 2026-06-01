@@ -142,6 +142,24 @@ internal static class SelfTestFixtureRegistry
         "MdHtml_HtmlGeneration",
         "MdHtml_HtmlInWebView2",
         "ListView_TypedRendering",
+        // Typed, data-driven TreeView<T> — issue #447 (rich content renders).
+        "TTV_RendersRichContent",
+        "TTV_HeterogeneousTemplates",
+        "TTV_KeyedUpdateReconcile",
+        "TTV_KeyedUpdateAddChild",
+        "TTV_EventErasureResolvesT",
+        "TTV_ValueTypeT",
+        "TTV_IsExpandedApplied",
+        "TTV_ExpandCollapseCycle",
+        "TTV_UnmountTearsDown",
+        "TTV_UnmountRunsChildCleanup",
+        "TTV_UnmountAndPoolRunsChildCleanup",
+        "TTV_StructuralRootRemoval",
+        "TTV_KeyedRootReorder",
+        "TTV_ControlPropsMountAndUpdate",
+        "TTV_EmptyThenPopulate",
+        "TTV_DeepNestingRenders",
+        "TTV_TwoIndependentTrees",
         // ItemsView reconciler arm — mount / update / layout-kind / selection.
         "ItemsView_Mount",
         "ItemsView_Layout_UniformGrid",
@@ -170,6 +188,28 @@ internal static class SelfTestFixtureRegistry
         "KLR_FlexColumn_KeyedChildren_Swap_SurvivorsKeepIdentity",
         "KLR_FlexColumn_KeyedChildren_Reverse_SurvivorsKeepIdentity",
         "KLR_FlexColumn_WithKeyItem_PreservesIdentityAcrossInsert",
+        // Spec 047 §14 — panel descriptor migration: keyed reconcile identity,
+        // lockstep attached-prop reapply, stale-state clears, unmount cleanup.
+        "PDM_Stack_KeyedSwap_PreservesIdentity",
+        "PDM_Grid_KeyedSwap_PreservesIdentity_And_RowFollows",
+        "PDM_Canvas_KeyedReorder_PreservesIdentity_And_PositionFollows",
+        "PDM_Canvas_AnchorClearedOnReuse",
+        "PDM_WrapGrid_KeyedReverse_PreservesIdentity",
+        "PDM_RelativePanel_KeyedReorder_PreservesIdentity_And_StaleClear",
+        "PDM_Panel_Unmount_RunsChildEffectCleanup",
+        // Spec 047 §4.5 — overlay handler-owned Unmount tears down side-mounted
+        // Reactor subtrees (Flyout content, Popup child) the generic recursion
+        // cannot reach.
+        "OverlayTeardown_Flyout_Unmount_RunsFlyoutContentCleanup",
+        "OverlayTeardown_Flyout_Unmount_RunsPassThroughCleanup",
+        "OverlayTeardown_Popup_Unmount_RunsChildCleanup",
+        // Issue #480 — InlineUIContainer rich-text inline (Route A + Route B + unmount)
+        "InlineUI_RouteA_ReactorChild",
+        "InlineUI_RouteB_NativeFactory",
+        "InlineUI_Unmount_TearsDownReactorChild",
+        // Issue #480 follow-up — incremental RTB update preserves child identity
+        "InlineUI_IncrementalUpdate_PreservesChildIdentity",
+        "InlineUI_IncrementalUpdate_RunMutatedInPlace",
         // ElementFactory<T> + WinUI ItemsRepeater recycle contract — regression
         // for the leak fixed alongside these tests (every realize was Minting
         // a fresh UIElement, orphaning prior ones in Repeater.Children).
@@ -194,6 +234,8 @@ internal static class SelfTestFixtureRegistry
         "Navigation_NavHostGoBack",
         "Navigation_NavHostLifecycleOrder",
         "Navigation_NavHostNested",
+        "Navigation_NavHostCacheMode",
+        "Navigation_NavHostScrollViewerNestedNavigatingFromCancels",
         "Observable_UseObservable_Rerender",
         "Observable_UseObservable_ExternalMutation",
         "Observable_UseObservableProperty_FineGrained",
@@ -269,6 +311,7 @@ internal static class SelfTestFixtureRegistry
         "RareControl_ColorPicker",
         "RareControl_TeachingTip",
         "RareControl_GridView",
+        "RareControl_GridViewLazy",
         "RareControl_PersonPicture",
         "RareControl_RelativePanel",
         "RareControl_CalendarView",
@@ -284,6 +327,8 @@ internal static class SelfTestFixtureRegistry
         "ComponentHook_UseWindowSize",
         "ComponentHook_UseBreakpoint",
         "ComponentHook_MultipleComponents",
+        "HotReload_ChildHookOrderRecovery",
+        "HotReload_ComponentMigratesState",
         // DSL and extension tests
         "DslExt_FluentModifierChain",
         "DslExt_TransitionExtensions",
@@ -423,6 +468,7 @@ internal static class SelfTestFixtureRegistry
         // Core coverage tests — targeting uncovered Reconciler/RenderContext paths
         "CoreCov_RichTextBlockParagraphUpdate",
         "CoreCov_RichTextBlockInlineReconciliation",
+        "CoreCov_RichTextHyperlink_OnClickMode",
         "CoreCov_TemplatedGridViewMountUpdate",
         "CoreCov_TemplatedFlipViewMountUpdate",
         "CoreCov_LazyVStackMountUpdate",
@@ -527,6 +573,7 @@ internal static class SelfTestFixtureRegistry
         "ValCov_BuiltInValidators",
         "ValCov_ValidateExtensions",
         "ValCov_FormFieldRendering",
+        "ValCov_ValidationCompositeLifecycleUpdateAndCleanup",
         "ValCov_ValidationRule",
         "ValCov_FormFieldHelpers",
         // Controls coverage — MaskEngine, InputFormatter, AutoSuggest
@@ -690,6 +737,7 @@ internal static class SelfTestFixtureRegistry
         "CovBoost2_SemanticElement",
         "CovBoost2_ValidationVisualizerStyles",
         "CovBoost2_TitleBarMountUpdate",
+        "CovBoost2_TitleBarRightHeaderInset",
         "CovBoost2_ReconcileChildPaths",
         "CovBoost2_RichToolTipUpdate",
         "CovBoost2_FlexChildPropChange",
@@ -702,6 +750,23 @@ internal static class SelfTestFixtureRegistry
         "CovBoost2_ElementPoolInteractiveReset",
         "CovBoost2_DataGridSearchSort",
         "CovBoost2_FocusTrapExercise",
+
+        // Accessibility — SemanticPanel automation peer + UseFocusTrap hook
+        "A11y_SemanticPanel_RangeValueProvider",
+        "A11y_SemanticPanel_ValueProvider",
+        "A11y_SemanticPanel_RangeSetValueRespectsReadOnly",
+        "A11y_SemanticPanel_ValueSetValueRespectsReadOnly",
+        "A11y_SemanticPanel_HidesRangePatternWhenNoRange",
+        "A11y_SemanticPanel_HidesValuePatternWhenNoValue",
+        "A11y_SemanticPanel_ControlTypeMapping",
+        "A11y_SemanticPanel_UpdatePathRefreshesPanel",
+        "A11y_Semantics_FluentModifierBuildsRecord",
+        "A11y_FocusTrap_HookReturnsStableHandle",
+        "A11y_FocusTrap_HookIsActiveTracksHookArg",
+        "A11y_FocusTrap_ModifierAttachesContainer",
+        "A11y_FocusTrap_ModifierChainsExistingOnMount",
+        "A11y_FocusTrap_HandleAttachDetachIdempotent",
+        "A11y_FocusTrap_HandleSetContainerSwaps",
 
         // Input modifiers — spec 027 Tier 1
         "PointerMod_DoubleTappedAutoEnables",
@@ -829,13 +894,6 @@ internal static class SelfTestFixtureRegistry
         "TemplatedListHL_LazyHStack_NoHighlightOnSiblingStateChange",
         "TemplatedListHL_LazyVStack_SpacingChangeFlagsControl",
 
-        // Layout-cost overlay (spec 032)
-        "LayoutCost_FlagOn_BackFillsExistingComponents",
-        "LayoutCost_MountWhileOn_AddsRollup",
-        "LayoutCost_UnmountWhileOn_DropsRollup",
-        "LayoutCost_ToggleOffOn_NewComponentsStillRegister",
-        "LayoutCost_BoundsRefreshFromVisualTree",
-
         // ReconcilerBigCoverage — targets uncovered Reconciler/Mount/Update branches
         "RBC_AllEventHandlersAttached",
         "RBC_TapHandlersRemovedDisablesFlags",
@@ -850,6 +908,7 @@ internal static class SelfTestFixtureRegistry
         "RBC_TreeViewHandlerWiringFastPath",
         "RBC_WebView2HandlerWiring",
         "RBC_CommandBarUpdate",
+        "RBC_CmdBarToggleIconUpdate",
         "RBC_FrameMount",
         "RBC_ParallaxMountUpdate",
         "RBC_AnnounceRegionMount",
@@ -953,6 +1012,22 @@ internal static class SelfTestFixtureRegistry
         "NativeDocking_Composition_Rehydration_ContentMatchesByKey",
         // Spec 045 §2.4 drag/drop matrix — exhaustive programmatic-drag
         // scenarios for each DockTarget value + invariants.
+        // Spec 045 §2.6 VS-style tear-off pipeline — covers the
+        // DockTabTearOff state machine end-to-end via *ForTest hooks.
+        "NativeDockingTearOff_T01_HostMounts_AttachesPressHook",
+        "NativeDockingTearOff_T02_PressOnTab_RecordsCandidate",
+        "NativeDockingTearOff_T03_PressBelowThreshold_NoTearOff",
+        "NativeDockingTearOff_T04_PressAboveThreshold_TearsOff",
+        "NativeDockingTearOff_T05_CanMoveFalse_RefusedAtBeginTearOff",
+        "NativeDockingTearOff_T06_CanFloatFalse_RefusedAtBeginTearOff",
+        "NativeDockingTearOff_T07_StaleTrackerForceCleaned_NextDragSucceeds",
+        "NativeDockingTearOff_T08_DropOutside_RetainsFloating_EndsSession",
+        "NativeDockingTearOff_T09_EscCancel_BehavesLikeDropOutside",
+        "NativeDockingTearOff_T10_HostUnmount_StopsTracker",
+        "NativeDockingTearOff_T11_FloatingTabPress_HidesSource_AndStartsTracker",
+        "NativeDockingTearOff_T12_FloatingTearOff_DropOnHostTarget_DocksToHost",
+        "NativeDockingTearOff_T13_FloatingTearOff_DropOutside_RetainsPreview",
+        "NativeDockingTearOff_T14_FloatingTearOff_StaleTrackerForceCleaned",
         "NativeDockingMatrix_DragToCenterSameGroup_NoOp",
         "NativeDockingMatrix_DragToSplitRight_AddsColumn",
         "NativeDockingMatrix_DragToSplitLeft_AddsLeadingColumn",
@@ -1076,6 +1151,79 @@ internal static class SelfTestFixtureRegistry
         "HostCov_PinToSide_DrainsIntoSideStrip",
         "HostCov_AutomationIds_PaneIdsWiredOnDocked",
         "HostCov_ActiveContentChangedCallback_FiresOnActivate",
+
+        // Spec 047 §14 Phase 1 (1.11–1.15) — V1 protocol behavior parity fixtures.
+        "V1_ToggleSwitch_MountUpdate",
+        "V1_Slider_CoercionTolerance",
+        "V1_TextBox_Controlled",
+        "V1_Border_SingleContent",
+        "V1_ListView_MountSelect",
+
+        // Spec 047 §8 — real-input echo-stranding regression (CR Finding 1).
+        "Echo_RadioButton_RealInput",
+        "Echo_ToggleSplitButton_RealInput",
+        "Echo_NumberBox_RealInput",
+
+        // Spec 047 §8 — value-diff echo suppression PoC (ControlledPropEntry path).
+        "ValueDiff_RadioButton_Drift",
+        "ValueDiff_ToggleSplitButton_Drift",
+        "ValueDiff_TextBox_Drift",
+        "ValueDiff_TextBox_SnapBack",
+        "ValueDiff_TextBox_Transition",
+        "ValueDiff_ComboBox_Drift",
+        "ValueDiff_ToggleSwitch_Drift",
+        "ValueDiff_GridView_GuardedNoOpStrand",
+        "Issue464_GridView_RapidDoubleWriteEcho",
+        "Issue495_ListViewLoop_StateBound_NoLoopAfterSelection",
+        "Issue495_GridViewLoop_StateBound_NoLoopAfterSelection",
+        "Issue495_TypedListViewLoop_StateBound_NoLoopAfterSelection",
+        "Issue495_TypedGridViewLoop_StateBound_NoLoopAfterSelection",
+        "Issue495_ListView_SameLengthContentChange_RefreshesContainers",
+        "Issue495_GridView_SameLengthContentChange_RefreshesContainers",
+
+        // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
+        // The MarqueeHandler is authored in tests/external_proof/
+        // Reactor.External.TestControl, references Reactor as a regular
+        // project ref (no InternalsVisibleTo), and proves the public V1
+        // surface is sufficient for external authors.
+        "Spec047ExternalProof_Marquee_MountUpdate",
+        "Spec047ExternalProof_Marquee_WriteSuppressed",
+        "Spec047ExternalProof_Marquee_ModifierChain",
+        "Spec047ExternalProof_Marquee_SetterChain",
+        "Spec047ExternalProof_Marquee_PoolRent",
+        "Spec047ExternalProof_Marquee_PoolResetContract",
+
+        // Spec 047 §4.3 — EventHandlerState split (§9.2) contract fixtures.
+        // Validate the ModifierEventHandlerState / per-control
+        // ControlEventStateBox split landed in commit 691048bd (issue #114).
+        "EventStateSplit_NoDuplicateSubscriptionAcrossPoolReuse",
+        "EventStateSplit_HandlerTypeMismatchResetsBox",
+        "EventStateSplit_DualReturnIdempotent",
+        "EventStateSplit_ModifierStateLazyForIntrinsicOnly",
+        "EventStateSplit_AddRawRoutedHandler_HandledEventsToo",
+
+        // Spec 048 §8 — global ControlRegistry dispatch precedence fixtures.
+        // Validate that handlers registered via ControlRegistry.Register
+        // resolve via the new arm-3 fallback in Reconciler.Mount/Update,
+        // and that per-host caching / shadow precedence work end-to-end
+        // against a live WinUI control.
+        "Spec048_GlobalRegistry_Mount_DispatchesThroughArm3",
+        "Spec048_GlobalRegistry_FactoryCachedAfterFirstHit",
+        "Spec048_PerHost_RegisterHandler_ShadowsGlobal",
+        // Spec 048 §3.3 — Text-group factory `Reg<>.Done` registration touch.
+        "Spec048_TextGroupFactoriesRegisterHandlers",
+        // Spec 048 §3.3 — Input-group factory `Reg<>.Done` registration touch.
+        "Spec048_InputGroupFactoriesRegisterHandlers",
+        // Spec 048 §3.3 — Container/layout-group factory `Reg<>.Done` registration touch.
+        "Spec048_ContainerGroupFactoriesRegisterHandlers",
+        "Spec048_CollectionsGroupFactoriesRegisterHandlers",
+        "Spec048_DateTimeGroupFactoriesRegisterHandlers",
+        "Spec048_StatusInfoGroupFactoriesRegisterHandlers",
+        "Spec048_MediaIconsGroupFactoriesRegisterHandlers",
+        "Spec048_ShapesGroupFactoriesRegisterHandlers",
+        "Spec048_NavigationChromeGroupFactoriesRegisterHandlers",
+        "Spec048_OverlaysGroupFactoriesRegisterHandlers",
+        "Spec048_IconAndInteropGroupFactoriesRegisterHandlers",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -1213,6 +1361,23 @@ internal static class SelfTestFixtureRegistry
         "MdHtml_HtmlGeneration" => new MarkdownHtmlFixtures.HtmlGeneration(harness),
         "MdHtml_HtmlInWebView2" => new MarkdownHtmlFixtures.HtmlInWebView2(harness),
         "ListView_TypedRendering" => new CollectionFixtures.ListViewTyped(harness),
+        "TTV_RendersRichContent" => new TemplatedTreeViewFixtures.RendersRichContent(harness),
+        "TTV_HeterogeneousTemplates" => new TemplatedTreeViewFixtures.HeterogeneousTemplates(harness),
+        "TTV_KeyedUpdateReconcile" => new TemplatedTreeViewFixtures.KeyedUpdateReconcile(harness),
+        "TTV_KeyedUpdateAddChild" => new TemplatedTreeViewFixtures.KeyedUpdateAddChild(harness),
+        "TTV_EventErasureResolvesT" => new TemplatedTreeViewFixtures.EventErasureResolvesT(harness),
+        "TTV_ValueTypeT" => new TemplatedTreeViewFixtures.ValueTypeT(harness),
+        "TTV_IsExpandedApplied" => new TemplatedTreeViewFixtures.IsExpandedApplied(harness),
+        "TTV_ExpandCollapseCycle" => new TemplatedTreeViewFixtures.ExpandCollapseCycle(harness),
+        "TTV_UnmountTearsDown" => new TemplatedTreeViewFixtures.UnmountTearsDown(harness),
+        "TTV_UnmountRunsChildCleanup" => new TemplatedTreeViewFixtures.UnmountRunsChildCleanup(harness),
+        "TTV_UnmountAndPoolRunsChildCleanup" => new TemplatedTreeViewFixtures.UnmountAndPoolRunsChildCleanup(harness),
+        "TTV_StructuralRootRemoval" => new TemplatedTreeViewFixtures.StructuralRootRemoval(harness),
+        "TTV_KeyedRootReorder" => new TemplatedTreeViewFixtures.KeyedRootReorder(harness),
+        "TTV_ControlPropsMountAndUpdate" => new TemplatedTreeViewFixtures.ControlPropsMountAndUpdate(harness),
+        "TTV_EmptyThenPopulate" => new TemplatedTreeViewFixtures.EmptyThenPopulate(harness),
+        "TTV_DeepNestingRenders" => new TemplatedTreeViewFixtures.DeepNestingRenders(harness),
+        "TTV_TwoIndependentTrees" => new TemplatedTreeViewFixtures.TwoIndependentTrees(harness),
         "ItemsView_Mount" => new ItemsViewFixtures.ItemsView_BasicMount(harness),
         "ItemsView_Layout_UniformGrid" => new ItemsViewFixtures.ItemsView_LayoutKind_AppliesUniformGrid(harness),
         "ItemsView_Layout_LinedFlow" => new ItemsViewFixtures.ItemsView_LayoutKind_AppliesLinedFlow(harness),
@@ -1240,6 +1405,23 @@ internal static class SelfTestFixtureRegistry
         "KLR_FlexColumn_KeyedChildren_Swap_SurvivorsKeepIdentity" => new KeyedListReconciliationFixtures.FlexColumn_KeyedChildren_Swap_SurvivorsKeepIdentity(harness),
         "KLR_FlexColumn_KeyedChildren_Reverse_SurvivorsKeepIdentity" => new KeyedListReconciliationFixtures.FlexColumn_KeyedChildren_Reverse_SurvivorsKeepIdentity(harness),
         "KLR_FlexColumn_WithKeyItem_PreservesIdentityAcrossInsert" => new KeyedListReconciliationFixtures.FlexColumn_WithKeyItem_PreservesIdentityAcrossInsert(harness),
+        "PDM_Stack_KeyedSwap_PreservesIdentity" => new PanelDescriptorMigrationFixtures.Stack_KeyedSwap_PreservesIdentity(harness),
+        "PDM_Grid_KeyedSwap_PreservesIdentity_And_RowFollows" => new PanelDescriptorMigrationFixtures.Grid_KeyedSwap_PreservesIdentity_And_RowFollows(harness),
+        "PDM_Canvas_KeyedReorder_PreservesIdentity_And_PositionFollows" => new PanelDescriptorMigrationFixtures.Canvas_KeyedReorder_PreservesIdentity_And_PositionFollows(harness),
+        "PDM_Canvas_AnchorClearedOnReuse" => new PanelDescriptorMigrationFixtures.Canvas_AnchorClearedOnReuse(harness),
+        "PDM_WrapGrid_KeyedReverse_PreservesIdentity" => new PanelDescriptorMigrationFixtures.WrapGrid_KeyedReverse_PreservesIdentity(harness),
+        "PDM_RelativePanel_KeyedReorder_PreservesIdentity_And_StaleClear" => new PanelDescriptorMigrationFixtures.RelativePanel_KeyedReorder_PreservesIdentity_And_StaleClear(harness),
+        "PDM_Panel_Unmount_RunsChildEffectCleanup" => new PanelDescriptorMigrationFixtures.Panel_Unmount_RunsChildEffectCleanup(harness),
+        "OverlayTeardown_Flyout_Unmount_RunsFlyoutContentCleanup" => new OverlayTeardownFixtures.Flyout_Unmount_RunsFlyoutContentCleanup(harness),
+        "OverlayTeardown_Flyout_Unmount_RunsPassThroughCleanup" => new OverlayTeardownFixtures.Flyout_Unmount_RunsPassThroughCleanup(harness),
+        "OverlayTeardown_Popup_Unmount_RunsChildCleanup" => new OverlayTeardownFixtures.Popup_Unmount_RunsChildCleanup(harness),
+        // Issue #480 — InlineUIContainer rich-text inline.
+        "InlineUI_RouteA_ReactorChild" => new InlineUIContainerFixtures.InlineUI_RouteA_ReactorChild(harness),
+        "InlineUI_RouteB_NativeFactory" => new InlineUIContainerFixtures.InlineUI_RouteB_NativeFactory(harness),
+        "InlineUI_Unmount_TearsDownReactorChild" => new InlineUIContainerFixtures.InlineUI_Unmount_TearsDownReactorChild(harness),
+        // Issue #480 follow-up — incremental RTB update preserves child identity.
+        "InlineUI_IncrementalUpdate_PreservesChildIdentity" => new InlineUIContainerFixtures.InlineUI_IncrementalUpdate_PreservesChildIdentity(harness),
+        "InlineUI_IncrementalUpdate_RunMutatedInPlace" => new InlineUIContainerFixtures.InlineUI_IncrementalUpdate_RunMutatedInPlace(harness),
         "EFR_Factory_BoundedDistinctControls_AcrossManyRealizeCycles" => new ElementFactoryRecyclingFixtures.Factory_BoundedDistinctControls_AcrossManyRealizeCycles(harness),
         "EFR_Factory_RecycledControlIsReusedOnNextRealize" => new ElementFactoryRecyclingFixtures.Factory_RecycledControlIsReusedOnNextRealize(harness),
         "EFR_Factory_BookkeepingBoundedAcrossCycles" => new ElementFactoryRecyclingFixtures.Factory_BookkeepingBoundedAcrossCycles(harness),
@@ -1259,6 +1441,8 @@ internal static class SelfTestFixtureRegistry
         "Navigation_NavHostGoBack" => new NavigationFixtures.NavHostGoBack(harness),
         "Navigation_NavHostLifecycleOrder" => new NavigationFixtures.NavHostLifecycleOrder(harness),
         "Navigation_NavHostNested" => new NavigationFixtures.NavHostNested(harness),
+        "Navigation_NavHostCacheMode" => new NavigationFixtures.NavHostCacheMode(harness),
+        "Navigation_NavHostScrollViewerNestedNavigatingFromCancels" => new NavigationFixtures.NavHostScrollViewerNestedNavigatingFromCancels(harness),
         "Observable_UseObservable_Rerender" => new ObservableFixtures.UseObservable_Rerender(harness),
         "Observable_UseObservable_ExternalMutation" => new ObservableFixtures.UseObservable_ExternalMutation(harness),
         "Observable_UseObservableProperty_FineGrained" => new ObservableFixtures.UseObservableProperty_FineGrained(harness),
@@ -1334,6 +1518,7 @@ internal static class SelfTestFixtureRegistry
         "RareControl_ColorPicker" => new RareControlFixtures.ColorPickerMountUpdate(harness),
         "RareControl_TeachingTip" => new RareControlFixtures.TeachingTipMount(harness),
         "RareControl_GridView" => new RareControlFixtures.GridViewMountUpdate(harness),
+        "RareControl_GridViewLazy" => new RareControlFixtures.GridViewLazyRealization(harness),
         "RareControl_PersonPicture" => new RareControlFixtures.PersonPictureUpdate(harness),
         "RareControl_RelativePanel" => new RareControlFixtures.RelativePanelMount(harness),
         "RareControl_CalendarView" => new RareControlFixtures.CalendarViewMountUpdate(harness),
@@ -1349,6 +1534,8 @@ internal static class SelfTestFixtureRegistry
         "ComponentHook_UseWindowSize" => new ComponentHookFixtures.UseWindowSizeHook(harness),
         "ComponentHook_UseBreakpoint" => new ComponentHookFixtures.UseBreakpointHook(harness),
         "ComponentHook_MultipleComponents" => new ComponentHookFixtures.MultipleComponents(harness),
+        "HotReload_ChildHookOrderRecovery" => new HotReloadRecoveryFixtures.ChildRecoversAndSiblingStateSurvives(harness),
+        "HotReload_ComponentMigratesState" => new HotReloadComponentMigrationFixtures.MigratesPreservingState(harness),
         // DSL and extension tests
         "DslExt_FluentModifierChain" => new DslExtensionFixtures.FluentModifierChain(harness),
         "DslExt_TransitionExtensions" => new DslExtensionFixtures.TransitionExtensions(harness),
@@ -1486,6 +1673,7 @@ internal static class SelfTestFixtureRegistry
         // Core coverage tests
         "CoreCov_RichTextBlockParagraphUpdate" => new CoreCoverageFixtures.RichTextBlockParagraphUpdate(harness),
         "CoreCov_RichTextBlockInlineReconciliation" => new CoreCoverageFixtures.RichTextBlockInlineReconciliation(harness),
+        "CoreCov_RichTextHyperlink_OnClickMode" => new CoreCoverageFixtures.RichTextHyperlink_OnClickMode(harness),
         "CoreCov_TemplatedGridViewMountUpdate" => new CoreCoverageFixtures.TemplatedGridViewMountUpdate(harness),
         "CoreCov_TemplatedFlipViewMountUpdate" => new CoreCoverageFixtures.TemplatedFlipViewMountUpdate(harness),
         "CoreCov_LazyVStackMountUpdate" => new CoreCoverageFixtures.LazyVStackMountUpdate(harness),
@@ -1590,6 +1778,7 @@ internal static class SelfTestFixtureRegistry
         "ValCov_BuiltInValidators" => new ValidationCoverageFixtures.BuiltInValidatorsExercise(harness),
         "ValCov_ValidateExtensions" => new ValidationCoverageFixtures.ValidateExtensionsExercise(harness),
         "ValCov_FormFieldRendering" => new ValidationCoverageFixtures.FormFieldRendering(harness),
+        "ValCov_ValidationCompositeLifecycleUpdateAndCleanup" => new ValidationCoverageFixtures.CompositeLifecycleUpdateAndCleanup(harness),
         "ValCov_ValidationRule" => new ValidationCoverageFixtures.ValidationRuleExercise(harness),
         "ValCov_FormFieldHelpers" => new ValidationCoverageFixtures.FormFieldHelpersExercise(harness),
         // Controls coverage
@@ -1750,6 +1939,7 @@ internal static class SelfTestFixtureRegistry
         "CovBoost2_SemanticElement" => new CoverageBoostFixtures2.SemanticElementExercise(harness),
         "CovBoost2_ValidationVisualizerStyles" => new CoverageBoostFixtures2.ValidationVisualizerStyles(harness),
         "CovBoost2_TitleBarMountUpdate" => new CoverageBoostFixtures2.TitleBarMountUpdate(harness),
+        "CovBoost2_TitleBarRightHeaderInset" => new CoverageBoostFixtures2.TitleBarRightHeaderInset(harness),
         "CovBoost2_ReconcileChildPaths" => new CoverageBoostFixtures2.ReconcileChildPaths(harness),
         "CovBoost2_RichToolTipUpdate" => new CoverageBoostFixtures2.RichToolTipUpdate(harness),
         "CovBoost2_FlexChildPropChange" => new CoverageBoostFixtures2.FlexChildPropChange(harness),
@@ -1762,6 +1952,38 @@ internal static class SelfTestFixtureRegistry
         "CovBoost2_ElementPoolInteractiveReset" => new CoverageBoostFixtures2.ElementPoolInteractiveReset(harness),
         "CovBoost2_DataGridSearchSort" => new CoverageBoostFixtures2.DataGridSearchSort(harness),
         "CovBoost2_FocusTrapExercise" => new CoverageBoostFixtures2.SplitViewExercise(harness),
+
+        // Accessibility — SemanticPanel automation peer + UseFocusTrap hook
+        "A11y_SemanticPanel_RangeValueProvider"
+            => new AccessibilityFixtures.SemanticPanelRangeValueProvider(harness),
+        "A11y_SemanticPanel_ValueProvider"
+            => new AccessibilityFixtures.SemanticPanelValueProvider(harness),
+        "A11y_SemanticPanel_RangeSetValueRespectsReadOnly"
+            => new AccessibilityFixtures.SemanticPanelRangeSetValueRespectsReadOnly(harness),
+        "A11y_SemanticPanel_ValueSetValueRespectsReadOnly"
+            => new AccessibilityFixtures.SemanticPanelValueSetValueRespectsReadOnly(harness),
+        "A11y_SemanticPanel_HidesRangePatternWhenNoRange"
+            => new AccessibilityFixtures.SemanticPanelHidesRangePatternWhenNoRange(harness),
+        "A11y_SemanticPanel_HidesValuePatternWhenNoValue"
+            => new AccessibilityFixtures.SemanticPanelHidesValuePatternWhenNoValue(harness),
+        "A11y_SemanticPanel_ControlTypeMapping"
+            => new AccessibilityFixtures.SemanticPanelControlTypeMapping(harness),
+        "A11y_SemanticPanel_UpdatePathRefreshesPanel"
+            => new AccessibilityFixtures.SemanticElementUpdatePathRefreshesPanel(harness),
+        "A11y_Semantics_FluentModifierBuildsRecord"
+            => new AccessibilityFixtures.SemanticsFluentModifierBuildsRecord(harness),
+        "A11y_FocusTrap_HookReturnsStableHandle"
+            => new AccessibilityFixtures.FocusTrapHookReturnsStableHandle(harness),
+        "A11y_FocusTrap_HookIsActiveTracksHookArg"
+            => new AccessibilityFixtures.FocusTrapHookIsActiveTracksHookArg(harness),
+        "A11y_FocusTrap_ModifierAttachesContainer"
+            => new AccessibilityFixtures.FocusTrapModifierAttachesContainer(harness),
+        "A11y_FocusTrap_ModifierChainsExistingOnMount"
+            => new AccessibilityFixtures.FocusTrapModifierChainsExistingOnMount(harness),
+        "A11y_FocusTrap_HandleAttachDetachIdempotent"
+            => new AccessibilityFixtures.FocusTrapHandleAttachDetachIdempotent(harness),
+        "A11y_FocusTrap_HandleSetContainerSwaps"
+            => new AccessibilityFixtures.FocusTrapHandleSetContainerSwaps(harness),
 
         // Input modifiers — spec 027 Tier 1
         "PointerMod_DoubleTappedAutoEnables" => new PointerModifierFixtures.DoubleTappedAutoEnables(harness),
@@ -1887,13 +2109,6 @@ internal static class SelfTestFixtureRegistry
         "TemplatedListHL_LazyHStack_NoHighlightOnSiblingStateChange" => new TemplatedListHighlightTests.LazyHStack_NoHighlightOnSiblingStateChange(harness),
         "TemplatedListHL_LazyVStack_SpacingChangeFlagsControl" => new TemplatedListHighlightTests.LazyVStack_SpacingChangeFlagsControl(harness),
 
-        // Layout-cost overlay
-        "LayoutCost_FlagOn_BackFillsExistingComponents" => new LayoutCostOverlayTests.FlagOn_BackFillsExistingComponents(harness),
-        "LayoutCost_MountWhileOn_AddsRollup" => new LayoutCostOverlayTests.MountWhileOn_AddsRollup(harness),
-        "LayoutCost_UnmountWhileOn_DropsRollup" => new LayoutCostOverlayTests.UnmountWhileOn_DropsRollup(harness),
-        "LayoutCost_ToggleOffOn_NewComponentsStillRegister" => new LayoutCostOverlayTests.ToggleOffOn_NewComponentsStillRegister(harness),
-        "LayoutCost_BoundsRefreshFromVisualTree" => new LayoutCostOverlayTests.BoundsRefreshFromVisualTree(harness),
-
         // ReconcilerBigCoverage
         "RBC_AllEventHandlersAttached" => new ReconcilerBigCoverageFixtures.AllEventHandlersAttached(harness),
         "RBC_TapHandlersRemovedDisablesFlags" => new ReconcilerBigCoverageFixtures.TapHandlersRemovedDisablesFlags(harness),
@@ -1908,6 +2123,7 @@ internal static class SelfTestFixtureRegistry
         "RBC_TreeViewHandlerWiringFastPath" => new ReconcilerBigCoverageFixtures.TreeViewHandlerWiringFastPath(harness),
         "RBC_WebView2HandlerWiring" => new ReconcilerBigCoverageFixtures.WebView2HandlerWiring(harness),
         "RBC_CommandBarUpdate" => new ReconcilerBigCoverageFixtures.CommandBarUpdate(harness),
+        "RBC_CmdBarToggleIconUpdate" => new ReconcilerBigCoverageFixtures.CmdBarToggleIconUpdate(harness),
         "RBC_FrameMount" => new ReconcilerBigCoverageFixtures.FrameMount(harness),
         "RBC_ParallaxMountUpdate" => new ReconcilerBigCoverageFixtures.ParallaxMountUpdate(harness),
         "RBC_AnnounceRegionMount" => new ReconcilerBigCoverageFixtures.AnnounceRegionMount(harness),
@@ -2006,6 +2222,21 @@ internal static class SelfTestFixtureRegistry
         "NativeDocking_Composition_ContentMutationFlowsToActivePane" => new NativeDockingCompositionFixtures.Composition_ContentMutationFlowsToActivePane(harness),
         "NativeDocking_Composition_SiblingMutation_PreservesActivePaneIdentity" => new NativeDockingCompositionFixtures.Composition_SiblingMutation_PreservesActivePaneIdentity(harness),
         "NativeDocking_Composition_Rehydration_ContentMatchesByKey" => new NativeDockingCompositionFixtures.Composition_Rehydration_ContentMatchesByKey(harness),
+        // Spec 045 §2.6 tear-off pipeline
+        "NativeDockingTearOff_T01_HostMounts_AttachesPressHook" => new NativeDockingTearOffFixtures.T01_HostMounts_AttachesPressHook(harness),
+        "NativeDockingTearOff_T02_PressOnTab_RecordsCandidate" => new NativeDockingTearOffFixtures.T02_PressOnTab_RecordsCandidate(harness),
+        "NativeDockingTearOff_T03_PressBelowThreshold_NoTearOff" => new NativeDockingTearOffFixtures.T03_PressBelowThreshold_NoTearOff(harness),
+        "NativeDockingTearOff_T04_PressAboveThreshold_TearsOff" => new NativeDockingTearOffFixtures.T04_PressAboveThreshold_TearsOff(harness),
+        "NativeDockingTearOff_T05_CanMoveFalse_RefusedAtBeginTearOff" => new NativeDockingTearOffFixtures.T05_CanMoveFalse_RefusedAtBeginTearOff(harness),
+        "NativeDockingTearOff_T06_CanFloatFalse_RefusedAtBeginTearOff" => new NativeDockingTearOffFixtures.T06_CanFloatFalse_RefusedAtBeginTearOff(harness),
+        "NativeDockingTearOff_T07_StaleTrackerForceCleaned_NextDragSucceeds" => new NativeDockingTearOffFixtures.T07_StaleTrackerForceCleaned_NextDragSucceeds(harness),
+        "NativeDockingTearOff_T08_DropOutside_RetainsFloating_EndsSession" => new NativeDockingTearOffFixtures.T08_DropOutside_RetainsFloating_EndsSession(harness),
+        "NativeDockingTearOff_T09_EscCancel_BehavesLikeDropOutside" => new NativeDockingTearOffFixtures.T09_EscCancel_BehavesLikeDropOutside(harness),
+        "NativeDockingTearOff_T10_HostUnmount_StopsTracker" => new NativeDockingTearOffFixtures.T10_HostUnmount_StopsTracker(harness),
+        "NativeDockingTearOff_T11_FloatingTabPress_HidesSource_AndStartsTracker" => new NativeDockingTearOffFixtures.T11_FloatingTabPress_HidesSource_AndStartsTracker(harness),
+        "NativeDockingTearOff_T12_FloatingTearOff_DropOnHostTarget_DocksToHost" => new NativeDockingTearOffFixtures.T12_FloatingTearOff_DropOnHostTarget_DocksToHost(harness),
+        "NativeDockingTearOff_T13_FloatingTearOff_DropOutside_RetainsPreview" => new NativeDockingTearOffFixtures.T13_FloatingTearOff_DropOutside_RetainsPreview(harness),
+        "NativeDockingTearOff_T14_FloatingTearOff_StaleTrackerForceCleaned" => new NativeDockingTearOffFixtures.T14_FloatingTearOff_StaleTrackerForceCleaned(harness),
         // Spec 045 §2.4 drag/drop matrix
         "NativeDockingMatrix_DragToCenterSameGroup_NoOp" => new NativeDockingDragDropMatrixFixtures.DragToCenterSameGroup_NoOp(harness),
         "NativeDockingMatrix_DragToSplitRight_AddsColumn" => new NativeDockingDragDropMatrixFixtures.DragToSplitRight_AddsColumn(harness),
@@ -2119,6 +2350,66 @@ internal static class SelfTestFixtureRegistry
         "HostCov_PinToSide_DrainsIntoSideStrip" => new NativeDockingCoverageHostFixtures.Host_PinToSide_DrainsIntoSideStrip(harness),
         "HostCov_AutomationIds_PaneIdsWiredOnDocked" => new NativeDockingCoverageHostFixtures.Host_AutomationIds_PaneIdsWiredOnDocked(harness),
         "HostCov_ActiveContentChangedCallback_FiresOnActivate" => new NativeDockingCoverageHostFixtures.Host_ActiveContentChangedCallback_FiresOnActivate(harness),
+
+        // Spec 047 §14 Phase 1 (1.11–1.15) — V1 protocol behavior parity fixtures.
+        "V1_ToggleSwitch_MountUpdate" => new Spec047V1ProtocolFixtures.V1ToggleSwitchMountUpdate(harness),
+        "V1_Slider_CoercionTolerance" => new Spec047V1ProtocolFixtures.V1SliderCoercionTolerance(harness),
+        "V1_TextBox_Controlled" => new Spec047V1ProtocolFixtures.V1TextBoxControlled(harness),
+        "V1_Border_SingleContent" => new Spec047V1ProtocolFixtures.V1BorderSingleContent(harness),
+        "V1_ListView_MountSelect" => new Spec047V1ProtocolFixtures.V1ListViewMountSelect(harness),
+
+        // Spec 047 §8 — real-input echo-stranding regression (CR Finding 1).
+        "Echo_RadioButton_RealInput" => new Spec047EchoStrandingFixtures.RadioButtonRealInputEcho(harness),
+        "Echo_ToggleSplitButton_RealInput" => new Spec047EchoStrandingFixtures.ToggleSplitButtonRealInputEcho(harness),
+        "Echo_NumberBox_RealInput" => new Spec047EchoStrandingFixtures.NumberBoxRealInputEcho(harness),
+
+        // Spec 047 §8 — value-diff echo suppression PoC (ControlledPropEntry path).
+        "ValueDiff_RadioButton_Drift" => new Spec047ValueDiffEchoFixtures.RadioButtonProgrammaticDrift(harness),
+        "ValueDiff_ToggleSplitButton_Drift" => new Spec047ValueDiffEchoFixtures.ToggleSplitButtonProgrammaticDrift(harness),
+        "ValueDiff_TextBox_Drift" => new Spec047ValueDiffEchoFixtures.TextBoxProgrammaticDrift(harness),
+        "ValueDiff_TextBox_SnapBack" => new Spec047ValueDiffEchoFixtures.TextBoxControlledSnapBack(harness),
+        "ValueDiff_TextBox_Transition" => new Spec047ValueDiffEchoFixtures.TextBoxControlledTransitionDrift(harness),
+        "ValueDiff_ComboBox_Drift" => new Spec047ValueDiffEchoFixtures.ComboBoxProgrammaticDrift(harness),
+        "ValueDiff_ToggleSwitch_Drift" => new Spec047ValueDiffEchoFixtures.ToggleSwitchProgrammaticDrift(harness),
+        "ValueDiff_GridView_GuardedNoOpStrand" => new Spec047ValueDiffEchoFixtures.GridViewGuardedNoOpStrand(harness),
+        "Issue464_GridView_RapidDoubleWriteEcho" => new Spec047ValueDiffEchoFixtures.GridViewRapidDoubleWriteEcho(harness),
+        "Issue495_ListViewLoop_StateBound_NoLoopAfterSelection" => new ListViewLoopReproFixtures.StateBound_NoLoopAfterSelection(harness),
+        "Issue495_GridViewLoop_StateBound_NoLoopAfterSelection" => new ListViewLoopReproFixtures.GridView_StateBound_NoLoopAfterSelection(harness),
+        "Issue495_TypedListViewLoop_StateBound_NoLoopAfterSelection" => new ListViewLoopReproFixtures.TypedListView_StateBound_NoLoopAfterSelection(harness),
+        "Issue495_TypedGridViewLoop_StateBound_NoLoopAfterSelection" => new ListViewLoopReproFixtures.TypedGridView_StateBound_NoLoopAfterSelection(harness),
+        "Issue495_ListView_SameLengthContentChange_RefreshesContainers" => new ListViewLoopReproFixtures.ListView_SameLengthContentChange_RefreshesContainers(harness),
+        "Issue495_GridView_SameLengthContentChange_RefreshesContainers" => new ListViewLoopReproFixtures.GridView_SameLengthContentChange_RefreshesContainers(harness),
+
+        // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
+        "Spec047ExternalProof_Marquee_MountUpdate" => new Spec047ExternalProofFixtures.MarqueeMountUpdate(harness),
+        "Spec047ExternalProof_Marquee_WriteSuppressed" => new Spec047ExternalProofFixtures.MarqueeWriteSuppressedEcho(harness),
+        "Spec047ExternalProof_Marquee_ModifierChain" => new Spec047ExternalProofFixtures.MarqueeModifierChain(harness),
+        "Spec047ExternalProof_Marquee_SetterChain" => new Spec047ExternalProofFixtures.MarqueeSetterChain(harness),
+        "Spec047ExternalProof_Marquee_PoolRent" => new Spec047ExternalProofFixtures.MarqueePoolRentReturn(harness),
+        "Spec047ExternalProof_Marquee_PoolResetContract" => new Spec047ExternalProofFixtures.MarqueePoolResetContract(harness),
+
+        // Spec 047 §4.3 — EventHandlerState split (§9.2) contract fixtures.
+        "EventStateSplit_NoDuplicateSubscriptionAcrossPoolReuse" => new Spec047EventStateSplitFixtures.NoDuplicateSubscriptionAcrossPoolReuse(harness),
+        "EventStateSplit_HandlerTypeMismatchResetsBox" => new Spec047EventStateSplitFixtures.HandlerTypeMismatchResetsBox(harness),
+        "EventStateSplit_DualReturnIdempotent" => new Spec047EventStateSplitFixtures.DualReturnIdempotent(harness),
+        "EventStateSplit_ModifierStateLazyForIntrinsicOnly" => new Spec047EventStateSplitFixtures.ModifierStateLazyForIntrinsicOnly(harness),
+        "EventStateSplit_AddRawRoutedHandler_HandledEventsToo" => new Spec047EventStateSplitFixtures.AddRawRoutedHandler_HandledEventsToo(harness),
+
+        // Spec 048 §8 — global ControlRegistry dispatch precedence fixtures.
+        "Spec048_GlobalRegistry_Mount_DispatchesThroughArm3" => new Spec048ControlRegistryFixtures.GlobalRegistry_Mount_DispatchesThroughArm3(harness),
+        "Spec048_GlobalRegistry_FactoryCachedAfterFirstHit" => new Spec048ControlRegistryFixtures.GlobalRegistry_FactoryCachedAfterFirstHit(harness),
+        "Spec048_PerHost_RegisterHandler_ShadowsGlobal" => new Spec048ControlRegistryFixtures.PerHost_RegisterHandler_ShadowsGlobal(harness),
+        "Spec048_TextGroupFactoriesRegisterHandlers" => new Spec048RegistrationFixtures.TextGroupFactoriesRegisterHandlers(harness),
+        "Spec048_InputGroupFactoriesRegisterHandlers" => new Spec048RegistrationFixtures.InputGroupFactoriesRegisterHandlers(harness),
+        "Spec048_ContainerGroupFactoriesRegisterHandlers" => new Spec048RegistrationFixtures.ContainerGroupFactoriesRegisterHandlers(harness),
+        "Spec048_CollectionsGroupFactoriesRegisterHandlers" => new Spec048RegistrationFixtures.CollectionsGroupFactoriesRegisterHandlers(harness),
+        "Spec048_DateTimeGroupFactoriesRegisterHandlers" => new Spec048RegistrationFixtures.DateTimeGroupFactoriesRegisterHandlers(harness),
+        "Spec048_StatusInfoGroupFactoriesRegisterHandlers" => new Spec048RegistrationFixtures.StatusInfoGroupFactoriesRegisterHandlers(harness),
+        "Spec048_MediaIconsGroupFactoriesRegisterHandlers" => new Spec048RegistrationFixtures.MediaIconsGroupFactoriesRegisterHandlers(harness),
+        "Spec048_ShapesGroupFactoriesRegisterHandlers" => new Spec048RegistrationFixtures.ShapesGroupFactoriesRegisterHandlers(harness),
+        "Spec048_NavigationChromeGroupFactoriesRegisterHandlers" => new Spec048RegistrationFixtures.NavigationChromeGroupFactoriesRegisterHandlers(harness),
+        "Spec048_OverlaysGroupFactoriesRegisterHandlers" => new Spec048RegistrationFixtures.OverlaysGroupFactoriesRegisterHandlers(harness),
+        "Spec048_IconAndInteropGroupFactoriesRegisterHandlers" => new Spec048RegistrationFixtures.IconAndInteropGroupFactoriesRegisterHandlers(harness),
 
         _ => null,
     };

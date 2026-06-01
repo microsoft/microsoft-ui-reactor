@@ -78,7 +78,7 @@ internal static class NativeDockingReliabilityFixtures
             });
             await Harness.Render();
             H.Check("Reliability_CorruptLoad_FallbackPaneMounted",
-                H.FindText("body-fallback") is not null);
+                await Harness.WaitFor(() => H.FindText("body-fallback") is not null));
 
             host.Mount(_ => TextBlock("corrupt-fallback-done"));
             await Harness.Render();
@@ -173,21 +173,20 @@ internal static class NativeDockingReliabilityFixtures
     /// programmatically closes the pane via <c>model.Close</c>. Asserts:
     /// (a) the close drains through the §2.16 mutation queue, (b) the
     /// component's body is removed from the visual tree, (c) the
-    /// component's mount effect ran exactly once. Spec §8.10 reliability
-    /// invariant on the visual unmount.
+    /// component's mount effect ran exactly once, and (d) the component's
+    /// UseEffect cleanup fired exactly once on pane close. Spec §8.10
+    /// reliability invariant on the visual unmount.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Open follow-up (tracked as §2.25): when a <see cref="DockableContent.Content"/>
-    /// holds a <see cref="ComponentElement"/>, the reconciler removes the
-    /// element from the visual tree on pane close but does not fire the
-    /// component's <c>UseEffect</c> cleanup. This fixture intentionally
-    /// does NOT assert that cleanup ran — a perpetual SKIP rotted
-    /// because nothing ever forced anyone to look at it. The cleanup-
-    /// fires-on-close contract is tracked separately in
-    /// <c>docs/specs/045-docking-windows-implementation.md §2.25</c>;
-    /// when the underlying reconciler gap is closed, add a fresh
-    /// assertion here.
+    /// Issue #375 — the UseEffect cleanup assertion is the regression
+    /// test for the V1HandlerAdapter unmount-side strategy dispatch:
+    /// when a <see cref="DockableContent.Content"/> holds a
+    /// <see cref="ComponentElement"/> nested under the docking host's
+    /// Border wrapper (<c>WrapLeafWithPaneContext</c>), the SingleContent
+    /// strategy must walk its live child on Unmount so the component
+    /// wrapper Border that anchors the <c>_componentNodes</c> lookup is
+    /// reached and <c>RunCleanups()</c> fires.
     /// </para>
     /// </remarks>
     internal class UseEffectCleanup_BodyRemovedOnPaneClose(Harness h) : SelfTestFixtureBase(h)
@@ -223,7 +222,7 @@ internal static class NativeDockingReliabilityFixtures
             H.Check("Reliability_Effect_MountedOnce", mountedCount == 1);
             H.Check("Reliability_Effect_NoCleanupBeforeClose", cleanupCount == 0);
             H.Check("Reliability_Effect_BodyRendered",
-                H.FindText("effect-body-p1") is not null);
+                await Harness.WaitFor(() => H.FindText("effect-body-p1") is not null));
 
             var model = DockHostModelBridge.Get(managerEl);
             H.Check("Reliability_Effect_BridgeYieldsModel", model is not null);
@@ -245,11 +244,14 @@ internal static class NativeDockingReliabilityFixtures
             H.Check("Reliability_Effect_BodyGoneFromTree",
                 H.FindText("effect-body-p1") is null);
 
-            // The matching cleanup-fires-on-close assertion is
-            // deliberately not emitted here. See class docstring for
-            // the §2.25 follow-up; cleanupCount stays wired so a fresh
-            // assertion can land here without reshape.
-            _ = cleanupCount;
+            // Issue #375 regression — the cleanup must fire when the pane
+            // is closed. Before the V1HandlerAdapter unmount-side strategy
+            // dispatch landed, this counter stayed at 0 because the docking
+            // host's BorderElement wrapper around the pane Content was
+            // unmounted via the V1 arm returning CollectSelf — which short-
+            // circuited before the engine could recurse into the component
+            // wrapper Border that anchors RunCleanups().
+            H.Check("Reliability_Effect_CleanupRanOnClose", cleanupCount == 1);
 
             host.Mount(_ => TextBlock("effect-cleanup-done"));
             await Harness.Render();
@@ -525,10 +527,12 @@ internal static class NativeDockingReliabilityFixtures
     {
         // 100 mount/unmount cycles × 2 Harness.Render() each = 200 renders + 200
         // reconcile passes. Locally this runs ~15s; CI VMs under contention have
-        // been measured at 2-4× slower per INVESTIGATION.md Cluster T, easily
-        // overshooting the prior 30s budget on a heavy iteration. The cap exists
-        // to catch a hung fixture, not to set a perf target.
-        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(60);
+        // been measured at 2-4× slower per INVESTIGATION.md Cluster T (i.e. up to
+        // ~60s on a heavy iteration). Prior 60s budget tripped the host-level
+        // HangWatchdogLoop once in 500 stress iterations; 120s gives margin and,
+        // under the new per-fixture watchdog rule (SelfTestRunner.HangSlack),
+        // automatically lifts that watchdog threshold to 150s.
+        public override TimeSpan FixtureTimeout => TimeSpan.FromSeconds(120);
 
         public override async Task RunAsync()
         {
@@ -547,6 +551,7 @@ internal static class NativeDockingReliabilityFixtures
             // Drain to an empty host.
             host.Mount(_ => TextBlock("warmup-done"));
             await Harness.Render();
+            H.Check("Reliability_LeakBaseline_WarmupComplete", true);
 
             // Force GC so the baseline reflects steady state. Marshal off
             // the UI dispatcher to avoid a finalizer-deadlock on UI-thread-
@@ -576,6 +581,13 @@ internal static class NativeDockingReliabilityFixtures
                 await Harness.Render();
                 host.Mount(_ => TextBlock($"between-{i}"));
                 await Harness.Render();
+                // Heartbeat every 25 cycles. NOTE: this does NOT reset the
+                // host-level HangWatchdogLoop — that uses elapsed-since-fixture-
+                // start, not TAP output. These are log breadcrumbs only, so a
+                // future hang reveals which 25-cycle window it lived in
+                // (e.g. "Cycle25Progress: ok" printed but Cycle50 did not).
+                if ((i + 1) % 25 == 0)
+                    H.Check($"Reliability_LeakBaseline_Cycle{i + 1}Progress", true);
             }
 
             await Task.Run(() =>

@@ -71,13 +71,13 @@ class FlexPanelDemo : Component
             // Live flex container
             SubHeading("Live Preview"),
             Border(
-                new FlexElement([
+                Flex([
                     ColorBox("A", "#4A90D9").Flex(grow: 1).Size(80, 60),
                     ColorBox("B", "#50B86C").Flex(grow: 2).Size(80, 80),
                     ColorBox("C", "#E8834A").Flex(grow: 1).Size(80, 40),
                     ColorBox("D", "#9B59B6").Size(80, 50),
                     ColorBox("E", "#E74C3C").Flex(grow: 1).Size(80, 70),
-                ])
+                ]) with
                 {
                     Direction = direction,
                     Wrap = wrap,
@@ -91,11 +91,11 @@ class FlexPanelDemo : Component
             // Grow ratio demo
             SubHeading("Grow Ratios"),
             TextBlock("Items with grow 1 : 2 : 1 share available space proportionally."),
-            new FlexElement([
+            Flex([
                 ColorBox("1x", "#4A90D9").Flex(grow: 1).Height(50),
                 ColorBox("2x", "#50B86C").Flex(grow: 2).Height(50),
                 ColorBox("1x", "#E8834A").Flex(grow: 1).Height(50),
-            ])
+            ]) with
             {
                 Direction = FlexDirection.Row,
                 ColumnGap = 8,
@@ -104,12 +104,12 @@ class FlexPanelDemo : Component
             // Wrap demo
             SubHeading("Wrap"),
             TextBlock("Eight items with wrap enabled flow onto multiple lines."),
-            new FlexElement(
+            Flex(
                 Enumerable.Range(1, 8).Select(i =>
                     ColorBox($"{i}", i % 2 == 0 ? "#4A90D9" : "#E8834A")
                         .Size(120, 50).Flex(grow: 1)
                 ).ToArray()
-            )
+            ) with
             {
                 Direction = FlexDirection.Row,
                 Wrap = FlexWrap.Wrap,

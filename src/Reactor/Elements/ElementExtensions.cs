@@ -10,6 +10,11 @@ using Windows.UI.Text;
 using WinUI = Microsoft.UI.Xaml.Controls;
 using WinPrim = Microsoft.UI.Xaml.Controls.Primitives;
 using WinShapes = Microsoft.UI.Xaml.Shapes;
+// Spec 048 §7 — aliases for the per-modifier `Reg<>` registration touch
+// (mirroring the Dsl.cs convention).
+using V1 = Microsoft.UI.Reactor.Core.V1Protocol;
+using Desc = Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
+using SemanticPanel = Microsoft.UI.Reactor.Accessibility.SemanticPanel;
 
 namespace Microsoft.UI.Reactor;
 
@@ -2334,6 +2339,7 @@ public static partial class ElementExtensions
         double? rangeValue = null,
         bool isReadOnly = true) where T : Element
     {
+        _ = V1.Reg<SemanticElement, SemanticPanel, Desc.SemanticDescriptorHandler>.Done;
         return new SemanticElement(el, new SemanticDescription(role, value, rangeMin, rangeMax, rangeValue, isReadOnly));
     }
 

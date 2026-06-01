@@ -181,7 +181,7 @@ class TransitionsDemo : Component
             TextBlock("Toggle item width — items reflow within the same FlexPanel, animating to new positions."),
             Button(useWrap ? "Shrink items (fit one row)" : "Expand items (wrap to rows)",
                 () => setUseWrap(!useWrap)),
-            new FlexElement(
+            Flex(
                 Enumerable.Range(0, 6).Select(i =>
                     Border(
                         TextBlock($"Item {i}").SemiBold()
@@ -192,7 +192,7 @@ class TransitionsDemo : Component
                         .Size(useWrap ? 250 : 120, 70)
                         .LayoutAnimation(TimeSpan.FromMilliseconds(400))
                 ).ToArray()
-            ) { Wrap = Microsoft.UI.Reactor.Layout.FlexWrap.Wrap, ColumnGap = 8, RowGap = 8 },
+            ) with { Wrap = Microsoft.UI.Reactor.Layout.FlexWrap.Wrap, ColumnGap = 8, RowGap = 8 },
 
             // Section 9: Connected animation — FlexPanel <-> UniformGrid
             SubHeading("Connected Animation — Layout Switch"),
@@ -212,7 +212,7 @@ class TransitionsDemo : Component
                             .ConnectedAnimation($"layout-item-{i}")
                     ).ToArray()
                 )
-                : new FlexElement(
+                : Flex(
                     Enumerable.Range(0, 6).Select(i =>
                         Border(
                             TextBlock($"Item {i}").SemiBold()
@@ -223,7 +223,7 @@ class TransitionsDemo : Component
                             .Size(250, 70)
                             .ConnectedAnimation($"layout-item-{i}")
                     ).ToArray()
-                ) { Wrap = Microsoft.UI.Reactor.Layout.FlexWrap.Wrap, ColumnGap = 8, RowGap = 8 },
+                ) with { Wrap = Microsoft.UI.Reactor.Layout.FlexWrap.Wrap, ColumnGap = 8, RowGap = 8 },
 
             // Section 10: Layout animation — slow reorder
             SubHeading("Layout Animation — Slow Reorder"),

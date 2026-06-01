@@ -197,13 +197,13 @@ static void EmitAbsoluteTable(string path, List<IGrouping<(string, string, strin
     sb.AppendLine();
     sb.AppendLine("Mean ns per op + alloc bytes, per variant. Columns are dashes when a variant has < min-reps repetitions. Architecture column distinguishes ARM64-native from x64-emulated runs (spec §15.5 — non-comparable across architectures).");
     sb.AppendLine();
-    sb.AppendLine("| Bench | Arch | Direct ns | Today ns | V2 ns | Direct alloc | Today alloc | V2 alloc |");
+    sb.AppendLine("| Bench | Arch | Direct ns | Today ns | Reactor ns | Direct alloc | Today alloc | Reactor alloc |");
     sb.AppendLine("|---|---|---:|---:|---:|---:|---:|---:|");
     foreach (var bench in ByBenchArch(groups))
     {
         var direct = bench.FirstOrDefault(g => g.Key.Item2 == "Direct");
         var today = bench.FirstOrDefault(g => g.Key.Item2 == "ReactorToday");
-        var v2 = bench.FirstOrDefault(g => g.Key.Item2 == "ReactorV2");
+        var v2 = bench.FirstOrDefault(g => g.Key.Item2 == "Reactor");
         sb.Append("| ").Append(bench.Key.Bench).Append(" | ").Append(bench.Key.Arch).Append(' ');
         AppendCell(sb, direct, minReps, r => r.MeanNs, "F1");
         AppendCell(sb, today, minReps, r => r.MeanNs, "F1");
@@ -219,16 +219,16 @@ static void EmitAbsoluteTable(string path, List<IGrouping<(string, string, strin
 static void EmitDeltaTable(string path, List<IGrouping<(string, string, string), Row>> groups, int minReps)
 {
     var sb = new StringBuilder();
-    sb.AppendLine("# Spec 047 §15.6 (b) — Reactor Delta (V2 vs Today)");
+    sb.AppendLine("# Spec 047 §15.6 (b) — Reactor Delta (Reactor vs Today)");
     sb.AppendLine();
-    sb.AppendLine("Positive % = V2 slower / larger than Today. Negative = improvement. One row per (bench, architecture).");
+    sb.AppendLine("Positive % = Reactor slower / larger than Today. Negative = improvement. One row per (bench, architecture).");
     sb.AppendLine();
     sb.AppendLine("| Bench | Arch | ns delta % | ns 95% CI half-width | alloc delta % |");
     sb.AppendLine("|---|---|---:|---:|---:|");
     foreach (var bench in ByBenchArch(groups))
     {
         var today = bench.FirstOrDefault(g => g.Key.Item2 == "ReactorToday");
-        var v2 = bench.FirstOrDefault(g => g.Key.Item2 == "ReactorV2");
+        var v2 = bench.FirstOrDefault(g => g.Key.Item2 == "Reactor");
         if (today is null || v2 is null) continue;
         if (today.Count() < minReps || v2.Count() < minReps) continue;
 
@@ -253,16 +253,16 @@ static void EmitDeltaTable(string path, List<IGrouping<(string, string, string),
 static void EmitGapTable(string path, List<IGrouping<(string, string, string), Row>> groups, int minReps)
 {
     var sb = new StringBuilder();
-    sb.AppendLine("# Spec 047 §15.6 (c) — WinUI Gap (V2 vs Direct)");
+    sb.AppendLine("# Spec 047 §15.6 (c) — WinUI Gap (Reactor vs Direct)");
     sb.AppendLine();
     sb.AppendLine("Absolute overhead Reactor still adds on top of raw WinUI. One row per (bench, architecture).");
     sb.AppendLine();
-    sb.AppendLine("| Bench | Arch | V2 ns | Direct ns | V2 - Direct ns | V2 alloc - Direct alloc |");
+    sb.AppendLine("| Bench | Arch | Reactor ns | Direct ns | Reactor - Direct ns | Reactor alloc - Direct alloc |");
     sb.AppendLine("|---|---|---:|---:|---:|---:|");
     foreach (var bench in ByBenchArch(groups))
     {
         var direct = bench.FirstOrDefault(g => g.Key.Item2 == "Direct");
-        var v2 = bench.FirstOrDefault(g => g.Key.Item2 == "ReactorV2");
+        var v2 = bench.FirstOrDefault(g => g.Key.Item2 == "Reactor");
         if (direct is null || v2 is null) continue;
         if (direct.Count() < minReps || v2.Count() < minReps) continue;
 
@@ -329,7 +329,7 @@ internal static class JsonStatics
 
 internal sealed class VariantConverter : System.Text.Json.Serialization.JsonConverter<string>
 {
-    private static readonly string[] _names = ["Direct", "ReactorToday", "ReactorV2"];
+    private static readonly string[] _names = ["Direct", "ReactorToday", "Reactor"];
 
     public override string Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {

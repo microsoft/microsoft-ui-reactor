@@ -279,6 +279,12 @@ internal static class NativeDockingCoverageMiscFixtures
                 onTabClosing: null);
             host.Mount(_ => tbRendered);
             await Harness.Render();
+            // TabView lazy-realizes the selected pane's body on Normal-priority
+            // dispatcher messages scheduled by layout; on contended CI a single
+            // Render() pump can race the realization (rare, ~timing-dependent —
+            // surfaced once under the V1-ON selftest gate). A second pump drains
+            // the straggler so FindText reliably sees the realized body.
+            await Harness.Render();
             H.Check("TabRenderer_TitleBarChrome_BodyRendered",
                 H.FindText("body-tw1") is not null);
 
@@ -289,6 +295,7 @@ internal static class NativeDockingCoverageMiscFixtures
                 onSelectedIndexChanged: null,
                 onTabClosing: null);
             host.Mount(_ => flatRendered);
+            await Harness.Render();
             await Harness.Render();
             H.Check("TabRenderer_FlatChrome_BodyRendered",
                 H.FindText("body-tw1") is not null);

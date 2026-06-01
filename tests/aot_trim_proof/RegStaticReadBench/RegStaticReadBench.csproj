@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Spec 048 §9 / §13 Phase 2 — standalone measurement of the
+    `Reg<TElement, TControl, THandler>.Done` static-field-read shape that
+    Phase 3 will inject into every factory method.
+
+    The bench does NOT depend on Reactor. It models the exact shape that
+    `Reg<>` will use:
+
+        internal static class Reg<TElement, TControl, THandler>
+            where THandler : IElementHandler<TElement, TControl>, new()
+        {
+            static Reg() { }                                  // disables `beforefieldinit`
+            internal static readonly byte Done = Init();
+            private static byte Init() { ControlRegistry.Register(...); return 1; }
+        }
+
+    The factory just touches `_ = Reg<E, C, H>.Done;` — at JIT time, the
+    cctor is precise before-first-use (the explicit empty static
+    constructor disables the `beforefieldinit` flag a type without an
+    explicit cctor would otherwise carry), but on each subsequent read the
+    JIT elides the cctor check (the runtime tracks "cctor has run" per
+    closed generic). The steady-state cost is one indirect load.
+
+    This bench drives that pattern with a single closed-generic helper
+    type and a paired empty-loop control. The delta should be near-zero
+    on modern x64/ARM64.
+
+    Output is human-readable to stdout; the operator pastes the numbers
+    into docs/specs/048/perf-results/phase2-baseline.md.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    <TieredCompilation>true</TieredCompilation>
+    <Optimize>true</Optimize>
+  </PropertyGroup>
+</Project>

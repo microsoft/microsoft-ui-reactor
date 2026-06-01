@@ -240,6 +240,65 @@ Border(child).Background(Theme.Ref("AcrylicBackgroundFillColorDefaultBrush"))
 Border(child).WithBorder(Theme.Ref("SurfaceStrokeColorFlyoutBrush"), 1)
 ```
 
+#### App-Level Custom Theme Resources
+
+Define brand colors and app-specific semantic tokens that adapt to Light, Dark, and High Contrast themes. Use `AppTheme.Register()` at app startup to inject custom brushes into WinUI's `ThemeDictionaries` — making them available to `Theme.Ref()` and lightweight styling throughout the app.
+
+**Registration (in App constructor or OnLaunched, before building the visual tree):**
+
+```csharp
+AppTheme.Register(theme => theme
+    .Add("BrandPrimaryBrush",
+        light: "#005A9E",
+        dark: "#4FC3F7",
+        highContrast: "SystemColorHighlightColorBrush")
+    .Add("BrandSecondaryBrush",
+        light: "#106EBE",
+        dark: "#81D4FA",
+        highContrast: "SystemColorHotlightColorBrush")
+    .Add("BrandSurfaceBrush",
+        light: "#F0F6FF",
+        dark: "#1A1A2E",
+        highContrast: "SystemColorWindowColorBrush"));
+```
+
+**Consumption (same `Theme.Ref()` API — no new syntax):**
+
+```csharp
+// Custom resources work everywhere WinUI theme resources work
+Border(child).Background(Theme.Ref("BrandPrimaryBrush"))
+TextBlock("Branded heading").Foreground(Theme.Ref("BrandSecondaryBrush"))
+
+// Works with lightweight styling
+Button("Brand Action", onClick).Resources(r => r
+    .Set("ButtonBackground", Theme.Ref("BrandPrimaryBrush"))
+    .Set("ButtonBackgroundPointerOver", Theme.Ref("BrandSecondaryBrush")))
+```
+
+**Gradient brushes** are supported for surfaces that accept arbitrary `Brush` types (e.g., `Border.Background`). Most control template resource keys (e.g., `ButtonBackground`) expect `SolidColorBrush` — gradients assigned to those keys may not render correctly. In High Contrast, gradients must fall back to a solid color.
+
+```csharp
+AppTheme.Register(theme => theme
+    .AddGradient("BrandAccentGradientBrush",
+        light: new GradientDef(("0", "#7cb6e9"), ("0.5", "#335fe3"), ("1.0", "#ee9bbf")),
+        dark: new GradientDef(("0", "#7cb6e9"), ("0.5", "#335fe3"), ("1.0", "#ee9bbf")),
+        highContrast: "#48B1E9"));  // Solid fallback in HC — no gradients or opacity
+
+// Use on surfaces — not control template keys
+Border(hero).Background(Theme.Ref("BrandAccentGradientBrush"))
+```
+
+**Rules:**
+
+- **Register before building the visual tree** — call `AppTheme.Register()` in the App constructor or `OnLaunched`, before any component renders.
+- **Always provide all three variants** (light, dark, highContrast). Omitting HC causes accessibility regressions.
+- **HC values must reference system color brushes or solid hex colors** — no gradients, no opacity, no custom colors. Use WinUI system brush keys like `"SystemColorHighlightColorBrush"`.
+- **Custom keys must end in `Brush`** for `SolidColorBrush` resources — matches WinUI naming conventions and ensures `Theme.Ref()` resolves them correctly.
+- **Don't re-register WinUI built-in keys** — use `Theme.*` tokens or `Theme.Ref()` for existing WinUI resources. `AppTheme.Register()` is for app-defined resources only.
+- **Duplicate key behavior** — registering the same key twice throws at startup. Libraries and app code must coordinate key names to avoid collisions.
+
+See [theme-aware-resources.md](design-docs/theme-aware-resources.md) for the full pattern with examples.
+
 #### Per-Subtree Theme Override
 
 Force a subtree to a specific theme variant:
@@ -488,7 +547,7 @@ element.Margin(left: 4, top: 8, right: 16, bottom: 24)
 
 #### Corner Radius
 
-Use system values — `ControlCornerRadius` (4px) for controls and `OverlayCornerRadius` (8px) for overlays.
+Use system values — `ControlCornerRadius` (4px) for controls and `OverlayCornerRadius` (8px) for overlays. Setting `CornerRadius` with hardcoded number values is not recommended; always use `ControlCornerRadius` and `OverlayCornerRadius` theme resources instead.
 
 WinUI provides two corner radius theme resources. Use `ThemeResource.CornerRadius()` to resolve the system values at render time, ensuring your UI adapts if these values are customized:
 
@@ -501,16 +560,14 @@ var overlayRadius = ThemeResource.CornerRadius("OverlayCornerRadius");
 Border(child).CornerRadius(controlRadius.TopLeft)   // controls, buttons, cards
 Border(dialog).CornerRadius(overlayRadius.TopLeft)   // dialogs, flyouts, menus
 
-// Also acceptable: hardcoded system values
-Border(child).CornerRadius(4)   // ControlCornerRadius equivalent
-Border(child).CornerRadius(8)   // OverlayCornerRadius equivalent
-
-// Selective rounding (top corners only)
-Border(child).CornerRadius(8, 8, 0, 0)
+// Not recommended: hardcoded number values
+// Border(child).CornerRadius(4)
+// Border(child).CornerRadius(8)
+// Border(child).CornerRadius(8, 8, 0, 0)
 
 // Wrong: non-standard radii (even if from Figma)
-Border(child).CornerRadius(3)
-Border(child).CornerRadius(6)
+// Border(child).CornerRadius(3)
+// Border(child).CornerRadius(6)
 ```
 
 **Mixed radii for nested surfaces:** When nesting controls inside overlay containers, the outer container uses `OverlayCornerRadius` while inner controls use `ControlCornerRadius`:

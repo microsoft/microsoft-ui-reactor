@@ -64,6 +64,10 @@ internal static class DevtoolsStateTool
             index = s.Index,
             valueType = s.ValueType?.FullName ?? s.ValueType?.Name,
             value = ShapeValue(s.Value),
+            // Q3 (spec 049 §3.6): true when this cell's value was migrated by
+            // the most recent hot-reload state-migration pass, so a devtools
+            // client can visually flag preserved-across-edit state.
+            migrated = s.Migrated,
         }).ToArray();
 
         return new { hooks };

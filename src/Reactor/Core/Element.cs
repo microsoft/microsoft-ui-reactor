@@ -65,11 +65,46 @@ public abstract record Element
     }
 
     /// <summary>
+    /// Cross-cutting extras (attached properties, transitions, theme bindings,
+    /// animation configs, resource overrides, context values) bucketed into a
+    /// lazy sub-record (spec 047 §4.4). The common case — a leaf with none of
+    /// these — leaves this slot null, so the 14 fields below cost one reference
+    /// instead of 14 inline slots on every <see cref="Element"/>.
+    /// The setter is <c>internal</c> (PR #455 CR item #6): ordinary code uses
+    /// the field shim properties (Attached, ThemeBindings, AnimationConfig, …)
+    /// below and never observes this slot. Keeping the setter off the public
+    /// surface removes an initializer-ordering footgun — a public
+    /// <c>with { Extensions = X }</c> after a shim write would have silently
+    /// discarded the shim. The engine and perf-critical internal paths may
+    /// still set it directly.
+    /// </summary>
+    /// <remarks>Spec 047 §4.4.</remarks>
+    public ElementExtras? Extensions { get; internal init; }
+
+    /// <summary>
+    /// Collapses an all-null <see cref="ElementExtras"/> back to a null
+    /// <see cref="Extensions"/> slot (PR #455 CR item #2). The bucketed shim
+    /// setters below route through this so that writing a bucketed field to
+    /// <c>null</c> never materializes (or keeps) a non-null empty bucket — an
+    /// empty bucket is <em>not</em> <c>Equals</c> to <c>null</c>, which would
+    /// otherwise break the synthesized record equality between an extras-free
+    /// element and one that had a field set to null (e.g.
+    /// <c>(x with { Attached = null }) == x</c>).
+    /// </summary>
+    private static ElementExtras? NormalizeExtras(ElementExtras extras)
+        => extras.IsEmpty ? null : extras;
+
+    /// <summary>
     /// Attached properties from parent containers (Grid.Row, Canvas.Left, etc.).
     /// Set via fluent extension methods: Text("hi").Grid(row: 1, column: 2)
     /// Stored as a type-keyed dictionary so each provider defines its own data record.
     /// </summary>
-    public IReadOnlyDictionary<Type, object>? Attached { get; init; }
+    public IReadOnlyDictionary<Type, object>? Attached
+    {
+        get => Extensions?.Attached;
+        init => Extensions = value is null && Extensions is null ? null
+            : NormalizeExtras(Extensions is null ? new ElementExtras { Attached = value } : Extensions with { Attached = value });
+    }
 
     /// <summary>
     /// Implicit transitions (opacity, scale, rotation, translation, background).
@@ -77,20 +112,35 @@ public abstract record Element
     /// Applied by the reconciler after mount/update, so they are always present when
     /// property values are set via .Set() callbacks.
     /// </summary>
-    public ImplicitTransitions? ImplicitTransitions { get; init; }
+    public ImplicitTransitions? ImplicitTransitions
+    {
+        get => Extensions?.ImplicitTransitions;
+        init => Extensions = value is null && Extensions is null ? null
+            : NormalizeExtras(Extensions is null ? new ElementExtras { ImplicitTransitions = value } : Extensions with { ImplicitTransitions = value });
+    }
 
     /// <summary>
     /// Theme transitions (children, item container).
     /// Set via fluent extension methods: VStack(children).WithThemeTransitions(...)
     /// </summary>
-    public ThemeTransitions? ThemeTransitions { get; init; }
+    public ThemeTransitions? ThemeTransitions
+    {
+        get => Extensions?.ThemeTransitions;
+        init => Extensions = value is null && Extensions is null ? null
+            : NormalizeExtras(Extensions is null ? new ElementExtras { ThemeTransitions = value } : Extensions with { ThemeTransitions = value });
+    }
 
     /// <summary>
     /// Theme-resource bindings for brush properties (Background, Foreground, BorderBrush).
     /// When set, the reconciler resolves from WinUI theme resources instead of using local values.
     /// Set via fluent extension methods: Text("hi").Background(Theme.Accent)
     /// </summary>
-    public IReadOnlyDictionary<string, ThemeRef>? ThemeBindings { get; init; }
+    public IReadOnlyDictionary<string, ThemeRef>? ThemeBindings
+    {
+        get => Extensions?.ThemeBindings;
+        init => Extensions = value is null && Extensions is null ? null
+            : NormalizeExtras(Extensions is null ? new ElementExtras { ThemeBindings = value } : Extensions with { ThemeBindings = value });
+    }
 
     /// <summary>
     /// Composition-layer layout animation configuration.
@@ -98,47 +148,82 @@ public abstract record Element
     /// so that layout-driven position (and optionally size) changes animate smoothly.
     /// Set via fluent extension methods: Border(child).LayoutAnimation()
     /// </summary>
-    public LayoutAnimationConfig? LayoutAnimation { get; init; }
+    public LayoutAnimationConfig? LayoutAnimation
+    {
+        get => Extensions?.LayoutAnimation;
+        init => Extensions = value is null && Extensions is null ? null
+            : NormalizeExtras(Extensions is null ? new ElementExtras { LayoutAnimation = value } : Extensions with { LayoutAnimation = value });
+    }
 
     /// <summary>
     /// Compositor property animation configuration (.Animate() modifier).
     /// When set, the reconciler creates ImplicitAnimationCollection entries on the
     /// element's Visual for Opacity/Scale/Rotation/Offset/CenterPoint.
     /// </summary>
-    public Microsoft.UI.Reactor.Animation.AnimationConfig? AnimationConfig { get; init; }
+    public Microsoft.UI.Reactor.Animation.AnimationConfig? AnimationConfig
+    {
+        get => Extensions?.AnimationConfig;
+        init => Extensions = value is null && Extensions is null ? null
+            : NormalizeExtras(Extensions is null ? new ElementExtras { AnimationConfig = value } : Extensions with { AnimationConfig = value });
+    }
 
     /// <summary>
     /// Element enter/exit transition configuration (.Transition() modifier).
     /// When set, the reconciler animates mount (enter) and unmount (exit) with
     /// compositor animations, deferring removal until exit animation completes.
     /// </summary>
-    public Microsoft.UI.Reactor.Animation.ElementTransition? ElementTransition { get; init; }
+    public Microsoft.UI.Reactor.Animation.ElementTransition? ElementTransition
+    {
+        get => Extensions?.ElementTransition;
+        init => Extensions = value is null && Extensions is null ? null
+            : NormalizeExtras(Extensions is null ? new ElementExtras { ElementTransition = value } : Extensions with { ElementTransition = value });
+    }
 
     /// <summary>
     /// Interaction states configuration (.InteractionStates() modifier).
     /// When set, the reconciler registers pointer event handlers that drive
     /// zero-reconcile visual state transitions (hover, pressed, focused).
     /// </summary>
-    public Microsoft.UI.Reactor.Animation.InteractionStatesConfig? InteractionStates { get; init; }
+    public Microsoft.UI.Reactor.Animation.InteractionStatesConfig? InteractionStates
+    {
+        get => Extensions?.InteractionStates;
+        init => Extensions = value is null && Extensions is null ? null
+            : NormalizeExtras(Extensions is null ? new ElementExtras { InteractionStates = value } : Extensions with { InteractionStates = value });
+    }
 
     /// <summary>
     /// Stagger configuration for container children (.Stagger() modifier).
     /// When set, child animations (enter, layout, property) have incrementing
     /// DelayTime = childIndex * staggerDelay.
     /// </summary>
-    public Microsoft.UI.Reactor.Animation.StaggerConfig? StaggerConfig { get; init; }
+    public Microsoft.UI.Reactor.Animation.StaggerConfig? StaggerConfig
+    {
+        get => Extensions?.StaggerConfig;
+        init => Extensions = value is null && Extensions is null ? null
+            : NormalizeExtras(Extensions is null ? new ElementExtras { StaggerConfig = value } : Extensions with { StaggerConfig = value });
+    }
 
     /// <summary>
     /// Keyframe animation definitions (.Keyframes() modifier).
     /// Trigger-based: plays when the trigger value changes between renders.
     /// </summary>
-    public Microsoft.UI.Reactor.Animation.KeyframeEntry[]? KeyframeAnimations { get; init; }
+    public Microsoft.UI.Reactor.Animation.KeyframeEntry[]? KeyframeAnimations
+    {
+        get => Extensions?.KeyframeAnimations;
+        init => Extensions = value is null && Extensions is null ? null
+            : NormalizeExtras(Extensions is null ? new ElementExtras { KeyframeAnimations = value } : Extensions with { KeyframeAnimations = value });
+    }
 
     /// <summary>
     /// Scroll-linked expression animation configuration (.ScrollLinked() modifier).
     /// Expression animations run on the compositor, driven by ScrollViewer position.
     /// </summary>
-    public Microsoft.UI.Reactor.Animation.ScrollAnimationConfig? ScrollAnimation { get; init; }
+    public Microsoft.UI.Reactor.Animation.ScrollAnimationConfig? ScrollAnimation
+    {
+        get => Extensions?.ScrollAnimation;
+        init => Extensions = value is null && Extensions is null ? null
+            : NormalizeExtras(Extensions is null ? new ElementExtras { ScrollAnimation = value } : Extensions with { ScrollAnimation = value });
+    }
 
     /// <summary>
     /// Connected animation key for cross-container transitions.
@@ -147,7 +232,12 @@ public abstract record Element
     /// mount if a prepared animation with the same key exists.
     /// Set via fluent extension method: Border(child).ConnectedAnimation("hero")
     /// </summary>
-    public string? ConnectedAnimationKey { get; init; }
+    public string? ConnectedAnimationKey
+    {
+        get => Extensions?.ConnectedAnimationKey;
+        init => Extensions = value is null && Extensions is null ? null
+            : NormalizeExtras(Extensions is null ? new ElementExtras { ConnectedAnimationKey = value } : Extensions with { ConnectedAnimationKey = value });
+    }
 
     /// <summary>
     /// Per-control resource overrides (lightweight styling). When set, the reconciler
@@ -155,14 +245,24 @@ public abstract record Element
     /// VisualStateManager picks them up for hover/pressed/disabled states.
     /// Set via fluent extension: <c>Button("Go").Resources(r => r.Set("ButtonBackground", "#0078D4"))</c>
     /// </summary>
-    public Microsoft.UI.Reactor.Elements.ResourceOverrides? ResourceOverrides { get; init; }
+    public Microsoft.UI.Reactor.Elements.ResourceOverrides? ResourceOverrides
+    {
+        get => Extensions?.ResourceOverrides;
+        init => Extensions = value is null && Extensions is null ? null
+            : NormalizeExtras(Extensions is null ? new ElementExtras { ResourceOverrides = value } : Extensions with { ResourceOverrides = value });
+    }
 
     /// <summary>
     /// Context values provided to this element's subtree via .Provide().
     /// The reconciler pushes these onto the context scope when entering
     /// this element's subtree and pops them when leaving.
     /// </summary>
-    public IReadOnlyDictionary<ContextBase, object?>? ContextValues { get; init; }
+    public IReadOnlyDictionary<ContextBase, object?>? ContextValues
+    {
+        get => Extensions?.ContextValues;
+        init => Extensions = value is null && Extensions is null ? null
+            : NormalizeExtras(Extensions is null ? new ElementExtras { ContextValues = value } : Extensions with { ContextValues = value });
+    }
 
     /// <summary>
     /// Gets the attached property data of the specified type, or null if not set.
@@ -187,7 +287,7 @@ public abstract record Element
     /// Convenience: implicitly convert a string to a TextBlockElement.
     /// Allows writing: VStack("Hello", "World") instead of VStack(Text("Hello"), Text("World"))
     /// </summary>
-    public static implicit operator Element(string text) => new TextBlockElement(text);
+    public static implicit operator Element(string text) => Microsoft.UI.Reactor.Factories.TextBlock(text);
 
     // ════════════════════════════════════════════════════════════════════════
     //  Fast structural comparison for reconciler short-circuit
@@ -221,6 +321,10 @@ public abstract record Element
     /// and a change in callback *presence* must run Update so the lazy-wire path
     /// can subscribe to the WinRT event on a null→non-null transition.
     /// IMPORTANT: keep in sync with the ShallowEquals fast-path in Reconciler.Update().
+    /// Note: when both elements have a null <see cref="Extensions"/> bucket (spec 047
+    /// §4.4 — the common no-extras leaf), ShallowEquals skips the Attached /
+    /// ThemeBindings / ContextValues structural compares entirely, since all 14
+    /// bucketed fields are provably null on both sides.
     /// </summary>
     internal static bool CanSkipUpdate(Element oldEl, Element newEl)
         => ShallowEquals(oldEl, newEl)
@@ -238,9 +342,18 @@ public abstract record Element
         if (ReferenceEquals(a, b)) return true;
         if (a.GetType() != b.GetType()) return false;
         if (!ModifiersEqual(a.Modifiers, b.Modifiers)) return false;
-        if (!AttachedEqual(a.Attached, b.Attached)) return false;
-        if (!ThemeBindingsEqual(a.ThemeBindings, b.ThemeBindings)) return false;
-        if (!ContextValuesEqual(a.ContextValues, b.ContextValues)) return false;
+
+        // Spec 047 §4.4 fast-path: when neither element carries an Extras bucket,
+        // all 14 bucketed fields (Attached, ThemeBindings, ContextValues, …) are
+        // provably null on both sides, so the three structural compares below are
+        // guaranteed to pass. Skip them (and their null-deref property GETs) for
+        // the common no-extras leaf.
+        if (!(a.Extensions is null && b.Extensions is null))
+        {
+            if (!AttachedEqual(a.Attached, b.Attached)) return false;
+            if (!ThemeBindingsEqual(a.ThemeBindings, b.ThemeBindings)) return false;
+            if (!ContextValuesEqual(a.ContextValues, b.ContextValues)) return false;
+        }
 
         return (a, b) switch
         {
@@ -701,6 +814,16 @@ public abstract record Element
                 && ta.GetIsItemClickEnabled() == tb.GetIsItemClickEnabled()
                 && !ta.HasSetters && !tb.HasSetters,
 
+            // Templated hierarchical TreeView — same rationale as the
+            // templated lists above: Items/selectors/ViewBuilder are factory
+            // inputs that drive child reconcile, not parent-control props.
+            (TemplatedTreeViewElementBase tta, TemplatedTreeViewElementBase ttb) =>
+                tta.GetSelectionMode() == ttb.GetSelectionMode()
+                && tta.GetCanDragItems() == ttb.GetCanDragItems()
+                && tta.GetAllowDrop() == ttb.GetAllowDrop()
+                && tta.GetCanReorderItems() == ttb.GetCanReorderItems()
+                && !tta.HasSetters && !ttb.HasSetters,
+
             // Lazy (virtualized) stacks: same rationale — Items/ViewBuilder
             // are factory inputs, not control properties.
             (LazyStackElementBase la, LazyStackElementBase lb) =>
@@ -1031,6 +1154,156 @@ public record SemanticDescription(
 /// can't override OnCreateAutomationPeer().
 /// </summary>
 public record SemanticElement(Element Child, SemanticDescription Semantics) : Element;
+
+/// <summary>
+/// Cross-cutting "extras" bucket for <see cref="Element"/> (spec 047 §4.4).
+/// Holds the 14 rarely-set fields (attached properties, transitions, theme
+/// bindings, animation configs, resource overrides, context values) that used
+/// to sit inline on every element. Bucketing them into a lazy sub-record lets
+/// the common case (a leaf with none of these) pay one reference slot instead
+/// of 14. The fields are exposed on <see cref="Element"/> via get/init shim
+/// properties that read from / write into this record, so call sites see no
+/// API change. Value-equality (default record) so equality helpers and
+/// <c>with</c>-writers behave exactly as before. Unlike
+/// <see cref="ElementModifiers"/> nothing merges Extras, so there is no Merge.
+///
+/// <para><b>Construction-cost tradeoff (spec 047 §4.4 / §11.6):</b> the common
+/// no-extras leaf now saves a reference slot (the §4.4 win), but each
+/// extra-setting fluent call (<c>.Grid()</c>, <c>.Background(Theme…)</c>,
+/// <c>.Animate()</c>, <c>.Provide()</c>, …) clones this sub-record <em>in
+/// addition to</em> the <see cref="Element"/> clone — so an element that sets
+/// several extras does N small <c>ElementExtras</c> allocations during
+/// construction where the inline layout did zero. Net win for the common case;
+/// watch the §11.6 byte-gate M2/M3 (callback/modifier-heavy leaves) when it is
+/// measured on the baseline box, as those are the construction-cost-sensitive
+/// scenarios.</para>
+/// </summary>
+/// <remarks>Spec 047 §4.4.</remarks>
+public record ElementExtras
+{
+    /// <summary>
+    /// Attached properties from parent containers (Grid.Row, Canvas.Left, etc.).
+    /// Set via fluent extension methods: Text("hi").Grid(row: 1, column: 2)
+    /// Stored as a type-keyed dictionary so each provider defines its own data record.
+    /// </summary>
+    public IReadOnlyDictionary<Type, object>? Attached { get; init; }
+
+    /// <summary>
+    /// Implicit transitions (opacity, scale, rotation, translation, background).
+    /// Set via fluent extension methods: Rectangle().WithOpacityTransition()
+    /// Applied by the reconciler after mount/update, so they are always present when
+    /// property values are set via .Set() callbacks.
+    /// </summary>
+    public ImplicitTransitions? ImplicitTransitions { get; init; }
+
+    /// <summary>
+    /// Theme transitions (children, item container).
+    /// Set via fluent extension methods: VStack(children).WithThemeTransitions(...)
+    /// </summary>
+    public ThemeTransitions? ThemeTransitions { get; init; }
+
+    /// <summary>
+    /// Theme-resource bindings for brush properties (Background, Foreground, BorderBrush).
+    /// When set, the reconciler resolves from WinUI theme resources instead of using local values.
+    /// Set via fluent extension methods: Text("hi").Background(Theme.Accent)
+    /// </summary>
+    public IReadOnlyDictionary<string, ThemeRef>? ThemeBindings { get; init; }
+
+    /// <summary>
+    /// Composition-layer layout animation configuration.
+    /// When set, the reconciler attaches implicit animations to the element's Visual
+    /// so that layout-driven position (and optionally size) changes animate smoothly.
+    /// Set via fluent extension methods: Border(child).LayoutAnimation()
+    /// </summary>
+    public LayoutAnimationConfig? LayoutAnimation { get; init; }
+
+    /// <summary>
+    /// Compositor property animation configuration (.Animate() modifier).
+    /// When set, the reconciler creates ImplicitAnimationCollection entries on the
+    /// element's Visual for Opacity/Scale/Rotation/Offset/CenterPoint.
+    /// </summary>
+    public Microsoft.UI.Reactor.Animation.AnimationConfig? AnimationConfig { get; init; }
+
+    /// <summary>
+    /// Element enter/exit transition configuration (.Transition() modifier).
+    /// When set, the reconciler animates mount (enter) and unmount (exit) with
+    /// compositor animations, deferring removal until exit animation completes.
+    /// </summary>
+    public Microsoft.UI.Reactor.Animation.ElementTransition? ElementTransition { get; init; }
+
+    /// <summary>
+    /// Interaction states configuration (.InteractionStates() modifier).
+    /// When set, the reconciler registers pointer event handlers that drive
+    /// zero-reconcile visual state transitions (hover, pressed, focused).
+    /// </summary>
+    public Microsoft.UI.Reactor.Animation.InteractionStatesConfig? InteractionStates { get; init; }
+
+    /// <summary>
+    /// Stagger configuration for container children (.Stagger() modifier).
+    /// When set, child animations (enter, layout, property) have incrementing
+    /// DelayTime = childIndex * staggerDelay.
+    /// </summary>
+    public Microsoft.UI.Reactor.Animation.StaggerConfig? StaggerConfig { get; init; }
+
+    /// <summary>
+    /// Keyframe animation definitions (.Keyframes() modifier).
+    /// Trigger-based: plays when the trigger value changes between renders.
+    /// </summary>
+    public Microsoft.UI.Reactor.Animation.KeyframeEntry[]? KeyframeAnimations { get; init; }
+
+    /// <summary>
+    /// Scroll-linked expression animation configuration (.ScrollLinked() modifier).
+    /// Expression animations run on the compositor, driven by ScrollViewer position.
+    /// </summary>
+    public Microsoft.UI.Reactor.Animation.ScrollAnimationConfig? ScrollAnimation { get; init; }
+
+    /// <summary>
+    /// Connected animation key for cross-container transitions.
+    /// When set, the reconciler automatically captures a visual snapshot on unmount
+    /// (via ConnectedAnimationService.PrepareToAnimate) and starts the animation on
+    /// mount if a prepared animation with the same key exists.
+    /// Set via fluent extension method: Border(child).ConnectedAnimation("hero")
+    /// </summary>
+    public string? ConnectedAnimationKey { get; init; }
+
+    /// <summary>
+    /// Per-control resource overrides (lightweight styling). When set, the reconciler
+    /// injects these into <see cref="FrameworkElement.Resources"/> so that the control's
+    /// VisualStateManager picks them up for hover/pressed/disabled states.
+    /// Set via fluent extension: <c>Button("Go").Resources(r => r.Set("ButtonBackground", "#0078D4"))</c>
+    /// </summary>
+    public Microsoft.UI.Reactor.Elements.ResourceOverrides? ResourceOverrides { get; init; }
+
+    /// <summary>
+    /// Context values provided to this element's subtree via .Provide().
+    /// The reconciler pushes these onto the context scope when entering
+    /// this element's subtree and pops them when leaving.
+    /// </summary>
+    public IReadOnlyDictionary<ContextBase, object?>? ContextValues { get; init; }
+
+    /// <summary>
+    /// True when every bucketed field is null. The <see cref="Element"/> shim
+    /// setters use this (via <c>Element.NormalizeExtras</c>) to collapse an
+    /// all-null bucket back to a null <c>Extensions</c> slot, so record
+    /// equality between an extras-free element and one whose only "extra" is a
+    /// field explicitly set to null stays symmetric (PR #455 CR item #2).
+    /// </summary>
+    internal bool IsEmpty =>
+        Attached is null
+        && ImplicitTransitions is null
+        && ThemeTransitions is null
+        && ThemeBindings is null
+        && LayoutAnimation is null
+        && AnimationConfig is null
+        && ElementTransition is null
+        && InteractionStates is null
+        && StaggerConfig is null
+        && KeyframeAnimations is null
+        && ScrollAnimation is null
+        && ConnectedAnimationKey is null
+        && ResourceOverrides is null
+        && ContextValues is null;
+}
 
 public record ElementModifiers
 {
@@ -1736,6 +2009,17 @@ public record TreeViewNodeData(string Content, TreeViewNodeData[]? Children = nu
     /// Optional Reactor element to render as the node's visual content.
     /// When null, a TextBlock showing Content is rendered.
     /// </summary>
+    /// <remarks>
+    /// Deprecated. WinUI's node-mode <c>TreeView</c> stringifies node content
+    /// and cannot host a pre-built <c>UIElement</c>, so rich per-node visuals
+    /// must come from a template (a <c>data → Element</c> function), never an
+    /// element instance. Use the typed, data-driven
+    /// <c>UI.TreeView&lt;T&gt;(items, keySelector, childrenSelector, viewBuilder)</c>
+    /// — the hierarchical peer of <c>ListView&lt;T&gt;</c> — instead. The legacy
+    /// path stays functional for back-compat but renders blank under
+    /// virtualization recycling.
+    /// </remarks>
+    [Obsolete("Use the typed UI.TreeView<T>(items, keySelector, childrenSelector, viewBuilder) overload (the hierarchical peer of ListView<T>); a pre-built Element cannot be hosted in a node-mode TreeViewNode. See issue #447.")]
     public Element? ContentElement { get; init; }
 }
 
@@ -1913,9 +2197,75 @@ public record RichTextRun(string Text) : RichTextInline
     public Brush? Foreground { get; init; }
 }
 
-public record RichTextHyperlink(string Text, Uri NavigateUri) : RichTextInline;
+/// <summary>
+/// Inline hyperlink fragment inside a <see cref="RichTextBlockElement"/>.
+///
+/// <para><b>Two modes</b> (issue #479):
+/// <list type="bullet">
+///   <item><b>Navigate mode</b> — when <see cref="OnClick"/> is <c>null</c>
+///   the WinUI <c>Hyperlink</c> is mounted with <see cref="NavigateUri"/>
+///   set and clicks open the URI via the platform launcher.</item>
+///   <item><b>Click mode</b> — when <see cref="OnClick"/> is non-null the
+///   delegate fires on click and the WinUI <c>NavigateUri</c> is left
+///   unset, so the platform does not navigate. Use this for clickable
+///   inline fragments (open a menu, enter edit mode, dispatch an action)
+///   without escaping to a hosted native subtree.</item>
+/// </list></para>
+/// </summary>
+public record RichTextHyperlink(string Text, Uri NavigateUri) : RichTextInline
+{
+    /// <summary>
+    /// Optional click handler. When non-null, fires on every click and
+    /// suppresses navigation (the underlying WinUI <c>Hyperlink</c> is
+    /// mounted with no <c>NavigateUri</c>). When null, the inline behaves
+    /// as a pure navigation link using <see cref="NavigateUri"/>.
+    /// </summary>
+    public Action? OnClick { get; init; }
+}
 
 public record RichTextLineBreak() : RichTextInline;
+
+/// <summary>
+/// Mirrors WinUI's <c>Microsoft.UI.Xaml.Documents.InlineUIContainer</c> — an
+/// inline that embeds a UIElement inside a flowing <see cref="RichTextBlockElement"/>.
+///
+/// <para><b>Two embedding routes</b> (issue #480):
+/// <list type="bullet">
+///   <item><b>Route A — Reactor element (<see cref="Child"/>):</b> the
+///   embedded UI is described declaratively as any other Reactor
+///   <see cref="Element"/> (e.g. <c>Button("+", () =&gt; ...)</c>) and is mounted
+///   through the reconciler. The descriptor uses an incremental rich-text
+///   update path: re-renders of the owning <c>RichTextBlock</c> preserve
+///   the existing inline UIElement and reconcile the Reactor child via
+///   the standard child-reconciliation pipeline, so embedded interactive
+///   controls (sliders, buttons, etc.) keep their drag focus and
+///   component state across renders. A structural change to the
+///   surrounding paragraph tree (different paragraph count, mismatched
+///   inline shape) falls back to a full rebuild that tears down and
+///   remounts the child along with the rest of the block.</item>
+///   <item><b>Route B — imperative native factory (<see cref="Factory"/>):</b>
+///   the embedded UI is produced by a caller-supplied lambda returning a
+///   raw WinUI <see cref="Microsoft.UI.Xaml.FrameworkElement"/>. Useful as
+///   an escape hatch for native controls that have no Reactor element
+///   counterpart. The factory is opaque to the reconciler, so the
+///   incremental path re-invokes it only when the delegate identity
+///   itself changes (capture-equal lambdas are treated as unchanged) —
+///   pass a stable delegate reference if you want the native UIElement
+///   to survive renders.</item>
+/// </list></para>
+///
+/// <para>Exactly one of <see cref="Child"/> / <see cref="Factory"/> should
+/// be non-null. If both are null the inline expands to a zero-size empty
+/// container; if both are set, <see cref="Child"/> wins.</para>
+/// </summary>
+public record RichTextInlineUIContainer : RichTextInline
+{
+    /// <summary>Reactor element to mount as the inline UI (Route A).</summary>
+    public Element? Child { get; init; }
+    /// <summary>Imperative factory producing a native <see cref="FrameworkElement"/>
+    /// (Route B). Invoked once per rebuild of the owning <c>RichTextBlock</c>.</summary>
+    public Func<FrameworkElement>? Factory { get; init; }
+}
 
 // ════════════════════════════════════════════════════════════════════════
 //  Button elements
@@ -2988,7 +3338,7 @@ public enum TemplatedControlKind { ListView, GridView, FlipView }
 /// Abstract base for data-driven items controls. Non-generic so the reconciler
 /// can match on a single type in its switch expression (same pattern as LazyStackElementBase).
 /// </summary>
-public abstract record TemplatedListElementBase : Element
+public abstract record TemplatedListElementBase : Element, global::Microsoft.UI.Reactor.Core.Internal.IItemViewSource, global::Microsoft.UI.Reactor.Core.Internal.IKeyedItemSource
 {
     public abstract TemplatedControlKind ControlKind { get; }
     public abstract int ItemCount { get; }
@@ -3005,6 +3355,11 @@ public abstract record TemplatedListElementBase : Element
     /// pre-mounts so it does not participate.
     /// </summary>
     internal abstract string GetKeyAt(int index);
+    // §14 Phase 3 close-out — bridge the internal abstract to the public
+    // IKeyedItemSource contract via explicit interface implementation so
+    // the abstract stays internal (spec 042 decision) while descriptor
+    // ports can still read keys through the IKeyedItemSource handle.
+    string global::Microsoft.UI.Reactor.Core.Internal.IKeyedItemSource.GetKeyAt(int index) => GetKeyAt(index);
     public abstract void InvokeSelectionChanged(int index);
     public abstract void InvokeItemClick(int index);
     public abstract void ApplyControlSetters(object control);
@@ -3030,11 +3385,46 @@ public abstract record TemplatedListElementBase : Element
     internal virtual bool HasMultiSelectionCallback => false;
 }
 
+/// <summary>
+/// Spec 047 §14 Phase 3 close-out — empty marker intermediate that lets
+/// the v1 handler registry route every closed
+/// <c>TemplatedListViewElement&lt;T&gt;</c> through a single base-derived
+/// descriptor registration without an open-generic resolver. Adds no
+/// fields and no overrides, so record equality on the leaf type
+/// <c>TemplatedListViewElement&lt;T&gt;</c> is unchanged.
+/// </summary>
+public abstract record TemplatedListViewElementBase : TemplatedListElementBase
+{
+    public sealed override TemplatedControlKind ControlKind => TemplatedControlKind.ListView;
+}
+
+/// <summary>
+/// Spec 047 §14 Phase 3 close-out — see
+/// <see cref="TemplatedListViewElementBase"/>.
+/// </summary>
+public abstract record TemplatedGridViewElementBase : TemplatedListElementBase
+{
+    public sealed override TemplatedControlKind ControlKind => TemplatedControlKind.GridView;
+}
+
+/// <summary>
+/// Spec 047 §14 Phase 3 close-out — see
+/// <see cref="TemplatedListViewElementBase"/>. FlipView descriptor port
+/// is carved to Phase 4 because FlipView does not support
+/// <c>ContainerContentChanging</c> (pre-mounts items via a different
+/// shape); the marker is reserved so the symmetry is visible in the
+/// element hierarchy.
+/// </summary>
+public abstract record TemplatedFlipViewElementBase : TemplatedListElementBase
+{
+    public sealed override TemplatedControlKind ControlKind => TemplatedControlKind.FlipView;
+}
+
 public record TemplatedListViewElement<T>(
     IReadOnlyList<T> Items,
     Func<T, string> KeySelector,
     Func<T, int, Element> ViewBuilder
-) : TemplatedListElementBase
+) : TemplatedListViewElementBase
 {
     public int SelectedIndex { get; init; } = -1;
     public Action<int>? OnSelectedIndexChanged { get; init; }
@@ -3049,7 +3439,6 @@ public record TemplatedListViewElement<T>(
     public Action<IReadOnlyList<T>>? OnSelectionChanged { get; init; }
     internal Action<WinUI.ListView>[] Setters { get; init; } = [];
 
-    public override TemplatedControlKind ControlKind => TemplatedControlKind.ListView;
     public override int ItemCount => Items.Count;
     public override int GetSelectedIndex() => SelectedIndex;
     public override ListViewSelectionMode GetSelectionMode() => SelectionMode;
@@ -3081,7 +3470,7 @@ public record TemplatedGridViewElement<T>(
     IReadOnlyList<T> Items,
     Func<T, string> KeySelector,
     Func<T, int, Element> ViewBuilder
-) : TemplatedListElementBase
+) : TemplatedGridViewElementBase
 {
     public int SelectedIndex { get; init; } = -1;
     public Action<int>? OnSelectedIndexChanged { get; init; }
@@ -3095,7 +3484,6 @@ public record TemplatedGridViewElement<T>(
     public Action<IReadOnlyList<T>>? OnSelectionChanged { get; init; }
     internal Action<WinUI.GridView>[] Setters { get; init; } = [];
 
-    public override TemplatedControlKind ControlKind => TemplatedControlKind.GridView;
     public override int ItemCount => Items.Count;
     public override int GetSelectedIndex() => SelectedIndex;
     public override ListViewSelectionMode GetSelectionMode() => SelectionMode;
@@ -3127,13 +3515,12 @@ public record TemplatedFlipViewElement<T>(
     IReadOnlyList<T> Items,
     Func<T, string> KeySelector,
     Func<T, int, Element> ViewBuilder
-) : TemplatedListElementBase
+) : TemplatedFlipViewElementBase
 {
     public int SelectedIndex { get; init; } = 0;
     public Action<int>? OnSelectedIndexChanged { get; init; }
     internal Action<WinUI.FlipView>[] Setters { get; init; } = [];
 
-    public override TemplatedControlKind ControlKind => TemplatedControlKind.FlipView;
     public override int ItemCount => Items.Count;
     public override int GetSelectedIndex() => SelectedIndex;
     public override ListViewSelectionMode GetSelectionMode() => ListViewSelectionMode.Single;
@@ -3156,14 +3543,138 @@ public record TemplatedFlipViewElement<T>(
 }
 
 // ════════════════════════════════════════════════════════════════════════
+//  Templated (data-driven) hierarchical TreeView
+// ════════════════════════════════════════════════════════════════════════
+
+/// <summary>
+/// Abstract non-generic base for the typed, data-driven <c>TreeView</c>.
+/// Non-generic so the reconciler can match a single type in its switch
+/// expression (same type-erasure pattern as <see cref="TemplatedListElementBase"/>).
+///
+/// <para>This is the hierarchical peer of <see cref="TemplatedListViewElement{T}"/>:
+/// the developer supplies their own data items, a key selector, a children
+/// selector (the hierarchy), and a <c>viewBuilder</c> (<c>data → Element</c>,
+/// the WinUI <c>ItemTemplate</c> equivalent). It exists because WinUI's
+/// node-mode <c>TreeView</c> stringifies <c>TreeViewNode.Content</c> and
+/// cannot host a pre-built <c>UIElement</c> — rich per-node visuals must come
+/// from a template, never an element instance (the root cause of issue #447).</para>
+///
+/// <para>The base exposes object-erased accessors; the generic leaf casts back
+/// to <c>T</c>. Reference-type <c>T</c> flows through the covariant
+/// <see cref="IReadOnlyList{T}"/> → <c>IReadOnlyList&lt;object&gt;</c>
+/// conversion; value-type <c>T</c> is boxed once via the leaf's projection
+/// helper.</para>
+/// </summary>
+public abstract record TemplatedTreeViewElementBase : Element
+{
+    /// <summary>The root data items (object-erased), in document order.</summary>
+    public abstract IReadOnlyList<object> GetRoots();
+    /// <summary>The children of <paramref name="item"/>, or null for a leaf.</summary>
+    public abstract IReadOnlyList<object>? GetChildren(object item);
+    /// <summary>The stable identity string for <paramref name="item"/> (the keyed-diff key).</summary>
+    public abstract string GetKey(object item);
+    /// <summary>Builds the per-node view (the <c>ItemTemplate</c> equivalent).</summary>
+    public abstract Element BuildView(object item);
+    /// <summary>Whether <paramref name="item"/>'s node should start expanded.</summary>
+    public abstract bool GetIsExpanded(object item);
+    /// <summary>Dispatches <c>OnItemInvoked</c> with the developer's own <c>T</c>.</summary>
+    public abstract void InvokeItemInvoked(object item);
+    /// <summary>Dispatches <c>OnExpanding</c> with the developer's own <c>T</c>.</summary>
+    public abstract void InvokeExpanding(object item);
+
+    public abstract TreeViewSelectionMode GetSelectionMode();
+    public abstract bool GetCanDragItems();
+    public abstract bool GetAllowDrop();
+    public abstract bool GetCanReorderItems();
+    public abstract void ApplyControlSetters(object control);
+
+    /// <summary>
+    /// True when programmatic setter actions (.Set(...)) are attached. Used by
+    /// <see cref="Element.OwnPropsEqual"/> to suppress the reconcile-highlight
+    /// short-circuit (same rationale as <see cref="TemplatedListElementBase.HasSetters"/>).
+    /// </summary>
+    internal virtual bool HasSetters => false;
+}
+
+/// <summary>
+/// Typed, data-driven <c>TreeView</c>. The hierarchical peer of
+/// <see cref="TemplatedListViewElement{T}"/>. See
+/// <see cref="TemplatedTreeViewElementBase"/>.
+/// </summary>
+public record TemplatedTreeViewElement<T>(
+    IReadOnlyList<T> Items,
+    Func<T, string> KeySelector,
+    Func<T, IReadOnlyList<T>?> ChildrenSelector,
+    Func<T, Element> ViewBuilder
+) : TemplatedTreeViewElementBase
+{
+    /// <summary>Invoked with the developer's <c>T</c> when a node is clicked/invoked.</summary>
+    public Action<T>? OnItemInvoked { get; init; }
+    /// <summary>Invoked with the developer's <c>T</c> just before a node expands.</summary>
+    public Action<T>? OnExpanding { get; init; }
+    /// <summary>Per-item initial-expansion selector. Defaults to collapsed.</summary>
+    public Func<T, bool>? IsExpanded { get; init; }
+    public TreeViewSelectionMode SelectionMode { get; init; } = TreeViewSelectionMode.Single;
+    public bool CanDragItems { get; init; }
+    public bool AllowDrop { get; init; }
+    public bool CanReorderItems { get; init; }
+    internal Action<WinUI.TreeView>[] Setters { get; init; } = [];
+
+    public override IReadOnlyList<object> GetRoots() => Project(Items);
+    public override IReadOnlyList<object>? GetChildren(object item)
+    {
+        var children = ChildrenSelector((T)item);
+        return children is null ? null : Project(children);
+    }
+    public override string GetKey(object item) => KeySelector((T)item);
+    public override Element BuildView(object item) => ViewBuilder((T)item);
+    public override bool GetIsExpanded(object item) => IsExpanded?.Invoke((T)item) ?? false;
+    public override void InvokeItemInvoked(object item) => OnItemInvoked?.Invoke((T)item);
+    public override void InvokeExpanding(object item) => OnExpanding?.Invoke((T)item);
+
+    public override TreeViewSelectionMode GetSelectionMode() => SelectionMode;
+    public override bool GetCanDragItems() => CanDragItems;
+    public override bool GetAllowDrop() => AllowDrop;
+    public override bool GetCanReorderItems() => CanReorderItems;
+    public override void ApplyControlSetters(object control) =>
+        Reconciler.ApplySetters(Setters, (WinUI.TreeView)control);
+
+    internal override bool HasCallbacks => OnItemInvoked is not null || OnExpanding is not null;
+    internal override bool HasSetters => Setters.Length > 0;
+
+    /// <summary>
+    /// Object-erases the source list. Reference-type <c>T</c> reuses the same
+    /// instance through covariance (no copy); value-type <c>T</c> is boxed into
+    /// a fresh <c>object[]</c>. Identity-stable mapping back to <c>T</c> is via
+    /// <see cref="GetKey"/> (a string), not object reference, so the per-call
+    /// boxing of value types is harmless.
+    /// </summary>
+    private static IReadOnlyList<object> Project(IReadOnlyList<T> source)
+    {
+        if (source is IReadOnlyList<object> covariant) return covariant;
+        var boxed = new object[source.Count];
+        for (int i = 0; i < source.Count; i++) boxed[i] = source[i]!;
+        return boxed;
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════
 //  Virtualized collection elements (backed by ItemsRepeater)
 // ════════════════════════════════════════════════════════════════════════
 
 /// <summary>
 /// Abstract base for virtualized lazy stacks. Non-generic so the reconciler
 /// can match on a single type in its switch expression.
+///
+/// <para>Spec 047 §14 Phase 3 finish — Port (6): also implements
+/// <see cref="Internal.IKeyedItemSource"/> and
+/// <see cref="IItemsRepeaterFactorySource"/> so the descriptor-driven
+/// G2 port (<c>LazyStackDescriptor</c>) can flow Lazy*Stack through
+/// <see cref="Reconciler.BindErasedKeyedItemsSource"/>'s ItemsRepeater
+/// arm — same realization plumbing as the hand-coded
+/// <c>MountLazyStack</c> / <c>UpdateLazyStack</c> bodies.</para>
 /// </summary>
-public abstract record LazyStackElementBase : Element
+public abstract record LazyStackElementBase : Element, Internal.IKeyedItemSource, IItemsRepeaterFactorySource
 {
     public abstract Orientation Orientation { get; }
     public abstract double Spacing { get; init; }
@@ -3177,6 +3688,18 @@ public abstract record LazyStackElementBase : Element
     /// string consumed by spec 042's keyed-list reconciliation pipeline.
     /// </summary>
     internal abstract string GetKeyAt(int index);
+    /// <summary>
+    /// §14 Phase 3 finish — Port (6): build the per-item Element subtree
+    /// for index N. Same shape as <c>TemplatedListElementBase.BuildItemView</c>;
+    /// the descriptor binder reads this through the
+    /// <see cref="Internal.IItemViewSource"/> contract (bridged via
+    /// <see cref="Internal.IKeyedItemSource"/>) when the factory realizes
+    /// a container.
+    /// </summary>
+    public abstract Element BuildItemView(int index);
+    // IKeyedItemSource explicit bridge — forward to the existing internal
+    // GetKeyAt without exposing it publicly.
+    string Internal.IKeyedItemSource.GetKeyAt(int index) => GetKeyAt(index);
     public abstract IElementFactory CreateFactory(Reconciler reconciler, Action requestRerender, ElementPool? pool);
     /// <summary>
     /// Update an existing factory's items and viewBuilder in place, avoiding
@@ -3191,11 +3714,42 @@ public abstract record LazyStackElementBase : Element
     /// index — keying by string makes the mapping reorder-stable.
     /// </summary>
     internal abstract void AttachListStateToFactory(IElementFactory factory, Internal.ReactorListState listState);
+    // IItemsRepeaterFactorySource bridge — same internal abstract surface
+    // is exposed under the interface contract so the descriptor binder
+    // (which only knows about the interface) can call it.
+    void IItemsRepeaterFactorySource.AttachListStateToFactory(IElementFactory factory, Internal.ReactorListState listState)
+        => AttachListStateToFactory(factory, listState);
     /// <summary>
     /// After updating the factory in place, reconcile all realized items
     /// with the new viewBuilder output (property diffs only, no collection changes).
     /// </summary>
     public abstract void RefreshRealizedItems(IElementFactory factory, WinUI.ItemsRepeater repeater);
+    /// <summary>
+    /// §14 Phase 3 finish — Port (6): set <see cref="WinUI.ItemsRepeater.Layout"/>
+    /// to a <see cref="WinUI.StackLayout"/> with this element's
+    /// <see cref="Orientation"/> + <see cref="Spacing"/>. Mirrors the
+    /// inline assignment in legacy <c>MountLazyStack</c>
+    /// (Reconciler.Mount.cs ~:3148) plus the in-place Spacing update from
+    /// <c>UpdateLazyStack</c> (Reconciler.Update.cs ~:3109). Reuses the
+    /// existing <c>StackLayout</c> when both orientation and spacing match
+    /// — avoids re-allocating a Layout on every Update.
+    /// </summary>
+    void IItemsRepeaterFactorySource.ConfigureLayout(WinUI.ItemsRepeater repeater)
+    {
+        if (repeater.Layout is WinUI.StackLayout existing && existing.Orientation == Orientation)
+        {
+            // Epsilon compare per the spec-047 Phase 3-final fixture
+            // convention (b0910016) — CodeQL flags `!=` on double, and the
+            // engine never needs to react to sub-nanometer Spacing changes.
+            if (Math.Abs(existing.Spacing - Spacing) > 1e-9) existing.Spacing = Spacing;
+            return;
+        }
+        repeater.Layout = new WinUI.StackLayout
+        {
+            Orientation = Orientation,
+            Spacing = Spacing,
+        };
+    }
     internal Action<WinUI.ScrollViewer>[] ScrollViewerSetters { get; init; } = [];
     internal Action<WinUI.ItemsRepeater>[] RepeaterSetters { get; init; } = [];
 }
@@ -3211,6 +3765,7 @@ public record LazyVStackElement<T>(
     public override double EstimatedItemSize { get; init; } = 40;
     public override int ItemCount => Items.Count;
     internal override string GetKeyAt(int index) => KeySelector(Items[index]);
+    public override Element BuildItemView(int index) => ViewBuilder(Items[index], index);
 
     public override object GetItemsSource() =>
         Enumerable.Range(0, Items.Count).ToList();
@@ -3246,9 +3801,116 @@ public record LazyHStackElement<T>(
     public override double EstimatedItemSize { get; init; } = 100;
     public override int ItemCount => Items.Count;
     internal override string GetKeyAt(int index) => KeySelector(Items[index]);
+    public override Element BuildItemView(int index) => ViewBuilder(Items[index], index);
 
     public override object GetItemsSource() =>
         Enumerable.Range(0, Items.Count).ToList();
+
+    public override IElementFactory CreateFactory(Reconciler reconciler, Action requestRerender, ElementPool? pool) =>
+        new ElementFactory<T>(Items, ViewBuilder, reconciler, requestRerender, pool);
+
+    public override bool TryUpdateFactory(IElementFactory existingFactory)
+    {
+        if (existingFactory is ElementFactory<T> f) { f.UpdateInPlace(Items, ViewBuilder); return true; }
+        return false;
+    }
+
+    public override void RefreshRealizedItems(IElementFactory factory, WinUI.ItemsRepeater repeater)
+    {
+        if (factory is ElementFactory<T> f) f.RefreshRealizedItems(repeater);
+    }
+
+    internal override void AttachListStateToFactory(IElementFactory factory, Internal.ReactorListState listState)
+    {
+        if (factory is ElementFactory<T> f) f.AttachListState(listState);
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════
+//  ItemsRepeater<T>  (spec 047 §14 Phase 3 finish — Port (7))
+// ════════════════════════════════════════════════════════════════════════
+
+/// <summary>
+/// Spec 047 §14 Phase 3 finish — Port (7). Non-generic intermediate base
+/// for <see cref="ItemsRepeaterElement{T}"/>. Same role as
+/// <see cref="LazyStackElementBase"/>: lets the reconciler match on a
+/// single type AND lets the descriptor's
+/// <see cref="Reconciler.RegisterHandlerForDerivedTypes"/> registration
+/// catch every closed-T variant. Implements
+/// <see cref="Internal.IKeyedItemSource"/> +
+/// <see cref="IItemsRepeaterFactorySource"/> for the Engine (1)
+/// ItemsRepeater arm in <see cref="Reconciler.BindErasedKeyedItemsSource"/>.
+///
+/// <para><b>Distinct from <see cref="LazyStackElementBase"/>:</b> no
+/// hard-coded <see cref="WinUI.StackLayout"/>. The element exposes a
+/// nullable <see cref="Layout"/> property — the descriptor / legacy mount
+/// arm assigns it directly when non-null, otherwise leaves the
+/// ItemsRepeater on its default (Stack vertical). No
+/// <see cref="WinUI.ScrollViewer"/> wrapping either — the rendered
+/// <see cref="UIElement"/> is the bare <see cref="WinUI.ItemsRepeater"/>.
+/// Authors who need scrolling host the element inside their own
+/// <c>ScrollViewer</c> / <c>ScrollView</c> / <c>RefreshContainer</c>.</para>
+/// </summary>
+public abstract record ItemsRepeaterElementBase : Element, Internal.IKeyedItemSource, IItemsRepeaterFactorySource
+{
+    /// <summary>Total number of items in the source list.</summary>
+    public abstract int ItemCount { get; }
+    /// <summary>Per-index Element factory — same shape as
+    /// <see cref="LazyStackElementBase.BuildItemView"/>.</summary>
+    public abstract Element BuildItemView(int index);
+    /// <summary>Stable identity projection for spec 042's keyed-list diff.</summary>
+    internal abstract string GetKeyAt(int index);
+
+    string Internal.IKeyedItemSource.GetKeyAt(int index) => GetKeyAt(index);
+
+    /// <summary>Optional WinUI <see cref="WinUI.Layout"/>. Null = leave
+    /// the ItemsRepeater on its default layout (which itself defaults to
+    /// vertical <see cref="WinUI.StackLayout"/>). Authors typically pass
+    /// a <c>UniformGridLayout</c> or <c>LinedFlowLayout</c> instance
+    /// configured up-front; the engine reuses it across renders by
+    /// reference identity (no per-update Layout allocation).</summary>
+    public WinUI.Layout? Layout { get; init; }
+
+    internal Action<WinUI.ItemsRepeater>[] RepeaterSetters { get; init; } = [];
+
+    public abstract IElementFactory CreateFactory(Reconciler reconciler, Action requestRerender, ElementPool? pool);
+    public abstract bool TryUpdateFactory(IElementFactory existingFactory);
+    internal abstract void AttachListStateToFactory(IElementFactory factory, Internal.ReactorListState listState);
+    public abstract void RefreshRealizedItems(IElementFactory factory, WinUI.ItemsRepeater repeater);
+
+    void IItemsRepeaterFactorySource.AttachListStateToFactory(IElementFactory factory, Internal.ReactorListState listState)
+        => AttachListStateToFactory(factory, listState);
+
+    /// <summary>Assign the author-supplied <see cref="Layout"/> when
+    /// non-null and not already in place; otherwise leave the
+    /// ItemsRepeater on whatever default layout it constructed
+    /// itself with (vertical StackLayout). Reference-equality reuse —
+    /// passing the same Layout instance every render is a no-op.</summary>
+    void IItemsRepeaterFactorySource.ConfigureLayout(WinUI.ItemsRepeater repeater)
+    {
+        if (Layout is null) return;
+        if (!ReferenceEquals(repeater.Layout, Layout))
+            repeater.Layout = Layout;
+    }
+}
+
+/// <summary>
+/// Spec 047 §14 Phase 3 finish — Port (7). Typed peer of
+/// <see cref="ItemsRepeaterElementBase"/>. The lambdas mirror the
+/// <see cref="LazyVStackElement{T}"/> / <see cref="LazyHStackElement{T}"/>
+/// shape (Items + KeySelector + ViewBuilder) so authors moving from
+/// Lazy*Stack to a custom-layout ItemsRepeater find the surface
+/// identical.
+/// </summary>
+public record ItemsRepeaterElement<T>(
+    IReadOnlyList<T> Items,
+    Func<T, string> KeySelector,
+    Func<T, int, Element> ViewBuilder
+) : ItemsRepeaterElementBase
+{
+    public override int ItemCount => Items.Count;
+    public override Element BuildItemView(int index) => ViewBuilder(Items[index], index);
+    internal override string GetKeyAt(int index) => KeySelector(Items[index]);
 
     public override IElementFactory CreateFactory(Reconciler reconciler, Action requestRerender, ElementPool? pool) =>
         new ElementFactory<T>(Items, ViewBuilder, reconciler, requestRerender, pool);
@@ -3635,8 +4297,12 @@ public enum ItemsViewLayoutKind
 /// shape: virtual hooks for factory creation, in-place update,
 /// per-row reconcile, and event callback dispatch.
 /// </summary>
-public abstract record ItemsViewElementBase : Element
+public abstract record ItemsViewElementBase : Element, global::Microsoft.UI.Reactor.Core.Internal.IKeyedItemSource
 {
+    int global::Microsoft.UI.Reactor.Core.Internal.IItemViewSource.ItemCount => ItemCount;
+    Element global::Microsoft.UI.Reactor.Core.Internal.IItemViewSource.BuildItemView(int index) => BuildItemViewAt(index);
+    string global::Microsoft.UI.Reactor.Core.Internal.IKeyedItemSource.GetKeyAt(int index) => GetKeyAt(index);
+
     public ItemsViewLayoutKind LayoutKind { get; init; } = ItemsViewLayoutKind.StackLayout;
     public ItemsViewSelectionMode SelectionMode { get; init; } = ItemsViewSelectionMode.Single;
     public bool IsItemInvokedEnabled { get; init; }
@@ -3648,6 +4314,7 @@ public abstract record ItemsViewElementBase : Element
     public abstract bool TryUpdateFactory(IElementFactory existingFactory);
     public abstract void RefreshRealizedItems(IElementFactory factory, WinUI.ItemsRepeater repeater);
     internal abstract void AttachListStateToFactory(IElementFactory factory, Internal.ReactorListState listState);
+    internal abstract Element BuildItemViewAt(int index);
     /// <summary>Dispatch an <c>ItemInvoked</c> event to the typed callback.</summary>
     public abstract void InvokeItemInvoked(int index);
     /// <summary>Dispatch a <c>SelectionChanged</c> snapshot to the typed callback.</summary>
@@ -3713,6 +4380,8 @@ public record ItemsViewElement<T>(
         // Just invoke the guard; any non-container root throws.
         _ = GuardedViewBuilder(Items[0], 0);
     }
+
+    internal override Element BuildItemViewAt(int index) => GuardedViewBuilder(Items[index], index);
 
     public override IElementFactory CreateFactory(Reconciler reconciler, Action requestRerender, ElementPool? pool) =>
         new ElementFactory<T>(Items, GuardedViewBuilder, reconciler, requestRerender, pool);

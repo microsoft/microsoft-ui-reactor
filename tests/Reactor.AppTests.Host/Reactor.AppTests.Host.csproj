@@ -10,6 +10,11 @@
     <Nullable>enable</Nullable>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
+    <!-- CsWinRT1030: generic WinRT-implementing collection use (e.g. List<Border>
+         in SplitterMatrixFixtures) requires the CsWinRT-generated marshaling
+         code to use unsafe blocks. This flag enables that for the generated
+         code only; user code in this project does not opt into unsafe. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(PublishAotInternal)' == 'true'">
@@ -45,11 +50,19 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\_shared\BuiltInHandlerBootstrap.cs" Link="BuiltInHandlerBootstrap.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Reactor\Reactor.csproj" />
     <!-- Standalone library used by Issue142_ThirdPartyControlPrivateDp_Renders to
          simulate a 3P control NuGet referenced from a Reactor app that has its
          own XAML metadata. -->
     <ProjectReference Include="..\Reactor.AppTests.ThirdPartyControls\Reactor.AppTests.ThirdPartyControls.csproj" />
+    <!-- Spec 047 §14 Phase 1 (1.16) — external-assembly proof. Lets the
+         live-WinUI fixtures (Spec047ExternalProofFixtures.cs) exercise the
+         MarqueeHandler authored against Reactor's public V1 surface only. -->
+    <ProjectReference Include="..\external_proof\Reactor.External.TestControl\Reactor.External.TestControl.csproj" />
     <!-- spec 045 §2.19: the XAML wrapper assembly was unhooked from the
          solution at the §2.29 review gate. The Phase-1 DockingSmokeFixtures
          have been retired; the Phase-2 NativeDockingSmokeFixtures cover the

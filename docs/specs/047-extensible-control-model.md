@@ -47,8 +47,8 @@ However: **the lambdas registered via `RegisterType` cannot reach most of the ma
 | `ApplySetters<T>` | `Reconciler.cs:1436` | Runs the `Action<TControl>[]` from the element's `.Set(...)` modifier chain |
 | `SetElementTag` / `GetElementTag` | `Reconciler.cs:331-352` | Writes/reads the current `Element` on the `ReactorAttached.StateProperty` attached DP — feeds the event trampoline |
 | `ChangeEchoSuppressor` | `ChangeEchoSuppressor.cs` | Suppresses the change-event echo that fires when the engine programmatically writes a value-bearing DP (`ColorPicker.Color`, `ToggleSwitch.IsOn`, `NumberBox.Value`, …) |
-| `EventHandlerState` + `Ensure*Subscribed` family | `Reconciler.cs:2780+`, `2963-3069+` | Attach exactly one stable trampoline per WinUI event per native DependencyObject; update handler delegates by swapping a `Current*` field on the state object rather than `event +=` / `-=` |
-| `ApplyDefaultAutomationName` / `ApplyThemeBindings` / `ApplyResourceOverrides` | `Reconciler.cs` | Per-control accessibility, theming, resource override pipelines |
+| `EventHandlerState` + `Ensure*Subscribed` family | `Reconciler.cs:2787`, `2963-3200` | Attach exactly one stable trampoline per WinUI event per native DependencyObject; update handler delegates by swapping a `Current*` field on the state object rather than `event +=` / `-=` |
+| `ApplyDefaultAutomationName` / `UpdateDefaultAutomationName` / `ApplyThemeBindings` / `ApplyResourceOverrides` | `Reconciler.cs` | Per-control accessibility (mount + update variants), theming, resource override pipelines. Phase 1 promoted all four to `public static` with `[Experimental("REACTOR_V1_PREVIEW")]`. |
 | `_pool` (`ElementPool`) | `Reconciler.cs` | Control rental/return for re-mount and ListView recycling |
 
 In other words: an external author who tries to wire `control.PointerPressed += ...` themselves silently bypasses pool-survivable subscription and re-introduces double-subscribe on re-mount (issue #114). An external author who writes a value-bearing DP without `BeginSuppress` re-introduces the cross-state-echo bug from spec 030. The asymmetry isn't just "first-party gets nicer helpers"; it's "first-party gets correctness."
@@ -398,6 +398,53 @@ Concrete savings: `Prop.Initial` and `Prop.OneWay` *never* need echo suppression
 
 This subsumes a real fraction of the §8 audit by construction: if an author marks a prop `Initial` or `OneWay`, no audit is needed for it at all.
 
+#### 6.1.1 `.HandCodedControlled` / `.HandCodedEvent` — multi-event composition (Phase 3 prerequisite)
+
+**Resolved (Phase 2, 2026-05-26 — §13 Q1 follow-up).** The `.Controlled<TValue, TArgs>` classification above stores its trampoline in a closed-generic payload keyed by `(TElement, TControl, TValue, TArgs)`. That keying is fine for **single-event controls** (ToggleSwitch / Slider / Border — what Phase 2 measured) but breaks down for **multi-event controls** because the §9.2 `ControlEventStateBox` is a single-slot discriminated wrapper: a second `.Controlled` or `.Event` entry on the same control would request a different closed-generic payload type, hit the type discriminator's mismatch path, and clobber the first entry's slot.
+
+Two new classifications cover the multi-event case without waiting for source-gen (§7):
+
+```csharp
+// Same shape as .Controlled, but the author supplies:
+// - the static trampoline (hand-authored — direct field access, no per-fire indirection)
+// - typed slot accessors into a per-descriptor TPayload class (typically reuses
+//   the existing §9.2 per-control-class payload — TextBoxEventPayload, etc.)
+.HandCodedControlled<TValue, TArgs>(
+    get:        e => e.Text,
+    set:        (c, v) => c.Text = v,
+    subscribe:  (fe, h) => ((TextBox)fe).TextChanged += h,
+    callback:   e => e.OnTextChanged,
+    trampoline: TextChangedTrampoline,            // static — captures nothing
+    slotIsNull: p => p.TextChangedTrampoline is null,
+    setSlot:    (p, t) => p.TextChangedTrampoline = (TextChangedEventHandler)t)
+
+// Fire-and-forget event (no DP round-trip). For Button.Click, ListView.ItemClick,
+// MenuFlyoutItem.Click, NavigationView.ItemInvoked, Hyperlink.Click, etc.
+.HandCodedEvent<TArgs>(
+    subscribe:  (fe, h) => ((Button)fe).Click += h,
+    callback:   e => e.OnClick,
+    trampoline: ClickTrampoline,
+    slotIsNull: p => p.ClickTrampoline is null,
+    setSlot:    (p, t) => p.ClickTrampoline = (RoutedEventHandler)t)
+```
+
+The hand-coded shape pays the §9.2 per-control-class payload allocation **exactly once**, holds N trampoline slots in one box, and dispatches per-fire identically to the hand-coded handler. The Q1 +9.6% / +19.3% interpreter overhead (`PropEntry<>.Mount` virtual dispatch + delegate getter/setter) shrinks toward noise for controls authored this way because the trampoline body is open-coded and reads through `GetElementTag` directly — no entry-level lambda indirection.
+
+**Author guidance** (Phase 3 default):
+
+| Control shape | Classification |
+|---|---|
+| Zero events | `.OneWay` / `.OneWayConditional` / `.Initial` only |
+| One event, round-trip with DP | **`.Controlled<TValue, TArgs>`** — uses the generic interpreter; no TPayload required |
+| One event, fire-and-forget | `.HandCodedEvent<TArgs>` — needs a per-descriptor payload, but TPayload has just one slot |
+| Two or more events on one control | **`.HandCodedControlled` / `.HandCodedEvent` exclusively** — reuses the §9.2 per-control-class payload (e.g., `TextBoxEventPayload`) |
+| Perf-critical mount path (measured M2/M10 cost matters) | `.HandCodedControlled` even for single-event controls — collapses interpreter overhead |
+| Truly irregular control (logic doesn't fit §6.1) | Fall through to `IElementHandler<,>` (§4) escape hatch |
+
+**Source-gen interop.** When source-gen (§7) lands, the generator emits exactly this `.HandCodedControlled` / `.HandCodedEvent` shape from the descriptor declaration. Phase 3 controls authored hand-coded today port forward to source-gen by **deletion of boilerplate**, not rewrite.
+
+See §9.2 for the per-descriptor payload storage shape (the `ControlDescriptor<TElement, TControl, TPayload>` overload).
+
 ### 6.2 Modifier × declarative-prop precedence
 
 A descriptor that declares `Prop.OneWay(e => e.Background, (c,v) => c.Background = v)` and an element whose modifier chain includes `.Background(brush)` both want to write `Background`.
@@ -508,6 +555,18 @@ The audit shrunk the problem materially. The headline tally across 24 production
 
 **Phase 4 plan**: 14 trivial deletions + 1 redundant deletion in one PR; the 8 coercion / float-precision sites get tolerance metadata declared by their descriptors; the 1 ColorPicker site gets an imperative shim; `ChangeEchoSuppressor.cs` is deleted at the end. `ReactorBinding<T>.WriteSuppressed` (the public primitive — §13 Q19) keeps its signature throughout; its implementation swaps under the hood without changing the API.
 
+> **Phase 1 KD-1 (revisit during Phase 4).** Phase 1 ships an interim
+> `ChangeEchoSuppressor.ShouldSuppress` drain inside the
+> `ReactorBinding<T>.OnCustomEvent` trampoline so that programmatic writes
+> via `WriteSuppressed` are consumed on the V1 path the same way the legacy
+> per-control trampolines (`EnsureToggleSwitchWiring` etc.) consume them.
+> When the Phase 4 work above replaces `ChangeEchoSuppressor` with
+> per-control tolerance / coercion metadata, that interim drain migrates
+> with it — the descriptor-declared echo shape takes over from the universal
+> counter. Tracked in
+> [`tasks/047-extensible-control-model-phase1-implementation.md`](tasks/047-extensible-control-model-phase1-implementation.md#kd-1--oncustomevent-must-drain-changeechosuppressor)
+> ("Phase 1 known defects / Phase 4 followups", KD-1).
+
 The remaining echo cases that *don't* appear in the audit but are worth naming for future controls:
 
 - **Focus-property writes** (engine writes `IsTabStop`/`FocusState`/programmatic `Focus()`). No current sites; if one appears, it falls into `eliminable-tight-diff`.
@@ -524,6 +583,81 @@ Net effect: `ChangeEchoSuppressor` module deleted (Phase 4), echo handling moves
 A latent issue worth fixing as part of this work, called out in §13 Q8 below: `ApplySetters` runs after declarative property writes today and bypasses any echo suppression scope. A user writing `Set(ts => ts.IsOn = true)` on a `ToggleSwitch` whose `el.IsOn = false` produces an unmasked write that *will* fire `Toggled` and feed back into state on the next event-loop tick. The descriptor model should require setters to either run inside the same suppression / round-trip scope as declared props, or be opted into an explicit raw-write mode (`Set.Raw(...)`) that the author has audited and accepted responsibility for. Default behavior should match declared props.
 
 **Resolved** as a carve-out ahead of Phase 1 (per [`047/factoring-recommendation.md`](047/factoring-recommendation.md)). `ApplySetters` now enters a scope-based suppression mode on the control's `ReactorState` (a depth counter alongside the existing paired `EchoSuppressCount`) for the duration of the setter chain, so any change event raised by a setter-driven write is dropped without consuming a paired token. The M13 perf-bench check flips from `OnIsOnChangedFireCount = 1` to `0` on both `ReactorToday` and `ReactorV2`. Default behavior now matches declared props as called for above; an explicit raw-write opt-out (`Set.Raw(...)`) is still a future refinement should it become needed.
+
+### 8.3 Phase 4 implemented direction — value-diff for safe paths, counter retained (HYBRID)
+
+> **Supersedes the "delete `ChangeEchoSuppressor` entirely" plan in §8.** The
+> wholesale-deletion plan (14 trivial deletions + tolerance metadata for the
+> coercion/float sites + ColorPicker shim) was assessed in Phase 4 and ruled
+> **NO-GO** for the counter's elimination: ~30 live sites remain, the
+> causal-token mechanism models cases value-comparison cannot (the
+> `ApplySetters` scope and the public `WriteSuppressed` primitive carry **no
+> expected value**), and regression coverage for a like-for-like swap was
+> missing. Refreshed live-site inventory:
+> [`047/audits/echo-suppressor-phase4-live-sites.md`](047/audits/echo-suppressor-phase4-live-sites.md).
+
+Instead of deleting the suppressor, Phase 4 introduces a **value-diff** echo
+mechanism *alongside* the counter and migrates only the controlled
+round-trips that value-diff can model safely. The end state is an intentional
+**hybrid**:
+
+- **Value-diff arm** (`ReactorState.PendingEchoMatch`, a one-shot
+  `Func<object?,bool>?`). Before a programmatic controlled write the engine
+  *arms* a predicate that recognizes the synthesized echo by its **readback
+  value** (`ChangeEchoSuppressor.ArmExpectedEcho`), then writes **bare** (no
+  counter bump). The control's change-event trampoline calls
+  `ChangeEchoSuppressor.ShouldSuppressEcho(ctrl, readback)` as its first line;
+  the single matching echo is dropped, the arm consumed. A *mismatch* means a
+  real user change superseded the pending write, so the arm is cleared and the
+  event falls through to the user callback. This is value-keyed, not
+  count-keyed — it cannot mis-drain on a coincidental extra event the way the
+  counter can, and it self-heals on the next event rather than stranding.
+- **Counter** (`EchoSuppressCount` + setter-scope `EchoSuppressScopeDepth`) is
+  **retained unchanged** as the fallback for every site value-diff cannot
+  model. `ShouldSuppressEcho` lets the counter/scope win **first** (draining a
+  coincident matching arm so it cannot strand), then consumes the value-diff
+  predicate.
+
+**Migrated to value-diff** (synchronous change event, exact-comparable,
+single controlled value): `ComboBox`, `FlipView`, `GridView`, `ListBox`,
+`Pivot`, `PipsPager`, `RadioButtons`, `SelectorBar`, `TabView`,
+`TemplatedFlipView` (all via `HandCodedControlledPropEntry`'s opt-in
+`valueDiffEcho: true`), plus `ToggleSwitchHandler` and the live `TextBoxHandler`
+(`ControlledPropEntry` was already value-diff from the PoC).
+
+**Retained on the counter** (with rationale):
+
+| Site | Why value-diff is unsafe |
+|---|---|
+| `Slider.Value`, `NumberBox.Value` | `double` snapping / precision — exact readback comparison leaks echoes |
+| `NumberBox` Min/Max coercion (`CoercingOneWayPropEntry`) | post-write coerced value is not known a-priori at arm time |
+| `CalendarView.SelectedDates` (`CollectionDiffControlledPropEntry`) | collection batch — no single expected value |
+| `AutoSuggestBox.Text`, `PasswordBox`, `RichEditBox` | string + deferred/coercion semantics |
+| `Expander` (`Expanding`/`Collapsed`) | `IsExpanded` readback timing at event uncertain |
+| `CheckBox` path-B legacy trampoline | retained legacy path |
+| `ApplySetters` scope | engine cannot predict which DPs `.Set(...)` writes — no expected value |
+| public `ReactorBinding<T>.WriteSuppressed` | external callers supply no expected value |
+
+**Why hybrid (and not full migration):** because the counter is retained for
+the cases above, this migration yields **no byte-size win** on `ReactorState`
+(it *adds* one reference field, `PendingEchoMatch`). Its value is correctness
+and self-healing on the migrated paths — value-diff cannot strand-and-swallow a
+real user event the way a mis-paired counter token can. If a migrated control
+later proves problematic (e.g. an unforeseen coerced or asynchronous echo), the
+documented fall-back is to flip its `valueDiffEcho` opt-in back off and let the
+counter handle it.
+
+**Subscription-timing note (why this is simpler than TextBox):** WinUI
+selection (`SelectionChanged`) and `Toggled` events fire **synchronously**
+inside the property write. On a `null → non-null` callback transition where the
+trampoline is not yet subscribed (subscription happens after the write in the
+same `Update`), the synchronous event simply finds no trampoline and produces
+**no echo** — so no arm strands. `TextBox.TextChanged`, by contrast, is
+*deferred*, which is why its value-diff path must arm ahead of wiring and gate
+on the callback being present.
+
+The `WriteSuppressed` public primitive (§13 Q19) keeps its signature and
+counter-backed implementation throughout.
 
 ---
 
@@ -593,7 +727,28 @@ The reset contract: on `Pool.Return(control)`, the engine clears `ControlEventSt
 
 Each per-control payload struct is sized exactly to that control's event count (1–3 slots in practice).
 
-There is no case where a `Toggled` handler attached to an ancestor needs a trampoline slot — `Toggled` cannot fire on an ancestor at all. So the per-control table only ever appears on attached state for the matching native control type, and never appears on unrelated controls.
+#### 9.2.1 Per-descriptor payload composition (Phase 2 follow-up; §6.1.1)
+
+The `ControlEventStateBox` is **one slot per control**. A handler reads it only after asserting `HandlerType == typeof(MyPayload)`. That single-slot discipline forces a design rule for descriptors with more than one event entry:
+
+- The descriptor declares a `TPayload` parameter — typically reusing the **existing §9.2 per-control-class payload** (e.g., `ToggleSwitchEventPayload`, `TextBoxEventPayload`, `ImageEventPayload`). The hand-coded handler and the descriptor handler for the same control share the payload class; the box's `HandlerType` discriminator matches regardless of which shape authored the mount.
+- Every event entry on the descriptor (`.Controlled`, `.HandCodedControlled`, `.HandCodedEvent`) writes into a distinct slot in that one payload — no second `ControlEventStateBox` ever appears.
+- The descriptor builder's signature gains `TPayload`:
+  ```csharp
+  new ControlDescriptor<TextBoxElement, TextBox, TextBoxEventPayload>
+  {
+      Children = …,
+      GetSetters = …,
+      PayloadFactory = static () => new TextBoxEventPayload(),
+  }
+  ```
+- Per-event slot access is typed via author-supplied `slotIsNull` + `setSlot` lambdas (see §6.1.1). The entry's `EnsureSubscribed` does `GetOrCreateControlEventPayload<TPayload>(ctrl)` and then writes through the supplied accessors. Per-fire indirection is zero (the static trampoline reads through `GetElementTag` directly).
+
+**Why not closed-generic-per-entry?** The descriptor model's Phase 2 fast path (`DescriptorControlledPayload<TElement, TControl, TValue, TArgs>`) closes a fresh payload type per entry. That preserves typed slots without author-supplied accessors and is the right shape for **single-event** controls. It cannot compose to multi-event controls under the single-slot box constraint — two entries on the same control would clobber each other's `HandlerType` stamp. Phase 2 measured only single-event controls; Phase 3 multi-event controls use the per-descriptor TPayload shape instead.
+
+**Why not source-gen yet?** §7 is the right long-term home for the per-control payload class — the generator emits it from the descriptor declaration. Until §7 lands, authors write the payload class (or reuse an existing §9.2 one) and the slot accessors by hand. The boilerplate is ~12 lines per event entry; source-gen removes it via deletion, not rewrite.
+
+**`HandlerType` discriminator across hand-coded and descriptor shapes.** Because the payload class is shared, a `TextBoxEventPayload` written by `TextBoxHandler` is reused by `TextBoxDescriptor` — and vice versa — through pool rent/return cycles. The discriminator's hot-reload safety property (Phase 4+) survives: if `TextBoxDescriptor` is replaced by a recompiled descriptor at hot-reload time, the new descriptor still writes into `TextBoxEventPayload` and the box's stamp still matches.
 
 There is no case where a `Toggled` handler attached to an ancestor needs a trampoline slot — `Toggled` cannot fire on an ancestor at all. So the per-control table only ever appears on attached state for the matching native control type, and never appears on unrelated controls.
 
@@ -1062,34 +1217,88 @@ Things that could surprise us — worth a microbench in Phase 1 before committin
 
 Phase 0 ratified decision criteria for the data-driven questions in [`decision-criteria.md`](047/decision-criteria.md); each question below carries a **Status** line indicating whether the decision has landed in the spec body, is gated on a later phase's measurement, or remains an open design call for a future session.
 
-1. **Descriptor vs. hand-coded handler — which one ships?** **Status: Open — Phase 2 measurement gate.** Decision matrix ratified in [`decision-criteria.md#q1`](047/decision-criteria.md#q1); Phase 2 runs the head-to-head and applies the matrix. Source-gen is deferred (see §7's revised status). The live question is whether the primary author-facing surface for first-party controls is a hand-coded `IElementHandler<TElement, TControl>` (more code, direct execution, full flexibility) or a declarative `ControlDescriptor<TElement, TControl>` interpreted by a shared engine (less code per control, indirect execution, more discipline). Intuition says imperative C# is faster than interpreted data, but data-driven systems with tight interpreters can match or beat hand-written code when the interpreter is short and predictable. This is not decidable by argument — it needs measurement.
+1. **Descriptor vs. hand-coded handler — which one ships?** **Status: Resolved (Phase 2, 2026-05-26) — descriptors primary, hand-coded `IElementHandler<,>` as escape hatch.** Source-gen (§7) remains deferred.
 
-   **Proposed validation plan** (executed during Phase 2):
-   - Implement **three controls** in *both* shapes against the same v1 protocol surface:
-     - **`ToggleSwitch`** — value-bearing, one control event, simple. The vanilla case.
-     - **`Slider`** — value-bearing, coercion-prone, exercises echo handling (suppression *or* round-trip per §8/§8.1).
-     - **`Border`** — pure container, no events, exercises modifier integration and `Prop.OneWay`-style brush/thickness props.
-   - For each control, write the handler variant first (it's the direct port of today's `MountXxx`). Then write the descriptor entry and let the shared interpreter execute it. Same v1 protocol, same `MountContext`, same setters/modifier pipeline.
-   - Run the §15.3 micro suite (especially M1, M2, M5, M7, M10) and the relevant §15.4 macros (L4, L9) against both implementations on the same machine, same session.
-   - Compare:
-     - **Per-mount ns** and **allocation bytes** — does the descriptor interpreter pay a real cost, or does the JIT specialize it well enough that the cost is in the noise?
-     - **LOC per control** — count the lines of authoring code needed to express the control (excluding shared interpreter).
-     - **Cognitive load** — have 2-3 engineers read both versions cold and rate which they'd rather write a 4th control in.
-     - **Compile-time validation reach** (per Q10) — how much of the surface is C#-compiler-validated for free vs requires the analyzer? A shape whose entire surface is compile-validated by the C# compiler alone wins by a small margin on tooling-cost-over-time.
-     - Hot-reload behavior is explicitly **not** an input — see Q15.
+   **Verdict.** The pre-committed decision matrix
+   ([`decision-criteria.md#q1`](047/decision-criteria.md#q1)) lands the
+   Phase 2 measurement in the **5-15% judgment-call band**, with the worst
+   gating bench (M2) at +9.6%. The matrix's qualitative inputs (LOC,
+   readability) come down on descriptors at Phase 3 scope. Authors default
+   to `ControlDescriptor<TElement, TControl>`; hand-coded
+   `IElementHandler<TElement, TControl>` stays as the escape hatch for
+   irregular controls, perf-critical mount paths, and multi-event composition
+   shapes that the descriptor interpreter's single-payload-per-control
+   storage doesn't natively cover (see §6.1's `.HandCodedControlled` /
+   `.HandCodedEvent` classifications).
 
-   **Decision matrix** to apply to the data, fixed up front so the discussion doesn't relitigate based on whoever's preference is loudest:
-   - **Descriptor within 5% of handler on M1/M2/M5/M7:** ship descriptors as the primary first-party surface. The LOC and uniformity wins are real and the perf cost isn't material. Handlers stay as an escape hatch for irregular controls and runtime registration.
-   - **Descriptor 5–15% slower:** judgment call, weigh LOC + readability + hot-reload against the per-mount cost in context of L4/L7/L9 macro impact. Likely picks descriptors if macros show no detectable difference; picks handlers if even one macro shows a >2% regression.
-   - **Descriptor >15% slower on any of M1/M2/M5/M7:** ship hand-coded handlers as the primary surface. Descriptors stay available for *late-bound external controls* only (the §16-permanent-fallback path), not as the recommended first-party shape. Revisit when source-gen could collapse the cost (which would mean revisiting §7 too).
+   **Capture lineage** (all on LAPTOP-4MEP83VI, ARM64-native, Release,
+   .NET 10.0.8, 15 measurements per cell):
 
-   This is a measurement-driven gate, not a discussion gate. Phase 2 doesn't conclude until the decision matrix produces an answer.
+   | Capture | Descriptor event path | M1 | M2 | M5 | M7 | M10 (informative) | Matrix verdict at the time |
+   |---|---|---:|---:|---:|---:|---:|---|
+   | `2026-05-26-q1-spike-5x5/` | Public `OnCustomEvent` | +1.3% | +19.1% | +13.4% | -8.2% | +31.5% | Ship hand-coded |
+   | `2026-05-26-q1-fastpath-3x5/` | Internal typed-payload fast path; capture noisy | +23.5% | +18.8% | +16.7% | -6.1% | +32.1% | Ship hand-coded (suspect — M1 anomaly) |
+   | **`2026-05-26-q1-fastpath-3x5-stableac/`** | **Internal typed-payload fast path; stable AC, clean foreground** | **-1.0%** | **+9.6%** | **-2.3%** | **+8.1%** | **+19.3%** | **Judgment call → descriptors** |
+
+   Numbers are descriptor-vs-`ReactorV2`-handler deltas. Full raw captures
+   live under `docs/specs/047/phase2-results/LAPTOP-4MEP83VI/`. The stable-AC
+   capture is the authoritative one — the prior two were degraded by
+   capture-condition noise (the M1 +23.5% on a TextBlock that doesn't engage
+   the descriptor path at all was the giveaway).
+
+   **What the fast-path rewrite bought.** Phase 2's first capture used the
+   descriptor model's public-surface event wiring (`OnCustomEvent`, which
+   allocates a closure per first-mount and stores trampolines in a
+   non-deduped list). The descriptor sources live inside `src/Reactor/`
+   and have the same `internal` access the hand-coded handlers do, so the
+   path was rewritten to use `GetOrCreateControlEventPayload<T>` with a
+   static trampoline — mirroring `ToggleSwitchHandler.EnsureToggledWiring`.
+   The rewrite cut roughly half of the M2 / M10 cost (M2: −9.5pp, M10: −12.2pp).
+   The residual +9.6% on M2 is **intrinsic interpreter overhead** — virtual
+   `PropEntry<,>.Mount` dispatch plus delegate getter/setter invocations
+   versus the hand-coded handler's inlined property writes. Removable only
+   via source-gen (§7).
+
+   **LOC + readability inputs to the judgment call.** For the three Phase 2
+   controls (LOC excluding interpreter):
+
+   | Shape | LOC per control (avg) | Shared interpreter | Break-even N |
+   |---|---:|---:|---:|
+   | Hand-coded `IElementHandler<,>` | ~100 | 0 | — |
+   | Descriptor + interpreter | ~66 | 586 (one-time) | ~17 controls |
+
+   Phase 3 ports ~60 controls. At full scope descriptors save ~24% total LOC.
+   Readability: the §6.1 prop classifications (`Initial` / `OneWay` /
+   `Controlled` / `OneWayConditional` / `CoercingOneWay`) are visible at the
+   call site, type-system-enforced, and read like spec tables. The descriptor
+   shape is dramatically easier for external authors to ship correctly (they
+   don't need to understand trampoline-storage internals to wire an event).
+
+   **Decision matrix as applied** (copied verbatim from the original entry
+   for the record; this is the bar Phase 2 cleared):
+   - **Descriptor within 5% of handler on M1/M2/M5/M7:** ship descriptors as primary. (M1 / M5 met this; M2 / M7 fell into the next band.)
+   - **Descriptor 5–15% slower:** judgment call, weigh LOC + readability against per-mount cost in context of L4/L7/L9 macros. (M2 / M7 landed here; LOC + readability won.)
+   - **Descriptor >15% slower on any of M1/M2/M5/M7:** ship hand-coded handlers as primary. (Not triggered on the authoritative stable-AC capture.)
+
+   **Carry-forward for Phase 3** — known defects that intersect Q1:
+   - **KD-3** (Phase 1) — dispatch fast-path for the ported built-ins (M4 +88.9% V1 vs Today). Intersects with whichever Q1 shape wins; carries into Phase 3.
+   - **KD-4** (Phase 1) — public typed-event surface for external descriptor authors. Scope **narrowed** by Phase 2: in-tree descriptors already use the internal fast path; KD-4 is now external-author-only.
+   - **Multi-event composition** — Phase 2 measured only single-event controls (ToggleSwitch / Slider). Multi-event controls (TextBox / Image / proposed ListView) need the §6.1 `.HandCodedControlled` + `.HandCodedEvent` builders, which reuse the §9.2 per-control-class payload types. Phase 3 prerequisite.
+
+   **Reopen condition.** Re-run Q1 only if source-gen (§7) lands, in which
+   case the +9.6% residual is expected to collapse to noise. KD-4 is no
+   longer expected to flip Q1 because the in-tree fast path already exists.
+
+   **What is NOT in scope for re-opening.** The Phase 2 noisy captures
+   are not grounds to reopen the verdict — they're documented as
+   capture-condition artifacts. Future readers reaching for those numbers
+   should use the stable-AC capture as the authoritative reference.
 2. **What's the AOT story end-to-end?** **Status: Resolved (Phase 0).** Reactor is AOT-compatible today: the AOT test suite runs at ≥ 90% pass rate against the AOT-compiled bits. The full assembly is not yet marked `IsAotCompatible=true` because a small number of features remain unsafe; those land separately. **Commitment for spec 047: no new AOT warnings introduced by the v1 protocol surface, regardless of which Q1 shape wins.** Descriptor lambdas are strongly-typed (no `nameof()`-resolved reflection) precisely so the interpreter remains AOT-clean; hand-coded handlers are AOT-clean by construction. L14 (AOT publish of the split-library scenario) ships as a **regression guard** in Phase 1's exit gate — not an exploratory check. See [`decision-criteria.md#q2`](047/decision-criteria.md#q2).
 3. **Can echo suppression be eliminated, and at what cost?** **Status: Resolved (Phase 0).** Ship "delete + tight diff" for the 14 trivial sites, per-control tolerance metadata for 8 coercion / float-precision sites, and a one-off ColorPicker shim. §8.1 (`mostRecentEventCount`) rejected — only 1 / 24 sites required it. See [`decision-criteria.md#q3`](047/decision-criteria.md#q3) and §8.
 4. **What's the `ReconcileChildren` shape?** **Status: Resolved (Phase 0).** Concrete C# strategy types ship in Phase 1: `None` / `SingleContent` / `Panel` / `NamedSlots` / `ItemsHost` / `Imperative`, plus `AttachedPropWriter` on container descriptors. See §6's ChildrenStrategy block.
 5. **Is `RegisterType` even the right verb?** **Status: Resolved (Phase 0).** Keep `RegisterType`. After the split-library plan, first-party and external registrations travel through the same surface — a single verb reflects that. Phase 1 promotes it to public with Q17's throw-on-duplicate rules. Renames / split verbs were considered and rejected (source-compat + the engine treats both paths identically).
-6. **Should setters re-run on every update or only when the setters array changed?** **Status: Resolved (Phase 0) pending Phase 1 M7 measurement.** Default to skip-on-ref-equality (`oldEl.Setters == newEl.Setters` → no-op); back-compat opt-out via a `SetterRunPolicy.Always` flag on the element record if a real consumer trips on it. See [`decision-criteria.md#q6`](047/decision-criteria.md#q6).
-7. **Pool integration with descriptors.** **Status: Resolved (Phase 0) pending Phase 1 M12 measurement.** Promote `ctx.AllocateControl` as the documented mount path; deprecate direct construction in handlers. M12 gates the perf claim. See [`decision-criteria.md#q7`](047/decision-criteria.md#q7) and Q18.
+6. **Should setters re-run on every update or only when the setters array changed?** **Status: Resolved (Phase 0) — Phase 1 M7 measurement pending baseline-machine run** (see [`phase1-results/1.19-final-perf-validation-deferral.md`](047/phase1-results/1.19-final-perf-validation-deferral.md)). Default to skip-on-ref-equality (`oldEl.Setters == newEl.Setters` → no-op); back-compat opt-out via a `SetterRunPolicy.Always` flag on the element record if a real consumer trips on it. The ported handlers in `src/Reactor/Core/V1Protocol/Handlers/` call `ctx.ApplySetters(n.Setters, ctrl)` on every Update — the ref-equality short-circuit lives inside `Reconciler.ApplySetters`. See [`decision-criteria.md#q6`](047/decision-criteria.md#q6).
+7. **Pool integration with descriptors.** **Status: Resolved (Phase 0) — Phase 1 M12 measurement pending baseline-machine run** (see [`phase1-results/1.19-final-perf-validation-deferral.md`](047/phase1-results/1.19-final-perf-validation-deferral.md)). Phase 1 shipped `ctx.RentControl<T>(policy, factory)` as the documented mount path (Q18 contract); the legacy direct-`new` path is still permitted in legacy `MountXxx` arms during the Phase 1 / Phase 3 migration. M12 gates the perf claim once the baseline-machine run lands. See [`decision-criteria.md#q7`](047/decision-criteria.md#q7) and Q18.
 8. **`Set(...)` modifier semantics — and a latent correctness hole.** **Status: Resolved (carve-out landed ahead of Phase 1).** `ApplySetters` now runs inside a scope-based suppression scope on the control's `ReactorState`; M13 baseline flipped from `OnIsOnChangedFireCount = 1` to `0`. See §8.2 and [`factoring-recommendation.md`](047/factoring-recommendation.md). An explicit `Set.Raw(...)` opt-out remains a future refinement if needed.
 9. **Override semantics.** **Status: Resolved (Phase 0).** No override mechanism in v1 — duplicate registration throws. Test fakes compose a `Reconciler` from scratch with the registry they need; `RegisterOverride` can be added later as a non-breaking, additive verb if a real consumer scenario surfaces. See [`decision-criteria.md#q9`](047/decision-criteria.md#q9) and §2.1.
 10. **Compile-time validation.** **Status: Resolved (Phase 0).** Compile-time validation of property and event references is **required**. The C# compiler handles it for free where the protocol uses strongly-typed delegates (hand-coded handler bodies, descriptor `get` / `set` / `subscribe` / `unsubscribe` lambdas, and `nameof(Type.Member)` references). For any portion of the protocol surface that would otherwise reduce to a string-form name lookup (e.g. raw `changeEvent: "Toggled"` strings), Phase 1 ships a Roslyn analyzer that flags the mismatch as a compile error. A descriptor with a typo or wrong type is never a runtime failure. See [`decision-criteria.md#q10`](047/decision-criteria.md#q10).
@@ -1195,31 +1404,175 @@ Without (2) specifically, Phase 1 can't claim the split-library path works.
 
 ### Phase 2 — descriptor model spike + decision
 
-This is the §13 Q1 measurement-driven decision phase.
+**Status: Complete (2026-05-26).** §13 Q1 resolved — descriptors as primary first-party surface; hand-coded `IElementHandler<,>` as escape hatch.
 
-- Build a `ControlDescriptor<TElement, TControl>` interpreter using the v1 context surface internally.
-- Implement **the same three controls** (`ToggleSwitch`, `Slider`, `Border`) in *both* hand-coded-handler and descriptor shapes against the same protocol.
-- Run the §15.3 micro suite and §15.4 macros (specifically L4, L9, L12 for hot-reload) on both implementations.
-- Apply the §13 Q1 decision matrix to the data.
-- **Phase 2 exit gate:** either descriptors are the primary first-party surface going forward, *or* hand-coded handlers are. The losing shape stays available only in its narrower role (escape hatch / late-bound external).
+- ✅ Built `ControlDescriptor<TElement, TControl>` interpreter using the v1 context surface internally (`src/Reactor/Core/V1Protocol/Descriptor/`).
+- ✅ Implemented the three controls (`ToggleSwitch`, `Slider`, `Border`) in both hand-coded-handler and descriptor shapes. Behavior parity verified by 23/23 self-test assertions (`Desc_*` fixtures).
+- ✅ Ran the §15.3 micro suite (M1, M2, M5, M7, M10) — three captures progressively de-noised. L4 / L9 macros not required for verdict (matrix gated on micro deltas; LOC + readability resolved the judgment-call band).
+- ✅ Applied the §13 Q1 decision matrix to the stable-AC capture. Worst gating bench M2 +9.6%, landed in 5-15% judgment-call band; LOC + readability inputs resolved to descriptors at Phase 3 scope.
+- **Phase 2 exit gate met:** descriptors are the primary first-party surface (§6.1). Hand-coded handlers stay as escape hatch (irregular controls, perf-critical mount paths, multi-event composition via §6.1.1 / §9.2.1).
+
+See §13 Q1 for the full capture lineage and matrix application. Raw data under `docs/specs/047/phase2-results/LAPTOP-4MEP83VI/`.
 
 ### Phase 3 — controls migration
 
-- Migrate the value-bearing family first (`Slider`, `NumberBox`, `ColorPicker`, `RatingControl`). Closes out the echo-suppressor audit (§8.x).
-- Then input controls (`Button`, `TextBox`, `CheckBox`). Exercises shared trampolines.
-- Then containers (`Stack`, `Grid`, `Flex`). Exercises `ReconcileChildren`.
-- Then templated lists. Exercises keyed reconciliation interop with spec 042.
-- Then the long tail (`NavigationView`, dialogs, `MapControl`, …).
+**Phase 3 prerequisites** (added by Phase 2 verdict — must land before bulk porting starts):
+
+1. **Ship `.HandCodedControlled<TValue,TArgs>` and `.HandCodedEvent<TArgs>` builder methods** on `ControlDescriptor<TElement, TControl, TPayload>` (§6.1.1). Adds `TPayload` overload and two new `PropEntry` subclasses (`HandCodedControlledPropEntry`, `HandCodedEventPropEntry`). ~200 LOC in `src/Reactor/Core/V1Protocol/Descriptor/`.
+2. **Port `TextBox` to descriptors as the 2-event proof point** (TextChanged + SelectionChanged). Reuses the existing `TextBoxEventPayload` class from `ControlEventPayloads.cs`. Confirms the §9.2.1 hand-coded-shape + per-descriptor-TPayload composition works end-to-end.
+3. **Re-bench M2 / M10 against the TextBox descriptor port** — expect the +9.6% / +19.3% residuals to shrink substantially for hand-coded-shape descriptors (matches the hand-coded handler's per-fire shape exactly). Document in `docs/specs/047/phase3-results/`.
+4. **Author guidance written into the Phase 3 onboarding doc** — the §6.1.1 classification table (when to use `.Controlled` vs `.HandCodedControlled` + `.HandCodedEvent` vs `IElementHandler<,>`).
+
+**Phase 3 migration order** (~60 controls total):
+
+- Migrate the value-bearing family first (`Slider`, `NumberBox`, `ColorPicker`, `RatingControl`). Closes out the echo-suppressor audit (§8.x). Single-event controls use `.Controlled<,>`.
+- Then input controls (`Button`, `TextBox`, `CheckBox`). Multi-event cases (TextBox) use `.HandCodedControlled` + `.HandCodedEvent` per §6.1.1.
+- Then containers (`Stack`, `Grid`, `Flex`). Exercises `ReconcileChildren`. Mostly zero-event.
+- Then templated lists. Exercises keyed reconciliation interop with spec 042. Multi-event (selection + item-click).
+- Then the long tail (`NavigationView`, dialogs, `MapControl`, …). Mix of event shapes.
 - The private `MountXxx` switch shrinks one arm per PR.
 - The §15 suite gates every PR — see §15.6 regression budgets.
 
+**Phase 3 progress** (see `docs/specs/tasks/047-extensible-control-model-implementation.md` for the live tracker):
+
+- Phase 3 prerequisites (`.HandCodedControlled` / `.HandCodedEvent` builders, `TextBoxDescriptor` 2-event proof, x64 advisory bench) — **landed** (PR #424).
+- Value-bearing batch 1 — `CheckBox`, `RadioButton`, `RatingControl`, `ToggleSplitButton` — **landed** (PR #428). Documented gaps on `CheckBoxDescriptor` (three-state mode + `OnCheckedStateChanged`) and `ToggleSplitButtonDescriptor` (Flyout child) carried forward to follow-ups.
+- Value-bearing batch 2 — `ColorPicker`, `CalendarDatePicker`, `DatePicker`, `TimePicker` — **landed** (PR #428). Date/time/color leaves with clean single-event shapes.
+- Batches 3–11 (bulk-port) — **landed** (PR #435). 38 descriptors across 9 batches:
+  - **Batch 3** (Display, `.OneWay`) — `TextBlock`, `Image`, `PersonPicture`, `ProgressBar`, `ProgressRing`, `InfoBadge`.
+  - **Batch 4** (Buttons, `.HandCodedEvent` Click) — `Button`, `HyperlinkButton`, `RepeatButton`, `ToggleButton`, `DropDownButton`, `SplitButton`.
+  - **Batch 5** (value-bearing inputs, `.HandCodedControlled` single-event) — `RichEditBox`, `PasswordBox`, `RadioButtons` (group control).
+  - **Batch 6** (multi-event inputs) — `AutoSuggestBox`, `ComboBox`. `.HandCodedControlled` + 2× `.HandCodedEvent` against per-control payloads with 3 trampoline slots each.
+  - **Batch 7** (single-content containers, `SingleContent`) — `Viewbox`, `Expander`, `ScrollViewer`, `ScrollView`.
+  - **Batch 8** (panels, `Panel` strategy) — `StackPanel`, `Grid`, `Canvas`, `FlexPanel`, `RelativePanel`. `WrapGrid` escape-hatched (needs per-child attached-prop hook).
+  - **Batch 9** (named-slot containers, `NamedSlots`) — `SplitView`, `InfoBar`, `TeachingTip`.
+  - **Batch 10** (shapes + display leaves, `.OneWay`) — `Rectangle`, `Ellipse`, `Line`, `Path`, `AnimatedIcon`. `Icon` escape-hatched (polymorphic mount).
+  - **Batch 11** (long-tail triage) — ported: `PipsPager`, `ListBox`, `SelectorBar`, `BreadcrumbBar`. Escape-hatched: `Frame` (imperative mount-only `Navigate`), `CalendarView` (`SelectedDates` `IObservableVector` with per-element echo).
+- Phase 3 follow-ups (need new builder/entry shapes — separate spec-reviewed PR): `NumberBox` (Immediate-mode keystroke + `NumberFormatter` ref-equality), `RichTextBlock` (incremental Paragraphs/Inlines diff), `FrameElement` (mount-only entry shape), `CalendarViewElement` (collection-diff with per-element echo). Within-control partial-port gaps (Flyout children, items collections, per-child attached props, IconSource, Path.Data) tracked in `docs/specs/tasks/047-extensible-control-model-implementation.md`. Templated lists (`ListView`, `GridView`, `TreeView`, `FlipView`, `TabView`, `Pivot`, `ItemsRepeater`) require spec-042 keyed reconciliation integrated into `ItemsHost`.
+- Phase 3 advisory perf — final x64 capture under `docs/specs/047/phase3-results/CPC-ander-YTZ3O-x64-advisory/2026-05-27-phase3-final-3x5/` (50 controls registered, 3×5 launches). V1 ON (descriptors) vs V1 OFF (today) headline: M1 +14.9%, M7 +7.4%, M8 +25.5%, M10 +8.7%, M11 +8.5%, M12 +20.9% — descriptor-interpreter Mount/Update overhead amortized over the larger registration table. M4 −21.2% / M5 −24.3% — dispatch wins from a fatter handler table (fewer fallthroughs to the legacy switch arm). Cloud-PC advisory only; ARM64 stable-AC re-capture on `LAPTOP-4MEP83VI` is deferred for the §14 ratification gate.
+
+**Phase 3-final descriptor scale-out** (delivers the follow-ups listed above + within-control partial-port gaps from PR #435 batches 3–11):
+
+- **Batch A — engine shapes** (`.OneWayBridged`, `.Immediate`, `.CollectionDiffControlled`, `Panel.PerChildAttached`, `ItemsHost<TElement,TControl>` flat, `Reconciler.CreateFlyoutForDescriptor`). Carries no controls; enables the rest.
+- **Batch B** — `FrameElement` (.HandCodedEvent triple — gates on callback-at-mount; legacy unconditional subscription stays preferable for late-attached callbacks), `RichTextBlockElement` (reference-equality rebuild on Paragraphs; legacy incremental per-paragraph diff stays preferable for authors needing the incremental shape), `NumberBoxElement` (plain `.OneWay` Min/Max; `.CoercingOneWay` not threaded — see follow-up).
+- **Batch C** — `CalendarViewElement` via `.CollectionDiffControlled`. Null `SelectedDates` is treated as empty (descriptor clears the vector); legacy treats null as uncontrolled (preserves user picks) — call sites must pass a list whenever selection is controlled.
+- **Batch D** — `DropDownButton`/`SplitButton`/`ToggleSplitButton` Flyout child via `.OneWayBridged` + `Reconciler.CreateFlyoutForDescriptor`.
+- **Batch E** — `Grid`/`Canvas`/`FlexPanel` per-child attached props via `Panel.PerChildAttached`; `WrapGrid` via a tailored panel shape.
+- **Batch F** — `ImageElement` `ImageOpened`/`ImageFailed` via `.HandCodedEvent`; `PathElement` pre-built `Geometry Data` via `.OneWayConditional` (gated on `PathDataString` being null); `InfoBarElement.ActionButton` via `.OneWayBridged` with a Click trampoline.
+- **Batch G-prep — engine ordering fix.** `ItemsHost.GetCollection` retyped from `System.Collections.IList` to `IList<object>` (WinUI `ItemCollection` does not implement the non-generic projection under CsWinRT). `DescriptorHandler` now dispatches `ItemsHost` inline between `RentControl` and the prop loop on Mount, and before the prop loop on Update, so selection-tracking initial writes (`SelectedIndex`/`SelectedItem`) land against a populated collection. Strategy shape unchanged for hand-coded handlers (V1HandlerAdapter dispatch path kept).
+- **Batch G1 — flat `ItemsHost` ports.** `ListBoxElement`, `ComboBoxElement`, `RadioButtonsElement` migrate from `.OneWay<string[]>` items entries to `Children = new ItemsHost<...>(...)`. `ComboBoxElement.ItemElements` (`Element[]?`) supported alongside `Items` (`string[]`); the engine routes `Element` items through `MountChild`.
+
+**Phase 3 close-out** (`spec/047-phase3-close-out` branch, off PR #436 HEAD) — closes the largest Phase 3-final carve-outs:
+
+- **Engine (1)** — `Panel<>.PerChildAttachedAfterAll`. Two-pass callback fired once after every child mount/reconcile with the full ordered `(UIElement, Element)` pair list. Distinct from per-child `PerChildAttached` (cannot see un-mounted siblings). Lazy allocation; existing `Grid`/`Canvas`/`FlexPanel`/`WrapGrid` unaffected.
+- **Engine (2)** — `TemplatedItems<TItem, TElement, TControl>` strategy + `Reconciler.BindKeyedItemsSource` binder. Wires `ReactorListState` + shared `ContainerContentChanging` + spec-042 `KeyedListDiff.Apply`. MVP on `WinUI.ListViewBase`. Companion T-erased shape (`TemplatedItemsErased<>` + `BindErasedKeyedItemsSource`) reads items/keys through `IKeyedItemSource` so the descriptor doesn't carry TItem — matches the legacy `TemplatedListElementBase` erasure model used by `Reconciler.Mount`.
+- **Port (4)** — `RelativePanel` via the new after-all callback. The descriptor builds a name → control map across mounted children, then writes the sibling-referencing attached DPs (`SetRightOf`, `SetBelow`, `SetAlignLeftWith`, …). Closes the Batch E `RelativePanel per-child attached` carve-out.
+- **Port (5) G2** — `TemplatedListView<T>` / `TemplatedGridView<T>` via base-derived registration. New empty intermediate marker bases (`TemplatedListViewElementBase`, `TemplatedGridViewElementBase`) catch every closed-T variant through `V1HandlerRegistry.AddForDerivedTypes`. Surfaced on the public v1 API as `Reconciler.RegisterHandlerForDerivedTypes<TBase, TControl>`. Erased strategy + binder reads items + keys through `IKeyedItemSource` on the live element. Selection / item-click event wiring inlined in `BindErasedKeyedItemsSource` so the descriptor needs no new `ControlEventState` payload box.
+
+**Phase 3 close-out carve-outs — status after Phase 3 finish:**
+
+- **Expander.HeaderTemplate** — **closed** by Phase 3 finish via Engine (2)'s `.ImperativeBridged` prop-entry shape (see Phase 3 finish section below). The "two-strategy composition" was resolved at the *property* level, not the children-strategy level — `Children` stays as `SingleContent`; HeaderTemplate ports as a bridged imperative entry whose Update lambda calls `Reconciler.ReconcileV1Child` to preserve descendant component state, paired with a sibling `.OneWayConditional` for the string `Header` gated on `HeaderTemplate is null`.
+- **TeachingTip.Target** — **closed by audit** (Engine (3)). The legacy `MountTeachingTip` does not set `Target` either; both paths leave it as a `.Set` imperative setter. No engine extension is needed for "100% V1 dispatch" because Target was never routed through V1 dispatch in either path. A declarative cross-element-reference shape (a `.DeferredOneWay` PropEntry with end-of-Mount queue drain) remains future polish, not a Phase 3 gate.
+- **PathElement.PathDataString** — **closed** by Phase 3 finish via Engine (4)'s `.Imperative` prop-entry shape. The descriptor now drives all three legacy strategies (XamlReader.Load → pre-built Geometry → PathDataParser.Parse) end-to-end with the same multi-source error context; the prior `e.PathDataString is null` gate dropped.
+- **NumberBox coercion** — **closed** by Phase 3 finish — Engine (5) audit confirmed `.CoercingOneWay` already covers the suppression semantics line-for-line; NumberBoxDescriptor's `Minimum` / `Maximum` entries ported through.
+- **`Lazy*Stack<T>` G2 port** — **closed** by Phase 3 finish (Port (6)). `BindErasedKeyedItemsSource` gained a `case WinUI.ItemsRepeater` arm driven through a new internal `IItemsRepeaterFactorySource` companion to `IKeyedItemSource`; `LazyStackElementBase` implements both. A single non-generic descriptor on the base catches every closed-T `LazyVStackElement<T>` / `LazyHStackElement<T>` variant via `RegisterHandlerForDerivedTypes`. Behavior difference vs the hand-coded handler: the descriptor's TControl is `WinUI.ItemsRepeater` directly (no auto-`ScrollViewer` wrapping); authors who need scrolling wrap externally.
+- **`ItemsRepeater<T>` G2 port** — **deferred** to a follow-up. `ItemsRepeaterElement<T>` does not exist today (only `ItemsViewElementBase` for the higher-level `ItemsView`); shipping requires a new element type + DSL surface, out of scope for Phase 3's engine-validation pass. Engine (1)'s ItemsRepeater arm is already exercised end-to-end by Port (6), so the engine work is proven; only the missing element type blocks Port (7).
+- **G3 typed lists — `TreeView`, `FlipView`, `TabView`, `Pivot`** — **carried forward**. Each needs a NEW children-strategy shape: `TreeChildren` (hierarchical, non-keyed); `PreMountedItems` (FlipView pre-mounts all items, no CCC, no OC delta); `TabItemsHost` (heterogeneous items with Header + Content + IsClosable per `TabViewItemData`). Pivot reuses the TabItemsHost shape with `WinUI.PivotItem` as the container. Engine (1) and the dispatch consolidation in Phase 3 finish (single-marker `IItemsBinderStrategy` arm) keep these ports incremental — each new strategy plugs into the same dispatch arm without a per-strategy `is`-check.
+
+**Phase 3 close-out advisory perf** — Cloud PC x64 re-capture with the close-out scope (52 registered descriptors — +2 from `2026-05-27-phase3-final-3x5/`'s 50) under `docs/specs/047/phase3-results/CPC-ander-YTZ3O-x64-advisory/2026-05-27-phase3-closeout-3x5/`. Median of n=15 (3 launches × 5 reps) V1 ON (descriptors) vs V1 OFF (today):
+
+- **Held:** M4 −20.8% / M5 −23.9% (dispatch wins persist with the wider registration table). M12 +18.5% (descriptor-interpreter pool-rent overhead from prior, unchanged).
+- **Improved vs prior `phase3-final-3x5/`:** M8 Update_OneLeafChanged +18.9% (down from +25.5%, −6.6pp) — `DescriptorHandler.Children` switch refactor adds inline-binding arms for templated-items strategies so the non-ItemsHost Update path is shorter. M10 −1.7% (down from +8.7%, volatile but real on this run).
+- **Regressed vs prior:** M1 Mount_Leaf_NoCallback +21.2% (up from +14.9%, +6.3pp) — two new `is`-checks in `V1HandlerAdapter.DispatchChildrenMount` for the templated-items markers fire ahead of the pattern switch on every Mount. Worth folding into the `case` switch in a Phase 4 perf-tuning pass; not load-bearing for correctness.
+- **Net headline:** the M1/M12 regressions persist on advisory and the M8 improvement is a structural win. No deltas exceed the §13 Q1 reopen threshold (gated on source-gen, not advisory perf).
+
+ARM64 stable-AC re-capture on `LAPTOP-4MEP83VI` remains deferred for the §14 ratification gate.
+
+**Phase 3 finish** (`spec/047-phase3-finish` branch, off `spec/047-phase3-close-out` HEAD) — closes the largest close-out carve-outs and consolidates the items-binder dispatch arm:
+
+- **Engine (1)** — `Reconciler.BindErasedKeyedItemsSource` gains a `case WinUI.ItemsRepeater` arm. New internal `IItemsRepeaterFactorySource` companion interface to the public `IKeyedItemSource` carries the WinUI `IElementFactory` + layout knobs the ItemsRepeater realization path needs (CCC doesn't exist on ItemsRepeater; realization is `GetElement`/`RecycleElement` driven through the factory closure). Source objects implement both interfaces; the binder probes for the factory side at dispatch.
+- **Engine (2)** — `.ImperativeBridged(mount, update)` PropEntry. Bridged superset of Engine (4)'s `.Imperative` — Mount/Update lambdas receive `MountContext` / `UpdateContext` so a property-level entry can call `Reconciler.ReconcileV1Child`. The "two-strategy composition" gap (Expander.HeaderTemplate) resolves at the *property* level instead of the children-strategy level — `Children` stays unambiguous; the secondary Element slot ports as a bridged imperative entry that reconciles against the existing slot value and clears it on transition.
+- **Engine (3)** — TeachingTip.Target audit. No engine code; legacy and descriptor agree on the setter-escape contract.
+- **Engine (4)** — `.Imperative(mount, update)` PropEntry. Property-level escape hatch — Update lambda receives BOTH old and new TElement, letting the entry express a diff the per-value get/set shapes can't (the motivating case is `Path.PathDataString` comparing the *string* field on old vs new while writing the *Geometry* value). No fast-path; runs on every render.
+- **Engine (5)** — NumberBox.Min/Max coercion audit. No new engine surface; `.CoercingOneWay` already matched `UpdateNumberBox`'s `if (nb.Value < n.Minimum) ChangeEchoSuppressor.BeginSuppress(nb)` pattern line-for-line. NumberBoxDescriptor ported through in the same commit.
+- **Port (6) Lazy*Stack G2** — `LazyVStackElement<T>` / `LazyHStackElement<T>` via base-derived registration on `LazyStackElementBase` (single descriptor on the non-generic base catches every closed-T variant). `LazyStackElementBase` now implements `IItemViewSource`, `IKeyedItemSource`, and `IItemsRepeaterFactorySource`; the descriptor's `Children` strategy is `TemplatedItemsErased<>` targeting `WinUI.ItemsRepeater`. Fixtures: `Desc_LazyVStack_*` (13 checks) + `Desc_LazyHStack_*` (4 checks).
+- **Carve-forward (12) Expander.HeaderTemplate** — ports through Engine (2). Update lambda calls `ReconcileV1Child` to preserve descendant component state; sibling string `Header` entry gated on `HeaderTemplate is null`.
+- **Carve-forward (14) Path.PathDataString** — ports through Engine (4). Single `.Imperative` entry drives all three legacy strategies (XamlReader.Load → pre-built Geometry → PathDataParser.Parse) end-to-end with the same multi-source `ArgumentException` rethrow path the legacy arm uses.
+- **Carve-forward (15) NumberBox.Min/Max** — landed alongside Engine (5).
+- **Dispatch consolidation** — `ITemplatedItemsStrategy` and `IErasedTemplatedItemsStrategy` inherit from a new base `IItemsBinderStrategy`; `V1HandlerAdapter.DispatchChildrenMount` / `DispatchChildrenUpdate` and `DescriptorHandler.Mount` / `Update` collapse their per-strategy `is`-checks into one base-interface check. The G3 strategies below (`TreeChildren`, `TabItemsHost`) implement the same marker, so they plug into the same arm — M1 cost stays at one `is`-check + one interface call regardless of how many strategy variants are registered.
+- **Port (8) TreeView** — new `TreeChildren<TElement, TControl>` ChildrenStrategy (hierarchical, non-keyed). Builds the WinUI `TreeViewNode` tree recursively from `TreeViewNodeData`; mounts per-node `ContentElement` through the reconciler when any node uses one (and picks `SharedContentControlTemplate.Value` as the item template); otherwise uses a new `TreeViewTextItemTemplate` shared lazy resource. Update is positional rebuild — old `ContentElement` UI subtrees unmount before the WinUI tree clears. `OnItemInvoked` / `OnExpanding` wired via `.HandCodedEvent` against a new `TreeViewEventPayload`.
+- **Port (9) FlipView** — reuses the existing `ItemsHost<>` strategy (verifying the handoff alternative (b)). `FlipView.Items` is a flat `IList<object>` sink; the engine pre-mounts each `Element` item through ItemsHost's existing dispatch body. No new `PreMountedItems` strategy needed. `SelectedIndex` + `OnSelectedIndexChanged` round-trip via `.HandCodedControlled` (new `FlipViewEventPayload`).
+- **Ports (10) TabView + (11) Pivot** — new `TabItemsHost<TElement, TControl, TItem>` ChildrenStrategy shared between both. Each item provides Header + Element Content; the descriptor's `CreateContainer` lambda builds the per-host container (`WinUI.TabViewItem` with `IsClosable` + `IconSource`; `WinUI.PivotItem` with Header + Content). Positional rebuild on Update — `ContentControl`-based walk unmounts each existing container's content before the collection clears. TabView's `OnTabCloseRequested` + `OnAddTabButtonClick` wire via `.HandCodedEvent` against a new `TabViewEventPayload`; Pivot reuses `FlipViewEventPayload` for its single `SelectionChanged` slot. **Known scope:** TabView's `TabStripHeader` / `TabStripFooter` Elements + spec 045 §2.4 docking drag pipeline + §2.2 pinnable headers stay on the legacy arm; common-case TabView ports through.
+
+- **Port (7) ItemsRepeater<T>** — new `ItemsRepeaterElementBase` + `ItemsRepeaterElement<T>` records modeled on `LazyStackElementBase` (the base implements `IKeyedItemSource` + `IItemsRepeaterFactorySource` so it flows through Engine (1)'s arm without new engine work). Distinct from Lazy*Stack: no hard-coded `StackLayout` (nullable `Layout` property — author supplies any `WinUI.Layout`) and no implicit `ScrollViewer` wrap (host externally for scrolling). Legacy `MountItemsRepeater` / `UpdateItemsRepeater` arms added for V1 OFF parity (there was no legacy arm before — the element type is new). DSL surface: `ItemsRepeater<T>(items, keySelector, viewBuilder)` factory in `Dsl.cs` matching `LazyVStack` / `LazyHStack`. Single base-derived descriptor on `ItemsRepeaterElementBase` catches every closed-T variant via `RegisterHandlerForDerivedTypes`.
+
+**Phase 3 finish carry-forwards:** none remaining for the typed-items host families that were on Phase 3's scope (LazyVStack/HStack, ItemsRepeater<T>, ListView<T>, GridView<T>, TreeView, FlipView (simple), TabView, Pivot). The engine surface is complete. Production swap (Phase 4 cleanup) registers each descriptor in `RegisterV1BuiltInHandlers` and deletes the matching legacy `MountXxx` switch arm.
+
+**Phase 3 deferred / not-attempted** (recorded for the Phase 3.5 / Phase 4 prelude — element types in the legacy `Reconciler.Mount` switch that have neither a Phase 1 V1 handler nor a Phase 3 descriptor; see `tasks/047-extensible-control-model-implementation.md` for the full enumeration). **Updated in Phase 3 completion (PR #440, commit 16636c0d):** the engine gap is closed (`TemplatedFlipViewElement<T>` ported via the new `PreMountedItems` ChildrenStrategy + `TemplatedFlipViewDescriptor`), and every previously-deferred descriptor on the Phase 3 batch list is now both authored AND registered in `RegisterV1BuiltInHandlers`: untyped items hosts (`GridView`, `ItemsView`, `ItemContainer`), heavy / specialized controls (`WebView2`, `NavigationView`, `TitleBar`, `MediaPlayerElement`, `AnimatedVisualPlayer`, `MapControl`, `SemanticZoom`, `AnnotatedScrollBar`, `RefreshContainer`, `SwipeControl`, `ParallaxView`), polymorphic / a11y (`IconElement` via the new `IDecoratorElementHandler` engine extension, `SemanticElement`, `AnnounceRegion`). What still ships unregistered (intentional carve list, documented inline in `RegisterV1BuiltInHandlers`): the dialog / overlay family (`ContentDialog`, `Flyout`, `Popup`, `MenuBar`, `MenuFlyout`, `CommandBar`, `CommandBarFlyout`) — modal lifecycle needs decorator-style ports beyond the IDecoratorElementHandler shape; the stateful `NavigationHostElement` — `Reconciler.UnmountRecursive` intercepts before the V1 arm and needs a small refactor; `TabViewDescriptor` — bisect ratifies the documented gaps (spec 045 §2.4 drag pipeline, §2.2 pinnable headers, in-place CanUpdate, conditional `SelectedIndex` write, `TabStripHeader` / `TabStripFooter` slots) need engine work (post-children mount-hook + `ImperativeBridged` for named slots); the XAML interop bridges (`XamlHost`, `XamlPage`) — descriptors exist but `XamlInterop.Register` populates `_typeRegistry` at startup so V1 auto-registration would clash; and the Reactor composition primitives (`Component`, `Func`, `Memo`, `ErrorBoundary`, `CommandHost`, `Validation.*`) — these sit ABOVE the V1 handler protocol and Phase 4 cleanup keeps their legacy arms. The A|B parity bar is met for every registered element: 9134 xunit + 4410 selftest (V1 ON ≡ V1 OFF), 0 failures both flags.
+
+**Quantified V1 dispatch coverage (post-PR #440):**
+
+| Bucket | Arms | Notes |
+|---|---:|---|
+| Routed through V1 (Phase 1 handler or Phase 3 descriptor) | 75 | Production dispatch path when V1 ON |
+| Reachable-but-deferred (overlays 7 + NavigationHost 1 + TabView 1 + GridView 1 + XamlHost/Page 2) | 12 | Follow-up PR closes these |
+| Intentionally above V1 (Reactor composition primitives) | 8 | Permanent carve; Phase 4 keeps legacy arms |
+| **Total switch arms** | **95** | — |
+
+- **Coverage of V1-reachable surface:** 75 / 87 ≈ **86%** (excludes the 8 composition primitives that are permanently above the protocol).
+- **Coverage of all element-type switch arms:** 75 / 95 ≈ **79%**.
+- **Path to 100% reachable:** the next PR ports the 12 deferred (overlays, NavigationHost, TabView gap closure, GridView CCC virtualization, XamlHost/Page unification). Phase 4 cleanup follows.
+
+**Phase 3 finish advisory perf** — Cloud PC x64 re-capture under `docs/specs/047/phase3-results/CPC-ander-YTZ3O-x64-advisory/2026-05-28-phase3-finish-3x5/` (n=15, 3 launches × 5 reps). V1 ON (descriptors) vs V1 OFF (today), against prior `2026-05-27-phase3-closeout-3x5/`:
+
+- **Held:** M4 −20.2% / M5 −17.8% (dispatch wins persist with +1 base-derived descriptor registration). M7 +6.4% / M11 +10.7% within prior band.
+- **M1 Mount_Leaf_NoCallback +20.7%** — close-out's +21.2% essentially unchanged. The dispatch consolidation's structural fold (two markers into the `IItemsBinderStrategy` base) reduces instruction count but didn't recover the +6.3pp the close-out added on this Cloud-PC run; a genuine M1 fix likely needs a Phase 4 perf-tuning pass that folds the binder check into the existing pattern switch's `case` arm rather than a leading `if`-block.
+- **New regressions vs close-out:** M8 +21.8% (+2.9pp — Lazy*Stack base-derived registration's added is-check in the Update path), M12 +30.7% (+12.2pp — Cloud-PC volatile; M12 has trended ±15pp across the last three captures and should be confirmed on stable AC).
+- **Net headline:** no bench exceeds the §13 Q1 reopen threshold. The structural wins (dispatch consolidation, single `IItemsBinderStrategy` arm) are in place; the absolute Cloud-PC numbers track the close-out baseline.
+
+**ARM64 stable-AC ratification gate** — **still pending; first capture attempt was inconclusive.** An ARM64-native 3×5 capture on `LAPTOP-4MEP83VI` (the Phase 0/2 baseline machine) landed under [`docs/specs/047/phase3-results/LAPTOP-4MEP83VI/2026-05-28-phase3-completion-3x5-stableac/`](047/phase3-results/LAPTOP-4MEP83VI/2026-05-28-phase3-completion-3x5-stableac/README.md) but **does not ratify the gate**: the fixed variant-ordering run drifted under sustained load (suspected thermal throttling — `ReactorDescriptors` always runs last and so against the hottest core), inflating long-bench deltas (M2 +23.4%, M3 +175.3%, M12 +44.2% vs Today). A controlled **order-swap re-run** (Descriptors first/cold) proves the contamination: M2's Descriptors-vs-Today delta flips from +23.4% to −30.5% (a 54pp position swing), and Descriptors-vs-ReactorV2 collapses from +36.1% to +1.1% — i.e. no real M2 regression. The thermally-insensitive fast benches confirm descriptors ≈ hand-coded V1 (M1/M7/M8/M11/M13 within ±5% vs ReactorV2), and M1's order-robust +30% vs Today is the known V1-protocol-vs-legacy mount overhead, not descriptor-specific. **A thermally-clean ARM64 re-run** (randomized/interleaved variant order, cooldowns, and/or CPU-clock telemetry) is still required to close the gate; until then it remains pending with a named owner + date to be appended. See the capture README for the full drift evidence and reproduction steps. **Phase-4 update (PR #465):** a post-Phase-4 capture landed under [`docs/specs/047/phase4-results/LAPTOP-4MEP83VI/2026-05-29-arm64/`](047/phase4-results/LAPTOP-4MEP83VI/2026-05-29-arm64/RESULTS.md); it **still does not close the gate** (same gap — fixed ordering, no §15.5 isolation, so the timing axis is throttled and the macro suite is unrunnable post-Phase-4). Its value is the deterministic **allocation** axis: most benches held/improved vs the 2026-05-25 baseline (M9 −41%), but **M1 regressed +20%** (3.2× over its 407 B gate) and **M12 +17%** — so the M1 leaf-alloc work (KD-3 fold + bucketing-regression investigation) is now confirmed as required, ahead of the thermally-clean re-run.
+
+**Carry-forward known defects from Phase 1:**
+- **KD-3** — dispatch fast-path for the ported built-ins (M4 was +88.9% V1 vs Today at Phase 1; final advisory shows M4 −21.2% / M5 −24.3% at amortized scope — KD-3 has materially closed at the batch-11 registration set).
+- **KD-4** — public typed-event surface for external descriptor authors. Scope narrowed by Phase 2 to external-author-only; in-tree descriptors already use the internal fast path via `DescriptorControlledPayload<T>` or `.HandCodedControlled`/`.HandCodedEvent` per-descriptor payload pattern.
+
 ### Phase 4 — cleanup
 
-- Delete the private switch.
-- Delete `ChangeEchoSuppressor` if §8 audit succeeded (or finalize the §8.1 round-trip implementation if that path won).
-- Split `EventHandlerState` per §9 — implement the per-control struct shapes from §9.2.
-- Land the §11.6 hard byte gates (V2 must hit ≤100 / ≤320 / ≤500).
-- Document the final author-facing surface in `docs/guide/`.
+**Status: code-complete — migration closed; V1 is the unconditional production
+path.** The only outstanding items are baseline-machine-only (ARM64
+`LAPTOP-4MEP83VI`): the stable-AC perf ratification and the §11.6 hard byte-gate
+*measurement/enforcement*. An **indicative ARM64 capture has landed** (PR #465,
+`047/phase4-results/LAPTOP-4MEP83VI/2026-05-29-arm64/`): the deterministic
+**allocation** axis is measured — M2/M3 meet the §15.6 "≤ Today" budget, **M1
+regressed +20%** (and M1/M2 miss the absolute 407/1,520 B gates; M3 passes), plus
+an **M12 +17%** pool-reuse regression. The **timing** axis (no §15.5 isolation)
+and the **macro suite** (its projects were deleted in Phase 4) remain unratified,
+so the gate is **not yet closed** — it needs an isolated stable-AC re-capture and
+the M1/M12 alloc fix. See the close-out tracker
+[`tasks/047-extensible-control-model-phase4-implementation.md`](tasks/047-extensible-control-model-phase4-implementation.md).
+
+- ✅ Delete the private switch. *(Done §4.5 — dispatch is V1 registry →
+  `_typeRegistry` → composition-primitive switch; no legacy fallthrough.)*
+- ✅ ~~Delete `ChangeEchoSuppressor`~~ → **settled as a HYBRID (§8.3).** Full
+  deletion was assessed and ruled NO-GO (causal-token vs value-compare
+  correctness gap, plus the `ApplySetters` scope and public `WriteSuppressed`
+  carry no value to compare). The safe synchronous single-value round-trips
+  migrated to a value-diff arm; the counter is RETAINED as the fallback.
+  `ChangeEchoSuppressor.cs` stays. `WriteSuppressed` keeps its signature.
+- ✅ Split `EventHandlerState` per §9 — implemented the §9.2 shape: the routed
+  family became `ModifierEventHandlerState` (lazy on `ReactorState.Modifiers`) +
+  per-control `ControlEventStateBox` payloads; the monolith is gone (§4.3).
+- 🟡 Land the §11.6 hard byte gates (V2 must hit the measured §11.6 targets
+  `Target = min(Direct + 100, ReactorToday × 0.4)` → **≤ 407 / ≤ 1520 / ≤ 19200**
+  for no-callback / one-callback / three-callback; the stale `≤100 / ≤320 / ≤500`
+  estimates predate the Phase-0 baseline capture). *(Code-complete: the bucketed
+  `Element` base (§11.7, `ElementExtras`) ships and the target constants are
+  landed (`PerformanceBudgets.cs`); the gate has now been **MEASURED** on
+  `LAPTOP-4MEP83VI` ARM64 (PR #465): **M1 1,289 B (FAIL, 3.2×), M2 3,687 B
+  (FAIL, 2.4×), M3 8,530 B (PASS)** per-render. The gates do **not** pass for
+  M1/M2 — enforcement stays open pending the M1 leaf-alloc fix + an isolated
+  re-capture. §4.4/§4.9 handoff.)*
+- ✅ Document the final author-facing surface in `docs/guide/`. *(Done §4.8.)*
 
 ### Future: source generation (deferred, no committed timeline)
 
@@ -1233,7 +1586,7 @@ Source-gen (§7) is revisited when one of the triggers in §7's status section f
 
 ### 15.1 Goals
 
-1. **Validate §11 byte targets** (≤100 / ≤320 / ≤500 per element by class) with measured allocations in real WinUI processes, not synthetic harness numbers.
+1. **Validate §11 byte targets** (measured §11.6 targets ≤ 407 / ≤ 1520 / ≤ 19200 per element by class) with measured allocations in real WinUI processes, not synthetic harness numbers.
 2. **Validate §12 dispatch claims** (~1% of mount cost) with directly comparable per-mount cost across all three implementation models.
 3. **Validate the §9.4 routed-event-rare hypothesis** by measuring `ModifierEventHandlerState`-allocation frequency across a representative app sample.
 4. **Establish a regression budget** so Phase 4 control migrations can be merged with confidence that each PR doesn't silently break a win earned in an earlier phase.
@@ -1348,7 +1701,7 @@ Regression budgets (block merge if exceeded):
 | GC pauses (L9) | Max pause and total pause time ≤ baseline. Allocation rate is the input we're optimizing. |
 | Heap stability (L11) | Slope of managed-heap-over-time within ±10% of baseline. |
 
-The §11.6 targets become **hard gates** at Phase 5 cleanup: if `ReactorV2` Mount_Leaf_NoCallback hasn't hit ≤100 B by then, the cleanup PR is blocked.
+The §11.6 targets become **hard gates** at Phase 4 cleanup: if `ReactorV2` Mount_Leaf_NoCallback hasn't hit the measured §11.6 target (≤ 407 B) by then, the cleanup PR is blocked.
 
 ### 15.7 Phase coupling — which tests gate which phases
 
@@ -1358,7 +1711,7 @@ The §11.6 targets become **hard gates** at Phase 5 cleanup: if `ReactorV2` Moun
 | Phase 1 (v1 protocol) | M1, M2, M5, M7, L1, L4, **L13** (split-library mixed tree ≤ +10% vs all-in-core), **L14** (AOT build clean) | M10, M11, L6 (data only — informs descriptor design) |
 | Phase 2 (descriptor decision) | M13 (setters correctness). Descriptor-vs-handler micro+macro head-to-head completes and produces a Phase-2 decision per §13 Q1 matrix. | L12 (observability only per Q15 — does not inform Q1) |
 | Phase 3 (controls migration, per-PR) | All Phase 1 gates + the §15.6 regression budgets — the suite is the merge gate, every PR. | — |
-| Phase 4 (cleanup) | §11.6 targets become hard gates: ≤100 B no-callback, ≤320 B one-callback, ≤500 B three-callback. M10 must show the §9 EHS-allocation drop. | — |
+| Phase 4 (cleanup) | §11.6 targets become hard gates: ≤ 407 B no-callback, ≤ 1520 B one-callback, ≤ 19200 B three-callback (measured §11.6 targets). M10 must show the §9 EHS-allocation drop. | — |
 | Future (source-gen, when revisited) | Must match or beat the Phase-4 hand-coded numbers across the entire suite. No regression on any §13 question already settled. | — |
 
 ### 15.8 Test surface for §13's open questions

@@ -39,3 +39,13 @@ public sealed class PersistedStateCacheCollection { }
 /// </summary>
 [CollectionDefinition("JumpListGlobals", DisableParallelization = true)]
 public sealed class JumpListGlobalsCollection { }
+
+/// <summary>
+/// xUnit collection marker for tests that mutate
+/// <see cref="Microsoft.UI.Reactor.Hosting.HotReloadService"/> process-wide
+/// state (the pending-update flag via <c>UpdateApplication</c>). These tests
+/// must run exclusively so a concurrent test does not observe or clear a
+/// pending flag they raised.
+/// </summary>
+[CollectionDefinition("HotReload", DisableParallelization = true)]
+public sealed class HotReloadCollection { }

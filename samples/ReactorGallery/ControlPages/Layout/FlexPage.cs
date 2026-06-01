@@ -37,11 +37,11 @@ class FlexPage : Component
 
                 SampleCard("Interactive Flex Container",
                     Border(
-                        new FlexElement(new[]
+                        Flex(new[]
                         {
                             Box("1", "#E74C3C"), Box("2", "#3498DB"), Box("3", "#2ECC71"),
                             Box("4", "#F39C12"), Box("5", "#9B59B6")
-                        })
+                        }) with
                         {
                             Direction = direction,
                             JustifyContent = justify,
@@ -60,7 +60,7 @@ class FlexPage : Component
                     )),
 
                 SampleCard("Grow & Shrink",
-                    new FlexElement(new Element[]
+                    Flex(new Element[]
                     {
                         Border(TextBlock("Fixed").Center().Foreground("#FFFFFF"))
                             .Background("#E74C3C").Height(40).Width(80).CornerRadius(ThemeResource.CornerRadius("ControlCornerRadius").TopLeft),
@@ -70,7 +70,7 @@ class FlexPage : Component
                         Border(TextBlock("Grow 2").Center().Foreground("#FFFFFF"))
                             .Background("#2ECC71").Height(40).CornerRadius(ThemeResource.CornerRadius("ControlCornerRadius").TopLeft)
                             .Flex(grow: 2),
-                    })
+                    }) with
                     {
                         Direction = FlexDirection.Row,
                         ColumnGap = 8,

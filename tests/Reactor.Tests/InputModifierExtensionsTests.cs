@@ -249,7 +249,9 @@ public class InputModifierExtensionsTests
     [Fact]
     public void AccessKeyDisplayRequested_ZeroArg_WiresHandler()
     {
+#pragma warning disable CS0618 // intentional coverage of obsolete bridge
         var el = TextBlock("x").AccessKeyDisplayRequested(() => { });
+#pragma warning restore CS0618
         Assert.NotNull(el.Modifiers!.OnAccessKeyDisplayRequested);
     }
 

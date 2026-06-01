@@ -90,6 +90,8 @@ InfoBadge(int value) → InfoBadgeElement
 InfoBar(string title = null, string message = null) → InfoBarElement
 InterspersedGrid(Orientation orientation, Element[] items, double[] proportions, double separatorSize, Func<int, Element> separatorFactory) → GridElement
 ItemContainer(Element child) → ItemContainerElement
+ItemsRepeater<T>(IReadOnlyList<T> items, Func<T, int, Element> viewBuilder) → ItemsRepeaterElement<T>
+ItemsRepeater<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → ItemsRepeaterElement<T>
 ItemsView<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → ItemsViewElement<T>
 LazyHStack<T>(IReadOnlyList<T> items, Func<T, int, Element> viewBuilder) → LazyHStackElement<T>
 LazyHStack<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → LazyHStackElement<T>
@@ -184,6 +186,8 @@ ToggleSplitButton(string label, bool isChecked = false, Action<bool> onIsChecked
 ToggleSwitch(bool isOn, Action<bool> onIsOnChanged = null, string onContent = null, string offContent = null, string header = null) → ToggleSwitchElement
 TreeNode(string content, TreeViewNodeData[] children) → TreeViewNodeData
 TreeView(TreeViewNodeData[] nodes) → TreeViewElement
+TreeView<T>(IReadOnlyList<T> items, Func<T, IReadOnlyList<T>> childrenSelector, Func<T, Element> viewBuilder) → TemplatedTreeViewElement<T>
+TreeView<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, IReadOnlyList<T>> childrenSelector, Func<T, Element> viewBuilder) → TemplatedTreeViewElement<T>
 UniformGrid(Orientation orientation, Element[] items) → GridElement
 VStack(Element[] children) → StackElement
 VStack(double spacing, Element[] children) → StackElement
@@ -372,7 +376,7 @@ ListViewElement.SelectionChanged(Action<IReadOnlyList<int>> handler) → ListVie
 ListViewElement.SelectionMode(ListViewSelectionMode mode) → ListViewElement
 ListViewElement.Set(Action<ListView> configure) → ListViewElement
 MapControlElement.Set(Action<MapControl> configure) → MapControlElement
-MaskedTextFieldElement.Changed(Action<string> handler) → MaskedTextFieldElement
+MaskedTextBoxElement.Changed(Action<string> handler) → MaskedTextBoxElement
 MediaPlayerElementElement.MediaEnded(Action handler) → MediaPlayerElementElement
 MediaPlayerElementElement.MediaFailed(Action<string> handler) → MediaPlayerElementElement
 MediaPlayerElementElement.MediaOpened(Action handler) → MediaPlayerElementElement
@@ -706,6 +710,8 @@ TemplatedListViewElement<T>.ItemClick<T>(Action<T> handler) → TemplatedListVie
 TemplatedListViewElement<T>.SelectedIndexChanged<T>(Action<int> handler) → TemplatedListViewElement<T>
 TemplatedListViewElement<T>.SelectionChanged<T>(Action<IReadOnlyList<T>> handler) → TemplatedListViewElement<T>
 TemplatedListViewElement<T>.Set<T>(Action<ListView> configure) → TemplatedListViewElement<T>
+TemplatedTreeViewElement<T>.Expanding<T>(Action<T> handler) → TemplatedTreeViewElement<T>
+TemplatedTreeViewElement<T>.ItemInvoked<T>(Action<T> handler) → TemplatedTreeViewElement<T>
 TextBlockElement.Bold() → TextBlockElement
 TextBlockElement.CharacterSpacing(int spacing) → TextBlockElement
 TextBlockElement.FontFamily(FontFamily family) → TextBlockElement
@@ -918,6 +924,7 @@ KeyedListDiagnosticKind { NullKey, DuplicateKey }
 ItemsViewLayoutKind { StackLayout, LinedFlowLayout, UniformGridLayout }
 PersistedScope { Window, Application }
 TemplatedControlKind { ListView, GridView, FlipView }
+V1UnmountDisposition { CollectSelf, ContinueDefaultTraversal, SkipPool }
 BlockStatus { Loading, Loaded, Failed }
 DataSourceCapabilities { None, ServerSort, ServerFilter, ServerSearch, ServerCount, ServerSelect, Mutate, Refresh }
 FilterOperator { Equals, NotEquals, Contains, StartsWith, EndsWith, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Between, In, IsNull, IsNotNull }

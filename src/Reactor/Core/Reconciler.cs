@@ -1,6 +1,8 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using Microsoft.UI.Reactor.Animation;
 using Microsoft.UI.Reactor.Core.Diagnostics;
+using Microsoft.UI.Reactor.Core.V1Protocol;
 using Microsoft.UI.Reactor.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -13,6 +15,7 @@ using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Media.Imaging;
 using WinUI = Microsoft.UI.Xaml.Controls;
 using WinPrim = Microsoft.UI.Xaml.Controls.Primitives;
+using WinShapes = Microsoft.UI.Xaml.Shapes;
 
 namespace Microsoft.UI.Reactor.Core;
 
@@ -28,13 +31,19 @@ public sealed partial class Reconciler : IDisposable
 {
     private readonly Dictionary<UIElement, ComponentNode> _componentNodes = new();
     private readonly Dictionary<UIElement, ErrorBoundaryNode> _errorBoundaryNodes = new();
-    private readonly Dictionary<UIElement, NavigationHostNode> _navigationHostNodes = new();
-    private readonly ElementPool _pool = new();
+    // internal so NavigationHostLifecycle (V1-owned mount/update) can record and
+    // look up per-instance navigation state; teardown stays here (Dispose loop +
+    // CleanupNavigationHostNode).
+    internal readonly Dictionary<UIElement, NavigationHostNode> _navigationHostNodes = new();
+    // Internal so V1-owned lifecycle classes (e.g. LazyStackLifecycle) can rent
+    // pooled controls and pass the pool into element factories.
+    internal readonly ElementPool _pool = new();
     private readonly Dictionary<Type, ITypeRegistration> _typeRegistry = new();
     // Null when no caller-supplied logger and no devtools logger is published.
     // All call sites use null-conditional access so the M.E.Logging code path
     // doesn't run (and stays JIT-cold) for default apps.
-    private readonly ILogger? _logger;
+    // Internal so V1-owned lifecycle classes can pass it into shared keyed-diff helpers.
+    internal readonly ILogger? _logger;
     private readonly List<(ConnectedAnimation Animation, UIElement Target)> _pendingConnectedAnimationStarts = new();
     private readonly ContextScope _contextScope = new();
     private int _errorBoundaryDepth;
@@ -159,53 +168,6 @@ public sealed partial class Reconciler : IDisposable
     private List<UIElement>? _highlightMounted;
     private List<UIElement>? _highlightModified;
 
-    // ── Layout-cost component lifecycle (gated by ReactorFeatureFlags.ShowLayoutCost) ──
-    // Fired from the three MountComponent/MountFunc/MountMemo paths and from
-    // Unmount. Subscribers wire the attribution aggregator without the core
-    // reconciler taking a dependency on the Hosting.LayoutCost layer. Only
-    // raised when the flag is on so the no-op cost is a single bool check.
-    /// <summary>Fired when a Component (class/func/memo) is mounted. Args: wrapper Border, display name, depth.</summary>
-    internal event Action<UIElement, string, int>? LayoutCostComponentMounted;
-    /// <summary>Fired when a Component is unmounted. Arg: wrapper Border.</summary>
-    internal event Action<UIElement>? LayoutCostComponentUnmounted;
-
-    private int _layoutCostComponentDepth;
-
-    internal void RaiseLayoutCostComponentMounted(UIElement wrapper, string displayName)
-    {
-        if (!ReactorFeatureFlags.ShowLayoutCost) return;
-        LayoutCostComponentMounted?.Invoke(wrapper, displayName, _layoutCostComponentDepth);
-    }
-    internal void RaiseLayoutCostComponentUnmounted(UIElement wrapper)
-    {
-        if (!ReactorFeatureFlags.ShowLayoutCost) return;
-        LayoutCostComponentUnmounted?.Invoke(wrapper);
-    }
-
-    /// <summary>
-    /// Enumerate every currently-mounted Component wrapper + its display name.
-    /// Used by the layout-cost overlay to back-fill rollups when the flag is
-    /// flipped on mid-session (Components mounted before the flip never fired
-    /// <see cref="LayoutCostComponentMounted"/>).
-    /// </summary>
-    /// <remarks>
-    /// Depth is not tracked per-node, so this method reports depth 0 for all
-    /// entries. Depth is only used by spatial attribution's innermost-wins
-    /// tiebreak; getting it wrong for back-filled components just biases that
-    /// tiebreak — acceptable for a dev-time overlay.
-    /// </remarks>
-    internal IEnumerable<(UIElement Wrapper, string DisplayName)> EnumerateComponentWrappers()
-    {
-        foreach (var kv in _componentNodes)
-        {
-            var node = kv.Value;
-            var name = node.Component?.GetType().Name
-                ?? node.Element?.GetType().Name
-                ?? "Component";
-            yield return (kv.Key, name);
-        }
-    }
-
     /// <summary>
     /// UIElements that were newly mounted during the last top-level Reconcile pass.
     /// Only populated when <see cref="ReactorFeatureFlags.HighlightReconcileChanges"/> is true;
@@ -243,11 +205,86 @@ public sealed partial class Reconciler : IDisposable
         set => _enableBitmaskDiff = value;
     }
 
-    public Reconciler() : this(null) { }
-
-    public Reconciler(ILogger? logger)
+    /// <summary>
+    /// Spec 047 §14 — the V1 protocol is the unconditional production path.
+    /// The Phase 1 <c>UseV1Protocol</c> feature flag, its AppContext switch,
+    /// and the descriptor-vs-handler A|B harness ctor were all removed in
+    /// §4.6 once the legacy <c>MountXxx</c>/<c>UpdateXxx</c> switch was deleted
+    /// (§4.5).
+    ///
+    /// Built-in V1 handlers register automatically into the internal
+    /// <see cref="V1HandlerRegistry"/>; external authors add handlers via
+    /// <see cref="RegisterHandler{TElement,TControl}"/> /
+    /// <see cref="RegisterType{TElement,TControl}"/> (which populate
+    /// <c>_typeRegistry</c>). Dispatch order is V1 → external → the four
+    /// composition primitives that sit above the protocol.
+    /// </summary>
+    public Reconciler(ILogger? logger = null)
     {
         _logger = logger;
+        // Spec 048 §3.4 — no more bootstrap. Built-in handlers register
+        // themselves lazily on first factory call (per-control Reg<>/
+        // RegDecorator<> cctor latch in `Dsl.cs`), or callers register
+        // explicitly via `ControlRegistry.Register<,>`. Constructing an
+        // element record directly (e.g. `new TextBlockElement("hi")`)
+        // without ever touching its factory or registering its handler
+        // throws on first mount with a diagnostic pointing at issue #486.
+    }
+
+
+
+    /// <summary>
+    /// Spec 047 §14 Phase 4 (4.0.5) — true if an element type already has a
+    /// handler in either the V1 registry or the external type registry. Lets
+    /// idempotent external registrars (e.g. <see cref="Hosting.XamlInterop.Register"/>)
+    /// avoid the <see cref="EnsureRegistrableElementType"/> duplicate throw when
+    /// V1 auto-registration already owns the type.
+    /// </summary>
+    internal bool IsElementTypeRegistered(Type elementType)
+        => _v1Handlers.ContainsKey(elementType) || _typeRegistry.ContainsKey(elementType);
+
+    // ── V1 handler registry (spec 047 §14 Phase 1, Q1.1) ──────────────
+    // Keyed by exact element type, separate from _typeRegistry so that
+    // external RegisterType callers and built-in V1 ports stay isolated.
+    // Add is internal-only for Phase 1; the public author-facing surface
+    // (`RegisterHandler<TElement,TControl>(IElementHandler<…>)`) lands in
+    // sections 1.6 / 1.9.
+    internal readonly V1HandlerRegistry _v1Handlers = new();
+
+    /// <summary>
+    /// Spec 048 §8 — arm 3 of the dispatch precedence: on a per-host
+    /// <c>_v1Handlers</c> and per-host <c>_typeRegistry</c> miss, consult
+    /// the global lazy <see cref="V1Protocol.ControlRegistry"/>. On a hit
+    /// the factory is invoked exactly once and the resulting adapter is
+    /// cached into per-host <c>_v1Handlers</c> so steady-state dispatch
+    /// short-circuits in arm 1 (the existing fast per-host lookup) on the
+    /// next call for this element type on this host.
+    ///
+    /// <para>Precedence enforced at the call sites (Mount / Update):
+    /// (1) per-host <c>_v1Handlers</c> →
+    /// (2) per-host <c>_typeRegistry</c> →
+    /// (3) global <see cref="V1Protocol.ControlRegistry"/> →
+    /// (4) composition-primitive switch.</para>
+    /// </summary>
+    /// <param name="elementType">Exact runtime element type
+    /// (<c>element.GetType()</c>); not a base type. Dispatch is exact-match
+    /// (spec 047 §13 Q17).</param>
+    /// <param name="entry">On hit, the type-erased adapter to dispatch
+    /// through (and now cached in <c>_v1Handlers</c>).</param>
+    internal bool TryResolveFromControlRegistry(Type elementType, out IV1HandlerEntry entry)
+    {
+        if (V1Protocol.ControlRegistry.TryResolve(elementType, out var factory))
+        {
+            entry = factory();
+            // _v1Handlers is UI-thread-only; the caller has already verified
+            // there is no per-host entry for this element type, so the Add
+            // can never see a duplicate it didn't itself just plant.
+            _v1Handlers.Add(elementType, entry);
+            return true;
+        }
+
+        entry = null!;
+        return false;
     }
 
     /// <summary>
@@ -266,19 +303,33 @@ public sealed partial class Reconciler : IDisposable
             "<ContentControl HorizontalContentAlignment='Stretch' VerticalContentAlignment='Stretch'/>" +
             "</DataTemplate>"));
 
+    /// <summary>
+    /// Spec 047 §14 Phase 3 finish — text-bound TreeView item template
+    /// shared between the legacy <c>MountTreeView</c> arm and the
+    /// <see cref="V1Protocol.TreeChildren{TElement,TControl}"/> strategy.
+    /// In node mode the template's DataContext is <c>TreeViewNode</c>, so
+    /// <c>{Binding Content.Content}</c> resolves <c>TreeViewNode.Content</c>
+    /// (a <c>TreeViewNodeData</c>) → its <c>Content</c> (the display string).
+    /// </summary>
+    internal static readonly Lazy<DataTemplate> TreeViewTextItemTemplate = new(() =>
+        (DataTemplate)Microsoft.UI.Xaml.Markup.XamlReader.Load(
+            "<DataTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation'>" +
+            "<TextBlock Text='{Binding Content.Content}'/>" +
+            "</DataTemplate>"));
+
     // ════════════════════════════════════════════════════════════════════
     //  ReactorAttached.StateProperty  (ReactorState)
     // ════════════════════════════════════════════════════════════════════
     //
     // A single attached DP carrying a ReactorState wrapper that bundles
     //   (a) the current Reactor Element for this native element, and
-    //   (b) the per-element EventHandlerState (current user handlers +
+    //   (b) the per-element ModifierEventHandlerState (current user handlers +
     //       stable trampoline delegates).
     //
     // The DP lives on the native DependencyObject, so every C# RCW pointing
     // at the same native element observes the same ReactorState — fixing the
     // duplicate-RCW event-subscription bug where ConditionalWeakTable keyed
-    // per-RCW would return a different EventHandlerState for each wrapper
+    // per-RCW would return a different ModifierEventHandlerState for each wrapper
     // and attach duplicate trampolines on the native event source.
     //
     // Lifecycle:
@@ -294,7 +345,7 @@ public sealed partial class Reconciler : IDisposable
     internal sealed class ReactorState
     {
         public Element? Element;
-        public EventHandlerState? Events;
+        public ModifierEventHandlerState? Modifiers;
         // Per-native-element echo-suppress counter consumed by ChangeEchoSuppressor.
         // Lives here (not in a CWT-by-RCW) so that BeginSuppress on one managed
         // wrapper and ShouldSuppress on a different wrapper for the same native
@@ -304,6 +355,24 @@ public sealed partial class Reconciler : IDisposable
         // change event on this control is dropped without consuming a token
         // from EchoSuppressCount. See ApplySetters / ChangeEchoSuppressor.
         public int EchoSuppressScopeDepth;
+        // Spec 047 §8 value-diff echo suppression. A programmatic controlled
+        // write on a migrated single-value, exact-comparable, synchronous
+        // round-trip (e.g. ComboBox.SelectedIndex, ToggleSwitch.IsOn) arms this
+        // one-shot predicate with the value it just wrote; the change-event
+        // trampoline drops the single matching echo (readback satisfies the
+        // predicate) via ChangeEchoSuppressor.ShouldSuppressEcho, then clears it.
+        // Replaces the causal counter on those paths. The counter
+        // (EchoSuppressCount / EchoSuppressScopeDepth) is RETAINED as the
+        // fallback for paths value-diff cannot model: coercion (Slider/NumberBox
+        // Min/Max), collection batch (CalendarView), the setter scope, the public
+        // ReactorBinding.WriteSuppressed API, and double-valued controls.
+        //
+        // Single pending slot — correct only because migrated controls have
+        // exactly one controlled round-trip property whose event fires
+        // synchronously inside the write. Reset everywhere the counter is reset
+        // (pool return / ClearCurrentEventHandlers / DetachReactorState) so a
+        // stale arm can't suppress the first real event of a later lifecycle.
+        public Func<object?, bool>? PendingEchoMatch;
         // Spec 042 Phase 1 — keyed-list reconciliation state. Set when the
         // host element is a templated items control (ListView/GridView/
         // ItemsRepeater). The internal ObservableCollection<ReactorRow> in
@@ -311,6 +380,26 @@ public sealed partial class Reconciler : IDisposable
         // ops translate into container-level animations rather than full
         // re-realization.
         public Internal.ReactorListState? ListState;
+
+        // Spec 047 §14 Phase 3 close-out — descriptor-side per-index view
+        // source. Populated by Reconciler.BindKeyedItemsSource when a
+        // TemplatedItems<TItem,TElement,TControl> strategy is in effect.
+        // HandleTemplatedContainerContentChanging and RefreshRealizedContainers
+        // prefer this over the legacy TemplatedListElementBase fallback so
+        // descriptor-driven controls never need to inherit from the legacy
+        // abstract base.
+        public Internal.IItemViewSource? ItemViewSource;
+
+        // Spec 047 §9.2 / §14 Phase 1 (1.7) — per-control event payload box.
+        // Holds a strongly-typed payload struct (e.g. ToggleSwitchEventPayload)
+        // discriminated by HandlerType. Populated for ported V1 controls and
+        // for the control-intrinsic events (Button.Click, NumberBox immediate
+        // inner-TextBox) that migrated off the routed ModifierEventHandlerState.
+        // PRESERVED across pool rent/return per the Q18 contract (issue #114) —
+        // trampolines stay subscribed for the control's lifetime; a stale type
+        // is never observable post-rent because GetOrCreateControlEventPayload
+        // re-creates the box on a HandlerType mismatch.
+        public object? ControlEventState;
     }
 
     internal static class ReactorAttached
@@ -332,7 +421,33 @@ public sealed partial class Reconciler : IDisposable
         return state;
     }
 
-    internal static void SetElementTag(FrameworkElement control, Element? element)
+    // ── Typed TreeView<T> container hosting ──────────────────────────────
+    //
+    // The typed TreeView hosts each node's view imperatively (the WinUI
+    // ItemTemplate-equivalent), exactly like the typed ListView: the
+    // ItemTemplate is an empty ContentControl shell, and we populate each
+    // realized container's ContentControl from the node's data item on
+    // realization (and tear it down on recycle). This is what makes
+    // expand/collapse robust — a fresh view is mounted into whichever pooled
+    // container WinUI realizes the node into, so no element is ever stuck
+    // parented to a stale (recycled) container. node.Content holds the
+    // developer's data item (the boxed T) — WinUI-aligned, and read back by
+    // the ItemInvoked / Expanding trampolines.
+    //
+    // Caches the internal TreeViewList (template part "ListControl", a public
+    // ListView subclass) per TreeView so Update can reconcile realized
+    // containers, and so the ContainerContentChanging subscription is attached
+    // exactly once.
+    internal readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<WinUI.TreeView, WinUI.ListView> _typedTreeListControls = new();
+
+    /// <summary>
+    /// Spec 047 §14 Phase 1 (1.3) — promoted from internal. Associates a
+    /// control with its current Reactor element via the
+    /// <see cref="ReactorAttached.StateProperty"/> attached DP so that
+    /// trampolines can resolve the live element on dispatch.
+    /// Provisional API; see <c>REACTOR_V1_PREVIEW</c>.
+    /// </summary>
+    public static void SetElementTag(FrameworkElement control, Element? element)
     {
         if (control.GetValue(ReactorAttached.StateProperty) is ReactorState state)
         {
@@ -345,14 +460,92 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>
-    /// Retrieves the element associated with a control, or null.
+    /// Spec 047 §4.4 follow-up — allocation-gated element tagging for the V1
+    /// dispatch adapter. Refreshes an existing <see cref="ReactorState"/>'s
+    /// element pointer cheaply, but only <em>allocates</em> a new
+    /// <see cref="ReactorState"/> (+ attached-DP write) for elements whose
+    /// downstream code actually reads the element back via
+    /// <see cref="GetElementTag(FrameworkElement)"/>.
+    ///
+    /// <para>Three things require a live element pointer on the control:</para>
+    /// <list type="bullet">
+    ///   <item>
+    ///     <b>Event trampolines</b> — <see cref="Element.HasCallbacks"/>.
+    ///     Routed-input modifiers (<c>.OnPointerPressed</c> etc.) dispatch
+    ///     through <see cref="ModifierEventHandlerState"/>'s <c>Current*</c>
+    ///     fields refreshed each render by <c>ApplyEventHandlers</c> and do
+    ///     <em>not</em> resolve via the tag, so they are intentionally not
+    ///     part of the gate.
+    ///   </item>
+    ///   <item>
+    ///     <b>Keyed child reconciliation</b> — <see cref="Element.Key"/>.
+    ///     <see cref="ChildReconciler"/> reads the child's tag to extract the
+    ///     stable key during keyed reorders (see <c>ChildReconciler.cs:303</c>
+    ///     and <c>:392</c>). A keyed callback-free element (e.g.
+    ///     <c>Border(...).WithKey("a")</c>) loses its identity across reorders
+    ///     without the tag.
+    ///   </item>
+    ///   <item>
+    ///     <b>Element-extras readback</b> — <see cref="Element.Extensions"/>.
+    ///     Several bucketed extras have engine paths that read the live
+    ///     element via the tag — exit transitions
+    ///     (<c>ElementTransition</c>), connected-animation snapshots
+    ///     (<c>ConnectedAnimationKey</c>), <c>InteractionStates</c>,
+    ///     <c>KeyframeAnimations</c>, and friends. The bucket being null is
+    ///     spec 047 §4.4's "truly inert leaf" signal, so we tag whenever any
+    ///     extra is present rather than enumerating each feature.
+    ///   </item>
+    /// </list>
+    ///
+    /// <para>Callback-free display leaves with no key and no extras
+    /// (TextBlock / Border / StackPanel / Image — the bulk of a real tree)
+    /// never dispatch into Reactor code and have nothing reading the tag, so
+    /// they stay untagged. This mirrors the legacy reconciler discipline. The
+    /// pre-§4.5 V1 adapter tagged <em>every</em> control unconditionally,
+    /// allocating a ReactorState per leaf mount — the per-render byte
+    /// regression this restores the savings for.</para>
     /// </summary>
-    internal static Element? GetElementTag(UIElement control) =>
+    internal static void SetElementTagIfNeeded(FrameworkElement control, Element element)
+    {
+        if (control.GetValue(ReactorAttached.StateProperty) is ReactorState state)
+        {
+            // State already allocated (callback-bearing control, pooled reuse,
+            // or echo/setter scope) — refresh the live element with no alloc.
+            state.Element = element;
+            return;
+        }
+        if (!NeedsTag(element)) return;
+        control.SetValue(
+            ReactorAttached.StateProperty,
+            new ReactorState { Element = element });
+    }
+
+    /// <summary>
+    /// Predicate companion to <see cref="SetElementTagIfNeeded"/>. Returns
+    /// true when downstream code will read the element back through
+    /// <see cref="GetElementTag(FrameworkElement)"/> — see the helper's
+    /// summary for the three categories.
+    /// </summary>
+    private static bool NeedsTag(Element element) =>
+        element.HasCallbacks
+        || element.Key is not null
+        || element.Extensions is not null;
+
+    /// <summary>
+    /// Spec 047 §14 Phase 1 (1.3) — promoted from internal. Retrieves the
+    /// element associated with a control, or null.
+    /// Provisional API; see <c>REACTOR_V1_PREVIEW</c>.
+    /// </summary>
+    public static Element? GetElementTag(UIElement control) =>
         control is FrameworkElement fe
             ? (fe.GetValue(ReactorAttached.StateProperty) as ReactorState)?.Element
             : null;
 
-    internal static Element? GetElementTag(FrameworkElement fe) =>
+    /// <summary>
+    /// Spec 047 §14 Phase 1 (1.3) — promoted from internal.
+    /// Provisional API; see <c>REACTOR_V1_PREVIEW</c>.
+    /// </summary>
+    public static Element? GetElementTag(FrameworkElement fe) =>
         (fe.GetValue(ReactorAttached.StateProperty) as ReactorState)?.Element;
 
     // ────────────────────────────────────────────────────────────────────
@@ -381,8 +574,29 @@ public sealed partial class Reconciler : IDisposable
         control.SetValue(ReactorAttached.StateProperty, state);
     }
 
+    // ── §14 Phase 3 close-out: per-control descriptor view source ──────
+
+    internal static Internal.IItemViewSource? GetItemViewSource(DependencyObject control)
+    {
+        if (control is FrameworkElement fe
+            && fe.GetValue(ReactorAttached.StateProperty) is ReactorState state)
+            return state.ItemViewSource;
+        return null;
+    }
+
+    internal static void SetItemViewSource(FrameworkElement control, Internal.IItemViewSource viewSource)
+    {
+        if (control.GetValue(ReactorAttached.StateProperty) is ReactorState state)
+        {
+            state.ItemViewSource = viewSource;
+            return;
+        }
+        state = new ReactorState { ItemViewSource = viewSource };
+        control.SetValue(ReactorAttached.StateProperty, state);
+    }
+
     /// <summary>
-    /// Clears the Element pointer while preserving EventHandlerState. Call on
+    /// Clears the Element pointer while preserving ModifierEventHandlerState. Call on
     /// pool return — attached trampolines stay valid so that rent/re-mount
     /// reuses the same subscriptions (re-attaching would re-introduce the
     /// duplicate-subscription bug).
@@ -395,7 +609,7 @@ public sealed partial class Reconciler : IDisposable
 
     /// <summary>
     /// Clears the Current* user-handler delegates from the per-element
-    /// EventHandlerState while leaving the trampoline subscription on the
+    /// ModifierEventHandlerState while leaving the trampoline subscription on the
     /// underlying control. Call from <see cref="ElementPool.CleanElement"/>
     /// so the next rent doesn't fire the previous component's captured
     /// rerender closure. TASK-060.
@@ -407,30 +621,36 @@ public sealed partial class Reconciler : IDisposable
     {
         if (fe.GetValue(ReactorAttached.StateProperty) is ReactorState state)
         {
-            state.Events?.ClearCurrentHandlers();
+            state.Modifiers?.ClearCurrentHandlers();
             state.EchoSuppressCount = 0;
             state.EchoSuppressScopeDepth = 0;
+            state.PendingEchoMatch = null;
         }
     }
 
     /// <summary>
     /// Fully detaches reactor state from a control: nulls the Element and
-    /// clears the EventHandlerState's Current* delegates so any already-
+    /// clears the ModifierEventHandlerState's Current* delegates so any already-
     /// attached trampoline on the native event source becomes a no-op if it
     /// fires. Use when the control leaves reactor's ownership for good
     /// (XamlHost / XamlPage unmount) but may remain alive because the app
     /// holds a reference — without this, captured closures stay reachable
     /// and stale reactor callbacks can still fire.
     /// </summary>
-    internal static void DetachReactorState(FrameworkElement fe)
+    /// <summary>
+    /// Spec 047 §14 Phase 1 (1.3) — promoted from internal.
+    /// Provisional API; see <c>REACTOR_V1_PREVIEW</c>.
+    /// </summary>
+    public static void DetachReactorState(FrameworkElement fe)
     {
         if (fe.GetValue(ReactorAttached.StateProperty) is not ReactorState state)
             return;
         state.Element = null;
-        state.Events?.ClearCurrentHandlers();
-        state.Events = null;
+        state.Modifiers?.ClearCurrentHandlers();
+        state.Modifiers = null;
         state.EchoSuppressCount = 0;
         state.EchoSuppressScopeDepth = 0;
+        state.PendingEchoMatch = null;
     }
 
     // ════════════════════════════════════════════════════════════════════
@@ -448,70 +668,14 @@ public sealed partial class Reconciler : IDisposable
     // We need a per-control dedupe key that survives pool cycles to avoid
     // double-subscription.
     //
-    // All poolable wiring dedupes through EventHandlerState (attached on
+    // All poolable wiring dedupes through ModifierEventHandlerState (attached on
     // ReactorAttached.StateProperty, which is a DependencyProperty keyed by
     // native DO identity). Two managed RCWs over the same native DependencyObject
-    // resolve to the same EventHandlerState, so the *Trampoline-is-not-null
+    // resolve to the same ModifierEventHandlerState, so the *Trampoline-is-not-null
     // check correctly short-circuits. This was previously split between an
     // unsafe managed-FE-keyed CWT (Button, TextBox, Image, ScrollViewer) and
-    // EventHandlerState (ToggleSwitch); issue #114 unified everything onto
-    // EventHandlerState.
-
-    // ════════════════════════════════════════════════════════════════════
-    //  Canvas anchor positioning
-    // ════════════════════════════════════════════════════════════════════
-    //  CanvasAttached.AnchorX/AnchorY express positioning as a fraction of
-    //  the element's rendered size (0,0 = top-left, 0.5,0.5 = centered).
-    //  Final position depends on ActualWidth/ActualHeight, which is unknown
-    //  at mount time, so we recompute on Loaded + SizeChanged. The current
-    //  CanvasAttached is held in per-FE state so updates can swap anchor
-    //  values without re-subscribing.
-
-    private sealed class CanvasAnchorState
-    {
-        public CanvasAttached Current = new();
-        public bool Subscribed;
-    }
-
-    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<FrameworkElement, CanvasAnchorState> _canvasAnchorStates = new();
-
-    internal static void ApplyCanvasPosition(FrameworkElement fe, CanvasAttached ca)
-    {
-        if (ca.AnchorX == 0 && ca.AnchorY == 0)
-        {
-            WinUI.Canvas.SetLeft(fe, ca.Left);
-            WinUI.Canvas.SetTop(fe, ca.Top);
-            // If anchor handlers were previously installed (e.g. element re-used after
-            // a different anchor), keep them but update Current so they become a no-op.
-            if (_canvasAnchorStates.TryGetValue(fe, out var existing))
-                existing.Current = ca;
-            return;
-        }
-
-        var state = _canvasAnchorStates.GetValue(fe, static _ => new CanvasAnchorState());
-        state.Current = ca;
-        RecomputeCanvasAnchor(fe, state.Current);
-
-        if (state.Subscribed) return;
-        state.Subscribed = true;
-
-        fe.SizeChanged += (_, _) =>
-        {
-            if (_canvasAnchorStates.TryGetValue(fe, out var s))
-                RecomputeCanvasAnchor(fe, s.Current);
-        };
-        fe.Loaded += (_, _) =>
-        {
-            if (_canvasAnchorStates.TryGetValue(fe, out var s))
-                RecomputeCanvasAnchor(fe, s.Current);
-        };
-    }
-
-    private static void RecomputeCanvasAnchor(FrameworkElement fe, CanvasAttached ca)
-    {
-        WinUI.Canvas.SetLeft(fe, ca.Left - ca.AnchorX * fe.ActualWidth);
-        WinUI.Canvas.SetTop(fe, ca.Top - ca.AnchorY * fe.ActualHeight);
-    }
+    // ModifierEventHandlerState (ToggleSwitch); issue #114 unified everything onto
+    // ModifierEventHandlerState.
 
     // ════════════════════════════════════════════════════════════════════
     //  Extensible type registry (Feature 1: RegisterType API)
@@ -521,8 +685,20 @@ public sealed partial class Reconciler : IDisposable
     /// Registers a custom element type so the reconciler knows how to mount, update, and unmount it.
     /// Registered types take priority over built-in types.
     ///
+    /// Spec 047 §13 Q17 / §14 Phase 1 (1.9) — v1 semantics:
+    ///   - Exact-type lookup via <c>element.GetType()</c>; no base-class fallback.
+    ///   - Throws <see cref="InvalidOperationException"/> on duplicate registration,
+    ///     including duplicates against a previously-registered V1 handler
+    ///     (<see cref="V1HandlerRegistry"/>).
+    ///   - Throws on open-generic element types.
+    ///
     /// The mount and update handlers receive the Reconciler instance so they can
     /// recursively mount/update/unmount child elements without capturing external state.
+    ///
+    /// Not part of the <c>REACTOR_V1_PREVIEW</c> surface — this is the legacy
+    /// type-registry path, public since before Spec 047. The §13 Q17 hardening
+    /// (throw on duplicate, no base-class fallback, no open generics) tightens
+    /// previously-undefined behavior; it does not change the shape of this API.
     /// </summary>
     public void RegisterType<TElement, TControl>(
         Func<Reconciler, TElement, Action, TControl> mount,
@@ -531,7 +707,383 @@ public sealed partial class Reconciler : IDisposable
         where TElement : Element
         where TControl : UIElement
     {
-        _typeRegistry[typeof(TElement)] = new TypeRegistration<TElement, TControl>(mount, update, unmount);
+        EnsureRegistrableElementType(typeof(TElement), typeof(TControl), "RegisterType");
+        _typeRegistry.Add(typeof(TElement), new TypeRegistration<TElement, TControl>(mount, update, unmount));
+    }
+
+    /// <summary>
+    /// Spec 047 §14 Phase 1 (1.9) — shared duplicate / open-generic guard for
+    /// both <see cref="RegisterType{TElement,TControl}"/> and
+    /// <see cref="RegisterHandler{TElement,TControl}"/>. Throws on any
+    /// cross-registry collision; message names both the existing and the new
+    /// TControl types so the author sees what they're shadowing.
+    /// </summary>
+    internal void EnsureRegistrableElementType(Type elementType, Type newControlType, string callerName)
+    {
+        if (elementType.ContainsGenericParameters)
+        {
+            throw new InvalidOperationException(
+                $"{callerName}: open-generic element types (e.g. typeof(DataGrid<>)) are not " +
+                $"supported in v1 (spec 047 §13 Q17). Element type: '{elementType.FullName}'.");
+        }
+        if (_typeRegistry.TryGetValue(elementType, out var existing))
+        {
+            var existingControl = existing.GetType().GetGenericArguments() is { Length: 2 } args
+                ? args[1].FullName
+                : "<unknown>";
+            throw new InvalidOperationException(
+                $"Cannot register handler for '{elementType.FullName}' (-> '{newControlType.FullName}'): " +
+                $"a handler is already registered (-> '{existingControl}'). " +
+                "Duplicate registrations are forbidden in v1 (spec 047 §13 Q17); " +
+                "build a separate Reconciler instance if you need a different mapping.");
+        }
+        if (_v1Handlers.ContainsKey(elementType))
+        {
+            throw new InvalidOperationException(
+                $"Cannot register handler for '{elementType.FullName}' (-> '{newControlType.FullName}'): " +
+                "a V1 element handler is already registered for this element type. " +
+                "Duplicate registrations are forbidden in v1 (spec 047 §13 Q17); " +
+                "build a separate Reconciler instance if you need a different mapping.");
+        }
+    }
+
+    /// <summary>
+    /// Spec 047 §14 Phase 1 (1.6 / 1.9) — register a v1
+    /// <see cref="V1Protocol.IElementHandler{TElement,TControl}"/> for the
+    /// given element type. Dispatched ahead of <see cref="RegisterType{T,U}"/>
+    /// callbacks. Throws on duplicate
+    /// (including across registries) and on open-generic element types
+    /// (spec §13 Q17).
+    /// </summary>
+    public void RegisterHandler<TElement, TControl>(V1Protocol.IElementHandler<TElement, TControl> handler)
+        where TElement : Element
+        where TControl : UIElement
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        EnsureRegistrableElementType(typeof(TElement), typeof(TControl), "RegisterHandler");
+        _v1Handlers.Add(typeof(TElement), new V1Protocol.V1HandlerAdapter<TElement, TControl>(handler));
+    }
+
+    /// <summary>
+    /// §14 Phase 3 close-out — register a v1 handler that catches every
+    /// closed runtime type whose chain reaches <typeparamref name="TBase"/>.
+    /// Used by the typed templated-list descriptor ports
+    /// (<c>TemplatedListViewElement&lt;T&gt;</c> family) so a single
+    /// registration on a non-generic intermediate base routes every closed-T
+    /// variant — same T-erasure pattern the legacy
+    /// <see cref="Reconciler.Mount"/> switch uses.
+    ///
+    /// <para>Exact-type registrations via
+    /// <see cref="RegisterHandler{TElement,TControl}"/> always win over a
+    /// derived-type registration. Throws on duplicate base-type
+    /// registration.</para>
+    /// </summary>
+    public void RegisterHandlerForDerivedTypes<TBase, TControl>(V1Protocol.IElementHandler<TBase, TControl> handler)
+        where TBase : Element
+        where TControl : UIElement
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        // Open-generic base types (e.g. typeof(Foo<>)) and the legacy
+        // duplicate-registration policy are both validated in
+        // EnsureRegistrableElementType — reuse it.
+        EnsureRegistrableElementType(typeof(TBase), typeof(TControl), "RegisterHandlerForDerivedTypes");
+        _v1Handlers.AddForDerivedTypes(typeof(TBase), new V1Protocol.V1HandlerAdapter<TBase, TControl>(handler));
+    }
+
+    /// <summary>
+    /// Spec 047 §14 Phase 3 completion — register a decorator-style V1
+    /// handler for elements whose returned <see cref="UIElement"/>
+    /// identity may change on update or whose unmount disposition
+    /// diverges from the standard pool-return. See
+    /// <see cref="V1Protocol.IDecoratorElementHandler{TElement}"/> for
+    /// the use cases (target-wrapping flyouts, modal lifecycle wrappers,
+    /// polymorphic mounts, interop bridges).
+    ///
+    /// <para>This registration sits on the same dispatch table as
+    /// <see cref="RegisterHandler{TElement,TControl}"/> — collisions
+    /// throw via <see cref="EnsureRegistrableElementType"/>.</para>
+    /// </summary>
+    internal void RegisterDecoratorHandler<TElement>(V1Protocol.IDecoratorElementHandler<TElement> handler)
+        where TElement : Element
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        EnsureRegistrableElementType(typeof(TElement), typeof(UIElement), "RegisterDecoratorHandler");
+        _v1Handlers.Add(typeof(TElement), new V1Protocol.V1DecoratorHandlerAdapter<TElement>(handler));
+    }
+
+    /// <summary>
+    /// Spec 047 §14 Phase 3 prelude — register a decorator-style V1 handler
+    /// that catches every closed runtime type whose chain reaches
+    /// <typeparamref name="TBase"/> (the derived-type analogue of
+    /// <see cref="RegisterDecoratorHandler{TElement}"/>). Used by the
+    /// Lazy*Stack family, whose closed-T variants all derive from the
+    /// non-generic <c>LazyStackElementBase</c> and need the decorator
+    /// shape (control identity differs from the descriptor port — the
+    /// legacy mount wraps the ItemsRepeater in a ScrollViewer — and
+    /// <see cref="V1Protocol.V1UnmountDisposition.ContinueDefaultTraversal"/> so the
+    /// engine recurses ScrollViewer → ItemsRepeater → realized rows on
+    /// unmount).
+    /// </summary>
+    internal void RegisterDecoratorHandlerForDerivedTypes<TBase>(V1Protocol.IDecoratorElementHandler<TBase> handler)
+        where TBase : Element
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+        EnsureRegistrableElementType(typeof(TBase), typeof(UIElement), "RegisterDecoratorHandlerForDerivedTypes");
+        _v1Handlers.AddForDerivedTypes(typeof(TBase), new V1Protocol.V1DecoratorHandlerAdapter<TBase>(handler));
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Pool rent / return — public author-facing surface (spec 047 §13 Q18)
+    // ════════════════════════════════════════════════════════════════════
+    //
+    // Pool key is typeof(TControl) only (Q18 — finer keys deferred to Phase 3+).
+    // Mount-time allocations route here so external authors get the same
+    // pool behavior as built-in ports.
+    //
+    // TODO(Phase 4): the dirty-rent diagnostic ("structured log entry on
+    // dirty rent") is unimplementable without a way to inspect the control's
+    // state; the engine trusts ElementPool.CleanElement to scrub on return.
+    // When the per-control reset contract becomes declarative (descriptor-
+    // driven, Phase 4), the engine will know what slots to inspect.
+
+    /// <summary>
+    /// Spec 047 §14 Phase 1 (1.5) — rent a control instance, either from
+    /// the per-type pool (if poolable and a pooled instance is available)
+    /// or via <paramref name="factory"/> / <c>new T()</c>. Pool key is
+    /// <c>typeof(T)</c> only.
+    /// </summary>
+    public T RentControl<T>(PoolPolicy<T>? policy = null, Func<T>? factory = null) where T : class, new()
+    {
+        // Default = poolable; only skip the pool when the policy explicitly opts out.
+        bool poolable = policy?.IsPoolable != false;
+        if (poolable && typeof(FrameworkElement).IsAssignableFrom(typeof(T)))
+        {
+            var rented = _pool.TryRent(typeof(T));
+            if (rented is T t) return t;
+        }
+        return factory is not null ? factory() : new T();
+    }
+
+    /// <summary>
+    /// Spec 047 §14 Phase 1 (1.5) — return a control to its per-type pool,
+    /// after running the Q18 reset contract:
+    /// <list type="bullet">
+    ///   <item>Clear <c>ControlEventState</c> (per-control event payload box, §9.2).</item>
+    ///   <item>Clear <c>ModifierEventHandlerState</c> (modifier / routed-input handler state).</item>
+    ///   <item>Clear <c>ReactorAttached.StateProperty</c> Tag / DataContext set by Reactor.</item>
+    ///   <item>Invoke <c>policy.Reset</c> last (author-defined extra cleanup).</item>
+    /// </list>
+    /// Double-return is safe: <see cref="ElementPool.Return"/> dedupes via
+    /// the per-type stack cap (<c>MaxPerType</c>).
+    /// </summary>
+    public void ReturnControl<T>(T control, PoolPolicy<T>? policy = null) where T : class
+    {
+        ArgumentNullException.ThrowIfNull(control);
+        if (policy?.IsPoolable == false) return;
+
+        // Engine reset contract (Q18). Order is intentional — clear the
+        // attached-state box BEFORE the pool's CleanElement runs so any
+        // ControlEventState payload is gone before the next rent.
+        if (control is FrameworkElement fe)
+        {
+            if (fe.GetValue(ReactorAttached.StateProperty) is ReactorState rs)
+            {
+                rs.Modifiers?.ClearCurrentHandlers();
+                // Spec 047 §9.2 / Phase 1 KD-3 — typed per-control event
+                // payloads (ToggleSwitch / Slider / TextBox / Button / ...)
+                // are intentionally preserved across pool rent/return cycles.
+                // Their trampolines stay subscribed to native WinUI events for
+                // the control's lifetime and read live state via GetElementTag
+                // — clearing the box would force re-allocation on every rent
+                // and double-subscribe to the native event. Mirrors the legacy
+                // ModifierEventHandlerState contract (ClearCurrentHandlers nulls user
+                // delegates only; trampoline slots stay). The generic-anchor
+                // CustomEventAnchorPayload from V1 OnCustomEvent has the same
+                // shape, so it stays too — handlers that use the generic
+                // surface must be idempotent on rent (Phase 1 known caveat
+                // for OnCustomEvent; see Phase 1 task file KD-4).
+                rs.EchoSuppressCount = 0;
+                rs.EchoSuppressScopeDepth = 0;
+                rs.PendingEchoMatch = null;
+                rs.Element = null;
+            }
+            // Clear Reactor-set DataContext (FrameworkElement-only DP).
+            fe.ClearValue(FrameworkElement.DataContextProperty);
+
+            _pool.Return(fe);
+        }
+
+        // Author-defined extra reset runs last (per Q18 contract).
+        policy?.Reset?.Invoke(control);
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Internal binding shims for V1 ReactorBinding<TElement> (1.6)
+    // ════════════════════════════════════════════════════════════════════
+    //
+    // Each shim corresponds to an Ensure*Subscribed helper in this file.
+    // They exist so ReactorBinding<TElement>.On<Event>(Action<TElement,…>)
+    // can update the per-control trampoline without exposing the private
+    // ModifierEventHandlerState type. Strongly-typed delegates only — no reflection.
+
+    internal static void BindOnPointerPressed(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+        => EnsurePointerPressedSubscribed(fe, GetOrCreateModifierState(fe), handler);
+    internal static void BindOnPointerMoved(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+        => EnsurePointerMovedSubscribed(fe, GetOrCreateModifierState(fe), handler);
+    internal static void BindOnPointerReleased(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+        => EnsurePointerReleasedSubscribed(fe, GetOrCreateModifierState(fe), handler);
+    internal static void BindOnPointerEntered(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+        => EnsurePointerEnteredSubscribed(fe, GetOrCreateModifierState(fe), handler);
+    internal static void BindOnPointerExited(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+        => EnsurePointerExitedSubscribed(fe, GetOrCreateModifierState(fe), handler);
+    internal static void BindOnPointerCaptureLost(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+        => EnsurePointerCaptureLostSubscribed(fe, GetOrCreateModifierState(fe), handler);
+    internal static void BindOnPointerWheelChanged(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+        => EnsurePointerWheelChangedSubscribed(fe, GetOrCreateModifierState(fe), handler);
+    internal static void BindOnTapped(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs>? handler)
+        => EnsureTappedSubscribed(fe, GetOrCreateModifierState(fe), handler, oldHandler: null);
+    internal static void BindOnDoubleTapped(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs>? handler)
+        => EnsureDoubleTappedSubscribed(fe, GetOrCreateModifierState(fe), handler, oldHandler: null);
+    internal static void BindOnRightTapped(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.RightTappedRoutedEventArgs>? handler)
+        => EnsureRightTappedSubscribed(fe, GetOrCreateModifierState(fe), handler, oldHandler: null);
+    internal static void BindOnHolding(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.HoldingRoutedEventArgs>? handler)
+        => EnsureHoldingSubscribed(fe, GetOrCreateModifierState(fe), handler, oldHandler: null);
+    internal static void BindOnKeyDown(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? handler)
+        => EnsureKeyDownSubscribed(fe, GetOrCreateModifierState(fe), handler);
+    internal static void BindOnKeyUp(FrameworkElement fe, Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? handler)
+        => EnsureKeyUpSubscribed(fe, GetOrCreateModifierState(fe), handler);
+    internal static void BindOnGotFocus(FrameworkElement fe, Action<object, RoutedEventArgs>? handler)
+        => EnsureGotFocusSubscribed(fe, GetOrCreateModifierState(fe), handler);
+    internal static void BindOnLostFocus(FrameworkElement fe, Action<object, RoutedEventArgs>? handler)
+        => EnsureLostFocusSubscribed(fe, GetOrCreateModifierState(fe), handler);
+
+    /// <summary>
+    /// Spec 047 §9.2 / §14 Phase 1 (1.7) — anchor a strongly-typed
+    /// trampoline delegate to the control's per-control event payload box
+    /// so the GC keeps the captured closure alive while WinUI's
+    /// subscription list holds the native side. Pool reset clears the
+    /// box on return.
+    /// </summary>
+    internal static void AnchorCustomEventTrampoline(FrameworkElement fe, Delegate trampoline)
+    {
+        var state = GetOrCreateReactorState(fe);
+        if (state.ControlEventState is not ControlEventStateBox box
+            || box.HandlerType != typeof(V1Protocol.CustomEventAnchorPayload))
+        {
+            box = new ControlEventStateBox
+            {
+                HandlerType = typeof(V1Protocol.CustomEventAnchorPayload),
+                Payload = new V1Protocol.CustomEventAnchorPayload()
+            };
+            state.ControlEventState = box;
+        }
+        ((V1Protocol.CustomEventAnchorPayload)box.Payload).Trampolines.Add(trampoline);
+    }
+
+    /// <summary>
+    /// Spec 047 §9.2 / §14 Phase 1 — get-or-create a typed per-control event
+    /// payload (e.g. <c>ToggleSwitchEventPayload</c>). The payload survives
+    /// pool rent/return cycles so trampolines wired once per control lifetime
+    /// stay alive (mirrors the legacy <c>ModifierEventHandlerState</c> "stable
+    /// trampoline + mutable Current* slot" pattern documented in
+    /// <c>Reconciler.cs:3266-3289</c>). Authors of built-in ports use this
+    /// instead of <see cref="V1Protocol.ReactorBinding{TElement}.OnCustomEvent"/>
+    /// for the seven audited control-intrinsic events — see
+    /// <c>ControlEventPayloads.cs</c>.
+    /// </summary>
+    internal static T GetOrCreateControlEventPayload<T>(FrameworkElement fe) where T : class, new()
+    {
+        var state = GetOrCreateReactorState(fe);
+        if (state.ControlEventState is ControlEventStateBox existing
+            && existing.HandlerType == typeof(T))
+        {
+            return (T)existing.Payload;
+        }
+        var payload = new T();
+        state.ControlEventState = new ControlEventStateBox
+        {
+            HandlerType = typeof(T),
+            Payload = payload,
+        };
+        return payload;
+    }
+
+    /// <summary>
+    /// Spec 047 §8 — non-allocating sibling of
+    /// <see cref="GetOrCreateControlEventPayload{T}"/>. Returns the existing
+    /// per-control payload of type <typeparamref name="T"/>, or <c>null</c> if
+    /// the control has no <c>ReactorState</c>, no event-state box, or a box of a
+    /// different handler type. Unlike the get-or-create form this never creates
+    /// state, so callers on a hot/read path (e.g. the controlled-prop value-diff
+    /// echo check) can probe without forcing allocation on callback-less or
+    /// unsubscribed controls.
+    /// </summary>
+    internal static T? TryGetControlEventPayload<T>(FrameworkElement fe) where T : class
+    {
+        if (fe.GetValue(ReactorAttached.StateProperty) is ReactorState state
+            && state.ControlEventState is ControlEventStateBox box
+            && box.HandlerType == typeof(T))
+        {
+            return (T)box.Payload;
+        }
+        return null;
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Disposable wrappers for V1 MountContext (1.6)
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Spec 047 §14 Phase 1 (1.6) — typed context push that returns an
+    /// <see cref="IDisposable"/> the handler disposes when its scope ends.
+    /// The underlying scope is the same one used by built-in ContextProvider
+    /// elements.
+    /// </summary>
+    internal IDisposable PushContextDisposable<T>(Context<T> context, T value)
+    {
+        var dict = new Dictionary<ContextBase, object?>(1) { [context] = value };
+        _contextScope.Push(dict);
+        return new PopOnDispose(_contextScope, 1);
+    }
+
+    // Internal so V1-owned lifecycle classes can read ambient Context<T> values
+    // without exposing the traversal stack itself.
+    internal T ReadContext<T>(Context<T> context) => _contextScope.Read(context);
+
+    /// <summary>
+    /// Spec 047 §14 Phase 1 (1.6) — push a stagger scope for child enter
+    /// transitions. Returns an <see cref="IDisposable"/> that pops the
+    /// scope on dispose.
+    /// </summary>
+    internal IDisposable PushStaggerScopeDisposable(TimeSpan delay)
+    {
+        PushStaggerScope(delay);
+        return new PopStaggerOnDispose();
+    }
+
+    private sealed class PopOnDispose : IDisposable
+    {
+        private ContextScope? _scope;
+        private readonly int _count;
+        public PopOnDispose(ContextScope scope, int count) { _scope = scope; _count = count; }
+        public void Dispose()
+        {
+            var s = _scope;
+            if (s is null) return;
+            _scope = null;
+            s.Pop(_count);
+        }
+    }
+
+    private sealed class PopStaggerOnDispose : IDisposable
+    {
+        private bool _disposed;
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            PopStaggerScope();
+        }
     }
 
     internal interface ITypeRegistration
@@ -746,6 +1298,15 @@ public sealed partial class Reconciler : IDisposable
             return replacement ?? existingControl;
         }
 
+        // Hot Reload: an edited component subclass mints a new Type token, so
+        // CanUpdate is false above. Migrate the subtree in place (preserving
+        // descendant state) instead of unmount/mount. Gated on IsHotReloadLive
+        // (MetadataUpdater.IsSupported) so the reflection-bearing path is
+        // statically dead under NativeAOT (spec 049 §7/§8).
+        if (HotReloadService.IsHotReloadLive
+            && TryHotReloadMigrateComponent(oldElement, newElement, existingControl, requestRerender))
+            return existingControl;
+
         Unmount(existingControl);
         return Mount(newElement, requestRerender);
     }
@@ -838,51 +1399,78 @@ public sealed partial class Reconciler : IDisposable
         }
 
         Element newChildElement;
-        try
+        // The RenderContext backing whichever branch we render (component or
+        // func/memo). Used to recover an in-flight hook-order change during a
+        // hot-reload pass: reset this context's hook state and re-render once.
+        RenderContext? renderCtx = node.Component?.Context ?? node.Context;
+        bool hotReloadRetried = false;
+        while (true)
         {
-            if (node.Component is not null)
+            try
             {
-                // Update props before re-rendering so the component sees fresh data
-                if (newEl is ComponentElement compEl && compEl.Props is not null
-                    && node.Component is IPropsReceiver receiver)
+                if (node.Component is not null)
                 {
-                    receiver.SetProps(compEl.Props);
-                }
+                    // Update props before re-rendering so the component sees fresh data
+                    if (newEl is ComponentElement compEl && compEl.Props is not null
+                        && node.Component is IPropsReceiver receiver)
+                    {
+                        receiver.SetProps(compEl.Props);
+                    }
 
-                node.Component.Context.BeginRender(componentRerender, _contextScope);
-                newChildElement = node.Component.Render();
-                FlushEffectsTraced(node.Component.Context, componentName);
+                    node.Component.Context.BeginRender(componentRerender, _contextScope);
+                    newChildElement = node.Component.Render();
+                    FlushEffectsTraced(node.Component.Context, componentName);
+                }
+                else if (node.Context is not null && newEl is FuncElement func)
+                {
+                    node.Context.BeginRender(componentRerender, _contextScope);
+                    newChildElement = func.RenderFunc(node.Context);
+                    FlushEffectsTraced(node.Context, componentName);
+                }
+                else if (node.Context is not null && newEl is MemoElement memo)
+                {
+                    node.Context.BeginRender(componentRerender, _contextScope);
+                    newChildElement = memo.RenderFunc(node.Context);
+                    FlushEffectsTraced(node.Context, componentName);
+                }
+                else
+                {
+                    if (traceRender)
+                        Diagnostics.ReactorEventSource.Log.ComponentRenderStop(componentName!, 0);
+                    return;
+                }
             }
-            else if (node.Context is not null && newEl is FuncElement func)
+            // Tree-wide hot-reload hook-order recovery: when an edit reorders or
+            // retypes hooks in a *non-root* child, its Render() throws here.
+            // Inside a hot-reload pass we reset that child's hook state and
+            // re-render once (matching the root recovery in the host), so the
+            // edit applies and the subtree's descendant state is preserved,
+            // instead of falling through to the error-fallback path below.
+            catch (HookOrderException ex) when (!hotReloadRetried
+                && renderCtx is not null
+                && HotReloadService.WithinUpdatePass)
             {
-                node.Context.BeginRender(componentRerender, _contextScope);
-                newChildElement = func.RenderFunc(node.Context);
-                FlushEffectsTraced(node.Context, componentName);
+                _logger?.LogWarning(ex,
+                    "Hot reload: hook order/type changed in child component — " +
+                    "resetting state and re-rendering: {ComponentName}",
+                    componentName ?? newEl.GetType().Name);
+                hotReloadRetried = true;
+                renderCtx.ResetForHotReload();
+                continue;
             }
-            else if (node.Context is not null && newEl is MemoElement memo)
+            catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
             {
-                node.Context.BeginRender(componentRerender, _contextScope);
-                newChildElement = memo.RenderFunc(node.Context);
-                FlushEffectsTraced(node.Context, componentName);
+                _logger?.LogError(ex, "Component Render() threw: {ComponentName}", newEl.GetType().Name);
+                if (Diagnostics.ReactorEventSource.Log.IsEnabled(
+                        global::System.Diagnostics.Tracing.EventLevel.Error,
+                        Diagnostics.ReactorEventSource.Keywords.Errors))
+                {
+                    Diagnostics.ReactorEventSource.Log.RenderError(
+                        componentName ?? newEl.GetType().Name, ex.GetType().Name, ex.Message);
+                }
+                newChildElement = ErrorFallback.BuildElement(ex);
             }
-            else
-            {
-                if (traceRender)
-                    Diagnostics.ReactorEventSource.Log.ComponentRenderStop(componentName!, 0);
-                return;
-            }
-        }
-        catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
-        {
-            _logger?.LogError(ex, "Component Render() threw: {ComponentName}", newEl.GetType().Name);
-            if (Diagnostics.ReactorEventSource.Log.IsEnabled(
-                    global::System.Diagnostics.Tracing.EventLevel.Error,
-                    Diagnostics.ReactorEventSource.Keywords.Errors))
-            {
-                Diagnostics.ReactorEventSource.Log.RenderError(
-                    componentName ?? newEl.GetType().Name, ex.GetType().Name, ex.Message);
-            }
-            newChildElement = ErrorFallback.BuildElement(ex);
+            break;
         }
 
         if (traceRender)
@@ -1020,11 +1608,17 @@ public sealed partial class Reconciler : IDisposable
         finally { Diagnostics.ReactorEventSource.Log.ChildReconcileStop(); }
     }
 
-    private void ReconcileItemsChildren(
+    // Spec 047 §14 — keyed-reconcile entrypoint for the V1 descriptor Panel<>
+    // strategy. The descriptor resolves the live collection as a
+    // UIElementCollection (not a WinUI.Panel), so this overload wraps that
+    // collection directly. Behavior — including the diagnostics ChildReconcile
+    // event scope — is identical to the WinUI.Panel-based ReconcileChildren so
+    // descriptor panels match the legacy hand-coded Update* methods byte-for-byte.
+    internal void ReconcilePanelChildrenInto(
         Element[] oldChildren, Element[] newChildren,
-        WinUI.ItemsControl itemsControl, Action requestRerender)
+        UIElementCollection collection, Action requestRerender)
     {
-        var childCollection = new ItemsControlChildCollection(itemsControl);
+        var childCollection = new PanelChildCollection(collection);
         if (!Diagnostics.ReactorEventSource.Log.IsEnabled(
                 global::System.Diagnostics.Tracing.EventLevel.Informational,
                 Diagnostics.ReactorEventSource.Keywords.Reconcile))
@@ -1063,6 +1657,27 @@ public sealed partial class Reconciler : IDisposable
         UnmountRecursive(control);
     }
 
+    /// <summary>
+    /// Spec 047 §14 Phase 4 (4.0.2) — tears down the per-instance navigation
+    /// state (route subscription, cache, current child control) tracked for a
+    /// <see cref="NavigationHostElement"/>'s host Grid. Owned by
+    /// <c>NavigationHostHandler.Unmount</c> on the V1 path; also invoked by the
+    /// V1-OFF fallback in <see cref="UnmountRecursive"/>. No-op if the control
+    /// is not a tracked navigation host.
+    /// </summary>
+    internal void CleanupNavigationHostNode(UIElement control)
+    {
+        if (!_navigationHostNodes.TryGetValue(control, out var navNode))
+            return;
+        if (navNode.RouteChangedHandler is not null)
+            navNode.Handle.RouteChanged -= navNode.RouteChangedHandler;
+        navNode.Handle.Detach();
+        navNode.Cache?.Clear();
+        if (navNode.CurrentChildControl is not null)
+            UnmountRecursive(navNode.CurrentChildControl);
+        _navigationHostNodes.Remove(control);
+    }
+
     private void UnmountRecursive(UIElement control)
     {
         // Capture connected animation snapshot while element is still in the visual tree
@@ -1095,22 +1710,24 @@ public sealed partial class Reconciler : IDisposable
             node.Component?.Context.RunCleanups();
             node.Context?.RunCleanups();
             _componentNodes.Remove(control);
-            if (ReactorFeatureFlags.ShowLayoutCost)
-                RaiseLayoutCostComponentUnmounted(control);
         }
 
         _errorBoundaryNodes.Remove(control);
 
-        if (_navigationHostNodes.TryGetValue(control, out var navNode))
+        // Spec 047 §14 Phase 1 (1.1) — V1 handler unmount dispatch. Standard
+        // handlers return CollectSelf (terminate the traversal — children
+        // already torn down by the handler; e.g. NavigationHostHandler.Unmount
+        // runs CleanupNavigationHostNode). Phase 3 completion decorator handlers
+        // may return ContinueDefaultTraversal to let the engine recurse into the
+        // wrapped child whose control they returned (e.g., FlyoutElement returns
+        // the Target's mounted control; the Target's children still need their
+        // own unmount).
+        if (control is FrameworkElement v1Fe && GetElementTag(v1Fe) is Element v1TagEl
+            && _v1Handlers.TryGet(v1TagEl.GetType(), out var v1Entry) && v1Entry.HasUnmount)
         {
-            if (navNode.RouteChangedHandler is not null)
-                navNode.Handle.RouteChanged -= navNode.RouteChangedHandler;
-            navNode.Handle.Detach();
-            navNode.Cache?.Clear();
-            if (navNode.CurrentChildControl is not null)
-                UnmountRecursive(navNode.CurrentChildControl);
-            _navigationHostNodes.Remove(control);
-            return; // Children already handled above; don't recurse into Grid children again
+            var v1Disposition = v1Entry.Unmount(control, this);
+            if (v1Disposition != V1Protocol.V1UnmountDisposition.ContinueDefaultTraversal)
+                return;
         }
 
         // Check registered type unmount handlers via the attached element
@@ -1121,65 +1738,109 @@ public sealed partial class Reconciler : IDisposable
             return;
         }
 
-        // XamlHostElement children were created outside Reactor's tree —
-        // do NOT recurse into them (they may have stale parent references
-        // or be types Reactor doesn't know how to clean). Fully detach
-        // reactor state so retained-by-app references can't fire stale
-        // callbacks through orphaned trampolines.
-        if (control is FrameworkElement hostFe && GetElementTag(hostFe) is XamlHostElement)
+        if (control is WinUI.RichTextBlock rtb)
         {
-            DetachReactorState(hostFe);
-            return;
+            // Issue #480 — RichTextBlock is neither a Panel nor a ContentControl,
+            // so ForEachReactorChildControl doesn't recurse into its flow
+            // document. Route A (Reactor element) inline UI children must be torn
+            // down here or their hook cleanups + pooled descendants leak when the
+            // block goes away.
+            UnmountInlineUIChildren(rtb);
         }
 
-        // XamlPageElement — clear content to trigger Page.OnNavigatedFrom cleanup
-        if (control is WinUI.Frame pageFrame && GetElementTag(pageFrame) is XamlPageElement)
-        {
-            pageFrame.Content = null;
-            DetachReactorState(pageFrame);
-            return;
-        }
+        ForEachReactorChildControl(control, UnmountRecursive);
+    }
 
+    private static void ForEachReactorChildControl(UIElement control, Action<UIElement> visit)
+        => ForEachReactorChildControl(control, child => { visit(child); return true; });
+
+    private static void ForEachReactorChildControl(UIElement control, Func<UIElement, bool> visit)
+    {
         if (control is WinUI.Panel panel)
         {
             foreach (var child in panel.Children)
-                UnmountRecursive(child);
+                if (!visit(child)) return;
         }
         else if (control is WinUI.ItemsRepeater repeater)
         {
-            // ItemsRepeater projects to C# as a FrameworkElement (not a
-            // Panel — see microsoft-ui-xaml-lift/.../ItemsRepeater.idl), so
-            // the Panel branch above doesn't catch it even though the
-            // framework keeps both realized and recycled containers in
-            // its visual subtree. Without this branch, row Components'
-            // UseEffect cleanups would never run when the LazyStack is
-            // unmounted (e.g., on navigation), leaking any in-flight
-            // timers / subscriptions / async loops. We walk via
-            // VisualTreeHelper because the public ItemsRepeater surface
-            // doesn't expose a Children collection. (PR #324 review)
+            // ItemsRepeater does not expose a Children collection; realized and
+            // recycled row hosts live in its visual subtree.
             int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(repeater);
             for (int i = 0; i < count; i++)
             {
-                if (Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(repeater, i) is UIElement child)
-                    UnmountRecursive(child);
+                if (Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(repeater, i) is UIElement child && !visit(child))
+                    return;
             }
         }
         else if (control is WinUI.Border border && border.Child is not null)
         {
-            UnmountRecursive(border.Child);
+            visit(border.Child);
         }
         else if (control is WinUI.ScrollViewer sv && sv.Content is UIElement svChild)
         {
-            UnmountRecursive(svChild);
+            visit(svChild);
         }
         else if (control is WinUI.UserControl uc && uc.Content is UIElement ucChild)
         {
-            UnmountRecursive(ucChild);
+            visit(ucChild);
         }
         else if (control is WinUI.ContentControl cc && cc.Content is UIElement ccChild)
         {
-            UnmountRecursive(ccChild);
+            visit(ccChild);
         }
+    }
+
+    /// <summary>
+    /// Walks a typed TreeView's visual subtree and unmounts every per-node view
+    /// hosted in a tagged container ContentControl. Used on full-tree unmount
+    /// (recycle of individual containers is handled by the
+    /// ContainerContentChanging recycle path).
+    /// </summary>
+    internal void UnmountTypedTreeViewContainers(WinUI.TreeView treeView)
+    {
+        int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(treeView);
+        for (int i = 0; i < count; i++)
+            UnmountTypedTreeViewContainersRecursive(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(treeView, i));
+    }
+
+    internal void UnmountTypedTreeViewContainersRecursive(DependencyObject node)
+    {
+        // Our node-view hosts are ContentControls tagged with the view Element.
+        if (node is WinUI.ContentControl cc && cc.Content is UIElement view && GetElementTag(cc) is not null)
+        {
+            UnmountChild(view);
+            cc.Content = null;
+            ClearElementTag(cc);
+            return; // the view's own subtree is handled by UnmountChild
+        }
+        int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(node);
+        for (int i = 0; i < count; i++)
+            UnmountTypedTreeViewContainersRecursive(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(node, i));
+    }
+
+    /// <summary>
+    /// Finds the typed TreeView's internal <c>TreeViewList</c> (template part
+    /// "ListControl", a public <see cref="WinUI.ListView"/> subclass). Returns
+    /// the cached instance when hosting is already attached; otherwise walks the
+    /// visual subtree without caching — only <c>AttachTypedTreeHosting</c> writes
+    /// <see cref="_typedTreeListControls"/> (its presence marks "subscribed", so
+    /// a read-side cache write here would suppress the real subscription).
+    /// </summary>
+    internal WinUI.ListView? FindTypedTreeListControl(WinUI.TreeView treeView) =>
+        _typedTreeListControls.TryGetValue(treeView, out var cached)
+            ? cached
+            : FindDescendantListView(treeView);
+
+    private static WinUI.ListView? FindDescendantListView(DependencyObject root)
+    {
+        int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < count; i++)
+        {
+            var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i);
+            if (child is WinUI.ListView lv) return lv;
+            if (FindDescendantListView(child) is { } nested) return nested;
+        }
+        return null;
     }
 
     /// <summary>
@@ -1365,8 +2026,31 @@ public sealed partial class Reconciler : IDisposable
             node.Component?.Context.RunCleanups();
             node.Context?.RunCleanups();
             _componentNodes.Remove(control);
-            if (ReactorFeatureFlags.ShowLayoutCost)
-                RaiseLayoutCostComponentUnmounted(control);
+        }
+
+        // Spec 047 §14 Phase 1 (1.1) — V1 handler unmount on the
+        // UnmountAndCollect path. Standard handlers return CollectSelf
+        // (mirrors the legacy registry behavior: pool the control, no
+        // recursion). Phase 3 completion decorator handlers may opt out
+        // of pooling (SkipPool — handler-managed teardown) or fall back
+        // to the default child traversal (ContinueDefaultTraversal —
+        // wrapped child owns the control identity, default recursion
+        // reaches the wrapped element's own unmount).
+        if (control is FrameworkElement v1Fe && GetElementTag(v1Fe) is Element v1TagEl
+            && _v1Handlers.TryGet(v1TagEl.GetType(), out var v1Entry) && v1Entry.HasUnmount)
+        {
+            var v1Disposition = v1Entry.Unmount(control, this);
+            switch (v1Disposition)
+            {
+                case V1Protocol.V1UnmountDisposition.CollectSelf:
+                    if (control is FrameworkElement v1Pool)
+                        toPool.Add(v1Pool);
+                    return;
+                case V1Protocol.V1UnmountDisposition.SkipPool:
+                    return;
+                case V1Protocol.V1UnmountDisposition.ContinueDefaultTraversal:
+                    break;
+            }
         }
 
         if (control is FrameworkElement fe && GetElementTag(fe) is Element tagEl
@@ -1381,28 +2065,22 @@ public sealed partial class Reconciler : IDisposable
             return;
         }
 
-        // Recurse into children.
-        if (control is WinUI.Panel panel)
+        // Recurse into children. The shared child walk includes ItemsRepeater,
+        // so pooled removals now tear down realized LazyStack rows too.
+        ForEachReactorChildControl(control, child => UnmountAndCollect(child, toPool));
+        if (control is WinUI.ContentControl cc && cc.Content is UIElement)
         {
-            foreach (var child in panel.Children)
-                UnmountAndCollect(child, toPool);
-        }
-        else if (control is WinUI.Border border && border.Child is not null)
-        {
-            UnmountAndCollect(border.Child, toPool);
-        }
-        else if (control is WinUI.ScrollViewer sv && sv.Content is UIElement svChild)
-        {
-            UnmountAndCollect(svChild, toPool);
-        }
-        else if (control is WinUI.UserControl uc && uc.Content is UIElement ucChild)
-        {
-            UnmountAndCollect(ucChild, toPool);
-        }
-        else if (control is WinUI.ContentControl cc && cc.Content is UIElement ccChild)
-        {
-            UnmountAndCollect(ccChild, toPool);
             cc.Content = null; // Detach so pooled child has no parent
+        }
+        else if (control is WinUI.RichTextBlock rtb)
+        {
+            // Issue #480 — mirror UnmountRecursive's RichTextBlock arm so
+            // Route A (Reactor element) inline UI children are torn down
+            // before the block is recycled to the pool. ElementPool.Reset
+            // calls rtb.Blocks.Clear() which drops the InlineUIContainer
+            // references; without this, descendant hooks / event trampolines
+            // would leak.
+            UnmountInlineUIChildren(rtb);
         }
 
         if (control is FrameworkElement poolCandidate)
@@ -1426,6 +2104,152 @@ public sealed partial class Reconciler : IDisposable
     }
 
     // ════════════════════════════════════════════════════════════════════
+    //  Hot Reload — subtree migration on component type identity change
+    //  (spec 049 §7 / Phase 3)
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// When a <see cref="Component"/> subclass is edited under Hot Reload the
+    /// runtime mints a <em>new</em> <see cref="Type"/> token, so
+    /// <see cref="CanUpdate"/> returns false and the steady-state path would
+    /// unmount the whole subtree — discarding every descendant's
+    /// <c>UseState</c>. This migrates the node in place instead: it constructs
+    /// the post-edit component via the element's factory closure (so
+    /// parameterized constructors work — spec §7 Q2), copies surviving instance
+    /// fields old → new via <see cref="Microsoft.UI.Reactor.Hosting.ReactorHotReloadCopier"/>,
+    /// transfers the live <see cref="RenderContext"/> (hooks + cleanups stay
+    /// alive), swaps <see cref="ComponentNode.Component"/>, and re-renders
+    /// through the normal <see cref="ReconcileComponent"/> path so prop-set,
+    /// Phase-1 hook-order recovery, child reconciliation, tracing and node
+    /// bookkeeping all run exactly as a regular update would. The wrapper
+    /// <see cref="UIElement"/> is preserved, so <see cref="FrameworkElement"/>
+    /// identity (and any running compositor animations on descendant visuals)
+    /// survives the edit.
+    ///
+    /// <para>Returns false — and the caller falls through to unmount/mount —
+    /// when the elements are not both class <see cref="ComponentElement"/>s of
+    /// the same <c>FullName</c>+assembly, when the keys differ, when the node is
+    /// not found, or when the post-edit instance cannot be constructed (no
+    /// factory and no parameterless ctor). Only ever reached inside a hot-reload
+    /// pass, so it is statically dead under NativeAOT (spec §8).</para>
+    /// </summary>
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Reachable only via HotReloadService.IsHotReloadLive; dead under NativeAOT (spec 049 §8).")]
+    [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "Reachable only via HotReloadService.IsHotReloadLive; dead under NativeAOT (spec 049 §8).")]
+    internal bool TryHotReloadMigrateComponent(Element oldEl, Element newEl, UIElement existingControl, Action requestRerender)
+    {
+        // Only a class ComponentElement whose Type token changed but whose
+        // logical identity (FullName + assembly) and key are unchanged is an
+        // edit we migrate. Anything else (different component, different key,
+        // a base-class swap that changes the name) is a genuine identity
+        // change the author asked to discard.
+        if (oldEl is not ComponentElement oldComp || newEl is not ComponentElement newComp)
+            return false;
+        if (oldEl.Key != newEl.Key) return false;
+
+        Type oldType = oldComp.ComponentType;
+        Type newType = newComp.ComponentType;
+        if (oldType.FullName is null || oldType.FullName != newType.FullName) return false;
+        if (oldType.Assembly.GetName().Name != newType.Assembly.GetName().Name) return false;
+
+        if (!_componentNodes.TryGetValue(existingControl, out var node) || node.Component is null)
+            return false;
+
+        Component newComponent;
+        try
+        {
+            newComponent = newComp.CreateInstance();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            // Factory closure threw or no usable constructor — let the caller
+            // unmount/mount so the edit still takes effect (state is lost). A
+            // clean recreate is strictly better than migrating onto a
+            // half-built instance. Fatal exceptions deliberately propagate.
+            return false;
+        }
+
+        Component oldComponent = node.Component;
+
+        // Copy surviving instance fields old → new (added fields keep their
+        // default, removed fields drop, native/visual handles are block-listed).
+        // Contain reflection faults on pathological user fields so a copy failure
+        // falls back to unmount/mount rather than aborting the hot-reload pass —
+        // a clean recreate beats proceeding with a partially-migrated instance.
+        try
+        {
+            Microsoft.UI.Reactor.Hosting.ReactorHotReloadCopier.TryMigrate(
+                oldComponent, newComponent,
+                new HashSet<object>(ReferenceEqualityComparer.Instance));
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            // Field copy faulted midway: discard the partially-migrated instance
+            // and recreate the component cleanly. Fatal exceptions propagate.
+            return false;
+        }
+
+        // Transfer the live render context explicitly (deterministic regardless
+        // of copier field-copy order) so hooks and pending cleanups survive.
+        // KNOWN LIMITATION (spec 049 §7): UseEffect cleanup closures captured the
+        // OLD instance; effects whose deps are unchanged do not re-run, so their
+        // cleanups still reference the pre-edit instance until deps change or the
+        // subtree unmounts. This matches React's component-identity semantics
+        // (preserved state ⇒ effects don't re-fire); most effects close over
+        // state values rather than `this`, so this is benign in practice.
+        newComponent.Context = oldComponent.Context;
+
+        // Swap the instance and force a render past the memo gate, then delegate
+        // to the normal component reconcile path. ReconcileComponent re-sets
+        // props from newEl, applies Phase-1 hook-order recovery if the edit
+        // changed the hook shape, reconciles the child element against the
+        // preserved wrapper, and updates node.Element / node.PreviousProps.
+        node.Component = newComponent;
+        node.SelfTriggered = true;
+        ReconcileComponent(oldEl, newEl, existingControl, requestRerender);
+
+        Diagnostics.ReactorEventSource.Log.HotReloadStateMigrated(newType.FullName ?? newType.Name);
+        return true;
+    }
+
+    /// <summary>
+    /// Spec 047 §14 Phase 1 — child-slot reconciliation used by the V1
+    /// <c>ChildrenStrategy</c> dispatch (SingleContent, NamedSlots). Mirrors
+    /// legacy <c>ReconcileChild</c> semantics: structural <c>Update</c> when
+    /// <see cref="CanUpdate"/> matches, fresh <c>Mount</c> otherwise, and
+    /// <c>Unmount</c> when the slot is being cleared. Returns the
+    /// <see cref="UIElement"/> the caller should write back into the slot
+    /// (or null when the slot should be cleared).
+    ///
+    /// <para>This exists because the naive replace in early Phase 1
+    /// (<c>MountChild</c> + <c>SetChild</c> without comparing old vs new)
+    /// destroys descendant state slots on every parent re-render — see the
+    /// DynDock / KLR_FlexColumn regressions in
+    /// <c>docs/specs/tasks/047-extensible-control-model-phase1-implementation.md</c>
+    /// (Phase 1 known defects).</para>
+    /// </summary>
+    internal UIElement? ReconcileV1Child(Element? oldChild, Element? newChild, UIElement? existing, Action requestRerender)
+    {
+        if (newChild is null)
+        {
+            if (existing is not null) Unmount(existing);
+            return null;
+        }
+        if (oldChild is not null && existing is not null && CanUpdate(oldChild, newChild))
+        {
+            var replacement = Update(oldChild, newChild, existing, requestRerender);
+            return replacement ?? existing;
+        }
+        // Hot Reload component-identity migration (spec 049 §7) — preserve the
+        // child subtree's state across an edit instead of unmount/mount.
+        if (oldChild is not null && existing is not null
+            && HotReloadService.IsHotReloadLive
+            && TryHotReloadMigrateComponent(oldChild, newChild, existing, requestRerender))
+            return existing;
+        if (existing is not null) Unmount(existing);
+        return Mount(newChild, requestRerender);
+    }
+
+    // ════════════════════════════════════════════════════════════════════
     //  Shared helpers (used by Mount + Update)
     // ════════════════════════════════════════════════════════════════════
 
@@ -1439,7 +2263,14 @@ public sealed partial class Reconciler : IDisposable
         return true;
     }
 
-    internal static void ApplySetters<T>(Action<T>[] setters, T control) where T : class
+    /// <summary>
+    /// Spec 047 §14 Phase 1 (1.3) — promoted from internal. Runs each setter
+    /// inside the §8.2 echo-suppression scope so user-authored
+    /// <c>.Set(c =&gt; c.IsOn = true)</c> writes don't echo through the
+    /// engine-wired OnXChanged callback. Provisional API;
+    /// see <c>REACTOR_V1_PREVIEW</c>.
+    /// </summary>
+    public static void ApplySetters<T>(Action<T>[] setters, T control) where T : class
     {
         if (setters.Length == 0) return;
         // §8.2 — run setters inside the echo-suppression scope so that a
@@ -1474,7 +2305,14 @@ public sealed partial class Reconciler : IDisposable
     // click { selector: "[name='+ 1']" } and a screen reader saying "+ 1" both work
     // without the author having to say so twice. Skips when the author already set
     // an AutomationName via modifier or setter — explicit always wins.
-    internal static void ApplyDefaultAutomationName(FrameworkElement fe, string? caption)
+    /// <summary>
+    /// Spec 047 §14 Phase 1 (1.3) — promoted from internal. Mirrors a control's
+    /// caption into <c>AutomationProperties.Name</c> when the author has not set
+    /// one explicitly, so UIA clients that read the attached property directly
+    /// (not via the peer) still find the name. Provisional API;
+    /// see <c>REACTOR_V1_PREVIEW</c>.
+    /// </summary>
+    public static void ApplyDefaultAutomationName(FrameworkElement fe, string? caption)
     {
         if (fe is null) return;
         if (string.IsNullOrWhiteSpace(caption)) return;
@@ -1490,7 +2328,13 @@ public sealed partial class Reconciler : IDisposable
     // provenance, so the rule is: overwrite when the current value is empty or
     // equals the previous caption — any other value means the author intervened
     // (via modifier or setter) and we leave it alone.
-    internal static void UpdateDefaultAutomationName(FrameworkElement fe, string? oldCaption, string? newCaption)
+    /// <summary>
+    /// Spec 047 §14 Phase 1 (1.3) — promoted from internal. Update-time pair
+    /// for <see cref="ApplyDefaultAutomationName"/>; overwrites the
+    /// automation Name only when it matches the previous caption (i.e. the
+    /// author hasn't intervened). Provisional API; see <c>REACTOR_V1_PREVIEW</c>.
+    /// </summary>
+    public static void UpdateDefaultAutomationName(FrameworkElement fe, string? oldCaption, string? newCaption)
     {
         if (fe is null) return;
         if (string.IsNullOrWhiteSpace(newCaption)) return;
@@ -2810,7 +3654,7 @@ public sealed partial class Reconciler : IDisposable
     /// trampoline reads from the mutable <c>Current*</c> field when it fires, so updating
     /// a handler just swaps the field — no WinUI subscribe/unsubscribe churn.
     /// </summary>
-    internal sealed class EventHandlerState
+    internal sealed class ModifierEventHandlerState
     {
         // Current user handlers (mutable; null means "no-op")
         public Action<object, SizeChangedEventArgs>? CurrentSizeChanged;
@@ -2857,19 +3701,7 @@ public sealed partial class Reconciler : IDisposable
         public global::Windows.Foundation.TypedEventHandler<UIElement, Microsoft.UI.Xaml.Input.CharacterReceivedRoutedEventArgs>? CharacterReceivedTrampoline;
         public RoutedEventHandler? GotFocusTrampoline;
         public RoutedEventHandler? LostFocusTrampoline;
-        public RoutedEventHandler? ToggleSwitchToggledTrampoline;
         public global::Windows.Foundation.TypedEventHandler<UIElement, Microsoft.UI.Xaml.Input.AccessKeyDisplayRequestedEventArgs>? AccessKeyDisplayRequestedTrampoline;
-        // Issue #114 — these former PoolableWireFlags entries are now keyed by native DO
-        // identity through ReactorAttached.StateProperty, so two RCWs over the same control
-        // share one trampoline (no double-subscribe).
-        public RoutedEventHandler? ButtonClickTrampoline;
-        public WinUI.TextChangedEventHandler? TextBoxTextChangedTrampoline;
-        public RoutedEventHandler? TextBoxSelectionChangedTrampoline;
-        public RoutedEventHandler? ImageOpenedTrampoline;
-        public Microsoft.UI.Xaml.ExceptionRoutedEventHandler? ImageFailedTrampoline;
-        public global::System.EventHandler<WinUI.ScrollViewerViewChangedEventArgs>? ScrollViewerViewChangedTrampoline;
-        public global::Windows.Foundation.TypedEventHandler<WinUI.ScrollView, object>? ScrollViewViewChangedTrampoline;
-        public bool NumberBoxInnerTextChanged;
 
         /// <summary>
         /// Null out every Current* user delegate so trampolines already attached
@@ -2903,14 +3735,14 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    // EventHandlerState lives on the ReactorState wrapper attached to the
+    // ModifierEventHandlerState lives on the ReactorState wrapper attached to the
     // native DependencyObject via ReactorAttached.StateProperty. That keys
     // on native identity, so two RCWs pointing at the same element share one
-    // EventHandlerState and one set of trampolines — fixing issue #86.
-    private static EventHandlerState GetOrCreateEventState(FrameworkElement fe)
+    // ModifierEventHandlerState and one set of trampolines — fixing issue #86.
+    private static ModifierEventHandlerState GetOrCreateModifierState(FrameworkElement fe)
     {
         var state = GetOrCreateReactorState(fe);
-        return state.Events ??= new EventHandlerState();
+        return state.Modifiers ??= new ModifierEventHandlerState();
     }
 
     private static bool HasAnyEventHandler(ElementModifiers? m)
@@ -2941,7 +3773,7 @@ public sealed partial class Reconciler : IDisposable
         // Fast path: nothing to do
         if (!HasAnyEventHandler(m) && !HasAnyEventHandler(oldM)) return;
 
-        var state = GetOrCreateEventState(fe);
+        var state = GetOrCreateModifierState(fe);
 
         // Trampoline pattern: each Ensure* helper points the current-handler field at
         // the new delegate and, if the trampoline isn't attached yet, attaches it once.
@@ -2986,7 +3818,7 @@ public sealed partial class Reconciler : IDisposable
     //      When the user handler becomes null again, the trampoline dispatches no-op.
 
     // <snippet:event-trampoline>
-    private static void EnsureSizeChangedSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, SizeChangedEventArgs>? handler)
+    private static void EnsureSizeChangedSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, SizeChangedEventArgs>? handler)
     {
         state.CurrentSizeChanged = handler;
         if (state.SizeChangedTrampoline is null && handler is not null)
@@ -3002,7 +3834,7 @@ public sealed partial class Reconciler : IDisposable
     }
     // </snippet:event-trampoline>
 
-    private static void EnsurePointerPressedSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+    private static void EnsurePointerPressedSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
     {
         state.CurrentPointerPressed = handler;
         if (state.PointerPressedTrampoline is null && handler is not null)
@@ -3017,7 +3849,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private static void EnsurePointerMovedSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+    private static void EnsurePointerMovedSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
     {
         state.CurrentPointerMoved = handler;
         if (state.PointerMovedTrampoline is null && handler is not null)
@@ -3032,7 +3864,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private static void EnsurePointerReleasedSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+    private static void EnsurePointerReleasedSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
     {
         state.CurrentPointerReleased = handler;
         if (state.PointerReleasedTrampoline is null && handler is not null)
@@ -3047,7 +3879,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private static void EnsurePointerEnteredSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+    private static void EnsurePointerEnteredSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
     {
         state.CurrentPointerEntered = handler;
         if (state.PointerEnteredTrampoline is null && handler is not null)
@@ -3062,7 +3894,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private static void EnsurePointerExitedSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+    private static void EnsurePointerExitedSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
     {
         state.CurrentPointerExited = handler;
         if (state.PointerExitedTrampoline is null && handler is not null)
@@ -3077,7 +3909,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private static void EnsurePointerCanceledSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+    private static void EnsurePointerCanceledSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
     {
         state.CurrentPointerCanceled = handler;
         if (state.PointerCanceledTrampoline is null && handler is not null)
@@ -3092,7 +3924,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private static void EnsurePointerCaptureLostSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+    private static void EnsurePointerCaptureLostSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
     {
         state.CurrentPointerCaptureLost = handler;
         if (state.PointerCaptureLostTrampoline is null && handler is not null)
@@ -3107,7 +3939,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private static void EnsurePointerWheelChangedSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
+    private static void EnsurePointerWheelChangedSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>? handler)
     {
         state.CurrentPointerWheelChanged = handler;
         if (state.PointerWheelChangedTrampoline is null && handler is not null)
@@ -3122,7 +3954,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private static void EnsureTappedSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs>? handler, Action<object, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs>? oldHandler)
+    private static void EnsureTappedSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs>? handler, Action<object, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs>? oldHandler)
     {
         state.CurrentTapped = handler;
         if (state.TappedTrampoline is null && handler is not null)
@@ -3148,7 +3980,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private static void EnsureDoubleTappedSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs>? handler, Action<object, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs>? oldHandler)
+    private static void EnsureDoubleTappedSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs>? handler, Action<object, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs>? oldHandler)
     {
         state.CurrentDoubleTapped = handler;
         if (state.DoubleTappedTrampoline is null && handler is not null)
@@ -3165,7 +3997,7 @@ public sealed partial class Reconciler : IDisposable
         else if (oldHandler is not null) fe.IsDoubleTapEnabled = false;
     }
 
-    private static void EnsureRightTappedSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.RightTappedRoutedEventArgs>? handler, Action<object, Microsoft.UI.Xaml.Input.RightTappedRoutedEventArgs>? oldHandler)
+    private static void EnsureRightTappedSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.RightTappedRoutedEventArgs>? handler, Action<object, Microsoft.UI.Xaml.Input.RightTappedRoutedEventArgs>? oldHandler)
     {
         state.CurrentRightTapped = handler;
         if (state.RightTappedTrampoline is null && handler is not null)
@@ -3182,7 +4014,7 @@ public sealed partial class Reconciler : IDisposable
         else if (oldHandler is not null) fe.IsRightTapEnabled = false;
     }
 
-    private static void EnsureHoldingSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.HoldingRoutedEventArgs>? handler, Action<object, Microsoft.UI.Xaml.Input.HoldingRoutedEventArgs>? oldHandler)
+    private static void EnsureHoldingSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.HoldingRoutedEventArgs>? handler, Action<object, Microsoft.UI.Xaml.Input.HoldingRoutedEventArgs>? oldHandler)
     {
         state.CurrentHolding = handler;
         if (state.HoldingTrampoline is null && handler is not null)
@@ -3199,7 +4031,7 @@ public sealed partial class Reconciler : IDisposable
         else if (oldHandler is not null) fe.IsHoldingEnabled = false;
     }
 
-    private static void EnsureKeyDownSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? handler)
+    private static void EnsureKeyDownSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? handler)
     {
         state.CurrentKeyDown = handler;
         if (state.KeyDownTrampoline is null && handler is not null)
@@ -3214,7 +4046,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private static void EnsureKeyUpSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? handler)
+    private static void EnsureKeyUpSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? handler)
     {
         state.CurrentKeyUp = handler;
         if (state.KeyUpTrampoline is null && handler is not null)
@@ -3229,7 +4061,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private static void EnsurePreviewKeyDownSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? handler)
+    private static void EnsurePreviewKeyDownSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? handler)
     {
         state.CurrentPreviewKeyDown = handler;
         if (state.PreviewKeyDownTrampoline is null && handler is not null)
@@ -3244,7 +4076,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private static void EnsurePreviewKeyUpSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? handler)
+    private static void EnsurePreviewKeyUpSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs>? handler)
     {
         state.CurrentPreviewKeyUp = handler;
         if (state.PreviewKeyUpTrampoline is null && handler is not null)
@@ -3259,7 +4091,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private static void EnsureCharacterReceivedSubscribed(FrameworkElement fe, EventHandlerState state, Action<UIElement, Microsoft.UI.Xaml.Input.CharacterReceivedRoutedEventArgs>? handler)
+    private static void EnsureCharacterReceivedSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<UIElement, Microsoft.UI.Xaml.Input.CharacterReceivedRoutedEventArgs>? handler)
     {
         state.CurrentCharacterReceived = handler;
         if (state.CharacterReceivedTrampoline is null && handler is not null)
@@ -3274,7 +4106,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private static void EnsureGotFocusSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, RoutedEventArgs>? handler)
+    private static void EnsureGotFocusSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, RoutedEventArgs>? handler)
     {
         state.CurrentGotFocus = handler;
         if (state.GotFocusTrampoline is null && handler is not null)
@@ -3289,7 +4121,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private static void EnsureLostFocusSubscribed(FrameworkElement fe, EventHandlerState state, Action<object, RoutedEventArgs>? handler)
+    private static void EnsureLostFocusSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<object, RoutedEventArgs>? handler)
     {
         state.CurrentLostFocus = handler;
         if (state.LostFocusTrampoline is null && handler is not null)
@@ -3304,7 +4136,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private static void EnsureAccessKeyDisplayRequestedSubscribed(FrameworkElement fe, EventHandlerState state, Action<UIElement, Microsoft.UI.Xaml.Input.AccessKeyDisplayRequestedEventArgs>? handler)
+    private static void EnsureAccessKeyDisplayRequestedSubscribed(FrameworkElement fe, ModifierEventHandlerState state, Action<UIElement, Microsoft.UI.Xaml.Input.AccessKeyDisplayRequestedEventArgs>? handler)
     {
         state.CurrentAccessKeyDisplayRequested = handler;
         if (state.AccessKeyDisplayRequestedTrampoline is null && handler is not null)
@@ -3327,7 +4159,13 @@ public sealed partial class Reconciler : IDisposable
     /// against the app theme, not per-element RequestedTheme overrides — for subtree theme
     /// overrides, rely on native WinUI control theming instead of ThemeRef bindings.
     /// </summary>
-    private static void ApplyThemeBindings(FrameworkElement fe, IReadOnlyDictionary<string, ThemeRef> bindings)
+    /// <summary>
+    /// Spec 047 §14 Phase 1 (1.3) — promoted from private (per audit
+    /// existing-api-surface.md). Applies <see cref="ThemeRef"/> bindings as
+    /// a synthesized <c>{ThemeResource}</c>-driven Style. Provisional API;
+    /// see <c>REACTOR_V1_PREVIEW</c>.
+    /// </summary>
+    public static void ApplyThemeBindings(FrameworkElement fe, IReadOnlyDictionary<string, ThemeRef> bindings)
     {
         var targetType = GetStyleTargetType(fe);
         if (targetType is null) return;
@@ -3429,7 +4267,12 @@ public sealed partial class Reconciler : IDisposable
     /// <see cref="ThemeRef"/>-based values are resolved from
     /// <c>Application.Current.Resources</c>.
     /// </summary>
-    private static void ApplyResourceOverrides(
+    /// <summary>
+    /// Spec 047 §14 Phase 1 (1.3) — promoted from private (per audit
+    /// existing-api-surface.md). Applies per-control resource overrides
+    /// (lightweight styling). Provisional API; see <c>REACTOR_V1_PREVIEW</c>.
+    /// </summary>
+    public static void ApplyResourceOverrides(
         FrameworkElement fe,
         Microsoft.UI.Reactor.Elements.ResourceOverrides? oldOverrides,
         Microsoft.UI.Reactor.Elements.ResourceOverrides? newOverrides)
@@ -3532,7 +4375,7 @@ public sealed partial class Reconciler : IDisposable
         if (newEl is MenuFlyoutContentElement newMf && existingFlyout is WinUI.MenuFlyout menuFlyout)
         {
             menuFlyout.Items.Clear();
-            foreach (var item in newMf.Items) menuFlyout.Items.Add(CreateMenuFlyoutItem(item));
+            foreach (var item in newMf.Items) menuFlyout.Items.Add(MenuCommandFactory.CreateMenuFlyoutItem(item));
             if (newMf.Placement != WinPrim.FlyoutPlacementMode.Auto)
                 menuFlyout.Placement = newMf.Placement;
             return;
@@ -3554,7 +4397,7 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
-    private void SetFlyoutOnControl(FrameworkElement fe, WinPrim.FlyoutBase flyout)
+    internal void SetFlyoutOnControl(FrameworkElement fe, WinPrim.FlyoutBase flyout)
     {
         // Check SplitButton before Button (SplitButton doesn't inherit from Button,
         // but DropDownButton does, so Button catch-all handles it).
@@ -3588,7 +4431,7 @@ public sealed partial class Reconciler : IDisposable
                 // Only set Placement if explicitly specified (Auto can cause assertions on MenuFlyout)
                 if (mf.Placement != WinPrim.FlyoutPlacementMode.Auto)
                     menuFlyout.Placement = mf.Placement;
-                foreach (var item in mf.Items) menuFlyout.Items.Add(CreateMenuFlyoutItem(item));
+                foreach (var item in mf.Items) menuFlyout.Items.Add(MenuCommandFactory.CreateMenuFlyoutItem(item));
                 return menuFlyout;
             }
             default:
@@ -3599,35 +4442,19 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
+    /// <summary>
+    /// Spec 047 §14 Phase 3-final — descriptor-facing sibling of
+    /// <see cref="CreateFlyoutFromElement"/>. Same shape as
+    /// <see cref="IconResolver.ResolveIconForDescriptor"/>: a thin forwarder that tolerates
+    /// <see langword="null"/> input so a <c>.OneWayBridged</c> entry on a
+    /// button-family descriptor can wire
+    /// <c>(c, v, rec, rr) =&gt; c.Flyout = rec.CreateFlyoutForDescriptor(v, rr)</c>
+    /// without an upstream null guard.
+    /// </summary>
+    internal WinPrim.FlyoutBase? CreateFlyoutForDescriptor(Element? flyoutEl, Action requestRerender)
+        => flyoutEl is null ? null : CreateFlyoutFromElement(flyoutEl, requestRerender);
+
     // ── Enum conversions removed — Reactor now uses WinUI types directly ──
-
-    internal static Symbol ParseSymbol(string name)
-    {
-        if (Enum.TryParse<Symbol>(name, ignoreCase: true, out var symbol)) return symbol;
-        return Symbol.Placeholder;
-    }
-
-    // ── Grid definition parsing ─────────────────────────────────────
-
-    internal static ColumnDefinition ParseColumnDef(string def) => def switch
-    {
-        "*" => new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
-        "Auto" or "auto" => new ColumnDefinition { Width = GridLength.Auto },
-        _ when double.TryParse(def, global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture, out var px) => new ColumnDefinition { Width = new GridLength(px) },
-        _ when def.EndsWith('*') && double.TryParse(def[..^1], global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture, out var stars) =>
-            new ColumnDefinition { Width = new GridLength(stars, GridUnitType.Star) },
-        _ => new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
-    };
-
-    internal static RowDefinition ParseRowDef(string def) => def switch
-    {
-        "*" => new RowDefinition { Height = new GridLength(1, GridUnitType.Star) },
-        "Auto" or "auto" => new RowDefinition { Height = GridLength.Auto },
-        _ when double.TryParse(def, global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture, out var px) => new RowDefinition { Height = new GridLength(px) },
-        _ when def.EndsWith('*') && double.TryParse(def[..^1], global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture, out var stars) =>
-            new RowDefinition { Height = new GridLength(stars, GridUnitType.Star) },
-        _ => new RowDefinition { Height = new GridLength(1, GridUnitType.Star) },
-    };
 
     /// <summary>
     /// Tracks the state of a mounted component in the tree.
@@ -3725,20 +4552,7 @@ public sealed partial class Reconciler : IDisposable
                 hooks.Add(hook);
         }
 
-        // Recurse into children (Border wraps components, Panel/Grid wraps layouts)
-        if (control is WinUI.Panel panel)
-        {
-            foreach (UIElement child in panel.Children)
-                CollectLifecycleHooksRecursive(child, hooks);
-        }
-        else if (control is WinUI.Border border && border.Child is not null)
-        {
-            CollectLifecycleHooksRecursive(border.Child, hooks);
-        }
-        else if (control is WinUI.ContentControl cc && cc.Content is UIElement content)
-        {
-            CollectLifecycleHooksRecursive(content, hooks);
-        }
+        ForEachReactorChildControl(control, child => CollectLifecycleHooksRecursive(child, hooks));
     }
 
     /// <summary>
@@ -3809,21 +4623,28 @@ public sealed partial class Reconciler : IDisposable
             if (ctx.IsCancelled) return;
         }
 
-        if (root is WinUI.Panel panel)
+        ForEachReactorChildControl(root, child =>
         {
-            foreach (UIElement child in panel.Children)
-            {
-                InvokeNavigatingFrom(child, ctx);
-                if (ctx.IsCancelled) return;
-            }
-        }
-        else if (root is WinUI.Border border && border.Child is not null)
+            InvokeNavigatingFrom(child, ctx);
+            return !ctx.IsCancelled;
+        });
+    }
+
+    /// <summary>
+    /// Hot Reload (spec 049 §6 step 3). Invokes <paramref name="action"/> once for
+    /// every live <see cref="RenderContext"/> tracked by this reconciler — both
+    /// function-component contexts (<see cref="ComponentNode.Context"/>) and
+    /// class-component contexts (<see cref="Component.Context"/>). The host calls
+    /// this at the start of a hot-reload pass to migrate hook state tree-wide
+    /// before any component re-renders. The root component's context is NOT in
+    /// <c>_componentNodes</c>, so the host migrates it separately.
+    /// </summary>
+    internal void ForEachLiveContext(Action<RenderContext> action)
+    {
+        foreach (var node in _componentNodes.Values)
         {
-            InvokeNavigatingFrom(border.Child, ctx);
-        }
-        else if (root is WinUI.ContentControl cc && cc.Content is UIElement content)
-        {
-            InvokeNavigatingFrom(content, ctx);
+            if (node.Context is { } funcCtx) action(funcCtx);
+            if (node.Component?.Context is { } classCtx) action(classCtx);
         }
     }
 

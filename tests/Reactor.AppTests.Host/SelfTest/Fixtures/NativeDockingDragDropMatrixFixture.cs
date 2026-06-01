@@ -165,7 +165,7 @@ internal static class NativeDockingDragDropMatrixFixtures
             H.Check("M02_HorizontalSplitAppeared", SplitCount(H) == 1);
             H.Check("M02_TwoTabViews", TabViewCount(H) == 2);
             H.Check("M02_BothPanesReachable",
-                H.FindText("body-a") is not null && H.FindText("body-b") is not null);
+                await Harness.WaitFor(() => H.FindText("body-a") is not null && H.FindText("body-b") is not null));
 
             var panel = RootSplitPanel(H);
             H.Check("M02_FlexPanelIsRow",
@@ -201,7 +201,7 @@ internal static class NativeDockingDragDropMatrixFixtures
             await Harness.Render();
 
             H.Check("M03_HorizontalSplitAppeared", SplitCount(H) == 1);
-            H.Check("M03_BodyBReachable", H.FindText("body-b") is not null);
+            H.Check("M03_BodyBReachable", await Harness.WaitFor(() => H.FindText("body-b") is not null));
 
             var panel = RootSplitPanel(H);
             H.Check("M03_FlexPanelIsRow",
@@ -273,7 +273,7 @@ internal static class NativeDockingDragDropMatrixFixtures
 
             H.Check("M05_VerticalSplitAppeared", SplitCount(H) == 1);
             H.Check("M05_BothBodiesReachable",
-                H.FindText("body-a") is not null && H.FindText("body-b") is not null);
+                await Harness.WaitFor(() => H.FindText("body-a") is not null && H.FindText("body-b") is not null));
 
             var panel = RootSplitPanel(H);
             H.Check("M05_FlexPanelIsColumn",
@@ -324,7 +324,7 @@ internal static class NativeDockingDragDropMatrixFixtures
             H.Check("M06_OnePathRemains", SplitCount(H) == 1);
             H.Check("M06_TwoTabViewsAfter", TabViewCount(H) == 2);
             H.Check("M06_BothBodiesReachable",
-                H.FindText("body-only") is not null && H.FindText("body-right") is not null);
+                await Harness.WaitFor(() => H.FindText("body-only") is not null && H.FindText("body-right") is not null));
             DockDragSession.ResetForTest();
         }
     }
@@ -489,9 +489,10 @@ internal static class NativeDockingDragDropMatrixFixtures
 
             H.Check("M11_MultipleSplits", SplitCount(H) >= 2);
             H.Check("M11_AllPanesPresent",
-                H.FindText("body-a") is not null
-                && H.FindText("body-b") is not null
-                && H.FindText("body-c") is not null);
+                await Harness.WaitFor(() =>
+                    H.FindText("body-a") is not null
+                    && H.FindText("body-b") is not null
+                    && H.FindText("body-c") is not null));
             DockDragSession.ResetForTest();
         }
     }
@@ -591,10 +592,11 @@ internal static class NativeDockingDragDropMatrixFixtures
             // outer wrap, and all 4 panes still reachable.
             H.Check("M13_SplitsIncreased", SplitCount(H) >= 2);
             H.Check("M13_AllPanesPresent",
-                H.FindText("body-a") is not null
-                && H.FindText("body-b") is not null
-                && H.FindText("body-c") is not null
-                && H.FindText("body-d") is not null);
+                await Harness.WaitFor(() =>
+                    H.FindText("body-a") is not null
+                    && H.FindText("body-b") is not null
+                    && H.FindText("body-c") is not null
+                    && H.FindText("body-d") is not null));
             DockDragSession.ResetForTest();
         }
     }
@@ -630,9 +632,10 @@ internal static class NativeDockingDragDropMatrixFixtures
             await Harness.Render();
 
             H.Check("M14_AllPanesReachable",
-                H.FindText("body-a") is not null
-                && H.FindText("body-b") is not null
-                && H.FindText("body-c") is not null);
+                await Harness.WaitFor(() =>
+                    H.FindText("body-a") is not null
+                    && H.FindText("body-b") is not null
+                    && H.FindText("body-c") is not null));
             DockDragSession.ResetForTest();
         }
     }

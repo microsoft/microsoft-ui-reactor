@@ -139,6 +139,8 @@ nav:
     - Reactivity Model: reactivity-model.md
     - Hooks Internals: hooks-internals.md
     - Reconciliation: reconciliation.md
+    - Control Reconciler Protocol: control-reconciler-protocol.md
+    - Extending Reactor Controls: extending-reactor-controls.md
     - Element Pool: element-pool.md
     - Effects Scheduling: effects-scheduling.md
     - Threading and Dispatch: threading-and-dispatch.md

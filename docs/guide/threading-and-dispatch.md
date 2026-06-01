@@ -165,8 +165,13 @@ internal static void BeginSuppress(UIElement control)
 internal static bool ShouldSuppress(UIElement control)
 {
     if (control is not FrameworkElement fe) return false;
-    if (fe.GetValue(Reconciler.ReactorAttached.StateProperty) is Reconciler.ReactorState state
-        && state.EchoSuppressCount > 0)
+    if (fe.GetValue(Reconciler.ReactorAttached.StateProperty) is not Reconciler.ReactorState state)
+        return false;
+    // §8.2 — setter-suppression scope: drop the echo without consuming a
+    // counter token. The scope wraps ApplySetters, where the engine can't
+    // predict which value-bearing DPs the user's `.Set(...)` will write.
+    if (state.EchoSuppressScopeDepth > 0) return true;
+    if (state.EchoSuppressCount > 0)
     {
         state.EchoSuppressCount--;
         return true;

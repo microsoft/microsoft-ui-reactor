@@ -41,16 +41,23 @@ public class TypeRegistryTests
     }
 
     [Fact]
-    public void RegisterType_Overwrite_Does_Not_Throw()
+    public void RegisterType_Duplicate_Throws_In_V1()
     {
+        // Spec 047 §13 Q17 / §14 Phase 1 (1.9): duplicate registration is
+        // forbidden in v1. The pre-v1 overwrite behavior has been removed;
+        // callers that need a different mapping build a separate Reconciler.
         var reconciler = new Reconciler();
-        // Register same type twice — second should overwrite
         reconciler.RegisterType<TestCustomElement, TextBlock>(
             mount: (r, el, rerender) => null!,
             update: (r, oldEl, newEl, ctrl, rerender) => null);
-        reconciler.RegisterType<TestCustomElement, Border>(
-            mount: (r, el, rerender) => null!,
-            update: (r, oldEl, newEl, ctrl, rerender) => null);
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            reconciler.RegisterType<TestCustomElement, Border>(
+                mount: (r, el, rerender) => null!,
+                update: (r, oldEl, newEl, ctrl, rerender) => null));
+        // Error message must name both control types (Q17).
+        Assert.Contains("TestCustomElement", ex.Message);
+        Assert.Contains("TextBlock", ex.Message);
+        Assert.Contains("Border", ex.Message);
     }
 
     [Fact]
@@ -241,25 +248,5 @@ public class TypeRegistryTests
         var reconciler = new Reconciler();
         // CanUpdate should work for built-in types
         Assert.True(reconciler.CanUpdate(new TextBlockElement("a"), new TextBlockElement("b")));
-    }
-
-    [Fact]
-    public void Override_Builtin_Type_Mount_Is_Dispatched()
-    {
-        var reconciler = new Reconciler();
-        bool customCalled = false;
-
-        // Override built-in TextBlockElement
-        reconciler.RegisterType<TextBlockElement, TextBlock>(
-            mount: (r, el, rerender) =>
-            {
-                customCalled = true;
-                throw new InvalidOperationException("Custom handler reached");
-            },
-            update: (r, oldEl, newEl, ctrl, rerender) => null);
-
-        Assert.Throws<InvalidOperationException>(() =>
-            reconciler.Mount(new TextBlockElement("hello"), () => { }));
-        Assert.True(customCalled);
     }
 }

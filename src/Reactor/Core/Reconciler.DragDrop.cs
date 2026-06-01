@@ -9,7 +9,7 @@ public sealed partial class Reconciler
 {
     /// <summary>
     /// Per-element drag-and-drop dispatch state (spec 027 Tier 6 / Phase 6a).
-    /// Mirrors <see cref="EventHandlerState"/>'s trampoline pattern so per-render
+    /// Mirrors <see cref="ModifierEventHandlerState"/>'s trampoline pattern so per-render
     /// updates of <see cref="ElementModifiers.DragSource"/> / <see cref="ElementModifiers.DropTarget"/>
     /// touch only a mutable field — the underlying WinUI events stay subscribed
     /// for the element's lifetime.

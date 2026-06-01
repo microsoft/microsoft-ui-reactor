@@ -1,4 +1,5 @@
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.V1Protocol;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Xunit;
@@ -665,13 +666,13 @@ public class ReconcilerCorrectnessTests
     [Fact]
     public void ParseSymbol_Empty_String_Returns_Placeholder()
     {
-        Assert.Equal(Symbol.Placeholder, Reconciler.ParseSymbol(""));
+        Assert.Equal(Symbol.Placeholder, IconResolver.ParseSymbol(""));
     }
 
     [Fact]
     public void ParseSymbol_Home()
     {
-        Assert.Equal(Symbol.Home, Reconciler.ParseSymbol("Home"));
+        Assert.Equal(Symbol.Home, IconResolver.ParseSymbol("Home"));
     }
 
     // ════════════════════════════════════════════════════════════════

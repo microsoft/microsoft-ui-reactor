@@ -31,6 +31,15 @@ internal sealed class PanelChildCollection : IChildCollection
         _children = panel.Children;
     }
 
+    // Spec 047 §14 — the V1 descriptor Panel<> strategy resolves the live
+    // collection via Func<TControl, UIElementCollection> rather than holding a
+    // WinUI.Panel reference, so it constructs the wrapper from the collection
+    // directly. Identical semantics to the panel-based ctor.
+    public PanelChildCollection(UIElementCollection children)
+    {
+        _children = children;
+    }
+
     public int Count => _children.Count;
     public UIElement Get(int index) => _children[index];
     public void Insert(int index, UIElement element) => _children.Insert(index, element);
@@ -57,45 +66,5 @@ internal sealed class PanelChildCollection : IChildCollection
         // element is later reused from the pool.
         _children.RemoveAt(index);
         _children.Insert(index, element);
-    }
-}
-
-/// <summary>
-/// Wraps ItemsControl.Items (ListView, GridView, FlipView, etc.).
-/// Items in these controls are objects (not necessarily UIElement), but we store UIElements.
-/// </summary>
-internal sealed class ItemsControlChildCollection : IChildCollection
-{
-    private readonly ItemCollection _items;
-
-    public ItemsControlChildCollection(WinUI.ItemsControl itemsControl)
-    {
-        _items = itemsControl.Items;
-    }
-
-    public int Count => _items.Count;
-    public UIElement Get(int index) => _items[index] as UIElement
-        ?? throw new InvalidOperationException(
-            $"ItemsControl item at index {index} is {_items[index]?.GetType().Name ?? "null"}, expected UIElement.");
-    public void Insert(int index, UIElement element) => _items.Insert(index, element);
-    public void RemoveAt(int index) => _items.RemoveAt(index);
-
-    public void Move(int oldIndex, int newIndex)
-    {
-        if (oldIndex == newIndex) return;
-        Debug.Assert(oldIndex >= 0 && oldIndex < _items.Count, $"oldIndex {oldIndex} out of range [0, {_items.Count})");
-        Debug.Assert(newIndex >= 0 && newIndex < _items.Count, $"newIndex {newIndex} out of range [0, {_items.Count})");
-        var item = _items[oldIndex];
-        _items.RemoveAt(oldIndex);
-        _items.Insert(newIndex, item);
-    }
-
-    public void Replace(int index, UIElement element)
-    {
-        // Use RemoveAt+Insert to match PanelChildCollection.Replace.
-        // Direct indexer assignment doesn't fully disconnect the old element's
-        // internal parent state, causing COMException on later reuse.
-        _items.RemoveAt(index);
-        _items.Insert(index, element);
     }
 }

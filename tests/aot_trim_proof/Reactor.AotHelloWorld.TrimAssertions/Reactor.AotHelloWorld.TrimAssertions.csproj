@@ -1,0 +1,58 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Spec 048 §11 / §13.2 — AOT/trim assertion harness for
+    ../Reactor.AotHelloWorld/.
+
+    These xUnit tests scan the contents of the AOT-published Hello-World
+    binary (the .exe and every bundled .dll under the publish folder) and
+    fail loudly if any of the forbidden Reactor-side symbols appear. The
+    forbidden set is exactly the "things that must be trimmed" enumeration
+    from spec §11: Marquee*, TreeView*, GridView*, TabViewHandler — plus
+    a positive control assertion that proves the scanner can actually
+    find a symbol when present (so a future trimmer that strips
+    EVERYTHING does not silently pass these tests).
+
+    The publish folder is located through one of:
+     1. The REACTOR_AOT_PUBLISH_DIR environment variable (set by CI).
+     2. A `<published-folder>` argument inferred from the standard
+        `dotnet publish -o <dir>` convention used by the README runbook.
+     3. The default convention: ../Reactor.AotHelloWorld/bin/$(Configuration)/
+        $(TargetFramework)/$(Runtime)/publish/
+
+    The tests run AFTER the publish, not as part of `dotnet build`. The CI
+    job runs `dotnet publish` first, then `dotnet test` against this
+    project, passing the publish dir via REACTOR_AOT_PUBLISH_DIR.
+
+    NOT a unit test — this is a deliberate integration assertion that
+    requires a successful publish to run. Tests skip with an explanatory
+    message if the publish folder is missing, so a developer running
+    `dotnet test Reactor.slnx` doesn't see a confusing failure for an
+    artifact they never built.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Reactor.AotHelloWorld.TrimAssertions</RootNamespace>
+    <AssemblyName>Reactor.AotHelloWorld.TrimAssertions</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+
+    <!--
+      Pure scanner — no Reactor runtime, no WinUI. Reads bytes off disk and
+      decodes ASCII / UTF-16. Keeping this lean avoids dragging the heavy
+      WindowsAppSDK transitive graph into a test assembly that needs none
+      of it.
+    -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.0.2" />
+    <PackageReference Include="Xunit.SkippableFact" Version="1.5.23" />
+  </ItemGroup>
+
+</Project>

@@ -57,7 +57,7 @@ Hooks (`UseState`, `UseEffect`, `UseReducer`, `UseMemo`, etc.) are tracked by ca
 
 ### Echo suppression for value controls
 
-Value-bearing controls (TextBox, Slider, ColorPicker) use `ChangeEchoSuppressor` + `SetElementTag`-first to prevent programmatic writes from re-firing user callbacks. Any new value control must follow this pattern.
+Echo handling is a documented hybrid (spec-047 §8.3). Synchronous, exact-comparable, single-controlled-value round-trips (ComboBox, FlipView, GridView, ListBox, Pivot, PipsPager, RadioButtons, SelectorBar, TabView, TemplatedFlipView, ToggleSwitch, TextBox) use a value-diff arm (`ReactorState.PendingEchoMatch` + `ArmExpectedEcho`/`ShouldSuppressEcho`, opt-in `valueDiffEcho`). `ChangeEchoSuppressor` is **retained** as the suppress-counter fallback for the rest: doubles (Slider/NumberBox value), NumberBox coercion, CalendarView collection diff, deferred/coercion strings (AutoSuggest/Password/RichEdit), Expander, CheckBox path-B, the `ApplySetters` suppression scope, and the public `WriteSuppressed` primitive. Authors keep using the stable `WriteSuppressed` primitive (or declare `.Controlled` / `valueDiffEcho` on a descriptor) — never the suppressor directly.
 
 ### Element pooling
 
@@ -65,7 +65,7 @@ Value-bearing controls (TextBox, Slider, ColorPicker) use `ChangeEchoSuppressor`
 
 ### Per-element state via attached DP
 
-`ReactorAttached.StateProperty` stores `ReactorState` (Element pointer + EventHandlerState) on native elements — not `FrameworkElement.Tag` or a CWT.
+`ReactorAttached.StateProperty` stores `ReactorState` (Element pointer + `ModifierEventHandlerState` — the routed-input family, lazily allocated — + per-control `ControlEventStateBox` for control-intrinsic events) on native elements — not `FrameworkElement.Tag` or a CWT.
 
 ## Key Conventions
 
@@ -98,14 +98,18 @@ Text("Hello").Bold().Margin(16).Set(tb => tb.TextWrapping = TextWrapping.Wrap)
 // Still TextBlockElement throughout the chain
 ```
 
-### Adding a new WinUI control requires four touch points
+### Adding a new WinUI control
+
+The legacy Element-record + `MountXxx`/`UpdateXxx` dispatch-switch path is gone. The current path:
 
 1. **Element record** in `src/Reactor/Core/Element.cs`
-2. **Factory method** in `src/Reactor/Elements/Dsl.cs`
-3. **Mount handler** in `src/Reactor/Core/Reconciler.Mount.cs` (+ register in dispatch switch)
-4. **Update handler** in `src/Reactor/Core/Reconciler.Update.cs` (+ register in dispatch switch)
+2. **Authoring shape** — a `ControlDescriptor<TElement, TControl>` (the primary path) or a hand-coded `IElementHandler<TElement, TControl>` for irregular controls.
+3. **Register** it in `RegisterV1BuiltInHandlers`.
+4. **Selftest fixture** in `tests/Reactor.AppTests.Host/SelfTest/Fixtures/`.
 
-Optionally: fluent modifiers in `ElementExtensions.cs`, tests in `Reactor.Tests/` and/or selftest fixture in `Reactor.AppTests.Host/SelfTest/Fixtures/`.
+See [`docs/guide/extensibility-preview.md`](docs/guide/extensibility-preview.md) for the authoring-shape decision tree (prop/engine shapes, children strategies, echo handling, pooling).
+
+Optionally: a factory method in `src/Reactor/Elements/Dsl.cs`, fluent modifiers in `ElementExtensions.cs`, and unit tests in `Reactor.Tests/`.
 
 ### Test tier selection
 

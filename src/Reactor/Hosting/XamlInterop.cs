@@ -12,7 +12,20 @@ namespace Microsoft.UI.Reactor.Hosting;
 /// An element that embeds a XAML Page inside a Frame, enabling navigation
 /// to existing XAML pages from within a Reactor component tree.
 /// </summary>
-public record XamlPageElement(Type PageType, object? Parameter = null) : Element;
+public record XamlPageElement(Type PageType, object? Parameter = null) : Element
+{
+    static XamlPageElement()
+    {
+        // Spec 048 §3.4 — singleton-handler decorator registration on first
+        // type load. Provides the global ControlRegistry entry that legacy
+        // XamlInterop.Register also installs per-host, so callers that
+        // construct `new XamlPageElement(...)` directly (no Register call) are
+        // also covered now that the eager registrar (RegisterV1BuiltInHandlers)
+        // has been deleted.
+        Microsoft.UI.Reactor.Core.V1Protocol.ControlRegistry.RegisterDecorator<XamlPageElement>(
+            static () => Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors.XamlPageDescriptor.Handler);
+    }
+}
 
 /// <summary>
 /// An element that embeds an arbitrary FrameworkElement (UserControl, custom control, etc.)
@@ -23,6 +36,14 @@ public record XamlHostElement(
     Action<FrameworkElement>? Updater = null
 ) : Element
 {
+    static XamlHostElement()
+    {
+        // Spec 048 §3.4 — singleton-handler decorator registration on first
+        // type load. See XamlPageElement static ctor for rationale.
+        Microsoft.UI.Reactor.Core.V1Protocol.ControlRegistry.RegisterDecorator<XamlHostElement>(
+            static () => Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors.XamlHostDescriptor.Handler);
+    }
+
     /// <summary>
     /// Optional discriminator for the reconciler's CanUpdate check.
     /// When set, two XamlHostElements can only update in place if their
@@ -47,7 +68,13 @@ public static class XamlInterop
 {
     public static void Register(Reconciler reconciler)
     {
+        // Spec 047 §14 Phase 4 (4.0.5): V1 auto-registration owns these two
+        // element types when the V1 protocol is active. Skip any type that is
+        // already registered so this call stays idempotent and never trips the
+        // EnsureRegistrableElementType duplicate-registration guard (whether the
+        // prior registration came from V1 built-ins or an earlier Register call).
         // ── XamlPageElement → Frame ──────────────────────────────────
+        if (!reconciler.IsElementTypeRegistered(typeof(XamlPageElement)))
         reconciler.RegisterType<XamlPageElement, Frame>(
             mount: (r, el, rerender) =>
             {
@@ -71,6 +98,7 @@ public static class XamlInterop
             });
 
         // ── XamlHostElement → FrameworkElement ───────────────────────
+        if (!reconciler.IsElementTypeRegistered(typeof(XamlHostElement)))
         reconciler.RegisterType<XamlHostElement, FrameworkElement>(
             mount: (r, el, rerender) =>
             {

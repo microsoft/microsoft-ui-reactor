@@ -44,7 +44,7 @@ class DataTemplateDemo : Component
 
         return ScrollView(VStack(16,
             Heading("DataTemplate Demo"),
-            TextBlock("Typed ListView<T>, GridView<T>, FlipView<T> with viewBuilder, plus TreeView ContentElement."),
+            TextBlock("Typed ListView<T>, GridView<T>, FlipView<T> and TreeView<T> — all data-driven with a viewBuilder."),
 
             // Filter + add/remove controls
             HStack(12,
@@ -154,48 +154,75 @@ class DataTemplateDemo : Component
 
             TextBlock($"Showing {flipIndex + 1} of {filtered.Count}").Foreground(SecondaryText),
 
-            // 4. TreeView with ContentElement
-            SubHeading("4. TreeView with ContentElement"),
-            TextBlock("Tree nodes render custom Reactor elements instead of plain text."),
+            // 4. Typed TreeView<T> — hierarchical peer of ListView<T>
+            SubHeading("4. Typed TreeView<T> with viewBuilder"),
+            TextBlock("Heterogeneous nodes render distinct templates via a switch in the viewBuilder (the ItemTemplateSelector pattern)."),
             Border(
-                TreeView(
-                    new TreeViewNodeData("Pets") { IsExpanded = true,
-                        ContentElement = HStack(8,
+                TreeView(BuildPetTree(filtered),
+                    keySelector: n => n.Key,
+                    childrenSelector: n => n.Children.Length > 0 ? n.Children : null,
+                    viewBuilder: n => n switch
+                    {
+                        PetRoot => HStack(8,
                             TextBlock("\U0001F3E0").FontSize(16),
                             TextBlock("All Pets").SemiBold()
                         ),
-                        Children = new[] { "Cat", "Dog", "Rabbit", "Hamster", "Parrot" }
-                            .Where(species => filtered.Any(a => a.Species == species))
-                            .Select(species => new TreeViewNodeData(species)
-                            {
-                                IsExpanded = true,
-                                ContentElement = HStack(8,
-                                    TextBlock(species switch
-                                    {
-                                        "Cat" => "\U0001F431",
-                                        "Dog" => "\U0001F436",
-                                        "Rabbit" => "\U0001F430",
-                                        "Hamster" => "\U0001F439",
-                                        "Parrot" => "\U0001F99C",
-                                        _ => "\U0001F43E"
-                                    }),
-                                    TextBlock(species).SemiBold(),
-                                    TextBlock($"({filtered.Count(a => a.Species == species)})").Foreground(TertiaryText)
-                                ),
-                                Children = filtered
-                                    .Where(a => a.Species == species)
-                                    .Select(a => new TreeViewNodeData(a.Name)
-                                    {
-                                        ContentElement = HStack(8,
-                                            TextBlock(a.Emoji),
-                                            TextBlock(a.Name),
-                                            Caption($"#{a.Id}").Foreground(TertiaryText)
-                                        )
-                                    }).ToArray()
-                            }).ToArray()
-                    }
-                )
-            ).CornerRadius(8).Height(300)
+                        PetSpecies s => HStack(8,
+                            TextBlock(s.Emoji),
+                            TextBlock(s.Species).SemiBold(),
+                            TextBlock($"({s.Count})").Foreground(TertiaryText)
+                        ),
+                        PetLeaf l => HStack(8,
+                            TextBlock(l.Animal.Emoji),
+                            TextBlock(l.Animal.Name),
+                            Caption($"#{l.Animal.Id}").Foreground(TertiaryText)
+                        ),
+                        _ => TextBlock("?")
+                    })
+                    // Expand every group; leaves have no children to expand.
+                    with { IsExpanded = n => n is not PetLeaf }
+            ).CornerRadius(8).Height(300).Margin(10)
         ));
+    }
+
+    // ── §4 typed-tree model: a discriminated pet hierarchy ────────────────
+    // (root group → species groups → animal leaves). Distinct record shapes
+    // drive distinct per-node templates in the viewBuilder switch above.
+    abstract record PetNode(string Key)
+    {
+        public PetNode[] Children { get; init; } = [];
+    }
+    record PetRoot(string Key) : PetNode(Key);
+    record PetSpecies(string Key, string Species, string Emoji, int Count) : PetNode(Key);
+    record PetLeaf(string Key, Animal Animal) : PetNode(Key);
+
+    static string EmojiForSpecies(string species) => species switch
+    {
+        "Cat" => "\U0001F431",
+        "Dog" => "\U0001F436",
+        "Rabbit" => "\U0001F430",
+        "Hamster" => "\U0001F439",
+        "Parrot" => "\U0001F99C",
+        _ => "\U0001F43E"
+    };
+
+    static PetNode[] BuildPetTree(List<Animal> animals)
+    {
+        var speciesGroups = new[] { "Cat", "Dog", "Rabbit", "Hamster", "Parrot" }
+            .Where(species => animals.Any(a => a.Species == species))
+            .Select(species => (PetNode)new PetSpecies(
+                $"species:{species}",
+                species,
+                EmojiForSpecies(species),
+                animals.Count(a => a.Species == species))
+            {
+                Children = animals
+                    .Where(a => a.Species == species)
+                    .Select(a => (PetNode)new PetLeaf($"animal:{a.Id}", a))
+                    .ToArray()
+            })
+            .ToArray();
+
+        return [new PetRoot("root") { Children = speciesGroups }];
     }
 }

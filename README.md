@@ -67,6 +67,28 @@ Many of the experiments in this repo — the charting stack, accessibility valid
 
 ---
 
+## Quick start
+
+Reactor doesn't ship a signed NuGet yet, so you build the framework, the `mur` CLI, and the project template from source. `bootstrap.ps1` collapses that into a single command — ~3 minutes per machine.
+
+```powershell
+git clone https://github.com/microsoft/microsoft-ui-reactor.git
+cd microsoft-ui-reactor
+
+# calling the bootstrap system under the correct PowerShell version you're on
+& (Get-Process -Id $PID).Path -ExecutionPolicy Bypass -File .\bootstrap.ps1
+
+dotnet new reactorapp -n MyApp
+cd MyApp
+dotnet run
+```
+
+`bootstrap.ps1` packs `mur` as a `dotnet tool` global install (cross-shell PATH, no per-arch `$env:Path` edits), packs the framework + project templates into `local-nupkgs/`, registers the `dotnet new reactorapp` template, and installs the Reactor agent plugin under `~/.claude/plugins/reactor`. Re-run it (or `mur upgrade` for a lighter refresh) after `git pull`. Verify a working install with `mur doctor`.
+
+Prefer to wire it up by hand? **[Getting Started](https://microsoft.github.io/microsoft-ui-reactor/getting-started/#manual-setup)** has a no-magic walkthrough of the exact `dotnet pack` / `dotnet tool install` / `dotnet new install` calls `bootstrap.ps1` makes, plus the full hello-world → todo → calculator tour.
+
+---
+
 ## What's included
 
 Reactor spans a core framework and a set of higher-level features. Each area below is labeled by its current maturity — *Preview* is the most mature, then *Draft*, then *Early*. **All areas are pre-1.0 and the public API surface may change without notice while the project is labeled experimental.**
@@ -82,8 +104,12 @@ Reactor spans a core framework and a set of higher-level features. Each area bel
 | **Markdown** | Native md4c parser with `Markdown()` element builder | Preview |
 | **Navigation** | Type-safe declarative routing, GPU composition transitions, lifecycle guards, back-stack serialization | Draft |
 | **Accessibility** | `AutomationProperties` modifiers, WCAG 2.1 AA target, compile- and runtime-validation | Draft |
+| **Docking & windows** | Visual Studio-style docking — tab tear-off, cross-window dock-in, floating panes, splitters, reserved document area, layout serialization and migration | Draft |
 | **WinForms interop** | Simple hosting of WinUI content inside WinForms apps | Draft |
-| **Theming & styling** | `ThemeRef` tokens, dark / light / high-contrast, style caching, per-control overrides, Roslyn analyzers | Early |
+| **Shell integration** | Taskbar progress and overlays, jump lists, tray icons, thumbnail toolbars, layered-window hosting (opacity, no-activate, click-through) | Draft |
+| **DevTools & diagnostics** | In-process MCP server for AI agents, UIA tree inspection, layout-cost overlay, screenshot capture, structured log capture, ETW layout events | Draft |
+| **`mur` CLI & analyzers** | App scaffolding, doc pipeline, `mur find` sample catalogue, `mur check` did-you-mean linter, localization tooling, Roslyn analyzers (theming, pooling) | Draft |
+| **Theming & styling** | `ThemeRef` tokens, dark / light / high-contrast, style caching, per-control overrides | Early |
 | **Animation** | Compositor-layer transitions, keyframes, stagger, scroll-linked and connected animations | Early |
 | **Localization** | ICU message format, source generator, CLI tooling (extract, translate, validate), RTL/BiDi | Early |
 | **Lists & virtualization** | Virtualized `ListView`, `GridView`, `ItemsRepeater`, `LazyStack` with recycling | Early |
@@ -100,7 +126,7 @@ Reactor spans a core framework and a set of higher-level features. Each area bel
 
 The core framework has been through 13 days of continuous reconciler iteration, a competitive review against React, SwiftUI, and Compose, and a 275-finding code review. It targets the basics every WinUI developer cares about:
 
-- **Performance.** Element pooling, render coalescing, skip-unchanged optimization, native interop that bypasses CsWinRT overhead on hot paths.
+- **Performance.** Element pooling, render coalescing, skip-unchanged optimization. Keyed lists reconcile with a longest-increasing-subsequence diff so reordering moves the fewest possible controls, virtualized lists recycle realized containers instead of rebuilding them on every scroll, and a dedicated allocation-reduction pass trimmed per-render modifier and hook churn.
 - **Stability.** Built as a system component: high reliability bar, structured logging, stress testing.
 - **Developer experience.** Full IntelliSense, refactoring, and compile-time type safety — no XAML string-typing, no binding errors at runtime.
 - **Localization.** ICU message format with pluralization, CLI extraction, and AI-assisted translation.
@@ -129,11 +155,6 @@ If you're building line-of-business applications:
 
 ---
 
-## Quick start
-
-See **[docs/guide/getting-started.md](docs/guide/getting-started.md)** for the full walkthrough — prerequisites, building the framework and `mur` CLI from source, scaffolding your first app, and running through hello-world, a todo list, and a calculator with screenshots at each step.
-
----
 
 ## Live preview
 
@@ -177,7 +198,7 @@ Open a C# file with a Reactor `Component`, run **Reactor: Preview Component** fr
 
 Reactor is on GitHub as an **experimental** project. The label will stay on for 3–6 months as we iterate on the design in the open.
 
-We are not launching with a big public announcement. Instead we're starting with MVPs and trusted community members — gathering feedback, pressure-testing the API surface, and refining the programming model before broadening adoption. We want the design shaped by real developer experience, not just our internal usage.
+We are gathering feedback, pressure-testing the API surface, and refining the programming model before broadening adoption. We want the design shaped by real developer experience.
 
 Everything in the repository — framework code, specs, sample apps, test suites — is available for anyone to read, build, and experiment with. Contributions and feedback are welcome from day one.
 
@@ -224,7 +245,7 @@ dotnet run --project samples/apps/wordpuzzle
 
 | Doc | Description |
 |-----|-------------|
-| [Guide](docs/guide/) | Documentation on how to use Reactor |
+| [Guide](https://microsoft.github.io/microsoft-ui-reactor/) | Documentation on how to use Reactor |
 | [Design Specs](docs/specs/) | Numbered specs covering theming, navigation, animation, data, accessibility |
 | [AOT support matrix](docs/aot-support.md) | Which subsystems work under `PublishAot=true` and which throw at runtime |
 | [Contributing](CONTRIBUTING.md) | Build, test, add features, code style |

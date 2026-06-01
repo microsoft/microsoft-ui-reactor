@@ -61,8 +61,16 @@ internal static class FixtureRegistry
         // Collections
         "ListView_TypedRendering",
 
+        // TreeView expand/collapse (mirrors ReactorGallery Basic TreeView —
+        // E2E repro/guard for the item-body-collapse bug)
+        "TreeView_BasicTextTree",
+
         // Navigation
         "Navigation_TabSwitching",
+
+        // NavigationView hierarchical expand/collapse (E2E repro/guard for the
+        // re-render rebuild-clobber that collapsed expanded categories)
+        "NavigationView_Hierarchical",
 
         // Observable
         "Observable_UseObservable_Rerender",
@@ -148,6 +156,11 @@ internal static class FixtureRegistry
         // across docking layout mutations)
         "DockingInput_TwoPaneTextBoxes",
         "DockingInput_TwoPaneTextBoxesNoPin",
+
+        // Docking tear-off (spec 045 §2.6 — E2E validation of the
+        // immediate-tear-off pipeline with real WinAppDriver pointer
+        // input)
+        "DockingTearOff_Flow",
     ];
 
     public static Element? Build(string name, RenderContext ctx) => name switch
@@ -200,8 +213,14 @@ internal static class FixtureRegistry
         // Collections
         "ListView_TypedRendering" => CollectionFixtures.ListViewTyped(ctx),
 
+        // TreeView expand/collapse
+        "TreeView_BasicTextTree" => TreeViewE2EFixtures.BasicTextTree(ctx),
+
         // Navigation
         "Navigation_TabSwitching" => NavigationFixtures.TabSwitching(ctx),
+
+        // NavigationView hierarchical expand/collapse
+        "NavigationView_Hierarchical" => NavigationViewE2EFixtures.HierarchicalNav(ctx),
 
         // Observable
         "Observable_UseObservable_Rerender" => ObservableFixtures.UseObservable_Rerender(ctx),
@@ -286,6 +305,9 @@ internal static class FixtureRegistry
         // Docking input (spec 045 — E2E validation)
         "DockingInput_TwoPaneTextBoxes" => DockingInputE2EFixtures.TwoPaneTextBoxTest(ctx),
         "DockingInput_TwoPaneTextBoxesNoPin" => DockingInputE2EFixtures.TwoPaneTextBoxNoPinTest(ctx),
+
+        // Docking tear-off (spec 045 §2.6)
+        "DockingTearOff_Flow" => DockingTearOffE2EFixtures.TearOffFlowTest(ctx),
 
         _ => null,
     };

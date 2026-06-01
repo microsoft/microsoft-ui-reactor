@@ -52,25 +52,4 @@ public static class ReactorFeatureFlags
     /// the reconciler skips all collection work so there is zero overhead.
     /// </remarks>
     public static bool HighlightReconcileChanges { get; set; }
-
-    /// <summary>
-    /// When true, Reactor hosts start an in-process ETW session on the
-    /// <c>Microsoft-Windows-XAML</c> provider, attribute measure/arrange events to
-    /// the owning Reactor <c>Component</c>, and render a per-Component cost-meter
-    /// overlay (layout ms + authored vs rendered element count). See
-    /// <c>docs/specs/032-layout-cost-overlay-design.md</c>.
-    /// </summary>
-    /// <remarks>
-    /// <para>Default: <c>false</c>. Reactor hosts support toggling this flag
-    /// during a session: enabling it lazily builds the ETW pipeline + overlay
-    /// wrapper on the next render and starts the layout-cost ETW session;
-    /// disabling it stops the session, disposes the layout-cost sub-overlay,
-    /// pauses the idle-decay ticker, and (if no other dev overlay flag is on)
-    /// tears the wrapper back down. The transitions are edge-triggered, so
-    /// every render pass is cheap. Tests that mutate the flag must save and
-    /// restore the previous value.</para>
-    /// <para>When off, no ETW session is started, no overlay is constructed, and the
-    /// reconciler's mount path pays only a single boolean check.</para>
-    /// </remarks>
-    public static bool ShowLayoutCost { get; set; }
 }

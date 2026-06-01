@@ -129,6 +129,7 @@ because you build the `Paragraph[]` from data per render.
 | `Paragraph(params RichTextInline[])` | A paragraph; one per visual break. |
 | `Run(string text)` | A plain text fragment. |
 | `Hyperlink(string text, Uri target)` | Inline link with a navigate target. |
+| `Hyperlink(string text, Action onClick)` | Clickable inline fragment — fires the delegate and suppresses platform navigation. Use to make a single rich-text run interactive (open an editor, dispatch a command) without escaping to a hosted native subtree. |
 
 Modifiers — `.MaxLines`, `.LineHeight`, `.TextAlignment`,
 `.TextTrimming`, `.CharacterSpacing` — match `TextBlock`. Inline runs do

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using Xunit;
 
@@ -11,7 +12,15 @@ namespace Microsoft.UI.Reactor.Tests.Markdown;
 /// </summary>
 public class SanitizeUrlTests
 {
-    private static readonly Type MarkdownHtmlType =
+    [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.NonPublicMethods)]
+    private static readonly Type MarkdownHtmlType = LoadMarkdownHtmlType();
+
+    [UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification = "Test reaches a known-internal type via Assembly.GetType; the trimmer can't carry the annotation through Assembly.GetType, so we assert the type was kept manually.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2073",
+        Justification = "Same as IL2026 — Assembly.GetType return doesn't propagate DAM annotation.")]
+    [return: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.NonPublicMethods)]
+    private static Type LoadMarkdownHtmlType() =>
         typeof(Microsoft.UI.Reactor.Factories).Assembly
             .GetType("Microsoft.UI.Reactor.Markdown.MarkdownHtml")
         ?? throw new InvalidOperationException(

@@ -1,0 +1,13 @@
+{
+  "name": "reactor-figma-sync",
+  "id": "reactor-figma-sync-dev",
+  "api": "1.0.0",
+  "main": "dist/code.js",
+  "ui": "dist/ui.html",
+  "documentAccess": "dynamic-page",
+  "enablePrivatePluginApi": true,
+  "editorType": ["figma"],
+  "networkAccess": {
+    "allowedDomains": ["none"]
+  }
+}

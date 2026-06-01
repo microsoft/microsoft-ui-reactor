@@ -25,6 +25,15 @@ if (cliOptions.Headless)
     ConsoleHelper.EnsureConsole();
 
 StockGridApp.CliOpts = cliOptions;
+
+// Spec-048 §3.4 — direct-record-initializer hot path (see Render() below)
+// uses `new TextBlockElement(...)` to avoid factory overhead. Spec-048
+// requires that handlers are registered before first reconcile, normally
+// via the factory call itself. This explicit factory touch (the result is
+// discarded) runs the TextBlock factory's static cctor exactly once at
+// process startup so the hot loop can skip the factory call.
+_ = TextBlock(string.Empty);
+
 ReactorApp.Run<StockGridApp>("StressPerf.ReactorOptimized", fullScreen: true);
 
 // ---------------------------------------------------------------------------
