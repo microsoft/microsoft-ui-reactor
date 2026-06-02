@@ -148,13 +148,17 @@ steps:
       dotnet restore "${{ parameters.solution }}" --configfile "${{ parameters.nugetConfig }}"
     displayName: 'Restore'
 
-  # RoslynAnalyzers wraps dotnet build to enable SDL static analysis.
-  - task: RoslynAnalyzers@3
-    displayName: 'Build framework + analyzers (RoslynAnalyzers)'
-    inputs:
-      userProvideBuildInfo: 'msBuildInfo'
-      setupCommandlinePicker: 'vs2022' # Allows you to pick the visual studio version used during the execution of the Analyzers. 2022 is required for .net 6 on the latest images.
-      msBuildCommandline: 'dotnet.exe build "${{ parameters.solution }}" --no-restore --configuration ${{ parameters.configuration }} --configfile "${{ parameters.nugetConfig }}"'
+  # Plain dotnet build. SDL static analysis is handled by CodeQL 3000, which the
+  # OneBranch Official template (v2/OneBranch.Official.CrossPlat.yml) auto-injects
+  # around the build tasks -- it watches the compiler calls during this step.
+  # We deliberately do NOT use the legacy RoslynAnalyzers@3 task: its vs2022 Roslyn
+  # toolset does not run the .NET 10 SDK source generators, producing false-positive
+  # CS8795 ([LibraryImport] partials) and CS0534 (JsonSerializerContext) compile
+  # errors. A normal `dotnet build` keeps the generators intact, and CodeQL provides
+  # the SDL-required scan. See https://aka.ms/codeql3000-onebranch
+  - pwsh: |
+      dotnet build "${{ parameters.solution }}" --no-restore --configuration ${{ parameters.configuration }} --configfile "${{ parameters.nugetConfig }}"
+    displayName: 'Build framework (dotnet build; CodeQL-scanned)'
 
   - ${{ if eq(parameters.runTests, true) }}:
     - pwsh: |
