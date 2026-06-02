@@ -85,8 +85,11 @@ public sealed class Sidebar : Component<SidebarProps>
 
                     var p = props.Cursor.Current.Position;
                     field.Burst((float)p.X, (float)p.Y, 1_000, Palettes.For(props.Palette));
-                    props.SetCount(field.ActiveCount);
-                    setDisplayCount(field.ActiveCount);
+                    // Burst is queued and applied on the next game-thread tick;
+                    // the live count display is driven by the existing 250 ms
+                    // DispatcherTimer polling field.ActiveCount, which will pick
+                    // up the new count one cycle later. No SetCount here — that
+                    // would override the slider value the user just set.
                 })
                 .HAlign(HorizontalAlignment.Stretch)
             )

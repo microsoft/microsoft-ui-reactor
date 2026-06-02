@@ -4,7 +4,7 @@ Particle Storm is a Reactor + Win2D sample that renders up to 100,000 particles 
 
 ## What to look for
 
-- `App.cs` wires Reactor state into `Win2DAnimatedCanvas.Of(onUpdate, onDraw, drawState, isPaused)`.
+- `App.cs` wires Reactor state into `Win2DAnimatedCanvas(onUpdate, onDraw, drawState, isPaused)` (factories imported via `using static Microsoft.UI.Reactor.Advanced.Factories;`).
 - `ParticleField.cs` owns the flat `Particle[]` buffer, physics step, palette LUTs, and Win2D sprite-batch rendering.
 - `Sidebar.cs` polls the live FPS ref every ~250 ms so the retained UI does not re-render at the canvas frame rate.
 

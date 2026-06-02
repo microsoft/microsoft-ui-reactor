@@ -18,7 +18,7 @@ All three use `CanvasDrawingSession` for drawing. They differ in **who invalidat
 
 ## Manual canvas (`Win2DCanvas`)
 
-Use `Win2DCanvas.Of` when pixels should change only after app state changes. Pass every state value the draw callback depends on as `redrawKey`; when the key changes during reconciliation, the handler calls `CanvasControl.Invalidate()`.
+Use `Win2DCanvas(...)` when pixels should change only after app state changes. Pass every state value the draw callback depends on as `redrawKey`; when the key changes during reconciliation, the handler calls `CanvasControl.Invalidate()`.
 
 ```csharp
 class ManualCanvasDemo : Component
@@ -30,7 +30,7 @@ class ManualCanvasDemo : Component
         return VStack(12,
             SubHeading("Manual canvas"),
             Button($"Redraw with count {count}", () => setCount(count + 1)),
-            Win2DCanvas.Of((session, _) =>
+            Win2DCanvas((session, _) =>
             {
                 session.Clear(Colors.White);
                 session.DrawText($"Count = {count}", 24, 24, Colors.DarkSlateBlue);
@@ -52,7 +52,7 @@ class ManualCanvasDemo : Component
 
 ## Animated canvas (`Win2DAnimatedCanvas`)
 
-Use `Win2DAnimatedCanvas.Of` for steady-tick scenes. The draw loop runs independently of Reactor re-renders, but the state object you pass through `drawState` survives renders because it comes from `UseDrawState`.
+Use `Win2DAnimatedCanvas(...)` for steady-tick scenes. The draw loop runs independently of Reactor re-renders, but the state object you pass through `drawState` survives renders because it comes from `UseDrawState`.
 
 ```csharp
 class AnimatedCanvasDemo : Component
@@ -83,7 +83,7 @@ class AnimatedCanvasDemo : Component
 
             return VStack(12,
                 SubHeading("Animated canvas"),
-                Win2DAnimatedCanvas.Of(
+                Win2DAnimatedCanvas(
                     onUpdate: (args, state) => ((DotField)state!).Step(args.Timing.ElapsedTime),
                     onDraw: (session, _, state) =>
                     {
@@ -111,7 +111,7 @@ Read [Threading](#threading) before putting real work in `onUpdate` or `onDraw`.
 
 ## Virtual canvas (`Win2DVirtualCanvas`)
 
-Use `Win2DVirtualCanvas.Of` when the logical content is much larger than the viewport. Win2D asks you to draw invalidated regions; Reactor exposes `InvalidateRegions` as an immutable command prop. Pass a **new** list instance to invalidate specific tiles after a state change.
+Use `Win2DVirtualCanvas(...)` when the logical content is much larger than the viewport. Win2D asks you to draw invalidated regions; Reactor exposes `InvalidateRegions` as an immutable command prop. Pass a **new** list instance to invalidate specific tiles after a state change.
 
 ```csharp
 class VirtualCanvasDemo : Component
@@ -121,7 +121,7 @@ class VirtualCanvasDemo : Component
         var (stamp, setStamp) = UseState(0);
         var highlightedTile = new Rect(1024, 512, 360, 360);
 
-        var canvas = Win2DVirtualCanvas.Of((session, region) =>
+        var canvas = Win2DVirtualCanvas((session, region) =>
         {
             const double tile = 512;
             session.Clear(Colors.WhiteSmoke);
@@ -205,7 +205,7 @@ class AnimatedCanvasDemo : Component
 
             return VStack(12,
                 SubHeading("Animated canvas"),
-                Win2DAnimatedCanvas.Of(
+                Win2DAnimatedCanvas(
                     onUpdate: (args, state) => ((DotField)state!).Step(args.Timing.ElapsedTime),
                     onDraw: (session, _, state) =>
                     {
@@ -263,7 +263,7 @@ var draw = UseDrawCommand(
         session.DrawText($"Count = {value}", 16, 16, Colors.Black),
     deps: [count]);
 
-return Win2DCanvas.Of(draw, redrawKey: count);
+return Win2DCanvas(draw, redrawKey: count);
 ```
 
 ## Threading
@@ -277,7 +277,7 @@ return Win2DCanvas.Of(draw, redrawKey: count);
 | `Win2DVirtualCanvas.OnRegionDraw` | UI thread. |
 | `UseCanvasResources` `create` | Worker or game thread depending on the host canvas. |
 
-Treat `Ref.Current` like a `volatile` field: re-read it, do not assume compound mutations are synchronized, and make the referenced object thread-safe if both the UI thread and Win2D game thread can mutate it. Reactor does not marshal animated callbacks to the UI thread because the point of `CanvasAnimatedControl` is to avoid the UI-thread bottleneck.
+Treat `Ref<T>` as a stable, non-volatile slot: writes from the UI thread are eventually visible to the Win2D game thread, but `Ref<T>` itself inserts no memory barriers and does not protect compound mutations. Make the referenced object thread-safe (lock, `Interlocked`, `Volatile`, or a producer/consumer queue drained at the start of the next tick) when both threads can mutate it. Reactor does not marshal animated callbacks to the UI thread because the point of `CanvasAnimatedControl` is to avoid the UI-thread bottleneck. See `UseDrawState`'s XML remarks for the per-shape guidance.
 
 > **Debug sentinel:** debug builds wrap animated `OnUpdate` / `OnDraw` and append a pointer to this section when a likely WinUI thread-affinity exception escapes. The sentinel is a diagnostic aid, not a synchronization model.
 
@@ -287,9 +287,7 @@ A `CanvasDevice` can be lost when the GPU resets, a monitor changes, or a driver
 
 ## Performance: Particle Storm
 
-The [Particle Storm sample](../../samples/apps/particle-storm/) uses `Win2DAnimatedCanvas` for the hot path and pure Reactor controls for the chrome: sliders, palette choices, pause/resume, and live FPS. It is the canonical performance proof for `Reactor.Advanced`.
-
-![Particle Storm sample](../../samples/apps/particle-storm/screenshot.png)
+The [Particle Storm sample](../../samples/apps/particle-storm/) is the canonical worked example for `Reactor.Advanced`: `Win2DAnimatedCanvas` for the hot path, pure Reactor controls for the chrome (sliders, palette choices, pause/resume, live FPS), and a producer/consumer queue for cross-thread mutations from the UI thread into the game-thread simulation. Run the sample and capture FPS at your particle-count targets on your own hardware; the sample's README documents the baseline-measurement methodology.
 
 ## Tips
 

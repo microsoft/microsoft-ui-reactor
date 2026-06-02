@@ -152,6 +152,106 @@ internal static class Win2DCanvasFixtures
         }
     }
 
+    /// <summary>
+    /// Spec 053 review #1: verifies that a Win2DAnimatedCanvas mounted with
+    /// <c>isPaused: true</c> can be unpaused by a subsequent re-render.
+    /// Before the Mount-fix, the handler wrote <c>ctrl.Paused = true</c> at mount
+    /// and Update never wrote Paused, so the native game loop stayed parked.
+    /// </summary>
+    internal class AnimatedCanvasInitialPausedResumes(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            AnimatedProbe? probe = null;
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var state = ctx.UseDrawState(() => new AnimatedProbe());
+                probe = state.Current;
+                var (paused, setPaused) = ctx.UseState(true);  // start paused
+
+                return VStack(8,
+                    Button("Resume Win2D", () => setPaused(false)),
+                    Win2DAnimatedCanvas(
+                        onUpdate: (_, drawState) => Interlocked.Increment(ref ((AnimatedProbe)drawState!).Ticks),
+                        onDraw: (session, _, _) => session.Clear(Colors.Black),
+                        drawState: state.Current,
+                        isPaused: paused)
+                        .TargetFps(30)
+                        .Width(240)
+                        .Height(120));
+            });
+
+            // While initially paused, give the canvas multiple game-loop ticks worth of
+            // time. The handler must NOT have written ctrl.Paused=true, so the game loop
+            // keeps ticking, but IsPaused gates the user's OnUpdate delegate — Ticks stays
+            // at 0 because the probe increment happens inside OnUpdate.
+            for (int i = 0; i < 6; i++) await Harness.Render();
+            H.Check("Win2D_AnimatedCanvas_InitiallyPaused_NoOnUpdateTicks",
+                probe is not null && Volatile.Read(ref probe.Ticks) == 0);
+
+            // Click to resume — re-render flips IsPaused=false; gate opens; Ticks start advancing.
+            H.ClickButton("Resume Win2D");
+            await Harness.Render();
+            H.Check("Win2D_AnimatedCanvas_ResumesAfterInitialPaused",
+                await Harness.WaitFor(() => probe is not null && Volatile.Read(ref probe.Ticks) >= 2,
+                    maxPasses: 80, perPassMs: 50));
+
+            host.Mount(_ => TextBlock("Win2D initially-paused unmounted"));
+            await Harness.Render();
+        }
+    }
+
+    /// <summary>
+    /// Spec 053 review #3: verifies that re-rendering Win2DCanvas with the same
+    /// RedrawKey value (boxed differently across renders) does NOT trigger
+    /// Invalidate(). Before the fix, ReferenceEquals on boxed primitives made
+    /// every parent re-render trigger a redundant redraw.
+    /// </summary>
+    internal class CanvasSameRedrawKeyNoExtraDraws(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var drawCount = 0;
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (bump, setBump) = ctx.UseState(0);
+                return VStack(8,
+                    Button("Re-render same key", () => setBump(bump + 1)),
+                    Win2DCanvas((session, _) =>
+                    {
+                        Interlocked.Increment(ref drawCount);
+                        session.Clear(Colors.White);
+                    }, redrawKey: 42)  // fixed value across all re-renders
+                        .Width(240)
+                        .Height(120));
+            });
+
+            H.Check("Win2D_Canvas_SameKey_InitialDraw",
+                await Harness.WaitFor(() => Volatile.Read(ref drawCount) >= 1, maxPasses: 40, perPassMs: 25));
+
+            var before = Volatile.Read(ref drawCount);
+            const int rerenderCount = 5;
+            for (int i = 0; i < rerenderCount; i++)
+            {
+                H.ClickButton("Re-render same key");
+                await Harness.Render();
+            }
+            // Let any incidental draws settle.
+            for (int i = 0; i < 4; i++) await Harness.Render();
+
+            var delta = Volatile.Read(ref drawCount) - before;
+            // With value-equality on RedrawKey, `rerenderCount` re-renders with the same
+            // key value must not produce `rerenderCount` invalidations. Win2D may
+            // invalidate on its own for window/dpi changes; allow ≤2 incidental draws.
+            H.Check("Win2D_Canvas_SameKey_NoExtraDrawsFromRerender", delta <= 2);
+
+            host.Mount(_ => TextBlock("Win2D same-key unmounted"));
+            await Harness.Render();
+        }
+    }
+
     private sealed class AnimatedProbe
     {
         public int Ticks;
@@ -168,13 +268,13 @@ internal static class Win2DCanvasFixtures
 
     private static async Task<bool> WaitForCollectedOrDetached(WeakReference weak, Func<bool> isDetached)
     {
-        return await Harness.WaitFor(() =>
-        {
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-            GC.Collect();
-            return !weak.IsAlive || isDetached();
-        }, maxPasses: 60, perPassMs: 100);
+        // Detection priority: the visual-tree detach check is the observable invariant
+        // we actually care about. WeakReference.IsAlive is a paranoia signal for hidden
+        // hard references kept alive after detach; we let normal GC do its thing rather
+        // than forcing collections inside the WaitFor loop (CodeQL flags explicit
+        // GC.Collect, and forced collections introduce test-suite-wide perf cost / flake).
+        return await Harness.WaitFor(() => isDetached() || !weak.IsAlive,
+            maxPasses: 60, perPassMs: 100);
     }
 
     private static async Task<bool> WaitForPlateau(Func<int> read)

@@ -11,7 +11,7 @@
     <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
-    <Platforms>x64;ARM64</Platforms>
+    <Platforms>AnyCPU;x64;ARM64</Platforms>
 
     <PublishTrimmed>false</PublishTrimmed>
     <IsTrimmable>true</IsTrimmable>

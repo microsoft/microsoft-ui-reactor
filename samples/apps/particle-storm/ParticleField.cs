@@ -61,6 +61,12 @@ public sealed class ParticleField : IDisposable
     const float InitialHeight = 700f;
     readonly Particle[] _particles;
     readonly Random _random = new(53);
+    // Burst requests are produced on the UI thread (button click) and consumed on the
+    // Win2D game thread at the start of Step. ConcurrentQueue gives us a lock-free
+    // hand-off — without it, ResetParticle mutations from the UI thread would race
+    // the Step inner loop's reads on the same _particles slots, producing torn
+    // Particle structs (17 bytes, not atomic).
+    readonly System.Collections.Concurrent.ConcurrentQueue<(float X, float Y, int N)> _pendingBursts = new();
     CanvasDevice? _spriteDevice;
     CanvasRenderTarget? _sprite;
     int _burstCursor;
@@ -99,6 +105,11 @@ public sealed class ParticleField : IDisposable
         float canvasWidth,
         float canvasHeight)
     {
+        // Drain any UI-thread-queued burst requests before iterating the particle
+        // array, so all mutations happen single-threaded on the game thread.
+        while (_pendingBursts.TryDequeue(out var b))
+            ApplyBurst(b.X, b.Y, b.N);
+
         int targetCount = Math.Clamp(count, 1, Capacity);
         while (ActiveCount < targetCount)
             ResetParticle(ActiveCount++, cursorX, cursorY, spread: 240f);
@@ -236,9 +247,21 @@ public sealed class ParticleField : IDisposable
         }
     }
 
+    /// <summary>
+    /// UI-thread safe: enqueues a burst request that the game thread applies on
+    /// the next <see cref="Step"/>. The <paramref name="palette"/> parameter is
+    /// unused — hue is set from <see cref="Random"/> in ResetParticle so each
+    /// burst gets a fresh-looking spread.
+    /// </summary>
     public void Burst(float x, float y, int n, Color[] palette)
     {
         _ = palette;
+        if (n <= 0) return;
+        _pendingBursts.Enqueue((x, y, Math.Min(n, Capacity)));
+    }
+
+    void ApplyBurst(float x, float y, int n)
+    {
         int count = Math.Clamp(n, 0, Capacity);
         for (int i = 0; i < count; i++)
         {

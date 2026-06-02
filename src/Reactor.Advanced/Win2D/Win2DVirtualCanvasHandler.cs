@@ -42,7 +42,7 @@ public sealed class Win2DVirtualCanvasHandler : IElementHandler<Win2DVirtualCanv
     {
         Reconciler.SetElementTag(ctrl, newEl);
 
-        if (ctrl.Width != newEl.ContentSize.Width || ctrl.Height != newEl.ContentSize.Height)
+        if (!SizesEqual(ctrl.Width, ctrl.Height, newEl.ContentSize.Width, newEl.ContentSize.Height))
             ApplyContentSize(ctrl, newEl);
 
         if (!ReferenceEquals(oldEl.InvalidateRegions, newEl.InvalidateRegions) && newEl.InvalidateRegions is { } regions)
@@ -68,6 +68,13 @@ public sealed class Win2DVirtualCanvasHandler : IElementHandler<Win2DVirtualCanv
         ctrl.Width = el.ContentSize.Width;
         ctrl.Height = el.ContentSize.Height;
     }
+
+    // Width/Height are doubles; avoid `!=` to satisfy CA1018-style float-equality analysis
+    // and skip pointless DP writes for sub-pixel float-precision noise from layout/devicescale math.
+    private const double SizeEpsilon = 0.5; // half a DIP is well below display rounding
+    private static bool SizesEqual(double aw, double ah, double bw, double bh) =>
+        global::System.Math.Abs(aw - bw) <= SizeEpsilon
+        && global::System.Math.Abs(ah - bh) <= SizeEpsilon;
 
     private static void DrawInvalidatedRegions(
         CanvasVirtualControl ctrl,

@@ -76,7 +76,7 @@ Full coverage on [Hooks](hooks.md).
 | `ListView<T>(items, key, view)` | Bound list. |
 | `VirtualList(count, render, ...)` | Index-driven virtual list. |
 | `DataGrid<T>(source, columns, ...)` | [Data-system](data-system.md) grid. |
-| `Win2DCanvas.Of(...)` / `Win2DAnimatedCanvas.Of(...)` | Optional [Win2D canvas](win2d-canvas.md) surfaces from `Microsoft.UI.Reactor.Advanced`. |
+| `Win2DCanvas(...)` / `Win2DAnimatedCanvas(...)` | Optional [Win2D canvas](win2d-canvas.md) surfaces from `Microsoft.UI.Reactor.Advanced` (import `using static Microsoft.UI.Reactor.Advanced.Factories;`). |
 | `Empty()` / `Group(...children)` / `ForEach(items, render)` | Tree helpers. |
 | `Memo(ctx => ...)` / `RenderEachTime(ctx => ...)` | Function components. |
 | `Component<TComp>()` | Mount a class-based [Component](components.md). |

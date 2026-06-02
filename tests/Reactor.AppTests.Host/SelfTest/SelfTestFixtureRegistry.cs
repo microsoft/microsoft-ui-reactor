@@ -220,6 +220,8 @@ internal static class SelfTestFixtureRegistry
         "Win2D_Canvas_Mount",
         "Win2D_AnimatedCanvas_Mount",
         "Win2D_VirtualCanvas_Mount",
+        "Win2D_AnimatedCanvas_InitialPausedResumes",
+        "Win2D_Canvas_SameRedrawKeyNoExtraDraws",
         // PR #324 review fixes — heterogeneous rows, RefreshRealizedItems
         // sync, and ItemsRepeater unmount cleanup.
         "EFR_Factory_ReplacementOnRootTypeChange_DropsOldControlTracking",
@@ -1369,6 +1371,8 @@ internal static class SelfTestFixtureRegistry
         "Win2D_Canvas_Mount" => new Win2DCanvasFixtures.CanvasMount(harness),
         "Win2D_AnimatedCanvas_Mount" => new Win2DCanvasFixtures.AnimatedCanvasMount(harness),
         "Win2D_VirtualCanvas_Mount" => new Win2DCanvasFixtures.VirtualCanvasMount(harness),
+        "Win2D_AnimatedCanvas_InitialPausedResumes" => new Win2DCanvasFixtures.AnimatedCanvasInitialPausedResumes(harness),
+        "Win2D_Canvas_SameRedrawKeyNoExtraDraws" => new Win2DCanvasFixtures.CanvasSameRedrawKeyNoExtraDraws(harness),
 
         "MdHtml_HtmlGeneration" => new MarkdownHtmlFixtures.HtmlGeneration(harness),
         "MdHtml_HtmlInWebView2" => new MarkdownHtmlFixtures.HtmlInWebView2(harness),

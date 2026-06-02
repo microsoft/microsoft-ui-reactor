@@ -48,7 +48,12 @@ public sealed class Win2DCanvasHandler : IElementHandler<Win2DCanvasElement, Can
         if (ctrl.ClearColor != newEl.ClearColor)
             bind.WriteSuppressed(() => ctrl.ClearColor = newEl.ClearColor);
 
-        if (!ReferenceEquals(oldEl.RedrawKey, newEl.RedrawKey))
+        // Value-equality on RedrawKey — boxed primitives (int, enum, etc.) compare by reference
+        // when boxed across renders, so ReferenceEquals would invalidate on every parent re-render
+        // even when the key value is unchanged. The intent of RedrawKey is "redraw when this value
+        // changes"; Equals captures that. For identity-only keys, authors pass a fixed sentinel
+        // instance and rely on reference equality producing Equals == true.
+        if (!Equals(oldEl.RedrawKey, newEl.RedrawKey))
             ctrl.Invalidate();
 
         ctx.ApplySetters(newEl.Setters, ctrl);

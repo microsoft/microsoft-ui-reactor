@@ -34,8 +34,12 @@ public sealed class Win2DAnimatedCanvasHandler : IElementHandler<Win2DAnimatedCa
             ctrl.ClearColor = el.ClearColor;
         if (ctrl.TargetElapsedTime != el.TargetElapsedTime)
             ctrl.TargetElapsedTime = el.TargetElapsedTime;
-        if (ctrl.Paused != el.IsPaused)
-            ctrl.Paused = el.IsPaused;
+        // Intentionally NEVER write ctrl.Paused — under WinUI 3, toggling
+        // CanvasAnimatedControl.Paused wakes the game thread for one tick
+        // and then permanently parks it (see Win2DAnimatedCanvasElement.IsPaused
+        // remarks). IsPaused is enforced by skipping the user's OnUpdate
+        // delegate in InvokeUpdate; the native game loop stays unpaused so
+        // the canvas can resume after any number of pause/resume toggles.
 
         var subscriptions = new AnimatedCanvasSubscriptions(el);
         TypedEventHandler<ICanvasAnimatedControl, CanvasAnimatedUpdateEventArgs> updateHandler = (_, args) =>
