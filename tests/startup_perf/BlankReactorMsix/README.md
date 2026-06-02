@@ -1,11 +1,17 @@
-# BlankReactor — Reactor perf-gate synthetic blank app
+# BlankReactor (MSIX) — Reactor perf-gate synthetic blank app
 
-`BlankReactor` is a synthetic blank app for measuring Reactor
-(Microsoft.UI.Reactor) + WinUI 3 cold-launch cost. It complements the
-in-repo `tests/startup_perf/BlankWinUI3` and `tests/startup_perf/BlankRNW`
-siblings: all three emit the same `BenchmarkSyntheticApps` ETW regions so
-the same WPA analysis resolves across stacks, enabling apples-to-apples
-comparison of the Reactor + WinUI 3 stack against the other UI frameworks.
+This is the **MSIX-packaged** variant of the Reactor blank perf app, used
+to measure Reactor (Microsoft.UI.Reactor) + WinUI 3 cold-launch cost
+through the standard packaged-deploy path. It sits alongside the
+**unpackaged** `BlankReactor/` sibling in the same directory — that one
+is `WindowsPackageType=None` for fast local iteration; this one builds a
+real MSIX so a perf-gate harness can `Add-AppxPackage` it the way a
+shipped app would be installed.
+
+Both Reactor variants — together with `BlankWinUI3/` and `BlankRNW/` —
+emit the same `BenchmarkSyntheticApps` ETW regions so the same WPA
+analysis resolves across stacks and packaging modes, enabling
+apples-to-apples comparison.
 
 It is **not** a feature demo — see `samples/Reactor.TestApp` for that — and
 it is **not** a microbenchmark — see `tests/perf_bench/` for those. It is a
@@ -51,11 +57,11 @@ verification.
 ```powershell
 # Unsigned MSIX — works on a fresh clone, can be installed with
 # Add-AppxPackage when Windows is in Developer Mode.
-dotnet build samples\apps\blank-reactor\BlankReactor.csproj /p:Platform=x64 -c Release
+dotnet build tests\startup_perf\BlankReactorMsix\BlankReactor.csproj /p:Platform=x64 -c Release
 ```
 
 The build emits an unsigned `.msix` at
-`samples\apps\blank-reactor\bin\Release\net10.0-windows10.0.22621.0\win-x64\AppPackages\…`.
+`tests\startup_perf\BlankReactorMsix\bin\Release\net10.0-windows10.0.22621.0\win-x64\AppPackages\…`.
 
 ## Signing for the perf-gate harness
 
@@ -83,7 +89,7 @@ to a machine-trusted root. Two pieces have to line up:
 Then build with signing enabled:
 
 ```powershell
-dotnet build samples\apps\blank-reactor\BlankReactor.csproj `
+dotnet build tests\startup_perf\BlankReactorMsix\BlankReactor.csproj `
     /p:Platform=x64 -c Release `
     /p:AppxPackageSigningEnabled=true `
     /p:PackageCertificateKeyFile=path\to\your.pfx

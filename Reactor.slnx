@@ -217,8 +217,8 @@
       <Platform Solution="*|x64" Project="x64" />
     </Project>
   </Folder>
-  <Folder Name="/samples/apps/blank-reactor/">
-    <Project Path="samples/apps/blank-reactor/BlankReactor.csproj">
+  <Folder Name="/tests/startup_perf/BlankReactorMsix/">
+    <Project Path="tests/startup_perf/BlankReactorMsix/BlankReactor.csproj">
       <Platform Solution="*|ARM64" Project="ARM64" />
       <Platform Solution="*|x64" Project="x64" />
     </Project>

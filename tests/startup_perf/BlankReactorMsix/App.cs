@@ -9,11 +9,12 @@ using Windows.Foundation;
 using static Microsoft.UI.Reactor.Factories;
 
 // ── Perf instrumentation ────────────────────────────────────────────────
-// Synthetic blank app for measuring Reactor + WinUI 3 cold-launch cost.
-// Emits the "BenchmarkSyntheticApps" ETW provider regions (WinMainEntry,
-// WindowLoaded, FirstRender, FirstIdle, ProcessStop) so the same WPA
-// regions resolve here as in the WinUI3 / RNW siblings under
-// tests/startup_perf/, enabling apples-to-apples cross-stack comparison.
+// Synthetic blank app for measuring Reactor + WinUI 3 cold-launch cost
+// via the MSIX-packaged deployment path. Emits the "BenchmarkSyntheticApps"
+// ETW provider regions (WinMainEntry, WindowLoaded, FirstRender,
+// FirstIdle, ProcessStop) so the same WPA regions resolve here as in the
+// sibling BlankReactor / BlankWinUI3 / BlankRNW apps in the same
+// tests/startup_perf/ directory, enabling apples-to-apples comparison.
 //
 //   Provider Name : BenchmarkSyntheticApps
 //   Provider GUID : FD80D616-E92B-4B2B-9BED-131ADA36A8FD

@@ -1,14 +1,15 @@
 # startup_perf — minimal startup baseline
 
-Three sibling apps that each start, paint once, and quit:
+Sibling apps that each start, paint once, and quit:
 
-| Variant         | Stack                                | AppName payload  |
-| --------------- | ------------------------------------ | ---------------- |
-| `BlankWinUI3/`  | C# WinUI 3 (unpackaged)              | `blank_winui3`   |
-| `BlankReactor/` | C# Reactor                           | `blank_reactor`  |
-| `BlankRNW/`     | RN-Windows 0.82, C++ host + Hermes   | `blank_rnw`      |
+| Variant              | Stack                                | AppName payload  |
+| -------------------- | ------------------------------------ | ---------------- |
+| `BlankWinUI3/`       | C# WinUI 3 (unpackaged)              | `blank_winui3`   |
+| `BlankReactor/`      | C# Reactor (unpackaged)              | `blank_reactor`  |
+| `BlankReactorMsix/`  | C# Reactor (MSIX-packaged)           | `blank_reactor`  |
+| `BlankRNW/`          | RN-Windows 0.82, C++ host + Hermes   | `blank_rnw`      |
 
-All three emit ETW on **the same provider** as the
+All variants emit ETW on **the same provider** as the
 [`microsoft-ui-xaml-lift` blank-app benchmarks][lift]:
 
 - Provider: `BenchmarkSyntheticApps`
@@ -172,7 +173,8 @@ tests/startup_perf/
 │   ├── BlankPerfMetrics.cs   C# AppStart/FirstFrame/Interactive holder
 │   └── Tracing.wprp          WPR capture profile (single provider, slim)
 ├── BlankWinUI3/              C# WinUI 3 minimal blank app
-├── BlankReactor/             C# Reactor minimal blank app
+├── BlankReactor/             C# Reactor minimal blank app (unpackaged)
+├── BlankReactorMsix/         C# Reactor blank app (MSIX-packaged) — see its README.md
 ├── BlankRNW/                 RN-Windows 0.82 minimal blank app
 │   ├── App.tsx               JS-side T0 → rAF → idleCallback pipeline
 │   ├── windows/BlankRNW/
