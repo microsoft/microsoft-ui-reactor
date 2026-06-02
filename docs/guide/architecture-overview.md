@@ -46,6 +46,7 @@ reconciler is the single mutator.
 | Modifiers | `src/Reactor/Elements/ElementExtensions*.cs` | Fluent modifier fold |
 | Hosting | `src/Reactor/Hosting/` | Window/app bootstrap, UI dispatcher capture |
 | Diagnostics | `src/Reactor/Core/Diagnostics/` | ETW provider, overlay hooks |
+| Advanced sibling package | `src/Reactor.Advanced/` | Optional heavy dependencies; first inhabitant is [Win2D canvas](win2d-canvas.md) |
 
 Every section below zooms into one row of that table.
 
