@@ -156,8 +156,16 @@ steps:
   # CS8795 ([LibraryImport] partials) and CS0534 (JsonSerializerContext) compile
   # errors. A normal `dotnet build` keeps the generators intact, and CodeQL provides
   # the SDL-required scan. See https://aka.ms/codeql3000-onebranch
+  #
+  # CI / CopilotSkipCliDownload are passed as explicit MSBuild global properties (-p:)
+  # rather than relying on the pipeline env vars of the same name: those did not reach
+  # MSBuild in the docked container (build 118608 still ran the dev-only SignaturesGen
+  # nested build -> CS2012 file-lock race, and still hit the Copilot CLI download ->
+  # MSB3923). Global properties are deterministic. CI=true gates off Reactor.Cli's
+  # RunSignaturesGen target; CopilotSkipCliDownload=true skips the GitHub.Copilot.SDK
+  # npmjs.org download in the network-restricted container.
   - pwsh: |
-      dotnet build "${{ parameters.solution }}" --no-restore --configuration ${{ parameters.configuration }} --configfile "${{ parameters.nugetConfig }}"
+      dotnet build "${{ parameters.solution }}" --no-restore --configuration ${{ parameters.configuration }} -p:CI=true -p:CopilotSkipCliDownload=true
     displayName: 'Build framework (dotnet build; CodeQL-scanned)'
 
   - ${{ if eq(parameters.runTests, true) }}:
@@ -197,6 +205,7 @@ steps:
           --runtime win-x64 `
           --self-contained false `
           -p:Version=$(PackageVersion) `
+          -p:CI=true `
           -o "${{ parameters.outputDirectory }}\mur\x64"
       displayName: 'Publish mur (win-x64)'
 
@@ -206,6 +215,7 @@ steps:
           --runtime win-arm64 `
           --self-contained false `
           -p:Version=$(PackageVersion) `
+          -p:CI=true `
           -o "${{ parameters.outputDirectory }}\mur\arm64"
       displayName: 'Publish mur (win-arm64)'
 
