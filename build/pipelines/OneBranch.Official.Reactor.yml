@@ -77,7 +77,7 @@ extends:
           # ob_sdl_suppression_suppressionFile: $(Build.SourcesDirectory)\.gdn\job.gdnsuppress
 
         steps:
-          - template: templates/reactor-build-steps.yml
+          - template: /build/pipelines/templates/reactor-build-steps.yml@self
             parameters:
               outputDirectory: '$(Build.SourcesDirectory)\out'
               solution: '$(BuildSolution)'
