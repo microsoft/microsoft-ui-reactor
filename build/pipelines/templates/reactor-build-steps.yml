@@ -24,6 +24,10 @@ parameters:
   - name: nugetConfig
     type: string
     default: '$(Build.SourcesDirectory)\build\pipelines\nuget.internal.config'
+  - name: npmRegistry
+    displayName: 'Internal npm registry (ADO feed) for transitive npm downloads.'
+    type: string
+    default: 'https://github-private.pkgs.visualstudio.com/microsoft/_packaging/microsoft-ui-reactor/npm/registry/'
   - name: version
     displayName: 'Explicit version; blank => MinVer.'
     type: string
@@ -57,6 +61,30 @@ steps:
     displayName: 'NuGet Authentication'
     inputs:
       forceReinstallCredentialProvider: true
+
+  # Pin a repo-root .npmrc at the internal ADO npm registry for the build.
+  #
+  # The committed .npmrc files (src/vscode-reactor, tests/..., samples/...) point at
+  # public registry.npmjs.org so external contributors can restore. We cannot commit an
+  # internal-only .npmrc without breaking them. Instead, write the internal registry to
+  # the repo-root .npmrc at build time (the CI working tree is disposable) so transitive
+  # npm downloads (e.g. GitHub.Copilot.SDK pulling copilot-win32-x64-*.tgz) resolve from
+  # the internal feed -- which proxies npmjs.org -- instead of the blocked public registry.
+  - pwsh: |
+      $dest = Join-Path "$(Build.SourcesDirectory)" '.npmrc'
+      @(
+        'registry=${{ parameters.npmRegistry }}'
+        'always-auth=true'
+      ) | Set-Content -Path $dest -Encoding utf8
+      Write-Host "Pinned ambient npm registry to internal feed: $dest"
+    displayName: 'Pin ambient npm to internal feed'
+
+  # Inject the feed access token into the repo-root .npmrc written above so the
+  # authenticated download against the internal registry succeeds.
+  - task: npmAuthenticate@0
+    displayName: 'npm Authentication'
+    inputs:
+      workingFile: '$(Build.SourcesDirectory)/.npmrc'
 
   # Make the internal feed the AMBIENT NuGet config for the whole build.
   #
