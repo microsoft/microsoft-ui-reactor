@@ -34,6 +34,16 @@ variables:
   # skills/reactor.api.txt is what pack consumes, so skipping regen in CI is correct.
   CI: true
 
+  # Skip the GitHub.Copilot.SDK native CLI download in the isolated container.
+  # The SDK's GitHub.Copilot.SDK.targets downloads copilot-<rid>.tgz via an MSBuild
+  # DownloadFile task hardcoded to registry.npmjs.org (blocked here). DownloadFile is an
+  # unauthenticated HTTP GET, so it ignores .npmrc AND can't auth against the internal ADO
+  # npm feed -- redirecting the registry would 401. The native copilot.exe is only a RUNTIME
+  # artifact for the demo-script-tool sample; it is not needed to compile the framework, pack
+  # the Reactor NuGets, or run unit tests. MSBuild surfaces this env var as the property the
+  # targets gate on ($(CopilotSkipCliDownload) != 'true'), so the download target is skipped.
+  CopilotSkipCliDownload: true
+
   # Reactor builds the .slnx solution via the dotnet CLI (no dirs.proj / msbuild.exe).
   BuildSolution: $(Build.SourcesDirectory)\Reactor.slnx
   BuildConfiguration: Release
