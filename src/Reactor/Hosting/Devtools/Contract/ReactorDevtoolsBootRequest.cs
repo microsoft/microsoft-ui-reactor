@@ -9,5 +9,6 @@ public sealed record ReactorDevtoolsBootRequest(
     double Height,
     bool FullScreen,
     Type? HostRoot,
+    Func<Component>? HostRootFactory,
     Func<RenderContext, Element>? RootRenderFunc,
     Action<ReactorHost>? Configure);

@@ -79,7 +79,7 @@ internal sealed class DevtoolsMcpServer : IDisposable
         _projectIdentifier = projectIdentifier;
         _authToken = GenerateToken();
 
-        Port = preferredPort ?? FindFreePort();
+        Port = preferredPort is > 0 ? preferredPort.Value : FindFreePort();
         _listener = new HttpListener();
         _listener.Prefixes.Add($"http://127.0.0.1:{Port}/");
     }

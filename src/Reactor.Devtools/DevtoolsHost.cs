@@ -40,7 +40,7 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
                 return RunListSubverb(options);
             case DevtoolsSubverb.Run:
                 ReactorApp.DevtoolsEnabled = true;
-                return RunRunSubverb(options, request.Title, request.Width, request.Height, request.Configure, request.HostRoot);
+                return RunRunSubverb(options, request.Title, request.Width, request.Height, request.Configure, request.HostRoot, request.HostRootFactory);
             case DevtoolsSubverb.Screenshot:
                 return RunScreenshotSubverb(options, request.Width, request.Height, request.Configure, request.HostRoot);
             case DevtoolsSubverb.Tree:
@@ -134,7 +134,7 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
     }
 
     [RequiresUnreferencedCode("Devtools component discovery uses Assembly.GetTypes() and Activator.CreateInstance.")]
-    private static bool RunRunSubverb(DevtoolsCliOptions options, string title, double width, double height, Action<ReactorHost>? configure, Type? hostRoot = null)
+    private static bool RunRunSubverb(DevtoolsCliOptions options, string title, double width, double height, Action<ReactorHost>? configure, Type? hostRoot = null, Func<Component>? hostRootFactory = null)
     {
         _ = title;
 
@@ -292,19 +292,29 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
                 DevtoolsLogsTool.Register(mcp, () => LogCaptureInstall.Shared);
                 DevtoolsDockingTools.Register(mcp);
 
-                mcp.Start();
                 bool announced = false;
-                host.Window.DispatcherQueue.TryEnqueue(() =>
+                _ = Task.Run(() =>
                 {
-                    if (announced) return;
-                    announced = true;
-                    mcp.AnnounceReady();
+                    try
+                    {
+                        mcp.Start();
+                        host.Window.DispatcherQueue.TryEnqueue(() =>
+                        {
+                            if (announced) return;
+                            announced = true;
+                            mcp.AnnounceReady();
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine($"[devtools:mcp] Start failed: {ex}");
+                    }
                 });
                 host.Window.Closed += (_, _) => mcp.Dispose();
             };
 
             ReactorApp.Options = new ReactorAppOptions(
-                RootFactory: () => (Component)Activator.CreateInstance(initialComponentType)!,
+                RootFactory: hostRootFactory ?? (() => (Component)Activator.CreateInstance(initialComponentType)!),
                 Configure: combinedConfigure,
                 WindowTitle: $"Preview — {initialComponentName}",
                 WindowWidth: width,

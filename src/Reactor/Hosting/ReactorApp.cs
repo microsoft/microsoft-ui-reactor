@@ -299,7 +299,7 @@ public static class ReactorApp
         where TRoot : Component, new()
     {
         EmitDipBehaviorChangeNoticeOnce();
-        if (TryRunDevtools(title, width, height, fullScreen, configure, hostRoot: typeof(TRoot))) return;
+        if (TryRunDevtools(title, width, height, fullScreen, configure, hostRoot: typeof(TRoot), hostRootFactory: static () => new TRoot())) return;
 
         RunOnSta(() =>
         {
@@ -659,17 +659,17 @@ public static class ReactorApp
     /// With <c>--vscode</c>, starts the capture server for the VS Code preview panel. Devtools
     /// dispatch requires the build-time <c>Reactor.DevtoolsSupport</c> switch.
     /// </summary>
-    private static bool TryRunDevtools(string title, double width, double height, bool fullScreen, Action<ReactorHost>? configure, Type? hostRoot = null, Func<RenderContext, Element>? rootRenderFunc = null)
+    private static bool TryRunDevtools(string title, double width, double height, bool fullScreen, Action<ReactorHost>? configure, Type? hostRoot = null, Func<Component>? hostRootFactory = null, Func<RenderContext, Element>? rootRenderFunc = null)
     {
-        return TryRunDevtoolsCore(Environment.GetCommandLineArgs(), title, width, height, fullScreen, configure, hostRoot, rootRenderFunc, exitOnUnavailable: true);
+        return TryRunDevtoolsCore(Environment.GetCommandLineArgs(), title, width, height, fullScreen, configure, hostRoot, hostRootFactory, rootRenderFunc, exitOnUnavailable: true);
     }
 
     internal static bool TryRunDevtoolsForTest(string[] args, string title, double width, double height, Action<ReactorHost>? configure = null, Type? hostRoot = null)
     {
-        return TryRunDevtoolsCore(args, title, width, height, fullScreen: false, configure, hostRoot, rootRenderFunc: null, exitOnUnavailable: false);
+        return TryRunDevtoolsCore(args, title, width, height, fullScreen: false, configure, hostRoot, hostRootFactory: null, rootRenderFunc: null, exitOnUnavailable: false);
     }
 
-    private static bool TryRunDevtoolsCore(string[] args, string title, double width, double height, bool fullScreen, Action<ReactorHost>? configure, Type? hostRoot = null, Func<RenderContext, Element>? rootRenderFunc = null, bool exitOnUnavailable = false)
+    private static bool TryRunDevtoolsCore(string[] args, string title, double width, double height, bool fullScreen, Action<ReactorHost>? configure, Type? hostRoot = null, Func<Component>? hostRootFactory = null, Func<RenderContext, Element>? rootRenderFunc = null, bool exitOnUnavailable = false)
     {
         var options = DevtoolsCliParser.Parse(args);
 
@@ -690,6 +690,7 @@ public static class ReactorApp
                 height,
                 fullScreen,
                 hostRoot,
+                hostRootFactory,
                 rootRenderFunc,
                 configure);
             return host.TryHandleCommandLine(request);

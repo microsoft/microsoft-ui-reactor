@@ -8,6 +8,27 @@
          RuntimeHostConfigurationOption. -->
     <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
                                     Value="false"
-                                    Trim="true" />
+                                    Trim="true"
+                                    Condition="'@(RuntimeHostConfigurationOption->WithMetadataValue('Identity', 'Reactor.DevtoolsSupport'))' == ''" />
   </ItemGroup>
+
+  <Target Name="_NormalizeReactorDevtoolsSupportSwitch"
+          BeforeTargets="_GenerateRuntimeConfigurationFilesInputCache;GenerateBuildRuntimeConfigurationFiles;PrepareForILLink">
+    <ItemGroup Condition="'@(RuntimeHostConfigurationOption->WithMetadataValue('Identity', 'Reactor.DevtoolsSupport')->WithMetadataValue('Value', 'true'))' != ''">
+      <RuntimeHostConfigurationOption Remove="Reactor.DevtoolsSupport" />
+      <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
+                                      Value="true"
+                                      Trim="true" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="_RestoreReactorDevtoolsSupportRuntimeKnob"
+          AfterTargets="PrepareForILLink"
+          BeforeTargets="WriteIlcRspFileForCompilation"
+          Condition="'@(_TrimmerFeatureSettings->WithMetadataValue('Identity', 'Reactor.DevtoolsSupport')->WithMetadataValue('Value', 'true'))' != ''">
+    <ItemGroup>
+      <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
+                                      Value="true" />
+    </ItemGroup>
+  </Target>
 </Project>
