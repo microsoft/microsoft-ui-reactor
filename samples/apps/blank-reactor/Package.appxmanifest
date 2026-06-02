@@ -13,7 +13,7 @@
   -->
   <Identity
     Name="BlankReactor"
-    Publisher="CN=sumand"
+    Publisher="CN=BlankReactor"
     Version="1.0.0.0" />
 
   <Properties>
