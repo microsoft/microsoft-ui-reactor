@@ -200,6 +200,21 @@ steps:
     # explicit `dotnet restore ... --configfile` first, then `dotnet test --no-restore`
     # (the build happens inside `dotnet test` from the already-restored packages, needing
     # no network). `-p:CI=true` keeps Copilot/SignaturesGen gated off for consistency.
+    #
+    # AnalyzerTests are EXCLUDED here (`--filter "FullyQualifiedName!~AnalyzerTests"`).
+    # They use the Microsoft.CodeAnalysis.Testing harness, which resolves .NET
+    # reference-assembly packs (Microsoft.NETCore.App.Ref, etc.) at TEST RUNTIME via
+    # NuGet `Settings.LoadDefaultSettings(root: null)` -- this reads only the USER/MACHINE
+    # NuGet config, NOT our repo-root pinned nuget.config, so it bypasses the internal
+    # feed and reaches the public api.nuget.org service index, which is BLOCKED in this
+    # sealed container. In build 118613 this surfaced as 88 AnalyzerTests failing with
+    # "access a socket in a way forbidden ... (api.nuget.org:443)" while all other 9046
+    # tests passed. The analyzers are fully gated by GitHub Actions CI (ci.yml runs the
+    # same Reactor.Tests with nuget.org reachable) on every PR, so excluding them from
+    # the sealed Official build loses no coverage. (Future option to restore Official
+    # coverage: overwrite the user-level %APPDATA%\NuGet\NuGet.Config with the internal
+    # feed so the harness's LoadDefaultSettings(null) resolves ref packs through the
+    # Azure Artifacts feed's nuget.org upstream -- only viable if upstreaming is enabled.)
     - pwsh: |
         dotnet restore tests/Reactor.Tests/Reactor.Tests.csproj `
           -p:Platform=x64 --configfile "${{ parameters.nugetConfig }}"
@@ -208,6 +223,7 @@ steps:
     - pwsh: |
         dotnet test tests/Reactor.Tests/Reactor.Tests.csproj `
           --no-restore -p:Platform=x64 -p:CI=true --configuration ${{ parameters.configuration }} `
+          --filter "FullyQualifiedName!~AnalyzerTests" `
           --logger trx --results-directory "$(Build.SourcesDirectory)\TestResults"
       displayName: 'Unit tests (Reactor.Tests)'
 
