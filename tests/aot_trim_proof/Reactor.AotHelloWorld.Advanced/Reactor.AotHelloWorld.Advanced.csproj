@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Spec 053 §10 — AOT/trim verification app for Reactor.Advanced.
+
+    This app references Microsoft.UI.Reactor.Advanced so the assembly is in the
+    compilation graph, but App.Render() only calls TextBlock and Button. It
+    never names Win2DCanvas / Win2DAnimatedCanvas / Win2DVirtualCanvas, so the
+    Reactor.Advanced Win2D handlers must not survive NativeAOT publishing.
+  -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <Platforms>x64;ARM64</Platforms>
+    <RootNamespace>Reactor.AotHelloWorld.Advanced</RootNamespace>
+    <AssemblyName>Reactor.AotHelloWorld.Advanced</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <IsPackable>false</IsPackable>
+    <IsAotCompatible>true</IsAotCompatible>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(PublishAotInternal)' == 'true'">
+    <PublishAot>true</PublishAot>
+  </PropertyGroup>
+
+  <Target Name="_CopyWinUIResourcesForAot" AfterTargets="Publish"
+          Condition="'$(PublishAot)' == 'true' and '$(AppxPackage)' != 'true'">
+    <ItemGroup>
+      <_WinUIResourcesForAot Include="$(OutputPath)**\*.xbf" />
+      <_WinUIResourcesForAot Include="$(OutputPath)$(AssemblyName).pri" Condition="Exists('$(OutputPath)$(AssemblyName).pri')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_WinUIResourcesForAot)"
+          DestinationFiles="@(_WinUIResourcesForAot->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Reactor\Reactor.csproj" />
+    <ProjectReference Include="..\..\..\src\Reactor.Advanced\Reactor.Advanced.csproj" />
+  </ItemGroup>
+
+</Project>

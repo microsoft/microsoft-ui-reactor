@@ -90,10 +90,14 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Restore
-        run: dotnet restore tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64
+        run: |
+          dotnet restore tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64
+          dotnet restore tests/Reactor.Advanced.Tests/Reactor.Advanced.Tests.csproj -p:Platform=x64
 
       - name: Test
-        run: dotnet test tests/Reactor.Tests/Reactor.Tests.csproj --no-restore -p:Platform=x64 --logger "console;verbosity=normal"
+        run: |
+          dotnet test tests/Reactor.Tests/Reactor.Tests.csproj --no-restore -p:Platform=x64 --logger "console;verbosity=normal"
+          dotnet test tests/Reactor.Advanced.Tests/Reactor.Advanced.Tests.csproj --no-restore -p:Platform=x64 --logger "console;verbosity=normal"
 
   integration-tests:
     name: Integration Tests
@@ -307,6 +311,44 @@ jobs:
           REACTOR_AOT_PUBLISH_DIR: ${{ runner.temp }}/aot-hello-world
         run: |
           dotnet test tests/aot_trim_proof/Reactor.AotHelloWorld.TrimAssertions `
+            --nologo `
+            --logger "console;verbosity=normal"
+
+      - name: Publish AOT Hello-World Advanced negative
+        run: >
+          dotnet publish tests/aot_trim_proof/Reactor.AotHelloWorld.Advanced
+          -p:PublishAotInternal=true
+          -p:Platform=x64
+          -r win-x64
+          -c Release
+          -o ${{ runner.temp }}/aot-hello-world-advanced
+          --nologo
+
+      - name: Run Advanced negative trim assertions
+        shell: pwsh
+        env:
+          REACTOR_AOT_ADVANCED_PUBLISH_DIR: ${{ runner.temp }}/aot-hello-world-advanced
+        run: |
+          dotnet test tests/aot_trim_proof/Reactor.AotHelloWorld.Advanced.TrimAssertions `
+            --nologo `
+            --logger "console;verbosity=normal"
+
+      - name: Publish AOT Hello-World Advanced positive
+        run: >
+          dotnet publish tests/aot_trim_proof/Reactor.AotHelloWorld.Advanced.Positive
+          -p:PublishAotInternal=true
+          -p:Platform=x64
+          -r win-x64
+          -c Release
+          -o ${{ runner.temp }}/aot-hello-world-advanced-positive
+          --nologo
+
+      - name: Run Advanced positive trim assertions
+        shell: pwsh
+        env:
+          REACTOR_AOT_ADVANCED_POSITIVE_PUBLISH_DIR: ${{ runner.temp }}/aot-hello-world-advanced-positive
+        run: |
+          dotnet test tests/aot_trim_proof/Reactor.AotHelloWorld.Advanced.Positive.TrimAssertions `
             --nologo `
             --logger "console;verbosity=normal"
 

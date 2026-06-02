@@ -3,6 +3,7 @@
 // scaffolded projects) can consume it via:
 //
 //   #:package Microsoft.UI.Reactor@0.0.0-local
+//   #:package Microsoft.UI.Reactor.Advanced@0.0.0-local
 //
 // The same code path consumers use against a real NuGet — but rebuilt from the
 // current source. Includes the analyzers and agentkit/reactor.api.txt
@@ -44,6 +45,10 @@ public static class PackLocalCommand
         {
             try { File.Delete(stale); } catch { /* best effort */ }
         }
+        foreach (var stale in Directory.EnumerateFiles(feed, $"Microsoft.UI.Reactor.Advanced.{version}.*nupkg"))
+        {
+            try { File.Delete(stale); } catch { /* best effort */ }
+        }
 
         // pack honors Platform-specific build outputs; pick host arch.
         var arch = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture switch
@@ -62,7 +67,16 @@ public static class PackLocalCommand
             return rc;
         }
 
-        // 2. Project templates — Microsoft.UI.Reactor.ProjectTemplates.<version>.nupkg.
+        // 2. Advanced components — Microsoft.UI.Reactor.Advanced.<version>.nupkg
+        Console.WriteLine($"Packing Microsoft.UI.Reactor.Advanced {version} → {feed}");
+        rc = RunPack(repoRoot, Path.Combine("src", "Reactor.Advanced", "Reactor.Advanced.csproj"), configuration, version, feed, arch);
+        if (rc != 0)
+        {
+            Console.Error.WriteLine("advanced pack failed.");
+            return rc;
+        }
+
+        // 3. Project templates — Microsoft.UI.Reactor.ProjectTemplates.<version>.nupkg.
         // Powers `dotnet new reactorapp -n MyApp` against this clone. Templates pack
         // is AnyCPU (no arch needed); the template's <PackageReference> resolves the
         // matching framework version through this same feed.
@@ -95,8 +109,10 @@ public static class PackLocalCommand
         Console.WriteLine();
         Console.WriteLine($"Done. Apps in this repo can now reference:");
         Console.WriteLine($"    #:package Microsoft.UI.Reactor@{version}");
+        Console.WriteLine($"    #:package Microsoft.UI.Reactor.Advanced@{version}");
         Console.WriteLine($"or in a .csproj:");
         Console.WriteLine($"    <PackageReference Include=\"Microsoft.UI.Reactor\" Version=\"{version}\" />");
+        Console.WriteLine($"    <PackageReference Include=\"Microsoft.UI.Reactor.Advanced\" Version=\"{version}\" />");
         Console.WriteLine();
         Console.WriteLine($"To use `dotnet new reactorapp` against this feed:");
         Console.WriteLine($"    dotnet new install \"{templatesNupkg}\"");

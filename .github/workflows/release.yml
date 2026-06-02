@@ -117,6 +117,13 @@ jobs:
           -p:Version=${{ steps.version.outputs.version }}
           -o artifacts/nupkg
 
+      - name: Pack Advanced NuGet
+        run: >
+          dotnet pack src/Reactor.Advanced/Reactor.Advanced.csproj
+          --no-build --configuration Release
+          -p:Version=${{ steps.version.outputs.version }}
+          -o artifacts/nupkg
+
       - name: Pack Templates
         run: >
           dotnet pack tools\Templates\Microsoft.UI.Reactor.Templates.csproj
@@ -233,7 +240,7 @@ jobs:
 
             > Interim distribution — see [spec 022](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/022-packaging-and-distribution.md) for the rollout plan.
 
-            ## Two assets
+            ## Three assets
 
             ### `Microsoft.UI.Reactor.${{ steps.version.outputs.version }}.nupkg` — the framework
 
@@ -252,7 +259,12 @@ jobs:
 
             ```xml
             <PackageReference Include="Microsoft.UI.Reactor" Version="${{ steps.version.outputs.version }}" />
+            <PackageReference Include="Microsoft.UI.Reactor.Advanced" Version="${{ steps.version.outputs.version }}" />
             ```
+
+            ### `Microsoft.UI.Reactor.Advanced.${{ steps.version.outputs.version }}.nupkg` — optional Win2D/advanced controls
+
+            Versioned in lock-step with the framework package.
 
             ### `reactor-skill-kit-${{ steps.version.outputs.version }}.zip` — agent skill bundle + `mur` CLI
 
