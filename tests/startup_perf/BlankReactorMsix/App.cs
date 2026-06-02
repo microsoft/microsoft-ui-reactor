@@ -38,7 +38,6 @@ try
         title: "BlankReactor",
         width: 600,
         height: 400,
-        devtools: false,
         configure: host =>
         {
             // Hook before Activate() so the first WM_ACTIVATE arrives at our handler.
