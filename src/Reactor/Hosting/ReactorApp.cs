@@ -181,8 +181,6 @@ public static class ReactorApp
         set => Volatile.Write(ref _appLogger, value);
     }
 
-    private static int _previewParamDeprecationWarned;
-
     // ── XAML control-assembly registration ─────────────────────────────────
     //
     // The lifted XAML loader resolves `local:` namespaces and Generic.xaml type
@@ -203,7 +201,7 @@ public static class ReactorApp
     /// XAML loader for this process. Required when a third-party control library
     /// is referenced from a Reactor app that has no XAML files of its own (and
     /// therefore no compiler-generated provider that would auto-chain to the
-    /// library). Call before <see cref="Run{TRoot}(string, double, double, bool, bool, bool, Action{ReactorHost}?)"/>.
+    /// library). Call before <see cref="Run{TRoot}(string, double, double, bool, Action{ReactorHost}?)"/>.
     /// Idempotent (same instance is added at most once) and thread-safe.
     /// See https://github.com/microsoft/microsoft-ui-reactor/issues/142.
     /// </summary>
@@ -267,9 +265,9 @@ public static class ReactorApp
         => Volatile.Read(ref _registeredXamlMetadataProviders);
 
     // Session-scoped flag. True iff the process was launched with a devtools
-    // subverb (--devtools app / --devtools run) AND the developer passed
-    // devtools: true to Run. Frozen after startup; read by UseDevtools() and
-    // by the DevtoolsMenu component to decide whether to render themselves.
+    // subverb (--devtools app / --devtools run) and the binary was built with
+    // Reactor.DevtoolsSupport enabled. Frozen after startup; read by UseDevtools()
+    // and by the DevtoolsMenu component to decide whether to render themselves.
     private static int _devtoolsEnabled;
     public static bool DevtoolsEnabled
     {
@@ -287,30 +285,21 @@ public static class ReactorApp
     private static readonly nint DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4;
 
     /// <summary>
-    /// Launches the app. Set <c>devtools: true</c> in DEBUG builds to enable the
-    /// <c>mur devtools</c> / <c>--devtools</c> surface: component switching via VS Code,
-    /// MCP agent tools (Phase 2+), and component listing.
+    /// Launches the app. Enable the <c>Reactor.DevtoolsSupport</c> runtime host
+    /// configuration switch in DEBUG builds to allow the <c>mur devtools</c> /
+    /// <c>--devtools</c> surface: component switching via VS Code, MCP agent tools,
+    /// and component listing.
     /// </summary>
-    /// <remarks>
-    /// The <c>preview</c> parameter is deprecated and is kept for one release. When both are
-    /// passed, <c>devtools</c> wins.
-    /// </remarks>
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Devtools uses Assembly.GetTypes(); non-devtools code paths are trim-safe.")]
     public static void Run<TRoot>(
         string title = "Reactor App",
         double width = 1024,
         double height = 768,
         bool fullScreen = false,
-        bool devtools = false,
-        // DEPRECATED: use 'devtools:'. Kept for one release. The runtime emits a
-        // one-shot stderr warning when this is set without 'devtools:'.
-        bool preview = false,
         Action<ReactorHost>? configure = null)
         where TRoot : Component, new()
     {
         EmitDipBehaviorChangeNoticeOnce();
-        var effectiveDevtools = ResolveDevtoolsParam(devtools, preview);
-        if (effectiveDevtools && TryRunDevtools(title, width, height, configure, hostRoot: typeof(TRoot))) return;
+        if (TryRunDevtools(title, width, height, fullScreen, configure, hostRoot: typeof(TRoot), hostRootFactory: static () => new TRoot())) return;
 
         RunOnSta(() =>
         {
@@ -334,24 +323,18 @@ public static class ReactorApp
 
     /// <summary>
     /// Launches the app with a render function instead of a Component subclass.
-    /// See the generic overload for <c>devtools</c> semantics.
+    /// See the generic overload for devtools activation semantics.
     /// </summary>
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Devtools uses Assembly.GetTypes(); non-devtools code paths are trim-safe.")]
     public static void Run(
         string title,
         Func<RenderContext, Element> rootRender,
         double width = 1024,
         double height = 768,
         bool fullScreen = false,
-        bool devtools = false,
-        // DEPRECATED: use 'devtools:'. Kept for one release. The runtime emits a
-        // one-shot stderr warning when this is set without 'devtools:'.
-        bool preview = false,
         Action<ReactorHost>? configure = null)
     {
         EmitDipBehaviorChangeNoticeOnce();
-        var effectiveDevtools = ResolveDevtoolsParam(devtools, preview);
-        if (effectiveDevtools && TryRunDevtools(title, width, height, configure)) return;
+        if (TryRunDevtools(title, width, height, fullScreen, configure, rootRenderFunc: rootRender)) return;
 
         RunOnSta(() =>
         {
@@ -409,7 +392,7 @@ public static class ReactorApp
     /// Use it for pre-mount setup that needs the live <see cref="ReactorHost"/>
     /// (logger wiring, custom reconciler registrations, host-level event
     /// hooks). Mirror of the <c>configure</c> parameter on the legacy
-    /// <see cref="Run{TRoot}(string, double, double, bool, bool, bool, Action{ReactorHost}?)"/>
+    /// <see cref="Run{TRoot}(string, double, double, bool, Action{ReactorHost}?)"/>
     /// entry — secondary windows now have the same escape hatch as the
     /// primary.
     /// </param>
@@ -671,28 +654,23 @@ public static class ReactorApp
     }
 
     /// <summary>
-    /// Reconciles the deprecated <c>preview:</c> parameter with the new <c>devtools:</c>.
-    /// If only <c>preview</c> is set, emit a one-time deprecation warning to stderr.
-    /// </summary>
-    internal static bool ResolveDevtoolsParam(bool devtools, bool preview)
-    {
-        if (preview && !devtools && Interlocked.Exchange(ref _previewParamDeprecationWarned, 1) == 0)
-        {
-            Console.Error.WriteLine("[reactor] 'preview:' is deprecated; use 'devtools:'.");
-        }
-        return devtools || preview;
-    }
-
-    /// <summary>
     /// Checks the process command-line for <c>--devtools</c> or the deprecated <c>--preview</c>.
     /// If a devtools subverb is selected, launches the corresponding flow (list, run, etc.).
-    /// With <c>--vscode</c>, starts the capture server for the VS Code preview panel. Only
-    /// active when the caller passes <c>devtools: true</c>.
+    /// With <c>--vscode</c>, starts the capture server for the VS Code preview panel. Devtools
+    /// dispatch requires the build-time <c>Reactor.DevtoolsSupport</c> switch.
     /// </summary>
-    [RequiresUnreferencedCode("Devtools uses Assembly.GetTypes() for component discovery.")]
-    private static bool TryRunDevtools(string title, double width, double height, Action<ReactorHost>? configure, Type? hostRoot = null)
+    private static bool TryRunDevtools(string title, double width, double height, bool fullScreen, Action<ReactorHost>? configure, Type? hostRoot = null, Func<Component>? hostRootFactory = null, Func<RenderContext, Element>? rootRenderFunc = null)
     {
-        var args = Environment.GetCommandLineArgs();
+        return TryRunDevtoolsCore(Environment.GetCommandLineArgs(), title, width, height, fullScreen, configure, hostRoot, hostRootFactory, rootRenderFunc, exitOnUnavailable: true);
+    }
+
+    internal static bool TryRunDevtoolsForTest(string[] args, string title, double width, double height, Action<ReactorHost>? configure = null, Type? hostRoot = null)
+    {
+        return TryRunDevtoolsCore(args, title, width, height, fullScreen: false, configure, hostRoot, hostRootFactory: null, rootRenderFunc: null, exitOnUnavailable: false);
+    }
+
+    private static bool TryRunDevtoolsCore(string[] args, string title, double width, double height, bool fullScreen, Action<ReactorHost>? configure, Type? hostRoot = null, Func<Component>? hostRootFactory = null, Func<RenderContext, Element>? rootRenderFunc = null, bool exitOnUnavailable = false)
+    {
         var options = DevtoolsCliParser.Parse(args);
 
         if (options.PreviewAndDevtoolsConflict)
@@ -703,419 +681,34 @@ public static class ReactorApp
 
         if (options.Subverb is null) return false;
 
-        // Install log capture as the very first side-effect after we know
-        // devtools is active. Runs before component reflection, before any
-        // Application.Start, so startup Debug/Trace/Console output is caught
-        // even when the agent attaches late. Skipped when `--devtools-logs off`
-        // is set. In stdio transport we must NOT forward Console.Out (that's
-        // the JSON-RPC frame) — writes still land in the buffer, just not
-        // passed through to the parent process.
-        if (options.Subverb == DevtoolsSubverb.Run && !options.LogsDisabled)
+        if (ReactorFeatures.IsDevtoolsSupported && ReactorDevtoolsBootstrap.Current is { } host)
         {
-            var capBytes = options.LogsCapacityMb is { } mb
-                ? (long)mb * 1024 * 1024
-                : LogCaptureBuffer.DefaultCapacityBytes;
-            var forwardOut = options.Transport != McpTransport.Stdio;
-            LogCaptureInstall.Install(capBytes, forwardConsole: forwardOut);
+            var request = new ReactorDevtoolsBootRequest(
+                options,
+                title,
+                width,
+                height,
+                fullScreen,
+                hostRoot,
+                hostRootFactory,
+                rootRenderFunc,
+                configure);
+            return host.TryHandleCommandLine(request);
         }
 
-        if (options.UsedDeprecatedPreview)
-            Console.Error.WriteLine("[reactor] '--preview' is deprecated; use '--devtools run'.");
-
-        switch (options.Subverb)
-        {
-            case DevtoolsSubverb.List:
-                return RunListSubverb(options);
-            case DevtoolsSubverb.Run:
-                DevtoolsEnabled = true;
-                return RunRunSubverb(options, title, width, height, configure, hostRoot);
-            case DevtoolsSubverb.Screenshot:
-                return RunScreenshotSubverb(options, width, height, configure, hostRoot);
-            case DevtoolsSubverb.Tree:
-                Console.Error.WriteLine($"[devtools] '--devtools tree' (headless) is not implemented yet.");
-                return true;
-            case DevtoolsSubverb.App:
-                // Pass-through mode: enable the in-app dev UI flag and let the
-                // caller's normal run loop proceed (returning false skips the
-                // short-circuit in Run<TRoot>).
-                DevtoolsEnabled = true;
-                return false;
-            default:
-                return false;
-        }
-    }
-
-    [RequiresUnreferencedCode("Devtools component discovery uses Assembly.GetTypes().")]
-    private static bool RunScreenshotSubverb(DevtoolsCliOptions options, double width, double height, Action<ReactorHost>? configure, Type? hostRoot = null)
-    {
-        if (string.IsNullOrEmpty(options.ScreenshotOutputPath))
-        {
-            Console.Error.WriteLine("[devtools] '--devtools screenshot' requires --out <path.png>.");
-            return true;
-        }
-
-        var componentName = options.ComponentName ?? hostRoot?.Name ?? FindAllComponentNames().FirstOrDefault();
-        if (componentName == null)
-        {
-            Console.Error.WriteLine("[devtools] No Component subclasses found.");
-            return true;
-        }
-        var type = FindComponentType(componentName);
-        if (type == null)
-        {
-            Console.Error.WriteLine($"[devtools] Component '{componentName}' not found.");
-            return true;
-        }
-
-        string outPath = options.ScreenshotOutputPath!;
-
-        RunOnSta(() =>
-        {
-            InitProcess();
-
-            Options = new ReactorAppOptions(
-                RootFactory: () => (Core.Component)Activator.CreateInstance(type)!,
-                Configure: host =>
-                {
-                    configure?.Invoke(host);
-                    // Capture once after first render, then exit. UpdateLayout flushes
-                    // pending measure/arrange so the first frame is stable.
-                    host.Window.DispatcherQueue.TryEnqueue(() =>
-                    {
-                        try
-                        {
-                            if (host.Window.Content is FrameworkElement fe) fe.UpdateLayout();
-                            var capture = ScreenshotCapture.CaptureWindow(host.Window, includeChrome: false);
-                            File.WriteAllBytes(outPath, capture.Png);
-                            Console.WriteLine($"[devtools] Wrote {capture.Width}x{capture.Height} PNG to {outPath}");
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.Error.WriteLine($"[devtools] Screenshot failed: {ex.Message}");
-                        }
-                        finally
-                        {
-                            Environment.Exit(0);
-                        }
-                    });
-                },
-                WindowTitle: $"Screenshot — {componentName}",
-                WindowWidth: width,
-                WindowHeight: height);
-
-            Application.Start(_ =>
-            {
-                var context = new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread());
-                SynchronizationContext.SetSynchronizationContext(context);
-                new ReactorApplication();
-            });
-        });
-
+        EmitDevtoolsNotAvailableMessage();
+        Environment.ExitCode = 2;
+        if (exitOnUnavailable) Environment.Exit(2);
         return true;
     }
 
-    [RequiresUnreferencedCode("Devtools component listing uses Assembly.GetTypes().")]
-    private static bool RunListSubverb(DevtoolsCliOptions options)
+    private static void EmitDevtoolsNotAvailableMessage()
     {
-        var names = FindAllComponentNames().ToList();
-        foreach (var name in names)
-            Console.WriteLine(name);
-        Console.Out.Flush();
-        if (!string.IsNullOrEmpty(options.ListOutputPath))
-            File.WriteAllLines(options.ListOutputPath, names);
-        return true;
-    }
-
-    [RequiresUnreferencedCode("Devtools component discovery uses Assembly.GetTypes() and Activator.CreateInstance.")]
-    private static bool RunRunSubverb(DevtoolsCliOptions options, string title, double width, double height, Action<ReactorHost>? configure, Type? hostRoot = null)
-    {
-        _ = title;
-
-        // Resolve the initial component type. Precedence:
-        //   1. Explicit --component on the command line — the user asked.
-        //   2. The TRoot type that the host passed to Run<TRoot> — matches their
-        //      intent and avoids "first-alphabetical" surprises where a nested
-        //      helper component wins over the real app root.
-        //   3. Fallback to the first component the reflection scan finds.
-        string? componentName = options.ComponentName;
-        Type? componentType = null;
-        if (componentName != null)
-        {
-            componentType = FindComponentType(componentName);
-            if (componentType == null)
-            {
-                Console.Error.WriteLine($"[devtools] Component '{componentName}' not found.");
-                Console.Error.WriteLine($"[devtools] Available components: {string.Join(", ", FindAllComponentNames())}");
-                return true;
-            }
-        }
-        else if (hostRoot != null && typeof(Core.Component).IsAssignableFrom(hostRoot) && !hostRoot.IsAbstract)
-        {
-            componentType = hostRoot;
-            componentName = hostRoot.Name;
-        }
-        else
-        {
-            var firstName = FindAllComponentNames().FirstOrDefault();
-            if (firstName == null)
-            {
-                Console.Error.WriteLine("[devtools] No Component subclasses found.");
-                return true;
-            }
-            componentType = FindComponentType(firstName)!;
-            componentName = firstName;
-            Console.Error.WriteLine(
-                $"[devtools] No --component passed and Run<T> not detected; defaulting to '{firstName}' (alphabetical). " +
-                $"Pass --component to pick another.");
-        }
-
-        bool vscodeMode = options.VsCodeMode;
-        int captureFps = options.Fps;
-
-        Console.WriteLine($"[devtools] Previewing {componentType.FullName}");
-        Console.WriteLine($"[devtools] Hot reload active — edit and save to see changes instantly");
-        if (vscodeMode) Console.WriteLine($"[devtools] VS Code mode enabled (capture @ {captureFps} fps)");
-
-        var initialComponentType = componentType;
-        var initialComponentName = componentName;
-
-        RunOnSta(() =>
-        {
-            InitProcess();
-
-            Action<ReactorHost> combinedConfigure = host =>
-            {
-                configure?.Invoke(host);
-
-                // Shared switch-component callback — reused by both the VS Code
-                // capture server and the MCP devtools server so they agree on
-                // the active component.
-                bool SwitchComponentCore(string name)
-                {
-                    // SECURITY (TASK-021): only allow switching to a type
-                    // already present in the announced component list. Without
-                    // this, the loopback /preview endpoint becomes a primitive
-                    // for activating arbitrary Component subclasses (including
-                    // ones the dev never intended to expose).
-                    var allowed = FindAllComponentNames();
-                    bool ok = false;
-                    foreach (var n in allowed)
-                    {
-                        if (string.Equals(n, name, StringComparison.OrdinalIgnoreCase)) { ok = true; break; }
-                    }
-                    if (!ok) return false;
-
-                    var type = FindComponentType(name);
-                    if (type == null) return false;
-
-                    host.Window.DispatcherQueue.TryEnqueue(() =>
-                    {
-                        var instance = (Core.Component)Activator.CreateInstance(type)!;
-                        host.Mount(instance);
-                        host.Window.Title = $"Preview — {name}";
-                    });
-
-                    initialComponentName = name;
-                    Console.WriteLine($"[devtools] Switched to {type.FullName}");
-                    return true;
-                }
-
-                if (vscodeMode)
-                {
-                    var server = new PreviewCaptureServer(
-                        host.Window.DispatcherQueue,
-                        host.Window,
-                        captureFps);
-
-                    server.GetComponents = () => FindAllComponentNames().ToList();
-                    server.GetCurrentComponent = () => initialComponentName;
-                    server.SwitchComponent = SwitchComponentCore;
-
-                    server.Start();
-                    host.Window.Closed += (_, _) => server.Dispose();
-                }
-
-                // MCP devtools server — always on when --devtools run is active.
-                // Port pinned by --mcp-port for the supervisor reload loop.
-                // Log level pinned by --devtools-log-level (default: call).
-                var logger = new DevtoolsLogger(
-                    DevtoolsLogger.DefaultDirectory(),
-                    global::System.Diagnostics.Process.GetCurrentProcess().Id,
-                    DevtoolsLogger.ParseLevel(options.LogLevel));
-                var projectId = options.ProjectIdentifier ?? DeriveProjectIdentifier();
-                if (projectId is not null && DevtoolsMcpServer.IsAnotherSessionActive(projectId, out var existing))
-                {
-                    Console.Error.WriteLine(
-                        $"[devtools] another session for this project is active at {existing!.Endpoint} (pid {existing.Pid}); stop it first");
-                    Environment.Exit(3);
-                    return;
-                }
-
-                var mcp = new DevtoolsMcpServer(
-                    host.Window.DispatcherQueue,
-                    host.Window,
-                    preferredPort: options.McpPort,
-                    logger: logger,
-                    transport: options.Transport,
-                    projectIdentifier: projectId);
-
-                var windows = new WindowRegistry(mcp.BuildTag);
-                var nodes = new NodeRegistry();
-                // Pin the primary devtools window to "main" so the handle
-                // doesn't drift when switchComponent updates the title;
-                // secondary windows opened via OpenWindow get title-based ids.
-                // Subscribing here picks up the legacy bridge's window because
-                // RegisterWindow fires AFTER configure (this lambda) returns.
-                // (spec 036 §10)
-                EventHandler<ReactorWindow> onOpened = (_, w) =>
-                {
-                    bool isMain = ReferenceEquals(w, ReactorApp.PrimaryWindow);
-                    windows.Attach(w, isMain: isMain, stableId: isMain ? "main" : null);
-                };
-                EventHandler<ReactorWindow> onClosed = (_, w) => windows.Detach(w);
-                ReactorApp.WindowOpened += onOpened;
-                ReactorApp.WindowClosed += onClosed;
-                host.Window.Closed += (_, _) =>
-                {
-                    ReactorApp.WindowOpened -= onOpened;
-                    ReactorApp.WindowClosed -= onClosed;
-                };
-
-                // windows.open factory. The allowlist gate is enforced by
-                // DevtoolsTools.Register_WindowsOpen before this fires (W-3
-                // hardening); here we just resolve the type and open the
-                // window. (spec 036 §10 / §0.5 security checklist)
-                string? OpenWindowByAllowlistedComponentCore(WindowSpec spec, string componentName)
-                {
-                    var type = FindComponentType(componentName);
-                    if (type is null) return null;
-
-                    var opened = ReactorApp.OpenWindow(spec, () => (Core.Component)Activator.CreateInstance(type)!);
-                    return opened.Id;
-                }
-
-                DevtoolsTools.RegisterCore(mcp, new DevtoolsTools.ToolHostContext
-                {
-                    GetComponents = () => FindAllComponentNames().ToList(),
-                    GetComponentsDetailed = () => FindAllComponentsDetailed().ToList(),
-                    GetCurrentComponent = () => initialComponentName,
-                    SwitchComponent = SwitchComponentCore,
-                    RequestReload = () => RequestDevtoolsReload(mcp, host),
-                    RequestShutdown = () => RequestDevtoolsShutdown(mcp, host),
-                    Windows = windows,
-                    Nodes = nodes,
-                    OpenWindowByAllowlistedComponent = OpenWindowByAllowlistedComponentCore,
-                });
-                DevtoolsUiaTools.RegisterUiaTools(mcp, nodes, windows);
-                DevtoolsFireTool.Register(mcp, () => host.RootComponent);
-                DevtoolsStateTool.Register(mcp, () => host.RootComponent);
-                DevtoolsLogsTool.Register(mcp, () => LogCaptureInstall.Shared);
-                // Spec 045 §2.26 — docking.list / docking.snapshot / docking.dock.
-                // Backs onto DockHostRegistry + DockSnapshotBuilder + the
-                // DockHostModel mutator queue. Idempotent re-registration is
-                // safe (mcp.Tools.Register replaces by name).
-                DevtoolsDockingTools.Register(mcp);
-
-                mcp.Start();
-                // Ready line fires after the first render — subscribe once to the host.
-                bool announced = false;
-                host.Window.DispatcherQueue.TryEnqueue(() =>
-                {
-                    if (announced) return;
-                    announced = true;
-                    mcp.AnnounceReady();
-                });
-                host.Window.Closed += (_, _) => mcp.Dispose();
-            };
-
-            Options = new ReactorAppOptions(
-                RootFactory: () => (Core.Component)Activator.CreateInstance(initialComponentType)!,
-                Configure: combinedConfigure,
-                WindowTitle: $"Preview — {initialComponentName}",
-                WindowWidth: width,
-                WindowHeight: height);
-
-            Application.Start(_ =>
-            {
-                var context = new DispatcherQueueSynchronizationContext(DispatcherQueue.GetForCurrentThread());
-                SynchronizationContext.SetSynchronizationContext(context);
-                new ReactorApplication();
-            });
-        });
-
-        return true;
-    }
-
-    /// <summary>
-    /// Finds a Component type by name across all loaded assemblies (case-insensitive).
-    /// </summary>
-    [RequiresUnreferencedCode("Devtools component discovery uses Assembly.GetTypes().")]
-    internal static Type? FindComponentType(string name)
-    {
-        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-        {
-            Type[] types;
-            try { types = asm.GetTypes(); }
-            catch (global::System.Reflection.ReflectionTypeLoadException ex) { types = ex.Types.Where(t => t != null).ToArray()!; }
-            catch { continue; }
-
-            var match = types.FirstOrDefault(t =>
-                string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase) &&
-                typeof(Core.Component).IsAssignableFrom(t) &&
-                !t.IsAbstract);
-            if (match != null) return match;
-        }
-        return null;
-    }
-
-    [RequiresUnreferencedCode("Assembly.GetTypes() is incompatible with trimming. Devtools-only code path.")]
-    internal static IEnumerable<string> FindAllComponentNames()
-    {
-        return AppDomain.CurrentDomain.GetAssemblies()
-            .SelectMany(a => { try { return a.GetTypes(); } catch (global::System.Reflection.ReflectionTypeLoadException ex) { return ex.Types.Where(t => t != null)!; } catch { return []; } })
-            .Where(t => typeof(Core.Component).IsAssignableFrom(t!) && !t!.IsAbstract && !t.FullName!.StartsWith("Microsoft.UI.Reactor."))
-            .Select(t => t!.Name)
-            .Distinct()
-            .OrderBy(n => n);
-    }
-
-    [RequiresUnreferencedCode("Assembly.GetTypes() is incompatible with trimming. Devtools-only code path.")]
-    internal static IEnumerable<Hosting.Devtools.ComponentInfo> FindAllComponentsDetailed()
-    {
-        return AppDomain.CurrentDomain.GetAssemblies()
-            .SelectMany(a => { try { return a.GetTypes(); } catch (global::System.Reflection.ReflectionTypeLoadException ex) { return ex.Types.Where(t => t != null)!; } catch { return []; } })
-            .Where(t => typeof(Core.Component).IsAssignableFrom(t!) && !t!.IsAbstract && !t.FullName!.StartsWith("Microsoft.UI.Reactor."))
-            .Select(t => new Hosting.Devtools.ComponentInfo(
-                Name: t!.Name,
-                FullName: t.FullName ?? t.Name,
-                IsNested: t.IsNested,
-                IsPublic: t.IsPublic || t.IsNestedPublic,
-                Namespace: t.Namespace))
-            .GroupBy(c => c.Name)
-            .Select(g => g.First());
-    }
-
-    /// <summary>
-    /// Identifier used to hash this session's lockfile path when the supervisor
-    /// didn't pass <c>--devtools-project</c>. Falls back to the entry assembly
-    /// location — stable per build output, sufficient for single-instance.
-    /// </summary>
-    [UnconditionalSuppressMessage("AOT", "IL3000", Justification = "Assembly.Location used for diagnostic project identifier.")]
-    private static string? DeriveProjectIdentifier()
-    {
-        try
-        {
-            var asm = global::System.Reflection.Assembly.GetEntryAssembly();
-            var loc = asm?.Location;
-            if (!string.IsNullOrEmpty(loc)) return loc;
-        }
-        catch { }
-        return null;
-    }
-
-    internal static void ResetDeprecationWarningForTests()
-    {
-        Interlocked.Exchange(ref _previewParamDeprecationWarned, 0);
+        Console.Error.WriteLine(
+            "[reactor] --devtools requested but this binary was built without Reactor.DevtoolsSupport or without the Microsoft.UI.Reactor.Devtools package. " +
+            "Devtools must be enabled at build time. Add the following to your csproj and rebuild:");
+        Console.Error.WriteLine(
+            "  <RuntimeHostConfigurationOption Include=\"Reactor.DevtoolsSupport\" Value=\"true\" Trim=\"true\" />");
     }
 
     internal static void ResetDevtoolsEnabledForTests()
@@ -1123,71 +716,18 @@ public static class ReactorApp
         Interlocked.Exchange(ref _devtoolsEnabled, 0);
     }
 
-    /// <summary>
-    /// Test-only reset for the once-per-process DIP behavior notice flag.
-    /// Mirrors <see cref="ResetDeprecationWarningForTests"/> so the unit-test
-    /// suite can drive <see cref="EmitDipBehaviorChangeNoticeOnce"/> through
-    /// both branches deterministically.
-    /// </summary>
     internal static void ResetDipBehaviorChangeNoticeForTests()
     {
         Interlocked.Exchange(ref _dipBehaviorChangeNoticeEmitted, 0);
     }
 
-    /// <summary>
-    /// Test-only reset for the registered XAML metadata provider list. Lets
-    /// <see cref="RegisterControlAssembly(IXamlMetadataProvider)"/> tests run
-    /// independently regardless of other tests' (or production code's)
-    /// registrations.
-    /// </summary>
     internal static void ResetRegisteredControlAssembliesForTests()
     {
         lock (_registeredXamlMetadataProvidersLock)
             Volatile.Write(ref _registeredXamlMetadataProviders, []);
     }
 
-    /// <summary>
-    /// Sentinel exit code consumed by the `mur devtools` supervisor to mean
-    /// "rebuild and respawn". Any other exit code propagates.
-    /// </summary>
-    internal const int DevtoolsReloadExitCode = 42;
-
-    private static void RequestDevtoolsReload(DevtoolsMcpServer mcp, ReactorHost host)
-    {
-        // Response flush happens before shutdown — the tool returns first, then the
-        // UI thread disposes the listener and closes the window. Exit 42 tells the
-        // supervisor to rebuild and relaunch with the same pinned MCP port.
-        _ = Task.Run(async () =>
-        {
-            await Task.Delay(100); // Let the HTTP response flush.
-            try { mcp.Dispose(); } catch { }
-            host.Window.DispatcherQueue.TryEnqueue(() =>
-            {
-                try { host.Window.Close(); } catch { }
-                Environment.Exit(DevtoolsReloadExitCode);
-            });
-        });
-    }
-
-    /// <summary>
-    /// Same shape as the reload path, but exits with code 0 so the `mur devtools`
-    /// supervisor returns cleanly without rebuilding.
-    /// </summary>
-    private static void RequestDevtoolsShutdown(DevtoolsMcpServer mcp, ReactorHost host)
-    {
-        _ = Task.Run(async () =>
-        {
-            await Task.Delay(100); // Let the HTTP response flush.
-            try { mcp.Dispose(); } catch { }
-            host.Window.DispatcherQueue.TryEnqueue(() =>
-            {
-                try { host.Window.Close(); } catch { }
-                Environment.Exit(0);
-            });
-        });
-    }
-
-    private static void InitProcess()
+    internal static void InitProcess()
     {
         if (!SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2))
             global::System.Diagnostics.Debug.WriteLine($"SetProcessDpiAwarenessContext failed: {Marshal.GetLastWin32Error()}");
@@ -1200,7 +740,7 @@ public static class ReactorApp
     /// Top-level statements and async Main produce MTA threads where [STAThread] cannot be
     /// applied, so we re-launch on a dedicated STA thread when needed.
     /// </summary>
-    private static void RunOnSta(Action action)
+    internal static void RunOnSta(Action action)
     {
         if (Thread.CurrentThread.GetApartmentState() == ApartmentState.STA)
         {

@@ -126,3 +126,12 @@ internal static class RichEditBoxDescriptor
             set:         static (c, v) => c.SelectionHighlightColor = v,
             shouldWrite: static e => e.SelectionHighlightColor is not null);
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <c>new()</c>-able registration shim for
+/// <see cref="RichEditBoxDescriptor"/>; touched via
+/// <c>_ = Reg&lt;RichEditBoxElement, WinUI.RichEditBox, RichEditBoxDescriptorHandler&gt;.Done</c>
+/// from the <c>RichEditBox</c> factory.
+/// </summary>
+internal sealed class RichEditBoxDescriptorHandler()
+    : DescriptorHandler<RichEditBoxElement, WinUI.RichEditBox>(RichEditBoxDescriptor.Descriptor);

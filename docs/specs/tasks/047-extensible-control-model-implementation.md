@@ -29,10 +29,17 @@ Derived from: `docs/specs/047-extensible-control-model.md`
 > `EventHandlerState` split into `ModifierEventHandlerState` + per-control
 > `ControlEventStateBox` (§4.3); the §11.7 bucketed `Element` base
 > (`ElementExtras`) + the §11.6 byte-gate target constants (§4.4); and the final
-> author docs (§4.8). **Outstanding (baseline-machine-only, handed off):** the
-> ARM64 stable-AC perf ratification (§4.9) and the §11.6 hard byte-gate
-> *measurement/enforcement* (§4.4) — both blocked on `LAPTOP-4MEP83VI`. Full
-> x64 validation green throughout (build / xunit 9128 / selftests).
+> author docs (§4.8). **Outstanding (baseline-machine-only, partially landed):**
+> the ARM64 stable-AC perf ratification (§4.9) and the §11.6 hard byte-gate
+> *measurement/enforcement* (§4.4). An **indicative ARM64 capture landed on
+> `LAPTOP-4MEP83VI`** (PR #465, `047/phase4-results/.../2026-05-29-arm64/`): the
+> deterministic **allocation** axis is now measured — **M2/M3 meet the §15.6
+> "≤ Today" budget, but M1 regressed +20%** (and M1/M2 miss the absolute
+> 407/1,520 B gates; M3 passes); **M12 +17%** also regressed. The **timing** axis
+> and the **macro suite (L1–L14)** are still unratified (no §15.5 isolation;
+> macro projects deleted in Phase 4), so a full sign-off + the M1/M12 alloc fix
+> remain open. Full x64 correctness validation green throughout (build / xunit
+> 9128 / selftests).
 >
 > Phase 0 below is *spec-process* work — audits, suite infrastructure, baseline
 > measurements, and decision criteria. It cleared its exit gate (PR #414) and

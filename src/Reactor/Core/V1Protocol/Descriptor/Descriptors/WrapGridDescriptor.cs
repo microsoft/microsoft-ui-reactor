@@ -70,3 +70,11 @@ internal static class WrapGridDescriptor
             set:         static (c, v) => c.ItemHeight = v,
             shouldWrite: static e => !double.IsNaN(e.ItemHeight));
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <see cref="DescriptorHandler{TElement,TControl}"/>
+/// subclass so the Reactor.Factories DSL can reach this descriptor via
+/// the <c>Reg&lt;&gt;</c> registration touch without leaking
+/// <c>DescriptorHandler&lt;,&gt;</c> as a public surface.
+/// </summary>
+internal sealed class WrapGridDescriptorHandler() : DescriptorHandler<WrapGridElement, WinUI.VariableSizedWrapGrid>(WrapGridDescriptor.Descriptor);

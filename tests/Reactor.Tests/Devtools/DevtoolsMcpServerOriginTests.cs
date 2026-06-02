@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using Microsoft.UI.Reactor.Hosting.Devtools;
 using Xunit;
@@ -13,6 +14,7 @@ namespace Microsoft.UI.Reactor.Tests.Devtools;
 /// </summary>
 public class DevtoolsMcpServerOriginTests
 {
+    [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.NonPublicMethods)]
     private static readonly Type ServerType = typeof(DevtoolsMcpServer);
 
     private static bool InvokeIsAllowedOrigin(string origin)

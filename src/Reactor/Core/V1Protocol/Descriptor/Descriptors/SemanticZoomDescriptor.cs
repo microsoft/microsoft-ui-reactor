@@ -42,3 +42,10 @@ internal static class SemanticZoomDescriptor
             GetSetters = static e => e.Setters,
         };
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <c>new()</c>-able registration shim for
+/// <see cref="SemanticZoomDescriptor"/>.
+/// </summary>
+internal sealed class SemanticZoomDescriptorHandler()
+    : DescriptorHandler<SemanticZoomElement, WinUI.SemanticZoom>(SemanticZoomDescriptor.Descriptor);

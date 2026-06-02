@@ -36,3 +36,11 @@ internal static class AnnounceRegionDescriptor
             },
             update: static (tb, oldAnn, newAnn) => { });
 }
+
+/// <summary>
+/// Spec 048 §3.3 thin handler — instantiated lazily by
+/// <see cref="ControlRegistry"/> when the global path needs the
+/// descriptor-backed <see cref="AnnounceRegionDescriptor"/>.
+/// </summary>
+internal sealed class AnnounceRegionDescriptorHandler()
+    : DescriptorHandler<AnnounceRegionElement, WinUI.TextBlock>(AnnounceRegionDescriptor.Descriptor);

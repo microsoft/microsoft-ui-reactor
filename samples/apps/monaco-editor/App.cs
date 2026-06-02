@@ -31,9 +31,6 @@ public static class Program
 {
     [STAThread]
     static void Main() => ReactorApp.Run<EditorApp>("Monaco Editor", width: 1200, height: 800,
-#if DEBUG
-        devtools: true,
-#endif
         configure: host =>
     {
         // Spec 033 §6 — backdrop is declared on the root element via

@@ -8,9 +8,6 @@ global using ChatSample.Chat.Model;
 global using ChatSample.Chat.UI;
 
 ReactorApp.Run<ChatSampleApp>("Chat Sample", width: 1200, height: 800
-#if DEBUG
-    , devtools: true
-#endif
     , configure: host =>
     {
         var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(host.Window);

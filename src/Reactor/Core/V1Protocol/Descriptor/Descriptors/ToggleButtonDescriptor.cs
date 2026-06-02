@@ -69,3 +69,10 @@ internal static class ToggleButtonDescriptor
             slotIsNull:       static p => p.ClickTrampoline is null,
             setSlot:          static (p, h) => p.ClickTrampoline = h);
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <c>new()</c>-able registration shim for
+/// <see cref="ToggleButtonDescriptor"/>.
+/// </summary>
+internal sealed class ToggleButtonDescriptorHandler()
+    : DescriptorHandler<ToggleButtonElement, WinPrim.ToggleButton>(ToggleButtonDescriptor.Descriptor);

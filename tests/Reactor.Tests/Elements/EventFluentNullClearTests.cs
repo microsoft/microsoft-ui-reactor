@@ -738,9 +738,9 @@ public class EventFluentNullClearTests
     }
 
     [Fact]
-    public void MaskedTextField_Changed_NullClears()
+    public void MaskedTextBox_Changed_NullClears()
     {
-        var el = new MaskedTextFieldElement("").Changed(SentinelStr);
+        var el = new MaskedTextBoxElement("").Changed(SentinelStr);
         Assert.Same(SentinelStr, el.OnChanged);
         Assert.Null(el.Changed(null).OnChanged);
     }

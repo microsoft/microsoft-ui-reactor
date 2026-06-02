@@ -16,9 +16,6 @@ if (args.Contains("--self-test"))
 else
 {
     ReactorApp.Run<GalleryApp>("Reactor Charting Gallery", width: 1400, height: 900,
-#if DEBUG
-        devtools: true,
-#endif
         configure: host => XamlInterop.Register(host.Reconciler));
 }
 
@@ -152,7 +149,7 @@ class LandingPage : Component
         var sections = categories.Select(group =>
             VStack(8,
                 SubHeading(group.Key).Foreground(Theme.PrimaryText),
-                new FlexElement(
+                Flex(
                     group.Select(sample =>
                         Button(
                             VStack(6,
@@ -164,7 +161,7 @@ class LandingPage : Component
                          .WithKey(sample.Title)
                          .AutomationName(sample.Title)
                     ).ToArray()
-                )
+                ) with
                 {
                     Direction = FlexDirection.Row,
                     Wrap = FlexWrap.Wrap,

@@ -130,9 +130,12 @@ The `<EmbeddedResource Include="..\..\SKILL.md">` line stays — `mur --skill` s
 
 > Mixing a binary into a skill directory is unusual — most agent skills are pure markdown and ask the user to install the CLI separately (winget, scoop, manual). The agent-native shape for runtime tooling is an MCP server, which `mur devtools` already exposes at `/mcp` (see `skills/devtools.md`). The skill-kit bundle is a pragmatic interim: as the MCP surface stabilizes, the kit can shrink back to pure markdown and the binary moves to MCP-only invocation. Tracked under §13.
 
-### 4.5 Secondary packages (v1+, optional)
+### 4.5 Secondary packages (optional)
 
+- `Microsoft.UI.Reactor.Devtools` — optional development-time package containing the MCP server, preview capture, lockfile registry, and other devtools implementation types. Apps that want `--devtools` add this package plus the `Reactor.DevtoolsSupport` runtime host configuration switch; apps that omit it keep devtools implementation IL out of `Reactor.dll` and out of their publish closure.
 - `Microsoft.UI.Reactor.Interop.WinForms` — smaller audience, ship as a separate package so WinForms-free consumers don't pay the cost.
+
+`Microsoft.UI.Reactor.Devtools` is version-locked to `Microsoft.UI.Reactor`: both packages ship from the same repo tag and share the same MSBuild `Version` value. Do not mix versions; the devtools package consumes internal-shape contracts from the matching core framework build.
 
 ## 5. NuGet Package Layout
 
@@ -423,7 +426,7 @@ Plus a one-time `nuget.config` in the repo root pointing at our internal feed:
 </configuration>
 ```
 
-Consumer gets: framework, analyzers, source generator, and WinUI SDK (transitive). Optionally installs `mur` via the install script. No clone of `microsoft/reactor3` required.
+Consumer gets: framework, analyzers, source generator, and WinUI SDK (transitive). Apps that need the `--devtools` runtime surface add a second, same-version `<PackageReference Include="Microsoft.UI.Reactor.Devtools" Version="0.1.0-*" />` and the `Reactor.DevtoolsSupport` switch in the app project. Optionally installs `mur` via the install script. No clone of `microsoft/reactor3` required.
 
 ## 13. Open Questions
 

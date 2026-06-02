@@ -1393,12 +1393,21 @@ public sealed class RenderContext
 
     internal void RunCleanups()
     {
-        // Phase 1: Run effect cleanups
+        // Phase 1: Run effect cleanups. Drain BOTH the committed cleanup and any
+        // staged-but-not-yet-flushed cleanup: when a render changes an effect's
+        // deps it moves the old cleanup into PendingCleanup (to run at the next
+        // FlushEffects). If teardown/hot-reload-reset happens before that flush
+        // (e.g. a later hook threw HookOrderException), the pending cleanup would
+        // otherwise leak its subscription/timer/handle. Each is null-guarded and
+        // cleared so it cannot run twice.
         for (int i = 0; i < _hooks.Count; i++)
         {
             if (_hooks[i] is EffectHookState hook)
             {
+                hook.PendingCleanup?.Invoke();
+                hook.PendingCleanup = null;
                 hook.Cleanup?.Invoke();
+                hook.Cleanup = null;
             }
         }
 
@@ -1427,6 +1436,97 @@ public sealed class RenderContext
         RunCleanups();
         _hooks.Clear();
         _hookIndex = 0;
+    }
+
+    /// <summary>
+    /// Hot Reload state migration (spec 049 §6). Called once per live context at
+    /// the <em>start</em> of a hot-reload pass, before any <c>Render()</c> runs.
+    /// For each value-carrying hook cell (<c>UseState</c> / <c>UseReducer</c> /
+    /// <c>UseRef</c> / <c>UseMemo</c> / <c>UsePersisted</c>) whose stored value's
+    /// type was reported as updated by the runtime, constructs a fresh instance
+    /// of the (current) type and copies the surviving fields by name via
+    /// <see cref="Microsoft.UI.Reactor.Hosting.ReactorHotReloadCopier"/>, then value-swaps it into the cell.
+    /// This is a value swap, not a hook reset: <c>_hookIndex</c> is untouched and
+    /// no cleanups run, so hook identity/order is preserved while the data shape
+    /// catches up to the edited record/class. Effects whose deps referenced the
+    /// migrated value re-run on the following render because the new instance is
+    /// a different reference (spec §11 Q1) — matching normal SetState semantics.
+    ///
+    /// <para>Within a hot-reload pass it always resets every cell's
+    /// <see cref="HookState.Migrated"/> flag first so the devtools annotation
+    /// reflects only the most recent pass, even when there is nothing to
+    /// migrate. Outside a pass it is a complete no-op (the guard is checked
+    /// before the reset) so a stray call never wipes the prior pass's
+    /// annotations. Reflection-bearing; reachable only inside a hot-reload
+    /// pass, so it is statically dead under NativeAOT (spec §8).</para>
+    /// </summary>
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Reachable only inside a hot-reload pass; dead under NativeAOT (spec 049 §8).")]
+    [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = "Reachable only inside a hot-reload pass; dead under NativeAOT (spec 049 §8).")]
+    [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Reachable only inside a hot-reload pass; dead under NativeAOT (spec 049 §8).")]
+    internal void MigrateHooksForHotReload(IReadOnlySet<Type>? updatedTypes)
+    {
+        // Outside a hot-reload pass this is a complete no-op so a stray call
+        // never disturbs the devtools Migrated annotations from the last pass.
+        if (!Microsoft.UI.Reactor.Hosting.HotReloadService.WithinUpdatePass) return;
+
+        // Within a pass, clear stale per-pass annotations regardless of work.
+        for (int i = 0; i < _hooks.Count; i++)
+            _hooks[i].Migrated = false;
+
+        if (updatedTypes is null || updatedTypes.Count == 0) return;
+
+        for (int i = 0; i < _hooks.Count; i++)
+        {
+            var h = _hooks[i];
+            var t = h.GetType();
+            if (!t.IsGenericType) continue;
+            var def = t.GetGenericTypeDefinition();
+            if (def != typeof(ValueHookState<>) &&
+                def != typeof(MemoHookState<>) &&
+                def != typeof(PersistedHookState<>))
+                continue;
+
+            var valueField = t.GetField("Value");
+            if (valueField is null) continue;
+
+            object? oldValue = valueField.GetValue(h);
+            if (oldValue is null) continue;
+
+            Type valueType = oldValue.GetType();
+            if (!FullNameMatches(updatedTypes, valueType)) continue;
+
+            object? newInstance = Microsoft.UI.Reactor.Hosting.ReactorHotReloadCopier.CreateInstance(valueType);
+            if (newInstance is null) continue; // no usable ctor — keep old value.
+
+            Microsoft.UI.Reactor.Hosting.ReactorHotReloadCopier.TryMigrate(
+                oldValue, newInstance,
+                new HashSet<object>(ReferenceEqualityComparer.Instance));
+
+            try
+            {
+                valueField.SetValue(h, newInstance);
+                h.Migrated = true;
+                Diagnostics.ReactorEventSource.Log.HotReloadStateMigrated(
+                    valueType.FullName ?? valueType.Name);
+            }
+            catch (ArgumentException)
+            {
+                // The cell's generic argument is a distinct Type that merely
+                // shares a FullName with the edited shape (the runtime minted a
+                // new Type token rather than editing in place). The new instance
+                // is not assignable to the old cell — leave the old value rather
+                // than corrupt the hook. Tracked as a known headless-irreproducible
+                // limitation in spec 049 §6.
+            }
+        }
+    }
+
+    private static bool FullNameMatches(IReadOnlySet<Type> updatedTypes, Type candidate)
+    {
+        if (updatedTypes.Contains(candidate)) return true;
+        foreach (var u in updatedTypes)
+            if (u.FullName is not null && u.FullName == candidate.FullName) return true;
+        return false;
     }
 
     private static bool DepsEqual(object[] prev, object[] next)
@@ -1506,12 +1606,19 @@ public sealed class RenderContext
                 hookName = t.Name;
             }
 
-            list.Add(new HookSnapshot(i, hookName, valueType, value));
+            list.Add(new HookSnapshot(i, hookName, valueType, value, h.Migrated));
         }
         return list;
     }
 
-    internal abstract class HookState { }
+    internal abstract class HookState
+    {
+        // Q3 (spec 049 §3.6): set true by MigrateHooksForHotReload when this
+        // cell's value was value-swapped during the most recent hot-reload
+        // pass; surfaced by SnapshotHooks -> reactor.state. Reset to false at
+        // the start of every hot-reload pass so it reflects only that pass.
+        public bool Migrated;
+    }
 
     private class ValueHookState<T> : HookState
     {
@@ -1610,7 +1717,7 @@ public sealed class RenderContext
 /// <c>Value</c> is the live boxed hook value; serialization shaping happens in
 /// the devtools state tool.
 /// </summary>
-internal readonly record struct HookSnapshot(int Index, string Hook, Type? ValueType, object? Value);
+internal readonly record struct HookSnapshot(int Index, string Hook, Type? ValueType, object? Value, bool Migrated = false);
 
 /// <summary>
 /// A mutable reference that persists across renders (like React's useRef).

@@ -215,14 +215,14 @@ public class ReactorAppStaticHelperTests
 // FindXamlMetadataProviderInAssembly has something concrete to find when
 // pointed at this test assembly. They never participate in real XAML markup.
 
-internal sealed class FakeXamlMetadataProvider : IXamlMetadataProvider
+internal sealed partial class FakeXamlMetadataProvider : IXamlMetadataProvider
 {
     public IXamlType GetXamlType(global::System.Type type) => null!;
     public IXamlType GetXamlType(string fullName) => null!;
     public XmlnsDefinition[] GetXmlnsDefinitions() => Array.Empty<XmlnsDefinition>();
 }
 
-internal sealed class AnotherFakeXamlMetadataProvider : IXamlMetadataProvider
+internal sealed partial class AnotherFakeXamlMetadataProvider : IXamlMetadataProvider
 {
     public IXamlType GetXamlType(global::System.Type type) => null!;
     public IXamlType GetXamlType(string fullName) => null!;
@@ -234,14 +234,14 @@ internal sealed class AnotherFakeXamlMetadataProvider : IXamlMetadataProvider
 // (skip abstract, skip interface, skip no-default-ctor, swallow throwing
 // ctor) doesn't return them.
 
-internal abstract class AbstractXamlMetadataProviderShouldBeSkipped : IXamlMetadataProvider
+internal abstract partial class AbstractXamlMetadataProviderShouldBeSkipped : IXamlMetadataProvider
 {
     public IXamlType GetXamlType(global::System.Type type) => null!;
     public IXamlType GetXamlType(string fullName) => null!;
     public XmlnsDefinition[] GetXmlnsDefinitions() => Array.Empty<XmlnsDefinition>();
 }
 
-internal sealed class NoDefaultCtorXamlMetadataProviderShouldBeSkipped : IXamlMetadataProvider
+internal sealed partial class NoDefaultCtorXamlMetadataProviderShouldBeSkipped : IXamlMetadataProvider
 {
     public NoDefaultCtorXamlMetadataProviderShouldBeSkipped(int _) { }
     public IXamlType GetXamlType(global::System.Type type) => null!;
@@ -249,7 +249,7 @@ internal sealed class NoDefaultCtorXamlMetadataProviderShouldBeSkipped : IXamlMe
     public XmlnsDefinition[] GetXmlnsDefinitions() => Array.Empty<XmlnsDefinition>();
 }
 
-internal sealed class ThrowingCtorXamlMetadataProviderShouldBeSwallowed : IXamlMetadataProvider
+internal sealed partial class ThrowingCtorXamlMetadataProviderShouldBeSwallowed : IXamlMetadataProvider
 {
     public ThrowingCtorXamlMetadataProviderShouldBeSwallowed()
     {

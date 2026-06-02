@@ -4,9 +4,6 @@ using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
 ReactorApp.Run<ReadmeShowcase>("Reactor Showcase", width: 600, height: 500
-#if DEBUG
-    , preview: true
-#endif
 );
 
 // <snippet:hello-world>

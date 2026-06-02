@@ -10,23 +10,23 @@ namespace Microsoft.UI.Reactor.Tests.Spec047.V1Protocol.Ports;
 ///
 /// <para>The behavior-fires-the-event tests require a WinUI dispatcher and
 /// live in <c>tests/Reactor.AppTests.Host/SelfTest/Fixtures/Spec047V1ProtocolFixtures.cs</c>.
-/// Here we exercise the registration contract:</para>
-/// <list type="bullet">
-///   <item>The built-in handler registers automatically in the ctor.</item>
-///   <item>Re-registering the same element type throws (Q17 dedupe).</item>
-/// </list>
+/// Here we exercise the registration contract: spec 048 §3.4 makes the
+/// built-ins lazy-globally-registered — touching the factory (or the
+/// test-only <c>BuiltInHandlerBootstrap</c> module initializer) installs the
+/// handler in the process-wide <see cref="V1Protocol.ControlRegistry"/>.</para>
 /// </summary>
 public class ToggleSwitchPortTests
 {
     [Fact]
-    public void BuiltIn_Registers_ToggleSwitchHandler_Automatically()
+    public void BuiltIn_ToggleSwitchHandler_In_Global_Registry()
     {
-        var rec = new Reconciler();
-        // Trying to register the same element type a second time must throw
-        // because the ctor already registered it.
-        Assert.Throws<InvalidOperationException>(
-            () => rec.RegisterHandler<ToggleSwitchElement, Microsoft.UI.Xaml.Controls.ToggleSwitch>(
-                new ToggleSwitchHandler()));
+        // Spec 048 §3.4 — the test-only BuiltInHandlerBootstrap module
+        // initializer has already touched Reg<ToggleSwitchElement, ToggleSwitch,
+        // ToggleSwitchHandler>.Done, registering the closed-generic handler in
+        // the global ControlRegistry. Production code reaches the same state by
+        // calling the ToggleSwitch() factory at least once.
+        Assert.True(Microsoft.UI.Reactor.Core.V1Protocol.ControlRegistry.TryResolve(
+            typeof(ToggleSwitchElement), out _));
     }
 
     [Fact(Skip = "Requires WinUI dispatcher; covered in AppTests.Host SelfTest/Fixtures/Spec047V1ProtocolFixtures.cs (1.11)")]

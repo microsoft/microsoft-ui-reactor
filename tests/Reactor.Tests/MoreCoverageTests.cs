@@ -741,6 +741,58 @@ public class MoreCoverageTests
         Assert.NotEmpty(stack.Children);
     }
 
+    // ════════════════════════════════════════════════════════════════════
+    //  Issue #479 — clickable inline Hyperlink (OnClick on RichTextHyperlink)
+    // ════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void Hyperlink_OnClickFactory_SetsOnClickAndSentinelUri()
+    {
+        var fired = 0;
+        var link = Hyperlink("click me", () => fired++);
+
+        Assert.Equal("click me", link.Text);
+        Assert.NotNull(link.OnClick);
+        // Sentinel URI is set so the record positional ctor stays non-null.
+        Assert.Equal(new Uri("about:blank"), link.NavigateUri);
+
+        link.OnClick!.Invoke();
+        Assert.Equal(1, fired);
+    }
+
+    [Fact]
+    public void Hyperlink_OnClickFactory_ThrowsOnNullAction()
+    {
+        Assert.Throws<ArgumentNullException>(() => Hyperlink("x", (Action)null!));
+    }
+
+    [Fact]
+    public void Hyperlink_UriFactory_LeavesOnClickNull()
+    {
+        var link = Hyperlink("text", new Uri("https://example.com"));
+        Assert.Null(link.OnClick);
+        Assert.Equal(new Uri("https://example.com"), link.NavigateUri);
+    }
+
+    [Fact]
+    public void RichTextHyperlink_RecordEquality_TracksOnClick()
+    {
+        Action a = () => { };
+        Action b = () => { };
+
+        var withA1 = new RichTextHyperlink("t", new Uri("about:blank")) { OnClick = a };
+        var withA2 = new RichTextHyperlink("t", new Uri("about:blank")) { OnClick = a };
+        var withB  = new RichTextHyperlink("t", new Uri("about:blank")) { OnClick = b };
+        var withNone = new RichTextHyperlink("t", new Uri("about:blank"));
+
+        // Same delegate → equal. Different closures → unequal. Required so
+        // the reconciler's inline diff calls UpdateHyperlinkInPlace whenever
+        // the click handler changes between renders.
+        Assert.Equal(withA1, withA2);
+        Assert.NotEqual(withA1, withB);
+        Assert.NotEqual(withA1, withNone);
+    }
+
     // PathDataParser tests were intentionally skipped — every overload of
     // PathDataParser.Parse constructs a `new PathGeometry()` even for null or
     // whitespace inputs, which requires WinUI XAML Application activation that

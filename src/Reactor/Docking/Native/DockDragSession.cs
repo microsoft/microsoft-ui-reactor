@@ -120,6 +120,11 @@ internal sealed class DockDragSession
     /// sessions on unmount. Older callers (e.g. tests that don't model
     /// the cross-render lifecycle) may omit it.
     /// </param>
+    /// <param name="source">The pane the user grabbed.</param>
+    /// <param name="sourceManager">The <see cref="DockManager"/> the
+    /// <paramref name="source"/> currently belongs to.</param>
+    /// <param name="sourceTabIndex">The tab index of <paramref name="source"/>
+    /// within its current group (used for re-insertion on cancel).</param>
     public static DockDragSession? Begin(
         DockableContent source,
         DockManager sourceManager,

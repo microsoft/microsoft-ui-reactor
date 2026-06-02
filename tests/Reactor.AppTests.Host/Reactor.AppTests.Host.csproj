@@ -10,6 +10,11 @@
     <Nullable>enable</Nullable>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
+    <!-- CsWinRT1030: generic WinRT-implementing collection use (e.g. List<Border>
+         in SplitterMatrixFixtures) requires the CsWinRT-generated marshaling
+         code to use unsafe blocks. This flag enables that for the generated
+         code only; user code in this project does not opt into unsafe. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(PublishAotInternal)' == 'true'">
@@ -40,12 +45,23 @@
   </Target>
 
   <ItemGroup>
+    <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
+                                    Value="true"
+                                    Trim="true" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
     <PackageReference Include="MessageFormat" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\_shared\BuiltInHandlerBootstrap.cs" Link="BuiltInHandlerBootstrap.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Reactor\Reactor.csproj" />
+    <ProjectReference Include="..\..\src\Reactor.Devtools\Reactor.Devtools.csproj" />
     <!-- Standalone library used by Issue142_ThirdPartyControlPrivateDp_Renders to
          simulate a 3P control NuGet referenced from a Reactor app that has its
          own XAML metadata. -->

@@ -19,3 +19,11 @@ internal static class AnimatedVisualPlayerDescriptor
             get: static e => e.AutoPlay,
             set: static (c, v) => c.AutoPlay = v);
 }
+
+/// <summary>
+/// Spec 048 §3.3 thin handler — instantiated lazily by
+/// <see cref="ControlRegistry"/> when the global path needs the
+/// descriptor-backed <see cref="AnimatedVisualPlayerDescriptor"/>.
+/// </summary>
+internal sealed class AnimatedVisualPlayerDescriptorHandler()
+    : DescriptorHandler<AnimatedVisualPlayerElement, WinUI.AnimatedVisualPlayer>(AnimatedVisualPlayerDescriptor.Descriptor);

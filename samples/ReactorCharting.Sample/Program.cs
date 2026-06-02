@@ -8,9 +8,6 @@ using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.Charting.Charts;
 
 ReactorApp.Run<ChartGallery>("Reactor Chart Gallery", width: 1200, height: 800
-#if DEBUG
-    , devtools: true
-#endif
 );
 
 // ── Data types ──────────────────────────────────────────────────────────────

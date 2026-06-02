@@ -18,12 +18,10 @@ no consumer is listening.
 # Perf Instrumentation
 
 This page covers what Reactor publishes, where to read it, and how to
-get a clean trace. The deeper sampling and attribution machinery
+get a clean trace. The deeper sampling machinery
 lives in
 [spec 031 (frame-aligned sampling)](https://github.com/microsoft/reactor)
-and
-[spec 032 (layout-cost attribution)](https://github.com/microsoft/reactor)
-— this page links to those for the design rationale and focuses on
+— this page links to that for the design rationale and focuses on
 what the runtime emits today.
 
 ## The emission pipeline
@@ -75,6 +73,7 @@ public static class Keywords
     public const EventKeywords Intl = (EventKeywords)0x400;         // missing keys, fallback, format
     public const EventKeywords Theme = (EventKeywords)0x800;        // theme apply, bindings
     public const EventKeywords Shell = (EventKeywords)0x1000;       // JumpList/Tray/ThumbnailToolbar
+    public const EventKeywords HotReload = (EventKeywords)0x2000;   // spec 049 — state migration across edits
 }
 ```
 
@@ -147,8 +146,7 @@ public void ReconcileStop(int elementsDiffed, int elementsSkipped, int uiElement
 [reconcile pass](reconciliation.md) emits exactly one of these, and
 the four counters (elements diffed, elements skipped, UI elements
 created, UI elements modified) are the per-pass cost summary that
-the [layout-cost overlay](devtools-internals.md) and the
-`perf` CLI verbs read. Pairing `ReconcileStart` (event id 1) with
+the `perf` CLI verbs read. Pairing `ReconcileStart` (event id 1) with
 `ReconcileStop` (event id 2) over `Task = Tasks.Reconcile` with
 `Start` / `Stop` opcodes is what makes the pair show up as a
 duration band in PerfView's timeline view instead of as two
@@ -179,16 +177,13 @@ instead — those are the only consumers that see the native
 carries the exact xperf invocation; the GUIDs are stable across
 shipped versions.
 
-## Spec 031 and 032 — the companion specs
+## Spec 031 — the companion spec
 
-Two adjacent specs build on this provider rather than reshape it.
-Spec 031 — frame-aligned sampling — adds a per-frame heartbeat event
-so a consumer can correlate sample-based profiles (CPU hot spots)
-with Reactor's frame boundaries. Spec 032 — layout-cost attribution
-— adds events at the WinUI panel measure / arrange boundary so an
-expensive layout pass can be attributed back to the element that
-caused it. Both are wired through the same `Microsoft-UI-Reactor`
-provider with new event ids and new keywords; both leave the event
+Spec 031 — frame-aligned sampling — builds on this provider rather
+than reshape it. It adds a per-frame heartbeat event so a consumer
+can correlate sample-based profiles (CPU hot spots) with Reactor's
+frame boundaries. It is wired through the same `Microsoft-UI-Reactor`
+provider with new event ids and new keywords; it leaves the event
 shapes in this document untouched.
 
 ## Patterns

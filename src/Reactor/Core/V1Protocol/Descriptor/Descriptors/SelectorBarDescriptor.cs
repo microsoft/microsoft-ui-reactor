@@ -59,7 +59,7 @@ internal static class SelectorBarDescriptor
                 {
                     var sbi = new WinUI.SelectorBarItem { Text = item.Text };
                     if (item.Icon is not null)
-                        sbi.Icon = Reconciler.ResolveIconForDescriptor(new SymbolIconData(item.Icon));
+                        sbi.Icon = IconResolver.ResolveIconForDescriptor(new SymbolIconData(item.Icon));
                     c.Items.Add(sbi);
                 }
             },
@@ -98,3 +98,10 @@ internal static class SelectorBarDescriptor
         public int GetHashCode(SelectorBarItemData[] obj) => obj.Length;
     }
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <c>new()</c>-able registration shim for
+/// <see cref="SelectorBarDescriptor"/>.
+/// </summary>
+internal sealed class SelectorBarDescriptorHandler()
+    : DescriptorHandler<SelectorBarElement, WinUI.SelectorBar>(SelectorBarDescriptor.Descriptor);

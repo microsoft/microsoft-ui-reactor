@@ -21,7 +21,7 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor;
 /// <list type="number">
 ///   <item>Rent the control via <see cref="MountContext.RentControl{T}"/>.</item>
 ///   <item>Iterate <see cref="ControlDescriptor{TElement,TControl}.Properties"/>
-///   and invoke <see cref="PropEntry{TElement,TControl}.Mount"/> on each —
+///   and invoke <see cref="PropEntry{TElement,TControl}.Mount(TControl, TElement)"/> on each —
 ///   all bare initial writes happen first.</item>
 ///   <item>Iterate again and invoke
 ///   <see cref="PropEntry{TElement,TControl}.EnsureSubscribed"/> — controlled
@@ -30,7 +30,18 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor;
 ///   <item>Apply setters.</item>
 /// </list></para>
 /// </summary>
-public sealed class DescriptorHandler<TElement, TControl> : IElementHandler<TElement, TControl>
+/// <remarks>
+/// Spec 048 §7 — <b>unsealed</b> so the built-in catalog can expose a thin,
+/// <c>new()</c>-constructible registration subclass per descriptor (e.g.
+/// <c>TextBlockDescriptorHandler() : DescriptorHandler&lt;…&gt;(TextBlockDescriptor.Descriptor)</c>).
+/// That subclass is what the <see cref="Reg{TElement,TControl,THandler}"/> shim
+/// instantiates via its <c>static () =&gt; new THandler()</c> lambda, so the
+/// descriptor path registers through the exact same zero-closure mechanism as a
+/// hand-coded handler. The base interpreter has no virtual members the subclass
+/// overrides; unsealing carries no dispatch cost (calls already route through the
+/// <see cref="IElementHandler{TElement,TControl}"/> interface via the adapter).
+/// </remarks>
+public class DescriptorHandler<TElement, TControl> : IElementHandler<TElement, TControl>
     where TElement : Element
     where TControl : FrameworkElement, new()
 {
@@ -67,6 +78,16 @@ public sealed class DescriptorHandler<TElement, TControl> : IElementHandler<TEle
             IItemsBinderStrategy => null,
             _ => _descriptor.Children,
         };
+
+    /// <summary>Issue #375 — on Unmount the bind-before-props ordering
+    /// constraint that motivates hiding <see cref="ItemsHost{TElement,TControl}"/>
+    /// / <see cref="IItemsBinderStrategy"/> strategies from
+    /// <see cref="Children"/> no longer applies, so expose the descriptor's
+    /// real strategy here. Lets <c>V1HandlerAdapter</c>'s unmount-side
+    /// dispatch walk descendant items (e.g. <c>TabView</c> tabs whose
+    /// content holds Components) and fire their <c>UseEffect</c>
+    /// cleanups.</summary>
+    public ChildrenStrategy<TElement, TControl>? ChildrenForUnmount => _descriptor.Children;
 
     // <snippet:descriptor-mount>
     public TControl Mount(MountContext ctx, TElement el)

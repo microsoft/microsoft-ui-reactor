@@ -4,9 +4,6 @@ using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
 ReactorApp.Run<EffectsApp>("Effects and Lifecycle", width: 600, height: 550
-#if DEBUG
-    , preview: true
-#endif
 );
 
 // <snippet:mount-effect>

@@ -4,9 +4,6 @@ using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
 ReactorApp.Run<TextAndMediaApp>("Text and Media", width: 720, height: 1200
-#if DEBUG
-    , preview: true
-#endif
 );
 
 // <snippet:text-variants>

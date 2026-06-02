@@ -1,11 +1,32 @@
 # Layout Cost Overlay — Design Spec
 
+> **REMOVED** — 2026-06-01. The layout-cost overlay shipped in v1 but
+> didn't work very well in practice: the ETW session creation is
+> privileged (Performance Log Users / admin), WinUI's native
+> `MeasureElement` / `ArrangeElement` task IDs drifted across runtime
+> updates, and the resulting per-Component attribution rarely gave
+> useful signal. The overlay, its ETW consumer (`LayoutEtwConsumer`,
+> `EventPairing`, `LayoutEventRing`), the `ShowLayoutCost` feature
+> flag, the `LogCategory.LayoutCost` enum value, the reconciler
+> lifecycle hooks (`LayoutCostComponentMounted` / `Unmounted` +
+> `EnumerateComponentWrappers`), the `Microsoft.Diagnostics.Tracing.TraceEvent`
+> NuGet dependency, and the `Reactor.TestApp` `LayoutCostDemo` were
+> all removed in PR #507. The reconcile-highlight overlay and the
+> general `Microsoft-UI-Reactor` `EventSource` (`ReactorEventSource` /
+> `ReactorTrace` / the `reactor.logs` MCP bridge) were retained —
+> they are independent of the layout-cost pipeline.
+>
+> The rest of this document is preserved as a historical record so
+> future contributors can see why a comparable feature was tried and
+> what the failure modes were before re-proposing one.
+
 ## Status
 
 - **Drafted** — 2026-04-24.
 - **v1 implemented** — 2026-04-25 on branch `feat/032-layout-cost-overlay-impl`.
   See [Implementation findings](#implementation-findings) for the
   divergences from the original design and the lessons that warranted them.
+- **Removed** — 2026-06-01 (PR #507).
 
 ---
 

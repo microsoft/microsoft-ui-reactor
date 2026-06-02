@@ -3,16 +3,20 @@ Microsoft.UI.Reactor (Reactor) ships handlers for the built-in WinUI
 control gallery, but the protocol that drives them is the same surface
 authors use to add their own native controls. The contract you wire
 up — an immutable element record, a descriptor or hand-coded handler,
-a registration call against the reconciler — gives a custom control
+and a factory holder whose static constructor registers the handler
+with the global [`ControlRegistry`](control-reconciler-protocol.md#registration) — gives a custom control
 the same lifecycle, the same diff-and-write efficiency, the same pool
 reuse, and the same echo-safe two-way binding as `Button`,
-[`TextBox`](forms.md), and `TabView`. This page is the cookbook for
-that flow. By the end you will have added a `StarMeter` element to a
-Reactor app, wired it to WinUI's `RatingControl`, and matched the
-built-in performance bar without writing a line of imperative
-interpreter code. Read the reference companion
-[The Control Reconciler Protocol](control-reconciler-protocol.md) for the model the steps here
-plug into.
+[`TextBox`](forms.md), and `TabView`. The factory holder pattern is
+[trim-clean by construction](#step-3--wrap-the-constructor-in-a-factory-holder):
+if the app never calls the factory, the handler and the underlying
+WinUI control type are unreachable and NativeAOT publishing drops both.
+This page is the cookbook for that flow. By the end you will have
+added a `StarMeter` element to a Reactor app, wired it to WinUI's
+`RatingControl`, and matched the built-in performance bar without
+writing a line of imperative interpreter code. Read the reference
+companion [The Control Reconciler Protocol](control-reconciler-protocol.md)
+for the model the steps here plug into.
 
 # Extending Reactor with Native Controls
 
@@ -26,25 +30,42 @@ descriptors in `src/Reactor/Core/V1Protocol/Descriptor/Descriptors/`
 as you adapt the example — they are the production examples of every
 shape this page mentions.
 
-## The five-step playbook
+## The four-step playbook
 
-The whole flow is five steps, plus an optional sixth for control
-families that need a derived-type registration. The same five steps
-cover every leaf control in the built-in catalog; you can do them in
-any order, but the listing order is the order they typically come up.
+The whole flow is four steps, plus an optional fifth for control
+families that need a derived-type registration. The same four steps
+cover every leaf control in the built-in catalog; do them in the
+listed order — the factory holder in Step 3 *must* exist before
+Step 4 can use the element, because that holder's class-init is what
+registers the handler.
 
 | Step | What you write | Where it lives |
 |---|---|---|
-| 1 | An `Element` record subclass with one field per prop and one field per event callback | App code, next to the component that uses it |
+| 1 | An `Element` record subclass with one field per prop and one field per event callback, primary constructor `internal` so callers must reach it through the factory | App code, next to the component that uses it |
 | 2 | A `ControlDescriptor<TElement, TControl>` (or `IElementHandler<TElement, TControl>`) wiring each field to a WinUI property or event | A `static class` in the same file or a sibling |
-| 3 | A `Register` extension method that calls `reconciler.RegisterHandler(...)` | Co-located with the descriptor |
-| 4 | A call to `Register` against your host's reconciler at startup | App bootstrap, before the first render |
-| 5 | A factory (`new MyElement { ... }` or a `static Element` helper) | Anywhere — usage shape is up to you |
+| 3 | A `public static class` factory holder whose **static constructor** calls `ControlRegistry.Register<TElement, TControl>(static () => new MyHandler())` and whose `Of(...)` method is the sole construction path for the element | Co-located with the element record |
+| 4 | A component that calls `MyControl.Of(...)` like any other factory in the [DSL](controls.md) | Anywhere — usage shape is up to you |
 
-A sixth step — `RegisterHandlerForDerivedTypes` against a non-generic
-intermediate base — lets one registration catch every closed-T
-variant of a generic element family. It is what the typed templated-
-list ports use; you only need it if you are adding a similar family.
+A fifth step — `ControlRegistry.RegisterForDerivedTypes` against a
+non-generic intermediate base — lets one registration catch every
+closed-T variant of a generic element family. It is what the typed
+templated-list ports use; you only need it if you are adding a
+similar family.
+
+> **Caveat:** **Why a factory holder, not a manual `Register` call at startup?** The
+> `static` keyword on the lambda in Step 3 is mandatory, and the
+> holder's class-init being the registration trigger is what makes the
+> control trim-clean under NativeAOT publishing (see
+> [Step 6 — Wrap the constructor in a factory holder, then use it](#step-6--wrap-the-constructor-in-a-factory-holder-then-use-it)).
+> If no component ever calls `StarMeter.Of(...)`, the holder is
+> unreachable; the trimmer follows that unreachability through the
+> cctor to the handler class and the WinUI control type, and removes
+> all three from the published binary. A manual
+> `reconciler.RegisterHandler<...>` call at app bootstrap roots every
+> custom control unconditionally and defeats that story — it is
+> documented in [The Control Reconciler Protocol](control-reconciler-protocol.md#registration)
+> as the explicit-override escape hatch for tests and host substitution,
+> not the standard authoring path.
 
 ## Step 1 — Define the Element record
 
@@ -53,6 +74,13 @@ list ports use; you only need it if you are adding a similar family.
 // props (MaxRating, Caption, IsClearEnabled), and one callback (OnValueChanged).
 // Records give the reconciler value-equality for free — two StarMeterElement
 // instances with identical fields compare equal and Update becomes a no-op.
+//
+// The primary constructor is `internal` (spec 048 §6 construction discipline):
+// external callers cannot `new StarMeterElement(...)` directly, so the only
+// reachable construction path is `StarMeter.Of(...)` below — whose class-init
+// installs the global handler registration. Init properties stay `public` so
+// `Of(...)` and its callers can configure the optional fields, and `with`
+// expressions still work across the assembly boundary.
 public sealed record StarMeterElement : Element
 {
     public double Value { get; init; }
@@ -60,6 +88,12 @@ public sealed record StarMeterElement : Element
     public string? Caption { get; init; }
     public bool IsClearEnabled { get; init; } = true;
     public System.Action<double>? OnValueChanged { get; init; }
+
+    internal StarMeterElement(double value, System.Action<double>? onValueChanged = null)
+    {
+        Value = value;
+        OnValueChanged = onValueChanged;
+    }
 }
 ```
 
@@ -73,6 +107,18 @@ when the element will be created millions of times per second (so the
 sealed-record allocation is the dominant cost); reach for `record
 struct` only after profiling shows the heap pressure matters — most
 custom controls are well-served by the default sealed-record shape.
+
+The primary constructor is `internal` on purpose: it closes off
+`new StarMeterElement(...)` from outside the assembly that owns the
+element, leaving `StarMeter.Of(...)` (Step 6) as the sole external
+construction path. That is the *construction discipline* spec 048 §6
+requires for the [factory-holder trim story](#step-6--wrap-the-constructor-in-a-factory-holder-then-use-it)
+to hold — if external callers could bypass `Of`, the holder's class-
+init would not be guaranteed to run and the global registration could
+be missing when the element reached the reconciler. Init properties
+stay `public` so `Of(...)` (and `with` expressions for downstream
+authors) can configure the optional fields across the assembly
+boundary.
 
 The fields below are the only thing your component author touches.
 Every named property maps to one descriptor entry in Step 2.
@@ -160,6 +206,15 @@ public static class StarMeterDescriptor
             unsubscribe: static (fe, h) => { /* trampoline anchored for control lifetime */ },
             callback:    static e => e.OnValueChanged,
             readBack:    static c => c.Value);
+
+    // The thin `new()`-able handler subclass that the `static` lambda in
+    // StarMeter's cctor instantiates. Subclassing DescriptorHandler keeps
+    // the descriptor accessible *only* through this handler — the trimmer
+    // can drop both if the StarMeter factory is never called.
+    internal sealed class Handler : DescriptorHandler<StarMeterElement, WinUI.RatingControl>
+    {
+        public Handler() : base(StarMeterDescriptor.Descriptor) { }
+    }
 }
 ```
 
@@ -255,29 +310,73 @@ together. Reach for it last; you give up the engine's keyed reconcile
 and lose descendant component state across re-renders that touch the
 imperative slot.
 
-## Step 6 — Register and use
+## Step 6 — Wrap the constructor in a factory holder, then use it
 
 ```csharp
-public static class StarMeterInterop
+// Spec 048 §6 Pattern A — the factory holder *is* the registration trigger.
+// The static cctor runs the first time any member of `StarMeter` is touched
+// (CLR-guaranteed precise-init), which means the global ControlRegistry
+// entry is in place before the first Of() call returns its element.
+//
+// The `static` keyword on the lambda is MANDATORY (not stylistic): it
+// guarantees the delegate is cached in a static field (one allocation,
+// ever) and captures nothing. A non-static lambda compiles but allocates
+// a closure per Register call AND defeats the trimmer's ability to follow
+// the holder→handler→control chain. The static lambda is what makes
+// Pattern A trim-clean.
+public static class StarMeter
 {
-    // One call per Reactor host. RegisterHandler accepts any IElementHandler,
-    // and DescriptorHandler<TElement,TControl> is the canonical interpreter
-    // for a ControlDescriptor. Duplicate registration for the same element
-    // type throws — register exactly once on each host you mount.
-    public static void Register(Reconciler reconciler) =>
-        reconciler.RegisterHandler<StarMeterElement, WinUI.RatingControl>(
-            new DescriptorHandler<StarMeterElement, WinUI.RatingControl>(
-                StarMeterDescriptor.Descriptor));
+    static StarMeter() =>
+        ControlRegistry.Register<StarMeterElement, WinUI.RatingControl>(
+            static () => new StarMeterDescriptor.Handler());
+
+    // Sole construction path for StarMeterElement (spec §6 construction
+    // discipline). Calling Of() guarantees the handler is registered before
+    // the returned element is mounted — the cctor above runs before any
+    // member of this type, including Of, can be invoked.
+    public static StarMeterElement Of(
+        double value,
+        System.Action<double>? onValueChanged = null,
+        int maxRating = 5,
+        string? caption = null,
+        bool isClearEnabled = true) =>
+        new(value, onValueChanged)
+        {
+            MaxRating = maxRating,
+            Caption = caption,
+            IsClearEnabled = isClearEnabled,
+        };
 }
 ```
 
-The `Register` call is the single bridge between your descriptor and
-the Reactor host. Call it once per `ReactorHost` instance, before the
-first render against that host — typically from your app bootstrap,
-next to any other interop registrations
-(`DockingNativeInterop.Register`, `XamlInterop.Register`, etc.). The
-call shape is the same whether you registered a descriptor or a hand-
-coded handler; both land on the same dispatch table.
+The `StarMeter` holder is the bridge between your descriptor and the
+runtime. The CLR's precise-initialization rules guarantee its static
+constructor runs exactly once, immediately before the first member
+access — which means the global
+[`ControlRegistry.Register`](control-reconciler-protocol.md#registration)
+call lands before `StarMeter.Of(...)` can return. No app bootstrap
+code is involved; the registration is co-located with the only
+construction path for the element. Multiple components calling
+`StarMeter.Of(...)` from different threads are safe — the CLR
+serializes class init.
+
+The `static` keyword on the lambda passed to `ControlRegistry.Register`
+is **mandatory, not stylistic**:
+
+- A `static` lambda is cached in a compiler-generated static field —
+  one delegate allocation, ever, no matter how many times the cctor
+  runs (which is one).
+- A `static` lambda captures nothing (a capture is a compile error),
+  so the trimmer can prove the handler factory does not hold a
+  reference to anything outside `MyHandler` itself. That is what lets
+  the trimmer drop the entire holder → handler → control chain when
+  `StarMeter` is unreachable.
+- A non-`static` lambda compiles, allocates a closure object per
+  `Register` call, *and* roots whatever it captures (typically
+  `this`) — which on a static cctor is nothing useful, but the
+  trimmer treats the closure as a generic reference that may hold
+  arbitrary types. See
+  [Common Mistakes — Passing a non-static lambda to ControlRegistry.Register](#common-mistakes).
 
 ```csharp
 class ExtendingApp : Component
@@ -290,13 +389,11 @@ class ExtendingApp : Component
             TextBlock("StarMeter — custom element wrapping WinUI RatingControl")
                 .FontSize(14).SemiBold(),
 
-            new StarMeterElement
-            {
-                Value = rating,
-                MaxRating = 5,
-                Caption = "Rate this page",
-                OnValueChanged = setRating,
-            },
+            // StarMeter.Of(...) is the sole construction path: it returns a
+            // StarMeterElement AND ensures (via its cctor) that the global
+            // ControlRegistry has the handler. No reconciler.RegisterHandler
+            // call lives anywhere in this app.
+            StarMeter.Of(rating, setRating, caption: "Rate this page"),
 
             TextBlock($"current rating: {rating:0.0}"),
 
@@ -310,14 +407,28 @@ class ExtendingApp : Component
 
 ![Custom StarMeter element rendered alongside built-in Reactor controls](images/extending-reactor-controls/star-meter.png)
 
-That is the entire path from `setRating(5)` to a frame. The
-component sets state, the reconciler walks the new element tree, the
-registered descriptor is invoked for `StarMeterElement`, the
-interpreter diffs against the previous element (only `Value`
-changed), writes through `WriteSuppressed`, the trampoline drains
-the suppress counter on the next echo, and the loop ends with the
-control at 5 stars. The rest of the app's controls dispatch through
-the built-in handlers in lockstep.
+That is the entire path from `setRating(5)` to a frame. The component
+calls `StarMeter.Of(rating, setRating, ...)`; the holder's class-init
+has already run, so the global `ControlRegistry` carries the entry
+for `StarMeterElement`; the reconciler walks the new element tree,
+the registered descriptor handler is invoked for `StarMeterElement`,
+the interpreter diffs against the previous element (only `Value`
+changed), writes through `WriteSuppressed`, the trampoline drains the
+suppress counter on the next echo, and the loop ends with the control
+at 5 stars. The rest of the app's controls dispatch through the
+built-in handlers in lockstep.
+
+**Prove your control trims.** The repo ships a tiny NativeAOT proof
+harness at [`tests/aot_trim_proof/`](https://github.com/microsoft/microsoft-ui-reactor/tree/main/tests/aot_trim_proof)
+that publishes a Reactor app whose `Render()` references only
+`TextBlock` and `Button`, then asserts that the handler class names
+and element record names of every other built-in control are *absent*
+from the published binary. Copy the same pattern for your control:
+publish your app with `dotnet publish -p:PublishAot=true`, then grep
+the resulting binary for your custom handler class name. If
+`StarMeter.Of(...)` is reachable, the name appears; if no component
+references it, the name is gone. That round-trip is the only
+authoritative test that Pattern A is wired correctly.
 
 ## Patterns
 
@@ -385,12 +496,39 @@ or on the typed event payload box (use
 reset contract clears both on `ReturnControl`; descriptor-level state
 survives pool rent and corrupts the next mount.
 
-**Registering against the wrong reconciler.** If your app uses
-multiple `ReactorHost` instances (a tray icon host, a settings
-window, an interop host inside XAML islands), each host has its own
-reconciler. Register on every host that will render your element.
-The exact-type dispatch will throw `Mount` for an unregistered
-element type — it does not fall back to a base type.
+**Passing a non-`static` lambda to `ControlRegistry.Register`.** The
+`static` keyword on the factory lambda is mandatory (see
+[Step 6](#step-6--wrap-the-constructor-in-a-factory-holder-then-use-it)).
+Writing
+`ControlRegistry.Register<MyElement, MyControl>(() => new MyHandler())`
+without the `static` modifier compiles, but allocates a closure object
+per `Register` call *and* defeats the trimmer's ability to drop the
+handler/control chain when the factory holder is unreachable. The
+compiler will accept either shape; reviewers and analyzers are your
+only guard. (Issue #486 tracks adding the analyzer.) Always write
+`static () => new MyHandler()`.
+
+**Bypassing the factory with `new MyElement(...)`.** The whole reason
+the element's primary constructor is `internal` is to make
+`new StarMeterElement(...)` from outside the assembly a compile
+error. If you also expose the element record from a library, do not
+re-export a `public` constructor or a parameter-forwarding `public
+StarMeterElement Create(...)` helper that calls the internal ctor —
+both bypass the holder's class-init and the first time your library's
+element reaches an unregistered reconciler the mount will throw.
+`StarMeter.Of(...)` (which triggers the cctor *and* returns the
+element) is the only externally-reachable construction path that's
+safe.
+
+**Registering on a non-global reconciler when you meant the global
+one.** `Reconciler.RegisterHandler<...>` is the per-host escape hatch
+documented in [The Control Reconciler Protocol](control-reconciler-protocol.md#registration);
+it is meant for tests substituting a fake handler, not for shipping
+custom controls. If your app has multiple `ReactorHost` instances and
+your control is registered through Pattern A on the global
+`ControlRegistry`, every host sees it automatically — the four-step
+dispatch precedence ends with the global registry, so no per-host
+call is needed.
 
 **Capturing the element in a static trampoline.** The static
 trampoline pattern works because it reads the live element on every
@@ -428,10 +566,16 @@ floating-point tolerance, deliberately imperative entry — capture
 the reason in a comment on the descriptor field, not on the calling
 component. The descriptor is where future maintainers will look.
 
-**Read the Control Reconciler Protocol reference once end-to-end.** Steps 1 through 6
-above are the recipe; [the protocol page](control-reconciler-protocol.md) is the
+**Read the Control Reconciler Protocol reference once end-to-end.** The
+six body sections above are the recipe; [the protocol page](control-reconciler-protocol.md) is the
 specification it implements. The two pages together are the complete
 contract — bookmark both.
+
+**Keep devtools-adjacent hooks in the optional package.** Control helpers
+that only serve the `--devtools` MCP/preview surface belong in
+`Microsoft.UI.Reactor.Devtools`, not core `Microsoft.UI.Reactor`. That
+keeps retail apps from resolving or shipping devtools implementation IL
+unless they add the optional package and enable `Reactor.DevtoolsSupport`.
 
 ## Next Steps
 

@@ -6,9 +6,6 @@ using Windows.System;
 using static Microsoft.UI.Reactor.Factories;
 
 ReactorApp.Run<CommandPaletteRecipeApp>("Command Palette Recipe", width: 520, height: 420
-#if DEBUG
-    , preview: true
-#endif
 );
 
 class CommandPaletteRecipeApp : Component

@@ -71,10 +71,10 @@ public class ChildrenStrategyTests
     [Fact]
     public void Imperative_Strategy_Invokes_Lambda()
     {
-        bool ran = false;
         var strategy = new Imperative<TestEl, UIElement>((ctx, oldEl, newEl, ctrl) =>
         {
-            ran = true;
+            // Body intentionally empty — see note below: we only assert the
+            // delegate is wired (the engine path needs a real MountContext).
         });
         // Direct invoke (the engine path needs a real MountContext; here we just
         // verify the lambda is wired). Cannot construct MountContext from a test

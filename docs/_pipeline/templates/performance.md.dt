@@ -35,10 +35,9 @@ you're adding a new event id, not before you take your first trace.
 | PerfView / xperf | Classic ETW | `.etl` opened in PerfView's Events view or WPA | Frame stutter that may be Reactor *or* WinUI native |
 | `tests/perf_bench/PerfBench.*` | In-process `BenchTracker` | `*.report.txt` next to the exe | Reproducing a regression with FPS / update-ms / GC numbers |
 | Reconcile-highlight overlay | Dev menu | Flashing rectangle per re-render | Finding which component re-rendered without taking a trace |
-| Layout-cost overlay | Dev menu | Heatmap tint by measure/arrange cost | Finding expensive panels without taking a trace |
 
-The reconcile-highlight and layout-cost overlays are documented in
-[Dev Tooling](dev-tooling.md); reach for them first when "something
+The reconcile-highlight overlay is documented in
+[Dev Tooling](dev-tooling.md); reach for it first when "something
 feels slow" is the only signal you have. A profile trace is the next
 step up: it costs more to set up but gives you elapsed microseconds
 per span and a complete hierarchy you can sort.
@@ -205,13 +204,12 @@ Re-run the same command on `main` and on your branch; the deltas in
 shrinks by roughly an order of magnitude — a 30-second session that
 was 1.2 GB becomes ~80 MB.
 
-**Reach for an overlay before a trace.** The
-[reconcile-highlight](dev-tooling.md) and
-[layout-cost](dev-tooling.md) overlays cost nothing to enable and
-will solve "which component is re-rendering too much" without you
-ever opening a profiler. A trace is the right tool when you need
-elapsed microseconds; the overlays are the right tool when you need
-"which one".
+**Reach for the overlay before a trace.** The
+[reconcile-highlight](dev-tooling.md) overlay costs nothing to
+enable and will solve "which component is re-rendering too much"
+without you ever opening a profiler. A trace is the right tool when
+you need elapsed microseconds; the overlay is the right tool when
+you need "which one".
 
 **Compare against the matching `*.Direct` bench.** A Reactor bench
 result in isolation is hard to interpret. Run the sibling
@@ -222,7 +220,7 @@ the framework-overhead number, not the absolute number.
 ## Next Steps
 
 - **[Perf Instrumentation](perf-instrumentation.md)** — Under-the-hood companion: why each event exists, the IsEnabled gate, how to add a new event id.
-- **[Dev Tooling](dev-tooling.md)** — The reconcile-highlight and layout-cost overlays plus the rest of the `mur` CLI.
-- **[DevTools Internals](devtools-internals.md)** — How the overlays read the same provider events the profilers do.
+- **[Dev Tooling](dev-tooling.md)** — The reconcile-highlight overlay plus the rest of the `mur` CLI.
+- **[DevTools Internals](devtools-internals.md)** — How the overlay reads the same provider events the profilers do.
 - **[Reconciliation](reconciliation.md)** — What the `ReconcileStop` counters describe; how to read the keyed child-list diff.
 - **[Hooks](hooks.md)** — Where `UseMemo` deps come from and what makes them unstable.

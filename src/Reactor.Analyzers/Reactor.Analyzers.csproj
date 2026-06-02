@@ -9,6 +9,15 @@
     <AssemblyName>Reactor.Analyzers</AssemblyName>
     <RootNamespace>Microsoft.UI.Reactor.Analyzers</RootNamespace>
 
+    <!-- Roslyn loads analyzers into the in-process csc compiler, so the DLL
+         must be architecture-neutral regardless of the consuming project's
+         $(Platform). Without these, an x64/ARM64 build (e.g. `mur
+         pack-local`) drops the analyzer in bin\x64\... and csc raises
+         CS8034 "assembly architecture is not compatible with the current
+         process" on the consumer side. -->
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <AppendPlatformToOutputPath>false</AppendPlatformToOutputPath>
+
     <!-- Bundled into Microsoft.UI.Reactor.nupkg — does not ship as its own
          package. See docs/specs/022-packaging-and-distribution.md §5. -->
     <IsPackable>false</IsPackable>

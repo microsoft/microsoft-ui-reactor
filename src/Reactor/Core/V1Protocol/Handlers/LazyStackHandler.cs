@@ -29,11 +29,16 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 /// <summary>§14 prelude — Lazy*Stack (ScrollViewer-wrapped virtualizing list).</summary>
 internal sealed class LazyStackHandler : IDecoratorElementHandler<LazyStackElementBase>
 {
+    // Public ctor required by the `new()` constraint on
+    // `RegBaseDecorator<TBase, THandler>.Done` (spec-048 §3.4 base-derived
+    // global registration path).
+    public LazyStackHandler() { }
+
     public UIElement Mount(MountContext ctx, LazyStackElementBase el)
-        => ctx.Reconciler.MountLazyStack(el, ctx.RequestRerender);
+        => LazyStackLifecycle.Mount(ctx.Reconciler, el, ctx.RequestRerender);
 
     public UIElement Update(UpdateContext ctx, LazyStackElementBase oldEl, LazyStackElementBase newEl, UIElement control)
-        => ctx.Reconciler.UpdateLazyStack(newEl, (WinUI.ScrollViewer)control, ctx.RequestRerender) ?? control;
+        => LazyStackLifecycle.Update(ctx.Reconciler, newEl, (WinUI.ScrollViewer)control, ctx.RequestRerender) ?? control;
 
     public V1UnmountDisposition Unmount(UnmountContext ctx, LazyStackElementBase? element, UIElement control)
         => V1UnmountDisposition.ContinueDefaultTraversal;

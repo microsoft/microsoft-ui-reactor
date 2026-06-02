@@ -37,21 +37,17 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 ///         observable on a poolable type (Border).</item>
 /// </list>
 ///
-/// <para>All fixtures register <see cref="MarqueeHandler"/> through the
-/// public <see cref="Reconciler.RegisterHandler{TElement, TControl}"/>,
-/// then mount a tree containing the external element.</para>
+/// <para>Spec 048 §6 update: registration now happens implicitly via
+/// the <see cref="Marquee"/> static cctor on the first
+/// <see cref="Marquee.Of(string)"/> call — no per-host
+/// <see cref="Reconciler.RegisterHandler{TElement,TControl}"/> is needed
+/// or written. Dispatch reaches the handler through arm 3
+/// (<see cref="Microsoft.UI.Reactor.Core.V1Protocol.ControlRegistry"/>);
+/// the cached adapter is hoisted into <c>_v1Handlers</c> on first hit so
+/// subsequent dispatches use the fast arm 1 path.</para>
 /// </summary>
 internal static class Spec047ExternalProofFixtures
 {
-
-    /// <summary>Register the external MarqueeHandler on the host's
-    /// Reconciler. The five Phase 1 built-in V1 ports are registered by
-    /// the Reconciler ctor; the external handler is added here.</summary>
-    private static void RegisterMarqueeHandler(Microsoft.UI.Reactor.Hosting.ReactorHost host)
-    {
-        host.Reconciler.RegisterHandler<MarqueeElement, MarqueeControl>(new MarqueeHandler());
-    }
-
     // ────────────────────────────────────────────────────────────────────
     //  Mount + Update — value-bearing prop tracking.
     // ────────────────────────────────────────────────────────────────────
@@ -61,13 +57,12 @@ internal static class Spec047ExternalProofFixtures
         public override async Task RunAsync()
         {
             var host = H.CreateHost();
-            RegisterMarqueeHandler(host);
 
             host.Mount(ctx =>
             {
                 var (caption, setCaption) = ctx.UseState("initial");
                 return VStack(
-                    new MarqueeElement(caption),
+                    Marquee.Of(caption),
                     Button("Update", () => setCaption("updated"))
                 );
             });
@@ -99,13 +94,12 @@ internal static class Spec047ExternalProofFixtures
         {
             int fireCount = 0;
             var host = H.CreateHost();
-            RegisterMarqueeHandler(host);
 
             host.Mount(ctx =>
             {
                 var (caption, setCaption) = ctx.UseState("a");
                 return VStack(
-                    new MarqueeElement(caption, c => { fireCount++; setCaption(c); }),
+                    Marquee.Of(caption, c => { fireCount++; setCaption(c); }),
                     Button("Reconcile", () => setCaption("b"))
                 );
             });
@@ -146,10 +140,9 @@ internal static class Spec047ExternalProofFixtures
         public override async Task RunAsync()
         {
             var host = H.CreateHost();
-            RegisterMarqueeHandler(host);
 
             host.Mount(_ => VStack(
-                new MarqueeElement("modded").Margin(8).Width(120)
+                Marquee.Of("modded").Margin(8).Width(120)
             ));
 
             await Harness.Render();
@@ -172,11 +165,10 @@ internal static class Spec047ExternalProofFixtures
         public override async Task RunAsync()
         {
             var host = H.CreateHost();
-            RegisterMarqueeHandler(host);
 
             bool setterRan = false;
             host.Mount(_ => VStack(
-                new MarqueeElement("set-base")
+                Marquee.Of("set-base") with
                 {
                     Setters =
                     [
@@ -255,7 +247,7 @@ internal static class Spec047ExternalProofFixtures
             // instance identity, because pool stack capacity / dirty
             // detach may drop the return silently.
             var border = reconciler.RentControl<Border>();
-            Reconciler.SetElementTag(border, new MarqueeElement("tagged"));
+            Reconciler.SetElementTag(border, Marquee.Of("tagged"));
             H.Check("ExtProof_Pool_TagSet",
                 Reconciler.GetElementTag(border) is MarqueeElement m && m.Caption == "tagged");
 

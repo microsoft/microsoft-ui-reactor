@@ -39,4 +39,29 @@ internal static class ItemsRepeaterDescriptor
                 static el => (IKeyedItemSource)el),
             GetSetters = static e => e.RepeaterSetters,
         };
+
+    /// <summary>
+    /// Spec 048 §3.4 — closed-generic registration latch. Reading
+    /// <see cref="Done"/> from inside the <c>ItemsRepeater&lt;T&gt;</c> factory
+    /// runs this cctor exactly once per process, which registers the
+    /// descriptor against <see cref="ItemsRepeaterElementBase"/> in the
+    /// global <see cref="ControlRegistry"/>. Every closed-T variant
+    /// dispatches via the base-derived fallback.
+    /// </summary>
+    internal static class Registration
+    {
+        // Explicit (empty) static constructor — disables `beforefieldinit`
+        // so Init() runs precisely on the first read of Done (the factory
+        // touch), not earlier. Matches the Reg<>/RegDecorator<> shape.
+        static Registration() { }
+
+        internal static readonly byte Done = Init();
+
+        private static byte Init()
+        {
+            ControlRegistry.RegisterForDerivedTypes<ItemsRepeaterElementBase, WinUI.ItemsRepeater>(
+                static () => new DescriptorHandler<ItemsRepeaterElementBase, WinUI.ItemsRepeater>(Descriptor));
+            return 1;
+        }
+    }
 }

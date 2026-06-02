@@ -21,7 +21,7 @@ class HelloVignette : Component
 
 Three pieces: a `using static Microsoft.UI.Reactor.Factories` import,
 a `Component` subclass, and a `ReactorApp.Run<App>(title, ...)` call.
-Add `#if DEBUG preview: true #endif` so `mur` can capture screenshots.
+Doc apps inherit `Reactor.DevtoolsSupport=true` from `docs/_pipeline/apps/Directory.Build.props` so `mur` can capture screenshots.
 
 ## Hooks
 

@@ -12,12 +12,13 @@ namespace Microsoft.UI.Reactor.Tests.Spec047.V1Protocol.Ports;
 public class SliderPortTests
 {
     [Fact]
-    public void Flag_On_Registers_SliderHandler_Automatically()
+    public void BuiltIn_SliderHandler_In_Global_Registry()
     {
-        var rec = new Reconciler();
-        Assert.Throws<InvalidOperationException>(
-            () => rec.RegisterHandler<SliderElement, Microsoft.UI.Xaml.Controls.Slider>(
-                new SliderHandler()));
+        // Spec 048 §3.4 — test-only BuiltInHandlerBootstrap module
+        // initializer has touched Reg<SliderElement, Slider, SliderHandler>.Done,
+        // installing the closed-generic handler in the global ControlRegistry.
+        Assert.True(Microsoft.UI.Reactor.Core.V1Protocol.ControlRegistry.TryResolve(
+            typeof(SliderElement), out _));
     }
 
     [Fact(Skip = "Requires WinUI dispatcher; covered in AppTests.Host SelfTest/Fixtures/Spec047V1ProtocolFixtures.cs (1.12)")]

@@ -114,3 +114,11 @@ internal static class ComboBoxDescriptor
             set:         static (c, v) => c.Description = v,
             shouldWrite: static e => e.Description is not null);
 }
+
+/// <summary>
+/// Spec 048 §3.3 thin handler — instantiated lazily by
+/// <see cref="ControlRegistry"/> when the global path needs the
+/// descriptor-backed <see cref="ComboBoxDescriptor"/>.
+/// </summary>
+internal sealed class ComboBoxDescriptorHandler()
+    : DescriptorHandler<ComboBoxElement, WinUI.ComboBox>(ComboBoxDescriptor.Descriptor);

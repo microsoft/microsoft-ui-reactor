@@ -77,6 +77,52 @@ dotnet run --project tests/Reactor.AppTests.Host -- --self-test
 dotnet run --project tests/Reactor.AppTests.Host -- --self-test --filter "Flex"
 ```
 
+### Selftest waiting patterns — `Render` vs `WaitFor` vs `WaitForIdleAsync`
+
+Selftests run against a real WinUI dispatcher: most user-visible work (template realization, layout, content-presenter materialization, control intrinsic `Loaded` handlers) lands on *later* dispatcher waves, not synchronously with the mount call. Always wait on a concrete idle signal — never `Task.Delay(<n>)` — and pick the right primitive for the host you're driving:
+
+| You want to… | Use | Why |
+|---|---|---|
+| Pump the dispatcher once because you only need an event queue drain (no realization, no layout) | `await Harness.Render()` | Drains the **shared harness host** (`ReactorApp.PrimaryWindow?.Host`) to idle, runs `UpdateLayout`, yields Low, re-layouts. Cheap when nothing is dirty, but only knows about the harness window. |
+| Wait until a probe predicate against the live visual tree holds | `await Harness.WaitFor(() => H.FindText("Foo") is not null)` | Re-queries the predicate each pass against the current tree. The contention-proof alternative to a one-shot snapshot. Pass `maxPasses`/`perPassMs` to tune. **The predicate must re-query** — capturing a value from before the loop defeats it. |
+| Drain an **isolated** `ReactorHost` (one you constructed with `new ReactorHost(myWindow)`, not `H.CreateHost()`) | `await host.WaitForIdleAsync(); ((UIElement)window.Content).UpdateLayout();` | `Harness.Render()` only drives `ReactorApp.PrimaryWindow`'s host, **not** your isolated one. Drive the isolated host directly. Add a `Low`-priority `TryEnqueue` yield after `UpdateLayout` if you need to drain WinUI's deferred realization messages (TabView content-presenters, TitleBar template parts, etc.). |
+
+**Anti-pattern — blind delays:**
+
+```csharp
+// ❌ Flaky: Task.Delay is a guess; it won't catch a slower runner.
+host.Mount(...);
+await Task.Delay(200);
+await Harness.Render();    // pumps the WRONG host if `host` is isolated
+var ctrl = FindFirst<MyControl>(window.Content);   // may be null on this pass
+```
+
+**Correct pattern — bounded convergence against the right host:**
+
+```csharp
+// ✅ Drives the isolated host to idle, lays out its window, then
+//    polls the predicate against re-queried visual-tree state.
+host.Mount(...);
+await host.WaitForIdleAsync();
+((UIElement)window.Content).UpdateLayout();
+
+MyControl? ctrl = null;
+for (int pass = 0; pass < 8; pass++)
+{
+    ctrl = FindFirst<MyControl>(window.Content);
+    if (ctrl is not null) break;
+    await host.WaitForIdleAsync();
+    ((UIElement)window.Content).UpdateLayout();
+}
+```
+
+Rules of thumb:
+
+- **`Render` only when you literally need an event-queue pump.** Anything that may be delayed (layout, control realization, template part materialization, `Loaded` cascades, lazy content presenters) needs `WaitFor` (predicate-based) or a bounded `WaitForIdleAsync` loop — not `Render` alone.
+- **`WaitFor` over a single `Render` + snapshot probe.** A one-shot probe right after `Render()` is the classic flake source on contended/AOT runners. `WaitFor` re-queries; `Render` is a single wave.
+- **`host.WaitForIdleAsync()` for isolated hosts.** If you constructed your own `ReactorHost`, neither `Harness.Render` nor `Harness.WaitFor` knows about it.
+- **Save and restore `ReactorApp.ActiveHostInternal`** when using an isolated host so subsequent fixtures see the shared host they expect (`var prev = ReactorApp.ActiveHostInternal; try { … } finally { if (prev is not null) ReactorApp.ActiveHostInternal = prev; }`).
+
 ### Running selftests under NativeAOT
 
 The Host app supports an AOT-published build so the selftest suite doubles as Reactor's primary AOT regression gate. The framework itself is AOT-clean (see [`docs/aot-support.md`](docs/aot-support.md)) but a meaningful slice of selftest *fixtures* still trip over reflection paths the AOT compiler can't preserve. Those fixtures are pre-skipped via a baked-in pattern list so the run completes and the remaining failures are visible.

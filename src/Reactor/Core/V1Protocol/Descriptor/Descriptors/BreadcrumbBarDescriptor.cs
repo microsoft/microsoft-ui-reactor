@@ -50,3 +50,11 @@ internal static class BreadcrumbBarDescriptor
             slotIsNull:       static p => p.ItemClickedTrampoline is null,
             setSlot:          static (p, h) => p.ItemClickedTrampoline = h);
 }
+
+/// <summary>
+/// Spec 048 §3.3 thin handler — instantiated lazily by
+/// <see cref="ControlRegistry"/> when the global path needs the
+/// descriptor-backed <see cref="BreadcrumbBarDescriptor"/>.
+/// </summary>
+internal sealed class BreadcrumbBarDescriptorHandler()
+    : DescriptorHandler<BreadcrumbBarElement, WinUI.BreadcrumbBar>(BreadcrumbBarDescriptor.Descriptor);

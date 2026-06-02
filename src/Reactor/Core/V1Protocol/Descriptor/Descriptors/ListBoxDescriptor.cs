@@ -92,3 +92,11 @@ internal static class ListBoxDescriptor
             slotIsNull:  static p => p.SelectionChangedTrampoline is null,
             setSlot:     static (p, h) => p.SelectionChangedTrampoline = h);
 }
+
+/// <summary>
+/// Spec 048 §3.3 thin handler — instantiated lazily by
+/// <see cref="ControlRegistry"/> when the global path needs the
+/// descriptor-backed <see cref="ListBoxDescriptor"/>.
+/// </summary>
+internal sealed class ListBoxDescriptorHandler()
+    : DescriptorHandler<ListBoxElement, WinUI.ListBox>(ListBoxDescriptor.Descriptor);

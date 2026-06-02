@@ -4,7 +4,7 @@ gate. The MCP server speaks JSON-RPC over either HTTP loopback or
 stdio, exposing a fixed inventory of tools (`tools/list`, `tools/call`)
 that an external CLI, editor, or agent harness drives against the
 running app. The in-app dev menu — `DevtoolsMenu(...)`, the keyboard
-shortcuts, the reconcile-highlight overlay, the layout-cost overlay —
+shortcuts, the reconcile-highlight overlay —
 runs entirely in-process, observes the same component tree the user
 sees, and is gated by the same `UseDevtools()` flag. Both subsystems
 are zero-cost in retail: the gate evaluates a `static readonly bool`,
@@ -41,12 +41,12 @@ the lockfile, present the token, and call tools.
 
 | Subsystem | Owner type | Source | Gate |
 |---|---|---|---|
-| Gate hook | `UseDevtools()` | `src/Reactor/Hooks/UseDevtools.cs` | Build-time `devtools: true` AND session-time `--devtools app` |
-| MCP server | `DevtoolsMcpServer` | `src/Reactor/Hosting/Devtools/DevtoolsMcpServer.cs` | Bearer token + project lockfile |
-| Tool registry | `McpToolRegistry` | `src/Reactor/Hosting/Devtools/McpToolRegistry.cs` | Per-tool input-schema validation |
-| JSON-RPC dispatch | `McpDispatcher` | `src/Reactor/Hosting/Devtools/McpDispatcher.cs` | Method allowlist + `tools/call` routing |
+| Gate hook | `UseDevtools()` | `src/Reactor/Hooks/UseDevtools.cs` | Build-time `Reactor.DevtoolsSupport` AND session-time `--devtools app` |
+| MCP server | `DevtoolsMcpServer` | `src/Reactor.Devtools/DevtoolsMcpServer.cs` | Bearer token + project lockfile |
+| Tool registry | `McpToolRegistry` | `src/Reactor.Devtools/McpToolRegistry.cs` | Per-tool input-schema validation |
+| JSON-RPC dispatch | `McpDispatcher` | `src/Reactor.Devtools/McpDispatcher.cs` | Method allowlist + `tools/call` routing |
 | CLI client | `McpCliClient` | `src/Reactor.Cli/Devtools/McpCliClient.cs` | Reads lockfile, posts bearer-authed JSON-RPC |
-| In-app menu | `DevtoolsMenu(...)` factory | `src/Reactor/Hosting/Devtools/DevtoolsMenuFactory.cs` | `UseDevtools()` — returns `Empty()` when off |
+| In-app menu | `DevtoolsMenu(...)` factory | `src/Reactor.Devtools/DevtoolsMenuFactory.cs` | `UseDevtools()` — returns `Empty()` when off |
 | Overlays | `ReactorFeatureFlags` | `src/Reactor/Core/` | Toggle binds an ETW listener only when on |
 
 ## The gate
@@ -58,9 +58,9 @@ public static bool UseDevtools(this RenderContext ctx) =>
 
 `UseDevtools()` returns `ReactorApp.DevtoolsEnabled` — the AND of two
 independent signals captured at process startup. The build-time signal
-is the `devtools: true` argument to `ReactorApp.Run<TRoot>(...)`; ship
-a release binary without it and the AND is false no matter what flags
-the user passes. The session-time signal is the `--devtools app` (or
+is the `Reactor.DevtoolsSupport` runtime host configuration switch in
+the app project; ship a release binary without it and the AND is false
+no matter what flags the user passes. The session-time signal is the `--devtools app` (or
 `--devtools run`) command-line argument the user supplies. Both must
 hold for the gate to open.
 
@@ -194,24 +194,13 @@ the gate flipped.
 
 ## Overlays
 
-The reconcile-highlight overlay and the layout-cost overlay both
-attach to a running app when the gate is open. They're driven by
-`ReactorFeatureFlags.HighlightReconcileChanges` and
-`ReactorFeatureFlags.LayoutCostOverlay`, both of which are simple
-`static bool` properties the dev menu toggles. The overlays
-themselves are stateless wrappers that subscribe to the
-[ETW provider](perf-instrumentation.md) only while their flag is
-true — the listener registration is the consuming cost. Toggle the
-flag back off and the subscription is dropped on the next render
-cycle.
-
-The reconcile overlay paints a brief flash on every element the
-reconciler patched on the most recent render; the layout-cost
-overlay tints elements by their last measure / arrange time
-sourced from the
-[`Microsoft-UI-Reactor`](perf-instrumentation.md) ETW provider's
-reconcile / layout events. Neither one allocates per frame when
-its flag is off.
+The reconcile-highlight overlay attaches to a running app when the
+gate is open. It's driven by
+`ReactorFeatureFlags.HighlightReconcileChanges`, a simple `static bool`
+property the dev menu toggles. The overlay is a stateless wrapper
+that paints a brief flash on every element the reconciler patched on
+the most recent render. It does not allocate per frame when its flag
+is off.
 
 ## Patterns
 
@@ -245,7 +234,7 @@ Handlers that touch WinUI state must run inside a
 already on the UI thread, but the handler will run on the listener
 thread *if* the registration uses the synchronous shape. See the
 existing `windows.activate` registration in
-`src/Reactor/Hosting/Devtools/DevtoolsTools.cs` for the dispatcher
+`src/Reactor.Devtools/DevtoolsTools.cs` for the dispatcher
 trampoline pattern.
 
 ## Common Mistakes

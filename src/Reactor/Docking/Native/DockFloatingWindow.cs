@@ -53,6 +53,18 @@ public static class DockFloatingWindow
     /// window. When supplied, the window is associated with that manager's
     /// tracking set; the host unmount handler closes it. When null,
     /// the window is tracked only in the global set.</param>
+    /// <param name="opacity">Window opacity in [0, 1]. Defaults to 1.0
+    /// (fully opaque). Spec 045 §2.6 tear-off uses 0.5 for the immediate
+    /// drag preview.</param>
+    /// <param name="noActivate">When true, opens the window without
+    /// stealing focus from the source. Spec 045 §2.6 tear-off uses this
+    /// so the drag pointer-capture stays on the source TabView.</param>
+    /// <param name="ignorePointerInput">When true, the window swallows
+    /// no pointer input — drop-target overlays underneath remain hit-testable.
+    /// Spec 045 §2.6 tear-off pairs this with the 0.5 opacity preview.</param>
+    /// <param name="initialPosition">Optional explicit top-left (in DIPs).
+    /// When provided, suppresses the WindowStartPosition.Default placement
+    /// and pins the window at the supplied coordinates.</param>
     /// <returns>The opened <see cref="ReactorWindow"/>.</returns>
     public static ReactorWindow Open(
         DockableContent pane,
@@ -257,7 +269,7 @@ public static class DockFloatingWindow
         // WinUI OLE drag with the cross-window session begin handler.
         var rendered = (TabViewElement)DockTabGroupRenderer.Render(
             tabGroup,
-            renderLeafContent: doc => doc.Content ?? (Element)new BorderElement(null),
+            renderLeafContent: doc => doc.Content ?? (Element)Border(null),
             onSelectedIndexChanged: null,
             onTabClosing: onTabClosing,
             onTabDragStarting: onTabImmediateTearOff is null ? (doc, idx) =>
@@ -302,7 +314,7 @@ public static class DockFloatingWindow
         // assigned at the end of the reconcile pass — so at OnMount
         // time the Border lives in a detached subtree and SetTitleBar
         // silently no-ops.
-        var dragRegion = new BorderElement(null)
+        var dragRegion = Border(null)
             .HAlign(HorizontalAlignment.Stretch)
             .VAlign(VerticalAlignment.Stretch)
             .MinWidth(180)

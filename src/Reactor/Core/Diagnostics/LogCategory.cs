@@ -35,9 +35,6 @@ internal enum LogCategory
     /// <summary>Windows shell integration: JumpList, ThumbnailToolbar, tray icon, taskbar.</summary>
     Shell,
 
-    /// <summary>Layout-cost overlay pipeline (spec 032) — ETW consumer, attribution.</summary>
-    LayoutCost,
-
     /// <summary>Devtools surface: MCP server, log capture, preview pipe.</summary>
     Devtools,
 

@@ -7,9 +7,6 @@ using Microsoft.UI.Xaml;
 using static Microsoft.UI.Reactor.Factories;
 
 ReactorApp.Run<PointerModifiersExample>("Input and Gestures", width: 640, height: 520
-#if DEBUG
-    , preview: true
-#endif
 );
 
 // <snippet:pointer-modifiers>

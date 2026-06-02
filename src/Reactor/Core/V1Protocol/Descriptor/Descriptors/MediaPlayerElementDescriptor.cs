@@ -58,3 +58,11 @@ internal static class MediaPlayerElementDescriptor
         });
     }
 }
+
+/// <summary>
+/// Spec 048 §3.3 thin handler — instantiated lazily by
+/// <see cref="ControlRegistry"/> when the global path needs the
+/// descriptor-backed <see cref="MediaPlayerElementDescriptor"/>.
+/// </summary>
+internal sealed class MediaPlayerElementDescriptorHandler()
+    : DescriptorHandler<MediaPlayerElementElement, WinUI.MediaPlayerElement>(MediaPlayerElementDescriptor.Descriptor);

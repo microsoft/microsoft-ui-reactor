@@ -91,3 +91,15 @@ internal static class TextBlockDescriptor
             get: static e => e.TextDecorations,
             set: static (c, v) => c.TextDecorations = v);
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <c>new()</c>-able registration shim that lets the
+/// <see cref="Reg{TElement,TControl,THandler}"/> mechanism register the
+/// descriptor-backed <see cref="TextBlockDescriptor"/> the same way it
+/// registers a hand-coded handler. Touched once per process via
+/// <c>_ = Reg&lt;TextBlockElement, WinUI.TextBlock, TextBlockDescriptorHandler&gt;.Done</c>
+/// from the <c>TextBlock</c> / <c>Heading</c> / <c>SubHeading</c> / <c>Caption</c>
+/// factories.
+/// </summary>
+internal sealed class TextBlockDescriptorHandler()
+    : DescriptorHandler<TextBlockElement, WinUI.TextBlock>(TextBlockDescriptor.Descriptor);

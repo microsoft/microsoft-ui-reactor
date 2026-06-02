@@ -237,48 +237,61 @@ public class MaskEngineTests
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  MaskedTextFieldElement
+    //  MaskedTextBoxElement
     // ════════════════════════════════════════════════════════════════
 
     [Fact]
-    public void MaskedTextField_RawValue()
+    public void MaskedTextBox_RawValue()
     {
-        var el = MaskedTextFieldDsl.MaskedTextField(
+        var el = MaskedTextBoxDsl.MaskedTextBox(
             "(555) 123-4567",
             mask: MaskPreset.PhoneUS);
         Assert.Equal("5551234567", el.RawValue);
     }
 
     [Fact]
-    public void MaskedTextField_IsComplete_True()
+    public void MaskedTextBox_IsComplete_True()
     {
-        var el = MaskedTextFieldDsl.MaskedTextField(
+        var el = MaskedTextBoxDsl.MaskedTextBox(
             "(555) 123-4567",
             mask: MaskPreset.PhoneUS);
         Assert.True(el.IsComplete);
     }
 
     [Fact]
-    public void MaskedTextField_IsComplete_False()
+    public void MaskedTextBox_IsComplete_False()
     {
-        var el = MaskedTextFieldDsl.MaskedTextField(
+        var el = MaskedTextBoxDsl.MaskedTextBox(
             "(555) 123-____",
             mask: MaskPreset.PhoneUS);
         Assert.False(el.IsComplete);
     }
 
     [Fact]
-    public void MaskedTextField_No_Mask_RawValue_Is_Value()
+    public void MaskedTextBox_No_Mask_RawValue_Is_Value()
     {
-        var el = MaskedTextFieldDsl.MaskedTextField("hello");
+        var el = MaskedTextBoxDsl.MaskedTextBox("hello");
         Assert.Equal("hello", el.RawValue);
     }
 
     [Fact]
-    public void MaskedTextField_No_Mask_IsComplete_True()
+    public void MaskedTextBox_No_Mask_IsComplete_True()
     {
-        var el = MaskedTextFieldDsl.MaskedTextField("hello");
+        var el = MaskedTextBoxDsl.MaskedTextBox("hello");
         Assert.True(el.IsComplete);
+    }
+
+    [Fact]
+    public void MaskedTextField_ObsoleteShim_ReturnsMaskedTextBoxElement()
+    {
+        // Guards the one-release [Obsolete] compatibility shim for issue #389.
+#pragma warning disable CS0618
+        var el = MaskedTextFieldDsl.MaskedTextField(
+            "(555) 123-4567",
+            mask: MaskPreset.PhoneUS);
+#pragma warning restore CS0618
+        Assert.IsType<MaskedTextBoxElement>(el);
+        Assert.Equal("5551234567", el.RawValue);
     }
 
     // ════════════════════════════════════════════════════════════════

@@ -40,3 +40,11 @@ internal static class AnimatedIconDescriptor
             set:         static (c, v) => c.FallbackIconSource = v,
             shouldWrite: static e => e.FallbackIconSource is not null);
 }
+
+/// <summary>
+/// Spec 048 §3.3 thin handler — instantiated lazily by
+/// <see cref="ControlRegistry"/> when the global path needs the
+/// descriptor-backed <see cref="AnimatedIconDescriptor"/>.
+/// </summary>
+internal sealed class AnimatedIconDescriptorHandler()
+    : DescriptorHandler<AnimatedIconElement, WinUI.AnimatedIcon>(AnimatedIconDescriptor.Descriptor);

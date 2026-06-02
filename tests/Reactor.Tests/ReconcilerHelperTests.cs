@@ -1,4 +1,5 @@
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.V1Protocol;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Xunit;
@@ -177,20 +178,20 @@ public class ReconcilerHelperTests
     [InlineData("Add", Symbol.Add)]
     public void ParseSymbol_Valid_Name_Returns_Symbol(string name, Symbol expected)
     {
-        Assert.Equal(expected, Reconciler.ParseSymbol(name));
+        Assert.Equal(expected, IconResolver.ParseSymbol(name));
     }
 
     [Fact]
     public void ParseSymbol_CaseInsensitive()
     {
-        Assert.Equal(Symbol.Home, Reconciler.ParseSymbol("home"));
-        Assert.Equal(Symbol.Home, Reconciler.ParseSymbol("HOME"));
+        Assert.Equal(Symbol.Home, IconResolver.ParseSymbol("home"));
+        Assert.Equal(Symbol.Home, IconResolver.ParseSymbol("HOME"));
     }
 
     [Fact]
     public void ParseSymbol_Unknown_Returns_Placeholder()
     {
-        Assert.Equal(Symbol.Placeholder, Reconciler.ParseSymbol("NonExistentSymbol"));
+        Assert.Equal(Symbol.Placeholder, IconResolver.ParseSymbol("NonExistentSymbol"));
     }
 
     // Note: ParseColumnDef/ParseRowDef create WinUI ColumnDefinition/RowDefinition

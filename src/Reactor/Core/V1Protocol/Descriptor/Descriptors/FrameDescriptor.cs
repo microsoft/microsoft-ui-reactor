@@ -22,7 +22,7 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   three <see cref="ControlDescriptor{TElement,TControl}.HandCodedEvent{TPayload,TDelegate}"/>
 ///   entries sharing a <see cref="FrameEventPayload"/> with one trampoline
 ///   slot per event. Each trampoline reads the live element via
-///   <see cref="Reconciler.GetElementTag"/> and fires the corresponding
+///   <see cref="Reconciler.GetElementTag(Microsoft.UI.Xaml.UIElement)"/> and fires the corresponding
 ///   callback only when the element still has one wired — mirrors the
 ///   legacy arm's "always subscribe, read latest callback per fire"
 ///   pattern.</item>
@@ -98,3 +98,10 @@ internal static class FrameDescriptor
             slotIsNull:       static p => p.NavigationFailedTrampoline is null,
             setSlot:          static (p, h) => p.NavigationFailedTrampoline = h);
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <c>new()</c>-able registration shim for
+/// <see cref="FrameDescriptor"/>.
+/// </summary>
+internal sealed class FrameDescriptorHandler()
+    : DescriptorHandler<FrameElement, WinUI.Frame>(FrameDescriptor.Descriptor);

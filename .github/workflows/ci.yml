@@ -4,6 +4,8 @@ on:
   pull_request:
   push:
     branches: [main]
+  schedule:
+    - cron: '17 8 * * *'
 
 jobs:
   changes:
@@ -15,6 +17,7 @@ jobs:
     outputs:
       non-md: ${{ steps.filter.outputs.non-md }}
       docs-templates: ${{ steps.filter.outputs.docs-templates }}
+      devtools-trim: ${{ steps.filter.outputs.devtools-trim }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -38,15 +41,17 @@ jobs:
             files=$(git diff --name-only "$PUSH_BEFORE" "$PUSH_SHA")
             rc=$?
           else
-            echo "No valid diff range; defaulting to non-md=true and docs-templates=true"
+            echo "No valid diff range; defaulting to non-md=true, docs-templates=true, and devtools-trim=true"
             echo "non-md=true" >> "$GITHUB_OUTPUT"
             echo "docs-templates=true" >> "$GITHUB_OUTPUT"
+            echo "devtools-trim=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           if [ "$rc" -ne 0 ]; then
-            echo "git diff failed; defaulting to non-md=true and docs-templates=true"
+            echo "git diff failed; defaulting to non-md=true, docs-templates=true, and devtools-trim=true"
             echo "non-md=true" >> "$GITHUB_OUTPUT"
             echo "docs-templates=true" >> "$GITHUB_OUTPUT"
+            echo "devtools-trim=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           echo "Changed files:"
@@ -64,6 +69,11 @@ jobs:
             echo "docs-templates=true" >> "$GITHUB_OUTPUT"
           else
             echo "docs-templates=false" >> "$GITHUB_OUTPUT"
+          fi
+          if echo "$files" | grep -qE '^(src/Reactor/Hosting/|src/Reactor\.Devtools/|tools/Reactor\.MstatVerifier/|samples/apps/hello-world-aot/|samples/apps/hello-world-aot-devtools-on/)'; then
+            echo "devtools-trim=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "devtools-trim=false" >> "$GITHUB_OUTPUT"
           fi
 
   unit-tests:
@@ -260,6 +270,134 @@ jobs:
           name: aot-selftest-tap
           path: aot-selftest-output.tap
           if-no-files-found: ignore
+
+  aot-trim-proof:
+    name: AOT Trim Proof
+    needs: changes
+    if: needs.changes.outputs.non-md == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5.3.0
+        with:
+          dotnet-version: 10.0.x
+
+      # Spec 048 §13.2 — AOT/trim proof. Publishes the minimal Hello-World
+      # app (TextBlock + Button only) with NativeAOT, then asserts the
+      # produced binary does NOT contain symbols that lazy registration
+      # was supposed to leave dead (MarqueeControl/MarqueeHandler in
+      # Phase 2; expanded to built-ins in Phase 3).
+      # See tests/aot_trim_proof/README.md for the local runbook.
+      - name: Publish AOT Hello-World
+        run: >
+          dotnet publish tests/aot_trim_proof/Reactor.AotHelloWorld
+          -p:PublishAotInternal=true
+          -p:Platform=x64
+          -r win-x64
+          -c Release
+          -o ${{ runner.temp }}/aot-hello-world
+          --nologo
+
+      - name: Run trim assertions
+        shell: pwsh
+        env:
+          REACTOR_AOT_PUBLISH_DIR: ${{ runner.temp }}/aot-hello-world
+        run: |
+          dotnet test tests/aot_trim_proof/Reactor.AotHelloWorld.TrimAssertions `
+            --nologo `
+            --logger "console;verbosity=normal"
+
+      - name: Upload published binary on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: aot-hello-world-publish
+          path: ${{ runner.temp }}/aot-hello-world
+          if-no-files-found: ignore
+
+  devtools-trim-mstat:
+    name: Devtools trim mstat
+    needs: changes
+    if: github.event_name == 'schedule' || needs.changes.outputs.devtools-trim == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5.3.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build Reactor framework
+        run: dotnet build src\Reactor\Reactor.csproj -p:Platform=x64 -c Release --nologo
+
+      - name: Verify Reactor.dll has no devtools implementation IL
+        shell: pwsh
+        run: |
+          $reactorDll = Get-ChildItem src\Reactor\bin -Recurse -Filter Reactor.dll |
+            Where-Object { $_.FullName -like '*\Release\*' } |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+          if (-not $reactorDll) {
+            Write-Error "No built Reactor.dll found."
+            exit 1
+          }
+          dotnet run --project tools\Reactor.MstatVerifier\Reactor.MstatVerifier.csproj -c Release -- reactor-il $reactorDll.FullName
+
+      - name: Verify devtools implementation types require package reference
+        run: >
+          dotnet run --project tools\Reactor.MstatVerifier\Reactor.MstatVerifier.csproj -c Release --
+          negative-resolution tools\Reactor.DevtoolsNegativeResolutionFixture\Reactor.DevtoolsNegativeResolutionFixture.csproj
+
+      - name: Publish switch-off app
+        run: >
+          dotnet publish samples/apps/hello-world-aot/HelloWorldAot.csproj
+          -p:PublishAotInternal=true
+          -p:Platform=x64
+          -r win-x64
+          -c Release
+          -o ${{ runner.temp }}/hello-world-aot-off
+          --nologo
+
+      - name: Verify switch-off mstat
+        shell: pwsh
+        run: |
+          $mstat = Get-ChildItem samples\apps\hello-world-aot\obj -Recurse -Filter *.mstat |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+          if (-not $mstat) {
+            Write-Error "No switch-off mstat file found."
+            exit 1
+          }
+          $exe = Join-Path '${{ runner.temp }}/hello-world-aot-off' 'hello-world-aot.exe'
+          dotnet run --project tools\Reactor.MstatVerifier\Reactor.MstatVerifier.csproj -c Release -- absence $mstat.FullName $exe
+
+      - name: Publish switch-on positive control
+        run: >
+          dotnet publish samples/apps/hello-world-aot-devtools-on/HelloWorldAotDevtoolsOn.csproj
+          -p:PublishAotInternal=true
+          -p:Platform=x64
+          -r win-x64
+          -c Release
+          -o ${{ runner.temp }}/hello-world-aot-devtools-on
+          --nologo
+
+      - name: Verify switch-on mstat
+        shell: pwsh
+        run: |
+          $mstat = Get-ChildItem samples\apps\hello-world-aot-devtools-on\obj -Recurse -Filter *.mstat |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+          if (-not $mstat) {
+            Write-Error "No switch-on mstat file found."
+            exit 1
+          }
+          $exe = Join-Path '${{ runner.temp }}/hello-world-aot-devtools-on' 'hello-world-aot-devtools-on.exe'
+          dotnet run --project tools\Reactor.MstatVerifier\Reactor.MstatVerifier.csproj -c Release -- presence $mstat.FullName $exe
 
   docs-check-tier:
     name: Docs tier-drift

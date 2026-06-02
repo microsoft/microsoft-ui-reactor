@@ -84,3 +84,10 @@ internal static class ScrollViewDescriptor
             slotIsNull:       static p => p.ViewChangedTrampoline is null,
             setSlot:          static (p, h) => p.ViewChangedTrampoline = h);
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <c>new()</c>-able registration shim for
+/// <see cref="ScrollViewDescriptor"/>.
+/// </summary>
+internal sealed class ScrollViewDescriptorHandler()
+    : DescriptorHandler<ScrollViewElement, WinUI.ScrollView>(ScrollViewDescriptor.Descriptor);

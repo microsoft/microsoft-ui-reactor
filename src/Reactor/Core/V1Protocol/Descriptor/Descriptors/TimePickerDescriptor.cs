@@ -45,3 +45,11 @@ internal static class TimePickerDescriptor
             set:         static (c, v) => c.Header = v,
             shouldWrite: static e => e.Header is not null);
 }
+
+/// <summary>
+/// Spec 048 §3.3 thin handler — instantiated lazily by
+/// <see cref="ControlRegistry"/> when the global path needs the
+/// descriptor-backed <see cref="TimePickerDescriptor"/>.
+/// </summary>
+internal sealed class TimePickerDescriptorHandler()
+    : DescriptorHandler<TimePickerElement, WinUI.TimePicker>(TimePickerDescriptor.Descriptor);

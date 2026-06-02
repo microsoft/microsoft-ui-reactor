@@ -1,6 +1,8 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using Microsoft.UI.Xaml;
 using WinUI = Microsoft.UI.Xaml.Controls;
+using WinPrim = Microsoft.UI.Xaml.Controls.Primitives;
 
 namespace Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 
@@ -14,13 +16,23 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 // strategy, so V1 ON ≡ V1 OFF is byte-identical and §4.5 can delete the
 // legacy delegators + the V1-OFF switch arms without touching this logic.
 //
-// Why ContinueDefaultTraversal for every overlay: when the V1 flag is OFF the
-// engine SKIPS the V1 unmount arm entirely and runs the type-based recursion
-// in UnmountRecursive directly. ContinueDefaultTraversal tells the engine to
-// fall through to that SAME recursion after the (no-op) handler Unmount body,
-// keeping unmount byte-identical V1 ON ≡ V1 OFF. Reworking overlay teardown
-// (closing/detaching the side object) is deferred to §4.5 where it can change
-// for the V1-only world without breaking the parity bar.
+// Why most overlays still return ContinueDefaultTraversal: their returned
+// control (a Target control, a CommandBar, a MenuBar, or a wrapper StackPanel)
+// is torn down by the generic type-based recursion in UnmountRecursive, and
+// their menu items / commands are imperative WinUI data (no Reactor subtree).
+// Two overlays additionally OWN side-mounted Reactor subtrees that the generic
+// recursion cannot reach, so their Unmount bodies tear those down explicitly
+// (still returning ContinueDefaultTraversal so the visual subtree teardown
+// runs):
+//   • Flyout — flyout.Content + flyout.OverlayInputPassThroughElement live on
+//     the side flyout object attached to the Target, not under the Target's
+//     visual tree; the handler unmounts both and detaches the flyout.
+//   • Popup — the wrapper StackPanel hosts a WinUI Popup whose Child is a
+//     Reactor subtree the type switch has no branch for; the handler unmounts
+//     the child and closes the otherwise-orphaned popup.
+// ContentDialog's Content is also side-mounted but has no back-reference from
+// its placeholder to the dialog object — tearing it down needs per-instance
+// tracking and is tracked as known debt.
 //
 // The three target-wrapping decorators (Flyout, MenuFlyout, CommandBarFlyout)
 // return their Target's mounted control; the strategy may return null when the
@@ -52,7 +64,42 @@ internal sealed class FlyoutHandler : IDecoratorElementHandler<FlyoutElement>
         => OverlayLifecycle.UpdateFlyoutElement(ctx.Reconciler, oldEl, newEl, control, ctx.RequestRerender) ?? control;
 
     public V1UnmountDisposition Unmount(UnmountContext ctx, FlyoutElement? element, UIElement control)
-        => V1UnmountDisposition.ContinueDefaultTraversal;
+    {
+        // §4.5: the flyout's Content + OverlayInputPassThroughElement are Reactor
+        // subtrees hung off the side flyout object (attached to the Target), NOT
+        // in the Target control's visual child tree — the generic UnmountRecursive
+        // recursion never reaches them, so their child component cleanups would
+        // leak. Tear them down here, then detach the flyout from the Target so a
+        // pooled/reused Target retains no stale flyout state. Keep
+        // ContinueDefaultTraversal so the Target subtree still tears down.
+        if (control is FrameworkElement targetFe)
+        {
+            var attached = targetFe switch
+            {
+                WinUI.SplitButton sb => sb.Flyout,
+                WinUI.Button btn => btn.Flyout,
+                _ => WinPrim.FlyoutBase.GetAttachedFlyout(targetFe),
+            };
+
+            if (attached is WinUI.Flyout flyout)
+            {
+                if (flyout.Content is UIElement content)
+                    ctx.Reconciler.UnmountChild(content);
+                flyout.Content = null;
+                if (flyout.OverlayInputPassThroughElement is UIElement passThrough)
+                    ctx.Reconciler.UnmountChild(passThrough);
+                flyout.OverlayInputPassThroughElement = null;
+            }
+
+            switch (targetFe)
+            {
+                case WinUI.SplitButton sb: sb.Flyout = null; break;
+                case WinUI.Button btn: btn.Flyout = null; break;
+                default: WinPrim.FlyoutBase.SetAttachedFlyout(targetFe, null); break;
+            }
+        }
+        return V1UnmountDisposition.ContinueDefaultTraversal;
+    }
 }
 
 /// <summary>§4.0.1 — MenuBar (normal control; plain-WinUI menu items).</summary>
@@ -104,7 +151,28 @@ internal sealed class PopupHandler : IDecoratorElementHandler<PopupElement>
         => OverlayLifecycle.UpdatePopup(ctx.Reconciler, oldEl, newEl, (WinUI.StackPanel)control, ctx.RequestRerender) ?? control;
 
     public V1UnmountDisposition Unmount(UnmountContext ctx, PopupElement? element, UIElement control)
-        => V1UnmountDisposition.ContinueDefaultTraversal;
+    {
+        // §4.5: the wrapper StackPanel hosts a WinUI Popup whose Child is a
+        // Reactor subtree. UnmountRecursive recurses the wrapper's children and
+        // reaches the Popup, but Popup has no branch in the generic type switch,
+        // so popup.Child (and its component cleanups) would leak. Tear it down
+        // here and close the otherwise-orphaned free-floating popup. Clear the
+        // wrapper tag before closing so the Closed handler — which resolves
+        // OnClosed via the tag — does not spuriously fire during teardown.
+        if (control is WinUI.StackPanel wrapper
+            && wrapper.Children.OfType<WinPrim.Popup>().FirstOrDefault() is { } popup)
+        {
+            if (popup.Child is UIElement popupChild)
+                ctx.Reconciler.UnmountChild(popupChild);
+            popup.Child = null;
+            if (popup.IsOpen)
+            {
+                Reconciler.ClearElementTag(wrapper);
+                popup.IsOpen = false;
+            }
+        }
+        return V1UnmountDisposition.ContinueDefaultTraversal;
+    }
 }
 
 /// <summary>§4.0.1 — CommandBarFlyout (target-wrapping decorator).</summary>

@@ -8,9 +8,6 @@ using static Microsoft.UI.Reactor.Factories;
 // as the canonical Reactor-test shapes (component-under-test, effect-aware,
 // accessibility-scanner target).
 ReactorApp.Run<TestingApp>("Testing Demo", width: 360, height: 240
-#if DEBUG
-    , preview: true
-#endif
 );
 
 // <snippet:counter-component>

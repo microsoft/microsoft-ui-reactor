@@ -756,10 +756,16 @@ bucketed base landing.
       per §11.6 (`Target = min(Direct + 100, ReactorToday × 0.4)` — i.e. the
       measured ≤407 / ≤1520 / ≤19200, **not** the stale §14 ≤100/≤320/≤500
       estimates). *(Code-complete: the §11.6 TARGET constants are landed in
-      `src/Reactor/Core/PerformanceBudgets.cs` (407/1520/19200). The
-      merge-blocking ENFORCEMENT/MEASUREMENT is ARM64-baseline-blocked → deferred
-      to §4.9; box stays open until ratified on `LAPTOP-4MEP83VI`. Commit
-      `60f4a908`.)*
+      `src/Reactor/Core/PerformanceBudgets.cs` (407/1520/19200). **MEASURED** on
+      `LAPTOP-4MEP83VI` ARM64 (PR #465 — indicative capture 2026-05-29,
+      `docs/specs/047/phase4-results/.../2026-05-29-arm64/`): per-render alloc is
+      **M1 1,289 B (3.2× over 407 — FAIL)**, **M2 3,687 B (2.4× over 1,520 —
+      FAIL)**, **M3 8,530 B (≤19,200 — PASS)**. The gates are therefore NOT met
+      for M1/M2 — box stays open. Closing it needs the M1/M2 leaf-alloc
+      follow-up (the deferred KD-3 M1 binder-check fold + investigating the
+      **M1 +20% / M12 +17% alloc regressions** vs the pre-bucketing baseline)
+      and an isolated stable-AC re-capture to wire the merge-blocking
+      enforcement. Commit `60f4a908`.)*
 - [x] **Spec hygiene:** update spec §14 "Phase 4 — cleanup" to cite the measured
       §11.6 targets instead of the stale `≤100 / ≤320 / ≤500`, and fix the
       §15.6 "Phase 5 cleanup" reference to read "Phase 4" (this spec has no
@@ -768,7 +774,13 @@ bucketed base landing.
       "Phase 5 cleanup" reference now reads "Phase 4 cleanup".)*
 - [ ] **Validation.** M1/M2/M3 pass the hard gates on the baseline machine;
       L4/L5 working-set within the §15.6 budgets; M7 (no-change update) ≤ Today.
-      *(ARM64-baseline-blocked — deferred to §4.9. In this x64 env the bucketing is
+      *(PARTIAL — alloc axis measured on `LAPTOP-4MEP83VI` ARM64 (PR #465): the
+      §15.6 "M1–M3 alloc ≤ Today" budget is met for **M2 (−5.1%)** and
+      **M3 (−6.0%)** but FAILS for **M1 (+20.3%)**; the absolute hard gates remain
+      unmet for M1/M2 (above). L4/L5 (working-set) and M7 (timing) are NOT
+      ratified — the macro projects were deleted in Phase 4 and the timing axis is
+      environment-throttled in the non-isolated capture. The original x64
+      CORRECTNESS validation stands. In this x64 env the bucketing is
       validated for CORRECTNESS: build 0 err; xunit 9128/0; the full
       animation/transition/theme/context/attached/stagger/keyframe/scroll/
       connected-animation/resource selftest families 0 fail.)*
@@ -963,8 +975,24 @@ Source: spec §14 Phase 4 ("Document the final author-facing surface in
 Source: spec §15.6 / §15.7 Phase 4 row, Phase 1 deferrals 1.17 / 1.18 / 1.19,
 and the still-pending ARM64 stable-AC ratification gate (§14 Phase 3 finish).
 
-> **🔴 STATUS: ENTIRELY ARM64-BASELINE-BLOCKED — HANDED OFF (not executable in
-> the x64 dev environment).** Every bullet below is a *measurement/ratification*
+> **🟡 STATUS: INDICATIVE ARM64 CAPTURE LANDED (alloc-only); FULL RATIFICATION
+> STILL PENDING.** A post-Phase-4 micro capture (M1–M13) ran on the baseline box
+> `LAPTOP-4MEP83VI` (ARM64-native, Release, .NET 10.0.8, reps=5, baseline-matched
+> iters) and is committed under
+> `docs/specs/047/phase4-results/LAPTOP-4MEP83VI/2026-05-29-arm64/` (PR #465).
+> The **allocation axis is valid** (deterministic — `Direct` alloc matches the
+> 2026-05-25 baseline byte-for-byte) and is ratified in the boxes below. The
+> **timing axis is NOT valid**: §15.5 isolation (AC / High-Perf / DRR-off /
+> foreground) was not enforced, so `Direct` ns inflated +60–140% vs baseline; and
+> the §4.9-mandated randomized/interleaved ordering + CPU-clock telemetry is not
+> wired. The **macro suite (L1–L14) is unrunnable** — its projects
+> (`StressPerf.ReactorV2`, `BlankReactorV2`) were deleted in Phase 4. A full
+> sign-off still needs an isolated stable-AC re-capture + the macro suite rebuilt
+> against the single `Reactor` variant. **Headline alloc result:** most benches
+> held/improved vs baseline (M9 −41%), but **M1 regressed +20%** (3.2× over its
+> 407 B gate) and **M12 +17%** — confirming the KD-3 M1-over-budget trigger.
+>
+> Every bullet below is a *measurement/ratification*
 > on the Phase 0/2 baseline machine `LAPTOP-4MEP83VI` (ARM64-native, Release,
 > stable-AC) per the §15.5 runbook; results commit under
 > `docs/specs/047/phase4-results/LAPTOP-4MEP83VI/`. The boxes stay **unchecked**
@@ -991,6 +1019,11 @@ and the still-pending ARM64 stable-AC ratification gate (§14 Phase 3 finish).
       defeat the thermal drift that made the prior attempt inconclusive. Commit
       under `docs/specs/047/phase4-results/LAPTOP-4MEP83VI/`. Must clear the §13
       Q1 thresholds and the §15.6 budgets.
+      *(PARTIAL — PR #465 landed a `2026-05-29-arm64/` capture, but WITHOUT the
+      randomized/interleaved ordering + CPU-clock telemetry and WITHOUT §15.5
+      stable-AC isolation, so it does NOT yet satisfy this box. The allocation
+      portion is valid and analyzed (`RESULTS.md`); the timing portion is
+      throttled and must be re-captured under isolation. Box stays open.)*
 - [ ] **1.17 — AOT publish + L13 / L14.** AOT publish the split-library scenario
       with `PublishTrimmed=true` + `IsAotCompatible=true`; zero new trim/AOT
       warnings. L13 (mixed-tree, ≥50% external-assembly element types ≤ +10% vs
@@ -1003,11 +1036,24 @@ and the still-pending ARM64 stable-AC ratification gate (§14 Phase 3 finish).
       (M1–M3, must improve/equal), dispatch (M4–M6 ±10%), update (M7 ±5% / M8
       ≤+10%), TTFF (L1–L3 ≤+5%), working set (L4 ≤+2% / L5 ≤+5%), FPS
       (L6–L8 p95 ≤105%), GC pauses (L9 ≤ baseline), heap stability (L11 ±10%).
+      *(PARTIAL — PR #465, alloc only. per-element alloc (M1–M3): **M2 −5.1%,
+      M3 −6.0% PASS**; **M1 +20.3% FAIL**. Dispatch (M4–M6) and update (M7/M8)
+      are TIMING classes → not ratifiable from the throttled capture. TTFF /
+      working-set / FPS / GC / heap (L-series) → macro suite unrunnable
+      post-Phase-4. Box stays open pending the isolated re-capture + the M1
+      alloc fix.)*
 - [ ] Confirm KD-3 (dispatch fast-path for ported built-ins) stays closed at the
       full registration scope (advisory showed M4/M5 net negative — wins from a
       fatter handler table). Fold the M1 leading-`if` binder check into the
       pattern-switch `case` arm (the Phase 3-finish note flagged this as the
       Phase 4 perf-tuning item) if M1 is still above budget after §4.3 / §4.4.
+      *(TRIGGER NOW CONFIRMED — PR #465 measured **M1 at 1,289 B/render, +20.3%
+      over Today and 3.2× over the 407 B gate**, i.e. M1 IS still above budget
+      after §4.3/§4.4 (in fact it regressed). The M1 binder-check fold is
+      therefore warranted; additionally investigate why the §4.4 bucketing made
+      the leanest leaf HEAVIER (candidate sources: the added `Element.Extensions`
+      slot, the §4.3 EHS split, the `ReactorState.PendingEchoMatch` slot) and the
+      **M12 +17%** pool-reuse regression. Apply + re-measure under isolation.)*
 
 ## 4.10 Final close-out checklist
 

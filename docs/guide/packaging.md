@@ -11,9 +11,9 @@ combined with a `win-x64` or `win-arm64` runtime identifier. The
 trade-offs are the same ones any WinUI 3 app faces; the
 Reactor-specific notes on this page cover what changes when your
 codebase leans on the reflection-driven pieces of the framework
-([`AutoColumns<T>`](data-system.md), the devtools component
-discovery in [`ReactorApp.Run`](components.md), and the
-`UseObservableTree` INPC walker).
+([`AutoColumns<T>`](data-system.md), devtools component discovery
+when `Reactor.DevtoolsSupport` is enabled, and the `UseObservableTree`
+INPC walker).
 
 | Publish shape | Key properties | Runtime identifier | What you get |
 |---|---|---|---|
@@ -166,13 +166,11 @@ trim warnings that the AOT analyzer flags as actionable.
 > — call it from your component and the AOT analyzer threads the
 > annotation back through your code. Hand-built `Column<T>(...)`
 > columns avoid the reflection entirely and are the safe choice for
-> trim-paranoid code. The devtools code path
-> (`ReactorApp.Run(..., devtools: true)`) walks
-> `Assembly.GetTypes()` to enumerate component types, which is
-> incompatible with trimming and carries `[RequiresUnreferencedCode]`
-> on every method that touches it — the AOT publish will warn unless
-> you drop `devtools: true` from retail builds (the documented retail
-> shape; see [Dev Tooling](dev-tooling.md)).
+> trim-paranoid code. The devtools code path walks `Assembly.GetTypes()` to enumerate
+> component types when the app opts into `Reactor.DevtoolsSupport`, which
+> is incompatible with trimming and carries `[RequiresUnreferencedCode]`
+> on every method that touches it. Leave the switch off for retail/AOT
+> builds (the documented retail shape; see [Dev Tooling](dev-tooling.md)).
 
 ## Tips
 
@@ -188,11 +186,15 @@ runs under emulation but pays a startup tax. The `<Platforms>` line
 in the template covers both — the missing piece is the second
 `dotnet publish -r win-arm64` invocation in the build pipeline.
 
-**Keep `devtools: true` out of retail.** [`devtools: true`](dev-tooling.md)
-on `ReactorApp.Run` is a capability gate that nothing user-visible
-depends on at runtime — but the code path it enables walks
-`Assembly.GetTypes()`. Removing it from the release build drops the
-last AOT trim warning that the framework emits.
+**Keep `Reactor.DevtoolsSupport` out of retail.** The
+[`Reactor.DevtoolsSupport`](dev-tooling.md) runtime host configuration
+option is a capability gate that nothing user-visible depends on at
+runtime — but the code path it enables walks `Assembly.GetTypes()`.
+Leaving it off for Release/AOT builds drops the devtools trim warning
+and lets the linker remove that path. Devtools implementation types ship
+in the optional, same-version `Microsoft.UI.Reactor.Devtools` package;
+only add that package to app projects that intentionally expose
+`--devtools`.
 
 **`Reactor.dll` is in your publish output as a managed assembly,
 not a tucked-away framework package.** Reactor ships as
@@ -216,4 +218,4 @@ intentional knob.
 - **[Getting Started](getting-started.md)** — Where the `dotnet new reactorapp` template that produces the unpackaged shape comes from.
 - **[Performance](performance.md)** — When you should reach for AOT (cold-start budgets, startup-perf benchmarks).
 - **[Perf Instrumentation](perf-instrumentation.md)** — The ETW / EventPipe pipeline that survives AOT publish unchanged.
-- **[Components](components.md)** — Where `ReactorApp.Run` and the `devtools: true` capability gate live.
+- **[Dev Tooling](dev-tooling.md)** — How the `Reactor.DevtoolsSupport` capability switch combines with `--devtools` activation.

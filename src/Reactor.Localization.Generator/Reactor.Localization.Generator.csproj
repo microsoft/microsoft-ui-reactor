@@ -3,6 +3,12 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <PlatformTarget>AnyCPU</PlatformTarget>
+    <!-- Match the Reactor.Analyzers + Reactor.Analyzers.Internal projects:
+         force AnyCPU output regardless of the consuming project's $(Platform)
+         so Roslyn can load the generator into csc and the
+         _ReactorAnalyzerBinDir computation in Reactor.csproj points at a
+         single deterministic location. -->
+    <AppendPlatformToOutputPath>false</AppendPlatformToOutputPath>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>

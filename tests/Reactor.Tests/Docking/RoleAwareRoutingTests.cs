@@ -99,9 +99,8 @@ public class RoleAwareRoutingTests
         Assert.Null(fallback);
         var landing = FirstGroupContaining(inserted, "d1");
         Assert.Equal(DockGroupRole.DocumentArea, landing.Role);
-        Assert.Empty(((DockSplit)inserted).Children
-            .OfType<DockTabGroup>()
-            .Where(g => g.Role == DockGroupRole.ToolWindowStrip && g.Documents.Any(d => Equals(d.Key, "d1"))));
+        Assert.DoesNotContain(((DockSplit)inserted).Children.OfType<DockTabGroup>(),
+            g => g.Role == DockGroupRole.ToolWindowStrip && g.Documents.Any(d => Equals(d.Key, "d1")));
     }
 
     [Fact]

@@ -19,6 +19,11 @@ public class ChatTimeline : Component<ChatTimelineProps>
     static readonly Microsoft.UI.Reactor.Markdown.MarkdownOptions _markdownOptions = new()
     {
         CodeFontFamily = "Cascadia Code, Cascadia Mono, Consolas",
+        // Render the entire assistant reply as a single RichTextBlock so users
+        // can drag-select continuous text across paragraphs (instead of each
+        // paragraph being its own selection scope inside a VStack). Non-flow
+        // blocks (code, tables) are embedded via InlineUIContainer.
+        UnifiedRichText = true,
         CodeBlock = (code, lang) =>
         {
             var header = lang is { Length: > 0 }

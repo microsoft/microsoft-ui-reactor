@@ -38,9 +38,6 @@ ReactorApp.Run<DemoScriptShell>(
     "Demo Script Tool",
     width: 1280,
     height: 860,
-#if DEBUG
-    devtools: true,
-#endif
     configure: host =>
     {
         // Spec §High Contrast — opt out of OS HC color injection so theme

@@ -61,3 +61,10 @@ internal static class SwipeControlDescriptor
         return item;
     }
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <c>new()</c>-able registration shim for
+/// <see cref="SwipeControlDescriptor"/>.
+/// </summary>
+internal sealed class SwipeControlDescriptorHandler()
+    : DescriptorHandler<SwipeControlElement, WinUI.SwipeControl>(SwipeControlDescriptor.Descriptor);

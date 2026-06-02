@@ -12,12 +12,13 @@ namespace Microsoft.UI.Reactor.Tests.Spec047.V1Protocol.Ports;
 public class BorderPortTests
 {
     [Fact]
-    public void Flag_On_Registers_BorderHandler_Automatically()
+    public void BuiltIn_BorderHandler_In_Global_Registry()
     {
-        var rec = new Reconciler();
-        Assert.Throws<InvalidOperationException>(
-            () => rec.RegisterHandler<BorderElement, Microsoft.UI.Xaml.Controls.Border>(
-                new BorderHandler()));
+        // Spec 048 §3.4 — test-only BuiltInHandlerBootstrap module
+        // initializer has touched Reg<BorderElement, Border, BorderHandler>.Done,
+        // installing the closed-generic handler in the global ControlRegistry.
+        Assert.True(Microsoft.UI.Reactor.Core.V1Protocol.ControlRegistry.TryResolve(
+            typeof(BorderElement), out _));
     }
 
     [Fact]

@@ -40,3 +40,10 @@ internal static class ViewboxDescriptor
             set:         static (c, v) => c.StretchDirection = v!.Value,
             shouldWrite: static e => e.StretchDirection.HasValue);
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <c>new()</c>-able registration shim for
+/// <see cref="ViewboxDescriptor"/>.
+/// </summary>
+internal sealed class ViewboxDescriptorHandler()
+    : DescriptorHandler<ViewboxElement, WinUI.Viewbox>(ViewboxDescriptor.Descriptor);

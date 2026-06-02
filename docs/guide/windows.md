@@ -13,9 +13,6 @@ content:
 
 ```csharp
 ReactorApp.Run<WindowsApp>("Windows Demo", width: 640, height: 520
-#if DEBUG
-    , preview: true
-#endif
 );
 ```
 

@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Core.Diagnostics;
 using Microsoft.UI.Xaml;
+using static Microsoft.UI.Reactor.Factories;
 
 namespace Microsoft.UI.Reactor.Localization;
 
@@ -115,7 +116,7 @@ public sealed class IntlAccessor
         if (pattern is null)
         {
             var marker = _pseudoLocalize ? PseudoLocalizer.MissingKeyMarker(key) : $"[?? {key} ??]";
-            return new TextBlockElement(marker);
+            return TextBlock(marker);
         }
 
         string formatted;
@@ -144,7 +145,7 @@ public sealed class IntlAccessor
             formatted = PseudoLocalizer.Transform(formatted);
 
         if (tags is null || tags.Count == 0)
-            return new TextBlockElement(formatted);
+            return TextBlock(formatted);
 
         return ParseRichText(formatted, tags);
     }
@@ -302,7 +303,7 @@ public sealed class IntlAccessor
             // Add plain text before this tag
             if (match.Index > lastIndex)
             {
-                elements.Add(new TextBlockElement(formatted[lastIndex..match.Index]));
+                elements.Add(TextBlock(formatted[lastIndex..match.Index]));
             }
 
             var tagName = match.Groups[1].Value;
@@ -315,7 +316,7 @@ public sealed class IntlAccessor
             else
             {
                 // Unknown tag — render content as plain text
-                elements.Add(new TextBlockElement(tagContent));
+                elements.Add(TextBlock(tagContent));
             }
 
             lastIndex = match.Index + match.Length;
@@ -324,7 +325,7 @@ public sealed class IntlAccessor
         // Add trailing plain text
         if (lastIndex < formatted.Length)
         {
-            elements.Add(new TextBlockElement(formatted[lastIndex..]));
+            elements.Add(TextBlock(formatted[lastIndex..]));
         }
 
         // Single element: return it directly. Multiple: wrap in GroupElement.

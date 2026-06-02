@@ -236,9 +236,9 @@ internal static class NavigationViewDescriptor
         if (iconChanged)
         {
             var icon = data.IconElement is not null
-                ? Reconciler.ResolveIconForDescriptor(data.IconElement)
+                ? IconResolver.ResolveIconForDescriptor(data.IconElement)
                 : data.Icon is not null
-                    ? Reconciler.ResolveIconForDescriptor(new SymbolIconData(data.Icon))
+                    ? IconResolver.ResolveIconForDescriptor(new SymbolIconData(data.Icon))
                     : null;
             if (icon is not null) nvi.Icon = icon;
             else if (nvi.Icon is not null) nvi.Icon = null;
@@ -254,9 +254,9 @@ internal static class NavigationViewDescriptor
     {
         var item = new WinUI.NavigationViewItem { Content = data.Content, Tag = data.Tag ?? data.Content };
         var icon = data.IconElement is not null
-            ? Reconciler.ResolveIconForDescriptor(data.IconElement)
+            ? IconResolver.ResolveIconForDescriptor(data.IconElement)
             : data.Icon is not null
-                ? Reconciler.ResolveIconForDescriptor(new SymbolIconData(data.Icon))
+                ? IconResolver.ResolveIconForDescriptor(new SymbolIconData(data.Icon))
                 : null;
         if (icon is not null) item.Icon = icon;
         if (data.Children is not null)
@@ -281,3 +281,11 @@ internal static class NavigationViewDescriptor
         return null;
     }
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <see cref="DescriptorHandler{TElement,TControl}"/>
+/// subclass so the Reactor.Factories DSL can reach this descriptor via
+/// the <c>Reg&lt;&gt;</c> registration touch without leaking
+/// <c>DescriptorHandler&lt;,&gt;</c> as a public surface.
+/// </summary>
+internal sealed class NavigationViewDescriptorHandler() : DescriptorHandler<NavigationViewElement, WinUI.NavigationView>(NavigationViewDescriptor.Descriptor);

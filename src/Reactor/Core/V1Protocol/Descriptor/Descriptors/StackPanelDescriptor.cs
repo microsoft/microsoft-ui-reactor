@@ -48,3 +48,11 @@ internal static class StackPanelDescriptor
             set:         static (c, v) => c.VerticalAlignment = v!.Value,
             shouldWrite: static e => e.VerticalAlignment.HasValue);
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <see cref="DescriptorHandler{TElement,TControl}"/>
+/// subclass so the Reactor.Factories DSL can reach this descriptor via
+/// the <c>Reg&lt;&gt;</c> registration touch without leaking
+/// <c>DescriptorHandler&lt;,&gt;</c> as a public surface.
+/// </summary>
+internal sealed class StackPanelDescriptorHandler() : DescriptorHandler<StackElement, WinUI.StackPanel>(StackPanelDescriptor.Descriptor);

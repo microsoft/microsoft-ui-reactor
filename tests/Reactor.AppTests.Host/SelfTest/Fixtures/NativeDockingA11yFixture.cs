@@ -50,6 +50,16 @@ internal static class NativeDockingA11yFixtures
             });
             await Harness.Render();
 
+            // TabView lazy-realizes the selected pane's body one (or more)
+            // dispatcher waves after mount. Pump until the active pane's
+            // wrapper Border exists before snapshotting — otherwise the
+            // snapshot can miss the inner Border on a contended runner. The
+            // host landmark Border is an ancestor, so once the pane Border is
+            // realized the landmark Border is too.
+            await Harness.WaitFor(() =>
+                H.FindControl<Border>(b =>
+                    AutomationProperties.GetAutomationId(b) == "pane:a11y:editor") is not null);
+
             // Locate the docking host Border by its landmark name.
             var allBorders = H.FindAllControls<Border>(_ => true);
             Border? hostBorder = null;

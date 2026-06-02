@@ -20,4 +20,4 @@ if (urlIdx >= 0 && urlIdx + 1 < cliArgs.Length)
 bool legacyPaging = Array.IndexOf(cliArgs, "--legacy-paging") >= 0;
 ReactorFeatureFlags.UseHookBasedPaging = !legacyPaging;
 
-ReactorApp.Run<App>("HeadTrax – Employee Database", width: 1400, height: 900, devtools: true);
+ReactorApp.Run<App>("HeadTrax – Employee Database", width: 1400, height: 900);

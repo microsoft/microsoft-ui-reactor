@@ -21,7 +21,7 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <para><b>Event wiring lives inside
 /// <see cref="Reconciler.BindKeyedItemsSource"/></b> (SelectionChanged +
 /// ItemClick subscribed once at Mount with trampolines that re-read the
-/// live element via <see cref="Reconciler.GetElementTag"/>) — avoiding a
+/// live element via <see cref="Reconciler.GetElementTag(Microsoft.UI.Xaml.UIElement)"/>) — avoiding a
 /// new <c>ControlEventState</c> payload box just for this descriptor.
 /// Selection / Click semantics match the legacy
 /// <c>MountTemplatedListView</c> body 1:1, including the

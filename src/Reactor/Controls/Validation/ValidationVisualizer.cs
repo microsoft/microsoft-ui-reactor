@@ -1,4 +1,5 @@
 using Microsoft.UI.Reactor.Core;
+using V1 = Microsoft.UI.Reactor.Core.V1Protocol;
 
 namespace Microsoft.UI.Reactor.Controls.Validation;
 
@@ -61,13 +62,17 @@ public static class ValidationVisualizerDsl
         Element content,
         string? title = null,
         Severity? severityFilter = null,
-        ShowWhen showWhen = ShowWhen.Always) =>
-        new(style, content)
+        ShowWhen showWhen = ShowWhen.Always)
+    {
+        // Spec 048 §3.4 — per-factory registration touch.
+        _ = V1.RegDecorator<ValidationVisualizerElement, V1.Handlers.ValidationVisualizerHandler>.Done;
+        return new(style, content)
         {
             Title = title,
             SeverityFilter = severityFilter,
             ShowWhen = showWhen
         };
+    }
 
     /// <summary>
     /// Creates a custom validation visualizer with a render function.
@@ -76,13 +81,16 @@ public static class ValidationVisualizerDsl
         Func<IReadOnlyList<ValidationMessage>, Element> render,
         Element content,
         Severity? severityFilter = null,
-        ShowWhen showWhen = ShowWhen.Always) =>
-        new(VisualizerStyle.Custom, content)
+        ShowWhen showWhen = ShowWhen.Always)
+    {
+        _ = V1.RegDecorator<ValidationVisualizerElement, V1.Handlers.ValidationVisualizerHandler>.Done;
+        return new(VisualizerStyle.Custom, content)
         {
             CustomRender = render,
             SeverityFilter = severityFilter,
             ShowWhen = showWhen
         };
+    }
 }
 
 /// <summary>
@@ -94,8 +102,12 @@ public static class ShowErrorsExtension
     /// Wraps this element in an inline visualizer that shows error text below the control.
     /// </summary>
     public static ValidationVisualizerElement ShowErrors<T>(this T el,
-        ShowWhen showWhen = ShowWhen.Always) where T : Element =>
-        new(VisualizerStyle.Inline, el) { ShowWhen = showWhen };
+        ShowWhen showWhen = ShowWhen.Always) where T : Element
+    {
+        // Spec 048 §3.4 — per-factory registration touch.
+        _ = V1.RegDecorator<ValidationVisualizerElement, V1.Handlers.ValidationVisualizerHandler>.Done;
+        return new(VisualizerStyle.Inline, el) { ShowWhen = showWhen };
+    }
 }
 
 /// <summary>

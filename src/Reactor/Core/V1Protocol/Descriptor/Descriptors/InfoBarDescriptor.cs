@@ -24,7 +24,7 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   <c>Closed</c>.</item>
 ///   <item><c>IconSource</c> — <c>.OneWayConditional</c> with reference
 ///   comparer (mirrors legacy <c>!ReferenceEquals</c> gate). Resolved via
-///   <see cref="Reconciler.ResolveIconSource(IconData?)"/>.</item>
+///   <see cref="IconResolver.ResolveIconSource(IconData?)"/>.</item>
 /// </list></para>
 ///
 /// <para><b>ActionButton + <c>OnActionButtonClick</c> (Phase 3-final Batch F):</b>
@@ -34,7 +34,7 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <c>.OneWayBridged&lt;string?&gt;</c> entry whose set lambda creates the
 /// <c>Button</c>, wires <c>Click</c> via a closure over the parent InfoBar
 /// reference (which is rooted by the InfoBar's Tag — Click resolves
-/// <c>OnActionButtonClick</c> through <see cref="Reconciler.GetElementTag"/>
+///   <c>OnActionButtonClick</c> through <see cref="Reconciler.GetElementTag(Microsoft.UI.Xaml.FrameworkElement)"/>
 /// so a record-with that updates the callback picks up automatically). The
 /// gate matches the legacy "set when non-null" treatment: a non-null →
 /// non-null content swap rebuilds the inner button (legacy doesn't rebuild,
@@ -82,7 +82,7 @@ internal static class InfoBarDescriptor
             set: static (c, v) => c.IsClosable = v)
         .OneWayConditional(
             get:         static e => e.IconSource,
-            set:         static (c, v) => c.IconSource = Reconciler.ResolveIconSource(v),
+            set:         static (c, v) => c.IconSource = IconResolver.ResolveIconSource(v),
             shouldWrite: static e => e.IconSource is not null,
             comparer:    IconDataReferenceComparer.Instance)
         // ActionButton (Phase 3-final Batch F). Dynamically construct the inner
@@ -122,3 +122,11 @@ internal static class InfoBarDescriptor
             => global::System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
     }
 }
+
+/// <summary>
+/// Spec 048 §3.3 thin handler — instantiated lazily by
+/// <see cref="ControlRegistry"/> when the global path needs the
+/// descriptor-backed <see cref="InfoBarDescriptor"/>.
+/// </summary>
+internal sealed class InfoBarDescriptorHandler()
+    : DescriptorHandler<InfoBarElement, WinUI.InfoBar>(InfoBarDescriptor.Descriptor);

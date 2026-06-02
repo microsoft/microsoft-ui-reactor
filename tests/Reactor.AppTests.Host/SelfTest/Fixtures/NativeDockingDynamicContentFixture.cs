@@ -200,6 +200,8 @@ internal static class NativeDockingDynamicContentFixtures
             // The handler calls model.Dock(welcomeDoc), adding it to the
             // doc area. After a render flush, the Welcome doc's button
             // must be in the visual tree.
+            await Harness.WaitFor(() =>
+                H.FindControl<Button>(b => b.Name == "DynDock_ToolbarOpenWelcome") is not null);
             var openWelcomeBtn = H.FindControl<Button>(b => b.Name == "DynDock_ToolbarOpenWelcome");
             H.Check("DynDock_OpenWelcomeButton_Mounted", openWelcomeBtn is not null);
             // Dispatch the Dock through the live DockHostModel — same
@@ -460,7 +462,8 @@ internal static class NativeDockingDynamicContentFixtures
             host.Mount(_ => managerEl);
             await Harness.Render();
             H.Check("PixDoc_ToolbarMounted",
-                H.FindControl<Button>(b => b.Name == "PixDoc_ToolbarOpenWelcome") is not null);
+                await Harness.WaitFor(() =>
+                    H.FindControl<Button>(b => b.Name == "PixDoc_ToolbarOpenWelcome") is not null));
             H.Check("PixDoc_ModelRefPublished", modelRef.Current is not null);
 
             // Dispatch the Dock as the gallery does — through the
@@ -630,7 +633,8 @@ internal static class NativeDockingDynamicContentFixtures
             host.Mount(_ => Component<PixGalleryShell>());
             await Harness.Render();
             H.Check("PixShell_ToolbarMounted",
-                H.FindControl<Button>(b => b.Name == "PixDoc_ToolbarOpenWelcome") is not null);
+                await Harness.WaitFor(() =>
+                    H.FindControl<Button>(b => b.Name == "PixDoc_ToolbarOpenWelcome") is not null));
 
             // Click the toolbar "Welcome" button — this dispatches
             // model.Dock(BuildPixWelcomeDoc()) through the toolbar

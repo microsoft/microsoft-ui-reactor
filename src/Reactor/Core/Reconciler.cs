@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using Microsoft.UI.Reactor.Animation;
 using Microsoft.UI.Reactor.Core.Diagnostics;
+using Microsoft.UI.Reactor.Core.V1Protocol;
 using Microsoft.UI.Reactor.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -30,13 +31,19 @@ public sealed partial class Reconciler : IDisposable
 {
     private readonly Dictionary<UIElement, ComponentNode> _componentNodes = new();
     private readonly Dictionary<UIElement, ErrorBoundaryNode> _errorBoundaryNodes = new();
-    private readonly Dictionary<UIElement, NavigationHostNode> _navigationHostNodes = new();
-    private readonly ElementPool _pool = new();
+    // internal so NavigationHostLifecycle (V1-owned mount/update) can record and
+    // look up per-instance navigation state; teardown stays here (Dispose loop +
+    // CleanupNavigationHostNode).
+    internal readonly Dictionary<UIElement, NavigationHostNode> _navigationHostNodes = new();
+    // Internal so V1-owned lifecycle classes (e.g. LazyStackLifecycle) can rent
+    // pooled controls and pass the pool into element factories.
+    internal readonly ElementPool _pool = new();
     private readonly Dictionary<Type, ITypeRegistration> _typeRegistry = new();
     // Null when no caller-supplied logger and no devtools logger is published.
     // All call sites use null-conditional access so the M.E.Logging code path
     // doesn't run (and stays JIT-cold) for default apps.
-    private readonly ILogger? _logger;
+    // Internal so V1-owned lifecycle classes can pass it into shared keyed-diff helpers.
+    internal readonly ILogger? _logger;
     private readonly List<(ConnectedAnimation Animation, UIElement Target)> _pendingConnectedAnimationStarts = new();
     private readonly ContextScope _contextScope = new();
     private int _errorBoundaryDepth;
@@ -161,53 +168,6 @@ public sealed partial class Reconciler : IDisposable
     private List<UIElement>? _highlightMounted;
     private List<UIElement>? _highlightModified;
 
-    // ── Layout-cost component lifecycle (gated by ReactorFeatureFlags.ShowLayoutCost) ──
-    // Fired from the three MountComponent/MountFunc/MountMemo paths and from
-    // Unmount. Subscribers wire the attribution aggregator without the core
-    // reconciler taking a dependency on the Hosting.LayoutCost layer. Only
-    // raised when the flag is on so the no-op cost is a single bool check.
-    /// <summary>Fired when a Component (class/func/memo) is mounted. Args: wrapper Border, display name, depth.</summary>
-    internal event Action<UIElement, string, int>? LayoutCostComponentMounted;
-    /// <summary>Fired when a Component is unmounted. Arg: wrapper Border.</summary>
-    internal event Action<UIElement>? LayoutCostComponentUnmounted;
-
-    private int _layoutCostComponentDepth;
-
-    internal void RaiseLayoutCostComponentMounted(UIElement wrapper, string displayName)
-    {
-        if (!ReactorFeatureFlags.ShowLayoutCost) return;
-        LayoutCostComponentMounted?.Invoke(wrapper, displayName, _layoutCostComponentDepth);
-    }
-    internal void RaiseLayoutCostComponentUnmounted(UIElement wrapper)
-    {
-        if (!ReactorFeatureFlags.ShowLayoutCost) return;
-        LayoutCostComponentUnmounted?.Invoke(wrapper);
-    }
-
-    /// <summary>
-    /// Enumerate every currently-mounted Component wrapper + its display name.
-    /// Used by the layout-cost overlay to back-fill rollups when the flag is
-    /// flipped on mid-session (Components mounted before the flip never fired
-    /// <see cref="LayoutCostComponentMounted"/>).
-    /// </summary>
-    /// <remarks>
-    /// Depth is not tracked per-node, so this method reports depth 0 for all
-    /// entries. Depth is only used by spatial attribution's innermost-wins
-    /// tiebreak; getting it wrong for back-filled components just biases that
-    /// tiebreak — acceptable for a dev-time overlay.
-    /// </remarks>
-    internal IEnumerable<(UIElement Wrapper, string DisplayName)> EnumerateComponentWrappers()
-    {
-        foreach (var kv in _componentNodes)
-        {
-            var node = kv.Value;
-            var name = node.Component?.GetType().Name
-                ?? node.Element?.GetType().Name
-                ?? "Component";
-            yield return (kv.Key, name);
-        }
-    }
-
     /// <summary>
     /// UIElements that were newly mounted during the last top-level Reconcile pass.
     /// Only populated when <see cref="ReactorFeatureFlags.HighlightReconcileChanges"/> is true;
@@ -256,241 +216,22 @@ public sealed partial class Reconciler : IDisposable
     /// <see cref="V1HandlerRegistry"/>; external authors add handlers via
     /// <see cref="RegisterHandler{TElement,TControl}"/> /
     /// <see cref="RegisterType{TElement,TControl}"/> (which populate
-    /// <c>_typeRegistry</c>). Dispatch order is V1 → external → the eight
+    /// <c>_typeRegistry</c>). Dispatch order is V1 → external → the four
     /// composition primitives that sit above the protocol.
     /// </summary>
     public Reconciler(ILogger? logger = null)
     {
         _logger = logger;
-        RegisterV1BuiltInHandlers();
+        // Spec 048 §3.4 — no more bootstrap. Built-in handlers register
+        // themselves lazily on first factory call (per-control Reg<>/
+        // RegDecorator<> cctor latch in `Dsl.cs`), or callers register
+        // explicitly via `ControlRegistry.Register<,>`. Constructing an
+        // element record directly (e.g. `new TextBlockElement("hi")`)
+        // without ever touching its factory or registering its handler
+        // throws on first mount with a diagnostic pointing at issue #486.
     }
 
-    /// <summary>
-    /// Spec 047 §14 Phase 3 completion — register all built-in V1 handlers
-    /// (Phase 1 hand-coded handlers + Phase 3 descriptor-driven ports) into
-    /// <see cref="V1HandlerRegistry"/>. Sole registration site; built-in
-    /// handler / descriptor types stay internal.
-    ///
-    /// <para>Carved (not registered here — kept on the legacy
-    /// <see cref="Mount(Element, Action)"/> switch by design):</para>
-    /// <list type="bullet">
-    ///   <item><b>Composition primitives</b> — <see cref="ComponentElement"/>,
-    ///   <see cref="FuncElement"/>, <see cref="MemoElement"/>,
-    ///   <see cref="ErrorBoundaryElement"/>, <c>CommandHostElement</c>,
-    ///   <see cref="Controls.Validation.FormFieldElement"/>,
-    ///   <see cref="Controls.Validation.ValidationVisualizerElement"/>,
-    ///   <see cref="Controls.Validation.ValidationRuleElement"/>. These sit
-    ///   <i>above</i> the V1 handler protocol (they orchestrate child
-    ///   reconciliation rather than wrap a single WinUI control), so Phase 4
-    ///   cleanup keeps their legacy arms.</item>
-    ///   <item><b>Interop bridges</b> — <see cref="Hosting.XamlHostElement"/>,
-    ///   <see cref="Hosting.XamlPageElement"/>. V1 descriptors exist
-    ///   (<c>XamlHostDescriptor</c>, <c>XamlPageDescriptor</c>) but stay
-    ///   unregistered because <see cref="Hosting.XamlInterop.Register(Reconciler)"/>
-    ///   populates the external <c>_typeRegistry</c> during app startup;
-    ///   auto-registering V1 would clash via
-    ///   <see cref="EnsureRegistrableElementType"/>. Unification is Phase 4
-    ///   follow-up.</item>
-    ///   <item><b>Overlays — PORTED (§14 Phase 3 prelude)</b> —
-    ///   <c>ContentDialogElement</c>, <c>FlyoutElement</c>,
-    ///   <c>MenuBarElement</c>, <c>CommandBarElement</c>,
-    ///   <c>MenuFlyoutElement</c>, <c>PopupElement</c>,
-    ///   <c>CommandBarFlyoutElement</c> now route through V1 via
-    ///   decorator-style handlers in <c>V1Protocol.Handlers</c> that delegate
-    ///   to the legacy <c>MountXxx</c>/<c>UpdateXxx</c> bodies and return
-    ///   <see cref="V1Protocol.V1UnmountDisposition.ContinueDefaultTraversal"/>
-    ///   on unmount — so the engine falls through to the same
-    ///   <see cref="UnmountRecursive"/> type-based recursion that runs when
-    ///   the flag is OFF, making mount/update/unmount byte-identical
-    ///   V1 ON ≡ V1 OFF.</item>
-    ///   <item><b>Stateful host — PORTED (§14 Phase 3 prelude)</b> —
-    ///   <c>NavigationHostElement</c> now routes through V1 via
-    ///   <see cref="V1Protocol.Handlers.NavigationHostHandler"/> (Path B
-    ///   delegate). Per-instance route/cache/transition state is still torn
-    ///   down by the flag-independent intercept in
-    ///   <see cref="UnmountRecursive"/> (fires before the V1 unmount arm), so
-    ///   unmount is byte-identical V1 ON ≡ V1 OFF.</item>
-    ///
-    ///   <item><b>TabView — PORTED (§14 Phase 4 §4.0.3)</b> —
-    ///   <c>TabViewElement</c> now routes through V1 via the full
-    ///   <c>TabViewDescriptor</c> + <c>TabItemsHost</c> port, which owns the
-    ///   complete behavior: spec 045 §2.4 drag pipeline, §2.2 pinnable headers
-    ///   (via <c>Reconciler.BuildTabHeader</c> / <c>TryUpdatePinHeaderInPlace</c>),
-    ///   in-place tab content reconcile, conditional SelectedIndex, and
-    ///   TabStripHeader / TabStripFooter Element slots (via
-    ///   <c>.ImperativeBridged</c>). Supersedes the retired delegate
-    ///   <c>TabViewHandler</c>. Unmount is byte-identical V1 ON ≡ V1 OFF
-    ///   (a <c>WinUI.TabView</c> is an <c>ItemsControl</c> that pools without
-    ///   child recursion in both paths).</item>
-    ///   <item><b>Items host — PORTED (§14 Phase 3 prelude)</b> —
-    ///   <c>GridViewElement</c> now routes through V1 via the hand-coded
-    ///   <see cref="V1Protocol.Handlers.GridViewHandler"/> (Path B delegate),
-    ///   which mirrors <see cref="V1Protocol.Handlers.ListViewHandler"/>'s
-    ///   lazy <c>ItemsSource + ContainerContentChanging</c> realization. The
-    ///   <c>GridViewDescriptor</c>'s <c>ItemsHost&lt;&gt;</c> strategy stays
-    ///   unregistered — it pre-mounts every item with no virtualization,
-    ///   which would regress the recycle contract.</item>
-    /// </list>
-    /// </summary>
-    private void RegisterV1BuiltInHandlers()
-    {
-        // ── Phase 1 hand-coded handlers (battle-tested, hot-path tuned) ──
-        RegisterHandler<ToggleSwitchElement, WinUI.ToggleSwitch>(new V1Protocol.Handlers.ToggleSwitchHandler());
-        RegisterHandler<SliderElement, WinUI.Slider>(new V1Protocol.Handlers.SliderHandler());
-        RegisterHandler<TextBoxElement, WinUI.TextBox>(new V1Protocol.Handlers.TextBoxHandler());
-        RegisterHandler<BorderElement, WinUI.Border>(new V1Protocol.Handlers.BorderHandler());
-        RegisterHandler<ListViewElement, WinUI.ListView>(new V1Protocol.Handlers.ListViewHandler());
 
-        // ── §14 Phase 3 prelude carve-closures (delegate to engine bodies) ──
-        RegisterHandler<NavigationHostElement, WinUI.Grid>(new V1Protocol.Handlers.NavigationHostHandler());
-        RegisterHandler<GridViewElement, WinUI.GridView>(new V1Protocol.Handlers.GridViewHandler());
-
-        // Overlays — decorator-style ports. Each delegates to the legacy
-        // MountXxx/UpdateXxx body and returns ContinueDefaultTraversal on
-        // unmount, so the V1 ON path is byte-identical to V1 OFF (which skips
-        // the V1 arm and runs the same UnmountRecursive type-based recursion).
-        RegisterDecoratorHandler<ContentDialogElement>(new V1Protocol.Handlers.ContentDialogHandler());
-        RegisterDecoratorHandler<FlyoutElement>(new V1Protocol.Handlers.FlyoutHandler());
-        RegisterDecoratorHandler<MenuBarElement>(new V1Protocol.Handlers.MenuBarHandler());
-        RegisterDecoratorHandler<CommandBarElement>(new V1Protocol.Handlers.CommandBarHandler());
-        RegisterDecoratorHandler<MenuFlyoutElement>(new V1Protocol.Handlers.MenuFlyoutHandler());
-        RegisterDecoratorHandler<PopupElement>(new V1Protocol.Handlers.PopupHandler());
-        RegisterDecoratorHandler<CommandBarFlyoutElement>(new V1Protocol.Handlers.CommandBarFlyoutHandler());
-
-        // Button — delegate to the COMPLETE legacy MountButton/UpdateButton
-        // bodies (the ButtonDescriptor only handles the string-Label fast path
-        // and drops ContentElement; the delegate runs the full legacy impl so
-        // element content round-trips). Decorator shape so unmount falls
-        // through to ContentControl recursion (cleanup parity for an element
-        // child) — see ButtonHandler. Supersedes the registered descriptor.
-        RegisterDecoratorHandler<ButtonElement>(new V1Protocol.Handlers.ButtonHandler());
-
-        // TabView — §4.0.3 full descriptor port. TabViewDescriptor now owns
-        // the complete behavior (drag pipeline, pinnable headers, strip
-        // header/footer slots, in-place content reconcile, conditional
-        // SelectedIndex), so it supersedes the delegate TabViewHandler.
-        // Registered below with the standard concrete descriptors.
-
-        // ── §14 Phase 3 base-derived (templated/lazy/items hosts) ────────
-        // Each closed-T leaf routes through the same descriptor via the
-        // base-derived fallback walk (matches the legacy switch's erasure
-        // pattern). Parallel implementations: TemplatedListView/GridView
-        // overlap with the Phase 1 ListViewHandler — exact-type wins, so
-        // ListView itself uses ListViewHandler; only typed templated
-        // variants route through these base-derived registrations.
-        // §14: typed templated lists route through one Path B delegate on the
-        // common base (legacy move/reorder animations) — see TemplatedListHandler.
-        RegisterDecoratorHandlerForDerivedTypes<TemplatedListElementBase>(new V1Protocol.Handlers.TemplatedListHandler());
-        RegisterDecoratorHandlerForDerivedTypes<LazyStackElementBase>(new V1Protocol.Handlers.LazyStackHandler()); // §14: ScrollViewer-wrapped — see LazyStackHandler
-        RegisterDescriptorForDerivedTypes(V1Protocol.Descriptor.Descriptors.ItemsRepeaterDescriptor.Descriptor);
-        RegisterDescriptorForDerivedTypes(V1Protocol.Descriptor.Descriptors.ItemsViewDescriptor.Descriptor);
-
-        // ── §14 Phase 3 standard concrete descriptors (alphabetical) ────
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.AnimatedIconDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.AnimatedVisualPlayerDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.AnnotatedScrollBarDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.AnnounceRegionDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.AutoSuggestBoxDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.BreadcrumbBarDescriptor.Descriptor);
-        // ButtonDescriptor is intentionally NOT registered — superseded by the
-        // delegate ButtonHandler above (ContentElement coverage + unmount
-        // parity). The descriptor type is retained for its isolated selftests
-        // and the perf-bench descriptor variant.
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.CalendarDatePickerDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.CalendarViewDescriptor.Descriptor);
-        RegisterDecoratorHandler<CanvasElement>(new V1Protocol.Handlers.CanvasPanelHandler()); // §14: keyed reconcile — see PanelDelegateHandlers
-        RegisterDecoratorHandler<CheckBoxElement>(new V1Protocol.Handlers.CheckBoxHandler()); // §14: value-control echo-suppression — see CheckBoxHandler
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ColorPickerDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ComboBoxDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.DatePickerDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.DropDownButtonDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.EllipseDescriptor.Descriptor);
-        RegisterDecoratorHandler<ExpanderElement>(new V1Protocol.Handlers.ExpanderHandler()); // §14: callback/template wiring — see ExpanderHandler
-        RegisterDecoratorHandler<FlexElement>(new V1Protocol.Handlers.FlexPanelHandler()); // §14: keyed reconcile — see PanelDelegateHandlers
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.FlipViewDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.FrameDescriptor.Descriptor);
-        RegisterDecoratorHandler<GridElement>(new V1Protocol.Handlers.GridPanelHandler()); // §14: keyed reconcile — see PanelDelegateHandlers
-        // Spec 047 §14 Phase 3 prelude — GridViewElement now routes through V1
-        // via the hand-coded V1Protocol.Handlers.GridViewHandler (registered
-        // above with the Phase 1 handlers), which preserves the legacy
-        // ItemsSource + ContainerContentChanging lazy realization. The
-        // GridViewDescriptor stays carved: its ItemsHost<> strategy pre-mounts
-        // every item into GridView.Items (one container per item, no
-        // virtualization, no recycle), which would silently regress production
-        // memory and lifecycle (item Mount/Unmount fires for every item
-        // up-front instead of per-viewport, breaking the recycle contract).
-        // RegisterDescriptor(V1Protocol.Descriptor.Descriptors.GridViewDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.HyperlinkButtonDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ImageDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.InfoBadgeDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.InfoBarDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ItemContainerDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.LineDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ListBoxDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.MapControlDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.MediaPlayerElementDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.NavigationViewDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.NumberBoxDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ParallaxViewDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.PasswordBoxDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.PathDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.PersonPictureDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.PipsPagerDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.PivotDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ProgressBarDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ProgressRingDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.RadioButtonDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.RadioButtonsDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.RatingControlDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.RectangleDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.RefreshContainerDescriptor.Descriptor);
-        RegisterDecoratorHandler<RelativePanelElement>(new V1Protocol.Handlers.RelativePanelHandler()); // §14: keyed reconcile — see PanelDelegateHandlers
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.RepeatButtonDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.RichEditBoxDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.RichTextBlockDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ScrollViewDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ScrollViewerDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.SelectorBarDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.SemanticDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.SemanticZoomDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.SplitButtonDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.SplitViewDescriptor.Descriptor);
-        RegisterDecoratorHandler<StackElement>(new V1Protocol.Handlers.StackPanelHandler()); // §14: keyed reconcile — see PanelDelegateHandlers
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.SwipeControlDescriptor.Descriptor);
-        // Spec 047 §14 Phase 4 (§4.0.3) — TabViewElement routes through V1 via
-        // the full TabViewDescriptor port (drag pipeline, pinnable headers,
-        // in-place content reconcile, conditional SelectedIndex, TabStripHeader
-        // / TabStripFooter Element slots). Supersedes the delegate
-        // TabViewHandler. Unmount is byte-identical V1 ON ≡ V1 OFF (a
-        // WinUI.TabView is an ItemsControl that pools without child recursion in
-        // both paths).
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.TabViewDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.TeachingTipDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.TextBlockDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.TimePickerDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.TitleBarDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ToggleButtonDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ToggleSplitButtonDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.TreeViewDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.ViewboxDescriptor.Descriptor);
-        RegisterDescriptor(V1Protocol.Descriptor.Descriptors.WebView2Descriptor.Descriptor);
-        RegisterDecoratorHandler<WrapGridElement>(new V1Protocol.Handlers.WrapGridHandler()); // §14: keyed reconcile — see PanelDelegateHandlers
-
-        // ── §14 Phase 3 completion decorator-style handlers ──────────────
-        RegisterDecoratorHandler<IconElement>(V1Protocol.Descriptor.Descriptors.IconDescriptor.Handler);
-
-        // ── §4.0.5 — XAML interop bridges own their V1 registration ──────
-        // Spec 047 §14 Phase 4 (4.0.5): the two reverse-embedding element
-        // types are now owned by V1 auto-registration. Hosting.XamlInterop.Register
-        // (still a public API for source compat) skips populating _typeRegistry
-        // for any type already registered here, so it no longer clashes with
-        // EnsureRegistrableElementType. The decorator handlers reimplement the
-        // legacy MountXamlHost/MountXamlPage bodies and the UnmountRecursive
-        // intercepts (frame.Content=null + DetachReactorState), so the V1 ON
-        // path is behavior-identical to V1 OFF.
-        RegisterDecoratorHandler<XamlPageElement>(V1Protocol.Descriptor.Descriptors.XamlPageDescriptor.Handler);
-        RegisterDecoratorHandler<XamlHostElement>(V1Protocol.Descriptor.Descriptors.XamlHostDescriptor.Handler);
-    }
 
     /// <summary>
     /// Spec 047 §14 Phase 4 (4.0.5) — true if an element type already has a
@@ -502,32 +243,6 @@ public sealed partial class Reconciler : IDisposable
     internal bool IsElementTypeRegistered(Type elementType)
         => _v1Handlers.ContainsKey(elementType) || _typeRegistry.ContainsKey(elementType);
 
-    /// <summary>
-    /// Spec 047 §14 Phase 3 completion — sugar wrapper around
-    /// <see cref="RegisterHandler{TElement,TControl}"/> for built-in
-    /// descriptor-driven ports. Keeps <see cref="RegisterV1BuiltInHandlers"/>
-    /// readable as a flat list of descriptors.
-    /// </summary>
-    private void RegisterDescriptor<TElement, TControl>(
-        V1Protocol.Descriptor.ControlDescriptor<TElement, TControl> descriptor)
-        where TElement : Element
-        where TControl : FrameworkElement, new()
-        => RegisterHandler<TElement, TControl>(
-            new V1Protocol.Descriptor.DescriptorHandler<TElement, TControl>(descriptor));
-
-    /// <summary>
-    /// Spec 047 §14 Phase 3 completion — sugar wrapper around
-    /// <see cref="RegisterHandlerForDerivedTypes{TBase,TControl}"/> for
-    /// base-derived descriptor ports (typed templated lists, lazy stacks,
-    /// items hosts).
-    /// </summary>
-    private void RegisterDescriptorForDerivedTypes<TBase, TControl>(
-        V1Protocol.Descriptor.ControlDescriptor<TBase, TControl> descriptor)
-        where TBase : Element
-        where TControl : FrameworkElement, new()
-        => RegisterHandlerForDerivedTypes<TBase, TControl>(
-            new V1Protocol.Descriptor.DescriptorHandler<TBase, TControl>(descriptor));
-
     // ── V1 handler registry (spec 047 §14 Phase 1, Q1.1) ──────────────
     // Keyed by exact element type, separate from _typeRegistry so that
     // external RegisterType callers and built-in V1 ports stay isolated.
@@ -535,6 +250,42 @@ public sealed partial class Reconciler : IDisposable
     // (`RegisterHandler<TElement,TControl>(IElementHandler<…>)`) lands in
     // sections 1.6 / 1.9.
     internal readonly V1HandlerRegistry _v1Handlers = new();
+
+    /// <summary>
+    /// Spec 048 §8 — arm 3 of the dispatch precedence: on a per-host
+    /// <c>_v1Handlers</c> and per-host <c>_typeRegistry</c> miss, consult
+    /// the global lazy <see cref="V1Protocol.ControlRegistry"/>. On a hit
+    /// the factory is invoked exactly once and the resulting adapter is
+    /// cached into per-host <c>_v1Handlers</c> so steady-state dispatch
+    /// short-circuits in arm 1 (the existing fast per-host lookup) on the
+    /// next call for this element type on this host.
+    ///
+    /// <para>Precedence enforced at the call sites (Mount / Update):
+    /// (1) per-host <c>_v1Handlers</c> →
+    /// (2) per-host <c>_typeRegistry</c> →
+    /// (3) global <see cref="V1Protocol.ControlRegistry"/> →
+    /// (4) composition-primitive switch.</para>
+    /// </summary>
+    /// <param name="elementType">Exact runtime element type
+    /// (<c>element.GetType()</c>); not a base type. Dispatch is exact-match
+    /// (spec 047 §13 Q17).</param>
+    /// <param name="entry">On hit, the type-erased adapter to dispatch
+    /// through (and now cached in <c>_v1Handlers</c>).</param>
+    internal bool TryResolveFromControlRegistry(Type elementType, out IV1HandlerEntry entry)
+    {
+        if (V1Protocol.ControlRegistry.TryResolve(elementType, out var factory))
+        {
+            entry = factory();
+            // _v1Handlers is UI-thread-only; the caller has already verified
+            // there is no per-host entry for this element type, so the Add
+            // can never see a duplicate it didn't itself just plant.
+            _v1Handlers.Add(elementType, entry);
+            return true;
+        }
+
+        entry = null!;
+        return false;
+    }
 
     /// <summary>
     /// Associates a control with its current element via Tag.
@@ -670,6 +421,25 @@ public sealed partial class Reconciler : IDisposable
         return state;
     }
 
+    // ── Typed TreeView<T> container hosting ──────────────────────────────
+    //
+    // The typed TreeView hosts each node's view imperatively (the WinUI
+    // ItemTemplate-equivalent), exactly like the typed ListView: the
+    // ItemTemplate is an empty ContentControl shell, and we populate each
+    // realized container's ContentControl from the node's data item on
+    // realization (and tear it down on recycle). This is what makes
+    // expand/collapse robust — a fresh view is mounted into whichever pooled
+    // container WinUI realizes the node into, so no element is ever stuck
+    // parented to a stale (recycled) container. node.Content holds the
+    // developer's data item (the boxed T) — WinUI-aligned, and read back by
+    // the ItemInvoked / Expanding trampolines.
+    //
+    // Caches the internal TreeViewList (template part "ListControl", a public
+    // ListView subclass) per TreeView so Update can reconcile realized
+    // containers, and so the ContainerContentChanging subscription is attached
+    // exactly once.
+    internal readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<WinUI.TreeView, WinUI.ListView> _typedTreeListControls = new();
+
     /// <summary>
     /// Spec 047 §14 Phase 1 (1.3) — promoted from internal. Associates a
     /// control with its current Reactor element via the
@@ -688,6 +458,78 @@ public sealed partial class Reconciler : IDisposable
         state = new ReactorState { Element = element };
         control.SetValue(ReactorAttached.StateProperty, state);
     }
+
+    /// <summary>
+    /// Spec 047 §4.4 follow-up — allocation-gated element tagging for the V1
+    /// dispatch adapter. Refreshes an existing <see cref="ReactorState"/>'s
+    /// element pointer cheaply, but only <em>allocates</em> a new
+    /// <see cref="ReactorState"/> (+ attached-DP write) for elements whose
+    /// downstream code actually reads the element back via
+    /// <see cref="GetElementTag(FrameworkElement)"/>.
+    ///
+    /// <para>Three things require a live element pointer on the control:</para>
+    /// <list type="bullet">
+    ///   <item>
+    ///     <b>Event trampolines</b> — <see cref="Element.HasCallbacks"/>.
+    ///     Routed-input modifiers (<c>.OnPointerPressed</c> etc.) dispatch
+    ///     through <see cref="ModifierEventHandlerState"/>'s <c>Current*</c>
+    ///     fields refreshed each render by <c>ApplyEventHandlers</c> and do
+    ///     <em>not</em> resolve via the tag, so they are intentionally not
+    ///     part of the gate.
+    ///   </item>
+    ///   <item>
+    ///     <b>Keyed child reconciliation</b> — <see cref="Element.Key"/>.
+    ///     <see cref="ChildReconciler"/> reads the child's tag to extract the
+    ///     stable key during keyed reorders (see <c>ChildReconciler.cs:303</c>
+    ///     and <c>:392</c>). A keyed callback-free element (e.g.
+    ///     <c>Border(...).WithKey("a")</c>) loses its identity across reorders
+    ///     without the tag.
+    ///   </item>
+    ///   <item>
+    ///     <b>Element-extras readback</b> — <see cref="Element.Extensions"/>.
+    ///     Several bucketed extras have engine paths that read the live
+    ///     element via the tag — exit transitions
+    ///     (<c>ElementTransition</c>), connected-animation snapshots
+    ///     (<c>ConnectedAnimationKey</c>), <c>InteractionStates</c>,
+    ///     <c>KeyframeAnimations</c>, and friends. The bucket being null is
+    ///     spec 047 §4.4's "truly inert leaf" signal, so we tag whenever any
+    ///     extra is present rather than enumerating each feature.
+    ///   </item>
+    /// </list>
+    ///
+    /// <para>Callback-free display leaves with no key and no extras
+    /// (TextBlock / Border / StackPanel / Image — the bulk of a real tree)
+    /// never dispatch into Reactor code and have nothing reading the tag, so
+    /// they stay untagged. This mirrors the legacy reconciler discipline. The
+    /// pre-§4.5 V1 adapter tagged <em>every</em> control unconditionally,
+    /// allocating a ReactorState per leaf mount — the per-render byte
+    /// regression this restores the savings for.</para>
+    /// </summary>
+    internal static void SetElementTagIfNeeded(FrameworkElement control, Element element)
+    {
+        if (control.GetValue(ReactorAttached.StateProperty) is ReactorState state)
+        {
+            // State already allocated (callback-bearing control, pooled reuse,
+            // or echo/setter scope) — refresh the live element with no alloc.
+            state.Element = element;
+            return;
+        }
+        if (!NeedsTag(element)) return;
+        control.SetValue(
+            ReactorAttached.StateProperty,
+            new ReactorState { Element = element });
+    }
+
+    /// <summary>
+    /// Predicate companion to <see cref="SetElementTagIfNeeded"/>. Returns
+    /// true when downstream code will read the element back through
+    /// <see cref="GetElementTag(FrameworkElement)"/> — see the helper's
+    /// summary for the three categories.
+    /// </summary>
+    private static bool NeedsTag(Element element) =>
+        element.HasCallbacks
+        || element.Key is not null
+        || element.Extensions is not null;
 
     /// <summary>
     /// Spec 047 §14 Phase 1 (1.3) — promoted from internal. Retrieves the
@@ -834,62 +676,6 @@ public sealed partial class Reconciler : IDisposable
     // unsafe managed-FE-keyed CWT (Button, TextBox, Image, ScrollViewer) and
     // ModifierEventHandlerState (ToggleSwitch); issue #114 unified everything onto
     // ModifierEventHandlerState.
-
-    // ════════════════════════════════════════════════════════════════════
-    //  Canvas anchor positioning
-    // ════════════════════════════════════════════════════════════════════
-    //  CanvasAttached.AnchorX/AnchorY express positioning as a fraction of
-    //  the element's rendered size (0,0 = top-left, 0.5,0.5 = centered).
-    //  Final position depends on ActualWidth/ActualHeight, which is unknown
-    //  at mount time, so we recompute on Loaded + SizeChanged. The current
-    //  CanvasAttached is held in per-FE state so updates can swap anchor
-    //  values without re-subscribing.
-
-    private sealed class CanvasAnchorState
-    {
-        public CanvasAttached Current = new();
-        public bool Subscribed;
-    }
-
-    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<FrameworkElement, CanvasAnchorState> _canvasAnchorStates = new();
-
-    internal static void ApplyCanvasPosition(FrameworkElement fe, CanvasAttached ca)
-    {
-        if (ca.AnchorX == 0 && ca.AnchorY == 0)
-        {
-            WinUI.Canvas.SetLeft(fe, ca.Left);
-            WinUI.Canvas.SetTop(fe, ca.Top);
-            // If anchor handlers were previously installed (e.g. element re-used after
-            // a different anchor), keep them but update Current so they become a no-op.
-            if (_canvasAnchorStates.TryGetValue(fe, out var existing))
-                existing.Current = ca;
-            return;
-        }
-
-        var state = _canvasAnchorStates.GetValue(fe, static _ => new CanvasAnchorState());
-        state.Current = ca;
-        RecomputeCanvasAnchor(fe, state.Current);
-
-        if (state.Subscribed) return;
-        state.Subscribed = true;
-
-        fe.SizeChanged += (_, _) =>
-        {
-            if (_canvasAnchorStates.TryGetValue(fe, out var s))
-                RecomputeCanvasAnchor(fe, s.Current);
-        };
-        fe.Loaded += (_, _) =>
-        {
-            if (_canvasAnchorStates.TryGetValue(fe, out var s))
-                RecomputeCanvasAnchor(fe, s.Current);
-        };
-    }
-
-    private static void RecomputeCanvasAnchor(FrameworkElement fe, CanvasAttached ca)
-    {
-        WinUI.Canvas.SetLeft(fe, ca.Left - ca.AnchorX * fe.ActualWidth);
-        WinUI.Canvas.SetTop(fe, ca.Top - ca.AnchorY * fe.ActualHeight);
-    }
 
     // ════════════════════════════════════════════════════════════════════
     //  Extensible type registry (Feature 1: RegisterType API)
@@ -1260,6 +1046,10 @@ public sealed partial class Reconciler : IDisposable
         return new PopOnDispose(_contextScope, 1);
     }
 
+    // Internal so V1-owned lifecycle classes can read ambient Context<T> values
+    // without exposing the traversal stack itself.
+    internal T ReadContext<T>(Context<T> context) => _contextScope.Read(context);
+
     /// <summary>
     /// Spec 047 §14 Phase 1 (1.6) — push a stagger scope for child enter
     /// transitions. Returns an <see cref="IDisposable"/> that pops the
@@ -1508,6 +1298,15 @@ public sealed partial class Reconciler : IDisposable
             return replacement ?? existingControl;
         }
 
+        // Hot Reload: an edited component subclass mints a new Type token, so
+        // CanUpdate is false above. Migrate the subtree in place (preserving
+        // descendant state) instead of unmount/mount. Gated on IsHotReloadLive
+        // (MetadataUpdater.IsSupported) so the reflection-bearing path is
+        // statically dead under NativeAOT (spec 049 §7/§8).
+        if (HotReloadService.IsHotReloadLive
+            && TryHotReloadMigrateComponent(oldElement, newElement, existingControl, requestRerender))
+            return existingControl;
+
         Unmount(existingControl);
         return Mount(newElement, requestRerender);
     }
@@ -1600,51 +1399,78 @@ public sealed partial class Reconciler : IDisposable
         }
 
         Element newChildElement;
-        try
+        // The RenderContext backing whichever branch we render (component or
+        // func/memo). Used to recover an in-flight hook-order change during a
+        // hot-reload pass: reset this context's hook state and re-render once.
+        RenderContext? renderCtx = node.Component?.Context ?? node.Context;
+        bool hotReloadRetried = false;
+        while (true)
         {
-            if (node.Component is not null)
+            try
             {
-                // Update props before re-rendering so the component sees fresh data
-                if (newEl is ComponentElement compEl && compEl.Props is not null
-                    && node.Component is IPropsReceiver receiver)
+                if (node.Component is not null)
                 {
-                    receiver.SetProps(compEl.Props);
-                }
+                    // Update props before re-rendering so the component sees fresh data
+                    if (newEl is ComponentElement compEl && compEl.Props is not null
+                        && node.Component is IPropsReceiver receiver)
+                    {
+                        receiver.SetProps(compEl.Props);
+                    }
 
-                node.Component.Context.BeginRender(componentRerender, _contextScope);
-                newChildElement = node.Component.Render();
-                FlushEffectsTraced(node.Component.Context, componentName);
+                    node.Component.Context.BeginRender(componentRerender, _contextScope);
+                    newChildElement = node.Component.Render();
+                    FlushEffectsTraced(node.Component.Context, componentName);
+                }
+                else if (node.Context is not null && newEl is FuncElement func)
+                {
+                    node.Context.BeginRender(componentRerender, _contextScope);
+                    newChildElement = func.RenderFunc(node.Context);
+                    FlushEffectsTraced(node.Context, componentName);
+                }
+                else if (node.Context is not null && newEl is MemoElement memo)
+                {
+                    node.Context.BeginRender(componentRerender, _contextScope);
+                    newChildElement = memo.RenderFunc(node.Context);
+                    FlushEffectsTraced(node.Context, componentName);
+                }
+                else
+                {
+                    if (traceRender)
+                        Diagnostics.ReactorEventSource.Log.ComponentRenderStop(componentName!, 0);
+                    return;
+                }
             }
-            else if (node.Context is not null && newEl is FuncElement func)
+            // Tree-wide hot-reload hook-order recovery: when an edit reorders or
+            // retypes hooks in a *non-root* child, its Render() throws here.
+            // Inside a hot-reload pass we reset that child's hook state and
+            // re-render once (matching the root recovery in the host), so the
+            // edit applies and the subtree's descendant state is preserved,
+            // instead of falling through to the error-fallback path below.
+            catch (HookOrderException ex) when (!hotReloadRetried
+                && renderCtx is not null
+                && HotReloadService.WithinUpdatePass)
             {
-                node.Context.BeginRender(componentRerender, _contextScope);
-                newChildElement = func.RenderFunc(node.Context);
-                FlushEffectsTraced(node.Context, componentName);
+                _logger?.LogWarning(ex,
+                    "Hot reload: hook order/type changed in child component — " +
+                    "resetting state and re-rendering: {ComponentName}",
+                    componentName ?? newEl.GetType().Name);
+                hotReloadRetried = true;
+                renderCtx.ResetForHotReload();
+                continue;
             }
-            else if (node.Context is not null && newEl is MemoElement memo)
+            catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
             {
-                node.Context.BeginRender(componentRerender, _contextScope);
-                newChildElement = memo.RenderFunc(node.Context);
-                FlushEffectsTraced(node.Context, componentName);
+                _logger?.LogError(ex, "Component Render() threw: {ComponentName}", newEl.GetType().Name);
+                if (Diagnostics.ReactorEventSource.Log.IsEnabled(
+                        global::System.Diagnostics.Tracing.EventLevel.Error,
+                        Diagnostics.ReactorEventSource.Keywords.Errors))
+                {
+                    Diagnostics.ReactorEventSource.Log.RenderError(
+                        componentName ?? newEl.GetType().Name, ex.GetType().Name, ex.Message);
+                }
+                newChildElement = ErrorFallback.BuildElement(ex);
             }
-            else
-            {
-                if (traceRender)
-                    Diagnostics.ReactorEventSource.Log.ComponentRenderStop(componentName!, 0);
-                return;
-            }
-        }
-        catch (Exception ex) when (_errorBoundaryDepth == 0 && ex is not OutOfMemoryException and not StackOverflowException)
-        {
-            _logger?.LogError(ex, "Component Render() threw: {ComponentName}", newEl.GetType().Name);
-            if (Diagnostics.ReactorEventSource.Log.IsEnabled(
-                    global::System.Diagnostics.Tracing.EventLevel.Error,
-                    Diagnostics.ReactorEventSource.Keywords.Errors))
-            {
-                Diagnostics.ReactorEventSource.Log.RenderError(
-                    componentName ?? newEl.GetType().Name, ex.GetType().Name, ex.Message);
-            }
-            newChildElement = ErrorFallback.BuildElement(ex);
+            break;
         }
 
         if (traceRender)
@@ -1782,11 +1608,17 @@ public sealed partial class Reconciler : IDisposable
         finally { Diagnostics.ReactorEventSource.Log.ChildReconcileStop(); }
     }
 
-    private void ReconcileItemsChildren(
+    // Spec 047 §14 — keyed-reconcile entrypoint for the V1 descriptor Panel<>
+    // strategy. The descriptor resolves the live collection as a
+    // UIElementCollection (not a WinUI.Panel), so this overload wraps that
+    // collection directly. Behavior — including the diagnostics ChildReconcile
+    // event scope — is identical to the WinUI.Panel-based ReconcileChildren so
+    // descriptor panels match the legacy hand-coded Update* methods byte-for-byte.
+    internal void ReconcilePanelChildrenInto(
         Element[] oldChildren, Element[] newChildren,
-        WinUI.ItemsControl itemsControl, Action requestRerender)
+        UIElementCollection collection, Action requestRerender)
     {
-        var childCollection = new ItemsControlChildCollection(itemsControl);
+        var childCollection = new PanelChildCollection(collection);
         if (!Diagnostics.ReactorEventSource.Log.IsEnabled(
                 global::System.Diagnostics.Tracing.EventLevel.Informational,
                 Diagnostics.ReactorEventSource.Keywords.Reconcile))
@@ -1878,8 +1710,6 @@ public sealed partial class Reconciler : IDisposable
             node.Component?.Context.RunCleanups();
             node.Context?.RunCleanups();
             _componentNodes.Remove(control);
-            if (ReactorFeatureFlags.ShowLayoutCost)
-                RaiseLayoutCostComponentUnmounted(control);
         }
 
         _errorBoundaryNodes.Remove(control);
@@ -1908,65 +1738,109 @@ public sealed partial class Reconciler : IDisposable
             return;
         }
 
-        // XamlHostElement children were created outside Reactor's tree —
-        // do NOT recurse into them (they may have stale parent references
-        // or be types Reactor doesn't know how to clean). Fully detach
-        // reactor state so retained-by-app references can't fire stale
-        // callbacks through orphaned trampolines.
-        if (control is FrameworkElement hostFe && GetElementTag(hostFe) is XamlHostElement)
+        if (control is WinUI.RichTextBlock rtb)
         {
-            DetachReactorState(hostFe);
-            return;
+            // Issue #480 — RichTextBlock is neither a Panel nor a ContentControl,
+            // so ForEachReactorChildControl doesn't recurse into its flow
+            // document. Route A (Reactor element) inline UI children must be torn
+            // down here or their hook cleanups + pooled descendants leak when the
+            // block goes away.
+            UnmountInlineUIChildren(rtb);
         }
 
-        // XamlPageElement — clear content to trigger Page.OnNavigatedFrom cleanup
-        if (control is WinUI.Frame pageFrame && GetElementTag(pageFrame) is XamlPageElement)
-        {
-            pageFrame.Content = null;
-            DetachReactorState(pageFrame);
-            return;
-        }
+        ForEachReactorChildControl(control, UnmountRecursive);
+    }
 
+    private static void ForEachReactorChildControl(UIElement control, Action<UIElement> visit)
+        => ForEachReactorChildControl(control, child => { visit(child); return true; });
+
+    private static void ForEachReactorChildControl(UIElement control, Func<UIElement, bool> visit)
+    {
         if (control is WinUI.Panel panel)
         {
             foreach (var child in panel.Children)
-                UnmountRecursive(child);
+                if (!visit(child)) return;
         }
         else if (control is WinUI.ItemsRepeater repeater)
         {
-            // ItemsRepeater projects to C# as a FrameworkElement (not a
-            // Panel — see microsoft-ui-xaml-lift/.../ItemsRepeater.idl), so
-            // the Panel branch above doesn't catch it even though the
-            // framework keeps both realized and recycled containers in
-            // its visual subtree. Without this branch, row Components'
-            // UseEffect cleanups would never run when the LazyStack is
-            // unmounted (e.g., on navigation), leaking any in-flight
-            // timers / subscriptions / async loops. We walk via
-            // VisualTreeHelper because the public ItemsRepeater surface
-            // doesn't expose a Children collection. (PR #324 review)
+            // ItemsRepeater does not expose a Children collection; realized and
+            // recycled row hosts live in its visual subtree.
             int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(repeater);
             for (int i = 0; i < count; i++)
             {
-                if (Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(repeater, i) is UIElement child)
-                    UnmountRecursive(child);
+                if (Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(repeater, i) is UIElement child && !visit(child))
+                    return;
             }
         }
         else if (control is WinUI.Border border && border.Child is not null)
         {
-            UnmountRecursive(border.Child);
+            visit(border.Child);
         }
         else if (control is WinUI.ScrollViewer sv && sv.Content is UIElement svChild)
         {
-            UnmountRecursive(svChild);
+            visit(svChild);
         }
         else if (control is WinUI.UserControl uc && uc.Content is UIElement ucChild)
         {
-            UnmountRecursive(ucChild);
+            visit(ucChild);
         }
         else if (control is WinUI.ContentControl cc && cc.Content is UIElement ccChild)
         {
-            UnmountRecursive(ccChild);
+            visit(ccChild);
         }
+    }
+
+    /// <summary>
+    /// Walks a typed TreeView's visual subtree and unmounts every per-node view
+    /// hosted in a tagged container ContentControl. Used on full-tree unmount
+    /// (recycle of individual containers is handled by the
+    /// ContainerContentChanging recycle path).
+    /// </summary>
+    internal void UnmountTypedTreeViewContainers(WinUI.TreeView treeView)
+    {
+        int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(treeView);
+        for (int i = 0; i < count; i++)
+            UnmountTypedTreeViewContainersRecursive(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(treeView, i));
+    }
+
+    internal void UnmountTypedTreeViewContainersRecursive(DependencyObject node)
+    {
+        // Our node-view hosts are ContentControls tagged with the view Element.
+        if (node is WinUI.ContentControl cc && cc.Content is UIElement view && GetElementTag(cc) is not null)
+        {
+            UnmountChild(view);
+            cc.Content = null;
+            ClearElementTag(cc);
+            return; // the view's own subtree is handled by UnmountChild
+        }
+        int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(node);
+        for (int i = 0; i < count; i++)
+            UnmountTypedTreeViewContainersRecursive(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(node, i));
+    }
+
+    /// <summary>
+    /// Finds the typed TreeView's internal <c>TreeViewList</c> (template part
+    /// "ListControl", a public <see cref="WinUI.ListView"/> subclass). Returns
+    /// the cached instance when hosting is already attached; otherwise walks the
+    /// visual subtree without caching — only <c>AttachTypedTreeHosting</c> writes
+    /// <see cref="_typedTreeListControls"/> (its presence marks "subscribed", so
+    /// a read-side cache write here would suppress the real subscription).
+    /// </summary>
+    internal WinUI.ListView? FindTypedTreeListControl(WinUI.TreeView treeView) =>
+        _typedTreeListControls.TryGetValue(treeView, out var cached)
+            ? cached
+            : FindDescendantListView(treeView);
+
+    private static WinUI.ListView? FindDescendantListView(DependencyObject root)
+    {
+        int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
+        for (int i = 0; i < count; i++)
+        {
+            var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i);
+            if (child is WinUI.ListView lv) return lv;
+            if (FindDescendantListView(child) is { } nested) return nested;
+        }
+        return null;
     }
 
     /// <summary>
@@ -2152,8 +2026,6 @@ public sealed partial class Reconciler : IDisposable
             node.Component?.Context.RunCleanups();
             node.Context?.RunCleanups();
             _componentNodes.Remove(control);
-            if (ReactorFeatureFlags.ShowLayoutCost)
-                RaiseLayoutCostComponentUnmounted(control);
         }
 
         // Spec 047 §14 Phase 1 (1.1) — V1 handler unmount on the
@@ -2193,28 +2065,22 @@ public sealed partial class Reconciler : IDisposable
             return;
         }
 
-        // Recurse into children.
-        if (control is WinUI.Panel panel)
+        // Recurse into children. The shared child walk includes ItemsRepeater,
+        // so pooled removals now tear down realized LazyStack rows too.
+        ForEachReactorChildControl(control, child => UnmountAndCollect(child, toPool));
+        if (control is WinUI.ContentControl cc && cc.Content is UIElement)
         {
-            foreach (var child in panel.Children)
-                UnmountAndCollect(child, toPool);
-        }
-        else if (control is WinUI.Border border && border.Child is not null)
-        {
-            UnmountAndCollect(border.Child, toPool);
-        }
-        else if (control is WinUI.ScrollViewer sv && sv.Content is UIElement svChild)
-        {
-            UnmountAndCollect(svChild, toPool);
-        }
-        else if (control is WinUI.UserControl uc && uc.Content is UIElement ucChild)
-        {
-            UnmountAndCollect(ucChild, toPool);
-        }
-        else if (control is WinUI.ContentControl cc && cc.Content is UIElement ccChild)
-        {
-            UnmountAndCollect(ccChild, toPool);
             cc.Content = null; // Detach so pooled child has no parent
+        }
+        else if (control is WinUI.RichTextBlock rtb)
+        {
+            // Issue #480 — mirror UnmountRecursive's RichTextBlock arm so
+            // Route A (Reactor element) inline UI children are torn down
+            // before the block is recycled to the pool. ElementPool.Reset
+            // calls rtb.Blocks.Clear() which drops the InlineUIContainer
+            // references; without this, descendant hooks / event trampolines
+            // would leak.
+            UnmountInlineUIChildren(rtb);
         }
 
         if (control is FrameworkElement poolCandidate)
@@ -2234,6 +2100,114 @@ public sealed partial class Reconciler : IDisposable
         if (oldEl is XamlHostElement oldHost && newEl is XamlHostElement newHost)
             return oldHost.TypeKey == newHost.TypeKey;
         // MemoElement can always update to MemoElement (same type check above handles it)
+        return true;
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Hot Reload — subtree migration on component type identity change
+    //  (spec 049 §7 / Phase 3)
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// When a <see cref="Component"/> subclass is edited under Hot Reload the
+    /// runtime mints a <em>new</em> <see cref="Type"/> token, so
+    /// <see cref="CanUpdate"/> returns false and the steady-state path would
+    /// unmount the whole subtree — discarding every descendant's
+    /// <c>UseState</c>. This migrates the node in place instead: it constructs
+    /// the post-edit component via the element's factory closure (so
+    /// parameterized constructors work — spec §7 Q2), copies surviving instance
+    /// fields old → new via <see cref="Microsoft.UI.Reactor.Hosting.ReactorHotReloadCopier"/>,
+    /// transfers the live <see cref="RenderContext"/> (hooks + cleanups stay
+    /// alive), swaps <see cref="ComponentNode.Component"/>, and re-renders
+    /// through the normal <see cref="ReconcileComponent"/> path so prop-set,
+    /// Phase-1 hook-order recovery, child reconciliation, tracing and node
+    /// bookkeeping all run exactly as a regular update would. The wrapper
+    /// <see cref="UIElement"/> is preserved, so <see cref="FrameworkElement"/>
+    /// identity (and any running compositor animations on descendant visuals)
+    /// survives the edit.
+    ///
+    /// <para>Returns false — and the caller falls through to unmount/mount —
+    /// when the elements are not both class <see cref="ComponentElement"/>s of
+    /// the same <c>FullName</c>+assembly, when the keys differ, when the node is
+    /// not found, or when the post-edit instance cannot be constructed (no
+    /// factory and no parameterless ctor). Only ever reached inside a hot-reload
+    /// pass, so it is statically dead under NativeAOT (spec §8).</para>
+    /// </summary>
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Reachable only via HotReloadService.IsHotReloadLive; dead under NativeAOT (spec 049 §8).")]
+    [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "Reachable only via HotReloadService.IsHotReloadLive; dead under NativeAOT (spec 049 §8).")]
+    internal bool TryHotReloadMigrateComponent(Element oldEl, Element newEl, UIElement existingControl, Action requestRerender)
+    {
+        // Only a class ComponentElement whose Type token changed but whose
+        // logical identity (FullName + assembly) and key are unchanged is an
+        // edit we migrate. Anything else (different component, different key,
+        // a base-class swap that changes the name) is a genuine identity
+        // change the author asked to discard.
+        if (oldEl is not ComponentElement oldComp || newEl is not ComponentElement newComp)
+            return false;
+        if (oldEl.Key != newEl.Key) return false;
+
+        Type oldType = oldComp.ComponentType;
+        Type newType = newComp.ComponentType;
+        if (oldType.FullName is null || oldType.FullName != newType.FullName) return false;
+        if (oldType.Assembly.GetName().Name != newType.Assembly.GetName().Name) return false;
+
+        if (!_componentNodes.TryGetValue(existingControl, out var node) || node.Component is null)
+            return false;
+
+        Component newComponent;
+        try
+        {
+            newComponent = newComp.CreateInstance();
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            // Factory closure threw or no usable constructor — let the caller
+            // unmount/mount so the edit still takes effect (state is lost). A
+            // clean recreate is strictly better than migrating onto a
+            // half-built instance. Fatal exceptions deliberately propagate.
+            return false;
+        }
+
+        Component oldComponent = node.Component;
+
+        // Copy surviving instance fields old → new (added fields keep their
+        // default, removed fields drop, native/visual handles are block-listed).
+        // Contain reflection faults on pathological user fields so a copy failure
+        // falls back to unmount/mount rather than aborting the hot-reload pass —
+        // a clean recreate beats proceeding with a partially-migrated instance.
+        try
+        {
+            Microsoft.UI.Reactor.Hosting.ReactorHotReloadCopier.TryMigrate(
+                oldComponent, newComponent,
+                new HashSet<object>(ReferenceEqualityComparer.Instance));
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException and not StackOverflowException)
+        {
+            // Field copy faulted midway: discard the partially-migrated instance
+            // and recreate the component cleanly. Fatal exceptions propagate.
+            return false;
+        }
+
+        // Transfer the live render context explicitly (deterministic regardless
+        // of copier field-copy order) so hooks and pending cleanups survive.
+        // KNOWN LIMITATION (spec 049 §7): UseEffect cleanup closures captured the
+        // OLD instance; effects whose deps are unchanged do not re-run, so their
+        // cleanups still reference the pre-edit instance until deps change or the
+        // subtree unmounts. This matches React's component-identity semantics
+        // (preserved state ⇒ effects don't re-fire); most effects close over
+        // state values rather than `this`, so this is benign in practice.
+        newComponent.Context = oldComponent.Context;
+
+        // Swap the instance and force a render past the memo gate, then delegate
+        // to the normal component reconcile path. ReconcileComponent re-sets
+        // props from newEl, applies Phase-1 hook-order recovery if the edit
+        // changed the hook shape, reconciles the child element against the
+        // preserved wrapper, and updates node.Element / node.PreviousProps.
+        node.Component = newComponent;
+        node.SelfTriggered = true;
+        ReconcileComponent(oldEl, newEl, existingControl, requestRerender);
+
+        Diagnostics.ReactorEventSource.Log.HotReloadStateMigrated(newType.FullName ?? newType.Name);
         return true;
     }
 
@@ -2265,6 +2239,12 @@ public sealed partial class Reconciler : IDisposable
             var replacement = Update(oldChild, newChild, existing, requestRerender);
             return replacement ?? existing;
         }
+        // Hot Reload component-identity migration (spec 049 §7) — preserve the
+        // child subtree's state across an edit instead of unmount/mount.
+        if (oldChild is not null && existing is not null
+            && HotReloadService.IsHotReloadLive
+            && TryHotReloadMigrateComponent(oldChild, newChild, existing, requestRerender))
+            return existing;
         if (existing is not null) Unmount(existing);
         return Mount(newChild, requestRerender);
     }
@@ -4395,7 +4375,7 @@ public sealed partial class Reconciler : IDisposable
         if (newEl is MenuFlyoutContentElement newMf && existingFlyout is WinUI.MenuFlyout menuFlyout)
         {
             menuFlyout.Items.Clear();
-            foreach (var item in newMf.Items) menuFlyout.Items.Add(CreateMenuFlyoutItem(item));
+            foreach (var item in newMf.Items) menuFlyout.Items.Add(MenuCommandFactory.CreateMenuFlyoutItem(item));
             if (newMf.Placement != WinPrim.FlyoutPlacementMode.Auto)
                 menuFlyout.Placement = newMf.Placement;
             return;
@@ -4451,7 +4431,7 @@ public sealed partial class Reconciler : IDisposable
                 // Only set Placement if explicitly specified (Auto can cause assertions on MenuFlyout)
                 if (mf.Placement != WinPrim.FlyoutPlacementMode.Auto)
                     menuFlyout.Placement = mf.Placement;
-                foreach (var item in mf.Items) menuFlyout.Items.Add(CreateMenuFlyoutItem(item));
+                foreach (var item in mf.Items) menuFlyout.Items.Add(MenuCommandFactory.CreateMenuFlyoutItem(item));
                 return menuFlyout;
             }
             default:
@@ -4465,7 +4445,7 @@ public sealed partial class Reconciler : IDisposable
     /// <summary>
     /// Spec 047 §14 Phase 3-final — descriptor-facing sibling of
     /// <see cref="CreateFlyoutFromElement"/>. Same shape as
-    /// <see cref="ResolveIconForDescriptor"/>: a thin forwarder that tolerates
+    /// <see cref="IconResolver.ResolveIconForDescriptor"/>: a thin forwarder that tolerates
     /// <see langword="null"/> input so a <c>.OneWayBridged</c> entry on a
     /// button-family descriptor can wire
     /// <c>(c, v, rec, rr) =&gt; c.Flyout = rec.CreateFlyoutForDescriptor(v, rr)</c>
@@ -4475,34 +4455,6 @@ public sealed partial class Reconciler : IDisposable
         => flyoutEl is null ? null : CreateFlyoutFromElement(flyoutEl, requestRerender);
 
     // ── Enum conversions removed — Reactor now uses WinUI types directly ──
-
-    internal static Symbol ParseSymbol(string name)
-    {
-        if (Enum.TryParse<Symbol>(name, ignoreCase: true, out var symbol)) return symbol;
-        return Symbol.Placeholder;
-    }
-
-    // ── Grid definition parsing ─────────────────────────────────────
-
-    internal static ColumnDefinition ParseColumnDef(string def) => def switch
-    {
-        "*" => new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
-        "Auto" or "auto" => new ColumnDefinition { Width = GridLength.Auto },
-        _ when double.TryParse(def, global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture, out var px) => new ColumnDefinition { Width = new GridLength(px) },
-        _ when def.EndsWith('*') && double.TryParse(def[..^1], global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture, out var stars) =>
-            new ColumnDefinition { Width = new GridLength(stars, GridUnitType.Star) },
-        _ => new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) },
-    };
-
-    internal static RowDefinition ParseRowDef(string def) => def switch
-    {
-        "*" => new RowDefinition { Height = new GridLength(1, GridUnitType.Star) },
-        "Auto" or "auto" => new RowDefinition { Height = GridLength.Auto },
-        _ when double.TryParse(def, global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture, out var px) => new RowDefinition { Height = new GridLength(px) },
-        _ when def.EndsWith('*') && double.TryParse(def[..^1], global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture, out var stars) =>
-            new RowDefinition { Height = new GridLength(stars, GridUnitType.Star) },
-        _ => new RowDefinition { Height = new GridLength(1, GridUnitType.Star) },
-    };
 
     /// <summary>
     /// Tracks the state of a mounted component in the tree.
@@ -4600,20 +4552,7 @@ public sealed partial class Reconciler : IDisposable
                 hooks.Add(hook);
         }
 
-        // Recurse into children (Border wraps components, Panel/Grid wraps layouts)
-        if (control is WinUI.Panel panel)
-        {
-            foreach (UIElement child in panel.Children)
-                CollectLifecycleHooksRecursive(child, hooks);
-        }
-        else if (control is WinUI.Border border && border.Child is not null)
-        {
-            CollectLifecycleHooksRecursive(border.Child, hooks);
-        }
-        else if (control is WinUI.ContentControl cc && cc.Content is UIElement content)
-        {
-            CollectLifecycleHooksRecursive(content, hooks);
-        }
+        ForEachReactorChildControl(control, child => CollectLifecycleHooksRecursive(child, hooks));
     }
 
     /// <summary>
@@ -4684,21 +4623,28 @@ public sealed partial class Reconciler : IDisposable
             if (ctx.IsCancelled) return;
         }
 
-        if (root is WinUI.Panel panel)
+        ForEachReactorChildControl(root, child =>
         {
-            foreach (UIElement child in panel.Children)
-            {
-                InvokeNavigatingFrom(child, ctx);
-                if (ctx.IsCancelled) return;
-            }
-        }
-        else if (root is WinUI.Border border && border.Child is not null)
+            InvokeNavigatingFrom(child, ctx);
+            return !ctx.IsCancelled;
+        });
+    }
+
+    /// <summary>
+    /// Hot Reload (spec 049 §6 step 3). Invokes <paramref name="action"/> once for
+    /// every live <see cref="RenderContext"/> tracked by this reconciler — both
+    /// function-component contexts (<see cref="ComponentNode.Context"/>) and
+    /// class-component contexts (<see cref="Component.Context"/>). The host calls
+    /// this at the start of a hot-reload pass to migrate hook state tree-wide
+    /// before any component re-renders. The root component's context is NOT in
+    /// <c>_componentNodes</c>, so the host migrates it separately.
+    /// </summary>
+    internal void ForEachLiveContext(Action<RenderContext> action)
+    {
+        foreach (var node in _componentNodes.Values)
         {
-            InvokeNavigatingFrom(border.Child, ctx);
-        }
-        else if (root is WinUI.ContentControl cc && cc.Content is UIElement content)
-        {
-            InvokeNavigatingFrom(content, ctx);
+            if (node.Context is { } funcCtx) action(funcCtx);
+            if (node.Component?.Context is { } classCtx) action(classCtx);
         }
     }
 

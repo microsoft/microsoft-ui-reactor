@@ -73,3 +73,11 @@ internal static class DatePickerDescriptor
             get: static e => e.Orientation,
             set: static (c, v) => c.Orientation = v);
 }
+
+/// <summary>
+/// Spec 048 §3.3 thin handler — instantiated lazily by
+/// <see cref="ControlRegistry"/> when the global path needs the
+/// descriptor-backed <see cref="DatePickerDescriptor"/>.
+/// </summary>
+internal sealed class DatePickerDescriptorHandler()
+    : DescriptorHandler<DatePickerElement, WinUI.DatePicker>(DatePickerDescriptor.Descriptor);

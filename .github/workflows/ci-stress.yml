@@ -16,12 +16,18 @@ on:
         options:
           - unit
           - selftests
+          - aot
           - integration
           - all
       shards:
         description: "Number of parallel runners (iterations are divided across shards)"
         required: true
         default: "20"
+        type: string
+      filter:
+        description: "Optional --self-test --filter prefix for the aot target (e.g. TTV_). Empty = full suite."
+        required: false
+        default: ""
         type: string
 
 jobs:
@@ -217,9 +223,82 @@ jobs:
           }
           Write-Host "Shard ${idx}: $count iterations passed."
 
+  aot-selftests:
+    name: AOT Selftests (shard ${{ matrix.shard }})
+    needs: plan
+    if: ${{ inputs.target == 'aot' || inputs.target == 'all' }}
+    runs-on: windows-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.shard-list) }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5.3.0
+        with:
+          dotnet-version: 10.0.x
+
+      # Publish the NativeAOT selftest host once per shard (same knobs as ci.yml).
+      - name: Publish AOT host (once)
+        run: >
+          dotnet publish tests/Reactor.AppTests.Host
+          -p:PublishAotInternal=true
+          -p:Platform=x64
+          -r win-x64
+          -c Release
+          -o ${{ runner.temp }}/aot-publish
+          --nologo
+
+      - name: Stress loop
+        shell: pwsh
+        env:
+          PER_SHARD: ${{ needs.plan.outputs.per-shard }}
+          REMAINDER: ${{ needs.plan.outputs.remainder }}
+          SHARD_INDEX: ${{ matrix.shard }}
+          FILTER: ${{ inputs.filter }}
+        run: |
+          $exe = Join-Path '${{ runner.temp }}/aot-publish' 'Reactor.AppTests.Host.exe'
+          if (-not (Test-Path $exe)) { Write-Host "::error::AOT host not found at $exe"; exit 1 }
+          $per = [int]$env:PER_SHARD
+          $rem = [int]$env:REMAINDER
+          $idx = [int]$env:SHARD_INDEX
+          $count = if ($idx -le $rem) { $per + 1 } else { $per }
+          if ($count -lt 1) { Write-Host "Shard $idx has no work."; exit 0 }
+          $args = @('--self-test')
+          if ($env:FILTER) { $args += @('--filter', $env:FILTER) }
+          $failures = New-Object System.Collections.Generic.List[int]
+          for ($i = 1; $i -le $count; $i++) {
+            Write-Host "::group::AOT selftest iteration $i / $count (shard $idx)"
+            & $exe @args 2>&1 | Tee-Object -FilePath "aot-$idx-$i.tap"
+            $code = $LASTEXITCODE
+            # A nonzero exit OR any 'not ok' line is a failure for this iteration.
+            $notOk = Select-String -Path "aot-$idx-$i.tap" -Pattern '^not ok ' -SimpleMatch -Quiet
+            Write-Host "::endgroup::"
+            if ($code -ne 0 -or $notOk) {
+              Write-Host "::warning::AOT iteration $i (shard $idx) failed (exit $code, notOk=$notOk)"
+              $failures.Add($i) | Out-Null
+            }
+          }
+          if ($failures.Count -gt 0) {
+            Write-Host "::error::Shard $idx had $($failures.Count) failed iteration(s): $($failures -join ', ')"
+            exit 1
+          }
+          Write-Host "Shard ${idx}: $count AOT iterations passed."
+
+      - name: Upload failing TAP
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: aot-stress-tap-shard-${{ matrix.shard }}
+          path: aot-*.tap
+          if-no-files-found: ignore
+
   summary:
     name: Stress summary
-    needs: [plan, unit-tests, selftests, integration-tests]
+    needs: [plan, unit-tests, selftests, aot-selftests, integration-tests]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
@@ -227,14 +306,16 @@ jobs:
         env:
           UNIT_RESULT: ${{ needs.unit-tests.result }}
           SELFTESTS_RESULT: ${{ needs.selftests.result }}
+          AOT_RESULT: ${{ needs.aot-selftests.result }}
           INTEGRATION_RESULT: ${{ needs.integration-tests.result }}
         run: |
           echo "Unit shards:         $UNIT_RESULT"
           echo "Selftest shards:     $SELFTESTS_RESULT"
+          echo "AOT selftest shards: $AOT_RESULT"
           echo "Integration shards:  $INTEGRATION_RESULT"
           fail=0
           # 'skipped' is OK (target filter); 'success' is OK; anything else is a fail.
-          for r in "$UNIT_RESULT" "$SELFTESTS_RESULT" "$INTEGRATION_RESULT"; do
+          for r in "$UNIT_RESULT" "$SELFTESTS_RESULT" "$AOT_RESULT" "$INTEGRATION_RESULT"; do
             case "$r" in
               success|skipped|"") ;;
               *) fail=1 ;;

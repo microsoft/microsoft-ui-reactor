@@ -1,7 +1,4 @@
-using System;
-using System.Diagnostics.CodeAnalysis;
 using Microsoft.UI.Xaml;
-using WinUI = Microsoft.UI.Xaml.Controls;
 
 namespace Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 
@@ -30,22 +27,16 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 /// <summary>§14 prelude — typed templated lists (ListView/GridView/FlipView&lt;T&gt;).</summary>
 internal sealed class TemplatedListHandler : IDecoratorElementHandler<TemplatedListElementBase>
 {
+    // Public ctor required by the `new()` constraint on
+    // `RegBaseDecorator<TBase, THandler>.Done` (spec-048 §3.4 base-derived
+    // global registration path).
+    public TemplatedListHandler() { }
+
     public UIElement Mount(MountContext ctx, TemplatedListElementBase el)
-        => ctx.Reconciler.MountTemplatedList(el, ctx.RequestRerender);
+        => TemplatedListLifecycle.Mount(ctx.Reconciler, el, ctx.RequestRerender);
 
     public UIElement Update(UpdateContext ctx, TemplatedListElementBase oldEl, TemplatedListElementBase newEl, UIElement control)
-    {
-        var rr = ctx.RequestRerender;
-        UIElement? replacement = control switch
-        {
-            WinUI.GridView gv => ctx.Reconciler.UpdateTemplatedGridView(oldEl, newEl, gv, rr),
-            WinUI.FlipView fv => ctx.Reconciler.UpdateTemplatedFlipView(oldEl, newEl, fv, rr),
-            WinUI.ListView lv => ctx.Reconciler.UpdateTemplatedListView(oldEl, newEl, lv, rr),
-            _ => throw new InvalidOperationException(
-                $"TemplatedListHandler: unexpected control type {control.GetType().Name} for element {newEl.GetType().Name}."),
-        };
-        return replacement ?? control;
-    }
+        => TemplatedListLifecycle.Update(ctx.Reconciler, oldEl, newEl, control, ctx.RequestRerender) ?? control;
 
     public V1UnmountDisposition Unmount(UnmountContext ctx, TemplatedListElementBase? element, UIElement control)
         => V1UnmountDisposition.ContinueDefaultTraversal;

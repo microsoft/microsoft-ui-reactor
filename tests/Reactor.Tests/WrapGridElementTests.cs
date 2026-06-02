@@ -144,7 +144,14 @@ public class WrapGridElementTests
         }
         catch (global::System.Runtime.InteropServices.COMException)
         {
-            // Expected on CI/non-WinUI thread
+            // Expected on CI/non-WinUI thread (legacy raw form).
+        }
+        catch (global::System.Reflection.TargetInvocationException tie)
+            when (tie.InnerException is global::System.Runtime.InteropServices.COMException)
+        {
+            // Expected on CI/non-WinUI thread: the V1 descriptor path constructs
+            // VariableSizedWrapGrid via the generic new() constraint, which wraps
+            // the off-thread ctor COMException in a TargetInvocationException.
         }
     }
 

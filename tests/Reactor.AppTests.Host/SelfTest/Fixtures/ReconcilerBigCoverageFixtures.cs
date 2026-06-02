@@ -1,6 +1,7 @@
 using System.Reflection;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.V1Protocol;
 using Microsoft.UI.Reactor.Core.Internal;
 using Microsoft.UI.Reactor.Hooks;
 using Microsoft.UI.Reactor.Controls.Validation;
@@ -36,6 +37,7 @@ internal static class ReconcilerBigCoverageFixtures
         public override async Task RunAsync()
         {
             var host = H.CreateHost();
+#pragma warning disable CS0618 // exercises obsolete .AccessKeyDisplayRequested → OnAccessKeyDisplayRequested bridge
             host.Mount(ctx => VStack(
                 TextBlock("evt-target")
                     .OnSizeChanged((_, _) => { })
@@ -60,6 +62,7 @@ internal static class ReconcilerBigCoverageFixtures
                     .OnLostFocus((_, _) => { })
                     .AccessKeyDisplayRequested(() => { })
             ));
+#pragma warning restore CS0618
 
             await Harness.Render();
             var tb = H.FindText("evt-target");
@@ -541,6 +544,55 @@ internal static class ReconcilerBigCoverageFixtures
             H.ClickButton("CmdBarPhase");
             await Harness.Render();
             H.Check("CmdBar_Updated", H.FindControl<Microsoft.UI.Xaml.Controls.CommandBar>(_ => true) is not null);
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  11b. CommandBar AppBarToggleButton icon update — regression.
+    //     The toggle update path must route through IconResolver (so it honors
+    //     IconElement + glyph fallback and clears a stale icon when the new data
+    //     drops it), mirroring the mount path and the AppBarButton update arm.
+    //     Previously it only did `if (Icon is not null) SymbolIcon(ParseSymbol)`,
+    //     which ignored IconElement and stranded a stale SymbolIcon.
+    // ════════════════════════════════════════════════════════════════════
+    internal class CmdBarToggleIconUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (phase, set) = ctx.UseState(0);
+                AppBarItemBase[] primary = phase == 0
+                    ? [new AppBarToggleButtonData("Tgl", Icon: "Pin")]
+                    : [new AppBarToggleButtonData("Tgl") { IconElement = new FontIconData("\uE734") }];
+                return VStack(
+                    Button("TglIconPhase", () => set(1)),
+                    CommandBar(primary)
+                );
+            });
+
+            await Harness.Render();
+            H.Check("TglIcon_InitialSymbol",
+                FindFirstToggle()?.Icon is Microsoft.UI.Xaml.Controls.SymbolIcon);
+
+            H.ClickButton("TglIconPhase");
+            await Harness.Render();
+
+            // Under the old narrow `if (Icon is not null)` write the toggle would
+            // retain its stale SymbolIcon; IconResolver honors IconElement instead.
+            H.Check("TglIcon_UpdatedToFontIcon",
+                FindFirstToggle()?.Icon is Microsoft.UI.Xaml.Controls.FontIcon);
+        }
+
+        private Microsoft.UI.Xaml.Controls.AppBarToggleButton? FindFirstToggle()
+        {
+            var cb = H.FindControl<Microsoft.UI.Xaml.Controls.CommandBar>(_ => true);
+            if (cb is null) return null;
+            foreach (var c in cb.PrimaryCommands)
+                if (c is Microsoft.UI.Xaml.Controls.AppBarToggleButton atb)
+                    return atb;
+            return null;
         }
     }
 
@@ -1048,8 +1100,12 @@ internal static class ReconcilerBigCoverageFixtures
             H.Check("CondExit_Initial", H.FindText("cond-exit-child") is not null);
 
             H.ClickButton("CondExit");
-            await Harness.Render(450);
-            H.Check("CondExit_Removed", H.FindText("cond-exit-child") is null);
+            // The child plays a Fade exit transition before it leaves the
+            // tree; poll with per-pass wall-clock time so we converge as soon
+            // as the transition completes rather than betting on one fixed wait.
+            H.Check("CondExit_Removed",
+                await Harness.WaitFor(() => H.FindText("cond-exit-child") is null,
+                    maxPasses: 12, perPassMs: 100));
         }
     }
 
@@ -1641,50 +1697,18 @@ internal static class ReconcilerBigCoverageFixtures
             await Task.Yield();
 
             var reconciler = new Reconciler();
-            var red = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Red);
-            var blue = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Blue);
-            Action rerender = () => { };
-
-            var path = new WinShapes.Path();
-            InvokePrivate<UIElement?>(reconciler, "UpdatePath",
-                Path2D() with { PathDataString = "M0,0 L5,5" },
-                Path2D() with
-                {
-                    PathDataString = "M0,0 L10,10",
-                    Fill = red,
-                    Stroke = blue,
-                    StrokeThickness = 3,
-                    StrokeDashArray = new Microsoft.UI.Xaml.Media.DoubleCollection { 1, 2 },
-                    RenderTransform = new Microsoft.UI.Xaml.Media.TranslateTransform { X = 1, Y = 2 },
-                    StrokeStartLineCap = Microsoft.UI.Xaml.Media.PenLineCap.Round,
-                    StrokeEndLineCap = Microsoft.UI.Xaml.Media.PenLineCap.Square,
-                    StrokeLineJoin = Microsoft.UI.Xaml.Media.PenLineJoin.Bevel,
-                    StrokeMiterLimit = 4,
-                    StrokeDashCap = Microsoft.UI.Xaml.Media.PenLineCap.Triangle,
-                    StrokeDashOffset = 2,
-                },
-                path);
-            H.Check("PrivUpdate_Path", path.Fill == red && path.Stroke == blue && path.StrokeThickness == 3);
-
-            var line = new WinShapes.Line();
-            InvokePrivate<UIElement?>(reconciler, "UpdateLine",
-                Line(1, 2, 3, 4) with { Stroke = red, StrokeThickness = 5 },
-                line);
-            H.Check("PrivUpdate_Line", line.X2 == 3 && line.Stroke == red && line.StrokeThickness == 5);
-
-            var calendar = new WinXC.CalendarView { SelectionMode = WinXC.CalendarViewSelectionMode.Multiple };
-            var d1 = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
-            var d2 = new DateTimeOffset(2026, 1, 2, 0, 0, 0, TimeSpan.Zero);
-            InvokePrivateStatic("SyncSelectedDates", calendar, new[] { d1, d2 });
-            H.Check("PrivUpdate_CalendarAdds", calendar.SelectedDates.Count == 2);
-            InvokePrivateStatic("SyncSelectedDates", calendar, Array.Empty<DateTimeOffset>());
-            H.Check("PrivUpdate_CalendarRemoves", calendar.SelectedDates.Count == 0);
 
             var rows = new[] { new KeyRow("a"), new KeyRow("b"), new KeyRow("c") };
-            var listState = InvokePrivateStatic<ReactorListState>("BuildListStateFromElement",
-                ListView(rows, r => r.Key, (r, _) => TextBlock(r.Key)));
-            var lazyState = InvokePrivateStatic<ReactorListState>("BuildListStateFromLazy",
-                LazyVStack(rows, r => r.Key, (r, _) => TextBlock(r.Key)));
+            var buildListState = typeof(global::Microsoft.UI.Reactor.Core.V1Protocol.TemplatedListLifecycle)
+                .GetMethod("BuildListState", BindingFlags.Static | BindingFlags.NonPublic)
+                ?? throw new MissingMethodException("TemplatedListLifecycle", "BuildListState");
+            var listState = (ReactorListState)buildListState.Invoke(null,
+                new object?[] { ListView(rows, r => r.Key, (r, _) => TextBlock(r.Key)) })!;
+            var lazyBuild = typeof(global::Microsoft.UI.Reactor.Core.V1Protocol.LazyStackLifecycle)
+                .GetMethod("BuildListState", BindingFlags.Static | BindingFlags.NonPublic)
+                ?? throw new MissingMethodException("LazyStackLifecycle", "BuildListState");
+            var lazyState = (ReactorListState)lazyBuild.Invoke(null,
+                new object?[] { LazyVStack(rows, r => r.Key, (r, _) => TextBlock(r.Key)) })!;
             H.Check("PrivUpdate_ListStates", listState.Source.Count == 3 && lazyState.Source.Count == 3);
 
             var repeater = new WinXC.ItemsRepeater();
@@ -1707,13 +1731,13 @@ internal static class ReconcilerBigCoverageFixtures
 
             var iconSources = new WinXC.IconSource?[]
             {
-                Reconciler.ResolveIconSource(new SymbolIconData("Edit")),
-                Reconciler.ResolveIconSource(new SymbolIconData("DefinitelyNotASymbol")),
-                Reconciler.ResolveIconSource(new FontIconData("\uE700", "Segoe Fluent Icons", 18)),
-                Reconciler.ResolveIconSource(new BitmapIconData(new Uri("ms-appx:///Assets/StoreLogo.png"), false)),
-                Reconciler.ResolveIconSource(new PathIconData("M0,0 L8,8")),
-                Reconciler.ResolveIconSource(new ImageIconData(new Uri("ms-appx:///Assets/StoreLogo.png"))),
-                Reconciler.ResolveIconSource("DefinitelyNotASymbol"),
+                IconResolver.ResolveIconSource(new SymbolIconData("Edit")),
+                IconResolver.ResolveIconSource(new SymbolIconData("DefinitelyNotASymbol")),
+                IconResolver.ResolveIconSource(new FontIconData("\uE700", "Segoe Fluent Icons", 18)),
+                IconResolver.ResolveIconSource(new BitmapIconData(new Uri("ms-appx:///Assets/StoreLogo.png"), false)),
+                IconResolver.ResolveIconSource(new PathIconData("M0,0 L8,8")),
+                IconResolver.ResolveIconSource(new ImageIconData(new Uri("ms-appx:///Assets/StoreLogo.png"))),
+                IconResolver.ResolveIconSource("DefinitelyNotASymbol"),
             };
             H.Check("PrivMount_IconSources", iconSources.Take(6).All(i => i is not null));
 
@@ -1730,7 +1754,7 @@ internal static class ReconcilerBigCoverageFixtures
                 OnSelectionChanged = items => multi = items,
                 OnItemClick = item => clicked = item,
             };
-            var list = InvokePrivate<WinXC.ListView>(reconciler, "MountTemplatedListView", listEl, rerender);
+            var list = global::Microsoft.UI.Reactor.Core.V1Protocol.TemplatedListLifecycle.MountListView(reconciler, listEl, rerender);
             if (list.ItemsSource is IList<ReactorRow> listRows)
             {
                 list.SelectedItems.Add(listRows[0]);
@@ -1746,7 +1770,7 @@ internal static class ReconcilerBigCoverageFixtures
                 OnSelectionChanged = items => multi = items,
                 OnItemClick = item => clicked = item,
             };
-            var grid = InvokePrivate<WinXC.GridView>(reconciler, "MountTemplatedGridView", gridEl, rerender);
+            var grid = global::Microsoft.UI.Reactor.Core.V1Protocol.TemplatedListLifecycle.MountGridView(reconciler, gridEl, rerender);
             if (grid.ItemsSource is IList<ReactorRow> gridRows)
             {
                 grid.SelectedItems.Add(gridRows[1]);

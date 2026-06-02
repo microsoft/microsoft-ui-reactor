@@ -130,3 +130,13 @@ internal static class NumberBoxDescriptor
             set:         static (c, v) => c.Header = v,
             shouldWrite: static e => e.Header is not null);
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <c>new()</c>-able registration shim for
+/// <see cref="NumberBoxDescriptor"/>. The thin class is itself trim-free
+/// (no static-field init) — the descriptor cctor (which activates the
+/// WinUI <c>NumberBox.TextProperty</c>) only fires when this handler is
+/// actually instantiated on a dispatch hit, not on Reg&lt;&gt; touch.
+/// </summary>
+internal sealed class NumberBoxDescriptorHandler()
+    : DescriptorHandler<NumberBoxElement, WinUI.NumberBox>(NumberBoxDescriptor.Descriptor);

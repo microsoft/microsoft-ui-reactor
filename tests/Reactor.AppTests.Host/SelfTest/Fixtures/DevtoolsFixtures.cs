@@ -1178,7 +1178,7 @@ internal static class DevtoolsFixtures
         public override async Task RunAsync()
         {
             var toolsType = typeof(DevtoolsPropertyTools);
-            H.Check("Devtools_PropReflect_Start", toolsType is not null);
+            H.Check("Devtools_PropReflect_Start", true);
             object? Invoke(string name, params object?[] args) =>
                 toolsType.GetMethod(name, global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.Static)!
                     .Invoke(null, args);

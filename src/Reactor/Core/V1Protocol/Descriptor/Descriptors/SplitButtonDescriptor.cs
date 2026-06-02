@@ -55,3 +55,10 @@ internal static class SplitButtonDescriptor
             comparer:    ElementReferenceComparer.Instance);
 
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <c>new()</c>-able registration shim for
+/// <see cref="SplitButtonDescriptor"/>.
+/// </summary>
+internal sealed class SplitButtonDescriptorHandler()
+    : DescriptorHandler<SplitButtonElement, WinUI.SplitButton>(SplitButtonDescriptor.Descriptor);

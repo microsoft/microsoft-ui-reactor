@@ -3,6 +3,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Data;
 using Microsoft.UI.Reactor.Controls.Validation;
 using static Microsoft.UI.Reactor.Factories;
+using V1 = Microsoft.UI.Reactor.Core.V1Protocol;
 
 namespace Microsoft.UI.Reactor.Controls.Validation;
 
@@ -43,12 +44,16 @@ public static class FormFieldDsl
         bool required = false,
         string? description = null,
         string? fieldName = null,
-        ShowWhen showWhen = ShowWhen.WhenTouched) =>
-        new(content, label, required, description)
+        ShowWhen showWhen = ShowWhen.WhenTouched)
+    {
+        // Spec 048 §3.4 — per-factory registration touch.
+        _ = V1.RegDecorator<FormFieldElement, V1.Handlers.FormFieldHandler>.Done;
+        return new(content, label, required, description)
         {
             FieldName = fieldName,
             ShowWhen = showWhen
         };
+    }
 
     /// <summary>
     /// Creates an auto-wired FormField from a FieldDescriptor.
@@ -61,6 +66,9 @@ public static class FormFieldDsl
         Action<object> onChange,
         Microsoft.UI.Reactor.Controls.TypeRegistry? registry = null)
     {
+        // Spec 048 §3.4 — per-factory registration touch.
+        _ = V1.RegDecorator<FormFieldElement, V1.Handlers.FormFieldHandler>.Done;
+
         // Resolve editor
         Element content;
         if (field.Editor is not null)

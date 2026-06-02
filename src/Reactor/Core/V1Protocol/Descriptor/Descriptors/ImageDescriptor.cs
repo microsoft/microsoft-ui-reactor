@@ -22,7 +22,7 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <c>ImageOpened</c>/<c>ImageFailed</c> route back to the element
 /// callbacks. The descriptor reuses <see cref="ImageEventPayload"/> with the
 /// established slot-gating shape; trampolines read the live element via
-/// <see cref="Reconciler.GetElementTag"/> and fire the corresponding
+/// <see cref="Reconciler.GetElementTag(Microsoft.UI.Xaml.UIElement)"/> and fire the corresponding
 /// callback only when it's wired — mirrors the
 /// "always subscribe, read latest callback per fire" pattern.</para>
 ///
@@ -99,3 +99,11 @@ internal static class ImageDescriptor
             set:         static (c, v) => c.NineGrid = v!.Value,
             shouldWrite: static e => e.NineGrid.HasValue);
 }
+
+/// <summary>
+/// Spec 048 §3.3 thin handler — instantiated lazily by
+/// <see cref="ControlRegistry"/> when the global path needs the
+/// descriptor-backed <see cref="ImageDescriptor"/>.
+/// </summary>
+internal sealed class ImageDescriptorHandler()
+    : DescriptorHandler<ImageElement, WinUI.Image>(ImageDescriptor.Descriptor);

@@ -17,9 +17,6 @@ using static Microsoft.UI.Reactor.Controls.Validation.ValidationVisualizerDsl;
 using Microsoft.UI.Reactor.Animation;
 
 ReactorApp.Run<ShowcaseApp>("Validation Showcase", width: 720, height: 900
-#if DEBUG
-    , devtools: true
-#endif
 );
 
 // ═══════════════════════════════════════════════════════════════════════

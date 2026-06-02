@@ -39,7 +39,7 @@
 "ListViewElement","OnItemClick","Action<int>?","§8",".\src\Reactor\Core\Element.cs"
 "ListViewElement","OnSelectedIndexChanged","Action<int>?","§8",".\src\Reactor\Core\Element.cs"
 "ListViewElement","OnSelectionChanged","Action<IReadOnlyList<int>>?","§3.1",".\src\Reactor\Core\Element.cs"
-"MaskedTextFieldElement","OnChanged","Action<string>?","§3.1",".\src\Reactor\Controls\MaskedTextBox\MaskedTextFieldElement.cs"
+"MaskedTextBoxElement","OnChanged","Action<string>?","§3.1",".\src\Reactor\Controls\MaskedTextBox\MaskedTextBoxElement.cs"
 "MediaPlayerElementElement","OnMediaEnded","Action?","?",".\src\Reactor\Core\Element.cs"
 "MediaPlayerElementElement","OnMediaFailed","Action<string>?","?",".\src\Reactor\Core\Element.cs"
 "MediaPlayerElementElement","OnMediaOpened","Action?","?",".\src\Reactor\Core\Element.cs"

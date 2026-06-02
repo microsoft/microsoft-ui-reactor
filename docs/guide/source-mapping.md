@@ -44,6 +44,7 @@ public static class Keywords
     public const EventKeywords Intl = (EventKeywords)0x400;         // missing keys, fallback, format
     public const EventKeywords Theme = (EventKeywords)0x800;        // theme apply, bindings
     public const EventKeywords Shell = (EventKeywords)0x1000;       // JumpList/Tray/ThumbnailToolbar
+    public const EventKeywords HotReload = (EventKeywords)0x2000;   // spec 049 — state migration across edits
 }
 ```
 
@@ -97,7 +98,11 @@ know which user line called `Text("hello")`:
 ```csharp
 public abstract class Component
 {
-    internal RenderContext Context { get; } = new();
+    // Settable so the reconciler can transfer a live RenderContext (hooks +
+    // cleanups) onto a freshly-constructed instance when a Hot Reload edit
+    // mints a new component Type token (spec 049 §7 subtree migration). Outside
+    // that path the value is the per-instance context created here.
+    internal RenderContext Context { get; set; } = new();
 
     /// <summary>
     /// Override to describe the UI. Use UseState, UseEffect, etc. from the context.
@@ -166,7 +171,7 @@ flow native providers.
 
 **Watch the design before designing around it.** Spec 010 owns the
 per-element story and several Phase 4 surfaces (preview inspector,
-layout-cost overlay, reconcile-highlight) wait on it. Don't fork a
+reconcile-highlight) wait on it. Don't fork a
 parallel attribution scheme; track the spec.
 
 ## Next Steps

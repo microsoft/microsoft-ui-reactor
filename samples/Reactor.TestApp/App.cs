@@ -14,9 +14,6 @@ using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.Core.Theme;
 
 ReactorApp.Run<DemoApp>("Reactor Demo", width: 1200, height: 800
-#if DEBUG
-    , devtools: true
-#endif
     // Spec 045 — register the native docking renderer once at the
     // root host. Lets any component in the app (e.g. the DockingDemo
     // tab) instantiate a `DockManager` element directly.
@@ -26,7 +23,7 @@ ReactorApp.Run<DemoApp>("Reactor Demo", width: 1200, height: 800
 // ─── Global dev flags ──────────────────────────────────────────────────────────
 // Declared as static Observable<T> cells so any component can read/write without
 // prop-drilling. Toggled from the Dev menu in the titlebar when the app is
-// launched with `--devtools app` (and built with devtools: true).
+// launched with `--devtools app` (and built with Reactor.DevtoolsSupport enabled).
 static class AppFlags
 {
     public static readonly Observable<bool> DebugUI = new(false);
@@ -35,7 +32,7 @@ static class AppFlags
 
 // ─── Root application component ────────────────────────────────────────────────
 
-enum Tab { Counter, TodoList, ConditionalUI, Form, DynamicList, PerfStress, Virtualization, ItemsView, Flyout, DataTemplate, FlexPanel, Transitions, PropertyGrid, DataSystem, DataGrid, IntegratedData, AsyncValueSamples, Context, Memo, Persisted, Slots, Navigation, Commanding, InputGestures, SpecializedEditors, LayoutCost, Windows, Docking }
+enum Tab { Counter, TodoList, ConditionalUI, Form, DynamicList, PerfStress, Virtualization, ItemsView, Flyout, DataTemplate, FlexPanel, Transitions, PropertyGrid, DataSystem, DataGrid, IntegratedData, AsyncValueSamples, Context, Memo, Persisted, Slots, Navigation, Commanding, InputGestures, SpecializedEditors, Windows, Docking, RichText }
 
 class DemoApp : Component
 {
@@ -72,9 +69,9 @@ class DemoApp : Component
             Tab.Commanding => ("Commanding", "commanding"),
             Tab.InputGestures => ("Input & Gestures", "counter"),
             Tab.SpecializedEditors => ("Specialized Editors", "propertygrid"),
-            Tab.LayoutCost => ("Layout Cost", "perfstress"),
             Tab.Windows => ("Windows & Tray", "navigation"),
             Tab.Docking => ("Docking", "flexpanel"),
+            Tab.RichText => ("Rich Text", "datatemplate"),
             _ => (tab.ToString(), "counter")
         }).ToArray();
 
@@ -152,9 +149,9 @@ class DemoApp : Component
                     Tab.Commanding => Component<CommandingTestDemo>(),
                     Tab.InputGestures => Component<InputGesturesDemo>(),
                     Tab.SpecializedEditors => Component<SpecializedEditorsDemo>(),
-                    Tab.LayoutCost => Component<LayoutCostDemo>(),
                     Tab.Windows => Component<WindowsDemo>(),
                     Tab.Docking => Component<DockingDemo>(),
+                    Tab.RichText => Component<RichTextDemo>(),
                     _ => TextBlock("Select a tab")
                 }
             )

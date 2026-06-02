@@ -4,9 +4,6 @@ using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 
 ReactorApp.Run<LoginRecipeApp>("Login Recipe", width: 360, height: 380
-#if DEBUG
-    , preview: true
-#endif
 );
 
 class LoginRecipeApp : Component

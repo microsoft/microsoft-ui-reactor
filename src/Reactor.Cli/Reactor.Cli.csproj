@@ -76,7 +76,7 @@
     <PackageReference Include="YamlDotNet" Version="16.3.0" />
     <!-- Pin the transitive Nerdbank.MessagePack (via GitHub.Copilot.SDK → StreamJsonRpc)
          to a version that includes the GHSA-2cwq-pwfr-wcw3 / CVE-2026-44375 fix. -->
-    <PackageReference Include="Nerdbank.MessagePack" Version="1.1.62" />
+    <PackageReference Include="Nerdbank.MessagePack" Version="1.2.4" />
   </ItemGroup>
 
   <ItemGroup>

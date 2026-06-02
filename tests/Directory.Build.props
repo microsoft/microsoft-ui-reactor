@@ -1,0 +1,13 @@
+<Project>
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)..\'))" />
+
+  <!-- Test hosts reference devtools types (PreviewCaptureServer, etc.) unconditionally,
+       and CI builds the solution in Release, so this reference must apply in all
+       configurations — not just Debug — or the Release solution build breaks. -->
+  <ItemGroup Condition="'$(ReactorDevtoolsManaged)' != 'false' And ('$(MSBuildProjectName)' == 'Reactor.Tests' Or '$(MSBuildProjectName)' == 'Reactor.AppTests.Host' Or '$(MSBuildProjectName)' == 'Reactor.WinFormsTests.Host')">
+    <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
+                                    Value="true"
+                                    Trim="true" />
+    <ProjectReference Include="$(MSBuildThisFileDirectory)..\src\Reactor.Devtools\Reactor.Devtools.csproj" />
+  </ItemGroup>
+</Project>

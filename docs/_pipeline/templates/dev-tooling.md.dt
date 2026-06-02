@@ -7,8 +7,8 @@ goal: |
   Cover Reactor's entire inner-loop surface: the `mur` CLI, preview
   mode with `dotnet watch`, the MCP server, the VS Code panel, the
   in-app dev menu (DevtoolsMenu + Observable<T> + UseDevtools — merged
-  from the standalone devtools-ux page), and the runtime overlays
-  (reconcile-highlight + layout-cost). Comprehensive tier — this page
+  from the standalone devtools-ux page), and the reconcile-highlight
+  overlay. Comprehensive tier — this page
   is the primary entry point for new contributors.
 tier: comprehensive
 ---
@@ -19,13 +19,12 @@ every reconcile, every effect, every dispatcher hop — through a small
 set of dedicated tools so you can see, attribute, and reason about
 what your app is doing without a profiler. The `mur` CLI, preview
 mode under `dotnet watch`, the MCP server, the VS Code panel, the
-in-app dev menu, and the reconcile-highlight / layout-cost overlays
+in-app dev menu, and the reconcile-highlight overlay
 are all variants of the same idea: the runtime publishes its work,
 and the inner loop lets you read it. The cost is zero in retail —
-every devtools entry point lives behind a build-time opt-in
-([`devtools: true`](components.md)) plus a session-time opt-in
-(`--devtools app`) so end users never see anything you don't intend
-to ship.
+every devtools entry point lives behind a build-time capability switch
+(`Reactor.DevtoolsSupport`) plus a session-time opt-in (`--devtools app`)
+so end users never see anything you don't intend to ship.
 
 # Dev Tooling
 
@@ -40,16 +39,16 @@ when you ask for it.
 
 ## Preview Mode
 
-Pass `preview: true` to `ReactorApp.Run` to enable preview mode. This
-connects your app to the Reactor hot reload pipeline:
+Launch the app from `dotnet watch` to use Reactor's hot-reload-friendly
+preview workflow:
 
 ```csharp snippet="dev-tooling/entry-point"
 ```
 
-The `#if DEBUG` guard ensures preview mode is only active in debug builds.
-Release builds skip it entirely — no overhead, no extra dependencies. Inside
-a [function component](components.md), the same flag is forwarded by
-`ReactorApp.Run("Title", ctx => ...)`.
+The app entry point is an ordinary `ReactorApp.Run` call; there is no
+`preview:` or `devtools:` argument. Devtools-specific screenshot capture is
+enabled by the app project's `Reactor.DevtoolsSupport` switch and activated
+at launch with `--devtools`.
 
 ## Running with Hot Reload
 
@@ -62,8 +61,9 @@ dotnet watch run
 <!-- /ai:lock -->
 
 This launches the app and watches your `.cs` files for changes. When you
-save, `dotnet watch` recompiles and Reactor reloads the component tree.
-Your app state resets, but the window stays open.
+save, `dotnet watch` recompiles and Reactor re-renders the component tree
+in place — the same window, the same process. For most edits your live
+state survives the reload.
 
 Here's what the preview app looks like running:
 
@@ -75,15 +75,58 @@ Here's what the preview app looks like running:
 Edit the `message` default value or add a new element, save the file, and
 watch the window update.
 
+### What state survives a reload
+
+Reactor migrates live state across a hot reload instead of resetting it.
+When you save, the runtime re-runs `Render()` against the existing
+[`RenderContext`](hooks.md) and reconciles the result onto the live
+controls. Hook cells are matched **by call order**, so `UseState`,
+`UseReducer`, `UseRef`, `UseMemo`, and `UsePersisted` keep their values
+as long as the hook sequence is unchanged. When you edit a record or
+class that a hook stores, the runtime migrates the value field-by-field
+onto the new shape; fields it can't map are dropped (with a log line)
+rather than throwing. When you rename or change the type of a component,
+Reactor migrates the subtree onto the new component instance, preserving
+its hook state and the underlying WinUI controls.
+
+| Edit you make | What happens to state |
+|---|---|
+| Change a `Render()` body, add/remove/reorder elements | Preserved — controls patched in place |
+| Edit a value-type or record stored in a hook | Preserved — migrated field-by-field; unmappable fields dropped |
+| Rename a component type / change its identity | Preserved — subtree migrated onto the new instance |
+| **Add, remove, or reorder hook calls** | Reset — the hook list is cleared and re-mounted fresh |
+
+The last row is the unavoidable case: changing the hook *shape* means the
+old values can't be re-keyed onto the new layout, so Reactor runs pending
+cleanups and re-mounts hooks from scratch to keep the loop alive instead
+of leaving you at an error fallback.
+
 <!-- ai:caveat -->
-Hot reload **resets state on every recompile**. `UseState`, `UseReducer`,
-and `UsePersisted` (Application scope) all reinitialize. For state you
-want to survive a reload, use `UsePersisted` with `PersistedScope.Window`
-or store the value in an `Observable<T>` field — see
-[persistence](persistence.md). Avoid wiring critical app state through a
-plain `UseState` if your loop depends on the value staying put across
-saves.
+Effects whose dependencies didn't change across a reload keep the cleanup
+closure they captured from the previous instance. This matches React's
+identity semantics and is harmless for state-capturing effects, but if an
+effect must re-run on every reload, give it a dependency that changes. For
+state you explicitly want to survive even a hook-shape change, use
+`UsePersisted` with `PersistedScope.Window` or store the value in an
+`Observable<T>` field — see [persistence](persistence.md).
 <!-- /ai:caveat -->
+
+### When migration misbehaves
+
+State migration is best-effort. If an unusual edit leaves a component in a
+bad state, force a clean "lose everything, remount fresh" reload from your
+app: call `HotReloadService.ResetAllContexts()`, which runs every live
+context's pending cleanups, clears its hook list, and re-renders so hooks
+re-mount from scratch. Reach for it only when the targeted migration above
+doesn't produce the result you expect.
+
+### NativeAOT builds
+
+State migration relies on .NET Hot Reload, which is only available in
+JIT debug builds. Under NativeAOT (`PublishAot=true`)
+`MetadataUpdater.IsSupported` is `false`, so the whole migration subsystem
+is statically dead and trims away — there is no hot-reload loop and no
+overhead in a published app.
 
 ## Function Component Entry Point
 
@@ -159,15 +202,18 @@ Reactor exposes three small primitives: `UseDevtools()`,
 `DevtoolsMenu(...)`, and `Observable<T>`. Two independent signals
 combine:
 
-1. **Build-time opt-in** — pass `devtools: true` to `ReactorApp.Run`:
+1. **Build-time capability** — add the feature switch to the app project:
 
-   ```csharp
-   ReactorApp.Run<App>("My App", devtools: true);
+   ```xml
+   <ItemGroup>
+     <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
+                                     Value="true" Trim="true" />
+   </ItemGroup>
    ```
 
    This is a capability gate — it does **not** by itself show any dev
-   UI. Ship retail binaries with `devtools: true` safely; end users
-   don't see anything unless they ask for it.
+   UI. Samples typically enable it only in Debug builds so Release/AOT
+   binaries keep the devtools code trimmed.
 
 2. **Session opt-in** — run the app with `--devtools app`:
 
@@ -232,19 +278,15 @@ story.
 
 ## Runtime Overlays
 
-Two overlays attach to a running app when devtools are on:
+The reconcile-highlight overlay attaches to a running app when devtools are on:
 
 - **Reconcile-highlight overlay.** Flashes a rectangle around any
   element that the reconciler patched on the most recent render. Useful
   for catching unintended re-renders (the [Rules of Reactor](rules-of-reactor.md)
   page covers the most common causes).
-- **Layout-cost overlay.** Tints elements by the cost of their last
-  measure / arrange pass, sourced from ETW. The deeper attribution
-  story is in [Perf Instrumentation](perf-instrumentation.md).
 
-Both overlays render under the `DevtoolsMenu` toggle group. They are
-zero-cost when off — they consume an ETW listener registration only
-when their flag is true.
+The overlay renders under the `DevtoolsMenu` toggle group. It is
+zero-cost when off.
 
 ## The Iteration Cycle
 
@@ -276,9 +318,10 @@ to a dozen flags without a config UI.
 
 ### Headless screenshot capture for docs
 
-The same preview-mode plumbing the doc pipeline uses is available to
-your own app: pass `preview: true` to `ReactorApp.Run` and the doc-
-pipeline screenshot harness can capture the window. See
+The same devtools plumbing the doc pipeline uses is available to
+your own app: enable `Reactor.DevtoolsSupport` in the app project and
+launch the app with `--devtools run` so the screenshot harness can
+capture the window. See
 [`docs/contributing/doc-pipeline.md`](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/contributing/doc-pipeline.md)
 for the harness contract. This is how every page in the docset gets
 its screenshots automatically without an author launching the app by
@@ -286,14 +329,13 @@ hand.
 
 ## Common Mistakes
 
-### Shipping with `devtools: true` and no session gate
+### Enabling the switch without a session gate
 
-Forgetting that `devtools: true` is the **capability** gate and
-`--devtools app` is the **activation** gate is the most common
-mistake. A retail binary built with `devtools: true` shows no dev UI
-to a user — the session-time flag does. If you want dev tools off in
-retail, leave `devtools: true` in your `ReactorApp.Run` call; remove
-the `--devtools app` flag from your shortcuts.
+Forgetting that `Reactor.DevtoolsSupport` is the **capability** gate
+and `--devtools app` is the **activation** gate is the most common
+mistake. A binary built with the switch enabled shows no dev UI to a
+user — the session-time flag does. If you want devtools trimmed out of
+retail, keep the switch Debug-only instead of enabling it for Release/AOT.
 
 ### Wiring real app state through `UseState` during inner-loop work
 
@@ -308,10 +350,10 @@ without resetting your state.
 The `mur devtools serve` MCP server and the VS Code panel are
 **separate** surfaces from the in-app menu. They observe a running
 app from the outside; the in-app menu observes the runtime from
-inside the app itself. Build-time opt-in (`devtools: true`) is enough
-for the in-app menu, but the MCP server requires a separate
-`mur devtools serve` invocation — don't expect it to start
-automatically.
+inside the app itself. Build-time capability (`Reactor.DevtoolsSupport`)
+plus `--devtools app` opens the in-app menu, while the external MCP
+server still requires a separate `mur devtools serve` invocation — don't
+expect it to start automatically.
 
 ## Tips
 

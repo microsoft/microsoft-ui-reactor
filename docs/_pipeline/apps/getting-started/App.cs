@@ -4,7 +4,7 @@ using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<GettingStartedApp>("Getting Started", width: 600, height: 400, devtools: true);
+ReactorApp.Run<GettingStartedApp>("Getting Started", width: 600, height: 400);
 
 class GettingStartedApp : Component
 {

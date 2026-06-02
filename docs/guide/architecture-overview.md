@@ -52,7 +52,11 @@ Every section below zooms into one row of that table.
 ```csharp
 public abstract class Component
 {
-    internal RenderContext Context { get; } = new();
+    // Settable so the reconciler can transfer a live RenderContext (hooks +
+    // cleanups) onto a freshly-constructed instance when a Hot Reload edit
+    // mints a new component Type token (spec 049 §7 subtree migration). Outside
+    // that path the value is the per-instance context created here.
+    internal RenderContext Context { get; set; } = new();
 
     /// <summary>
     /// Override to describe the UI. Use UseState, UseEffect, etc. from the context.
@@ -332,7 +336,11 @@ covers the overlay rendering.
 ```csharp
 public abstract class Component
 {
-    internal RenderContext Context { get; } = new();
+    // Settable so the reconciler can transfer a live RenderContext (hooks +
+    // cleanups) onto a freshly-constructed instance when a Hot Reload edit
+    // mints a new component Type token (spec 049 §7 subtree migration). Outside
+    // that path the value is the per-instance context created here.
+    internal RenderContext Context { get; set; } = new();
 
     /// <summary>
     /// Override to describe the UI. Use UseState, UseEffect, etc. from the context.

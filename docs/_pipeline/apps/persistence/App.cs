@@ -9,9 +9,6 @@ using static Microsoft.UI.Reactor.Factories;
 // Doc app for `persistence.md` — tiny notes editor showing the
 // in-memory UsePersisted patterns and the disk-backed UseEffect bridge.
 ReactorApp.Run<PersistenceApp>("Persistence Demo", width: 440, height: 360
-#if DEBUG
-    , preview: true
-#endif
 );
 
 class PersistenceApp : Component

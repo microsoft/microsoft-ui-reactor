@@ -1,0 +1,84 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <Platforms>x64;ARM64</Platforms>
+    <RootNamespace>HelloWorldAot</RootNamespace>
+    <AssemblyName>hello-world-aot</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <!-- Framework-dependent: WindowsAppSDK runtime is NOT carried in the publish output. -->
+    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <IsPackable>false</IsPackable>
+
+    <IsAotCompatible>true</IsAotCompatible>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <StackTraceSupport>false</StackTraceSupport>
+    <TrimMode>full</TrimMode>
+    <IlcGenerateMstatFile>true</IlcGenerateMstatFile>
+
+    <!-- Size: favor the smallest possible native image (simplified codegen/stack frames). -->
+    <OptimizationPreference>Size</OptimizationPreference>
+
+    <!-- Strip symbols: no managed PDB, no NativeAOT native PDB (~45 MB). -->
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <NativeDebugSymbols>false</NativeDebugSymbols>
+    <!-- Don't stage the NativeAOT native symbol .pdb into the publish directory. -->
+    <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
+
+    <!-- Strip docs: don't copy reference-related .pdb/.xml (e.g. Reactor.xml ~1.9 MB, Reactor.pdb) next to referenced assemblies. -->
+    <AllowedReferenceRelatedFileExtensions>none</AllowedReferenceRelatedFileExtensions>
+
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' And ('$(Platform)' == '' Or '$(Platform)' == 'AnyCPU' Or '$(Platform)' == 'Any CPU')">$(NETCoreSdkPortableRuntimeIdentifier)</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(PublishAotInternal)' == 'true'">
+    <PublishAot>true</PublishAot>
+  </PropertyGroup>
+
+  <Target Name="_CopyWinUIResourcesForAot" AfterTargets="Publish"
+          Condition="'$(PublishAot)' == 'true' and '$(AppxPackage)' != 'true'">
+    <ItemGroup>
+      <_WinUIResourcesForAot Include="$(OutputPath)**\*.xbf" />
+      <_WinUIResourcesForAot Include="$(OutputPath)$(AssemblyName).pri" Condition="Exists('$(OutputPath)$(AssemblyName).pri')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_WinUIResourcesForAot)"
+          DestinationFiles="@(_WinUIResourcesForAot->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
+  </ItemGroup>
+
+  <!--
+    Remove Windows ML explicitly. WindowsAppSDK transitively pulls
+    Microsoft.WindowsAppSDK.ML -> Microsoft.Windows.AI.MachineLearning. The SDK's
+    own _SuppressWindowsMLNativeCopyLocal target only prunes the *build* copy in
+    framework-dependent mode; the NativeAOT *publish* native-asset gather still
+    stages onnxruntime.dll (~20 MB), DirectML.dll (~18 MB) and
+    Microsoft.Windows.AI.MachineLearning.dll. This app uses no ML APIs, so drop
+    them from the publish output. (In framework-dependent mode they are provided
+    by the installed WindowsAppSDK runtime if ever needed.)
+  -->
+  <Target Name="_RemoveWindowsMLFromPublish" AfterTargets="Publish"
+          Condition="'$(WindowsAppSDKSelfContained)' != 'true'">
+    <ItemGroup>
+      <_WindowsMLPublishFiles Include="$(PublishDir)onnxruntime.dll" />
+      <_WindowsMLPublishFiles Include="$(PublishDir)DirectML.dll" />
+      <_WindowsMLPublishFiles Include="$(PublishDir)Microsoft.Windows.AI.MachineLearning.dll" />
+    </ItemGroup>
+    <Delete Files="@(_WindowsMLPublishFiles)" />
+  </Target>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Reactor\Reactor.csproj" />
+  </ItemGroup>
+
+</Project>

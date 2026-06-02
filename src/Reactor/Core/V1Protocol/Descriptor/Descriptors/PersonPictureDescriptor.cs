@@ -47,3 +47,11 @@ internal static class PersonPictureDescriptor
             get: static e => e.BadgeNumber,
             set: static (c, v) => c.BadgeNumber = v);
 }
+
+/// <summary>
+/// Spec 048 §3.3 thin handler — instantiated lazily by
+/// <see cref="ControlRegistry"/> when the global path needs the
+/// descriptor-backed <see cref="PersonPictureDescriptor"/>.
+/// </summary>
+internal sealed class PersonPictureDescriptorHandler()
+    : DescriptorHandler<PersonPictureElement, WinUI.PersonPicture>(PersonPictureDescriptor.Descriptor);

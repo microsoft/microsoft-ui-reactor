@@ -59,3 +59,11 @@ internal static class FlipViewDescriptor
             setSlot:     static (p, h) => p.SelectionChangedTrampoline = h,
             valueDiffEcho: true);
 }
+
+/// <summary>
+/// Spec 048 §3.3 thin handler — instantiated lazily by
+/// <see cref="ControlRegistry"/> when the global path needs the
+/// descriptor-backed <see cref="FlipViewDescriptor"/>.
+/// </summary>
+internal sealed class FlipViewDescriptorHandler()
+    : DescriptorHandler<FlipViewElement, WinUI.FlipView>(FlipViewDescriptor.Descriptor);

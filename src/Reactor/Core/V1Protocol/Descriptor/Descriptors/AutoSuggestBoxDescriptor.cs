@@ -120,9 +120,18 @@ internal static class AutoSuggestBoxDescriptor
             shouldWrite: static e => e.Header is not null)
         .OneWayConditional(
             get:         static e => e.QueryIcon,
-            set:         static (c, v) => c.QueryIcon = Reconciler.ResolveIconForDescriptor(v),
+            set:         static (c, v) => c.QueryIcon = IconResolver.ResolveIconForDescriptor(v),
             shouldWrite: static e => e.QueryIcon is not null)
         .OneWay(
             get: static e => e.IsSuggestionListOpen,
             set: static (c, v) => c.IsSuggestionListOpen = v);
 }
+
+/// <summary>
+/// Spec 048 §7 — thin <c>new()</c>-able registration shim for
+/// <see cref="AutoSuggestBoxDescriptor"/>; touched via
+/// <c>_ = Reg&lt;AutoSuggestBoxElement, WinUI.AutoSuggestBox, AutoSuggestBoxDescriptorHandler&gt;.Done</c>
+/// from the <c>AutoSuggestBox</c> factory.
+/// </summary>
+internal sealed class AutoSuggestBoxDescriptorHandler()
+    : DescriptorHandler<AutoSuggestBoxElement, WinUI.AutoSuggestBox>(AutoSuggestBoxDescriptor.Descriptor);

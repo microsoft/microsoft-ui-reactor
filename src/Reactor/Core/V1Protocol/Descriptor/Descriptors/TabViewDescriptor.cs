@@ -109,7 +109,7 @@ internal static class TabViewDescriptor
                         IsClosable = item.IsClosable,
                         Content = mounted,
                     };
-                    if (item.Icon is not null) tvi.IconSource = Reconciler.ResolveIconSource(item.Icon);
+                    if (item.Icon is not null) tvi.IconSource = IconResolver.ResolveIconSource(item.Icon);
                     return tvi;
                 },
                 UpdateContainer: static (oldItem, newItem, container) =>
@@ -136,7 +136,7 @@ internal static class TabViewDescriptor
 
                     if (tvi.IsClosable != newItem.IsClosable) tvi.IsClosable = newItem.IsClosable;
                     if (!Equals(newItem.Icon, oldItem.Icon))
-                        tvi.IconSource = newItem.Icon is null ? null : Reconciler.ResolveIconSource(newItem.Icon);
+                        tvi.IconSource = newItem.Icon is null ? null : IconResolver.ResolveIconSource(newItem.Icon);
                 }),
             GetSetters = static e => e.Setters,
         }
@@ -213,3 +213,11 @@ internal static class TabViewDescriptor
             slotIsNull:       static p => p.AddTabButtonClickTrampoline is null,
             setSlot:          static (p, h) => p.AddTabButtonClickTrampoline = h);
 }
+
+/// <summary>
+/// Spec 048 §3.3 thin handler — instantiated lazily by
+/// <see cref="ControlRegistry"/> when the global path needs the
+/// descriptor-backed <see cref="TabViewDescriptor"/>.
+/// </summary>
+internal sealed class TabViewDescriptorHandler()
+    : DescriptorHandler<TabViewElement, WinUI.TabView>(TabViewDescriptor.Descriptor);

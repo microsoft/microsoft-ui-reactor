@@ -10,9 +10,6 @@ using System.ComponentModel;
 using Component = Microsoft.UI.Reactor.Core.Component;
 
 ReactorApp.Run<AdvancedApp>("Advanced Patterns", width: 650, height: 700
-#if DEBUG
-    , preview: true
-#endif
 );
 
 // <snippet:error-boundary>
