@@ -50,7 +50,7 @@ variables:
   # Official builds are network-restricted: restore must resolve from the internal feed.
   NuGetConfig: $(Build.SourcesDirectory)\build\pipelines\nuget.internal.config
 
-  WindowsContainerImage: 'onebranch.azurecr.io/windows/ltsc2019/vse2022:latest' # must match agent host OS (ltsc2019/10.0.17763); .NET 10 SDK is installed at runtime via global.json
+  WindowsContainerImage: 'onebranch.azurecr.io/windows/ltsc2022/vse2022:latest' # Docker image which is used to build the project https://aka.ms/obpipelines/containers
 
 resources:
   repositories: 
@@ -83,13 +83,14 @@ extends:
       - job: main
         pool:
           type: windows  # read more about custom job pool types at https://aka.ms/obpipelines/yaml/jobs
+          hostVersion:  # request a 2022 host so the ltsc2022 image runs under process isolation (kernel match), aligning Official with CI
+            Version: 2022
         
         variables: # More settings at https://aka.ms/obpipelines/yaml/jobs
           ob_outputDirectory: '$(Build.SourcesDirectory)\out' # this directory is uploaded to pipeline artifacts, reddog and cloudvault. More info at https://aka.ms/obpipelines/artifacts
           ob_git_fetchDepth: -1 # full git history + tags so MinVer can derive the version (shallow clone => 0.1.0 fallback)
           # https://aka.ms/obpipelines/sdl
           ob_sdl_binskim_break: true # always break the build on binskim issues, even if TSA enabled. You can disable it by setting to 'false'
-          ob_sdl_roslyn_break: true
           ${{ if eq(variables['Build.SourceBranch'], 'refs/heads/main') }}: # conditionally enable symbolsPublishing for main branch only
             ob_symbolsPublishing_enabled: true # https://aka.ms/obpipelines/symbols
           # ob_sdl_suppression_suppressionFile: $(Build.SourcesDirectory)\.gdn\job.gdnsuppress

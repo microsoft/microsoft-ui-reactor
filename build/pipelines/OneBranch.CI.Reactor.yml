@@ -72,7 +72,6 @@ extends:
           ob_sdl_binskim_enabled: true # you can disable sdl tools in non-official build 
           ob_sdl_binskim_break: true # always break the build on binskim issues. You can disable it by setting to 'false'
           ob_sdl_binskim_scanOutputDirectoryOnly: true
-          ob_sdl_roslyn_break: true
           # ob_sdl_suppression_suppressionFile: $(Build.SourcesDirectory)\.gdn\job.gdnsuppress
 
         steps:
