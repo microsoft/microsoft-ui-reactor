@@ -186,14 +186,28 @@ steps:
     # `dotnet build Reactor.slnx` step above builds it under the slnx's DEFAULT solution
     # platform, which does not match the AnyCPU path `dotnet test --no-build` probes ->
     # build 118611 failed with "test source file ... Reactor.Tests.dll ... was not found".
-    # We therefore build+test the project standalone with `-p:Platform=x64`, exactly as
-    # the GitHub Actions unit-test job does (ci.yml: `dotnet test ... -p:Platform=x64`).
-    # No `--no-build`/`--no-restore`: restore uses the internal feed pinned by the
-    # "Pin ambient NuGet to internal feed" step. `-p:CI=true` keeps Copilot/SignaturesGen
-    # gated off for consistency (Reactor.Tests pulls neither, so this is just insurance).
+    # We therefore restore + build + test the project standalone with `-p:Platform=x64`,
+    # exactly as the GitHub Actions unit-test job does (ci.yml: restore + test
+    # `-p:Platform=x64`).
+    #
+    # The restore MUST use an explicit `--configfile "${{ parameters.nugetConfig }}"`
+    # pointing at the internal feed -- the same way the solution-level "Restore" step
+    # above does. Relying on the ambient pinned nuget.config is NOT enough: in build
+    # 118612 a bare `dotnet test` (no --no-restore) restored against the public
+    # api.nuget.org service index, which is blocked in the network-restricted container
+    # ("An attempt was made to access a socket in a way forbidden by its access
+    # permissions (api.nuget.org:443)"). `dotnet test` has no --configfile, so we do an
+    # explicit `dotnet restore ... --configfile` first, then `dotnet test --no-restore`
+    # (the build happens inside `dotnet test` from the already-restored packages, needing
+    # no network). `-p:CI=true` keeps Copilot/SignaturesGen gated off for consistency.
+    - pwsh: |
+        dotnet restore tests/Reactor.Tests/Reactor.Tests.csproj `
+          -p:Platform=x64 --configfile "${{ parameters.nugetConfig }}"
+      displayName: 'Restore unit tests (internal feed)'
+
     - pwsh: |
         dotnet test tests/Reactor.Tests/Reactor.Tests.csproj `
-          -p:Platform=x64 -p:CI=true --configuration ${{ parameters.configuration }} `
+          --no-restore -p:Platform=x64 -p:CI=true --configuration ${{ parameters.configuration }} `
           --logger trx --results-directory "$(Build.SourcesDirectory)\TestResults"
       displayName: 'Unit tests (Reactor.Tests)'
 
