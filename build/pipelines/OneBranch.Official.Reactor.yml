@@ -27,6 +27,13 @@ variables:
   CDP_DEFINITION_BUILD_COUNT: $[counter('', 0)] # needed for onebranch.pipeline.version task https://aka.ms/obpipelines/versioning
   system.debug: ${{ parameters.debug }}
 
+  # Mirror GitHub Actions' CI flag so dev-only nested builds stay off in the docked,
+  # network-restricted container. Reactor.Cli's RunSignaturesGen target is gated on
+  # '$(CI)' != 'true' and otherwise runs a nested `dotnet build` that does its OWN
+  # restore against the default feed -> NU1301 when isolated. The committed
+  # skills/reactor.api.txt is what pack consumes, so skipping regen in CI is correct.
+  CI: true
+
   # Reactor builds the .slnx solution via the dotnet CLI (no dirs.proj / msbuild.exe).
   BuildSolution: $(Build.SourcesDirectory)\Reactor.slnx
   BuildConfiguration: Release

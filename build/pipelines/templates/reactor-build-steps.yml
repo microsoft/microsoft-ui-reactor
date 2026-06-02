@@ -58,6 +58,24 @@ steps:
     inputs:
       forceReinstallCredentialProvider: true
 
+  # Make the internal feed the AMBIENT NuGet config for the whole build.
+  #
+  # `--configfile` only scopes the single dotnet invocation it is passed to. Nested
+  # restores (the SignaturesGen Exec in Reactor.Cli, `dotnet tool install`, the WinUI
+  # XamlCompiler, MSBuild download targets) discover NuGet config by walking up the
+  # directory tree, where they would otherwise find the committed repo-root nuget.config
+  # that points at public nuget.org -> blocked in the network-restricted container.
+  #
+  # Overwriting the repo-root nuget.config with the internal-only feed (it is `<clear/>`
+  # + the internal source) makes every nested restore resolve from the internal feed with
+  # no further plumbing. The CI working tree is disposable, so mutating the tracked file
+  # here is safe.
+  - pwsh: |
+      $dest = Join-Path "$(Build.SourcesDirectory)" 'nuget.config'
+      Copy-Item "${{ parameters.nugetConfig }}" $dest -Force
+      Write-Host "Pinned ambient NuGet config to internal feed: $dest"
+    displayName: 'Pin ambient NuGet to internal feed'
+
   - ${{ if eq(parameters.pack, true) }}:
     - pwsh: |
         dotnet tool install --global minver-cli --version 5.0.0 `
