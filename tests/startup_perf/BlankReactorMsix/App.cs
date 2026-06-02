@@ -28,16 +28,24 @@ using static Microsoft.UI.Reactor.Factories;
 //   FirstIdle      → DispatcherQueuePriority.Low    (≈ WPF DispatcherPriority.
 //                    enqueue after FirstRender         ApplicationIdle)
 //   ProcessStop    → after ReactorApp.Run returns   (≈ WPF App.OnExit)
+//
+// The UI is deliberately a single TextBlock — no TextBox, no on-screen
+// metrics readout, no state hooks — to match the unpackaged BlankReactor
+// sibling exactly. Any extra UI element would skew the cold-launch cost
+// measurement that the perf-gate harness is designed to capture.
 BenchmarkTracing.Log.SetAppName("blank_reactor");
 BenchmarkTracing.Log.TraceWinMainEntry();
-GettingStartedApp.Metrics.RecordAppStart();
+BlankApp.Metrics.RecordAppStart();
 
 try
 {
-    ReactorApp.Run<GettingStartedApp>(
+    // 1000x1000 to match BlankReactor / BlankRNW / BlankWinUI3. Window
+    // surface area affects layout / first-paint cost, so all four variants
+    // must use the same size for cross-stack comparison to be fair.
+    ReactorApp.Run<BlankApp>(
         title: "BlankReactor",
-        width: 600,
-        height: 400,
+        width: 1000,
+        height: 1000,
         configure: host =>
         {
             // Hook before Activate() so the first WM_ACTIVATE arrives at our handler.
@@ -58,7 +66,7 @@ try
                 onRendered = (s, e) =>
                 {
                     CompositionTarget.Rendered -= onRendered;
-                    GettingStartedApp.Metrics.RecordFirstFrame();
+                    BlankApp.Metrics.RecordFirstFrame();
 
                     // FirstIdle / RTI: schedule on the UI dispatcher at Low
                     // priority. This fires after all higher-priority work the
@@ -67,8 +75,7 @@ try
                     var dq = DispatcherQueue.GetForCurrentThread();
                     dq.TryEnqueue(DispatcherQueuePriority.Low, () =>
                     {
-                        GettingStartedApp.Metrics.RecordInteractive();
-                        GettingStartedApp.NotifyMetricsReady();
+                        BlankApp.Metrics.RecordInteractive();
                     });
                 };
                 CompositionTarget.Rendered += onRendered;
@@ -82,42 +89,18 @@ finally
     BenchmarkTracing.Log.Dispose();
 }
 
-class GettingStartedApp : Component
+internal sealed class BlankApp : Component
 {
-    // Shared metrics + a one-shot listener so the component can re-render
-    // with the final values once FirstIdle fires. Surfaces an on-screen
-    // "First Frame: X ms | Interactive: Y ms" status bar for quick visual
-    // verification.
     internal static readonly BlankPerfMetrics Metrics = new();
-    private static event Action? MetricsReady;
-    internal static void NotifyMetricsReady() => MetricsReady?.Invoke();
 
     public override Element Render()
     {
-        var (name, setName) = UseState("World");
-        var (metricsSummary, setMetricsSummary) = UseState<string?>(null);
-
-        // Subscribe once: when FirstIdle fires, snapshot the finalized metrics
-        // into local state so Reactor re-renders the status line.
-        UseEffect(() =>
-        {
-            Action handler = () =>
-            {
-                if (Metrics.IsFinalized)
-                    setMetricsSummary(Metrics.Summary);
-            };
-            MetricsReady += handler;
-            // If FirstIdle already fired before the first render finished,
-            // surface the value on the next render rather than waiting forever.
-            if (Metrics.IsFinalized)
-                setMetricsSummary(Metrics.Summary);
-            return () => MetricsReady -= handler;
-        });
-
-        return VStack(16,
-            TextBlock($"Hello, {name}!").FontSize(24).Bold(),
-            TextBox(name, setName, placeholderText: "Enter your name").Width(250),
-            TextBlock(metricsSummary ?? "Measuring…").FontSize(12)
-        ).Padding(24);
+        // Single TextBlock only — see file header comment for why no other UI.
+        // Mirrors the unpackaged BlankReactor sibling so the two variants
+        // differ only in deployment shape (MSIX vs unpackaged), not in
+        // measured user-code cost.
+        return TextBlock("Blank Reactor (MSIX) — see ETW trace for timings")
+            .FontSize(14)
+            .Padding(12);
     }
 }

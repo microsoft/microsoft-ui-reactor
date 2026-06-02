@@ -15,9 +15,11 @@ apples-to-apples comparison.
 
 It is **not** a feature demo — see `samples/Reactor.TestApp` for that — and
 it is **not** a microbenchmark — see `tests/perf_bench/` for those. It is a
-real WinUI 3 MSIX app deliberately kept to a single screen (a TextBlock, a
-TextField, and a status line) so the bulk of the measured time is framework
-overhead rather than user code.
+real WinUI 3 MSIX app deliberately kept to a single `TextBlock` (no
+`TextBox`, no on-screen metrics readout, no state hooks) so the measured
+time is framework + Reactor overhead rather than user code — matching the
+unpackaged `BlankReactor/` sibling exactly so the two variants differ only
+in deployment shape.
 
 ## What it measures
 
@@ -37,8 +39,9 @@ Provider: `BenchmarkSyntheticApps`, GUID `FD80D616-E92B-4B2B-9BED-131ADA36A8FD`,
 keyword `MICROSOFT_KEYWORD_MEASURES` (bit 46 — `0x0000400000000000`).
 
 The app also computes `FirstFrameMs` and `InteractiveMs` from
-`Stopwatch.GetTimestamp()` and displays them in the UI for quick visual
-verification.
+`Stopwatch.GetTimestamp()` (consumed only by the harness via ETW — they
+are intentionally **not** rendered into the UI so the on-screen content
+stays a single static `TextBlock`).
 
 ## Project shape
 
@@ -54,22 +57,46 @@ verification.
 
 ## Building
 
+The **command line is the supported build flow** for this project. It is
+the path CI exercises, and it gives you full, explicit control over the
+`Platform` × `Configuration` × `RuntimeIdentifier` × signing matrix that
+the MSIX tooling needs. Visual Studio (open `Reactor.slnx` or this csproj
+directly) can build and IntelliSense the project, but the `Create App
+Packages` wizard and other Publish UIs are **best-effort only** — quirks
+in the `.slnx` ↔ wizard handshake mean the commands below are the
+reliable way to produce a deployable `.msix`.
+
+### Unsigned MSIX (fastest local repro)
+
+Works on a fresh clone with no cert setup. Install it with
+`Add-AppxPackage` when Windows is in Developer Mode.
+
 ```powershell
-# Unsigned MSIX — works on a fresh clone, can be installed with
-# Add-AppxPackage when Windows is in Developer Mode.
-dotnet build tests\startup_perf\BlankReactorMsix\BlankReactor.csproj /p:Platform=x64 -c Release
+dotnet build tests\startup_perf\BlankReactorMsix\BlankReactor.csproj `
+    -p:Platform=x64 `
+    -p:RuntimeIdentifier=win-x64 `
+    -c Release `
+    -p:GenerateAppxPackageOnBuild=true
 ```
 
-The build emits an unsigned `.msix` at
-`tests\startup_perf\BlankReactorMsix\bin\Release\net10.0-windows10.0.22621.0\win-x64\AppPackages\…`.
+The build emits the `.msix` at:
 
-## Signing for the perf-gate harness
+```
+tests\startup_perf\BlankReactorMsix\AppPackages\BlankReactor_<version>_x64_Test\BlankReactor_<version>_x64.msix
+```
 
-The harness (and most lab installers) expect a signed MSIX whose cert chains
-to a machine-trusted root. Two pieces have to line up:
+For ARM64, swap `x64` → `ARM64` for `Platform` and `win-x64` → `win-arm64`
+for `RuntimeIdentifier`.
 
-1. The signing cert. Generate one once and import its public part into the
-   target machine's `Cert:\LocalMachine\TrustedPeople` store:
+### Signed x64 Release MSIX (perf-gate harness target)
+
+The harness (and most lab installers) expect a signed MSIX whose cert
+chains to a machine-trusted root. Two things have to line up before
+running the build command:
+
+1. **The signing cert.** Either generate a self-signed one once and
+   import its public part into the target machine's
+   `Cert:\LocalMachine\TrustedPeople` store:
 
    ```powershell
    # Subject must match Package.appxmanifest <Identity Publisher="..."> below.
@@ -79,20 +106,46 @@ to a machine-trusted root. Two pieces have to line up:
        -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
    ```
 
-   Export it to a `.pfx` (`Export-PfxCertificate`). Do **not** check the
-   `.pfx` into the repo — `*.pfx` is already covered by `.gitignore`.
+   Export to a `.pfx` (`Export-PfxCertificate`), or use a `.pfx` supplied
+   by the lab. Do **not** check the `.pfx` into the repo — `*.pfx` is
+   already covered by `.gitignore`.
 
-2. The manifest. `Package.appxmanifest` ships with
-   `<Identity Publisher="CN=BlankReactor" .../>` to match the cert subject
-   above. If you use a different cert subject, update this attribute.
+2. **The manifest.** `Package.appxmanifest` ships with
+   `<Identity Publisher="CN=BlankReactor" .../>` to match the
+   `New-SelfSignedCertificate` subject above. If your `.pfx` has a
+   different Subject, update this attribute first — they must match
+   exactly or signing fails with `APPX1101` / `APPX0105`. Check the
+   `.pfx` Subject with:
+
+   ```powershell
+   (Get-PfxCertificate -FilePath path\to\your.pfx).Subject
+   ```
 
 Then build with signing enabled:
 
 ```powershell
 dotnet build tests\startup_perf\BlankReactorMsix\BlankReactor.csproj `
-    /p:Platform=x64 -c Release `
-    /p:AppxPackageSigningEnabled=true `
-    /p:PackageCertificateKeyFile=path\to\your.pfx
+    -p:Platform=x64 `
+    -p:RuntimeIdentifier=win-x64 `
+    -c Release `
+    -p:GenerateAppxPackageOnBuild=true `
+    -p:AppxPackageSigningEnabled=true `
+    -p:PackageCertificateKeyFile="C:\path\to\your.pfx"
+```
+
+If the `.pfx` is password-protected add either
+`-p:PackageCertificatePassword=<password>` (visible in shell history) or
+import the `.pfx` into `Cert:\CurrentUser\My` and pass
+`-p:PackageCertificateThumbprint=<thumbprint>` instead.
+
+If a previous build left stale outputs that interfere with signing, nuke
+them first:
+
+```powershell
+Remove-Item tests\startup_perf\BlankReactorMsix\obj, `
+            tests\startup_perf\BlankReactorMsix\bin, `
+            tests\startup_perf\BlankReactorMsix\AppPackages `
+    -Recurse -Force -ErrorAction SilentlyContinue
 ```
 
 ## Verifying the ETW emissions
