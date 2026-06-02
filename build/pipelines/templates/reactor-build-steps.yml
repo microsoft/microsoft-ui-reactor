@@ -108,7 +108,7 @@ steps:
     inputs:
       userProvideBuildInfo: 'msBuildInfo'
       setupCommandlinePicker: 'vs2022' # Allows you to pick the visual studio version used during the execution of the Analyzers. 2022 is required for .net 6 on the latest images.
-      msBuildCommandline: 'dotnet.exe build "${{ parameters.solution }}" --no-restore --configuration ${{ parameters.configuration }}'
+      msBuildCommandline: 'dotnet.exe build "${{ parameters.solution }}" --no-restore --configuration ${{ parameters.configuration }} --configfile "${{ parameters.nugetConfig }}"'
 
   - ${{ if eq(parameters.runTests, true) }}:
     - pwsh: |
