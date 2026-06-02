@@ -65,6 +65,7 @@ extends:
         
         variables:
           ob_outputDirectory: '$(Build.SourcesDirectory)\out' # this directory is uploaded to pipeline artifacts, reddog and cloudvault. More info at https://aka.ms/obpipelines/artifacts
+          ob_git_fetchDepth: -1 # full git history + tags so MinVer can derive the version (shallow clone => 0.1.0 fallback)
           # https://aka.ms/obpipelines/sdl
           ob_sdl_binskim_enabled: true # you can disable sdl tools in non-official build 
           ob_sdl_binskim_break: true # always break the build on binskim issues. You can disable it by setting to 'false'
@@ -73,6 +74,10 @@ extends:
           # ob_sdl_suppression_suppressionFile: $(Build.SourcesDirectory)\.gdn\job.gdnsuppress
 
         steps:
+          # TODO: per-PR publish — flip pack:true and push to a preview/PR feed (NOT the
+          # release feed) so reviewers get an installable package per PR. Needs a preview
+          # feed (or settle for a pipeline artifact). The per-PR version suffix is already
+          # wired in reactor-build-steps.yml and activates under Build.Reason=PullRequest.
           - template: /build/pipelines/templates/reactor-build-steps.yml@self
             parameters:
               outputDirectory: '$(Build.SourcesDirectory)\out'

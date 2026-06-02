@@ -68,6 +68,7 @@ steps:
         $manualVersion = '${{ parameters.version }}'
 
         if (-not [string]::IsNullOrWhiteSpace($manualVersion)) {
+          # Explicit override always wins, verbatim.
           $version = $manualVersion.Trim()
         } else {
           $minver = Join-Path $env:USERPROFILE '.dotnet\tools\minver.exe'
@@ -76,6 +77,17 @@ steps:
           }
           # Keep parity with the GitHub workflow / ob-release.yml MinVer settings.
           $version = (& $minver -t v -p experimental.0 -m 0.1).Trim()
+
+          # Per-PR builds: append a unique, monotonic suffix so repeated iterations /
+          # rebuilds of the same commit never collide on the feed. MinVer alone is
+          # deterministic (same commit => same version), which would clash on re-push.
+          # $(CDP_DEFINITION_BUILD_COUNT) is OneBranch's per-definition monotonic counter.
+          if ($env:BUILD_REASON -eq 'PullRequest') {
+            $pr = $env:SYSTEM_PULLREQUEST_PULLREQUESTID
+            $counter = $env:CDP_DEFINITION_BUILD_COUNT
+            $base = $version.Split('-')[0]  # strip MinVer's own prerelease tail
+            $version = "$base-pr.$pr.$counter"
+          }
         }
 
         if (-not $version) { throw 'Could not resolve version' }
