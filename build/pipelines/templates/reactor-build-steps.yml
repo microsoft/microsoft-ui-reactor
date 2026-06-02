@@ -181,9 +181,19 @@ steps:
     displayName: 'Build framework (dotnet build; CodeQL-scanned)'
 
   - ${{ if eq(parameters.runTests, true) }}:
+    # Reactor.Tests is mapped in Reactor.slnx to the x64/ARM64 solution platforms only
+    # (no AnyCPU), so its build output lands under a platform-specific path. The main
+    # `dotnet build Reactor.slnx` step above builds it under the slnx's DEFAULT solution
+    # platform, which does not match the AnyCPU path `dotnet test --no-build` probes ->
+    # build 118611 failed with "test source file ... Reactor.Tests.dll ... was not found".
+    # We therefore build+test the project standalone with `-p:Platform=x64`, exactly as
+    # the GitHub Actions unit-test job does (ci.yml: `dotnet test ... -p:Platform=x64`).
+    # No `--no-build`/`--no-restore`: restore uses the internal feed pinned by the
+    # "Pin ambient NuGet to internal feed" step. `-p:CI=true` keeps Copilot/SignaturesGen
+    # gated off for consistency (Reactor.Tests pulls neither, so this is just insurance).
     - pwsh: |
         dotnet test tests/Reactor.Tests/Reactor.Tests.csproj `
-          --no-build --no-restore --configuration ${{ parameters.configuration }} `
+          -p:Platform=x64 -p:CI=true --configuration ${{ parameters.configuration }} `
           --logger trx --results-directory "$(Build.SourcesDirectory)\TestResults"
       displayName: 'Unit tests (Reactor.Tests)'
 
