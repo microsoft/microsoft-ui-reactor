@@ -157,15 +157,27 @@ steps:
   # errors. A normal `dotnet build` keeps the generators intact, and CodeQL provides
   # the SDL-required scan. See https://aka.ms/codeql3000-onebranch
   #
-  # CI / CopilotSkipCliDownload are passed as explicit MSBuild global properties (-p:)
-  # rather than relying on the pipeline env vars of the same name: those did not reach
-  # MSBuild in the docked container (build 118608 still ran the dev-only SignaturesGen
-  # nested build -> CS2012 file-lock race, and still hit the Copilot CLI download ->
-  # MSB3923). Global properties are deterministic. CI=true gates off Reactor.Cli's
-  # RunSignaturesGen target; CopilotSkipCliDownload=true skips the GitHub.Copilot.SDK
-  # npmjs.org download in the network-restricted container.
+  # -p:CI=true is passed as an explicit MSBuild global property (not the pipeline env
+  # var of the same name, which did not reach MSBuild in the docked container -- build
+  # 118608 still ran the dev-only SignaturesGen nested build). CI=true gates off
+  # Reactor.Cli's RunSignaturesGen target AND (via Directory.Build.props) sets
+  # CopilotSkipCliDownload=true so the GitHub.Copilot.SDK npmjs.org download is skipped
+  # in the network-restricted container. NOTE: passing -p:CopilotSkipCliDownload=true as
+  # a global property did NOT take effect in build 118609 (Copilot still downloaded for
+  # DemoScriptTool + Reactor.Cli -> MSB3923) even though -p:CI=true in the same project
+  # did; we therefore derive the skip from $(CI) in Directory.Build.props instead.
+  #
+  # -maxcpucount:1 (serial build) is required because the netstandard2.0 generator/
+  # analyzer projects (e.g. Reactor.Localization.Generator) set
+  # AppendPlatformToOutputPath=false, so the x64 and ARM64 consumer graphs both build
+  # them into the SAME bin/Release/netstandard2.0 path. On the 12-core container those
+  # two instances ran concurrently and collided on the .dll / deps.json (build 118608
+  # CS2012, build 118609 MSB4018 'being used by another process'). GitHub Actions runs
+  # the identical command but survives only because its hosted runners have far fewer
+  # cores. Serializing the build makes the two writes sequential (output is identical),
+  # deterministically eliminating the race.
   - pwsh: |
-      dotnet build "${{ parameters.solution }}" --no-restore --configuration ${{ parameters.configuration }} -p:CI=true -p:CopilotSkipCliDownload=true
+      dotnet build "${{ parameters.solution }}" --no-restore --configuration ${{ parameters.configuration }} -maxcpucount:1 -p:CI=true
     displayName: 'Build framework (dotnet build; CodeQL-scanned)'
 
   - ${{ if eq(parameters.runTests, true) }}:
