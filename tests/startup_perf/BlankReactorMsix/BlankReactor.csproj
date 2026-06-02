@@ -107,6 +107,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="..\Common\BenchmarkTracing.cs" Link="Common\BenchmarkTracing.cs" />
+    <Compile Include="..\Common\BlankPerfMetrics.cs" Link="Common\BlankPerfMetrics.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!--
       SetPlatform pins the Reactor build to match this project's $(Platform)
       so VS's design-time GetTargetPath query (which would otherwise resolve

@@ -4,9 +4,13 @@
 
 .DESCRIPTION
     Builds (optional) BlankWinUI3 / BlankReactor / BlankRNW, then for each
-    variant runs the executable N times under a WPR session, parses the
-    BenchmarkSyntheticApps ETW events out of the trace, and prints
-    median TTFP / TTI side-by-side.
+    file-path-launchable variant runs the executable N times under a WPR
+    session, parses the BenchmarkSyntheticApps ETW events out of the trace,
+    and prints median TTFP / TTI side-by-side.
+
+    BlankReactorMsix is intentionally excluded: a packaged measurement must
+    install the MSIX and launch by AUMID so it measures the packaged path.
+    See BlankReactorMsix/README.md.
 
     The ETW provider GUID and event schema match -lift's blank-app set
     (see README.md), so traces produced here can be opened against

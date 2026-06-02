@@ -10,8 +10,9 @@ shipped app would be installed.
 
 Both Reactor variants — together with `BlankWinUI3/` and `BlankRNW/` —
 emit the same `BenchmarkSyntheticApps` ETW regions so the same WPA
-analysis resolves across stacks and packaging modes, enabling
-apples-to-apples comparison.
+analysis resolves across stacks and packaging modes. This packaged
+variant uses `AppName="blank_reactor_msix"` so side-by-side traces do not
+collapse into the unpackaged `blank_reactor` row.
 
 It is **not** a feature demo — see `samples/Reactor.TestApp` for that — and
 it is **not** a microbenchmark — see `tests/perf_bench/` for those. It is a
@@ -30,8 +31,9 @@ every framework's trace:
 | Event           | Maps to                                | Reactor hook                                                     |
 | --------------- | -------------------------------------- | ---------------------------------------------------------------- |
 | `wWinMainEntry` | WPF `App.Main` entry                   | Before `ReactorApp.Run<>(...)`                                   |
-| `WindowLoaded`  | WPF `Window.Loaded`                    | First `Window.Activated`                                         |
-| `FirstRender`   | WPF `Window.ContentRendered`           | First `CompositionTarget.Rendered` after activation (post-paint) |
+| `XamlAppLoaded` | WPF `App.OnLaunched`                   | First `BlankApp.Render()`                                        |
+| `WindowLoaded`  | WPF `Window.Loaded`                    | First post-commit `UseEffect`                                    |
+| `FirstRender`   | WPF `Window.ContentRendered`           | First `CompositionTarget.Rendering` after commit                 |
 | `FirstIdle`     | WPF `DispatcherPriority.ApplicationIdle` | `DispatcherQueuePriority.Low` enqueue after `FirstRender`      |
 | `ProcessStop`   | WPF `App.OnExit`                       | After `ReactorApp.Run<>(...)` returns                            |
 
@@ -46,6 +48,8 @@ stays a single static `TextBlock`).
 ## Project shape
 
 - `AssemblyName` is **`BlankReactor`** so a perf harness's `ProcessName` filter matches.
+- ETW `AppName` is **`blank_reactor_msix`** so WPA can distinguish this
+  package-deployment mode from the unpackaged `blank_reactor` sibling.
 - `WindowsPackageType=MSIX` so a perf harness can deploy/install it the standard way.
 - `SelfContained=true` so perf-test machines (which may only carry an older
   .NET runtime for sibling baseline apps) don't need a separate .NET 10
@@ -148,15 +152,29 @@ Remove-Item tests\startup_perf\BlankReactorMsix\obj, `
     -Recurse -Force -ErrorAction SilentlyContinue
 ```
 
+## Running
+
+`tests\startup_perf\run_startup_bench.ps1` intentionally does **not** run
+this variant. That script launches file-path executables and owns the
+returned process handle for window detection, working-set sampling, and
+teardown. A real MSIX measurement must install the package and launch it
+by AUMID; launching the loose build output would either fail activation
+or stop measuring the packaged path this variant exists to cover.
+
+After installing the produced MSIX, launch it through your perf-gate
+harness or by its Start-menu/AUMID entry, then capture the same
+`BenchmarkSyntheticApps` provider used by the default startup suite.
+
 ## Verifying the ETW emissions
 
 ```powershell
 # Start a trace just for our provider, run the app, stop, view in WPA.
 wpr -start GeneralProfile -start "BenchmarkSyntheticApps:0x0000400000000000:5"
-# … launch BlankReactor and let it idle …
+# ... launch the installed BlankReactor package and let it idle ...
 wpr -stop blank-reactor.etl
 wpa.exe blank-reactor.etl
 ```
 
-You should see five `wWinMainEntry` / `WindowLoaded` / `FirstRender` /
-`FirstIdle` / `ProcessStop` events in order, all carrying `AppName="blank_reactor"`.
+You should see six `wWinMainEntry` / `XamlAppLoaded` / `WindowLoaded` /
+`FirstRender` / `FirstIdle` / `ProcessStop` events in order, all carrying
+`AppName="blank_reactor_msix"`.

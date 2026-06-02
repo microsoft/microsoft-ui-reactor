@@ -217,12 +217,6 @@
       <Platform Solution="*|x64" Project="x64" />
     </Project>
   </Folder>
-  <Folder Name="/tests/startup_perf/BlankReactorMsix/">
-    <Project Path="tests/startup_perf/BlankReactorMsix/BlankReactor.csproj">
-      <Platform Solution="*|ARM64" Project="ARM64" />
-      <Platform Solution="*|x64" Project="x64" />
-    </Project>
-  </Folder>
   <Folder Name="/samples/apps/chat/">
     <Project Path="samples/apps/chat/Chat.Model/Chat.Model.csproj" />
     <Project Path="samples/apps/chat/Chat.UI/Chat.UI.csproj" />
@@ -355,6 +349,12 @@
       <Platform Solution="*|x64" Project="x64" />
     </Project>
     <Project Path="tests/external_proof/Reactor.External.TestControl.Tests/Reactor.External.TestControl.Tests.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/tests/startup_perf/">
+    <Project Path="tests/startup_perf/BlankReactorMsix/BlankReactor.csproj">
       <Platform Solution="*|ARM64" Project="ARM64" />
       <Platform Solution="*|x64" Project="x64" />
     </Project>

@@ -2,12 +2,12 @@
 
 Sibling apps that each start, paint once, and quit:
 
-| Variant              | Stack                                | AppName payload  |
-| -------------------- | ------------------------------------ | ---------------- |
-| `BlankWinUI3/`       | C# WinUI 3 (unpackaged)              | `blank_winui3`   |
-| `BlankReactor/`      | C# Reactor (unpackaged)              | `blank_reactor`  |
-| `BlankReactorMsix/`  | C# Reactor (MSIX-packaged)           | `blank_reactor`  |
-| `BlankRNW/`          | RN-Windows 0.82, C++ host + Hermes   | `blank_rnw`      |
+| Variant              | Stack                                | AppName payload      |
+| -------------------- | ------------------------------------ | -------------------- |
+| `BlankWinUI3/`       | C# WinUI 3 (unpackaged)              | `blank_winui3`       |
+| `BlankReactor/`      | C# Reactor (unpackaged)              | `blank_reactor`      |
+| `BlankReactorMsix/`  | C# Reactor (MSIX-packaged)           | `blank_reactor_msix` |
+| `BlankRNW/`          | RN-Windows 0.82, C++ host + Hermes   | `blank_rnw`          |
 
 All variants emit ETW on **the same provider** as the
 [`microsoft-ui-xaml-lift` blank-app benchmarks][lift]:
@@ -47,7 +47,7 @@ runtime growth.
 ## Build
 
 ```powershell
-# All three apps. From repo root.
+# Default launch-by-path variants. From repo root.
 dotnet build tests/startup_perf/BlankWinUI3/BlankWinUI3.csproj   -c Release -p:Platform=ARM64
 dotnet build tests/startup_perf/BlankReactor/BlankReactor.csproj -c Release -p:Platform=ARM64
 
@@ -56,6 +56,12 @@ dotnet build tests/startup_perf/BlankReactor/BlankReactor.csproj -c Release -p:P
 cd tests/startup_perf/BlankRNW
 npm install
 npx @react-native-community/cli run-windows --release --no-deploy --no-launch --arch ARM64
+
+# Packaged Reactor variant. See BlankReactorMsix/README.md for signing,
+# install, and AUMID launch details.
+dotnet build tests/startup_perf/BlankReactorMsix/BlankReactor.csproj `
+    -c Release -p:Platform=ARM64 -p:RuntimeIdentifier=win-arm64 `
+    -p:GenerateAppxPackageOnBuild=true
 ```
 
 If the VS detection rejects your Visual Studio version, build the
@@ -78,7 +84,7 @@ packages under `%USERPROFILE%\.nuget\packages` are used as fallback.
 wpr -start tests\startup_perf\Common\Tracing.wprp -filemode
 
 # Launch one app, wait for the window to render, close it
-.\tests\startup_perf\BlankWinUI3\bin\ARM64\Release\net9.0-windows10.0.22621.0\BlankWinUI3.exe
+.\tests\startup_perf\BlankWinUI3\bin\ARM64\Release\net10.0-windows10.0.22621.0\BlankWinUI3.exe
 
 # Stop and view
 wpr -stop run.etl
@@ -94,12 +100,18 @@ tracerpt run.etl -o run.xml -of XML -lr -y
 The `wWinMainEntry` → `FirstRender` and `wWinMainEntry` → `FirstIdle`
 deltas are TRUE TTFP / TRUE TTI.
 
-## Run all three + median (admin shell required)
+## Run default variants + median (admin shell required)
 
 `run_startup_bench.ps1` cancels any orphaned WPR session, then for each
 variant: `wpr -start`, launch the exe, wait for window, sample working
 set every 50 ms, close, `wpr -stop`. Parses each ETL with `tracerpt`,
 prints medians + writes per-run + summary CSVs.
+
+The script intentionally runs only variants that can be launched by file
+path (`BlankWinUI3`, unpackaged `BlankReactor`, and `BlankRNW`). The MSIX
+variant needs package installation plus AUMID activation, which is
+documented in `BlankReactorMsix/README.md` rather than hidden behind a
+file-path launch that would not measure the packaged path.
 
 ```powershell
 .\tests\startup_perf\run_startup_bench.ps1 -Runs 5
@@ -169,7 +181,7 @@ tests/startup_perf/
 ├── README.md                 (this file)
 ├── SPEC.md                   event-by-event description of the pipeline
 ├── Common/
-│   ├── BenchmarkTracing.cs   C# EventSource (used by BlankWinUI3 + BlankReactor)
+│   ├── BenchmarkTracing.cs   C# EventSource (used by C# variants)
 │   ├── BlankPerfMetrics.cs   C# AppStart/FirstFrame/Interactive holder
 │   └── Tracing.wprp          WPR capture profile (single provider, slim)
 ├── BlankWinUI3/              C# WinUI 3 minimal blank app

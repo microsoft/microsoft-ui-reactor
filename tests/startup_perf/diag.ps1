@@ -1,6 +1,9 @@
-<# Diagnostic: capture each variant manually with tracelog (bypasses WPR)
+<# Diagnostic: capture each file-path-launchable variant manually with tracelog (bypasses WPR)
    and dump per-event provider GUID, name, and all property values.
-   Run from admin PowerShell. #>
+   Run from admin PowerShell.
+
+   BlankReactorMsix is intentionally excluded because a packaged measurement
+   must install the MSIX and launch by AUMID; see BlankReactorMsix/README.md. #>
 
 $ErrorActionPreference = "Continue"
 $root = $PSScriptRoot
