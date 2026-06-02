@@ -53,11 +53,16 @@ public sealed class TrimAssertionTests
             return fromEnv;
 
         var here = new DirectoryInfo(AppContext.BaseDirectory);
-        while (here is not null && !File.Exists(Path.Combine(here.FullName, "Reactor.slnx")))
+        while (here is not null && here.GetFiles("Reactor.slnx").Length == 0)
             here = here.Parent;
         if (here is null) return string.Empty;
 
-        var appBin = Path.Combine(here.FullName, "tests", "aot_trim_proof", appDirectoryName, "bin");
+        // Defense-in-depth against the CodeQL Path.Combine warning: appDirectoryName is a
+        // compile-time constant from the assertion-project pair (e.g. "Reactor.AotHelloWorld.Advanced"),
+        // never a rooted path; assert that so the combine is unambiguously a child segment.
+        if (string.IsNullOrEmpty(appDirectoryName) || Path.IsPathRooted(appDirectoryName))
+            return string.Empty;
+        var appBin = Path.Join(here.FullName, "tests", "aot_trim_proof", appDirectoryName, "bin");
         if (!Directory.Exists(appBin)) return string.Empty;
 
         return Directory.EnumerateDirectories(appBin, "publish", SearchOption.AllDirectories)

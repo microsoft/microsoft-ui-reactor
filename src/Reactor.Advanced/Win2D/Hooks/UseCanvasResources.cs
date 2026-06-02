@@ -66,7 +66,11 @@ public static class UseCanvasResourcesHook
                 {
                     next = await createRef.Current(device).ConfigureAwait(false);
                 }
-                catch when (disposed)
+                catch (OperationCanceledException) when (disposed)
+                {
+                    return;
+                }
+                catch (ObjectDisposedException) when (disposed)
                 {
                     return;
                 }

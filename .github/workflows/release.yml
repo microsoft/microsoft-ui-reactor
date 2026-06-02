@@ -117,10 +117,22 @@ jobs:
           -p:Version=${{ steps.version.outputs.version }}
           -o artifacts/nupkg
 
+      - name: Build Advanced (AnyCPU)
+        # The slnx build above produces Reactor.Advanced for ARM64 (its slnx default
+        # platform) but the pack below needs the AnyCPU output. This mirrors how
+        # Reactor.csproj naturally lands at bin\Release\ (an analyzer reference forces
+        # an AnyCPU sub-build). Reactor.Advanced has no such forcing consumer, so it
+        # gets an explicit AnyCPU build step. Same shape as the Templates pack pattern.
+        run: >
+          dotnet build src/Reactor.Advanced/Reactor.Advanced.csproj
+          --no-restore --configuration Release
+          -p:Platform=AnyCPU
+
       - name: Pack Advanced NuGet
         run: >
           dotnet pack src/Reactor.Advanced/Reactor.Advanced.csproj
           --no-build --configuration Release
+          -p:Platform=AnyCPU
           -p:Version=${{ steps.version.outputs.version }}
           -o artifacts/nupkg
 

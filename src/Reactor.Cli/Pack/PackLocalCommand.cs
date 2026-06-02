@@ -65,7 +65,7 @@ public static class PackLocalCommand
 
         // 2. Advanced components — Microsoft.UI.Reactor.Advanced.<version>.nupkg
         Console.WriteLine($"Packing Microsoft.UI.Reactor.Advanced {version} → {feed}");
-        rc = RunPack(repoRoot, Path.Combine("src", "Reactor.Advanced", "Reactor.Advanced.csproj"), configuration, version, feed, arch);
+        rc = RunPack(repoRoot, Path.Join("src", "Reactor.Advanced", "Reactor.Advanced.csproj"), configuration, version, feed, arch);
         if (rc != 0)
         {
             Console.Error.WriteLine("advanced pack failed.");
@@ -153,7 +153,15 @@ public static class PackLocalCommand
         {
             File.Delete(path);
         }
-        catch (Exception ex)
+        catch (IOException ex)
+        {
+            Console.Error.WriteLine($"warning: could not delete stale '{path}' ({ex.GetType().Name}: {ex.Message}); pack may write next to a stale package — consumers may resolve the wrong one.");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Console.Error.WriteLine($"warning: could not delete stale '{path}' ({ex.GetType().Name}: {ex.Message}); pack may write next to a stale package — consumers may resolve the wrong one.");
+        }
+        catch (System.Security.SecurityException ex)
         {
             Console.Error.WriteLine($"warning: could not delete stale '{path}' ({ex.GetType().Name}: {ex.Message}); pack may write next to a stale package — consumers may resolve the wrong one.");
         }
