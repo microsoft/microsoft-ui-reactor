@@ -1,0 +1,172 @@
+# Shared build steps for Microsoft.UI.Reactor OneBranch pipelines.
+#
+# Consumed by the thin entry pipelines (Official, CI/NonOfficial, Stress, ...) so the
+# build logic lives in exactly one place. Each entry pipeline owns its own trigger and
+# `extends` the appropriate governed OB template, then injects these steps with parameters.
+#
+# Notes:
+#  - Reactor builds the .slnx solution via the dotnet CLI (no dirs.proj / msbuild.exe).
+#  - Restore resolves from the internal feed (build/pipelines/nuget.internal.config),
+#    hydrated by tools/seed-artifacts-feed.ps1. Official builds are network-restricted.
+#  - Selftests / E2E need a live WinUI window and do NOT run in the docked container;
+#    `runTests` covers headless unit tests only (tests/Reactor.Tests).
+
+parameters:
+  - name: outputDirectory
+    displayName: 'Directory OB scans + uploads as artifacts (ob_outputDirectory).'
+    type: string
+  - name: solution
+    type: string
+    default: '$(Build.SourcesDirectory)\Reactor.slnx'
+  - name: configuration
+    type: string
+    default: 'Release'
+  - name: nugetConfig
+    type: string
+    default: '$(Build.SourcesDirectory)\build\pipelines\nuget.internal.config'
+  - name: version
+    displayName: 'Explicit version; blank => MinVer.'
+    type: string
+    default: ''
+  - name: runTests
+    displayName: 'Run headless unit tests (tests/Reactor.Tests).'
+    type: boolean
+    default: false
+  - name: pack
+    displayName: 'Pack NuGet packages + assemble the skill kit.'
+    type: boolean
+    default: true
+
+steps:
+  - task: UseDotNet@2
+    displayName: 'Setup .NET SDK'
+    inputs:
+      packageType: 'sdk'
+      useGlobalJson: true # honor global.json (.NET 10 SDK); no-op if the image already ships it
+      performMultiLevelLookup: true
+
+  - task: onebranch.pipeline.version@1 # https://aka.ms/obpipelines/versioning
+    displayName: 'Setup BuildNumber'
+    inputs:
+      system: 'RevisionCounter'
+      major: '1'
+      minor: '0'
+      exclude_commit: true
+
+  - task: NuGetAuthenticate@1
+    displayName: 'NuGet Authentication'
+    inputs:
+      forceReinstallCredentialProvider: true
+
+  - ${{ if eq(parameters.pack, true) }}:
+    - pwsh: |
+        dotnet tool install --global minver-cli --version 5.0.0 `
+          --configfile "${{ parameters.nugetConfig }}"
+      displayName: 'Install minver-cli'
+
+    - pwsh: |
+        $manualVersion = '${{ parameters.version }}'
+
+        if (-not [string]::IsNullOrWhiteSpace($manualVersion)) {
+          $version = $manualVersion.Trim()
+        } else {
+          $minver = Join-Path $env:USERPROFILE '.dotnet\tools\minver.exe'
+          if (-not (Test-Path $minver)) {
+            throw "minver not found at $minver"
+          }
+          # Keep parity with the GitHub workflow / ob-release.yml MinVer settings.
+          $version = (& $minver -t v -p experimental.0 -m 0.1).Trim()
+        }
+
+        if (-not $version) { throw 'Could not resolve version' }
+
+        $isPrerelease = $version.Contains('-')
+        Write-Host "##vso[task.setvariable variable=PackageVersion]$version"
+        Write-Host "##vso[task.setvariable variable=IsPrerelease]$($isPrerelease.ToString().ToLower())"
+        Write-Host "Version: $version (isPrerelease=$isPrerelease)"
+      displayName: 'Resolve version'
+
+  - pwsh: |
+      dotnet restore "${{ parameters.solution }}" --configfile "${{ parameters.nugetConfig }}"
+    displayName: 'Restore'
+
+  # RoslynAnalyzers wraps dotnet build to enable SDL static analysis.
+  - task: RoslynAnalyzers@3
+    displayName: 'Build framework + analyzers (RoslynAnalyzers)'
+    inputs:
+      userProvideBuildInfo: 'msBuildInfo'
+      msBuildCommandline: 'dotnet.exe build "${{ parameters.solution }}" --no-restore --configuration ${{ parameters.configuration }}'
+
+  - ${{ if eq(parameters.runTests, true) }}:
+    - pwsh: |
+        dotnet test tests/Reactor.Tests/Reactor.Tests.csproj `
+          --no-build --no-restore --configuration ${{ parameters.configuration }} `
+          --logger trx --results-directory "$(Build.SourcesDirectory)\TestResults"
+      displayName: 'Unit tests (Reactor.Tests)'
+
+    - task: PublishTestResults@2
+      displayName: 'Publish test results'
+      condition: succeededOrFailed()
+      inputs:
+        testResultsFormat: VSTest
+        testResultsFiles: '$(Build.SourcesDirectory)\TestResults\**\*.trx'
+        failTaskOnFailedTests: true
+
+  - ${{ if eq(parameters.pack, true) }}:
+    - pwsh: |
+        dotnet pack src/Reactor/Reactor.csproj `
+          --no-build --configuration ${{ parameters.configuration }} `
+          -p:Version=$(PackageVersion) `
+          -o "${{ parameters.outputDirectory }}\nupkg"
+      displayName: 'Pack framework NuGet'
+
+    - pwsh: |
+        dotnet pack tools/Templates/Microsoft.UI.Reactor.Templates.csproj `
+          --no-build --configuration ${{ parameters.configuration }} `
+          -p:Version=$(PackageVersion) `
+          -p:Platform=AnyCPU `
+          -o "${{ parameters.outputDirectory }}\nupkg"
+      displayName: 'Pack Templates'
+
+    - pwsh: |
+        dotnet publish src/Reactor.Cli/Reactor.Cli.csproj `
+          --configuration ${{ parameters.configuration }} `
+          --runtime win-x64 `
+          --self-contained false `
+          -p:Version=$(PackageVersion) `
+          -o "${{ parameters.outputDirectory }}\mur\x64"
+      displayName: 'Publish mur (win-x64)'
+
+    - pwsh: |
+        dotnet publish src/Reactor.Cli/Reactor.Cli.csproj `
+          --configuration ${{ parameters.configuration }} `
+          --runtime win-arm64 `
+          --self-contained false `
+          -p:Version=$(PackageVersion) `
+          -o "${{ parameters.outputDirectory }}\mur\arm64"
+      displayName: 'Publish mur (win-arm64)'
+
+    - pwsh: |
+        $version = '$(PackageVersion)'
+        $outDir = '${{ parameters.outputDirectory }}'
+        $stage = "$outDir\kit-stage\reactor"
+
+        New-Item -ItemType Directory -Force -Path $stage | Out-Null
+        New-Item -ItemType Directory -Force -Path "$stage\bin\x64" | Out-Null
+        New-Item -ItemType Directory -Force -Path "$stage\bin\arm64" | Out-Null
+
+        Copy-Item SKILL.md $stage
+        Copy-Item -Recurse skills $stage
+        Copy-Item "$outDir\mur\x64\*" "$stage\bin\x64\" -Recurse
+        Copy-Item "$outDir\mur\arm64\*" "$stage\bin\arm64\" -Recurse
+        Copy-Item tools/install-skill-kit.ps1 "$stage\install-skill-kit.ps1"
+
+        New-Item -ItemType Directory -Force -Path "$outDir\kit" | Out-Null
+        $zip = "$outDir\kit\reactor-skill-kit-$version.zip"
+        Compress-Archive -Path "$outDir\kit-stage\reactor" -DestinationPath $zip -Force
+
+        # Drop the staging tree so it isn't double-scanned / uploaded.
+        Remove-Item -Recurse -Force "$outDir\kit-stage"
+
+        Write-Host "Kit: $zip"
+      displayName: 'Assemble skill kit'
