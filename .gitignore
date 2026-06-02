@@ -199,6 +199,12 @@ health/
 
 # Publish profiles
 *.pubxml
+# Exception: BlankReactorMsix needs its publish profiles committed so VS's
+# Create App Packages wizard finds valid publish configurations. Without
+# these, the wizard reports "no valid configuration found" and the project
+# can only be packaged from the command line. See the csproj <PublishProfile>
+# reference and README.md for the signed-build flow.
+!tests/startup_perf/BlankReactorMsix/Properties/PublishProfiles/*.pubxml
 
 # Stress/perf publish logs
 tests/stress_perf/publish_log*.txt

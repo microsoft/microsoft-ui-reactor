@@ -4,6 +4,13 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
     <Platforms>x64;ARM64</Platforms>
+    <!--
+      Explicit Configurations so VS's Create App Packages wizard can enumerate
+      Configuration × Platform pairs reliably from the .slnx-format solution.
+      Without this, the wizard sometimes reports "no valid configuration found".
+      These are the MSBuild defaults so this is a no-op for command-line builds.
+    -->
+    <Configurations>Debug;Release</Configurations>
     <RootNamespace>BlankReactor</RootNamespace>
     <!--
       Perf-gate harnesses key off ProcessName, so the produced binary must
@@ -22,6 +29,18 @@
     <WindowsPackageType>MSIX</WindowsPackageType>
     <EnableMsixTooling>true</EnableMsixTooling>
     <GenerateAppxPackageOnBuild Condition="'$(GenerateAppxPackageOnBuild)' == ''">False</GenerateAppxPackageOnBuild>
+
+    <!--
+      VS's Create App Packages wizard requires a publish-profile reference to
+      know how to produce the MSIX for each platform. Files live in
+      Properties\PublishProfiles\win-{x64,arm64}.pubxml; the .gitignore has a
+      negation rule that keeps just these two source-controlled (every other
+      *.pubxml in the repo stays ignored). Filename resolution is
+      case-insensitive on Windows, so $(Platform)=ARM64 resolves to
+      win-arm64.pubxml correctly. Only consumed by the Publish target —
+      no effect on the Build target the slnx CI job runs.
+    -->
+    <PublishProfile Condition="'$(PublishProfile)' == '' And ('$(Platform)' == 'x64' Or '$(Platform)' == 'ARM64')">Properties\PublishProfiles\win-$(Platform).pubxml</PublishProfile>
     <!--
       Self-contained .NET 10 so perf-test machines (which may only carry an
       older .NET runtime for sibling baseline apps) don't need a separate
