@@ -88,6 +88,8 @@ internal sealed class McpDispatcher
         }
     }
 
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "JSON serialization for MCP tools/list input-schema fragments.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "JSON serialization for MCP tools/list input-schema fragments.")]
     private JsonObject BuildToolsListResult()
     {
         var tools = new JsonArray();
@@ -97,7 +99,9 @@ internal sealed class McpDispatcher
             {
                 ["name"] = JsonValue.Create(tool.Name),
                 ["description"] = JsonValue.Create(tool.Description),
-                ["inputSchema"] = new JsonObject(),
+                ["inputSchema"] = tool.InputSchema is null
+                    ? new JsonObject()
+                    : JsonSerializer.SerializeToNode(tool.InputSchema, tool.InputSchema.GetType()),
             });
         }
 
