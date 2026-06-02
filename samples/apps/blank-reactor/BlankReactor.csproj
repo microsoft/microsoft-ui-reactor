@@ -21,8 +21,7 @@
     -->
     <WindowsPackageType>MSIX</WindowsPackageType>
     <EnableMsixTooling>true</EnableMsixTooling>
-    <GenerateAppxPackageOnBuild>true</GenerateAppxPackageOnBuild>
-
+    <GenerateAppxPackageOnBuild Condition="'$(GenerateAppxPackageOnBuild)' == ''">False</GenerateAppxPackageOnBuild>
     <!--
       Self-contained .NET 10 so perf-test machines (which may only carry an
       older .NET runtime for sibling baseline apps) don't need a separate
