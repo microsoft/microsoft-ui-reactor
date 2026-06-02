@@ -34,7 +34,7 @@ variables:
   BuildConfiguration: Release
   NuGetConfig: $(Build.SourcesDirectory)\build\pipelines\nuget.internal.config
 
-  WindowsContainerImage: 'onebranch.azurecr.io/windows/ltsc2022/vse2022:latest' # Docker image which is used to build the project https://aka.ms/obpipelines/containers
+  WindowsContainerImage: 'onebranch.azurecr.io/windows/ltsc2019/vse2022:latest' # must match agent host OS (ltsc2019/10.0.17763); .NET 10 SDK is installed at runtime via global.json
 
 resources:
   repositories: 
