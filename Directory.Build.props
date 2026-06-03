@@ -6,12 +6,15 @@
     To install: dotnet restore (NuGet will pull the package automatically).
 
     WindowsAppSDKSelfContained default is `false` — the framework, its
-    samples, tests, and perf benches all consume the *installed* Windows
-    App Runtime (`Microsoft.WindowsAppRuntime.2.0`, installed via
+    samples, and the perf benches all consume the *installed* Windows App
+    Runtime (`Microsoft.WindowsAppRuntime.2.0`, installed via
     bootstrap.ps1 / winget) rather than bundling a copy of the runtime
     into every build output. Projects that genuinely need a standalone
-    deployable (the user-facing scaffolded template; AOT publish proofs)
-    set `WindowsAppSDKSelfContained=true` explicitly in their own csproj.
+    deployable set `WindowsAppSDKSelfContained=true` explicitly in their
+    own csproj — the user-facing scaffolded template, the AOT publish
+    proofs, and the in-process test hosts (Reactor.Tests,
+    Reactor.AppTests.Host, etc.) that load WinUI activation factories
+    before any bootstrapper has run.
   -->
   <PropertyGroup>
     <WindowsAppSDKVersion>2.0.1</WindowsAppSDKVersion>
