@@ -8,7 +8,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <UseWinUI>true</UseWinUI>
-    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 

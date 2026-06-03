@@ -55,14 +55,12 @@
     <!--
       Self-contained .NET 10 so perf-test machines (which may only carry an
       older .NET runtime for sibling baseline apps) don't need a separate
-      .NET 10 install. WindowsAppSDKSelfContained stays false so the app
-      shares the Microsoft.WindowsAppRuntime.2.msix that the test
-      environment is expected to provide. This overrides the repo-root
-      default (Directory.Build.props) which sets
-      WindowsAppSDKSelfContained=true.
+      .NET 10 install. WindowsAppSDKSelfContained stays false (the
+      repo-root default in Directory.Build.props) so the app shares the
+      Microsoft.WindowsAppRuntime.2.msix that the test environment is
+      expected to provide.
     -->
     <SelfContained>true</SelfContained>
-    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
     <!-- AOT off: the shared EventSource tracing helper relies on EventSource.Write()
          over [EventData] payloads, which NativeAOT trims and turns into zero ETW events. -->

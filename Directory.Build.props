@@ -4,11 +4,19 @@
     Centralize the Windows App SDK version so all projects stay in sync.
     This uses the public Microsoft.WindowsAppSDK package from NuGet.
     To install: dotnet restore (NuGet will pull the package automatically).
+
+    WindowsAppSDKSelfContained default is `false` — the framework, its
+    samples, tests, and perf benches all consume the *installed* Windows
+    App Runtime (`Microsoft.WindowsAppRuntime.2.0`, installed via
+    bootstrap.ps1 / winget) rather than bundling a copy of the runtime
+    into every build output. Projects that genuinely need a standalone
+    deployable (the user-facing scaffolded template; AOT publish proofs)
+    set `WindowsAppSDKSelfContained=true` explicitly in their own csproj.
   -->
   <PropertyGroup>
     <WindowsAppSDKVersion>2.0.1</WindowsAppSDKVersion>
     <Win2DVersion>1.3.0</Win2DVersion>
-    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
   </PropertyGroup>
 
   <Import Project="$(MSBuildThisFileDirectory)src\Reactor\build\Reactor.targets"

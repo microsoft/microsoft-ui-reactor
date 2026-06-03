@@ -11,6 +11,9 @@
     <UseWinUI>true</UseWinUI>
     <UseWindowsForms>true</UseWindowsForms>
     <WindowsPackageType>None</WindowsPackageType>
+    <!-- WinForms interop host launches a full WinUI app; bundle the runtime
+         so the exe runs without the machine-wide install. -->
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
   </PropertyGroup>
 
   <ItemGroup>

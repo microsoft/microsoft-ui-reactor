@@ -9,7 +9,6 @@
     <UseWinUI>true</UseWinUI>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <DisableEmbeddedXbf>false</DisableEmbeddedXbf>
-    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
     <Platforms>AnyCPU;x64;ARM64</Platforms>

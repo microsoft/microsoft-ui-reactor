@@ -8,7 +8,6 @@
     <Nullable>enable</Nullable>
     <UseWinUI>true</UseWinUI>
     <UseWindowsForms>true</UseWindowsForms>
-    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
   </PropertyGroup>
 
   <ItemGroup>

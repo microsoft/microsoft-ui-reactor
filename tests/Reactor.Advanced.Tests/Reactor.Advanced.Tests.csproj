@@ -9,7 +9,10 @@
     <Nullable>enable</Nullable>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
-    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
+    <!-- xUnit host loads WinUI types in-process; bundle the runtime so the
+         test host can locate it without depending on the machine-wide
+         Windows App Runtime install. -->
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <OutputType>Library</OutputType>

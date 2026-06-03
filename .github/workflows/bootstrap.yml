@@ -161,13 +161,14 @@ jobs:
               Pop-Location
           }
 
-      - name: Build TestApp (default WindowsAppSDKSelfContained=true)
+      - name: Build TestApp (template ships WindowsAppSDKSelfContained=true)
         shell: pwsh
         run: |
-          # WindowsAppSDKSelfContained=true (inherited from
-          # Directory.Build.props) requires a concrete arch to embed the
-          # runtime under — AnyCPU is rejected by the SelfContained
-          # target. Pass the host arch explicitly.
+          # The scaffolded template (tools/Templates/templates/WinUIApp-CSharp)
+          # explicitly sets WindowsAppSDKSelfContained=true so end users get a
+          # standalone deployable. SelfContained=true requires a concrete arch
+          # to embed the runtime under — AnyCPU is rejected by the
+          # SelfContained target. Pass the host arch explicitly.
           $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'ARM64' } else { 'x64' }
           dotnet build TestProjects/TestApp/TestApp.csproj `
               -c Release `

@@ -9,9 +9,6 @@
     <UseWinUI>true</UseWinUI>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <DisableEmbeddedXbf>false</DisableEmbeddedXbf>
-    <!-- Override Directory.Build.props (true) — this library should not bundle
-         the WinUI runtime; the consuming executable controls self-containedness. -->
-    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
     <!-- Explicit platforms so external consumers (Pix, samples, etc.) that

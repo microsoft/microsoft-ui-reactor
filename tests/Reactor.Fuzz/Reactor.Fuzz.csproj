@@ -9,6 +9,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <UseWinUI>true</UseWinUI>
+    <!-- Fuzz harness loads WinUI types in-process; bundle the runtime. -->
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <IsPackable>false</IsPackable>
     <!-- SharpFuzz instrumentation is incompatible with NativeAOT and trim analysis. -->
     <IsAotCompatible>false</IsAotCompatible>

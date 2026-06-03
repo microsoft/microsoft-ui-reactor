@@ -10,8 +10,6 @@
     <Nullable>enable</Nullable>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
-    <!-- Framework-dependent: WindowsAppSDK runtime is NOT carried in the publish output. -->
-    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
     <IsPackable>false</IsPackable>

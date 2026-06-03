@@ -214,7 +214,7 @@ On every CI run, publish:
 - Requires `winget install Microsoft.DotNet.Runtime.10` on the consumer's machine. Acceptable for the P0 audience (Microsoft engineers) and for P2/P3 consumers willing to install a runtime.
 - `install-skill-kit.ps1` checks for .NET 10 and warns clearly if it's missing.
 
-**Sample apps stay self-contained.** Reactor's sample apps and bench/perf projects continue to use `WindowsAppSDKSelfContained=true` (the Directory.Build.props default). Sample apps are sensitive to the WinUI runtime version — bundling makes it trivial to test against different SDK versions during dev. Tools (`mur`) are not.
+**Sample apps use the installed runtime.** Reactor's sample apps and bench/perf projects inherit the repo-wide default of `WindowsAppSDKSelfContained=false` and share the machine-wide `Microsoft.WindowsAppRuntime.2.0` install (`bootstrap.ps1` prompts to install it via winget). The only carve-outs are the user-facing scaffolded template (`tools/Templates/templates/WinUIApp-CSharp`), which keeps `=true` so a fresh `dotnet new reactorapp` build runs without prerequisites, and the AOT/trim publish proofs under `tests/aot_trim_proof/*`, which need a standalone exe to scan. Test hosts that load WinUI types in-process (`Reactor.Tests`, `Reactor.AppTests.Host`, etc.) also opt back into `=true` so the test runner can locate the runtime without depending on the dev's bootstrap state.
 
 The kit zip is the deployable unit; consumers extract it and run `install-skill-kit.ps1` which copies to the install location and adds `bin/<arch>` to user `PATH`.
 

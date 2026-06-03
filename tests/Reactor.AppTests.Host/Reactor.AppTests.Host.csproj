@@ -10,6 +10,9 @@
     <Nullable>enable</Nullable>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
+    <!-- Full WinUI host (selftest runner); bundle the WAS runtime so the
+         exe launches without depending on the machine-wide install. -->
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <!-- CsWinRT1030: generic WinRT-implementing collection use (e.g. List<Border>
          in SplitterMatrixFixtures) requires the CsWinRT-generated marshaling
          code to use unsafe blocks. This flag enables that for the generated

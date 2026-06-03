@@ -162,17 +162,19 @@ if (-not (Test-DotnetSdk10)) {
 }
 Write-Ok ".NET SDK present"
 
-# Windows App SDK runtime — optional but recommended.
+# Windows App SDK runtime — recommended for samples, perf-tests, and any
+# project that omits WindowsAppSDKSelfContained=true.
 #
-# The framework defaults to WindowsAppSDKSelfContained=true (see
-# Directory.Build.props), so builds and scaffolded apps work *without* the
-# machine-wide runtime — every app's bin/ output ships its own copy of WAS
-# native binaries from NuGet restore.
+# The repo defaults WindowsAppSDKSelfContained=false (see
+# Directory.Build.props) so samples and perf benches share a single
+# machine-wide Microsoft.WindowsAppRuntime install rather than bundling a
+# copy of the runtime into every build output. The scaffolded template
+# (tools/Templates/templates/WinUIApp-CSharp) and the AOT-publish trim
+# proofs (tests/aot_trim_proof/*) keep =true explicitly so their build
+# output stays a standalone deployable.
 #
-# But many devs prefer framework-dependent deployment: smaller per-app
-# output, faster incremental builds, and the runtime installed once on the
-# machine. For that path the user needs the WindowsAppRuntime 2.0 install
-# matching our WindowsAppSDKVersion=2.0.1.
+# Net effect: the user needs the WindowsAppRuntime 2.0 install matching
+# our WindowsAppSDKVersion=2.0.1 to run most things in this repo.
 #
 # So we prompt by default. `-InstallWinAppSdk` to force-install,
 # `-InstallWinAppSdk:$false` to skip the prompt non-interactively.
@@ -207,10 +209,10 @@ if (-not (Test-WindowsAppRuntime20)) {
     } else {
         Write-Host ''
         Write-Host '    Windows App Runtime 2.0 is not installed on this machine.' -ForegroundColor Yellow
-        Write-Host '    Reactor builds default to WindowsAppSDKSelfContained=true, so this is optional —'
-        Write-Host '    your apps will work either way. Installing it enables framework-dependent'
-        Write-Host '    deployment (smaller per-app output, faster builds) when you override'
-        Write-Host '    WindowsAppSDKSelfContained=false in a consuming project.'
+        Write-Host '    The Reactor repo defaults to WindowsAppSDKSelfContained=false, so most'
+        Write-Host '    samples, perf benches, and apps in this repo need the machine-wide runtime'
+        Write-Host '    installed to launch. Skip only if you know your projects override'
+        Write-Host '    WindowsAppSDKSelfContained=true to bundle their own copy.'
         $answer = Read-Host '    Install Windows App Runtime 2.0 via winget now? [y/N]'
         if ($answer -match '^[Yy]') {
             Install-WithWinget -Id 'Microsoft.WindowsAppRuntime.2.0' -Reason 'Windows App Runtime 2.0'
