@@ -96,8 +96,8 @@ jobs:
 
       - name: Test
         run: |
-          dotnet test tests/Reactor.Tests/Reactor.Tests.csproj --no-restore -p:Platform=x64 --logger "console;verbosity=normal"
-          dotnet test tests/Reactor.Advanced.Tests/Reactor.Advanced.Tests.csproj --no-restore -p:Platform=x64 --logger "console;verbosity=normal"
+          dotnet test tests/Reactor.Tests/Reactor.Tests.csproj --no-restore -p:Platform=x64 --logger "console;verbosity=normal" --blame-hang-timeout 180s --blame-hang-dump-type none
+          dotnet test tests/Reactor.Advanced.Tests/Reactor.Advanced.Tests.csproj --no-restore -p:Platform=x64 --logger "console;verbosity=normal" --blame-hang-timeout 180s --blame-hang-dump-type none
 
   integration-tests:
     name: Integration Tests
