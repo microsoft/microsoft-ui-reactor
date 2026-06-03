@@ -244,21 +244,29 @@ steps:
         failTaskOnFailedTests: true
 
   - ${{ if eq(parameters.pack, true) }}:
-    # ── Phase 1a: Authenticode-sign the framework assembly BEFORE packing. ──
-    # `dotnet pack --no-build` zips the existing build output (src/Reactor/bin) into the
-    # .nupkg's lib/ folder, so the DLL must be signed HERE for the SIGNED copy to land
-    # inside Microsoft.UI.Reactor.nupkg. Signing the .nupkg later (Phase 2) only seals the
-    # package container; it does NOT reach the assemblies within. ESRP NuGet-signs .nupkg
-    # and Authenticode-signs .dll/.exe based on file type (OneBranch Signing FAQ).
+    # ── Phase 1a: Authenticode-sign the packed assemblies BEFORE packing. ──
+    # `dotnet pack --no-build` zips the existing build output into the .nupkg, so each
+    # authored DLL must be signed HERE for the SIGNED copy to land inside
+    # Microsoft.UI.Reactor.nupkg. Signing the .nupkg later (Phase 2) only seals the package
+    # container; it does NOT reach the assemblies within (Guardian CodeSign post-analysis
+    # validates the members and breaks the build if any are unsigned -- build 118650 caught
+    # an unsigned analyzers/dotnet/cs/Reactor.Analyzers.dll). ESRP NuGet-signs .nupkg and
+    # Authenticode-signs .dll/.exe based on file type (OneBranch Signing FAQ).
+    #
+    # Four authored assemblies ship inside Microsoft.UI.Reactor.nupkg:
+    #   lib/<tfm>/Reactor.dll (+ Reactor.resources.dll satellite)        <- src\Reactor\bin
+    #   analyzers/dotnet/cs/Reactor.Analyzers.dll                         <- src\Reactor.Analyzers\bin
+    #   analyzers/dotnet/cs/Reactor.Localization.Generator.dll            <- src\Reactor.Localization.Generator\bin
+    # Each glob is scoped to its project's bin\ dir so we sign only our own assemblies
+    # (never restored third-party DLLs).
     - ${{ if eq(parameters.sign, true) }}:
       - task: onebranch.pipeline.signing@1
-        displayName: 'Sign framework assembly (Authenticode, pre-pack)'
+        displayName: 'Sign packed assemblies (Authenticode, pre-pack)'
         inputs:
           command: 'sign'
           signing_environment: '${{ parameters.signingEnvironment }}'
-          # Only our authored assembly ships in the package's lib/ folder.
-          files_to_sign: '**/Reactor.dll;**/Reactor.resources.dll'
-          search_root: '$(Build.SourcesDirectory)\src\Reactor\bin\${{ parameters.configuration }}'
+          files_to_sign: 'Reactor\bin\**\Reactor.dll;Reactor\bin\**\Reactor.resources.dll;Reactor.Analyzers\bin\**\Reactor.Analyzers.dll;Reactor.Localization.Generator\bin\**\Reactor.Localization.Generator.dll'
+          search_root: '$(Build.SourcesDirectory)\src'
 
     - pwsh: |
         dotnet pack src/Reactor/Reactor.csproj `
