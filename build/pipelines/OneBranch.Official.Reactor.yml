@@ -105,14 +105,11 @@ extends:
               version: ${{ parameters.version }}
               runTests: false # selftests/E2E need a live WinUI window; not available in the docked container
               pack: true
-
-          - task: onebranch.pipeline.signing@1
-            displayName: 'Sign output'
-            inputs:
-              command: 'sign'
-              signing_environment: 'azure-ado'
-              files_to_sign: '**/*.exe;**/*.dll;**/*.nupkg;**/*.ps1;**/*.psm1'
-              search_root: '$(Build.SourcesDirectory)\out'
+              # Two-phase ESRP signing (Official builds only): Authenticode-sign the framework
+              # assembly + mur binaries BEFORE pack/zip so the DLLs inside the .nupkg and the
+              # skill-kit zip are signed, then NuGet-sign the .nupkg containers after pack.
+              sign: true
+              signingEnvironment: 'azure-ado'
 # uncomment this section and edit parameters to enable VSTest instead of dotnet tests. When you enable this you dont need publish test results and codecoverage steps
          # - task: VSTest@3
          #   inputs:

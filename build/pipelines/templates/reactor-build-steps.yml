@@ -40,6 +40,14 @@ parameters:
     displayName: 'Pack NuGet packages + assemble the skill kit.'
     type: boolean
     default: true
+  - name: sign
+    displayName: 'ESRP-sign outputs (Authenticode binaries before pack, NuGet-sign .nupkg after). Official builds only.'
+    type: boolean
+    default: false
+  - name: signingEnvironment
+    displayName: 'onebranch.pipeline.signing signing_environment (e.g. azure-ado).'
+    type: string
+    default: 'azure-ado'
 
 steps:
   - task: UseDotNet@2
@@ -236,6 +244,22 @@ steps:
         failTaskOnFailedTests: true
 
   - ${{ if eq(parameters.pack, true) }}:
+    # ── Phase 1a: Authenticode-sign the framework assembly BEFORE packing. ──
+    # `dotnet pack --no-build` zips the existing build output (src/Reactor/bin) into the
+    # .nupkg's lib/ folder, so the DLL must be signed HERE for the SIGNED copy to land
+    # inside Microsoft.UI.Reactor.nupkg. Signing the .nupkg later (Phase 2) only seals the
+    # package container; it does NOT reach the assemblies within. ESRP NuGet-signs .nupkg
+    # and Authenticode-signs .dll/.exe based on file type (OneBranch Signing FAQ).
+    - ${{ if eq(parameters.sign, true) }}:
+      - task: onebranch.pipeline.signing@1
+        displayName: 'Sign framework assembly (Authenticode, pre-pack)'
+        inputs:
+          command: 'sign'
+          signing_environment: '${{ parameters.signingEnvironment }}'
+          # Only our authored assembly ships in the package's lib/ folder.
+          files_to_sign: '**/Reactor.dll;**/Reactor.resources.dll'
+          search_root: '$(Build.SourcesDirectory)\src\Reactor\bin\${{ parameters.configuration }}'
+
     - pwsh: |
         dotnet pack src/Reactor/Reactor.csproj `
           --no-build --configuration ${{ parameters.configuration }} `
@@ -271,6 +295,18 @@ steps:
           -o "${{ parameters.outputDirectory }}\mur\arm64"
       displayName: 'Publish mur (win-arm64)'
 
+    # ── Phase 1b: Authenticode-sign the mur CLI binaries BEFORE they are copied into
+    # the skill-kit staging tree, so the binaries inside reactor-skill-kit-*.zip (and the
+    # loose out\mur artifacts) are signed. The .zip itself is not Authenticode-signable.
+    - ${{ if eq(parameters.sign, true) }}:
+      - task: onebranch.pipeline.signing@1
+        displayName: 'Sign mur binaries (Authenticode, pre-zip)'
+        inputs:
+          command: 'sign'
+          signing_environment: '${{ parameters.signingEnvironment }}'
+          files_to_sign: '**/*.exe;**/*.dll'
+          search_root: '${{ parameters.outputDirectory }}\mur'
+
     - pwsh: |
         $version = '$(PackageVersion)'
         $outDir = '${{ parameters.outputDirectory }}'
@@ -286,6 +322,24 @@ steps:
         Copy-Item "$outDir\mur\arm64\*" "$stage\bin\arm64\" -Recurse
         Copy-Item tools/install-skill-kit.ps1 "$stage\install-skill-kit.ps1"
 
+        Write-Host "Staged kit at: $stage"
+      displayName: 'Stage skill kit'
+
+    # Sign the installer script in the staging tree BEFORE zipping (the mur binaries
+    # copied above are already signed from Phase 1b and retain their signatures).
+    - ${{ if eq(parameters.sign, true) }}:
+      - task: onebranch.pipeline.signing@1
+        displayName: 'Sign skill-kit scripts (Authenticode, pre-zip)'
+        inputs:
+          command: 'sign'
+          signing_environment: '${{ parameters.signingEnvironment }}'
+          files_to_sign: '**/*.ps1;**/*.psm1'
+          search_root: '${{ parameters.outputDirectory }}\kit-stage'
+
+    - pwsh: |
+        $version = '$(PackageVersion)'
+        $outDir = '${{ parameters.outputDirectory }}'
+
         New-Item -ItemType Directory -Force -Path "$outDir\kit" | Out-Null
         $zip = "$outDir\kit\reactor-skill-kit-$version.zip"
         Compress-Archive -Path "$outDir\kit-stage\reactor" -DestinationPath $zip -Force
@@ -294,4 +348,16 @@ steps:
         Remove-Item -Recurse -Force "$outDir\kit-stage"
 
         Write-Host "Kit: $zip"
-      displayName: 'Assemble skill kit'
+      displayName: 'Zip skill kit'
+
+    # ── Phase 2: NuGet-sign the packages AFTER pack. This seals each .nupkg as a whole
+    # (tamper-evidence + authenticity of the package container). The assemblies inside
+    # were already Authenticode-signed in Phase 1a.
+    - ${{ if eq(parameters.sign, true) }}:
+      - task: onebranch.pipeline.signing@1
+        displayName: 'Sign NuGet packages (post-pack)'
+        inputs:
+          command: 'sign'
+          signing_environment: '${{ parameters.signingEnvironment }}'
+          files_to_sign: '**/*.nupkg'
+          search_root: '${{ parameters.outputDirectory }}\nupkg'
