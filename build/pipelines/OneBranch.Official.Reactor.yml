@@ -90,7 +90,10 @@ extends:
           ob_outputDirectory: '$(Build.SourcesDirectory)\out' # this directory is uploaded to pipeline artifacts, reddog and cloudvault. More info at https://aka.ms/obpipelines/artifacts
           ob_git_fetchDepth: -1 # full git history + tags so MinVer can derive the version (shallow clone => 0.1.0 fallback)
           # https://aka.ms/obpipelines/sdl
+          ob_sdl_binskim_enabled: true # run BinSkim (matches CI; explicit for parity)
           ob_sdl_binskim_break: true # always break the build on binskim issues, even if TSA enabled. You can disable it by setting to 'false'
+          # NOTE: unlike CI, Official does NOT set ob_sdl_binskim_scanOutputDirectoryOnly -- the
+          # release build scans the full tree (stricter compliance posture), not just out\.
           ${{ if eq(variables['Build.SourceBranch'], 'refs/heads/main') }}: # conditionally enable symbolsPublishing for main branch only
             ob_symbolsPublishing_enabled: true # https://aka.ms/obpipelines/symbols
           # ob_sdl_suppression_suppressionFile: $(Build.SourcesDirectory)\.gdn\job.gdnsuppress
