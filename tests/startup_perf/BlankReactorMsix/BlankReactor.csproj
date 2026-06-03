@@ -64,6 +64,9 @@
     <SelfContained>true</SelfContained>
     <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <!-- AOT off: the shared EventSource tracing helper relies on EventSource.Write()
+         over [EventData] payloads, which NativeAOT trims and turns into zero ETW events. -->
+    <PublishAot>false</PublishAot>
     <AppxBundle>Never</AppxBundle>
     <AppxAutoIncrementPackageRevision>False</AppxAutoIncrementPackageRevision>
     <AppxSymbolPackageEnabled>False</AppxSymbolPackageEnabled>

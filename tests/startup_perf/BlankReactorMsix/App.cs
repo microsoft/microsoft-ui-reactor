@@ -79,7 +79,7 @@ internal sealed class BlankApp : Component
             };
             CompositionTarget.Rendering += handler;
 
-            return () => { /* one-shot — handler unsubscribes itself */ };
+            return () => CompositionTarget.Rendering -= handler;
         }, Array.Empty<object>());
 
         // Single TextBlock only — see file header comment for why no other UI.

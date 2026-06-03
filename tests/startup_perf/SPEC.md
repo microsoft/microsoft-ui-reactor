@@ -67,7 +67,7 @@ so our regions still resolve.
 ```
 
 ```
-BlankWinUI3 (C# AOT):
+BlankWinUI3 (C# non-AOT):
   Main()
     [Metrics.RecordAppStart; BenchmarkTracing.TraceWinMainEntry]
     → Application.Start
@@ -81,7 +81,7 @@ BlankWinUI3 (C# AOT):
 ```
 
 ```
-BlankReactor / BlankReactorMsix (C# AOT):
+BlankReactor / BlankReactorMsix (C# non-AOT):
   Main()
     [Metrics.RecordAppStart; BenchmarkTracing.TraceWinMainEntry]
     → ReactorApp.Run<BlankApp>
