@@ -265,6 +265,7 @@ internal static class SelfTestFixtureRegistry
         "PropertyGrid_Array_NonGenericList_RemoveOnly",
         "PropertyGrid_Array_ObservableCollection_ExternalAndGridMutations",
         "PropertyGrid_Array_ObservableItem_PropertyChanged_Rerenders",
+        "PropertyGrid_Array_CustomMetadata_EnumerableAdapter",
         // Localization
         "Localization_LocaleSwitching",
         // TypeRegistration mismatch regression
@@ -1489,6 +1490,7 @@ internal static class SelfTestFixtureRegistry
         "PropertyGrid_Array_NonGenericList_RemoveOnly" => new PropertyGridFixtures.Array_NonGenericList_RemoveOnly(harness),
         "PropertyGrid_Array_ObservableCollection_ExternalAndGridMutations" => new PropertyGridFixtures.Array_ObservableCollection_ExternalAndGridMutations(harness),
         "PropertyGrid_Array_ObservableItem_PropertyChanged_Rerenders" => new PropertyGridFixtures.Array_ObservableItem_PropertyChanged_Rerenders(harness),
+        "PropertyGrid_Array_CustomMetadata_EnumerableAdapter" => new PropertyGridFixtures.Array_CustomMetadata_EnumerableAdapter(harness),
         // Localization
         "Localization_LocaleSwitching" => new LocalizationFixtures.LocaleSwitching(harness),
         // TypeRegistration mismatch regression

@@ -3,6 +3,7 @@ using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Layout;
 using Microsoft.UI.Reactor.Controls;
+using Microsoft.UI.Reactor.Data;
 using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
@@ -203,6 +204,11 @@ internal static class PropertyGridFixtures
     private class CollectionContractModel
     {
         public ICollection<string> Items { get; set; } = new List<string> { "col-a", "col-b" };
+    }
+
+    private class EnumerableAdapterModel
+    {
+        public IEnumerable<string> Source { get; set; } = new[] { "adapt-a", "adapt-b" }.Select(x => x);
     }
 
     private class NonGenericListModel
@@ -580,7 +586,6 @@ internal static class PropertyGridFixtures
             H.Check("ArrayEditors_ReadOnlyToolbar", H.FindText("ReadOnlyTags (2)") is not null);
             H.Check("ArrayEditors_ReadOnlyCollectionToolbar", H.FindText("ReadOnlyCollectionTags (2)") is not null);
             H.Check("ArrayEditors_ReadOnlySetToolbar", H.FindText("ReadOnlySetTags (2)") is not null);
-            H.Check("ArrayEditors_EnumerableToolbar", H.FindText("EnumerableTags (2)") is not null);
             H.Check("ArrayEditors_SetToolbar", H.FindText("SetTags (2)") is not null);
             H.Check("ArrayEditors_QueueToolbar", H.FindText("QueueTags (2)") is not null);
             H.Check("ArrayEditors_StackToolbar", H.FindText("StackTags (2)") is not null);
@@ -588,7 +593,6 @@ internal static class PropertyGridFixtures
             H.Check("ArrayEditors_NonGenericToolbar", H.FindText("Objects (2)") is not null);
             H.Check("ArrayEditors_NonGenericIListToolbar", H.FindText("NonGenericList (2)") is not null);
             H.Check("ArrayEditors_NonGenericICollectionToolbar", H.FindText("NonGenericCollection (2)") is not null);
-            H.Check("ArrayEditors_NonGenericIEnumerableToolbar", H.FindText("NonGenericEnumerable (2)") is not null);
             H.Check("ArrayEditors_GenericOnlyIListToolbar", H.FindText("GenericOnlyTags (2)") is not null);
             H.Check("ArrayEditors_HidesListToString",
                 H.FindTextContaining("System.Collections.Generic.List") is null);
@@ -596,12 +600,14 @@ internal static class PropertyGridFixtures
                 H.FindText("Map (2)") is null);
             H.Check("ArrayEditors_DoesNotTreatStringAsCollection",
                 H.FindText("Text (16)") is null);
+            H.Check("ArrayEditors_DoesNotTreatGenericEnumerableAsCollection",
+                H.FindText("EnumerableTags (2)") is null);
+            H.Check("ArrayEditors_DoesNotTreatNonGenericEnumerableAsCollection",
+                H.FindText("NonGenericEnumerable (2)") is null);
             H.Check("ArrayEditors_ShowsListItems",
                 H.FindText("a") is not null && H.FindText("b") is not null);
             H.Check("ArrayEditors_ShowsArrayItems",
                 H.FindText("x") is not null && H.FindText("y") is not null);
-            H.Check("ArrayEditors_ShowsEnumerableItems",
-                H.FindText("en-a") is not null && H.FindText("en-b") is not null);
             H.Check("ArrayEditors_ShowsConcreteCollectionItems",
                 H.FindText("queue-a") is not null
                 && H.FindText("stack-a") is not null
@@ -617,7 +623,6 @@ internal static class PropertyGridFixtures
             H.Check("ArrayEditors_HidesReadOnlyAddButton", FindAddButton(H, "ReadOnlyTags") is null);
             H.Check("ArrayEditors_HidesReadOnlyCollectionAddButton", FindAddButton(H, "ReadOnlyCollectionTags") is null);
             H.Check("ArrayEditors_HidesReadOnlySetAddButton", FindAddButton(H, "ReadOnlySetTags") is null);
-            H.Check("ArrayEditors_HidesEnumerableAddButton", FindAddButton(H, "EnumerableTags") is null);
             H.Check("ArrayEditors_HidesSetAddButton", FindAddButton(H, "SetTags") is null);
             H.Check("ArrayEditors_HidesQueueAddButton", FindAddButton(H, "QueueTags") is null);
             H.Check("ArrayEditors_HidesStackAddButton", FindAddButton(H, "StackTags") is null);
@@ -801,6 +806,42 @@ internal static class PropertyGridFixtures
             await Harness.Render();
 
             H.Check("ArrayObservableItem_NewItemSubscribedAfterAdd", H.FindText("item-c-renamed") is not null);
+        }
+    }
+
+    internal class Array_CustomMetadata_EnumerableAdapter(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var model = new EnumerableAdapterModel();
+            var registry = new TypeRegistry();
+            registry.Register<EnumerableAdapterModel>(new TypeMetadata
+            {
+                Decompose = owner =>
+                {
+                    var current = ((EnumerableAdapterModel)owner).Source.ToArray();
+                    return
+                    [
+                        new FieldDescriptor
+                        {
+                            Name = nameof(EnumerableAdapterModel.Source),
+                            DisplayName = "AdaptedSource",
+                            FieldType = typeof(IReadOnlyList<string>),
+                            GetValue = _ => current,
+                            IsReadOnly = true,
+                        }
+                    ];
+                },
+            });
+
+            var host = H.CreateHost();
+            host.Mount(_ => PropertyGrid(model, registry));
+            await Harness.Render();
+
+            H.Check("ArrayEnumerableAdapter_ShowsToolbar", H.FindText("AdaptedSource (2)") is not null);
+            H.Check("ArrayEnumerableAdapter_ShowsItems",
+                H.FindText("adapt-a") is not null && H.FindText("adapt-b") is not null);
+            H.Check("ArrayEnumerableAdapter_ReadOnlyNoAdd", FindAddButton(H, "AdaptedSource") is null);
         }
     }
 

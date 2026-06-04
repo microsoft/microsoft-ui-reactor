@@ -45,6 +45,13 @@ public class PropertyGridArrayTests
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
     }
 
+    private sealed class EnumerableOnly<T> : IEnumerable<T>
+    {
+        private readonly List<T> _items = [];
+        public IEnumerator<T> GetEnumerator() => _items.GetEnumerator();
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
     // ── Array resolution ──────────────────────────────────────────
 
     [Fact]
@@ -250,7 +257,7 @@ public class PropertyGridArrayTests
         Assert.Equal(typeof(int), ArrayOperations.GetElementType(typeof(IReadOnlyList<int>)));
         Assert.Equal(typeof(int), ArrayOperations.GetElementType(typeof(IReadOnlyCollection<int>)));
         Assert.Equal(typeof(int), ArrayOperations.GetElementType(typeof(IReadOnlySet<int>)));
-        Assert.Equal(typeof(int), ArrayOperations.GetElementType(typeof(IEnumerable<int>)));
+        Assert.Null(ArrayOperations.GetElementType(typeof(IEnumerable<int>)));
     }
 
     [Fact]
@@ -269,7 +276,7 @@ public class PropertyGridArrayTests
     {
         Assert.Equal(typeof(object), ArrayOperations.GetElementType(typeof(IList)));
         Assert.Equal(typeof(object), ArrayOperations.GetElementType(typeof(ICollection)));
-        Assert.Equal(typeof(object), ArrayOperations.GetElementType(typeof(IEnumerable)));
+        Assert.Null(ArrayOperations.GetElementType(typeof(IEnumerable)));
         Assert.Equal(typeof(object), ArrayOperations.GetElementType(typeof(ArrayList)));
     }
 
@@ -277,7 +284,7 @@ public class PropertyGridArrayTests
     public void GetElementType_Does_Not_Treat_String_Or_Domain_Enumerable_As_Collection()
     {
         Assert.Null(ArrayOperations.GetElementType(typeof(string)));
-        Assert.Null(ArrayOperations.GetElementType(typeof(GenericOnlyList<string>)));
+        Assert.Null(ArrayOperations.GetElementType(typeof(EnumerableOnly<string>)));
         Assert.Null(ArrayOperations.GetElementType(typeof(int[,]))); // multi-dimensional arrays are not list-like
     }
 
@@ -292,7 +299,7 @@ public class PropertyGridArrayTests
         Assert.IsType<ArrayTypeMetadata>(registry.Resolve(typeof(IReadOnlyList<string>)));
         Assert.IsType<ArrayTypeMetadata>(registry.Resolve(typeof(IReadOnlyCollection<string>)));
         Assert.IsType<ArrayTypeMetadata>(registry.Resolve(typeof(IReadOnlySet<string>)));
-        Assert.IsType<ArrayTypeMetadata>(registry.Resolve(typeof(IEnumerable<string>)));
+        Assert.NotNull(registry.Resolve(typeof(IEnumerable<string>)).Decompose);
         Assert.IsType<ArrayTypeMetadata>(registry.Resolve(typeof(ArrayList)));
     }
 
@@ -460,31 +467,21 @@ public class PropertyGridArrayTests
     }
 
     [Fact]
-    public void GetCount_And_GetItem_Work_For_ReadOnly_And_Enumerable_Collections()
+    public void GetCount_And_GetItem_Work_For_ReadOnly_Collections()
     {
         IReadOnlyList<string> readOnlyList = new List<string> { "a", "b", "c" };
-        IEnumerable<string> enumerable = Yield("x", "y", "z");
 
         Assert.Equal(3, ArrayOperations.GetCount(readOnlyList));
         Assert.Equal("b", ArrayOperations.GetItem(readOnlyList, 1));
-        Assert.Equal(3, ArrayOperations.GetCount(enumerable));
-        Assert.Equal("y", ArrayOperations.GetItem(enumerable, 1));
     }
 
     [Fact]
-    public void Snapshot_Enumerates_Lazy_Enumerable_Only_Once()
+    public void Snapshot_Captures_Collection_State_For_Current_Render()
     {
-        var enumerations = 0;
-        IEnumerable<string> Lazy()
-        {
-            enumerations++;
-            yield return "a";
-            yield return "b";
-        }
+        var items = new List<string> { "a", "b" };
+        var snapshot = ArrayOperations.Snapshot(items);
+        items.Add("c");
 
-        var snapshot = ArrayOperations.Snapshot(Lazy());
-
-        Assert.Equal(1, enumerations);
         Assert.Equal(new[] { "a", "b" }, snapshot);
     }
 
@@ -537,8 +534,6 @@ public class PropertyGridArrayTests
 
         Assert.Equal(default, ArrayOperations.GetCapabilities(
             list, typeof(IReadOnlyList<string>), canWriteBack: true, isReadOnly: false));
-        Assert.Equal(default, ArrayOperations.GetCapabilities(
-            list, typeof(IEnumerable<string>), canWriteBack: true, isReadOnly: false));
     }
 
     [Fact]
@@ -575,12 +570,6 @@ public class PropertyGridArrayTests
     {
         Assert.Null(ArrayOperations.GetElementType(typeof(string)));
         Assert.Null(ArrayOperations.GetElementType(typeof(Dictionary<string, int>)));
-    }
-
-    private static IEnumerable<T> Yield<T>(params T[] items)
-    {
-        foreach (var item in items)
-            yield return item;
     }
 
     // ── Test model ────────────────────────────────────────────────
