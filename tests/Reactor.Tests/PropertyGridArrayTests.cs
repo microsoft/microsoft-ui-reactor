@@ -521,8 +521,8 @@ public class PropertyGridArrayTests
             canWriteBack: true,
             isReadOnly: false);
 
-        Assert.True(caps.CanAdd);
-        Assert.True(caps.CanRemoveAt);
+        Assert.Equal(global::System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported, caps.CanAdd);
+        Assert.Equal(global::System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported, caps.CanRemoveAt);
         Assert.True(caps.CanReplaceAt);
         Assert.True(caps.CanReorder);
     }

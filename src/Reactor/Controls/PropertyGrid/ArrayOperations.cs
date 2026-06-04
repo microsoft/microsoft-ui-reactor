@@ -248,13 +248,16 @@ internal static class ArrayOperations
             return default;
 
         if (collection is Array array && IsZeroBasedOneDimensional(array))
+        {
+            var canResize = canWriteBack && RuntimeFeature.IsDynamicCodeSupported;
             return canWriteBack
                 ? new CollectionCapabilities(
-                    CanAdd: true,
-                    CanRemoveAt: true,
+                    CanAdd: canResize,
+                    CanRemoveAt: canResize,
                     CanReplaceAt: true,
                     CanReorder: true)
                 : default;
+        }
 
         if (collection is IList list)
         {

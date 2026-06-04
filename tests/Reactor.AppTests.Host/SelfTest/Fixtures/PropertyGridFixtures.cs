@@ -738,7 +738,8 @@ internal static class PropertyGridFixtures
                 H.FindText("[0]") is not null && H.FindText("[1]") is not null);
 
             H.Check("ArrayEditors_ShowsListAddButton", FindAddButton(H, "Tags") is not null);
-            H.Check("ArrayEditors_ShowsArrayAddButton", FindAddButton(H, "Codes") is not null);
+            H.Check("ArrayEditors_ArrayAddButtonMatchesRuntime",
+                (FindAddButton(H, "Codes") is not null) == global::System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported);
             H.Check("ArrayEditors_ShowsIListAddButton", FindAddButton(H, "InterfaceTags") is not null);
             H.Check("ArrayEditors_ShowsICollectionAddButton", FindAddButton(H, "CollectionTags") is not null);
             H.Check("ArrayEditors_HidesISetAddButton", FindAddButton(H, "SetContractTags") is null);
@@ -795,6 +796,12 @@ internal static class PropertyGridFixtures
             var host = H.CreateHost();
             host.Mount(_ => PropertyGrid(model, registry));
             await Harness.Render();
+
+            if (!global::System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported)
+            {
+                H.Check("ArrayArrayOps_AddHiddenWithoutDynamicCode", FindAddButton(H, "Codes") is null);
+                return;
+            }
 
             var original = model.Codes;
             Invoke(FindAddButton(H, "Codes")!);
