@@ -257,6 +257,7 @@ internal static class ControlledOptionalSelfTestHelpers
     }
 
 
+    internal static async Task RunFamilyAsync<TControl, TValue>(
         Harness h,
         string fixtureName,
         IReadOnlyList<Scenario<TControl, TValue>> scenarios)
