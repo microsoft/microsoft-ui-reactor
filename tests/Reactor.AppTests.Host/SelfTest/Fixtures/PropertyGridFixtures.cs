@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Layout;
@@ -569,6 +570,7 @@ internal static class PropertyGridFixtures
 
     internal class Array_CollectionVariantMatrix(Harness h) : SelfTestFixtureBase(h)
     {
+        [DynamicDependency(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors, typeof(CollectionModel))]
         public override async Task RunAsync()
         {
             var model = new CollectionModel();
@@ -634,6 +636,7 @@ internal static class PropertyGridFixtures
 
     internal class Array_List_AddRemove(Harness h) : SelfTestFixtureBase(h)
     {
+        [DynamicDependency(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors, typeof(CollectionModel))]
         public override async Task RunAsync()
         {
             var model = new CollectionModel();
@@ -663,6 +666,7 @@ internal static class PropertyGridFixtures
 
     internal class Array_Array_AddRemove_ReplacesProperty(Harness h) : SelfTestFixtureBase(h)
     {
+        [DynamicDependency(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors, typeof(ArrayOnlyModel))]
         public override async Task RunAsync()
         {
             var model = new ArrayOnlyModel();
@@ -690,6 +694,7 @@ internal static class PropertyGridFixtures
 
     internal class Array_ICollection_AddRemove(Harness h) : SelfTestFixtureBase(h)
     {
+        [DynamicDependency(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors, typeof(CollectionContractModel))]
         public override async Task RunAsync()
         {
             var model = new CollectionContractModel();
@@ -715,6 +720,7 @@ internal static class PropertyGridFixtures
 
     internal class Array_NonGenericList_RemoveOnly(Harness h) : SelfTestFixtureBase(h)
     {
+        [DynamicDependency(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors, typeof(NonGenericListModel))]
         public override async Task RunAsync()
         {
             var model = new NonGenericListModel();
@@ -736,6 +742,7 @@ internal static class PropertyGridFixtures
 
     internal class Array_ObservableCollection_ExternalAndGridMutations(Harness h) : SelfTestFixtureBase(h)
     {
+        [DynamicDependency(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors, typeof(ObservableCollectionModel))]
         public override async Task RunAsync()
         {
             var model = new ObservableCollectionModel();
@@ -777,6 +784,8 @@ internal static class PropertyGridFixtures
 
     internal class Array_ObservableItem_PropertyChanged_Rerenders(Harness h) : SelfTestFixtureBase(h)
     {
+        [DynamicDependency(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors, typeof(ObservableItemCollectionModel))]
+        [DynamicDependency(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors, typeof(ObservableItem))]
         public override async Task RunAsync()
         {
             var model = new ObservableItemCollectionModel();
@@ -811,6 +820,7 @@ internal static class PropertyGridFixtures
 
     internal class Array_CustomMetadata_EnumerableAdapter(Harness h) : SelfTestFixtureBase(h)
     {
+        [DynamicDependency(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors, typeof(EnumerableAdapterModel))]
         public override async Task RunAsync()
         {
             var model = new EnumerableAdapterModel();
