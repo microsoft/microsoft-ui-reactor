@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
@@ -20,6 +21,18 @@ internal static class ArrayOperations
 {
     private static readonly Type[] GenericCollectionDefinitions =
     [
+        typeof(List<>),
+        typeof(Collection<>),
+        typeof(ObservableCollection<>),
+        typeof(ReadOnlyCollection<>),
+        typeof(HashSet<>),
+        typeof(SortedSet<>),
+        typeof(Queue<>),
+        typeof(Stack<>),
+        typeof(LinkedList<>),
+        typeof(ConcurrentBag<>),
+        typeof(ConcurrentQueue<>),
+        typeof(ConcurrentStack<>),
         typeof(IList<>),
         typeof(ICollection<>),
         typeof(ISet<>),
@@ -32,6 +45,9 @@ internal static class ArrayOperations
     [
         typeof(IList),
         typeof(ICollection),
+        typeof(ArrayList),
+        typeof(Queue),
+        typeof(Stack),
     ];
 
     /// <summary>
@@ -303,7 +319,6 @@ internal static class ArrayOperations
         return $"{name.Replace('+', '.')}<{args}>";
     }
 
-    [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = "PropertyGrid uses interface metadata only to classify collection contracts; missing metadata degrades to non-collection rendering.")]
     public static Type? GetElementType(Type collectionType)
     {
         if (collectionType == typeof(string))
@@ -325,13 +340,6 @@ internal static class ArrayOperations
 
         if (IsDictionaryLike(collectionType))
             return null;
-
-        foreach (var interfaceType in collectionType.GetInterfaces().Where(i => i.IsGenericType))
-        {
-            var genDef = interfaceType.GetGenericTypeDefinition();
-            if (GenericCollectionDefinitions.Contains(genDef))
-                return interfaceType.GetGenericArguments()[0];
-        }
 
         if (NonGenericCollectionTypes.Contains(collectionType) || typeof(IList).IsAssignableFrom(collectionType))
             return typeof(object);
@@ -357,11 +365,10 @@ internal static class ArrayOperations
     private static bool IsZeroBasedOneDimensional(Array array)
         => array.Rank == 1 && array.GetLowerBound(0) == 0;
 
-    [UnconditionalSuppressMessage("Trimming", "IL2070", Justification = "Dictionary detection uses interface metadata only to avoid treating map types as list-like collections.")]
     private static bool IsDictionaryLike(Type type)
         => typeof(IDictionary).IsAssignableFrom(type)
-            || type.GetInterfaces().Any(i =>
-                i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IDictionary<,>));
+            || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IDictionary<,>))
+            || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>));
 }
 
 internal readonly record struct CollectionCapabilities(
