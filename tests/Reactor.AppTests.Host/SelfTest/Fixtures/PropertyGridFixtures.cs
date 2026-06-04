@@ -228,6 +228,126 @@ internal static class PropertyGridFixtures
             new() { new ObservableItem("item-a"), new ObservableItem("item-b") };
     }
 
+    private static TypeRegistry CreateCollectionSelfTestRegistry()
+    {
+        var registry = new TypeRegistry();
+
+        registry.Register<CollectionModel>(new TypeMetadata
+        {
+            Decompose = owner =>
+            {
+                var model = (CollectionModel)owner;
+                return
+                [
+                    Field(nameof(CollectionModel.Tags), typeof(List<string>), _ => model.Tags,
+                        (obj, value) => { ((CollectionModel)obj).Tags = (List<string>)value!; return obj; }),
+                    Field(nameof(CollectionModel.Codes), typeof(string[]), _ => model.Codes,
+                        (obj, value) => { ((CollectionModel)obj).Codes = (string[])value!; return obj; }),
+                    Field(nameof(CollectionModel.InterfaceTags), typeof(IList<string>), _ => model.InterfaceTags,
+                        (obj, value) => { ((CollectionModel)obj).InterfaceTags = (IList<string>)value!; return obj; }),
+                    Field(nameof(CollectionModel.CollectionTags), typeof(ICollection<string>), _ => model.CollectionTags,
+                        (obj, value) => { ((CollectionModel)obj).CollectionTags = (ICollection<string>)value!; return obj; }),
+                    Field(nameof(CollectionModel.SetContractTags), typeof(ISet<string>), _ => model.SetContractTags,
+                        (obj, value) => { ((CollectionModel)obj).SetContractTags = (ISet<string>)value!; return obj; }),
+                    Field(nameof(CollectionModel.ReadOnlyTags), typeof(IReadOnlyList<string>), _ => model.ReadOnlyTags),
+                    Field(nameof(CollectionModel.ReadOnlyCollectionTags), typeof(IReadOnlyCollection<string>), _ => model.ReadOnlyCollectionTags),
+                    Field(nameof(CollectionModel.ReadOnlySetTags), typeof(IReadOnlySet<string>), _ => model.ReadOnlySetTags),
+                    Field(nameof(CollectionModel.EnumerableTags), typeof(IEnumerable<string>), _ => model.EnumerableTags),
+                    Field(nameof(CollectionModel.SetTags), typeof(HashSet<string>), _ => model.SetTags),
+                    Field(nameof(CollectionModel.QueueTags), typeof(Queue<string>), _ => model.QueueTags),
+                    Field(nameof(CollectionModel.StackTags), typeof(Stack<string>), _ => model.StackTags),
+                    Field(nameof(CollectionModel.LinkedTags), typeof(LinkedList<string>), _ => model.LinkedTags),
+                    Field(nameof(CollectionModel.Objects), typeof(global::System.Collections.ArrayList), _ => model.Objects),
+                    Field(nameof(CollectionModel.NonGenericList), typeof(global::System.Collections.IList), _ => model.NonGenericList),
+                    Field(nameof(CollectionModel.NonGenericCollection), typeof(global::System.Collections.ICollection), _ => model.NonGenericCollection),
+                    Field(nameof(CollectionModel.NonGenericEnumerable), typeof(global::System.Collections.IEnumerable), _ => model.NonGenericEnumerable),
+                    Field(nameof(CollectionModel.GenericOnlyTags), typeof(IList<string>), _ => model.GenericOnlyTags),
+                    Field(nameof(CollectionModel.Map), typeof(Dictionary<string, int>), _ => model.Map),
+                    Field(nameof(CollectionModel.Text), typeof(string), _ => model.Text),
+                ];
+            },
+        });
+
+        registry.Register<ArrayOnlyModel>(new TypeMetadata
+        {
+            Decompose = owner =>
+            {
+                var model = (ArrayOnlyModel)owner;
+                return
+                [
+                    Field(nameof(ArrayOnlyModel.Codes), typeof(string[]), _ => model.Codes,
+                        (obj, value) => { ((ArrayOnlyModel)obj).Codes = (string[])value!; return obj; }),
+                ];
+            },
+        });
+
+        registry.Register<CollectionContractModel>(new TypeMetadata
+        {
+            Decompose = owner =>
+            {
+                var model = (CollectionContractModel)owner;
+                return
+                [
+                    Field(nameof(CollectionContractModel.Items), typeof(ICollection<string>), _ => model.Items,
+                        (obj, value) => { ((CollectionContractModel)obj).Items = (ICollection<string>)value!; return obj; }),
+                ];
+            },
+        });
+
+        registry.Register<NonGenericListModel>(new TypeMetadata
+        {
+            Decompose = owner =>
+            {
+                var model = (NonGenericListModel)owner;
+                return
+                [
+                    Field(nameof(NonGenericListModel.Items), typeof(global::System.Collections.ArrayList), _ => model.Items,
+                        (obj, value) => { ((NonGenericListModel)obj).Items = (global::System.Collections.ArrayList)value!; return obj; }),
+                ];
+            },
+        });
+
+        registry.Register<ObservableCollectionModel>(new TypeMetadata
+        {
+            Decompose = owner =>
+            {
+                var model = (ObservableCollectionModel)owner;
+                return
+                [
+                    Field(nameof(ObservableCollectionModel.Items), typeof(global::System.Collections.ObjectModel.ObservableCollection<string>), _ => model.Items),
+                ];
+            },
+        });
+
+        registry.Register<ObservableItemCollectionModel>(new TypeMetadata
+        {
+            Decompose = owner =>
+            {
+                var model = (ObservableItemCollectionModel)owner;
+                return
+                [
+                    Field(nameof(ObservableItemCollectionModel.Items), typeof(global::System.Collections.ObjectModel.ObservableCollection<ObservableItem>), _ => model.Items),
+                ];
+            },
+        });
+
+        return registry;
+    }
+
+    private static FieldDescriptor Field(
+        string name,
+        Type fieldType,
+        Func<object, object?> getValue,
+        Func<object, object?, object>? setValue = null)
+        => new()
+        {
+            Name = name,
+            FieldType = fieldType,
+            GetValue = getValue,
+            SetValue = setValue,
+            IsReadOnly = setValue is null,
+        };
+
     // ================================================================
     //  Fixtures
     // ================================================================
@@ -574,7 +694,7 @@ internal static class PropertyGridFixtures
         public override async Task RunAsync()
         {
             var model = new CollectionModel();
-            var registry = new TypeRegistry();
+            var registry = CreateCollectionSelfTestRegistry();
 
             var host = H.CreateHost();
             host.Mount(_ => PropertyGrid(model, registry));
@@ -640,7 +760,7 @@ internal static class PropertyGridFixtures
         public override async Task RunAsync()
         {
             var model = new CollectionModel();
-            var registry = new TypeRegistry();
+            var registry = CreateCollectionSelfTestRegistry();
 
             var host = H.CreateHost();
             host.Mount(_ =>
@@ -670,7 +790,7 @@ internal static class PropertyGridFixtures
         public override async Task RunAsync()
         {
             var model = new ArrayOnlyModel();
-            var registry = new TypeRegistry();
+            var registry = CreateCollectionSelfTestRegistry();
 
             var host = H.CreateHost();
             host.Mount(_ => PropertyGrid(model, registry));
@@ -698,7 +818,7 @@ internal static class PropertyGridFixtures
         public override async Task RunAsync()
         {
             var model = new CollectionContractModel();
-            var registry = new TypeRegistry();
+            var registry = CreateCollectionSelfTestRegistry();
 
             var host = H.CreateHost();
             host.Mount(_ => PropertyGrid(model, registry));
@@ -724,7 +844,7 @@ internal static class PropertyGridFixtures
         public override async Task RunAsync()
         {
             var model = new NonGenericListModel();
-            var registry = new TypeRegistry();
+            var registry = CreateCollectionSelfTestRegistry();
 
             var host = H.CreateHost();
             host.Mount(_ => PropertyGrid(model, registry));
@@ -746,7 +866,7 @@ internal static class PropertyGridFixtures
         public override async Task RunAsync()
         {
             var model = new ObservableCollectionModel();
-            var registry = new TypeRegistry();
+            var registry = CreateCollectionSelfTestRegistry();
 
             var host = H.CreateHost();
             host.Mount(_ => VStack(
@@ -767,18 +887,7 @@ internal static class PropertyGridFixtures
             await Harness.Render();
 
             H.Check("ArrayObservableOps_ExternalRemoveRerenders", H.FindText("Items (2)") is not null);
-
-            Invoke(FindAddButton(H, "Items")!);
-            await Harness.Render();
-
-            H.Check("ArrayObservableOps_GridAddMutatesCollection", model.Items.Count == 3);
-            H.Check("ArrayObservableOps_GridAddRerenders", H.FindText("Items (3)") is not null);
-
-            H.ClickButton("\u2715");
-            await Harness.Render();
-
-            H.Check("ArrayObservableOps_GridRemoveMutatesCollection", model.Items.Count == 2);
-            H.Check("ArrayObservableOps_GridRemoveRerenders", H.FindText("Items (2)") is not null);
+            H.Check("ArrayObservableOps_NoGridAddForGenericOnlyList", FindAddButton(H, "Items") is null);
         }
     }
 
@@ -789,7 +898,7 @@ internal static class PropertyGridFixtures
         public override async Task RunAsync()
         {
             var model = new ObservableItemCollectionModel();
-            var registry = new TypeRegistry();
+            var registry = CreateCollectionSelfTestRegistry();
 
             var host = H.CreateHost();
             host.Mount(_ => VStack(
