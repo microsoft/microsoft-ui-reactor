@@ -258,6 +258,13 @@ internal static class SelfTestFixtureRegistry
         "PropertyGrid_Category_ExpandCollapse",
         "PropertyGrid_DeepNesting_RecordInRecord",
         "PropertyGrid_INPC_ExternalMutation",
+        "PropertyGrid_Array_CollectionVariantMatrix",
+        "PropertyGrid_Array_List_AddRemove",
+        "PropertyGrid_Array_Array_AddRemove_ReplacesProperty",
+        "PropertyGrid_Array_ICollection_AddRemove",
+        "PropertyGrid_Array_NonGenericList_RemoveOnly",
+        "PropertyGrid_Array_ObservableCollection_ExternalAndGridMutations",
+        "PropertyGrid_Array_ObservableItem_PropertyChanged_Rerenders",
         // Localization
         "Localization_LocaleSwitching",
         // TypeRegistration mismatch regression
@@ -1475,6 +1482,13 @@ internal static class SelfTestFixtureRegistry
         "PropertyGrid_Category_ExpandCollapse" => new PropertyGridFixtures.Category_ExpandCollapse(harness),
         "PropertyGrid_DeepNesting_RecordInRecord" => new PropertyGridFixtures.DeepNesting_RecordInRecord(harness),
         "PropertyGrid_INPC_ExternalMutation" => new PropertyGridFixtures.INPC_ExternalMutation(harness),
+        "PropertyGrid_Array_CollectionVariantMatrix" => new PropertyGridFixtures.Array_CollectionVariantMatrix(harness),
+        "PropertyGrid_Array_List_AddRemove" => new PropertyGridFixtures.Array_List_AddRemove(harness),
+        "PropertyGrid_Array_Array_AddRemove_ReplacesProperty" => new PropertyGridFixtures.Array_Array_AddRemove_ReplacesProperty(harness),
+        "PropertyGrid_Array_ICollection_AddRemove" => new PropertyGridFixtures.Array_ICollection_AddRemove(harness),
+        "PropertyGrid_Array_NonGenericList_RemoveOnly" => new PropertyGridFixtures.Array_NonGenericList_RemoveOnly(harness),
+        "PropertyGrid_Array_ObservableCollection_ExternalAndGridMutations" => new PropertyGridFixtures.Array_ObservableCollection_ExternalAndGridMutations(harness),
+        "PropertyGrid_Array_ObservableItem_PropertyChanged_Rerenders" => new PropertyGridFixtures.Array_ObservableItem_PropertyChanged_Rerenders(harness),
         // Localization
         "Localization_LocaleSwitching" => new LocalizationFixtures.LocaleSwitching(harness),
         // TypeRegistration mismatch regression

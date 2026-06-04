@@ -62,7 +62,7 @@ public class TypeRegistry
     /// 1. Exact match in registry
     /// 2. Enum — auto-generated ComboBox editor
     /// 3. CLR primitive — built-in editor
-    /// 4. Array/IList&lt;T&gt; — array editor
+    /// 4. Collection/enumerable shapes — array editor
     /// 5. Record/class/struct — reflection-based decomposition
     /// </summary>
     public TypeMetadata Resolve(
@@ -80,7 +80,7 @@ public class TypeRegistry
         if (TryResolvePrimitive(type, out var primitive))
             return primitive;
 
-        // 4. Array / IList<T>
+        // 4. Collection/enumerable shapes
         if (TryResolveArray(type, out var array))
             return array;
 
@@ -299,24 +299,18 @@ public class TypeRegistry
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicConstructors)] Type type, [NotNullWhen(true)] out TypeMetadata? metadata)
     {
         metadata = null;
-        Type? elementType = null;
-
-        if (type.IsArray)
-        {
-            elementType = type.GetElementType();
-        }
-        else if (type.IsGenericType)
-        {
-            var genDef = type.GetGenericTypeDefinition();
-            if (genDef == typeof(List<>) || genDef == typeof(IList<>))
-                elementType = type.GetGenericArguments()[0];
-        }
+        var elementType = ArrayOperations.GetElementType(type);
 
         if (elementType is null)
             return false;
 
         Func<Task<object?>>? createElement = null;
-        if (elementType.GetConstructor(Type.EmptyTypes) is not null)
+        if (elementType == typeof(string))
+        {
+            createElement = () => Task.FromResult<object?>("");
+        }
+        else if (elementType != typeof(object) &&
+            (elementType.IsValueType || elementType.GetConstructor(Type.EmptyTypes) is not null))
         {
             createElement = () => Task.FromResult<object?>(Activator.CreateInstance(elementType));
         }
