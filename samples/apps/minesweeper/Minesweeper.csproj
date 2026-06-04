@@ -9,6 +9,16 @@
     <Nullable>enable</Nullable>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
+    <!-- Reactor.Tests project-references this csproj for its
+         Minesweeper.Game/Persistence reducer types. Reactor.Tests is
+         WindowsAppSDKSelfContained=true (the test host has to bundle the
+         runtime since it loads WinUI activation factories from a
+         ModuleInitializer). The Minesweeper sample needs to stay =true
+         in lockstep so the WAS runtime assets staged by the project
+         reference match what the test-host bin/ expects — otherwise the
+         xUnit test host crashes ~96% of the way through the run while
+         loading Minesweeper.dll for the .Minesweeper.* reducer tests. -->
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <!-- Accept any installed .NET 10+ runtime; patch-only rollforward is the
          default but be explicit so binaries built on a preview SDK still
          launch on a stable runtime install. -->
