@@ -326,11 +326,8 @@ internal static class ArrayOperations
         if (IsDictionaryLike(collectionType))
             return null;
 
-        foreach (var interfaceType in collectionType.GetInterfaces())
+        foreach (var interfaceType in collectionType.GetInterfaces().Where(i => i.IsGenericType))
         {
-            if (!interfaceType.IsGenericType)
-                continue;
-
             var genDef = interfaceType.GetGenericTypeDefinition();
             if (GenericCollectionDefinitions.Contains(genDef))
                 return interfaceType.GetGenericArguments()[0];

@@ -208,7 +208,7 @@ internal static class PropertyGridFixtures
 
     private class EnumerableAdapterModel
     {
-        public IEnumerable<string> Source { get; set; } = new[] { "adapt-a", "adapt-b" }.Select(x => x);
+        public IEnumerable<string> Source { get; set; } = ["adapt-a", "adapt-b"];
     }
 
     private class NonGenericListModel
