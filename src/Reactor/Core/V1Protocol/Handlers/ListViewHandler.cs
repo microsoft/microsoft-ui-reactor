@@ -106,8 +106,14 @@ internal sealed class ListViewHandler : IElementHandler<ListViewElement, WinUI.L
         // src/Reactor/Core/ChangeEchoSuppressor.cs: BeginSuppress always
         // increments, ShouldSuppress only consumes on a real event, so an
         // unconsumed token would swallow the next real user input.
+        //
+        // Spec 050: Optional.Of(-1) is the explicit force-clear sentinel
+        // (see ListViewElement.SelectedIndex XML doc and
+        // docs/guide/migration/050-optional-t.md). WinUI accepts -1 as
+        // "deselect", so write it through the same drift gate. Optional<int>.Unset
+        // (HasValue == false) means "control owns the selection" and falls
+        // through without a write.
         if (lv.SelectedIndex is { HasValue: true } mountIndex
-            && mountIndex.Value >= 0
             && listView.SelectedIndex != mountIndex.Value)
         {
             ReactorBinding.WriteSuppressed(listView, () => listView.SelectedIndex = mountIndex.Value);
@@ -168,9 +174,9 @@ internal sealed class ListViewHandler : IElementHandler<ListViewElement, WinUI.L
         // Issue #495 — wrap the SelectedIndex write so the SelectionChanged
         // ListView fires after the property set doesn't echo back into
         // OnSelectedIndexChanged. Only arm on real drift (see Mount comment
-        // above and the GridView analog wired for issue #464).
+        // above and the GridView analog wired for issue #464). Spec 050: -1
+        // is the explicit force-clear sentinel; Unset means "control owns it".
         if (n.SelectedIndex is { HasValue: true } updateIndex
-            && updateIndex.Value >= 0
             && lv.SelectedIndex != updateIndex.Value)
         {
             ReactorBinding.WriteSuppressed(lv, () => lv.SelectedIndex = updateIndex.Value);

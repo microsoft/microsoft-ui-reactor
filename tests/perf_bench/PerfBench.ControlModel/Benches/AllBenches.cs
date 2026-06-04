@@ -748,9 +748,10 @@ public sealed class OptionalElementAllocBench : IBench
 
     public void RunOne(BenchVariant variant, BenchContext ctx)
     {
-        var textValue = TextBox(Optional<string>.Of("x"), static _ => { });
+        var textValue = TextBox("x", static _ => { });
         var textUnset = TextBox(Optional<string>.Unset, static _ => { });
-        var gridValue = GridView(Optional<int>.Of(1), static _ => { }, GridItems);
+        int? gridIndex = 1;
+        var gridValue = GridView(gridIndex, static _ => { }, GridItems);
         var gridUnset = GridView(Optional<int>.Unset, static _ => { }, GridItems);
 
         GC.KeepAlive(textValue);
@@ -792,7 +793,7 @@ public sealed class OptionalReconcilerUpdateBench : IBench
 
         public Fixture(BenchContext ctx)
         {
-            _hasValueElement = ToggleSwitch(Optional<bool>.Of(false), static _ => { }).Margin(0);
+            _hasValueElement = ToggleSwitch(false, static _ => { }).Margin(0);
             _unsetElement = ToggleSwitch(Optional<bool>.Unset, static _ => { }).Margin(0);
             _hasValueControl = ctx.Reconciler.Mount(_hasValueElement, NoOp)!;
             _unsetControl = ctx.Reconciler.Mount(_unsetElement, NoOp)!;
@@ -803,7 +804,7 @@ public sealed class OptionalReconcilerUpdateBench : IBench
         public void Update(BenchContext ctx)
         {
             var alt = (ctx.Iteration & 1) == 0;
-            var nextHasValue = ToggleSwitch(Optional<bool>.Of(alt), static _ => { }).Margin(alt ? 0 : 1);
+            var nextHasValue = ToggleSwitch(alt, static _ => { }).Margin(alt ? 0 : 1);
             var nextUnset = ToggleSwitch(Optional<bool>.Unset, static _ => { }).Margin(alt ? 0 : 1);
 
             ctx.Reconciler.UpdateChild(_hasValueElement, nextHasValue, _hasValueControl, NoOp);

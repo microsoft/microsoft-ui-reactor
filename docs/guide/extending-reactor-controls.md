@@ -369,7 +369,7 @@ public static class StarMeter
         int maxRating = 5,
         string? caption = null,
         bool isClearEnabled = true) =>
-        Of(Optional<double>.Of(value), onValueChanged, maxRating, caption, isClearEnabled);
+        Of(value, onValueChanged, maxRating, caption, isClearEnabled);
 
     public static StarMeterElement Of(
         Optional<double> value,

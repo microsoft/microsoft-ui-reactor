@@ -212,7 +212,51 @@ internal static class ControlledOptionalSelfTestHelpers
             callbackObserved);
     }
 
-    internal static async Task RunFamilyAsync<TControl, TValue>(
+    internal static async Task RunForceClearSentinelAsync<TControl>(
+        Harness h,
+        string fixtureName,
+        Scenario<TControl, int> scenario)
+        where TControl : DependencyObject
+    {
+        // Spec 050 sentinel contract: Optional.Of(-1) must force-clear the
+        // selection (control's SelectedIndex == -1 / SelectedItem == null)
+        // even after a prior positive user selection. See
+        // docs/guide/migration/050-optional-t.md and the per-control XML
+        // doc on SelectedIndex.
+        using var host = h.CreateHost();
+        var clearLabel = $"{fixtureName}_{scenario.Name}_ForceClear_Trigger";
+        host.Mount(ctx =>
+        {
+            var (clear, setClear) = ctx.UseState(false);
+            var value = clear ? Optional<int>.Of(-1) : Optional<int>.Of(scenario.FirstValue);
+            return VStack(
+                Button(clearLabel, () => setClear(true)),
+                scenario.CreateElement(value, _ => { }));
+        });
+
+        await Harness.Render();
+        var control = scenario.FindControl(h);
+        h.Check($"{fixtureName}_{scenario.Name}_ForceClear_ControlFound", control is not null);
+        if (control is null) return;
+
+        h.Check(
+            $"{fixtureName}_{scenario.Name}_ForceClear_InitialApplied",
+            ValuesEqual(scenario.GetValue(control), scenario.FirstValue));
+
+        h.ClickButton(clearLabel);
+        await Harness.Render();
+
+        var cleared = await Harness.WaitFor(
+            () => scenario.GetValue(control) == -1,
+            maxPasses: 10,
+            perPassMs: 20);
+
+        h.Check(
+            $"{fixtureName}_{scenario.Name}_ForceClear_OfNegativeOneClearsSelection",
+            cleared);
+    }
+
+
         Harness h,
         string fixtureName,
         IReadOnlyList<Scenario<TControl, TValue>> scenarios)

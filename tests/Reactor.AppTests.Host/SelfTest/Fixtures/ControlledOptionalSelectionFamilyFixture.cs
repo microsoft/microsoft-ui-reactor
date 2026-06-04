@@ -31,6 +31,14 @@ internal static class ControlledOptionalSelectionFamilyFixture
             await ControlledOptionalSelfTestHelpers.RunUnsetSurvivesSiblingRerenderAsync(H, fixture, scenario);
             await ControlledOptionalSelfTestHelpers.RunBoundUpdatesControlAsync(H, fixture, scenario);
             await ControlledOptionalSelfTestHelpers.RunSnapBackAsync(H, fixture, scenario);
+
+            // Spec 050 F1 regression: Optional.Of(-1) is the explicit
+            // force-clear sentinel for selection-index controls. Only
+            // ListView, GridView, and SelectorBar accept it as a real
+            // "deselect" today; the rest have control-specific guards or
+            // do not surface a no-selection state through SelectedIndex.
+            if (scenario.Name is "ListView" or "GridView" or "SelectorBar")
+                await ControlledOptionalSelfTestHelpers.RunForceClearSentinelAsync(H, fixture, scenario);
         }
     }
 

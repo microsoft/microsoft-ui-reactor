@@ -94,8 +94,14 @@ internal sealed class GridViewHandler : IElementHandler<GridViewElement, WinUI.G
         // suppressed instead of leaking into OnSelectedIndexChanged. Only
         // arm when the value would actually drift (a no-op write raises no
         // echo and would strand a token that swallows the next real input).
+        //
+        // Spec 050: Optional.Of(-1) is the explicit force-clear sentinel
+        // (see GridViewElement.SelectedIndex XML doc and
+        // docs/guide/migration/050-optional-t.md). WinUI accepts -1 as
+        // "deselect", so write it through the same drift gate. Optional<int>.Unset
+        // (HasValue == false) means "control owns the selection" and falls
+        // through without a write.
         if (gv.SelectedIndex is { HasValue: true } mountIndex
-            && mountIndex.Value >= 0
             && gridView.SelectedIndex != mountIndex.Value)
         {
             ReactorBinding.WriteSuppressed(gridView, () => gridView.SelectedIndex = mountIndex.Value);
@@ -155,9 +161,9 @@ internal sealed class GridViewHandler : IElementHandler<GridViewElement, WinUI.G
         // ChangeEchoSuppressor.BeginSuppress / ShouldSuppress in
         // src/Reactor/Core/ChangeEchoSuppressor.cs — BeginSuppress always
         // increments, ShouldSuppress only consumes on a real event, so an
-        // unconsumed token swallows the next user input).
+        // unconsumed token swallows the next user input). Spec 050: -1 is
+        // the explicit force-clear sentinel; Unset means "control owns it".
         if (n.SelectedIndex is { HasValue: true } updateIndex
-            && updateIndex.Value >= 0
             && gv.SelectedIndex != updateIndex.Value)
         {
             ReactorBinding.WriteSuppressed(gv, () => gv.SelectedIndex = updateIndex.Value);

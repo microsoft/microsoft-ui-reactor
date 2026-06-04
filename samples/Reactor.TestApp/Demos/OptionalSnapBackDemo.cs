@@ -12,8 +12,8 @@ class OptionalSnapBackDemo : Component
         return ScrollView(
             VStack(16,
                 Heading("Optional<T> snap-back recipe"),
-                Body("The Slider is always rendered with Value = Optional.Of(5.0). When the user moves it, the callback bumps a reducer to force a render and Reactor asserts 5.0 again."),
-                Slider(Optional<double>.Of(5.0), 0, 10, value =>
+                Body("The Slider is always rendered with Value = 5.0 (the implicit conversion to Optional<double> means \"force-assert this value\"). When the user moves it, the callback bumps a reducer to force a render and Reactor asserts 5.0 again."),
+                Slider(5.0, 0, 10, value =>
                     {
                         setLastAttempt($"User tried {value:0.##}; snapped back to 5.");
                         bump(flag => !flag);

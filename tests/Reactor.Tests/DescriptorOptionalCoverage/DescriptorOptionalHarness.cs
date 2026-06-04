@@ -8,6 +8,14 @@ namespace Microsoft.UI.Reactor.Tests.DescriptorOptionalCoverage;
 
 internal static class DescriptorOptionalHarness
 {
+    // NumberBox is intentionally NOT covered by a headless DescriptorOptionalCoverage
+    // test: NumberBoxDescriptor's static initializer evaluates
+    // `WinUI.NumberBox.TextProperty` (for the .Immediate observe entry),
+    // which requires a live WinUI XAML runtime and throws COMException in
+    // the headless Reactor.Tests process. Real runtime coverage for the
+    // NumberBox Optional<double> gate lives in
+    // tests/Reactor.AppTests.Host/SelfTest/Fixtures/ControlledOptionalNumericFamilyFixture.cs
+    // (NumberBoxScenario).
     public static void AssertOptionalGate<TValue>(
         object descriptor,
         object unset,
