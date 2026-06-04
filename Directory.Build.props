@@ -25,14 +25,13 @@
   <!--
     In CI we never need the GitHub.Copilot.SDK native CLI (copilot.exe), which the
     SDK's build targets fetch from registry.npmjs.org via an unauthenticated MSBuild
-    DownloadFile task. That download is blocked in the network-restricted OneBranch
-    Official container (MSB3923) and cannot use the internal authenticated npm feed.
-    The native binary is only a runtime artifact for the demo-script-tool sample; it
-    is not needed to compile the framework, pack the NuGets, or run unit tests.
-    Deriving the skip from $(CI) is reliable here: $(CI) is set as an explicit MSBuild
-    global property by the build pipeline and is honored in every project evaluation
-    (the equivalent -p:CopilotSkipCliDownload=true global property did not take effect
-    in build 118609). Anyone can still override CopilotSkipCliDownload explicitly.
+    DownloadFile task. That download can fail in restricted CI environments and cannot
+    use an authenticated package feed. The native binary is only a runtime artifact for
+    the demo-script-tool sample; it is not needed to compile the framework, pack the
+    NuGets, or run unit tests. Deriving the skip from $(CI) is reliable because $(CI)
+    is set as an explicit MSBuild global property by the build pipeline and is honored
+    in every project evaluation. Anyone can still override CopilotSkipCliDownload
+    explicitly.
   -->
   <PropertyGroup Condition="'$(CopilotSkipCliDownload)' == '' and '$(CI)' == 'true'">
     <CopilotSkipCliDownload>true</CopilotSkipCliDownload>

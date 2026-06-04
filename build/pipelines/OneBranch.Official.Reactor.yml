@@ -27,27 +27,27 @@ variables:
   CDP_DEFINITION_BUILD_COUNT: $[counter('', 0)] # needed for onebranch.pipeline.version task https://aka.ms/obpipelines/versioning
   system.debug: ${{ parameters.debug }}
 
-  # Mirror GitHub Actions' CI flag so dev-only nested builds stay off in the docked,
-  # network-restricted container. Reactor.Cli's RunSignaturesGen target is gated on
-  # '$(CI)' != 'true' and otherwise runs a nested `dotnet build` that does its OWN
-  # restore against the default feed -> NU1301 when isolated. The committed
-  # skills/reactor.api.txt is what pack consumes, so skipping regen in CI is correct.
+  # Mirror GitHub Actions' CI flag so dev-only nested builds stay off in CI.
+  # Reactor.Cli's RunSignaturesGen target is gated on '$(CI)' != 'true' and otherwise
+  # runs a nested `dotnet build` that does its OWN restore, which fails in a restricted
+  # CI environment. The committed skills/reactor.api.txt is what pack consumes, so
+  # skipping regen in CI is correct.
   CI: true
 
-  # Skip the GitHub.Copilot.SDK native CLI download in the isolated container.
+  # Skip the GitHub.Copilot.SDK native CLI download in CI.
   # The SDK's GitHub.Copilot.SDK.targets downloads copilot-<rid>.tgz via an MSBuild
-  # DownloadFile task hardcoded to registry.npmjs.org (blocked here). DownloadFile is an
-  # unauthenticated HTTP GET, so it ignores .npmrc AND can't auth against the internal ADO
-  # npm feed -- redirecting the registry would 401. The native copilot.exe is only a RUNTIME
-  # artifact for the demo-script-tool sample; it is not needed to compile the framework, pack
-  # the Reactor NuGets, or run unit tests. MSBuild surfaces this env var as the property the
-  # targets gate on ($(CopilotSkipCliDownload) != 'true'), so the download target is skipped.
+  # DownloadFile task hardcoded to registry.npmjs.org, which can fail in a restricted
+  # CI environment and cannot use an authenticated package feed. The native copilot.exe
+  # is only a RUNTIME artifact for the demo-script-tool sample; it is not needed to
+  # compile the framework, pack the NuGets, or run unit tests. MSBuild surfaces this env
+  # var as the property the targets gate on ($(CopilotSkipCliDownload) != 'true'), so the
+  # download target is skipped.
   CopilotSkipCliDownload: true
 
   # Reactor builds the .slnx solution via the dotnet CLI (no dirs.proj / msbuild.exe).
   BuildSolution: $(Build.SourcesDirectory)\Reactor.slnx
   BuildConfiguration: Release
-  # Official builds are network-restricted: restore must resolve from the internal feed.
+  # Restore resolves from the pinned internal feed config.
   NuGetConfig: $(Build.SourcesDirectory)\build\pipelines\nuget.internal.config
 
   WindowsContainerImage: 'onebranch.azurecr.io/windows/ltsc2022/vse2022:latest' # Docker image which is used to build the project https://aka.ms/obpipelines/containers
@@ -103,7 +103,7 @@ extends:
               configuration: '$(BuildConfiguration)'
               nugetConfig: '$(NuGetConfig)'
               version: ${{ parameters.version }}
-              runTests: false # selftests/E2E need a live WinUI window; not available in the docked container
+              runTests: false # selftests/E2E need a live WinUI window; not available in CI
               pack: true
               # Two-phase ESRP signing (Official builds only): Authenticode-sign the framework
               # assembly + mur binaries BEFORE pack/zip so the DLLs inside the .nupkg and the
