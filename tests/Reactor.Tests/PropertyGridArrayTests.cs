@@ -566,7 +566,7 @@ public class PropertyGridArrayTests
     }
 
     [Fact]
-    public void GetElementType_For_NonGeneric_Returns_Null()
+    public void GetElementType_For_NonCollection_Types_Returns_Null()
     {
         Assert.Null(ArrayOperations.GetElementType(typeof(string)));
         Assert.Null(ArrayOperations.GetElementType(typeof(Dictionary<string, int>)));

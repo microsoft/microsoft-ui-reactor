@@ -142,7 +142,7 @@ internal static class PropertyGridFixtures
         public IReadOnlyList<string> ReadOnlyTags { get; set; } = new List<string> { "ro-a", "ro-b" };
         public IReadOnlyCollection<string> ReadOnlyCollectionTags { get; set; } = new List<string> { "roc-a", "roc-b" };
         public IReadOnlySet<string> ReadOnlySetTags { get; set; } = new HashSet<string> { "ros-a", "ros-b" };
-        public IEnumerable<string> EnumerableTags { get; set; } = new[] { "en-a", "en-b" }.Select(x => x);
+        public IEnumerable<string> EnumerableTags { get; set; } = ["en-a", "en-b"];
         public HashSet<string> SetTags { get; set; } = ["set-a", "set-b"];
         public Queue<string> QueueTags { get; set; } = new(["queue-a", "queue-b"]);
         public Stack<string> StackTags { get; set; } = new(["stack-a", "stack-b"]);

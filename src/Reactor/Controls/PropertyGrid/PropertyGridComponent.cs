@@ -377,7 +377,7 @@ public class PropertyGridComponent : Component<PropertyGridElement>
         {
             var index = i;
             var item = items[index];
-            var itemDescriptor = CreateArrayItemDescriptor(index, elementType, capabilities.CanReplaceAt);
+            var itemDescriptor = CreateArrayItemDescriptor(index, elementType, capabilities.CanReplaceAt, Refresh);
             var itemKey = $"array:{arrayPath}[{index}]";
             var isExpanded = expandState.TryGetValue(itemKey, out var expanded) && expanded;
             var summary = item?.ToString() ?? "(null)";
@@ -478,7 +478,8 @@ public class PropertyGridComponent : Component<PropertyGridElement>
     private static FieldDescriptor CreateArrayItemDescriptor(
         int index,
         [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors)] Type elementType,
-        bool canEdit)
+        bool canEdit,
+        Action refresh)
     {
         return new FieldDescriptor
         {
@@ -487,7 +488,12 @@ public class PropertyGridComponent : Component<PropertyGridElement>
             FieldType = elementType,
             GetValue = owner => ArrayOperations.GetItem(owner, index),
             SetValue = canEdit
-                ? (owner, value) => ArrayOperations.ReplaceAt(owner, index, value, elementType)
+                ? (owner, value) =>
+                {
+                    var result = ArrayOperations.ReplaceAt(owner, index, value, elementType);
+                    refresh();
+                    return result;
+                }
                 : null,
             IsReadOnly = !canEdit,
         };
