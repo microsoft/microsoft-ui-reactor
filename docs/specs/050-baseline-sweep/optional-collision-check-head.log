@@ -1,2 +1,0 @@
-HEAD:src/Reactor.Cli/Docs/TemplateParser.cs:38:    /// <summary>Optional <c>winui-ref:</c> URL; empty if not declared.</summary>
-HEAD:src/Reactor/Docking/Persistence/DockLayoutJson.cs:87:    /// <summary>Fractional weight of this child within its split parent (0..1). Optional.</summary>

@@ -1,4 +1,0 @@
-mstat: samples\apps\hello-world-aot\obj\x64\Release\net10.0-windows10.0.22621.0\win-x64\native\hello-world-aot.mstat
-Optional<T> closed-generic string entries observed: 3
-Ceiling: <= 30
-Result: PASS

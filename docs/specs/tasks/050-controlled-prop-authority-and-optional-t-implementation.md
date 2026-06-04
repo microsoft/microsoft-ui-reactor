@@ -875,8 +875,9 @@ and add a "controlled props use `Optional<T>` — see
 
 ### 12.5 Final cleanup
 
-- [ ] Remove the `docs/specs/050-baseline-sweep/` artifacts directory
-      (or fold into a single signed-off summary in the PR description).
+- [x] Removed the `docs/specs/050-baseline-sweep/` artifacts directory
+      after folding the unit/selftest/perf/AOT findings into the
+      paste-ready PR description.
 - [x] Tag the spec §15 "Open questions" section as resolved (or append
       any newly-discovered ones with their resolution).
 
