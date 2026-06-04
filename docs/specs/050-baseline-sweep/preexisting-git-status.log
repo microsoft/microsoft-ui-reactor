@@ -1,0 +1,28 @@
+A  docs/specs/tasks/050-controlled-prop-authority-and-optional-t-implementation.md
+A  src/Reactor/Core/Optional.cs
+ M src/Reactor/Core/V1Protocol/Descriptor/ControlDescriptor.cs
+ M src/Reactor/Core/V1Protocol/Descriptor/PropEntry.cs
+A  tests/Reactor.Tests/OptionalTests.cs
+?? docs/specs/050-baseline-sweep/build/build.exitcode.txt
+?? docs/specs/050-baseline-sweep/build/build.log
+?? docs/specs/050-baseline-sweep/optional-collision-check-head.exitcode.txt
+?? docs/specs/050-baseline-sweep/optional-collision-check-head.log
+?? docs/specs/050-baseline-sweep/optional-collision-check.exitcode.txt
+?? docs/specs/050-baseline-sweep/optional-collision-check.log
+?? docs/specs/050-baseline-sweep/optional-declaration-check-head.exitcode.txt
+?? docs/specs/050-baseline-sweep/optional-declaration-check-head.log
+?? docs/specs/050-baseline-sweep/optional-declaration-check-worktree.exitcode.txt
+?? docs/specs/050-baseline-sweep/optional-declaration-check-worktree.log
+?? docs/specs/050-baseline-sweep/optional-grep-head.exitcode.txt
+?? docs/specs/050-baseline-sweep/optional-grep-head.log
+?? docs/specs/050-baseline-sweep/optional-grep.exitcode.txt
+?? docs/specs/050-baseline-sweep/optional-grep.log
+?? docs/specs/050-baseline-sweep/preexisting-git-status.log
+?? docs/specs/050-baseline-sweep/selftest-host/host.exitcode.txt
+?? docs/specs/050-baseline-sweep/selftest-host/host.log
+?? docs/specs/050-baseline-sweep/selftests/selftests.exitcode.txt
+?? docs/specs/050-baseline-sweep/selftests/selftests.log
+?? docs/specs/050-baseline-sweep/unit/unit.exitcode.txt
+?? docs/specs/050-baseline-sweep/unit/unit.log
+?? docs/specs/050-baseline-sweep/unit/unit.trx
+?? docs/specs/050-baseline-sweep/unit/unit.trx.source.txt

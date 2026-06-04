@@ -1,0 +1,115 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  Reactor.Compile.Analyzer -> C:\Users\andersonch\Code\reactor3\src\Reactor.Compile.Analyzer\bin\Debug\netstandard2.0\Reactor.Compile.Analyzer.dll
+  Reactor.Analyzers -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers\bin\Debug\netstandard2.0\Reactor.Analyzers.dll
+  Reactor.Localization.Generator -> C:\Users\andersonch\Code\reactor3\src\Reactor.Localization.Generator\bin\Debug\netstandard2.0\Reactor.Localization.Generator.dll
+  PerfBench.Shared -> C:\Users\andersonch\Code\reactor3\tests\perf_bench\PerfBench.Shared\bin\Debug\net10.0-windows10.0.22621.0\PerfBench.Shared.dll
+  Reactor.Analyzers.Internal -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers.Internal\bin\Debug\netstandard2.0\Reactor.Analyzers.Internal.dll
+  Chat.Model -> C:\Users\andersonch\Code\reactor3\samples\apps\chat\Chat.Model\bin\Debug\net10.0\ChatSample.Chat.Model.dll
+  Reactor.AotHelloWorld.Advanced.Positive.TrimAssertions -> C:\Users\andersonch\Code\reactor3\tests\aot_trim_proof\Reactor.AotHelloWorld.Advanced.Positive.TrimAssertions\bin\Debug\net10.0\Reactor.AotHelloWorld.Advanced.Positive.TrimAssertions.dll
+  StressPerf.Shared -> C:\Users\andersonch\Code\reactor3\tests\stress_perf\StressPerf.Shared\bin\Debug\net10.0-windows\StressPerf.Shared.dll
+  Reactor.IntegrationTests -> C:\Users\andersonch\Code\reactor3\tests\Reactor.IntegrationTests\bin\Debug\net10.0\Reactor.IntegrationTests.dll
+  Reactor.AotHelloWorld.Advanced.TrimAssertions -> C:\Users\andersonch\Code\reactor3\tests\aot_trim_proof\Reactor.AotHelloWorld.Advanced.TrimAssertions\bin\Debug\net10.0\Reactor.AotHelloWorld.Advanced.TrimAssertions.dll
+  Spec047Aggregator -> C:\Users\andersonch\Code\reactor3\tools\spec047-aggregator\bin\Debug\net10.0\spec047-aggregator.dll
+  Reactor.MstatVerifier -> C:\Users\andersonch\Code\reactor3\tools\Reactor.MstatVerifier\bin\Debug\net10.0\Reactor.MstatVerifier.dll
+  Microsoft.UI.Reactor.Templates -> C:\Users\andersonch\Code\reactor3\tools\Templates\bin\Debug\netstandard2.0\Microsoft.UI.Reactor.Templates.dll
+  OffThread.Direct -> C:\Users\andersonch\Code\reactor3\tests\perf_bench\PerfBench.OffThread\OffThread.Direct\bin\x64\Debug\net10.0-windows10.0.22621.0\OffThread.Direct.dll
+  Reactor.AppTests.ThirdPartyControls -> C:\Users\andersonch\Code\reactor3\tests\Reactor.AppTests.ThirdPartyControls\bin\x64\Debug\net10.0-windows10.0.22621.0\Reactor.AppTests.ThirdPartyControls.dll
+  Journal.Direct -> C:\Users\andersonch\Code\reactor3\tests\perf_bench\PerfBench.Journal\Journal.Direct\bin\x64\Debug\net10.0-windows10.0.22621.0\Journal.Direct.dll
+  InteractivePool.Direct -> C:\Users\andersonch\Code\reactor3\tests\perf_bench\PerfBench.InteractivePool\InteractivePool.Direct\bin\x64\Debug\net10.0-windows10.0.22621.0\InteractivePool.Direct.dll
+  StructuralSharing.Bound -> C:\Users\andersonch\Code\reactor3\tests\perf_bench\PerfBench.StructuralSharing\StructuralSharing.Bound\bin\x64\Debug\net10.0-windows10.0.22621.0\StructuralSharing.Bound.dll
+  OffThread.Bound -> C:\Users\andersonch\Code\reactor3\tests\perf_bench\PerfBench.OffThread\OffThread.Bound\bin\x64\Debug\net10.0-windows10.0.22621.0\OffThread.Bound.dll
+  Journal.Bound -> C:\Users\andersonch\Code\reactor3\tests\perf_bench\PerfBench.Journal\Journal.Bound\bin\x64\Debug\net10.0-windows10.0.22621.0\Journal.Bound.dll
+  StressPerf.Bound -> C:\Users\andersonch\Code\reactor3\tests\stress_perf\StressPerf.Bound\bin\x64\Debug\net10.0-windows10.0.22621.0\StressPerf.Bound.dll
+  Priorities.Direct -> C:\Users\andersonch\Code\reactor3\tests\perf_bench\PerfBench.Priorities\Priorities.Direct\bin\x64\Debug\net10.0-windows10.0.22621.0\Priorities.Direct.dll
+  Allocation.Direct -> C:\Users\andersonch\Code\reactor3\tests\perf_bench\PerfBench.Allocation\Allocation.Direct\bin\x64\Debug\net10.0-windows10.0.22621.0\Allocation.Direct.dll
+  DirtyTracking.Direct -> C:\Users\andersonch\Code\reactor3\tests\perf_bench\PerfBench.DirtyTracking\DirtyTracking.Direct\bin\x64\Debug\net10.0-windows10.0.22621.0\DirtyTracking.Direct.dll
+  InteractivePool.Bound -> C:\Users\andersonch\Code\reactor3\tests\perf_bench\PerfBench.InteractivePool\InteractivePool.Bound\bin\x64\Debug\net10.0-windows10.0.22621.0\InteractivePool.Bound.dll
+  StructuralSharing.Direct -> C:\Users\andersonch\Code\reactor3\tests\perf_bench\PerfBench.StructuralSharing\StructuralSharing.Direct\bin\x64\Debug\net10.0-windows10.0.22621.0\StructuralSharing.Direct.dll
+  DeferredMount.Direct -> C:\Users\andersonch\Code\reactor3\tests\perf_bench\PerfBench.DeferredMount\DeferredMount.Direct\bin\x64\Debug\net10.0-windows10.0.22621.0\DeferredMount.Direct.dll
+  PropertyDiff.Bound -> C:\Users\andersonch\Code\reactor3\tests\perf_bench\PerfBench.PropertyDiff\PropertyDiff.Bound\bin\x64\Debug\net10.0-windows10.0.22621.0\PropertyDiff.Bound.dll
+  DeferredMount.Bound -> C:\Users\andersonch\Code\reactor3\tests\perf_bench\PerfBench.DeferredMount\DeferredMount.Bound\bin\x64\Debug\net10.0-windows10.0.22621.0\DeferredMount.Bound.dll
+  TimeSlice.Bound -> C:\Users\andersonch\Code\reactor3\tests\perf_bench\PerfBench.TimeSlice\TimeSlice.Bound\bin\x64\Debug\net10.0-windows10.0.22621.0\TimeSlice.Bound.dll
+  TimeSlice.Direct -> C:\Users\andersonch\Code\reactor3\tests\perf_bench\PerfBench.TimeSlice\TimeSlice.Direct\bin\x64\Debug\net10.0-windows10.0.22621.0\TimeSlice.Direct.dll
+  Allocation.Bound -> C:\Users\andersonch\Code\reactor3\tests\perf_bench\PerfBench.Allocation\Allocation.Bound\bin\x64\Debug\net10.0-windows10.0.22621.0\Allocation.Bound.dll
+  Reactor.Compile.Analyzer.Tests -> C:\Users\andersonch\Code\reactor3\tests\Reactor.Compile.Analyzer.Tests\bin\Debug\net8.0\Reactor.Compile.Analyzer.Tests.dll
+  StressPerf.Wpf -> C:\Users\andersonch\Code\reactor3\tests\stress_perf\StressPerf.Wpf\bin\Debug\net10.0-windows\StressPerf.Wpf.dll
+  StressPerf.Direct -> C:\Users\andersonch\Code\reactor3\tests\stress_perf\StressPerf.Direct\bin\x64\Debug\net10.0-windows10.0.22621.0\StressPerf.Direct.dll
+  StressPerf.DirectX -> C:\Users\andersonch\Code\reactor3\tests\stress_perf\StressPerf.DirectX\bin\x64\Debug\net10.0-windows10.0.22621.0\StressPerf.DirectX.dll
+  StressPerf.VirtualList.WinUI -> C:\Users\andersonch\Code\reactor3\tests\stress_perf\StressPerf.VirtualList.WinUI\bin\x64\Debug\net10.0-windows10.0.22621.0\StressPerf.VirtualList.WinUI.dll
+  
+  Build succeeded.
+      0 Warning(s)
+      0 Error(s)
+  
+  Time Elapsed 00:01:10.66
+  Reactor.Cli -> C:\Users\andersonch\Code\reactor3\src\Reactor.Cli\bin\x64\Debug\net10.0\mur.dll
+  mur mirrored: C:\Users\andersonch\Code\reactor3\src\Reactor.Cli\..\..\bin\x64
+  Reactor.DocPipeline.Tests -> C:\Users\andersonch\Code\reactor3\tests\Reactor.DocPipeline.Tests\bin\x64\Debug\net10.0-windows10.0.22621.0\Reactor.DocPipeline.Tests.dll
+  Reactor.MurCheckGuardrail -> C:\Users\andersonch\Code\reactor3\tools\Reactor.MurCheckGuardrail\bin\Debug\net10.0-windows10.0.22621.0\Reactor.MurCheckGuardrail.dll
+  DirtyTracking.Bound -> C:\Users\andersonch\Code\reactor3\tests\perf_bench\PerfBench.DirtyTracking\DirtyTracking.Bound\bin\x64\Debug\net10.0-windows10.0.22621.0\DirtyTracking.Bound.dll
+  Reactor -> C:\Users\andersonch\Code\reactor3\src\Reactor\bin\Debug\net10.0-windows10.0.22621.0\Reactor.dll
+  The package Microsoft.UI.Reactor.ProjectTemplates.0.0.0-local is missing a readme. Go to https://aka.ms/nuget/authoring-best-practices/readme to learn why package readmes are important.
+  Successfully created package 'C:\Users\andersonch\Code\reactor3\tools\Templates\bin\Debug\Microsoft.UI.Reactor.ProjectTemplates.0.0.0-local.nupkg'.
+  Priorities.Bound -> C:\Users\andersonch\Code\reactor3\tests\perf_bench\PerfBench.Priorities\Priorities.Bound\bin\x64\Debug\net10.0-windows10.0.22621.0\Priorities.Bound.dll
+  PropertyDiff.Direct -> C:\Users\andersonch\Code\reactor3\tests\perf_bench\PerfBench.PropertyDiff\PropertyDiff.Direct\bin\x64\Debug\net10.0-windows10.0.22621.0\PropertyDiff.Direct.dll
+  TimeSlice.Reactor -> C:\Users\andersonch\Code\reactor3\tests\perf_bench\PerfBench.TimeSlice\TimeSlice.Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\TimeSlice.Reactor.dll
+  InteractivePool.Reactor -> C:\Users\andersonch\Code\reactor3\tests\perf_bench\PerfBench.InteractivePool\InteractivePool.Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\InteractivePool.Reactor.dll
+  StructuralSharing.Reactor -> C:\Users\andersonch\Code\reactor3\tests\perf_bench\PerfBench.StructuralSharing\StructuralSharing.Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\StructuralSharing.Reactor.dll
+  StressPerf.ReactorGrid -> C:\Users\andersonch\Code\reactor3\tests\stress_perf\StressPerf.ReactorGrid\bin\x64\Debug\net10.0-windows10.0.22621.0\StressPerf.ReactorGrid.dll
+  OffThread.Reactor -> C:\Users\andersonch\Code\reactor3\tests\perf_bench\PerfBench.OffThread\OffThread.Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\OffThread.Reactor.dll
+  Reactor.Advanced -> C:\Users\andersonch\Code\reactor3\src\Reactor.Advanced\bin\x64\Debug\net10.0-windows10.0.22621.0\Reactor.Advanced.dll
+  Journal.Reactor -> C:\Users\andersonch\Code\reactor3\tests\perf_bench\PerfBench.Journal\Journal.Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\Journal.Reactor.dll
+  Reactor.Devtools -> C:\Users\andersonch\Code\reactor3\src\Reactor.Devtools\bin\Debug\net10.0-windows10.0.22621.0\Microsoft.UI.Reactor.Devtools.dll
+  HelloWorldAot -> C:\Users\andersonch\Code\reactor3\samples\apps\hello-world-aot\bin\x64\Debug\net10.0-windows10.0.22621.0\hello-world-aot.dll
+  Reactor.External.TestControl -> C:\Users\andersonch\Code\reactor3\tests\external_proof\Reactor.External.TestControl\bin\x64\Debug\net10.0-windows10.0.22621.0\Reactor.External.TestControl.dll
+  PerfBench.ControlModel -> C:\Users\andersonch\Code\reactor3\tests\perf_bench\PerfBench.ControlModel\bin\x64\Debug\net10.0-windows10.0.22621.0\PerfBench.ControlModel.dll
+  PropertyDiff.Reactor -> C:\Users\andersonch\Code\reactor3\tests\perf_bench\PerfBench.PropertyDiff\PropertyDiff.Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\PropertyDiff.Reactor.dll
+  StressPerf.Reactor -> C:\Users\andersonch\Code\reactor3\tests\stress_perf\StressPerf.Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\StressPerf.Reactor.dll
+  StressPerf.VirtualList.Reactor -> C:\Users\andersonch\Code\reactor3\tests\stress_perf\StressPerf.VirtualList.Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\StressPerf.VirtualList.Reactor.dll
+  Priorities.Reactor -> C:\Users\andersonch\Code\reactor3\tests\perf_bench\PerfBench.Priorities\Priorities.Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\Priorities.Reactor.dll
+  Reactor.Interop.WinForms -> C:\Users\andersonch\Code\reactor3\src\Reactor.Interop.WinForms\bin\Debug\net10.0-windows10.0.22621.0\Reactor.Interop.WinForms.dll
+  Reactor.Fuzz -> C:\Users\andersonch\Code\reactor3\tests\Reactor.Fuzz\bin\x64\Debug\net10.0-windows10.0.22621.0\Reactor.Fuzz.dll
+  Reactor.SignaturesGen -> C:\Users\andersonch\Code\reactor3\tools\Reactor.SignaturesGen\bin\x64\Debug\net10.0-windows10.0.22621.0\Reactor.SignaturesGen.dll
+  StressPerf.ReactorOptimized -> C:\Users\andersonch\Code\reactor3\tests\stress_perf\StressPerf.ReactorOptimized\bin\x64\Debug\net10.0-windows10.0.22621.0\StressPerf.ReactorOptimized.dll
+  DeferredMount.Reactor -> C:\Users\andersonch\Code\reactor3\tests\perf_bench\PerfBench.DeferredMount\DeferredMount.Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\DeferredMount.Reactor.dll
+  Allocation.Reactor -> C:\Users\andersonch\Code\reactor3\tests\perf_bench\PerfBench.Allocation\Allocation.Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\Allocation.Reactor.dll
+  BlankReactor -> C:\Users\andersonch\Code\reactor3\tests\startup_perf\BlankReactorMsix\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\BlankReactor.dll
+  TodoApp -> C:\Users\andersonch\Code\reactor3\samples\TodoApp\bin\x64\Debug\net10.0-windows10.0.22621.0\TodoApp.dll
+  HelloWorldAotDevtoolsOn -> C:\Users\andersonch\Code\reactor3\samples\apps\hello-world-aot-devtools-on\bin\x64\Debug\net10.0-windows10.0.22621.0\hello-world-aot-devtools-on.dll
+  MonacoEditorApp -> C:\Users\andersonch\Code\reactor3\samples\apps\monaco-editor\bin\x64\Debug\net10.0-windows10.0.22621.0\MonacoEditorApp.dll
+  ReactorIde -> C:\Users\andersonch\Code\reactor3\samples\apps\reactor-ide\bin\x64\Debug\net10.0-windows10.0.22621.0\ReactorIde.dll
+  ValidationShowcase -> C:\Users\andersonch\Code\reactor3\samples\apps\validation-showcase\bin\x64\Debug\net10.0-windows10.0.22621.0\ValidationShowcase.dll
+  CommandingDemo -> C:\Users\andersonch\Code\reactor3\samples\CommandingDemo\bin\x64\Debug\net10.0-windows10.0.22621.0\CommandingDemo.dll
+  ReactorCharting.Sample -> C:\Users\andersonch\Code\reactor3\samples\ReactorCharting.Sample\bin\x64\Debug\net10.0-windows10.0.22621.0\ReactorCharting.Sample.dll
+  Reactor.AotHelloWorld.Advanced -> C:\Users\andersonch\Code\reactor3\tests\aot_trim_proof\Reactor.AotHelloWorld.Advanced\bin\x64\Debug\net10.0-windows10.0.22621.0\Reactor.AotHelloWorld.Advanced.dll
+  ReactorCharting.Gallery -> C:\Users\andersonch\Code\reactor3\samples\ReactorCharting.Gallery\bin\x64\Debug\net10.0-windows10.0.22621.0\ReactorCharting.Gallery.dll
+  Chat.UI -> C:\Users\andersonch\Code\reactor3\samples\apps\chat\Chat.UI\bin\Debug\net10.0-windows10.0.22621.0\ChatSample.Chat.UI.dll
+  DirtyTracking.Reactor -> C:\Users\andersonch\Code\reactor3\tests\perf_bench\PerfBench.DirtyTracking\DirtyTracking.Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\DirtyTracking.Reactor.dll
+  Reactor.Advanced.Tests -> C:\Users\andersonch\Code\reactor3\tests\Reactor.Advanced.Tests\bin\x64\Debug\net10.0-windows10.0.22621.0\Reactor.Advanced.Tests.dll
+  Reactor.AotHelloWorld.Advanced.Positive -> C:\Users\andersonch\Code\reactor3\tests\aot_trim_proof\Reactor.AotHelloWorld.Advanced.Positive\bin\x64\Debug\net10.0-windows10.0.22621.0\Reactor.AotHelloWorld.Advanced.Positive.dll
+  A11yShowcase -> C:\Users\andersonch\Code\reactor3\samples\apps\a11y-showcase\bin\x64\Debug\net10.0-windows10.0.22621.0\A11yShowcase.dll
+  ReactorHostControlDemo -> C:\Users\andersonch\Code\reactor3\samples\ReactorHostControlDemo\bin\x64\Debug\net10.0-windows10.0.22621.0\ReactorHostControlDemo.dll
+  HeadTrax -> C:\Users\andersonch\Code\reactor3\samples\apps\headtrax\HeadTrax\bin\x64\Debug\net10.0-windows10.0.22621.0\HeadTrax.dll
+  NavigationDemo -> C:\Users\andersonch\Code\reactor3\samples\NavigationDemo\bin\x64\Debug\net10.0-windows10.0.22621.0\NavigationDemo.dll
+  ReactorRegedit -> C:\Users\andersonch\Code\reactor3\samples\apps\regedit\bin\x64\Debug\net10.0-windows10.0.22621.0\ReactorRegedit.dll
+  Reactor.WinFormsTests.Host -> C:\Users\andersonch\Code\reactor3\tests\Reactor.WinFormsTests.Host\bin\x64\Debug\net10.0-windows10.0.22621.0\Reactor.WinFormsTests.Host.dll
+  Minesweeper -> C:\Users\andersonch\Code\reactor3\samples\apps\minesweeper\bin\x64\Debug\net10.0-windows10.0.22621.0\Minesweeper.dll
+  ChatSample -> C:\Users\andersonch\Code\reactor3\samples\apps\chat\App\bin\x64\Debug\net10.0-windows10.0.22621.0\ChatSample.dll
+  StylingGallery -> C:\Users\andersonch\Code\reactor3\samples\StylingGallery\bin\x64\Debug\net10.0-windows10.0.22621.0\StylingGallery.dll
+  InteropFirst -> C:\Users\andersonch\Code\reactor3\samples\InteropFirst\bin\x64\Debug\net10.0-windows10.0.22621.0\InteropFirst.dll
+  AnimatedListDemo -> C:\Users\andersonch\Code\reactor3\samples\apps\animated-list-demo\bin\x64\Debug\net10.0-windows10.0.22621.0\AnimatedListDemo.dll
+  WinFormsInterop -> C:\Users\andersonch\Code\reactor3\samples\WinFormsInterop\bin\x64\Debug\net10.0-windows10.0.22621.0\WinFormsInterop.dll
+  NetPulse -> C:\Users\andersonch\Code\reactor3\samples\apps\netpulse\bin\x64\Debug\net10.0-windows10.0.22621.0\NetPulse.dll
+  win2d-canvas -> C:\Users\andersonch\Code\reactor3\docs\_pipeline\apps\win2d-canvas\bin\x64\Debug\net10.0-windows10.0.22621.0\win2d-canvas.dll
+  Reactor.TestApp -> C:\Users\andersonch\Code\reactor3\samples\Reactor.TestApp\bin\x64\Debug\net10.0-windows10.0.22621.0\Reactor.TestApp.dll
+  ParticleStorm -> C:\Users\andersonch\Code\reactor3\samples\apps\particle-storm\bin\x64\Debug\net10.0-windows10.0.22621.0\ParticleStorm.dll
+  DemoScriptTool -> C:\Users\andersonch\Code\reactor3\samples\apps\demo-script-tool\App\bin\x64\Debug\net10.0-windows10.0.22621.0\DemoScriptTool.dll
+  ReactorGallery -> C:\Users\andersonch\Code\reactor3\samples\ReactorGallery\bin\x64\Debug\net10.0-windows10.0.22621.0\ReactorGallery.dll
+  WordPuzzle -> C:\Users\andersonch\Code\reactor3\samples\apps\wordpuzzle\bin\x64\Debug\net10.0-windows10.0.22621.0\WordPuzzle.dll
+  Reactor.External.TestControl.Tests -> C:\Users\andersonch\Code\reactor3\tests\external_proof\Reactor.External.TestControl.Tests\bin\x64\Debug\net10.0-windows10.0.22621.0\Reactor.External.TestControl.Tests.dll
+  Reactor.AppTests.Host -> C:\Users\andersonch\Code\reactor3\tests\Reactor.AppTests.Host\bin\x64\Debug\net10.0-windows10.0.22621.0\Reactor.AppTests.Host.dll
+  Reactor.SelfTests -> C:\Users\andersonch\Code\reactor3\tests\Reactor.SelfTests\bin\Debug\net10.0-windows10.0.22621.0\Reactor.SelfTests.dll
+  Reactor.AppTests -> C:\Users\andersonch\Code\reactor3\tests\Reactor.AppTests\bin\x64\Debug\net10.0-windows10.0.22621.0\Reactor.AppTests.dll
+MSBUILD : error MSB4166: Child node "10" exited prematurely. Shutting down. Diagnostic information may be found in files in "C:\Users\andersonch\AppData\Local\Temp\MSBuildTempakx5hm5u.tyk\" and will be named MSBuild_*.failure.txt. This location can be changed by setting the MSBUILDDEBUGPATH environment variable to a different directory.
+MSBUILD : error MSB4166: Child node "9" exited prematurely. Shutting down. Diagnostic information may be found in files in "C:\Users\andersonch\AppData\Local\Temp\MSBuildTempakx5hm5u.tyk\" and will be named MSBuild_*.failure.txt. This location can be changed by setting the MSBUILDDEBUGPATH environment variable to a different directory.

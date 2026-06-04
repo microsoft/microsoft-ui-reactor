@@ -20,9 +20,10 @@ internal sealed class ExpanderHandler : IDecoratorElementHandler<ExpanderElement
         var requestRerender = ctx.RequestRerender;
         var expander = new WinUI.Expander
         {
-            IsExpanded = el.IsExpanded,
             ExpandDirection = el.ExpandDirection,
         };
+        if (el.IsExpanded.HasValue)
+            expander.IsExpanded = el.IsExpanded.Value;
         // Element header wins over the string slot (matches the spec
         // "HeaderTemplate" slot semantics — strings are still supported as
         // the default header content).
@@ -46,7 +47,8 @@ internal sealed class ExpanderHandler : IDecoratorElementHandler<ExpanderElement
         var reconciler = ctx.Reconciler;
         var requestRerender = ctx.RequestRerender;
         var exp = (WinUI.Expander)control;
-        exp.IsExpanded = newEl.IsExpanded;
+        if (newEl.IsExpanded.HasValue && exp.IsExpanded != newEl.IsExpanded.Value)
+            ReactorBinding.WriteSuppressed(exp, () => exp.IsExpanded = newEl.IsExpanded.Value);
         exp.ExpandDirection = newEl.ExpandDirection;
 
         // Element header wins over the string slot. Reconcile via ReconcileChild

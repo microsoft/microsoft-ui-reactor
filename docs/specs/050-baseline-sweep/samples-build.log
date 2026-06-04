@@ -1,0 +1,506 @@
+Sample build sweep with restore 2026-06-04T09:35:47.5711956-07:00
+
+== C:\Users\andersonch\Code\reactor3\samples\apps\a11y-showcase\A11yShowcase.csproj ==
+  Determining projects to restore...
+  Restored C:\Users\andersonch\Code\reactor3\src\Reactor.Devtools\Reactor.Devtools.csproj (in 335 ms).
+  Restored C:\Users\andersonch\Code\reactor3\samples\apps\a11y-showcase\A11yShowcase.csproj (in 335 ms).
+  4 of 6 projects are up-to-date for restore.
+  Reactor.Localization.Generator -> C:\Users\andersonch\Code\reactor3\src\Reactor.Localization.Generator\bin\Debug\netstandard2.0\Reactor.Localization.Generator.dll
+  Reactor.Analyzers.Internal -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers.Internal\bin\Debug\netstandard2.0\Reactor.Analyzers.Internal.dll
+  Reactor.Analyzers -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers\bin\Debug\netstandard2.0\Reactor.Analyzers.dll
+  Reactor -> C:\Users\andersonch\Code\reactor3\src\Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Reactor.dll
+  Reactor.Devtools -> C:\Users\andersonch\Code\reactor3\src\Reactor.Devtools\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Microsoft.UI.Reactor.Devtools.dll
+  A11yShowcase -> C:\Users\andersonch\Code\reactor3\samples\apps\a11y-showcase\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\A11yShowcase.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:07.60
+OK
+
+== C:\Users\andersonch\Code\reactor3\samples\apps\animated-list-demo\AnimatedListDemo.csproj ==
+  Determining projects to restore...
+  Restored C:\Users\andersonch\Code\reactor3\samples\apps\animated-list-demo\AnimatedListDemo.csproj (in 568 ms).
+  5 of 6 projects are up-to-date for restore.
+  Reactor.Analyzers.Internal -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers.Internal\bin\Debug\netstandard2.0\Reactor.Analyzers.Internal.dll
+  Reactor.Localization.Generator -> C:\Users\andersonch\Code\reactor3\src\Reactor.Localization.Generator\bin\Debug\netstandard2.0\Reactor.Localization.Generator.dll
+  Reactor.Analyzers -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers\bin\Debug\netstandard2.0\Reactor.Analyzers.dll
+  Reactor -> C:\Users\andersonch\Code\reactor3\src\Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Reactor.dll
+  Reactor.Devtools -> C:\Users\andersonch\Code\reactor3\src\Reactor.Devtools\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Microsoft.UI.Reactor.Devtools.dll
+  AnimatedListDemo -> C:\Users\andersonch\Code\reactor3\samples\apps\animated-list-demo\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\AnimatedListDemo.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:08.18
+OK
+
+== C:\Users\andersonch\Code\reactor3\samples\apps\chat\App\ChatSample.csproj ==
+  Determining projects to restore...
+  Restored C:\Users\andersonch\Code\reactor3\samples\apps\chat\Chat.Model\Chat.Model.csproj (in 195 ms).
+  Restored C:\Users\andersonch\Code\reactor3\samples\apps\chat\App\ChatSample.csproj (in 232 ms).
+  Restored C:\Users\andersonch\Code\reactor3\samples\apps\chat\Chat.UI\Chat.UI.csproj (in 232 ms).
+  5 of 8 projects are up-to-date for restore.
+  Chat.Model -> C:\Users\andersonch\Code\reactor3\samples\apps\chat\Chat.Model\bin\x64\Debug\net10.0\ChatSample.Chat.Model.dll
+  Reactor.Localization.Generator -> C:\Users\andersonch\Code\reactor3\src\Reactor.Localization.Generator\bin\Debug\netstandard2.0\Reactor.Localization.Generator.dll
+  Reactor.Analyzers.Internal -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers.Internal\bin\Debug\netstandard2.0\Reactor.Analyzers.Internal.dll
+  Reactor.Analyzers -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers\bin\Debug\netstandard2.0\Reactor.Analyzers.dll
+  Reactor -> C:\Users\andersonch\Code\reactor3\src\Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Reactor.dll
+  Reactor.Devtools -> C:\Users\andersonch\Code\reactor3\src\Reactor.Devtools\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Microsoft.UI.Reactor.Devtools.dll
+  Chat.UI -> C:\Users\andersonch\Code\reactor3\samples\apps\chat\Chat.UI\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\ChatSample.Chat.UI.dll
+  ChatSample -> C:\Users\andersonch\Code\reactor3\samples\apps\chat\App\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\ChatSample.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:09.59
+OK
+
+== C:\Users\andersonch\Code\reactor3\samples\apps\chat\Chat.Model\Chat.Model.csproj ==
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  Chat.Model -> C:\Users\andersonch\Code\reactor3\samples\apps\chat\Chat.Model\bin\x64\Debug\net10.0\win-x64\ChatSample.Chat.Model.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:01.27
+OK
+
+== C:\Users\andersonch\Code\reactor3\samples\apps\chat\Chat.UI\Chat.UI.csproj ==
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  Chat.Model -> C:\Users\andersonch\Code\reactor3\samples\apps\chat\Chat.Model\bin\x64\Debug\net10.0\ChatSample.Chat.Model.dll
+  Reactor.Localization.Generator -> C:\Users\andersonch\Code\reactor3\src\Reactor.Localization.Generator\bin\Debug\netstandard2.0\Reactor.Localization.Generator.dll
+  Reactor.Analyzers.Internal -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers.Internal\bin\Debug\netstandard2.0\Reactor.Analyzers.Internal.dll
+  Reactor.Analyzers -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers\bin\Debug\netstandard2.0\Reactor.Analyzers.dll
+  Reactor -> C:\Users\andersonch\Code\reactor3\src\Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Reactor.dll
+  Reactor.Devtools -> C:\Users\andersonch\Code\reactor3\src\Reactor.Devtools\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Microsoft.UI.Reactor.Devtools.dll
+  Chat.UI -> C:\Users\andersonch\Code\reactor3\samples\apps\chat\Chat.UI\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\ChatSample.Chat.UI.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:06.52
+OK
+
+== C:\Users\andersonch\Code\reactor3\samples\apps\demo-script-tool\App\DemoScriptTool.csproj ==
+  Determining projects to restore...
+  Restored C:\Users\andersonch\Code\reactor3\samples\apps\demo-script-tool\App\DemoScriptTool.csproj (in 626 ms).
+  5 of 6 projects are up-to-date for restore.
+  Reactor.Analyzers.Internal -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers.Internal\bin\Debug\netstandard2.0\Reactor.Analyzers.Internal.dll
+  Reactor.Localization.Generator -> C:\Users\andersonch\Code\reactor3\src\Reactor.Localization.Generator\bin\Debug\netstandard2.0\Reactor.Localization.Generator.dll
+  Reactor.Analyzers -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers\bin\Debug\netstandard2.0\Reactor.Analyzers.dll
+  Reactor -> C:\Users\andersonch\Code\reactor3\src\Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Reactor.dll
+  Reactor.Devtools -> C:\Users\andersonch\Code\reactor3\src\Reactor.Devtools\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Microsoft.UI.Reactor.Devtools.dll
+  DemoScriptTool -> C:\Users\andersonch\Code\reactor3\samples\apps\demo-script-tool\App\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\DemoScriptTool.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:10.52
+OK
+
+== C:\Users\andersonch\Code\reactor3\samples\apps\headtrax\HeadTrax\HeadTrax.csproj ==
+  Determining projects to restore...
+  Restored C:\Users\andersonch\Code\reactor3\samples\apps\headtrax\HeadTrax\HeadTrax.csproj (in 546 ms).
+  5 of 6 projects are up-to-date for restore.
+  Reactor.Analyzers.Internal -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers.Internal\bin\Debug\netstandard2.0\Reactor.Analyzers.Internal.dll
+  Reactor.Localization.Generator -> C:\Users\andersonch\Code\reactor3\src\Reactor.Localization.Generator\bin\Debug\netstandard2.0\Reactor.Localization.Generator.dll
+  Reactor.Analyzers -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers\bin\Debug\netstandard2.0\Reactor.Analyzers.dll
+  Reactor -> C:\Users\andersonch\Code\reactor3\src\Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Reactor.dll
+  Reactor.Devtools -> C:\Users\andersonch\Code\reactor3\src\Reactor.Devtools\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Microsoft.UI.Reactor.Devtools.dll
+  HeadTrax -> C:\Users\andersonch\Code\reactor3\samples\apps\headtrax\HeadTrax\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\HeadTrax.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:08.82
+OK
+
+== C:\Users\andersonch\Code\reactor3\samples\apps\hello-world-aot-devtools-on\HelloWorldAotDevtoolsOn.csproj ==
+  Determining projects to restore...
+  Restored C:\Users\andersonch\Code\reactor3\samples\apps\hello-world-aot-devtools-on\HelloWorldAotDevtoolsOn.csproj (in 484 ms).
+  5 of 6 projects are up-to-date for restore.
+  Reactor.Analyzers.Internal -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers.Internal\bin\Debug\netstandard2.0\Reactor.Analyzers.Internal.dll
+  Reactor.Localization.Generator -> C:\Users\andersonch\Code\reactor3\src\Reactor.Localization.Generator\bin\Debug\netstandard2.0\Reactor.Localization.Generator.dll
+  Reactor.Analyzers -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers\bin\Debug\netstandard2.0\Reactor.Analyzers.dll
+  Reactor -> C:\Users\andersonch\Code\reactor3\src\Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Reactor.dll
+  Reactor.Devtools -> C:\Users\andersonch\Code\reactor3\src\Reactor.Devtools\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Microsoft.UI.Reactor.Devtools.dll
+  HelloWorldAotDevtoolsOn -> C:\Users\andersonch\Code\reactor3\samples\apps\hello-world-aot-devtools-on\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\hello-world-aot-devtools-on.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:06.90
+OK
+
+== C:\Users\andersonch\Code\reactor3\samples\apps\hello-world-aot\HelloWorldAot.csproj ==
+  Determining projects to restore...
+  Restored C:\Users\andersonch\Code\reactor3\samples\apps\hello-world-aot\HelloWorldAot.csproj (in 304 ms).
+  4 of 5 projects are up-to-date for restore.
+  Reactor.Localization.Generator -> C:\Users\andersonch\Code\reactor3\src\Reactor.Localization.Generator\bin\Debug\netstandard2.0\Reactor.Localization.Generator.dll
+  Reactor.Analyzers.Internal -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers.Internal\bin\Debug\netstandard2.0\Reactor.Analyzers.Internal.dll
+  Reactor.Analyzers -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers\bin\Debug\netstandard2.0\Reactor.Analyzers.dll
+  Reactor -> C:\Users\andersonch\Code\reactor3\src\Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Reactor.dll
+  HelloWorldAot -> C:\Users\andersonch\Code\reactor3\samples\apps\hello-world-aot\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\hello-world-aot.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:05.48
+OK
+
+== C:\Users\andersonch\Code\reactor3\samples\apps\minesweeper\Minesweeper.csproj ==
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  Reactor.Analyzers.Internal -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers.Internal\bin\Debug\netstandard2.0\Reactor.Analyzers.Internal.dll
+  Reactor.Localization.Generator -> C:\Users\andersonch\Code\reactor3\src\Reactor.Localization.Generator\bin\Debug\netstandard2.0\Reactor.Localization.Generator.dll
+  Reactor.Analyzers -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers\bin\Debug\netstandard2.0\Reactor.Analyzers.dll
+  Reactor -> C:\Users\andersonch\Code\reactor3\src\Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Reactor.dll
+  Reactor.Devtools -> C:\Users\andersonch\Code\reactor3\src\Reactor.Devtools\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Microsoft.UI.Reactor.Devtools.dll
+  Minesweeper -> C:\Users\andersonch\Code\reactor3\samples\apps\minesweeper\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Minesweeper.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:08.14
+OK
+
+== C:\Users\andersonch\Code\reactor3\samples\apps\monaco-editor\MonacoEditorApp.csproj ==
+  Determining projects to restore...
+  Restored C:\Users\andersonch\Code\reactor3\samples\apps\monaco-editor\MonacoEditorApp.csproj (in 558 ms).
+  5 of 6 projects are up-to-date for restore.
+  Reactor.Analyzers.Internal -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers.Internal\bin\Debug\netstandard2.0\Reactor.Analyzers.Internal.dll
+  Reactor.Localization.Generator -> C:\Users\andersonch\Code\reactor3\src\Reactor.Localization.Generator\bin\Debug\netstandard2.0\Reactor.Localization.Generator.dll
+  Reactor.Analyzers -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers\bin\Debug\netstandard2.0\Reactor.Analyzers.dll
+  Reactor -> C:\Users\andersonch\Code\reactor3\src\Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Reactor.dll
+  Reactor.Devtools -> C:\Users\andersonch\Code\reactor3\src\Reactor.Devtools\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Microsoft.UI.Reactor.Devtools.dll
+  MonacoEditorApp -> C:\Users\andersonch\Code\reactor3\samples\apps\monaco-editor\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\MonacoEditorApp.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:08.48
+OK
+
+== C:\Users\andersonch\Code\reactor3\samples\apps\netpulse\NetPulse.csproj ==
+  Determining projects to restore...
+  Restored C:\Users\andersonch\Code\reactor3\samples\apps\netpulse\NetPulse.csproj (in 536 ms).
+  5 of 6 projects are up-to-date for restore.
+  Reactor.Analyzers.Internal -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers.Internal\bin\Debug\netstandard2.0\Reactor.Analyzers.Internal.dll
+  Reactor.Localization.Generator -> C:\Users\andersonch\Code\reactor3\src\Reactor.Localization.Generator\bin\Debug\netstandard2.0\Reactor.Localization.Generator.dll
+  Reactor.Analyzers -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers\bin\Debug\netstandard2.0\Reactor.Analyzers.dll
+  Reactor -> C:\Users\andersonch\Code\reactor3\src\Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Reactor.dll
+  Reactor.Devtools -> C:\Users\andersonch\Code\reactor3\src\Reactor.Devtools\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Microsoft.UI.Reactor.Devtools.dll
+  NetPulse -> C:\Users\andersonch\Code\reactor3\samples\apps\netpulse\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\NetPulse.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:08.39
+OK
+
+== C:\Users\andersonch\Code\reactor3\samples\apps\particle-storm\ParticleStorm.csproj ==
+  Determining projects to restore...
+  Restored C:\Users\andersonch\Code\reactor3\samples\apps\particle-storm\ParticleStorm.csproj (in 555 ms).
+  Restored C:\Users\andersonch\Code\reactor3\src\Reactor.Advanced\Reactor.Advanced.csproj (in 555 ms).
+  5 of 7 projects are up-to-date for restore.
+  Reactor.Localization.Generator -> C:\Users\andersonch\Code\reactor3\src\Reactor.Localization.Generator\bin\Debug\netstandard2.0\Reactor.Localization.Generator.dll
+  Reactor.Analyzers.Internal -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers.Internal\bin\Debug\netstandard2.0\Reactor.Analyzers.Internal.dll
+  Reactor.Analyzers -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers\bin\Debug\netstandard2.0\Reactor.Analyzers.dll
+  Reactor -> C:\Users\andersonch\Code\reactor3\src\Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Reactor.dll
+  Reactor -> C:\Users\andersonch\Code\reactor3\src\Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\Reactor.dll
+  Reactor.Devtools -> C:\Users\andersonch\Code\reactor3\src\Reactor.Devtools\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Microsoft.UI.Reactor.Devtools.dll
+  Reactor.Advanced -> C:\Users\andersonch\Code\reactor3\src\Reactor.Advanced\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Reactor.Advanced.dll
+  ParticleStorm -> C:\Users\andersonch\Code\reactor3\samples\apps\particle-storm\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\ParticleStorm.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:11.67
+OK
+
+== C:\Users\andersonch\Code\reactor3\samples\apps\reactor-ide\ReactorIde.csproj ==
+  Determining projects to restore...
+  Restored C:\Users\andersonch\Code\reactor3\samples\apps\reactor-ide\ReactorIde.csproj (in 547 ms).
+  5 of 6 projects are up-to-date for restore.
+  Reactor.Analyzers.Internal -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers.Internal\bin\Debug\netstandard2.0\Reactor.Analyzers.Internal.dll
+  Reactor.Localization.Generator -> C:\Users\andersonch\Code\reactor3\src\Reactor.Localization.Generator\bin\Debug\netstandard2.0\Reactor.Localization.Generator.dll
+  Reactor.Analyzers -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers\bin\Debug\netstandard2.0\Reactor.Analyzers.dll
+  Reactor -> C:\Users\andersonch\Code\reactor3\src\Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Reactor.dll
+  Reactor.Devtools -> C:\Users\andersonch\Code\reactor3\src\Reactor.Devtools\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Microsoft.UI.Reactor.Devtools.dll
+  ReactorIde -> C:\Users\andersonch\Code\reactor3\samples\apps\reactor-ide\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\ReactorIde.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:07.95
+OK
+
+== C:\Users\andersonch\Code\reactor3\samples\apps\regedit\ReactorRegedit.csproj ==
+  Determining projects to restore...
+  Restored C:\Users\andersonch\Code\reactor3\samples\apps\regedit\ReactorRegedit.csproj (in 573 ms).
+  5 of 6 projects are up-to-date for restore.
+  Reactor.Analyzers.Internal -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers.Internal\bin\Debug\netstandard2.0\Reactor.Analyzers.Internal.dll
+  Reactor.Localization.Generator -> C:\Users\andersonch\Code\reactor3\src\Reactor.Localization.Generator\bin\Debug\netstandard2.0\Reactor.Localization.Generator.dll
+  Reactor.Analyzers -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers\bin\Debug\netstandard2.0\Reactor.Analyzers.dll
+  Reactor -> C:\Users\andersonch\Code\reactor3\src\Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Reactor.dll
+  Reactor.Devtools -> C:\Users\andersonch\Code\reactor3\src\Reactor.Devtools\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Microsoft.UI.Reactor.Devtools.dll
+  ReactorRegedit -> C:\Users\andersonch\Code\reactor3\samples\apps\regedit\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\ReactorRegedit.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:08.72
+OK
+
+== C:\Users\andersonch\Code\reactor3\samples\apps\validation-showcase\ValidationShowcase.csproj ==
+  Determining projects to restore...
+  Restored C:\Users\andersonch\Code\reactor3\samples\apps\validation-showcase\ValidationShowcase.csproj (in 526 ms).
+  5 of 6 projects are up-to-date for restore.
+  Reactor.Analyzers.Internal -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers.Internal\bin\Debug\netstandard2.0\Reactor.Analyzers.Internal.dll
+  Reactor.Localization.Generator -> C:\Users\andersonch\Code\reactor3\src\Reactor.Localization.Generator\bin\Debug\netstandard2.0\Reactor.Localization.Generator.dll
+  Reactor.Analyzers -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers\bin\Debug\netstandard2.0\Reactor.Analyzers.dll
+  Reactor -> C:\Users\andersonch\Code\reactor3\src\Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Reactor.dll
+  Reactor.Devtools -> C:\Users\andersonch\Code\reactor3\src\Reactor.Devtools\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Microsoft.UI.Reactor.Devtools.dll
+  ValidationShowcase -> C:\Users\andersonch\Code\reactor3\samples\apps\validation-showcase\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\ValidationShowcase.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:08.10
+OK
+
+== C:\Users\andersonch\Code\reactor3\samples\apps\wordpuzzle\WordPuzzle.csproj ==
+  Determining projects to restore...
+  Restored C:\Users\andersonch\Code\reactor3\samples\apps\wordpuzzle\WordPuzzle.csproj (in 450 ms).
+  5 of 6 projects are up-to-date for restore.
+  Reactor.Analyzers.Internal -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers.Internal\bin\Debug\netstandard2.0\Reactor.Analyzers.Internal.dll
+  Reactor.Localization.Generator -> C:\Users\andersonch\Code\reactor3\src\Reactor.Localization.Generator\bin\Debug\netstandard2.0\Reactor.Localization.Generator.dll
+  Reactor.Analyzers -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers\bin\Debug\netstandard2.0\Reactor.Analyzers.dll
+  Reactor -> C:\Users\andersonch\Code\reactor3\src\Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Reactor.dll
+  Reactor.Devtools -> C:\Users\andersonch\Code\reactor3\src\Reactor.Devtools\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Microsoft.UI.Reactor.Devtools.dll
+  WordPuzzle -> C:\Users\andersonch\Code\reactor3\samples\apps\wordpuzzle\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\WordPuzzle.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:07.62
+OK
+
+== C:\Users\andersonch\Code\reactor3\samples\CommandingDemo\CommandingDemo.csproj ==
+  Determining projects to restore...
+  Restored C:\Users\andersonch\Code\reactor3\samples\CommandingDemo\CommandingDemo.csproj (in 561 ms).
+  5 of 6 projects are up-to-date for restore.
+  Reactor.Analyzers.Internal -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers.Internal\bin\Debug\netstandard2.0\Reactor.Analyzers.Internal.dll
+  Reactor.Localization.Generator -> C:\Users\andersonch\Code\reactor3\src\Reactor.Localization.Generator\bin\Debug\netstandard2.0\Reactor.Localization.Generator.dll
+  Reactor.Analyzers -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers\bin\Debug\netstandard2.0\Reactor.Analyzers.dll
+  Reactor -> C:\Users\andersonch\Code\reactor3\src\Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Reactor.dll
+  Reactor.Devtools -> C:\Users\andersonch\Code\reactor3\src\Reactor.Devtools\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Microsoft.UI.Reactor.Devtools.dll
+  CommandingDemo -> C:\Users\andersonch\Code\reactor3\samples\CommandingDemo\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\CommandingDemo.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:08.21
+OK
+
+== C:\Users\andersonch\Code\reactor3\samples\InteropFirst\InteropFirst.csproj ==
+  Determining projects to restore...
+  Restored C:\Users\andersonch\Code\reactor3\samples\InteropFirst\InteropFirst.csproj (in 560 ms).
+  5 of 6 projects are up-to-date for restore.
+  Reactor.Analyzers.Internal -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers.Internal\bin\Debug\netstandard2.0\Reactor.Analyzers.Internal.dll
+  Reactor.Localization.Generator -> C:\Users\andersonch\Code\reactor3\src\Reactor.Localization.Generator\bin\Debug\netstandard2.0\Reactor.Localization.Generator.dll
+  Reactor.Analyzers -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers\bin\Debug\netstandard2.0\Reactor.Analyzers.dll
+  Reactor -> C:\Users\andersonch\Code\reactor3\src\Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Reactor.dll
+  Reactor.Devtools -> C:\Users\andersonch\Code\reactor3\src\Reactor.Devtools\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Microsoft.UI.Reactor.Devtools.dll
+  InteropFirst -> C:\Users\andersonch\Code\reactor3\samples\InteropFirst\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\InteropFirst.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:32.71
+OK
+
+== C:\Users\andersonch\Code\reactor3\samples\NavigationDemo\NavigationDemo.csproj ==
+  Determining projects to restore...
+  Restored C:\Users\andersonch\Code\reactor3\samples\NavigationDemo\NavigationDemo.csproj (in 541 ms).
+  5 of 6 projects are up-to-date for restore.
+  Reactor.Analyzers.Internal -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers.Internal\bin\Debug\netstandard2.0\Reactor.Analyzers.Internal.dll
+  Reactor.Localization.Generator -> C:\Users\andersonch\Code\reactor3\src\Reactor.Localization.Generator\bin\Debug\netstandard2.0\Reactor.Localization.Generator.dll
+  Reactor.Analyzers -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers\bin\Debug\netstandard2.0\Reactor.Analyzers.dll
+  Reactor -> C:\Users\andersonch\Code\reactor3\src\Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Reactor.dll
+  Reactor.Devtools -> C:\Users\andersonch\Code\reactor3\src\Reactor.Devtools\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Microsoft.UI.Reactor.Devtools.dll
+  NavigationDemo -> C:\Users\andersonch\Code\reactor3\samples\NavigationDemo\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\NavigationDemo.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:08.53
+OK
+
+== C:\Users\andersonch\Code\reactor3\samples\Reactor.TestApp\Reactor.TestApp.csproj ==
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  Reactor.Analyzers.Internal -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers.Internal\bin\Debug\netstandard2.0\Reactor.Analyzers.Internal.dll
+  Reactor.Localization.Generator -> C:\Users\andersonch\Code\reactor3\src\Reactor.Localization.Generator\bin\Debug\netstandard2.0\Reactor.Localization.Generator.dll
+  Reactor.Analyzers -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers\bin\Debug\netstandard2.0\Reactor.Analyzers.dll
+  Reactor -> C:\Users\andersonch\Code\reactor3\src\Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Reactor.dll
+  Reactor.Devtools -> C:\Users\andersonch\Code\reactor3\src\Reactor.Devtools\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Microsoft.UI.Reactor.Devtools.dll
+  Reactor.TestApp -> C:\Users\andersonch\Code\reactor3\samples\Reactor.TestApp\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Reactor.TestApp.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:09.30
+OK
+
+== C:\Users\andersonch\Code\reactor3\samples\ReactorCharting.Gallery\ReactorCharting.Gallery.csproj ==
+  Determining projects to restore...
+  Restored C:\Users\andersonch\Code\reactor3\samples\ReactorCharting.Gallery\ReactorCharting.Gallery.csproj (in 472 ms).
+  5 of 6 projects are up-to-date for restore.
+  Reactor.Analyzers.Internal -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers.Internal\bin\Debug\netstandard2.0\Reactor.Analyzers.Internal.dll
+  Reactor.Localization.Generator -> C:\Users\andersonch\Code\reactor3\src\Reactor.Localization.Generator\bin\Debug\netstandard2.0\Reactor.Localization.Generator.dll
+  Reactor.Analyzers -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers\bin\Debug\netstandard2.0\Reactor.Analyzers.dll
+  Reactor -> C:\Users\andersonch\Code\reactor3\src\Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Reactor.dll
+  Reactor.Devtools -> C:\Users\andersonch\Code\reactor3\src\Reactor.Devtools\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Microsoft.UI.Reactor.Devtools.dll
+  ReactorCharting.Gallery -> C:\Users\andersonch\Code\reactor3\samples\ReactorCharting.Gallery\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\ReactorCharting.Gallery.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:10.05
+OK
+
+== C:\Users\andersonch\Code\reactor3\samples\ReactorCharting.Sample\ReactorCharting.Sample.csproj ==
+  Determining projects to restore...
+  Restored C:\Users\andersonch\Code\reactor3\samples\ReactorCharting.Sample\ReactorCharting.Sample.csproj (in 586 ms).
+  5 of 6 projects are up-to-date for restore.
+  Reactor.Localization.Generator -> C:\Users\andersonch\Code\reactor3\src\Reactor.Localization.Generator\bin\Debug\netstandard2.0\Reactor.Localization.Generator.dll
+  Reactor.Analyzers.Internal -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers.Internal\bin\Debug\netstandard2.0\Reactor.Analyzers.Internal.dll
+  Reactor.Analyzers -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers\bin\Debug\netstandard2.0\Reactor.Analyzers.dll
+  Reactor -> C:\Users\andersonch\Code\reactor3\src\Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Reactor.dll
+  Reactor.Devtools -> C:\Users\andersonch\Code\reactor3\src\Reactor.Devtools\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Microsoft.UI.Reactor.Devtools.dll
+  ReactorCharting.Sample -> C:\Users\andersonch\Code\reactor3\samples\ReactorCharting.Sample\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\ReactorCharting.Sample.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:09.33
+OK
+
+== C:\Users\andersonch\Code\reactor3\samples\ReactorGallery\ReactorGallery.csproj ==
+  Determining projects to restore...
+  Restored C:\Users\andersonch\Code\reactor3\samples\ReactorGallery\ReactorGallery.csproj (in 639 ms).
+  5 of 6 projects are up-to-date for restore.
+  Reactor.Analyzers.Internal -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers.Internal\bin\Debug\netstandard2.0\Reactor.Analyzers.Internal.dll
+  Reactor.Localization.Generator -> C:\Users\andersonch\Code\reactor3\src\Reactor.Localization.Generator\bin\Debug\netstandard2.0\Reactor.Localization.Generator.dll
+  Reactor.Analyzers -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers\bin\Debug\netstandard2.0\Reactor.Analyzers.dll
+  Reactor -> C:\Users\andersonch\Code\reactor3\src\Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Reactor.dll
+  Reactor.Devtools -> C:\Users\andersonch\Code\reactor3\src\Reactor.Devtools\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Microsoft.UI.Reactor.Devtools.dll
+  ReactorGallery -> C:\Users\andersonch\Code\reactor3\samples\ReactorGallery\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\ReactorGallery.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:13.46
+OK
+
+== C:\Users\andersonch\Code\reactor3\samples\ReactorHostControlDemo\ReactorHostControlDemo.csproj ==
+  Determining projects to restore...
+  Restored C:\Users\andersonch\Code\reactor3\samples\ReactorHostControlDemo\ReactorHostControlDemo.csproj (in 677 ms).
+  5 of 6 projects are up-to-date for restore.
+  Reactor.Analyzers.Internal -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers.Internal\bin\Debug\netstandard2.0\Reactor.Analyzers.Internal.dll
+  Reactor.Localization.Generator -> C:\Users\andersonch\Code\reactor3\src\Reactor.Localization.Generator\bin\Debug\netstandard2.0\Reactor.Localization.Generator.dll
+  Reactor.Analyzers -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers\bin\Debug\netstandard2.0\Reactor.Analyzers.dll
+  Reactor -> C:\Users\andersonch\Code\reactor3\src\Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Reactor.dll
+  Reactor.Devtools -> C:\Users\andersonch\Code\reactor3\src\Reactor.Devtools\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Microsoft.UI.Reactor.Devtools.dll
+  ReactorHostControlDemo -> C:\Users\andersonch\Code\reactor3\samples\ReactorHostControlDemo\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\ReactorHostControlDemo.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:30.73
+OK
+
+== C:\Users\andersonch\Code\reactor3\samples\StylingGallery\StylingGallery.csproj ==
+  Determining projects to restore...
+  Restored C:\Users\andersonch\Code\reactor3\samples\StylingGallery\StylingGallery.csproj (in 593 ms).
+  5 of 6 projects are up-to-date for restore.
+  Reactor.Analyzers.Internal -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers.Internal\bin\Debug\netstandard2.0\Reactor.Analyzers.Internal.dll
+  Reactor.Localization.Generator -> C:\Users\andersonch\Code\reactor3\src\Reactor.Localization.Generator\bin\Debug\netstandard2.0\Reactor.Localization.Generator.dll
+  Reactor.Analyzers -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers\bin\Debug\netstandard2.0\Reactor.Analyzers.dll
+  Reactor -> C:\Users\andersonch\Code\reactor3\src\Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Reactor.dll
+  Reactor.Devtools -> C:\Users\andersonch\Code\reactor3\src\Reactor.Devtools\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Microsoft.UI.Reactor.Devtools.dll
+  StylingGallery -> C:\Users\andersonch\Code\reactor3\samples\StylingGallery\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\StylingGallery.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:08.89
+OK
+
+== C:\Users\andersonch\Code\reactor3\samples\TodoApp\TodoApp.csproj ==
+  Determining projects to restore...
+  Restored C:\Users\andersonch\Code\reactor3\samples\TodoApp\TodoApp.csproj (in 710 ms).
+  5 of 6 projects are up-to-date for restore.
+  Reactor.Analyzers.Internal -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers.Internal\bin\Debug\netstandard2.0\Reactor.Analyzers.Internal.dll
+  Reactor.Localization.Generator -> C:\Users\andersonch\Code\reactor3\src\Reactor.Localization.Generator\bin\Debug\netstandard2.0\Reactor.Localization.Generator.dll
+  Reactor.Analyzers -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers\bin\Debug\netstandard2.0\Reactor.Analyzers.dll
+  Reactor -> C:\Users\andersonch\Code\reactor3\src\Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Reactor.dll
+  Reactor.Devtools -> C:\Users\andersonch\Code\reactor3\src\Reactor.Devtools\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Microsoft.UI.Reactor.Devtools.dll
+  TodoApp -> C:\Users\andersonch\Code\reactor3\samples\TodoApp\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\TodoApp.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:08.77
+OK
+
+== C:\Users\andersonch\Code\reactor3\samples\WinFormsInterop\WinFormsInterop.csproj ==
+  Determining projects to restore...
+  Restored C:\Users\andersonch\Code\reactor3\samples\WinFormsInterop\WinFormsInterop.csproj (in 640 ms).
+  Restored C:\Users\andersonch\Code\reactor3\src\Reactor.Interop.WinForms\Reactor.Interop.WinForms.csproj (in 641 ms).
+  5 of 7 projects are up-to-date for restore.
+  Reactor.Analyzers.Internal -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers.Internal\bin\Debug\netstandard2.0\Reactor.Analyzers.Internal.dll
+  Reactor.Localization.Generator -> C:\Users\andersonch\Code\reactor3\src\Reactor.Localization.Generator\bin\Debug\netstandard2.0\Reactor.Localization.Generator.dll
+  Reactor.Analyzers -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers\bin\Debug\netstandard2.0\Reactor.Analyzers.dll
+  Reactor -> C:\Users\andersonch\Code\reactor3\src\Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Reactor.dll
+  Reactor.Devtools -> C:\Users\andersonch\Code\reactor3\src\Reactor.Devtools\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Microsoft.UI.Reactor.Devtools.dll
+  Reactor.Interop.WinForms -> C:\Users\andersonch\Code\reactor3\src\Reactor.Interop.WinForms\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\Reactor.Interop.WinForms.dll
+  WinFormsInterop -> C:\Users\andersonch\Code\reactor3\samples\WinFormsInterop\bin\x64\Debug\net10.0-windows10.0.22621.0\win-x64\WinFormsInterop.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:10.48
+OK

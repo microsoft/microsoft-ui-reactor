@@ -1242,6 +1242,16 @@ internal static class SelfTestFixtureRegistry
         "Spec048_NavigationChromeGroupFactoriesRegisterHandlers",
         "Spec048_OverlaysGroupFactoriesRegisterHandlers",
         "Spec048_IconAndInteropGroupFactoriesRegisterHandlers",
+        "PropEntryOptional_Execution",
+        "ElementPoolOptionalReset",
+        "ControlledOptionalCustomerRepro",
+        "ControlledOptionalSelectionFamily",
+        "ControlledOptionalToggleFamily",
+        "ControlledOptionalNumericFamily",
+        "ControlledOptionalDateTimeFamily",
+        "ControlledOptionalTextInputFamily",
+        "OneWayClearValue",
+        "OptionalEchoStrandRegression",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -2446,6 +2456,16 @@ internal static class SelfTestFixtureRegistry
         "Spec048_NavigationChromeGroupFactoriesRegisterHandlers" => new Spec048RegistrationFixtures.NavigationChromeGroupFactoriesRegisterHandlers(harness),
         "Spec048_OverlaysGroupFactoriesRegisterHandlers" => new Spec048RegistrationFixtures.OverlaysGroupFactoriesRegisterHandlers(harness),
         "Spec048_IconAndInteropGroupFactoriesRegisterHandlers" => new Spec048RegistrationFixtures.IconAndInteropGroupFactoriesRegisterHandlers(harness),
+        "PropEntryOptional_Execution" => new PropEntryOptionalFixture.Execution(harness),
+        "ElementPoolOptionalReset" => new ElementPoolOptionalResetFixture.Execution(harness),
+        "ControlledOptionalCustomerRepro" => new ControlledOptionalCustomerRepro.Execution(harness),
+        "ControlledOptionalSelectionFamily" => new ControlledOptionalSelectionFamilyFixture.Execution(harness),
+        "ControlledOptionalToggleFamily" => new ControlledOptionalToggleFamilyFixture.Execution(harness),
+        "ControlledOptionalNumericFamily" => new ControlledOptionalNumericFamilyFixture.Execution(harness),
+        "ControlledOptionalDateTimeFamily" => new ControlledOptionalDateTimeFamilyFixture.Execution(harness),
+        "ControlledOptionalTextInputFamily" => new ControlledOptionalTextInputFamilyFixture.Execution(harness),
+        "OneWayClearValue" => new OneWayClearValueFixture.Execution(harness),
+        "OptionalEchoStrandRegression" => new OptionalEchoStrandRegressionFixture.Execution(harness),
 
         _ => null,
     };

@@ -38,10 +38,10 @@ internal static class BuiltInHandlerBootstrap
     [ModuleInitializer]
     internal static void Initialize()
     {
-        // ── Phase 1 hand-coded handlers ──
-        _ = V1.Reg<ToggleSwitchElement, WinUI.ToggleSwitch, V1.Handlers.ToggleSwitchHandler>.Done;
-        _ = V1.Reg<SliderElement, WinUI.Slider, V1.Handlers.SliderHandler>.Done;
-        _ = V1.Reg<TextBoxElement, WinUI.TextBox, V1.Handlers.TextBoxHandler>.Done;
+        // ── Descriptor-backed value controls ──
+        _ = V1.Reg<ToggleSwitchElement, WinUI.ToggleSwitch, Desc.ToggleSwitchDescriptorHandler>.Done;
+        _ = V1.Reg<SliderElement, WinUI.Slider, Desc.SliderDescriptorHandler>.Done;
+        _ = V1.Reg<TextBoxElement, WinUI.TextBox, Desc.TextBoxDescriptorHandler>.Done;
         _ = V1.Reg<BorderElement, WinUI.Border, V1.Handlers.BorderHandler>.Done;
         _ = V1.Reg<ListViewElement, WinUI.ListView, V1.Handlers.ListViewHandler>.Done;
 
@@ -81,7 +81,7 @@ internal static class BuiltInHandlerBootstrap
         _ = V1.Reg<CalendarDatePickerElement, WinUI.CalendarDatePicker, Desc.CalendarDatePickerDescriptorHandler>.Done;
         _ = V1.Reg<CalendarViewElement, WinUI.CalendarView, Desc.CalendarViewDescriptorHandler>.Done;
         _ = V1.Reg<CanvasElement, WinUI.Canvas, Desc.CanvasDescriptorHandler>.Done;
-        _ = V1.RegDecorator<CheckBoxElement, V1.Handlers.CheckBoxHandler>.Done;
+        _ = V1.Reg<CheckBoxElement, WinUI.CheckBox, Desc.CheckBoxDescriptorHandler>.Done;
         _ = V1.Reg<ColorPickerElement, WinUI.ColorPicker, Desc.ColorPickerDescriptorHandler>.Done;
         _ = V1.Reg<ComboBoxElement, WinUI.ComboBox, Desc.ComboBoxDescriptorHandler>.Done;
         _ = V1.Reg<DatePickerElement, WinUI.DatePicker, Desc.DatePickerDescriptorHandler>.Done;

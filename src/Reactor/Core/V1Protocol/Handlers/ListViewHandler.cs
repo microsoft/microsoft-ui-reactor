@@ -106,10 +106,11 @@ internal sealed class ListViewHandler : IElementHandler<ListViewElement, WinUI.L
         // src/Reactor/Core/ChangeEchoSuppressor.cs: BeginSuppress always
         // increments, ShouldSuppress only consumes on a real event, so an
         // unconsumed token would swallow the next real user input.
-        if (lv.SelectedIndex >= 0 && listView.SelectedIndex != lv.SelectedIndex)
+        if (lv.SelectedIndex is { HasValue: true } mountIndex
+            && mountIndex.Value >= 0
+            && listView.SelectedIndex != mountIndex.Value)
         {
-            ChangeEchoSuppressor.BeginSuppress(listView);
-            listView.SelectedIndex = lv.SelectedIndex;
+            ReactorBinding.WriteSuppressed(listView, () => listView.SelectedIndex = mountIndex.Value);
         }
         Reconciler.ApplySetters(lv.Setters, listView);
         return listView;
@@ -168,10 +169,11 @@ internal sealed class ListViewHandler : IElementHandler<ListViewElement, WinUI.L
         // ListView fires after the property set doesn't echo back into
         // OnSelectedIndexChanged. Only arm on real drift (see Mount comment
         // above and the GridView analog wired for issue #464).
-        if (n.SelectedIndex >= 0 && lv.SelectedIndex != n.SelectedIndex)
+        if (n.SelectedIndex is { HasValue: true } updateIndex
+            && updateIndex.Value >= 0
+            && lv.SelectedIndex != updateIndex.Value)
         {
-            ChangeEchoSuppressor.BeginSuppress(lv);
-            lv.SelectedIndex = n.SelectedIndex;
+            ReactorBinding.WriteSuppressed(lv, () => lv.SelectedIndex = updateIndex.Value);
         }
         Reconciler.ApplySetters(n.Setters, lv);
     }

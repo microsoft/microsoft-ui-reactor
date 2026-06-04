@@ -106,13 +106,13 @@ public class FactoryWithExpressionTests
         => Assert.Equal("k", (ThreeStateCheckBox(null) with { Key = "k" }).Key);
 
     [Fact] public void RadioButton_WithExpr_Sets_Property()
-        => Assert.True((RadioButton("hi") with { IsChecked = true }).IsChecked);
+        => Assert.True((RadioButton("hi") with { IsChecked = true }).IsChecked.Value);
 
     [Fact] public void RadioButtons_WithExpr_Sets_Property()
-        => Assert.Equal(1, (RadioButtons(new[] { "a", "b" }) with { SelectedIndex = 1 }).SelectedIndex);
+        => Assert.Equal(1, (RadioButtons(new[] { "a", "b" }) with { SelectedIndex = 1 }).SelectedIndex.Value);
 
     [Fact] public void ComboBox_Strings_WithExpr_Sets_Property()
-        => Assert.Equal(1, (ComboBox(new[] { "a", "b" }) with { SelectedIndex = 1 }).SelectedIndex);
+        => Assert.Equal(1, (ComboBox(new[] { "a", "b" }) with { SelectedIndex = 1 }).SelectedIndex.Value);
 
     [Fact] public void ComboBox_Elements_WithExpr_Sets_Key()
         => Assert.Equal("k", (ComboBox(new Element[] { TextBlock("a") }, 0, null) with { Key = "k" }).Key);

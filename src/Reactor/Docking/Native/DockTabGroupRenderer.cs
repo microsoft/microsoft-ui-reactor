@@ -213,7 +213,7 @@ internal static class DockTabGroupRenderer
 
     /// <summary>
     /// Apply <see cref="DockTabGroup.TabChrome"/>-driven chrome to the
-    /// rendered <see cref="TabView"/>. Each preset is implemented as a
+    /// rendered <see cref="Microsoft.UI.Xaml.Controls.TabView"/>. Each preset is implemented as a
     /// scoped resource-dictionary override on the <c>TabView</c> instance
     /// — the underlying control template / accessibility tree are
     /// unchanged across presets (spec 045 §4.6).

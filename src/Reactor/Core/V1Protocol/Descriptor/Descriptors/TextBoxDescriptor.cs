@@ -5,10 +5,8 @@ using WinUI = Microsoft.UI.Xaml.Controls;
 namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 
 /// <summary>
-/// Spec 047 §14 Phase 3 (3.0.2) — descriptor variant of
-/// <see cref="V1Protocol.Handlers.TextBoxHandler"/>. First proof point for
-/// the <c>HandCodedControlled</c> / <c>HandCodedEvent</c> escape-hatch
-/// builders shipped in 3.0.1.
+/// Descriptor-backed TextBox handler using the <c>HandCodedControlled</c>
+/// / <c>HandCodedEvent</c> escape-hatch builders.
 ///
 /// <para><b>Why hand-coded:</b> TextBox round-trips one DP (<c>Text</c> via
 /// <c>TextChanged</c>) AND raises a second control-intrinsic event
@@ -140,3 +138,6 @@ internal static class TextBoxDescriptor
             set:         static (c, v) => c.Description = v,
             shouldWrite: static e => e.Description is not null);
 }
+
+internal sealed class TextBoxDescriptorHandler()
+    : DescriptorHandler<TextBoxElement, WinUI.TextBox>(TextBoxDescriptor.Descriptor);

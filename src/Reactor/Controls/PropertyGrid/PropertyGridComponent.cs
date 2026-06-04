@@ -218,8 +218,9 @@ public class PropertyGridComponent : Component<PropertyGridElement>
             return;
         }
 
-        var hasDecompose = meta.Decompose is not null && !IsPrimitiveOrEnum(propertyType);
-        var hasEditor = meta.Editor is not null;
+        var hasFieldEditor = descriptor.Editor is not null;
+        var hasDecompose = !hasFieldEditor && meta.Decompose is not null && !IsPrimitiveOrEnum(propertyType);
+        var hasEditor = hasFieldEditor || meta.Editor is not null;
 
         var label = labelTemplate(descriptor, indentLevel);
 
@@ -545,7 +546,7 @@ public class PropertyGridComponent : Component<PropertyGridElement>
             }
         };
 
-        return meta.Editor!(currentValue!, onChange);
+        return (descriptor.Editor ?? meta.Editor)!(currentValue!, onChange);
     }
 
     private static Element RenderReadOnlyValue(object? value, Type type)

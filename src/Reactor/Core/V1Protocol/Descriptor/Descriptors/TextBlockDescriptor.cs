@@ -9,7 +9,7 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <c>MountText</c> / <c>UpdateText</c> arms in <see cref="Reconciler"/>.
 ///
 /// <para><b>Coverage:</b> a zero-event display leaf. Every prop is either
-/// <see cref="ControlDescriptor{TElement,TControl}.OneWay"/> or
+/// <c>ControlDescriptor.OneWay</c> or
 /// <see cref="ControlDescriptor{TElement,TControl}.OneWayConditional"/>,
 /// mirroring the legacy arm's "write only when the element provides a value"
 /// pattern.</para>
@@ -20,7 +20,7 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// with the same <c>HasValue</c> / <c>is not null</c> guards. <c>MaxLines</c>,
 /// <c>CharacterSpacing</c> and <c>TextDecorations</c> are non-nullable on
 /// the element record so they round-trip via plain
-/// <see cref="ControlDescriptor{TElement,TControl}.OneWay"/>.</para>
+/// <c>ControlDescriptor.OneWay</c>.</para>
 ///
 /// <para><b>Known gaps vs. hand-coded handler:</b>
 /// <list type="bullet">

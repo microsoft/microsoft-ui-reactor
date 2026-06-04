@@ -66,7 +66,7 @@ internal static class TemplatedFlipViewDescriptor
         }
         .HandCodedControlled<FlipViewEventPayload, int,
             WinUI.SelectionChangedEventHandler>(
-            get:         static el => el.GetSelectedIndex(),
+            get:         static el => el.GetControlledSelectedIndex(),
             set:         static (ctrl, v) => { if (v >= 0) ctrl.SelectedIndex = v; },
             readBack:    static ctrl => ctrl.SelectedIndex,
             subscribe:   static (ctrl, h) => ctrl.SelectionChanged += h,

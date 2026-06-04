@@ -101,6 +101,55 @@ internal sealed class OneWayPropEntry<TElement, TControl, TValue> : PropEntry<TE
     }
 }
 
+/// <summary>§6.3 <c>Prop.OneWay</c> for <see cref="Optional{T}"/> values backed
+/// by a dependency property. Explicit values write through <c>set</c>; unset
+/// values clear the local DP value so WinUI value precedence can fall back.</summary>
+internal sealed class OneWayClearValuePropEntry<TElement, TControl, TValue> : PropEntry<TElement, TControl>
+    where TElement : Element
+    where TControl : UIElement
+{
+    private readonly Func<TElement, Optional<TValue>> _get;
+    private readonly Action<TControl, TValue> _set;
+    private readonly DependencyProperty _dp;
+    private readonly IEqualityComparer<TValue> _comparer;
+
+    public OneWayClearValuePropEntry(
+        Func<TElement, Optional<TValue>> get,
+        Action<TControl, TValue> set,
+        DependencyProperty dp,
+        IEqualityComparer<TValue>? comparer = null)
+    {
+        _get = get;
+        _set = set;
+        _dp = dp;
+        _comparer = comparer ?? EqualityComparer<TValue>.Default;
+    }
+
+    public override void Mount(TControl ctrl, TElement el)
+    {
+        var vOpt = _get(el);
+        if (vOpt.HasValue)
+            _set(ctrl, vOpt.Value);
+        else
+            ctrl.ClearValue(_dp);
+    }
+
+    public override void Update(TControl ctrl, TElement oldEl, TElement newEl)
+    {
+        var ovOpt = _get(oldEl);
+        var nvOpt = _get(newEl);
+        if (!nvOpt.HasValue)
+        {
+            if (ovOpt.HasValue)
+                ctrl.ClearValue(_dp);
+            return;
+        }
+
+        if (!ovOpt.HasValue || !_comparer.Equals(ovOpt.Value, nvOpt.Value))
+            _set(ctrl, nvOpt.Value);
+    }
+}
+
 /// <summary>§6.1 <c>Prop.OneWay</c> with a "should I write?" predicate — for
 /// nullable / optional values where the host control should be left at its
 /// default unless the element actually has a value. Used by Border's
@@ -163,6 +212,26 @@ internal sealed class InitialPropEntry<TElement, TControl, TValue> : PropEntry<T
     public override void Update(TControl ctrl, TElement oldEl, TElement newEl) { /* never */ }
 }
 
+/// <summary>§7 <c>Prop.InitialOnly</c> — write once at Mount, never on Update.
+/// Use for default-value-style props where the control owns the value after
+/// its initial seed.</summary>
+internal sealed class InitialOnlyPropEntry<TElement, TControl, TValue> : PropEntry<TElement, TControl>
+    where TElement : Element
+    where TControl : UIElement
+{
+    private readonly Func<TElement, TValue> _get;
+    private readonly Action<TControl, TValue> _set;
+
+    public InitialOnlyPropEntry(Func<TElement, TValue> get, Action<TControl, TValue> set)
+    {
+        _get = get;
+        _set = set;
+    }
+
+    public override void Mount(TControl ctrl, TElement el) => _set(ctrl, _get(el));
+    public override void Update(TControl ctrl, TElement oldEl, TElement newEl) { /* never */ }
+}
+
 /// <summary>§6.1 <c>Prop.Controlled</c> — two-way bound. The engine writes
 /// from element state (suppressed on Update), the control raises the change
 /// event on user interaction, a static trampoline invokes the user's
@@ -176,8 +245,7 @@ internal sealed class InitialPropEntry<TElement, TControl, TValue> : PropEntry<T
 /// stashed via <see cref="Reconciler.GetOrCreateControlEventPayload{T}"/>,
 /// which survives pool rent/return (KD-3 invariant). Subsequent mounts of
 /// the same control hit the null-slot check and skip the subscription
-/// entirely — zero allocations on the re-mount fast path, identical shape
-/// to <c>EnsureToggledWiring</c> in <see cref="V1Protocol.Handlers.ToggleSwitchHandler"/>.</para>
+/// entirely — zero allocations on the re-mount fast path.</para>
 ///
 /// <para><b>Callback gate:</b> if the element's callback selector returns
 /// <c>null</c> the entry does not subscribe. Mirrors the hand-coded
@@ -188,7 +256,7 @@ internal sealed class ControlledPropEntry<TElement, TControl, TValue, TArgs> : P
     where TElement : Element
     where TControl : FrameworkElement
 {
-    private readonly Func<TElement, TValue> _get;
+    private readonly Func<TElement, Optional<TValue>> _get;
     private readonly Action<TControl, TValue> _set;
     private readonly Action<FrameworkElement, EventHandler<TArgs>> _subscribe;
     private readonly Action<FrameworkElement, EventHandler<TArgs>> _unsubscribe;
@@ -250,7 +318,7 @@ internal sealed class ControlledPropEntry<TElement, TControl, TValue, TArgs> : P
     };
 
     public ControlledPropEntry(
-        Func<TElement, TValue> get,
+        Func<TElement, Optional<TValue>> get,
         Action<TControl, TValue> set,
         Action<FrameworkElement, EventHandler<TArgs>> subscribe,
         Action<FrameworkElement, EventHandler<TArgs>> unsubscribe,
@@ -284,14 +352,18 @@ internal sealed class ControlledPropEntry<TElement, TControl, TValue, TArgs> : P
         // Bare initial write — subscription has not yet been wired (the
         // interpreter calls EnsureSubscribed after all Mount writes), so this
         // write raises no echo callback and needs no arming.
-        var v = _get(el);
+        var vOpt = _get(el);
+        if (!vOpt.HasValue) return;
+        var v = vOpt.Value;
         if (!_comparer.Equals(_readBack(ctrl), v))
             _set(ctrl, v);
     }
 
     public override void Update(TControl ctrl, TElement oldEl, TElement newEl)
     {
-        var nv = _get(newEl);
+        var nvOpt = _get(newEl);
+        if (!nvOpt.HasValue) return;
+        var nv = nvOpt.Value;
         var current = _readBack(ctrl);
         // Spec 047 §8 echo-suppression contract: write ONLY when the control has
         // drifted from the element's authority. A no-drift write raises no event,
@@ -427,7 +499,7 @@ internal sealed class HandCodedControlledPropEntry<TElement, TControl, TPayload,
     where TPayload : class, new()
     where TDelegate : Delegate
 {
-    private readonly Func<TElement, TValue> _get;
+    private readonly Func<TElement, Optional<TValue>> _get;
     private readonly Action<TControl, TValue> _set;
     private readonly Func<TControl, TValue> _readBack;
     private readonly Action<TControl, TDelegate> _subscribe;
@@ -439,7 +511,7 @@ internal sealed class HandCodedControlledPropEntry<TElement, TControl, TPayload,
     private readonly bool _valueDiffEcho;
 
     public HandCodedControlledPropEntry(
-        Func<TElement, TValue> get,
+        Func<TElement, Optional<TValue>> get,
         Action<TControl, TValue> set,
         Func<TControl, TValue> readBack,
         Action<TControl, TDelegate> subscribe,
@@ -470,14 +542,18 @@ internal sealed class HandCodedControlledPropEntry<TElement, TControl, TPayload,
         if (_valueDiffEcho)
             ChangeEchoSuppressor.ClearExpectedEcho(ctrl);
 
-        var v = _get(el);
+        var vOpt = _get(el);
+        if (!vOpt.HasValue) return;
+        var v = vOpt.Value;
         if (!_comparer.Equals(_readBack(ctrl), v))
             _set(ctrl, v);
     }
 
     public override void Update(TControl ctrl, TElement oldEl, TElement newEl)
     {
-        var nv = _get(newEl);
+        var nvOpt = _get(newEl);
+        if (!nvOpt.HasValue) return;
+        var nv = nvOpt.Value;
         var current = _readBack(ctrl);
         // Spec 047 §8: suppress-write only on real drift (see ControlledPropEntry).
         // The prior `oldEl != newEl` disjunct stranded the suppress token on the

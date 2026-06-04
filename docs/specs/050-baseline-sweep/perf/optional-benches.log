@@ -1,0 +1,4 @@
+Optional<T> perf bench (migrated tree, Debug x64)
+No main baseline available in this worktree; absolute numbers only.
+OAlloc: mean 316.9 ns/op, alloc 5,280,040 B/rep, status ok
+OUpdate: mean 80,508.1 ns/op, alloc 53,630,288 B/rep, status ok

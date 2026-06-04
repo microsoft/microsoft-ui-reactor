@@ -15,7 +15,7 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <c>StrokeThickness</c> / <c>RadiusX</c> / <c>RadiusY</c> only when
 /// <c>&gt; 0</c>, while the legacy <c>UpdateRectangle</c> writes them
 /// unconditionally. We mirror the <i>update</i> behavior (unconditional
-/// <see cref="ControlDescriptor{TElement,TControl}.OneWay"/>) — the per-prop
+/// <c>ControlDescriptor.OneWay</c>) — the per-prop
 /// comparer makes the write a no-op when the values match anyway, and the
 /// engine doesn't distinguish mount vs. update sites. The element's default
 /// zero values keep the visible-output equivalent to the legacy mount for

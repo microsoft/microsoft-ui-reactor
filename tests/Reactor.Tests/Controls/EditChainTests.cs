@@ -407,7 +407,7 @@ public class EditChainTests
         var method = GetStatic("RenderReadOnlyValue");
         var el = (Element)method.Invoke(null, new object?[] { true, typeof(bool) })!;
         var toggle = Assert.IsType<ToggleSwitchElement>(el);
-        Assert.True(toggle.IsOn);
+        Assert.True(toggle.IsOn.Value);
         Assert.Equal(false, toggle.Modifiers?.IsEnabled);
     }
 
@@ -419,7 +419,7 @@ public class EditChainTests
         var method = GetStatic("RenderReadOnlyValue");
         var el = (Element)method.Invoke(null, new object?[] { null, typeof(bool) })!;
         var toggle = Assert.IsType<ToggleSwitchElement>(el);
-        Assert.False(toggle.IsOn);
+        Assert.False(toggle.IsOn.Value);
         Assert.Equal(false, toggle.Modifiers?.IsEnabled);
     }
 

@@ -94,10 +94,11 @@ internal sealed class GridViewHandler : IElementHandler<GridViewElement, WinUI.G
         // suppressed instead of leaking into OnSelectedIndexChanged. Only
         // arm when the value would actually drift (a no-op write raises no
         // echo and would strand a token that swallows the next real input).
-        if (gv.SelectedIndex >= 0 && gridView.SelectedIndex != gv.SelectedIndex)
+        if (gv.SelectedIndex is { HasValue: true } mountIndex
+            && mountIndex.Value >= 0
+            && gridView.SelectedIndex != mountIndex.Value)
         {
-            ChangeEchoSuppressor.BeginSuppress(gridView);
-            gridView.SelectedIndex = gv.SelectedIndex;
+            ReactorBinding.WriteSuppressed(gridView, () => gridView.SelectedIndex = mountIndex.Value);
         }
         Reconciler.ApplySetters(gv.Setters, gridView);
         return gridView;
@@ -155,10 +156,11 @@ internal sealed class GridViewHandler : IElementHandler<GridViewElement, WinUI.G
         // src/Reactor/Core/ChangeEchoSuppressor.cs — BeginSuppress always
         // increments, ShouldSuppress only consumes on a real event, so an
         // unconsumed token swallows the next user input).
-        if (n.SelectedIndex >= 0 && gv.SelectedIndex != n.SelectedIndex)
+        if (n.SelectedIndex is { HasValue: true } updateIndex
+            && updateIndex.Value >= 0
+            && gv.SelectedIndex != updateIndex.Value)
         {
-            ChangeEchoSuppressor.BeginSuppress(gv);
-            gv.SelectedIndex = n.SelectedIndex;
+            ReactorBinding.WriteSuppressed(gv, () => gv.SelectedIndex = updateIndex.Value);
         }
         Reconciler.ApplySetters(n.Setters, gv);
     }

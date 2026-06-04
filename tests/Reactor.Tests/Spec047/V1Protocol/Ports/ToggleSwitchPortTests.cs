@@ -1,6 +1,5 @@
 using System;
 using Microsoft.UI.Reactor.Core;
-using Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 using Xunit;
 
 namespace Microsoft.UI.Reactor.Tests.Spec047.V1Protocol.Ports;
@@ -18,13 +17,11 @@ namespace Microsoft.UI.Reactor.Tests.Spec047.V1Protocol.Ports;
 public class ToggleSwitchPortTests
 {
     [Fact]
-    public void BuiltIn_ToggleSwitchHandler_In_Global_Registry()
+    public void BuiltIn_ToggleSwitchDescriptor_In_Global_Registry()
     {
-        // Spec 048 §3.4 — the test-only BuiltInHandlerBootstrap module
-        // initializer has already touched Reg<ToggleSwitchElement, ToggleSwitch,
-        // ToggleSwitchHandler>.Done, registering the closed-generic handler in
-        // the global ControlRegistry. Production code reaches the same state by
-        // calling the ToggleSwitch() factory at least once.
+        // Spec 050 — the test-only BuiltInHandlerBootstrap module initializer
+        // now registers ToggleSwitch through the descriptor-backed handler.
+        // Production code reaches the same state by calling the factory.
         Assert.True(Microsoft.UI.Reactor.Core.V1Protocol.ControlRegistry.TryResolve(
             typeof(ToggleSwitchElement), out _));
     }

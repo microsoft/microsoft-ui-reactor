@@ -1,0 +1,16 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  Reactor.Analyzers.Internal -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers.Internal\bin\Debug\netstandard2.0\Reactor.Analyzers.Internal.dll
+  Reactor.Localization.Generator -> C:\Users\andersonch\Code\reactor3\src\Reactor.Localization.Generator\bin\Debug\netstandard2.0\Reactor.Localization.Generator.dll
+  Reactor.Analyzers -> C:\Users\andersonch\Code\reactor3\src\Reactor.Analyzers\bin\Debug\netstandard2.0\Reactor.Analyzers.dll
+  Reactor.AppTests.ThirdPartyControls -> C:\Users\andersonch\Code\reactor3\tests\Reactor.AppTests.ThirdPartyControls\bin\x64\Debug\net10.0-windows10.0.22621.0\Reactor.AppTests.ThirdPartyControls.dll
+  Reactor -> C:\Users\andersonch\Code\reactor3\src\Reactor\bin\x64\Debug\net10.0-windows10.0.22621.0\Reactor.dll
+  Reactor.Devtools -> C:\Users\andersonch\Code\reactor3\src\Reactor.Devtools\bin\x64\Debug\net10.0-windows10.0.22621.0\Microsoft.UI.Reactor.Devtools.dll
+  Reactor.External.TestControl -> C:\Users\andersonch\Code\reactor3\tests\external_proof\Reactor.External.TestControl\bin\x64\Debug\net10.0-windows10.0.22621.0\Reactor.External.TestControl.dll
+  Reactor.Advanced -> C:\Users\andersonch\Code\reactor3\src\Reactor.Advanced\bin\x64\Debug\net10.0-windows10.0.22621.0\Reactor.Advanced.dll
+  Reactor.AppTests.Host -> C:\Users\andersonch\Code\reactor3\tests\Reactor.AppTests.Host\bin\x64\Debug\net10.0-windows10.0.22621.0\Reactor.AppTests.Host.dll
+  Reactor.SelfTests -> C:\Users\andersonch\Code\reactor3\tests\Reactor.SelfTests\bin\x64\Debug\net10.0-windows10.0.22621.0\Reactor.SelfTests.dll
+Test run for C:\Users\andersonch\Code\reactor3\tests\Reactor.SelfTests\bin\x64\Debug\net10.0-windows10.0.22621.0\Reactor.SelfTests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+
+Passed!  - Failed:     0, Passed:  1047, Skipped:     0, Total:  1047, Duration: 3 m 40 s - Reactor.SelfTests.dll (net10.0)

@@ -321,7 +321,7 @@ public sealed class ElementPool : IDisposable
                 VisualStateManager.GoToState(button, "Normal", false);
                 break;
             case TextBox textBox:
-                textBox.Text = "";
+                textBox.ClearValue(TextBox.TextProperty);
                 textBox.PlaceholderText = "";
                 textBox.Header = null;
                 textBox.IsReadOnly = false;
@@ -330,7 +330,7 @@ public sealed class ElementPool : IDisposable
                 VisualStateManager.GoToState(textBox, "Normal", false);
                 break;
             case WinUI.ToggleSwitch toggle:
-                toggle.IsOn = false;
+                toggle.ClearValue(WinUI.ToggleSwitch.IsOnProperty);
                 toggle.IsEnabled = true;
                 toggle.OnContent = null;
                 toggle.OffContent = null;

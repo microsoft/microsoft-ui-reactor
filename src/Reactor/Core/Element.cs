@@ -2333,7 +2333,8 @@ public record SplitButtonElement(string Label, Action? OnClick = null, Element? 
     internal override bool HasCallbacks => OnClick is not null;
 }
 
-public record ToggleSplitButtonElement(string Label, bool IsChecked = false, Action<bool>? OnIsCheckedChanged = null, Element? Flyout = null) : Element
+/// <summary>Toggle split button element. <c>IsChecked</c> defaults to <see cref="Optional{T}.Unset"/> so the control owns its initial checked state until explicitly set.</summary>
+public record ToggleSplitButtonElement(string Label, Optional<bool> IsChecked = default, Action<bool>? OnIsCheckedChanged = null, Element? Flyout = null) : Element
 {
     internal Action<WinUI.ToggleSplitButton>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnIsCheckedChanged is not null;
@@ -2343,8 +2344,9 @@ public record ToggleSplitButtonElement(string Label, bool IsChecked = false, Act
 //  Input elements
 // ════════════════════════════════════════════════════════════════════════
 
+/// <summary>Text box element. <c>Value</c> defaults to <see cref="Optional{T}.Unset"/> so user text is not overwritten unless a value is explicitly provided.</summary>
 public record TextBoxElement(
-    string Value,
+    Optional<string> Value = default,
     Action<string>? OnChanged = null,
     string? PlaceholderText = null
 ) : Element
@@ -2373,8 +2375,9 @@ public record TextBoxElement(
     internal override bool HasCallbacks => OnChanged is not null || OnSelectionChanged is not null;
 }
 
+/// <summary>Password box element. <c>Password</c> defaults to <see cref="Optional{T}.Unset"/> so user input is not overwritten unless a value is explicitly provided.</summary>
 public record PasswordBoxElement(
-    string Password,
+    Optional<string> Password = default,
     Action<string>? OnPasswordChanged = null,
     string? PlaceholderText = null
 ) : Element
@@ -2391,8 +2394,9 @@ public record PasswordBoxElement(
     internal override bool HasCallbacks => OnPasswordChanged is not null;
 }
 
+/// <summary>Number box element. <c>Value</c> defaults to <see cref="Optional{T}.Unset"/> so the control owns its value until explicitly set.</summary>
 public record NumberBoxElement(
-    double Value,
+    Optional<double> Value = default,
     Action<double>? OnValueChanged = null,
     string? Header = null
 ) : Element
@@ -2415,8 +2419,9 @@ public record NumberBoxElement(
     internal override bool HasCallbacks => OnValueChanged is not null;
 }
 
+/// <summary>Auto-suggest box element. <c>Text</c> defaults to <see cref="Optional{T}.Unset"/> so typed text is not overwritten unless explicitly set.</summary>
 public record AutoSuggestBoxElement(
-    string Text,
+    Optional<string> Text = default,
     Action<string>? OnTextChanged = null,
     Action<string>? OnQuerySubmitted = null,
     Action<string>? OnSuggestionChosen = null
@@ -2434,8 +2439,9 @@ public record AutoSuggestBoxElement(
     internal override bool HasCallbacks => OnTextChanged is not null || OnQuerySubmitted is not null || OnSuggestionChosen is not null;
 }
 
+/// <summary>Check box element. <c>IsChecked</c> defaults to <see cref="Optional{T}.Unset"/> so the control owns its checked state until explicitly set.</summary>
 public record CheckBoxElement(
-    bool IsChecked,
+    Optional<bool?> IsChecked = default,
     Action<bool>? OnIsCheckedChanged = null,
     string? Label = null
 ) : Element
@@ -2447,9 +2453,10 @@ public record CheckBoxElement(
     internal override bool HasCallbacks => OnIsCheckedChanged is not null || OnCheckedStateChanged is not null;
 }
 
+/// <summary>Radio button element. <c>IsChecked</c> defaults to <see cref="Optional{T}.Unset"/> so the control owns its checked state until explicitly set.</summary>
 public record RadioButtonElement(
     string Label,
-    bool IsChecked = false,
+    Optional<bool> IsChecked = default,
     Action<bool>? OnIsCheckedChanged = null,
     string? GroupName = null
 ) : Element
@@ -2458,9 +2465,10 @@ public record RadioButtonElement(
     internal override bool HasCallbacks => OnIsCheckedChanged is not null;
 }
 
+/// <summary>RadioButtons element. <c>SelectedIndex</c> defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no selection.</summary>
 public record RadioButtonsElement(
     string[] Items,
-    int SelectedIndex = -1,
+    Optional<int> SelectedIndex = default,
     Action<int>? OnSelectedIndexChanged = null
 ) : Element
 {
@@ -2469,9 +2477,10 @@ public record RadioButtonsElement(
     internal override bool HasCallbacks => OnSelectedIndexChanged is not null;
 }
 
+/// <summary>ComboBox element. <c>SelectedIndex</c> defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no selection.</summary>
 public record ComboBoxElement(
     string[] Items,
-    int SelectedIndex = -1,
+    Optional<int> SelectedIndex = default,
     Action<int>? OnSelectedIndexChanged = null
 ) : Element
 {
@@ -2494,8 +2503,9 @@ public record ComboBoxElement(
         || OnDropDownClosed is not null;
 }
 
+/// <summary>Slider element. <c>Value</c> defaults to <see cref="Optional{T}.Unset"/> so the control owns its value until explicitly set.</summary>
 public record SliderElement(
-    double Value,
+    Optional<double> Value = default,
     double Min = 0,
     double Max = 100,
     Action<double>? OnValueChanged = null
@@ -2517,8 +2527,9 @@ public record SliderElement(
     internal override bool HasCallbacks => OnValueChanged is not null;
 }
 
+/// <summary>Toggle switch element. <c>IsOn</c> defaults to <see cref="Optional{T}.Unset"/> so the control owns its state until explicitly set.</summary>
 public record ToggleSwitchElement(
-    bool IsOn,
+    Optional<bool> IsOn = default,
     Action<bool>? OnIsOnChanged = null,
     string? OnContent = null,
     string? OffContent = null
@@ -2529,8 +2540,9 @@ public record ToggleSwitchElement(
     internal override bool HasCallbacks => OnIsOnChanged is not null;
 }
 
+/// <summary>Rating control element. <c>Value</c> defaults to <see cref="Optional{T}.Unset"/> so the control owns its rating until explicitly set.</summary>
 public record RatingControlElement(
-    double Value = 0,
+    Optional<double> Value = default,
     Action<double>? OnValueChanged = null
 ) : Element
 {
@@ -2545,8 +2557,9 @@ public record RatingControlElement(
     internal override bool HasCallbacks => OnValueChanged is not null;
 }
 
+/// <summary>Color picker element. <c>Color</c> defaults to <see cref="Optional{T}.Unset"/> so the control owns its color until explicitly set.</summary>
 public record ColorPickerElement(
-    global::Windows.UI.Color Color,
+    Optional<global::Windows.UI.Color> Color = default,
     Action<global::Windows.UI.Color>? OnColorChanged = null
 ) : Element
 {
@@ -2578,8 +2591,9 @@ public record ColorPickerElement(
 //  Date / Time elements
 // ════════════════════════════════════════════════════════════════════════
 
+/// <summary>Calendar date picker element. <c>Date</c> defaults to <see cref="Optional{T}.Unset"/>; use an explicit <c>null</c> value to assert no date.</summary>
 public record CalendarDatePickerElement(
-    DateTimeOffset? Date = null,
+    Optional<DateTimeOffset?> Date = default,
     Action<DateTimeOffset?>? OnDateChanged = null
 ) : Element
 {
@@ -2599,8 +2613,9 @@ public record CalendarDatePickerElement(
     internal override bool HasCallbacks => OnDateChanged is not null;
 }
 
+/// <summary>Date picker element. <c>Date</c> defaults to <see cref="Optional{T}.Unset"/> so the control owns its date until explicitly set.</summary>
 public record DatePickerElement(
-    DateTimeOffset Date,
+    Optional<DateTimeOffset> Date = default,
     Action<DateTimeOffset>? OnDateChanged = null
 ) : Element
 {
@@ -2622,8 +2637,9 @@ public record DatePickerElement(
     internal override bool HasCallbacks => OnDateChanged is not null;
 }
 
+/// <summary>Time picker element. <c>Time</c> defaults to <see cref="Optional{T}.Unset"/> so the control owns its time until explicitly set.</summary>
 public record TimePickerElement(
-    TimeSpan Time,
+    Optional<TimeSpan> Time = default,
     Action<TimeSpan>? OnTimeChanged = null
 ) : Element
 {
@@ -2721,8 +2737,9 @@ public record WebView2Element(Uri? Source = null) : Element
 //  Rich text elements
 // ════════════════════════════════════════════════════════════════════════
 
+/// <summary>Rich edit box element. <c>Text</c> defaults to <see cref="Optional{T}.Unset"/> so user text is not overwritten unless explicitly set.</summary>
 public record RichEditBoxElement(
-    string Text = ""
+    Optional<string> Text = default
 ) : Element
 {
     public bool IsReadOnly { get; init; }
@@ -2868,10 +2885,11 @@ public record BorderElement(Element? Child) : Element
     internal Action<WinUI.Border>[] Setters { get; init; } = [];
 }
 
+/// <summary>Expander element. <c>IsExpanded</c> defaults to <see cref="Optional{T}.Unset"/> so the control owns its expansion state until explicitly set.</summary>
 public record ExpanderElement(
     string Header,
     Element Content,
-    bool IsExpanded = false,
+    Optional<bool> IsExpanded = default,
     Action<bool>? OnIsExpandedChanged = null
 ) : Element
 {
@@ -3036,7 +3054,8 @@ public record TabViewElement(
     TabViewItemData[] Tabs
 ) : Element
 {
-    public int SelectedIndex { get; init; } = 0;
+    /// <summary>Selected tab index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no selection.</summary>
+    public Optional<int> SelectedIndex { get; init; } = default;
     public Action<int>? OnSelectedIndexChanged { get; init; }
     public Action<int>? OnTabCloseRequested { get; init; }
     public Action? OnAddTabButtonClick { get; init; }
@@ -3088,7 +3107,8 @@ public record PivotElement(
     PivotItemData[] Items
 ) : Element
 {
-    public int SelectedIndex { get; init; } = 0;
+    /// <summary>Selected pivot item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no selection.</summary>
+    public Optional<int> SelectedIndex { get; init; } = default;
     public Action<int>? OnSelectedIndexChanged { get; init; }
     public string? Title { get; init; }
     internal Action<WinUI.Pivot>[] Setters { get; init; } = [];
@@ -3103,7 +3123,8 @@ public record ListViewElement(
     Element[] Items
 ) : Element
 {
-    public int SelectedIndex { get; init; } = -1;
+    /// <summary>Selected item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no selection.</summary>
+    public Optional<int> SelectedIndex { get; init; } = default;
     public Action<int>? OnSelectedIndexChanged { get; init; }
     public Action<int>? OnItemClick { get; init; }
     public ListViewSelectionMode SelectionMode { get; init; } = ListViewSelectionMode.Single;
@@ -3130,7 +3151,8 @@ public record GridViewElement(
     Element[] Items
 ) : Element
 {
-    public int SelectedIndex { get; init; } = -1;
+    /// <summary>Selected item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no selection.</summary>
+    public Optional<int> SelectedIndex { get; init; } = default;
     public Action<int>? OnSelectedIndexChanged { get; init; }
     public Action<int>? OnItemClick { get; init; }
     public ListViewSelectionMode SelectionMode { get; init; } = ListViewSelectionMode.Single;
@@ -3168,7 +3190,8 @@ public record FlipViewElement(
     Element[] Items
 ) : Element
 {
-    public int SelectedIndex { get; init; } = 0;
+    /// <summary>Selected item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no selection.</summary>
+    public Optional<int> SelectedIndex { get; init; } = default;
     public Action<int>? OnSelectedIndexChanged { get; init; }
     internal Action<WinUI.FlipView>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnSelectedIndexChanged is not null;
@@ -3343,6 +3366,7 @@ public abstract record TemplatedListElementBase : Element, global::Microsoft.UI.
     public abstract TemplatedControlKind ControlKind { get; }
     public abstract int ItemCount { get; }
     public abstract int GetSelectedIndex();
+    internal virtual Optional<int> GetControlledSelectedIndex() => GetSelectedIndex();
     public abstract ListViewSelectionMode GetSelectionMode();
     public abstract string? GetHeader();
     public abstract bool GetIsItemClickEnabled();
@@ -3517,12 +3541,14 @@ public record TemplatedFlipViewElement<T>(
     Func<T, int, Element> ViewBuilder
 ) : TemplatedFlipViewElementBase
 {
-    public int SelectedIndex { get; init; } = 0;
+    /// <summary>Selected item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no selection.</summary>
+    public Optional<int> SelectedIndex { get; init; } = default;
     public Action<int>? OnSelectedIndexChanged { get; init; }
     internal Action<WinUI.FlipView>[] Setters { get; init; } = [];
 
     public override int ItemCount => Items.Count;
-    public override int GetSelectedIndex() => SelectedIndex;
+    public override int GetSelectedIndex() => SelectedIndex.GetValueOrDefault(0);
+    internal override Optional<int> GetControlledSelectedIndex() => SelectedIndex;
     public override ListViewSelectionMode GetSelectionMode() => ListViewSelectionMode.Single;
     public override string? GetHeader() => null;
     public override bool GetIsItemClickEnabled() => false;
@@ -4058,7 +4084,8 @@ public record SemanticZoomElement(Element ZoomedInView, Element ZoomedOutView) :
 
 public record ListBoxElement(string[] Items) : Element
 {
-    public int SelectedIndex { get; init; } = -1;
+    /// <summary>Selected item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no selection.</summary>
+    public Optional<int> SelectedIndex { get; init; } = default;
     public Action<int>? OnSelectedIndexChanged { get; init; }
     /// <summary>
     /// Multi-select snapshot callback. Receives the FULL list of currently
@@ -4075,7 +4102,8 @@ public record ListBoxElement(string[] Items) : Element
 
 public record SelectorBarElement(SelectorBarItemData[] Items) : Element
 {
-    public int SelectedIndex { get; init; } = 0;
+    /// <summary>Selected item index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no selection.</summary>
+    public Optional<int> SelectedIndex { get; init; } = default;
     public Action<int>? OnSelectedIndexChanged { get; init; }
     internal Action<WinUI.SelectorBar>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnSelectedIndexChanged is not null;
@@ -4085,7 +4113,8 @@ public record SelectorBarItemData(string Text, string? Icon = null);
 
 public record PipsPagerElement(int NumberOfPages) : Element
 {
-    public int SelectedPageIndex { get; init; }
+    /// <summary>Selected page index. Defaults to <see cref="Optional{T}.Unset"/>; use <c>Optional.Of(-1)</c> to force no page selection.</summary>
+    public Optional<int> SelectedPageIndex { get; init; } = default;
     public Action<int>? OnSelectedPageIndexChanged { get; init; }
     /// <summary>Whether the selected index wraps around the ends. Defaults to <c>None</c>.</summary>
     public PipsPagerWrapMode WrapMode { get; init; } = PipsPagerWrapMode.None;

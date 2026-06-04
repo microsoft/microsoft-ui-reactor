@@ -6,8 +6,7 @@ using WinUI = Microsoft.UI.Xaml.Controls;
 namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 
 /// <summary>
-/// Spec 047 §14 Phase 2 (Q1 spike) — descriptor variant of
-/// <see cref="V1Protocol.Handlers.SliderHandler"/>.
+/// Descriptor-backed Slider handler.
 ///
 /// <para>The hardest of the three Q1 head-to-head ports — exercises the
 /// coercion-tolerance entry shape (§8 audit). <c>Slider.Value</c> is the
@@ -78,3 +77,6 @@ internal static class SliderDescriptor
             set:         static (c, v) => c.Header = v,
             shouldWrite: static e => e.Header is not null);
 }
+
+internal sealed class SliderDescriptorHandler()
+    : DescriptorHandler<SliderElement, WinUI.Slider>(SliderDescriptor.Descriptor);

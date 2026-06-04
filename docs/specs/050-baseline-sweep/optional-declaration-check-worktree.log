@@ -1,0 +1,15 @@
+src/Reactor/Core/Optional.cs:11:public readonly struct Optional<T> : IEquatable<Optional<T>>
+src/Reactor/Core/Optional.cs:26:    public T Value => _hasValue ? _value! : throw new InvalidOperationException("Optional<T> has no value.");
+src/Reactor/Core/Optional.cs:41:    public static Optional<T> Unset => default;
+src/Reactor/Core/Optional.cs:46:    public static Optional<T> Of([AllowNull] T value) => new(hasValue: true, value);
+src/Reactor/Core/Optional.cs:48:    private Optional(bool hasValue, [AllowNull] T value)
+src/Reactor/Core/Optional.cs:57:    public static implicit operator Optional<T>([AllowNull] T value) => Of(value);
+src/Reactor/Core/Optional.cs:62:    public bool Equals(Optional<T> other)
+src/Reactor/Core/Optional.cs:75:    public override bool Equals(object? obj) => obj is Optional<T> other && Equals(other);
+src/Reactor/Core/Optional.cs:94:    public static bool operator ==(Optional<T> left, Optional<T> right) => left.Equals(right);
+src/Reactor/Core/Optional.cs:99:    public static bool operator !=(Optional<T> left, Optional<T> right) => !left.Equals(right);
+src/Reactor/Core/V1Protocol/Descriptor/PropEntry.cs:112:    private readonly Func<TElement, Optional<TValue>> _get;
+src/Reactor/Core/V1Protocol/Descriptor/PropEntry.cs:229:    private readonly Func<TElement, Optional<TValue>> _get;
+src/Reactor/Core/V1Protocol/Descriptor/PropEntry.cs:232:    public InitialOnlyPropEntry(Func<TElement, Optional<TValue>> get, Action<TControl, TValue> set)
+src/Reactor/Core/V1Protocol/Descriptor/PropEntry.cs:273:    private readonly Func<TElement, Optional<TValue>> _get;
+src/Reactor/Core/V1Protocol/Descriptor/PropEntry.cs:516:    private readonly Func<TElement, Optional<TValue>> _get;
