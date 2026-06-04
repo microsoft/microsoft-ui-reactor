@@ -65,16 +65,8 @@ extends:
     cloudvault: # https://aka.ms/obpipelines/cloudvault
       enabled: false
     globalSdl: # https://aka.ms/obpipelines/sdl
-      # TSA (Trust Services Automation = automated SDL bug-filing) is intentionally OFF:
-      # we have no registered TSA codebase and no .config/tsaoptions.json, so the upload
-      # only warned the build into 'partiallySucceeded' (build 118652: TsaConfigFormatException
-      # / ENOENT on .config/tsaoptions.json). With TSA disabled, OneBranch forces every SDL
-      # tool into BREAK mode -- which is what we want for an official release anyway, and is
-      # reinforced by ob_sdl_binskim_break + policheck.break below. To enable TSA bug-filing
-      # later: register a TSA codebase, commit a valid .config/tsaoptions.json, then set
-      # asyncSdl.enabled + tsaOptionsFile and remove `tsa.enabled: false`.
       tsa:
-        enabled: false
+        enabled: true
       # credscan:
       #   suppressionsFile: $(Build.SourcesDirectory)\.config\CredScanSuppressions.json
       policheck:

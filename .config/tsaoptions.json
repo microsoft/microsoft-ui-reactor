@@ -1,0 +1,8 @@
+{
+    "instanceUrl":  "https://microsoft.visualstudio.com/",
+    "projectName":  "OS",
+    "areaPath":  "OS\\Windows Client and Services\\WinPD\\DFX-Developer Fundamentals and Experiences",
+    "notificationAliases": ["xupa@microsoft.com,andersonch@microsoft.com"],
+    "ppe":  "false",
+    "codebaseName":  "microsoft-ui-reactor"
+}
