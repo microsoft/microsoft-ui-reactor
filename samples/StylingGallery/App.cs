@@ -6,9 +6,6 @@ using static StylingHelpers;
 using Microsoft.UI.Xaml;
 
 ReactorApp.Run<StylingGalleryApp>("Styling Gallery", width: 960, height: 780
-#if DEBUG
-    , devtools: true
-#endif
 );
 
 // ════════════════════════════════════════════════════════════════════════

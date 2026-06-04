@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk" TreatAsLocalProperty="PublishTrimmed">
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
@@ -11,6 +11,7 @@
     <AppendPlatformToOutputPath>false</AppendPlatformToOutputPath>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
+    <PublishTrimmed>false</PublishTrimmed>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
     <IsRoslynComponent>true</IsRoslynComponent>
     <RootNamespace>Microsoft.UI.Reactor.Localization.Generator</RootNamespace>

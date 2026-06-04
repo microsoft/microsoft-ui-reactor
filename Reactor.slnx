@@ -239,6 +239,18 @@
       <Platform Solution="*|x64" Project="x64" />
     </Project>
   </Folder>
+  <Folder Name="/samples/apps/hello-world-aot/">
+    <Project Path="samples/apps/hello-world-aot/HelloWorldAot.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/samples/apps/hello-world-aot-devtools-on/">
+    <Project Path="samples/apps/hello-world-aot-devtools-on/HelloWorldAotDevtoolsOn.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
   <Folder Name="/samples/apps/monaco-editor/">
     <Project Path="samples/apps/monaco-editor/MonacoEditorApp.csproj">
       <Platform Solution="*|ARM64" Project="ARM64" />
@@ -253,6 +265,12 @@
   </Folder>
   <Folder Name="/samples/apps/netpulse/">
     <Project Path="samples/apps/netpulse/NetPulse.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/samples/apps/particle-storm/">
+    <Project Path="samples/apps/particle-storm/ParticleStorm.csproj">
       <Platform Solution="*|ARM64" Project="ARM64" />
       <Platform Solution="*|x64" Project="x64" />
     </Project>
@@ -278,6 +296,10 @@
   <Folder Name="/src/" />
   <Folder Name="/tests/">
     <Project Path="tests/Reactor.Compile.Analyzer.Tests/Reactor.Compile.Analyzer.Tests.csproj" />
+    <Project Path="tests/Reactor.Advanced.Tests/Reactor.Advanced.Tests.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
     <Project Path="tests/Reactor.AppTests.Host/Reactor.AppTests.Host.csproj">
       <Platform Solution="*|ARM64" Project="ARM64" />
       <Platform Solution="*|x64" Project="x64" />
@@ -309,12 +331,30 @@
       <Platform Solution="*|x64" Project="x64" />
     </Project>
   </Folder>
+  <Folder Name="/tests/aot_trim_proof/">
+    <Project Path="tests/aot_trim_proof/Reactor.AotHelloWorld.Advanced/Reactor.AotHelloWorld.Advanced.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/aot_trim_proof/Reactor.AotHelloWorld.Advanced.Positive/Reactor.AotHelloWorld.Advanced.Positive.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+    <Project Path="tests/aot_trim_proof/Reactor.AotHelloWorld.Advanced.Positive.TrimAssertions/Reactor.AotHelloWorld.Advanced.Positive.TrimAssertions.csproj" />
+    <Project Path="tests/aot_trim_proof/Reactor.AotHelloWorld.Advanced.TrimAssertions/Reactor.AotHelloWorld.Advanced.TrimAssertions.csproj" />
+  </Folder>
   <Folder Name="/tests/external_proof/">
     <Project Path="tests/external_proof/Reactor.External.TestControl/Reactor.External.TestControl.csproj">
       <Platform Solution="*|ARM64" Project="ARM64" />
       <Platform Solution="*|x64" Project="x64" />
     </Project>
     <Project Path="tests/external_proof/Reactor.External.TestControl.Tests/Reactor.External.TestControl.Tests.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/tests/startup_perf/">
+    <Project Path="tests/startup_perf/BlankReactorMsix/BlankReactor.csproj">
       <Platform Solution="*|ARM64" Project="ARM64" />
       <Platform Solution="*|x64" Project="x64" />
     </Project>
@@ -355,11 +395,20 @@
     </Project>
     <Project Path="tests/stress_perf/StressPerf.Wpf/StressPerf.Wpf.csproj" />
   </Folder>
+  <Folder Name="/docs/_pipeline/apps/win2d-canvas/">
+    <Project Path="docs/_pipeline/apps/win2d-canvas/win2d-canvas.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/spec047-aggregator/Spec047Aggregator.csproj" />
   </Folder>
   <Folder Name="/tools/Reactor.MurCheckGuardrail/">
     <Project Path="tools/Reactor.MurCheckGuardrail/Reactor.MurCheckGuardrail.csproj" />
+  </Folder>
+  <Folder Name="/tools/Reactor.MstatVerifier/">
+    <Project Path="tools/Reactor.MstatVerifier/Reactor.MstatVerifier.csproj" />
   </Folder>
   <Folder Name="/tools/Reactor.SignaturesGen/">
     <Project Path="tools/Reactor.SignaturesGen/Reactor.SignaturesGen.csproj">
@@ -378,5 +427,10 @@
     <Platform Solution="*|x64" Project="x64" />
   </Project>
   <Project Path="src/Reactor.Localization.Generator/Reactor.Localization.Generator.csproj" />
+  <Project Path="src/Reactor.Devtools/Reactor.Devtools.csproj" />
   <Project Path="src/Reactor/Reactor.csproj" />
+  <Project Path="src/Reactor.Advanced/Reactor.Advanced.csproj">
+    <Platform Solution="*|ARM64" Project="ARM64" />
+    <Platform Solution="*|x64" Project="x64" />
+  </Project>
 </Solution>

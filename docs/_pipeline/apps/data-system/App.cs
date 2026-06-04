@@ -8,9 +8,6 @@ using Microsoft.UI.Xaml;
 using static Microsoft.UI.Reactor.Factories;
 
 ReactorApp.Run<DataSystemApp>("Data System", width: 900, height: 600
-#if DEBUG
-    , preview: true
-#endif
 );
 
 record Product(int Id, string Name, string Category, double Price, int Stock);

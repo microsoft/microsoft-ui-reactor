@@ -1,0 +1,7 @@
+{
+  "profiles": {
+    "BlankReactor (Package)": {
+      "commandName": "MsixPackage"
+    }
+  }
+}

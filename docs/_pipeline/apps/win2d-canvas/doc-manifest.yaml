@@ -1,0 +1,25 @@
+app:
+  title: "Win2D canvas"
+  width: 920
+  height: 760
+  startup-delay: 2000
+
+screenshots:
+  - id: manual
+    description: "Manual Win2DCanvas redraw driven by a RedrawKey"
+    component: ManualCanvasDemo
+    region: client
+    format: png
+    crop: content
+  - id: animated
+    description: "Animated Win2DCanvas dots using UseDrawState and UseCanvasResources"
+    component: AnimatedCanvasScreenshot
+    region: client
+    format: png
+    crop: content
+  - id: virtual
+    description: "Virtual Win2D canvas showing a large tiled logical surface"
+    component: VirtualCanvasDemo
+    region: client
+    format: png
+    crop: none

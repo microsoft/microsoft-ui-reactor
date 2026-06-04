@@ -80,10 +80,15 @@ cd microsoft-ui-reactor
 
 dotnet new reactorapp -n MyApp
 cd MyApp
-dotnet run
+dotnet run -p:Platform=x64
 ```
 
-`bootstrap.ps1` packs `mur` as a `dotnet tool` global install (cross-shell PATH, no per-arch `$env:Path` edits), packs the framework + project templates into `local-nupkgs/`, registers the `dotnet new reactorapp` template, and installs the Reactor agent plugin under `~/.claude/plugins/reactor`. Re-run it (or `mur upgrade` for a lighter refresh) after `git pull`. Verify a working install with `mur doctor`.
+> ⚠️ **Platform flag required**: Always build with an explicit platform:
+> `dotnet build -p:Platform=x64` (or `ARM64`). Omitting `-p:Platform=...`
+> causes `WindowsAppSDKSelfContained` errors. This applies to `dotnet build`,
+> `dotnet run`, and `mur check` invocations alike.
+
+`bootstrap.ps1` packs `mur` as a `dotnet tool` global install (cross-shell PATH, no per-arch `$env:Path` edits), packs the framework + project templates into `local-nupkgs/`, registers the `dotnet new reactorapp` template, and installs the Reactor agent plugin under `~/.claude/plugins/reactor`. Apps reference `Microsoft.UI.Reactor`; add the optional, same-version `Microsoft.UI.Reactor.Devtools` package only when enabling `--devtools` with `Reactor.DevtoolsSupport`. Re-run it (or `mur upgrade` for a lighter refresh) after `git pull`. Verify a working install with `mur doctor`.
 
 Prefer to wire it up by hand? **[Getting Started](https://microsoft.github.io/microsoft-ui-reactor/getting-started/#manual-setup)** has a no-magic walkthrough of the exact `dotnet pack` / `dotnet tool install` / `dotnet new install` calls `bootstrap.ps1` makes, plus the full hello-world → todo → calculator tour.
 
@@ -170,13 +175,13 @@ ReactorApp.Run<App>("My App", preview: true);
 
 ```bash
 # Preview a specific component with hot reload
-dotnet watch run --project MyApp -- --preview CounterDemo
+dotnet watch run --project MyApp -p:Platform=x64 -- --preview CounterDemo
 
 # Preview the first component in the project
-dotnet watch run --project MyApp -- --preview
+dotnet watch run --project MyApp -p:Platform=x64 -- --preview
 
 # List available components
-dotnet run --project MyApp -- --preview-list
+dotnet run --project MyApp -p:Platform=x64 -- --preview-list
 ```
 
 ### VS Code extension
@@ -236,7 +241,7 @@ samples/
 A word search game demonstrating grid layout, timers, and interactive state.
 
 ```bash
-dotnet run --project samples/apps/wordpuzzle
+dotnet run --project samples/apps/wordpuzzle -p:Platform=x64
 ```
 
 ---

@@ -16,6 +16,10 @@ tests/aot_trim_proof/
 ├── Reactor.AotHelloWorld.TrimAssertions/      ← xUnit assertion harness
 │   ├── Reactor.AotHelloWorld.TrimAssertions.csproj
 │   └── TrimAssertionTests.cs
+├── Reactor.AotHelloWorld.Advanced/            ← spec 053 negative Advanced probe
+├── Reactor.AotHelloWorld.Advanced.TrimAssertions/
+├── Reactor.AotHelloWorld.Advanced.Positive/   ← spec 053 positive Advanced probe
+├── Reactor.AotHelloWorld.Advanced.Positive.TrimAssertions/
 └── RegStaticReadBench/                        ← Phase 2 perf baseline (spec §9)
     ├── RegStaticReadBench.csproj
     └── Program.cs
@@ -68,6 +72,35 @@ dotnet test tests/aot_trim_proof/Reactor.AotHelloWorld.TrimAssertions --nologo
 The assertion project also auto-discovers the publish folder under
 `tests/aot_trim_proof/Reactor.AotHelloWorld/bin/**/publish/` if you
 forget the env var, picking the most recent one by mtime.
+
+### Reactor.Advanced Win2D probes (spec 053 §10)
+
+The negative Advanced probe references `Microsoft.UI.Reactor.Advanced` but
+never calls any Win2D canvas factory; its assertion requires zero
+`Win2DCanvasHandler`, `Win2DAnimatedCanvasHandler`, or
+`Win2DVirtualCanvasHandler` symbols in the NativeAOT publish output. The
+positive sibling calls `Win2DCanvas.Of(...)` and requires
+`Win2DCanvasHandler` to be present, proving the negative check is not a
+false-positive vacuum. Win2D SDK symbols such as `CanvasControl` are out of
+scope because they are owned by the SDK, not Reactor.Advanced.
+
+```powershell
+# Negative: Advanced is referenced, no canvas factory is named.
+dotnet publish tests/aot_trim_proof/Reactor.AotHelloWorld.Advanced `
+    -c Release -r win-x64 -p:PublishAotInternal=true -p:Platform=x64 `
+    -o ${PWD}/artifacts/aot-hello-world-advanced
+
+$env:REACTOR_AOT_ADVANCED_PUBLISH_DIR = "${PWD}/artifacts/aot-hello-world-advanced"
+dotnet test tests/aot_trim_proof/Reactor.AotHelloWorld.Advanced.TrimAssertions --nologo
+
+# Positive: Win2DCanvas.Of(...) is called, so Win2DCanvasHandler must survive.
+dotnet publish tests/aot_trim_proof/Reactor.AotHelloWorld.Advanced.Positive `
+    -c Release -r win-x64 -p:PublishAotInternal=true -p:Platform=x64 `
+    -o ${PWD}/artifacts/aot-hello-world-advanced-positive
+
+$env:REACTOR_AOT_ADVANCED_POSITIVE_PUBLISH_DIR = "${PWD}/artifacts/aot-hello-world-advanced-positive"
+dotnet test tests/aot_trim_proof/Reactor.AotHelloWorld.Advanced.Positive.TrimAssertions --nologo
+```
 
 ## Phase 2 perf baseline (`RegStaticReadBench`)
 

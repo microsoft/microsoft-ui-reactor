@@ -4,7 +4,7 @@ using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
-ReactorApp.Run<TodoApp>("Todo App", width: 550, height: 600, devtools: true);
+ReactorApp.Run<TodoApp>("Todo App", width: 550, height: 600);
 
 class TodoApp : Component
 {

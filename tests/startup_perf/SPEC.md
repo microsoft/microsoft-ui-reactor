@@ -9,7 +9,8 @@ exactly so the same WPR Regions XML resolves both.
 
 All events carry these payload fields:
 
-- `AppName` (string) — `blank_winui3` / `blank_reactor` / `blank_rnw`.
+- `AppName` (string) — `blank_winui3` / `blank_reactor` /
+  `blank_reactor_msix` / `blank_rnw`.
   Used by Regions XML's `<Naming><PayloadBased NameField="AppName"/>` so
   variants split into separate region rows in WPA.
 - `Seq` (uint64) — monotonic per process.
@@ -19,7 +20,7 @@ All events carry these payload fields:
 | --------------- | --------- | -------------------------------------------------------------------------------------- |
 | `wWinMainEntry` | all       | first managed/native instruction in `Main` / `wWinMain`                                |
 | `XamlAppLoaded` | all       | `Application.Start` callback / `OnLaunched` / first `Render()` (Reactor)               |
-| `WindowLoaded`  | all       | `MainWindow` constructor (WinUI3) / first post-commit `UseEffect` (Reactor) / `appWindow` configured + before `Start` (RNW) |
+| `WindowLoaded`  | all       | `MainWindow` constructor (WinUI3) / first post-commit `UseEffect` (Reactor variants) / `appWindow` configured + before `Start` (RNW) |
 | `JSBundleLoaded` | RNW only | `InstanceSettings.InstanceLoaded` callback (Hermes loaded + bundle evaluated)          |
 | `ReactMounted`  | RNW only  | from JS, in `useEffect(…, [])` of the root component                                   |
 | `FirstRender`   | all       | first display frame after the root content commits (one-shot `CompositionTarget.Rendering` for WinUI3/Reactor; computed in JS for RNW) |
@@ -66,7 +67,7 @@ so our regions still resolve.
 ```
 
 ```
-BlankWinUI3 (C# AOT):
+BlankWinUI3 (C# non-AOT):
   Main()
     [Metrics.RecordAppStart; BenchmarkTracing.TraceWinMainEntry]
     → Application.Start
@@ -80,7 +81,7 @@ BlankWinUI3 (C# AOT):
 ```
 
 ```
-BlankReactor (C# AOT):
+BlankReactor / BlankReactorMsix (C# non-AOT):
   Main()
     [Metrics.RecordAppStart; BenchmarkTracing.TraceWinMainEntry]
     → ReactorApp.Run<BlankApp>
@@ -92,6 +93,11 @@ BlankReactor (C# AOT):
                 → DispatcherQueue.Low
                     [Metrics.RecordInteractive → TraceFirstIdle]
 ```
+
+`BlankReactorMsix` uses `AppName=blank_reactor_msix`, but keeps the
+same `AssemblyName` / process name (`BlankReactor`) as the unpackaged
+variant so external perf-gate harnesses can target the same executable
+identity while WPA rows still distinguish the package-deployment mode.
 
 ```
 BlankRNW (C++ + JS):

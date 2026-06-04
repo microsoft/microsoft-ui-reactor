@@ -1,8 +1,10 @@
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Layout;
 using Microsoft.UI.Reactor.Controls;
+using Microsoft.UI.Reactor.Data;
 using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
@@ -130,6 +132,221 @@ internal static class PropertyGridFixtures
         public event PropertyChangedEventHandler? PropertyChanged;
         private void OnPC(string n) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
     }
+
+    private class CollectionModel
+    {
+        public List<string> Tags { get; set; } = new() { "a", "b" };
+        public string[] Codes { get; set; } = ["x", "y"];
+        public IList<string> InterfaceTags { get; set; } = new List<string> { "il-a", "il-b" };
+        public ICollection<string> CollectionTags { get; set; } = new List<string> { "col-a", "col-b" };
+        public ISet<string> SetContractTags { get; set; } = new HashSet<string> { "iset-a", "iset-b" };
+        public IReadOnlyList<string> ReadOnlyTags { get; set; } = new List<string> { "ro-a", "ro-b" };
+        public IReadOnlyCollection<string> ReadOnlyCollectionTags { get; set; } = new List<string> { "roc-a", "roc-b" };
+        public IReadOnlySet<string> ReadOnlySetTags { get; set; } = new HashSet<string> { "ros-a", "ros-b" };
+        public IEnumerable<string> EnumerableTags { get; set; } = ["en-a", "en-b"];
+        public HashSet<string> SetTags { get; set; } = ["set-a", "set-b"];
+        public Queue<string> QueueTags { get; set; } = new(["queue-a", "queue-b"]);
+        public Stack<string> StackTags { get; set; } = new(["stack-a", "stack-b"]);
+        public LinkedList<string> LinkedTags { get; set; } = new(["link-a", "link-b"]);
+        public global::System.Collections.ArrayList Objects { get; set; } = new() { "obj-a", "obj-b" };
+        public global::System.Collections.IList NonGenericList { get; set; } = new global::System.Collections.ArrayList { "ng-list-a", "ng-list-b" };
+        public global::System.Collections.ICollection NonGenericCollection { get; set; } = new global::System.Collections.ArrayList { "ng-col-a", "ng-col-b" };
+        public global::System.Collections.IEnumerable NonGenericEnumerable { get; set; } = new global::System.Collections.ArrayList { "ng-en-a", "ng-en-b" };
+        public IList<string> GenericOnlyTags { get; set; } = new GenericOnlyList<string>(["go-a", "go-b"]);
+        public Dictionary<string, int> Map { get; set; } = new() { ["one"] = 1, ["two"] = 2 };
+        public string Text { get; set; } = "not a collection";
+    }
+
+    private sealed class GenericOnlyList<T> : IList<T>
+    {
+        private readonly List<T> _items = [];
+
+        public GenericOnlyList(IEnumerable<T> items) => _items.AddRange(items);
+
+        public T this[int index] { get => _items[index]; set => _items[index] = value; }
+        public int Count => _items.Count;
+        public bool IsReadOnly => false;
+        public void Add(T item) => _items.Add(item);
+        public void Clear() => _items.Clear();
+        public bool Contains(T item) => _items.Contains(item);
+        public void CopyTo(T[] array, int arrayIndex) => _items.CopyTo(array, arrayIndex);
+        public IEnumerator<T> GetEnumerator() => _items.GetEnumerator();
+        public int IndexOf(T item) => _items.IndexOf(item);
+        public void Insert(int index, T item) => _items.Insert(index, item);
+        public bool Remove(T item) => _items.Remove(item);
+        public void RemoveAt(int index) => _items.RemoveAt(index);
+        global::System.Collections.IEnumerator global::System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    private sealed class ObservableItem(string name) : INotifyPropertyChanged
+    {
+        private string _name = name;
+
+        public string Name
+        {
+            get => _name;
+            set
+            {
+                if (_name == value) return;
+                _name = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Name)));
+            }
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+        public override string ToString() => Name;
+    }
+
+    private class ArrayOnlyModel
+    {
+        public string[] Codes { get; set; } = ["x", "y"];
+    }
+
+    private class CollectionContractModel
+    {
+        public ICollection<string> Items { get; set; } = new List<string> { "col-a", "col-b" };
+    }
+
+    private class EnumerableAdapterModel
+    {
+        public IEnumerable<string> Source { get; set; } = ["adapt-a", "adapt-b"];
+    }
+
+    private class NonGenericListModel
+    {
+        public global::System.Collections.ArrayList Items { get; set; } = new() { "obj-a", "obj-b" };
+    }
+
+    private class ObservableCollectionModel
+    {
+        public global::System.Collections.ObjectModel.ObservableCollection<string> Items { get; set; } = new() { "obs-a", "obs-b" };
+    }
+
+    private class ObservableItemCollectionModel
+    {
+        public global::System.Collections.ObjectModel.ObservableCollection<ObservableItem> Items { get; set; } =
+            new() { new ObservableItem("item-a"), new ObservableItem("item-b") };
+    }
+
+    private static TypeRegistry CreateCollectionSelfTestRegistry()
+    {
+        var registry = new TypeRegistry();
+
+        registry.Register<CollectionModel>(new TypeMetadata
+        {
+            Decompose = owner =>
+            {
+                var model = (CollectionModel)owner;
+                return
+                [
+                    Field(nameof(CollectionModel.Tags), typeof(List<string>), _ => model.Tags,
+                        (obj, value) => { ((CollectionModel)obj).Tags = (List<string>)value!; return obj; }),
+                    Field(nameof(CollectionModel.Codes), typeof(string[]), _ => model.Codes,
+                        (obj, value) => { ((CollectionModel)obj).Codes = (string[])value!; return obj; }),
+                    Field(nameof(CollectionModel.InterfaceTags), typeof(IList<string>), _ => model.InterfaceTags,
+                        (obj, value) => { ((CollectionModel)obj).InterfaceTags = (IList<string>)value!; return obj; }),
+                    Field(nameof(CollectionModel.CollectionTags), typeof(ICollection<string>), _ => model.CollectionTags,
+                        (obj, value) => { ((CollectionModel)obj).CollectionTags = (ICollection<string>)value!; return obj; }),
+                    Field(nameof(CollectionModel.SetContractTags), typeof(ISet<string>), _ => model.SetContractTags,
+                        (obj, value) => { ((CollectionModel)obj).SetContractTags = (ISet<string>)value!; return obj; }),
+                    Field(nameof(CollectionModel.ReadOnlyTags), typeof(IReadOnlyList<string>), _ => model.ReadOnlyTags),
+                    Field(nameof(CollectionModel.ReadOnlyCollectionTags), typeof(IReadOnlyCollection<string>), _ => model.ReadOnlyCollectionTags),
+                    Field(nameof(CollectionModel.ReadOnlySetTags), typeof(IReadOnlySet<string>), _ => model.ReadOnlySetTags),
+                    Field(nameof(CollectionModel.EnumerableTags), typeof(IEnumerable<string>), _ => model.EnumerableTags),
+                    Field(nameof(CollectionModel.SetTags), typeof(HashSet<string>), _ => model.SetTags),
+                    Field(nameof(CollectionModel.QueueTags), typeof(Queue<string>), _ => model.QueueTags),
+                    Field(nameof(CollectionModel.StackTags), typeof(Stack<string>), _ => model.StackTags),
+                    Field(nameof(CollectionModel.LinkedTags), typeof(LinkedList<string>), _ => model.LinkedTags),
+                    Field(nameof(CollectionModel.Objects), typeof(global::System.Collections.ArrayList), _ => model.Objects),
+                    Field(nameof(CollectionModel.NonGenericList), typeof(global::System.Collections.IList), _ => model.NonGenericList),
+                    Field(nameof(CollectionModel.NonGenericCollection), typeof(global::System.Collections.ICollection), _ => model.NonGenericCollection),
+                    Field(nameof(CollectionModel.NonGenericEnumerable), typeof(global::System.Collections.IEnumerable), _ => model.NonGenericEnumerable),
+                    Field(nameof(CollectionModel.GenericOnlyTags), typeof(IList<string>), _ => model.GenericOnlyTags),
+                    Field(nameof(CollectionModel.Map), typeof(Dictionary<string, int>), _ => model.Map),
+                    Field(nameof(CollectionModel.Text), typeof(string), _ => model.Text),
+                ];
+            },
+        });
+
+        registry.Register<ArrayOnlyModel>(new TypeMetadata
+        {
+            Decompose = owner =>
+            {
+                var model = (ArrayOnlyModel)owner;
+                return
+                [
+                    Field(nameof(ArrayOnlyModel.Codes), typeof(string[]), _ => model.Codes,
+                        (obj, value) => { ((ArrayOnlyModel)obj).Codes = (string[])value!; return obj; }),
+                ];
+            },
+        });
+
+        registry.Register<CollectionContractModel>(new TypeMetadata
+        {
+            Decompose = owner =>
+            {
+                var model = (CollectionContractModel)owner;
+                return
+                [
+                    Field(nameof(CollectionContractModel.Items), typeof(ICollection<string>), _ => model.Items,
+                        (obj, value) => { ((CollectionContractModel)obj).Items = (ICollection<string>)value!; return obj; }),
+                ];
+            },
+        });
+
+        registry.Register<NonGenericListModel>(new TypeMetadata
+        {
+            Decompose = owner =>
+            {
+                var model = (NonGenericListModel)owner;
+                return
+                [
+                    Field(nameof(NonGenericListModel.Items), typeof(global::System.Collections.ArrayList), _ => model.Items,
+                        (obj, value) => { ((NonGenericListModel)obj).Items = (global::System.Collections.ArrayList)value!; return obj; }),
+                ];
+            },
+        });
+
+        registry.Register<ObservableCollectionModel>(new TypeMetadata
+        {
+            Decompose = owner =>
+            {
+                var model = (ObservableCollectionModel)owner;
+                return
+                [
+                    Field(nameof(ObservableCollectionModel.Items), typeof(global::System.Collections.ObjectModel.ObservableCollection<string>), _ => model.Items),
+                ];
+            },
+        });
+
+        registry.Register<ObservableItemCollectionModel>(new TypeMetadata
+        {
+            Decompose = owner =>
+            {
+                var model = (ObservableItemCollectionModel)owner;
+                return
+                [
+                    Field(nameof(ObservableItemCollectionModel.Items), typeof(global::System.Collections.ObjectModel.ObservableCollection<ObservableItem>), _ => model.Items),
+                ];
+            },
+        });
+
+        return registry;
+    }
+
+    private static FieldDescriptor Field(
+        string name,
+        Type fieldType,
+        Func<object, object?> getValue,
+        Func<object, object?, object>? setValue = null)
+        => new()
+        {
+            Name = name,
+            FieldType = fieldType,
+            GetValue = getValue,
+            SetValue = setValue,
+            IsReadOnly = setValue is null,
+        };
 
     // ================================================================
     //  Fixtures
@@ -469,5 +686,299 @@ internal static class PropertyGridFixtures
 
             H.Check("INPC_MutatedName", H.FindText("Live: Bob") is not null);
         }
+    }
+
+    internal class Array_CollectionVariantMatrix(Harness h) : SelfTestFixtureBase(h)
+    {
+        [DynamicDependency(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors, typeof(CollectionModel))]
+        public override async Task RunAsync()
+        {
+            var model = new CollectionModel();
+            var registry = CreateCollectionSelfTestRegistry();
+
+            var host = H.CreateHost();
+            host.Mount(_ => PropertyGrid(model, registry));
+            await Harness.Render();
+
+            H.Check("ArrayEditors_ListToolbar", H.FindText("Tags (2)") is not null);
+            H.Check("ArrayEditors_ArrayToolbar", H.FindText("Codes (2)") is not null);
+            H.Check("ArrayEditors_IListToolbar", H.FindText("InterfaceTags (2)") is not null);
+            H.Check("ArrayEditors_ICollectionToolbar", H.FindText("CollectionTags (2)") is not null);
+            H.Check("ArrayEditors_ISetToolbar", H.FindText("SetContractTags (2)") is not null);
+            H.Check("ArrayEditors_ReadOnlyToolbar", H.FindText("ReadOnlyTags (2)") is not null);
+            H.Check("ArrayEditors_ReadOnlyCollectionToolbar", H.FindText("ReadOnlyCollectionTags (2)") is not null);
+            H.Check("ArrayEditors_ReadOnlySetToolbar", H.FindText("ReadOnlySetTags (2)") is not null);
+            H.Check("ArrayEditors_SetToolbar", H.FindText("SetTags (2)") is not null);
+            H.Check("ArrayEditors_QueueToolbar", H.FindText("QueueTags (2)") is not null);
+            H.Check("ArrayEditors_StackToolbar", H.FindText("StackTags (2)") is not null);
+            H.Check("ArrayEditors_LinkedListToolbar", H.FindText("LinkedTags (2)") is not null);
+            H.Check("ArrayEditors_NonGenericToolbar", H.FindText("Objects (2)") is not null);
+            H.Check("ArrayEditors_NonGenericIListToolbar", H.FindText("NonGenericList (2)") is not null);
+            H.Check("ArrayEditors_NonGenericICollectionToolbar", H.FindText("NonGenericCollection (2)") is not null);
+            H.Check("ArrayEditors_GenericOnlyIListToolbar", H.FindText("GenericOnlyTags (2)") is not null);
+            H.Check("ArrayEditors_HidesListToString",
+                H.FindTextContaining("System.Collections.Generic.List") is null);
+            H.Check("ArrayEditors_DoesNotTreatDictionaryAsCollection",
+                H.FindText("Map (2)") is null);
+            H.Check("ArrayEditors_DoesNotTreatStringAsCollection",
+                H.FindText("Text (16)") is null);
+            H.Check("ArrayEditors_DoesNotTreatGenericEnumerableAsCollection",
+                H.FindText("EnumerableTags (2)") is null);
+            H.Check("ArrayEditors_DoesNotTreatNonGenericEnumerableAsCollection",
+                H.FindText("NonGenericEnumerable (2)") is null);
+            H.Check("ArrayEditors_ShowsListItems",
+                H.FindText("a") is not null && H.FindText("b") is not null);
+            H.Check("ArrayEditors_ShowsArrayItems",
+                H.FindText("x") is not null && H.FindText("y") is not null);
+            H.Check("ArrayEditors_ShowsConcreteCollectionItems",
+                H.FindText("queue-a") is not null
+                && H.FindText("stack-a") is not null
+                && H.FindText("link-a") is not null);
+            H.Check("ArrayEditors_ShowsItemRows",
+                H.FindText("[0]") is not null && H.FindText("[1]") is not null);
+
+            H.Check("ArrayEditors_ShowsListAddButton", FindAddButton(H, "Tags") is not null);
+            H.Check("ArrayEditors_ArrayAddButtonMatchesRuntime",
+                (FindAddButton(H, "Codes") is not null) == global::System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported);
+            H.Check("ArrayEditors_ShowsIListAddButton", FindAddButton(H, "InterfaceTags") is not null);
+            H.Check("ArrayEditors_ShowsICollectionAddButton", FindAddButton(H, "CollectionTags") is not null);
+            H.Check("ArrayEditors_HidesISetAddButton", FindAddButton(H, "SetContractTags") is null);
+            H.Check("ArrayEditors_HidesReadOnlyAddButton", FindAddButton(H, "ReadOnlyTags") is null);
+            H.Check("ArrayEditors_HidesReadOnlyCollectionAddButton", FindAddButton(H, "ReadOnlyCollectionTags") is null);
+            H.Check("ArrayEditors_HidesReadOnlySetAddButton", FindAddButton(H, "ReadOnlySetTags") is null);
+            H.Check("ArrayEditors_HidesSetAddButton", FindAddButton(H, "SetTags") is null);
+            H.Check("ArrayEditors_HidesQueueAddButton", FindAddButton(H, "QueueTags") is null);
+            H.Check("ArrayEditors_HidesStackAddButton", FindAddButton(H, "StackTags") is null);
+            H.Check("ArrayEditors_HidesLinkedListAddButton", FindAddButton(H, "LinkedTags") is null);
+            H.Check("ArrayEditors_HidesObjectAddButton", FindAddButton(H, "Objects") is null);
+            H.Check("ArrayEditors_HidesGenericOnlyAddButton", FindAddButton(H, "GenericOnlyTags") is null);
+        }
+    }
+
+    internal class Array_List_AddRemove(Harness h) : SelfTestFixtureBase(h)
+    {
+        [DynamicDependency(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors, typeof(CollectionModel))]
+        public override async Task RunAsync()
+        {
+            var model = new CollectionModel();
+            var registry = CreateCollectionSelfTestRegistry();
+
+            var host = H.CreateHost();
+            host.Mount(_ =>
+            {
+                var grid = PropertyGrid(model, registry);
+                return grid with { Props = grid.Props with { Filter = d => d.Name == nameof(CollectionModel.Tags) } };
+            });
+            await Harness.Render();
+
+            Invoke(FindAddButton(H, "Tags")!);
+            await Harness.Render();
+
+            H.Check("ArrayListOps_AddMutatesList", model.Tags.Count == 3);
+            H.Check("ArrayListOps_AddRerendersToolbar", H.FindText("Tags (3)") is not null);
+
+            H.ClickButton("\u2715");
+            await Harness.Render();
+
+            H.Check("ArrayListOps_RemoveMutatesList", model.Tags.Count == 2);
+            H.Check("ArrayListOps_RemoveRerendersToolbar", H.FindText("Tags (2)") is not null);
+        }
+    }
+
+    internal class Array_Array_AddRemove_ReplacesProperty(Harness h) : SelfTestFixtureBase(h)
+    {
+        [DynamicDependency(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors, typeof(ArrayOnlyModel))]
+        public override async Task RunAsync()
+        {
+            var model = new ArrayOnlyModel();
+            var registry = CreateCollectionSelfTestRegistry();
+
+            var host = H.CreateHost();
+            host.Mount(_ => PropertyGrid(model, registry));
+            await Harness.Render();
+
+            if (!global::System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported)
+            {
+                H.Check("ArrayArrayOps_AddHiddenWithoutDynamicCode", FindAddButton(H, "Codes") is null);
+                return;
+            }
+
+            var original = model.Codes;
+            Invoke(FindAddButton(H, "Codes")!);
+            await Harness.Render();
+
+            H.Check("ArrayArrayOps_AddReplacesArray", !ReferenceEquals(original, model.Codes));
+            H.Check("ArrayArrayOps_AddRerendersToolbar", H.FindText("Codes (3)") is not null);
+
+            var afterAdd = model.Codes;
+            H.ClickButton("\u2715");
+            await Harness.Render();
+
+            H.Check("ArrayArrayOps_RemoveReplacesArray", !ReferenceEquals(afterAdd, model.Codes));
+            H.Check("ArrayArrayOps_RemoveRerendersToolbar", H.FindText("Codes (2)") is not null);
+        }
+    }
+
+    internal class Array_ICollection_AddRemove(Harness h) : SelfTestFixtureBase(h)
+    {
+        [DynamicDependency(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors, typeof(CollectionContractModel))]
+        public override async Task RunAsync()
+        {
+            var model = new CollectionContractModel();
+            var registry = CreateCollectionSelfTestRegistry();
+
+            var host = H.CreateHost();
+            host.Mount(_ => PropertyGrid(model, registry));
+            await Harness.Render();
+
+            Invoke(FindAddButton(H, "Items")!);
+            await Harness.Render();
+
+            H.Check("ArrayICollectionOps_AddMutatesRuntimeList", model.Items.Count == 3);
+            H.Check("ArrayICollectionOps_AddRerendersToolbar", H.FindText("Items (3)") is not null);
+
+            H.ClickButton("\u2715");
+            await Harness.Render();
+
+            H.Check("ArrayICollectionOps_RemoveMutatesRuntimeList", model.Items.Count == 2);
+            H.Check("ArrayICollectionOps_RemoveRerendersToolbar", H.FindText("Items (2)") is not null);
+        }
+    }
+
+    internal class Array_NonGenericList_RemoveOnly(Harness h) : SelfTestFixtureBase(h)
+    {
+        [DynamicDependency(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors, typeof(NonGenericListModel))]
+        public override async Task RunAsync()
+        {
+            var model = new NonGenericListModel();
+            var registry = CreateCollectionSelfTestRegistry();
+
+            var host = H.CreateHost();
+            host.Mount(_ => PropertyGrid(model, registry));
+            await Harness.Render();
+
+            H.Check("ArrayNonGenericOps_HidesAdd", FindAddButton(H, "Items") is null);
+
+            H.ClickButton("\u2715");
+            await Harness.Render();
+
+            H.Check("ArrayNonGenericOps_RemoveMutatesList", model.Items.Count == 1);
+            H.Check("ArrayNonGenericOps_RemoveRerendersToolbar", H.FindText("Items (1)") is not null);
+        }
+    }
+
+    internal class Array_ObservableCollection_ExternalAndGridMutations(Harness h) : SelfTestFixtureBase(h)
+    {
+        [DynamicDependency(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors, typeof(ObservableCollectionModel))]
+        public override async Task RunAsync()
+        {
+            var model = new ObservableCollectionModel();
+            var registry = CreateCollectionSelfTestRegistry();
+
+            var host = H.CreateHost();
+            host.Mount(_ => VStack(
+                PropertyGrid(model, registry),
+                Button("ExternalAddObs", () => model.Items.Add("obs-c")),
+                Button("ExternalRemoveObs", () => model.Items.RemoveAt(0))));
+            await Harness.Render();
+
+            H.Check("ArrayObservableOps_InitialToolbar", H.FindText("Items (2)") is not null);
+
+            H.ClickButton("ExternalAddObs");
+            await Harness.Render();
+
+            H.Check("ArrayObservableOps_ExternalAddRerenders", H.FindText("Items (3)") is not null);
+            H.Check("ArrayObservableOps_ExternalAddItemVisible", H.FindText("obs-c") is not null);
+
+            H.ClickButton("ExternalRemoveObs");
+            await Harness.Render();
+
+            H.Check("ArrayObservableOps_ExternalRemoveRerenders", H.FindText("Items (2)") is not null);
+            H.Check("ArrayObservableOps_NoGridAddForGenericOnlyList", FindAddButton(H, "Items") is null);
+        }
+    }
+
+    internal class Array_ObservableItem_PropertyChanged_Rerenders(Harness h) : SelfTestFixtureBase(h)
+    {
+        [DynamicDependency(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors, typeof(ObservableItemCollectionModel))]
+        [DynamicDependency(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors, typeof(ObservableItem))]
+        public override async Task RunAsync()
+        {
+            var model = new ObservableItemCollectionModel();
+            var registry = CreateCollectionSelfTestRegistry();
+
+            var host = H.CreateHost();
+            host.Mount(_ => VStack(
+                PropertyGrid(model, registry),
+                Button("RenameFirstObservableItem", () => model.Items[0].Name = "item-a-renamed"),
+                Button("AddObservableItem", () => model.Items.Add(new ObservableItem("item-c")))));
+            await Harness.Render();
+
+            H.Check("ArrayObservableItem_InitialItemVisible", H.FindText("item-a") is not null);
+
+            H.ClickButton("RenameFirstObservableItem");
+            await Harness.Render();
+
+            H.Check("ArrayObservableItem_RenameRerenders", H.FindText("item-a-renamed") is not null);
+
+            H.ClickButton("AddObservableItem");
+            await Harness.Render();
+
+            H.Check("ArrayObservableItem_AddRerendersToolbar", H.FindText("Items (3)") is not null);
+            H.Check("ArrayObservableItem_AddedItemVisible", H.FindText("item-c") is not null);
+
+            model.Items[2].Name = "item-c-renamed";
+            await Harness.Render();
+
+            H.Check("ArrayObservableItem_NewItemSubscribedAfterAdd", H.FindText("item-c-renamed") is not null);
+        }
+    }
+
+    internal class Array_CustomMetadata_EnumerableAdapter(Harness h) : SelfTestFixtureBase(h)
+    {
+        [DynamicDependency(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors, typeof(EnumerableAdapterModel))]
+        public override async Task RunAsync()
+        {
+            var model = new EnumerableAdapterModel();
+            var registry = new TypeRegistry();
+            registry.Register<EnumerableAdapterModel>(new TypeMetadata
+            {
+                Decompose = owner =>
+                {
+                    var current = ((EnumerableAdapterModel)owner).Source.ToArray();
+                    return
+                    [
+                        new FieldDescriptor
+                        {
+                            Name = nameof(EnumerableAdapterModel.Source),
+                            DisplayName = "AdaptedSource",
+                            FieldType = typeof(IReadOnlyList<string>),
+                            GetValue = _ => current,
+                            IsReadOnly = true,
+                        }
+                    ];
+                },
+            });
+
+            var host = H.CreateHost();
+            host.Mount(_ => PropertyGrid(model, registry));
+            await Harness.Render();
+
+            H.Check("ArrayEnumerableAdapter_ShowsToolbar", H.FindText("AdaptedSource (2)") is not null);
+            H.Check("ArrayEnumerableAdapter_ShowsItems",
+                H.FindText("adapt-a") is not null && H.FindText("adapt-b") is not null);
+            H.Check("ArrayEnumerableAdapter_ReadOnlyNoAdd", FindAddButton(H, "AdaptedSource") is null);
+        }
+    }
+
+    private static Button? FindAddButton(Harness h, string propertyName)
+        => h.FindControl<Button>(b =>
+            Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(b) == $"Add {propertyName} item");
+
+    private static void Invoke(Button button)
+    {
+        var peer = new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(button);
+        ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)
+            peer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
     }
 }

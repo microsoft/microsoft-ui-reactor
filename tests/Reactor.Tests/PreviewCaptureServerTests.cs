@@ -7,6 +7,7 @@ using System.Reflection;
 using System.Runtime.Serialization;
 using System.Text;
 using Microsoft.UI.Reactor.Hosting;
+using Microsoft.UI.Reactor.Hosting.Devtools;
 using Xunit;
 
 namespace Microsoft.UI.Reactor.Tests;

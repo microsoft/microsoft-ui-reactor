@@ -37,7 +37,6 @@ ReactorApp.Run<IdeApp>(
     title: "Reactor IDE",
     width: 1280,
     height: 820,
-    devtools: true,
     configure: host => DockingNativeInterop.Register(host.Reconciler));
 
 // ════════════════════════════════════════════════════════════════════════

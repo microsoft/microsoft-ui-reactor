@@ -29,6 +29,9 @@
     <Nullable>enable</Nullable>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
+    <!-- Override Directory.Build.props default (false) — AOT-published exe
+         must launch and execute without an installed Windows App Runtime
+         (CI may scan the publish output without installing the runtime). -->
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>

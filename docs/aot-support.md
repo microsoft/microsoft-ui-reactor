@@ -2,7 +2,7 @@
 
 Microsoft.UI.Reactor (Reactor)'s core framework targets .NET native AOT. The repo sets `IsAotCompatible=true` and treats the IL2*/IL3* analyzer warnings as errors on the core library, so trimming/AOT regressions can't merge silently. The `tests/stress_perf/StressPerf.Reactor` benchmark harness publishes Reactor with `PublishAot=true` on every CI build that runs perf — that's the canary for the framework's AOT viability.
 
-But not every subsystem is AOT-clean. Some features rely on reflection in ways that can't yet be expressed without a source generator, and they sit behind unconditional trim suppressions. The suppressions silence the analyzer; at runtime, the affected code paths will throw under AOT if they're invoked.
+Most of Reactor's runtime stays AOT-clean by default. Reflection-heavy development surfaces are now gated behind build-time feature switches so release/AOT apps can keep them trimmed unless they explicitly opt in.
 
 This page enumerates what works, what doesn't, and what's planned. **If you publish your app with `PublishAot=true`, you're responsible for staying inside the green column.**
 
@@ -26,16 +26,37 @@ These subsystems compile cleanly with `IsAotCompatible=true` (the warnings are s
 
 | Subsystem | What breaks | Tracking |
 |---|---|---|
-| **Devtools / MCP server** | `Assembly.GetTypes` for component discovery, reflection-based hook inspection in `DevtoolsStateTool`, reflection-based method invocation in `DevtoolsFireTool`, `DependencyProperty` enumeration in `DevtoolsPropertyTools`, `JsonSerializer` for MCP request/response. The whole devtools surface (`/--devtools`, `/--mcp-stdio`) is reflection-driven. | Issue #70 |
 | **PropertyGrid auto-discovery** | `TypeRegistry.Resolve`, `ReflectionTypeMetadataProvider` walk public properties, build init-only setters, and instantiate editors via `Activator.CreateInstance`. Manually-registered metadata is fine; auto-discovery from a runtime type is not. | Issue #70 |
 | **PropertyGrid array editor** | `Array.CreateInstance` is annotated `RequiresDynamicCode`. Array-typed property editors won't work AOT. | Issue #70 |
 | **DataGrid `AutoColumns<T>`** | Reflects over `T`'s public properties via `TypeRegistry`. The `T` parameter is annotated `[DynamicallyAccessedMembers(PublicProperties)]` so the trimmer keeps the members, but `AutoColumns` ultimately funnels into `TypeRegistry.Resolve`, which is `RequiresUnreferencedCode`. Use explicit `Column<T,V>(…)` definitions instead. | Issue #70 |
 | **`UseObservable` on POCOs** | `ObservableTreeTracker` walks public properties via reflection to subscribe to INPC. Observables built explicitly (`Observable<T>`, `IObservableCollection`) are fine; the implicit-INPC path is not. | Issue #70 |
 | **Form validation** | `FormField`'s default editor resolution goes through `TypeRegistry`. Same caveat as PropertyGrid. | Issue #70 |
-| **Navigation state JSON** | `NavigationHandle` serializes deep-link state via `JsonSerializer` without a source-generated context. Custom types that ride through navigation state will fail to serialize under AOT. | Issue #70 |
-| **Component discovery (`ReactorApp.Run<TApp>` reflection paths)** | The instantiation of `TApp` itself is annotated and works. The devtools-only `--list-components` enumeration scans `Assembly.GetTypes`; that path is gated to non-AOT builds. | Issue #70 |
+| **Component discovery (`ReactorApp.Run<TApp>` reflection paths)** | The instantiation of `TApp` itself is annotated and works. Devtools component enumeration is available only when the app opts into `Reactor.DevtoolsSupport` at build time and launches with `--devtools`; leave the switch off for retail/AOT builds. | Issue #70 |
 | **Theme resource lookup (`Theme.X`, `ThemeRef.Resolve`)** | Works once the WindowsAppSDK#6394 workaround target ships the project `.pri` into the publish output (see [Required publish-time workarounds](#required-publish-time-workarounds)). Reactor's library itself is AOT-clean here. | WindowsAppSDK#6394 |
 | **Third-party-assembly XAML metadata (Issue #142 fixtures)** | Built-in WinUI controls work under AOT now (see [Required publish-time workarounds](#required-publish-time-workarounds)). What remains is `{TemplateBinding}` against private DPs in a third-party assembly that ships *no* `.xaml` file: the XAML compiler only emits an `IXamlMetadataProvider` for projects that have at least one `.xaml`, and AOT trims any implicit metadata path. Affected fixtures: `Issue142_CustomControlPrivateDp_Renders`, `Issue142_ThirdPartyControlPrivateDp_Renders`. The library-author workaround is to register a hand-written `IXamlMetadataProvider` via `RegisterControlAssembly`. | Issue #142 |
+
+## Devtools support switch
+
+Devtools are a two-layer opt-in so release and NativeAOT binaries stay trimmed by default:
+
+1. **Build-time capability** — add the feature switch to an app project that needs devtools:
+
+   ```xml
+   <ItemGroup>
+     <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
+                                     Value="true" Trim="true" />
+   </ItemGroup>
+   ```
+
+   `src/Reactor/build/Reactor.targets` supplies the default `false` value. Samples enable the switch conditionally in Debug builds; Release/AOT publishes leave it off.
+
+2. **Runtime activation** — launch with a devtools subverb, for example:
+
+   ```powershell
+   dotnet run -- --devtools run
+   ```
+
+   `ReactorApp.Run` and `Run<TRoot>` no longer take `devtools:` or `preview:` parameters. If a switch-off binary receives `--devtools run`, it writes an actionable stderr message with the `RuntimeHostConfigurationOption` snippet above instead of silently opening a normal window.
 
 ## Conventions
 

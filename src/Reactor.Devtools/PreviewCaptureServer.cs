@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Net;
@@ -10,7 +11,7 @@ using System.Text.Json.Nodes;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 
-namespace Microsoft.UI.Reactor.Hosting;
+namespace Microsoft.UI.Reactor.Hosting.Devtools;
 
 /// <summary>
 /// Captures frames from the WinUI preview window and serves them over a local HTTP endpoint.
@@ -56,6 +57,7 @@ internal sealed class PreviewCaptureServer : IDisposable
     /// <summary>Switches to a different component by name. Returns true on success.</summary>
     public Func<string, bool>? SwitchComponent { get; set; }
 
+    [RequiresUnreferencedCode("Devtools subsystem; gated by Reactor.DevtoolsSupport.")]
     public PreviewCaptureServer(DispatcherQueue dispatcherQueue, Window window, int fps = 10)
     {
         _dispatcherQueue = dispatcherQueue;

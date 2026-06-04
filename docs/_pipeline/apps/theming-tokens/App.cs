@@ -7,9 +7,6 @@ using static Microsoft.UI.Reactor.Factories;
 // `Theme.*` token defined in src/Reactor/Core/Theme.cs. The doc-app harness
 // captures `light` and `dark` variants for the page's lead screenshot pair.
 ReactorApp.Run<ThemingTokensApp>("Theming Tokens", width: 760, height: 720
-#if DEBUG
-    , preview: true
-#endif
 );
 
 class ThemingTokensApp : Component

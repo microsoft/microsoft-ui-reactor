@@ -9,9 +9,6 @@
     <UseWinUI>true</UseWinUI>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <DisableEmbeddedXbf>false</DisableEmbeddedXbf>
-    <!-- Override Directory.Build.props (true) — this library should not bundle
-         the WinUI runtime; the consuming executable controls self-containedness. -->
-    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
     <!-- Explicit platforms so external consumers (Pix, samples, etc.) that
@@ -58,6 +55,7 @@
     <InternalsVisibleTo Include="Reactor.Tests" />
     <InternalsVisibleTo Include="Reactor.AppTests.Host" />
     <InternalsVisibleTo Include="Reactor.Fuzz" />
+    <InternalsVisibleTo Include="Microsoft.UI.Reactor.Devtools" />
     <!-- Spec 047 — PerfBench.ControlModel benches the V1 control model
          against the Direct/Bound baselines; it references internal descriptor
          and handler types to construct representative element trees. -->
@@ -119,6 +117,10 @@
     <None Include="..\Reactor.Localization.Generator\$(_ReactorAnalyzerBinDir)\Reactor.Localization.Generator.dll"
           Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="" Visible="false" />
+    <!-- Packed under the PackageId-matching name so NuGet auto-imports it into
+         consuming projects (build/<PackageId>.targets). The source file keeps
+         the short name for the repo's own Directory.Build.props import. -->
+    <None Include="build\Reactor.targets" Pack="true" PackagePath="build\Microsoft.UI.Reactor.targets" Visible="false" />
     <!-- Agent kit packed into the NuGet at `agentkit/`: SKILL.md, every
          skills/*.md sub-skill, the recipes folder, and the generated
          signatures index. Mirrors the source-tree layout. Discoverable from

@@ -1,4 +1,6 @@
 using System.Collections;
+using System.Collections.Concurrent;
+using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
@@ -17,13 +19,44 @@ namespace Microsoft.UI.Reactor.Controls;
 /// </remarks>
 internal static class ArrayOperations
 {
+    private static readonly Type[] GenericCollectionDefinitions =
+    [
+        typeof(List<>),
+        typeof(Collection<>),
+        typeof(ObservableCollection<>),
+        typeof(ReadOnlyCollection<>),
+        typeof(HashSet<>),
+        typeof(SortedSet<>),
+        typeof(Queue<>),
+        typeof(Stack<>),
+        typeof(LinkedList<>),
+        typeof(ConcurrentBag<>),
+        typeof(ConcurrentQueue<>),
+        typeof(ConcurrentStack<>),
+        typeof(IList<>),
+        typeof(ICollection<>),
+        typeof(ISet<>),
+        typeof(IReadOnlyList<>),
+        typeof(IReadOnlyCollection<>),
+        typeof(IReadOnlySet<>),
+    ];
+
+    private static readonly Type[] NonGenericCollectionTypes =
+    [
+        typeof(IList),
+        typeof(ICollection),
+        typeof(ArrayList),
+        typeof(Queue),
+        typeof(Stack),
+    ];
+
     /// <summary>
     /// Adds an item to the end of the list. For arrays, returns a new array.
     /// Throws <see cref="NotSupportedException"/> on Native AOT for the array branch.
     /// </summary>
     [UnconditionalSuppressMessage("AOT", "IL3050",
         Justification = "Array.CreateInstance is only reached when RuntimeFeature.IsDynamicCodeSupported is true; otherwise we throw before calling it.")]
-    public static object Add(object collection, object item, Type elementType)
+    public static object Add(object collection, object? item, Type elementType)
     {
         if (collection is IList list && !collection.GetType().IsArray)
         {
@@ -143,16 +176,127 @@ internal static class ArrayOperations
 
     public static int GetCount(object collection)
     {
+        if (collection is string) return 0;
         if (collection is ICollection c) return c.Count;
-        if (collection is Array a) return a.Length;
+        if (collection is IEnumerable e)
+        {
+            var count = 0;
+            foreach (var _ in e) count++;
+            return count;
+        }
         return 0;
     }
 
     public static object? GetItem(object collection, int index)
     {
+        if (index < 0)
+            throw new ArgumentOutOfRangeException(nameof(index), index, "Index must be non-negative.");
+
+        if (collection is string) return null;
+        if (collection is Array array && IsZeroBasedOneDimensional(array)) return array.GetValue(index);
         if (collection is IList list) return list[index];
-        if (collection is Array array) return array.GetValue(index);
+        if (collection is IEnumerable e)
+        {
+            var i = 0;
+            foreach (var item in e)
+            {
+                if (i == index) return item;
+                i++;
+            }
+        }
         return null;
+    }
+
+    public static IReadOnlyList<object?> Snapshot(object collection)
+    {
+        if (collection is string) return [];
+
+        if (collection is Array array && IsZeroBasedOneDimensional(array))
+        {
+            var items = new object?[array.Length];
+            for (var i = 0; i < array.Length; i++)
+                items[i] = array.GetValue(i);
+            return items;
+        }
+
+        if (collection is IList list)
+        {
+            var items = new object?[list.Count];
+            for (var i = 0; i < list.Count; i++)
+                items[i] = list[i];
+            return items;
+        }
+
+        if (collection is IEnumerable enumerable)
+        {
+            var items = new List<object?>();
+            foreach (var item in enumerable)
+                items.Add(item);
+            return items;
+        }
+
+        return [];
+    }
+
+    public static CollectionCapabilities GetCapabilities(
+        object collection,
+        Type declaredType,
+        bool canWriteBack,
+        bool isReadOnly)
+    {
+        if (isReadOnly || IsDeclaredReadOnlyCollection(declaredType))
+            return default;
+
+        if (collection is Array array && IsZeroBasedOneDimensional(array))
+        {
+            var canResize = canWriteBack && RuntimeFeature.IsDynamicCodeSupported;
+            return canWriteBack
+                ? new CollectionCapabilities(
+                    CanAdd: canResize,
+                    CanRemoveAt: canResize,
+                    CanReplaceAt: true,
+                    CanReorder: true)
+                : default;
+        }
+
+        if (collection is IList list)
+        {
+            var canResize = !list.IsReadOnly && !list.IsFixedSize;
+            var canReplace = !list.IsReadOnly;
+            return new CollectionCapabilities(
+                CanAdd: canResize,
+                CanRemoveAt: canResize,
+                CanReplaceAt: canReplace,
+                CanReorder: canResize);
+        }
+
+        return default;
+    }
+
+    public static object ReplaceAt(object collection, int index, object? item, Type elementType)
+    {
+        if (index < 0)
+            throw new ArgumentOutOfRangeException(nameof(index), index, "Index must be non-negative.");
+
+        if (collection is IList list && !collection.GetType().IsArray)
+        {
+            if (index >= list.Count)
+                throw new ArgumentOutOfRangeException(nameof(index), index, $"Index must be less than the collection size ({list.Count}).");
+            list[index] = item;
+            return collection;
+        }
+
+        if (collection is Array array)
+        {
+            if (index >= array.Length)
+                throw new ArgumentOutOfRangeException(nameof(index), index, $"Index must be less than the array length ({array.Length}).");
+
+            var newArray = (Array)array.Clone();
+            newArray.SetValue(item, index);
+            return newArray;
+        }
+
+        throw new InvalidOperationException($"Cannot replace an item in {collection.GetType().Name}");
     }
 
     /// <summary>
@@ -180,16 +324,58 @@ internal static class ArrayOperations
 
     public static Type? GetElementType(Type collectionType)
     {
+        if (collectionType == typeof(string))
+            return null;
+
         if (collectionType.IsArray)
+        {
+            if (!collectionType.IsSZArray)
+                return null;
             return collectionType.GetElementType();
+        }
 
         if (collectionType.IsGenericType)
         {
             var genDef = collectionType.GetGenericTypeDefinition();
-            if (genDef == typeof(List<>) || genDef == typeof(IList<>))
+            if (GenericCollectionDefinitions.Contains(genDef))
                 return collectionType.GetGenericArguments()[0];
         }
 
+        if (IsDictionaryLike(collectionType))
+            return null;
+
+        if (NonGenericCollectionTypes.Contains(collectionType) || typeof(IList).IsAssignableFrom(collectionType))
+            return typeof(object);
+
         return null;
     }
+
+    private static bool IsDeclaredReadOnlyCollection(Type declaredType)
+    {
+        if (declaredType == typeof(ICollection))
+            return true;
+
+        if (!declaredType.IsGenericType)
+            return false;
+
+        var genDef = declaredType.GetGenericTypeDefinition();
+        return genDef == typeof(IReadOnlyCollection<>)
+            || genDef == typeof(IReadOnlyList<>)
+            || genDef == typeof(IReadOnlySet<>)
+            || genDef == typeof(ReadOnlyCollection<>);
+    }
+
+    private static bool IsZeroBasedOneDimensional(Array array)
+        => array.Rank == 1 && array.GetLowerBound(0) == 0;
+
+    private static bool IsDictionaryLike(Type type)
+        => typeof(IDictionary).IsAssignableFrom(type)
+            || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IDictionary<,>))
+            || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>));
 }
+
+internal readonly record struct CollectionCapabilities(
+    bool CanAdd,
+    bool CanRemoveAt,
+    bool CanReplaceAt,
+    bool CanReorder);

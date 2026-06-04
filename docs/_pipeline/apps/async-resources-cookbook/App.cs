@@ -5,9 +5,6 @@ using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
 ReactorApp.Run<AsyncResourcesCookbookApp>("Async Resources Cookbook", width: 600, height: 600
-#if DEBUG
-    , preview: true
-#endif
 );
 
 // Stand-in "API" so each snippet can demonstrate a real fetch without depending

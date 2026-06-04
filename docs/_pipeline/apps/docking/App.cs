@@ -10,7 +10,6 @@ ReactorApp.Run<DockingApp>(
     title: "Docking",
     width: 900,
     height: 600,
-    devtools: true,
     configure: host => DockingNativeInterop.Register(host.Reconciler));
 // </snippet:register>
 

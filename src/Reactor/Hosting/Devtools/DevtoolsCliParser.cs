@@ -1,6 +1,6 @@
 namespace Microsoft.UI.Reactor.Hosting.Devtools;
 
-internal enum DevtoolsSubverb
+public enum DevtoolsSubverb
 {
     Run,
     List,
@@ -9,11 +9,18 @@ internal enum DevtoolsSubverb
     App,
 }
 
+/// <summary>Which MCP transport the devtools surface uses.</summary>
+public enum McpTransport
+{
+    Http,
+    Stdio,
+}
+
 /// <summary>
 /// Parsed result of a <c>--devtools</c> / <c>--preview</c> invocation.
 /// <see cref="Subverb"/> is <c>null</c> when neither flag is present.
 /// </summary>
-internal sealed record DevtoolsCliOptions(
+public sealed record DevtoolsCliOptions(
     DevtoolsSubverb? Subverb,
     string? ComponentName,
     bool VsCodeMode,

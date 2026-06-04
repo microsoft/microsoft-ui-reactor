@@ -4,9 +4,6 @@ using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
 ReactorApp.Run<StylingApp>("Styling and Theming", width: 650, height: 800
-#if DEBUG
-    , preview: true
-#endif
 );
 
 // <snippet:theme-tokens>

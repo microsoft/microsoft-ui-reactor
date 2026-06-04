@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.UI.Reactor.Core.Diagnostics;
 
 namespace Microsoft.UI.Reactor.Hosting.Devtools;
@@ -58,21 +59,7 @@ internal sealed class McpDispatcher
                 // satisfies both strict MCP clients (which ignore the body
                 // when id is absent) and curl-happy humans.
                 var m when m.StartsWith("notifications/", StringComparison.Ordinal) => new { },
-                "tools/list" => new
-                {
-                    tools = _tools.List().Select(t => new
-                    {
-                        name = t.Name,
-                        description = t.Description,
-                        inputSchema = t.InputSchema,
-                    }).ToArray(),
-                    // Extensions beyond the MCP spec: agents can read the
-                    // selector grammar without a separate GET /mcp hop. MCP
-                    // clients that strict-parse tools/list ignore unknown
-                    // fields.
-                    _selectorGrammar = DevtoolsMcpServer.SelectorGrammarDoc,
-                    _treeSchemaVersion = TreeWalker.SchemaVersion,
-                },
+                "tools/list" => BuildToolsListResult(),
                 // MCP resource / prompt surfaces are not implemented yet; return
                 // the empty inventory so `initialize`-speaking clients don't fail
                 // their discovery step.
@@ -99,6 +86,31 @@ internal sealed class McpDispatcher
                 Error = new JsonRpcError { Code = JsonRpcErrorCodes.InternalError, Message = ex.Message },
             };
         }
+    }
+
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "JSON serialization for MCP tools/list input-schema fragments.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "JSON serialization for MCP tools/list input-schema fragments.")]
+    private JsonObject BuildToolsListResult()
+    {
+        var tools = new JsonArray();
+        foreach (var tool in _tools.List())
+        {
+            tools.Add((JsonNode)new JsonObject
+            {
+                ["name"] = JsonValue.Create(tool.Name),
+                ["description"] = JsonValue.Create(tool.Description),
+                ["inputSchema"] = tool.InputSchema is null
+                    ? new JsonObject()
+                    : JsonSerializer.SerializeToNode(tool.InputSchema, tool.InputSchema.GetType()),
+            });
+        }
+
+        return new JsonObject
+        {
+            ["tools"] = tools,
+            ["_selectorGrammar"] = JsonValue.Create(DevtoolsMcpServer.SelectorGrammarDoc),
+            ["_treeSchemaVersion"] = JsonValue.Create(TreeWalker.SchemaVersion),
+        };
     }
 
     /// <summary>

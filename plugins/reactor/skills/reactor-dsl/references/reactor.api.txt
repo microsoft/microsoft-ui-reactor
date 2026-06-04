@@ -76,6 +76,7 @@ Group(Element[] children) → Element
 HStack(Element[] children) → StackElement
 HStack(double spacing, Element[] children) → StackElement
 Heading(string content) → TextBlockElement
+Hyperlink(string text, Action onClick) → RichTextHyperlink
 Hyperlink(string text, Uri navigateUri) → RichTextHyperlink
 HyperlinkButton(Command command) → HyperlinkButtonElement
 HyperlinkButton(string content, Uri navigateUri = null, Action onClick = null) → HyperlinkButtonElement
@@ -88,6 +89,8 @@ ImageIcon(Uri source) → ImageIconData
 InfoBadge() → InfoBadgeElement
 InfoBadge(int value) → InfoBadgeElement
 InfoBar(string title = null, string message = null) → InfoBarElement
+InlineUI(Element child) → RichTextInlineUIContainer
+InlineUI(Func<FrameworkElement> factory) → RichTextInlineUIContainer
 InterspersedGrid(Orientation orientation, Element[] items, double[] proportions, double separatorSize, Func<int, Element> separatorFactory) → GridElement
 ItemContainer(Element child) → ItemContainerElement
 ItemsRepeater<T>(IReadOnlyList<T> items, Func<T, int, Element> viewBuilder) → ItemsRepeaterElement<T>
@@ -938,6 +941,8 @@ DockSides { None, Left, Top, Right, Bottom, All }
 DockTarget { Center, SplitLeft, SplitTop, SplitRight, SplitBottom, DockLeft, DockTop, DockRight, DockBottom }
 TabChrome { Win11, Flat, TitleBar }
 TabPosition { Top, Bottom }
+DevtoolsSubverb { Run, List, Screenshot, Tree, App }
+McpTransport { Http, Stdio }
 DragOperations { None, Copy, Move, Link, All }
 GesturePhase { Began, Changed, Ended, Cancelled }
 PanAxis { Both, Horizontal, Vertical }

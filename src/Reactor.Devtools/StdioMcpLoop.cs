@@ -4,17 +4,6 @@ using System.Text.Json;
 namespace Microsoft.UI.Reactor.Hosting.Devtools;
 
 /// <summary>
-/// Which MCP transport the devtools surface uses. HTTP stays the default in
-/// v1 (spec §16 open question #1); stdio is additive for agents that prefer
-/// framed-line JSON-RPC.
-/// </summary>
-internal enum McpTransport
-{
-    Http,
-    Stdio,
-}
-
-/// <summary>
 /// Newline-delimited JSON-RPC 2.0 read/write loop. One request per line in,
 /// one response per line out. Reuses the same <see cref="McpDispatcher"/> as
 /// the HTTP transport so tool handlers and logging are shared.

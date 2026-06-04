@@ -216,6 +216,12 @@ internal static class SelfTestFixtureRegistry
         "EFR_Factory_BoundedDistinctControls_AcrossManyRealizeCycles",
         "EFR_Factory_RecycledControlIsReusedOnNextRealize",
         "EFR_Factory_BookkeepingBoundedAcrossCycles",
+        // Spec 053 Phase 3 — Reactor.Advanced Win2D live-control smoke coverage.
+        "Win2D_Canvas_Mount",
+        "Win2D_AnimatedCanvas_Mount",
+        "Win2D_VirtualCanvas_Mount",
+        "Win2D_AnimatedCanvas_InitialPausedResumes",
+        "Win2D_Canvas_SameRedrawKeyNoExtraDraws",
         // PR #324 review fixes — heterogeneous rows, RefreshRealizedItems
         // sync, and ItemsRepeater unmount cleanup.
         "EFR_Factory_ReplacementOnRootTypeChange_DropsOldControlTracking",
@@ -252,6 +258,14 @@ internal static class SelfTestFixtureRegistry
         "PropertyGrid_Category_ExpandCollapse",
         "PropertyGrid_DeepNesting_RecordInRecord",
         "PropertyGrid_INPC_ExternalMutation",
+        "PropertyGrid_Array_CollectionVariantMatrix",
+        "PropertyGrid_Array_List_AddRemove",
+        "PropertyGrid_Array_Array_AddRemove_ReplacesProperty",
+        "PropertyGrid_Array_ICollection_AddRemove",
+        "PropertyGrid_Array_NonGenericList_RemoveOnly",
+        "PropertyGrid_Array_ObservableCollection_ExternalAndGridMutations",
+        "PropertyGrid_Array_ObservableItem_PropertyChanged_Rerenders",
+        "PropertyGrid_Array_CustomMetadata_EnumerableAdapter",
         // Localization
         "Localization_LocaleSwitching",
         // TypeRegistration mismatch regression
@@ -823,6 +837,10 @@ internal static class SelfTestFixtureRegistry
         "DevtoolsUx_MenuHiddenWhenDisabled",
         "DevtoolsUx_MenuVisibleWhenEnabled",
         "DevtoolsUx_ObservableToggleRerendersSubscribers",
+        "Spec051_DevtoolsMenu_SwitchOff_RendersEmpty",
+        "Spec051_DevtoolsMenu_SwitchOn_RendersTrigger",
+        "Spec051_UseDevtools_SwitchOff_ReturnsFalse",
+        "Spec051_UseDevtools_SwitchOn_PlusCli_ReturnsTrue",
 
         // Selection-event wiring (Tier 2 gap closure)
         "SelectionEvt_ComboBox",
@@ -1358,6 +1376,12 @@ internal static class SelfTestFixtureRegistry
         "ChartA11y_FullIntegration" => new ChartAccessibilityFixtures.FullIntegration(harness),
         "ChartA11y_AutomationPeerProviderExercise" => new ChartAccessibilityFixtures.AutomationPeerProviderExercise(harness),
 
+        "Win2D_Canvas_Mount" => new Win2DCanvasFixtures.CanvasMount(harness),
+        "Win2D_AnimatedCanvas_Mount" => new Win2DCanvasFixtures.AnimatedCanvasMount(harness),
+        "Win2D_VirtualCanvas_Mount" => new Win2DCanvasFixtures.VirtualCanvasMount(harness),
+        "Win2D_AnimatedCanvas_InitialPausedResumes" => new Win2DCanvasFixtures.AnimatedCanvasInitialPausedResumes(harness),
+        "Win2D_Canvas_SameRedrawKeyNoExtraDraws" => new Win2DCanvasFixtures.CanvasSameRedrawKeyNoExtraDraws(harness),
+
         "MdHtml_HtmlGeneration" => new MarkdownHtmlFixtures.HtmlGeneration(harness),
         "MdHtml_HtmlInWebView2" => new MarkdownHtmlFixtures.HtmlInWebView2(harness),
         "ListView_TypedRendering" => new CollectionFixtures.ListViewTyped(harness),
@@ -1459,6 +1483,14 @@ internal static class SelfTestFixtureRegistry
         "PropertyGrid_Category_ExpandCollapse" => new PropertyGridFixtures.Category_ExpandCollapse(harness),
         "PropertyGrid_DeepNesting_RecordInRecord" => new PropertyGridFixtures.DeepNesting_RecordInRecord(harness),
         "PropertyGrid_INPC_ExternalMutation" => new PropertyGridFixtures.INPC_ExternalMutation(harness),
+        "PropertyGrid_Array_CollectionVariantMatrix" => new PropertyGridFixtures.Array_CollectionVariantMatrix(harness),
+        "PropertyGrid_Array_List_AddRemove" => new PropertyGridFixtures.Array_List_AddRemove(harness),
+        "PropertyGrid_Array_Array_AddRemove_ReplacesProperty" => new PropertyGridFixtures.Array_Array_AddRemove_ReplacesProperty(harness),
+        "PropertyGrid_Array_ICollection_AddRemove" => new PropertyGridFixtures.Array_ICollection_AddRemove(harness),
+        "PropertyGrid_Array_NonGenericList_RemoveOnly" => new PropertyGridFixtures.Array_NonGenericList_RemoveOnly(harness),
+        "PropertyGrid_Array_ObservableCollection_ExternalAndGridMutations" => new PropertyGridFixtures.Array_ObservableCollection_ExternalAndGridMutations(harness),
+        "PropertyGrid_Array_ObservableItem_PropertyChanged_Rerenders" => new PropertyGridFixtures.Array_ObservableItem_PropertyChanged_Rerenders(harness),
+        "PropertyGrid_Array_CustomMetadata_EnumerableAdapter" => new PropertyGridFixtures.Array_CustomMetadata_EnumerableAdapter(harness),
         // Localization
         "Localization_LocaleSwitching" => new LocalizationFixtures.LocaleSwitching(harness),
         // TypeRegistration mismatch regression
@@ -2040,6 +2072,10 @@ internal static class SelfTestFixtureRegistry
         "DevtoolsUx_MenuHiddenWhenDisabled" => new DevtoolsUxTests.MenuHiddenWhenDisabled(harness),
         "DevtoolsUx_MenuVisibleWhenEnabled" => new DevtoolsUxTests.MenuVisibleWhenEnabled(harness),
         "DevtoolsUx_ObservableToggleRerendersSubscribers" => new DevtoolsUxTests.ObservableToggleRerendersSubscribers(harness),
+        "Spec051_DevtoolsMenu_SwitchOff_RendersEmpty" => new Spec051DevtoolsTrimmabilityFixtures.DevtoolsMenu_SwitchOff_RendersEmpty(harness),
+        "Spec051_DevtoolsMenu_SwitchOn_RendersTrigger" => new Spec051DevtoolsTrimmabilityFixtures.DevtoolsMenu_SwitchOn_RendersTrigger(harness),
+        "Spec051_UseDevtools_SwitchOff_ReturnsFalse" => new Spec051DevtoolsTrimmabilityFixtures.UseDevtools_SwitchOff_ReturnsFalse(harness),
+        "Spec051_UseDevtools_SwitchOn_PlusCli_ReturnsTrue" => new Spec051DevtoolsTrimmabilityFixtures.UseDevtools_SwitchOn_PlusCli_ReturnsTrue(harness),
 
         // Selection-event wiring
         "SelectionEvt_ComboBox" => new SelectionEventFixtures.ComboBoxSelectionFires(harness),

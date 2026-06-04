@@ -1,0 +1,34 @@
+<Project>
+  <ItemGroup>
+    <!-- Default: devtools subsystem is trimmed out of AOT publishes.
+         Apps that need devtools override by adding their own
+         <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
+                                          Value="true" Trim="true" />.
+         SDK uses last-write-wins for duplicate Include keys on
+         RuntimeHostConfigurationOption. -->
+    <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
+                                    Value="false"
+                                    Trim="true"
+                                    Condition="'@(RuntimeHostConfigurationOption->WithMetadataValue('Identity', 'Reactor.DevtoolsSupport'))' == ''" />
+  </ItemGroup>
+
+  <Target Name="_NormalizeReactorDevtoolsSupportSwitch"
+          BeforeTargets="_GenerateRuntimeConfigurationFilesInputCache;GenerateBuildRuntimeConfigurationFiles;PrepareForILLink">
+    <ItemGroup Condition="'@(RuntimeHostConfigurationOption->WithMetadataValue('Identity', 'Reactor.DevtoolsSupport')->WithMetadataValue('Value', 'true'))' != ''">
+      <RuntimeHostConfigurationOption Remove="Reactor.DevtoolsSupport" />
+      <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
+                                      Value="true"
+                                      Trim="true" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="_RestoreReactorDevtoolsSupportRuntimeKnob"
+          AfterTargets="PrepareForILLink"
+          BeforeTargets="WriteIlcRspFileForCompilation"
+          Condition="'@(_TrimmerFeatureSettings->WithMetadataValue('Identity', 'Reactor.DevtoolsSupport')->WithMetadataValue('Value', 'true'))' != ''">
+    <ItemGroup>
+      <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
+                                      Value="true" />
+    </ItemGroup>
+  </Target>
+</Project>

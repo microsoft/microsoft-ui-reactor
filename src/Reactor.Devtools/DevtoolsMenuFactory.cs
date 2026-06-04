@@ -1,49 +1,13 @@
 using System.Text;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Core.Diagnostics;
+using static Microsoft.UI.Reactor.Factories;
 
-namespace Microsoft.UI.Reactor;
+namespace Microsoft.UI.Reactor.Hosting.Devtools;
 
-public static partial class Factories
+internal static class DevtoolsMenuFactory
 {
-    /// <summary>
-    /// Renders a minimal, icon-only trigger (a lightning bolt "⚡" by default)
-    /// whose click opens a flyout containing the menu items returned by
-    /// <paramref name="items"/>. Deliberately distinct from normal chrome —
-    /// an amber glyph with no drop-down indicator — so "this session is in
-    /// dev mode" reads at a glance.
-    ///
-    /// When the in-app devtools UI is disabled for the session
-    /// (<see cref="ReactorApp.DevtoolsEnabled"/> is false), this returns
-    /// <see cref="Empty"/> and the <paramref name="items"/> lambda is not
-    /// invoked — so any element construction inside the lambda is skipped
-    /// at retail cost of one bool check.
-    ///
-    /// A built-in "Highlight reconcile changes" toggle is always appended
-    /// (separated from user items) to flip
-    /// <see cref="ReactorFeatureFlags.HighlightReconcileChanges"/>.
-    ///
-    /// Typical placement is a titlebar:
-    /// <code>
-    /// HStack(
-    ///     Text("My App"), Spacer(),
-    ///     DevtoolsMenu(() => new MenuFlyoutItemBase[]
-    ///     {
-    ///         ToggleMenuItem("Debug UI", AppFlags.DebugUI.Value,
-    ///             v => AppFlags.DebugUI.Value = v),
-    ///         MenuSeparator(),
-    ///         MenuItem("Clear cache", () => CacheService.Clear()),
-    ///     })
-    /// )
-    /// </code>
-    ///
-    /// Pass a different <paramref name="glyph"/> to customize — e.g. the
-    /// radioactive sign "☢" (U+2622), a bug "🐛", or any Unicode/Segoe Fluent
-    /// glyph you prefer. For toggle items to reflect fresh state when a
-    /// backing <see cref="Observable{T}"/> changes, subscribe the enclosing
-    /// component via <c>ctx.UseObservable(flag)</c>.
-    /// </summary>
-    public static Element DevtoolsMenu(
+    internal static Element Build(
         Func<IEnumerable<MenuFlyoutItemBase>>? items = null,
         string glyph = "⚡",
         string toolTip = "Devtools",
@@ -58,17 +22,9 @@ public static partial class Factories
             v =>
             {
                 ReactorFeatureFlags.HighlightReconcileChanges = v;
-                // Nudge a render so wrapper install / teardown happens
-                // immediately.
                 ReactorApp.ActiveHostInternal?.RequestRender();
             });
 
-        // Keyed-list diagnostics viewer (spec 042 Phase 6.2). Surfaces the
-        // duplicate-key / null-key bailout warnings captured by
-        // ReactorDiagnostics — first occurrence per (control, kind, sample-set)
-        // logs through ILogger; subsequent occurrences bump the count in the
-        // collector. The label refreshes only when the parent component
-        // re-renders, so the click handler nudges a render after closing.
         var warningCount = ReactorDiagnostics.RecentKeyedListWarnings.Count;
         var keyedListItem = MenuItem(
             warningCount == 0
@@ -76,7 +32,6 @@ public static partial class Factories
                 : $"Keyed-list diagnostics ({warningCount})",
             ShowKeyedListDiagnosticsDialog);
 
-        // Separator only makes sense when there are user items to separate from.
         var builtInItems = userItems.Length > 0
             ? new MenuFlyoutItemBase[] { MenuSeparator(), builtInToggle, keyedListItem }
             : new MenuFlyoutItemBase[] { builtInToggle, keyedListItem };
@@ -100,8 +55,6 @@ public static partial class Factories
 
     private static void ShowKeyedListDiagnosticsDialog()
     {
-        // Capture a snapshot up front — the producer side keeps writing, but
-        // the dialog only shows what was visible at click time.
         var warnings = ReactorDiagnostics.RecentKeyedListWarnings;
         var host = ReactorApp.ActiveHostInternal;
         var xamlRoot = host?.Window?.Content?.XamlRoot;
@@ -162,10 +115,6 @@ public static partial class Factories
             XamlRoot = xamlRoot,
         };
 
-        // Already on the UI thread (the menu's click handler dispatches
-        // there). Fire and forget — ContentDialog manages its own lifetime;
-        // wrap in try so a re-entrant click (dialog already open) doesn't
-        // crash the host.
         try
         {
             var op = dialog.ShowAsync();

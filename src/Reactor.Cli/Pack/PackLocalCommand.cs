@@ -3,6 +3,7 @@
 // scaffolded projects) can consume it via:
 //
 //   #:package Microsoft.UI.Reactor@0.0.0-local
+//   #:package Microsoft.UI.Reactor.Advanced@0.0.0-local
 //
 // The same code path consumers use against a real NuGet — but rebuilt from the
 // current source. Includes the analyzers and agentkit/reactor.api.txt
@@ -36,14 +37,14 @@ public static class PackLocalCommand
 
         // Clean prior nupkgs of this version so package restore picks up the new one
         // even if NuGet has cached the previous build by the same version string.
+        // Cleanup failures are non-fatal but surfaced as warnings so they aren't silent
+        // when `mur pack-local` reports success but the consumer keeps resolving stale.
         foreach (var stale in Directory.EnumerateFiles(feed, $"Microsoft.UI.Reactor.{version}.*nupkg"))
-        {
-            try { File.Delete(stale); } catch { /* best effort */ }
-        }
+            DeleteStaleNupkg(stale);
         foreach (var stale in Directory.EnumerateFiles(feed, $"Microsoft.UI.Reactor.ProjectTemplates.{version}.*nupkg"))
-        {
-            try { File.Delete(stale); } catch { /* best effort */ }
-        }
+            DeleteStaleNupkg(stale);
+        foreach (var stale in Directory.EnumerateFiles(feed, $"Microsoft.UI.Reactor.Advanced.{version}.*nupkg"))
+            DeleteStaleNupkg(stale);
 
         // pack honors Platform-specific build outputs; pick host arch.
         var arch = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture switch
@@ -62,7 +63,16 @@ public static class PackLocalCommand
             return rc;
         }
 
-        // 2. Project templates — Microsoft.UI.Reactor.ProjectTemplates.<version>.nupkg.
+        // 2. Advanced components — Microsoft.UI.Reactor.Advanced.<version>.nupkg
+        Console.WriteLine($"Packing Microsoft.UI.Reactor.Advanced {version} → {feed}");
+        rc = RunPack(repoRoot, Path.Join("src", "Reactor.Advanced", "Reactor.Advanced.csproj"), configuration, version, feed, arch);
+        if (rc != 0)
+        {
+            Console.Error.WriteLine("advanced pack failed.");
+            return rc;
+        }
+
+        // 3. Project templates — Microsoft.UI.Reactor.ProjectTemplates.<version>.nupkg.
         // Powers `dotnet new reactorapp -n MyApp` against this clone. Templates pack
         // is AnyCPU (no arch needed); the template's <PackageReference> resolves the
         // matching framework version through this same feed.
@@ -75,7 +85,9 @@ public static class PackLocalCommand
         }
 
         // Bust NuGet's HTTP cache for our local source so the new build is picked up
-        // immediately on the next restore.
+        // immediately on the next restore. Failure here is non-fatal but surfaced as
+        // a warning — stale caches are a common "why doesn't my change take effect"
+        // pitfall and silent failure makes the diagnostic worse.
         try
         {
             var clearProc = Process.Start(new ProcessStartInfo("dotnet")
@@ -87,16 +99,23 @@ public static class PackLocalCommand
                 RedirectStandardError = true,
             });
             clearProc?.WaitForExit();
+            if (clearProc is not null && clearProc.ExitCode != 0)
+                Console.Error.WriteLine($"warning: 'dotnet nuget locals http-cache --clear' exited with code {clearProc.ExitCode}; consumers may continue to resolve cached versions of {version}.");
         }
-        catch { /* non-fatal */ }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"warning: could not run 'dotnet nuget locals http-cache --clear' ({ex.GetType().Name}: {ex.Message}); consumers may continue to resolve cached versions of {version}.");
+        }
 
         var templatesNupkg = Path.Combine(feed, $"Microsoft.UI.Reactor.ProjectTemplates.{version}.nupkg");
 
         Console.WriteLine();
         Console.WriteLine($"Done. Apps in this repo can now reference:");
         Console.WriteLine($"    #:package Microsoft.UI.Reactor@{version}");
+        Console.WriteLine($"    #:package Microsoft.UI.Reactor.Advanced@{version}");
         Console.WriteLine($"or in a .csproj:");
         Console.WriteLine($"    <PackageReference Include=\"Microsoft.UI.Reactor\" Version=\"{version}\" />");
+        Console.WriteLine($"    <PackageReference Include=\"Microsoft.UI.Reactor.Advanced\" Version=\"{version}\" />");
         Console.WriteLine();
         Console.WriteLine($"To use `dotnet new reactorapp` against this feed:");
         Console.WriteLine($"    dotnet new install \"{templatesNupkg}\"");
@@ -126,6 +145,26 @@ public static class PackLocalCommand
         using var proc = Process.Start(psi)!;
         proc.WaitForExit();
         return proc.ExitCode;
+    }
+
+    static void DeleteStaleNupkg(string path)
+    {
+        try
+        {
+            File.Delete(path);
+        }
+        catch (IOException ex)
+        {
+            Console.Error.WriteLine($"warning: could not delete stale '{path}' ({ex.GetType().Name}: {ex.Message}); pack may write next to a stale package — consumers may resolve the wrong one.");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Console.Error.WriteLine($"warning: could not delete stale '{path}' ({ex.GetType().Name}: {ex.Message}); pack may write next to a stale package — consumers may resolve the wrong one.");
+        }
+        catch (System.Security.SecurityException ex)
+        {
+            Console.Error.WriteLine($"warning: could not delete stale '{path}' ({ex.GetType().Name}: {ex.Message}); pack may write next to a stale package — consumers may resolve the wrong one.");
+        }
     }
 
     static string? ParseFlag(string[] args, string name)

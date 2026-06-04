@@ -282,14 +282,7 @@ string GenerateProgram(string name) =>
     using static Microsoft.UI.Reactor.Factories;
     using Microsoft.UI.Xaml;
 
-    ReactorApp.Run<App>("{{name}}", width: 800, height: 600
-    #if DEBUG
-        // Enables `mur devtools` (agent tools over MCP + VS Code preview panel).
-        // Run `mur devtools` to launch with component switching, hot reload, and
-        // an MCP endpoint printed to stdout (MCP_ENDPOINT=http://127.0.0.1:NNNN/mcp).
-        , devtools: true
-    #endif
-    );
+    ReactorApp.Run<App>("{{name}}", width: 800, height: 600);
 
     class App : Component
     {
@@ -312,6 +305,11 @@ string GenerateCsproj() =>
         <UseWinUI>true</UseWinUI>
         <WindowsPackageType>None</WindowsPackageType>
       </PropertyGroup>
+      <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+        <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
+                                        Value="true"
+                                        Trim="true" />
+      </ItemGroup>
       <ItemGroup>
         <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.0.1" />
       </ItemGroup>

@@ -4,9 +4,6 @@ using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 
 ReactorApp.Run<MasterDetailApp>("Master-Detail Recipe", width: 640, height: 360
-#if DEBUG
-    , preview: true
-#endif
 );
 
 class MasterDetailApp : Component

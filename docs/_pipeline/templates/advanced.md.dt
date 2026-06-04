@@ -42,6 +42,7 @@ hatch's scope is fulfilled.
 | `UseObservableTree` | Bridging an existing INPC view model with nested objects. | New code — prefer `UseState` and `UseReducer` from [hooks](hooks.md). |
 | `UseCollection` | Wrapping an `ObservableCollection<T>` you don't own. | Owned lists — use `UseState<ImmutableList<T>>` or `ImmutableArray<T>`. |
 | Custom hook (`this RenderContext`) | Reusing a hook combination across components. | One-off compositions inside a single Render. |
+| [Win2D canvas](win2d-canvas.md) (`Reactor.Advanced`) | Immediate-mode drawing, game loops, and virtual tiled surfaces that retained WinUI controls cannot represent cheaply. | Ordinary retained UI — stay with elements, modifiers, and animation. |
 | Direct record-initializer cells | Profiled hot loops (tickers, stress grids). | Ordinary screens. Keep them fluent. |
 
 ## Error Boundary

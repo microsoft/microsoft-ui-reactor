@@ -8,6 +8,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <UseWinUI>true</UseWinUI>
+    <!-- Tests P/Invoke Microsoft.WindowsAppRuntime.dll from a ModuleInitializer
+         (TestSetup.cs); bundle the runtime so the test host can locate it
+         without needing the system-wide Windows App Runtime install. -->
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <OutputType>Library</OutputType>

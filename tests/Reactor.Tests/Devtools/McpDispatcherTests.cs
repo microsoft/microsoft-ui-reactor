@@ -41,6 +41,19 @@ public class McpDispatcherTests
     }
 
     [Fact]
+    public void ToolsList_EmitsRegisteredInputSchema()
+    {
+        // Regression: tools/list must echo each tool's registered inputSchema
+        // (not an empty object) so MCP clients can discover argument shapes.
+        var d = BuildDispatcher(out _);
+        var resp = d.Dispatch("""{"jsonrpc":"2.0","id":1,"method":"tools/list"}""");
+        var json = JsonSerializer.Serialize(resp.Result, DevtoolsMcpServer.JsonOpts);
+
+        Assert.Contains("\"inputSchema\":{\"type\":\"object\"}", json);
+        Assert.DoesNotContain("\"inputSchema\":{}", json);
+    }
+
+    [Fact]
     public void ToolsList_IncludesSelectorGrammarAndTreeSchemaVersion()
     {
         // Agents that read tools/list directly (no GET /mcp) still want the

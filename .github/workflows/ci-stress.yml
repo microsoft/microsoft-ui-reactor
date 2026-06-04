@@ -103,7 +103,7 @@ jobs:
           $failures = New-Object System.Collections.Generic.List[int]
           for ($i = 1; $i -le $count; $i++) {
             Write-Host "::group::Unit iteration $i / $count (shard $idx)"
-            dotnet test tests/Reactor.Tests/Reactor.Tests.csproj --no-restore --no-build -p:Platform=x64 --logger "console;verbosity=normal"
+            dotnet test tests/Reactor.Tests/Reactor.Tests.csproj --no-restore --no-build -p:Platform=x64 --logger "console;verbosity=normal" --blame-hang-timeout 180s --blame-hang-dump-type none
             $code = $LASTEXITCODE
             Write-Host "::endgroup::"
             if ($code -ne 0) {

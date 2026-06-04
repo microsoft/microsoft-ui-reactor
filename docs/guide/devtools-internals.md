@@ -41,12 +41,12 @@ the lockfile, present the token, and call tools.
 
 | Subsystem | Owner type | Source | Gate |
 |---|---|---|---|
-| Gate hook | `UseDevtools()` | `src/Reactor/Hooks/UseDevtools.cs` | Build-time `devtools: true` AND session-time `--devtools app` |
-| MCP server | `DevtoolsMcpServer` | `src/Reactor/Hosting/Devtools/DevtoolsMcpServer.cs` | Bearer token + project lockfile |
-| Tool registry | `McpToolRegistry` | `src/Reactor/Hosting/Devtools/McpToolRegistry.cs` | Per-tool input-schema validation |
-| JSON-RPC dispatch | `McpDispatcher` | `src/Reactor/Hosting/Devtools/McpDispatcher.cs` | Method allowlist + `tools/call` routing |
+| Gate hook | `UseDevtools()` | `src/Reactor/Hooks/UseDevtools.cs` | Build-time `Reactor.DevtoolsSupport` AND session-time `--devtools app` |
+| MCP server | `DevtoolsMcpServer` | `src/Reactor.Devtools/DevtoolsMcpServer.cs` | Bearer token + project lockfile |
+| Tool registry | `McpToolRegistry` | `src/Reactor.Devtools/McpToolRegistry.cs` | Per-tool input-schema validation |
+| JSON-RPC dispatch | `McpDispatcher` | `src/Reactor.Devtools/McpDispatcher.cs` | Method allowlist + `tools/call` routing |
 | CLI client | `McpCliClient` | `src/Reactor.Cli/Devtools/McpCliClient.cs` | Reads lockfile, posts bearer-authed JSON-RPC |
-| In-app menu | `DevtoolsMenu(...)` factory | `src/Reactor/Hosting/Devtools/DevtoolsMenuFactory.cs` | `UseDevtools()` — returns `Empty()` when off |
+| In-app menu | `DevtoolsMenu(...)` factory | `src/Reactor.Devtools/DevtoolsMenuFactory.cs` | `UseDevtools()` — returns `Empty()` when off |
 | Overlays | `ReactorFeatureFlags` | `src/Reactor/Core/` | Toggle binds an ETW listener only when on |
 
 ## The gate
@@ -58,9 +58,9 @@ public static bool UseDevtools(this RenderContext ctx) =>
 
 `UseDevtools()` returns `ReactorApp.DevtoolsEnabled` — the AND of two
 independent signals captured at process startup. The build-time signal
-is the `devtools: true` argument to `ReactorApp.Run<TRoot>(...)`; ship
-a release binary without it and the AND is false no matter what flags
-the user passes. The session-time signal is the `--devtools app` (or
+is the `Reactor.DevtoolsSupport` runtime host configuration switch in
+the app project; ship a release binary without it and the AND is false
+no matter what flags the user passes. The session-time signal is the `--devtools app` (or
 `--devtools run`) command-line argument the user supplies. Both must
 hold for the gate to open.
 
@@ -234,7 +234,7 @@ Handlers that touch WinUI state must run inside a
 already on the UI thread, but the handler will run on the listener
 thread *if* the registration uses the synchronous shape. See the
 existing `windows.activate` registration in
-`src/Reactor/Hosting/Devtools/DevtoolsTools.cs` for the dispatcher
+`src/Reactor.Devtools/DevtoolsTools.cs` for the dispatcher
 trampoline pattern.
 
 ## Common Mistakes

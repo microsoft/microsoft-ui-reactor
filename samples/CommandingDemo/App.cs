@@ -10,9 +10,6 @@ using static Microsoft.UI.Reactor.Core.Theme;
 using Windows.System;
 
 ReactorApp.Run<CommandingDemoApp>("Commanding Demo", width: 960, height: 720
-#if DEBUG
-    , devtools: true
-#endif
 );
 
 // ─── Root component ───────────────────────────────────────────────────────────

@@ -38,9 +38,6 @@ if (dlIdx >= 0 && dlIdx + 1 < args.Length)
 }
 
 ReactorApp.Run<AppShell>("Navigation Demo", width: 1200, height: 800
-#if DEBUG
-    , devtools: true
-#endif
 );
 
 // ─── Deep link state (static, consumed once by AppShell) ──────────────────────

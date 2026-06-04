@@ -5,9 +5,6 @@ using static Microsoft.UI.Reactor.Factories;
 // Doc app for `cheat-sheet.md` — tiny vignettes showing the most common
 // one-line patterns so the cheat sheet can reference real snippets.
 ReactorApp.Run<CheatSheetApp>("Cheat Sheet", width: 480, height: 360
-#if DEBUG
-    , preview: true
-#endif
 );
 
 class CheatSheetApp : Component

@@ -5,9 +5,6 @@ using Microsoft.UI.Xaml;
 using Windows.System;
 
 ReactorApp.Run<CommandingApp>("Commanding", width: 650, height: 550
-#if DEBUG
-    , preview: true
-#endif
 );
 
 // <snippet:basic-command>

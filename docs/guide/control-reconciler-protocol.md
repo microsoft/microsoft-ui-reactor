@@ -45,8 +45,10 @@ public UIElement Mount(Element element, Action requestRerender, Reconciler recon
 
     // Anchor element identity on the control via the attached state DP so
     // event trampolines can re-fetch the live element on each fire.
+    // Gated: callback-free leaves never dispatch into Reactor code, so we
+    // skip the ReactorState allocation for them (§4.4 follow-up).
     if (control is FrameworkElement fe)
-        Reconciler.SetElementTag(fe, typedEl);
+        Reconciler.SetElementTagIfNeeded(fe, typedEl);
 
     // Strategy dispatch — only when the handler declares a non-None Children strategy.
     var strategy = _handler.Children;
@@ -116,6 +118,17 @@ public interface IElementHandler<TElement, TControl>
     /// otherwise the handler is a leaf for the purposes of child
     /// reconciliation.</summary>
     ChildrenStrategy<TElement, TControl>? Children => null;
+
+    /// <summary>Issue #375 — children strategy the engine uses for the
+    /// unmount-side child walk. Defaults to <see cref="Children"/>; some
+    /// implementations (notably <see cref="Descriptor.DescriptorHandler{TElement,TControl}"/>)
+    /// suppress <see cref="Children"/> when they dispatch a strategy inline
+    /// during Mount/Update for ordering reasons (e.g. items-binder
+    /// strategies whose collection must be populated before
+    /// <c>SelectedIndex</c> initial writes land). On Unmount the ordering
+    /// constraint no longer applies, so they expose the real strategy here
+    /// so descendant Component <c>UseEffect</c> cleanups still fire.</summary>
+    ChildrenStrategy<TElement, TControl>? ChildrenForUnmount => Children;
 
     /// <summary>Spec 047 §14 Phase 3 prelude (Engine A1) — optional hook the
     /// engine invokes from <see cref="V1HandlerAdapter{TElement,TControl}"/>

@@ -10,7 +10,7 @@ using WinUI = Microsoft.UI.Xaml.Controls;
 // StarMeter's handler into the global ControlRegistry on the first
 // StarMeter.Of() call (whose class-init runs the static cctor below).
 ReactorApp.Run<ExtendingApp>(
-    "Extending Reactor", width: 540, height: 360, devtools: true);
+    "Extending Reactor", width: 540, height: 360);
 
 // ════════════════════════════════════════════════════════════════════════
 //  Step 1 — Define the Element record

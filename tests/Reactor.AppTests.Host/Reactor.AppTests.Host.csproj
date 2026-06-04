@@ -10,6 +10,9 @@
     <Nullable>enable</Nullable>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
+    <!-- Full WinUI host (selftest runner); bundle the WAS runtime so the
+         exe launches without depending on the machine-wide install. -->
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <!-- CsWinRT1030: generic WinRT-implementing collection use (e.g. List<Border>
          in SplitterMatrixFixtures) requires the CsWinRT-generated marshaling
          code to use unsafe blocks. This flag enables that for the generated
@@ -45,6 +48,12 @@
   </Target>
 
   <ItemGroup>
+    <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"
+                                    Value="true"
+                                    Trim="true" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
     <PackageReference Include="MessageFormat" Version="8.0.0" />
   </ItemGroup>
@@ -55,6 +64,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Reactor\Reactor.csproj" />
+    <ProjectReference Include="..\..\src\Reactor.Advanced\Reactor.Advanced.csproj" />
+    <ProjectReference Include="..\..\src\Reactor.Devtools\Reactor.Devtools.csproj" />
     <!-- Standalone library used by Issue142_ThirdPartyControlPrivateDp_Renders to
          simulate a 3P control NuGet referenced from a Reactor app that has its
          own XAML metadata. -->

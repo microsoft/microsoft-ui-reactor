@@ -3,9 +3,6 @@ using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
 
 ReactorApp.Run<MultiStepFormApp>("Multi-Step Form Recipe", width: 420, height: 460
-#if DEBUG
-    , preview: true
-#endif
 );
 
 class MultiStepFormApp : Component

@@ -1,0 +1,133 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <Platforms>x64;ARM64</Platforms>
+    <!--
+      VS opens a bare csproj (or initially evaluates an slnx) with an empty
+      or AnyCPU `$(Platform)`. Because BlankReactor's <Platforms> doesn't
+      include AnyCPU, design-time evaluation otherwise picks AnyCPU and the
+      Reactor ProjectReference resolves to the AnyCPU obj path which never
+      gets built — surfacing as `CS0006: Metadata file Reactor.dll could not
+      be found`. Coercing to x64 here normalises the active platform before
+      any other targets evaluate. CLI builds that already pass `-p:Platform=`
+      hit the condition first and keep their explicit value.
+    -->
+    <Platform Condition="'$(Platform)' == '' or '$(Platform)' == 'AnyCPU'">x64</Platform>
+    <!--
+      Explicit Configurations so VS's Create App Packages wizard can enumerate
+      Configuration × Platform pairs reliably from the .slnx-format solution.
+      Without this, the wizard sometimes reports "no valid configuration found".
+      These are the MSBuild defaults so this is a no-op for command-line builds.
+    -->
+    <Configurations>Debug;Release</Configurations>
+    <RootNamespace>BlankReactor</RootNamespace>
+    <!--
+      Perf-gate harnesses key off ProcessName, so the produced binary must
+      be named "BlankReactor" regardless of the csproj filename. Keep this
+      in sync with Package.appxmanifest Identity Name.
+    -->
+    <AssemblyName>BlankReactor</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWinUI>true</UseWinUI>
+
+    <!--
+      MSIX packaging — required so a perf-gate harness can deploy the app
+      via Add-AppxPackage / standard MSIX install paths.
+    -->
+    <WindowsPackageType>MSIX</WindowsPackageType>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <GenerateAppxPackageOnBuild Condition="'$(GenerateAppxPackageOnBuild)' == ''">False</GenerateAppxPackageOnBuild>
+
+    <!--
+      VS's Create App Packages wizard requires a publish-profile reference to
+      know how to produce the MSIX for each platform. Files live in
+      Properties\PublishProfiles\win-{x64,arm64}.pubxml; the .gitignore has a
+      negation rule that keeps just these two source-controlled (every other
+      *.pubxml in the repo stays ignored). Filename resolution is
+      case-insensitive on Windows, so $(Platform)=ARM64 resolves to
+      win-arm64.pubxml correctly. Only consumed by the Publish target —
+      no effect on the Build target the slnx CI job runs.
+    -->
+    <PublishProfile Condition="'$(PublishProfile)' == '' And ('$(Platform)' == 'x64' Or '$(Platform)' == 'ARM64')">Properties\PublishProfiles\win-$(Platform).pubxml</PublishProfile>
+    <!--
+      Self-contained .NET 10 so perf-test machines (which may only carry an
+      older .NET runtime for sibling baseline apps) don't need a separate
+      .NET 10 install. WindowsAppSDKSelfContained stays false (the
+      repo-root default in Directory.Build.props) so the app shares the
+      Microsoft.WindowsAppRuntime.2.msix that the test environment is
+      expected to provide.
+    -->
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <!-- AOT off: the shared EventSource tracing helper relies on EventSource.Write()
+         over [EventData] payloads, which NativeAOT trims and turns into zero ETW events. -->
+    <PublishAot>false</PublishAot>
+    <AppxBundle>Never</AppxBundle>
+    <AppxAutoIncrementPackageRevision>False</AppxAutoIncrementPackageRevision>
+    <AppxSymbolPackageEnabled>False</AppxSymbolPackageEnabled>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <GenerateAppInstallerFile>False</GenerateAppInstallerFile>
+    <GenerateTestArtifacts>False</GenerateTestArtifacts>
+    <HoursBetweenUpdateChecks>0</HoursBetweenUpdateChecks>
+
+    <!--
+      Signing is OFF by default so a fresh clone builds without requiring a
+      developer cert. To produce a signed deployable MSIX, set both properties
+      below — either on the command line:
+        /p:AppxPackageSigningEnabled=true /p:PackageCertificateKeyFile=<path-to.pfx>
+      or persistently in BlankReactor.csproj.user (gitignored).
+      The cert subject (CN=...) must match the Package.appxmanifest
+      <Identity Publisher="..."> value. See README.md for details.
+    -->
+    <AppxPackageSigningEnabled Condition="'$(AppxPackageSigningEnabled)' == ''">False</AppxPackageSigningEnabled>
+    <AppxPackageSigningTimestampDigestAlgorithm>SHA256</AppxPackageSigningTimestampDigestAlgorithm>
+  </PropertyGroup>
+
+  <!-- Pick a default RID based on the build Platform so SelfContained
+       publishing doesn't error out when no -r is passed. -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == '' and '$(Platform)' == 'x64'">
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' == '' and '$(Platform)' == 'ARM64'">
+    <RuntimeIdentifier>win-arm64</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AppxManifest Include="Package.appxmanifest">
+      <SubType>Designer</SubType>
+    </AppxManifest>
+    <Content Include="Images\*.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Common\BenchmarkTracing.cs" Link="Common\BenchmarkTracing.cs" />
+    <Compile Include="..\Common\BlankPerfMetrics.cs" Link="Common\BlankPerfMetrics.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      SetPlatform pins the Reactor build to match this project's $(Platform)
+      so VS's design-time GetTargetPath query (which would otherwise resolve
+      Reactor at its default AnyCPU and look for an obj\Debug\<tfm>\ref\
+      Reactor.dll that never gets produced) returns the same x64/ARM64 path
+      that the actual build emits. Fixes
+        CS0006: Metadata file '...\src\Reactor\obj\Debug\<tfm>\ref\Reactor.dll'
+                could not be found
+      when opening BlankReactor.csproj (or Reactor.slnx) in Visual Studio.
+      Skipped if $(Platform) somehow evaluates to empty so we never pass an
+      empty Platform= override.
+    -->
+    <ProjectReference Include="..\..\..\src\Reactor\Reactor.csproj">
+      <SetPlatform Condition="'$(Platform)' != ''">Platform=$(Platform)</SetPlatform>
+    </ProjectReference>
+  </ItemGroup>
+
+</Project>

@@ -5,9 +5,6 @@ using static Microsoft.UI.Reactor.Factories;
 using Microsoft.UI.Xaml;
 
 ReactorApp.Run<DialogsAndFlyoutsApp>("Dialogs and Flyouts", width: 640, height: 960
-#if DEBUG
-    , preview: true
-#endif
 );
 
 // <snippet:basic-dialog>

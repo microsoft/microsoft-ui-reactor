@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <Platforms>x64;ARM64</Platforms>
+    <AssemblyName>Reactor.Advanced.Tests</AssemblyName>
+    <RootNamespace>Microsoft.UI.Reactor.Advanced.Tests</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <!-- xUnit host loads WinUI types in-process; bundle the runtime so the
+         test host can locate it without depending on the machine-wide
+         Windows App Runtime install. -->
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Library</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Reactor.Advanced\Reactor.Advanced.csproj" />
+  </ItemGroup>
+
+</Project>

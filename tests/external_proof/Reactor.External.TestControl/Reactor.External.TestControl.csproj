@@ -34,9 +34,6 @@
     <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
     <Platforms>x64;ARM64</Platforms>
     <IsPackable>false</IsPackable>
-    <!-- Override Directory.Build.props default — a class library does not
-         bundle the WinUI runtime; the consuming app does. -->
-    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
 
     <!-- 1.17 AOT/trim story: opt into both PublishTrimmed and
          IsAotCompatible so the trim/AOT analyzers run during build, and

@@ -1,4 +1,6 @@
+using System.Collections;
 using System.ComponentModel;
+using System.Collections.Specialized;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Data;
@@ -55,6 +57,29 @@ public class PropertyGridComponent : Component<PropertyGridElement>
         var descriptors = el.Filter is not null
             ? allDescriptors.Where(el.Filter).ToList()
             : allDescriptors.ToList();
+
+        var observationTargets = BuildCollectionObservationTargets(descriptors, target);
+        UseEffect(() =>
+        {
+            if (observationTargets.Collections.Count == 0 && observationTargets.Items.Count == 0)
+                return () => { };
+
+            NotifyCollectionChangedEventHandler collectionHandler = (_, _) => forceRender(v => !v);
+            PropertyChangedEventHandler itemHandler = (_, _) => forceRender(v => !v);
+
+            foreach (var collection in observationTargets.Collections)
+                collection.CollectionChanged += collectionHandler;
+            foreach (var item in observationTargets.Items)
+                item.PropertyChanged += itemHandler;
+
+            return () =>
+            {
+                foreach (var collection in observationTargets.Collections)
+                    collection.CollectionChanged -= collectionHandler;
+                foreach (var item in observationTargets.Items)
+                    item.PropertyChanged -= itemHandler;
+            };
+        }, observationTargets.Dependencies);
 
         var (searchText, setSearchText) = UseState("");
         if (el.ShowSearch && !string.IsNullOrEmpty(searchText))
@@ -132,6 +157,45 @@ public class PropertyGridComponent : Component<PropertyGridElement>
         return content;
     }
 
+    private static CollectionObservationTargets BuildCollectionObservationTargets(
+        IEnumerable<FieldDescriptor> descriptors,
+        object owner)
+    {
+        var collections = new List<INotifyCollectionChanged>();
+        var items = new List<INotifyPropertyChanged>();
+        var dependencies = new List<object>();
+        var seen = new HashSet<object>(ReferenceEqualityComparer.Instance);
+
+        foreach (var value in descriptors.Select(descriptor => descriptor.GetValue(owner)))
+        {
+            if (value is null or string)
+                continue;
+
+            if (value is INotifyCollectionChanged collection && seen.Add(collection))
+            {
+                collections.Add(collection);
+                dependencies.Add(collection);
+            }
+
+            if (value is ICollection or Array)
+            {
+                foreach (var inpc in ArrayOperations.Snapshot(value).OfType<INotifyPropertyChanged>())
+                {
+                    if (seen.Add(inpc))
+                    {
+                        items.Add(inpc);
+                        dependencies.Add(inpc);
+                    }
+                }
+            }
+        }
+
+        return new CollectionObservationTargets(
+            collections,
+            items,
+            dependencies.Count == 0 ? [] : dependencies.ToArray());
+    }
+
     private static void RenderProperty(
         List<Element?> rows,
         FieldDescriptor descriptor,
@@ -147,6 +211,13 @@ public class PropertyGridComponent : Component<PropertyGridElement>
     {
         var propertyType = descriptor.FieldType;
         var meta = registry.Resolve(propertyType);
+        if (meta is ArrayTypeMetadata arrayMeta)
+        {
+            RenderArrayProperty(rows, descriptor, owner, registry, el, rowTemplate, labelTemplate,
+                expandState, setExpandState, editChain, indentLevel, arrayMeta);
+            return;
+        }
+
         var hasDecompose = meta.Decompose is not null && !IsPrimitiveOrEnum(propertyType);
         var hasEditor = meta.Editor is not null;
 
@@ -235,6 +306,217 @@ public class PropertyGridComponent : Component<PropertyGridElement>
         {
             rows.Add(rowTemplate(descriptor, label, editor, indentLevel));
         }
+    }
+
+    [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "Array element types are discovered from the annotated FieldDescriptor.FieldType at runtime.")]
+    private static void RenderArrayProperty(
+        List<Element?> rows,
+        FieldDescriptor descriptor,
+        object owner,
+        TypeRegistry registry,
+        PropertyGridElement el,
+        PropertyRowTemplate rowTemplate,
+        PropertyLabelTemplate labelTemplate,
+        Dictionary<string, bool> expandState,
+        Action<Func<Dictionary<string, bool>, Dictionary<string, bool>>> setExpandState,
+        EditChain editChain,
+        int indentLevel,
+        ArrayTypeMetadata arrayMeta)
+    {
+        var collection = descriptor.GetValue(owner);
+        if (collection is null)
+        {
+            rows.Add(rowTemplate(descriptor, labelTemplate(descriptor, indentLevel),
+                TextBlock("(null)"), indentLevel));
+            return;
+        }
+
+        var elementType = ArrayOperations.GetElementType(descriptor.FieldType);
+        if (elementType is null)
+        {
+            rows.Add(rowTemplate(descriptor, labelTemplate(descriptor, indentLevel),
+                TextBlock(collection.ToString() ?? "(null)"), indentLevel));
+            return;
+        }
+
+        var arrayToolbarTemplate = el.ArrayToolbarTemplate ?? PropertyGridDefaults.ArrayToolbarTemplate;
+        var arrayItemTemplate = el.ArrayItemTemplate ?? PropertyGridDefaults.ArrayItemTemplate;
+        var propertyName = descriptor.DisplayName ?? descriptor.Name;
+        var items = ArrayOperations.Snapshot(collection);
+        var count = items.Count;
+        var canWriteBack = descriptor.SetValue is not null || !editChain.CannotPropagate(descriptor);
+        var capabilities = ArrayOperations.GetCapabilities(
+            collection,
+            descriptor.FieldType,
+            canWriteBack,
+            descriptor.IsReadOnly);
+
+        void Refresh() => setExpandState(dict => new Dictionary<string, bool>(dict));
+
+        Func<Task>? onAdd = capabilities.CanAdd && arrayMeta.CreateElement is not null
+            ? async () =>
+            {
+                var item = await arrayMeta.CreateElement();
+                var currentCollection = descriptor.GetValue(owner)
+                    ?? throw new InvalidOperationException($"Cannot add to null collection property '{descriptor.Name}'.");
+                var updatedCollection = ArrayOperations.Add(currentCollection, item, elementType);
+                ApplyArrayChange(descriptor, owner, updatedCollection, editChain, Refresh);
+            }
+            : null;
+
+        var editorRows = new List<Element?>
+        {
+            arrayToolbarTemplate(propertyName, count, onAdd)
+        };
+
+        var arrayEditChain = editChain.Push(descriptor, arrayMeta, collection);
+        var arrayPath = editChain.BuildPath(descriptor.Name);
+
+        for (var i = 0; i < count; i++)
+        {
+            var index = i;
+            var item = items[index];
+            var itemDescriptor = CreateArrayItemDescriptor(index, elementType, capabilities.CanReplaceAt, Refresh);
+            var itemKey = $"array:{arrayPath}[{index}]";
+            var isExpanded = expandState.TryGetValue(itemKey, out var expanded) && expanded;
+            var summary = item?.ToString() ?? "(null)";
+
+            Action? onMoveUp = capabilities.CanReorder && index > 0
+                ? () =>
+                {
+                    var currentCollection = descriptor.GetValue(owner)
+                        ?? throw new InvalidOperationException($"Cannot move an item in null collection property '{descriptor.Name}'.");
+                    var updatedCollection = ArrayOperations.MoveUp(currentCollection, index, elementType);
+                    ApplyArrayChange(descriptor, owner, updatedCollection, editChain, Refresh);
+                }
+                : null;
+
+            Action? onMoveDown = capabilities.CanReorder && index < count - 1
+                ? () =>
+                {
+                    var currentCollection = descriptor.GetValue(owner)
+                        ?? throw new InvalidOperationException($"Cannot move an item in null collection property '{descriptor.Name}'.");
+                    var updatedCollection = ArrayOperations.MoveDown(currentCollection, index, elementType);
+                    ApplyArrayChange(descriptor, owner, updatedCollection, editChain, Refresh);
+                }
+                : null;
+
+            Action? onRemove = capabilities.CanRemoveAt
+                ? () =>
+                {
+                    var currentCollection = descriptor.GetValue(owner)
+                        ?? throw new InvalidOperationException($"Cannot remove from null collection property '{descriptor.Name}'.");
+                    var updatedCollection = ArrayOperations.RemoveAt(currentCollection, index, elementType);
+                    ApplyArrayChange(descriptor, owner, updatedCollection, editChain, Refresh);
+                }
+                : null;
+
+            editorRows.Add(arrayItemTemplate(
+                index,
+                summary,
+                isExpanded,
+                value => setExpandState(dict =>
+                {
+                    var copy = new Dictionary<string, bool>(dict);
+                    copy[itemKey] = value;
+                    return copy;
+                }),
+                onMoveUp,
+                onMoveDown,
+                onRemove));
+
+            if (isExpanded && item is not null)
+            {
+                RenderExpandedArrayItem(editorRows, collection, item, itemDescriptor, registry, el,
+                    rowTemplate, labelTemplate, expandState, setExpandState,
+                    arrayEditChain,
+                    indentLevel + 1);
+            }
+        }
+
+        var label = labelTemplate(descriptor, indentLevel);
+        var editor = FlexColumn(editorRows.ToArray()) with { RowGap = 2 };
+        rows.Add(rowTemplate(descriptor, label, editor, indentLevel));
+    }
+
+    [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "Array element types are discovered from the annotated FieldDescriptor.FieldType at runtime.")]
+    private static void RenderExpandedArrayItem(
+        List<Element?> rows,
+        object collection,
+        object item,
+        FieldDescriptor itemDescriptor,
+        TypeRegistry registry,
+        PropertyGridElement el,
+        PropertyRowTemplate rowTemplate,
+        PropertyLabelTemplate labelTemplate,
+        Dictionary<string, bool> expandState,
+        Action<Func<Dictionary<string, bool>, Dictionary<string, bool>>> setExpandState,
+        EditChain arrayEditChain,
+        int indentLevel)
+    {
+        var itemType = itemDescriptor.FieldType;
+        var itemMeta = registry.Resolve(itemType);
+        var isComposite = itemMeta.Decompose is not null && !IsPrimitiveOrEnum(itemType);
+
+        if (isComposite)
+        {
+            var itemEditChain = arrayEditChain.Push(itemDescriptor, itemMeta, item);
+            foreach (var subDescriptor in itemMeta.Decompose!(item))
+            {
+                RenderProperty(rows, subDescriptor, item, registry, el, rowTemplate, labelTemplate,
+                    expandState, setExpandState, itemEditChain, indentLevel);
+            }
+        }
+        else
+        {
+            RenderProperty(rows, itemDescriptor, collection, registry, el,
+                rowTemplate, labelTemplate, expandState, setExpandState, arrayEditChain, indentLevel);
+        }
+    }
+
+    private static FieldDescriptor CreateArrayItemDescriptor(
+        int index,
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors)] Type elementType,
+        bool canEdit,
+        Action refresh)
+    {
+        return new FieldDescriptor
+        {
+            Name = $"[{index}]",
+            DisplayName = "Value",
+            FieldType = elementType,
+            GetValue = owner => ArrayOperations.GetItem(owner, index),
+            SetValue = canEdit
+                ? (owner, value) =>
+                {
+                    var result = ArrayOperations.ReplaceAt(owner, index, value, elementType);
+                    refresh();
+                    return result;
+                }
+                : null,
+            IsReadOnly = !canEdit,
+        };
+    }
+
+    private static void ApplyArrayChange(
+        FieldDescriptor descriptor,
+        object owner,
+        object updatedCollection,
+        EditChain editChain,
+        Action refresh)
+    {
+        if (descriptor.SetValue is not null)
+        {
+            var newOwner = descriptor.SetValue(owner, updatedCollection);
+            if (!ReferenceEquals(newOwner, owner))
+                editChain.PropagateNewOwner(descriptor.Name, newOwner);
+        }
+        else
+        {
+            editChain.PropagateImmutableEdit(descriptor.Name, updatedCollection);
+        }
+
+        refresh();
     }
 
     private static Element RenderEditor(
@@ -402,3 +684,8 @@ internal record EditChainEntry(
     TypeMetadata Meta,
     object CurrentValue,
     object ParentValue);
+
+internal sealed record CollectionObservationTargets(
+    IReadOnlyList<INotifyCollectionChanged> Collections,
+    IReadOnlyList<INotifyPropertyChanged> Items,
+    object[] Dependencies);
