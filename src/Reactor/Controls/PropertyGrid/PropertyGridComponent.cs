@@ -166,9 +166,8 @@ public class PropertyGridComponent : Component<PropertyGridElement>
         var dependencies = new List<object>();
         var seen = new HashSet<object>(ReferenceEqualityComparer.Instance);
 
-        foreach (var descriptor in descriptors)
+        foreach (var value in descriptors.Select(descriptor => descriptor.GetValue(owner)))
         {
-            var value = descriptor.GetValue(owner);
             if (value is null or string)
                 continue;
 
@@ -180,9 +179,9 @@ public class PropertyGridComponent : Component<PropertyGridElement>
 
             if (value is ICollection or Array)
             {
-                foreach (var item in ArrayOperations.Snapshot(value))
+                foreach (var inpc in ArrayOperations.Snapshot(value).OfType<INotifyPropertyChanged>())
                 {
-                    if (item is INotifyPropertyChanged inpc && seen.Add(inpc))
+                    if (seen.Add(inpc))
                     {
                         items.Add(inpc);
                         dependencies.Add(inpc);
