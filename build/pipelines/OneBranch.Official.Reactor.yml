@@ -116,8 +116,11 @@ extends:
               # Two-phase ESRP signing (Official builds only): Authenticode-sign the framework
               # assembly + mur binaries BEFORE pack/zip so the DLLs inside the .nupkg and the
               # skill-kit zip are signed, then NuGet-sign the .nupkg containers after pack.
+              # signingProfile external_distribution => ESRP CP-230012, "Microsoft Corporation"
+              # root (for code shipped outside Microsoft, e.g. nuget.org). The .nupkg containers
+              # are signed separately in the template with cp_code CP-401405.
               sign: true
-              signingEnvironment: 'azure-ado'
+              signingProfile: 'external_distribution'
 # uncomment this section and edit parameters to enable VSTest instead of dotnet tests. When you enable this you dont need publish test results and codecoverage steps
          # - task: VSTest@3
          #   inputs:

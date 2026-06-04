@@ -44,10 +44,19 @@ parameters:
     displayName: 'ESRP-sign outputs (Authenticode binaries before pack, NuGet-sign .nupkg after). Official builds only.'
     type: boolean
     default: false
-  - name: signingEnvironment
-    displayName: 'onebranch.pipeline.signing signing_environment (e.g. azure-ado).'
+  - name: signingProfile
+    # onebranch.pipeline.signing@1 signing_profile for the AUTHORED BINARIES + SCRIPTS
+    # (*.dll / *.exe / *.ps1 / *.psm1). Per the OneBranch Container Build Signing docs:
+    #   external_distribution  -> ESRP CP-230012, "Microsoft Corporation" root -- for
+    #                             libraries/apps shipped OUTSIDE Microsoft (e.g. nuget.org). <-- ours
+    #   internal_azure_service -> ESRP CP-236167, "AME" root -- internal-to-Azure services.
+    # WARNING: if this parameter is misspelled OR an unrecognized signing parameter is used
+    # (e.g. the old signing_environment: 'azure-ado'), the task does NOT fail -- it silently
+    # falls back to internal_azure_service. NuGet packages are signed separately below with
+    # cp_code CP-401405 (the dedicated NuGet signing cert), not with this profile.
+    displayName: 'onebranch.pipeline.signing signing_profile for binaries/scripts (external_distribution | internal_azure_service).'
     type: string
-    default: 'azure-ado'
+    default: 'external_distribution'
 
 steps:
   - task: UseDotNet@2
@@ -250,8 +259,10 @@ steps:
     # Microsoft.UI.Reactor.nupkg. Signing the .nupkg later (Phase 2) only seals the package
     # container; it does NOT reach the assemblies within (Guardian CodeSign post-analysis
     # validates the members and breaks the build if any are unsigned -- build 118650 caught
-    # an unsigned analyzers/dotnet/cs/Reactor.Analyzers.dll). ESRP NuGet-signs .nupkg and
-    # Authenticode-signs .dll/.exe based on file type (OneBranch Signing FAQ).
+    # an unsigned analyzers/dotnet/cs/Reactor.Analyzers.dll). ESRP picks Authenticode vs
+    # NuGet-sign by file type; the CERT is chosen by signing_profile (binaries/scripts) or
+    # cp_code (nupkg). We use signing_profile: external_distribution (CP-230012, "Microsoft
+    # Corporation" root) here for the *.dll, and cp_code CP-401405 for the *.nupkg in Phase 2.
     #
     # Four authored assemblies ship inside Microsoft.UI.Reactor.nupkg:
     #   lib/<tfm>/Reactor.dll (+ Reactor.resources.dll satellite)        <- src\Reactor\bin
@@ -264,7 +275,7 @@ steps:
         displayName: 'Sign packed assemblies (Authenticode, pre-pack)'
         inputs:
           command: 'sign'
-          signing_environment: '${{ parameters.signingEnvironment }}'
+          signing_profile: '${{ parameters.signingProfile }}'
           files_to_sign: 'Reactor\bin\**\Reactor.dll;Reactor\bin\**\Reactor.resources.dll;Reactor.Analyzers\bin\**\Reactor.Analyzers.dll;Reactor.Localization.Generator\bin\**\Reactor.Localization.Generator.dll'
           search_root: '$(Build.SourcesDirectory)\src'
 
@@ -311,9 +322,10 @@ steps:
         displayName: 'Sign mur binaries (Authenticode, pre-zip)'
         inputs:
           command: 'sign'
-          signing_environment: '${{ parameters.signingEnvironment }}'
+          signing_profile: '${{ parameters.signingProfile }}'
           files_to_sign: '**/*.exe;**/*.dll'
           search_root: '${{ parameters.outputDirectory }}\mur'
+          signing_profile: external_distribution
 
     - pwsh: |
         $version = '$(PackageVersion)'
@@ -340,9 +352,10 @@ steps:
         displayName: 'Sign skill-kit scripts (Authenticode, pre-zip)'
         inputs:
           command: 'sign'
-          signing_environment: '${{ parameters.signingEnvironment }}'
+          signing_profile: '${{ parameters.signingProfile }}'
           files_to_sign: '**/*.ps1;**/*.psm1'
           search_root: '${{ parameters.outputDirectory }}\kit-stage'
+          signing_profile: external_distribution
 
     - pwsh: |
         $version = '$(PackageVersion)'
@@ -360,12 +373,15 @@ steps:
 
     # ── Phase 2: NuGet-sign the packages AFTER pack. This seals each .nupkg as a whole
     # (tamper-evidence + authenticity of the package container). The assemblies inside
-    # were already Authenticode-signed in Phase 1a.
+    # were already Authenticode-signed in Phase 1a. NuGet packages use the dedicated NuGet
+    # signing cert via cp_code CP-401405 (per the OneBranch supported-file-extensions table),
+    # NOT a signing_profile -- the profiles map to Authenticode certs, not the NuGet cert.
     - ${{ if eq(parameters.sign, true) }}:
       - task: onebranch.pipeline.signing@1
         displayName: 'Sign NuGet packages (post-pack)'
         inputs:
           command: 'sign'
-          signing_environment: '${{ parameters.signingEnvironment }}'
+          cp_code: 'CP-401405'
           files_to_sign: '**/*.nupkg'
           search_root: '${{ parameters.outputDirectory }}\nupkg'
+          signing_profile: external_distribution
