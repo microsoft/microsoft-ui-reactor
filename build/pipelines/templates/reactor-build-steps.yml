@@ -325,7 +325,6 @@ steps:
           signing_profile: '${{ parameters.signingProfile }}'
           files_to_sign: '**/*.exe;**/*.dll'
           search_root: '${{ parameters.outputDirectory }}\mur'
-          signing_profile: external_distribution
 
     - pwsh: |
         $version = '$(PackageVersion)'
@@ -355,7 +354,6 @@ steps:
           signing_profile: '${{ parameters.signingProfile }}'
           files_to_sign: '**/*.ps1;**/*.psm1'
           search_root: '${{ parameters.outputDirectory }}\kit-stage'
-          signing_profile: external_distribution
 
     - pwsh: |
         $version = '$(PackageVersion)'
@@ -384,4 +382,3 @@ steps:
           cp_code: 'CP-401405'
           files_to_sign: '**/*.nupkg'
           search_root: '${{ parameters.outputDirectory }}\nupkg'
-          signing_profile: external_distribution
