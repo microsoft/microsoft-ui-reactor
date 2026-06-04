@@ -78,3 +78,5 @@
 "Microsoft.NETCore.App.Runtime.NativeAOT.win-x64","9.0.0","AvailableOrHydrated","Feed/Upstream"
 "runtime.win-x64.Microsoft.DotNet.ILCompiler","9.0.0","AvailableOrHydrated","Feed/Upstream"
 "Microsoft.CodeAnalysis.BinSkim","4.4.9.9","AvailableOrHydrated","Feed/Upstream"
+"Mono.Cecil","0.11.6","AvailableOrHydrated","Feed/Upstream"
+"Xunit.SkippableFact","1.5.23","AvailableOrHydrated","Feed/Upstream"
