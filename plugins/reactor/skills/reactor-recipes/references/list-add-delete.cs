@@ -14,6 +14,7 @@
 // In this clone, run `mur pack-local` once. Bump the version below to match
 // whatever `mur pack-local` printed (default: 0.0.0-local). For a real NuGet
 // consumer, set Version to a published Microsoft.UI.Reactor release.
+// Controlled-prop note: factories keep plain (value, setter) call sites; direct element-record reads use Optional<T> (.Value / .GetValueOrDefault).
 #:package Microsoft.UI.Reactor@0.0.0-local
 #:package Microsoft.WindowsAppSDK@2.0.1
 #:property OutputType=WinExe

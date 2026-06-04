@@ -726,7 +726,11 @@ Push everyone toward `Optional<T>` for `.Controlled` (this spec's choice) *and* 
 
 ## §15 Open questions
 
-All design-level open questions resolved in the **Status** section. Any further open questions surfaced during implementation should be added here with their resolution before merge.
+**Resolved for merge.** All design-level open questions are resolved in the
+**Status** section, and the implementation sweep did not surface any new
+unresolved design questions. Follow-up work is tracked as ordinary backlog
+items (expanded pool eligibility, interactive `Optional<T>` PropertyGrid
+editing, and future `OneWayConditional` migrations), not as spec blockers.
 
 ---
 

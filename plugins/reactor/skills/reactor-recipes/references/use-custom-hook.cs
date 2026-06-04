@@ -16,6 +16,7 @@
 // Right shape: a `Use*` extension on RenderContext that bundles the hooks.
 // Render() calls it like any other hook — order-stable, deps-driven.
 
+// Controlled-prop note: factories keep plain (value, setter) call sites; direct element-record reads use Optional<T> (.Value / .GetValueOrDefault).
 #:package Microsoft.UI.Reactor@0.0.0-local
 #:package Microsoft.WindowsAppSDK@2.0.1
 #:property OutputType=WinExe

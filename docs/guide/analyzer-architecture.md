@@ -145,6 +145,7 @@ via `.editorconfig`.
 | `REACTOR_DOC_001` | Warning | Public API missing XML doc summary | `XmlDocSummaryAnalyzer.cs` |
 | `REACTOR_DOC_002` | Warning | XML doc cref does not resolve | `XmlDocCrefAnalyzer.cs` |
 | `REACTOR_POOL_001` | Warning | `.Set` writes to a property that pool reset clears | `PoolResetSetAnalyzer.cs` |
+| `REACTOR0050` | Warning | Optional OneWay descriptor entry has no `dp:` ClearValue fallback | `OneWayClearValueAnalyzer.cs` |
 
 `REACTOR_HOOKS_002` and `_003` are reserved for future control-flow /
 data-flow analyses (variable hook counts across early returns, async

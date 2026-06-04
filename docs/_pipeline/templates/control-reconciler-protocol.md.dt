@@ -181,6 +181,29 @@ keeps its typed event-payload box, and re-mount checks the box's
 that gets rented out for a fresh `StarMeterElement` does not
 double-subscribe its `ValueChanged` event.
 
+### Optional-aware Update gate
+
+Controlled descriptor entries read `Optional<TValue>` from the new
+element before they compare or arm echo suppression:
+
+```csharp
+var next = get(newElement);              // Optional<TValue>
+if (!next.HasValue) return;              // Unset: control owns the value
+var value = next.Value;
+var current = readBack(control);
+if (comparer.Equals(current, value)) return;
+// HasValue drift: arm value-diff echo suppression, then write value.
+```
+
+`Unset` is therefore a real authority state, not a sentinel value of
+`TValue`: Mount skips the initial write, Update returns before any
+`readBack`, comparer call, echo arm, or `set`. When `HasValue` is true,
+the entry uses the same value-diff arm as other exact-comparable
+controlled props — it records the expected value, writes, and the
+trampoline suppresses only the matching programmatic echo. The
+`current == value` short-circuit stays in front of the arm so an
+already-correct control does not strand a pending echo token.
+
 ## Children strategies
 
 A handler's `Children` property declares **how** its child elements
@@ -317,9 +340,10 @@ hatches a hand-coded handler would otherwise need:
 | Builder | When to reach for it |
 |---|---|
 | `.OneWay(get, set)` | Plain one-way prop; write on Mount, diff-write on Update. No event subscription. |
-| `.OneWayConditional(get, set, shouldWrite)` | Nullable / optional prop where leaving the control's default is the intent when the element didn't set a value. |
-| `.Initial(get, set)` | Write once at Mount and never again. Use for seed-only props (`TextBox.InitialText`, etc.). |
-| `.Controlled<TValue, TArgs>(get, set, subscribe, unsubscribe, callback, readBack)` | Two-way prop. Framework writes with echo suppression; user input rounds back via the change event. Subscription is gated on `callback` returning non-null. |
+| `.OneWay(get, set, dp:)` | `Optional<T>` one-way prop backed by a DP; `HasValue` writes and `Unset` calls `ClearValue(dp)`. |
+| `.OneWayConditional(get, set, shouldWrite)` | Explicit skip-write prop where the predicate is more complex than set-vs-unset. |
+| `.InitialOnly(get, set)` | Write once at Mount and never again. Use for seed-only props (`TextBox.InitialText`, etc.). |
+| `.Controlled<TValue, TArgs>(get, set, subscribe, unsubscribe, callback, readBack)` | Two-way prop whose `get` returns `Optional<TValue>`. `Unset` means control-owned; `HasValue` writes with echo suppression and user input rounds back via the change event. Subscription is gated on `callback` returning non-null. |
 | `.CoercingOneWay(get, set, coercesController)` | One-way prop whose write may coerce a sibling controlled value (e.g. `Slider.Minimum` re-clamping `Slider.Value`); writes through `WriteSuppressed` when the coercion fires. |
 | `.HandCodedControlled<TPayload, TValue, TDelegate>` | Two-way prop with a multi-event control where the standard `Controlled` shape would collide on the per-control event payload (`TextBox.Text` alongside `SelectionChanged`). |
 | `.HandCodedEvent<TPayload, TDelegate>` | Fire-and-forget event with no associated DP (`Button.Click`, `Image.ImageOpened`). |

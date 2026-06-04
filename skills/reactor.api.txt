@@ -17,6 +17,7 @@ AppBarButton(string label, Action onClick = null, string icon = null) → AppBar
 AppBarSeparator() → AppBarSeparatorData
 AppBarToggleButton(string label, bool isChecked = false, Action<bool> onIsCheckedChanged = null, string icon = null) → AppBarToggleButtonData
 AutoColumns<T>(TypeRegistry registry = null, Func<FieldDescriptor, FieldDescriptor> overrides = null) → IReadOnlyList<FieldDescriptor>
+AutoSuggestBox(Optional<string> text, Action<string> onTextChanged = null, Action<string> onQuerySubmitted = null) → AutoSuggestBoxElement
 AutoSuggestBox(string text, Action<string> onTextChanged = null, Action<string> onQuerySubmitted = null) → AutoSuggestBoxElement
 BitmapIcon(Uri source, bool showAsMonochrome = true) → BitmapIconData
 Body(string content) → TextBlockElement
@@ -29,14 +30,19 @@ Button(Command command) → ButtonElement
 Button(Element content, Action onClick = null) → ButtonElement
 Button(string label, Action onClick = null) → ButtonElement
 CalendarDatePicker(DateTimeOffset? date = null, Action<DateTimeOffset?> onDateChanged = null) → CalendarDatePickerElement
+CalendarDatePicker(Optional<DateTimeOffset?> date, Action<DateTimeOffset?> onDateChanged = null) → CalendarDatePickerElement
 CalendarView() → CalendarViewElement
 Canvas(Element[] children) → CanvasElement
 Caption(string content) → TextBlockElement
 Card(Element child) → BorderElement
+CheckBox(Optional<bool?> isChecked, Action<bool> onIsCheckedChanged = null, string label = null) → CheckBoxElement
 CheckBox(bool isChecked, Action<bool> onIsCheckedChanged = null, string label = null) → CheckBoxElement
 ColorPicker(Color color, Action<Color> onColorChanged = null) → ColorPickerElement
+ColorPicker(Optional<Color> color, Action<Color> onColorChanged = null) → ColorPickerElement
 Column<T>(string name, Func<T, object> accessor, bool editable = false, string displayName = null, string format = null, double? width = null, PinPosition pin = PinPosition.None) → ColumnBuilder<T>
+ComboBox(Element[] itemElements, Optional<int> selectedIndex, Action<int> onSelectedIndexChanged) → ComboBoxElement
 ComboBox(Element[] itemElements, int selectedIndex, Action<int> onSelectedIndexChanged) → ComboBoxElement
+ComboBox(string[] items, Optional<int> selectedIndex, Action<int> onSelectedIndexChanged = null) → ComboBoxElement
 ComboBox(string[] items, int selectedIndex = -1, Action<int> onSelectedIndexChanged = null) → ComboBoxElement
 CommandBar(AppBarItemBase[] primaryCommands = null, AppBarItemBase[] secondaryCommands = null) → CommandBarElement
 CommandBarFlyout(Element target, AppBarItemBase[] primaryCommands = null, AppBarItemBase[] secondaryCommands = null) → CommandBarFlyoutElement
@@ -48,12 +54,14 @@ ContentFlyout(Element content, FlyoutPlacementMode placement = FlyoutPlacementMo
 DataGrid<T>(IDataSource<T> source, IReadOnlyList<FieldDescriptor> columns, TypeRegistry registry = null, SelectionMode selectionMode = SelectionMode.None, Action<IReadOnlySet<RowKey>> onSelectionChanged = null, Func<RowKey, T, Task> onRowChanged = null, double? rowHeight = 40, bool editable = false, EditMode editMode = EditMode.Cell, Func<CellContext<T>, Element> cellTemplate = null, Func<RowContext<T>, Element> rowTemplate = null, Func<HeaderContext, Element> headerTemplate = null, Element loadingTemplate = null, Element emptyTemplate = null, bool showSearch = false, Func<T, RowKey, Element> rowDetailTemplate = null, Func<FieldDescriptor, double, Element> placeholderCellTemplate = null) → ComponentElement<DataGridElement<T>>
 DataGrid<T>(IDataSource<T> source, TypeRegistry registry, Func<FieldDescriptor, FieldDescriptor> columnOverrides = null, SelectionMode selectionMode = SelectionMode.None, Action<IReadOnlySet<RowKey>> onSelectionChanged = null, Func<RowKey, T, Task> onRowChanged = null, double? rowHeight = 40, bool editable = false, EditMode editMode = EditMode.Cell, Element loadingTemplate = null, Element emptyTemplate = null) → ComponentElement<DataGridElement<T>>
 DatePicker(DateTimeOffset date, Action<DateTimeOffset> onDateChanged = null) → DatePickerElement
+DatePicker(Optional<DateTimeOffset> date, Action<DateTimeOffset> onDateChanged = null) → DatePickerElement
 DevtoolsMenu(Func<IEnumerable<MenuFlyoutItemBase>> items = null, string glyph = "⚡", string toolTip = "Devtools", string automationId = null) → Element
 DropDownButton(string label, Element flyout = null) → DropDownButtonElement
 Ellipse() → EllipseElement
 Empty() → Element
 ErrorBoundary(Element child, Element fallback) → ErrorBoundaryElement
 ErrorBoundary(Element child, Func<Exception, Element> fallback) → ErrorBoundaryElement
+Expander(string header, Element content, Optional<bool> isExpanded, Action<bool> onIsExpandedChanged = null) → ExpanderElement
 Expander(string header, Element content, bool isExpanded = false, Action<bool> onIsExpandedChanged = null) → ExpanderElement
 Expr(Func<Element> render) → Element
 Flex(Element[] children) → FlexElement
@@ -61,6 +69,8 @@ Flex(FlexDirection direction, Element[] children) → FlexElement
 FlexColumn(Element[] children) → FlexElement
 FlexRow(Element[] children) → FlexElement
 FlipView(Element[] items) → FlipViewElement
+FlipView(Optional<int> selectedIndex, Action<int> onSelectedIndexChanged = null, Element[] items) → FlipViewElement
+FlipView(int? selectedIndex, Action<int> onSelectedIndexChanged = null, Element[] items) → FlipViewElement
 FlipView<T>(IReadOnlyList<T> items, Func<T, int, Element> viewBuilder) → TemplatedFlipViewElement<T>
 FlipView<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → TemplatedFlipViewElement<T>
 Flyout(Element target, Element flyoutContent) → FlyoutElement
@@ -70,6 +80,8 @@ ForEach<T>(IEnumerable<T> items, Func<T, int, Element> render) → Element
 Frame(Type sourcePageType = null, object navigationParameter = null) → FrameElement
 Grid(GridSize[] columns, GridSize[] rows, Element[] children) → GridElement
 GridView(Element[] items) → GridViewElement
+GridView(Optional<int> selectedIndex, Action<int> onSelectedIndexChanged = null, Element[] items) → GridViewElement
+GridView(int? selectedIndex, Action<int> onSelectedIndexChanged = null, Element[] items) → GridViewElement
 GridView<T>(IReadOnlyList<T> items, Func<T, int, Element> viewBuilder) → TemplatedGridViewElement<T>
 GridView<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → TemplatedGridViewElement<T>
 Group(Element[] children) → Element
@@ -101,8 +113,11 @@ LazyHStack<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, 
 LazyVStack<T>(IReadOnlyList<T> items, Func<T, int, Element> viewBuilder) → LazyVStackElement<T>
 LazyVStack<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → LazyVStackElement<T>
 Line(double x1, double y1, double x2, double y2) → LineElement
+ListBox(string[] items, Optional<int> selectedIndex, Action<int> onSelectedIndexChanged = null) → ListBoxElement
 ListBox(string[] items, int selectedIndex = -1, Action<int> onSelectedIndexChanged = null) → ListBoxElement
 ListView(Element[] items) → ListViewElement
+ListView(Optional<int> selectedIndex, Action<int> onSelectedIndexChanged = null, Element[] items) → ListViewElement
+ListView(int? selectedIndex, Action<int> onSelectedIndexChanged = null, Element[] items) → ListViewElement
 ListView<T>(IReadOnlyList<T> items, Func<T, int, Element> viewBuilder) → TemplatedListViewElement<T>
 ListView<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → TemplatedListViewElement<T>
 LocaleProvider(string locale, Element child, IStringResourceProvider resourceProvider = null, string defaultLocale = "en-US", bool pseudoLocalize = false) → ComponentElement<LocaleProviderElement>
@@ -125,15 +140,20 @@ NavItem(string content, string icon = null, string tag = null) → NavigationVie
 NavItemHeader(string content) → NavigationViewItemData
 NavigationHost<TRoute>(NavigationHandle<TRoute> nav, Func<TRoute, Element> routeMap) → NavigationHostElement
 NavigationView(NavigationViewItemData[] menuItems, Element content = null) → NavigationViewElement
+NumberBox(Optional<double> value, Action<double> onValueChanged = null, string header = null) → NumberBoxElement
 NumberBox(double value, Action<double> onValueChanged = null, string header = null) → NumberBoxElement
 Paragraph(RichTextInline[] inlines) → RichTextParagraph
 ParallaxView(Element child, double verticalShift = 0, double horizontalShift = 0) → ParallaxViewElement
+PasswordBox(Optional<string> password, Action<string> onPasswordChanged = null, string placeholderText = null) → PasswordBoxElement
 PasswordBox(string password, Action<string> onPasswordChanged = null, string placeholderText = null) → PasswordBoxElement
 Path2D() → PathElement
 PathIcon(string data) → PathIconData
 PersonPicture() → PersonPictureElement
+PipsPager(int numberOfPages, Optional<int> selectedPageIndex, Action<int> onSelectedPageIndexChanged = null) → PipsPagerElement
 PipsPager(int numberOfPages, int selectedPageIndex = 0, Action<int> onSelectedPageIndexChanged = null) → PipsPagerElement
+Pivot(Optional<int> selectedIndex, Action<int> onSelectedIndexChanged = null, PivotItemData[] items) → PivotElement
 Pivot(PivotItemData[] items) → PivotElement
+Pivot(int? selectedIndex, Action<int> onSelectedIndexChanged = null, PivotItemData[] items) → PivotElement
 PivotItem(string header, Element content) → PivotItemData
 Popup(Element child, bool isOpen = false, Action onClosed = null) → PopupElement
 Progress(double value) → ProgressElement
@@ -141,9 +161,12 @@ ProgressIndeterminate() → ProgressElement
 ProgressRing() → ProgressRingElement
 ProgressRing(double value) → ProgressRingElement
 PropertyGrid(object target, TypeRegistry registry, Action<object> onRootChanged = null) → ComponentElement<PropertyGridElement>
+RadioButton(string label, Optional<bool> isChecked, Action<bool> onIsCheckedChanged = null, string groupName = null) → RadioButtonElement
 RadioButton(string label, bool isChecked = false, Action<bool> onIsCheckedChanged = null, string groupName = null) → RadioButtonElement
+RadioButtons(string[] items, Optional<int> selectedIndex, Action<int> onSelectedIndexChanged = null) → RadioButtonsElement
 RadioButtons(string[] items, int selectedIndex = -1, Action<int> onSelectedIndexChanged = null) → RadioButtonsElement
 RadioMenuItem(string text, string groupName, bool isChecked = false, Action onClick = null, string icon = null) → RadioMenuFlyoutItemData
+RatingControl(Optional<double> value, Action<double> onValueChanged = null) → RatingControlElement
 RatingControl(double value = 0, Action<double> onValueChanged = null) → RatingControlElement
 Rectangle() → RectangleElement
 RefreshContainer(Element content, Action onRefreshRequested = null) → RefreshContainerElement
@@ -151,15 +174,18 @@ RelativePanel(Element[] children) → RelativePanelElement
 RenderEachTime(Func<RenderContext, Element> render) → FuncElement
 RepeatButton(Command command) → RepeatButtonElement
 RepeatButton(string label, Action onClick = null) → RepeatButtonElement
+RichEditBox(Optional<string> text, Action<string> onTextChanged = null) → RichEditBoxElement
 RichEditBox(string text = "", Action<string> onTextChanged = null) → RichEditBoxElement
 RichTextBlock(RichTextParagraph[] paragraphs) → RichTextBlockElement
 RichTextBlock(string text) → RichTextBlockElement
 Run(string text) → RichTextRun
 ScrollView(Element child) → ScrollViewElement
 ScrollViewer(Element child) → ScrollViewerElement
+SelectorBar(SelectorBarItemData[] items, Optional<int> selectedIndex, Action<int> onSelectedIndexChanged = null) → SelectorBarElement
 SelectorBar(SelectorBarItemData[] items, int selectedIndex = 0, Action<int> onSelectedIndexChanged = null) → SelectorBarElement
 SelectorBarItem(string text, string icon = null) → SelectorBarItemData
 SemanticZoom(Element zoomedInView, Element zoomedOutView) → SemanticZoomElement
+Slider(Optional<double> value, double min = 0, double max = 100, Action<double> onValueChanged = null) → SliderElement
 Slider(double value, double min = 0, double max = 100, Action<double> onValueChanged = null) → SliderElement
 SplitButton(Command command, Element flyout = null) → SplitButtonElement
 SplitButton(string label, Action onClick = null, Element flyout = null) → SplitButtonElement
@@ -169,15 +195,20 @@ Subtitle(string content) → TextBlockElement
 SwipeControl(Element content, SwipeItemData[] leftItems = null, SwipeItemData[] rightItems = null) → SwipeControlElement
 SymbolIcon(string symbol) → SymbolIconData
 Tab(string header, Element content) → TabViewItemData
+TabView(Optional<int> selectedIndex, Action<int> onSelectedIndexChanged = null, TabViewItemData[] tabs) → TabViewElement
 TabView(TabViewItemData[] tabs) → TabViewElement
+TabView(int? selectedIndex, Action<int> onSelectedIndexChanged = null, TabViewItemData[] tabs) → TabViewElement
 TeachingTip(string title, string subtitle = null) → TeachingTipElement
 TextBlock(string content) → TextBlockElement
+TextBox(Optional<string> value, Action<string> onChanged = null, string placeholderText = null, string header = null) → TextBoxElement
 TextBox(string value, Action<string> onChanged = null, string placeholderText = null, string header = null) → TextBoxElement
 Thick(double horizontal, double vertical) → Thickness
 Thick(double left, double top, double right, double bottom) → Thickness
 Thick(double uniform) → Thickness
+ThreeStateCheckBox(Optional<bool?> checkedState, Action<bool?> onCheckedStateChanged = null, string label = null) → CheckBoxElement
 ThreeStateCheckBox(bool? checkedState, Action<bool?> onCheckedStateChanged = null, string label = null) → CheckBoxElement
 ThreeStateToggleButton(string label, bool? checkedState = null, Action<bool?> onCheckedStateChanged = null) → ToggleButtonElement
+TimePicker(Optional<TimeSpan> time, Action<TimeSpan> onTimeChanged = null) → TimePickerElement
 TimePicker(TimeSpan time, Action<TimeSpan> onTimeChanged = null) → TimePickerElement
 Title(string content) → TextBlockElement
 TitleBar(string title) → TitleBarElement
@@ -185,7 +216,9 @@ ToggleButton(Command command, bool isChecked = false) → ToggleButtonElement
 ToggleButton(string label, bool isChecked = false, Action<bool> onIsCheckedChanged = null) → ToggleButtonElement
 ToggleMenuItem(string text, bool isChecked = false, Action<bool> onIsCheckedChanged = null, string icon = null) → ToggleMenuFlyoutItemData
 ToggleSplitButton(Command command, bool isChecked = false, Element flyout = null) → ToggleSplitButtonElement
+ToggleSplitButton(string label, Optional<bool> isChecked, Action<bool> onIsCheckedChanged = null, Element flyout = null) → ToggleSplitButtonElement
 ToggleSplitButton(string label, bool isChecked = false, Action<bool> onIsCheckedChanged = null, Element flyout = null) → ToggleSplitButtonElement
+ToggleSwitch(Optional<bool> isOn, Action<bool> onIsOnChanged = null, string onContent = null, string offContent = null, string header = null) → ToggleSwitchElement
 ToggleSwitch(bool isOn, Action<bool> onIsOnChanged = null, string onContent = null, string offContent = null, string header = null) → ToggleSwitchElement
 TreeNode(string content, TreeViewNodeData[] children) → TreeViewNodeData
 TreeView(TreeViewNodeData[] nodes) → TreeViewElement
