@@ -235,6 +235,20 @@ steps:
         failTaskOnFailedTests: true
 
   - ${{ if eq(parameters.pack, true) }}:
+    # ── Build Reactor.Advanced (AnyCPU) for packing. ──
+    # Reactor.Advanced is NOT a direct slnx member, but tests/Reactor.Advanced.Tests is and
+    # project-references it, so the slnx build above produces Reactor.Advanced for the slnx
+    # default platform (ARM64) and the slnx restore already pulled its deps (Win2D) through
+    # the internal feed. `dotnet pack` below needs the AnyCPU output, so we build that one
+    # platform explicitly here -- mirroring the 'Build Advanced (AnyCPU)' step in
+    # .github/workflows/release.yml. --no-restore is safe (deps already restored); -p:CI=true
+    # keeps the Copilot/SignaturesGen gates off when the referenced Reactor.csproj is touched.
+    - pwsh: |
+        dotnet build src/Reactor.Advanced/Reactor.Advanced.csproj `
+          --no-restore --configuration ${{ parameters.configuration }} `
+          -p:Platform=AnyCPU -p:CI=true
+      displayName: 'Build Advanced (AnyCPU)'
+
     # ── Phase 1a: Authenticode-sign the packed assemblies BEFORE packing. ──
     # `dotnet pack --no-build` zips the existing build output into the .nupkg, so each
     # authored DLL must be signed HERE for the SIGNED copy to land inside the package.
@@ -244,6 +258,8 @@ steps:
     #   lib/<tfm>/Reactor.dll (+ Reactor.resources.dll satellite)
     #   analyzers/dotnet/cs/Reactor.Analyzers.dll
     #   analyzers/dotnet/cs/Reactor.Localization.Generator.dll
+    # And inside Microsoft.UI.Reactor.Advanced.nupkg:
+    #   lib/<tfm>/Reactor.Advanced.dll
     # Each glob is scoped to its project's bin\ dir so we sign only our own assemblies.
     - ${{ if eq(parameters.sign, true) }}:
       - task: onebranch.pipeline.signing@1
@@ -251,7 +267,7 @@ steps:
         inputs:
           command: 'sign'
           signing_profile: external_distribution
-          files_to_sign: 'Reactor\bin\**\Reactor.dll;Reactor\bin\**\Reactor.resources.dll;Reactor.Analyzers\bin\**\Reactor.Analyzers.dll;Reactor.Localization.Generator\bin\**\Reactor.Localization.Generator.dll'
+          files_to_sign: 'Reactor\bin\**\Reactor.dll;Reactor\bin\**\Reactor.resources.dll;Reactor.Advanced\bin\**\Reactor.Advanced.dll;Reactor.Analyzers\bin\**\Reactor.Analyzers.dll;Reactor.Localization.Generator\bin\**\Reactor.Localization.Generator.dll'
           search_root: '$(Build.SourcesDirectory)\src'
 
     - pwsh: |
@@ -260,6 +276,16 @@ steps:
           -p:Version=$(PackageVersion) `
           -o "${{ parameters.outputDirectory }}\nupkg"
       displayName: 'Pack framework NuGet'
+
+    # Pack the Advanced (Win2D/advanced controls) NuGet from the AnyCPU output built
+    # above. Mirrors the 'Pack Advanced NuGet' step in .github/workflows/release.yml.
+    - pwsh: |
+        dotnet pack src/Reactor.Advanced/Reactor.Advanced.csproj `
+          --no-build --configuration ${{ parameters.configuration }} `
+          -p:Platform=AnyCPU `
+          -p:Version=$(PackageVersion) `
+          -o "${{ parameters.outputDirectory }}\nupkg"
+      displayName: 'Pack Advanced NuGet'
 
     - pwsh: |
         dotnet pack tools/Templates/Microsoft.UI.Reactor.Templates.csproj `
