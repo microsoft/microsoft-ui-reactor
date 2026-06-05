@@ -4,6 +4,8 @@
 
 **Proposed** — 2026-05-07. No code yet.
 
+> **Superseded by spec 054:** `WindowSpec.IsResizable`, `WindowSpec.IsShownInSwitchers`, `WindowSpec.IsAlwaysOnTop`, and `WindowStartPosition.RestoreFromPersistence` were removed/replaced by the windowing evolution surface.
+
 This spec proposes a first-class **Window** model for Microsoft.UI.Reactor (Reactor). Today the
 framework hides Window creation behind `ReactorApp.Run`'s `OnLaunched` path
 and assumes a single primary window for the lifetime of the process. That

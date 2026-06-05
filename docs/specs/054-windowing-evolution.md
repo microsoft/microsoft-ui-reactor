@@ -2,7 +2,7 @@
 
 ## Status
 
-**Proposed** — 2026-06-04. Builds on [spec 036 — Window Model](036-window-design.md), which
+**Implemented** — 2026-06-05. Builds on [spec 036 — Window Model](036-window-design.md), which
 established `WindowSpec` / `ReactorWindow` / `ReactorApp.OpenWindow` and the multi-window
 hosting story. This spec catches Reactor's windowing surface up to the gaps identified
 by the WinUI windowing reform proposal — sizing / state / presenter ergonomics, persistence
@@ -1201,6 +1201,7 @@ into its own spec if scoping requires.
    it also stay above the _owner_ when both are non-topmost? WPF's
    `ToolWindow` does. Recommendation: yes, because authors using
    `Floating` expect tool-palette semantics. Pin in Phase 4 selftest.
+   **Resolution:** yes — `Floating` stays above the owner as well as sibling Reactor app windows; Phase 4 selftests pin this.
 
 2. **`SizeToContent` + min/max constraints visual contract.** When
    content desires `400×300` but `MinWidth=500`, do we set the window
@@ -1209,17 +1210,20 @@ into its own spec if scoping requires.
    document the choice — `AspectRatio` is exclusive with `SizeToContent`
    anyway (§9.1), so the only conflict is min/max vs. content desired,
    and min/max wins.
+   **Resolution:** min/max wins; `SizeToContent` clamps to the declared size bounds rather than preserving aspect.
 
 3. **`UseWindowDragMove` reentrancy.** The pattern returns an `Action` —
    calling it during an active drag is a no-op? Or queues a second drag?
    Recommendation: no-op when `GetCapture()` reports a drag in progress;
    document.
+   **Resolution:** no-op while `GetCapture()` indicates an active drag; no queued second drag is started.
 
 4. **`PositionChanged` firing rate during user drag.** `AppWindow.Changed`
    fires on every interactive move. Do we coalesce, or fire eagerly?
    Recommendation: fire eagerly. Apps that need throttling have
    `UseDebounced` from the async-resources spec. Throttling at the
    framework level would block snap-to-edge UIs.
+   **Resolution:** fire eagerly; hooks short-circuit unchanged DIP values and consumers debounce if needed.
 
 5. **`Transparent` BackdropKind on Windows 10.** `TransparentBackdrop`
    requires WinAppSDK 1.3+ which targets Windows 10 1809+, but the
@@ -1227,12 +1231,14 @@ into its own spec if scoping requires.
    it. Should we throw at `Validate()` time, log a warning at apply, or
    silently no-op? Recommendation: log warning at apply (matches existing
    Mica behavior), don't throw.
+   **Resolution:** log a warning at apply time and continue; validation does not reject Windows 10 fallback cases.
 
 6. **Should `CenterOnCurrent` use cursor position or foreground-window
    position?** Cursor is what users expect ("open here"); foreground is
    what WPF's `CenterScreen` actually does. Recommendation: cursor first,
    fall back to foreground monitor if cursor is on a disconnected
    monitor (rare).
+   **Resolution:** use the cursor monitor first; fall back to the foreground monitor when no usable cursor monitor is available.
 
 ---
 
