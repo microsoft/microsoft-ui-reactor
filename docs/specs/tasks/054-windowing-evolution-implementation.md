@@ -168,28 +168,28 @@ code lands, so later phases don't restart on a re-decision.
 
 ### 0.1 Resolve spec §11 open questions
 
-- [ ] **§11 Q1 — `WindowLevel.Floating` vs. owner.** Default
+- [x] **§11 Q1 — `WindowLevel.Floating` vs. owner.** Default
       recommendation: floating stays above the *owner* (matches WPF
       `ToolWindow`); pin this in Phase 4 selftest
       `WindowLevel_Floating_AboveOwner`. Record the decision.
-- [ ] **§11 Q2 — `SizeToContent` + min/max contract.** Min/max wins.
+- [x] **§11 Q2 — `SizeToContent` + min/max contract.** Min/max wins.
       Document under Phase 5 xmldoc.
-- [ ] **§11 Q3 — `UseWindowDragMove` re-entrancy.** No-op when
+- [x] **§11 Q3 — `UseWindowDragMove` re-entrancy.** No-op when
       `GetCapture()` reports a drag in progress; document.
-- [ ] **§11 Q4 — `PositionChanged` rate.** Fire eagerly; throttling
+- [x] **§11 Q4 — `PositionChanged` rate.** Fire eagerly; throttling
       is the consumer's job (`UseDebounced` from async-resources).
-- [ ] **§11 Q5 — `Transparent` BackdropKind on Win10.** Log warning at
+- [x] **§11 Q5 — `Transparent` BackdropKind on Win10.** Log warning at
       apply time, don't throw; matches existing Mica fallback behavior.
-- [ ] **§11 Q6 — `CenterOnCurrent` source-of-truth.** Cursor first,
+- [x] **§11 Q6 — `CenterOnCurrent` source-of-truth.** Cursor first,
       fall back to foreground monitor when no cursor (RDP /
       non-interactive); document.
 
 ### 0.2 Baseline measurements
 
-- [ ] Record the current selftest count and pass/fail baseline (clean
+- [x] Record the current selftest count and pass/fail baseline (clean
       `main` HEAD), so the post-054 delta is unambiguous. Expected ≈40
       new fixtures by the end of Phase 7.
-- [ ] Record the current `dotnet test tests/Reactor.Tests` count on
+- [x] Record the current `dotnet test tests/Reactor.Tests` count on
       `main`. No new unit tests are expected from this work; the count
       should be stable (modulo migration fixups for removed fields).
 
@@ -199,21 +199,21 @@ Spec §7 and Appendix A are explicit about what stays out. The
 implementing agent must not add any of the following, even
 "opportunistically":
 
-- [ ] No `WindowMessageReceived` public escape hatch (spec §7.6 deferred).
-- [ ] No `Window.JumpList` / `ICustomDestinationList` surface
+- [x] No `WindowMessageReceived` public escape hatch (spec §7.6 deferred).
+- [x] No `Window.JumpList` / `ICustomDestinationList` surface
       (spec §10 deferred to its own spec).
-- [ ] No `Window.ShowDialog()` / `DialogResult` / modal-top-level
+- [x] No `Window.ShowDialog()` / `DialogResult` / modal-top-level
       semantics (spec §2 N1, repeated §12).
-- [ ] No `IsTransparent` / `WS_EX_LAYERED` / `LWA_COLORKEY` shim
+- [x] No `IsTransparent` / `WS_EX_LAYERED` / `LWA_COLORKEY` shim
       (spec §7.1 rejected).
-- [ ] No arbitrary continuous `CornerRadius` via `SetWindowRgn`
+- [x] No arbitrary continuous `CornerRadius` via `SetWindowRgn`
       (spec §7.2 rejected).
-- [ ] No NSWindow-style multi-tier `WindowLevel.Overlay` /
+- [x] No NSWindow-style multi-tier `WindowLevel.Overlay` /
       `.statusBar` (spec §7.3 rejected).
-- [ ] No `WindowStyle.Hud` (spec §7.4 rejected).
-- [ ] No vibrancy materials beyond `SystemBackdrop` (spec §7.5).
-- [ ] No `Window.Cursor` per-window cursor (Appendix A).
-- [ ] No `Window.AllowsTransparency` / WPF-`WindowChrome`-shaped APIs
+- [x] No `WindowStyle.Hud` (spec §7.4 rejected).
+- [x] No vibrancy materials beyond `SystemBackdrop` (spec §7.5).
+- [x] No `Window.Cursor` per-window cursor (Appendix A).
+- [x] No `Window.AllowsTransparency` / WPF-`WindowChrome`-shaped APIs
       (Appendix A).
 
 If a future feature request asks for any of these, file an issue;
@@ -309,7 +309,7 @@ new event surface.
 
 - [x] All Phase 1 selftests registered in both places in
       `SelfTestFixtureRegistry.cs`.
-- [ ] Full selftest run green.
+- [x] Full selftest run green.
 - [x] No new trim / AOT warnings on `Reactor.csproj`.
 
 ---
