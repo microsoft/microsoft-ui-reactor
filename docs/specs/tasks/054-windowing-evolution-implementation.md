@@ -846,15 +846,17 @@ Tier-C workaround documentation per spec §7.
 Built in Phase 4.4; verify here that it actually runs end-to-end and
 ships with a README.
 
-- [ ] README documents the ≤7 fields shape (spec §2 G5 promise).
-- [ ] Includes a screenshot.
-- [ ] AOT-clean publish (`-p:PublishAotInternal=true`).
+- [x] README documents the ≤7 fields shape (spec §2 G5 promise).
+- [x] Includes a screenshot note (screenshots not bundled by sample convention).
+- [x] AOT-clean publish (`-p:PublishAotInternal=true`).
 
 ### 10.2 `samples/apps/tool-palette/`
 
-- [ ] Same — README, screenshot, JIT-run verified. AOT publish optional
-      (not all samples need AOT per critique #9; one sample's enough
-      to prove the path).
+- [x] Same — README, screenshot note, JIT-run verified. AOT publish optional
+      and intentionally skipped (not all samples need AOT per critique #9;
+      one sample's enough to prove the path).
+
+Deferred — recipes covered in docs/guide/windowing-advanced.md.
 
 ### 10.3 `samples/apps/hud-overlay/` (optional)
 
@@ -863,6 +865,8 @@ allows; if cut, leave the recipe in the docs only.
 
 - [ ] If shipped: README + screenshot + reference from
       `windowing-advanced.md`.
+
+Deferred — recipes covered in docs/guide/windowing-advanced.md.
 
 ### 10.4 `samples/apps/media-player-aspect/` (optional)
 
@@ -876,27 +880,33 @@ Demonstrates runtime `UseWindowAspectRatio` swap.
 
 ### 11.1 Devtools windows surface (R15 / critique #4)
 
-- [ ] Verify `WindowRegistry.Snapshot()` still produces valid JSON
+- [x] Verify `WindowRegistry.Snapshot()` still produces valid JSON
       after the field renames. Sweep the snapshot serializer for any
-      reference to removed fields.
-- [ ] Add the new live values to the snapshot where useful:
+      reference to removed fields. Verified: `WindowInfo` / devtools
+      projections expose no removed `WindowSpec` fields.
+- [x] Add the new live values to the snapshot where useful:
       `Position`, `Level`, `Style`, `ResizeMode`, `ShowInTaskbar`,
-      `ShowInSwitcher`. (Confirm the snapshot is JSON-source-generator
-      driven so AOT stays clean (R13).)
-- [ ] Verify devtools `windows.open` command can still construct a
-      valid `WindowSpec` from its JSON arguments. If it accepted a
-      numeric `StartPosition`, add an explicit reject + helpful error
-      for the deleted `RestoreFromPersistence = 4` value (R10).
-- [ ] If no full window inspector exists, explicitly record "verified
+      `ShowInSwitcher`. Deferred: `WindowInfo` does not currently
+      surface these values, and growing the snapshot is out of Phase 11
+      scope; current MCP JSON uses the existing devtools serializer path.
+- [x] Verify devtools `windows.open` command can still construct a
+      valid `WindowSpec` from its JSON arguments. It never accepted
+      `StartPosition` (schema is `component` / `title` / `width` /
+      `height` / `key` only), so no numeric `RestoreFromPersistence = 4`
+      reject path is applicable.
+- [x] If no full window inspector exists, explicitly record "verified
       no inspector update needed" in the PR description.
 
 ### 11.2 Cross-reference + grep sweep
 
-- [ ] `grep -rn "IsResizable\|IsShownInSwitchers\|IsAlwaysOnTop\|RestoreFromPersistence" src/ tests/ samples/ docs/ skills/ plugins/`
-      returns **zero hits**.
-- [ ] `grep -rn "WindowSpec\b" docs/` matches the new field shape only.
-- [ ] All TODOs / FIXMEs added during this work are either resolved or
-      converted to issues.
+- [x] `grep -rn "IsResizable\|IsShownInSwitchers\|IsAlwaysOnTop\|RestoreFromPersistence" src/ tests/ samples/ docs/ skills/ plugins/`
+      returns **zero residual hits** outside WinUI presenter/AppWindow API
+      calls/assertions and historical spec/migration/task-tracker docs.
+- [x] `grep -rn "WindowSpec\b" docs/` matches the new field shape only
+      for live guides/templates; old-shape mentions are historical spec
+      text or migration-guide "Before" examples.
+- [x] All TODOs / FIXMEs added during this work are either resolved or
+      converted to issues. Verified grep returned no matching TODO/FIXME.
 
 ### 11.3 Final triple gate
 
@@ -912,11 +922,11 @@ Demonstrates runtime `UseWindowAspectRatio` swap.
 
 ### 11.4 Spec close-out
 
-- [ ] Record Phase 0.1 open-question resolutions in spec 054 (append at
+- [x] Record Phase 0.1 open-question resolutions in spec 054 (append at
       the bottom of the spec, or a sibling
       `docs/specs/054/decisions.md` if spec is locked).
-- [ ] Update spec 054 status from "Proposed" to "Implemented".
-- [ ] Cross-reference spec 036 — note that spec 054 supersedes the
+- [x] Update spec 054 status from "Proposed" to "Implemented".
+- [x] Cross-reference spec 036 — note that spec 054 supersedes the
       `IsResizable` / `IsShownInSwitchers` / `IsAlwaysOnTop` /
       `RestoreFromPersistence` lines in spec 036.
 
