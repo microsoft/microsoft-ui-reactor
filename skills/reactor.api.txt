@@ -1003,6 +1003,11 @@ PresenterKind { Overlapped, FullScreen, CompactOverlay }
 ShutdownPolicy { OnPrimaryWindowClosed, OnLastSurfaceClosed, Explicit }
 TaskbarProgressState { None, Indeterminate, Normal, Paused, Error }
 WindowCloseReason { UserClosed, AppClosed, OwnerClosed }
-WindowStartPosition { Default, CenterOnPrimary, CenterOnOwner, RestoreFromPersistence, Manual }
+WindowStartPosition { Default, CenterOnPrimary, CenterOnOwner, Manual, CenterOnCurrent }
+WindowResizeMode { CanResize, NoResize, CanMinimize }
+WindowSizeToContent { Manual, Width, Height, WidthAndHeight }
+WindowStyle { Default, None, ToolWindow }
+WindowCornerStyle { Default, Square, Rounded, RoundedSmall }
+WindowLevel { Normal, Floating, AlwaysOnTop }
 WindowState { Normal, Minimized, Maximized, FullScreen, CompactOverlay }
 

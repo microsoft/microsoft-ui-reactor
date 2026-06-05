@@ -801,26 +801,26 @@ Tier-C workaround documentation per spec §7.
 
 ### 9.1 Loose-file: `skills/windowing.md`
 
-- [ ] New file with sections per Phase 8.1.
-- [ ] Three recipes inline: Command Palette, Tool Palette, Media Player
+- [x] New file with sections per Phase 8.1.
+- [x] Three recipes inline: Command Palette, Tool Palette, Media Player
       (aspect-locked).
 
 ### 9.2 Plugin: `plugins/reactor/skills/reactor-windowing/SKILL.md`
 
-- [ ] New skill folder matching the existing plugin-skill conventions
+- [x] New skill folder matching the existing plugin-skill conventions
       (front-matter, when-to-invoke triggers like "open a window",
       "make a window draggable", "remember window position", "tool
       palette", "command palette").
-- [ ] Same recipe content as `skills/windowing.md`.
+- [x] Same recipe content as `skills/windowing.md`.
 
 ### 9.3 Update existing skills for renamed fields
 
-- [ ] `plugins/reactor/skills/reactor-getting-started/SKILL.md` — sweep
+- [x] `plugins/reactor/skills/reactor-getting-started/SKILL.md` — sweep
       for `IsResizable`, `IsShownInSwitchers`, `IsAlwaysOnTop`,
       `RestoreFromPersistence`; update.
-- [ ] `plugins/reactor/skills/reactor-dsl/SKILL.md` — same sweep.
-- [ ] `skills/dsl-reference.md` (loose) — same sweep.
-- [ ] Any other skill with a window-related code snippet (`grep -rli
+- [x] `plugins/reactor/skills/reactor-dsl/SKILL.md` — same sweep.
+- [x] `skills/dsl-reference.md` (loose) — same sweep.
+- [x] Any other skill with a window-related code snippet (`grep -rli
       "WindowSpec" skills/ plugins/reactor/skills/`).
 
 ---
