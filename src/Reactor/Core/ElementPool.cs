@@ -221,6 +221,17 @@ public sealed class ElementPool : IDisposable
         fe.ClearValue(FrameworkElement.RenderTransformProperty);
         fe.ClearValue(FrameworkElement.FlowDirectionProperty);
 
+        // Issue #522 defense-in-depth — the in-place Update path clears the
+        // synthesized themed Style when an element transitions ThemeBindings
+        // set → unset, but a full unmount (the element is removed entirely,
+        // not transitioned) does not. Without clearing here, a control that
+        // was themed would carry that Style into the pool and the next
+        // unrelated element to rent it would inherit the prior brushes.
+        // Gated on Style being non-null so non-themed controls (the common
+        // case) skip the redundant COM call.
+        if (fe.Style is not null)
+            fe.ClearValue(FrameworkElement.StyleProperty);
+
         // Clear accessibility / automation properties so pooled controls don't
         // carry stale UIA state (Name, LabeledBy, LiveSetting, etc.) into reuse.
         fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.NameProperty);

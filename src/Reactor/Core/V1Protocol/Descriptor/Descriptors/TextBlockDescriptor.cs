@@ -8,18 +8,24 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// Spec 047 §14 Phase 3 (batch 3) — descriptor variant of the hand-coded
 /// <c>MountText</c> / <c>UpdateText</c> arms in <see cref="Reconciler"/>.
 ///
-/// <para><b>Coverage:</b> a zero-event display leaf. Every prop is either
-/// <c>ControlDescriptor.OneWay</c> or
-/// <see cref="ControlDescriptor{TElement,TControl}.OneWayConditional"/>,
-/// mirroring the legacy arm's "write only when the element provides a value"
-/// pattern.</para>
+/// <para><b>Coverage:</b> a zero-event display leaf. Every nullable
+/// styling prop is routed through the
+/// <c>ControlDescriptor.OneWay(get, set, dp)</c>
+/// overload (the <see cref="Optional{T}"/> + ClearValue path) so that a
+/// transition from "set" to "unset" on a recycled control calls
+/// <see cref="DependencyObject.ClearValue(DependencyProperty)"/> and the
+/// prop falls back to the theme default. This is the fix for
+/// https://github.com/microsoft/microsoft-ui-reactor/issues/522 — without
+/// the ClearValue arm, e.g. transitioning <c>Heading → TextBlock</c>
+/// would leave the prior <c>FontSize=28</c> / <c>Weight=700</c> on the
+/// recycled control, bleeding into the plain render.</para>
 ///
 /// <para><b>Phase 1 parity note:</b> <c>Content</c> is unconditional (the
 /// legacy arm writes it without a HasValue gate). All other nullable props
-/// use <see cref="ControlDescriptor{TElement,TControl}.OneWayConditional"/>
-/// with the same <c>HasValue</c> / <c>is not null</c> guards. <c>MaxLines</c>,
-/// <c>CharacterSpacing</c> and <c>TextDecorations</c> are non-nullable on
-/// the element record so they round-trip via plain
+/// adapt the element's <c>T?</c> field to <see cref="Optional{T}"/> at the
+/// descriptor edge — the public element-record shape is unchanged.
+/// <c>MaxLines</c>, <c>CharacterSpacing</c> and <c>TextDecorations</c>
+/// are non-nullable on the element record so they round-trip via plain
 /// <c>ControlDescriptor.OneWay</c>.</para>
 ///
 /// <para><b>Known gaps vs. hand-coded handler:</b>
@@ -41,46 +47,46 @@ internal static class TextBlockDescriptor
         .OneWay(
             get: static e => e.Content,
             set: static (c, v) => c.Text = v)
-        .OneWayConditional(
-            get:         static e => e.FontSize,
-            set:         static (c, v) => c.FontSize = v!.Value,
-            shouldWrite: static e => e.FontSize.HasValue)
-        .OneWayConditional(
-            get:         static e => e.Weight,
-            set:         static (c, v) => c.FontWeight = v!.Value,
-            shouldWrite: static e => e.Weight.HasValue)
-        .OneWayConditional(
-            get:         static e => e.FontStyle,
-            set:         static (c, v) => c.FontStyle = v!.Value,
-            shouldWrite: static e => e.FontStyle.HasValue)
-        .OneWayConditional(
-            get:         static e => e.HorizontalAlignment,
-            set:         static (c, v) => c.HorizontalAlignment = v!.Value,
-            shouldWrite: static e => e.HorizontalAlignment.HasValue)
-        .OneWayConditional(
-            get:         static e => e.TextWrapping,
-            set:         static (c, v) => c.TextWrapping = v!.Value,
-            shouldWrite: static e => e.TextWrapping.HasValue)
-        .OneWayConditional(
-            get:         static e => e.TextAlignment,
-            set:         static (c, v) => c.TextAlignment = v!.Value,
-            shouldWrite: static e => e.TextAlignment.HasValue)
-        .OneWayConditional(
-            get:         static e => e.TextTrimming,
-            set:         static (c, v) => c.TextTrimming = v!.Value,
-            shouldWrite: static e => e.TextTrimming.HasValue)
-        .OneWayConditional(
-            get:         static e => e.IsTextSelectionEnabled,
-            set:         static (c, v) => c.IsTextSelectionEnabled = v!.Value,
-            shouldWrite: static e => e.IsTextSelectionEnabled.HasValue)
-        .OneWayConditional(
-            get:         static e => e.FontFamily,
-            set:         static (c, v) => c.FontFamily = v,
-            shouldWrite: static e => e.FontFamily is not null)
-        .OneWayConditional(
-            get:         static e => e.LineHeight,
-            set:         static (c, v) => c.LineHeight = v!.Value,
-            shouldWrite: static e => e.LineHeight.HasValue)
+        .OneWay(
+            get: static e => e.FontSize.HasValue ? e.FontSize.Value : Optional<double>.Unset,
+            set: static (c, v) => c.FontSize = v,
+            dp:  WinUI.TextBlock.FontSizeProperty)
+        .OneWay(
+            get: static e => e.Weight.HasValue ? e.Weight.Value : Optional<global::Windows.UI.Text.FontWeight>.Unset,
+            set: static (c, v) => c.FontWeight = v,
+            dp:  WinUI.TextBlock.FontWeightProperty)
+        .OneWay(
+            get: static e => e.FontStyle.HasValue ? e.FontStyle.Value : Optional<global::Windows.UI.Text.FontStyle>.Unset,
+            set: static (c, v) => c.FontStyle = v,
+            dp:  WinUI.TextBlock.FontStyleProperty)
+        .OneWay(
+            get: static e => e.HorizontalAlignment.HasValue ? e.HorizontalAlignment.Value : Optional<HorizontalAlignment>.Unset,
+            set: static (c, v) => c.HorizontalAlignment = v,
+            dp:  FrameworkElement.HorizontalAlignmentProperty)
+        .OneWay(
+            get: static e => e.TextWrapping.HasValue ? e.TextWrapping.Value : Optional<TextWrapping>.Unset,
+            set: static (c, v) => c.TextWrapping = v,
+            dp:  WinUI.TextBlock.TextWrappingProperty)
+        .OneWay(
+            get: static e => e.TextAlignment.HasValue ? e.TextAlignment.Value : Optional<TextAlignment>.Unset,
+            set: static (c, v) => c.TextAlignment = v,
+            dp:  WinUI.TextBlock.TextAlignmentProperty)
+        .OneWay(
+            get: static e => e.TextTrimming.HasValue ? e.TextTrimming.Value : Optional<TextTrimming>.Unset,
+            set: static (c, v) => c.TextTrimming = v,
+            dp:  WinUI.TextBlock.TextTrimmingProperty)
+        .OneWay(
+            get: static e => e.IsTextSelectionEnabled.HasValue ? e.IsTextSelectionEnabled.Value : Optional<bool>.Unset,
+            set: static (c, v) => c.IsTextSelectionEnabled = v,
+            dp:  WinUI.TextBlock.IsTextSelectionEnabledProperty)
+        .OneWay(
+            get: static e => e.FontFamily is null ? Optional<Microsoft.UI.Xaml.Media.FontFamily>.Unset : e.FontFamily,
+            set: static (c, v) => c.FontFamily = v,
+            dp:  WinUI.TextBlock.FontFamilyProperty)
+        .OneWay(
+            get: static e => e.LineHeight.HasValue ? e.LineHeight.Value : Optional<double>.Unset,
+            set: static (c, v) => c.LineHeight = v,
+            dp:  WinUI.TextBlock.LineHeightProperty)
         .OneWay(
             get: static e => e.MaxLines,
             set: static (c, v) => c.MaxLines = v)

@@ -62,6 +62,23 @@ public sealed partial class Reconciler : IDisposable
     // ── Style cache: avoids redundant XamlReader.Load() for identical theme binding sets ──
     private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<string, Style> _styleCache = new();
 
+    // Issue #522 — per-control marker holding the themed Style instance
+    // Reactor most recently applied via ApplyThemeBindings. Used by
+    // ClearThemeBindings to decide whether the control's current Style is
+    // still ours (vs. replaced by an author Setter) without depending on
+    // _styleCache contents — the cache can be cleared at any time and would
+    // otherwise create a window where the in-place clear silently fails.
+    // Attached DPs are RCW-safe (the value is stored in the underlying
+    // DependencyObject's effective value table, accessed via COM SetValue/
+    // GetValue) — unlike ConditionalWeakTable, which keys on managed
+    // instance identity and desyncs when WinUI hands out duplicate RCWs.
+    private static readonly DependencyProperty ReactorAppliedThemeStyleProperty =
+        DependencyProperty.RegisterAttached(
+            "ReactorAppliedThemeStyle",
+            typeof(Style),
+            typeof(Reconciler),
+            new PropertyMetadata(null));
+
     /// <summary>
     /// Builds a deterministic cache key for a style based on its target type and
     /// the set of ThemeRef bindings. Keys are sorted by property name so that
@@ -4211,6 +4228,36 @@ public sealed partial class Reconciler : IDisposable
     }
 
     /// <summary>
+    /// Issue #522 — counterpart to <see cref="ApplyThemeBindings"/>. When an
+    /// element on a recycled control transitions from having
+    /// <see cref="Element.ThemeBindings"/> to none, drop the previously
+    /// applied themed Style so e.g. the red Foreground from an Error arm
+    /// does not bleed into a subsequent Loading / Data render.
+    ///
+    /// <para>Ownership is tracked via the
+    /// <c>ReactorAppliedThemeStyleProperty</c> attached DP, which stores the
+    /// Style instance we wrote on the most recent <see cref="ApplyThemeBindings"/>
+    /// call. <see cref="DependencyObject.ClearValue(DependencyProperty)"/>
+    /// on <see cref="FrameworkElement.StyleProperty"/> fires only when
+    /// <c>fe.Style</c> still references the same instance — preserving an
+    /// author Setter (e.g. <c>.Set(c =&gt; c.Style = mine)</c>) that may have
+    /// replaced our Style in between.</para>
+    ///
+    /// <para>This avoids per-FrameworkElement tracking via
+    /// <c>ConditionalWeakTable</c> (fragile under RCW churn) and is robust to
+    /// the global <c>_styleCache</c> being cleared between apply and clear —
+    /// the marker holds the actual Style reference, not a cache lookup key.</para>
+    /// </summary>
+    internal static void ClearThemeBindings(FrameworkElement fe)
+    {
+        if (fe.GetValue(ReactorAppliedThemeStyleProperty) is not Style ownedStyle)
+            return;
+        if (ReferenceEquals(fe.Style, ownedStyle))
+            fe.ClearValue(FrameworkElement.StyleProperty);
+        fe.ClearValue(ReactorAppliedThemeStyleProperty);
+    }
+
+    /// <summary>
     /// Applies a cached style to an element. Clears any existing style first to
     /// force WinUI to re-evaluate <c>{ThemeResource}</c> setters against the
     /// element's current effective theme (which may have changed due to a parent's
@@ -4224,6 +4271,11 @@ public sealed partial class Reconciler : IDisposable
         if (fe.Style is not null)
             fe.Style = null;
         fe.Style = cachedStyle;
+
+        // Track ownership for the symmetric ClearThemeBindings path (issue
+        // #522). Always overwrite so an A → B ThemeBindings transition
+        // updates the marker to the new Style.
+        fe.SetValue(ReactorAppliedThemeStyleProperty, cachedStyle);
     }
 
     private static string? GetStyleTargetType(FrameworkElement fe) => fe switch

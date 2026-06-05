@@ -197,6 +197,17 @@ internal static class SelfTestFixtureRegistry
         "PDM_WrapGrid_KeyedReverse_PreservesIdentity",
         "PDM_RelativePanel_KeyedReorder_PreservesIdentity_And_StaleClear",
         "PDM_Panel_Unmount_RunsChildEffectCleanup",
+        // Issue #522 — TextBlock styling props (FontSize, FontWeight) and
+        // ThemeRef-driven Foreground must reset when a recycled control
+        // transitions from a styled element to a plain one.
+        "Issue522_HeadingToPlainResetsFontProps",
+        "Issue522_StylingChainReturnsToDefault",
+        "Issue522_ThemeForegroundClearedOnRemoval",
+        "Issue522_UseResourceMatchTransitionsNoStyleBleed",
+        "Issue522_ContainerThemeBindingTransition_PreservesControlIdentity",
+        "Issue522_SharedStyleAcrossMultipleElements_IsolatedRemoval",
+        "Issue522_ThemeBindingsRemoval_AfterCacheClear_StillWorks",
+        "Issue522_ThemeRef_CycleAcrossDifferentKeys",
         // Spec 047 §4.5 — overlay handler-owned Unmount tears down side-mounted
         // Reactor subtrees (Flyout content, Popup child) the generic recursion
         // cannot reach.
@@ -1450,6 +1461,15 @@ internal static class SelfTestFixtureRegistry
         "PDM_WrapGrid_KeyedReverse_PreservesIdentity" => new PanelDescriptorMigrationFixtures.WrapGrid_KeyedReverse_PreservesIdentity(harness),
         "PDM_RelativePanel_KeyedReorder_PreservesIdentity_And_StaleClear" => new PanelDescriptorMigrationFixtures.RelativePanel_KeyedReorder_PreservesIdentity_And_StaleClear(harness),
         "PDM_Panel_Unmount_RunsChildEffectCleanup" => new PanelDescriptorMigrationFixtures.Panel_Unmount_RunsChildEffectCleanup(harness),
+        // Issue #522 — TextBlock styling reset on recycler transition.
+        "Issue522_HeadingToPlainResetsFontProps" => new Issue522TextBlockStyleResetFixture.HeadingToPlainResetsFontProps(harness),
+        "Issue522_StylingChainReturnsToDefault" => new Issue522TextBlockStyleResetFixture.StylingChainReturnsToDefault(harness),
+        "Issue522_ThemeForegroundClearedOnRemoval" => new Issue522TextBlockStyleResetFixture.ThemeForegroundClearedOnRemoval(harness),
+        "Issue522_UseResourceMatchTransitionsNoStyleBleed" => new Issue522TextBlockStyleResetFixture.UseResourceMatchTransitionsNoStyleBleed(harness),
+        "Issue522_ContainerThemeBindingTransition_PreservesControlIdentity" => new Issue522TextBlockStyleResetFixture.ContainerThemeBindingTransition_PreservesControlIdentity(harness),
+        "Issue522_SharedStyleAcrossMultipleElements_IsolatedRemoval" => new Issue522TextBlockStyleResetFixture.SharedStyleAcrossMultipleElements_IsolatedRemoval(harness),
+        "Issue522_ThemeBindingsRemoval_AfterCacheClear_StillWorks" => new Issue522TextBlockStyleResetFixture.ThemeBindingsRemoval_AfterCacheClear_StillWorks(harness),
+        "Issue522_ThemeRef_CycleAcrossDifferentKeys" => new Issue522TextBlockStyleResetFixture.ThemeRef_CycleAcrossDifferentKeys(harness),
         "OverlayTeardown_Flyout_Unmount_RunsFlyoutContentCleanup" => new OverlayTeardownFixtures.Flyout_Unmount_RunsFlyoutContentCleanup(harness),
         "OverlayTeardown_Flyout_Unmount_RunsPassThroughCleanup" => new OverlayTeardownFixtures.Flyout_Unmount_RunsPassThroughCleanup(harness),
         "OverlayTeardown_Popup_Unmount_RunsChildCleanup" => new OverlayTeardownFixtures.Popup_Unmount_RunsChildCleanup(harness),
