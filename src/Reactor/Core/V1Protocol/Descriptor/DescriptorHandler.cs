@@ -146,15 +146,22 @@ public class DescriptorHandler<TElement, TControl> : IElementHandler<TElement, T
             binder.Bind(feBinder, oldEl, newEl, ctx.Reconciler, ctx.RequestRerender, isMount: false);
 
         var props = _descriptor.Properties;
-        for (int i = 0; i < props.Count; i++)
-            props[i].Update(in ctx, ctrl, oldEl, newEl);
 
-        // Late-wire on null→non-null callback transition — if the element
-        // gained a callback since Mount, subscribe now. The per-entry CWT
-        // gate makes the no-op case cheap.
+        // Spec 050: wire trampolines BEFORE the prop Update loop so a
+        // controlled write that triggers a DEFERRED change event (TextBox /
+        // PasswordBox / NumberBox / AutoSuggest / RichEdit text writes,
+        // certain selection writes) has a live subscriber when the engine
+        // pumps the dispatcher. Wiring late stranded the WriteSuppressed
+        // counter token: the deferred echo had no trampoline to call
+        // ShouldSuppress on, so the token sat at +1 and swallowed the user's
+        // next real input. The per-entry CWT gate (slot-is-null) makes the
+        // steady-state no-op case cheap.
         var binding = ctx.BindFor(ctrl, newEl);
         for (int i = 0; i < props.Count; i++)
             props[i].EnsureSubscribed(binding, ctrl, newEl);
+
+        for (int i = 0; i < props.Count; i++)
+            props[i].Update(in ctx, ctrl, oldEl, newEl);
 
         var getSetters = _descriptor.GetSetters;
         if (getSetters is not null)
