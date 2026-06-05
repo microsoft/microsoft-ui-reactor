@@ -248,5 +248,8 @@ tests/stress_perf_rn/**/Generated Files/
 # MkDocs build output
 /site/
 
-# Isolated NuGet probe-restore dirs created by tools/seed-artifacts-feed.ps1
+# Isolated NuGet probe-restore dirs created by the feed-seeding tool
 /.nuget-packages*/
+
+# Generated feed-seed report (produced by the out-of-repo feed-seeding tool)
+/feed-seed-report.csv
