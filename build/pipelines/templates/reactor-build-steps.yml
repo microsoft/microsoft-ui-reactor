@@ -7,7 +7,7 @@
 # Notes:
 #  - Reactor builds the .slnx solution via the dotnet CLI (no dirs.proj / msbuild.exe).
 #  - Restore resolves from a pinned internal feed (build/pipelines/nuget.internal.config),
-#    seeded from the package set in tools/feed-package-manifest.txt.
+#    a pre-seeded internal package feed.
 #  - Selftests / E2E need a live WinUI window and do NOT run in CI;
 #    `runTests` covers headless unit tests only (tests/Reactor.Tests).
 

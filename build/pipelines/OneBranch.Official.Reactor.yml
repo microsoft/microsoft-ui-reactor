@@ -4,7 +4,7 @@
 # Produces framework NuGet packages (Microsoft.UI.Reactor + Templates) and the  #
 # reactor skill kit (mur x64 + arm64).                                          #
 # Official builds run network-restricted: NuGet restore resolves from            #
-# build/pipelines/nuget.internal.config (seeded from feed-package-manifest.txt). #
+# build/pipelines/nuget.internal.config (a pre-seeded internal package feed).     #
 # Documentation:  https://aka.ms/obpipelines                                    #
 # Yaml Schema:    https://aka.ms/obpipelines/yaml/schema                        #
 # Retail Tasks:   https://aka.ms/obpipelines/tasks                              #
