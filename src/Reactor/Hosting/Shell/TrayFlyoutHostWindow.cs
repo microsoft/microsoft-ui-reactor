@@ -84,7 +84,7 @@ internal sealed class TrayFlyoutHostWindow : IDisposable
                 op.IsMinimizable = false;
                 op.IsMaximizable = false;
                 op.SetBorderAndTitleBar(hasBorder: true, hasTitleBar: false);
-                op.IsAlwaysOnTop = true;
+                op.IsAlwaysOnTop = true; // WinUI presenter API; Reactor WindowSpec uses WindowLevel.
             }
         }
         catch (Exception ex) { Debug.WriteLine($"[Reactor] TrayFlyout presenter setup failed: {ex.Message}"); }

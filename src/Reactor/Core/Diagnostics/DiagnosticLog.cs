@@ -91,6 +91,11 @@ internal static class DiagnosticLog
         DebugHResult(category, operation, hr);
     }
 
+    public static void Warning(LogCategory category, string? operation, string? message)
+    {
+        DebugWarning(category, operation, message);
+    }
+
     [Conditional("DEBUG")]
     private static void DebugSwallowedError(LogCategory category, string? operation, Exception? ex)
     {
@@ -102,4 +107,8 @@ internal static class DiagnosticLog
     [Conditional("DEBUG")]
     private static void DebugHResult(LogCategory category, string? operation, int hr)
         => Debug.WriteLine($"[{category}] {operation} HR=0x{hr:X8}");
+
+    [Conditional("DEBUG")]
+    private static void DebugWarning(LogCategory category, string? operation, string? message)
+        => Debug.WriteLine($"[{category}] {operation} warning: {message}");
 }

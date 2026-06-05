@@ -30,6 +30,11 @@ public enum BackdropKind
 
     /// <summary>Acrylic (thin variant). Subtler blur than <see cref="DesktopAcrylic"/>.</summary>
     AcrylicThin,
+
+    /// <summary>
+    /// Transparent backdrop. Requires Windows App SDK support; unsupported platforms fall back to no backdrop.
+    /// </summary>
+    Transparent,
 }
 
 /// <summary>

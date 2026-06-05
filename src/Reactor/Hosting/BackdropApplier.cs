@@ -103,6 +103,8 @@ internal sealed class BackdropApplier
             // but a constructor throw would otherwise propagate up the render loop;
             // catch and fall back to "no backdrop" with a diagnostic log.
             Debug.WriteLine($"[Reactor] Backdrop materialization failed for kind={nextKind}: {ex.GetType().Name}: {ex.Message}");
+            if (nextKind == BackdropKind.Transparent)
+                Core.Diagnostics.DiagnosticLog.Warning(Core.Diagnostics.LogCategory.Hosting, "Backdrop.Transparent", "TransparentBackdrop is unsupported; falling back to no backdrop.");
             backdrop = null;
         }
 
@@ -167,6 +169,16 @@ internal sealed class BackdropApplier
         // expose a Kind selector, so we materialize the same base type. When the
         // SDK ships the variant we'll switch to it without an API change here.
         BackdropKind.AcrylicThin => new DesktopAcrylicBackdrop(),
+        BackdropKind.Transparent => TransparentUnsupported(),
         _ => null,
     };
+
+    private static SystemBackdrop? TransparentUnsupported()
+    {
+        Core.Diagnostics.DiagnosticLog.Warning(
+            Core.Diagnostics.LogCategory.Hosting,
+            "Backdrop.Transparent",
+            "TransparentBackdrop is unavailable in the referenced Windows App SDK; falling back to no backdrop.");
+        return null;
+    }
 }

@@ -61,8 +61,31 @@ public sealed record WindowSpec
     /// <summary>Coarse presenter selection.</summary>
     public PresenterKind Presenter { get; init; } = PresenterKind.Overlapped;
 
-    /// <summary>Whether the window may be resized by the user (Overlapped only).</summary>
-    public bool IsResizable { get; init; } = true;
+    /// <summary>Window chrome style for overlapped windows.</summary>
+    public WindowStyle Style { get; init; } = WindowStyle.Default;
+
+    /// <summary>
+    /// DWM corner preference. On Windows 10 the platform ignores this setting.
+    /// </summary>
+    public WindowCornerStyle CornerStyle { get; init; } = WindowCornerStyle.Default;
+
+    /// <summary>Z-order tier for this window.</summary>
+    public WindowLevel Level { get; init; } = WindowLevel.Normal;
+
+    /// <summary>
+    /// Content-driven sizing mode. Size changes are applied after the first layout pass,
+    /// so apps may see one frame at the initial Width/Height before content settles.
+    /// </summary>
+    public WindowSizeToContent SizeToContent { get; init; } = WindowSizeToContent.Manual;
+
+    /// <summary>Resize/chrome policy for overlapped windows.</summary>
+    public WindowResizeMode ResizeMode { get; init; } = WindowResizeMode.CanResize;
+
+    /// <summary>Optional width / height aspect lock applied during interactive resize.</summary>
+    public double? AspectRatio { get; init; }
+
+    /// <summary>Whether pressing non-interactive background starts an OS window drag.</summary>
+    public bool IsMovableByBackground { get; init; }
 
     /// <summary>Whether the minimize caption button is enabled (Overlapped only).</summary>
     public bool IsMinimizable { get; init; } = true;
@@ -70,18 +93,32 @@ public sealed record WindowSpec
     /// <summary>Whether the maximize caption button is enabled (Overlapped only).</summary>
     public bool IsMaximizable { get; init; } = true;
 
-    /// <summary>Whether the window stays above other top-level windows (Overlapped only).</summary>
-    public bool IsAlwaysOnTop { get; init; }
+    private readonly bool _showInTaskbar = true;
+    private readonly bool _showInTaskbarExplicit;
 
-    /// <summary>Whether the window appears in Alt-Tab and the taskbar.</summary>
-    public bool IsShownInSwitchers { get; init; } = true;
+    /// <summary>Whether the window appears in the taskbar.</summary>
+    public bool ShowInTaskbar
+    {
+        get => _showInTaskbar;
+        init
+        {
+            _showInTaskbar = value;
+            _showInTaskbarExplicit = true;
+        }
+    }
+
+    internal bool ShowInTaskbarExplicit => _showInTaskbarExplicit;
+
+    /// <summary>Whether the window appears in Alt-Tab / shell switchers.</summary>
+    public bool ShowInSwitcher { get; init; } = true;
 
     /// <summary>
-    /// Whether app content extends into the title-bar region. The
-    /// <c>TitleBar(...)</c> factory still owns title-bar customization; this
-    /// field merely toggles the WinUI extension flag.
+    /// Whether app content extends into the title-bar region. When <c>null</c>,
+    /// a mounted <c>TitleBar(...)</c> element infers <c>true</c>; otherwise the
+    /// explicit value wins. Hot reload cannot migrate the previous bool field
+    /// shape across this type change; restart after editing this field during HR.
     /// </summary>
-    public bool ExtendsContentIntoTitleBar { get; init; }
+    public bool? ExtendsContentIntoTitleBar { get; init; }
 
     /// <summary>Optional declarative backdrop. Seeds the per-host modifier.</summary>
     public BackdropChoice? Backdrop { get; init; }
@@ -89,12 +126,26 @@ public sealed record WindowSpec
     /// <summary>Optional window icon.</summary>
     public WindowIcon? Icon { get; init; }
 
-    /// <summary>
-    /// Optional persistence id. When set, the window saves its placement on
-    /// close and restores on reopen via the registered
-    /// <c>IWindowPersistenceStore</c>.
-    /// </summary>
+    /// <summary>Optional persistence id for placement and future per-window persistence subsystems.</summary>
     public string? PersistenceId { get; init; }
+
+    /// <summary>
+    /// Restore window placement from the registered store on open and save on close.
+    /// Ignored when <see cref="PersistenceId"/> is null.
+    /// </summary>
+    public bool PersistPlacement { get; init; }
+
+    /// <summary>Initial placement used when persistence is enabled but no placement exists yet.</summary>
+    public WindowStartPosition PersistenceFallback { get; init; } = WindowStartPosition.Default;
+
+    /// <summary>
+    /// Configure placement persistence in one call.
+    /// </summary>
+    public WindowSpec WithPersistence(string id, WindowStartPosition fallback = WindowStartPosition.Default)
+    {
+        if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("Persistence id must be non-empty.", nameof(id));
+        return this with { PersistenceId = id, PersistPlacement = true, PersistenceFallback = fallback };
+    }
 
     /// <summary>Optional stable identity for <c>UseOpenWindow</c> reuse and shell lookups.</summary>
     public WindowKey? Key { get; init; }
@@ -183,6 +234,25 @@ public sealed record WindowSpec
         if (StartPosition != WindowStartPosition.Manual && ManualPosition is not null)
             throw new ArgumentException(
                 "WindowSpec.ManualPosition must be null unless StartPosition == Manual.", nameof(ManualPosition));
+
+        if (AspectRatio is { } ratio)
+        {
+            if (!(ratio > 0.0) || !double.IsFinite(ratio))
+                throw new ArgumentException("WindowSpec.AspectRatio must be finite and greater than 0.", nameof(AspectRatio));
+            if (ResizeMode == WindowResizeMode.NoResize)
+                throw new ArgumentException("WindowSpec.AspectRatio cannot be combined with ResizeMode.NoResize.", nameof(AspectRatio));
+            if (SizeToContent != WindowSizeToContent.Manual)
+                throw new ArgumentException("WindowSpec.AspectRatio cannot be combined with SizeToContent.", nameof(SizeToContent));
+        }
+
+        if (PersistPlacement && string.IsNullOrEmpty(PersistenceId))
+            throw new ArgumentException("WindowSpec.PersistenceId must be set when PersistPlacement is true.", nameof(PersistenceId));
+
+        if (Style == WindowStyle.None && !IsMovableByBackground)
+            Core.Diagnostics.DiagnosticLog.Warning(
+                Core.Diagnostics.LogCategory.Hosting,
+                "WindowSpec.Validate",
+                "WindowStyle.None without IsMovableByBackground can leave the window without a drag affordance.");
 
         if (!(Opacity >= 0.0 && Opacity <= 1.0) || double.IsNaN(Opacity))
             throw new ArgumentException(

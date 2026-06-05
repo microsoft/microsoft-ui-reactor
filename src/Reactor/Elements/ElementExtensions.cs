@@ -2123,6 +2123,13 @@ public static partial class ElementExtensions
         return Modify(el, new ElementModifiers { OnMountAction = combined });
     }
 
+    /// <summary>
+    /// Opts a subtree in or out of window drag-from-background hit testing.
+    /// Use <c>.Drag(false)</c> on custom interactive regions that should not start a window move.
+    /// </summary>
+    public static T Drag<T>(this T el, bool enabled) where T : Element =>
+        (T)el.SetAttached(new DragAttached(enabled));
+
     // ════════════════════════════════════════════════════════════════
     //  Accessibility — Tier 1 (inline on ElementModifiers)
     // ════════════════════════════════════════════════════════════════

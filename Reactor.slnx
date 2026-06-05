@@ -227,6 +227,12 @@
       <Platform Solution="*|x64" Project="x64" />
     </Project>
   </Folder>
+  <Folder Name="/samples/apps/command-palette-window/">
+    <Project Path="samples/apps/command-palette-window/CommandPaletteWindow.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
   <Folder Name="/samples/apps/reactor-ide/">
     <Project Path="samples/apps/reactor-ide/ReactorIde.csproj">
       <Platform Solution="*|ARM64" Project="ARM64" />
@@ -283,6 +289,12 @@
   </Folder>
   <Folder Name="/samples/apps/validation-showcase/">
     <Project Path="samples/apps/validation-showcase/ValidationShowcase.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/samples/apps/tool-palette/">
+    <Project Path="samples/apps/tool-palette/ToolPalette.csproj">
       <Platform Solution="*|ARM64" Project="ARM64" />
       <Platform Solution="*|x64" Project="x64" />
     </Project>

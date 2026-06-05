@@ -115,6 +115,31 @@ public static class ReactorApp
         }
     }
 
+    internal static IDisposable UseWindowPersistenceStoreForTests(Hosting.Persistence.IWindowPersistenceStore? store)
+    {
+        var previous = Volatile.Read(ref _windowPersistenceStore);
+        var previousLocked = Volatile.Read(ref _persistenceStoreLocked);
+        Volatile.Write(ref _windowPersistenceStore, store);
+        return new TestPersistenceStoreScope(previous, previousLocked);
+    }
+
+    private sealed class TestPersistenceStoreScope : IDisposable
+    {
+        private Hosting.Persistence.IWindowPersistenceStore? _previous;
+        private readonly int _previousLocked;
+        public TestPersistenceStoreScope(Hosting.Persistence.IWindowPersistenceStore? previous, int previousLocked)
+        {
+            _previous = previous;
+            _previousLocked = previousLocked;
+        }
+        public void Dispose()
+        {
+            var previous = Interlocked.Exchange(ref _previous, null);
+            Volatile.Write(ref _windowPersistenceStore, previous);
+            Volatile.Write(ref _persistenceStoreLocked, _previousLocked);
+        }
+    }
+
     internal static Hosting.Persistence.IWindowPersistenceStore? ResolvePersistenceStore()
     {
         // Snapshot once and lock subsequent assignments. Idempotent; the
@@ -528,6 +553,8 @@ public static class ReactorApp
         if (PrimaryWindow is null)
             PrimaryWindow = window;
 
+        ReactorDisplay.RegisterWindowMonitor(window, window.MessageMonitor);
+
         try { WindowOpened?.Invoke(null, window); }
         catch (Exception ex) { global::System.Diagnostics.Debug.WriteLine($"[Reactor] WindowOpened threw: {ex.Message}"); }
     }
@@ -552,6 +579,8 @@ public static class ReactorApp
         bool wasPrimary = ReferenceEquals(PrimaryWindow, window);
         if (wasPrimary)
             PrimaryWindow = next.Length > 0 ? next[0] : null;
+
+        ReactorDisplay.UnregisterWindowMonitor(window);
 
         try { WindowClosed?.Invoke(null, window); }
         catch (Exception ex) { global::System.Diagnostics.Debug.WriteLine($"[Reactor] WindowClosed threw: {ex.Message}"); }

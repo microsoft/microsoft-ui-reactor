@@ -18,12 +18,20 @@ public class WindowSpecTests
         Assert.Equal(768, spec.Height);
         Assert.Equal(WindowStartPosition.Default, spec.StartPosition);
         Assert.Equal(PresenterKind.Overlapped, spec.Presenter);
-        Assert.True(spec.IsResizable);
+        Assert.Equal(WindowResizeMode.CanResize, spec.ResizeMode);
+        Assert.Null(spec.AspectRatio);
+        Assert.False(spec.IsMovableByBackground);
         Assert.True(spec.IsMinimizable);
         Assert.True(spec.IsMaximizable);
-        Assert.False(spec.IsAlwaysOnTop);
-        Assert.True(spec.IsShownInSwitchers);
-        Assert.False(spec.ExtendsContentIntoTitleBar);
+        Assert.Equal(WindowStyle.Default, spec.Style);
+        Assert.Equal(WindowCornerStyle.Default, spec.CornerStyle);
+        Assert.Equal(WindowLevel.Normal, spec.Level);
+        Assert.Equal(WindowSizeToContent.Manual, spec.SizeToContent);
+        Assert.True(spec.ShowInTaskbar);
+        Assert.True(spec.ShowInSwitcher);
+        Assert.False(spec.PersistPlacement);
+        Assert.Equal(WindowStartPosition.Default, spec.PersistenceFallback);
+        Assert.Null(spec.ExtendsContentIntoTitleBar);
         Assert.True(spec.ActivateOnOpen);
         spec.Validate(); // defaults must be valid
     }

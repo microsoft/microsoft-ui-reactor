@@ -159,6 +159,8 @@ public sealed partial class Reconciler
             _highlightModified.Add(control);
         if ((modifiers is not null || oldModifiers is not null) && target is FrameworkElement fe)
             ApplyModifiers(fe, oldModifiers, modifiers ?? new ElementModifiers(), requestRerender);
+        if (target is FrameworkElement dragFe)
+            ApplyDragAttached(dragFe, newEl.GetAttached<DragAttached>());
 
         // Re-apply the caption-derived default after modifiers have run so a
         // label change ("+ 1" → "+ 2") updates UIA Name when the author never

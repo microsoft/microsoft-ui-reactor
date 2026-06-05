@@ -93,7 +93,10 @@ internal static class TitleBarDescriptor
     {
         if (Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal is { } host)
         {
-            host.Window.ExtendsContentIntoTitleBar = true;
+            var explicitValue = host.OwningWindow?.Spec.ExtendsContentIntoTitleBar;
+            if (explicitValue == false) return;
+            if (explicitValue is null)
+                host.Window.ExtendsContentIntoTitleBar = true;
             host.Window.SetTitleBar(titleBar);
         }
     }

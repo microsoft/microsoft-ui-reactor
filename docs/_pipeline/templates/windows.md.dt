@@ -4,172 +4,348 @@ app: windows
 order: 21
 audience: intermediate
 goal: |
-  Introduce the top-level window model: ReactorApp.Run as the primary
-  window, ReactorApp.OpenWindow / WindowSpec for secondaries, the Windows
-  / PrimaryWindow / FindWindow surface, the UseWindow / UseWindowState /
-  UseOpenWindow hooks, ShutdownPolicy, and a brief mention of tray icons.
-  Concise — not a full tour of every WindowSpec field or every hook.
+  Comprehensive guide to Reactor top-level windows: lifecycle, sizing, placement,
+  z-order, chrome, persistence, taskbar integration, displays, and pickers.
 tier: solid
+winui-ref: https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/windowing/windowing-overview
 ---
 
 # Windows
 
-Most Microsoft.UI.Reactor (Reactor) apps start with a single window — the one `ReactorApp.Run` opens
-for you. When you need more (a settings dialog, a multi-document app, a tray
-flyout), the `ReactorApp` static surface and a handful of hooks give you a
-declarative way to manage every top-level window in the process.
+Most Microsoft.UI.Reactor (Reactor) apps start with the single window created by
+`ReactorApp.Run`. Larger desktop apps can open multiple native WinUI top-level
+windows with `WindowSpec` and `ReactorApp.OpenWindow`, while keeping the same
+declarative component model used inside a page.
 
-## The Primary Window
+## Lifecycle basics
 
-`ReactorApp.Run<TRoot>(...)` opens one window with `TRoot` mounted as its
-content:
+`ReactorApp.Run<TRoot>(...)` opens the primary window. `ReactorApp.OpenWindow`
+opens a secondary window from the UI thread and returns a `ReactorWindow` handle
+for imperative lifecycle operations.
 
 ```csharp snippet="windows/run"
 ```
 
-That window becomes `ReactorApp.PrimaryWindow`. By default, when the primary
-window closes the process exits — see [Shutdown Policy](#shutdown-policy)
-below if you need different behavior.
+```csharp
+var settings = ReactorApp.OpenWindow(
+    new WindowSpec { Title = "Settings", Width = 520, Height = 420 },
+    () => new SettingsWindow());
 
-## Opening a Secondary Window
-
-Call `ReactorApp.OpenWindow(spec, factory)` from anywhere on the UI thread.
-The `WindowSpec` describes the window's chrome (title, size, icon,
-presenter); the factory builds the root component:
-
-```csharp snippet="windows/shell"
+settings.Activate();
+settings.Close();
 ```
 
-![Top-level windows demo](screenshot://windows/shell)
+Caveats:
 
-Each click of "New Notepad window" spawns an independent window. They have
-their own state, their own DPI, their own lifecycle — closing one doesn't
-affect the others.
+- `Close`, `Show`, `Hide`, `Activate`, `Update`, and mutators are UI-thread only.
+- `ReactorApp.PrimaryWindow` is the first opened window; shutdown policy decides
+  whether closing it exits the process.
+- `UseWindow()` returns the owning `ReactorWindow` inside a window component and
+  `null` outside one (for example tray flyouts).
 
-`WindowSpec` is an immutable record. The fields you'll reach for most often:
+## Sizing & resizing
 
-| Field | Default | Purpose |
-|-------|---------|---------|
-| `Title` | `"Reactor App"` | Caption text |
-| `Width` / `Height` | `1024` / `768` | Initial size in DIPs |
-| `MinWidth` / `MinHeight` | `null` | Optional resize floor |
-| `Icon` | `null` | `WindowIcon.FromPath(...)` or `WindowIcon.FromResource(...)` |
-| `StartPosition` | `Default` | `CenterOnPrimary`, `CenterOnOwner`, `Manual`, `RestoreFromPersistence` |
-| `PersistenceId` | `null` | Save and restore placement across sessions |
-| `Key` | `null` | Stable identity for `FindWindow` and `UseOpenWindow` |
-| `Owner` | `null` | Owner window for owned-window semantics |
+Initial `Width` / `Height` are DIPs. Runtime size is controlled by `SetSize`,
+chrome resize policy by `ResizeMode`, interactive aspect locks by `AspectRatio`,
+and content-driven sizing by `SizeToContent`.
 
-All sizes are DIPs (device-independent pixels). Reactor handles the
-DIP→physical conversion at the destination monitor's DPI.
+```csharp
+new WindowSpec
+{
+    Title = "Preview",
+    Width = 640,
+    Height = 360,
+    ResizeMode = WindowResizeMode.CanMinimize,
+    AspectRatio = 16.0 / 9.0,
+};
 
-## Reading the Current Window
-
-Inside any component rendered as a window's content, hooks reach the owning
-`ReactorWindow`:
-
-```csharp snippet="windows/notepad-window"
+window.SetAspectRatio(4.0 / 3.0);
+UseWindowAspectRatio(1.0); // lifetime-bound hook; unmount clears it
 ```
 
-| Hook | Purpose |
-|------|---------|
-| `UseWindow()` | The owning `ReactorWindow` — `null` outside a window (e.g. tray flyouts) |
-| `UseWindowState()` | `Normal` / `Minimized` / `Maximized` / `FullScreen` / `CompactOverlay`; re-renders on change |
-| `UseIsActive()` | `true` while the window has foreground; re-renders on activation change |
-| `UseDpi()` | Current DPI; re-renders on monitor change |
-| `UseClosingGuard(canClose)` | Register a synchronous predicate that can veto a close |
+| API | Values / behavior |
+| --- | --- |
+| `ResizeMode` | `CanResize`, `NoResize`, `CanMinimize` |
+| `AspectRatio` | `double?` width / height; honored during drag resize |
+| `SizeToContent` | `Manual`, `Width`, `Height`, `WidthAndHeight` |
 
-`ReactorWindow` itself exposes `Close()`, `Activate()`, `SetSize(...)`,
-`SetPosition(...)`, and lifecycle events (`Closing`, `Closed`,
-`SizeChanged`, `StateChanged`).
+Caveats:
 
-## Finding and Enumerating Windows
+- `AspectRatio` rejects `ResizeMode.NoResize`; no drag means no constraint to apply.
+- `AspectRatio` and `SizeToContent` are mutually exclusive layout drivers.
+- `SizeToContent` runs after layout, so the first frame can briefly use the
+  initial `Width` / `Height`; maximized windows ignore it and log a warning.
+- Min/max fields (`MinWidth`, `MaxHeight`, etc.) win over content and aspect sizing.
+
+## Movement & placement
+
+Use `StartPosition` for initial placement, `SetPosition` for imperative moves,
+`Position` for read-back, and `PositionChanged` / `UseWindowPosition()` to react
+to live moves.
+
+```csharp
+var spec = new WindowSpec
+{
+    Title = "Command Palette",
+    StartPosition = WindowStartPosition.CenterOnCurrent,
+    IsMovableByBackground = true,
+};
+
+var (x, y) = UseWindowPosition();
+var drag = UseWindowDragMove();
+Button("Drag window", drag);
+```
+
+`IsMovableByBackground` starts the OS move loop when a non-interactive part of
+the root is pressed. Mark custom interactive regions with `.Drag(false)`:
+
+```csharp
+HStack(
+    TextBlock("Palette"),
+    Button("Settings").Drag(false));
+```
+
+Placement options:
+
+| `WindowStartPosition` | Meaning |
+| --- | --- |
+| `Default` | WinUI / shell chooses placement |
+| `CenterOnPrimary` | Center on primary monitor |
+| `CenterOnOwner` | Center on the owner window's monitor |
+| `CenterOnCurrent` | Center on the cursor monitor |
+| `Manual` | Use `ManualPosition` DIP top-left |
+
+Persistence is opt-in and explicit:
+
+```csharp
+var spec = new WindowSpec { Title = "Shell" }
+    .WithPersistence("main-window", fallback: WindowStartPosition.CenterOnCurrent);
+
+window.SavePlacement(); // manual best-effort flush
+```
+
+Caveats:
+
+- Position values are DIPs; mixed-DPI desktops have no single global DIP grid.
+- `PositionChanged` fires eagerly during drags; debounce in app code if needed.
+- `PersistenceId` alone is only identity. Placement restore/save requires
+  `PersistPlacement = true` or `.WithPersistence(...)`.
+
+## Z-order & visibility
+
+`WindowLevel` selects a z-order tier. `ShowInTaskbar` and `ShowInSwitcher` are
+separate because the taskbar button and Alt-Tab visibility are separate shell
+concepts.
+
+```csharp
+new WindowSpec
+{
+    Title = "Palette",
+    Level = WindowLevel.Floating,
+    ShowInTaskbar = false,
+    ShowInSwitcher = true,
+};
+
+var isCovered = UseIsCovered(); // hint from ZOrderChanged
+```
+
+| `WindowLevel` | Behavior |
+| --- | --- |
+| `Normal` | Regular z-order |
+| `Floating` | Stays above owner and other Reactor app windows as they activate |
+| `AlwaysOnTop` | Win32 topmost tier |
+
+| `ShowInTaskbar` | `ShowInSwitcher` | Result |
+| --- | --- | --- |
+| `true` | `true` | Normal app window |
+| `true` | `false` | Taskbar button, no Alt-Tab entry |
+| `false` | `true` | Tool palette shape |
+| `false` | `false` | Transient / launcher / overlay shape |
+
+Caveats:
+
+- `ZOrderChanged.IsCovered` is a covered hint based on HWND insertion order, not
+  pixel-accurate occlusion.
+- `Floating` is app-local. Use `AlwaysOnTop` only when you need global topmost.
+- Runtime taskbar visibility flips hide/show the HWND once so the shell refreshes.
+
+## Chrome & appearance
+
+`WindowStyle` controls native chrome. `WindowCornerStyle` maps to the Windows 11
+DWM corner preference. Backdrops are applied either on `WindowSpec.Backdrop` or
+with a root `.Backdrop(...)` modifier.
+
+```csharp
+new WindowSpec
+{
+    Title = "HUD",
+    Style = WindowStyle.None,
+    IsMovableByBackground = true,
+    CornerStyle = WindowCornerStyle.Rounded,
+    Backdrop = BackdropChoice.Of(BackdropKind.DesktopAcrylic),
+};
+```
+
+| API | Values |
+| --- | --- |
+| `WindowStyle` | `Default`, `None`, `ToolWindow` |
+| `WindowCornerStyle` | `Default`, `Square`, `Rounded`, `RoundedSmall` |
+| `BackdropKind` | `None`, `Mica`, `MicaAlt`, `DesktopAcrylic`, `AcrylicThin`, `Transparent` |
+
+`TitleBar(...)` is the declarative custom title bar. When `WindowSpec.ExtendsContentIntoTitleBar`
+is `null` (the default), mounting a `TitleBar(...)` element automatically sets
+`Window.ExtendsContentIntoTitleBar = true`. Explicit `true` or `false` on the
+spec wins over inference.
+
+```csharp
+VStack(
+    TitleBar("My app"),
+    TextBlock("Body"));
+```
+
+Caveats:
+
+- `WindowStyle.None` without `IsMovableByBackground` can strand the user; Reactor
+  warns but does not throw.
+- `WindowStyle.ToolWindow` defaults to hidden from the taskbar unless
+  `ShowInTaskbar` is explicitly set.
+- `WindowCornerStyle` is a Windows 11 DWM preference; Windows 10 ignores it.
+- `BackdropKind.Transparent` falls back to no backdrop when the referenced Windows
+  App SDK does not expose a transparent backdrop type.
+
+## Taskbar integration
+
+`TaskbarItem` groups all taskbar features while keeping the older shortcuts on
+`ReactorWindow` for compatibility.
+
+```csharp
+var taskbar = UseWindow()!.TaskbarItem;
+taskbar.Description = "Build in progress";
+taskbar.Progress.State = TaskbarProgressState.Normal;
+taskbar.Progress.Value = 0.42;
+taskbar.SetThumbnailToolbar([
+    new ThumbnailToolbarButton("pause", WindowIcon.FromPath("pause.ico"), "Pause", () => Pause())
+]);
+```
+
+Facade members:
+
+- `Progress` — same instance as `ReactorWindow.Progress`.
+- `Overlay` — same instance as `ReactorWindow.Overlay`.
+- `Description` — forwards to `ITaskbarList3.SetThumbnailTooltip`.
+- `SetThumbnailToolbar` / `ClearThumbnailToolbar` — same toolbar pipeline as the
+  `ReactorWindow` shortcut methods.
+
+Caveats:
+
+- Shell COM calls are best-effort; Reactor keeps last-set managed state where relevant.
+- Thumbnail toolbars support at most seven buttons.
+- Overlay icons need HICON-compatible sources; resource URIs are not overlay HICONs.
+
+## Displays
+
+`ReactorDisplay` exposes the current monitor layout in Reactor's DIP-oriented
+shape and raises `DisplayLayoutChanged` when Windows reports a layout change.
+
+```csharp
+var displays = UseDisplays();
+var nearest = ReactorDisplay.NearestTo(window.Position.X, window.Position.Y);
+```
+
+`DisplayInfo` contains:
+
+| Property | Meaning |
+| --- | --- |
+| `Id` | Win32 monitor id (for example `\\.\DISPLAY1`) |
+| `IsPrimary` | Primary monitor flag |
+| `WorkAreaDip` | Work area in approximate DIPs |
+| `BoundsDip` | Full bounds in approximate DIPs |
+| `Dpi` | Effective monitor DPI |
+
+Caveats:
+
+- Mixed-DPI virtual-screen X/Y values are approximate because Windows exposes
+  physical pixels, not a global DIP coordinate system.
+- `ReactorDisplay.Displays` is a snapshot. Use `UseDisplays()` to re-render on changes.
+- `NearestTo` accepts DIP coordinates in Reactor's approximate display space.
+
+## Pickers
+
+Picker hooks create WinUI storage pickers and initialize them with the owning
+window HWND, so the picker is modal to the correct window without app code doing
+HWND interop.
+
+```csharp
+async Task OpenAsync()
+{
+    var file = await UseFilePickerAsync(new FilePickerOptions(
+        FileTypeFilter: [".txt", ".md"]));
+}
+
+var folder = await UseFolderPickerAsync(new FolderPickerOptions());
+```
+
+Caveats:
+
+- Picker hooks must be called on the owning window's UI thread.
+- Reactor never accepts arbitrary HWNDs; it always uses `UseWindow().NativeWindow`.
+- Tests should inject the picker service rather than opening native dialogs.
+
+## WPF / UWP migration map
+
+| Prior stack concept | Reactor 054 shape | Notes |
+| --- | --- | --- |
+| WPF `ResizeMode` | `WindowResizeMode` | `CanResizeWithGrip` is intentionally omitted. |
+| WPF `SizeToContent` | `WindowSizeToContent` | Same four values. Min/max still win. |
+| WPF `Topmost` | `WindowLevel.AlwaysOnTop` | `Floating` adds app-local owner/sibling behavior. |
+| WPF `WindowStyle.None` | `WindowStyle.None` | Pair with `IsMovableByBackground`. |
+| WPF `WindowStartupLocation.CenterScreen` | `CenterOnCurrent` | Cursor monitor first. |
+| WPF manual `Top` / `Left` | `Position`, `SetPosition`, `UseWindowPosition` | DIPs, with mixed-DPI caveats. |
+| WPF taskbar visibility | `ShowInTaskbar` | Split from `ShowInSwitcher`. |
+| Manual settings persistence | `.WithPersistence(id)` | Opt-in, one line. |
+| `TaskbarItemInfo` | `TaskbarItem` | Facade over progress, overlay, description, thumb buttons. |
+| UWP/WinUI picker HWND setup | `UseFilePickerAsync` / `UseFolderPickerAsync` | Owning HWND is wired automatically. |
+
+## Finding and enumerating windows
 
 ```csharp
 ReactorApp.Windows          // IReadOnlyList<ReactorWindow> snapshot
-ReactorApp.PrimaryWindow    // First window opened, or null after it closes
-ReactorApp.FindWindow(key)  // Look up by WindowKey
+ReactorApp.PrimaryWindow    // first window opened, or null after it closes
+ReactorApp.FindWindow(key)  // look up by WindowKey
 ```
 
-`WindowKey` is a string-typed identity stamped onto a `WindowSpec.Key`. Use
-it to dedupe "open the settings window" against an existing one, as the
-button handler in the shell snippet above does.
+Use `WindowKey` for any window you might want to find again. `UseOpenWindow`
+lets a component declaratively own a secondary window's existence; tray icons use
+`UseTrayIcon` and close automatically on unmount.
 
-## Reusing a Window with `UseOpenWindow`
-
-`UseOpenWindow` lets a component declaratively own a window's lifetime:
-while the component is mounted, the window stays open; renders that pass
-the same `WindowKey` reuse the same handle.
-
-```csharp snippet="windows/use-open-window"
-```
-
-`UseOpenWindow` doesn't unmount-close the window — that's deliberate, since
-windows usually outlive the menu item that opened them. To close on
-unmount, return a `UseEffect` cleanup that calls `Close()` on the handle.
-
-(Tray icons go the other way — `UseTrayIcon` *does* close on unmount, since
-a tray icon belongs to the component that declared it.)
-
-## Shutdown Policy
+## Shutdown policy
 
 ```csharp snippet="windows/shutdown-policy"
 ```
 
 | Policy | Process exits when... |
-|--------|-----------------------|
+| --- | --- |
 | `OnPrimaryWindowClosed` *(default)* | The primary window closes |
-| `OnLastSurfaceClosed` | The last window AND the last tray icon both close |
-| `Explicit` | Never automatically — you must call `ReactorApp.Exit()` |
-
-Pick `OnLastSurfaceClosed` for tray-resident apps that should keep running
-while only an icon is visible. Pick `Explicit` when you need a custom
-"quit" gesture (a tray menu item, a `Cmd-Q` accelerator, etc.) and call
-`ReactorApp.Exit(exitCode)` from the handler.
-
-## Tray Icons (in Brief)
-
-A tray icon is a non-window surface registered with the shell's notification
-area. Use `UseTrayIcon` from a component to register one whose lifetime is
-tied to that component:
-
-```csharp snippet="windows/tray-icon"
-```
-
-The hook returns a `ReactorTrayIcon?` exposing `Click`, `DoubleClick`, and
-`RightClick` events plus `ShowFlyout(content)` for in-place flyout UI.
-For app-scoped tray icons that survive component unmount, call
-`ReactorApp.OpenTrayIcon(spec)` directly.
+| `OnLastSurfaceClosed` | The last window and the last tray icon both close |
+| `Explicit` | Never automatically; call `ReactorApp.Exit()` |
 
 ## Tips
 
-**One spec record per window — don't rebuild it in `Render()` if you can
-avoid it.** Wrap the `WindowSpec` (and especially the `WindowIcon`) in a
-`UseMemo` so re-renders don't reallocate them. Identity-stable specs let
-`UseOpenWindow`'s value-equality compare see no change and skip the
-chrome-update pass.
+**Memoize specs.** A stable `WindowSpec` avoids unnecessary chrome updates.
 
-**`Width`/`Height` are doubles, not ints.** All sizes and positions are
-DIPs. Literal call sites bind cleanly (`Width = 480`), but a variable
-typed `int` needs a cast.
+**Keep units in DIPs.** Window size and position APIs use DIPs; shell style bits
+and DWM APIs use physical pixels internally.
 
-**Use `WindowKey` for any window you might want to find again.** The cost
-is one string allocation; the payoff is `FindWindow` lookups,
-`UseOpenWindow` reuse, and shell tools that can address the surface by
-name.
+**Choose the narrowest z-order.** Prefer `Floating` for app palettes; reserve
+`AlwaysOnTop` for global overlays.
 
-**Closing guards are synchronous.** `UseClosingGuard(() => …)` runs on the
-UI thread and must return immediately. For an async confirmation dialog,
-return `false` from the guard and re-trigger `Close()` from the dialog
-callback.
-
-**The primary window is special only by default.** Once you change
-`ShutdownPolicy`, "primary" is just a name for the first window you opened
-— there's nothing the framework treats differently about it.
+**Use advanced recipes for rejected primitives.** If you need true layered-window
+transparency or arbitrary region corners, see [Advanced Windowing](windowing-advanced.md).
 
 ## Next Steps
 
-- **[WinForms Interop](winforms-interop.md)** — previous topic: hosting Reactor inside WinForms via XAML Islands
-- **[Reactor](index.md)** — back to the index: overview of the framework and full topic list
-- **[Navigation](navigation.md)** — in-window routing with `UseNavigation`, `NavigationView`, deep links
-- **[Effects and Lifecycle](effects.md)** — `UseEffect` patterns for the imperative work that pairs with windows
-- **[Commanding](commanding.md)** — wire keyboard accelerators and tray-menu items to commands
+- **[Advanced Windowing](windowing-advanced.md)** — unsupported / interop-heavy window recipes
+- **[Docking Windows](docking.md)** — dock panes, floating document tear-outs, persistence
+- **[Persistence](persistence.md)** — persisted scopes beyond window placement
+- **[Dialogs and Flyouts](dialogs-and-flyouts.md)** — modal in-window UI
+- **[Commanding](commanding.md)** — commands for title bars, tray menus, and window actions

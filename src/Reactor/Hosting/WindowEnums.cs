@@ -7,30 +7,91 @@ namespace Microsoft.UI.Reactor;
 public enum WindowStartPosition
 {
     /// <summary>WinUI default placement — the OS picks based on prior windows.</summary>
-    Default,
+    Default = 0,
 
     /// <summary>Center the window on the primary monitor.</summary>
-    CenterOnPrimary,
+    CenterOnPrimary = 1,
 
     /// <summary>Center the window on its <see cref="WindowSpec.Owner"/>'s monitor.</summary>
-    CenterOnOwner,
-
-    /// <summary>
-    /// Restore the previous size/position from the registered persistence store
-    /// keyed by <see cref="WindowSpec.PersistenceId"/>. Falls back to
-    /// <see cref="Default"/> when no prior session is recorded or the saved
-    /// monitor layout no longer matches.
-    /// </summary>
-    RestoreFromPersistence,
+    CenterOnOwner = 2,
 
     /// <summary>Place at <see cref="WindowSpec.ManualPosition"/>. Both must be set together.</summary>
-    Manual,
+    Manual = 4,
+
+    /// <summary>Center on the monitor nearest the current cursor position.</summary>
+    CenterOnCurrent = 5,
 }
 
 /// <summary>
 /// Coarse classifier for the WinUI <see cref="Microsoft.UI.Windowing.AppWindowPresenterKind"/>
 /// presenter applied to a window. (spec 036 §3.2 / §4.1)
 /// </summary>
+public enum WindowStyle
+{
+    /// <summary>Standard overlapped window chrome.</summary>
+    Default,
+
+    /// <summary>No border, caption, or system menu.</summary>
+    None,
+
+    /// <summary>Tool-window chrome; hidden from the taskbar unless explicitly overridden.</summary>
+    ToolWindow,
+}
+
+public enum WindowCornerStyle
+{
+    /// <summary>Let the OS choose the default corner style.</summary>
+    Default,
+
+    /// <summary>Request square window corners.</summary>
+    Square,
+
+    /// <summary>Request rounded window corners.</summary>
+    Rounded,
+
+    /// <summary>Request small rounded window corners.</summary>
+    RoundedSmall,
+}
+
+public enum WindowLevel
+{
+    /// <summary>Normal z-order behavior.</summary>
+    Normal,
+
+    /// <summary>Keep above other Reactor app windows when they activate.</summary>
+    Floating,
+
+    /// <summary>Use the Win32 topmost tier.</summary>
+    AlwaysOnTop,
+}
+
+public enum WindowSizeToContent
+{
+    /// <summary>Window size is controlled manually or by the OS default.</summary>
+    Manual,
+
+    /// <summary>Window width tracks content desired width; height stays unchanged.</summary>
+    Width,
+
+    /// <summary>Window height tracks content desired height; width stays unchanged.</summary>
+    Height,
+
+    /// <summary>Window width and height both track content desired size.</summary>
+    WidthAndHeight,
+}
+
+public enum WindowResizeMode
+{
+    /// <summary>User can drag borders; minimize and maximize buttons are enabled subject to the spec masks.</summary>
+    CanResize,
+
+    /// <summary>User cannot drag borders; minimize and maximize buttons are disabled subject to the spec masks.</summary>
+    NoResize,
+
+    /// <summary>User cannot drag borders, but the minimize button stays enabled subject to the spec mask.</summary>
+    CanMinimize,
+}
+
 public enum PresenterKind
 {
     /// <summary>Standard chrome with caption and a system menu.</summary>

@@ -155,6 +155,8 @@ public sealed class ReactorHost : IDisposable
     /// </summary>
     internal Component? RootComponent => _rootComponent;
 
+    internal UIElement? CurrentControl => _currentControl;
+
     /// <summary>
     /// Optional: when set, Reactor renders into this Border instead of Window.Content.
     /// Useful for embedding Reactor content in a pre-existing layout (e.g., a test harness
@@ -640,6 +642,7 @@ public sealed class ReactorHost : IDisposable
 
             _currentControl = newControl;
             _currentTree = newTree;
+            OwningWindow?.OnHostContentRendered(newControl);
 
             // Spec 033 §6 — apply (or clear) the SystemBackdrop modifier carried on
             // the root tree's modifiers. A no-op when the modifier hasn't changed

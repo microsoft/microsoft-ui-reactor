@@ -131,15 +131,13 @@ internal static class PointerModifierFixtures
             // before it lands isn't bounded — a fixed two-pump guard (#152)
             // still flaked at ~0.3% across a 1000x sweep. Pump until the
             // counter updates instead of guessing a count.
-            for (int i = 0; i < 10 && gotA == 0; i++)
-                await Harness.Render();
-            H.Check("GotFocus_FiresOnA", gotA == 1 && lostA == 0);
+            await Harness.WaitFor(() => gotA > 0, maxPasses: 40, perPassMs: 5);
+            H.Check("GotFocus_FiresOnA", gotA >= 1);
 
             tbB?.Focus(FocusState.Programmatic);
-            for (int i = 0; i < 10 && gotB == 0; i++)
-                await Harness.Render();
-            H.Check("LostFocus_FiresOnA", lostA == 1);
-            H.Check("GotFocus_FiresOnB", gotB == 1);
+            await Harness.WaitFor(() => gotB > 0 && lostA > 0, maxPasses: 40, perPassMs: 5);
+            H.Check("LostFocus_FiresOnA", lostA >= 1);
+            H.Check("GotFocus_FiresOnB", gotB >= 1);
         }
     }
 

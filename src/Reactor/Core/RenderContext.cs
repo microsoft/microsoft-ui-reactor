@@ -1053,6 +1053,131 @@ public sealed class RenderContext
         => Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow;
 
     /// <summary>
+    /// Subscribes to the host window's <c>PositionChanged</c> event and re-renders
+    /// on change. Returns <c>(0, 0)</c> outside a window. (spec 054 §5.5)
+    /// </summary>
+    public (double X, double Y) UseWindowPosition()
+    {
+        var win = Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow;
+        if (win is null)
+        {
+            _ = UseState((0.0, 0.0));
+            UseEffect(() => { /* no-op */ }, this);
+            return (0, 0);
+        }
+
+        var (position, setPosition) = UseState(win.Position);
+        UseEffect(() =>
+        {
+            void handler(object? sender, Microsoft.UI.Reactor.WindowDipPositionChangedEventArgs args)
+                => setPosition(args.Position);
+            win.PositionChanged += handler;
+            return () => win.PositionChanged -= handler;
+        }, win);
+        return position;
+    }
+
+    /// <summary>
+    /// Returns a covered hint from the host window's z-order transitions and
+    /// re-renders on change. The value is not pixel-accurate occlusion state.
+    /// </summary>
+    public bool UseIsCovered()
+    {
+        var win = Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow;
+        if (win is null)
+        {
+            _ = UseState(false);
+            UseEffect(() => { /* no-op */ }, this);
+            return false;
+        }
+
+        var (isCovered, setIsCovered) = UseState(false);
+        UseEffect(() =>
+        {
+            void handler(object? sender, Microsoft.UI.Reactor.WindowZOrderChangedEventArgs args)
+            {
+                if (args.MovedToTop) setIsCovered(false);
+                else if (args.IsCovered) setIsCovered(true);
+            }
+            win.ZOrderChanged += handler;
+            return () => win.ZOrderChanged -= handler;
+        }, win);
+        return isCovered;
+    }
+
+    /// <summary>
+    /// Returns the current display snapshot and re-renders when the display layout changes.
+    /// </summary>
+    public IReadOnlyList<Microsoft.UI.Reactor.DisplayInfo> UseDisplays()
+    {
+        var (displays, setDisplays) = UseState(Microsoft.UI.Reactor.ReactorDisplay.Displays);
+        UseEffect(() =>
+        {
+            void handler(object? sender, EventArgs args)
+                => setDisplays(Microsoft.UI.Reactor.ReactorDisplay.Displays);
+            Microsoft.UI.Reactor.ReactorDisplay.DisplayLayoutChanged += handler;
+            return () => Microsoft.UI.Reactor.ReactorDisplay.DisplayLayoutChanged -= handler;
+        }, this);
+        return displays;
+    }
+
+    /// <summary>
+    /// Applies a lifetime-bound width/height aspect lock to the owning window.
+    /// Last mounted hook wins; unmounting restores the previous writer.
+    /// </summary>
+    public void UseWindowAspectRatio(double? widthOverHeight)
+    {
+        var win = Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow;
+        UseEffect(() =>
+        {
+            if (win is null) return () => { };
+            var token = win.RegisterAspectRatioOverride(widthOverHeight);
+            return () => token.Dispose();
+        }, win!, widthOverHeight ?? double.NaN);
+    }
+
+    /// <summary>Returns a stable callback that starts an OS-managed window drag/move loop.</summary>
+    public Action UseWindowDragMove()
+    {
+        var win = Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow;
+        return UseMemo<Action>(() => win is null ? static () => { } : win.BeginDragMove, win!);
+    }
+
+    internal static IPickerService PickerService { get; set; } = new DefaultPickerService();
+
+    /// <summary>
+    /// Opens a file picker initialized with the owning window HWND. Must be called on the UI thread.
+    /// </summary>
+    public Task<global::Windows.Storage.StorageFile?> UseFilePickerAsync(FilePickerOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        var win = Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow
+            ?? throw new InvalidOperationException("UseFilePickerAsync requires an owning ReactorWindow.");
+        EnsurePickerOnUiThread(win, nameof(UseFilePickerAsync));
+        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(win.NativeWindow);
+        return PickerService.PickFileAsync(hwnd, options);
+    }
+
+    /// <summary>
+    /// Opens a folder picker initialized with the owning window HWND. Must be called on the UI thread.
+    /// </summary>
+    public Task<global::Windows.Storage.StorageFolder?> UseFolderPickerAsync(FolderPickerOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        var win = Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow
+            ?? throw new InvalidOperationException("UseFolderPickerAsync requires an owning ReactorWindow.");
+        EnsurePickerOnUiThread(win, nameof(UseFolderPickerAsync));
+        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(win.NativeWindow);
+        return PickerService.PickFolderAsync(hwnd, options);
+    }
+
+    private static void EnsurePickerOnUiThread(Microsoft.UI.Reactor.ReactorWindow win, string hookName)
+    {
+        if (!win.NativeWindow.DispatcherQueue.HasThreadAccess)
+            throw new InvalidOperationException($"{hookName} must be called on the owning window's UI thread.");
+    }
+
+    /// <summary>
     /// Subscribes to the host window's <c>StateChanged</c> event and re-renders
     /// on change. Returns <see cref="Microsoft.UI.Reactor.WindowState.Normal"/>
     /// outside a window. (spec 036 §7)

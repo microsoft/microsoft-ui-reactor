@@ -111,6 +111,8 @@ public sealed partial class Reconciler
         // Apply inline modifiers after mounting
         if (modifiers is not null && control is FrameworkElement fe)
             ApplyModifiers(fe, modifiers, requestRerender);
+        if (control is FrameworkElement dragFe)
+            ApplyDragAttached(dragFe, element.GetAttached<DragAttached>());
 
         // After modifiers + setters have had a chance to set an explicit
         // AutomationName, fall back to the control's visible caption so UIA

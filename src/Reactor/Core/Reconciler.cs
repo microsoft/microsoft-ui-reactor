@@ -3234,6 +3234,9 @@ public sealed partial class Reconciler : IDisposable
     internal void ApplyModifiers(FrameworkElement fe, ElementModifiers m, Action requestRerender)
         => ApplyModifiers(fe, null, m, requestRerender);
 
+    private static void ApplyDragAttached(FrameworkElement fe, DragAttached? attached)
+        => DragAttachedProperties.SetIsDragEnabled(fe, attached?.IsEnabled);
+
     internal void ApplyModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, Action requestRerender)
     {
         // Guard each property: only call into WinUI when the value actually changed.

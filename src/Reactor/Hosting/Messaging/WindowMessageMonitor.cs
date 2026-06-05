@@ -43,6 +43,12 @@ internal sealed class WindowMessageMonitor : IDisposable
     /// <summary>WM_COMMAND — menu and thumbnail-toolbar button clicks.</summary>
     public const uint WM_COMMAND = 0x0111;
 
+    /// <summary>WM_WINDOWPOSCHANGED — sent after size, position, or z-order changes.</summary>
+    public const uint WM_WINDOWPOSCHANGED = 0x0047;
+
+    /// <summary>WM_DISPLAYCHANGE — sent when the display layout or resolution changes.</summary>
+    public const uint WM_DISPLAYCHANGE = 0x007E;
+
     private readonly nint _hwnd;
     private GCHandle _selfHandle;
     private bool _subclassed;

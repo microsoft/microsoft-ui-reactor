@@ -22,6 +22,39 @@ public sealed class WindowDipSizeChangedEventArgs : EventArgs
     }
 }
 
+/// <summary>Event payload for <see cref="ReactorWindow.PositionChanged"/>.</summary>
+public sealed class WindowDipPositionChangedEventArgs : EventArgs
+{
+    /// <summary>New DIP top-left position of the window.</summary>
+    public (double X, double Y) Position { get; }
+
+    /// <summary>Construct from a DIP top-left position.</summary>
+    public WindowDipPositionChangedEventArgs((double X, double Y) position)
+    {
+        Position = position;
+    }
+}
+
+/// <summary>Event payload for <see cref="ReactorWindow.ZOrderChanged"/>.</summary>
+public sealed class WindowZOrderChangedEventArgs : EventArgs
+{
+    /// <summary>
+    /// True when Win32 reported this window was inserted behind another HWND.
+    /// This is a covered hint, not a pixel-accurate occlusion guarantee.
+    /// </summary>
+    public bool IsCovered { get; }
+
+    /// <summary>True when Win32 reported this window moved to the top of its z-order tier.</summary>
+    public bool MovedToTop { get; }
+
+    /// <summary>Construct from z-order hint flags.</summary>
+    public WindowZOrderChangedEventArgs(bool isCovered, bool movedToTop)
+    {
+        IsCovered = isCovered;
+        MovedToTop = movedToTop;
+    }
+}
+
 /// <summary>
 /// Event payload for <see cref="ReactorWindow.Closing"/>. Set
 /// <see cref="Cancel"/> to <c>true</c> to abort the close. (spec 036 §4.2)

@@ -110,6 +110,12 @@ public abstract class Component
     protected void UseClosingGuard(Func<bool> canClose)
         => Context.UseClosingGuard(canClose);
 
+    protected Task<global::Windows.Storage.StorageFile?> UseFilePickerAsync(FilePickerOptions options)
+        => Context.UseFilePickerAsync(options);
+
+    protected Task<global::Windows.Storage.StorageFolder?> UseFolderPickerAsync(FolderPickerOptions options)
+        => Context.UseFolderPickerAsync(options);
+
     /// <summary>
     /// Open or reuse a secondary window keyed by <paramref name="key"/>. Stable
     /// identity across re-renders. (spec 036 §4.3)

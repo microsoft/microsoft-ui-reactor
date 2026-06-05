@@ -472,10 +472,10 @@ internal static class WindowModelFixtures
                     Title = "Owned Child Updated",
                     Width = 250,
                     Height = 170,
-                    IsResizable = false,
+                    ResizeMode = WindowResizeMode.NoResize,
                     IsMinimizable = false,
                     IsMaximizable = false,
-                    IsAlwaysOnTop = true,
+                    Level = WindowLevel.AlwaysOnTop,
                     ExtendsContentIntoTitleBar = true,
                 });
                 H.Check("WindowMut_UpdateSpec", child.Spec.Title == "Owned Child Updated");
