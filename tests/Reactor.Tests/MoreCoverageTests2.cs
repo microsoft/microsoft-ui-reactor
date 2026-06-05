@@ -666,7 +666,7 @@ public class MoreCoverageTests2
             MinDate = DateTimeOffset.MinValue,
             MaxDate = DateTimeOffset.MaxValue,
         };
-        Assert.NotNull(p.Date);
+        Assert.True(p.Date.HasValue);
         Assert.Equal("Pick", p.Header);
     }
 
@@ -738,7 +738,7 @@ public class MoreCoverageTests2
         {
             Title = "Main",
         };
-        Assert.Equal(0, p.SelectedIndex);
+        Assert.False(p.SelectedIndex.HasValue);
         Assert.Equal("Main", p.Title);
     }
 
@@ -746,7 +746,7 @@ public class MoreCoverageTests2
     public void FlipViewElement_Defaults_AreSet()
     {
         var f = new FlipViewElement(Array.Empty<Element>());
-        Assert.Equal(0, f.SelectedIndex);
+        Assert.False(f.SelectedIndex.HasValue);
     }
 
     [Fact]
@@ -941,7 +941,7 @@ public class MoreCoverageTests2
     public void ListBoxElement_Construction_Defaults()
     {
         var lb = new ListBoxElement(new[] { "a", "b" });
-        Assert.Equal(-1, lb.SelectedIndex);
+        Assert.False(lb.SelectedIndex.HasValue);
     }
 
     [Fact]
@@ -953,7 +953,7 @@ public class MoreCoverageTests2
             new SelectorBarItemData("Two", "Icon"),
         };
         var sb = new SelectorBarElement(items);
-        Assert.Equal(0, sb.SelectedIndex);
+        Assert.False(sb.SelectedIndex.HasValue);
         Assert.Equal(2, sb.Items.Length);
         Assert.Equal("Icon", items[1].Icon);
     }
@@ -963,7 +963,7 @@ public class MoreCoverageTests2
     {
         var p = new PipsPagerElement(5) { SelectedPageIndex = 2 };
         Assert.Equal(5, p.NumberOfPages);
-        Assert.Equal(2, p.SelectedPageIndex);
+        Assert.Equal(2, p.SelectedPageIndex.Value);
     }
 
     [Fact]

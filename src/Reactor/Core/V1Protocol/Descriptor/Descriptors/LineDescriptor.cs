@@ -14,7 +14,7 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <para><b>Phase 1 parity note:</b> the legacy mount writes
 /// <c>StrokeThickness</c> only when <c>&gt; 0</c>; the legacy update writes
 /// it unconditionally. The descriptor mirrors the update path with plain
-/// <see cref="ControlDescriptor{TElement,TControl}.OneWay"/>. The element
+/// <c>ControlDescriptor.OneWay</c>. The element
 /// defaults <c>StrokeThickness</c> to <c>1</c>, matching WinUI default.</para>
 /// </summary>
 internal static class LineDescriptor

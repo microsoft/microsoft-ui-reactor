@@ -10,6 +10,13 @@ explicit `(value, setter)` pair driven by `UseState`. There is no two-way
 binding. Validation is layered on top via `UseValidationContext` and
 declarative `.Validate()` modifiers.
 
+
+> **Controlled prop note:** factory call sites keep the plain `(value,
+> setter)` shape, but the underlying element records use `Optional<T>`.
+> Read element props with `.Value` / `.GetValueOrDefault(...)`; use
+> `Optional<T>.Unset` only when the WinUI control should own the value. See
+> [`migration/050-optional-t.md`](../../../../docs/guide/migration/050-optional-t.md).
+
 ## Quick reference
 
 | API | Purpose |

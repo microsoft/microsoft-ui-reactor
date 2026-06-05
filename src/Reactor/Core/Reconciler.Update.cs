@@ -88,6 +88,24 @@ public sealed partial class Reconciler
                 ApplyResourceOverrides(resFeSE, newEl.ResourceOverrides, newEl.ResourceOverrides);
             return null; // null = keep existing control as-is
         }
+
+        // Issue #522 — when the element transitions away from ThemeBindings,
+        // drop the synthesized themed Style we wrote on the previous render.
+        // Without this, e.g. the red Foreground from .Foreground(ThemeRef(
+        // "SystemFillColorCriticalBrush")) on an AsyncValue Error arm bleeds
+        // into the next Loading / Data arm on the recycled control.
+        //
+        // Ownership is tracked via an attached DP storing the Style instance
+        // we wrote (see ReactorAppliedThemeStyleProperty); we deliberately
+        // avoid ConditionalWeakTable per-FrameworkElement tracking (fragile
+        // under RCW churn) and we avoid forcing a fresh Mount (would
+        // needlessly lose subtree state for container elements like
+        // .Background(ThemeRef(...)) on a VStack).
+        if (oldEl.ThemeBindings is not null && newEl.ThemeBindings is null
+            && control is FrameworkElement clearThFe)
+        {
+            ClearThemeBindings(clearThFe);
+        }
         DebugUIElementsModified++;
 
         // Push context values onto scope before processing children

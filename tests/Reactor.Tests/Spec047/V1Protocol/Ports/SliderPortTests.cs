@@ -1,6 +1,5 @@
 using System;
 using Microsoft.UI.Reactor.Core;
-using Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 using Xunit;
 
 namespace Microsoft.UI.Reactor.Tests.Spec047.V1Protocol.Ports;
@@ -12,11 +11,10 @@ namespace Microsoft.UI.Reactor.Tests.Spec047.V1Protocol.Ports;
 public class SliderPortTests
 {
     [Fact]
-    public void BuiltIn_SliderHandler_In_Global_Registry()
+    public void BuiltIn_SliderDescriptor_In_Global_Registry()
     {
-        // Spec 048 §3.4 — test-only BuiltInHandlerBootstrap module
-        // initializer has touched Reg<SliderElement, Slider, SliderHandler>.Done,
-        // installing the closed-generic handler in the global ControlRegistry.
+        // Spec 050 — test-only BuiltInHandlerBootstrap module initializer
+        // now registers Slider through the descriptor-backed handler.
         Assert.True(Microsoft.UI.Reactor.Core.V1Protocol.ControlRegistry.TryResolve(
             typeof(SliderElement), out _));
     }

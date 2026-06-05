@@ -69,7 +69,19 @@ internal static class SelectorBarDescriptor
             get:         static e => e.SelectedIndex,
             set:         static (c, v) =>
             {
-                if (v >= 0 && v < c.Items.Count)
+                // Spec 050: Optional.Of(-1) (or any negative) is the explicit
+                // force-clear sentinel (see SelectorBarElement.SelectedIndex
+                // XML doc and docs/guide/migration/050-optional-t.md). Map it
+                // to SelectedItem = null; readBack via Items.IndexOf returns
+                // -1 for null, so the gate's same-value short-circuit stays
+                // consistent. Optional<int>.Unset never reaches this lambda
+                // (the entry's Optional gate returns early on !HasValue).
+                if (v < 0)
+                {
+                    if (c.SelectedItem is not null)
+                        c.SelectedItem = null;
+                }
+                else if (v < c.Items.Count)
                 {
                     var desired = c.Items[v];
                     if (!ReferenceEquals(c.SelectedItem, desired))

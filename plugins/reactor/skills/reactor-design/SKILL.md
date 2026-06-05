@@ -9,6 +9,13 @@ Author, review, and fix Reactor UI code following Windows 11 design system rules
 
 Reactor is a functional UI framework for WinUI 3 that builds UI entirely in C# — no XAML, no data binding, no ViewModels. UI is described with immutable Element records, composed via bare factory methods imported with `using static Microsoft.UI.Reactor.Factories` (`TextBlock(...)`, `VStack(...)`, etc.), and updated through a React-style reconciler with hooks (`UseState`, `UseEffect`, etc.).
 
+
+> **Controlled prop note:** when design examples use inputs such as
+> `TextBox(value, setValue)` or `Slider(value, ...)`, the factory keeps the
+> simple call-site shape. Direct element-record reads of controlled props now
+> return `Optional<T>`; use `.GetValueOrDefault(...)` or `.Value`. See
+> [`migration/050-optional-t.md`](../../../../docs/guide/migration/050-optional-t.md).
+
 This skill translates the Windows 11 design language into Reactor's C# projection so that apps built with Reactor look, feel, and behave like first-class Windows 11 applications.
 
 ## Workflow

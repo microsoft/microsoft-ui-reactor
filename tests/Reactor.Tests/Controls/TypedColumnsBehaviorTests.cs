@@ -92,7 +92,7 @@ public class TypedColumnsBehaviorTests
         var factory = new TypeRegistry().ResolveEditor(typeof(global::System.Uri), EditorTier.Standard);
         var input = new global::System.Uri("https://example.com");
         var el = (TextBoxElement)factory!(input, v => captured = v);
-        Assert.Contains("example.com", el.Value);
+        Assert.Contains("example.com", el.Value.Value);
         el.OnChanged!.Invoke("https://docs.microsoft.com");
         Assert.IsType<global::System.Uri>(captured);
     }

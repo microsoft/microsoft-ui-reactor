@@ -396,6 +396,14 @@ Properties =
 
 Concrete savings: `Prop.Initial` and `Prop.OneWay` *never* need echo suppression because they don't subscribe to a change event from the engine side. `Prop.Uncontrolled` only ever writes once, so the suppression window is `Mount` only. Only `Prop.Controlled` is the case §8 worries about — and even there, the descriptor knows enough at registration time to drive whichever solution §8 picks (tight diff, suppression, or round-trip; see §8.1).
 
+
+> **Superseded by spec 050:** the controlled-prop authority contract no
+> longer uses plain-`T` `Prop.Controlled` getters. `.Controlled` and
+> `.HandCodedControlled` now require an `Optional<T>` element prop: `Unset`
+> means the control owns the value, `HasValue` means Reactor force-asserts
+> with the echo-suppression protocol described here. `Prop.Initial` shipped
+> as `.InitialOnly`.
+
 This subsumes a real fraction of the §8 audit by construction: if an author marks a prop `Initial` or `OneWay`, no audit is needed for it at all.
 
 #### 6.1.1 `.HandCodedControlled` / `.HandCodedEvent` — multi-event composition (Phase 3 prerequisite)
@@ -444,6 +452,12 @@ The hand-coded shape pays the §9.2 per-control-class payload allocation **exact
 **Source-gen interop.** When source-gen (§7) lands, the generator emits exactly this `.HandCodedControlled` / `.HandCodedEvent` shape from the descriptor declaration. Phase 3 controls authored hand-coded today port forward to source-gen by **deletion of boilerplate**, not rewrite.
 
 See §9.2 for the per-descriptor payload storage shape (the `ControlDescriptor<TElement, TControl, TPayload>` overload).
+
+
+> **Superseded by spec 050:** examples in this section predate the
+> `Optional<T>` controlled-prop authority model. The multi-event guidance
+> still stands, but any `.Controlled` / `.HandCodedControlled` getter now
+> returns `Optional<TValue>` rather than plain `TValue`.
 
 ### 6.2 Modifier × declarative-prop precedence
 
@@ -1308,6 +1322,12 @@ Phase 0 ratified decision criteria for the data-driven questions in [`decision-c
 15. **Hot-reload behavior across descriptor / source-gen approaches.** **Status: Resolved (Phase 0).** Component-definition changes may require a process restart; that is acceptable hot-reload behavior for Reactor. Therefore hot-reload smoothness is **not** an input to Q1's decision matrix — neither shape (descriptor / handler / future source-gen) gets a tiebreaker for "easier hot-reload." L12 still ships as observability in Phase 2 to document actual behavior, but it does not gate any phase or shift Q1's outcome. See [`decision-criteria.md#q15`](047/decision-criteria.md#q15).
 16. **External controls are permanently descriptor-bound.** **Status: Documented in §16 / Appendix A.** A third-party assembly that ships an element record cannot, in general, have the Reactor source generator run on it without the author opting in (`[ReactorControl]` annotation + generator package reference). For cooperating third parties, source-gen works; for non-cooperating cases (a control someone wraps at runtime via `RegisterType`-equivalent), the descriptor / runtime-handler path is permanent. This is not a transitional artifact — it is designed as a permanent surface from day one.
 17. **Registry precedence and subtype behavior.** **Status: Resolved (Phase 0).** Exact-runtime-type lookup only; no assignable / base matches. Duplicate registration (including against a built-in element type) throws at registration time. No open generic registrations in v1. No `RegisterOverride` verb in v1 — additive later if needed. See §2.1 and [`decision-criteria.md#q17`](047/decision-criteria.md#q17).
+
+
+    **Spec 050 note.** Registry precedence is unchanged. The only
+    controlled-prop authoring change layered on top of this Q17 decision is
+    that `.Controlled` / `.HandCodedControlled` getters now return
+    `Optional<T>` so control-owned vs Reactor-owned authority is explicit.
 18. **Pool policy as a public API, not just `ctx.AllocateControl`.** **Status: Resolved (Phase 0); concrete API design lands in Phase 1.** The contract:
     - **Poolability flag.** Descriptors / handlers declare `IsPoolable` explicitly. Controls with persistent native resources or non-resettable state opt out.
     - **Pool key.** `typeof(TControl)` only for v1. Finer keys (e.g., `(typeof(TextBlock), styleKey)`) revisited later.

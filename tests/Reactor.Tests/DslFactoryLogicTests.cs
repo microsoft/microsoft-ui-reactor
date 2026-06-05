@@ -86,7 +86,7 @@ public class DslFactoryLogicTests
     {
         Action<string>? handler = s => { };
         var el = RichEditBox("initial", handler);
-        Assert.Equal("initial", el.Text);
+        Assert.Equal("initial", el.Text.Value);
         Assert.Same(handler, el.OnTextChanged);
     }
 
@@ -98,7 +98,7 @@ public class DslFactoryLogicTests
     public void TextBox_With_All_Parameters()
     {
         var el = TextBox("val", s => { }, "hint", "Header");
-        Assert.Equal("val", el.Value);
+        Assert.Equal("val", el.Value.Value);
         Assert.Equal("hint", el.PlaceholderText);
         Assert.Equal("Header", el.Header);
         Assert.NotNull(el.OnChanged);
@@ -108,7 +108,7 @@ public class DslFactoryLogicTests
     public void PasswordBox_Creates_With_Parameters()
     {
         var el = PasswordBox("secret", null, "Enter password");
-        Assert.Equal("secret", el.Password);
+        Assert.Equal("secret", el.Password.Value);
         Assert.Equal("Enter password", el.PlaceholderText);
     }
 
@@ -116,7 +116,7 @@ public class DslFactoryLogicTests
     public void NumberBox_Creates_With_Value()
     {
         var el = NumberBox(42.5, null, "Count");
-        Assert.Equal(42.5, el.Value);
+        Assert.Equal(42.5, el.Value.Value);
         Assert.Equal("Count", el.Header);
     }
 
@@ -124,7 +124,7 @@ public class DslFactoryLogicTests
     public void AutoSuggestBox_Creates_With_Handlers()
     {
         var el = AutoSuggestBox("query", s => { }, s => { });
-        Assert.Equal("query", el.Text);
+        Assert.Equal("query", el.Text.Value);
         Assert.NotNull(el.OnTextChanged);
         Assert.NotNull(el.OnQuerySubmitted);
     }
@@ -141,7 +141,7 @@ public class DslFactoryLogicTests
     public void Slider_Creates_With_Range()
     {
         var el = Slider(50, 0, 100, null);
-        Assert.Equal(50, el.Value);
+        Assert.Equal(50, el.Value.Value);
         Assert.Equal(0, el.Min);
         Assert.Equal(100, el.Max);
     }
@@ -150,7 +150,7 @@ public class DslFactoryLogicTests
     public void ToggleSwitch_Creates_With_Content()
     {
         var el = ToggleSwitch(true, null, "Yes", "No", "Power");
-        Assert.True(el.IsOn);
+        Assert.True(el.IsOn.Value);
         Assert.Equal("Yes", el.OnContent);
         Assert.Equal("No", el.OffContent);
         Assert.Equal("Power", el.Header);
@@ -160,7 +160,7 @@ public class DslFactoryLogicTests
     public void RatingControl_Creates_With_Value()
     {
         var el = RatingControl(3.5, null);
-        Assert.Equal(3.5, el.Value);
+        Assert.Equal(3.5, el.Value.Value);
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -320,6 +320,6 @@ public class DslFactoryLogicTests
         var el = Expander("Show more", content, true, null);
         Assert.Equal("Show more", el.Header);
         Assert.Same(content, el.Content);
-        Assert.True(el.IsExpanded);
+        Assert.True(el.IsExpanded.Value);
     }
 }

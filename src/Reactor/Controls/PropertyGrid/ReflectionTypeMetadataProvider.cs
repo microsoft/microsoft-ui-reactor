@@ -50,6 +50,7 @@ public static class ReflectionTypeMetadataProvider
         }
 
         var (editorFromAttrs, rendererFromAttrs) = ResolveEditorFromDataAnnotations(property);
+        var isOptional = IsOptionalType(property.PropertyType);
 
         return new FieldDescriptor
         {
@@ -57,19 +58,19 @@ public static class ReflectionTypeMetadataProvider
             DisplayName = attrs.DisplayName,
             FieldType = property.PropertyType,
             GetValue = owner => property.GetValue(owner),
-            SetValue = setter,
+            SetValue = isOptional ? null : setter,
             Category = attrs.Category,
             Description = attrs.Description,
             Order = attrs.Order,
-            IsReadOnly = attrs.IsReadOnly,
+            IsReadOnly = attrs.IsReadOnly || isOptional,
             Width = attrs.Width,
             MinWidth = attrs.MinWidth,
             MaxWidth = attrs.MaxWidth,
             Sortable = attrs.Sortable,
             Filterable = attrs.Filterable,
             Pin = attrs.Pin,
-            Editor = editorFromAttrs,
-            CellRenderer = rendererFromAttrs,
+            Editor = isOptional ? RenderReadOnlyLabel : editorFromAttrs,
+            CellRenderer = isOptional ? RenderReadOnlyCell : rendererFromAttrs,
         };
     }
 
@@ -119,6 +120,15 @@ public static class ReflectionTypeMetadataProvider
 
         return (editor, renderer);
     }
+
+    private static bool IsOptionalType(Type type) =>
+        type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Optional<>);
+
+    private static Element RenderReadOnlyLabel(object value, Action<object> _) =>
+        Microsoft.UI.Reactor.Factories.TextBlock(value?.ToString() ?? "(null)");
+
+    private static Element RenderReadOnlyCell(object value) =>
+        Microsoft.UI.Reactor.Factories.TextBlock(value?.ToString() ?? "(null)");
 
     private static bool IsNumericType(Type t) =>
         t == typeof(int) || t == typeof(long) || t == typeof(short) || t == typeof(byte) ||
@@ -204,23 +214,27 @@ public static class ReflectionTypeMetadataProvider
             }
         }
 
+        var isOptional = IsOptionalType(property.PropertyType);
+
         return new FieldDescriptor
         {
             Name = property.Name,
             DisplayName = attrs.DisplayName,
             FieldType = property.PropertyType,
             GetValue = obj => property.GetValue(obj),
-            SetValue = setter,
+            SetValue = isOptional ? null : setter,
             Category = attrs.Category,
             Description = attrs.Description,
             Order = attrs.Order,
-            IsReadOnly = attrs.IsReadOnly,
+            IsReadOnly = attrs.IsReadOnly || isOptional,
             Width = attrs.Width,
             MinWidth = attrs.MinWidth,
             MaxWidth = attrs.MaxWidth,
             Sortable = attrs.Sortable,
             Filterable = attrs.Filterable,
             Pin = attrs.Pin,
+            Editor = isOptional ? RenderReadOnlyLabel : null,
+            CellRenderer = isOptional ? RenderReadOnlyCell : null,
         };
     }
 

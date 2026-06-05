@@ -284,7 +284,7 @@ public sealed partial class Reconciler
         // so the sync-guard below would let them through.
         if (!double.IsFinite(parsed)) return;
         if (parsed < el.Minimum || parsed > el.Maximum) return;
-        if (AreNumberBoxValuesEquivalent(parsed, el.Value)) return; // already in sync; suppresses post-programmatic-write callback
+        if (el.Value.HasValue && AreNumberBoxValuesEquivalent(parsed, el.Value.Value)) return; // already in sync; suppresses post-programmatic-write callback
         if (CanSynchronizeNumberBoxImmediateValueWithoutReformat(el, text, parsed)
             && !AreNumberBoxValuesEquivalent(box.Value, parsed))
         {

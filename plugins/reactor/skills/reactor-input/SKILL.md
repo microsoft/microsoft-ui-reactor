@@ -9,6 +9,13 @@ Reactor exposes input via **trampoline-dispatched `.On*` modifiers**. Events
 auto-enable their underlying WinUI flags (`ManipulationMode`, `AllowDrop`,
 etc.) when you attach a handler, so you never need to set those manually.
 
+
+> **Controlled prop note:** input factories keep the ergonomic
+> `(value, setter)` shape. The underlying controlled element properties are
+> `Optional<T>` so `Unset` can mean "control-owned"; direct reads need
+> `.Value` or `.GetValueOrDefault(...)`. See
+> [`migration/050-optional-t.md`](../../../../docs/guide/migration/050-optional-t.md).
+
 ## Quick reference
 
 | API | Purpose |

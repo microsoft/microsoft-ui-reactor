@@ -40,6 +40,13 @@ description: "Reactor essentials in one place — React-to-Reactor mental model,
 
 **One important difference:** in Reactor, `UseState` with a `List<T>` won't re-render on `.Add()` — same reference. Use `UseReducer` for lists (just like `useReducer` is preferred in React for complex state).
 
+
+> **Controlled prop note:** the factories shown here still take plain values
+> (`TextBox(text, setText)`, `Slider(value, ...)`) and wrap them for you.
+> Element-record properties behind those factories use `Optional<T>` so
+> `Optional<T>.Unset` can mean "the control owns this value". See
+> [`migration/050-optional-t.md`](../../../../docs/guide/migration/050-optional-t.md).
+
 ## Starting a new app
 
 `dotnet new reactorapp -n <Name>` scaffolds the canonical shape: `App.cs` (entry point + initial component, with the seven-line using block at the top) plus `<Name>.csproj`. See the anti-probe + `mur check` notes under "Use a `.csproj` …" below for what comes out of the scaffold.

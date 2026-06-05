@@ -89,6 +89,13 @@ Rules of thumb:
 - Reset / discard drag state ⇒ `.WithKey($"dock-{epoch}")` bump remounts the host.
 - Layout persistence across launches ⇒ `PersistenceId`, not `OnLiveLayoutChanged`.
 
+
+> **Controlled prop note:** `SelectedIndex`-style element properties are
+> `Optional<int>` under the hood. Factory parameters such as `SelectedIndex:`
+> still accept `int`, but if you read an element record directly use
+> `.Value` or `.GetValueOrDefault(-1)`. See
+> [`migration/050-optional-t.md`](../../../../docs/guide/migration/050-optional-t.md).
+
 ## Building a layout
 
 ```csharp

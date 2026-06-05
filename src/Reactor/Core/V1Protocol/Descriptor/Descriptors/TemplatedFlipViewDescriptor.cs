@@ -66,8 +66,12 @@ internal static class TemplatedFlipViewDescriptor
         }
         .HandCodedControlled<FlipViewEventPayload, int,
             WinUI.SelectionChangedEventHandler>(
-            get:         static el => el.GetSelectedIndex(),
-            set:         static (ctrl, v) => { if (v >= 0) ctrl.SelectedIndex = v; },
+            get:         static el => el.GetControlledSelectedIndex(),
+            // Spec 050: Optional.Of(-1) is the explicit force-clear sentinel.
+            // WinUI FlipView accepts SelectedIndex = -1 as "no selection".
+            // Optional<int>.Unset never reaches this lambda (the entry's
+            // Optional gate returns early on !HasValue).
+            set:         static (ctrl, v) => ctrl.SelectedIndex = v,
             readBack:    static ctrl => ctrl.SelectedIndex,
             subscribe:   static (ctrl, h) => ctrl.SelectionChanged += h,
             // HasCallbacks gates whether the engine subscribes — return a

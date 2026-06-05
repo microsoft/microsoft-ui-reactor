@@ -72,6 +72,7 @@ similar family.
 ```csharp
 // An Element subclass with one controlled prop (Value), three one-way
 // props (MaxRating, Caption, IsClearEnabled), and one callback (OnValueChanged).
+// Controlled props use Optional<T>: Unset means the WinUI control owns the value.
 // Records give the reconciler value-equality for free — two StarMeterElement
 // instances with identical fields compare equal and Update becomes a no-op.
 //
@@ -83,13 +84,13 @@ similar family.
 // expressions still work across the assembly boundary.
 public sealed record StarMeterElement : Element
 {
-    public double Value { get; init; }
+    public Optional<double> Value { get; init; } = Optional<double>.Unset;
     public int MaxRating { get; init; } = 5;
     public string? Caption { get; init; }
     public bool IsClearEnabled { get; init; } = true;
     public System.Action<double>? OnValueChanged { get; init; }
 
-    internal StarMeterElement(double value, System.Action<double>? onValueChanged = null)
+    internal StarMeterElement(Optional<double> value, System.Action<double>? onValueChanged = null)
     {
         Value = value;
         OnValueChanged = onValueChanged;
@@ -125,9 +126,9 @@ Every named property maps to one descriptor entry in Step 2.
 
 | Field | Kind | Why |
 |---|---|---|
-| `Value` | controlled `double` | The user can edit it; the framework writes it; the callback echoes the user's edits. |
+| `Value` | controlled `Optional<double>` | `HasValue` means Reactor force-asserts the value; `Unset` means the WinUI control owns it. |
 | `MaxRating` | one-way `int` | Driven by the element, never edited on the WinUI side. |
-| `Caption` | optional one-way `string?` | Should leave the control's default when the element didn't supply one. |
+| `Caption` | optional one-way `string?` | Demo uses an explicit skip predicate; DP-backed fallbacks should prefer `Optional<T>` + `dp:`. |
 | `IsClearEnabled` | one-way `bool` | Same as MaxRating — declarative knob. |
 | `OnValueChanged` | callback `Action<double>?` | Subscribes only when non-null; the descriptor gates the trampoline on it. |
 
@@ -193,12 +194,11 @@ public static class StarMeterDescriptor
             get:         static e => e.Caption,
             set:         static (c, v) => c.Caption = v!,
             shouldWrite: static e => e.Caption is not null)
-        // Controlled is the two-way binding shape: the framework writes the
-        // element's value at Mount (and on diff), suppresses the echo when
-        // the framework is the writer, and forwards user input back through
-        // OnValueChanged. Subscription is gated on the callback being non-
-        // null — if the caller didn't pass OnValueChanged, no trampoline
-        // is wired and the per-fire dispatch cost stays at zero.
+        // Controlled is the two-way binding shape. Its get lambda returns
+        // Optional<double>: Unset skips framework writes so the control owns
+        // the value; HasValue force-asserts on Mount and Update with echo
+        // suppression, then forwards user input through OnValueChanged.
+        // Subscription is gated on the callback being non-null.
         .Controlled<double, object>(
             get:         static e => e.Value,
             set:         static (c, v) => c.Value = v,
@@ -227,33 +227,62 @@ common shapes:
 `.OneWay(get, set)` — `MaxRating` and `IsClearEnabled`. The
 interpreter writes the value at Mount; on Update it compares the old
 element's value against the new and writes only when the values
-differ. The default comparer is `EqualityComparer<TValue>.Default`;
-pass an explicit comparer to the optional `comparer` parameter for
+differ. Use this for **always-write props with no callback**: the
+element is authoritative and there is no user edit channel to echo.
+The default comparer is `EqualityComparer<TValue>.Default`; pass an
+explicit comparer to the optional `comparer` parameter for
 floating-point tolerance or custom-type equality.
 
-`.OneWayConditional(get, set, shouldWrite)` — `Caption`. When the
-element does not set a caption, the predicate returns `false` and the
-write is skipped, leaving the control's default in place. This is the
-shape to reach for whenever "no value" is a meaningful state — every
-nullable / optional prop in the built-in catalog uses it.
+`.OneWay(get, set, dp:)` — the DP-backed fallback channel. When the
+`get` lambda returns `Optional<T>`, `HasValue` writes through `set`
+and `Unset` calls `ClearValue(dp)`, releasing the local value so
+WinUI's style / template / inherited / default precedence chain can
+win. Use this when the authoring question is **one-way with WinUI
+fallback** (for example, a themeable brush). If there is no DP or the
+predicate is not a simple set-vs-unset choice, keep
+`.OneWayConditional(get, set, shouldWrite)` as the explicit skip-write
+shape.
 
-`.Controlled<TValue, TArgs>(...)` — `Value`. The framework writes
-the element's value on Mount (bare, no echo possible because the
-trampoline is not yet wired). On Update it writes through
-`ReactorBinding.WriteSuppressed` so the WinUI side's synchronous
-`ValueChanged` echo is dropped. On user interaction the trampoline
-reads the live element off the control via the tag, drains the
-suppress counter (which is zero when the user is the writer), and
-calls `OnValueChanged` with the new value. The `subscribe` lambda's
-shape is `(FrameworkElement, EventHandler<TArgs>) → void`; the
-engine boxes the control identity through `FrameworkElement` to keep
-the entry generic across closed-T tuples. `TArgs` is whatever the
-WinUI event carries — for `RatingControl.ValueChanged` the args type
-is `object` because WinUI authors the event with
-`TypedEventHandler<RatingControl, object>`. Subscription is **gated
-on `callback` returning non-null** — if the element doesn't carry
-`OnValueChanged`, no trampoline is wired and the dispatch cost for
-that prop stays at zero.
+`.InitialOnly(get, set)` — the mount-only channel. It writes once at
+Mount and never on Update, the same role React's `defaultValue` plays
+for uncontrolled inputs. Use it for props that seed a control and then
+must hand authority to WinUI forever.
+
+`.Controlled<TValue, TArgs>(...)` — `Value`. Controlled props always
+use an `Optional<TValue>` element field and an Optional-returning
+`get:` lambda. `Unset` returns early on Mount and Update, meaning the
+WinUI control owns the value; `HasValue` force-asserts the element's
+value (bare on Mount, echo-suppressed on Update) and user interaction
+round-trips through the callback. This is Reactor's C# equivalent of
+React's controlled-input split: React can tell `<input>` from
+`<input value={x}>` because JSX preserves prop omission, while C#
+records cannot distinguish an omitted property from a property set to
+its default. `Optional<T>` supplies that missing bit.
+
+Decision tree for descriptor authors:
+
+| Intent | Element prop type | Builder |
+|---|---|---|
+| Controlled with user authority | `Optional<T>` | `.Controlled(...)` / `.HandCodedControlled(...)` |
+| One-way with WinUI fallback | `Optional<T>` | `.OneWay(get, set, dp: SomeControl.SomeProperty)` |
+| Mount-only seed | `T` | `.InitialOnly(get, set)` |
+| Always write, no callback | `T` | `.OneWay(get, set)` |
+
+> **Caveat:** For reference-type optionals, the implicit conversion is deliberate
+> but easy to misread: `with { Background = null }` for an
+> `Optional<Brush>` property becomes `Optional.Of(null)` — an explicit
+> force-assert of `null` — **not** `Optional<Brush>.Unset`. Write
+> `Optional<Brush>.Unset` when the control should own the value.
+
+The `subscribe` lambda's shape is `(FrameworkElement,
+EventHandler<TArgs>) → void`; the engine boxes the control identity
+through `FrameworkElement` to keep the entry generic across closed-T
+tuples. `TArgs` is whatever the WinUI event carries — for
+`RatingControl.ValueChanged` the args type is `object` because WinUI
+authors the event with `TypedEventHandler<RatingControl, object>`.
+Subscription is **gated on `callback` returning non-null** — if the
+element doesn't carry `OnValueChanged`, no trampoline is wired and the
+dispatch cost for that prop stays at zero.
 
 > **Caveat:** The `unsubscribe` lambda is intentionally a no-op body — descriptor
 > trampolines anchor to the control's lifetime, not the element's. The
@@ -336,6 +365,14 @@ public static class StarMeter
     // member of this type, including Of, can be invoked.
     public static StarMeterElement Of(
         double value,
+        System.Action<double>? onValueChanged = null,
+        int maxRating = 5,
+        string? caption = null,
+        bool isClearEnabled = true) =>
+        Of(value, onValueChanged, maxRating, caption, isClearEnabled);
+
+    public static StarMeterElement Of(
+        Optional<double> value,
         System.Action<double>? onValueChanged = null,
         int maxRating = 5,
         string? caption = null,
@@ -452,9 +489,9 @@ collapses two element fields into one WinUI write.
 **Layer in a Reactor-friendly default for an awkward control.** Many
 WinUI controls require an initial property write to "behave"
 (`TextBox.PlaceholderText`, `RatingControl.MaxRating`). Use
-`.Initial(get, set)` to seed those once at Mount without paying the
-diff-and-write cost on Update. The interpreter ignores Initial entries
-on the Update path.
+`.InitialOnly(get, set)` to seed those once at Mount without paying the
+diff-and-write cost on Update. The interpreter ignores InitialOnly
+entries on the Update path.
 
 **Wrap a third-party control whose API is unstable.** Put the
 descriptor in a sealed `static class`, mark every reference to the

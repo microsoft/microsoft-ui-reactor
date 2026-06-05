@@ -36,6 +36,9 @@ namespace Microsoft.UI.Reactor;
 /// </summary>
 public static partial class Factories
 {
+    private static Optional<int> ToOptionalSelectedIndex(int? selectedIndex) =>
+        selectedIndex.HasValue ? Optional<int>.Of(selectedIndex.Value) : Optional<int>.Unset;
+
     // ── Localization ──────────────────────────────────────────────────
 
     public static ComponentElement<Localization.LocaleProviderElement> LocaleProvider(
@@ -138,6 +141,15 @@ public static partial class Factories
     public static RichTextBlockElement RichText(string text) => RichTextBlock(text);
 
     public static RichEditBoxElement RichEditBox(string text = "", Action<string>? onTextChanged = null)
+    {
+        _ = V1.Reg<RichEditBoxElement, WinUI.RichEditBox, Desc.RichEditBoxDescriptorHandler>.Done;
+        return new(Optional<string>.Of(text)) { OnTextChanged = onTextChanged };
+    }
+
+    /// <summary>
+    /// Creates a rich edit box whose text is controlled only when <paramref name="text"/> has a value.
+    /// </summary>
+    public static RichEditBoxElement RichEditBox(Optional<string> text, Action<string>? onTextChanged = null)
     {
         _ = V1.Reg<RichEditBoxElement, WinUI.RichEditBox, Desc.RichEditBoxDescriptorHandler>.Done;
         return new(text) { OnTextChanged = onTextChanged };
@@ -273,6 +285,15 @@ public static partial class Factories
     public static ToggleSplitButtonElement ToggleSplitButton(string label, bool isChecked = false, Action<bool>? onIsCheckedChanged = null, Element? flyout = null)
     {
         _ = V1.Reg<ToggleSplitButtonElement, WinUI.ToggleSplitButton, Desc.ToggleSplitButtonDescriptorHandler>.Done;
+        return new(label, Optional<bool>.Of(isChecked), onIsCheckedChanged, flyout);
+    }
+
+    /// <summary>
+    /// Creates a toggle split button whose checked state is controlled only when <paramref name="isChecked"/> has a value.
+    /// </summary>
+    public static ToggleSplitButtonElement ToggleSplitButton(string label, Optional<bool> isChecked, Action<bool>? onIsCheckedChanged = null, Element? flyout = null)
+    {
+        _ = V1.Reg<ToggleSplitButtonElement, WinUI.ToggleSplitButton, Desc.ToggleSplitButtonDescriptorHandler>.Done;
         return new(label, isChecked, onIsCheckedChanged, flyout);
     }
 
@@ -294,12 +315,29 @@ public static partial class Factories
     /// </summary>
     public static TextBoxElement TextBox(string value, Action<string>? onChanged = null, string? placeholderText = null, string? header = null)
     {
-        // Hand-coded handler (not descriptor-backed) — touch its Reg<> directly.
-        _ = V1.Reg<TextBoxElement, WinUI.TextBox, V1.Handlers.TextBoxHandler>.Done;
+        _ = V1.Reg<TextBoxElement, WinUI.TextBox, Desc.TextBoxDescriptorHandler>.Done;
+        return new(Optional<string>.Of(value), onChanged, placeholderText) { Header = header };
+    }
+
+    /// <summary>
+    /// Creates a text box whose text is controlled only when <paramref name="value"/> has a value.
+    /// </summary>
+    public static TextBoxElement TextBox(Optional<string> value, Action<string>? onChanged = null, string? placeholderText = null, string? header = null)
+    {
+        _ = V1.Reg<TextBoxElement, WinUI.TextBox, Desc.TextBoxDescriptorHandler>.Done;
         return new(value, onChanged, placeholderText) { Header = header };
     }
 
     public static PasswordBoxElement PasswordBox(string password, Action<string>? onPasswordChanged = null, string? placeholderText = null)
+    {
+        _ = V1.Reg<PasswordBoxElement, WinUI.PasswordBox, Desc.PasswordBoxDescriptorHandler>.Done;
+        return new(Optional<string>.Of(password), onPasswordChanged, placeholderText);
+    }
+
+    /// <summary>
+    /// Creates a password box whose password is controlled only when <paramref name="password"/> has a value.
+    /// </summary>
+    public static PasswordBoxElement PasswordBox(Optional<string> password, Action<string>? onPasswordChanged = null, string? placeholderText = null)
     {
         _ = V1.Reg<PasswordBoxElement, WinUI.PasswordBox, Desc.PasswordBoxDescriptorHandler>.Done;
         return new(password, onPasswordChanged, placeholderText);
@@ -308,10 +346,28 @@ public static partial class Factories
     public static NumberBoxElement NumberBox(double value, Action<double>? onValueChanged = null, string? header = null)
     {
         _ = V1.Reg<NumberBoxElement, WinUI.NumberBox, Desc.NumberBoxDescriptorHandler>.Done;
+        return new(Optional<double>.Of(value), onValueChanged, header);
+    }
+
+    /// <summary>
+    /// Creates a number box whose value is controlled only when <paramref name="value"/> has a value.
+    /// </summary>
+    public static NumberBoxElement NumberBox(Optional<double> value, Action<double>? onValueChanged = null, string? header = null)
+    {
+        _ = V1.Reg<NumberBoxElement, WinUI.NumberBox, Desc.NumberBoxDescriptorHandler>.Done;
         return new(value, onValueChanged, header);
     }
 
     public static AutoSuggestBoxElement AutoSuggestBox(string text, Action<string>? onTextChanged = null, Action<string>? onQuerySubmitted = null)
+    {
+        _ = V1.Reg<AutoSuggestBoxElement, WinUI.AutoSuggestBox, Desc.AutoSuggestBoxDescriptorHandler>.Done;
+        return new(Optional<string>.Of(text), onTextChanged, onQuerySubmitted);
+    }
+
+    /// <summary>
+    /// Creates an auto-suggest box whose text is controlled only when <paramref name="text"/> has a value.
+    /// </summary>
+    public static AutoSuggestBoxElement AutoSuggestBox(Optional<string> text, Action<string>? onTextChanged = null, Action<string>? onQuerySubmitted = null)
     {
         _ = V1.Reg<AutoSuggestBoxElement, WinUI.AutoSuggestBox, Desc.AutoSuggestBoxDescriptorHandler>.Done;
         return new(text, onTextChanged, onQuerySubmitted);
@@ -319,18 +375,44 @@ public static partial class Factories
 
     public static CheckBoxElement CheckBox(bool isChecked, Action<bool>? onIsCheckedChanged = null, string? label = null)
     {
-        // Spec 048 §3.4 — decorator-global-path fan-out (see RegDecorator XML).
-        _ = V1.RegDecorator<CheckBoxElement, V1.Handlers.CheckBoxHandler>.Done;
+        _ = V1.Reg<CheckBoxElement, WinUI.CheckBox, Desc.CheckBoxDescriptorHandler>.Done;
+        return new(Optional<bool?>.Of(isChecked), onIsCheckedChanged, label);
+    }
+
+    /// <summary>
+    /// Creates a check box whose checked state is controlled only when <paramref name="isChecked"/> has a value.
+    /// </summary>
+    public static CheckBoxElement CheckBox(Optional<bool?> isChecked, Action<bool>? onIsCheckedChanged = null, string? label = null)
+    {
+        _ = V1.Reg<CheckBoxElement, WinUI.CheckBox, Desc.CheckBoxDescriptorHandler>.Done;
         return new(isChecked, onIsCheckedChanged, label);
     }
 
     public static CheckBoxElement ThreeStateCheckBox(bool? checkedState, Action<bool?>? onCheckedStateChanged = null, string? label = null)
     {
-        _ = V1.RegDecorator<CheckBoxElement, V1.Handlers.CheckBoxHandler>.Done;
-        return new(checkedState == true, Label: label) { IsThreeState = true, CheckedState = checkedState, OnCheckedStateChanged = onCheckedStateChanged };
+        _ = V1.Reg<CheckBoxElement, WinUI.CheckBox, Desc.CheckBoxDescriptorHandler>.Done;
+        return new(Optional<bool?>.Of(checkedState), Label: label) { IsThreeState = true, CheckedState = checkedState, OnCheckedStateChanged = onCheckedStateChanged };
+    }
+
+    /// <summary>
+    /// Creates a three-state check box whose checked state is controlled only when <paramref name="checkedState"/> has a value.
+    /// </summary>
+    public static CheckBoxElement ThreeStateCheckBox(Optional<bool?> checkedState, Action<bool?>? onCheckedStateChanged = null, string? label = null)
+    {
+        _ = V1.Reg<CheckBoxElement, WinUI.CheckBox, Desc.CheckBoxDescriptorHandler>.Done;
+        return new(checkedState, Label: label) { IsThreeState = true, CheckedState = checkedState.HasValue ? checkedState.Value : null, OnCheckedStateChanged = onCheckedStateChanged };
     }
 
     public static RadioButtonElement RadioButton(string label, bool isChecked = false, Action<bool>? onIsCheckedChanged = null, string? groupName = null)
+    {
+        _ = V1.Reg<RadioButtonElement, WinUI.RadioButton, Desc.RadioButtonDescriptorHandler>.Done;
+        return new(label, Optional<bool>.Of(isChecked), onIsCheckedChanged, groupName);
+    }
+
+    /// <summary>
+    /// Creates a radio button whose checked state is controlled only when <paramref name="isChecked"/> has a value.
+    /// </summary>
+    public static RadioButtonElement RadioButton(string label, Optional<bool> isChecked, Action<bool>? onIsCheckedChanged = null, string? groupName = null)
     {
         _ = V1.Reg<RadioButtonElement, WinUI.RadioButton, Desc.RadioButtonDescriptorHandler>.Done;
         return new(label, isChecked, onIsCheckedChanged, groupName);
@@ -339,39 +421,100 @@ public static partial class Factories
     public static RadioButtonsElement RadioButtons(string[] items, int selectedIndex = -1, Action<int>? onSelectedIndexChanged = null)
     {
         _ = V1.Reg<RadioButtonsElement, WinUI.RadioButtons, Desc.RadioButtonsDescriptorHandler>.Done;
+        return new(items, Optional<int>.Of(selectedIndex), onSelectedIndexChanged);
+    }
+
+    /// <summary>
+    /// Creates radio buttons whose selected index is controlled only when <paramref name="selectedIndex"/> has a value.
+    /// </summary>
+    public static RadioButtonsElement RadioButtons(string[] items, Optional<int> selectedIndex, Action<int>? onSelectedIndexChanged = null)
+    {
+        _ = V1.Reg<RadioButtonsElement, WinUI.RadioButtons, Desc.RadioButtonsDescriptorHandler>.Done;
         return new(items, selectedIndex, onSelectedIndexChanged);
     }
 
     public static ComboBoxElement ComboBox(string[] items, int selectedIndex = -1, Action<int>? onSelectedIndexChanged = null)
     {
         _ = V1.Reg<ComboBoxElement, WinUI.ComboBox, Desc.ComboBoxDescriptorHandler>.Done;
+        return new(items, Optional<int>.Of(selectedIndex), onSelectedIndexChanged);
+    }
+
+    /// <summary>
+    /// Creates a combo box whose selected index is controlled only when <paramref name="selectedIndex"/> has a value.
+    /// </summary>
+    public static ComboBoxElement ComboBox(string[] items, Optional<int> selectedIndex, Action<int>? onSelectedIndexChanged = null)
+    {
+        _ = V1.Reg<ComboBoxElement, WinUI.ComboBox, Desc.ComboBoxDescriptorHandler>.Done;
         return new(items, selectedIndex, onSelectedIndexChanged);
     }
 
     public static ComboBoxElement ComboBox(Element[] itemElements, int selectedIndex, Action<int>? onSelectedIndexChanged) =>
-        new([], selectedIndex, onSelectedIndexChanged) { ItemElements = itemElements };
+        ComboBox(itemElements, Optional<int>.Of(selectedIndex), onSelectedIndexChanged);
+
+    /// <summary>
+    /// Creates a combo box from element items whose selected index is controlled only when <paramref name="selectedIndex"/> has a value.
+    /// </summary>
+    public static ComboBoxElement ComboBox(Element[] itemElements, Optional<int> selectedIndex, Action<int>? onSelectedIndexChanged)
+    {
+        _ = V1.Reg<ComboBoxElement, WinUI.ComboBox, Desc.ComboBoxDescriptorHandler>.Done;
+        return new([], selectedIndex, onSelectedIndexChanged) { ItemElements = itemElements };
+    }
 
     public static SliderElement Slider(double value, double min = 0, double max = 100, Action<double>? onValueChanged = null)
     {
-        // Hand-coded handler (not descriptor-backed) — touch its Reg<> directly.
-        _ = V1.Reg<SliderElement, WinUI.Slider, V1.Handlers.SliderHandler>.Done;
+        _ = V1.Reg<SliderElement, WinUI.Slider, Desc.SliderDescriptorHandler>.Done;
+        return new(Optional<double>.Of(value), min, max, onValueChanged);
+    }
+
+    /// <summary>
+    /// Creates a slider whose value is controlled only when <paramref name="value"/> has a value.
+    /// </summary>
+    public static SliderElement Slider(Optional<double> value, double min = 0, double max = 100, Action<double>? onValueChanged = null)
+    {
+        _ = V1.Reg<SliderElement, WinUI.Slider, Desc.SliderDescriptorHandler>.Done;
         return new(value, min, max, onValueChanged);
     }
 
     public static ToggleSwitchElement ToggleSwitch(bool isOn, Action<bool>? onIsOnChanged = null, string? onContent = null, string? offContent = null, string? header = null)
     {
-        // Hand-coded handler (not descriptor-backed) — touch its Reg<> directly.
-        _ = V1.Reg<ToggleSwitchElement, WinUI.ToggleSwitch, V1.Handlers.ToggleSwitchHandler>.Done;
+        _ = V1.Reg<ToggleSwitchElement, WinUI.ToggleSwitch, Desc.ToggleSwitchDescriptorHandler>.Done;
+        return new(Optional<bool>.Of(isOn), onIsOnChanged, onContent, offContent) { Header = header };
+    }
+
+    /// <summary>
+    /// Creates a toggle switch whose on/off state is controlled only when <paramref name="isOn"/> has a value.
+    /// </summary>
+    public static ToggleSwitchElement ToggleSwitch(Optional<bool> isOn, Action<bool>? onIsOnChanged = null, string? onContent = null, string? offContent = null, string? header = null)
+    {
+        _ = V1.Reg<ToggleSwitchElement, WinUI.ToggleSwitch, Desc.ToggleSwitchDescriptorHandler>.Done;
         return new(isOn, onIsOnChanged, onContent, offContent) { Header = header };
     }
 
     public static RatingControlElement RatingControl(double value = 0, Action<double>? onValueChanged = null)
     {
         _ = V1.Reg<RatingControlElement, WinUI.RatingControl, Desc.RatingControlDescriptorHandler>.Done;
+        return new(Optional<double>.Of(value), onValueChanged);
+    }
+
+    /// <summary>
+    /// Creates a rating control whose value is controlled only when <paramref name="value"/> has a value.
+    /// </summary>
+    public static RatingControlElement RatingControl(Optional<double> value, Action<double>? onValueChanged = null)
+    {
+        _ = V1.Reg<RatingControlElement, WinUI.RatingControl, Desc.RatingControlDescriptorHandler>.Done;
         return new(value, onValueChanged);
     }
 
     public static ColorPickerElement ColorPicker(global::Windows.UI.Color color, Action<global::Windows.UI.Color>? onColorChanged = null)
+    {
+        _ = V1.Reg<ColorPickerElement, WinUI.ColorPicker, Desc.ColorPickerDescriptorHandler>.Done;
+        return new(Optional<global::Windows.UI.Color>.Of(color), onColorChanged);
+    }
+
+    /// <summary>
+    /// Creates a color picker whose color is controlled only when <paramref name="color"/> has a value.
+    /// </summary>
+    public static ColorPickerElement ColorPicker(Optional<global::Windows.UI.Color> color, Action<global::Windows.UI.Color>? onColorChanged = null)
     {
         _ = V1.Reg<ColorPickerElement, WinUI.ColorPicker, Desc.ColorPickerDescriptorHandler>.Done;
         return new(color, onColorChanged);
@@ -382,16 +525,43 @@ public static partial class Factories
     public static CalendarDatePickerElement CalendarDatePicker(DateTimeOffset? date = null, Action<DateTimeOffset?>? onDateChanged = null)
     {
         _ = V1.Reg<CalendarDatePickerElement, WinUI.CalendarDatePicker, Desc.CalendarDatePickerDescriptorHandler>.Done;
+        return new(Optional<DateTimeOffset?>.Of(date), onDateChanged);
+    }
+
+    /// <summary>
+    /// Creates a calendar date picker whose date is controlled only when <paramref name="date"/> has a value.
+    /// </summary>
+    public static CalendarDatePickerElement CalendarDatePicker(Optional<DateTimeOffset?> date, Action<DateTimeOffset?>? onDateChanged = null)
+    {
+        _ = V1.Reg<CalendarDatePickerElement, WinUI.CalendarDatePicker, Desc.CalendarDatePickerDescriptorHandler>.Done;
         return new(date, onDateChanged);
     }
 
     public static DatePickerElement DatePicker(DateTimeOffset date, Action<DateTimeOffset>? onDateChanged = null)
     {
         _ = V1.Reg<DatePickerElement, WinUI.DatePicker, Desc.DatePickerDescriptorHandler>.Done;
+        return new(Optional<DateTimeOffset>.Of(date), onDateChanged);
+    }
+
+    /// <summary>
+    /// Creates a date picker whose date is controlled only when <paramref name="date"/> has a value.
+    /// </summary>
+    public static DatePickerElement DatePicker(Optional<DateTimeOffset> date, Action<DateTimeOffset>? onDateChanged = null)
+    {
+        _ = V1.Reg<DatePickerElement, WinUI.DatePicker, Desc.DatePickerDescriptorHandler>.Done;
         return new(date, onDateChanged);
     }
 
     public static TimePickerElement TimePicker(TimeSpan time, Action<TimeSpan>? onTimeChanged = null)
+    {
+        _ = V1.Reg<TimePickerElement, WinUI.TimePicker, Desc.TimePickerDescriptorHandler>.Done;
+        return new(Optional<TimeSpan>.Of(time), onTimeChanged);
+    }
+
+    /// <summary>
+    /// Creates a time picker whose time is controlled only when <paramref name="time"/> has a value.
+    /// </summary>
+    public static TimePickerElement TimePicker(Optional<TimeSpan> time, Action<TimeSpan>? onTimeChanged = null)
     {
         _ = V1.Reg<TimePickerElement, WinUI.TimePicker, Desc.TimePickerDescriptorHandler>.Done;
         return new(time, onTimeChanged);
@@ -611,6 +781,15 @@ public static partial class Factories
     }
 
     public static ExpanderElement Expander(string header, Element content, bool isExpanded = false, Action<bool>? onIsExpandedChanged = null)
+    {
+        _ = V1.RegDecorator<ExpanderElement, V1.Handlers.ExpanderHandler>.Done;
+        return new(header, content, Optional<bool>.Of(isExpanded), onIsExpandedChanged);
+    }
+
+    /// <summary>
+    /// Creates an expander whose expanded state is controlled only when <paramref name="isExpanded"/> has a value.
+    /// </summary>
+    public static ExpanderElement Expander(string header, Element content, Optional<bool> isExpanded, Action<bool>? onIsExpandedChanged = null)
     {
         _ = V1.RegDecorator<ExpanderElement, V1.Handlers.ExpanderHandler>.Done;
         return new(header, content, isExpanded, onIsExpandedChanged);
@@ -857,6 +1036,24 @@ public static partial class Factories
         return new(tabs);
     }
 
+    /// <summary>
+    /// Creates a tab view whose selected index is unset when <paramref name="selectedIndex"/> is <c>null</c>.
+    /// </summary>
+    public static TabViewElement TabView(int? selectedIndex, Action<int>? onSelectedIndexChanged = null, params TabViewItemData[] tabs)
+    {
+        _ = V1.Reg<TabViewElement, WinUI.TabView, Desc.TabViewDescriptorHandler>.Done;
+        return new(tabs) { SelectedIndex = ToOptionalSelectedIndex(selectedIndex), OnSelectedIndexChanged = onSelectedIndexChanged };
+    }
+
+    /// <summary>
+    /// Creates a tab view whose selected index is controlled only when <paramref name="selectedIndex"/> has a value.
+    /// </summary>
+    public static TabViewElement TabView(Optional<int> selectedIndex, Action<int>? onSelectedIndexChanged = null, params TabViewItemData[] tabs)
+    {
+        _ = V1.Reg<TabViewElement, WinUI.TabView, Desc.TabViewDescriptorHandler>.Done;
+        return new(tabs) { SelectedIndex = selectedIndex, OnSelectedIndexChanged = onSelectedIndexChanged };
+    }
+
     public static TabViewItemData Tab(string header, Element content) => new(header, content);
 
     public static BreadcrumbBarElement BreadcrumbBar(BreadcrumbBarItemData[] items, Action<BreadcrumbBarItemData>? onItemClicked = null)
@@ -873,6 +1070,24 @@ public static partial class Factories
         return new(items);
     }
 
+    /// <summary>
+    /// Creates a pivot whose selected index is unset when <paramref name="selectedIndex"/> is <c>null</c>.
+    /// </summary>
+    public static PivotElement Pivot(int? selectedIndex, Action<int>? onSelectedIndexChanged = null, params PivotItemData[] items)
+    {
+        _ = V1.Reg<PivotElement, WinUI.Pivot, Desc.PivotDescriptorHandler>.Done;
+        return new(items) { SelectedIndex = ToOptionalSelectedIndex(selectedIndex), OnSelectedIndexChanged = onSelectedIndexChanged };
+    }
+
+    /// <summary>
+    /// Creates a pivot whose selected index is controlled only when <paramref name="selectedIndex"/> has a value.
+    /// </summary>
+    public static PivotElement Pivot(Optional<int> selectedIndex, Action<int>? onSelectedIndexChanged = null, params PivotItemData[] items)
+    {
+        _ = V1.Reg<PivotElement, WinUI.Pivot, Desc.PivotDescriptorHandler>.Done;
+        return new(items) { SelectedIndex = selectedIndex, OnSelectedIndexChanged = onSelectedIndexChanged };
+    }
+
     public static PivotItemData PivotItem(string header, Element content) => new(header, content);
 
     // ── Collections ─────────────────────────────────────────────────
@@ -883,10 +1098,46 @@ public static partial class Factories
         return new(items);
     }
 
+    /// <summary>
+    /// Creates a list view whose selected index is unset when <paramref name="selectedIndex"/> is <c>null</c>.
+    /// </summary>
+    public static ListViewElement ListView(int? selectedIndex, Action<int>? onSelectedIndexChanged = null, params Element[] items)
+    {
+        _ = V1.Reg<ListViewElement, WinUI.ListView, V1.Handlers.ListViewHandler>.Done;
+        return new(items) { SelectedIndex = ToOptionalSelectedIndex(selectedIndex), OnSelectedIndexChanged = onSelectedIndexChanged };
+    }
+
+    /// <summary>
+    /// Creates a list view whose selected index is controlled only when <paramref name="selectedIndex"/> has a value.
+    /// </summary>
+    public static ListViewElement ListView(Optional<int> selectedIndex, Action<int>? onSelectedIndexChanged = null, params Element[] items)
+    {
+        _ = V1.Reg<ListViewElement, WinUI.ListView, V1.Handlers.ListViewHandler>.Done;
+        return new(items) { SelectedIndex = selectedIndex, OnSelectedIndexChanged = onSelectedIndexChanged };
+    }
+
     public static GridViewElement GridView(params Element[] items)
     {
         _ = V1.Reg<GridViewElement, WinUI.GridView, V1.Handlers.GridViewHandler>.Done;
         return new(items);
+    }
+
+    /// <summary>
+    /// Creates a grid view whose selected index is unset when <paramref name="selectedIndex"/> is <c>null</c>.
+    /// </summary>
+    public static GridViewElement GridView(int? selectedIndex, Action<int>? onSelectedIndexChanged = null, params Element[] items)
+    {
+        _ = V1.Reg<GridViewElement, WinUI.GridView, V1.Handlers.GridViewHandler>.Done;
+        return new(items) { SelectedIndex = ToOptionalSelectedIndex(selectedIndex), OnSelectedIndexChanged = onSelectedIndexChanged };
+    }
+
+    /// <summary>
+    /// Creates a grid view whose selected index is controlled only when <paramref name="selectedIndex"/> has a value.
+    /// </summary>
+    public static GridViewElement GridView(Optional<int> selectedIndex, Action<int>? onSelectedIndexChanged = null, params Element[] items)
+    {
+        _ = V1.Reg<GridViewElement, WinUI.GridView, V1.Handlers.GridViewHandler>.Done;
+        return new(items) { SelectedIndex = selectedIndex, OnSelectedIndexChanged = onSelectedIndexChanged };
     }
 
     public static TreeViewElement TreeView(params TreeViewNodeData[] nodes)
@@ -943,6 +1194,24 @@ public static partial class Factories
     {
         _ = V1.Reg<FlipViewElement, WinUI.FlipView, Desc.FlipViewDescriptorHandler>.Done;
         return new(items);
+    }
+
+    /// <summary>
+    /// Creates a flip view whose selected index is unset when <paramref name="selectedIndex"/> is <c>null</c>.
+    /// </summary>
+    public static FlipViewElement FlipView(int? selectedIndex, Action<int>? onSelectedIndexChanged = null, params Element[] items)
+    {
+        _ = V1.Reg<FlipViewElement, WinUI.FlipView, Desc.FlipViewDescriptorHandler>.Done;
+        return new(items) { SelectedIndex = ToOptionalSelectedIndex(selectedIndex), OnSelectedIndexChanged = onSelectedIndexChanged };
+    }
+
+    /// <summary>
+    /// Creates a flip view whose selected index is controlled only when <paramref name="selectedIndex"/> has a value.
+    /// </summary>
+    public static FlipViewElement FlipView(Optional<int> selectedIndex, Action<int>? onSelectedIndexChanged = null, params Element[] items)
+    {
+        _ = V1.Reg<FlipViewElement, WinUI.FlipView, Desc.FlipViewDescriptorHandler>.Done;
+        return new(items) { SelectedIndex = selectedIndex, OnSelectedIndexChanged = onSelectedIndexChanged };
     }
 
     // ── Dialogs / Overlays ──────────────────────────────────────────
@@ -1521,6 +1790,15 @@ public static partial class Factories
     public static ListBoxElement ListBox(string[] items, int selectedIndex = -1, Action<int>? onSelectedIndexChanged = null)
     {
         _ = V1.Reg<ListBoxElement, WinUI.ListBox, Desc.ListBoxDescriptorHandler>.Done;
+        return new(items) { SelectedIndex = Optional<int>.Of(selectedIndex), OnSelectedIndexChanged = onSelectedIndexChanged };
+    }
+
+    /// <summary>
+    /// Creates a list box whose selected index is controlled only when <paramref name="selectedIndex"/> has a value.
+    /// </summary>
+    public static ListBoxElement ListBox(string[] items, Optional<int> selectedIndex, Action<int>? onSelectedIndexChanged = null)
+    {
+        _ = V1.Reg<ListBoxElement, WinUI.ListBox, Desc.ListBoxDescriptorHandler>.Done;
         return new(items) { SelectedIndex = selectedIndex, OnSelectedIndexChanged = onSelectedIndexChanged };
     }
 
@@ -1529,12 +1807,30 @@ public static partial class Factories
     public static SelectorBarElement SelectorBar(SelectorBarItemData[] items, int selectedIndex = 0, Action<int>? onSelectedIndexChanged = null)
     {
         _ = V1.Reg<SelectorBarElement, WinUI.SelectorBar, Desc.SelectorBarDescriptorHandler>.Done;
+        return new(items) { SelectedIndex = Optional<int>.Of(selectedIndex), OnSelectedIndexChanged = onSelectedIndexChanged };
+    }
+
+    /// <summary>
+    /// Creates a selector bar whose selected index is controlled only when <paramref name="selectedIndex"/> has a value.
+    /// </summary>
+    public static SelectorBarElement SelectorBar(SelectorBarItemData[] items, Optional<int> selectedIndex, Action<int>? onSelectedIndexChanged = null)
+    {
+        _ = V1.Reg<SelectorBarElement, WinUI.SelectorBar, Desc.SelectorBarDescriptorHandler>.Done;
         return new(items) { SelectedIndex = selectedIndex, OnSelectedIndexChanged = onSelectedIndexChanged };
     }
 
     public static SelectorBarItemData SelectorBarItem(string text, string? icon = null) => new(text, icon);
 
     public static PipsPagerElement PipsPager(int numberOfPages, int selectedPageIndex = 0, Action<int>? onSelectedPageIndexChanged = null)
+    {
+        _ = V1.Reg<PipsPagerElement, WinUI.PipsPager, Desc.PipsPagerDescriptorHandler>.Done;
+        return new(numberOfPages) { SelectedPageIndex = Optional<int>.Of(selectedPageIndex), OnSelectedPageIndexChanged = onSelectedPageIndexChanged };
+    }
+
+    /// <summary>
+    /// Creates a pips pager whose selected page index is controlled only when <paramref name="selectedPageIndex"/> has a value.
+    /// </summary>
+    public static PipsPagerElement PipsPager(int numberOfPages, Optional<int> selectedPageIndex, Action<int>? onSelectedPageIndexChanged = null)
     {
         _ = V1.Reg<PipsPagerElement, WinUI.PipsPager, Desc.PipsPagerDescriptorHandler>.Done;
         return new(numberOfPages) { SelectedPageIndex = selectedPageIndex, OnSelectedPageIndexChanged = onSelectedPageIndexChanged };

@@ -276,6 +276,15 @@ internal sealed class ListBoxEventPayload
     public Microsoft.UI.Xaml.Controls.SelectionChangedEventHandler? SelectionChangedTrampoline;
 }
 
+/// <summary>Spec 050 — ListView selected-index and item-click payload for
+/// descriptor-surface coverage. The production ListView path remains the
+/// virtualizing hand-coded handler.</summary>
+internal sealed class ListViewEventPayload
+{
+    public Microsoft.UI.Xaml.Controls.SelectionChangedEventHandler? SelectionChangedTrampoline;
+    public Microsoft.UI.Xaml.Controls.ItemClickEventHandler? ItemClickTrampoline;
+}
+
 /// <summary>Spec 047 §14 Phase 3 completion — GridView selected-index and
 /// item-click payload. SelectionChanged fires both single-index and
 /// multi-select snapshot callbacks; ItemClick maps the clicked item back to

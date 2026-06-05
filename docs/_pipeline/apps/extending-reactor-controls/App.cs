@@ -19,6 +19,7 @@ ReactorApp.Run<ExtendingApp>(
 // <snippet:star-meter-element>
 // An Element subclass with one controlled prop (Value), three one-way
 // props (MaxRating, Caption, IsClearEnabled), and one callback (OnValueChanged).
+// Controlled props use Optional<T>: Unset means the WinUI control owns the value.
 // Records give the reconciler value-equality for free — two StarMeterElement
 // instances with identical fields compare equal and Update becomes a no-op.
 //
@@ -30,13 +31,13 @@ ReactorApp.Run<ExtendingApp>(
 // expressions still work across the assembly boundary.
 public sealed record StarMeterElement : Element
 {
-    public double Value { get; init; }
+    public Optional<double> Value { get; init; } = Optional<double>.Unset;
     public int MaxRating { get; init; } = 5;
     public string? Caption { get; init; }
     public bool IsClearEnabled { get; init; } = true;
     public System.Action<double>? OnValueChanged { get; init; }
 
-    internal StarMeterElement(double value, System.Action<double>? onValueChanged = null)
+    internal StarMeterElement(Optional<double> value, System.Action<double>? onValueChanged = null)
     {
         Value = value;
         OnValueChanged = onValueChanged;
@@ -72,12 +73,11 @@ public static class StarMeterDescriptor
             get:         static e => e.Caption,
             set:         static (c, v) => c.Caption = v!,
             shouldWrite: static e => e.Caption is not null)
-        // Controlled is the two-way binding shape: the framework writes the
-        // element's value at Mount (and on diff), suppresses the echo when
-        // the framework is the writer, and forwards user input back through
-        // OnValueChanged. Subscription is gated on the callback being non-
-        // null — if the caller didn't pass OnValueChanged, no trampoline
-        // is wired and the per-fire dispatch cost stays at zero.
+        // Controlled is the two-way binding shape. Its get lambda returns
+        // Optional<double>: Unset skips framework writes so the control owns
+        // the value; HasValue force-asserts on Mount and Update with echo
+        // suppression, then forwards user input through OnValueChanged.
+        // Subscription is gated on the callback being non-null.
         .Controlled<double, object>(
             get:         static e => e.Value,
             set:         static (c, v) => c.Value = v,
@@ -125,6 +125,14 @@ public static class StarMeter
     // member of this type, including Of, can be invoked.
     public static StarMeterElement Of(
         double value,
+        System.Action<double>? onValueChanged = null,
+        int maxRating = 5,
+        string? caption = null,
+        bool isClearEnabled = true) =>
+        Of(value, onValueChanged, maxRating, caption, isClearEnabled);
+
+    public static StarMeterElement Of(
+        Optional<double> value,
         System.Action<double>? onValueChanged = null,
         int maxRating = 5,
         string? caption = null,

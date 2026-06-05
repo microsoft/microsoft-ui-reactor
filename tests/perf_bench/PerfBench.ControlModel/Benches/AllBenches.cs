@@ -740,6 +740,84 @@ public sealed class M13_SettersSuppressionScope : IBench, ICounterCarrier
     private static readonly Action NoOp = static () => { };
 }
 
+/// <summary>OAlloc — Optional&lt;T&gt; migrated element allocation throughput.</summary>
+public sealed class OptionalElementAllocBench : IBench
+{
+    public string Id => "OAlloc";
+    public string Name => "Optional_Element_Alloc";
+
+    public void RunOne(BenchVariant variant, BenchContext ctx)
+    {
+        var textValue = TextBox("x", static _ => { });
+        var textUnset = TextBox(Optional<string>.Unset, static _ => { });
+        int? gridIndex = 1;
+        var gridValue = GridView(gridIndex, static _ => { }, GridItems);
+        var gridUnset = GridView(Optional<int>.Unset, static _ => { }, GridItems);
+
+        GC.KeepAlive(textValue);
+        GC.KeepAlive(textUnset);
+        GC.KeepAlive(gridValue);
+        GC.KeepAlive(gridUnset);
+    }
+
+    private static readonly Element[] GridItems = Enumerable.Range(0, 100)
+        .Select(static i => TextBlock(i.ToString()))
+        .ToArray();
+}
+
+/// <summary>OUpdate — Optional&lt;T&gt; controlled-prop reconciler update hot path.</summary>
+public sealed class OptionalReconcilerUpdateBench : IBench
+{
+    public string Id => "OUpdate";
+    public string Name => "Optional_Reconciler_Update";
+
+    public void RunOne(BenchVariant variant, BenchContext ctx)
+    {
+        var fixture = ctx.Scratch as Fixture;
+        if (fixture is null)
+        {
+            fixture = new Fixture(ctx);
+            ctx.Scratch = fixture;
+            return;
+        }
+
+        fixture.Update(ctx);
+    }
+
+    private sealed class Fixture
+    {
+        private ToggleSwitchElement _hasValueElement;
+        private ToggleSwitchElement _unsetElement;
+        private readonly UIElement _hasValueControl;
+        private readonly UIElement _unsetControl;
+
+        public Fixture(BenchContext ctx)
+        {
+            _hasValueElement = ToggleSwitch(false, static _ => { }).Margin(0);
+            _unsetElement = ToggleSwitch(Optional<bool>.Unset, static _ => { }).Margin(0);
+            _hasValueControl = ctx.Reconciler.Mount(_hasValueElement, NoOp)!;
+            _unsetControl = ctx.Reconciler.Mount(_unsetElement, NoOp)!;
+            ctx.Parent.Children.Add(_hasValueControl);
+            ctx.Parent.Children.Add(_unsetControl);
+        }
+
+        public void Update(BenchContext ctx)
+        {
+            var alt = (ctx.Iteration & 1) == 0;
+            var nextHasValue = ToggleSwitch(alt, static _ => { }).Margin(alt ? 0 : 1);
+            var nextUnset = ToggleSwitch(Optional<bool>.Unset, static _ => { }).Margin(alt ? 0 : 1);
+
+            ctx.Reconciler.UpdateChild(_hasValueElement, nextHasValue, _hasValueControl, NoOp);
+            ctx.Reconciler.UpdateChild(_unsetElement, nextUnset, _unsetControl, NoOp);
+
+            _hasValueElement = nextHasValue;
+            _unsetElement = nextUnset;
+        }
+    }
+
+    private static readonly Action NoOp = static () => { };
+}
+
 public static class BenchCatalog
 {
     public static IReadOnlyList<IBench> All { get; } = new IBench[]
@@ -757,5 +835,7 @@ public static class BenchCatalog
         new M11_ModifierEHSFrequency(),
         new M12_PoolRentHotPath(),
         new M13_SettersSuppressionScope(),
+        new OptionalElementAllocBench(),
+        new OptionalReconcilerUpdateBench(),
     };
 }

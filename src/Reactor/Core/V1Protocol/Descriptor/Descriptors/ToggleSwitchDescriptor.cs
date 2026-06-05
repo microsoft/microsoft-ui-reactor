@@ -5,8 +5,7 @@ using WinUI = Microsoft.UI.Xaml.Controls;
 namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 
 /// <summary>
-/// Spec 047 §14 Phase 2 (Q1 spike) — descriptor variant of the Phase 1
-/// hand-coded <see cref="V1Protocol.Handlers.ToggleSwitchHandler"/>.
+/// Descriptor-backed ToggleSwitch handler.
 ///
 /// <para>Drives the §13 Q1 head-to-head: same element record, same v1
 /// protocol surface, same dispatch shell — only the body differs. Any
@@ -29,9 +28,8 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <see cref="PropEntry{TElement,TControl}"/>'s
 /// <c>DescriptorControlledPayload</c> fast path. Zero per-mount closures
 /// for the trampoline itself; the per-control subscription is gated by a
-/// typed-payload null check identical in shape to
-/// <c>ToggleSwitchHandler.EnsureToggledWiring</c>. The residual
-/// descriptor-vs-handler gap on M2 (~+9.6%, see
+/// typed-payload null check. The residual
+/// descriptor interpreter overhead on M2 (~+9.6%, see
 /// <c>docs/specs/047/phase2-results/.../2026-05-26-q1-fastpath-3x5-stableac/</c>)
 /// is intrinsic interpreter overhead (virtual <c>PropEntry.Mount</c>
 /// dispatch + getter/setter delegate invocations), not the event path.</para>
@@ -70,3 +68,6 @@ internal static class ToggleSwitchDescriptor
             set:         static (c, v) => c.Header = v,
             shouldWrite: static e => e.Header is not null);
 }
+
+internal sealed class ToggleSwitchDescriptorHandler()
+    : DescriptorHandler<ToggleSwitchElement, WinUI.ToggleSwitch>(ToggleSwitchDescriptor.Descriptor);

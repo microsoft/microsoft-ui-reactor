@@ -77,7 +77,13 @@ internal static class GridViewDescriptor
             shouldWrite: static e => e.ItemContainerStyle is not null)
         .HandCodedControlled<GridViewEventPayload, int, WinUI.SelectionChangedEventHandler>(
             get:         static e => e.SelectedIndex,
-            set:         static (c, v) => { if (v >= 0) c.SelectedIndex = v; },
+            // Spec 050: Optional.Of(-1) is the explicit force-clear sentinel
+            // (see GridViewElement.SelectedIndex XML doc + migration guide).
+            // WinUI accepts SelectedIndex = -1 as "deselect". Optional<int>.Unset
+            // never reaches this lambda (the entry's Optional gate returns
+            // early on !HasValue) so the control stays at its current
+            // selection in the "no force assert" case.
+            set:         static (c, v) => c.SelectedIndex = v,
             readBack:    static c => c.SelectedIndex,
             subscribe:   static (c, h) => c.SelectionChanged += h,
             callback:    static e =>

@@ -17,7 +17,7 @@ public class ThreeStateCheckBoxTests
     public void CheckBox_TwoState_Defaults()
     {
         var el = CheckBox(false, label: "Accept");
-        Assert.False(el.IsChecked);
+        Assert.False(el.IsChecked.Value.GetValueOrDefault());
         Assert.False(el.IsThreeState);
         Assert.Null(el.CheckedState);
         Assert.Null(el.OnCheckedStateChanged);
@@ -52,7 +52,7 @@ public class ThreeStateCheckBoxTests
         var el = ThreeStateCheckBox(true);
         Assert.True(el.IsThreeState);
         Assert.True(el.CheckedState);
-        Assert.True(el.IsChecked); // fallback for compat
+        Assert.True(el.IsChecked.Value.GetValueOrDefault()); // fallback for compat
     }
 
     [Fact]
@@ -61,7 +61,7 @@ public class ThreeStateCheckBoxTests
         var el = ThreeStateCheckBox(false);
         Assert.True(el.IsThreeState);
         Assert.False(el.CheckedState);
-        Assert.False(el.IsChecked);
+        Assert.False(el.IsChecked.Value.GetValueOrDefault());
     }
 
     [Fact]

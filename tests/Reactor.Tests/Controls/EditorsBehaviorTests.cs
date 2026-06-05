@@ -306,7 +306,7 @@ public class EditorsBehaviorTests
     {
         var factory = Editors.CheckBox();
         var el = (CheckBoxElement)factory(null!, _ => { });
-        Assert.False(el.IsChecked);
+        Assert.False(el.IsChecked.Value);
     }
 
     [Fact]
@@ -314,7 +314,7 @@ public class EditorsBehaviorTests
     {
         var factory = Editors.CheckBox();
         var el = (CheckBoxElement)factory(true, _ => { });
-        Assert.True(el.IsChecked);
+        Assert.True(el.IsChecked.Value);
     }
 
     [Fact]
@@ -333,7 +333,7 @@ public class EditorsBehaviorTests
     {
         var factory = Editors.Toggle();
         var el = (ToggleSwitchElement)factory(null!, _ => { });
-        Assert.False(el.IsOn);
+        Assert.False(el.IsOn.Value);
     }
 
     [Fact]
@@ -363,8 +363,8 @@ public class EditorsBehaviorTests
         // The DateTimeOffset's Offset must match the local time zone for
         // this DateTime, not UTC's (0).
         var expected = new DateTimeOffset(DateTime.SpecifyKind(input, DateTimeKind.Local));
-        Assert.Equal(expected.Offset, el.Date.Offset);
-        Assert.Equal(input, el.Date.DateTime);
+        Assert.Equal(expected.Offset, el.Date.Value.Offset);
+        Assert.Equal(input, el.Date.Value.DateTime);
     }
 
     [Fact]
@@ -373,7 +373,7 @@ public class EditorsBehaviorTests
         var factory = Editors.Date();
         var input = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Local);
         var el = (DatePickerElement)factory(input, _ => { });
-        Assert.Equal(input, el.Date.DateTime);
+        Assert.Equal(input, el.Date.Value.DateTime);
     }
 
     [Fact]
@@ -382,7 +382,7 @@ public class EditorsBehaviorTests
         var factory = Editors.Date();
         var input = new DateTimeOffset(2026, 5, 17, 12, 0, 0, TimeSpan.FromHours(-7));
         var el = (DatePickerElement)factory(input, _ => { });
-        Assert.Equal(input, el.Date);
+        Assert.Equal(input, el.Date.Value);
     }
 
     [Fact]
@@ -394,7 +394,7 @@ public class EditorsBehaviorTests
         var before = DateTimeOffset.Now.AddSeconds(-1);
         var el = (DatePickerElement)factory(null!, _ => { });
         var after = DateTimeOffset.Now.AddSeconds(1);
-        Assert.InRange(el.Date.DateTime.Ticks, before.DateTime.Ticks, after.DateTime.Ticks);
+        Assert.InRange(el.Date.Value.DateTime.Ticks, before.DateTime.Ticks, after.DateTime.Ticks);
     }
 
     [Fact]
@@ -416,7 +416,7 @@ public class EditorsBehaviorTests
         var factory = Editors.DateOffset();
         var input = new DateTimeOffset(2026, 3, 15, 10, 0, 0, TimeSpan.FromHours(2));
         var el = (DatePickerElement)factory(input, v => captured = v);
-        Assert.Equal(input, el.Date);
+        Assert.Equal(input, el.Date.Value);
 
         var picked = new DateTimeOffset(2026, 7, 4, 0, 0, 0, TimeSpan.Zero);
         el.OnDateChanged!.Invoke(picked);
@@ -430,7 +430,7 @@ public class EditorsBehaviorTests
         var factory = Editors.DateOffset();
         var before = DateTimeOffset.Now.AddSeconds(-1);
         var el = (DatePickerElement)factory(null!, _ => { });
-        Assert.InRange(el.Date.Ticks, before.Ticks, DateTimeOffset.Now.AddSeconds(1).Ticks);
+        Assert.InRange(el.Date.Value.Ticks, before.Ticks, DateTimeOffset.Now.AddSeconds(1).Ticks);
     }
 
     [Fact]
@@ -443,7 +443,7 @@ public class EditorsBehaviorTests
         var factory = Editors.DateOnly();
         var input = new DateOnly(2026, 5, 17);
         var el = (DatePickerElement)factory(input, v => captured = v);
-        Assert.Equal(input, DateOnly.FromDateTime(el.Date.DateTime));
+        Assert.Equal(input, DateOnly.FromDateTime(el.Date.Value.DateTime));
 
         el.OnDateChanged!.Invoke(new DateTimeOffset(2026, 12, 25, 0, 0, 0, TimeSpan.Zero));
         Assert.IsType<DateOnly>(captured);
@@ -461,7 +461,7 @@ public class EditorsBehaviorTests
         var factory = Editors.DateOnly();
         var el = (DatePickerElement)factory(null!, _ => { });
         var after = DateOnly.FromDateTime(DateTime.Today);
-        var actual = DateOnly.FromDateTime(el.Date.DateTime);
+        var actual = DateOnly.FromDateTime(el.Date.Value.DateTime);
         Assert.True(actual == before || actual == after,
             $"Expected today (before={before}, after={after}), got {actual}.");
     }
@@ -581,7 +581,7 @@ public class EditorsBehaviorTests
     {
         var factory = Editors.Uri();
         var el = (TextBoxElement)factory(new global::System.Uri("https://example.com/path"), _ => { });
-        Assert.Equal("https://example.com/path", el.Value.TrimEnd('/'));
+        Assert.Equal("https://example.com/path", el.Value.Value.TrimEnd('/'));
     }
 
     [Fact]

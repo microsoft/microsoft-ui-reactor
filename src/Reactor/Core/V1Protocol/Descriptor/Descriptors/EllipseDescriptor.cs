@@ -14,7 +14,7 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <para><b>Phase 1 parity note:</b> as with <see cref="RectangleDescriptor"/>
 /// — legacy mount writes <c>StrokeThickness</c> only when <c>&gt; 0</c>;
 /// update writes it unconditionally. The descriptor mirrors the update path
-/// (plain <see cref="ControlDescriptor{TElement,TControl}.OneWay"/>); zero
+/// (plain <c>ControlDescriptor.OneWay</c>); zero
 /// remains the element's default so unset callers observe legacy behavior.</para>
 /// </summary>
 internal static class EllipseDescriptor

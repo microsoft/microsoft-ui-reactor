@@ -48,6 +48,7 @@
       Analyzer ItemGroup form for shape parity with downstream consumers.
     -->
     <ProjectReference Include="..\..\src\Reactor.Compile.Analyzer\Reactor.Compile.Analyzer.csproj" />
+    <ProjectReference Include="..\..\src\Reactor.Analyzers\Reactor.Analyzers.csproj" />
   </ItemGroup>
 
 </Project>

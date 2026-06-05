@@ -9,6 +9,12 @@ Use `Command` when an action shows up in multiple surfaces (toolbar + menu +
 context menu), needs a keyboard shortcut, or needs `CanExecute` disabling.
 Use a bare `Action` for one-off button clicks with no reuse.
 
+
+> **Controlled prop note:** command examples may host controlled inputs such as
+> `TextBox(text, onChange)`. Factory call sites stay plain-valued, but direct
+> reads from migrated element records are `Optional<T>`; see
+> [`migration/050-optional-t.md`](../../../../docs/guide/migration/050-optional-t.md).
+
 ## Command record
 
 ```csharp

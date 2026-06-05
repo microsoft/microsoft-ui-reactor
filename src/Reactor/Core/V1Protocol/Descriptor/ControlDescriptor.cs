@@ -22,7 +22,7 @@ public delegate void AfterChildrenMountCallback<TElement, TControl>(
 ///
 /// <para>A descriptor is the data-driven alternative to a hand-coded
 /// <see cref="IElementHandler{TElement,TControl}"/>. Authors declare
-/// property bindings (<see cref="OneWay{TValue}"/>, <see cref="Initial{TValue}"/>,
+/// property bindings (<c>OneWay</c>, <see cref="InitialOnly{TValue}"/>,
 /// <see cref="Controlled{TValue,TArgs}"/>), an optional children strategy,
 /// and an optional factory; the interpreter
 /// (<see cref="DescriptorHandler{TElement,TControl}"/>) executes them
@@ -36,6 +36,8 @@ public delegate void AfterChildrenMountCallback<TElement, TControl>(
 ///
 /// <para><b>Fluent author pattern:</b>
 /// <code>
+/// public record ToggleSwitchElement(Optional&lt;bool&gt; IsOn = default) : Element;
+///
 /// public static readonly ControlDescriptor&lt;ToggleSwitchElement, ToggleSwitch&gt; Descriptor =
 ///     new ControlDescriptor&lt;ToggleSwitchElement, ToggleSwitch&gt;()
 ///         .OneWay(e => e.OnContent, (c, v) => c.OnContent = v)
@@ -106,6 +108,20 @@ public sealed class ControlDescriptor<TElement, TControl>
         return this;
     }
 
+    /// <summary>Add a one-way property binding for an <see cref="Optional{T}"/>
+    /// element value backed by a dependency property. Explicit values write via
+    /// <paramref name="set"/>; unset values call <see cref="DependencyObject.ClearValue(DependencyProperty)"/>
+    /// for <paramref name="dp"/> so WinUI value precedence can fall back.</summary>
+    public ControlDescriptor<TElement, TControl> OneWay<TValue>(
+        Func<TElement, Optional<TValue>> get,
+        Action<TControl, TValue> set,
+        DependencyProperty dp,
+        IEqualityComparer<TValue>? comparer = null)
+    {
+        _properties.Add(new OneWayClearValuePropEntry<TElement, TControl, TValue>(get, set, dp, comparer));
+        return this;
+    }
+
     /// <summary>Add a one-way property with a "should I write?" predicate.
     /// The write is skipped when the predicate returns false — useful for
     /// nullable props where leaving the control at its default is the
@@ -131,18 +147,34 @@ public sealed class ControlDescriptor<TElement, TControl>
         return this;
     }
 
+    /// <summary>Add an initial-only property binding (write on Mount, never
+    /// on Update). Use for default-value-style props where the control owns
+    /// the value after its initial seed.</summary>
+    public ControlDescriptor<TElement, TControl> InitialOnly<TValue>(
+        Func<TElement, TValue> get,
+        Action<TControl, TValue> set)
+    {
+        _properties.Add(new InitialOnlyPropEntry<TElement, TControl, TValue>(get, set));
+        return this;
+    }
+
+    // Spec 050 Phase 2 intentionally removes the plain-T Controlled overload.
+    // Existing plain-T descriptor getters can still compile through the implicit
+    // T -> Optional<T> conversion; the broad build break starts when Phase 3
+    // changes element-record prop types to Optional<T>.
     /// <summary>Add a controlled (two-way) property binding. The engine
-    /// writes from element state with echo suppression on Update; the
-    /// control raises <paramref name="subscribe"/>'s event on user
-    /// interaction; the trampoline invokes the element's
-    /// <paramref name="callback"/> with <paramref name="readBack"/>'s value.
+    /// writes from element state when <paramref name="get"/> returns a value
+    /// and leaves the control authoritative when it returns <see cref="Optional{T}.Unset"/>;
+    /// writes use echo suppression on Update. The control raises
+    /// <paramref name="subscribe"/>'s event on user interaction; the trampoline
+    /// invokes the element's <paramref name="callback"/> with <paramref name="readBack"/>'s value.
     ///
     /// <para><b>Callback gating:</b> if <paramref name="callback"/> returns
     /// <c>null</c> on the element passed at Mount, no subscription happens
     /// at all — mirrors the hand-coded <c>Ensure*Wiring</c> gate.</para>
     /// </summary>
     public ControlDescriptor<TElement, TControl> Controlled<TValue, TArgs>(
-        Func<TElement, TValue> get,
+        Func<TElement, Optional<TValue>> get,
         Action<TControl, TValue> set,
         Action<FrameworkElement, EventHandler<TArgs>> subscribe,
         Action<FrameworkElement, EventHandler<TArgs>> unsubscribe,
@@ -173,12 +205,12 @@ public sealed class ControlDescriptor<TElement, TControl>
     /// (no <c>EventHandler&lt;TArgs&gt;</c> bridge closure).</para>
     ///
     /// <para>Mount/Update prop-write semantics are identical to
-    /// <see cref="Controlled{TValue,TArgs}"/>: bare initial write,
-    /// suppressed write on element-change OR control-drift. Subscription is
-    /// gated on <paramref name="callback"/> returning non-null on the
-    /// mounted element.</para></summary>
+    /// <see cref="Controlled{TValue,TArgs}"/>: unset skips writes, set values
+    /// perform a bare initial write and a suppressed write on control drift.
+    /// Subscription is gated on <paramref name="callback"/> returning non-null
+    /// on the mounted element.</para></summary>
     public ControlDescriptor<TElement, TControl> HandCodedControlled<TPayload, TValue, TDelegate>(
-        Func<TElement, TValue> get,
+        Func<TElement, Optional<TValue>> get,
         Action<TControl, TValue> set,
         Func<TControl, TValue> readBack,
         Action<TControl, TDelegate> subscribe,
@@ -257,7 +289,7 @@ public sealed class ControlDescriptor<TElement, TControl>
     /// can't express the diff or the write. Imperative entries skip the
     /// engine's value-comparer fast-path, so a misused Imperative entry
     /// re-runs on every render. The other entry shapes
-    /// (<see cref="OneWay{TValue}"/>, <see cref="OneWayConditional{TValue}"/>,
+    /// (<c>OneWay</c>, <see cref="OneWayConditional{TValue}"/>,
     /// <see cref="CoercingOneWay{TValue}"/>, <see cref="HandCodedControlled"/>)
     /// still cover the 95% case.</para>
     ///

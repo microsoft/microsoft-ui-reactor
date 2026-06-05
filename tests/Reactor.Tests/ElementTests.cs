@@ -163,7 +163,7 @@ public class ElementTests
     public void CheckBox_Creates_With_State()
     {
         var el = CheckBox(true, label: "Agree");
-        Assert.True(el.IsChecked);
+        Assert.True(el.IsChecked.Value);
         Assert.Equal("Agree", el.Label);
     }
 
@@ -203,7 +203,7 @@ public class ElementTests
     public void ToggleSwitch_Creates_With_Content()
     {
         var el = ToggleSwitch(true, onContent: "On", offContent: "Off");
-        Assert.True(el.IsOn);
+        Assert.True(el.IsOn.Value);
         Assert.Equal("On", el.OnContent);
         Assert.Equal("Off", el.OffContent);
     }
@@ -342,7 +342,7 @@ public class ElementTests
     {
         var el = Expander("Header", TextBlock("Content"), isExpanded: true);
         Assert.Equal("Header", el.Header);
-        Assert.True(el.IsExpanded);
+        Assert.True(el.IsExpanded.Value);
         Assert.Equal(ExpandDirection.Down, el.ExpandDirection);
     }
 
@@ -364,7 +364,7 @@ public class ElementTests
     {
         var el = TabView(Tab("Tab1", TextBlock("Content1")), Tab("Tab2", TextBlock("Content2")));
         Assert.Equal(2, el.Tabs.Length);
-        Assert.Equal(0, el.SelectedIndex);
+        Assert.False(el.SelectedIndex.HasValue);
     }
 
     [Fact]
@@ -383,7 +383,7 @@ public class ElementTests
     {
         var el = ListView(TextBlock("A"), TextBlock("B"), TextBlock("C"));
         Assert.Equal(3, el.Items.Length);
-        Assert.Equal(-1, el.SelectedIndex);
+        Assert.False(el.SelectedIndex.HasValue);
         Assert.Equal(ListViewSelectionMode.Single, el.SelectionMode);
     }
 

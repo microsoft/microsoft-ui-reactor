@@ -107,6 +107,7 @@ its hook state and the underlying WinUI controls.
 | Change a `Render()` body, add/remove/reorder elements | Preserved — controls patched in place |
 | Edit a value-type or record stored in a hook | Preserved — migrated field-by-field; unmappable fields dropped |
 | Rename a component type / change its identity | Preserved — subtree migrated onto the new instance |
+| Change a stored value's field type, such as `int` → `Optional<int>` | Not migrated — the hot-reload copier matches fields by name and compatible type; restart or remount to cross the schema boundary |
 | **Add, remove, or reorder hook calls** | Reset — the hook list is cleared and re-mounted fresh |
 
 The last row is the unavoidable case: changing the hook *shape* means the

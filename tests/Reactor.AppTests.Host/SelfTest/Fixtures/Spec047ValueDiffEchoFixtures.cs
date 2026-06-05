@@ -346,17 +346,15 @@ internal static class Spec047ValueDiffEchoFixtures
         }
     }
 
-    /// <summary>Regression guard for the guarded-no-op suppression strand.
-    /// GridView's controlled setter is <c>if (v &gt;= 0) c.SelectedIndex = v;</c>.
-    /// Drifting the element to <c>SelectedIndex = -1</c> exercises a write the
-    /// guard drops. GridView/ListBox <c>SelectedIndex</c> is on the causal
-    /// counter (not the §8 value-diff arm — see PR #455 CR item #1 and
-    /// <see cref="GridViewDescriptor"/>), so the regression this fixture guards
-    /// is a stranded <c>WriteSuppressed</c> token surviving the dropped write
-    /// and swallowing a later genuine deselect. Empirically verified (PR #455):
-    /// the echo-suppress counter returns to 0 before the genuine deselect (the
-    /// dropped write leaves nothing armed), so the real deselect still fires.
-    /// This fixture asserts that genuine deselect fires.</summary>
+    /// <summary>Regression guard for the SelectedIndex echo-suppression strand
+    /// invariant. Prior to spec 050, GridView's controlled setter had an
+    /// `if (v >= 0)` guard that silently dropped negative-value writes. Spec 050
+    /// removed that guard so Optional.Of(-1) is the explicit force-clear sentinel
+    /// (see GridViewElement.SelectedIndex XML doc + migration guide). This fixture
+    /// asserts the post-spec-050 invariant: a programmatic Optional.Of(-1) drift
+    /// writes -1 through WriteSuppressed (no echo back to OnSelectedIndexChanged),
+    /// and a subsequent genuine user selection still fires the callback (the
+    /// suppress token did not strand and swallow it).</summary>
     internal class GridViewGuardedNoOpStrand(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
@@ -391,19 +389,20 @@ internal static class Spec047ValueDiffEchoFixtures
                 fireCount = 0;
                 lastIdx = -99;
 
-                // Drift element to -1; the `if (v >= 0)` setter guard drops the
-                // write so the control stays at 0. On the causal counter, the
-                // dropped write must not leave a stranded suppress token (the
-                // echo counter ends at 0 — verified in PR #455 probing).
+                // Spec 050: Optional.Of(-1) is the explicit force-clear sentinel.
+                // The drift writes -1 through WriteSuppressed (the WinUI deselect
+                // SelectionChanged that fires is consumed by the echo gate, so
+                // OnSelectedIndexChanged does NOT fire).
                 rec.UpdateChild(el1, el1 with { SelectedIndex = -1 }, gv, _noOp);
                 await Harness.Render();
-                H.Check("ValueDiff_GridViewStrand_GuardBlockedWrite", gv.SelectedIndex == 0);
+                H.Check("ValueDiff_GridViewStrand_ForceClearWrote", gv.SelectedIndex == -1);
                 H.Check("ValueDiff_GridViewStrand_NoEchoCall", fireCount == 0);
 
-                // Genuine user deselect: must NOT be swallowed by a stranded token.
-                gv.SelectedIndex = -1;
+                // Genuine user selection: must NOT be swallowed by a stranded token.
+                // (-1 → 1 is a real change; -1 → -1 would be a no-op WinUI ignores.)
+                gv.SelectedIndex = 1;
                 await Harness.Render();
-                H.Check("ValueDiff_GridViewStrand_RealDeselectFires", fireCount == 1 && lastIdx == -1);
+                H.Check("ValueDiff_GridViewStrand_RealSelectFires", fireCount == 1 && lastIdx == 1);
 
                 rec.UnmountChild(gv);
                 parent.Children.Clear();

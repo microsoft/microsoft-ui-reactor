@@ -264,6 +264,67 @@ the next render that touches a real modifier will not unwind it. Treat
 `.Set` as one-way: you're driving the control, not letting Reactor
 manage it.
 
+## `Optional<T>` and authority
+
+`Optional<T>` is Reactor's authority marker for controlled props. A
+controlled element property such as `SliderElement.Value` is not just a
+`double`; it is either `Optional.Of(value)` (Reactor is asserting the
+value) or `Optional<double>.Unset` (the WinUI control owns the value).
+This distinction exists because C# records cannot tell "property
+omitted" from "property set to the default" the way JSX can.
+
+### Snap-back recipe
+
+Sometimes the app deliberately wants to clamp a user-editable control
+to a fixed value. Keep the element value `HasValue` and force a
+re-render from the change callback:
+
+```csharp
+public override Element Render()
+{
+    // RenderContext.UseReducer<T>(T initialValue) returns
+    // (T Value, Action<Func<T, T>> Update). Toggling the bool guarantees
+    // a changed reducer result and therefore a re-render.
+    var (_, bump) = UseReducer(false);
+
+    return Slider(
+        value: Optional<double>.Of(5.0),
+        onValueChanged: _ => bump(b => !b));
+}
+```
+
+Flow: the user drags the slider away from 5, the callback toggles the
+reducer state, the next render produces `Optional.Of(5.0)`, and the
+controlled Update gate sees `HasValue` plus drift and writes 5 back
+with echo suppression. Use this only when the snap-back is intentional;
+ordinary inputs should bind to state (`Slider(value, setValue)`) or use
+`Optional<T>.Unset` when the control should own the value.
+
+### `ClearValue` channel for one-way fallback
+
+For DP-backed one-way props, `Optional<T>` also expresses "release the
+local value":
+
+```csharp
+public sealed record CardElement : Element
+{
+    public Optional<Brush?> Background { get; init; } = Optional<Brush?>.Unset;
+}
+
+static readonly ControlDescriptor<CardElement, Border> Descriptor =
+    new ControlDescriptor<CardElement, Border>()
+        .OneWay(
+            get: static e => e.Background,
+            set: static (c, v) => c.Background = v,
+            dp: Border.BackgroundProperty);
+```
+
+`Background = Optional.Of<Brush?>(brush)` writes a local brush;
+`Background = Optional<Brush?>.Unset` calls `ClearValue` so WinUI's
+style, template, inherited value, or registered default can show
+through. Be explicit with nulls: `with { Background = null }` uses the
+implicit conversion and means `Optional.Of(null)`, not `Unset`.
+
 ## Custom hooks
 
 Custom hooks compose existing hooks into reusable shapes. They're

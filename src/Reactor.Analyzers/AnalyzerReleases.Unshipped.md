@@ -15,3 +15,4 @@ REACTOR_A11Y_002 | Microsoft.UI.Reactor.Accessibility | Warning | AccessibilityA
 REACTOR_A11Y_003 | Microsoft.UI.Reactor.Accessibility | Warning | AccessibilityAnalyzers - Form field needs a label
 REACTOR_DSL_001 | Reactor.Dsl | Warning | MissingWithKeyAnalyzer - Dynamic list item missing .WithKey
 REACTOR_POOL_001 | Reactor.Pool | Warning | PoolResetSetAnalyzer - .Set assigns to a property reset on pool return; use the surviving Reactor modifier
+REACTOR0050 | Reactor.Descriptor | Warning | OneWayClearValueAnalyzer - Optional<T> OneWay descriptor entries should provide dp: for ClearValue fallback

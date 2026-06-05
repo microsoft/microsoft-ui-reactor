@@ -13,7 +13,7 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 /// <see cref="Geometry"/> path and the SVG-string <c>PathDataString</c> path
 /// (the latter via the §14 Phase 3 finish Engine (4) <c>.Imperative</c>
 /// entry). All paint / dash / cap / join / transform props use
-/// <see cref="ControlDescriptor{TElement,TControl}.OneWay"/> or
+/// <c>ControlDescriptor.OneWay</c> or
 /// <see cref="ControlDescriptor{TElement,TControl}.OneWayConditional"/>.</para>
 ///
 /// <para><b>Behavior parity vs. legacy:</b> the legacy <c>MountPath</c>

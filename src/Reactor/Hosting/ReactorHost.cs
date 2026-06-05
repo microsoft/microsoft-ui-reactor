@@ -758,7 +758,16 @@ public sealed class ReactorHost : IDisposable
     private void OnActualThemeChanged(FrameworkElement sender, object args)
     {
         _logger?.LogDebug("Theme changed to {Theme} — re-rendering", sender.ActualTheme);
-        Microsoft.UI.Reactor.Core.Reconciler.ClearStyleCache();
+        // Intentionally NOT calling Reconciler.ClearStyleCache() here:
+        //   - Cached Styles are content-addressed (BuildCacheKey over the
+        //     bindings dict) and use {ThemeResource} markup that WinUI
+        //     re-resolves live on theme change — no Style regeneration
+        //     needed for correctness.
+        //   - Issue #522: ClearThemeBindings relies on stable Style identity
+        //     to match fe.Style against the cache via ReferenceEquals. Clearing
+        //     the cache here would create a window where a coincident
+        //     ThemeBindings removal in the same render frame would silently
+        //     fail to drop the prior themed Style.
         RequestRender();
     }
 
