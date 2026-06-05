@@ -2,9 +2,23 @@
 
 Derived from: [`docs/specs/054-windowing-evolution.md`](../054-windowing-evolution.md).
 
-> **Status:** Not started. Spec is design-converged; this tracker decomposes
-> spec §10's seven-phase plan into a step-by-step checklist that can be
-> paused and resumed without losing place.
+> **Status:** Phases 0-9 complete on branch `andersonch/spec-054-windowing-evolution`
+> (3 commits ahead of `origin/main`). Phases 10 (sample-app polish) and 11
+> (devtools + final gate + spec close-out) remain.
+>
+> **Implementation metrics (current branch tip):**
+> - Selftest fixtures: 1,069 baseline → 1,118 (+49 across Phases 1-7).
+> - Unit tests: 9,251 baseline → 9,264 stable; 9,202 passed / 62 skipped.
+> - AOT publish smoke green: `samples/apps/command-palette-window`.
+> - Removed fields (zero residual references in `src/ tests/ samples/ docs/
+>   skills/ plugins/`): `WindowSpec.IsResizable`, `WindowSpec.IsShownInSwitchers`,
+>   `WindowSpec.IsAlwaysOnTop`, `WindowStartPosition.RestoreFromPersistence`.
+>
+> **Resume Phases 10-11:** dispatch a fresh general-purpose background sub-agent
+> per the dispatch templates in
+> `~/.copilot/session-state/fec95418-ea44-48f9-88e6-d6ed2d6b1a87/plan.md`
+> (handoff section at top). If that file is missing, the relevant tasks are
+> below at Phase 10 (lines 825-857) and Phase 11 (lines 859-905).
 >
 > **Conventions** (mirroring `053-reactor-advanced-and-win2d-canvas-implementation.md`):
 > - Every task is a checkbox; mark `[x]` only when its artifact (code +
