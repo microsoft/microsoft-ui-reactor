@@ -1252,6 +1252,10 @@ internal static class SelfTestFixtureRegistry
         "ControlledOptionalTextInputFamily",
         "OneWayClearValue",
         "OptionalEchoStrandRegression",
+        "OptionalThemeInteraction",
+        "OptionalTriStateCheckBox",
+        "OptionalSetterCollision",
+        "InitialOnly",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -2466,6 +2470,10 @@ internal static class SelfTestFixtureRegistry
         "ControlledOptionalTextInputFamily" => new ControlledOptionalTextInputFamilyFixture.Execution(harness),
         "OneWayClearValue" => new OneWayClearValueFixture.Execution(harness),
         "OptionalEchoStrandRegression" => new OptionalEchoStrandRegressionFixture.Execution(harness),
+        "OptionalThemeInteraction" => new OptionalThemeInteractionFixture.Execution(harness),
+        "OptionalTriStateCheckBox" => new OptionalTriStateCheckBoxFixture.Execution(harness),
+        "OptionalSetterCollision" => new OptionalSetterCollisionFixture.Execution(harness),
+        "InitialOnly" => new InitialOnlyFixture.Execution(harness),
 
         _ => null,
     };
