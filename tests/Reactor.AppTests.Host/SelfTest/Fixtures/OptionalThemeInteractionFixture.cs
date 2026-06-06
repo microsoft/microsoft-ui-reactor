@@ -21,6 +21,16 @@ internal static class OptionalThemeInteractionFixture
     {
         public override async Task RunAsync()
         {
+            // Defensive: clear any prior fixture's visual-tree state before
+            // we install raw WinUI DependencyObjects (a fresh Button + two
+            // Styles + three Brushes). Without this isolation, neighboring
+            // popup-heavy fixtures (e.g. OptionalEchoStrandRegression's
+            // AutoSuggestBox) have left WinUI in a state that races with
+            // this fixture's Style swap + ClearValue churn under NativeAOT,
+            // producing a STATUS_STACK_BUFFER_OVERRUN ~0.2% of stress runs.
+            H.SetContent(null);
+            await Harness.Render();
+
             // Two theme-keyed brushes installed as Style fallbacks. The
             // descriptor's .OneWay(...dp:) entry decides between writing a
             // local value (force-assert) and clearing the local value (Unset
@@ -36,55 +46,70 @@ internal static class OptionalThemeInteractionFixture
 
             var button = new WinUI.Button { Content = "theme-target", Style = lightStyle };
             H.SetContent(button);
-            await Harness.Render();
+            try
+            {
+                await Harness.Render();
 
-            var entry = new ControlDescriptor<ThemedElement, WinUI.Button>()
-                .OneWay(e => e.Background, (c, v) => c.Background = v, WinUI.Control.BackgroundProperty)
-                .Properties[0];
+                var entry = new ControlDescriptor<ThemedElement, WinUI.Button>()
+                    .OneWay(e => e.Background, (c, v) => c.Background = v, WinUI.Control.BackgroundProperty)
+                    .Properties[0];
 
-            // Mount with Unset → no local value → style fallback brush flows through.
-            var unsetEl = new ThemedElement(Optional<Brush>.Unset);
-            entry.Mount(button, unsetEl);
-            await Harness.Render();
-            H.Check(
-                "OptionalThemeInteraction_Unset_NoLocalValue",
-                ReferenceEquals(DependencyProperty.UnsetValue, button.ReadLocalValue(WinUI.Control.BackgroundProperty)));
-            H.Check(
-                "OptionalThemeInteraction_Unset_LightStyleFlowsThrough",
-                ReferenceEquals(button.Background, lightBrush));
+                // Mount with Unset → no local value → style fallback brush flows through.
+                var unsetEl = new ThemedElement(Optional<Brush>.Unset);
+                entry.Mount(button, unsetEl);
+                await Harness.Render();
+                H.Check(
+                    "OptionalThemeInteraction_Unset_NoLocalValue",
+                    ReferenceEquals(DependencyProperty.UnsetValue, button.ReadLocalValue(WinUI.Control.BackgroundProperty)));
+                H.Check(
+                    "OptionalThemeInteraction_Unset_LightStyleFlowsThrough",
+                    ReferenceEquals(button.Background, lightBrush));
 
-            // Simulate a theme switch by swapping the Style — equivalent to
-            // RequestedTheme=Dark resolving a different ThemeResource. The
-            // Unset prop should let the new style's default brush flow.
-            button.Style = darkStyle;
-            await Harness.Render();
-            H.Check(
-                "OptionalThemeInteraction_Unset_DarkStyleFlowsThroughAfterSwitch",
-                ReferenceEquals(button.Background, darkBrush));
-            H.Check(
-                "OptionalThemeInteraction_Unset_NoLocalValueAfterSwitch",
-                ReferenceEquals(DependencyProperty.UnsetValue, button.ReadLocalValue(WinUI.Control.BackgroundProperty)));
+                // Simulate a theme switch by swapping the Style — equivalent to
+                // RequestedTheme=Dark resolving a different ThemeResource. The
+                // Unset prop should let the new style's default brush flow.
+                button.Style = darkStyle;
+                await Harness.Render();
+                H.Check(
+                    "OptionalThemeInteraction_Unset_DarkStyleFlowsThroughAfterSwitch",
+                    ReferenceEquals(button.Background, darkBrush));
+                H.Check(
+                    "OptionalThemeInteraction_Unset_NoLocalValueAfterSwitch",
+                    ReferenceEquals(DependencyProperty.UnsetValue, button.ReadLocalValue(WinUI.Control.BackgroundProperty)));
 
-            // Force-assert via Update → local value wins regardless of style.
-            entry.Update(button, unsetEl, new ThemedElement(Optional<Brush>.Of(forceBrush)));
-            await Harness.Render();
-            H.Check(
-                "OptionalThemeInteraction_HasValue_ForcedBrushWinsOverDarkStyle",
-                ReferenceEquals(button.Background, forceBrush));
+                // Force-assert via Update → local value wins regardless of style.
+                entry.Update(button, unsetEl, new ThemedElement(Optional<Brush>.Of(forceBrush)));
+                await Harness.Render();
+                H.Check(
+                    "OptionalThemeInteraction_HasValue_ForcedBrushWinsOverDarkStyle",
+                    ReferenceEquals(button.Background, forceBrush));
 
-            // Swap style back; force-assert local value still wins.
-            button.Style = lightStyle;
-            await Harness.Render();
-            H.Check(
-                "OptionalThemeInteraction_HasValue_ForcedBrushSurvivesStyleSwitch",
-                ReferenceEquals(button.Background, forceBrush));
+                // Swap style back; force-assert local value still wins.
+                button.Style = lightStyle;
+                await Harness.Render();
+                H.Check(
+                    "OptionalThemeInteraction_HasValue_ForcedBrushSurvivesStyleSwitch",
+                    ReferenceEquals(button.Background, forceBrush));
 
-            // Back to Unset → local value cleared → new style flows through.
-            entry.Update(button, new ThemedElement(Optional<Brush>.Of(forceBrush)), unsetEl);
-            await Harness.Render();
-            H.Check(
-                "OptionalThemeInteraction_UnsetAgain_LightStyleRestored",
-                ReferenceEquals(button.Background, lightBrush));
+                // Back to Unset → local value cleared → new style flows through.
+                entry.Update(button, new ThemedElement(Optional<Brush>.Of(forceBrush)), unsetEl);
+                await Harness.Render();
+                H.Check(
+                    "OptionalThemeInteraction_UnsetAgain_LightStyleRestored",
+                    ReferenceEquals(button.Background, lightBrush));
+            }
+            finally
+            {
+                // Detach the raw button + styles + brushes from the visual
+                // tree so the next fixture starts clean. Without this, the
+                // DependencyObjects linger until GC, holding COM-backed
+                // resources whose teardown can race with the next fixture's
+                // mount under NativeAOT.
+                button.ClearValue(WinUI.Control.BackgroundProperty);
+                button.ClearValue(FrameworkElement.StyleProperty);
+                H.SetContent(null);
+                await Harness.Render();
+            }
         }
     }
 

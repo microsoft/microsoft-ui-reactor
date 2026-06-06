@@ -130,8 +130,15 @@ internal sealed class OneWayClearValuePropEntry<TElement, TControl, TValue> : Pr
         var vOpt = _get(el);
         if (vOpt.HasValue)
             _set(ctrl, vOpt.Value);
-        else
+        else if (!ReferenceEquals(ctrl.ReadLocalValue(_dp), DependencyProperty.UnsetValue))
+        {
+            // Mount path skips ClearValue when no local value exists. Fresh
+            // controls and clean pool-reused controls hit this no-op; we
+            // avoid an unnecessary native re-evaluation that has been
+            // implicated in low-rate NativeAOT crashes around style/theme
+            // resolution (OptionalThemeInteraction stress flake).
             ctrl.ClearValue(_dp);
+        }
     }
 
     public override void Update(TControl ctrl, TElement oldEl, TElement newEl)
