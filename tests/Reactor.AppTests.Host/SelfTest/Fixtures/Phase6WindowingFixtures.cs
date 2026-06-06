@@ -83,7 +83,7 @@ internal static class Phase6WindowingFixtures
 
                 progress.Clear();
                 H.Check("TaskbarItem_Progress_ClearedState", progress.State == TaskbarProgressState.None);
-                H.Check("TaskbarItem_Progress_ClearedValue", progress.Value == 0);
+                H.Check("TaskbarItem_Progress_ClearedValue", Math.Abs(progress.Value) < 1e-9);
             }
             finally { await CloseAndSettle(win); }
         }

@@ -51,6 +51,10 @@ internal static class Phase5WindowingFixtures
         await Task.Delay(100);
     }
 
+    // Forced GC + finalizer drain is intentional here. See the comment on
+    // CollectWindowResources in Phase2WindowingFixtures.cs for rationale —
+    // releases accumulated WinRT/COM handles between fixtures to stay under
+    // the WinUI 3 native-handle exhaustion threshold (PR #536 repro).
     private static async Task CollectWindowResources()
     {
         GC.Collect();

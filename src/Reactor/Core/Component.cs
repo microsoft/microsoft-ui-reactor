@@ -116,6 +116,26 @@ public abstract class Component
     protected Task<global::Windows.Storage.StorageFolder?> UseFolderPickerAsync(FolderPickerOptions options)
         => Context.UseFolderPickerAsync(options);
 
+    /// <summary>Subscribes to the host window's position-changed event and re-renders on move. (spec 054 §5.5)</summary>
+    protected (double X, double Y) UseWindowPosition()
+        => Context.UseWindowPosition();
+
+    /// <summary>Returns the current display snapshot and re-renders when the display layout changes. (spec 054 §5.6)</summary>
+    protected IReadOnlyList<Microsoft.UI.Reactor.DisplayInfo> UseDisplays()
+        => Context.UseDisplays();
+
+    /// <summary>Returns a covered hint based on the host window's z-order transitions. (spec 054 §5.5)</summary>
+    protected bool UseIsCovered()
+        => Context.UseIsCovered();
+
+    /// <summary>Applies a lifetime-bound width/height aspect lock to the owning window. (spec 054 §5.2)</summary>
+    protected void UseWindowAspectRatio(double? widthOverHeight)
+        => Context.UseWindowAspectRatio(widthOverHeight);
+
+    /// <summary>Returns a stable callback that starts the framework-managed window drag/move loop. (spec 054 §5.3)</summary>
+    protected Action UseWindowDragMove()
+        => Context.UseWindowDragMove();
+
     /// <summary>
     /// Open or reuse a secondary window keyed by <paramref name="key"/>. Stable
     /// identity across re-renders. (spec 036 §4.3)

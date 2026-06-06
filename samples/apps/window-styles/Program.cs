@@ -39,7 +39,11 @@ internal sealed class WindowStylesPlayground : Component
     {
         var win = UseWindow();
         var (winW, winH) = UseWindowSize();
-        var winPos = win?.Position ?? (0.0, 0.0);
+        // Use UseWindowPosition() (not win?.Position) so the status footer
+        // re-renders live while the user drags/moves the window. The hook
+        // subscribes to PositionChanged and triggers a re-render on each
+        // event, which is the read-back surface this playground showcases.
+        var winPos = UseWindowPosition();
 
         // All adjustable state lives here. Mutators push into the live
         // window via ReactorWindow.Update / targeted setters.

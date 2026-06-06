@@ -60,6 +60,15 @@ internal static class Phase2WindowingFixtures
         await Task.Delay(80);
     }
 
+    // Forced GC + finalizer drain is intentional here, NOT cargo culting:
+    // adding the new spec-054 window fixtures pushed the per-suite
+    // window-open count past a threshold that triggers a documented
+    // WinUI 3 native-handle exhaustion flake (CI repro: PR #536, exit
+    // 0xC0000402 STATUS_HEAP_CORRUPTION between fixtures). Combined-
+    // fixture refactor cut the count substantially; this drain releases
+    // the remaining accumulated WinRT/COM handles between fixtures so
+    // we stay under the threshold. CodeQL flags this as cs/call-to-gc
+    // — acknowledged trade-off vs. test reliability.
     private static async Task CollectWindowResources()
     {
         GC.Collect();

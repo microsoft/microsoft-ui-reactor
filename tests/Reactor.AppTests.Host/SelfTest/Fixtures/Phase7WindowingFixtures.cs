@@ -137,6 +137,10 @@ internal static class Phase7WindowingFixtures
         await CollectWindowResources();
     }
 
+    // Forced GC + finalizer drain is intentional. See the comment on
+    // CollectWindowResources in Phase2WindowingFixtures.cs for rationale.
+    // Uses a longer 100ms drain because Phase 7 fixtures hold more native
+    // resources (custom title bars, picker stubs, multi-hook components).
     private static async Task CollectWindowResources()
     {
         GC.Collect();
@@ -302,11 +306,20 @@ internal static class Phase7WindowingFixtures
                 Invoke(component.FileButton!);
                 var expected = WinRT.Interop.WindowNative.GetWindowHandle(win.NativeWindow);
                 H.Check("UseFilePickerAsync_RoutesThroughPickerService", service.FileCalls == 1 && service.LastHwnd == expected);
-                H.Check("UseFilePickerAsync_RoutesThroughPickerService_Options", service.LastFileOptions?.FileTypeFilter?.FirstOrDefault() == ".txt" && service.LastFileOptions.SuggestedStartLocation == PickerLocationId.PicturesLibrary && service.LastFileOptions.CommitButtonText == "Open Test");
+                var fileOpts = service.LastFileOptions;
+                H.Check("UseFilePickerAsync_RoutesThroughPickerService_Options",
+                    fileOpts is not null
+                    && fileOpts.FileTypeFilter?.FirstOrDefault() == ".txt"
+                    && fileOpts.SuggestedStartLocation == PickerLocationId.PicturesLibrary
+                    && fileOpts.CommitButtonText == "Open Test");
 
                 Invoke(component.FolderButton!);
                 H.Check("UseFolderPickerAsync_RoutesThroughPickerService", service.FolderCalls == 1 && service.LastHwnd == expected);
-                H.Check("UseFolderPickerAsync_RoutesThroughPickerService_Options", service.LastFolderOptions?.SuggestedStartLocation == PickerLocationId.Desktop && service.LastFolderOptions.CommitButtonText == "Select Test");
+                var folderOpts = service.LastFolderOptions;
+                H.Check("UseFolderPickerAsync_RoutesThroughPickerService_Options",
+                    folderOpts is not null
+                    && folderOpts.SuggestedStartLocation == PickerLocationId.Desktop
+                    && folderOpts.CommitButtonText == "Select Test");
             }
             finally
             {

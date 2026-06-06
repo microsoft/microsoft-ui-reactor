@@ -255,8 +255,8 @@ public sealed record WindowSpec
                 throw new ArgumentException("WindowSpec.AspectRatio cannot be combined with SizeToContent.", nameof(SizeToContent));
         }
 
-        if (PersistPlacement && string.IsNullOrEmpty(PersistenceId))
-            throw new ArgumentException("WindowSpec.PersistenceId must be set when PersistPlacement is true.", nameof(PersistenceId));
+        if (PersistPlacement && string.IsNullOrWhiteSpace(PersistenceId))
+            throw new ArgumentException("WindowSpec.PersistenceId must be non-empty (and not whitespace-only) when PersistPlacement is true.", nameof(PersistenceId));
 
         if (Style == WindowStyle.None && !IsMovableByBackground)
             Core.Diagnostics.DiagnosticLog.Warning(

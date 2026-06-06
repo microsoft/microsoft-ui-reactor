@@ -385,7 +385,12 @@ public sealed class ReactorWindow : IDisposable
                 RoundDip(pos.X / scale),
                 RoundDip(pos.Y / scale));
             var prev = Volatile.Read(ref _position);
-            if (prev.X == next.X && prev.Y == next.Y) return false;
+            // RoundDip produces integer-valued doubles, so == would be safe in
+            // practice — but use an epsilon comparison for defense-in-depth
+            // (and to satisfy CodeQL's floating-point-equality rule).
+            const double positionEpsilonDip = 1e-6;
+            if (Math.Abs(prev.X - next.X) < positionEpsilonDip
+                && Math.Abs(prev.Y - next.Y) < positionEpsilonDip) return false;
 
             Volatile.Write(ref _position, next);
             if (raiseEvent)
@@ -1128,7 +1133,7 @@ public sealed class ReactorWindow : IDisposable
     {
         var spec = _spec;
         var sizeRoot = _sizeToContentRoot;
-        bool hasSizeToContent = spec.SizeToContent != WindowSizeToContent.Manual && sizeRoot is not null;
+        bool hasSizeToContent = spec.SizeToContent != WindowSizeToContent.Manual && sizeRoot is FrameworkElement;
 
         // Skip when nothing is constrained — let WinUI's default min/max stand.
         if (spec.MinWidth is null && spec.MinHeight is null
@@ -1156,8 +1161,10 @@ public sealed class ReactorWindow : IDisposable
         // gate — eliminates the post-resize flicker that happens when we
         // correct via AppWindow.Resize from a SizeChanged handler after the
         // OS has already painted the user's drag size. (spec 054 §6.3 R7.)
-        if (hasSizeToContent && sizeRoot is FrameworkElement fwSize)
+        if (hasSizeToContent)
         {
+            // hasSizeToContent guarantees sizeRoot is non-null FrameworkElement.
+            var fwSize = (FrameworkElement)sizeRoot!;
             var desired = ResolveSizeToContentDesiredDip(fwSize);
             if (desired.Width > 0 && desired.Height > 0)
             {
