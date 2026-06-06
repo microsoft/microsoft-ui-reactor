@@ -2,23 +2,19 @@
 
 Derived from: [`docs/specs/054-windowing-evolution.md`](../054-windowing-evolution.md).
 
-> **Status:** Phases 0-9 complete on branch `andersonch/spec-054-windowing-evolution`
-> (3 commits ahead of `origin/main`). Phases 10 (sample-app polish) and 11
-> (devtools + final gate + spec close-out) remain.
+> **Status:** All phases (0-11) complete on branch
+> `andersonch/spec-054-windowing-evolution`. Ready for PR review.
 >
-> **Implementation metrics (current branch tip):**
-> - Selftest fixtures: 1,069 baseline → 1,118 (+49 across Phases 1-7).
-> - Unit tests: 9,251 baseline → 9,264 stable; 9,202 passed / 62 skipped.
+> **Final implementation metrics:**
+> - Selftest fixtures: 1,069 baseline → 1,118 (+49 across Phases 1-7), zero failures.
+> - Unit tests: 9,202 passed / 62 skipped / 0 failed (baseline match).
 > - AOT publish smoke green: `samples/apps/command-palette-window`.
+> - `mur docs compile --no-screenshots` clean; zero docs-template drift.
 > - Removed fields (zero residual references in `src/ tests/ samples/ docs/
->   skills/ plugins/`): `WindowSpec.IsResizable`, `WindowSpec.IsShownInSwitchers`,
+>   skills/ plugins/` outside legitimate WinUI `OverlappedPresenter` /
+>   `AppWindow` API calls and historical spec/migration-doc text):
+>   `WindowSpec.IsResizable`, `WindowSpec.IsShownInSwitchers`,
 >   `WindowSpec.IsAlwaysOnTop`, `WindowStartPosition.RestoreFromPersistence`.
->
-> **Resume Phases 10-11:** dispatch a fresh general-purpose background sub-agent
-> per the dispatch templates in
-> `~/.copilot/session-state/fec95418-ea44-48f9-88e6-d6ed2d6b1a87/plan.md`
-> (handoff section at top). If that file is missing, the relevant tasks are
-> below at Phase 10 (lines 825-857) and Phase 11 (lines 859-905).
 >
 > **Conventions** (mirroring `053-reactor-advanced-and-win2d-canvas-implementation.md`):
 > - Every task is a checkbox; mark `[x]` only when its artifact (code +
@@ -910,15 +906,19 @@ Demonstrates runtime `UseWindowAspectRatio` swap.
 
 ### 11.3 Final triple gate
 
-- [ ] `dotnet build Reactor.slnx -p:Platform=x64` — clean.
-- [ ] `dotnet test tests/Reactor.Tests -p:Platform=x64 --no-build` —
-      green, count matches the baseline from Task 0.2 (modulo migration
-      fixups documented in the PR).
-- [ ] `dotnet run --project tests/Reactor.AppTests.Host -p:Platform=x64 -- --self-test` —
-      green, count = baseline + ~40 new fixtures.
-- [ ] One sample AOT publishes clean (recommend
-      `samples/apps/command-palette-window/`).
-- [ ] `mur docs compile` is a no-op after the docs phase (no drift).
+- [x] `dotnet build Reactor.slnx -p:Platform=x64` — clean.
+- [x] `dotnet test tests/Reactor.Tests -p:Platform=x64 --no-build` —
+      green: 9,202 passed / 62 skipped / 0 failed (baseline match).
+- [x] `dotnet run --project tests/Reactor.AppTests.Host -p:Platform=x64 -- --self-test` —
+      green: 1,118 total fixtures, 0 failures (baseline 1,069 + 49 new).
+- [x] One sample AOT publishes clean
+      (`samples/apps/command-palette-window/` with `PublishAotInternal=true`).
+- [x] `mur docs compile` is a no-op after the docs phase (no drift).
+      Verified with `--no-screenshots --no-ai` (screenshot capture has a
+      pre-existing unrelated stack-overflow in the spec-048
+      `extending-reactor-controls` sample app's `StarMeter` — same on
+      `origin/main` and unrelated to spec-054). `git diff docs/guide/*.md`
+      is empty after a fresh compile.
 
 ### 11.4 Spec close-out
 
