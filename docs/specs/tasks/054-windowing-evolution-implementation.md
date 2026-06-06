@@ -155,7 +155,7 @@ underestimating restore/save gating.
 | --- | --- | --- |
 | R1  | `WM_SIZING` + `WM_GETMINMAXINFO` order: aspect-ratio clamp must run **before** OS re-clamps to min/max, else the user gets a rectangle that's neither correct aspect nor at min/max. Spec §5.2 documents the ordering. | Task 2.2 |
 | R2  | `IsMovableByBackground` interactive-suppression bubble walk must include built-in `Selector` derivatives + arbitrary `Drag(false)` opt-outs, and must not consume `PointerPressed` (clicks on non-interactive bg still need to bubble for tests / a11y). | Task 2.3 |
-| R3  | `BeginDragMove` re-entrancy during an active modal move loop (`GetCapture()` reports a drag in progress) — must no-op, not queue. Spec §11 Q3. | Task 2.3 |
+| R3  | `BeginDragMove` re-entrancy during an active drag — must no-op via `Interlocked.CompareExchange` on a per-window `_dragMoveActive` flag, not queue. Spec §11 Q3. | Task 2.3 |
 | R4  | `ShowInTaskbar` apply at runtime needs `ShowWindow(SW_HIDE)` + `SW_SHOW` to force shell refresh after `WS_EX_TOOLWINDOW` ↔ `WS_EX_APPWINDOW` flip. Risk of activation flicker / focus loss. | Task 3.1 |
 | R5  | `SizeToContent` measure-and-resize feedback loop: resize → layout → SizeChanged → resize. Must guard with a "we're applying" flag, and gate on actual desired-vs-current divergence. | Task 5.1 |
 | R6  | `WindowLevel.Floating` sibling tracking re-uses the spec-036 §9 owned-window registry; must not double-register existing listeners. Open question §11 Q1: should `Floating` also stay above the *owner* (WPF `ToolWindow` does)? **Recommendation: yes, pin in Phase 4 selftest.** | Tasks 0.1, 4.3 |
@@ -379,8 +379,17 @@ First breaking-change phase: removes `IsResizable`.
 ### 2.3 `IsMovableByBackground` + `BeginDragMove` (spec §5.3)
 
 - [x] Add `public bool IsMovableByBackground { get; init; }` to `WindowSpec`.
-- [x] Add `public void BeginDragMove()` to `ReactorWindow`: posts
-      `WM_SYSCOMMAND` with `SC_MOVE | HTCAPTION` on the UI thread.
+- [x] Add `public void BeginDragMove()` to `ReactorWindow`: snapshots
+      `GetCursorPos` + `AppWindow.Position`, then runs a 60Hz
+      `DispatcherQueueTimer` that polls `GetCursorPos` and calls
+      `AppWindow.Move` until `GetAsyncKeyState(VK_LBUTTON)` shows the
+      button is released. (Earlier implementations tried
+      `WM_SYSCOMMAND`+`SC_MOVE|HTCAPTION` and then
+      `WM_NCLBUTTONDOWN`+`HTCAPTION` — both silently fall into the
+      system-menu cursor-track Move mode in WinUI 3 because the
+      top-level HWND never sees a `WM_LBUTTONDOWN`; pointer input is
+      routed through a child `InputSiteBridge` HWND. The polling-timer
+      approach is the only reliable mechanism.)
 - [x] Re-entrancy guard: `GetCapture()` returns non-null → no-op
       (R3 / spec §11 Q3).
 - [x] Install a `PointerPressed` handler on the visual root when
@@ -797,7 +806,7 @@ Tier-C workaround documentation per spec §7.
       template-vs-output drift.
 - [x] Verify all `winui-ref:` links resolve to current Windows App SDK
       docs (`AppWindow`, `OverlappedPresenter`, `DwmSetWindowAttribute`,
-      `WM_SIZING`, `WM_SYSCOMMAND`, `ITaskbarList3`).
+      `WM_SIZING`, `GetCursorPos`/`AppWindow.Move`, `ITaskbarList3`).
 
 ### 8.4 Changelog / migration note
 

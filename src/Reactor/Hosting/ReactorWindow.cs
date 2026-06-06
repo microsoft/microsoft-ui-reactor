@@ -59,8 +59,9 @@ public sealed class ReactorWindow : IDisposable
     //   dispatcher. Swallowing those just hides the developer's bug.
     private static int s_nextId;
 
-    internal static Func<nint>? GetCaptureForTests { get; set; }
-    internal static Action<nint, uint, nuint, nint>? PostMessageForTests { get; set; }
+#pragma warning disable CS0649 // Assigned by test code via InternalsVisibleTo.
+    internal static bool SuppressDragMoveTimerForTests;
+#pragma warning restore CS0649
     internal static int BeginDragMovePostCountForTests;
 
     private readonly string _id;
@@ -558,6 +559,9 @@ public sealed class ReactorWindow : IDisposable
             case WindowStyle.None:
                 op.SetBorderAndTitleBar(false, false);
                 ApplyWindowStyleBits(remove: NativeShell.WS_OVERLAPPEDWINDOW, add: NativeShell.WS_POPUP);
+                // Clear WS_EX_TOOLWINDOW left over from a prior ToolWindow state
+                // so the borderless window doesn't inherit tool-window framing.
+                ApplyExtendedStyleBits(remove: NativeShell.WS_EX_TOOLWINDOW, add: 0);
                 break;
             case WindowStyle.ToolWindow:
                 op.SetBorderAndTitleBar(true, true);
@@ -567,6 +571,10 @@ public sealed class ReactorWindow : IDisposable
             default:
                 op.SetBorderAndTitleBar(true, true);
                 ApplyWindowStyleBits(remove: NativeShell.WS_POPUP, add: NativeShell.WS_OVERLAPPEDWINDOW);
+                // Strip WS_EX_TOOLWINDOW when returning to Default — otherwise
+                // Default→ToolWindow→Default leaves the smaller tool-window
+                // caption set on the window.
+                ApplyExtendedStyleBits(remove: NativeShell.WS_EX_TOOLWINDOW, add: 0);
                 break;
         }
 
@@ -591,8 +599,15 @@ public sealed class ReactorWindow : IDisposable
     {
         long bits = (long)NativeShell.GetWindowLongPtr(_hwnd, NativeShell.GWL_EXSTYLE);
         long updated = (bits & ~remove) | add;
-        if (updated != bits)
-            _ = NativeShell.SetWindowLongPtr(_hwnd, NativeShell.GWL_EXSTYLE, (nint)updated);
+        if (updated == bits) return;
+        _ = NativeShell.SetWindowLongPtr(_hwnd, NativeShell.GWL_EXSTYLE, (nint)updated);
+        // Ex-style changes (e.g. WS_EX_TOOLWINDOW) don't repaint the
+        // non-client area until SetWindowPos is called with SWP_FRAMECHANGED.
+        // Without this, toggling Style between Default and ToolWindow shows
+        // no visible chrome change until the next user resize / focus.
+        _ = NativeShell.SetWindowPos(_hwnd, 0, 0, 0, 0, 0,
+            NativeShell.SWP_NOMOVE | NativeShell.SWP_NOSIZE | NativeShell.SWP_NOZORDER
+            | NativeShell.SWP_NOACTIVATE | NativeShell.SWP_FRAMECHANGED);
     }
 
     private void ApplyCornerStyle(WindowCornerStyle style)
@@ -823,8 +838,12 @@ public sealed class ReactorWindow : IDisposable
             case WindowMessageMonitor.WM_SIZING:
                 _userResized = true;
                 // WM_SIZING precedes WM_GETMINMAXINFO / OS track-size clamping.
-                // We adjust the mutable RECT here, then the OS re-applies min/max
-                // constraints against the adjusted rectangle (spec 054 §5.2 / R1).
+                // Modify the mutable RECT in place; the OS reads it after the
+                // subclass chain returns. DO NOT mark Handled — that skips
+                // DefSubclassProc and bypasses any inner WinUI subclasses,
+                // which then miss the size change and try to "correct" it on
+                // a later message (the source of the AspectRatio flicker).
+                // (spec 054 §5.2 / R1.)
                 ApplyAspectRatioSizing(args.WParam, args.LParam);
                 break;
             case WindowMessageMonitor.WM_EXITSIZEMOVE:
@@ -909,11 +928,19 @@ public sealed class ReactorWindow : IDisposable
     {
         var rect = (RECT*)rectPtr;
         if (rect == null) return;
-        var adjusted = *rect;
+        // Snapshot the USER'S pre-adjusted drag rect — _lastSizingRect must
+        // store this (not our adjusted output) so the next frame's
+        // corner-drag master selection can compare against the user's
+        // actual cursor movement direction. Storing the adjusted rect
+        // creates an oscillation feedback loop where each frame's master
+        // flips and the window's width snaps wildly between drag-width
+        // and (drag-height × ratio). (spec 054 §5.2 / R1 follow-up.)
+        var userRect = *rect;
+        var adjusted = userRect;
         if (ApplyAspectRatioSizing((int)edge, ref adjusted))
         {
             *rect = adjusted;
-            _lastSizingRect = adjusted;
+            _lastSizingRect = userRect;
         }
     }
 
@@ -946,10 +973,16 @@ public sealed class ReactorWindow : IDisposable
 
         int width = Math.Max(1, rect.Right - rect.Left);
         int height = Math.Max(1, rect.Bottom - rect.Top);
+        // Side-edge drags: the user is moving the edge perpendicular to the
+        // axis they want to change. WMSZ_LEFT/RIGHT means they're moving
+        // the WIDTH; keep their width and compute height (widthMaster=true).
+        // WMSZ_TOP/BOTTOM means they're moving the HEIGHT; keep their
+        // height and compute width (widthMaster=false). Corner drags pick
+        // whichever axis moved further from the user's previous drag rect.
         bool widthMaster = edge switch
         {
-            WMSZ_LEFT or WMSZ_RIGHT => false,
-            WMSZ_TOP or WMSZ_BOTTOM => true,
+            WMSZ_LEFT or WMSZ_RIGHT => true,
+            WMSZ_TOP or WMSZ_BOTTOM => false,
             _ => Math.Abs(width - Math.Max(1, previous.Right - previous.Left))
                  >= Math.Abs(height - Math.Max(1, previous.Bottom - previous.Top)),
         };
@@ -1016,8 +1049,13 @@ public sealed class ReactorWindow : IDisposable
     private unsafe void ApplyMinMaxInfo(WindowMessageEventArgs args)
     {
         var spec = _spec;
+        var sizeRoot = _sizeToContentRoot;
+        bool hasSizeToContent = spec.SizeToContent != WindowSizeToContent.Manual && sizeRoot is not null;
+
         // Skip when nothing is constrained — let WinUI's default min/max stand.
-        if (spec.MinWidth is null && spec.MinHeight is null && spec.MaxWidth is null && spec.MaxHeight is null)
+        if (spec.MinWidth is null && spec.MinHeight is null
+            && spec.MaxWidth is null && spec.MaxHeight is null
+            && !hasSizeToContent)
             return;
 
         // Pointer dereferences only — no API call here that throws. An
@@ -1034,6 +1072,36 @@ public sealed class ReactorWindow : IDisposable
         if (spec.MinHeight is { } mnh) info->ptMinTrackSize.Y = DipToPxScalar(mnh);
         if (spec.MaxWidth is { } mxw) info->ptMaxTrackSize.X = DipToPxScalar(mxw);
         if (spec.MaxHeight is { } mxh) info->ptMaxTrackSize.Y = DipToPxScalar(mxh);
+
+        // SizeToContent: clamp min=max to content size for the constrained
+        // axis (or both). Doing it here — at the OS's pre-drag WM_GETMINMAXINFO
+        // gate — eliminates the post-resize flicker that happens when we
+        // correct via AppWindow.Resize from a SizeChanged handler after the
+        // OS has already painted the user's drag size. (spec 054 §6.3 R7.)
+        if (hasSizeToContent && sizeRoot is FrameworkElement fwSize)
+        {
+            var desired = ResolveSizeToContentDesiredDip(fwSize);
+            if (desired.Width > 0 && desired.Height > 0)
+            {
+                var rect = new RECT { Left = 0, Top = 0, Right = DipToPxScalar(desired.Width), Bottom = DipToPxScalar(desired.Height) };
+                long style = (long)NativeShell.GetWindowLongPtr(_hwnd, NativeShell.GWL_STYLE);
+                long exStyle = (long)NativeShell.GetWindowLongPtr(_hwnd, NativeShell.GWL_EXSTYLE);
+                _ = NativeShell.AdjustWindowRectExForDpi(ref rect, unchecked((uint)style), false, unchecked((uint)exStyle), dpi);
+                int wPx = ClampPhysicalDimension(Math.Max(1, rect.Right - rect.Left), spec.MinWidth, spec.MaxWidth);
+                int hPx = ClampPhysicalDimension(Math.Max(1, rect.Bottom - rect.Top), spec.MinHeight, spec.MaxHeight);
+                if (spec.SizeToContent is WindowSizeToContent.Width or WindowSizeToContent.WidthAndHeight)
+                {
+                    info->ptMinTrackSize.X = wPx;
+                    info->ptMaxTrackSize.X = wPx;
+                }
+                if (spec.SizeToContent is WindowSizeToContent.Height or WindowSizeToContent.WidthAndHeight)
+                {
+                    info->ptMinTrackSize.Y = hPx;
+                    info->ptMaxTrackSize.Y = hPx;
+                }
+            }
+        }
+
         args.Handled = true;
         args.Result = 0;
     }
@@ -1540,17 +1608,83 @@ public sealed class ReactorWindow : IDisposable
         Volatile.Write(ref _spec, prev with { AspectRatio = ratio });
     }
 
-    /// <summary>Begin an OS-managed drag/move loop as if the caption had been dragged.</summary>
+    private int _dragMoveActive; // 0 = idle, 1 = drag-in-progress
+
+    /// <summary>Begin a window drag/move loop as if the title bar had been clicked-and-dragged.</summary>
+    /// <remarks>
+    /// Call from a left-button <c>PointerPressed</c> handler. We snapshot the
+    /// initial cursor + window screen position, then run a dispatcher timer
+    /// that polls <c>GetCursorPos</c> at ~60Hz and calls <c>AppWindow.Move</c>
+    /// until <c>GetAsyncKeyState(VK_LBUTTON)</c> reports the button is no
+    /// longer pressed. The timer-based approach is necessary because WinUI 3
+    /// routes pointer input through a child <c>InputSiteBridge</c> HWND, so
+    /// synthesizing <c>WM_NCLBUTTONDOWN</c> (or <c>WM_SYSCOMMAND</c> +
+    /// <c>SC_MOVE | HTCAPTION</c>) on the top-level HWND silently falls into
+    /// keyboard/cursor-track move mode rather than mouse-driven click-drag
+    /// (DefWindowProc doesn't see a recent WM_LBUTTONDOWN message). The
+    /// polling approach is simple, reliable, and doesn't depend on the OS's
+    /// non-client message routing. The trade-off vs. the OS modal drag loop
+    /// is no Aero Snap during the drag — acceptable for the small floating
+    /// windows (command palettes, tool palettes) that need IsMovableByBackground.
+    /// </remarks>
     public void BeginDragMove()
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(BeginDragMove));
         if (_disposed) return;
-        var capture = (GetCaptureForTests ?? NativeWindowing.GetCapture)();
-        if (capture != 0) return;
+        // Re-entrancy: one active drag at a time per window.
+        if (Interlocked.CompareExchange(ref _dragMoveActive, 1, 0) != 0) return;
 
         Interlocked.Increment(ref BeginDragMovePostCountForTests);
-        var post = PostMessageForTests ?? NativeWindowing.PostMessage;
-        post(_hwnd, NativeWindowing.WM_SYSCOMMAND, NativeWindowing.SC_MOVE_HTCAPTION, 0);
+
+        if (SuppressDragMoveTimerForTests)
+        {
+            // Selftest path: leave _dragMoveActive=1 so reentrancy tests can
+            // observe the guard. Tests reset state at fixture teardown.
+            return;
+        }
+
+        if (!NativeWindowing.GetCursorPos(out var startCursor))
+        {
+            Volatile.Write(ref _dragMoveActive, 0);
+            return;
+        }
+        var startWindowPos = _appWindow.Position;
+
+        var timer = _window.DispatcherQueue.CreateTimer();
+        timer.Interval = TimeSpan.FromMilliseconds(16); // ~60Hz follow rate
+        timer.Tick += (_, _) =>
+        {
+            // Stop when the left mouse button is no longer held — that ends
+            // the drag the same way a real title-bar drag does on release.
+            if ((NativeWindowing.GetAsyncKeyState(NativeWindowing.VK_LBUTTON) & 0x8000) == 0)
+            {
+                timer.Stop();
+                Volatile.Write(ref _dragMoveActive, 0);
+                return;
+            }
+            if (_disposed)
+            {
+                timer.Stop();
+                Volatile.Write(ref _dragMoveActive, 0);
+                return;
+            }
+            if (!NativeWindowing.GetCursorPos(out var cursor)) return;
+            var dx = cursor.X - startCursor.X;
+            var dy = cursor.Y - startCursor.Y;
+            try
+            {
+                _appWindow.Move(new global::Windows.Graphics.PointInt32(
+                    startWindowPos.X + dx, startWindowPos.Y + dy));
+            }
+            catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
+            {
+                // Window closing mid-drag — bail out cleanly.
+                timer.Stop();
+                Volatile.Write(ref _dragMoveActive, 0);
+                DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.BeginDragMove.Move", ex);
+            }
+        };
+        timer.Start();
     }
 
     internal bool SimulateBackgroundPointerPressedForTests(DependencyObject source)
@@ -1798,18 +1932,21 @@ public sealed class ReactorWindow : IDisposable
 
     private static class NativeWindowing
     {
-        public const uint WM_SYSCOMMAND = 0x0112;
-        public const nuint SC_MOVE_HTCAPTION = 0xF012;
+        public const int VK_LBUTTON = 0x01;
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct POINT
+        {
+            public int X;
+            public int Y;
+        }
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetCursorPos(out POINT lpPoint);
 
         [DllImport("user32.dll")]
-        public static extern nint GetCapture();
-
-        [DllImport("user32.dll", EntryPoint = "PostMessageW", SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool PostMessageW(nint hWnd, uint msg, nuint wParam, nint lParam);
-
-        public static void PostMessage(nint hWnd, uint msg, nuint wParam, nint lParam)
-            => _ = PostMessageW(hWnd, msg, wParam, lParam);
+        public static extern short GetAsyncKeyState(int vKey);
 
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]

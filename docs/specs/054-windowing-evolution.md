@@ -168,7 +168,7 @@ Already covered by spec 036 (✅), evolving in this spec (▲), missing (❌), o
 | `WindowLevel` enum (Normal/Floating/AlwaysOnTop/Overlay) | only `IsAlwaysOnTop` bool | ▲ §6.4 partial — 3 useful tiers, not NSWindow's level stack |
 | `SizeToContent` | none — manual `SetSize` after measure | ▲ §6.3 |
 | `AspectRatio` | none | ▲ §5.2 (rock-solid via `WM_SIZING`) |
-| `IsMovableByBackground` / `DragMove()` | none | ▲ §5.3 (rock-solid via `WM_SYSCOMMAND`/`SC_MOVE`+`HTCAPTION`) |
+| `IsMovableByBackground` / `DragMove()` | none | ▲ §5.3 (`GetCursorPos`-polled `AppWindow.Move` driven from `PointerPressed`; `WM_NCLBUTTONDOWN` synthesis is unreliable under WinUI 3) |
 | `CornerRadius` | none on `WindowSpec` | ▲ §6.2 — discrete (`Default`/`Square`/`Rounded`/`Small`) via `DWMWA_WINDOW_CORNER_PREFERENCE`; arbitrary radius rejected (§7.2) |
 | `IsHitTestVisible` (click-through) | `WindowSpec.IgnorePointerInput` + opacity prereq | ✅ (already shipped for tear-off; document for general use) |
 | `Opacity` 0..1 | `WindowSpec.Opacity` | ✅ |
@@ -195,8 +195,9 @@ question separates "ship and forget" from "ship with footnotes."
 
 - **Tier A — rock solid.** The OS has a stable, well-documented mechanism;
   Reactor adds an idiomatic shape over it. No surprises. **Default
-  shipping target.** Examples: `WM_SIZING` for aspect ratio, `WM_SYSCOMMAND`
-  + `SC_MOVE` for drag-from-anywhere, `DwmSetWindowAttribute` for corner
+  shipping target.** Examples: `WM_SIZING` for aspect ratio,
+  `GetCursorPos`-polled `AppWindow.Move` for drag-from-anywhere,
+  `DwmSetWindowAttribute` for corner
   preference, `AppWindow.Position` for read-back.
 - **Tier B — works, with documented constraints.** The OS supports it but
   with caveats users should know about (e.g. `SizeToContent` needs a full
@@ -307,17 +308,34 @@ file). Mirrors into `_spec` like other live setters.
 
 ### 5.3 `IsMovableByBackground` — drag-from-anywhere
 
-**Platform quality: Tier A.** Two clean implementations exist:
+**Platform quality: Tier A.** The reliable mechanism in WinUI 3 is a
+**`GetCursorPos` polling drag** driven from a `PointerPressed` handler:
 
-1. `WM_NCLBUTTONDOWN` synthesis: post `WM_SYSCOMMAND` with
-   `SC_MOVE | HTCAPTION` from a `PointerPressed` handler on the root.
-   The OS then runs its own modal move loop — same one used for normal
-   title-bar drag. Pixel-perfect smooth, snap-aware, multi-monitor-aware,
-   handles Aero Snap layouts.
-2. `InputNonClientPointerSource` drag regions covering the client area.
-   Works but requires opting the whole client area out of input.
+1. On `PointerPressed` (left button, root element, no interactive
+   suppression): snapshot `GetCursorPos()` and `AppWindow.Position`,
+   then start a `DispatcherQueueTimer` (~60Hz).
+2. Each tick: if `GetAsyncKeyState(VK_LBUTTON)` shows the button is no
+   longer held, stop. Otherwise, `GetCursorPos()` and
+   `AppWindow.Move(initialWindowPos + cursorDelta)`.
 
-Approach (1) is materially simpler and is what WinUIEx does. Pick (1).
+Why not `WM_NCLBUTTONDOWN` + `HTCAPTION` (the WPF/WinForms `DragMove`
+trick)? In WinUI 3 the top-level HWND never sees the `WM_LBUTTONDOWN`
+that `DefWindowProc` looks for to enter mouse-track drag mode — pointer
+input is routed through a child `InputSiteBridge` HWND. The synthesized
+`WM_NCLBUTTONDOWN` silently falls back to the system-menu
+cursor-follow Move mode (click does nothing; releasing then moving
+the mouse moves the window), which is the wrong UX.
+`WM_SYSCOMMAND`+`SC_MOVE|HTCAPTION` has the same problem for the
+same reason. `Window.SetTitleBar(root)` works for drag but doesn't
+reliably auto-exclude nested interactive controls (`TextBox` text
+selection, etc.) — fine for a thin caption strip, wrong here.
+
+The polling-timer approach is simple, reliable, and lets WinUI's normal
+input routing handle interactive controls correctly (a `PointerPressed`
+marked `Handled` by a `TextBox`/`Button` never reaches the root
+handler). The trade-off vs. an OS-modal drag loop is **no Aero Snap
+during the drag** — acceptable for the small floating windows
+(command palettes, tool palettes) that need `IsMovableByBackground`.
 
 Surface:
 
@@ -330,7 +348,10 @@ Plus a method for ad-hoc drag (e.g. from a custom toolbar):
 ```csharp
 public sealed class ReactorWindow
 {
-    public void BeginDragMove();   // Posts WM_SYSCOMMAND SC_MOVE|HTCAPTION immediately
+    public void BeginDragMove();   // GetCursorPos baseline + 60Hz DispatcherQueueTimer
+                                   // polling AppWindow.Move until GetAsyncKeyState(VK_LBUTTON)
+                                   // shows the button is released. Returns immediately;
+                                   // re-entrant calls while a drag is active no-op.
 }
 ```
 
@@ -1297,7 +1318,7 @@ response.
 | `WindowLevel.Overlay` | ❌ rejected (no Win32 tier) | §7.3 |
 | `SizeToContent` | ▲ new enum | §6.3 |
 | `AspectRatio` | ▲ new field + `WM_SIZING` | §5.2 |
-| `IsMovableByBackground` | ▲ new field + `WM_SYSCOMMAND` | §5.3 |
+| `IsMovableByBackground` | ▲ new field + `GetCursorPos`-polled `AppWindow.Move` | §5.3 |
 | `CornerRadius` (arbitrary) | ❌ rejected | §7.2 |
 | `CornerStyle` (discrete) | ▲ new enum (DWM) | §6.2 |
 | `IsHitTestVisible` / click-through | ✅ shipped via `IgnorePointerInput` | — |

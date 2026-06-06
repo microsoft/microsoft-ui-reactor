@@ -578,6 +578,7 @@ T.CenterPoint<T>(Vector3 center) → T
 T.ConnectedAnimation<T>(string key) → T
 T.CornerRadius<T>(double radius) → T
 T.CornerRadius<T>(double topLeft, double topRight, double bottomRight, double bottomLeft) → T
+T.Drag<T>(bool enabled) → T
 T.DraggableWhen<T>(Func<bool> canDrag) → T
 T.Flex<T>(double grow = 0, double shrink = 1, double? basis = null, double? minWidth = null, double? minHeight = null, FlexAlign? alignSelf = null, FlexPositionType position = FlexPositionType.Relative, double? left = null, double? top = null, double? right = null, double? bottom = null) → T
 T.FocusMeta<T>(FocusManager fm, string fieldName, bool autoFocus = false) → T
@@ -844,6 +845,7 @@ RenderContext.UseContext<T>(Context<T> context) → T
 RenderContext.UseDataSource<T>(IDataSource<T> source, DataRequest request, InfiniteResourceOptions options = null, IHookDispatcher dispatcher = null) → InfiniteResource<T>
 RenderContext.UseDataSource<T>(IDataSource<T> source, DataRequest request, QueryCache cache, InfiniteResourceOptions options = null, IHookDispatcher dispatcher = null) → InfiniteResource<T>
 RenderContext.UseDevtools() → bool
+RenderContext.UseDisplays() → IReadOnlyList<DisplayInfo>
 RenderContext.UseDockHost() → DockHostModel
 RenderContext.UseDockLayout() → DockLayoutSnapshot
 RenderContext.UseDockPanePersisted<T>(string key, T initialValue) → ValueTuple<T, Action<T>>
@@ -853,8 +855,10 @@ RenderContext.UseEffect(Action effect, object[] dependencies) → void
 RenderContext.UseEffect(Func<Action> effectWithCleanup, object[] dependencies) → void
 RenderContext.UseElementFocus(FocusState state = FocusState.Programmatic) → ValueTuple<ElementRef, Action>
 RenderContext.UseElementRef<T>() → ElementRef<T>
+RenderContext.UseFilePickerAsync(FilePickerOptions options) → Task<StorageFile>
 RenderContext.UseFocus() → FocusManager
 RenderContext.UseFocusTrap(bool isActive) → FocusTrapHandle
+RenderContext.UseFolderPickerAsync(FolderPickerOptions options) → Task<StorageFolder>
 RenderContext.UseHighContrast() → bool
 RenderContext.UseHighContrastScheme() → string
 RenderContext.UseInfiniteResource<TItem, TCursor>(Func<TCursor, CancellationToken, Task<Page<TItem, TCursor>>> fetchPage, QueryCache cache, object[] deps, InfiniteResourceOptions options = null, IHookDispatcher dispatcher = null, Func<int, TCursor> cursorFromPageIndex = null) → InfiniteResource<TItem>
@@ -862,6 +866,7 @@ RenderContext.UseInfiniteResource<TItem, TCursor>(Func<TCursor, CancellationToke
 RenderContext.UseIntl() → IntlAccessor
 RenderContext.UseIsActive() → bool
 RenderContext.UseIsActivePane() → bool
+RenderContext.UseIsCovered() → bool
 RenderContext.UseIsDarkTheme() → bool
 RenderContext.UseMemo<T>(Func<T> factory, object[] dependencies) → T
 RenderContext.UseMemoCells<T>(IReadOnlyList<T> items, Func<T, int, Element> builder, object[] dependencies) → Element[]
@@ -890,6 +895,9 @@ RenderContext.UseSystemBackButton<TRoute>(NavigationHandle<TRoute> nav, Window w
 RenderContext.UseTrayIcon(TrayIconSpec spec) → ReactorTrayIcon
 RenderContext.UseValidationContext() → ValidationContext
 RenderContext.UseWindow() → ReactorWindow
+RenderContext.UseWindowAspectRatio(double? widthOverHeight) → void
+RenderContext.UseWindowDragMove() → Action
+RenderContext.UseWindowPosition() → ValueTuple<double, double>
 RenderContext.UseWindowSize() → ValueTuple<double, double>
 RenderContext.UseWindowSize(Window window) → ValueTuple<double, double>
 RenderContext.UseWindowState() → WindowState
@@ -954,7 +962,7 @@ Severity { Info, Warning, Error }
 ShowWhen { Always, WhenTouched, WhenDirty, AfterFirstSubmit, Never }
 VisualizerStyle { Inline, Summary, InfoBar, Custom }
 AnimationKind { None, Default, Spring, EaseIn, EaseOut, EaseInOut }
-BackdropKind { None, Mica, MicaAlt, DesktopAcrylic, AcrylicThin }
+BackdropKind { None, Mica, MicaAlt, DesktopAcrylic, AcrylicThin, Transparent }
 ColorScheme { Light, Dark, HighContrast }
 KeyedListDiagnosticKind { NullKey, DuplicateKey }
 ItemsViewLayoutKind { StackLayout, LinedFlowLayout, UniformGridLayout }
@@ -1003,11 +1011,11 @@ PresenterKind { Overlapped, FullScreen, CompactOverlay }
 ShutdownPolicy { OnPrimaryWindowClosed, OnLastSurfaceClosed, Explicit }
 TaskbarProgressState { None, Indeterminate, Normal, Paused, Error }
 WindowCloseReason { UserClosed, AppClosed, OwnerClosed }
-WindowStartPosition { Default, CenterOnPrimary, CenterOnOwner, Manual, CenterOnCurrent }
-WindowResizeMode { CanResize, NoResize, CanMinimize }
-WindowSizeToContent { Manual, Width, Height, WidthAndHeight }
-WindowStyle { Default, None, ToolWindow }
 WindowCornerStyle { Default, Square, Rounded, RoundedSmall }
 WindowLevel { Normal, Floating, AlwaysOnTop }
+WindowResizeMode { CanResize, NoResize, CanMinimize }
+WindowSizeToContent { Manual, Width, Height, WidthAndHeight }
+WindowStartPosition { Default, CenterOnPrimary, CenterOnOwner, Manual, CenterOnCurrent }
 WindowState { Normal, Minimized, Maximized, FullScreen, CompactOverlay }
+WindowStyle { Default, None, ToolWindow }
 

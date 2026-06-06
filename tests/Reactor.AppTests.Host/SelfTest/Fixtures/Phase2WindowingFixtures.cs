@@ -73,8 +73,7 @@ internal static class Phase2WindowingFixtures
 
     private static void ResetDragHooks()
     {
-        ReactorWindow.GetCaptureForTests = null;
-        ReactorWindow.PostMessageForTests = null;
+        ReactorWindow.SuppressDragMoveTimerForTests = false;
         ReactorWindow.BeginDragMovePostCountForTests = 0;
     }
 
@@ -241,8 +240,7 @@ internal static class Phase2WindowingFixtures
         {
             EnsureUIDispatcher();
             ResetDragHooks();
-            ReactorWindow.GetCaptureForTests = () => 0;
-            ReactorWindow.PostMessageForTests = (_, _, _, _) => { };
+            ReactorWindow.SuppressDragMoveTimerForTests = true;
             var component = new DragSurfaceComponent();
             var win = await OpenAndSettle(new WindowSpec { Title = "Drag Background", Width = 300, Height = 240, IsMovableByBackground = true }, () => component);
             try
@@ -261,8 +259,7 @@ internal static class Phase2WindowingFixtures
         {
             EnsureUIDispatcher();
             ResetDragHooks();
-            ReactorWindow.GetCaptureForTests = () => 0;
-            ReactorWindow.PostMessageForTests = (_, _, _, _) => { };
+            ReactorWindow.SuppressDragMoveTimerForTests = true;
             var component = new DragSurfaceComponent();
             var win = await OpenAndSettle(new WindowSpec { Title = "Drag Button", Width = 300, Height = 240, IsMovableByBackground = true }, () => component);
             try
@@ -284,8 +281,7 @@ internal static class Phase2WindowingFixtures
         {
             EnsureUIDispatcher();
             ResetDragHooks();
-            ReactorWindow.GetCaptureForTests = () => 0;
-            ReactorWindow.PostMessageForTests = (_, _, _, _) => { };
+            ReactorWindow.SuppressDragMoveTimerForTests = true;
             var component = new DragSurfaceComponent();
             var win = await OpenAndSettle(new WindowSpec { Title = "Drag False", Width = 300, Height = 240, IsMovableByBackground = true }, () => component);
             try
@@ -303,9 +299,10 @@ internal static class Phase2WindowingFixtures
         {
             EnsureUIDispatcher();
             ResetDragHooks();
-            int captureCalls = 0;
-            ReactorWindow.GetCaptureForTests = () => ++captureCalls == 1 ? 0 : 1234;
-            ReactorWindow.PostMessageForTests = (_, _, _, _) => { };
+            // SuppressDragMoveTimerForTests leaves the per-window _dragMoveActive
+            // flag set after the first call so the second call hits the
+            // re-entrancy guard and no-ops without bumping the counter.
+            ReactorWindow.SuppressDragMoveTimerForTests = true;
             var win = await OpenAndSettle(new WindowSpec { Title = "Drag Reentrancy", Width = 260, Height = 180 });
             try
             {
