@@ -356,7 +356,7 @@ function from (state + props) to elements.
 
 ## Next Steps
 
-- **[Hooks](hooks.md)** — Next: deep dive into UseState, UseReducer, UseEffect, and all the hooks
+- **[Hooks](hooks.md)** — Next: deep dive into [UseState](reference/hooks/UseState.md), [UseReducer](reference/hooks/UseReducer.md), [UseEffect](reference/hooks/UseEffect.md), and all the hooks
 - **[Dev Tooling](dev-tooling.md)** — Previous: hot reload and preview mode for faster iteration
 - **[Layout](layout.md)** — Arrange components with VStack, HStack, Grid, and responsive patterns
 - **[Styling and Theming](styling.md)** — Apply colors, typography, and themes to your components

@@ -17,6 +17,8 @@ Most Microsoft.UI.Reactor (Reactor) apps start with the single window created by
 windows with `WindowSpec` and `ReactorApp.OpenWindow`, while keeping the same
 declarative component model used inside a page.
 
+![Window lifecycle from WindowSpec to ReactorWindow host, native AppWindow chrome, display and taskbar integration, then close/dispose cleanup](images/windows/lifecycle.svg)
+
 ## Lifecycle basics
 
 `ReactorApp.Run<TRoot>(...)` opens the primary window. `ReactorApp.OpenWindow`
@@ -317,6 +319,9 @@ ReactorApp.FindWindow(key)  // look up by WindowKey
 Use `WindowKey` for any window you might want to find again. `UseOpenWindow`
 lets a component declaratively own a secondary window's existence; tray icons use
 `UseTrayIcon` and close automatically on unmount.
+
+```csharp snippet="windows/use-open-window"
+```
 
 ## Shutdown policy
 

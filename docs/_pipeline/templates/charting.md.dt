@@ -428,6 +428,6 @@ space works well for displaying a total or label.
 - **[Animation](animation.md)** — Previous: transitions, keyframes, interaction states
 - **[Advanced Patterns](advanced.md)** — Next: error boundaries, memoization, and performance tuning
 - **[Collections](collections.md)** — Bind chart data from virtualized lists and observable collections
-- **[Effects and Lifecycle](effects.md)** — Load chart data asynchronously with UseEffect
+- **[Effects and Lifecycle](effects.md)** — Load chart data asynchronously with [UseEffect](reference/hooks/UseEffect.md)
 - **[Styling and Theming](styling.md)** — Use theme tokens for chart colors that adapt to dark mode
 - **[Accessibility](accessibility.md)** — Screen reader, keyboard navigation, and forced-colors guidance

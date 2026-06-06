@@ -92,7 +92,7 @@ first; everyone else can follow the order.
 ### 2. Learn the framework
 
 - **[Components](components.md)** — Component classes, props, function components, composition
-- **[Hooks](hooks.md)** — UseState, UseReducer, UseEffect, UseMemo, UseRef, UseCallback
+- **[Hooks](hooks.md)** — [UseState](reference/hooks/UseState.md), [UseReducer](reference/hooks/UseReducer.md), [UseEffect](reference/hooks/UseEffect.md), [UseMemo](reference/hooks/UseMemo.md), [UseRef](reference/hooks/UseRef.md), [UseCallback](reference/hooks/UseCallback.md)
 - **[Effects and Lifecycle](effects.md)** — UseEffect patterns, cleanup, async work, timers
 - **[Context](context.md)** — Share state across the component tree without prop drilling
 - **[Commanding](commanding.md)** — Commands, keyboard shortcuts, async actions
@@ -123,7 +123,7 @@ first; everyone else can follow the order.
 - **[Windows](windows.md)** — Top-level windows, tray icons, OpenWindow, shutdown policy
 - **[Docking Windows](docking.md)** — Rearrangeable dock panes: splits, tabs, side pins, floating tear-outs, persistence
 - **[Async Resources](async-resources.md)** — `UseResource`, `UseInfiniteResource`, `UseMutation`, `Pending`
-- **[Persistence](persistence.md)** — UsePersisted, scopes, migration
+- **[Persistence](persistence.md)** — [UsePersisted](reference/hooks/UsePersisted.md), scopes, migration
 - **[Localization](localization.md)** — Multi-language support, resource strings, RTL layouts
 - **[Accessibility](accessibility.md)** — Screen readers, keyboard navigation, focus trapping, runtime scanning
 

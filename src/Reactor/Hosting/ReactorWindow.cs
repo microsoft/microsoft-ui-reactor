@@ -336,6 +336,9 @@ public sealed class ReactorWindow : IDisposable
 
     private WindowState ResolveCurrentState()
     {
+        if (NativeShell.IsIconic(_hwnd)) return Microsoft.UI.Reactor.WindowState.Minimized;
+        if (NativeShell.IsZoomed(_hwnd)) return Microsoft.UI.Reactor.WindowState.Maximized;
+
         try
         {
             switch (_appWindow.Presenter)
@@ -452,14 +455,7 @@ public sealed class ReactorWindow : IDisposable
                     break;
                 default:
                     _appWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
-                    if (_appWindow.Presenter is OverlappedPresenter op)
-                    {
-                        var (resizable, minimizable, maximizable) = ResolveResizeMode(spec);
-                        op.IsResizable = resizable;
-                        op.IsMinimizable = minimizable;
-                        op.IsMaximizable = maximizable;
-                        ApplyWindowStyle(spec, op);
-                    }
+                    ApplyWindowStyle(spec, _appWindow.Presenter as OverlappedPresenter);
                     break;
             }
         }
@@ -552,24 +548,24 @@ public sealed class ReactorWindow : IDisposable
     private static bool EffectiveShowInTaskbar(WindowSpec spec)
         => spec.ShowInTaskbarExplicit ? spec.ShowInTaskbar : spec.Style != WindowStyle.ToolWindow;
 
-    private void ApplyWindowStyle(WindowSpec spec, OverlappedPresenter op)
+    private void ApplyWindowStyle(WindowSpec spec, OverlappedPresenter? op)
     {
         switch (spec.Style)
         {
             case WindowStyle.None:
-                op.SetBorderAndTitleBar(false, false);
+                op?.SetBorderAndTitleBar(false, false);
                 ApplyWindowStyleBits(remove: NativeShell.WS_OVERLAPPEDWINDOW, add: NativeShell.WS_POPUP);
                 // Clear WS_EX_TOOLWINDOW left over from a prior ToolWindow state
                 // so the borderless window doesn't inherit tool-window framing.
                 ApplyExtendedStyleBits(remove: NativeShell.WS_EX_TOOLWINDOW, add: 0);
                 break;
             case WindowStyle.ToolWindow:
-                op.SetBorderAndTitleBar(true, true);
+                op?.SetBorderAndTitleBar(true, true);
                 ApplyWindowStyleBits(remove: NativeShell.WS_POPUP, add: NativeShell.WS_OVERLAPPEDWINDOW);
                 ApplyExtendedStyleBits(remove: 0, add: NativeShell.WS_EX_TOOLWINDOW);
                 break;
             default:
-                op.SetBorderAndTitleBar(true, true);
+                op?.SetBorderAndTitleBar(true, true);
                 ApplyWindowStyleBits(remove: NativeShell.WS_POPUP, add: NativeShell.WS_OVERLAPPEDWINDOW);
                 // Strip WS_EX_TOOLWINDOW when returning to Default — otherwise
                 // Default→ToolWindow→Default leaves the smaller tool-window
@@ -579,9 +575,29 @@ public sealed class ReactorWindow : IDisposable
         }
 
         var (resizable, minimizable, maximizable) = ResolveResizeMode(spec);
-        op.IsResizable = resizable;
-        op.IsMinimizable = minimizable;
-        op.IsMaximizable = maximizable;
+        if (op is not null)
+        {
+            op.IsResizable = resizable;
+            op.IsMinimizable = minimizable;
+            op.IsMaximizable = maximizable;
+        }
+        ApplyResizeModeStyleBits(spec, resizable, minimizable, maximizable);
+    }
+
+    private void ApplyResizeModeStyleBits(WindowSpec spec, bool resizable, bool minimizable, bool maximizable)
+    {
+        if (spec.Style == WindowStyle.None) return;
+
+        long add = 0;
+        long remove = 0;
+        if (resizable) add |= NativeShell.WS_THICKFRAME;
+        else remove |= NativeShell.WS_THICKFRAME;
+        if (minimizable) add |= NativeShell.WS_MINIMIZEBOX;
+        else remove |= NativeShell.WS_MINIMIZEBOX;
+        if (maximizable) add |= NativeShell.WS_MAXIMIZEBOX;
+        else remove |= NativeShell.WS_MAXIMIZEBOX;
+
+        ApplyWindowStyleBits(remove, add);
     }
 
     private void ApplyWindowStyleBits(long remove, long add)
@@ -2035,6 +2051,14 @@ public sealed class ReactorWindow : IDisposable
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool ShowWindow(nint hWnd, int nCmdShow);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool IsIconic(nint hWnd);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool IsZoomed(nint hWnd);
 
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]

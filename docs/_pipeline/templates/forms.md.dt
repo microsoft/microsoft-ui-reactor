@@ -457,6 +457,6 @@ values, clears touched/dirty state, and removes all messages.
 
 - **[Flex Layout](flex-layout.md)** — Previous: flexible box layout for adaptive UIs
 - **[Collections](collections.md)** — Next: render lists, grids, and virtualized data sets
-- **[Hooks](hooks.md)** — UseState, UseMemo, and other hooks that power form logic
+- **[Hooks](hooks.md)** — [UseState](reference/hooks/UseState.md), [UseMemo](reference/hooks/UseMemo.md), and other hooks that power form logic
 - **[Commanding](commanding.md)** — wire submit buttons to async commands with busy/error handling
 - **[Styling and Theming](styling.md)** — theme your forms with tokens and lightweight styling

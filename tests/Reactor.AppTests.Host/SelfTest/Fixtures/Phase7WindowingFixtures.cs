@@ -170,7 +170,12 @@ internal static class Phase7WindowingFixtures
             EnsureUIDispatcher();
             var win = await OpenAndSettle(new WindowSpec { Title = "Explicit False", Width = 320, Height = 220, ExtendsContentIntoTitleBar = false }, () => new TitleBarComponent());
             try { H.Check("TitleBar_ExplicitFalseOverrides", !win.NativeWindow.ExtendsContentIntoTitleBar); }
-            finally { await CloseAndSettle(win); }
+            finally
+            {
+                win.Hide();
+                ReactorDisplay.UnregisterWindowMonitor(win);
+                await Harness.Render(50);
+            }
         }
     }
 

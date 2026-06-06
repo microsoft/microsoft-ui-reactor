@@ -188,13 +188,12 @@ internal static class Phase5WindowingFixtures
             var win = await OpenAndSettle(spec, () => new FixedContent(500, 400));
             try
             {
-                var op = (OverlappedPresenter)win.AppWindow.Presenter;
-                op.Maximize();
-                await Harness.WaitFor(() => op.State == OverlappedPresenterState.Maximized, maxPasses: 10, perPassMs: 30);
+                Native.ShowWindow(Hwnd(win), Native.SW_MAXIMIZE);
+                await Harness.WaitFor(() => Native.IsZoomed(Hwnd(win)), maxPasses: 10, perPassMs: 30);
                 win.SizeToContentApplyCountForTests = 0;
                 win.Update(spec with { SizeToContent = WindowSizeToContent.WidthAndHeight });
                 await Harness.Render(120);
-                H.Check("SizeToContent_NoOpWhenMaximized_State", op.State == OverlappedPresenterState.Maximized);
+                H.Check("SizeToContent_NoOpWhenMaximized_State", Native.IsZoomed(Hwnd(win)));
                 H.Check("SizeToContent_NoOpWhenMaximized_Warning", ReactorWindow.SizeToContentMaximizedWarningCountForTests > 0);
                 H.Check("SizeToContent_NoOpWhenMaximized_NoResize", win.SizeToContentApplyCountForTests == 0);
             }
@@ -284,6 +283,7 @@ internal static class Phase5WindowingFixtures
     {
         public const int GWL_STYLE = -16;
         public const int GWL_EXSTYLE = -20;
+        public const int SW_MAXIMIZE = 3;
 
         [StructLayout(LayoutKind.Sequential)]
         public struct RECT { public int Left, Top, Right, Bottom; }
@@ -295,5 +295,13 @@ internal static class Phase5WindowingFixtures
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool AdjustWindowRectExForDpi(ref RECT lpRect, uint dwStyle,
             [MarshalAs(UnmanagedType.Bool)] bool bMenu, uint dwExStyle, uint dpi);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool ShowWindow(nint hWnd, int nCmdShow);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool IsZoomed(nint hWnd);
     }
 }

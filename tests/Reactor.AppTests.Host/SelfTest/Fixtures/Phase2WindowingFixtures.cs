@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Xaml;
@@ -66,8 +67,9 @@ internal static class Phase2WindowingFixtures
         await Task.Delay(50);
     }
 
-    private static OverlappedPresenter Presenter(ReactorWindow win)
-        => (OverlappedPresenter)win.AppWindow.Presenter;
+    private static nint Hwnd(ReactorWindow win) => WinRT.Interop.WindowNative.GetWindowHandle(win.NativeWindow);
+    private static long StyleBits(ReactorWindow win) => (long)Native.GetWindowLongPtr(Hwnd(win), Native.GWL_STYLE);
+    private static bool HasStyle(ReactorWindow win, long flag) => (StyleBits(win) & flag) != 0;
 
     private static bool WaitForSize(ReactorWindow win, int expectedWidthPx)
     {
@@ -98,9 +100,8 @@ internal static class Phase2WindowingFixtures
             });
             try
             {
-                var op = Presenter(win);
-                H.Check("ResizeMode_NoResize_IsResizableFalse", !op.IsResizable);
-                H.Check("ResizeMode_NoResize_MinMaxDisabled", !op.IsMinimizable && !op.IsMaximizable);
+                H.Check("ResizeMode_NoResize_IsResizableFalse", !HasStyle(win, Native.WS_THICKFRAME));
+                H.Check("ResizeMode_NoResize_MinMaxDisabled", !HasStyle(win, Native.WS_MINIMIZEBOX) && !HasStyle(win, Native.WS_MAXIMIZEBOX));
                 win.SetSize(360, 220);
                 int expectedWidth = (int)Math.Round(360 * win.DipScale);
                 bool changed = await Harness.WaitFor(() => WaitForSize(win, expectedWidth), maxPasses: 10, perPassMs: 20);
@@ -124,10 +125,9 @@ internal static class Phase2WindowingFixtures
             });
             try
             {
-                var op = Presenter(win);
-                H.Check("ResizeMode_CanMinimize_MinEnabled", op.IsMinimizable);
-                H.Check("ResizeMode_CanMinimize_ResizeDisabled", !op.IsResizable);
-                H.Check("ResizeMode_CanMinimize_MaxDisabled", !op.IsMaximizable);
+                H.Check("ResizeMode_CanMinimize_MinEnabled", HasStyle(win, Native.WS_MINIMIZEBOX));
+                H.Check("ResizeMode_CanMinimize_ResizeDisabled", !HasStyle(win, Native.WS_THICKFRAME));
+                H.Check("ResizeMode_CanMinimize_MaxDisabled", !HasStyle(win, Native.WS_MAXIMIZEBOX));
             }
             finally { await CloseAndSettle(win); }
         }
@@ -142,12 +142,11 @@ internal static class Phase2WindowingFixtures
             var win = await OpenAndSettle(spec);
             try
             {
-                H.Check("ResizeMode_RuntimeUpdate_InitiallyResizable", Presenter(win).IsResizable);
+                H.Check("ResizeMode_RuntimeUpdate_InitiallyResizable", HasStyle(win, Native.WS_THICKFRAME));
                 win.Update(spec with { ResizeMode = WindowResizeMode.NoResize });
                 await Harness.Render(50);
-                var op = Presenter(win);
-                H.Check("ResizeMode_RuntimeUpdate_ResizeDisabled", !op.IsResizable);
-                H.Check("ResizeMode_RuntimeUpdate_MinMaxDisabled", !op.IsMinimizable && !op.IsMaximizable);
+                H.Check("ResizeMode_RuntimeUpdate_ResizeDisabled", !HasStyle(win, Native.WS_THICKFRAME));
+                H.Check("ResizeMode_RuntimeUpdate_MinMaxDisabled", !HasStyle(win, Native.WS_MINIMIZEBOX) && !HasStyle(win, Native.WS_MAXIMIZEBOX));
             }
             finally { await CloseAndSettle(win); }
         }
@@ -483,5 +482,16 @@ internal static class Phase2WindowingFixtures
             }
             finally { ResetDragHooks(); await CloseAndSettle(win); }
         }
+    }
+
+    private static class Native
+    {
+        public const int GWL_STYLE = -16;
+        public const long WS_THICKFRAME = 0x00040000;
+        public const long WS_MINIMIZEBOX = 0x00020000;
+        public const long WS_MAXIMIZEBOX = 0x00010000;
+
+        [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
+        public static extern nint GetWindowLongPtr(nint hWnd, int nIndex);
     }
 }

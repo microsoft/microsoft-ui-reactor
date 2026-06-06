@@ -6,7 +6,7 @@ audience: advanced
 goal: |
   Document windowing scenarios that live outside Reactor's platform-quality
   contract, including recipes and tradeoffs for HWND interop-heavy shells.
-tier: solid
+tier: stub
 winui-ref: https://learn.microsoft.com/en-us/windows/win32/winmsg/window-features
 ---
 

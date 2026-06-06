@@ -947,6 +947,7 @@ Theme.TertiaryText                     → TextFillColorTertiaryBrush
 
 AnimateProperty { Opacity, Offset, Scale, Rotation, CenterPoint, All }
 Edge { Left, Top, Right, Bottom }
+AspectRatioBasis { Window, Client }
 ChartAxisType { X, Y }
 DashStyle { Solid, Dash4_2, Dash2_2, Dash6_2_2_2, Dash8_4, Dash1_1 }
 MarkerShape { Circle, Square, Triangle, Diamond, Plus, Cross, Star, Hexagon }

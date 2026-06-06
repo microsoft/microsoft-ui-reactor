@@ -68,10 +68,16 @@ internal static class Phase4WindowingFixtures
             });
             try
             {
+                bool settled = await Harness.WaitFor(() =>
+                {
+                    long bits = StyleBits(win);
+                    return (bits & (Native.WS_BORDER | Native.WS_CAPTION | Native.WS_SYSMENU)) == 0;
+                }, maxPasses: 20, perPassMs: 20);
+
                 long bits = StyleBits(win);
-                H.Check("WindowStyle_None_NoBorder", (bits & Native.WS_BORDER) == 0);
-                H.Check("WindowStyle_None_NoCaption", (bits & Native.WS_CAPTION) == 0);
-                H.Check("WindowStyle_None_NoSysMenu", (bits & Native.WS_SYSMENU) == 0);
+                H.Check("WindowStyle_None_NoBorder", settled && (bits & Native.WS_BORDER) == 0);
+                H.Check("WindowStyle_None_NoCaption", settled && (bits & Native.WS_CAPTION) == 0);
+                H.Check("WindowStyle_None_NoSysMenu", settled && (bits & Native.WS_SYSMENU) == 0);
             }
             finally { await CloseAndSettle(win); }
         }
@@ -126,9 +132,13 @@ internal static class Phase4WindowingFixtures
             try
             {
                 win.Update(spec with { Style = WindowStyle.None });
-                await Harness.Render(80);
+                bool noneSettled = await Harness.WaitFor(() =>
+                {
+                    long bits = StyleBits(win);
+                    return (bits & (Native.WS_CAPTION | Native.WS_SYSMENU | Native.WS_BORDER)) == 0;
+                }, maxPasses: 20, perPassMs: 20);
                 long none = StyleBits(win);
-                H.Check("WindowStyle_RuntimeUpdate_None", (none & (Native.WS_CAPTION | Native.WS_SYSMENU | Native.WS_BORDER)) == 0);
+                H.Check("WindowStyle_RuntimeUpdate_None", noneSettled && (none & (Native.WS_CAPTION | Native.WS_SYSMENU | Native.WS_BORDER)) == 0);
 
                 win.Update(spec with { Style = WindowStyle.Default });
                 await Harness.Render(80);

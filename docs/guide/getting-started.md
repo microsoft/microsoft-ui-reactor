@@ -761,6 +761,6 @@ reads cleanly and avoids unnecessary nesting.
 
 - **[Dev Tooling](dev-tooling.md)** — Set up hot reload and preview mode for a faster development loop
 - **[Components](components.md)** — Break your app into reusable pieces with `Component<TProps>` and typed record props
-- **[Hooks](hooks.md)** — Deep dive into UseState, UseReducer, UseEffect, UseMemo, and more
+- **[Hooks](hooks.md)** — Deep dive into [UseState](reference/hooks/UseState.md), [UseReducer](reference/hooks/UseReducer.md), [UseEffect](reference/hooks/UseEffect.md), [UseMemo](reference/hooks/UseMemo.md), and more
 - **[Layout](layout.md)** — Master VStack, HStack, Grid, and responsive patterns
 - **[Effects and Lifecycle](effects.md)** — Use `UseEffect` for side effects like timers, file I/O, and API calls
