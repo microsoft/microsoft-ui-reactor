@@ -20,7 +20,10 @@ public class RichEditBoxElementTests
     {
         var el = RichEditBox();
         Assert.IsType<RichEditBoxElement>(el);
-        Assert.Equal("", el.Text);
+        // After the Optional<T>-typed factory fix, no-arg defaults to Unset
+        // (uncontrolled). Authors who want the WinUI default empty string must
+        // not need to opt in.
+        Assert.False(el.Text.HasValue);
         Assert.False(el.IsReadOnly);
         Assert.Null(el.Header);
         Assert.Null(el.PlaceholderText);

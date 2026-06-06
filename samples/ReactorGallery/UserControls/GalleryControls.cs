@@ -219,9 +219,7 @@ public static class GalleryControls
                         .VAlign(VerticalAlignment.Top)
                         .Margin(0, 8, 12, 0)
                         .Grid(row: 0, column: 0)
-                ),
-                isExpanded: false,
-                onIsExpandedChanged: null
+                )
             )
             .OnMount(el =>
             {
