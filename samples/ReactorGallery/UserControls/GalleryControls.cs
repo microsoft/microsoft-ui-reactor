@@ -22,6 +22,16 @@ internal sealed class CopyToClipboardButton : Component<string>
         // Per-click generation token: only the latest click is allowed to
         // flip the label back, so rapid clicks can't reset early.
         var generation = UseRef(0);
+        // "Mounted" flag flipped in the UseEffect cleanup below — lets the
+        // background Task.Delay continuation short-circuit if the component
+        // was unmounted before the 1.5s timer fires (avoids touching state
+        // on a torn-down RenderContext).
+        var isMounted = UseRef(true);
+        UseEffect(() =>
+        {
+            isMounted.Current = true;
+            return () => isMounted.Current = false;
+        });
 
         return Button(copied ? "Copied" : "Copy")
             .Click(() =>
@@ -37,17 +47,16 @@ internal sealed class CopyToClipboardButton : Component<string>
                     setCopied(true);
                     _ = Task.Delay(1500).ContinueWith(_ =>
                     {
-                        try
-                        {
-                            if (generation.Current == myGen) setCopied(false);
-                        }
-                        catch { /* unmounted */ }
+                        if (!isMounted.Current) return;
+                        if (generation.Current == myGen) setCopied(false);
                     });
                 }
-                catch
+                catch (System.Runtime.InteropServices.COMException)
                 {
-                    // Clipboard.SetContent can throw RPC_E_CALL_REJECTED transiently;
-                    // swallow rather than crash the gallery.
+                    // Clipboard.SetContent can throw RPC_E_CALL_REJECTED (HRESULT
+                    // 0x80010001) when another app is holding the clipboard
+                    // marshaller — swallow this specific COM transient rather
+                    // than crash the gallery. Anything else propagates.
                 }
             })
             .SubtleButton();
