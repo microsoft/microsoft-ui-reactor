@@ -19,6 +19,9 @@ internal sealed class CopyToClipboardButton : Component<string>
     {
         var text = Props;
         var (copied, setCopied) = UseState(false, threadSafe: true);
+        // Per-click generation token: only the latest click is allowed to
+        // flip the label back, so rapid clicks can't reset early.
+        var generation = UseRef(0);
 
         return Button(copied ? "Copied" : "Copy")
             .Click(() =>
@@ -28,10 +31,17 @@ internal sealed class CopyToClipboardButton : Component<string>
                     var dp = new DataPackage();
                     dp.SetText(text);
                     Clipboard.SetContent(dp);
+                    // Click handler always runs on the UI thread, so plain ++ is safe.
+                    // The timer continuation only READS the int, which is atomic on .NET.
+                    var myGen = ++generation.Current;
                     setCopied(true);
                     _ = Task.Delay(1500).ContinueWith(_ =>
                     {
-                        try { setCopied(false); } catch { /* unmounted */ }
+                        try
+                        {
+                            if (generation.Current == myGen) setCopied(false);
+                        }
+                        catch { /* unmounted */ }
                     });
                 }
                 catch
@@ -189,7 +199,7 @@ public static class GalleryControls
             Expander("Source code",
                 Grid(
                     columns: [GridSize.Star()], rows: [GridSize.Star()],
-                    ScrollView(
+                    (ScrollView(
                         TextBlock(sourceCode.Trim())
                             .FontFamily("Consolas, 'Cascadia Code', monospace")
                             .FontSize(13)
@@ -199,7 +209,7 @@ public static class GalleryControls
                                 tb.IsTextSelectionEnabled = true;
                                 tb.TextWrapping = TextWrapping.NoWrap;
                             })
-                    )
+                    ) with { ContentOrientation = Microsoft.UI.Xaml.Controls.ScrollingContentOrientation.Both })
                     .Height(200)
                     .Background(Theme.SubtleFill)
                     .Grid(row: 0, column: 0),
