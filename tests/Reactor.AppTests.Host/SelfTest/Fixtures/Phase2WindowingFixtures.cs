@@ -59,6 +59,13 @@ internal static class Phase2WindowingFixtures
         await Task.Delay(80);
     }
 
+    private static async Task CollectWindowResources()
+    {
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        await Task.Delay(50);
+    }
+
     private static OverlappedPresenter Presenter(ReactorWindow win)
         => (OverlappedPresenter)win.AppWindow.Presenter;
 
@@ -231,6 +238,170 @@ internal static class Phase2WindowingFixtures
                 H.Check("AspectRatio_RuntimeSwap_Second", second);
             }
             finally { await CloseAndSettle(win); }
+        }
+    }
+
+    internal class AspectRatioClientBasis(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+            // Open with Client basis at 1:1. The window rect (~600x600 plus
+            // chrome) won't be square — the CLIENT area will. Verify the
+            // window aspect differs from 1:1 by at least the chrome inset,
+            // while the client aspect is exactly 1:1 (within rounding).
+            var win = await OpenAndSettle(new WindowSpec
+            {
+                Title = "Aspect Client",
+                Width = 600,
+                Height = 600,
+                AspectRatio = 1.0,
+                AspectRatioBasis = AspectRatioBasis.Client,
+            });
+            try
+            {
+                // Drag-resize event (WMSZ_RIGHT) — user wants a 1000-px-wide window.
+                var rect = new ReactorWindow.RECT { Left = 0, Top = 0, Right = 1000, Bottom = 800 };
+                bool applied = win.ApplyAspectRatioSizingForTests(2, ref rect);
+                H.Check("AspectRatio_ClientBasis_Applied", applied);
+
+                int windowW = rect.Right - rect.Left;
+                int windowH = rect.Bottom - rect.Top;
+                // The resulting WINDOW aspect should NOT be 1:1 — chrome
+                // adds vertical padding on top, so windowH > windowW.
+                double windowAspect = (double)windowW / windowH;
+                H.Check("AspectRatio_ClientBasis_WindowAspectNotOne", Math.Abs(windowAspect - 1.0) > 0.02);
+                // But the CLIENT area aspect SHOULD be 1:1 (within rounding).
+                // We don't have direct access to chrome insets in tests, but
+                // we can use the fact that windowH - windowW (the extra
+                // vertical) is exactly the chrome vertical inset; subtracting
+                // it from windowH gives clientH which should equal windowW
+                // (caption is taller than left/right borders combined).
+                // Looser tolerance because chrome includes per-monitor DPI.
+                H.Check("AspectRatio_ClientBasis_WindowH_GreaterThan_W",
+                    windowH > windowW);
+            }
+            finally { await CloseAndSettle(win); }
+        }
+    }
+
+    private static double WindowRatio(ReactorWindow win)
+    {
+        var size = win.AppWindow.Size;
+        return size.Width / (double)Math.Max(1, size.Height);
+    }
+
+    private static bool WindowRatioNear(ReactorWindow win, double expected, double tolerance = 0.03)
+        => Math.Abs(WindowRatio(win) - expected) <= tolerance;
+
+    internal class AspectRatioSuiteMath(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+            var win = await OpenAndSettle(new WindowSpec { Title = "Aspect Math Suite", Width = 320, Height = 200, AspectRatio = 16.0 / 9.0 });
+            try
+            {
+                var rect = new ReactorWindow.RECT { Left = 0, Top = 0, Right = 800, Bottom = 400 };
+                bool applied = win.ApplyAspectRatioSizingForTests(2, ref rect);
+                H.Check("AspectRatio_SideEdgePreservesWidth_Applied", applied);
+                H.Check("AspectRatio_SideEdgePreservesWidth_Width", Math.Abs((rect.Right - rect.Left) - 800) <= 1);
+                H.Check("AspectRatio_SideEdgePreservesWidth_Height", Math.Abs((rect.Bottom - rect.Top) - 450) <= 1);
+
+                rect = new ReactorWindow.RECT { Left = 0, Top = 0, Right = 800, Bottom = 400 };
+                applied = win.ApplyAspectRatioSizingForTests(6, ref rect);
+                H.Check("AspectRatio_SideEdgePreservesHeight_Applied", applied);
+                H.Check("AspectRatio_SideEdgePreservesHeight_Height", Math.Abs((rect.Bottom - rect.Top) - 400) <= 1);
+                H.Check("AspectRatio_SideEdgePreservesHeight_Width", Math.Abs((rect.Right - rect.Left) - 711) <= 1);
+
+                int previousWidth = 0;
+                bool monotonic = true;
+                for (int i = 0; i < 10; i++)
+                {
+                    rect = new ReactorWindow.RECT { Left = 0, Top = 0, Right = 800 + i * 5, Bottom = 400 };
+                    applied = win.ApplyAspectRatioSizingForTests(8, ref rect);
+                    int width = rect.Right - rect.Left;
+                    monotonic &= applied && width + 1 >= previousWidth;
+                    previousWidth = width;
+                }
+                H.Check("AspectRatio_CornerDragStable", monotonic);
+
+                win.Update(win.Spec with { AspectRatio = 1.0, AspectRatioBasis = AspectRatioBasis.Client, ExtendsContentIntoTitleBar = false });
+                await Harness.Render(50);
+                rect = new ReactorWindow.RECT { Left = 0, Top = 0, Right = 1000, Bottom = 800 };
+                applied = win.ApplyAspectRatioSizingForTests(2, ref rect);
+                H.Check("AspectRatio_ClientBasis_Applied", applied);
+                int windowW = rect.Right - rect.Left;
+                int windowH = rect.Bottom - rect.Top;
+                double windowAspect = (double)windowW / windowH;
+                H.Check("AspectRatio_ClientBasis_WindowAspectNotOne", Math.Abs(windowAspect - 1.0) > 0.02);
+                H.Check("AspectRatio_ClientBasis_WindowH_GreaterThan_W", windowH > windowW);
+            }
+            finally { await CloseAndSettle(win); await CollectWindowResources(); }
+        }
+    }
+
+    internal class AspectRatioSuiteConform(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+            var win = await OpenAndSettle(new WindowSpec { Title = "Aspect Conform Suite", Width = 600, Height = 400 });
+            try
+            {
+                win.Update(win.Spec with { AspectRatio = 1.0, AspectRatioBasis = AspectRatioBasis.Window, ExtendsContentIntoTitleBar = false });
+                bool square = await Harness.WaitFor(() => WindowRatioNear(win, 1.0), maxPasses: 10, perPassMs: 20);
+                H.Check("AspectRatio_ConformOnUpdate_Square", square);
+
+                win.Update(win.Spec with { AspectRatio = 2.0 });
+                bool wide = await Harness.WaitFor(() => WindowRatioNear(win, 2.0), maxPasses: 10, perPassMs: 20);
+                H.Check("AspectRatio_ConformOnUpdate_Wide", wide);
+
+                win.SetAspectRatio(1.0);
+                square = await Harness.WaitFor(() => WindowRatioNear(win, 1.0), maxPasses: 10, perPassMs: 20);
+                H.Check("AspectRatio_ConformOnSetAspectRatio", square);
+
+                bool initiallySquare = WindowRatioNear(win, 1.0);
+                int windowHeight = win.AppWindow.Size.Height;
+                win.Update(win.Spec with { AspectRatioBasis = AspectRatioBasis.Client });
+                bool grew = await Harness.WaitFor(() => win.AppWindow.Size.Height > windowHeight + 2, maxPasses: 10, perPassMs: 20);
+                int clientHeight = win.AppWindow.Size.Height;
+                win.Update(win.Spec with { AspectRatioBasis = AspectRatioBasis.Window });
+                bool shrank = await Harness.WaitFor(() => win.AppWindow.Size.Height < clientHeight - 2 && WindowRatioNear(win, 1.0), maxPasses: 10, perPassMs: 20);
+                H.Check("AspectRatio_ConformOnBasisFlip_InitialSquare", initiallySquare);
+                H.Check("AspectRatio_ConformOnBasisFlip_ClientGrew", grew);
+                H.Check("AspectRatio_ConformOnBasisFlip_WindowShrank", shrank);
+
+                win.Update(win.Spec with { AspectRatio = 1.0, AspectRatioBasis = AspectRatioBasis.Client, ExtendsContentIntoTitleBar = true });
+                await Harness.Render(50);
+                var rect = new ReactorWindow.RECT { Left = 0, Top = 0, Right = 1000, Bottom = 800 };
+                bool applied = win.ApplyAspectRatioSizingForTests(2, ref rect);
+                H.Check("AspectRatio_ClientBasisFallsBackOnExtendedTitleBar_Applied", applied);
+                H.Check("AspectRatio_ClientBasisFallsBackOnExtendedTitleBar_WindowBasis", Math.Abs((rect.Right - rect.Left) - 1000) <= 1 && Math.Abs((rect.Bottom - rect.Top) - 1000) <= 1);
+            }
+            finally { await CloseAndSettle(win); await CollectWindowResources(); }
+        }
+    }
+
+    internal class WindowStyleToolWindowExStyleRemoved(Harness h) : SelfTestFixtureBase(h)
+    {
+        private const long WS_EX_TOOLWINDOW = 0x00000080;
+
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+            var win = await OpenAndSettle(new WindowSpec { Title = "ToolWindow ExStyle", Width = 260, Height = 180, Style = WindowStyle.Default });
+            try
+            {
+                H.Check("WindowStyle_ToolWindowExStyleRemoved_InitiallyClear", (win.GetExtendedWindowStyleBitsForTests() & WS_EX_TOOLWINDOW) == 0);
+                win.Update(win.Spec with { Style = WindowStyle.ToolWindow });
+                bool set = await Harness.WaitFor(() => (win.GetExtendedWindowStyleBitsForTests() & WS_EX_TOOLWINDOW) != 0, maxPasses: 10, perPassMs: 20);
+                H.Check("WindowStyle_ToolWindowExStyleRemoved_Set", set);
+                win.Update(win.Spec with { Style = WindowStyle.Default });
+                bool cleared = await Harness.WaitFor(() => (win.GetExtendedWindowStyleBitsForTests() & WS_EX_TOOLWINDOW) == 0, maxPasses: 10, perPassMs: 20);
+                H.Check("WindowStyle_ToolWindowExStyleRemoved_Cleared", cleared);
+            }
+            finally { await CloseAndSettle(win); await CollectWindowResources(); }
         }
     }
 

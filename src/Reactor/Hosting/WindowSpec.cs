@@ -84,6 +84,16 @@ public sealed record WindowSpec
     /// <summary>Optional width / height aspect lock applied during interactive resize.</summary>
     public double? AspectRatio { get; init; }
 
+    /// <summary>
+    /// Whether <see cref="AspectRatio"/> constrains the outer window rect or
+    /// the client (content) area. Default is
+    /// <see cref="AspectRatioBasis.Window"/>; switch to
+    /// <see cref="AspectRatioBasis.Client"/> when the ratio describes the
+    /// content (e.g. 1:1 for a square video, 16:9 for a game viewport) and
+    /// the framework should auto-account for chrome.
+    /// </summary>
+    public AspectRatioBasis AspectRatioBasis { get; init; } = AspectRatioBasis.Window;
+
     /// <summary>Whether pressing non-interactive background starts an OS window drag.</summary>
     public bool IsMovableByBackground { get; init; }
 

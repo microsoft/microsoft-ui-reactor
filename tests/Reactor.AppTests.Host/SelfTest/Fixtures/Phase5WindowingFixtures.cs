@@ -51,6 +51,13 @@ internal static class Phase5WindowingFixtures
         await Task.Delay(100);
     }
 
+    private static async Task CollectWindowResources()
+    {
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        await Task.Delay(50);
+    }
+
     private static (int Width, int Height) ExpectedWindowSize(ReactorWindow win, double contentWidthDip, double contentHeightDip)
     {
         uint dpi = (uint)(win.Dpi == 0 ? 96 : win.Dpi);
@@ -227,6 +234,49 @@ internal static class Phase5WindowingFixtures
                 H.Check("SizeToContent_NoReentrancy_SingleResize", win.SizeToContentApplyCountForTests == 1);
             }
             finally { await CloseAndSettle(win); }
+        }
+    }
+
+    private static ReactorWindow.MINMAXINFO InitialMinMaxInfo() => new()
+    {
+        ptMinTrackSize = new ReactorWindow.POINT { X = 1, Y = 2 },
+        ptMaxTrackSize = new ReactorWindow.POINT { X = 10000, Y = 10001 },
+    };
+
+    internal class SizeToContentMinMaxInfoSuite(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+            var win = await OpenAndSettle(new WindowSpec
+            {
+                Title = "STC MinMax Suite",
+                Width = 240,
+                Height = 180,
+                SizeToContent = WindowSizeToContent.Width,
+            }, () => new FixedContent(360, 300));
+            try
+            {
+                var info = InitialMinMaxInfo();
+                win.ApplyMinMaxInfoForTests(ref info);
+                H.Check("SizeToContent_MinMaxInfoClampsWidth_X", info.ptMinTrackSize.X == info.ptMaxTrackSize.X && info.ptMinTrackSize.X > 1);
+                H.Check("SizeToContent_MinMaxInfoClampsWidth_YUnchanged", info.ptMinTrackSize.Y == 2 && info.ptMaxTrackSize.Y == 10001);
+
+                win.Update(win.Spec with { SizeToContent = WindowSizeToContent.Height });
+                await Harness.Render(60);
+                info = InitialMinMaxInfo();
+                win.ApplyMinMaxInfoForTests(ref info);
+                H.Check("SizeToContent_MinMaxInfoClampsHeight_Y", info.ptMinTrackSize.Y == info.ptMaxTrackSize.Y && info.ptMinTrackSize.Y > 2);
+                H.Check("SizeToContent_MinMaxInfoClampsHeight_XUnchanged", info.ptMinTrackSize.X == 1 && info.ptMaxTrackSize.X == 10000);
+
+                win.Update(win.Spec with { SizeToContent = WindowSizeToContent.WidthAndHeight });
+                await Harness.Render(60);
+                info = InitialMinMaxInfo();
+                win.ApplyMinMaxInfoForTests(ref info);
+                H.Check("SizeToContent_MinMaxInfoClampsBoth_X", info.ptMinTrackSize.X == info.ptMaxTrackSize.X && info.ptMinTrackSize.X > 1);
+                H.Check("SizeToContent_MinMaxInfoClampsBoth_Y", info.ptMinTrackSize.Y == info.ptMaxTrackSize.Y && info.ptMinTrackSize.Y > 2);
+            }
+            finally { await CloseAndSettle(win); await CollectWindowResources(); }
         }
     }
 

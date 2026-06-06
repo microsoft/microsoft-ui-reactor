@@ -92,6 +92,31 @@ public enum WindowResizeMode
     CanMinimize,
 }
 
+/// <summary>
+/// Whether <see cref="WindowSpec.AspectRatio"/> applies to the outer window
+/// rectangle (caption + borders included) or to the client (content) area.
+/// </summary>
+/// <remarks>
+/// <para><see cref="Window"/> is the simpler / cheaper mode and matches the
+/// raw shape of the OS <c>WM_SIZING</c> contract — the framework just
+/// enforces a ratio on the rect the OS hands us.</para>
+/// <para><see cref="Client"/> is what most media/game/canvas apps want
+/// (a 1:1 client area for a square video player, a 16:9 client area for a
+/// game viewport). The framework computes the chrome inset via
+/// <c>AdjustWindowRectExForDpi</c> at the current window style + DPI, so
+/// the ratio stays accurate across DPI changes and across
+/// <see cref="WindowStyle"/> flips. Has no effect when
+/// <see cref="WindowSpec.AspectRatio"/> is null.</para>
+/// </remarks>
+public enum AspectRatioBasis
+{
+    /// <summary>Ratio applies to the outer window rect, including caption and borders. Default.</summary>
+    Window,
+
+    /// <summary>Ratio applies to the client area. The framework auto-accounts for chrome.</summary>
+    Client,
+}
+
 public enum PresenterKind
 {
     /// <summary>Standard chrome with caption and a system menu.</summary>

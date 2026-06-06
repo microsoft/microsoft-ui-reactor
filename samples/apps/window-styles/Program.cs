@@ -50,6 +50,7 @@ internal sealed class WindowStylesPlayground : Component
         var (levelIdx,         setLevelIdx)         = UseState(0); // Normal
         var (sizeFitIdx,       setSizeFitIdx)       = UseState(0); // Manual
         var (aspectIdx,        setAspectIdx)        = UseState(0); // Unlocked
+        var (aspectClient,     setAspectClient)     = UseState(false); // false = Window basis, true = Client
         var (backdropIdx,      setBackdropIdx)      = UseState(1); // Mica
         var (movable,          setMovable)          = UseState(false);
         var (showInTaskbar,    setShowInTaskbar)    = UseState(true);
@@ -124,6 +125,12 @@ internal sealed class WindowStylesPlayground : Component
                         if (sizeFitIdx == 0)
                             Apply(s => s with { AspectRatio = AspectPresets[i].Ratio });
                     }).Width(180)),
+            Row("Aspect basis: content area", "Off = ratio applies to the outer window rect (default). On = ratio applies to the content area; chrome is auto-accounted for.",
+                ToggleSwitch(aspectClient, v =>
+                {
+                    setAspectClient(v);
+                    Apply(s => s with { AspectRatioBasis = v ? AspectRatioBasis.Client : AspectRatioBasis.Window });
+                })),
             Row("Recenter on screen", "Re-runs CenterOnPrimary based on the current monitor.",
                 Button("Center now", () => win!.CenterOnScreen()).Width(140)),
             Row("Programmatic drag", "Equivalent to clicking the title-bar and dragging.",

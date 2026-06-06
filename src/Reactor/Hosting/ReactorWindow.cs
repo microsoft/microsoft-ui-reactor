@@ -882,13 +882,13 @@ public sealed class ReactorWindow : IDisposable
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct POINT { public int X; public int Y; }
+    internal struct POINT { public int X; public int Y; }
 
     [StructLayout(LayoutKind.Sequential)]
     internal struct RECT { public int Left, Top, Right, Bottom; }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct MINMAXINFO
+    internal struct MINMAXINFO
     {
         public POINT ptReserved;
         public POINT ptMaxSize;
@@ -924,6 +924,9 @@ public sealed class ReactorWindow : IDisposable
         ZOrderChanged?.Invoke(this, new WindowZOrderChangedEventArgs(isCovered: !movedToTop, movedToTop));
     }
 
+    internal void RaiseZOrderChangedForTests(bool movedToTop, bool isCovered)
+        => ZOrderChanged?.Invoke(this, new WindowZOrderChangedEventArgs(isCovered, movedToTop));
+
     private unsafe void ApplyAspectRatioSizing(nuint edge, nint rectPtr)
     {
         var rect = (RECT*)rectPtr;
@@ -945,7 +948,14 @@ public sealed class ReactorWindow : IDisposable
     }
 
     internal bool ApplyAspectRatioSizingForTests(int edge, ref RECT rect)
-        => ApplyAspectRatioSizing(edge, ref rect);
+    {
+        var userRect = rect;
+        var adjusted = userRect;
+        if (!ApplyAspectRatioSizing(edge, ref adjusted)) return false;
+        rect = adjusted;
+        _lastSizingRect = userRect;
+        return true;
+    }
 
     internal RECT ClampSizingRectForTests(RECT rect)
     {
@@ -966,6 +976,19 @@ public sealed class ReactorWindow : IDisposable
         double? ratio = EffectiveAspectRatio;
         if (ratio is null) return false;
         if (!(ratio.Value > 0.0) || !double.IsFinite(ratio.Value)) return false;
+
+        // When AspectRatioBasis is Client, subtract chrome so the ratio
+        // constrains the content area, not the outer window rect.
+        // chromeH/chromeV are 0 for the Window basis (the no-op fallback)
+        // AND for ExtendsContentIntoTitleBar=true: once the app paints into
+        // the title-bar area, the OS's notion of "client area" no longer
+        // matches the developer's notion of "content area" (the custom
+        // title bar lives inside the client area), so Client basis becomes
+        // ambiguous. Fall back to Window basis until a future API lets the
+        // app declare its own content-area rectangle.
+        bool useClientBasis = _spec.AspectRatioBasis == AspectRatioBasis.Client
+            && !_window.ExtendsContentIntoTitleBar;
+        var (chromeH, chromeV) = useClientBasis ? ComputeChromeInset() : (0, 0);
 
         var previous = _lastSizingRect;
         if (previous.Right <= previous.Left || previous.Bottom <= previous.Top)
@@ -989,7 +1012,11 @@ public sealed class ReactorWindow : IDisposable
 
         if (widthMaster)
         {
-            int desiredHeight = Math.Max(1, (int)Math.Round(width / ratio.Value));
+            // Solve for window height H such that (W - chromeH) / (H - chromeV) == ratio
+            //   →   H = (W - chromeH) / ratio + chromeV.
+            // Collapses to H = W / ratio when chromeH == chromeV == 0 (Window basis).
+            int clientWidth = Math.Max(1, width - chromeH);
+            int desiredHeight = Math.Max(1, (int)Math.Round(clientWidth / ratio.Value) + chromeV);
             switch (edge)
             {
                 case WMSZ_TOP:
@@ -1004,7 +1031,8 @@ public sealed class ReactorWindow : IDisposable
         }
         else
         {
-            int desiredWidth = Math.Max(1, (int)Math.Round(height * ratio.Value));
+            int clientHeight = Math.Max(1, height - chromeV);
+            int desiredWidth = Math.Max(1, (int)Math.Round(clientHeight * ratio.Value) + chromeH);
             switch (edge)
             {
                 case WMSZ_LEFT:
@@ -1019,6 +1047,31 @@ public sealed class ReactorWindow : IDisposable
         }
         return true;
     }
+
+    /// <summary>
+    /// Returns the chrome inset (caption + borders, in physical px at the
+    /// current DPI) for the current window's style and ex-style. The two
+    /// values are total horizontal (left + right border) and total vertical
+    /// (caption + bottom border) padding around the client area.
+    /// Returns <c>(0, 0)</c> if the OS call fails.
+    /// </summary>
+    private (int Horizontal, int Vertical) ComputeChromeInset()
+    {
+        var rect = new RECT { Left = 0, Top = 0, Right = 100, Bottom = 100 };
+        long style = (long)NativeShell.GetWindowLongPtr(_hwnd, NativeShell.GWL_STYLE);
+        long exStyle = (long)NativeShell.GetWindowLongPtr(_hwnd, NativeShell.GWL_EXSTYLE);
+        var dpi = Dpi == 0 ? 96 : Dpi;
+        if (!NativeShell.AdjustWindowRectExForDpi(ref rect, unchecked((uint)style), false, unchecked((uint)exStyle), dpi))
+            return (0, 0);
+        int horizontal = (rect.Right - 100) + (-rect.Left);
+        int vertical = (rect.Bottom - 100) + (-rect.Top);
+        return (Math.Max(0, horizontal), Math.Max(0, vertical));
+    }
+
+    internal double? EffectiveAspectRatioForTests => EffectiveAspectRatio;
+
+    internal long GetExtendedWindowStyleBitsForTests()
+        => (long)NativeShell.GetWindowLongPtr(_hwnd, NativeShell.GWL_EXSTYLE);
 
     private double? EffectiveAspectRatio
     {
@@ -1045,6 +1098,15 @@ public sealed class ReactorWindow : IDisposable
     private const int WMSZ_BOTTOM = 6;
     private const int WMSZ_BOTTOMLEFT = 7;
     private const int WMSZ_BOTTOMRIGHT = 8;
+
+    internal unsafe void ApplyMinMaxInfoForTests(ref MINMAXINFO info)
+    {
+        fixed (MINMAXINFO* infoPtr = &info)
+        {
+            var args = new WindowMessageEventArgs(_hwnd, WindowMessageMonitor.WM_GETMINMAXINFO, 0, (nint)infoPtr);
+            ApplyMinMaxInfo(args);
+        }
+    }
 
     private unsafe void ApplyMinMaxInfo(WindowMessageEventArgs args)
     {
@@ -1553,6 +1615,18 @@ public sealed class ReactorWindow : IDisposable
             // tree carries no Backdrop modifier of its own. (spec 036 §3.3)
             if (!Equals(prev.Backdrop, next.Backdrop))
                 _host.BackdropApplier.SetWindowDefault(next.Backdrop);
+            // When the aspect-ratio lock changed to a new non-null value,
+            // immediately resize the window to conform — otherwise the new
+            // ratio only takes effect on the next interactive resize, which
+            // looks broken from the user's perspective. Also re-conform
+            // when only the basis flipped (Window ↔ Client) but the ratio
+            // stayed the same — switching from window-rect to client-rect
+            // at 1:1 means the window must grow vertically to keep the
+            // client area square.
+            bool aspectChanged = !Nullable.Equals(prev.AspectRatio, next.AspectRatio);
+            bool basisChanged = prev.AspectRatioBasis != next.AspectRatioBasis && next.AspectRatio is not null;
+            if (aspectChanged || basisChanged)
+                ConformToAspectRatio(aspectChanged ? prev.AspectRatio : null, next.AspectRatio);
         }
     }
 
@@ -1606,6 +1680,49 @@ public sealed class ReactorWindow : IDisposable
         ValidateAspectRatio(ratio, Volatile.Read(ref _spec).ResizeMode);
         var prev = Volatile.Read(ref _spec);
         Volatile.Write(ref _spec, prev with { AspectRatio = ratio });
+        ConformToAspectRatio(prev.AspectRatio, ratio);
+    }
+
+    /// <summary>
+    /// When the aspect-ratio lock changes to a non-null value (either from
+    /// null or from a different ratio), immediately resize the window so its
+    /// current dimensions conform to the new ratio. Width is preserved and
+    /// height is recomputed (<c>height = width / ratio</c>) — matches the
+    /// width-master convention used in the WM_SIZING handler for side-edge
+    /// drags. Clamps the new height against <c>MinHeight</c>/<c>MaxHeight</c>
+    /// constraints. No-op when the new ratio is null, invalid, the same as
+    /// the previous (or close enough), or the window is already conforming.
+    /// </summary>
+    private void ConformToAspectRatio(double? prevRatio, double? newRatio)
+    {
+        if (newRatio is not double ratio) return;
+        if (!(ratio > 0.0) || !double.IsFinite(ratio)) return;
+        if (prevRatio is double p && Math.Abs(p - ratio) < 0.0001) return;
+        try
+        {
+            var current = _appWindow.Size;
+            if (current.Width <= 0 || current.Height <= 0) return;
+            var spec = _spec;
+            // See ApplyAspectRatioSizing for the ExtendsContentIntoTitleBar
+            // rationale — Client basis is ambiguous when the app paints
+            // into the title bar, so fall back to Window basis.
+            bool useClientBasis = spec.AspectRatioBasis == AspectRatioBasis.Client
+                && !_window.ExtendsContentIntoTitleBar;
+            var (chromeH, chromeV) = useClientBasis ? ComputeChromeInset() : (0, 0);
+            int clientW = Math.Max(1, current.Width - chromeH);
+            int clientH = Math.Max(1, current.Height - chromeV);
+            var currentRatio = (double)clientW / clientH;
+            if (Math.Abs(currentRatio - ratio) < 0.001) return;
+
+            int newHeight = Math.Max(1, (int)Math.Round(clientW / ratio) + chromeV);
+            newHeight = ClampPhysicalDimension(newHeight, spec.MinHeight, spec.MaxHeight);
+            _userResized = true;
+            _appWindow.Resize(new global::Windows.Graphics.SizeInt32(current.Width, newHeight));
+        }
+        catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
+        {
+            DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.ConformToAspectRatio", ex);
+        }
     }
 
     private int _dragMoveActive; // 0 = idle, 1 = drag-in-progress

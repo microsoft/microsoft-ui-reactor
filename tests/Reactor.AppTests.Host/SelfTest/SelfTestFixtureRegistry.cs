@@ -992,6 +992,7 @@ internal static class SelfTestFixtureRegistry
         "AspectRatio_RespectsMinMax",
         "AspectRatio_RejectsNoResize",
         "AspectRatio_RuntimeSwap",
+        "AspectRatio_ClientBasis",
         "DragMove_FromBackground",
         "DragMove_SuppressedOnButton",
         "DragMove_SuppressedOnDragFalse",
@@ -1032,6 +1033,11 @@ internal static class SelfTestFixtureRegistry
         "BackdropTransparent_Apply",
         "FilePicker_InitializesWithWindow",
         "FilePicker_ThrowsOffUiThread",
+        "AspectRatio_Suite_Math",
+        "AspectRatio_Suite_Conform",
+        "WindowStyle_ToolWindowExStyleRemoved",
+        "SizeToContent_MinMaxInfoSuite",
+        "UseSpec054Hooks_Suite",
         // Spec 045 §2.19 — Phase-1 wrapper-based Docking_* smoke fixtures
         // were retired with the XAML wrapper at the §2.29 review gate.
         // NativeDocking_* below covers the same surface against the P2
@@ -2294,6 +2300,10 @@ internal static class SelfTestFixtureRegistry
         "AspectRatio_RespectsMinMax" => new Phase2WindowingFixtures.AspectRatioRespectsMinMax(harness),
         "AspectRatio_RejectsNoResize" => new Phase2WindowingFixtures.AspectRatioRejectsNoResize(harness),
         "AspectRatio_RuntimeSwap" => new Phase2WindowingFixtures.AspectRatioRuntimeSwap(harness),
+        "AspectRatio_ClientBasis" => new Phase2WindowingFixtures.AspectRatioClientBasis(harness),
+        "AspectRatio_Suite_Math" => new Phase2WindowingFixtures.AspectRatioSuiteMath(harness),
+        "AspectRatio_Suite_Conform" => new Phase2WindowingFixtures.AspectRatioSuiteConform(harness),
+        "WindowStyle_ToolWindowExStyleRemoved" => new Phase2WindowingFixtures.WindowStyleToolWindowExStyleRemoved(harness),
         "DragMove_FromBackground" => new Phase2WindowingFixtures.DragMoveFromBackground(harness),
         "DragMove_SuppressedOnButton" => new Phase2WindowingFixtures.DragMoveSuppressedOnButton(harness),
         "DragMove_SuppressedOnDragFalse" => new Phase2WindowingFixtures.DragMoveSuppressedOnDragFalse(harness),
@@ -2324,6 +2334,7 @@ internal static class SelfTestFixtureRegistry
         "SizeToContent_NoOpWhenMaximized" => new Phase5WindowingFixtures.SizeToContentNoOpWhenMaximized(harness),
         "SizeToContent_AspectRatio_BothRejected" => new Phase5WindowingFixtures.SizeToContentAspectRatioBothRejected(harness),
         "SizeToContent_NoReentrancy" => new Phase5WindowingFixtures.SizeToContentNoReentrancy(harness),
+        "SizeToContent_MinMaxInfoSuite" => new Phase5WindowingFixtures.SizeToContentMinMaxInfoSuite(harness),
         // Spec 054 Phase 6 — TaskbarItem facade.
         "TaskbarItem_Description_RoundTrip" => new Phase6WindowingFixtures.TaskbarItemDescriptionRoundTrip(harness),
         "TaskbarItem_ProgressRegression" => new Phase6WindowingFixtures.TaskbarItemProgressRegression(harness),
@@ -2334,6 +2345,7 @@ internal static class SelfTestFixtureRegistry
         "BackdropTransparent_Apply" => new Phase7WindowingFixtures.BackdropTransparentApply(harness),
         "FilePicker_InitializesWithWindow" => new Phase7WindowingFixtures.FilePickerInitializesWithWindow(harness),
         "FilePicker_ThrowsOffUiThread" => new Phase7WindowingFixtures.FilePickerThrowsOffUiThread(harness),
+        "UseSpec054Hooks_Suite" => new Phase7WindowingFixtures.UseSpec054HooksSuite(harness),
         // Spec 045 §2.19 — Phase-1 DockingSmokeFixtures retired alongside
         // the XAML wrapper unhooking. NativeDockingSmokeFixtures (below)
         // covers the same mount/update/unmount surface against the P2

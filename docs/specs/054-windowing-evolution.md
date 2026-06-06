@@ -282,19 +282,60 @@ public WindowSpec WithAspectRatio(double widthOverHeight) =>
 
 // On WindowSpec:
 public double? AspectRatio { get; init; }   // width / height; null = unconstrained
+public AspectRatioBasis AspectRatioBasis { get; init; } = AspectRatioBasis.Window;
+
+public enum AspectRatioBasis
+{
+    Window,   // ratio applies to the outer window rect (default; cheap, matches WM_SIZING)
+    Client,   // ratio applies to the client (content) area; framework computes chrome inset via AdjustWindowRectExForDpi
+}
 ```
 
 Validation: `> 0` and finite (else throw); rejected when `ResizeMode ==
 NoResize` (no drag means no constraint to apply) — that combination is a
 spec mistake worth catching at the boundary, not silently ignoring.
 
+**Window vs. client basis.** `AspectRatioBasis.Window` (the default) is
+the cheap shape — `WM_SIZING` hands us the outer window rect and we
+enforce the ratio on it directly. `AspectRatioBasis.Client` is what
+media/game/canvas apps want: a 1:1 *content* area for a square video, a
+16:9 viewport for a game. The framework subtracts the chrome inset
+(caption + borders, via `AdjustWindowRectExForDpi` at the current
+window style + DPI) before applying the ratio, then adds it back. The
+ratio stays accurate across DPI changes and `WindowStyle` flips because
+the inset is re-computed every message.
+
+**`Client` basis silently falls back to `Window` when
+`ExtendsContentIntoTitleBar = true`.** Once the app paints into the
+title-bar area, the OS's notion of "client area" (which still excludes
+the caption-button inset) no longer matches the developer's notion of
+"content area" — the custom title bar lives inside the client area, so
+constraining client-rect aspect would size the *title bar + content*
+together, not the content alone. The framework can't disambiguate these
+without an explicit content-rectangle declaration from the app, so for
+now it conservatively treats `Client` as `Window` in that configuration.
+A future iteration may add a `Window.SetContentDragRegion(rect)`-style
+API for apps that want client-basis aspect ratio together with a custom
+title bar.
+
+**Maximize bypasses the lock — by design.** Clicking the maximize
+caption button (or pressing <kbd>Win</kbd>+<kbd>↑</kbd>) sends
+`WM_SYSCOMMAND` with `SC_MAXIMIZE`, which goes straight to
+`ShowWindow(SW_MAXIMIZE)` without firing `WM_SIZING`. The window
+expands to fill the work area regardless of `AspectRatio`. This is
+intentional — users expect "maximize fills the work area"; an
+AspectRatio that refuses to maximize would surprise everyone. Apps
+that genuinely want to forbid maximize should set
+`ResizeMode = CanMinimize` (disables the maximize button outright).
+The lock re-engages on the next interactive drag-resize after restore.
+
 **Edge handling.** The algorithm picks the master dimension from the
 `wParam` of `WM_SIZING`:
 
 | Drag handle | Master | Slave |
 | --- | --- | --- |
-| `WMSZ_LEFT` / `WMSZ_RIGHT` | height | width |
-| `WMSZ_TOP` / `WMSZ_BOTTOM` | width | height |
+| `WMSZ_LEFT` / `WMSZ_RIGHT` | width | height |
+| `WMSZ_TOP` / `WMSZ_BOTTOM` | height | width |
 | Corner | whichever has the larger user delta (sticks-to-mouse) |
 
 Min/max constraints still apply through `WM_GETMINMAXINFO`; aspect-ratio
