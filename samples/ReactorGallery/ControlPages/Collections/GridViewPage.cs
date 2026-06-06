@@ -35,7 +35,13 @@ class GridViewPage : Component
                                 .Size(100, 100)
                                 .CornerRadius(ThemeResource.CornerRadius("ControlCornerRadius").TopLeft)                        ).ToArray()
                     ).SelectionMode(selectionMode),
-                    @"GridView(\n    items.Select(i =>\n        Border(TextBlock($""Item {i}"")).Size(100,100)\n    ).ToArray()\n).SelectionMode(ListViewSelectionMode.Multiple)",
+                    """
+                    GridView(
+                        items.Select(i =>
+                            Border(TextBlock($"Item {i}")).Size(100, 100)
+                        ).ToArray()
+                    ).SelectionMode(ListViewSelectionMode.Multiple)
+                    """,
                     OptionPanel(
                         TextBlock("Selection Mode"),
                         ComboBox(modes, mode, setMode)
@@ -50,7 +56,12 @@ class GridViewPage : Component
                             .Foreground("#FFFFFF")
                             .Size(80, 80).CornerRadius(ThemeResource.CornerRadius("OverlayCornerRadius").TopLeft)
                     ),
-                    @"GridView(\n    items, s => s,\n    (s, i) => Border(TextBlock(s)).Size(80,80)\n)")
+                    """
+                    GridView(
+                        items, s => s,
+                        (s, i) => Border(TextBlock(s)).Size(80, 80)
+                    )
+                    """)
             ).Margin(36, 24, 36, 36)
         );
     }

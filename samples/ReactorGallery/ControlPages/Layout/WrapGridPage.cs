@@ -28,7 +28,13 @@ class WrapGridPage : Component
                                     .Size(70, 70).CornerRadius(ThemeResource.CornerRadius("ControlCornerRadius").TopLeft).Margin(4)
                             ).ToArray()
                     ),
-                    @"WrapGrid(\n    items.Select(i =>\n        Border(TextBlock($""{i}"")).Size(70,70).Margin(4)\n    ).ToArray()\n)",
+                    """
+                    WrapGrid(
+                        items.Select(i =>
+                            Border(TextBlock($"{i}")).Size(70, 70).Margin(4)
+                        ).ToArray()
+                    )
+                    """,
                     OptionPanel(
                         TextBlock($"Item count: {(int)count}"),
                         Slider(count, 1, 24, setCount)
@@ -42,7 +48,11 @@ class WrapGridPage : Component
                                     .Background("#5B6ABF").Size(80, 50).CornerRadius(ThemeResource.CornerRadius("ControlCornerRadius").TopLeft).Margin(2)
                             ).ToArray()
                     ),
-                    @"WrapGrid(4,  // max 4 per row\n    items.Select(i => Border(TextBlock($""#{i}"")).Size(80,50)).ToArray()\n)")
+                    """
+                    WrapGrid(4,  // max 4 per row
+                        items.Select(i => Border(TextBlock($"#{i}")).Size(80, 50)).ToArray()
+                    )
+                    """)
             ).Margin(36, 24, 36, 36)
         );
     }

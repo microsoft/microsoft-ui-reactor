@@ -34,7 +34,13 @@ class RelativePanelPage : Component
                                 .Margin(0, 8, 0, 0)
                         )
                     ).Size(400, 200).Background(Theme.SubtleFill).CornerRadius(ThemeResource.CornerRadius("ControlCornerRadius").TopLeft),
-                    @"RelativePanel(\n    Border(""Top-Left"").RelativePanel(name: ""topLeft"",\n        alignLeftWithPanel: true, alignTopWithPanel: true),\n    Border(""Right"").RelativePanel(name: ""r"", rightOf: ""topLeft"")\n)"),
+                    """
+                    RelativePanel(
+                        Border("Top-Left").RelativePanel(name: "topLeft",
+                            alignLeftWithPanel: true, alignTopWithPanel: true),
+                        Border("Right").RelativePanel(name: "r", rightOf: "topLeft")
+                    )
+                    """),
 
                 SampleCard("Panel Alignment",
                     Border(
@@ -52,7 +58,11 @@ class RelativePanelPage : Component
                                     alignBottomWithPanel: true)
                         )
                     ).Size(400, 200).Background(Theme.SubtleFill).CornerRadius(ThemeResource.CornerRadius("ControlCornerRadius").TopLeft),
-                    @"Border(""Center"").RelativePanel(name: ""center"",\n    alignHorizontalCenterWithPanel: true,\n    alignVerticalCenterWithPanel: true)")
+                    """
+                    Border("Center").RelativePanel(name: "center",
+                        alignHorizontalCenterWithPanel: true,
+                        alignVerticalCenterWithPanel: true)
+                    """)
             ).Margin(36, 24, 36, 36)
         );
     }

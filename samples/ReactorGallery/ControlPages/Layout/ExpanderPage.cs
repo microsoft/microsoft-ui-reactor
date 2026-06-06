@@ -36,14 +36,21 @@ class ExpanderPage : Component
                             TextBlock("Log level: Debug")
                         ), expanded2, setExpanded2).Width(350)
                     ),
-                    @"Expander(""Settings"", VStack(\n    TextBlock(""Option 1: Enabled""), ...\n), expanded, setExpanded)"),
+                    """
+                    Expander("Settings", VStack(
+                        TextBlock("Option 1: Enabled"), ...
+                    ), expanded, setExpanded)
+                    """),
 
                 SampleCard("Direction Control",
                     Expander("Expand Direction", VStack(4,
                         TextBlock("This content appears based on the direction setting."),
                         TextBlock("Try switching between Down and Up.")
                     ), true).Direction(direction).Width(350),
-                    @"Expander(""Header"", content, true)\n    .Direction(ExpandDirection.Up)",
+                    """
+                    Expander("Header", content, true)
+                        .Direction(ExpandDirection.Up)
+                    """,
                     OptionPanel(
                         TextBlock("Direction"),
                         ComboBox(new[] { "Down", "Up" }, dirIndex, setDirIndex)

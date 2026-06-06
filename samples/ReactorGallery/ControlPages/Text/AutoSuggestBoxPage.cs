@@ -25,7 +25,10 @@ class AutoSuggestBoxPage : Component
                         AutoSuggestBox(query, setQuery).Width(300),
                         TextBlock($"Current text: \"{query}\"").Foreground(Theme.SecondaryText)
                     ),
-                    @"var (query, setQuery) = UseState("""");\nAutoSuggestBox(query, setQuery)"),
+                    """
+                    var (query, setQuery) = UseState("");
+                    AutoSuggestBox(query, setQuery)
+                    """),
 
                 SampleCard("With Query Submitted",
                     VStack(8,
@@ -46,7 +49,10 @@ class AutoSuggestBoxPage : Component
                                 .ToArray()
                         )
                     ),
-                    @"AutoSuggestBox(query, setQuery)\nallItems.Where(i => i.Contains(query)).Select(...)")
+                    """
+                    AutoSuggestBox(query, setQuery)
+                    allItems.Where(i => i.Contains(query)).Select(...)
+                    """)
             ).Margin(36, 24, 36, 36)
         );
     }

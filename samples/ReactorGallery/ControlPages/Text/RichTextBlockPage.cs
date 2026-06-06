@@ -33,14 +33,23 @@ class RichTextBlockPage : Component
                         Paragraph(Run("Italic emphasis ") with { IsItalic = true }, Run("mixed with "), Run("bold") with { IsBold = true }, Run(".")),
                         Paragraph(Run("A third paragraph with different content to show block-level formatting."))
                     }),
-                    @"RichTextBlock(new[] {\n    Paragraph(Run(""Bold"") with { IsBold = true }, Run(""normal"")),\n    Paragraph(Run(""Italic"") with { IsItalic = true })\n})"),
+                    """
+                    RichTextBlock(new[]
+                    {
+                        Paragraph(Run("Bold") with { IsBold = true }, Run("normal")),
+                        Paragraph(Run("Italic") with { IsItalic = true })
+                    })
+                    """),
 
                 SampleCard("Simple RichTextBlock String",
                     VStack(8,
                         RichTextBlock("Line one of text content."),
                         RichTextBlock("Line two with separate blocks.")
                     ),
-                    @"RichTextBlock(""Line one"")\nRichTextBlock(""Line two"")")
+                    """
+                    RichTextBlock("Line one")
+                    RichTextBlock("Line two")
+                    """)
             ).Margin(36, 24, 36, 36)
         );
     }

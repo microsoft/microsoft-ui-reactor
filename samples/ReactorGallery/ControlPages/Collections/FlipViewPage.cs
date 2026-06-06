@@ -26,7 +26,12 @@ class FlipViewPage : Component
                                 .Background(c).Size(300, 200)
                         ).ToArray()
                     ),
-                    @"FlipView(\n    Border(TextBlock(""Item 1"")).Background(""#FF4444"").Size(300,200),\n    Border(TextBlock(""Item 2"")).Background(""#44AA44"").Size(300,200)\n)"),
+                    """
+                    FlipView(
+                        Border(TextBlock("Item 1")).Background("#FF4444").Size(300, 200),
+                        Border(TextBlock("Item 2")).Background("#44AA44").Size(300, 200)
+                    )
+                    """),
 
                 SampleCard("Data-Driven FlipView",
                     FlipView(
@@ -39,7 +44,13 @@ class FlipViewPage : Component
                             ).Center()
                         ).Background(c).Size(300, 200)
                     ),
-                    @"FlipView(\n    colors,\n    c => c,\n    (c, i) => Border(VStack(...)).Background(c).Size(300, 200)\n)")
+                    """
+                    FlipView(
+                        colors,
+                        c => c,
+                        (c, i) => Border(VStack(...)).Background(c).Size(300, 200)
+                    )
+                    """)
             ).Margin(36, 24, 36, 36)
         );
     }

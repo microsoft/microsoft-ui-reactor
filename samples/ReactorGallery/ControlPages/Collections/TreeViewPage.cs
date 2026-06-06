@@ -31,7 +31,15 @@ class TreeViewPage : Component
                             TreeNode("Family")),
                         TreeNode("Music")
                     ).Height(300),
-                    @"TreeView(\n    TreeNode(""Documents"",\n        TreeNode(""Work"",\n            TreeNode(""Report.docx""),\n            TreeNode(""Slides.pptx""))),\n    TreeNode(""Pictures"", ...)\n)"),
+                    """
+                    TreeView(
+                        TreeNode("Documents",
+                            TreeNode("Work",
+                                TreeNode("Report.docx"),
+                                TreeNode("Slides.pptx"))),
+                        TreeNode("Pictures", ...)
+                    )
+                    """),
 
                 SampleCard("Deeply Nested TreeView",
                     TreeView(
@@ -44,7 +52,14 @@ class TreeViewPage : Component
                             TreeNode("Level 1B",
                                 TreeNode("Level 2C")))
                     ).Height(250),
-                    @"TreeView(\n    TreeNode(""Root"",\n        TreeNode(""Level 1A"",\n            TreeNode(""Level 2A"",\n                TreeNode(""Level 3A""))))\n)")
+                    """
+                    TreeView(
+                        TreeNode("Root",
+                            TreeNode("Level 1A",
+                                TreeNode("Level 2A",
+                                    TreeNode("Level 3A"))))
+                    )
+                    """)
             ).Margin(36, 24, 36, 36)
         );
     }

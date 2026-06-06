@@ -27,7 +27,11 @@ class ViewboxPage : Component
                             )
                         )
                     ).Size(size, size).Background(Theme.SubtleFill).CornerRadius(ThemeResource.CornerRadius("ControlCornerRadius").TopLeft),
-                    @"Viewbox(\n    VStack(4, TextBlock(""Hello"").Bold(), TextBlock(""Scaled""))\n)",
+                    """
+                    Viewbox(
+                        VStack(4, TextBlock("Hello").Bold(), TextBlock("Scaled"))
+                    )
+                    """,
                     OptionPanel(
                         TextBlock($"Container size: {(int)size}px"),
                         Slider(size, 50, 300, setSize)
@@ -51,7 +55,11 @@ class ViewboxPage : Component
                                 .Size(60, 150).Background(Theme.SubtleFill).CornerRadius(ThemeResource.CornerRadius("ControlCornerRadius").TopLeft)
                         )
                     ),
-                    @"// Same content at different sizes:\nBorder(Viewbox(TextBlock(""ABC""))).Size(100, 100)\nBorder(Viewbox(TextBlock(""ABC""))).Size(150, 80)"),
+                    """
+                    // Same content at different sizes:
+                    Border(Viewbox(TextBlock("ABC"))).Size(100, 100)
+                    Border(Viewbox(TextBlock("ABC"))).Size(150, 80)
+                    """),
 
                 SampleCard("Stretch Modes",
                     HStack(16,
@@ -76,7 +84,12 @@ class ViewboxPage : Component
                                 .Size(160, 80).Background(Theme.SubtleFill).CornerRadius(ThemeResource.CornerRadius("ControlCornerRadius").TopLeft)
                         )
                     ),
-                    @"Viewbox(TextBlock(""ABC"")).Stretch(Stretch.Uniform)\nViewbox(TextBlock(""ABC"")).Stretch(Stretch.Fill)\nViewbox(TextBlock(""ABC"")).Stretch(Stretch.UniformToFill)\nViewbox(TextBlock(""ABC"")).Stretch(Stretch.None)")
+                    """
+                    Viewbox(TextBlock("ABC")).Stretch(Stretch.Uniform)
+                    Viewbox(TextBlock("ABC")).Stretch(Stretch.Fill)
+                    Viewbox(TextBlock("ABC")).Stretch(Stretch.UniformToFill)
+                    Viewbox(TextBlock("ABC")).Stretch(Stretch.None)
+                    """)
             ).Margin(36, 24, 36, 36)
         );
     }

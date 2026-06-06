@@ -24,7 +24,10 @@ class ListBoxPage : Component
                         ListBox(fruits, selected, setSelected),
                         TextBlock($"Selected: {fruits[selected]}").Foreground(Theme.SecondaryText)
                     ),
-                    @"var (selected, setSelected) = UseState(0);\nListBox(fruits, selected, setSelected)"),
+                    """
+                    var (selected, setSelected) = UseState(0);
+                    ListBox(fruits, selected, setSelected)
+                    """),
 
                 SampleCard("Styled ListBox",
                     ListBox(

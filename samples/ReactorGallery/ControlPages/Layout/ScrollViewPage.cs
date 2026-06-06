@@ -29,7 +29,13 @@ class ScrollViewPage : Component
                             )
                         )
                     ).Size(300, 200).WithBorder(Theme.CardStroke).CornerRadius(ThemeResource.CornerRadius("ControlCornerRadius").TopLeft),
-                    @"ScrollView(\n    VStack(4, items.Select(i =>\n        Border(TextBlock($""Item {i}"")).Padding(8)\n    ).ToArray())\n)",
+                    """
+                    ScrollView(
+                        VStack(4, items.Select(i =>
+                            Border(TextBlock($"Item {i}")).Padding(8)
+                        ).ToArray())
+                    )
+                    """,
                     OptionPanel(
                         TextBlock($"Item count: {(int)itemCount}"),
                         Slider(itemCount, 5, 50, setItemCount)
@@ -46,7 +52,12 @@ class ScrollViewPage : Component
                             )
                         ) with { ContentOrientation = Microsoft.UI.Xaml.Controls.ScrollingContentOrientation.Horizontal })
                     ).Height(80).Width(350).WithBorder(Theme.CardStroke).CornerRadius(ThemeResource.CornerRadius("ControlCornerRadius").TopLeft),
-                    @"(ScrollView(HStack(...)) with {\n    ContentOrientation = ScrollingContentOrientation.Horizontal\n})"),
+                    """
+                    ScrollView(HStack(...)) with
+                    {
+                        ContentOrientation = ScrollingContentOrientation.Horizontal
+                    }
+                    """),
 
                 SampleCard("Classic ScrollViewer (legacy)",
                     Border(
@@ -60,7 +71,13 @@ class ScrollViewPage : Component
                         ) with { HorizontalScrollMode = Microsoft.UI.Xaml.Controls.ScrollMode.Disabled,
                                  HorizontalScrollBarVisibility = Microsoft.UI.Xaml.Controls.ScrollBarVisibility.Disabled })
                     ).Size(300, 160).WithBorder(Theme.CardStroke).CornerRadius(ThemeResource.CornerRadius("ControlCornerRadius").TopLeft),
-                    @"(ScrollViewer(VStack(...)) with {\n    HorizontalScrollMode = ScrollMode.Disabled,\n    HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled\n})")
+                    """
+                    ScrollViewer(VStack(...)) with
+                    {
+                        HorizontalScrollMode = ScrollMode.Disabled,
+                        HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
+                    }
+                    """)
             ).Margin(36, 24, 36, 36)
         );
     }

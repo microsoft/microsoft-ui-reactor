@@ -44,7 +44,13 @@ class SplitViewPage : Component
                         ) with { IsPaneOpen = isOpen })
                         .Set(sv => sv.DisplayMode = displayMode)
                     ).Size(500, 250).WithBorder(Theme.CardStroke).CornerRadius(4),
-                    @"SplitView(\n    pane: VStack(8, TextBlock(""Pane""), ...),\n    content: VStack(8, ...)\n) with { IsPaneOpen = isOpen }\n.Set(sv => sv.DisplayMode = SplitViewDisplayMode.Inline)",
+                    """
+                    SplitView(
+                        pane: VStack(8, TextBlock("Pane"), ...),
+                        content: VStack(8, ...)
+                    ) with { IsPaneOpen = isOpen }
+                    .Set(sv => sv.DisplayMode = SplitViewDisplayMode.Inline)
+                    """,
                     OptionPanel(
                         TextBlock("Display Mode"),
                         ComboBox(modes, modeIndex, setModeIndex),

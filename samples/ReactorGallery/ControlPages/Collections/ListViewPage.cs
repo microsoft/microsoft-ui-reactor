@@ -70,7 +70,11 @@ class ListViewPage : Component
                     ListView(
                         items.Select(i => TextBlock(i) as Element).ToArray()
                     ).SelectionMode(selectionMode).Height(250),
-                    @"ListView(\n    TextBlock(""Apples""), TextBlock(""Bananas""), ...\n).SelectionMode(ListViewSelectionMode.Multiple)",
+                    """
+                    ListView(
+                        TextBlock("Apples"), TextBlock("Bananas"), ...
+                    ).SelectionMode(ListViewSelectionMode.Multiple)
+                    """,
                     OptionPanel(
                         TextBlock("Selection Mode"),
                         ComboBox(modes, mode, setMode)
@@ -86,7 +90,15 @@ class ListViewPage : Component
                             TextBlock(s)
                         )
                     ).Height(250),
-                    @"ListView(\n    items, s => s,\n    (s, i) => HStack(8,\n        Border(TextBlock($""{i+1}"")).Size(28,28),\n        TextBlock(s)\n    )\n)"),
+                    """
+                    ListView(
+                        items, s => s,
+                        (s, i) => HStack(8,
+                            Border(TextBlock($"{i + 1}")).Size(28, 28),
+                            TextBlock(s)
+                        )
+                    )
+                    """),
 
                 // ── Animated edit (spec 042 — keyed reconciliation + Animate) ──
                 SampleCard("Animated edit (spec 042)",

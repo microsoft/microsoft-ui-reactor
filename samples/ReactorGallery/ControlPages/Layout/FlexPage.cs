@@ -51,7 +51,15 @@ class FlexPage : Component
                             RowGap = 8,
                         }
                     ).Size(400, 250).Background(Theme.SubtleFill).CornerRadius(ThemeResource.CornerRadius("ControlCornerRadius").TopLeft),
-                    @"new FlexElement(children) {\n    Direction = FlexDirection.Row,\n    JustifyContent = FlexJustify.SpaceBetween,\n    AlignItems = FlexAlign.Center,\n    Wrap = FlexWrap.Wrap\n}",
+                    """
+                    new FlexElement(children)
+                    {
+                        Direction = FlexDirection.Row,
+                        JustifyContent = FlexJustify.SpaceBetween,
+                        AlignItems = FlexAlign.Center,
+                        Wrap = FlexWrap.Wrap,
+                    }
+                    """,
                     OptionPanel(
                         TextBlock("Direction"), ComboBox(dirs, dirIndex, setDirIndex),
                         TextBlock("Justify"), ComboBox(justifies, justifyIndex, setJustifyIndex),
@@ -75,7 +83,10 @@ class FlexPage : Component
                         Direction = FlexDirection.Row,
                         ColumnGap = 8,
                     },
-                    @"Border(...).Flex(grow: 1)  // takes 1 share\nBorder(...).Flex(grow: 2)  // takes 2 shares"),
+                    """
+                    Border(...).Flex(grow: 1)  // takes 1 share
+                    Border(...).Flex(grow: 2)  // takes 2 shares
+                    """),
 
                 SampleCard("FlexRow & FlexColumn Shortcuts",
                     HStack(16,
@@ -92,7 +103,10 @@ class FlexPage : Component
                             )
                         )
                     ),
-                    @"FlexRow(Box(""A""), Box(""B""), Box(""C""))\nFlexColumn(Box(""X""), Box(""Y""), Box(""Z""))")
+                    """
+                    FlexRow(Box("A"), Box("B"), Box("C"))
+                    FlexColumn(Box("X"), Box("Y"), Box("Z"))
+                    """)
             ).Margin(36, 24, 36, 36)
         );
     }

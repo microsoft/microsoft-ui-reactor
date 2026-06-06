@@ -1,11 +1,48 @@
+using System.Threading.Tasks;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Windows.ApplicationModel.DataTransfer;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace WinUIGalleryReactor;
+
+/// <summary>
+/// A small "Copy" button used inside <see cref="GalleryControls.SampleCard"/>.
+/// Lives as a Component so we can use UseState for the transient "Copied" label.
+/// </summary>
+internal sealed class CopyToClipboardButton : Component<string>
+{
+    public override Element Render()
+    {
+        var text = Props;
+        var (copied, setCopied) = UseState(false, threadSafe: true);
+
+        return Button(copied ? "Copied" : "Copy")
+            .Click(() =>
+            {
+                try
+                {
+                    var dp = new DataPackage();
+                    dp.SetText(text);
+                    Clipboard.SetContent(dp);
+                    setCopied(true);
+                    _ = Task.Delay(1500).ContinueWith(_ =>
+                    {
+                        try { setCopied(false); } catch { /* unmounted */ }
+                    });
+                }
+                catch
+                {
+                    // Clipboard.SetContent can throw RPC_E_CALL_REJECTED transiently;
+                    // swallow rather than crash the gallery.
+                }
+            })
+            .SubtleButton();
+    }
+}
 
 /// <summary>
 /// Reusable UI building blocks shared across the WinUI Gallery app.
@@ -17,6 +54,7 @@ public static class GalleryControls
     static CornerRadius OverlayRadiusCR => ThemeResource.CornerRadius("OverlayCornerRadius");
     static double ControlRadius => ControlRadiusCR.TopLeft;
     static double OverlayRadius => OverlayRadiusCR.TopLeft;
+
     /// <summary>
     /// Renders a page header with a title and description.
     /// </summary>
@@ -149,14 +187,29 @@ public static class GalleryControls
 
         children.Add(
             Expander("Source code",
-                ScrollView(
-                    TextBlock(sourceCode.Trim())
-                        .FontFamily("Consolas, 'Cascadia Code', monospace")
-                        .FontSize(13)
-                        .Padding(12)
-                )
-                .Height(200)
-                .Background(Theme.SubtleFill),
+                Grid(
+                    columns: [GridSize.Star()], rows: [GridSize.Star()],
+                    ScrollView(
+                        TextBlock(sourceCode.Trim())
+                            .FontFamily("Consolas, 'Cascadia Code', monospace")
+                            .FontSize(13)
+                            .Padding(12)
+                            .Set(tb =>
+                            {
+                                tb.IsTextSelectionEnabled = true;
+                                tb.TextWrapping = TextWrapping.NoWrap;
+                            })
+                    )
+                    .Height(200)
+                    .Background(Theme.SubtleFill)
+                    .Grid(row: 0, column: 0),
+
+                    Component<CopyToClipboardButton, string>(sourceCode.Trim())
+                        .HAlign(HorizontalAlignment.Right)
+                        .VAlign(VerticalAlignment.Top)
+                        .Margin(0, 8, 12, 0)
+                        .Grid(row: 0, column: 0)
+                ),
                 isExpanded: false,
                 onIsExpandedChanged: null
             )

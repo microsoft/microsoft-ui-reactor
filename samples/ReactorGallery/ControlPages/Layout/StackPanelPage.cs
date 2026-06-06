@@ -29,7 +29,11 @@ class StackPanelPage : Component
                         ColorBox("#2ECC71", "C"),
                         ColorBox("#F39C12", "D")
                     ),
-                    @"VStack(8,\n    Box(""A""), Box(""B""), Box(""C""), Box(""D"")\n)",
+                    """
+                    VStack(8,
+                        Box("A"), Box("B"), Box("C"), Box("D")
+                    )
+                    """,
                     OptionPanel(
                         TextBlock($"Spacing: {(int)spacing}"),
                         Slider(spacing, 0, 32, setSpacing)
@@ -42,7 +46,11 @@ class StackPanelPage : Component
                         ColorBox("#E67E22", "3"),
                         ColorBox("#2C3E50", "4")
                     ),
-                    @"HStack(8,\n    Box(""1""), Box(""2""), Box(""3""), Box(""4"")\n)"),
+                    """
+                    HStack(8,
+                        Box("1"), Box("2"), Box("3"), Box("4")
+                    )
+                    """),
 
                 SampleCard("Nested Stacks",
                     VStack(12,
@@ -56,7 +64,12 @@ class StackPanelPage : Component
                             ColorBox("#9B59B6", "R2")
                         )
                     ),
-                    @"VStack(12,\n    HStack(8, Box(""R1""), Box(""R1""), Box(""R1"")),\n    HStack(8, Box(""R2""), Box(""R2""))\n)")
+                    """
+                    VStack(12,
+                        HStack(8, Box("R1"), Box("R1"), Box("R1")),
+                        HStack(8, Box("R2"), Box("R2"))
+                    )
+                    """)
             ).Margin(36, 24, 36, 36)
         );
     }
