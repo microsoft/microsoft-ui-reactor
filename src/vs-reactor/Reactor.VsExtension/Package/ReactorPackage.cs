@@ -16,7 +16,7 @@ namespace Microsoft.UI.Reactor.VsExtension.Package
 {
     [PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
     [InstalledProductRegistration("#110", "#111", "0.1", IconResourceID = 400)]
-    [ProvideMenuResource("Menus.ctmenu", 1)]
+    [ProvideMenuResource("PackageCommands.CTMENU", 1)]
     [ProvideToolWindow(typeof(ReactorEmbedToolWindow), Style = VsDockStyle.Tabbed, Window = ToolWindowGuids80.SolutionExplorer)]
     // Force auto-load on the shell-initialized UIContext (always true once VS is up,
     // regardless of solution state). This guarantees InitializeAsync runs even if no
