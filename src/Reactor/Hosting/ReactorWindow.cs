@@ -308,14 +308,27 @@ public sealed class ReactorWindow : IDisposable
 
         if (spec.Embed is { } embed)
         {
-            VerifyEmbedDpiAwareness(embed.Style);
-            ApplyEmbedInitialStyles(embed.Style);
-            _embedWatchdog = new EmbedHostWatchdog();
-            _embedWatchdog.Start(embed.HostPid, () =>
+            Console.Error.WriteLine("[embed:trace] entering embed setup (style=" + embed.Style + " hostPid=" + embed.HostPid + ")");
+            try
             {
-                try { NativeShell.SetParent(_hwnd, 0); } catch { }
-                Environment.Exit(0);
-            });
+                VerifyEmbedDpiAwareness(embed.Style);
+                Console.Error.WriteLine("[embed:trace] VerifyEmbedDpiAwareness ok");
+                ApplyEmbedInitialStyles(embed.Style);
+                Console.Error.WriteLine("[embed:trace] ApplyEmbedInitialStyles ok");
+                _embedWatchdog = new EmbedHostWatchdog();
+                _embedWatchdog.Start(embed.HostPid, () =>
+                {
+                    try { NativeShell.SetParent(_hwnd, 0); } catch { }
+                    Environment.Exit(0);
+                });
+                Console.Error.WriteLine("[embed:trace] EmbedHostWatchdog started");
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("[embed:trace] embed setup THREW: " + ex.GetType().FullName + ": " + ex.Message);
+                Console.Error.WriteLine(ex.ToString());
+                throw;
+            }
         }
 
         // Snapshot initial per-window DPI before applying spec sizing so the
@@ -592,6 +605,15 @@ public sealed class ReactorWindow : IDisposable
 
         Console.Error.WriteLine("[reactor] --embed owner mode is running without PerMonitorV2 DPI awareness; DPI fallback may be less precise.");
     }
+
+    /// <summary>
+    /// Test hook so unit tests can verify the underlying P/Invoke resolves
+    /// (Win32 entry point ``GetThreadDpiAwarenessContext`` — the historical
+    /// typo ``GetProcessDpiAwarenessContext`` does not exist in user32.dll and
+    /// threw at first call from the embed-Child code path, regressed silently
+    /// because no test exercised this entry point).
+    /// </summary>
+    internal static nint GetCurrentDpiAwarenessContextForTests() => NativeShell.GetProcessDpiAwarenessContext();
 
     private void ApplyEmbedInitialStyles(WindowEmbedStyle style)
     {
@@ -2148,7 +2170,13 @@ public sealed class ReactorWindow : IDisposable
         public static extern bool AdjustWindowRectExForDpi(ref RECT lpRect, uint dwStyle,
             [MarshalAs(UnmanagedType.Bool)] bool bMenu, uint dwExStyle, uint dpi);
 
-        [DllImport("user32.dll")]
+        // The Win32 API name is GetThreadDpiAwarenessContext (no params). The
+        // historical typo `GetProcessDpiAwarenessContext` does not exist in
+        // user32.dll and threw EntryPointNotFoundException at first call (the
+        // thread context is set by SetProcessDpiAwarenessContext at process
+        // init, so reading the thread context is equivalent for our embed
+        // PerMonitorV2 check).
+        [DllImport("user32.dll", EntryPoint = "GetThreadDpiAwarenessContext")]
         public static extern nint GetProcessDpiAwarenessContext();
 
         [DllImport("user32.dll")]

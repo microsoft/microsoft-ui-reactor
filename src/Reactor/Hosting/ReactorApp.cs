@@ -458,15 +458,29 @@ public static class ReactorApp
         Func<RenderContext, Element>? renderFunc,
         Action<ReactorHost>? configure)
     {
-        var window = new ReactorWindow(spec);
-        configure?.Invoke(window.Host);
+        Console.Error.WriteLine("[embed:trace] OpenWindowCore enter (embed=" + (spec.Embed is not null) + ")");
+        ReactorWindow window;
+        try
+        {
+            window = new ReactorWindow(spec);
+            Console.Error.WriteLine("[embed:trace] OpenWindowCore: ReactorWindow ctor ok");
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine("[embed:trace] ReactorWindow ctor THREW: " + ex);
+            throw;
+        }
+        try { configure?.Invoke(window.Host); Console.Error.WriteLine("[embed:trace] OpenWindowCore: configure ok"); }
+        catch (Exception ex) { Console.Error.WriteLine("[embed:trace] configure THREW: " + ex); throw; }
         RegisterWindow(window);
         try
         {
             window.MountAndActivate(rootFactory, renderFunc);
+            Console.Error.WriteLine("[embed:trace] OpenWindowCore: MountAndActivate ok");
         }
-        catch
+        catch (Exception ex)
         {
+            Console.Error.WriteLine("[embed:trace] MountAndActivate THREW: " + ex);
             UnregisterWindow(window);
             try { window.Dispose(); } catch { /* best effort */ }
             throw;
