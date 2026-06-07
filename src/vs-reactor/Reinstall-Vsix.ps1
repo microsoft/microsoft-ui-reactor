@@ -11,8 +11,8 @@ $ErrorActionPreference = 'Stop'
 
 # 1. Build the VSIX unless caller asks us to skip it.
 if (-not $SkipBuild) {
-    $buildArgs = @('-Configuration', $Configuration)
-    if ($NoRestore) { $buildArgs += '-NoRestore' }
+    $buildArgs = @{ Configuration = $Configuration }
+    if ($NoRestore) { $buildArgs.NoRestore = $true }
     & (Join-Path $PSScriptRoot 'Build-Vsix.ps1') @buildArgs
     if ($LASTEXITCODE -ne 0) { Write-Error "Build-Vsix.ps1 failed."; exit $LASTEXITCODE }
 }
@@ -50,7 +50,13 @@ if ($VsInstanceId) {
 
 $instanceHash = $target.instanceId
 $instanceVersion = $target.installationVersion
-$majorMinor = ($instanceVersion -split '\.')[0..1] -join '.'
+# IMPORTANT: VS's per-user data directory always uses <Major>.0 (NOT major.minor).
+# `installationVersion` is e.g. "18.6.11806.211", but the data dir is `18.0_<hash>`.
+# Using "18.6" silently targets a non-existent folder, so cleanup misses old installs
+# and the `extensions.configurationchanged` trigger never reaches VS — which is why
+# new menu entries fail to render after a re-install.
+$major = ($instanceVersion -split '\.')[0]
+$majorMinor = "$major.0"
 $dataDirLocal = "$env:LOCALAPPDATA\Microsoft\VisualStudio\${majorMinor}_${instanceHash}"
 $extRoot = Join-Path $dataDirLocal 'Extensions'
 
@@ -113,31 +119,53 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # 7. Verify exactly one Reactor extension is now installed.
-Start-Sleep -Seconds 2
-$installedFolders = @()
-foreach ($root in @($extRoot, $machineExtRoot)) {
-    if (-not (Test-Path -LiteralPath $root)) { continue }
-    $installedFolders += Get-ChildItem $root -Directory -ErrorAction SilentlyContinue | Where-Object {
-        $manifest = Join-Path $_.FullName 'extension.vsixmanifest'
-        if (-not (Test-Path $manifest)) { return $false }
-        try { [xml]$m = Get-Content $manifest -ErrorAction Stop } catch { return $false }
-        $m.PackageManifest.Metadata.Identity.Id -eq $packageId
+# VSIXInstaller commits its directory entries asynchronously; poll up to 30 seconds.
+function Find-ReactorInstalls {
+    param([string[]]$Roots, [string]$Id)
+    $out = New-Object System.Collections.Generic.List[object]
+    foreach ($root in $Roots) {
+        if (-not (Test-Path -LiteralPath $root)) { continue }
+        foreach ($dir in (Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue)) {
+            $manifest = Join-Path $dir.FullName 'extension.vsixmanifest'
+            if (-not (Test-Path -LiteralPath $manifest)) { continue }
+            try {
+                [xml]$m = Get-Content -LiteralPath $manifest -ErrorAction Stop
+            } catch {
+                continue
+            }
+            if ($m.PackageManifest.Metadata.Identity.Id -eq $Id) {
+                $out.Add($dir) | Out-Null
+            }
+        }
     }
+    return ,$out.ToArray()
+}
+
+$installedFolders = @()
+for ($attempt = 0; $attempt -lt 60; $attempt++) {
+    Start-Sleep -Milliseconds 500
+    $installedFolders = Find-ReactorInstalls -Roots @($extRoot, $machineExtRoot) -Id $packageId
+    if (@($installedFolders).Count -ge 1) { break }
 }
 
 Write-Host ""
 Write-Host "=== Result ==="
-if ($installedFolders.Count -eq 0) {
-    Write-Error "Install completed (exit 0) but no Reactor.VsExtension folder is visible yet. Check %TEMP%\dd_VSIXInstaller_*.log."
-    exit 1
-} elseif ($installedFolders.Count -gt 1) {
+$installedFoldersArray = @($installedFolders)
+$skipUpdateConfig = $false
+if ($installedFoldersArray.Count -eq 0) {
+    Write-Warning "Install reported success (VSIXInstaller exit 0) but no Reactor.VsExtension folder appeared within 30s. Proceeding with /updateconfiguration anyway. If VS still doesn't show the menus, inspect %TEMP%\dd_VSIXInstaller_*.log."
+} elseif ($installedFoldersArray.Count -gt 1) {
     Write-Warning "More than one Reactor.VsExtension install detected. VS may silently disable all of them. Folders:"
-    $installedFolders | ForEach-Object { Write-Warning "  $($_.FullName)" }
-    exit 1
+    $installedFoldersArray | ForEach-Object { Write-Warning "  $($_.FullName)" }
+    Write-Warning "Skipping /updateconfiguration; clean up duplicates and re-run."
+    $skipUpdateConfig = $true
 } else {
-    $folder = $installedFolders[0]
+    $folder = $installedFoldersArray[0]
     [xml]$m = Get-Content (Join-Path $folder.FullName 'extension.vsixmanifest')
     Write-Host ("Installed v{0} at {1}" -f $m.PackageManifest.Metadata.Identity.Version, $folder.FullName)
+}
+
+if (-not $skipUpdateConfig) {
     Write-Host ""
     Write-Host "Running 'devenv /updateconfiguration' to force the menu/pkgdef merge synchronously."
     Write-Host "Without this step, the first VS launch on VS 2026 sometimes silently skips the merge"
