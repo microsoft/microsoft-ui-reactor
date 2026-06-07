@@ -6,7 +6,7 @@
     <RootNamespace>Microsoft.UI.Reactor.VsExtension</RootNamespace>
     <AssemblyName>Reactor.VsExtension</AssemblyName>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-    <GeneratePkgDefFile>true</GeneratePkgDefFile>
+    <GeneratePkgDefFile>false</GeneratePkgDefFile>
     <CreateVsixContainer>true</CreateVsixContainer>
     <DeployExtension>true</DeployExtension>
     <IsAotCompatible>false</IsAotCompatible>
@@ -50,6 +50,15 @@
          top-level "Menus.ctmenu" resource added by AddCtoAsTopLevelMenusResource. -->
     <EmbeddedResource Update="VSPackage.resx" LogicalName="VSPackage.resources" MergeWithCTO="true" />
     <None Include="Resources\Resources.resx" />
+    <!-- Ship a hand-rolled pkgdef. The VSSDK CreatePkgDef task generates a pkgdef
+         that includes Assembly= (full name) but omits CodeBase=. On VS 2026 the CLR
+         loader cannot find Reactor.VsExtension.dll by simple name because it lives
+         in %LocalAppData%\Microsoft\VisualStudio\<MajorMinor>_<Hash>\Extensions\<random>\,
+         not in the GAC. CodeBase=$PackageFolder$\Reactor.VsExtension.dll fixes the load. -->
+    <Content Include="Reactor.VsExtension.handcrafted.pkgdef" CopyToOutputDirectory="PreserveNewest">
+      <Link>Reactor.VsExtension.pkgdef</Link>
+      <IncludeInVSIX>true</IncludeInVSIX>
+    </Content>
   </ItemGroup>
 
   <!--
