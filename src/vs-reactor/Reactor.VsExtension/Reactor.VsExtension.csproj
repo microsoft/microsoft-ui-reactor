@@ -44,9 +44,30 @@
   <ItemGroup>
     <VSCTCompile Include="PackageCommands.vsct" />
     <EmbeddedResource Remove="Resources\Resources.resx" />
+    <!-- Keep MergeWithCTO=true so the .ctmenu is also keyed inside VSPackage.resources
+         (one of the lookup paths VS shell tries). The primary embed path is the
+         top-level "Menus.ctmenu" resource added by AddCtoAsTopLevelMenusResource. -->
     <EmbeddedResource Update="VSPackage.resx" LogicalName="VSPackage.resources" MergeWithCTO="true" />
     <None Include="Resources\Resources.resx" />
   </ItemGroup>
+
+  <!--
+    Embed the compiled .vsct output (.cto) as a top-level "Menus.ctmenu" resource so
+    [ProvideMenuResource("Menus.ctmenu", 1)] can find it via
+    Assembly.GetManifestResourceStream("Menus.ctmenu"). This is the canonical lookup
+    path; the MergeCto-into-VSPackage.resources path is also kept active as a fallback.
+  -->
+  <Target Name="AddCtoAsTopLevelMenusResource"
+          AfterTargets="VSCTCompile"
+          BeforeTargets="AssignTargetPaths;PrepareResources;CoreCompile"
+          Condition="'$(DotnetVsixBuild)' != 'true' and '@(VSCTCompile)' != ''">
+    <ItemGroup>
+      <EmbeddedResource Include="$(IntermediateOutputPath)PackageCommands.cto">
+        <LogicalName>Menus.ctmenu</LogicalName>
+        <Visible>false</Visible>
+      </EmbeddedResource>
+    </ItemGroup>
+  </Target>
 
   <Import Project="$(VSSDKTargetsPath)\Microsoft.VsSDK.targets" Condition="'$(DotnetVsixBuild)' != 'true' and Exists('$(VSSDKTargetsPath)\Microsoft.VsSDK.targets')" />
 
