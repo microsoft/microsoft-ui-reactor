@@ -61,7 +61,7 @@
 
   <Symbols>
     <GuidSymbol name="guidSHLMainMenu" value="{D309F791-903F-11D0-9EFC-00A0C911004F}">
-      <IDSymbol name="IDG_VS_WNDO_OTRWNDWS1" value="0x103D" />
+      <IDSymbol name="IDG_VS_WNDO_OTRWNDWS1" value="0x019F" />
     </GuidSymbol>
     <GuidSymbol name="guidReactorPreviewPackage" value="{36b8ec71-7e24-402c-8a72-37c983cb91f8}" />
     <GuidSymbol name="guidReactorPreviewPackageCmdSet" value="{afeb5fd1-7552-45b2-b01a-65d3f75adefc}">
