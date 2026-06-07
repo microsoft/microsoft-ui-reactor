@@ -35,6 +35,17 @@ namespace Microsoft.UI.Reactor.VsExtension.UI
                         cbSize = (uint)Marshal.SizeOf(typeof(NativeMethods.WNDCLASSEX)),
                         lpfnWndProc = Marshal.GetFunctionPointerForDelegate(s_wndProc),
                         hInstance = NativeMethods.GetModuleHandleW(null),
+                        // Paint a solid system-color background instead of leaving the
+                        // window contents uninitialized. Before the Reactor child app
+                        // finishes its first composition pass and SetParent reparents
+                        // its HWND inside this placeholder, the child draw region would
+                        // otherwise display whatever pixels happened to live in this
+                        // screen space last (the "void" effect — leftover VS chrome,
+                        // a previous app frame, etc.). The WPF overlay on top of the
+                        // HwndHost is the primary user-facing placeholder; this brush
+                        // is defense-in-depth for the brief moment between the
+                        // overlay being collapsed and the embedded child's first paint.
+                        hbrBackground = (IntPtr)(NativeMethods.COLOR_BTNFACE + 1),
                         lpszClassName = ClassName,
                     };
 
@@ -58,11 +69,12 @@ namespace Microsoft.UI.Reactor.VsExtension.UI
 
         private static IntPtr WndProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam)
         {
-            if (msg == NativeMethods.WM_ERASEBKGND)
-            {
-                return (IntPtr)1;
-            }
-
+            // WM_ERASEBKGND is intentionally NOT short-circuited. Falling through to
+            // DefWindowProc lets it paint the WNDCLASSEX.hbrBackground brush
+            // (COLOR_BTNFACE) so the empty pre-embed window shows a solid background
+            // instead of leftover screen pixels. Once the WinUI child is reparented
+            // into this HWND and the WPF overlay collapses, the child fully covers
+            // this surface so the brush is invisible — no flicker risk.
             return NativeMethods.DefWindowProcW(hwnd, msg, wParam, lParam);
         }
     }

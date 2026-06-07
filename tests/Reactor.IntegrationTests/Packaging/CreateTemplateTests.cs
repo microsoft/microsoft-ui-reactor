@@ -256,6 +256,15 @@ public sealed class TemplatePackageTestFixture : IDisposable
             RepoRoot,
             CommandEnvironment,
             timeoutMs: 300_000);
+        // The template's Debug-only ItemGroup also references Microsoft.UI.Reactor.Devtools
+        // (so the devtools menu lights up in Debug + the VS embedded-preview extension works).
+        // Pack it here too so the post-scaffold `dotnet build` finds the matching version on
+        // the local feed instead of trying NuGet.org.
+        RunHelpers.RunDotnet(
+            $"pack \"{Path.Combine(RepoRoot, "src", "Reactor.Devtools", "Reactor.Devtools.csproj")}\" --no-restore --configuration Release -o \"{PackageSourceDir}\" -p:Version={PackageVersion}",
+            RepoRoot,
+            CommandEnvironment,
+            timeoutMs: 300_000);
         RunHelpers.RunDotnet(
             $"pack \"{Path.Combine(RepoRoot, "tools", "Templates", "Microsoft.UI.Reactor.Templates.csproj")}\" --no-restore --configuration Release -o \"{PackageSourceDir}\" -p:Version={PackageVersion} -p:MicrosoftUIReactorVersion={PackageVersion} -p:Platform=AnyCPU",
             RepoRoot,
@@ -263,6 +272,7 @@ public sealed class TemplatePackageTestFixture : IDisposable
             timeoutMs: 180_000);
 
         _ = FindPackage(PackageSourceDir, "Microsoft.UI.Reactor", PackageVersion);
+        _ = FindPackage(PackageSourceDir, "Microsoft.UI.Reactor.Devtools", PackageVersion);
         var templatePackage = FindPackage(PackageSourceDir, "Microsoft.UI.Reactor.ProjectTemplates", PackageVersion);
 
         RunHelpers.RunDotnet(

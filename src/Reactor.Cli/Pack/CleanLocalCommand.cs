@@ -16,6 +16,8 @@ public static class CleanLocalCommand
     internal static readonly string[] PackageIds =
     [
         "microsoft.ui.reactor",
+        "microsoft.ui.reactor.advanced",
+        "microsoft.ui.reactor.devtools",
         "microsoft.ui.reactor.projecttemplates",
     ];
 

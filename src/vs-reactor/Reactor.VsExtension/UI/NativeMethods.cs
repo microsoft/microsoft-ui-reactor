@@ -22,6 +22,11 @@ namespace Microsoft.UI.Reactor.VsExtension.UI
         public const int WM_MOUSEWHEEL = 0x020A;
         public const int WM_DPICHANGED = 0x02E0;
 
+        // System color indices for WNDCLASSEX.hbrBackground. The Win32 convention
+        // is `(IntPtr)(COLOR_* + 1)` — the +1 distinguishes a system-color index
+        // from a real HBRUSH handle.
+        public const int COLOR_BTNFACE = 15;
+
         public const int MA_ACTIVATE = 1;
 
         public const int GWLP_WNDPROC = -4;

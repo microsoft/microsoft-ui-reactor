@@ -41,11 +41,25 @@ The load-bearing properties are `UseWinUI=true` (pulls the WinUI 3
 XAML runtime), `WindowsPackageType=None` (no MSIX wrapper —
 `MyApp.exe` runs straight from the publish folder), and the explicit
 `<Platforms>x64;ARM64</Platforms>` (Windows App SDK self-contained
-builds reject the AnyCPU default). The
+builds reject the AnyCPU default — the template orders x64 first so
+unqualified `dotnet build` picks the right default on x64 dev
+machines, with ARM64 second for Snapdragon X). The
 [`Microsoft.WindowsAppSDK`](https://www.nuget.org/packages/Microsoft.WindowsAppSDK)
 package reference pulls the WinUI runtime; the `WindowsAppSDKVersion`
 property comes from `Directory.Build.props` so every project in the
 repo pins the same SDK build.
+
+`WindowsAppSDKSelfContained=true` is the other load-bearing piece —
+it bundles the WinUI runtime alongside the published exe so the app
+runs without a separate Windows App Runtime install, **and** it lets
+`dotnet watch run` survive hot-reload rebuilds (the Reactor Visual
+Studio embedded-preview extension and any other `dotnet watch`-based
+inner-loop tooling depends on this — incremental rebuilds otherwise
+double-count transitive `Microsoft.WindowsAppSDK.*` references and
+trip `Microsoft.WindowsAppSDK.ComponentReference.targets`' strict
+version check). Flip it to `false` only if you've explicitly chosen
+a framework-dependent distribution shape and your install
+instructions tell users to install the WinAppRuntime first.
 
 To ship this shape, `dotnet publish -c Release -r win-x64`. The
 publish folder contains `MyApp.exe`, `Reactor.dll`, the WinUI runtime
@@ -132,8 +146,9 @@ and any `System.Drawing.Common` / `TraceEvent` natives transitively
 pulled in by Reactor) ship per-RID, which is why the runtime
 identifier matters even for managed-only Reactor code. The repo's
 sample apps default to `<Platforms>x64;ARM64</Platforms>`; the
-`reactorapp` template adds `X86` to the list for parity with the
-WinUI 3 templates, but Reactor itself is only tested on x64 / ARM64.
+`reactorapp` template uses `<Platforms>x64;ARM64;X86</Platforms>`
+(X86 retained for parity with the WinUI 3 templates), but Reactor
+itself is only tested on x64 / ARM64.
 
 ## Native AOT
 
@@ -183,7 +198,8 @@ three — apply it once the distribution shape is settled.
 **Publish for both architectures in CI from day one.** ARM64
 Windows on Snapdragon X is a real audience now; an x64-only build
 runs under emulation but pays a startup tax. The `<Platforms>` line
-in the template covers both — the missing piece is the second
+in the template leads with x64 (the majority dev-machine default)
+and includes ARM64 — the missing piece is the second
 `dotnet publish -r win-arm64` invocation in the build pipeline.
 
 **Keep `Reactor.DevtoolsSupport` out of retail.** The
@@ -216,13 +232,30 @@ builds get `0.0.0-local` via `mur pack-local`). Trim-friendly
 deployments don't get any framework-side magic; the same trimmer
 configuration that works for any WinUI 3 app works here.
 
-**`Microsoft.WindowsAppSDK` is a transitive dependency, not a
-direct one in the template.** The `dotnet new reactorapp` CSPROJ
-references `Microsoft.UI.Reactor` and lets the WinUI SDK flow
-through. Override it in your CSPROJ when you need a specific SDK
-patch — Reactor pins through `WindowsAppSDKVersion` in
-`Directory.Build.props` so an explicit override is the
-intentional knob.
+**`Microsoft.WindowsAppSDK` is explicitly pinned in the template, not
+transitively inherited.** The `dotnet new reactorapp` CSPROJ
+references both `Microsoft.UI.Reactor` and `Microsoft.WindowsAppSDK`
+side-by-side so the SDK version is an obvious knob — bump it in the
+scaffolded CSPROJ when you need a specific WinUI patch. The
+repo-internal `WindowsAppSDKVersion` MSBuild property only governs
+projects under this clone (`Directory.Build.props`); consumer
+projects pick their version directly.
+
+**Debug builds of the scaffolded template auto-include the
+`Microsoft.UI.Reactor.Devtools` package** (gated by a
+`Condition="'$(Configuration)' == 'Debug'"` ItemGroup that adds both
+the package and `RuntimeHostConfigurationOption
+Reactor.DevtoolsSupport=true`). F5 from Visual Studio or VS Code
+runs the app with `--devtools` (from the scaffolded
+`Properties/launchSettings.json`), lighting up the right-click
+devtools menu and the docked devtools window. The Reactor Visual
+Studio embedded-preview extension (spec 056) also relies on this
+Debug wiring — its `dotnet watch run -- --devtools run --embed
+--embed-host-pid <pid>` activation needs the devtools assembly
+loadable in the user's process. Release builds drop both the package
+and the host-config switch so the trim / AOT analyzers stay quiet;
+move the ItemGroup out of the Debug condition if you want devtools
+in Release too.
 
 ## Next Steps
 

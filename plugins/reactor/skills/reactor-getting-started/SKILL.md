@@ -59,7 +59,9 @@ For a single-file `dotnet run App.cs` demo (no `.csproj`), prepend the file-leve
 
 `WindowsPackageType` MUST be `None` (unpackaged, no App.xaml). `UseWinUI` MUST be `true`. **No XAML files of any kind.**
 
-**After `dotnet new reactorapp -n <Name>`, the workspace contains exactly two source files: `App.cs` (entry point + initial component) and `<Name>.csproj`.** There is no `Program.cs` and no `GlobalUsings.cs` — modify `App.cs` in place. The `.csproj` does **not** enable implicit usings; `App.cs` has its own `using` directives at the top — the same set listed in the *Required imports* section below — which is the only place you add new namespaces (e.g. `using System.Linq;` when you reach for `.Select(...)`). Don't probe the `.csproj` after scaffolding unless you're adding a `PackageReference` or changing a property — `Restore succeeded.` in the scaffold stdout is the only confirmation you need.
+**After `dotnet new reactorapp -n <Name>`, the workspace contains exactly two source files: `App.cs` (entry point + initial component) and `<Name>.csproj`, plus a `Properties/launchSettings.json` for F5.** There is no `Program.cs` and no `GlobalUsings.cs` — modify `App.cs` in place. The `.csproj` does **not** enable implicit usings; `App.cs` has its own `using` directives at the top — the same set listed in the *Required imports* section below — which is the only place you add new namespaces (e.g. `using System.Linq;` when you reach for `.Select(...)`). Don't probe the `.csproj` after scaffolding unless you're adding a `PackageReference` or changing a property — `Restore succeeded.` in the scaffold stdout is the only confirmation you need.
+
+**The scaffolded csproj ships with `WindowsAppSDKSelfContained=true` and a Debug-only ItemGroup that adds `Microsoft.UI.Reactor.Devtools` + `Reactor.DevtoolsSupport=true`.** Together they make `dotnet watch run` (and the Visual Studio embedded-preview extension) hot-reload safe and F5 (which passes `--devtools` from `Properties/launchSettings.json`) bring up the devtools menu. Release builds drop the devtools package and host-config switch so trim / AOT analyzers stay quiet — see the `packaging` guide for the full rationale before flipping either knob.
 
 **Verify your edits with `mur check`** before declaring done. From the project directory: `mur check` (no arguments) runs `dotnet build` and emits one compressed line per diagnostic with a `→ try:` suggestion when the engine recognizes the mistake; `mur check --final` is the explicit "I am done iterating" sweep that emits the full diagnostic set including suppressed iteration-mode warnings. For anything more involved than the build/fix loop — strict-mode failures, custom diagnostic gating, MSBuild passthrough flags — load the `reactor-build-and-check` skill.
 
@@ -420,10 +422,9 @@ Nested `.Provide()` overrides the outer for its subtree only. If no provider is 
 
 `mur pack-local` (selfhost) and `nuget.config` (consumer outside the source clone) — see the top-level `SKILL.md`'s "Which mode are you in?" section. If selfhost restore fails with "package Microsoft.UI.Reactor 0.0.0-local was not found", run `mur pack-local`.
 
-> ⚠️ **Platform flag required**: Always build with an explicit platform:
-> `dotnet build -p:Platform=x64` (or `ARM64`). Omitting `-p:Platform=...`
-> causes `WindowsAppSDKSelfContained` errors. This applies to `dotnet build`,
-> `dotnet run`, and `mur check` invocations alike.
+> ⚠️ **Platform flag required when working *inside this repo* (selfhost)**: always build samples / in-repo projects with an explicit platform: `dotnet build -p:Platform=x64` (or `ARM64`). Omitting `-p:Platform=...` causes `WindowsAppSDKSelfContained` errors. This applies to `dotnet build`, `dotnet run`, and `mur check` invocations alike.
+>
+> The `dotnet new reactorapp` template auto-resolves `RuntimeIdentifier` from the host SDK when `Platform`/`RuntimeIdentifier` aren't explicit, so consumer projects scaffolded outside the repo build with bare `dotnet build` / F5 — the rule above only applies in the selfhost tree.
 
 ## Where the skill content comes from (and the api index)
 

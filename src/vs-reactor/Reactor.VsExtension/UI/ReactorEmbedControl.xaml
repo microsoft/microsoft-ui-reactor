@@ -26,7 +26,39 @@
         </DockPanel>
 
         <Grid Grid.Row="1">
-            <local:HwndHostPlaceholder x:Name="PlaceholderHost" />
+            <!--
+                The placeholder overlay is drawn BENEATH the HwndHostPlaceholder in
+                Z-order, but becomes visible because the host's HWND is hidden
+                (SW_HIDE) via EmbeddedHostVisible whenever the embedded child isn't
+                rendering yet. WPF airspace would otherwise show the empty Win32
+                placeholder HWND on top, hiding this content. The placeholder HWND
+                itself stays alive across visibility toggles so the EmbedClient's
+                SetParent flow keeps working.
+            -->
+            <Border Visibility="{Binding PlaceholderVisible, Converter={StaticResource BoolToVisibility}}"
+                    Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="32" MaxWidth="420">
+                    <TextBlock Text="{Binding PlaceholderTitle}"
+                               Foreground="{DynamicResource {x:Static SystemColors.ControlTextBrushKey}}"
+                               FontSize="18" FontWeight="SemiBold"
+                               HorizontalAlignment="Center" />
+                    <TextBlock Text="{Binding PlaceholderDetail}"
+                               Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                               Margin="0,8,0,0"
+                               TextWrapping="Wrap"
+                               TextAlignment="Center" />
+                    <ProgressBar IsIndeterminate="True"
+                                 Width="220" Height="4"
+                                 Margin="0,16,0,0" />
+                    <TextBlock Text="{Binding StatusText}"
+                               Foreground="{Binding StatusBrush}"
+                               Margin="0,8,0,0"
+                               FontStyle="Italic"
+                               HorizontalAlignment="Center" />
+                </StackPanel>
+            </Border>
+            <local:HwndHostPlaceholder x:Name="PlaceholderHost"
+                                       Visibility="{Binding EmbeddedHostVisible, Converter={StaticResource BoolToVisibility}}" />
             <Border Visibility="{Binding ErrorOverlayVisible, Converter={StaticResource BoolToVisibility}}"
                     Background="#CC000000">
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="20">

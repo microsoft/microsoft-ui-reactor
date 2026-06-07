@@ -5,13 +5,40 @@
         <OutputType>WinExe</OutputType>
         <TargetFramework Condition="'$(TargetFrameworkOverride)' == ''">net10.0-windows10.0.22621.0</TargetFramework>
         <TargetFramework Condition="'$(TargetFrameworkOverride)' != ''">TargetFrameworkOverride-windows10.0.22621.0</TargetFramework>
-        <Platforms>ARM64;X86;X64</Platforms>
+        <!--
+            x64 first so an unqualified `dotnet build` / F5 picks the right default on the
+            majority of dev machines. ARM64 second for Snapdragon X. X86 retained for parity
+            with the WinUI 3 templates even though Reactor itself is only tested on x64 / ARM64.
+        -->
+        <Platforms>x64;ARM64;X86</Platforms>
         <UseWinUI>true</UseWinUI>
         <WindowsPackageType>None</WindowsPackageType>
+        <!--
+            WindowsAppSDKSelfContained bundles the Windows App SDK runtime alongside the
+            published exe so the app:
+              (a) runs from any folder without a separate Windows App Runtime install, and
+              (b) survives `dotnet watch run` hot reload (used by the Reactor Visual Studio
+                  embedded-preview extension — spec 056). Incremental rebuilds otherwise
+                  double-count transitive Microsoft.WindowsAppSDK.* references and trip
+                  Microsoft.WindowsAppSDK.ComponentReference.targets' strict version check
+                  ("version 2.0.20;2.0.20 was referenced"). Self-contained bundling
+                  sidesteps that check.
+            Tradeoff: ~30 MB extra in the publish output. To ship framework-dependent
+            (smaller publish, requires the user to install Microsoft.WindowsAppRuntime
+            separately) flip this to false and ensure your install instructions tell users
+            to install the runtime first.
+        -->
         <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
         <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
         <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
         <Nullable>enable</Nullable>
+        <!--
+            Auto-resolve RuntimeIdentifier from the host SDK when the caller hasn't pinned
+            Platform / RuntimeIdentifier explicitly. Lets `dotnet build` / `dotnet run`
+            succeed without forcing -p:Platform=x64 on every invocation — WindowsAppSDK's
+            self-contained build path requires a concrete RID.
+        -->
+        <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' And ('$(Platform)' == '' Or '$(Platform)' == 'AnyCPU' Or '$(Platform)' == 'Any CPU')">$(NETCoreSdkPortableRuntimeIdentifier)</RuntimeIdentifier>
         <!--#if (NativeAot) -->
         <PublishAot>true</PublishAot>
         <InvariantGlobalization>true</InvariantGlobalization>
@@ -23,5 +50,21 @@
         <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.0.1" />
         <PackageReference Include="Microsoft.UI.Reactor" Version="MS_UI_REACTOR_VERSION" />
     </ItemGroup>
-    
+
+    <!--
+        Debug-only: enable the Reactor devtools surface so the *devtools* flag
+        (from Properties/launchSettings.json's default F5 args) lights up the
+        devtools menu, and so the Visual Studio embedded-preview extension's
+        embed-host activation (which requires devtools support) succeeds.
+        Release / Publish builds drop both the package and the host-config
+        switch so the trim / AOT analyzers stay happy (see
+        docs/guide/packaging.md, section "Keep Reactor.DevtoolsSupport out of
+        retail"). To enable devtools in Release as well, move these into the
+        unconditioned ItemGroup above.
+    -->
+    <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+        <PackageReference Include="Microsoft.UI.Reactor.Devtools" Version="MS_UI_REACTOR_VERSION" />
+        <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport" Value="true" Trim="true" />
+    </ItemGroup>
+
 </Project>

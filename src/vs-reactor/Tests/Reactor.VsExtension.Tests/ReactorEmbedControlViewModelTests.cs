@@ -108,6 +108,67 @@ namespace Reactor.VsExtension.Tests
         }
 
         [Fact]
+        public void VM_PlaceholderVisible_TrueForEveryStateExceptEmbeddedAndBuilding()
+        {
+            // The placeholder overlay covers the preview area whenever the embedded
+            // child can't be expected to be drawing content. Embedded is the obvious
+            // "live" state; Building keeps the prior frame visible under a thin
+            // "Building…" strip rather than collapsing back to the placeholder, so
+            // both states must keep the HwndHost visible. Any other state — including
+            // BuildFailed and Crashed where the error overlay also paints on top —
+            // must hide the empty HwndHost so the WPF placeholder shows through
+            // (otherwise WPF airspace would leave the placeholder HWND's leftover
+            // pixels visible, defeating the whole "no void content" fix).
+            var vm = new ReactorEmbedControlViewModel();
+
+            foreach (EmbedStatus status in Enum.GetValues(typeof(EmbedStatus)))
+            {
+                vm.TransitionTo(status);
+                var expectPlaceholder = status != EmbedStatus.Embedded && status != EmbedStatus.Building;
+                Assert.True(
+                    vm.PlaceholderVisible == expectPlaceholder,
+                    $"PlaceholderVisible should be {expectPlaceholder} for {status} (got {vm.PlaceholderVisible}).");
+                Assert.Equal(!vm.PlaceholderVisible, vm.EmbeddedHostVisible);
+            }
+        }
+
+        [Fact]
+        public void VM_PlaceholderMessage_UpdatesWithStatus()
+        {
+            var vm = new ReactorEmbedControlViewModel();
+
+            vm.TransitionTo(EmbedStatus.Launching);
+            Assert.Equal("Starting Reactor preview", vm.PlaceholderTitle);
+            Assert.Contains("launching the preview host", vm.PlaceholderDetail, StringComparison.OrdinalIgnoreCase);
+
+            vm.TransitionTo(EmbedStatus.WaitingForHandshake);
+            Assert.Equal("Connecting to preview", vm.PlaceholderTitle);
+
+            vm.TransitionTo(EmbedStatus.Respawning);
+            Assert.Equal("Restarting Reactor preview", vm.PlaceholderTitle);
+
+            vm.TransitionTo(EmbedStatus.Crashed);
+            Assert.Equal("Preview crashed", vm.PlaceholderTitle);
+
+            vm.TransitionTo(EmbedStatus.BuildFailed);
+            Assert.Equal("Build failed", vm.PlaceholderTitle);
+        }
+
+        [Fact]
+        public void VM_PlaceholderVisible_DefaultsTrueOnConstruction()
+        {
+            // Before any TransitionTo, the VM is in Idle and the preview hasn't been
+            // started — the placeholder must already be the visible layer so the
+            // tool window doesn't flash "void" content on first reveal.
+            var vm = new ReactorEmbedControlViewModel();
+
+            Assert.True(vm.PlaceholderVisible);
+            Assert.False(vm.EmbeddedHostVisible);
+            Assert.False(string.IsNullOrEmpty(vm.PlaceholderTitle));
+            Assert.False(string.IsNullOrEmpty(vm.PlaceholderDetail));
+        }
+
+        [Fact]
         public void VM_ForceReloadCommand_DisabledWhenIdle()
         {
             var vm = new ReactorEmbedControlViewModel();

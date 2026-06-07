@@ -45,6 +45,8 @@ public static class PackLocalCommand
             DeleteStaleNupkg(stale);
         foreach (var stale in Directory.EnumerateFiles(feed, $"Microsoft.UI.Reactor.Advanced.{version}.*nupkg"))
             DeleteStaleNupkg(stale);
+        foreach (var stale in Directory.EnumerateFiles(feed, $"Microsoft.UI.Reactor.Devtools.{version}.*nupkg"))
+            DeleteStaleNupkg(stale);
 
         // pack honors Platform-specific build outputs; pick host arch.
         var arch = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture switch
@@ -72,7 +74,19 @@ public static class PackLocalCommand
             return rc;
         }
 
-        // 3. Project templates — Microsoft.UI.Reactor.ProjectTemplates.<version>.nupkg.
+        // 3. Devtools host — Microsoft.UI.Reactor.Devtools.<version>.nupkg.
+        // Referenced by the scaffolded `dotnet new reactorapp` csproj in a Debug-only
+        // ItemGroup so the devtools menu (and the Reactor VS embedded-preview extension)
+        // works against this feed without falling through to NuGet.org.
+        Console.WriteLine($"Packing Microsoft.UI.Reactor.Devtools {version} → {feed}");
+        rc = RunPack(repoRoot, Path.Combine("src", "Reactor.Devtools", "Reactor.Devtools.csproj"), configuration, version, feed, arch);
+        if (rc != 0)
+        {
+            Console.Error.WriteLine("devtools pack failed.");
+            return rc;
+        }
+
+        // 4. Project templates — Microsoft.UI.Reactor.ProjectTemplates.<version>.nupkg.
         // Powers `dotnet new reactorapp -n MyApp` against this clone. Templates pack
         // is AnyCPU (no arch needed); the template's <PackageReference> resolves the
         // matching framework version through this same feed.

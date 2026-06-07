@@ -117,6 +117,19 @@ jobs:
           -p:Version=${{ steps.version.outputs.version }}
           -o artifacts/nupkg
 
+      - name: Pack Devtools NuGet
+        # Microsoft.UI.Reactor.Devtools is referenced by the scaffolded
+        # `dotnet new reactorapp` csproj's Debug-only ItemGroup (the
+        # devtools menu + the Reactor Visual Studio embedded-preview
+        # extension both need it). Ship it alongside the framework so the
+        # template's restore succeeds against the published feed. Version
+        # is locked to the framework version (spec 022).
+        run: >
+          dotnet pack src/Reactor.Devtools/Reactor.Devtools.csproj
+          --no-build --configuration Release
+          -p:Version=${{ steps.version.outputs.version }}
+          -o artifacts/nupkg
+
       - name: Build Advanced (AnyCPU)
         # The slnx build above produces Reactor.Advanced for ARM64 (its slnx default
         # platform) but the pack below needs the AnyCPU output. This mirrors how
@@ -277,7 +290,7 @@ jobs:
 
             `Reactor.VsExtension.vsix` — live embedded preview for Visual Studio 2022. Requires Windows 11 23H2+ and WinAppSDK 1.6+. See [VS extension guide](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/vs-extension.md) or [src/vs-reactor/README.md](https://github.com/microsoft/microsoft-ui-reactor/blob/main/src/vs-reactor/README.md). Phase 1 dev distribution may be unsigned.
 
-            ## Four assets
+            ## Five assets
 
             ### `Microsoft.UI.Reactor.${{ steps.version.outputs.version }}.nupkg` — the framework
 
@@ -302,6 +315,15 @@ jobs:
             ### `Microsoft.UI.Reactor.Advanced.${{ steps.version.outputs.version }}.nupkg` — optional Win2D/advanced controls
 
             Versioned in lock-step with the framework package.
+
+            ### `Microsoft.UI.Reactor.Devtools.${{ steps.version.outputs.version }}.nupkg` — optional devtools host (debug + VS preview)
+
+            Referenced by the scaffolded `dotnet new reactorapp` csproj in a
+            Debug-only `ItemGroup`, paired with `RuntimeHostConfigurationOption
+            Reactor.DevtoolsSupport=true`. Required to light up the right-click
+            devtools menu in Debug F5 launches and for the Reactor VS embedded
+            preview extension's embed-host activation. Versioned in lock-step
+            with the framework package.
 
             ### `reactor-skill-kit-${{ steps.version.outputs.version }}.zip` — agent skill bundle + `mur` CLI
 

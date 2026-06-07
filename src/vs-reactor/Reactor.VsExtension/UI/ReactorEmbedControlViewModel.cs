@@ -23,6 +23,10 @@ namespace Microsoft.UI.Reactor.VsExtension.UI
         private string _errorTitle = string.Empty;
         private string _errorDetail = string.Empty;
         private bool _buildingVisible;
+        private bool _placeholderVisible = true;
+        private bool _embeddedHostVisible;
+        private string _placeholderTitle = "Reactor preview";
+        private string _placeholderDetail = "Waiting for the preview to start.";
         private Rect _lastPlaceholderRect;
 
         public ReactorEmbedControlViewModel()
@@ -80,6 +84,55 @@ namespace Microsoft.UI.Reactor.VsExtension.UI
             private set => SetProperty(ref _buildingVisible, value);
         }
 
+        /// <summary>
+        /// True whenever the preview area has nothing live to show — i.e. before the
+        /// Reactor child app's HWND has been reparented into the placeholder, after
+        /// the child exits, during a rude-edit respawn, etc. Bound by the XAML to a
+        /// full-area "Reactor preview" overlay (title + status text + spinner) so the
+        /// content zone is never "void" (uninitialized Win32 pixels from whatever was
+        /// last drawn in that screen region).
+        /// </summary>
+        public bool PlaceholderVisible
+        {
+            get => _placeholderVisible;
+            private set => SetProperty(ref _placeholderVisible, value);
+        }
+
+        /// <summary>
+        /// Inverse of <see cref="PlaceholderVisible"/>. Bound to the
+        /// <c>HwndHostPlaceholder.Visibility</c> via <c>BooleanToVisibilityConverter</c>
+        /// so the host's HWND is hidden (SW_HIDE) when there's no embedded child —
+        /// otherwise WPF airspace would render the empty placeholder HWND on top of
+        /// the WPF overlay and the user would still see "void" pixels through it.
+        /// The HWND itself stays alive across visibility toggles so the embed-client
+        /// reparent flow (SetParent into the placeholder HWND) keeps working.
+        /// </summary>
+        public bool EmbeddedHostVisible
+        {
+            get => _embeddedHostVisible;
+            private set => SetProperty(ref _embeddedHostVisible, value);
+        }
+
+        /// <summary>
+        /// Heading rendered inside the placeholder overlay. Derived from
+        /// <see cref="EmbedStatus"/> in <see cref="TransitionTo"/>.
+        /// </summary>
+        public string PlaceholderTitle
+        {
+            get => _placeholderTitle;
+            private set => SetProperty(ref _placeholderTitle, value);
+        }
+
+        /// <summary>
+        /// Sub-heading rendered inside the placeholder overlay. Derived from
+        /// <see cref="EmbedStatus"/> in <see cref="TransitionTo"/>.
+        /// </summary>
+        public string PlaceholderDetail
+        {
+            get => _placeholderDetail;
+            private set => SetProperty(ref _placeholderDetail, value);
+        }
+
         public ICommand ForceReloadCommand { get; }
 
         public Rect LastPlaceholderRect
@@ -110,6 +163,14 @@ namespace Microsoft.UI.Reactor.VsExtension.UI
             StatusText = EmbedStatusInfo.GetText(status);
             StatusBrush = EmbedStatusInfo.GetBrush(status);
             BuildingVisible = status == EmbedStatus.Building;
+
+            // Placeholder overlay is visible whenever the embedded child can't be
+            // expected to be drawing content right now. Building is special — the
+            // child HWND is still parented and the old frame is fine to keep showing
+            // under the thin "Building…" strip while the new build lands.
+            EmbeddedHostVisible = status == EmbedStatus.Embedded || status == EmbedStatus.Building;
+            PlaceholderVisible = !EmbeddedHostVisible;
+            UpdatePlaceholderMessage(status);
 
             if (status == EmbedStatus.BuildFailed)
             {
@@ -271,6 +332,44 @@ namespace Microsoft.UI.Reactor.VsExtension.UI
             else
             {
                 ErrorOverlayVisible = true;
+            }
+        }
+
+        private void UpdatePlaceholderMessage(EmbedStatus status)
+        {
+            switch (status)
+            {
+                case EmbedStatus.Idle:
+                    PlaceholderTitle = "Reactor preview";
+                    PlaceholderDetail = "Pick a component to start the preview.";
+                    break;
+                case EmbedStatus.Launching:
+                    PlaceholderTitle = "Starting Reactor preview";
+                    PlaceholderDetail = "Building your project and launching the preview host…";
+                    break;
+                case EmbedStatus.WaitingForHandshake:
+                    PlaceholderTitle = "Connecting to preview";
+                    PlaceholderDetail = "The preview process is running — waiting for the first frame…";
+                    break;
+                case EmbedStatus.Respawning:
+                    PlaceholderTitle = "Restarting Reactor preview";
+                    PlaceholderDetail = "A rude edit (type/record shape change) was detected. Respawning…";
+                    break;
+                case EmbedStatus.ProjectSwitching:
+                    PlaceholderTitle = "Switching project";
+                    PlaceholderDetail = "Stopping the current preview and starting one for the active project…";
+                    break;
+                case EmbedStatus.BuildFailed:
+                    PlaceholderTitle = "Build failed";
+                    PlaceholderDetail = "See the error details below. Fix the build, then reload the preview.";
+                    break;
+                case EmbedStatus.Crashed:
+                    PlaceholderTitle = "Preview crashed";
+                    PlaceholderDetail = "The preview process exited. Reload to start a new embedded process.";
+                    break;
+                // Embedded / Building leave the live HWND visible so the placeholder
+                // text doesn't matter — keep the prior value to avoid a transient flash
+                // if a future transition makes the overlay visible again.
             }
         }
     }
