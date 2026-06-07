@@ -21,6 +21,7 @@
     </Groups>
 
     <Buttons>
+      <!-- View > Other Windows > Reactor Preview (primary location). -->
       <Button guid="guidReactorPreviewPackageCmdSet" id="cmdidShowReactorPreview" priority="0x0100" type="Button">
         <Parent guid="guidSHLMainMenu" id="IDG_VS_WNDO_OTRWNDWS1" />
         <Icon guid="ImageCatalogGuid" id="Play" />
@@ -29,6 +30,8 @@
           <CommandName>View.ReactorPreview</CommandName>
         </Strings>
       </Button>
+
+      <!-- Tool window toolbar buttons. -->
       <Button guid="guidReactorPreviewPackageCmdSet" id="cmdidPreviewActiveFile" priority="0x0100" type="Button">
         <Parent guid="guidReactorPreviewPackageCmdSet" id="IDG_REACTOR_PREVIEW_TOOLBAR_GROUP" />
         <Icon guid="ImageCatalogGuid" id="Play" />
@@ -56,12 +59,32 @@
     </Buttons>
   </Commands>
 
+  <!--
+    Belt-and-braces: place the ShowReactorPreview command in MULTIPLE menu locations
+    so users can find it even if a particular menu group has been re-laid-out by a VS
+    version we don't recognize.
+
+    1. View menu directly (IDG_VS_VIEW_WINDOWS = 0x0135) - top-level View menu.
+    2. Tools menu (IDG_VS_TOOLS_EXT_TOOLS = 0x0159) - "External Tools" group, where
+       most third-party extensions land. Most reliable visibility.
+  -->
+  <CommandPlacements>
+    <CommandPlacement guid="guidReactorPreviewPackageCmdSet" id="cmdidShowReactorPreview" priority="0xF000">
+      <Parent guid="guidSHLMainMenu" id="IDG_VS_VIEW_WINDOWS" />
+    </CommandPlacement>
+    <CommandPlacement guid="guidReactorPreviewPackageCmdSet" id="cmdidShowReactorPreview" priority="0xF000">
+      <Parent guid="guidSHLMainMenu" id="IDG_VS_TOOLS_EXT_TOOLS" />
+    </CommandPlacement>
+  </CommandPlacements>
+
   <VisibilityConstraints>
   </VisibilityConstraints>
 
   <Symbols>
     <GuidSymbol name="guidSHLMainMenu" value="{D309F791-903F-11D0-9EFC-00A0C911004F}">
       <IDSymbol name="IDG_VS_WNDO_OTRWNDWS1" value="0x019F" />
+      <IDSymbol name="IDG_VS_VIEW_WINDOWS" value="0x0135" />
+      <IDSymbol name="IDG_VS_TOOLS_EXT_TOOLS" value="0x0159" />
     </GuidSymbol>
     <GuidSymbol name="guidReactorPreviewPackage" value="{36b8ec71-7e24-402c-8a72-37c983cb91f8}" />
     <GuidSymbol name="guidReactorPreviewPackageCmdSet" value="{afeb5fd1-7552-45b2-b01a-65d3f75adefc}">
