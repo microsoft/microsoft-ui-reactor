@@ -139,8 +139,23 @@ if ($installedFolders.Count -eq 0) {
     [xml]$m = Get-Content (Join-Path $folder.FullName 'extension.vsixmanifest')
     Write-Host ("Installed v{0} at {1}" -f $m.PackageManifest.Metadata.Identity.Version, $folder.FullName)
     Write-Host ""
+    Write-Host "Running 'devenv /updateconfiguration' to force the menu/pkgdef merge synchronously."
+    Write-Host "Without this step, the first VS launch on VS 2026 sometimes silently skips the merge"
+    Write-Host "and our menu entry never appears. This step blocks until the merge completes (~10-30s)."
+    $devenv = Join-Path $installationPath 'Common7\IDE\devenv.exe'
+    if (Test-Path -LiteralPath $devenv) {
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = $devenv
+        $psi.Arguments = '/updateconfiguration'
+        $psi.UseShellExecute = $false
+        $proc = [System.Diagnostics.Process]::Start($psi)
+        if (-not $proc.WaitForExit(120000)) { $proc.Kill(); Write-Warning "/updateconfiguration timed out after 2 min." }
+        Write-Host ("  /updateconfiguration exit code: {0} ({1:0.0}s)" -f $proc.ExitCode, ($proc.ExitTime - $proc.StartTime).TotalSeconds)
+    } else {
+        Write-Warning "devenv.exe not found at $devenv. Run /updateconfiguration manually before launching VS."
+    }
+    Write-Host ""
     Write-Host "Next steps:"
-    Write-Host "  1. Launch Visual Studio: devenv /RootSuffix Exp  (or just devenv)"
-    Write-Host "  2. View -> Other Windows -> Reactor Preview"
-    Write-Host "  3. If menu still missing: devenv /updateconfiguration (forces pkgdef re-merge)"
+    Write-Host "  1. Launch Visual Studio (no special flags needed)."
+    Write-Host "  2. View -> Other Windows -> Reactor Preview."
 }
