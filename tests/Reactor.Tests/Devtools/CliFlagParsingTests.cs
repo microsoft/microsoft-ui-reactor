@@ -1,3 +1,6 @@
+using System;
+using System.IO;
+using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Hosting.Devtools;
 using Xunit;
 
@@ -99,6 +102,16 @@ public class CliFlagParsingTests
     {
         var opts = DevtoolsCliParser.Parse(["app.exe", "--preview", "--devtools", "run"]);
         Assert.True(opts.PreviewAndDevtoolsConflict);
+    }
+
+    [Fact]
+    public void BothPreviewAndDevtools_WithEmbed_DoesNotHonorEmbed()
+    {
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--preview", "--devtools", "run", "--embed", "--embed-host-pid", "1234"]);
+
+        Assert.True(opts.PreviewAndDevtoolsConflict);
+        Assert.False(opts.EmbedRequested);
+        Assert.Null(opts.EmbedValidationError);
     }
 
     [Fact]
@@ -229,5 +242,117 @@ public class CliFlagParsingTests
     {
         var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run"]);
         Assert.Null(opts.LogsCapacityMb);
+    }
+
+    [Fact]
+    public void Embed_Flag_RequiresRunSubverb()
+    {
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "list", "--embed", "--embed-host-pid", "1234"]);
+        Assert.Equal("--embed requires '--devtools run'", opts.EmbedValidationError);
+        Assert.Null(opts.Subverb);
+    }
+
+    [Fact]
+    public void Embed_Flag_RequiresHostPid()
+    {
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--embed"]);
+        Assert.Equal("--embed requires --embed-host-pid <pid>", opts.EmbedValidationError);
+        Assert.Null(opts.EmbedHostPid);
+    }
+
+    [Fact]
+    public void Embed_Flag_ImpliesVscode()
+    {
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--embed", "--embed-host-pid", "1234"]);
+        Assert.True(opts.VsCodeMode);
+        Assert.True(opts.EmbedAutoEnabledVsCode);
+    }
+
+    [Fact]
+    public void Embed_Flag_WithExplicitVscode_NoAutoFlag()
+    {
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--vscode", "--embed", "--embed-host-pid", "1234"]);
+        Assert.True(opts.VsCodeMode);
+        Assert.False(opts.EmbedAutoEnabledVsCode);
+    }
+
+    [Fact]
+    public void EmbedMode_Child_Default()
+    {
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--embed", "--embed-host-pid", "1234"]);
+        Assert.Equal(WindowEmbedStyle.Child, opts.EmbedStyle);
+    }
+
+    [Fact]
+    public void EmbedMode_Owner_Parses()
+    {
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--embed", "--embed-mode", "owner", "--embed-host-pid", "1234"]);
+        Assert.Equal(WindowEmbedStyle.Owner, opts.EmbedStyle);
+    }
+
+    [Fact]
+    public void EmbedMode_InvalidValue_DefaultsToChild()
+    {
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--embed", "--embed-mode", "bogus", "--embed-host-pid", "1234"]);
+        Assert.Equal(WindowEmbedStyle.Child, opts.EmbedStyle);
+    }
+
+    [Fact]
+    public void EmbedHostPid_Parses_Decimal()
+    {
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--embed", "--embed-host-pid", "9999"]);
+        Assert.Equal(9999, opts.EmbedHostPid);
+    }
+
+    [Fact]
+    public void EmbedHostPid_NonInteger_ReportsParseError()
+    {
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--embed", "--embed-host-pid", "xyz"]);
+
+        Assert.Null(opts.EmbedHostPid);
+        Assert.Equal("--embed-host-pid value 'xyz' is not a valid process id", opts.EmbedValidationError);
+    }
+
+    [Fact]
+    public void NoEmbed_NoErrors()
+    {
+        var opts = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run"]);
+        Assert.False(opts.EmbedRequested);
+        Assert.Null(opts.EmbedValidationError);
+    }
+}
+
+[Collection("ConsoleTests")]
+public class DevtoolsHostCliTests
+{
+    [Fact]
+    public void TryHandleCommandLine_InvalidEmbed_PrintsValidationErrorToStderr()
+    {
+        var options = DevtoolsCliParser.Parse(["app.exe", "--devtools", "list", "--embed", "--embed-host-pid", "1234"]);
+        using var stderr = new StringWriter();
+        var originalError = Console.Error;
+
+        try
+        {
+            Console.SetError(stderr);
+            var handled = new DevtoolsHost().TryHandleCommandLine(new ReactorDevtoolsBootRequest(
+                options,
+                Title: "Preview",
+                Width: 800,
+                Height: 600,
+                FullScreen: false,
+                HostRoot: null,
+                HostRootFactory: null,
+                RootRenderFunc: null,
+                Configure: null));
+
+            Assert.True(handled);
+        }
+        finally
+        {
+            Console.SetError(originalError);
+        }
+
+        Assert.Contains("[reactor] --embed requires '--devtools run'", stderr.ToString());
     }
 }

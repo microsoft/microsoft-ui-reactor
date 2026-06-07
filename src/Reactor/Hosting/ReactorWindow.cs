@@ -70,6 +70,7 @@ public sealed class ReactorWindow : IDisposable
     private readonly ReactorHost _host;
     private readonly nint _hwnd;
     private readonly WindowMessageMonitor _messageMonitor;
+    private readonly EmbedHostWatchdog? _embedWatchdog;
     private readonly Core.WindowPersistedScope _persistedScope = new();
     // HICON loaded by TryApplyExeIconFallback. We hold it for the window's
     // lifetime and DestroyIcon in Dispose — Microsoft.UI.Win32Interop
@@ -127,6 +128,8 @@ public sealed class ReactorWindow : IDisposable
     public AppWindow AppWindow => _appWindow;
 
     internal WindowMessageMonitor MessageMonitor => _messageMonitor;
+
+    internal nint Hwnd => _hwnd;
 
     /// <summary>The <see cref="ReactorHost"/> driving this window's render loop.</summary>
     public ReactorHost Host => _host;
@@ -303,6 +306,18 @@ public sealed class ReactorWindow : IDisposable
         _appWindow = _window.AppWindow;
         _hwnd = WinRT.Interop.WindowNative.GetWindowHandle(_window);
 
+        if (spec.Embed is { } embed)
+        {
+            VerifyEmbedDpiAwareness(embed.Style);
+            ApplyEmbedInitialStyles(embed.Style);
+            _embedWatchdog = new EmbedHostWatchdog();
+            _embedWatchdog.Start(embed.HostPid, () =>
+            {
+                try { NativeShell.SetParent(_hwnd, 0); } catch { }
+                Environment.Exit(0);
+            });
+        }
+
         // Snapshot initial per-window DPI before applying spec sizing so the
         // DIP -> physical conversion is correct on the first Resize call.
         _dpi = QueryDpiForWindow(_hwnd);
@@ -433,7 +448,7 @@ public sealed class ReactorWindow : IDisposable
         else
             _host.Mount(renderFunc!);
 
-        if (_spec.ActivateOnOpen && !_disposed)
+        if (_spec.ActivateOnOpen && !_disposed && (_spec.Embed is null || _spec.Embed.InitialVisibility))
             _window.Activate();
     }
 
@@ -445,53 +460,68 @@ public sealed class ReactorWindow : IDisposable
             DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.Title.set", ex);
         }
 
+        bool topLevelChromeAllowed = IsTopLevelChromeAllowed(spec);
+
         // Presenter: full-screen / compact-overlay flip via AppWindow.SetPresenter.
         // Default Overlapped chrome modulators (resizable, minimizable, maximizable,
         // alwaysOnTop) only apply to OverlappedPresenter.
-        try
+        if (topLevelChromeAllowed)
         {
-            switch (spec.Presenter)
+            try
             {
-                case PresenterKind.FullScreen:
-                    _appWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
-                    break;
-                case PresenterKind.CompactOverlay:
-                    _appWindow.SetPresenter(AppWindowPresenterKind.CompactOverlay);
-                    break;
-                default:
-                    _appWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
-                    ApplyWindowStyle(spec, _appWindow.Presenter as OverlappedPresenter);
-                    break;
+                switch (spec.Presenter)
+                {
+                    case PresenterKind.FullScreen:
+                        _appWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
+                        break;
+                    case PresenterKind.CompactOverlay:
+                        _appWindow.SetPresenter(AppWindowPresenterKind.CompactOverlay);
+                        break;
+                    default:
+                        _appWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
+                        ApplyWindowStyle(spec, _appWindow.Presenter as OverlappedPresenter);
+                        break;
+                }
+            }
+            catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
+            {
+                DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.Presenter.apply", ex);
+            }
+
+            if (spec.Embed is null)
+            {
+                try
+                {
+                    // AppWindow.IsShownInSwitchers is the WinUI Alt-Tab / shell-switcher flag.
+                    // Owned windows hide by default — conventional shell behavior for owned top-level surfaces.
+                    _appWindow.IsShownInSwitchers = spec.Owner is null && spec.ShowInSwitcher;
+                }
+                catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
+                {
+                    DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.ShowInSwitcher.set", ex);
+                }
             }
         }
-        catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
+
+        if (spec.Embed is null)
+            ApplyTaskbarVisibility(spec, isInitial);
+        if (topLevelChromeAllowed)
         {
-            DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.Presenter.apply", ex);
+            ApplyWindowLevel(spec.Level);
+            ApplyCornerStyle(spec.CornerStyle);
         }
 
-        try
+        if (topLevelChromeAllowed)
         {
-            // AppWindow.IsShownInSwitchers is the WinUI Alt-Tab / shell-switcher flag.
-            // Owned windows hide by default — conventional shell behavior for owned top-level surfaces.
-            _appWindow.IsShownInSwitchers = spec.Owner is null && spec.ShowInSwitcher;
-        }
-        catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
-        {
-            DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.ShowInSwitcher.set", ex);
-        }
-
-        ApplyTaskbarVisibility(spec, isInitial);
-        ApplyWindowLevel(spec.Level);
-        ApplyCornerStyle(spec.CornerStyle);
-
-        try { _window.ExtendsContentIntoTitleBar = spec.ExtendsContentIntoTitleBar.GetValueOrDefault(false); }
-        catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
-        {
-            DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.ExtendsContentIntoTitleBar.set", ex);
+            try { _window.ExtendsContentIntoTitleBar = spec.ExtendsContentIntoTitleBar.GetValueOrDefault(false); }
+            catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
+            {
+                DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.ExtendsContentIntoTitleBar.set", ex);
+            }
         }
 
         // Sizing — DIP -> physical at the current per-window DPI. (spec 036 §5.1)
-        if (isInitial && spec.Presenter == PresenterKind.Overlapped)
+        if (spec.Embed is null && isInitial && spec.Presenter == PresenterKind.Overlapped)
         {
             try
             {
@@ -503,10 +533,13 @@ public sealed class ReactorWindow : IDisposable
             }
         }
 
-        if (spec.Icon is { } icon)
-            icon.Apply(_appWindow);
-        else if (isInitial)
-            TryApplyExeIconFallback();
+        if (spec.Embed is null)
+        {
+            if (spec.Icon is { } icon)
+                icon.Apply(_appWindow);
+            else if (isInitial)
+                TryApplyExeIconFallback();
+        }
 
         // Spec 045 §2.6 tear-off — window-wide alpha via WS_EX_LAYERED +
         // SetLayeredWindowAttributes. Skipped when Opacity==1.0 so opaque
@@ -525,7 +558,7 @@ public sealed class ReactorWindow : IDisposable
         // Subsequent Update calls do not re-parent (changing ownership of a
         // realized window has no AppWindow API and is rarely the right thing
         // for an app to do). (spec 036 §9)
-        if (isInitial && spec.Owner is { } owner && !owner._disposed)
+        if (isInitial && spec.Embed is null && spec.Owner is { } owner && !owner._disposed)
         {
             try
             {
@@ -537,6 +570,41 @@ public sealed class ReactorWindow : IDisposable
             }
             owner.AddOwned(this);
         }
+    }
+
+    private static bool IsTopLevelChromeAllowed(WindowSpec spec)
+        => spec.Embed?.Style != WindowEmbedStyle.Child;
+
+    private void VerifyEmbedDpiAwareness(WindowEmbedStyle style)
+    {
+        bool perMonitorV2 = NativeShell.AreDpiAwarenessContextsEqual(
+            NativeShell.GetProcessDpiAwarenessContext(),
+            NativeShell.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
+        if (perMonitorV2) return;
+
+        if (style == WindowEmbedStyle.Child)
+        {
+            Console.Error.WriteLine("[reactor] --embed requires PerMonitorV2 DPI awareness.");
+            Console.Error.WriteLine("[reactor] Add <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode> to your csproj's <PropertyGroup>.");
+            Environment.Exit(2);
+        }
+
+        Console.Error.WriteLine("[reactor] --embed owner mode is running without PerMonitorV2 DPI awareness; DPI fallback may be less precise.");
+    }
+
+    private void ApplyEmbedInitialStyles(WindowEmbedStyle style)
+    {
+        if (style == WindowEmbedStyle.Child)
+        {
+            ApplyWindowStyleBits(
+                remove: NativeShell.WS_OVERLAPPEDWINDOW | NativeShell.WS_POPUP,
+                add: NativeShell.WS_CHILD | NativeShell.WS_CLIPSIBLINGS);
+            ApplyExtendedStyleBits(remove: NativeShell.WS_EX_APPWINDOW, add: 0);
+            return;
+        }
+
+        ApplyExtendedStyleBits(remove: NativeShell.WS_EX_APPWINDOW, add: 0);
     }
 
     private static (bool Resizable, bool Minimizable, bool Maximizable) ResolveResizeMode(WindowSpec spec)
@@ -839,7 +907,7 @@ public sealed class ReactorWindow : IDisposable
                     // First DPI report after window creation: re-apply spec
                     // sizing against the now-known per-window DPI, but only if
                     // the user hasn't already resized the window manually.
-                    if (!_userResized && !_firstDpiApplied)
+                    if (_spec.Embed is null && !_userResized && !_firstDpiApplied)
                     {
                         _firstDpiApplied = true;
                         try
@@ -2037,6 +2105,8 @@ public sealed class ReactorWindow : IDisposable
         public const long WS_MINIMIZEBOX = 0x00020000;
         public const long WS_MAXIMIZEBOX = 0x00010000;
         public const long WS_OVERLAPPEDWINDOW = WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX;
+        public const long WS_CHILD = 0x40000000;
+        public const long WS_CLIPSIBLINGS = 0x04000000;
         public const long WS_POPUP = 0x80000000L;
         public const long WS_EX_TOOLWINDOW = 0x00000080;
         public const long WS_EX_APPWINDOW = 0x00040000;
@@ -2048,6 +2118,7 @@ public sealed class ReactorWindow : IDisposable
         public const uint SWP_NOZORDER = 0x0004;
         public const uint SWP_NOACTIVATE = 0x0010;
         public const uint SWP_FRAMECHANGED = 0x0020;
+        public static readonly nint DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4;
 
         [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
         public static extern nint GetWindowLongPtr(nint hWnd, int nIndex);
@@ -2076,6 +2147,16 @@ public sealed class ReactorWindow : IDisposable
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool AdjustWindowRectExForDpi(ref RECT lpRect, uint dwStyle,
             [MarshalAs(UnmanagedType.Bool)] bool bMenu, uint dwExStyle, uint dpi);
+
+        [DllImport("user32.dll")]
+        public static extern nint GetProcessDpiAwarenessContext();
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool AreDpiAwarenessContextsEqual(nint dpiContextA, nint dpiContextB);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern nint SetParent(nint hWndChild, nint hWndNewParent);
     }
 
     private static class NativeWindowing
@@ -2219,6 +2300,7 @@ public sealed class ReactorWindow : IDisposable
         if (_disposed) return;
         _disposed = true;
 
+        _embedWatchdog?.Stop();
         DetachBackgroundDragRoot();
         DetachSizeToContentRoot();
 

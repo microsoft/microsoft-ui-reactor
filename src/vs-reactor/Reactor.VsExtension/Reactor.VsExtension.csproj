@@ -1,0 +1,84 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Microsoft.UI.Reactor.VsExtension</RootNamespace>
+    <AssemblyName>Reactor.VsExtension</AssemblyName>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GeneratePkgDefFile>true</GeneratePkgDefFile>
+    <CreateVsixContainer>true</CreateVsixContainer>
+    <DeployExtension>true</DeployExtension>
+    <IsAotCompatible>false</IsAotCompatible>
+    <NoWarn>$(NoWarn);IL2026;IL3050;IL2104;IL2118;VSTHRD002;VSTHRD012;VSTHRD109;RS0030</NoWarn>
+    <CompatibilitySeverity></CompatibilitySeverity>
+    <NuGetPackageRoot Condition="'$(NuGetPackageRoot)' == ''">$(UserProfile)\.nuget\packages\</NuGetPackageRoot>
+    <VSSDKTargetsPath Condition="'$(VSSDKTargetsPath)' == '' and '$(MSBuildRuntimeType)' != 'Core' and Exists('$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\VSSDK\Microsoft.VsSDK.targets')">$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\VSSDK</VSSDKTargetsPath>
+    <VSSDKTargetsPath Condition="'$(VSSDKTargetsPath)' == '' and '$(MSBuildRuntimeType)' != 'Core' and Exists('$(NuGetPackageRoot)microsoft.vssdk.buildtools\17.8.2365\tools\vssdk\Microsoft.VsSDK.targets')">$(NuGetPackageRoot)microsoft.vssdk.buildtools\17.8.2365\tools\vssdk</VSSDKTargetsPath>
+    <DotnetVsixBuild Condition="'$(DotnetVsixBuild)' == '' and '$(MSBuildRuntimeType)' != 'Core' and Exists('$(VSSDKTargetsPath)\Microsoft.VsSDK.targets')">false</DotnetVsixBuild>
+    <DotnetVsixBuild Condition="'$(DotnetVsixBuild)' == ''">true</DotnetVsixBuild>
+    <AppendTargetFrameworkToOutputPath Condition="'$(DotnetVsixBuild)' != 'true'">false</AppendTargetFrameworkToOutputPath>
+    <!-- Force flat obj path for desktop-MSBuild VSIX build so legacy VSSDK targets (MergeCto, VSCTCompile, CreatePkgDef) write into the same .resources file the assembly embeds. The SDK-style default of obj\$(Configuration)\$(TargetFramework)\ produces a path mismatch that silently embeds an empty .resources orphan and ships a DLL with the wrong CTMENU key, hiding all menu commands. -->
+    <BaseIntermediateOutputPath Condition="'$(DotnetVsixBuild)' != 'true'">obj\</BaseIntermediateOutputPath>
+    <IntermediateOutputPath Condition="'$(DotnetVsixBuild)' != 'true'">obj\$(Configuration)\</IntermediateOutputPath>
+    <TargetName Condition="'$(TargetName)' == ''">$(AssemblyName)</TargetName>
+    <TargetVsixContainerName Condition="'$(DotnetVsixBuild)' != 'true' and '$(TargetVsixContainerName)' == ''">$(AssemblyName).vsix</TargetVsixContainerName>
+    <TargetVsixContainer Condition="'$(DotnetVsixBuild)' != 'true' and '$(TargetVsixContainer)' == ''">$(MSBuildProjectDirectory)\bin\$(Configuration)\$(AssemblyName).vsix</TargetVsixContainer>
+    <IntermediateOutputPath Condition="'$(DotnetVsixBuild)' != 'true' and '$(IntermediateOutputPath)' == ''">obj\$(Configuration)\</IntermediateOutputPath>
+    <FileManifest Condition="'$(DotnetVsixBuild)' != 'true' and '$(FileManifest)' == ''">$(MSBuildProjectDirectory)\obj\$(Configuration)\files.json</FileManifest>
+    <TemplateFileManifest Condition="'$(DotnetVsixBuild)' != 'true' and '$(TemplateFileManifest)' == ''">$(MSBuildProjectDirectory)\obj\$(Configuration)\templateFiles.json</TemplateFileManifest>
+    <ResourceManifest Condition="'$(DotnetVsixBuild)' != 'true' and '$(ResourceManifest)' == ''">$(MSBuildProjectDirectory)\obj\$(Configuration)\resources.json</ResourceManifest>
+    <CtoFileManifest Condition="'$(DotnetVsixBuild)' != 'true' and '$(CtoFileManifest)' == ''">$(MSBuildProjectDirectory)\obj\$(Configuration)\ctoFiles.json</CtoFileManifest>
+    <CtoCacheFile Condition="'$(DotnetVsixBuild)' != 'true' and '$(CtoCacheFile)' == ''">$(MSBuildProjectDirectory)\obj\$(Configuration)\mergeCto.cache</CtoCacheFile>
+    <CreatePkgDefAssemblyToProcess Condition="'$(DotnetVsixBuild)' != 'true' and '$(CreatePkgDefAssemblyToProcess)' == ''">$(MSBuildProjectDirectory)\bin\$(Configuration)\$(AssemblyName).dll</CreatePkgDefAssemblyToProcess>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.VisualStudio.SDK" Version="17.8.37222" />
+    <PackageReference Include="Microsoft.VSSDK.BuildTools" Version="17.8.2365" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
+    <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" Version="17.8.14" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.VisualStudio.SDK.Analyzers" Version="17.7.113" PrivateAssets="all" />
+    <PackageReference Include="System.Text.Json" Version="8.0.6" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <VSCTCompile Include="PackageCommands.vsct" />
+    <EmbeddedResource Remove="Resources\Resources.resx" />
+    <EmbeddedResource Update="VSPackage.resx" LogicalName="VSPackage.resources" MergeWithCTO="true" />
+    <None Include="Resources\Resources.resx" />
+  </ItemGroup>
+
+  <Import Project="$(VSSDKTargetsPath)\Microsoft.VsSDK.targets" Condition="'$(DotnetVsixBuild)' != 'true' and Exists('$(VSSDKTargetsPath)\Microsoft.VsSDK.targets')" />
+
+  <!-- dotnet MSBuild does not run the legacy VSIX packaging targets, so CI uses a structural-only VSIX zip. -->
+  <Target Name="CreateDotnetVsixContainer" AfterTargets="Build" Condition="'$(DotnetVsixBuild)' == 'true' and '$(CreateVsixContainer)' == 'true'">
+    <PropertyGroup>
+      <VsixStagingDirectory>$(IntermediateOutputPath)vsix\</VsixStagingDirectory>
+      <TargetVsixContainer>$(OutputPath)$(AssemblyName).vsix</TargetVsixContainer>
+    </PropertyGroup>
+    <ItemGroup>
+      <VsixContentTypeLines Include="&lt;?xml version=&quot;1.0&quot; encoding=&quot;utf-8&quot;?&gt;" />
+      <VsixContentTypeLines Include="&lt;Types xmlns=&quot;http://schemas.openxmlformats.org/package/2006/content-types&quot;&gt;" />
+      <VsixContentTypeLines Include="  &lt;Default Extension=&quot;vsixmanifest&quot; ContentType=&quot;text/xml&quot; /&gt;" />
+      <VsixContentTypeLines Include="  &lt;Default Extension=&quot;dll&quot; ContentType=&quot;application/octet-stream&quot; /&gt;" />
+      <VsixContentTypeLines Include="  &lt;Default Extension=&quot;pkgdef&quot; ContentType=&quot;text/plain&quot; /&gt;" />
+      <VsixContentTypeLines Include="  &lt;Default Extension=&quot;png&quot; ContentType=&quot;image/png&quot; /&gt;" />
+      <VsixContentTypeLines Include="  &lt;Default Extension=&quot;json&quot; ContentType=&quot;application/json&quot; /&gt;" />
+      <VsixContentTypeLines Include="  &lt;Default Extension=&quot;xml&quot; ContentType=&quot;application/xml&quot; /&gt;" />
+      <VsixContentTypeLines Include="  &lt;Default Extension=&quot;txt&quot; ContentType=&quot;text/plain&quot; /&gt;" />
+      <VsixContentTypeLines Include="  &lt;Default Extension=&quot;pdb&quot; ContentType=&quot;application/octet-stream&quot; /&gt;" />
+      <VsixContentTypeLines Include="  &lt;Default Extension=&quot;xaml&quot; ContentType=&quot;application/xaml+xml&quot; /&gt;" />
+      <VsixContentTypeLines Include="&lt;/Types&gt;" />
+      <DotnetVsixOutputFile Include="$(OutputPath)*.pkgdef;$(OutputPath)*.pdb;$(OutputPath)*.json;$(OutputPath)*.png;$(OutputPath)*.xml;$(OutputPath)*.txt;$(OutputPath)*.xaml" />
+    </ItemGroup>
+    <RemoveDir Directories="$(VsixStagingDirectory)" />
+    <MakeDir Directories="$(VsixStagingDirectory)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(VsixStagingDirectory)" />
+    <Copy SourceFiles="@(DotnetVsixOutputFile)" DestinationFolder="$(VsixStagingDirectory)" Condition="'@(DotnetVsixOutputFile)' != ''" />
+    <Copy SourceFiles="$(ProjectDir)source.extension.vsixmanifest" DestinationFiles="$(VsixStagingDirectory)extension.vsixmanifest" />
+    <WriteLinesToFile File="$(VsixStagingDirectory)[Content_Types].xml" Lines="@(VsixContentTypeLines)" Overwrite="true" />
+    <ZipDirectory SourceDirectory="$(VsixStagingDirectory)" DestinationFile="$(TargetVsixContainer)" Overwrite="true" />
+  </Target>
+
+  <Target Name="CreateDesktopVsixContainerAfterBuild" AfterTargets="Build" DependsOnTargets="GeneratePkgDef;CopyPkgDef;CreateVsixContainer" Condition="'$(DotnetVsixBuild)' != 'true' and '$(CreateVsixContainer)' == 'true'" />
+</Project>

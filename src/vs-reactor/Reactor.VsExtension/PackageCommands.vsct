@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CommandTable xmlns="http://schemas.microsoft.com/VisualStudio/2005-10-18/CommandTable" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <Extern href="stdidcmd.h" />
+  <Extern href="vsshlids.h" />
+  <Include href="KnownImageIds.vsct" />
+
+  <Commands package="guidReactorPreviewPackage">
+    <Menus>
+      <Menu guid="guidReactorPreviewPackageCmdSet" id="IDM_REACTOR_PREVIEW_TOOLBAR" priority="0x0100" type="Toolbar">
+        <Strings>
+          <ButtonText>Reactor Preview</ButtonText>
+          <CommandName>Reactor Preview Toolbar</CommandName>
+        </Strings>
+      </Menu>
+    </Menus>
+
+    <Groups>
+      <Group guid="guidReactorPreviewPackageCmdSet" id="IDG_REACTOR_PREVIEW_TOOLBAR_GROUP" priority="0x0100">
+        <Parent guid="guidReactorPreviewPackageCmdSet" id="IDM_REACTOR_PREVIEW_TOOLBAR" />
+      </Group>
+    </Groups>
+
+    <Buttons>
+      <Button guid="guidReactorPreviewPackageCmdSet" id="cmdidShowReactorPreview" priority="0x0100" type="Button">
+        <Parent guid="guidSHLMainMenu" id="IDG_VS_WNDO_OTRWNDWS1" />
+        <Icon guid="ImageCatalogGuid" id="Play" />
+        <Strings>
+          <ButtonText>Reactor Preview</ButtonText>
+          <CommandName>View.ReactorPreview</CommandName>
+        </Strings>
+      </Button>
+      <Button guid="guidReactorPreviewPackageCmdSet" id="cmdidPreviewActiveFile" priority="0x0100" type="Button">
+        <Parent guid="guidReactorPreviewPackageCmdSet" id="IDG_REACTOR_PREVIEW_TOOLBAR_GROUP" />
+        <Icon guid="ImageCatalogGuid" id="Play" />
+        <Strings>
+          <ButtonText>Preview Active File</ButtonText>
+          <CommandName>Preview Active File</CommandName>
+        </Strings>
+      </Button>
+      <Button guid="guidReactorPreviewPackageCmdSet" id="cmdidStopPreview" priority="0x0200" type="Button">
+        <Parent guid="guidReactorPreviewPackageCmdSet" id="IDG_REACTOR_PREVIEW_TOOLBAR_GROUP" />
+        <Icon guid="ImageCatalogGuid" id="Stop" />
+        <Strings>
+          <ButtonText>Stop Preview</ButtonText>
+          <CommandName>Stop Preview</CommandName>
+        </Strings>
+      </Button>
+      <Button guid="guidReactorPreviewPackageCmdSet" id="cmdidForceReload" priority="0x0300" type="Button">
+        <Parent guid="guidReactorPreviewPackageCmdSet" id="IDG_REACTOR_PREVIEW_TOOLBAR_GROUP" />
+        <Icon guid="ImageCatalogGuid" id="Refresh" />
+        <Strings>
+          <ButtonText>Force Reload</ButtonText>
+          <CommandName>Force Reload</CommandName>
+        </Strings>
+      </Button>
+    </Buttons>
+  </Commands>
+
+  <VisibilityConstraints>
+  </VisibilityConstraints>
+
+  <Symbols>
+    <GuidSymbol name="guidSHLMainMenu" value="{D309F791-903F-11D0-9EFC-00A0C911004F}">
+      <IDSymbol name="IDG_VS_WNDO_OTRWNDWS1" value="0x103D" />
+    </GuidSymbol>
+    <GuidSymbol name="guidReactorPreviewPackage" value="{36b8ec71-7e24-402c-8a72-37c983cb91f8}" />
+    <GuidSymbol name="guidReactorPreviewPackageCmdSet" value="{afeb5fd1-7552-45b2-b01a-65d3f75adefc}">
+      <IDSymbol name="IDM_REACTOR_PREVIEW_TOOLBAR" value="0x1000" />
+      <IDSymbol name="IDG_REACTOR_PREVIEW_TOOLBAR_GROUP" value="0x1010" />
+      <IDSymbol name="cmdidShowReactorPreview" value="0x0100" />
+      <IDSymbol name="cmdidPreviewActiveFile" value="0x0101" />
+      <IDSymbol name="cmdidStopPreview" value="0x0102" />
+      <IDSymbol name="cmdidForceReload" value="0x0103" />
+    </GuidSymbol>
+  </Symbols>
+</CommandTable>

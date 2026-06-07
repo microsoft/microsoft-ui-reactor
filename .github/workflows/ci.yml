@@ -157,6 +157,23 @@ jobs:
       - name: Build
         run: dotnet build Reactor.slnx --no-restore --configuration Release
 
+      - name: VSIX Tier A tests
+        run: dotnet test src\vs-reactor\Tests\Reactor.VsExtension.Tests\Reactor.VsExtension.Tests.csproj -c Release --no-restore --logger "console;verbosity=normal"
+
+      - name: VSIX Tier B SDK tests
+        run: dotnet test src\vs-reactor\Tests\Reactor.VsExtension.SdkTests\Reactor.VsExtension.SdkTests.csproj -c Release --no-restore --logger "console;verbosity=normal"
+
+      # Tier C E2E/manual smoke is intentionally not run in CI; see src/vs-reactor/TESTING.md.
+      - name: Build structural VSIX artifact
+        run: dotnet build src\vs-reactor\Reactor.VsExtension\Reactor.VsExtension.csproj -c Debug --no-restore
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Reactor.VsExtension.vsix
+          path: src\vs-reactor\Reactor.VsExtension\bin\Debug\net472\Reactor.VsExtension.vsix
+          if-no-files-found: warn
+
   fuzz-smoke:
     name: Fuzz smoke
     needs: changes

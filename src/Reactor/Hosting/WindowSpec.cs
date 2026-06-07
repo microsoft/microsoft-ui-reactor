@@ -2,6 +2,14 @@ using Microsoft.UI.Reactor.Core;
 
 namespace Microsoft.UI.Reactor;
 
+public enum WindowEmbedStyle
+{
+    Child,
+    Owner,
+}
+
+public sealed record EmbedRequest(WindowEmbedStyle Style, int HostPid, bool InitialVisibility);
+
 /// <summary>
 /// Immutable (init-only) declarative description of a top-level Reactor window. Hand to
 /// <see cref="ReactorApp.OpenWindow(WindowSpec, Func{Component}, Action{Microsoft.UI.Reactor.Hosting.ReactorHost})"/>
@@ -163,6 +171,9 @@ public sealed record WindowSpec
     /// <summary>Optional parent window for owned-window semantics.</summary>
     public ReactorWindow? Owner { get; init; }
 
+    /// <summary>Optional request to embed this window into an external HWND host.</summary>
+    public EmbedRequest? Embed { get; init; }
+
     /// <summary>Whether the window auto-activates after content mounts. Default: true.</summary>
     public bool ActivateOnOpen { get; init; } = true;
 
@@ -257,6 +268,16 @@ public sealed record WindowSpec
 
         if (PersistPlacement && string.IsNullOrWhiteSpace(PersistenceId))
             throw new ArgumentException("WindowSpec.PersistenceId must be non-empty (and not whitespace-only) when PersistPlacement is true.", nameof(PersistenceId));
+
+        if (Embed is { } embed)
+        {
+            if (embed.HostPid <= 0)
+                throw new ArgumentException("WindowSpec.Embed.HostPid must be positive.", nameof(Embed));
+            if (embed.Style == WindowEmbedStyle.Child && Owner is not null)
+                throw new ArgumentException("WindowSpec.Owner must be null when Embed.Style is Child.", nameof(Owner));
+            if (PersistPlacement)
+                throw new ArgumentException("WindowSpec.PersistPlacement must be false when Embed is set.", nameof(PersistPlacement));
+        }
 
         if (Style == WindowStyle.None && !IsMovableByBackground)
             Core.Diagnostics.DiagnosticLog.Warning(

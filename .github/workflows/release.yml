@@ -144,6 +144,25 @@ jobs:
           -p:Platform=AnyCPU
           -o artifacts/nupkg
 
+      - name: Build VSIX
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts/vsix | Out-Null
+          $desktopVsix = 'src\vs-reactor\Reactor.VsExtension\bin\Release\Reactor.VsExtension.vsix'
+          $structuralVsix = 'src\vs-reactor\Reactor.VsExtension\bin\Release\net472\Reactor.VsExtension.vsix'
+          try {
+            pwsh -File src\vs-reactor\Build-Vsix.ps1 -Configuration Release -NoRestore
+            $source = $desktopVsix
+          } catch {
+            Write-Warning "Desktop VSIX build failed; falling back to structural dotnet VSIX. $_"
+            dotnet build src\vs-reactor\Reactor.VsExtension\Reactor.VsExtension.csproj --no-restore --configuration Release
+            $source = $structuralVsix
+          }
+          if (-not (Test-Path $source)) {
+            throw "VSIX was not produced at $source"
+          }
+          Copy-Item $source artifacts\vsix\Reactor.VsExtension.vsix -Force
+
       # Framework-dependent: the consumer's machine supplies the .NET 10
       # runtime — saves ~70 MB per RID. install-skill-kit.ps1 checks for it
       # and errors out with an install hint if it's missing. See spec 022 §6.
@@ -232,6 +251,7 @@ jobs:
           path: |
             artifacts/nupkg/*
             artifacts/kit/*.zip
+            artifacts/vsix/*.vsix
           retention-days: 30
 
       - name: Create GitHub Release
@@ -247,12 +267,17 @@ jobs:
             artifacts/nupkg/*.nupkg
             artifacts/nupkg/*.snupkg
             artifacts/kit/*.zip
+            artifacts/vsix/Reactor.VsExtension.vsix
           body: |
             **Reactor ${{ steps.version.outputs.version }}**
 
             > Interim distribution — see [spec 022](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/specs/022-packaging-and-distribution.md) for the rollout plan.
 
-            ## Three assets
+            ## New in this release
+
+            `Reactor.VsExtension.vsix` — live embedded preview for Visual Studio 2022. Requires Windows 11 23H2+ and WinAppSDK 1.6+. See [VS extension guide](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/vs-extension.md) or [src/vs-reactor/README.md](https://github.com/microsoft/microsoft-ui-reactor/blob/main/src/vs-reactor/README.md). Phase 1 dev distribution may be unsigned.
+
+            ## Four assets
 
             ### `Microsoft.UI.Reactor.${{ steps.version.outputs.version }}.nupkg` — the framework
 
@@ -288,3 +313,7 @@ jobs:
             ```
 
             Installs to `~/.claude/skills/reactor/` and adds `bin/<arch>` to your user PATH. After a new shell, `mur --version` should resolve.
+
+            ### `Reactor.VsExtension.vsix` — Visual Studio 2022 embedded preview
+
+            Double-click to install per-user, or install into the Experimental hive for smoke testing. See `src/vs-reactor/TESTING.md` before release promotion.

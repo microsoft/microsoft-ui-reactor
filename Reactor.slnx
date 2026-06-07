@@ -451,4 +451,16 @@
     <Platform Solution="*|ARM64" Project="ARM64" />
     <Platform Solution="*|x64" Project="x64" />
   </Project>
+  <Project Path="src/vs-reactor/Reactor.VsExtension/Reactor.VsExtension.csproj">
+    <Platform Solution="*|ARM64" Project="AnyCPU" />
+    <Platform Solution="*|x64" Project="AnyCPU" />
+  </Project>
+  <Project Path="src/vs-reactor/Tests/Reactor.VsExtension.Tests/Reactor.VsExtension.Tests.csproj">
+    <Platform Solution="*|ARM64" Project="AnyCPU" />
+    <Platform Solution="*|x64" Project="AnyCPU" />
+  </Project>
+  <Project Path="src/vs-reactor/Tests/Reactor.VsExtension.SdkTests/Reactor.VsExtension.SdkTests.csproj">
+    <Platform Solution="*|ARM64" Project="AnyCPU" />
+    <Platform Solution="*|x64" Project="AnyCPU" />
+  </Project>
 </Solution>

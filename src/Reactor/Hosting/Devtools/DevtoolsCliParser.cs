@@ -1,3 +1,5 @@
+using Microsoft.UI.Reactor;
+
 namespace Microsoft.UI.Reactor.Hosting.Devtools;
 
 public enum DevtoolsSubverb
@@ -34,7 +36,12 @@ public sealed record DevtoolsCliOptions(
     bool PreviewAndDevtoolsConflict,
     string? ProjectIdentifier = null,
     bool LogsDisabled = false,
-    int? LogsCapacityMb = null);
+    int? LogsCapacityMb = null,
+    bool EmbedRequested = false,
+    WindowEmbedStyle EmbedStyle = WindowEmbedStyle.Child,
+    int? EmbedHostPid = null,
+    string? EmbedValidationError = null,
+    bool EmbedAutoEnabledVsCode = false);
 
 /// <summary>
 /// Pure command-line parser for the devtools entry point. Has no side effects so it is
@@ -68,15 +75,21 @@ internal static class DevtoolsCliParser
                 UsedDeprecatedPreview: true,
                 PreviewAndDevtoolsConflict: true,
                 LogsDisabled: false,
-                LogsCapacityMb: null);
+                LogsCapacityMb: null,
+                EmbedRequested: false,
+                EmbedStyle: ParseEmbedStyle(args),
+                EmbedHostPid: ParseEmbedHostPid(args),
+                EmbedValidationError: null,
+                EmbedAutoEnabledVsCode: false);
         }
 
         if (!anyDevtools && !anyPreview)
         {
+            bool embedOnlyRequested = args.Contains("--embed");
             return new DevtoolsCliOptions(
                 Subverb: null,
                 ComponentName: null,
-                VsCodeMode: false,
+                VsCodeMode: embedOnlyRequested,
                 Fps: 10,
                 ListOutputPath: null,
                 ScreenshotOutputPath: null,
@@ -86,7 +99,12 @@ internal static class DevtoolsCliParser
                 UsedDeprecatedPreview: false,
                 PreviewAndDevtoolsConflict: false,
                 LogsDisabled: false,
-                LogsCapacityMb: null);
+                LogsCapacityMb: null,
+                EmbedRequested: embedOnlyRequested,
+                EmbedStyle: ParseEmbedStyle(args),
+                EmbedHostPid: ParseEmbedHostPid(args),
+                EmbedValidationError: embedOnlyRequested ? "--embed requires '--devtools run'" : null,
+                EmbedAutoEnabledVsCode: embedOnlyRequested && !args.Contains("--vscode"));
         }
 
         DevtoolsSubverb subverb;
@@ -138,6 +156,12 @@ internal static class DevtoolsCliParser
         }
 
         bool vscode = args.Contains("--vscode");
+        bool embedRequested = args.Contains("--embed");
+        var embedStyle = ParseEmbedStyle(args);
+        int? embedHostPid = ParseEmbedHostPid(args);
+        bool embedAutoEnabledVsCode = embedRequested && !vscode;
+        if (embedAutoEnabledVsCode)
+            vscode = true;
 
         int fps = 10;
         int fpsIdx = IndexOf(args, "--fps");
@@ -185,8 +209,19 @@ internal static class DevtoolsCliParser
 
         _ = anchorIdx;
 
+        string? embedValidationError = null;
+        if (embedRequested)
+        {
+            if (deprecated || subverb != DevtoolsSubverb.Run || !IsExplicitDevtoolsRun(args, devtoolsIdx))
+                embedValidationError = "--embed requires '--devtools run'";
+            else if (IndexOf(args, "--embed-host-pid") is var pidIdx && (pidIdx < 0 || pidIdx + 1 >= args.Length))
+                embedValidationError = "--embed requires --embed-host-pid <pid>";
+            else if (embedHostPid is null)
+                embedValidationError = $"--embed-host-pid value '{args[IndexOf(args, "--embed-host-pid") + 1]}' is not a valid process id";
+        }
+
         return new DevtoolsCliOptions(
-            Subverb: subverb,
+            Subverb: embedValidationError is null ? subverb : null,
             ComponentName: componentName,
             VsCodeMode: vscode,
             Fps: fps,
@@ -199,7 +234,12 @@ internal static class DevtoolsCliParser
             PreviewAndDevtoolsConflict: false,
             ProjectIdentifier: projectIdentifier,
             LogsDisabled: logsDisabled,
-            LogsCapacityMb: logsCapMb);
+            LogsCapacityMb: logsCapMb,
+            EmbedRequested: embedRequested,
+            EmbedStyle: embedStyle,
+            EmbedHostPid: embedHostPid,
+            EmbedValidationError: embedValidationError,
+            EmbedAutoEnabledVsCode: embedAutoEnabledVsCode);
     }
 
     private static (DevtoolsSubverb Subverb, int TrailingArgStart) ParseSubverbAfter(string[] args, int devtoolsIdx)
@@ -216,6 +256,36 @@ internal static class DevtoolsCliParser
             "app" => (DevtoolsSubverb.App, devtoolsIdx + 2),
             _ => (DevtoolsSubverb.Run, devtoolsIdx + 1),
         };
+    }
+
+    private static bool IsExplicitDevtoolsRun(string[] args, int devtoolsIdx)
+    {
+        return devtoolsIdx >= 0
+            && devtoolsIdx + 1 < args.Length
+            && string.Equals(args[devtoolsIdx + 1], "run", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static WindowEmbedStyle ParseEmbedStyle(string[] args)
+    {
+        int modeIdx = IndexOf(args, "--embed-mode");
+        if (modeIdx >= 0 && modeIdx + 1 < args.Length)
+        {
+            if (string.Equals(args[modeIdx + 1], "owner", StringComparison.OrdinalIgnoreCase))
+                return WindowEmbedStyle.Owner;
+            if (string.Equals(args[modeIdx + 1], "child", StringComparison.OrdinalIgnoreCase))
+                return WindowEmbedStyle.Child;
+        }
+
+        // Lenient default: unknown future/typo values fall back to the safer child mode.
+        return WindowEmbedStyle.Child;
+    }
+
+    private static int? ParseEmbedHostPid(string[] args)
+    {
+        int pidIdx = IndexOf(args, "--embed-host-pid");
+        if (pidIdx >= 0 && pidIdx + 1 < args.Length && int.TryParse(args[pidIdx + 1], out var pid))
+            return pid;
+        return null;
     }
 
     private static int IndexOf(string[] args, string flag)

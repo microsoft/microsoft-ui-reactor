@@ -8,6 +8,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization.Metadata;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 
@@ -17,17 +18,30 @@ namespace Microsoft.UI.Reactor.Hosting.Devtools;
 /// Captures frames from the WinUI preview window and serves them over a local HTTP endpoint.
 /// Uses Win32 PrintWindow for reliable capture of WinUI 3 content.
 /// Designed for integration with a VS Code extension that displays a live thumbnail.
+/// Embed endpoint protocol names are versioned as <c>embed-vN</c>; any breaking
+/// endpoint change must bump the suffix (for example, <c>embed-v2</c>), and clients
+/// must reject unknown protocol values.
 /// </summary>
+internal enum EmbedAckResult
+{
+    Success,
+    GenerationMismatch,
+    DpiMismatch,
+    NotReady,
+    Rejected,
+}
+
 internal sealed class PreviewCaptureServer : IDisposable
 {
     private readonly HttpListener _listener;
     private readonly DispatcherQueue _dispatcherQueue;
     private readonly Window _window;
-    private readonly DispatcherQueueTimer _captureTimer;
+    private readonly DispatcherQueueTimer? _captureTimer;
     private readonly IntPtr _hwnd;
 
     private byte[] _latestFrame = [];
     private bool _disposed;
+    private bool _embedMode;
     private int _captureErrorCount;
     /// <summary>Per-launch bearer token. TASK-018.</summary>
     private readonly string _authToken;
@@ -37,12 +51,25 @@ internal sealed class PreviewCaptureServer : IDisposable
     private int _activeReaders;
     /// <summary>Hard cap on POST body bytes. TASK-023.</summary>
     private const int MaxBodyBytes = 4 * 1024 * 1024;
+    /// <summary>Hard cap on embedded-preview endpoint POST body bytes. Spec 056.</summary>
+    internal const int EmbedMaxBodyBytes = 4 * 1024;
+    private const string EmbedProtocol = "embed-v1";
     /// <summary>The TcpListener kept alive across the FindFreePort -&gt;
     /// HttpListener.Start handoff to close the TOCTOU. TASK-026.</summary>
     private TcpListener? _portHolder;
 
     public int Port { get; }
     public int Fps { get; }
+    public int Generation { get; set; } = 1;
+    public bool EmbedMode
+    {
+        get => _embedMode;
+        set
+        {
+            _embedMode = value;
+            if (value) _captureTimer?.Stop();
+        }
+    }
     /// <summary>Test-only accessor for the bearer token.</summary>
     internal string AuthToken => _authToken;
     /// <summary>Test-only accessor for active reader count.</summary>
@@ -56,6 +83,12 @@ internal sealed class PreviewCaptureServer : IDisposable
 
     /// <summary>Switches to a different component by name. Returns true on success.</summary>
     public Func<string, bool>? SwitchComponent { get; set; }
+
+    public Func<IntPtr>? GetHwnd { get; set; }
+    public Func<IntPtr, int, int, int, EmbedAckResult>? AckEmbed { get; set; }
+    public Action<int, int>? ResizeEmbed { get; set; }
+    public Action<int, int>? MoveEmbed { get; set; }
+    public Action? ReleaseEmbed { get; set; }
 
     [RequiresUnreferencedCode("Devtools subsystem; gated by Reactor.DevtoolsSupport.")]
     public PreviewCaptureServer(DispatcherQueue dispatcherQueue, Window window, int fps = 10)
@@ -76,9 +109,30 @@ internal sealed class PreviewCaptureServer : IDisposable
         _listener = new HttpListener();
         _listener.Prefixes.Add($"http://127.0.0.1:{Port}/");
 
-        _captureTimer = _dispatcherQueue.CreateTimer();
-        _captureTimer.Interval = TimeSpan.FromMilliseconds(1000.0 / fps);
-        _captureTimer.Tick += OnCaptureTimerTick;
+        var captureTimer = _dispatcherQueue.CreateTimer();
+        captureTimer.Interval = TimeSpan.FromMilliseconds(1000.0 / fps);
+        captureTimer.Tick += OnCaptureTimerTick;
+        _captureTimer = captureTimer;
+    }
+
+    [RequiresUnreferencedCode("Devtools subsystem test seam; gated by Reactor.DevtoolsSupport.")]
+    internal static PreviewCaptureServer CreateForTests(int port, string authToken)
+    {
+        return new PreviewCaptureServer(port, authToken);
+    }
+
+    [RequiresUnreferencedCode("Devtools subsystem test seam; gated by Reactor.DevtoolsSupport.")]
+    private PreviewCaptureServer(int port, string authToken)
+    {
+        _dispatcherQueue = null!;
+        _window = null!;
+        _captureTimer = null;
+        _hwnd = IntPtr.Zero;
+        Fps = 10;
+        Port = port;
+        _authToken = authToken;
+        _listener = new HttpListener();
+        _listener.Prefixes.Add($"http://127.0.0.1:{Port}/");
     }
 
     private static string GenerateToken()
@@ -130,7 +184,7 @@ internal sealed class PreviewCaptureServer : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        _captureTimer.Stop();
+        _captureTimer?.Stop();
         try { _listener.Stop(); } catch { }
         try { _listener.Close(); } catch { }
     }
@@ -139,6 +193,7 @@ internal sealed class PreviewCaptureServer : IDisposable
 
     private void OnCaptureTimerTick(DispatcherQueueTimer timer, object args)
     {
+        if (EmbedMode) return;
         try
         {
             if (!NativeMethods.GetClientRect(_hwnd, out var clientRect)) return;
@@ -290,9 +345,28 @@ internal sealed class PreviewCaptureServer : IDisposable
                 case "/preview":
                     HandleSwitchComponent(ctx.Request, response);
                     break;
+                case "/hwnd":
+                    if (!EmbedMode) { NotFound(response); break; }
+                    ServeHwnd(ctx.Request, response);
+                    break;
+                case "/embed/ack":
+                    if (!EmbedMode) { NotFound(response); break; }
+                    HandleEmbedAck(ctx.Request, response);
+                    break;
+                case "/embed/resize":
+                    if (!EmbedMode) { NotFound(response); break; }
+                    HandleEmbedResize(ctx.Request, response);
+                    break;
+                case "/embed/move":
+                    if (!EmbedMode) { NotFound(response); break; }
+                    HandleEmbedMove(ctx.Request, response);
+                    break;
+                case "/embed/release":
+                    if (!EmbedMode) { NotFound(response); break; }
+                    HandleEmbedRelease(ctx.Request, response);
+                    break;
                 default:
-                    response.StatusCode = 404;
-                    response.Close();
+                    NotFound(response);
                     break;
             }
         }
@@ -348,6 +422,12 @@ internal sealed class PreviewCaptureServer : IDisposable
 
     private void ServeFrame(HttpListenerResponse response)
     {
+        if (EmbedMode || _dispatcherQueue is null)
+        {
+            NotFound(response);
+            return;
+        }
+
         // TASK-025: lazy-start the capture timer on the first reader so an
         // idle preview doesn't spin PrintWindow at 10 fps. We do NOT stop on
         // idle: each request increments+decrements _activeReaders so quickly
@@ -356,7 +436,7 @@ internal sealed class PreviewCaptureServer : IDisposable
         // /frame in serial) never received a single frame. The CPU cost of
         // the timer running idle until Dispose is negligible at <=10 fps.
         Interlocked.Increment(ref _activeReaders);
-        try { _dispatcherQueue.TryEnqueue(() => { if (!_disposed) _captureTimer.Start(); }); } catch { }
+        try { _dispatcherQueue.TryEnqueue(() => { if (!_disposed) _captureTimer?.Start(); }); } catch { }
         try
         {
             var frame = _latestFrame;
@@ -381,14 +461,18 @@ internal sealed class PreviewCaptureServer : IDisposable
 
     private void ServeStatus(HttpListenerResponse response)
     {
-        var json = $"{{\"building\":false,\"fps\":{Fps},\"port\":{Port}}}";
-        var bytes = Encoding.UTF8.GetBytes(json);
-
-        response.ContentType = "application/json";
-        response.ContentLength64 = bytes.Length;
-        response.Headers.Add("Cache-Control", "no-store");
-        response.OutputStream.Write(bytes, 0, bytes.Length);
-        response.Close();
+        WriteJson(
+            response,
+            new PreviewStatusPayload
+            {
+                Building = false,
+                Fps = Fps,
+                Port = Port,
+                Protocol = EmbedProtocol,
+                Generation = Generation,
+            },
+            PreviewJsonContext.Default.PreviewStatusPayload,
+            noStore: true);
     }
 
     private void HandleFocus(HttpListenerRequest request, HttpListenerResponse response)
@@ -501,6 +585,272 @@ internal sealed class PreviewCaptureServer : IDisposable
         response.Close();
     }
 
+    private void ServeHwnd(HttpListenerRequest request, HttpListenerResponse response)
+    {
+        if (request.HttpMethod != "GET")
+        {
+            WriteError(response, 405, "method-not-allowed");
+            return;
+        }
+
+        var hwnd = GetHwnd?.Invoke() ?? IntPtr.Zero;
+        WriteJson(
+            response,
+            new PreviewHwndPayload { Hwnd = FormatHwnd(hwnd), Generation = Generation },
+            PreviewJsonContext.Default.PreviewHwndPayload,
+            noStore: true);
+    }
+
+    private void HandleEmbedAck(HttpListenerRequest request, HttpListenerResponse response)
+    {
+        if (!TryReadEmbedJson(request, response, out var doc)) return;
+        using (doc)
+        {
+            var root = doc.RootElement;
+            if (!TryGetParent(root, out var parent) || !TryGetInt(root, "w", out var w)
+                || !TryGetInt(root, "h", out var h) || !TryGetInt(root, "generation", out var generation))
+            {
+                WriteError(response, 400, "bad-request");
+                return;
+            }
+
+            var result = generation != Generation
+                ? EmbedAckResult.GenerationMismatch
+                : AckEmbed is null
+                    ? EmbedAckResult.NotReady
+                    : AckEmbed(parent, w, h, generation);
+
+            if (result == EmbedAckResult.GenerationMismatch)
+            {
+                WriteJson(
+                    response,
+                    new PreviewEmbedErrorPayload
+                    {
+                        Ok = false,
+                        Error = "generation-mismatch",
+                        Expected = Generation,
+                        Got = generation,
+                    },
+                    PreviewJsonContext.Default.PreviewEmbedErrorPayload,
+                    statusCode: 409);
+                return;
+            }
+
+            if (result == EmbedAckResult.NotReady)
+            {
+                response.Headers.Add("Retry-After", "1");
+                WriteError(response, 503, "embed-not-ready");
+                return;
+            }
+
+            if (result == EmbedAckResult.DpiMismatch)
+            {
+                WriteJson(
+                    response,
+                    new PreviewEmbedErrorPayload
+                    {
+                        Ok = false,
+                        Error = "dpi-mismatch",
+                        Expected = Generation,
+                        Got = generation,
+                    },
+                    PreviewJsonContext.Default.PreviewEmbedErrorPayload,
+                    statusCode: 412);
+                return;
+            }
+
+            if (result == EmbedAckResult.Rejected)
+            {
+                WriteError(response, 400, "embed-rejected");
+                return;
+            }
+        }
+
+        WriteOk(response);
+    }
+
+    private void HandleEmbedResize(HttpListenerRequest request, HttpListenerResponse response)
+    {
+        if (!TryReadEmbedJson(request, response, out var doc)) return;
+        using (doc)
+        {
+            var root = doc.RootElement;
+            if (!TryGetInt(root, "w", out var w) || !TryGetInt(root, "h", out var h) || ResizeEmbed == null)
+            {
+                WriteError(response, 400, "bad-request");
+                return;
+            }
+
+            ResizeEmbed(w, h);
+        }
+
+        WriteOk(response);
+    }
+
+    private void HandleEmbedMove(HttpListenerRequest request, HttpListenerResponse response)
+    {
+        if (!TryReadEmbedJson(request, response, out var doc)) return;
+        using (doc)
+        {
+            var root = doc.RootElement;
+            if (!TryGetInt(root, "x", out var x) || !TryGetInt(root, "y", out var y) || MoveEmbed == null)
+            {
+                WriteError(response, 400, "bad-request");
+                return;
+            }
+
+            MoveEmbed(x, y);
+        }
+
+        WriteOk(response);
+    }
+
+    private void HandleEmbedRelease(HttpListenerRequest request, HttpListenerResponse response)
+    {
+        if (!TryReadEmbedJson(request, response, out var doc)) return;
+        using (doc)
+        {
+            if (ReleaseEmbed == null)
+            {
+                WriteError(response, 400, "bad-request");
+                return;
+            }
+
+            ReleaseEmbed();
+        }
+
+        WriteOk(response);
+    }
+
+    private bool TryReadEmbedJson(HttpListenerRequest request, HttpListenerResponse response, [NotNullWhen(true)] out JsonDocument? doc)
+    {
+        doc = null;
+        if (request.HttpMethod != "POST")
+        {
+            WriteError(response, 405, "method-not-allowed");
+            return false;
+        }
+
+        var ctMain = (request.ContentType ?? "").Split(';', 2)[0].Trim();
+        if (!string.Equals(ctMain, "application/json", StringComparison.OrdinalIgnoreCase))
+        {
+            WriteError(response, 415, "unsupported-media-type");
+            return false;
+        }
+
+        if (request.ContentLength64 > EmbedMaxBodyBytes)
+        {
+            WriteError(response, 413, "body-too-large");
+            return false;
+        }
+
+        string body;
+        try
+        {
+            body = ReadCappedBody(request.InputStream, request.ContentEncoding, EmbedMaxBodyBytes);
+        }
+        catch (InvalidDataException)
+        {
+            WriteError(response, 413, "body-too-large");
+            return false;
+        }
+
+        try
+        {
+            doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
+            return true;
+        }
+        catch (JsonException)
+        {
+            WriteError(response, 400, "bad-json");
+            return false;
+        }
+    }
+
+    private static bool TryGetInt(JsonElement root, string propertyName, out int value)
+    {
+        value = 0;
+        if (!root.TryGetProperty(propertyName, out var element)) return false;
+        if (element.ValueKind == JsonValueKind.Number) return element.TryGetInt32(out value);
+        if (element.ValueKind == JsonValueKind.String) return int.TryParse(element.GetString(), out value);
+        return false;
+    }
+
+    private static bool TryGetParent(JsonElement root, out IntPtr parent)
+    {
+        parent = IntPtr.Zero;
+        if (!root.TryGetProperty("parent", out var element)) return false;
+
+        long value;
+        if (element.ValueKind == JsonValueKind.Number)
+        {
+            if (!element.TryGetInt64(out value)) return false;
+        }
+        else if (element.ValueKind == JsonValueKind.String)
+        {
+            var text = element.GetString();
+            if (string.IsNullOrWhiteSpace(text)) return false;
+            if (text.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!long.TryParse(text[2..], global::System.Globalization.NumberStyles.HexNumber,
+                    global::System.Globalization.CultureInfo.InvariantCulture, out value))
+                    return false;
+            }
+            else if (!long.TryParse(text, out value))
+            {
+                return false;
+            }
+        }
+        else
+        {
+            return false;
+        }
+
+        parent = new IntPtr(value);
+        return true;
+    }
+
+    private static string FormatHwnd(IntPtr hwnd)
+    {
+        return "0x" + hwnd.ToInt64().ToString("x", global::System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static void NotFound(HttpListenerResponse response)
+    {
+        response.StatusCode = 404;
+        response.Close();
+    }
+
+    private static void WriteOk(HttpListenerResponse response)
+    {
+        WriteJson(
+            response,
+            new PreviewOkPayload { Ok = true },
+            PreviewJsonContext.Default.PreviewOkPayload);
+    }
+
+    private static void WriteError(HttpListenerResponse response, int statusCode, string error)
+    {
+        WriteJson(
+            response,
+            new PreviewErrorPayload { Ok = false, Error = error },
+            PreviewJsonContext.Default.PreviewErrorPayload,
+            statusCode);
+    }
+
+    private static void WriteJson<T>(HttpListenerResponse response, T payload, JsonTypeInfo<T> typeInfo, int statusCode = 200, bool noStore = false)
+    {
+        var json = JsonSerializer.Serialize(payload, typeInfo);
+        var bytes = Encoding.UTF8.GetBytes(json);
+
+        response.StatusCode = statusCode;
+        response.ContentType = "application/json";
+        response.ContentLength64 = bytes.Length;
+        if (noStore) response.Headers.Add("Cache-Control", "no-store");
+        response.OutputStream.Write(bytes, 0, bytes.Length);
+        response.Close();
+    }
+
     // -- Helpers -----------------------------------------------------------------
 
     private static int FindFreePort()
@@ -582,7 +932,46 @@ internal sealed class PreviewComponentsPayload
     public string? Current { get; set; }
 }
 
+internal sealed record PreviewStatusPayload
+{
+    public bool Building { get; set; }
+    public int Fps { get; set; }
+    public int Port { get; set; }
+    public string Protocol { get; set; } = string.Empty;
+    public int Generation { get; set; }
+}
+
+internal sealed class PreviewHwndPayload
+{
+    public string Hwnd { get; set; } = "0x0";
+    public int Generation { get; set; }
+}
+
+internal sealed class PreviewOkPayload
+{
+    public bool Ok { get; set; }
+}
+
+internal sealed class PreviewErrorPayload
+{
+    public bool Ok { get; set; }
+    public string Error { get; set; } = string.Empty;
+}
+
+internal sealed class PreviewEmbedErrorPayload
+{
+    public bool Ok { get; set; }
+    public string Error { get; set; } = string.Empty;
+    public int Expected { get; set; }
+    public int Got { get; set; }
+}
+
 [global::System.Text.Json.Serialization.JsonSerializable(typeof(PreviewComponentsPayload))]
+[global::System.Text.Json.Serialization.JsonSerializable(typeof(PreviewStatusPayload))]
+[global::System.Text.Json.Serialization.JsonSerializable(typeof(PreviewHwndPayload))]
+[global::System.Text.Json.Serialization.JsonSerializable(typeof(PreviewOkPayload))]
+[global::System.Text.Json.Serialization.JsonSerializable(typeof(PreviewErrorPayload))]
+[global::System.Text.Json.Serialization.JsonSerializable(typeof(PreviewEmbedErrorPayload))]
 [global::System.Text.Json.Serialization.JsonSourceGenerationOptions(
     PropertyNamingPolicy = global::System.Text.Json.Serialization.JsonKnownNamingPolicy.CamelCase)]
 internal partial class PreviewJsonContext : global::System.Text.Json.Serialization.JsonSerializerContext

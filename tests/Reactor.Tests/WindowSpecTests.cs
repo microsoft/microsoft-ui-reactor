@@ -33,6 +33,7 @@ public class WindowSpecTests
         Assert.Equal(WindowStartPosition.Default, spec.PersistenceFallback);
         Assert.Null(spec.ExtendsContentIntoTitleBar);
         Assert.True(spec.ActivateOnOpen);
+        Assert.Null(spec.Embed);
         spec.Validate(); // defaults must be valid
     }
 
@@ -95,6 +96,42 @@ public class WindowSpecTests
             ManualPosition = (50, 50),
         };
         spec.Validate();
+    }
+
+    [Fact]
+    public void Validate_Rejects_Embed_With_NonPositive_HostPid()
+    {
+        var spec = new WindowSpec { Embed = new EmbedRequest(WindowEmbedStyle.Child, 0, InitialVisibility: false) };
+
+        var ex = Assert.Throws<ArgumentException>(() => spec.Validate());
+
+        Assert.Contains("HostPid", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validate_Rejects_Child_Embed_With_Owner()
+    {
+        var owner = (ReactorWindow)global::System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(ReactorWindow));
+        var spec = new WindowSpec { Owner = owner, Embed = new EmbedRequest(WindowEmbedStyle.Child, 123, InitialVisibility: false) };
+
+        var ex = Assert.Throws<ArgumentException>(() => spec.Validate());
+
+        Assert.Contains("Owner", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Validate_Rejects_Embed_With_PersistPlacement()
+    {
+        var spec = new WindowSpec
+        {
+            PersistenceId = "preview",
+            PersistPlacement = true,
+            Embed = new EmbedRequest(WindowEmbedStyle.Owner, 123, InitialVisibility: false),
+        };
+
+        var ex = Assert.Throws<ArgumentException>(() => spec.Validate());
+
+        Assert.Contains("PersistPlacement", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]

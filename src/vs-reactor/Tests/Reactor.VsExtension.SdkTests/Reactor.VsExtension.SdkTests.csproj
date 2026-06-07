@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <IsAotCompatible>false</IsAotCompatible>
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);IL2026;IL3050;IL2104;IL2118;VSTHRD200</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="Microsoft.VisualStudio.SDK" Version="17.8.37222" />
+    <PackageReference Include="Microsoft.VisualStudio.Sdk.TestFramework.Xunit" Version="17.11.8" />
+    <PackageReference Include="System.Reflection.DispatchProxy" Version="4.7.1" />
+    <PackageReference Include="Microsoft.VisualStudio.Composition" Version="17.11.13" />
+    <PackageReference Include="Microsoft.VisualStudio.Interop" Version="17.11.40262" />
+    <PackageReference Include="Microsoft.VisualStudio.Shell.15.0" Version="17.11.40262" />
+    <PackageReference Include="Microsoft.VisualStudio.Utilities" Version="17.11.40262" />
+    <PackageReference Include="xunit" Version="2.8.1" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.1" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Reactor.VsExtension\Reactor.VsExtension.csproj" ReferenceOutputAssembly="true" CopyLocalSatelliteAssemblies="false" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

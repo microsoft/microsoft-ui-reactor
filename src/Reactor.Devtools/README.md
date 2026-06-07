@@ -45,6 +45,13 @@ If v1 usage signals push us toward scenarios where these caveats bite
 (e.g., CI runners, remote pair-programming), we revisit with an auth story
 in a follow-up spec.
 
+## Wire protocol versioning
+
+Embedded-preview HTTP endpoints advertise their protocol in `/status` as
+`"embed-v1"`. Any breaking change to the embed endpoints must bump the suffix
+(for example, `embed-v2`), and the Visual Studio extension must reject unknown
+protocol values rather than guessing compatibility.
+
 ## Observability
 
 `DevtoolsLogger` writes one line per tool call to

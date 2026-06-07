@@ -24,7 +24,8 @@ internal record ReactorAppOptions(
     double WindowWidth = 1024,
     double WindowHeight = 768,
     bool FullScreen = false,
-    Action<ReactorAppContext>? Startup = null);
+    Action<ReactorAppContext>? Startup = null,
+    WindowSpec? InitialWindowSpec = null);
 
 public static class ReactorApp
 {
@@ -947,7 +948,7 @@ public partial class ReactorApplication : Application, IXamlMetadataProvider
         // during OnLaunched). (spec 036 §4.3)
         if (opts.RootFactory is null && opts.RootRenderFunc is null) return;
 
-        var spec = new WindowSpec
+        var spec = opts.InitialWindowSpec ?? new WindowSpec
         {
             Title = opts.WindowTitle,
             Width = opts.WindowWidth,
