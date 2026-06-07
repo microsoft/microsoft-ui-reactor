@@ -14,6 +14,7 @@
     <CompatibilitySeverity></CompatibilitySeverity>
     <NuGetPackageRoot Condition="'$(NuGetPackageRoot)' == ''">$(UserProfile)\.nuget\packages\</NuGetPackageRoot>
     <VSSDKTargetsPath Condition="'$(VSSDKTargetsPath)' == '' and '$(MSBuildRuntimeType)' != 'Core' and Exists('$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\VSSDK\Microsoft.VsSDK.targets')">$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\VSSDK</VSSDKTargetsPath>
+    <VSSDKTargetsPath Condition="'$(VSSDKTargetsPath)' == '' and '$(MSBuildRuntimeType)' != 'Core' and Exists('$(NuGetPackageRoot)microsoft.vssdk.buildtools\18.6.38345\tools\vssdk\Microsoft.VsSDK.targets')">$(NuGetPackageRoot)microsoft.vssdk.buildtools\18.6.38345\tools\vssdk</VSSDKTargetsPath>
     <VSSDKTargetsPath Condition="'$(VSSDKTargetsPath)' == '' and '$(MSBuildRuntimeType)' != 'Core' and Exists('$(NuGetPackageRoot)microsoft.vssdk.buildtools\17.8.2365\tools\vssdk\Microsoft.VsSDK.targets')">$(NuGetPackageRoot)microsoft.vssdk.buildtools\17.8.2365\tools\vssdk</VSSDKTargetsPath>
     <DotnetVsixBuild Condition="'$(DotnetVsixBuild)' == '' and '$(MSBuildRuntimeType)' != 'Core' and Exists('$(VSSDKTargetsPath)\Microsoft.VsSDK.targets')">false</DotnetVsixBuild>
     <DotnetVsixBuild Condition="'$(DotnetVsixBuild)' == ''">true</DotnetVsixBuild>
@@ -34,11 +35,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.VisualStudio.SDK" Version="17.8.37222" />
-    <PackageReference Include="Microsoft.VSSDK.BuildTools" Version="17.8.2365" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
-    <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" Version="17.8.14" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.VisualStudio.SDK" Version="17.14.40265" />
+    <PackageReference Include="Microsoft.VSSDK.BuildTools" Version="18.6.38345" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
+    <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" Version="17.14.15" PrivateAssets="all" />
     <PackageReference Include="Microsoft.VisualStudio.SDK.Analyzers" Version="17.7.113" PrivateAssets="all" />
-    <PackageReference Include="System.Text.Json" Version="8.0.6" />
+    <PackageReference Include="System.Text.Json" Version="9.0.0" />
   </ItemGroup>
 
   <ItemGroup>

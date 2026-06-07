@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
   <Metadata>
-    <Identity Id="Microsoft.UI.Reactor.VsExtension.d369d334-c8d0-4443-b837-99a961e08b0f" Version="0.1.5" Language="en-US" Publisher="Microsoft" />
+    <Identity Id="Microsoft.UI.Reactor.VsExtension.d369d334-c8d0-4443-b837-99a961e08b0f" Version="0.1.6" Language="en-US" Publisher="Microsoft" />
     <DisplayName>Reactor Preview</DisplayName>
     <Description xml:space="preserve">Live, embedded preview pane for Microsoft.UI.Reactor apps.</Description>
     <MoreInfo>https://github.com/microsoft/microsoft-ui-reactor</MoreInfo>
