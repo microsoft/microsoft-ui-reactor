@@ -93,7 +93,11 @@ public static class DoctorCommand
         {
             var feed = Path.Combine(repoRoot, "local-nupkgs");
             var frameworkNupkg = Path.Combine(feed, $"Microsoft.UI.Reactor.{PackLocalCommand.DefaultLocalVersion}.nupkg");
-            var advancedNupkg = Path.Combine(feed, $"Microsoft.UI.Reactor.Advanced.{PackLocalCommand.DefaultLocalVersion}.nupkg");
+            // Path.GetFileName guards Path.Combine against accidentally dropping `feed`
+            // if the version constant ever picks up a path separator. Today
+            // DefaultLocalVersion is the literal "0.0.0-local" so this is purely defensive.
+            var advancedFileName = $"Microsoft.UI.Reactor.Advanced.{PackLocalCommand.DefaultLocalVersion}.nupkg";
+            var advancedNupkg = Path.Combine(feed, Path.GetFileName(advancedFileName));
             var templateNupkg = Path.Combine(feed, $"Microsoft.UI.Reactor.ProjectTemplates.{PackLocalCommand.DefaultLocalVersion}.nupkg");
 
             if (!File.Exists(frameworkNupkg))
