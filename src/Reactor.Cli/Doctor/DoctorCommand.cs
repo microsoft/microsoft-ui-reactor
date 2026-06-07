@@ -12,12 +12,14 @@
 //   2. `mur` itself: global-tool install or PATH-resolved bin-mirror; with
 //      --verbose, also the resolved version string
 //   3. Repo-checkout discovery (warns if not inside a Reactor source checkout,
-//      and skips the two `local-nupkgs/` checks below)
+//      and skips the three `local-nupkgs/` checks below)
 //   4. local-nupkgs/Microsoft.UI.Reactor.<ver>.nupkg present (framework)
-//   5. local-nupkgs/Microsoft.UI.Reactor.ProjectTemplates.<ver>.nupkg present
-//   6. `dotnet new` template list includes `reactorapp` (always runs — does
+//   5. local-nupkgs/Microsoft.UI.Reactor.Advanced.<ver>.nupkg present
+//      (warn-only — opt-in Win2D canvas package)
+//   6. local-nupkgs/Microsoft.UI.Reactor.ProjectTemplates.<ver>.nupkg present
+//   7. `dotnet new` template list includes `reactorapp` (always runs — does
 //      not depend on the repo checkout being found)
-//   7. Claude plugin at ~/.claude/plugins/reactor (informational only; not
+//   8. Claude plugin at ~/.claude/plugins/reactor (informational only; not
 //      every developer uses Claude Code)
 
 using System.Diagnostics;
@@ -91,6 +93,7 @@ public static class DoctorCommand
         {
             var feed = Path.Combine(repoRoot, "local-nupkgs");
             var frameworkNupkg = Path.Combine(feed, $"Microsoft.UI.Reactor.{PackLocalCommand.DefaultLocalVersion}.nupkg");
+            var advancedNupkg = Path.Combine(feed, $"Microsoft.UI.Reactor.Advanced.{PackLocalCommand.DefaultLocalVersion}.nupkg");
             var templateNupkg = Path.Combine(feed, $"Microsoft.UI.Reactor.ProjectTemplates.{PackLocalCommand.DefaultLocalVersion}.nupkg");
 
             if (!File.Exists(frameworkNupkg))
@@ -101,6 +104,21 @@ public static class DoctorCommand
             else
             {
                 Pass("local Reactor nupkg", $"{Path.GetFileName(frameworkNupkg)} ({FormatAge(File.GetLastWriteTimeUtc(frameworkNupkg))})");
+            }
+
+            // Microsoft.UI.Reactor.Advanced is opt-in (Win2D canvases) — apps that don't
+            // reference it restore fine without this nupkg. But `mur pack-local` always
+            // produces it alongside the framework, so a missing/stale Advanced nupkg
+            // means the local feed is out of sync with what consumers like
+            // samples/apps/particle-storm/ expect to resolve.
+            if (!File.Exists(advancedNupkg))
+            {
+                Warn("local Advanced nupkg", $"missing {advancedNupkg}. Run `mur pack-local` if you (or any sample) reference `Microsoft.UI.Reactor.Advanced` for Win2D canvases.");
+                warnings++;
+            }
+            else
+            {
+                Pass("local Advanced nupkg", $"{Path.GetFileName(advancedNupkg)} ({FormatAge(File.GetLastWriteTimeUtc(advancedNupkg))})");
             }
 
             if (!File.Exists(templateNupkg))

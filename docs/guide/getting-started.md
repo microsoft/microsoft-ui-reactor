@@ -103,7 +103,7 @@ anything goes wrong.
 | 2 | `git clone` + `cd` | Local source checkout |
 | 3 | `dotnet pack src/Reactor.Cli` | `Microsoft.UI.Reactor.Cli.<ver>.nupkg` in `local-nupkgs/` |
 | 4 | `dotnet tool install -g` | `mur` resolvable cross-shell from `~/.dotnet/tools` |
-| 5 | `mur pack-local` | Framework + `ProjectTemplates` 0.0.0-local nupkgs |
+| 5 | `mur pack-local` | Framework + `Advanced` + `ProjectTemplates` 0.0.0-local nupkgs |
 | 6 | `dotnet new uninstall` + `install` | `dotnet new reactorapp` template registered |
 | 7 | Symlink/copy `plugins/reactor` | Reactor agent kit under `~/.claude/plugins/reactor` (optional) |
 | 8 | `mur doctor` | Verification that 1–7 all stuck |
@@ -172,6 +172,7 @@ references.
 mur pack-local
 # Produces:
 #   local-nupkgs/Microsoft.UI.Reactor.0.0.0-local.nupkg
+#   local-nupkgs/Microsoft.UI.Reactor.Advanced.0.0.0-local.nupkg
 #   local-nupkgs/Microsoft.UI.Reactor.ProjectTemplates.0.0.0-local.nupkg
 ```
 

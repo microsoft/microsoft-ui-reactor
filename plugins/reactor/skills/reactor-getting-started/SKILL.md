@@ -427,7 +427,7 @@ Nested `.Provide()` overrides the outer for its subtree only. If no provider is 
 
 ## Where the skill content comes from (and the api index)
 
-You're reading this through the **`reactor` plugin** — the most efficient channel. The plugin SDK preloads `reactor-getting-started`; topical skills (`reactor-async`, `reactor-design`, `reactor-forms`, `reactor-navigation`, `reactor-input`, `reactor-recipes`, etc.) load only when the task explicitly needs them.
+You're reading this through the **`reactor` plugin** — the most efficient channel. The plugin SDK preloads `reactor-getting-started`; topical skills (`reactor-async`, `reactor-design`, `reactor-forms`, `reactor-navigation`, `reactor-input`, `reactor-recipes`, `reactor-advanced` for Win2D canvases via the optional `Microsoft.UI.Reactor.Advanced` package, etc.) load only when the task explicitly needs them.
 
 Full API index (every factory, modifier, hook, theme token, with parameter lists): `references/reactor.api.txt` inside the `reactor-dsl` skill (also bundled into the Microsoft.UI.Reactor nupkg's `agentkit/` tree if you need to find it from a consumer).
 

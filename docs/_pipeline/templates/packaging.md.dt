@@ -213,6 +213,18 @@ in the optional, same-version `Microsoft.UI.Reactor.Devtools` package;
 only add that package to app projects that intentionally expose
 `--devtools`.
 
+**Only reference `Microsoft.UI.Reactor.Advanced` when you actually use
+it.** The optional, same-version
+[`Microsoft.UI.Reactor.Advanced`](win2d-canvas.md) package hosts
+`Win2DCanvas`, `Win2DAnimatedCanvas`, and `Win2DVirtualCanvas` —
+adding it pulls `Microsoft.Graphics.Win2D` (~1 MB managed +
+~3 MB native interop dll) into your publish output and roots its
+WinRT activation chain for the AOT trimmer. Apps that do not draw
+immediate-mode pixels should leave `Microsoft.UI.Reactor.Advanced`
+off their `<PackageReference>` list so the Win2D native payload
+never ships. That split is the whole reason Advanced is a sibling
+package and not a folder inside `Reactor.dll`.
+
 **`Reactor.dll` is in your publish output as a managed assembly,
 not a tucked-away framework package.** Reactor ships as
 `Microsoft.UI.Reactor` (see [spec 022 / Phase 0 release-asset

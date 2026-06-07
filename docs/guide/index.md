@@ -142,6 +142,7 @@ first; everyone else can follow the order.
 - **[Dialogs and Flyouts](dialogs-and-flyouts.md)** — ContentDialog, MenuFlyout, CommandBarFlyout, Popup
 - **[Data System](data-system.md)** — DataGrid with sort, filter, search, inline editing
 - **[Charting](charting.md)** — Line, bar, area, pie charts with the ReactorCharting library
+- **[Win2D Canvas](win2d-canvas.md)** — Immediate-mode drawing surfaces from the optional `Microsoft.UI.Reactor.Advanced` package (manual, animated, virtual)
 
 ### 5. App architecture
 
