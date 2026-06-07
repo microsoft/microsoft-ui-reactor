@@ -56,6 +56,45 @@ Current Tier B gaps:
 
 Tier A discovery currently finds 64 tests in `src\vs-reactor\Tests\Reactor.VsExtension.Tests` (63 passing, 1 environment-gated elevation skip on this machine).
 
+## Install troubleshooting
+
+### Side-by-side install conflict — menu silently disappears
+
+If the Reactor Preview menu entry (View → Other Windows → Reactor Preview) does
+not appear after installing a new version of the VSIX, the most common cause is
+that **multiple copies of the same package GUID are installed simultaneously**
+(e.g., one per-user under `%LocalAppData%\Microsoft\VisualStudio\<MajorMinor>_<InstanceHash>\Extensions\<random>\`
+and one machine-wide under `C:\Program Files\Microsoft Visual Studio\<MajorVersion>\<Sku>\Common7\IDE\Extensions\<random>\`).
+Visual Studio detects the GUID collision and silently disables all of them — no
+ActivityLog error is produced for this case.
+
+To recover, run the bundled clean reinstaller:
+
+```powershell
+pwsh -File src\vs-reactor\Reinstall-Vsix.ps1
+```
+
+`Reinstall-Vsix.ps1` builds the VSIX (via `Build-Vsix.ps1`), removes every
+existing `Microsoft.UI.Reactor.VsExtension.*` folder under both the per-user and
+the machine-wide extension roots, touches `extensions.configurationchanged` to
+force a pkgdef re-merge on the next VS launch, and reinstalls the freshly-built
+VSIX silently into the highest-version VS instance reported by `vswhere`. Pass
+`-VsInstanceId <id>` to target a specific install. Skip `-SkipBuild` if the
+VSIX is already current.
+
+After it completes, launch VS once with `devenv /updateconfiguration` if the
+menu still does not appear — that forces a synchronous pkgdef merge before the
+shell starts.
+
+### `NoApplicableSKUsException` on VS 2026
+
+VS 2026 uses new SKU product IDs (`Microsoft.VisualStudio.Product.{Community,Pro,Enterprise}`)
+and `arm64` ProductArchitecture on Windows 11 ARM64. The Reactor Preview VSIX
+manifest declares both the legacy `Microsoft.VisualStudio.{Community,Pro,Enterprise}`
+IDs (for VS 2022) and the new `.Product.*` IDs (for VS 2026), and both `amd64`
+and `arm64` architectures. If you see `NoApplicableSKUsException` on a fresh
+install, your VSIX is older than 0.1.2 — rebuild with `Build-Vsix.ps1`.
+
 ## Reporting results
 
 Attach the completed checklist, machine details, VS version, Windows version, WinAppSDK/Reactor package version, and any screenshots/logs to the release PR description.
