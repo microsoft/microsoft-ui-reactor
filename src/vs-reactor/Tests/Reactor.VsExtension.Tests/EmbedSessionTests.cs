@@ -243,8 +243,80 @@ namespace Reactor.VsExtension.Tests
             await EventuallyAsync(() => harness.ViewModel.CurrentStatus == ViewStatus.BuildFailed);
 
             Assert.Equal(2, harness.Launchers.Count);
-            Assert.Equal("Build failed", harness.ViewModel.ErrorTitle);
+            // Title renamed from "Build failed" → "Preview handshake timeout"
+            // to accurately reflect what timed out: the child started, but
+            // never completed the devtools handshake. MSBuild errors surface
+            // in the detail's child-stderr section.
+            Assert.Equal("Preview handshake timeout", harness.ViewModel.ErrorTitle);
             Assert.Contains("CS1002", harness.ViewModel.ErrorDetail);
+            Assert.Contains("Microsoft.UI.Reactor.Devtools", harness.ViewModel.ErrorDetail);
+        }
+
+        [Fact]
+        public async Task EmbedSession_LateHandshakeAfterTimeout_RecoversToEmbedded()
+        {
+            // Cold `dotnet watch` first-build can exceed the handshake timeout
+            // on slow disks (loads 6+ projects + analyzers + WinAppSDK).
+            // When the timeout fires we transition to BuildFailed but keep
+            // the launcher subscription alive — so when CAPTURE_PORT eventually
+            // arrives, OnLauncherNewSession routes the late session through
+            // HandleNewSessionAsync, which completes the embed and transitions
+            // back to Embedded. Without this recovery, a slow first build
+            // leaves the UI permanently stuck.
+            var harness = new SessionHarness(
+                autoEmitLaunchers: new[] { false },
+                firstSessionTimeout: TimeSpan.FromMilliseconds(50));
+
+            await harness.Session.StartAsync(null, CancellationToken.None);
+
+            // Timed out → BuildFailed with the handshake-timeout error.
+            Assert.Equal(ViewStatus.BuildFailed, harness.ViewModel.CurrentStatus);
+            Assert.Equal("Preview handshake timeout", harness.ViewModel.ErrorTitle);
+
+            // Simulate the late CAPTURE_PORT/CAPTURE_TOKEN arrival after the timeout.
+            harness.Launchers[0].EmitNewSession();
+
+            await EventuallyAsync(() => harness.ViewModel.CurrentStatus == ViewStatus.Embedded);
+            Assert.Equal(ViewStatus.Embedded, harness.ViewModel.CurrentStatus);
+            Assert.Single(harness.Launchers);
+        }
+
+        [Fact]
+        public void EmbedSession_DefaultHandshakeTimeout_HonorsEnvironmentOverride()
+        {
+            // Static field init reads Reactor_VsExtension_HandshakeTimeoutSeconds
+            // once per process; the test verifies the parser, not the side
+            // effect on a running session. The default (180s) is generous
+            // enough to cover a cold dotnet watch first build of a Reactor app.
+            var method = typeof(EmbedSession).GetMethod(
+                "ResolveHandshakeTimeoutFromEnv",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+            Assert.NotNull(method);
+
+            var original = Environment.GetEnvironmentVariable("Reactor_VsExtension_HandshakeTimeoutSeconds");
+            try
+            {
+                Environment.SetEnvironmentVariable("Reactor_VsExtension_HandshakeTimeoutSeconds", null);
+                var defaultValue = (TimeSpan)method!.Invoke(null, null)!;
+                Assert.True(defaultValue >= TimeSpan.FromSeconds(60),
+                    $"Default timeout {defaultValue.TotalSeconds}s is too short for cold dotnet watch first build.");
+
+                Environment.SetEnvironmentVariable("Reactor_VsExtension_HandshakeTimeoutSeconds", "42");
+                var overridden = (TimeSpan)method!.Invoke(null, null)!;
+                Assert.Equal(TimeSpan.FromSeconds(42), overridden);
+
+                Environment.SetEnvironmentVariable("Reactor_VsExtension_HandshakeTimeoutSeconds", "garbage");
+                var fallback = (TimeSpan)method!.Invoke(null, null)!;
+                Assert.Equal(defaultValue, fallback);
+
+                Environment.SetEnvironmentVariable("Reactor_VsExtension_HandshakeTimeoutSeconds", "-1");
+                var negativeFallback = (TimeSpan)method!.Invoke(null, null)!;
+                Assert.Equal(defaultValue, negativeFallback);
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("Reactor_VsExtension_HandshakeTimeoutSeconds", original);
+            }
         }
 
         [Fact]
@@ -478,6 +550,8 @@ namespace Reactor.VsExtension.Tests
                 remove => _newSession -= value;
             }
 
+            public event EventHandler<string>? StdoutLine;
+
             public event EventHandler<string>? StderrLine;
 
             public event EventHandler? SupervisorExited;
@@ -495,6 +569,11 @@ namespace Reactor.VsExtension.Tests
                 _newSession?.Invoke(this, new NewSessionEventArgs { SessionId = 1, Port = 5000, Token = "token" });
             }
 
+            public void EmitNewSession(int sessionId, int port, string token)
+            {
+                _newSession?.Invoke(this, new NewSessionEventArgs { SessionId = sessionId, Port = port, Token = token });
+            }
+
             public void EmitSupervisorExited()
             {
                 SupervisorExited?.Invoke(this, EventArgs.Empty);
@@ -503,6 +582,11 @@ namespace Reactor.VsExtension.Tests
             public void EmitStderr(string line)
             {
                 StderrLine?.Invoke(this, line);
+            }
+
+            public void EmitStdout(string line)
+            {
+                StdoutLine?.Invoke(this, line);
             }
 
             public void Dispose()

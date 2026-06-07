@@ -176,6 +176,133 @@ namespace Reactor.VsExtension.Tests
             Assert.Equal(string.Empty, vm.ErrorDetail);
         }
 
+        [Fact]
+        public void VM_TransitionTo_FromBackgroundThread_DoesNotThrow_WhenWpfDispatcherActive()
+        {
+            // Regression: TransitionTo called RaiseCanExecuteChanged which
+            // touches ButtonBase.Command (a WPF DependencyProperty) — that's
+            // legal only on the dispatcher thread. EmbedSession callbacks run
+            // on threadpool/JTF threads, so a bg-thread TransitionTo threw
+            // InvalidOperationException: "The calling thread cannot access
+            // this object because a different thread owns it." The fix
+            // sync-dispatches to Application.Current.Dispatcher.
+            RunWithDispatcher(vm =>
+            {
+                Exception? observed = null;
+                var worker = new Thread(() =>
+                {
+                    try { vm.TransitionTo(EmbedStatus.Embedded); }
+                    catch (Exception ex) { observed = ex; }
+                });
+                worker.Start();
+                worker.Join();
+
+                Assert.Null(observed);
+                Assert.Equal(EmbedStatus.Embedded, vm.CurrentStatus);
+            });
+        }
+
+        [Fact]
+        public void VM_SetComponents_FromBackgroundThread_DoesNotThrow_WhenWpfDispatcherActive()
+        {
+            // Regression: Components is an ObservableCollection bound to a
+            // ComboBox via CollectionView, which throws
+            // "This type of CollectionView does not support changes to its
+            // SourceCollection from a thread different from the Dispatcher
+            // thread" on bg-thread Clear/Add. The fix sync-dispatches.
+            RunWithDispatcher(vm =>
+            {
+                Exception? observed = null;
+                var worker = new Thread(() =>
+                {
+                    try { vm.SetComponents(new[] { "Counter", "Todo" }, selected: "Todo"); }
+                    catch (Exception ex) { observed = ex; }
+                });
+                worker.Start();
+                worker.Join();
+
+                Assert.Null(observed);
+                Assert.Equal(new[] { "Counter", "Todo" }, vm.Components.ToArray());
+                Assert.Equal("Todo", vm.SelectedComponent);
+            });
+        }
+
+        [Fact]
+        public void VM_OnActiveDocumentChanged_FromBackgroundThread_DoesNotThrow_WhenWpfDispatcherActive()
+        {
+            // Same dispatcher-affinity hazard as SetComponents — auto-tracking
+            // mutates Components when a new component first appears in the
+            // active document, and that callback historically arrived from a
+            // JTF worker thread.
+            RunWithDispatcher(vm =>
+            {
+                vm.SetComponents(new[] { "Counter" });
+                vm.ClearPin();
+                Exception? observed = null;
+                var worker = new Thread(() =>
+                {
+                    try { vm.OnActiveDocumentChanged("Todo.cs", new[] { "Todo" }); }
+                    catch (Exception ex) { observed = ex; }
+                });
+                worker.Start();
+                worker.Join();
+
+                Assert.Null(observed);
+                Assert.Equal("Todo", vm.SelectedComponent);
+            });
+        }
+
+        // Spins up a shared STA-thread WPF Application + Dispatcher and pumps
+        // the test body onto it. WPF allows only one Application per AppDomain
+        // and xunit runs all tests in the same AppDomain, so we keep one
+        // permanent dispatcher thread alive across the test run.
+        private static readonly object _dispatcherLock = new object();
+        private static System.Windows.Threading.Dispatcher? _sharedDispatcher;
+
+        private static System.Windows.Threading.Dispatcher EnsureSharedDispatcher()
+        {
+            lock (_dispatcherLock)
+            {
+                if (_sharedDispatcher != null && !_sharedDispatcher.HasShutdownStarted)
+                {
+                    return _sharedDispatcher;
+                }
+
+                var ready = new ManualResetEventSlim(false);
+                System.Windows.Threading.Dispatcher? created = null;
+                var thread = new Thread(() =>
+                {
+                    if (Application.Current == null)
+                    {
+                        _ = new Application();
+                    }
+                    created = System.Windows.Threading.Dispatcher.CurrentDispatcher;
+                    ready.Set();
+                    System.Windows.Threading.Dispatcher.Run();
+                });
+                thread.SetApartmentState(ApartmentState.STA);
+                thread.IsBackground = true;
+                thread.Name = "ReactorVsExtensionTests.WpfDispatcher";
+                thread.Start();
+                ready.Wait();
+                _sharedDispatcher = created;
+                return _sharedDispatcher!;
+            }
+        }
+
+        private static void RunWithDispatcher(Action<ReactorEmbedControlViewModel> body)
+        {
+            var dispatcher = EnsureSharedDispatcher();
+
+            // Construct the VM on the dispatcher thread so any DependencyObjects
+            // it creates inherit the right affinity. The body itself runs on
+            // the calling thread so it can spawn a *different* worker thread
+            // to exercise the cross-thread guards.
+            ReactorEmbedControlViewModel? vm = null;
+            dispatcher.Invoke(() => vm = new ReactorEmbedControlViewModel());
+            body(vm!);
+        }
+
         private static void AssertStatus(ReactorEmbedControlViewModel vm, EmbedStatus status, string text, Brush brush, bool buildingVisible)
         {
             vm.TransitionTo(status);
