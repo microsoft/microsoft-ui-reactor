@@ -12,6 +12,19 @@
     <WindowsPackageType>None</WindowsPackageType>
   </PropertyGroup>
 
+  <!--
+    Debug builds only: bundle the WindowsAppSDK runtime self-contained. The VS
+    embedded preview panel (spec 056) runs through `dotnet watch run` which
+    incrementally re-evaluates the project graph on each save; transitive
+    WindowsAppSDK.* references get double-counted and trip
+    Microsoft.WindowsAppSDK.ComponentReference.targets' strict version check
+    ("version 2.0.20;2.0.20 was referenced"). Self-contained sidesteps the
+    check. Only matters in Debug because Release/CI builds don't hot-reload.
+  -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
   </ItemGroup>
