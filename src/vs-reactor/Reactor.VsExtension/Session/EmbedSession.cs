@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -19,10 +20,25 @@ namespace Microsoft.UI.Reactor.VsExtension.Session
     internal sealed class EmbedSession : IDisposable
     {
         private const int MaxAckAttempts = 5;
-        private static readonly TimeSpan DefaultFirstSessionTimeout = TimeSpan.FromSeconds(30);
+        // dotnet watch's first build of a Reactor app (loads 6+ projects + analyzers)
+        // commonly takes 30-90s on a cold disk cache. The handshake timer starts the
+        // moment we spawn the child, so we need substantial headroom. Override via
+        // env var Reactor_VsExtension_HandshakeTimeoutSeconds when iterating on
+        // performance or testing slow machines.
+        private static readonly TimeSpan DefaultFirstSessionTimeout = ResolveHandshakeTimeoutFromEnv();
         private static readonly TimeSpan DefaultHwndTimeout = TimeSpan.FromSeconds(5);
         private static readonly TimeSpan ReleaseTimeout = TimeSpan.FromSeconds(2);
         private static readonly TimeSpan AckRetryDelay = TimeSpan.FromMilliseconds(250);
+
+        private static TimeSpan ResolveHandshakeTimeoutFromEnv()
+        {
+            var raw = Environment.GetEnvironmentVariable("Reactor_VsExtension_HandshakeTimeoutSeconds");
+            if (!string.IsNullOrWhiteSpace(raw) && int.TryParse(raw, out var seconds) && seconds > 0)
+            {
+                return TimeSpan.FromSeconds(seconds);
+            }
+            return TimeSpan.FromSeconds(180);
+        }
 
         private readonly ReactorEmbedControlViewModel _vm;
         private readonly IntPtr _placeholderHwnd;
@@ -350,7 +366,35 @@ namespace Microsoft.UI.Reactor.VsExtension.Session
                 {
                     var stderr = string.IsNullOrWhiteSpace(launcher.LastStderr) ? _lastFailureStderr : launcher.LastStderr;
                     await SwitchToMainThreadAsync(ct).ConfigureAwait(true);
-                    _vm.ShowError("Build failed", string.IsNullOrWhiteSpace(stderr) ? "Timed out waiting for the Reactor preview server to start." : stderr!);
+
+                    // Clear the TCS so a late handshake from the still-spawning child
+                    // routes through OnLauncherNewSession → HandleNewSessionAsync (which
+                    // will TransitionTo(Embedded) and complete the embed). Without this
+                    // clear, the late CAPTURE_PORT/CAPTURE_TOKEN sets the TCS that no
+                    // one is awaiting and the embed never recovers from BuildFailed.
+                    _initialSessionTcs = null;
+
+                    var detail = new StringBuilder();
+                    detail.Append("The preview process started but never completed the devtools handshake within ");
+                    detail.Append(((int)_firstSessionTimeout.TotalSeconds).ToString(System.Globalization.CultureInfo.InvariantCulture));
+                    detail.AppendLine("s.");
+                    detail.AppendLine();
+                    detail.AppendLine("Common causes:");
+                    detail.AppendLine("  • First `dotnet watch` build is slow on a cold disk cache. The session will");
+                    detail.AppendLine("    automatically recover if the child eventually emits CAPTURE_PORT — watch");
+                    detail.AppendLine("    the Output pane. Set Reactor_VsExtension_HandshakeTimeoutSeconds=300");
+                    detail.AppendLine("    in the VS environment to extend this timeout.");
+                    detail.AppendLine("  • Target project does not reference Microsoft.UI.Reactor.Devtools.");
+                    detail.AppendLine("  • Target project is missing  <RuntimeHostConfigurationOption Include=\"Reactor.DevtoolsSupport\" Value=\"true\" Trim=\"true\" />");
+                    detail.AppendLine("  • MSBuild really did fail — see the stderr below.");
+                    if (!string.IsNullOrWhiteSpace(stderr))
+                    {
+                        detail.AppendLine();
+                        detail.AppendLine("--- child stderr ---");
+                        detail.AppendLine(stderr!.TrimEnd());
+                    }
+
+                    _vm.ShowError("Preview handshake timeout", detail.ToString());
                     _vm.TransitionTo(ViewStatus.BuildFailed);
                     return;
                 }
@@ -368,6 +412,7 @@ namespace Microsoft.UI.Reactor.VsExtension.Session
         private void SubscribeLauncher(IReactorChildLauncher launcher)
         {
             launcher.NewSession += OnLauncherNewSession;
+            launcher.StdoutLine += OnLauncherStdoutLine;
             launcher.StderrLine += OnLauncherStderrLine;
             launcher.SupervisorExited += OnLauncherSupervisorExited;
         }
@@ -375,6 +420,7 @@ namespace Microsoft.UI.Reactor.VsExtension.Session
         private void UnsubscribeLauncher(IReactorChildLauncher launcher)
         {
             launcher.NewSession -= OnLauncherNewSession;
+            launcher.StdoutLine -= OnLauncherStdoutLine;
             launcher.StderrLine -= OnLauncherStderrLine;
             launcher.SupervisorExited -= OnLauncherSupervisorExited;
         }
@@ -404,6 +450,26 @@ namespace Microsoft.UI.Reactor.VsExtension.Session
             }
 
             Log("stderr: " + line);
+        }
+
+        private void OnLauncherStdoutLine(object? sender, string line)
+        {
+            if (sender is not IReactorChildLauncher source || !ReferenceEquals(source, _launcher))
+            {
+                return;
+            }
+
+            // CAPTURE_PORT/CAPTURE_TOKEN lines are handshake plumbing, not signal
+            // for the user, so suppress them here. Everything else (including
+            // [devtools] dispatch messages) is useful breadcrumb data when the
+            // embed handshake misbehaves.
+            if (line.StartsWith("CAPTURE_PORT=", StringComparison.Ordinal) ||
+                line.StartsWith("CAPTURE_TOKEN=", StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            Log("stdout: " + line);
         }
 
         private void OnLauncherSupervisorExited(object? sender, EventArgs args)

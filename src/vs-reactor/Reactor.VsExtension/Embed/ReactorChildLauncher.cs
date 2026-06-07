@@ -14,6 +14,8 @@ namespace Microsoft.UI.Reactor.VsExtension.Embed
     {
         event EventHandler<NewSessionEventArgs>? NewSession;
 
+        event EventHandler<string>? StdoutLine;
+
         event EventHandler<string>? StderrLine;
 
         event EventHandler? SupervisorExited;
@@ -95,6 +97,8 @@ namespace Microsoft.UI.Reactor.VsExtension.Embed
                 }
             }
         }
+
+        public event EventHandler<string>? StdoutLine;
 
         public event EventHandler<string>? StderrLine;
 
@@ -219,6 +223,11 @@ namespace Microsoft.UI.Reactor.VsExtension.Embed
             {
                 return;
             }
+
+            // Forward to subscribers (EmbedSession logs to the Output pane) BEFORE
+            // pattern matching so authors can see [devtools] / [embed] / etc. lines
+            // from the child even when CAPTURE_PORT/CAPTURE_TOKEN never arrive.
+            StdoutLine?.Invoke(this, line);
 
             var portMatch = PortRegex.Match(line);
             if (portMatch.Success)

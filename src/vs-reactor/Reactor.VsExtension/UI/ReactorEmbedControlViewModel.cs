@@ -95,6 +95,17 @@ namespace Microsoft.UI.Reactor.VsExtension.UI
 
         public void TransitionTo(EmbedStatus status)
         {
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher != null && !dispatcher.HasShutdownStarted && !dispatcher.CheckAccess())
+            {
+                // Sync dispatch is intentional: TransitionTo is called from non-async
+                // session callbacks that must observe the post-transition VM state.
+#pragma warning disable VSTHRD001
+                dispatcher.Invoke(new Action(() => TransitionTo(status)));
+#pragma warning restore VSTHRD001
+                return;
+            }
+
             _status = status;
             StatusText = EmbedStatusInfo.GetText(status);
             StatusBrush = EmbedStatusInfo.GetBrush(status);
@@ -124,6 +135,22 @@ namespace Microsoft.UI.Reactor.VsExtension.UI
             if (components == null)
             {
                 throw new ArgumentNullException(nameof(components));
+            }
+
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher != null && !dispatcher.HasShutdownStarted && !dispatcher.CheckAccess())
+            {
+                // ObservableCollection is bound to a WPF ComboBox via
+                // CollectionView; mutating it from a background thread throws
+                // "This type of CollectionView does not support changes to its
+                // SourceCollection from a thread different from the Dispatcher
+                // thread." Sync-dispatch so call sites (refresh after handshake,
+                // active-document changed) can keep their straight-line shape.
+                var snapshot = components as IList<string> ?? components.ToList();
+#pragma warning disable VSTHRD001
+                dispatcher.Invoke(new Action(() => SetComponents(snapshot, selected)));
+#pragma warning restore VSTHRD001
+                return;
             }
 
             var componentList = components.Where(component => !string.IsNullOrWhiteSpace(component)).Distinct(StringComparer.Ordinal).ToList();
@@ -161,6 +188,16 @@ namespace Microsoft.UI.Reactor.VsExtension.UI
         {
             if (_manuallyPinned || componentsInDoc == null)
             {
+                return;
+            }
+
+            var dispatcher = Application.Current?.Dispatcher;
+            if (dispatcher != null && !dispatcher.HasShutdownStarted && !dispatcher.CheckAccess())
+            {
+                var snapshot = componentsInDoc as IList<string> ?? componentsInDoc.ToList();
+#pragma warning disable VSTHRD001
+                dispatcher.Invoke(new Action(() => OnActiveDocumentChanged(path, snapshot)));
+#pragma warning restore VSTHRD001
                 return;
             }
 
