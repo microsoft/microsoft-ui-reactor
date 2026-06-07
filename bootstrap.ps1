@@ -19,6 +19,14 @@
     Build and pack the CLI but don't run `dotnet tool install/update`.
     Useful for CI or for users who manage tool installs externally.
 
+.PARAMETER SkipVsExtension
+    Skip building / installing the Reactor Visual Studio embedded-preview
+    extension (`src/vs-reactor`). Default behavior is to detect VS via
+    vswhere and install the VSIX into the highest-version instance if
+    that instance has the 'Visual Studio extension development' workload.
+    Passing this flag (or not having VS / the workload installed) silently
+    skips this step — the rest of the bootstrap still completes.
+
 .PARAMETER Configuration
     Build configuration for the CLI nupkg. Default: Release.
 
@@ -63,6 +71,7 @@
 param(
     [switch]$SkipPlugin,
     [switch]$SkipMurInstall,
+    [switch]$SkipVsExtension,
     [string]$Configuration = 'Release',
     [switch]$InstallWinAppSdk,
     [switch]$NoWinAppSdk
@@ -395,6 +404,67 @@ if ($SkipPlugin) {
 }
 
 # ---------------------------------------------------------------------------
+# 7. Reactor Visual Studio embedded-preview extension (optional)
+# ---------------------------------------------------------------------------
+# Spec 056: ships a VSIX that hosts the live Reactor preview inside a VS tool
+# window. Building the VSIX needs the 'Visual Studio extension development'
+# workload (desktop MSBuild + VSSDK targets). We probe via vswhere and skip
+# silently when VS is absent or the workload isn't installed — the rest of
+# the bootstrap (mur, framework nupkgs, template, plugin) doesn't depend on
+# the extension, so this step never blocks the install.
+if ($SkipVsExtension) {
+    Write-Host ''
+    Write-Host '    Skipping VS extension install (per -SkipVsExtension).' -ForegroundColor Yellow
+} else {
+    Write-Step 'Building + installing Reactor Visual Studio extension (VSIX)'
+
+    $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+    if (-not (Test-Path -LiteralPath $vswhere)) {
+        Write-Host '    [skip] vswhere.exe not found — Visual Studio is not installed. The framework + mur + template + plugin are still ready.' -ForegroundColor Yellow
+        Write-Host "           To install the preview extension later, install VS 2022/2026 with the 'Visual Studio extension development' workload, then re-run ./bootstrap.ps1."
+    } else {
+        # `-requires Microsoft.VisualStudio.Workload.VisualStudioExtension` filters to
+        # instances that have the VSIX-development workload (desktop MSBuild + VSSDK
+        # targets). Without it, Build-Vsix.ps1 fails with "Desktop MSBuild was not
+        # found." or VSSDK target errors. We want to detect the absence here and emit
+        # a friendly skip note instead of a stack of red MSBuild errors.
+        Write-Dbg "Probing vswhere for VS instances with the VSIX-dev workload"
+        $instancesJson = & $vswhere -all -prerelease `
+            -requires 'Microsoft.VisualStudio.Workload.VisualStudioExtension' `
+            -format json 2>$null
+        $instances = if ($instancesJson) { $instancesJson | ConvertFrom-Json } else { @() }
+
+        if (-not $instances -or $instances.Count -eq 0) {
+            Write-Host "    [skip] Visual Studio is installed but no instance has the 'Visual Studio extension development' workload." -ForegroundColor Yellow
+            Write-Host "           Add it from the Visual Studio Installer (Modify -> Workloads) and re-run ./bootstrap.ps1."
+        } else {
+            $target = $instances | Sort-Object installationVersion -Descending | Select-Object -First 1
+            Write-Dbg "Target VS: $($target.displayName) ($($target.instanceId), $($target.installationVersion))"
+
+            $reinstall = Join-Path $repoRoot 'src\vs-reactor\Reinstall-Vsix.ps1'
+            if (-not (Test-Path -LiteralPath $reinstall)) {
+                Write-Host "    [skip] $reinstall not present in this checkout (older branch?). Pull `main` to get the VS extension." -ForegroundColor Yellow
+            } else {
+                # Reinstall-Vsix.ps1 chains Build-Vsix.ps1 (desktop MSBuild build) then
+                # the VSIXInstaller against the per-user data dir, plus a synchronous
+                # `devenv /updateconfiguration` to merge the pkgdef so menus appear on
+                # the next launch. -VsInstanceId pins to the same instance we probed.
+                & $reinstall -Configuration $Configuration -VsInstanceId $target.instanceId
+                if ($LASTEXITCODE -ne 0) {
+                    # Don't fail the whole bootstrap — the rest of the install is
+                    # usable without the VS extension. Surface the failure clearly
+                    # so users debugging install issues see it.
+                    Write-Host ''
+                    Write-Host "    [warn] VS extension install reported a non-zero exit code ($LASTEXITCODE). The rest of the bootstrap completed; re-run src\vs-reactor\Reinstall-Vsix.ps1 directly to retry." -ForegroundColor Yellow
+                } else {
+                    Write-Ok "VS extension installed into $($target.displayName) — launch VS, then View -> Other Windows -> Reactor Preview."
+                }
+            }
+        }
+    }
+}
+
+# ---------------------------------------------------------------------------
 # Done
 # ---------------------------------------------------------------------------
 Write-Host ''
@@ -409,3 +479,5 @@ Write-Host 'Other useful commands:'
 Write-Host '    mur doctor     verify your install'
 Write-Host '    mur upgrade    refresh local packages + plugin after `git pull`'
 Write-Host '    mur --help     full command list'
+Write-Host ''
+Write-Host 'Visual Studio preview (if VS installed): View -> Other Windows -> Reactor Preview'

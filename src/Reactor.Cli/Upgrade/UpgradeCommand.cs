@@ -6,6 +6,9 @@
 //   2. Reinstall the `dotnet new reactorapp` template (uninstall first so the
 //      template engine drops its cached copy).
 //   3. Refresh the Claude Code plugin install.
+//   4. Rebuild + reinstall the Reactor VS preview extension (best-effort —
+//      skipped if VS / the VSIX-dev workload aren't installed, same probe
+//      logic as bootstrap.ps1 §7).
 //
 // Does NOT update the `mur` global tool itself — a process can't replace its
 // own binary mid-run. To bump `mur`, re-run ./bootstrap.ps1 from the repo
@@ -22,6 +25,7 @@ public static class UpgradeCommand
     public static int Run(string[] args)
     {
         var skipPlugin = args.Contains("--skip-plugin");
+        var skipVsExtension = args.Contains("--skip-vs-extension");
 
         var repoRoot = RepoRootFinder.FindRepoRoot(Directory.GetCurrentDirectory())
                     ?? RepoRootFinder.FindRepoRoot();
@@ -110,6 +114,18 @@ public static class UpgradeCommand
             }
         }
 
+        // 4. Rebuild + reinstall the Reactor VS preview extension (best-effort).
+        //    Probes vswhere for an instance with the VSIX-dev workload; silently
+        //    skips when VS / the workload aren't installed (same shape as
+        //    bootstrap.ps1 §7). The rest of the upgrade isn't blocked by a
+        //    missing VS install.
+        if (!skipVsExtension)
+        {
+            Console.WriteLine();
+            Console.WriteLine("==> Refreshing Reactor VS preview extension");
+            TryReinstallVsExtension(repoRoot);
+        }
+
         Console.WriteLine();
         Console.WriteLine("Upgrade complete.");
         Console.WriteLine();
@@ -117,6 +133,129 @@ public static class UpgradeCommand
         Console.WriteLine($"    dotnet tool update -g --add-source \"{feed}\" Microsoft.UI.Reactor.Cli");
         Console.WriteLine("  Or just re-run ./bootstrap.ps1 from the repo root.");
         return 0;
+    }
+
+    static void TryReinstallVsExtension(string repoRoot)
+    {
+        var vswhere = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+            "Microsoft Visual Studio", "Installer", "vswhere.exe");
+        if (!File.Exists(vswhere))
+        {
+            Console.WriteLine("  (skipped — vswhere.exe not found; Visual Studio is not installed)");
+            return;
+        }
+
+        var reinstall = Path.Combine(repoRoot, "src", "vs-reactor", "Reinstall-Vsix.ps1");
+        if (!File.Exists(reinstall))
+        {
+            Console.WriteLine($"  (skipped — {reinstall} not present in this checkout)");
+            return;
+        }
+
+        // Filter to instances that have the 'Visual Studio extension development'
+        // workload (desktop MSBuild + VSSDK targets). Without that workload
+        // Build-Vsix.ps1 fails with "Desktop MSBuild was not found" — better to
+        // skip cleanly here than dump a wall of MSBuild errors into the upgrade log.
+        var probe = new ProcessStartInfo(vswhere)
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        probe.ArgumentList.Add("-all");
+        probe.ArgumentList.Add("-prerelease");
+        probe.ArgumentList.Add("-requires");
+        probe.ArgumentList.Add("Microsoft.VisualStudio.Workload.VisualStudioExtension");
+        probe.ArgumentList.Add("-property");
+        probe.ArgumentList.Add("instanceId");
+
+        string instances;
+        try
+        {
+            using var probeProc = Process.Start(probe);
+            if (probeProc is null)
+            {
+                Console.WriteLine("  (skipped — could not run vswhere)");
+                return;
+            }
+            instances = probeProc.StandardOutput.ReadToEnd();
+            probeProc.WaitForExit();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"  (skipped — vswhere failed: {ex.Message})");
+            return;
+        }
+
+        var instanceLines = instances.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (instanceLines.Length == 0)
+        {
+            Console.WriteLine("  (skipped — no Visual Studio instance has the 'Visual Studio extension development' workload installed)");
+            return;
+        }
+
+        var pwsh = ResolvePowerShell();
+        if (pwsh is null)
+        {
+            Console.WriteLine("  (skipped — powershell.exe / pwsh.exe not on PATH)");
+            return;
+        }
+
+        var psi = new ProcessStartInfo(pwsh)
+        {
+            UseShellExecute = false,
+            WorkingDirectory = repoRoot,
+        };
+        psi.ArgumentList.Add("-NoLogo");
+        psi.ArgumentList.Add("-NoProfile");
+        psi.ArgumentList.Add("-ExecutionPolicy");
+        psi.ArgumentList.Add("Bypass");
+        psi.ArgumentList.Add("-File");
+        psi.ArgumentList.Add(reinstall);
+        // Pick the highest-version instance the script finds (matches the
+        // default behavior of Reinstall-Vsix.ps1 when no -VsInstanceId is set).
+
+        try
+        {
+            using var proc = Process.Start(psi);
+            if (proc is null)
+            {
+                Console.WriteLine("  (skipped — failed to launch Reinstall-Vsix.ps1)");
+                return;
+            }
+            proc.WaitForExit();
+            if (proc.ExitCode != 0)
+            {
+                Console.Error.WriteLine($"  VS extension reinstall exited with code {proc.ExitCode}; the rest of the upgrade completed.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"  VS extension reinstall threw: {ex.Message}; the rest of the upgrade completed.");
+        }
+    }
+
+    static string? ResolvePowerShell()
+    {
+        // Prefer pwsh (PowerShell 7+) when available, fall back to Windows
+        // PowerShell 5.1. Reinstall-Vsix.ps1 is `#requires -Version 5.1`-clean
+        // so either works.
+        foreach (var name in new[] { "pwsh.exe", "powershell.exe" })
+        {
+            var path = Environment.GetEnvironmentVariable("PATH");
+            if (path is null) continue;
+            foreach (var dir in path.Split(Path.PathSeparator))
+            {
+                try
+                {
+                    var candidate = Path.Combine(dir, name);
+                    if (File.Exists(candidate)) return candidate;
+                }
+                catch { /* ignore malformed PATH entries */ }
+            }
+        }
+        return null;
     }
 
     static int RunDotnet(string workingDirectory, bool ignoreExitCode, params string[] arguments)

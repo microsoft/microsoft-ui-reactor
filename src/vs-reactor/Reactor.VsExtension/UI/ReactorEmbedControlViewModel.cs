@@ -100,12 +100,19 @@ namespace Microsoft.UI.Reactor.VsExtension.UI
 
         /// <summary>
         /// Inverse of <see cref="PlaceholderVisible"/>. Bound to the
-        /// <c>HwndHostPlaceholder.Visibility</c> via <c>BooleanToVisibilityConverter</c>
+        /// <c>HwndHostPlaceholder.Visibility</c> via <c>BooleanToHiddenVisibilityConverter</c>
         /// so the host's HWND is hidden (SW_HIDE) when there's no embedded child —
         /// otherwise WPF airspace would render the empty placeholder HWND on top of
         /// the WPF overlay and the user would still see "void" pixels through it.
         /// The HWND itself stays alive across visibility toggles so the embed-client
         /// reparent flow (SetParent into the placeholder HWND) keeps working.
+        ///
+        /// IMPORTANT: this MUST resolve to <see cref="Visibility.Hidden"/>, not
+        /// <see cref="Visibility.Collapsed"/>, when false. Collapsed removes the
+        /// HwndHost from layout entirely, so <c>OnWindowPositionChanged</c> never
+        /// fires and <see cref="LastPlaceholderRect"/> stays at 0,0,0,0. The
+        /// subsequent <c>AckEmbedAsync</c> then tells the child to resize to 0×0,
+        /// producing a black, invisible client area once the placeholder is shown.
         /// </summary>
         public bool EmbeddedHostVisible
         {

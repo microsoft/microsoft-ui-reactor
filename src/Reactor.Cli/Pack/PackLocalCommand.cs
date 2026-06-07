@@ -121,6 +121,45 @@ public static class PackLocalCommand
             Console.Error.WriteLine($"warning: could not run 'dotnet nuget locals http-cache --clear' ({ex.GetType().Name}: {ex.Message}); consumers may continue to resolve cached versions of {version}.");
         }
 
+        // Bust the per-package extracted cache directories under
+        // ~/.nuget/packages/<id>/<version>/. NuGet caches extracted packages by
+        // id+version and `dotnet restore` will reuse an existing extracted copy
+        // even after the source nupkg's bytes change — same version string = no
+        // refresh. For local-iteration `0.0.0-local` workflows this is the
+        // single most common "I packed a fix but the consumer still sees the
+        // old behavior" footgun: a stale Reactor.dll missing newly-added APIs
+        // produces a MissingMethodException at runtime instead of a build error.
+        // Clearing the extracted directories here forces the next restore to
+        // re-extract from the freshly-packed feed.
+        var globalPackages = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".nuget", "packages");
+        if (Directory.Exists(globalPackages))
+        {
+            foreach (var packageId in new[]
+                {
+                    "microsoft.ui.reactor",
+                    "microsoft.ui.reactor.advanced",
+                    "microsoft.ui.reactor.devtools",
+                    "microsoft.ui.reactor.projecttemplates",
+                })
+            {
+                var cached = Path.Combine(globalPackages, packageId, version);
+                if (Directory.Exists(cached))
+                {
+                    try
+                    {
+                        Directory.Delete(cached, recursive: true);
+                        Console.WriteLine($"  Cleared stale extracted cache: {cached}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.Error.WriteLine($"warning: could not clear extracted cache at {cached} ({ex.GetType().Name}: {ex.Message}); consumers may resolve a stale {packageId} {version} and hit MissingMethodException at runtime. Delete the directory manually before the next restore.");
+                    }
+                }
+            }
+        }
+
         var templatesNupkg = Path.Combine(feed, $"Microsoft.UI.Reactor.ProjectTemplates.{version}.nupkg");
 
         Console.WriteLine();
