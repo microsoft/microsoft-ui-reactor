@@ -1,4 +1,5 @@
 using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
+using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Layout;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -39,31 +40,12 @@ internal static class FlexPanelCssBehaviorFixtures
 
     private static Brush ThemeBrush(string key)
     {
-        var resources = Application.Current?.Resources
+        var app = Application.Current
             ?? throw new InvalidOperationException("Application resources are required for theme-aware selftest brushes.");
 
-        if (TryResolveBrush(resources, key, out var brush))
-            return brush;
-
-        throw new InvalidOperationException($"Theme brush '{key}' was not found.");
-    }
-
-    private static bool TryResolveBrush(ResourceDictionary resources, string key, out Brush brush)
-    {
-        if (resources.TryGetValue(key, out var value) && value is Brush direct)
-        {
-            brush = direct;
-            return true;
-        }
-
-        foreach (var merged in resources.MergedDictionaries)
-        {
-            if (TryResolveBrush(merged, key, out brush))
-                return true;
-        }
-
-        brush = null!;
-        return false;
+        var isDark = app.RequestedTheme == ApplicationTheme.Dark;
+        return ThemeRef.Resolve(key, isDark)
+            ?? throw new InvalidOperationException($"Theme brush '{key}' was not found.");
     }
 
     private static bool Near(double a, double b, double tol = Tolerance)

@@ -453,7 +453,7 @@ internal sealed class MarkdownBuilder
         Element element = Border(content)
             .Padding(0, 8, 16, 8)
             .Background(Theme.SubtleFill)
-            .WithBorder(Theme.DividerStroke, 1)
+            .WithBorder(Theme.DividerStroke, 0)
             .BorderInlineStart(new Thickness(3));
 
         if (_options.BlockQuote is not null)
