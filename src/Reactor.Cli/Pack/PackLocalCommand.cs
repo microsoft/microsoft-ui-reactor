@@ -131,9 +131,13 @@ public static class PackLocalCommand
         // produces a MissingMethodException at runtime instead of a build error.
         // Clearing the extracted directories here forces the next restore to
         // re-extract from the freshly-packed feed.
-        var globalPackages = ResolveNuGetGlobalPackagesPath(repoRoot);
-        if (Directory.Exists(globalPackages))
+        foreach (var globalPackages in ResolveNuGetGlobalPackagesPaths(repoRoot))
         {
+            if (!Directory.Exists(globalPackages))
+            {
+                continue;
+            }
+
             foreach (var packageId in new[]
                 {
                     "microsoft.ui.reactor",
@@ -177,8 +181,24 @@ public static class PackLocalCommand
         return 0;
     }
 
-    static string ResolveNuGetGlobalPackagesPath(string repoRoot)
+    static IReadOnlyList<string> ResolveNuGetGlobalPackagesPaths(string repoRoot)
     {
+        var paths = new List<string>();
+
+        void AddPath(string? path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return;
+            }
+
+            var fullPath = Path.GetFullPath(Environment.ExpandEnvironmentVariables(path.Trim()));
+            if (!paths.Contains(fullPath, StringComparer.OrdinalIgnoreCase))
+            {
+                paths.Add(fullPath);
+            }
+        }
+
         try
         {
             using var proc = Process.Start(new ProcessStartInfo("dotnet")
@@ -201,7 +221,7 @@ public static class PackLocalCommand
                         const string prefix = "global-packages:";
                         if (line.TrimStart().StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
                         {
-                            return line[(line.IndexOf(prefix, StringComparison.OrdinalIgnoreCase) + prefix.Length)..].Trim();
+                            AddPath(line[(line.IndexOf(prefix, StringComparison.OrdinalIgnoreCase) + prefix.Length)..]);
                         }
                     }
                 }
@@ -216,7 +236,9 @@ public static class PackLocalCommand
             Console.Error.WriteLine($"warning: could not resolve NuGet global packages path ({ex.GetType().Name}: {ex.Message}); falling back to the default user profile cache.");
         }
 
-        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget", "packages");
+        AddPath(Environment.GetEnvironmentVariable("NUGET_PACKAGES"));
+        AddPath(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget", "packages"));
+        return paths;
     }
 
     static int RunPack(string repoRoot, string projectRelative, string configuration, string version, string feed, string? arch)

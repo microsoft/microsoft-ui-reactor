@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Reflection;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
@@ -28,6 +29,9 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
     [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Optional devtools package implementation; invoked only through the devtools host gate.")]
     public bool TryHandleCommandLine(ReactorDevtoolsBootRequest request)
     {
+        if (TryReportPackageMismatch())
+            return true;
+
         var options = request.Options;
 
         if (options.Subverb == DevtoolsSubverb.Run && !options.LogsDisabled)
@@ -42,9 +46,10 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
         if (options.UsedDeprecatedPreview)
             Console.Error.WriteLine("[reactor] '--preview' is deprecated; use '--devtools run'.");
 
-        if (!string.IsNullOrEmpty(options.EmbedValidationError))
+        var embedValidationError = GetOptionalStringProperty(options, "EmbedValidationError");
+        if (!string.IsNullOrEmpty(embedValidationError))
         {
-            Console.Error.WriteLine($"[reactor] {options.EmbedValidationError}");
+            Console.Error.WriteLine($"[reactor] {embedValidationError}");
             return true;
         }
 
@@ -66,6 +71,34 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
             default:
                 return false;
         }
+    }
+
+    private static bool TryReportPackageMismatch()
+    {
+        var coreVersion = GetInformationalVersion(typeof(ReactorApp).Assembly);
+        var devtoolsVersion = GetInformationalVersion(typeof(DevtoolsHost).Assembly);
+        if (string.Equals(coreVersion, devtoolsVersion, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        Console.Error.WriteLine("[reactor] Microsoft.UI.Reactor and Microsoft.UI.Reactor.Devtools package payloads do not match.");
+        Console.Error.WriteLine($"[reactor]   Microsoft.UI.Reactor:          {coreVersion}");
+        Console.Error.WriteLine($"[reactor]   Microsoft.UI.Reactor.Devtools: {devtoolsVersion}");
+        Console.Error.WriteLine("[reactor] This usually means NuGet restored stale 0.0.0-local package contents. Run `mur pack-local`, delete bin/obj for this app, then restore/build again.");
+        return true;
+    }
+
+    private static string GetInformationalVersion(Assembly assembly)
+    {
+        return assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+            ?? assembly.GetName().Version?.ToString()
+            ?? "<unknown>";
+    }
+
+    private static string? GetOptionalStringProperty<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(T instance, string propertyName)
+    {
+        return typeof(T).GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public)?.GetValue(instance) as string;
     }
 
     [RequiresUnreferencedCode("Devtools component discovery uses Assembly.GetTypes().")]
