@@ -624,6 +624,194 @@ public static partial class ElementExtensions
     public static RichTextBlockElement CharacterSpacing(this RichTextBlockElement el, int spacing) =>
         el with { CharacterSpacing = spacing };
 
+    public static RichTextBlockElement FontFamily(this RichTextBlockElement el, string family) =>
+        el with { FontFamily = WinRTCache.GetFontFamily(family) };
+
+    public static RichTextBlockElement FontFamily(this RichTextBlockElement el, Microsoft.UI.Xaml.Media.FontFamily family) =>
+        el with { FontFamily = family };
+
+    public static RichTextBlockElement FontWeight(this RichTextBlockElement el, global::Windows.UI.Text.FontWeight weight) =>
+        el with { FontWeight = weight };
+
+    public static RichTextBlockElement FontStyle(this RichTextBlockElement el, global::Windows.UI.Text.FontStyle style) =>
+        el with { FontStyle = style };
+
+    public static RichTextBlockElement FontStretch(this RichTextBlockElement el, global::Windows.UI.Text.FontStretch stretch) =>
+        el with { FontStretch = stretch };
+
+    public static RichTextBlockElement Foreground(this RichTextBlockElement el, string color) =>
+        el with { Foreground = BrushHelper.Parse(color) };
+
+    public static RichTextBlockElement Foreground(this RichTextBlockElement el, Brush brush) =>
+        el with { Foreground = brush };
+
+    public static RichTextBlockElement TextDecorations(this RichTextBlockElement el, global::Windows.UI.Text.TextDecorations decorations) =>
+        el with { TextDecorations = decorations };
+
+    public static RichTextBlockElement LineStackingStrategy(this RichTextBlockElement el, LineStackingStrategy strategy) =>
+        el with { LineStackingStrategy = strategy };
+
+    public static RichTextBlockElement TextIndent(this RichTextBlockElement el, double indent) =>
+        el with { TextIndent = indent };
+
+    public static RichTextBlockElement HorizontalTextAlignment(this RichTextBlockElement el, TextAlignment alignment) =>
+        el with { HorizontalTextAlignment = alignment };
+
+    public static RichTextBlockElement TextLineBounds(this RichTextBlockElement el, TextLineBounds bounds) =>
+        el with { TextLineBounds = bounds };
+
+    public static RichTextBlockElement TextReadingOrder(this RichTextBlockElement el, TextReadingOrder order) =>
+        el with { TextReadingOrder = order };
+
+    public static RichTextBlockElement IsTextScaleFactorEnabled(this RichTextBlockElement el, bool enabled = true) =>
+        el with { IsTextScaleFactorEnabled = enabled };
+
+    public static RichTextBlockElement IsColorFontEnabled(this RichTextBlockElement el, bool enabled = true) =>
+        el with { IsColorFontEnabled = enabled };
+
+    public static RichTextBlockElement OpticalMarginAlignment(this RichTextBlockElement el, OpticalMarginAlignment alignment) =>
+        el with { OpticalMarginAlignment = alignment };
+
+    public static RichTextBlockElement SelectionHighlightColor(this RichTextBlockElement el, Microsoft.UI.Xaml.Media.SolidColorBrush brush) =>
+        el with { SelectionHighlightColor = brush };
+
+    // ── Rich text paragraph / inline sugar ────────────────────────────────
+
+    public static RichTextParagraph Margin(this RichTextParagraph paragraph, double uniform) =>
+        paragraph with { Margin = new Thickness(uniform) };
+
+    public static RichTextParagraph Margin(this RichTextParagraph paragraph, double horizontal, double vertical) =>
+        paragraph with { Margin = new Thickness(horizontal, vertical, horizontal, vertical) };
+
+    public static RichTextParagraph Margin(this RichTextParagraph paragraph, double left = 0.0, double top = 0.0, double right = 0.0, double bottom = 0.0) =>
+        paragraph with { Margin = new Thickness(left, top, right, bottom) };
+
+    public static RichTextParagraph TextIndent(this RichTextParagraph paragraph, double indent) =>
+        paragraph with { TextIndent = indent };
+
+    public static RichTextParagraph TextAlignment(this RichTextParagraph paragraph, TextAlignment alignment) =>
+        paragraph with { TextAlignment = alignment };
+
+    public static RichTextParagraph HorizontalTextAlignment(this RichTextParagraph paragraph, TextAlignment alignment) =>
+        paragraph with { HorizontalTextAlignment = alignment };
+
+    public static RichTextParagraph LineHeight(this RichTextParagraph paragraph, double height) =>
+        paragraph with { LineHeight = height };
+
+    public static RichTextParagraph LineStackingStrategy(this RichTextParagraph paragraph, LineStackingStrategy strategy) =>
+        paragraph with { LineStackingStrategy = strategy };
+
+    public static RichTextParagraph FontSize(this RichTextParagraph paragraph, double size) =>
+        paragraph with { FontSize = size };
+
+    public static RichTextParagraph FontFamily(this RichTextParagraph paragraph, string family) =>
+        paragraph with { FontFamily = family };
+
+    public static RichTextParagraph FontWeight(this RichTextParagraph paragraph, global::Windows.UI.Text.FontWeight weight) =>
+        paragraph with { FontWeight = weight };
+
+    public static RichTextParagraph FontStyle(this RichTextParagraph paragraph, global::Windows.UI.Text.FontStyle style) =>
+        paragraph with { FontStyle = style };
+
+    public static RichTextParagraph FontStretch(this RichTextParagraph paragraph, global::Windows.UI.Text.FontStretch stretch) =>
+        paragraph with { FontStretch = stretch };
+
+    public static RichTextParagraph Foreground(this RichTextParagraph paragraph, string color) =>
+        paragraph with { Foreground = BrushHelper.Parse(color) };
+
+    public static RichTextParagraph Foreground(this RichTextParagraph paragraph, Brush brush) =>
+        paragraph with { Foreground = brush };
+
+    public static RichTextParagraph CharacterSpacing(this RichTextParagraph paragraph, int spacing) =>
+        paragraph with { CharacterSpacing = spacing };
+
+    public static RichTextParagraph TextDecorations(this RichTextParagraph paragraph, global::Windows.UI.Text.TextDecorations decorations) =>
+        paragraph with { TextDecorations = decorations };
+
+    public static RichTextParagraph IsTextScaleFactorEnabled(this RichTextParagraph paragraph, bool enabled = true) =>
+        paragraph with { IsTextScaleFactorEnabled = enabled };
+
+    public static RichTextParagraph Language(this RichTextParagraph paragraph, string language) =>
+        paragraph with { Language = language };
+
+    public static RichTextRun FontSize(this RichTextRun run, double size) =>
+        run with { FontSize = size };
+
+    public static RichTextHyperlink FontSize(this RichTextHyperlink link, double size) =>
+        link with { FontSize = size };
+
+    public static RichTextRun FontFamily(this RichTextRun run, string family) =>
+        run with { FontFamily = family };
+
+    public static RichTextHyperlink FontFamily(this RichTextHyperlink link, string family) =>
+        link with { FontFamily = family };
+
+    public static RichTextRun FontWeight(this RichTextRun run, global::Windows.UI.Text.FontWeight weight) =>
+        run with { FontWeight = weight };
+
+    public static RichTextHyperlink FontWeight(this RichTextHyperlink link, global::Windows.UI.Text.FontWeight weight) =>
+        link with { FontWeight = weight };
+
+    public static RichTextRun FontStyle(this RichTextRun run, global::Windows.UI.Text.FontStyle style) =>
+        run with { FontStyle = style };
+
+    public static RichTextHyperlink FontStyle(this RichTextHyperlink link, global::Windows.UI.Text.FontStyle style) =>
+        link with { FontStyle = style };
+
+    public static RichTextRun FontStretch(this RichTextRun run, global::Windows.UI.Text.FontStretch stretch) =>
+        run with { FontStretch = stretch };
+
+    public static RichTextHyperlink FontStretch(this RichTextHyperlink link, global::Windows.UI.Text.FontStretch stretch) =>
+        link with { FontStretch = stretch };
+
+    public static RichTextRun Foreground(this RichTextRun run, string color) =>
+        run with { Foreground = BrushHelper.Parse(color) };
+
+    public static RichTextRun Foreground(this RichTextRun run, Brush brush) =>
+        run with { Foreground = brush };
+
+    public static RichTextHyperlink Foreground(this RichTextHyperlink link, string color) =>
+        link with { Foreground = BrushHelper.Parse(color) };
+
+    public static RichTextHyperlink Foreground(this RichTextHyperlink link, Brush brush) =>
+        link with { Foreground = brush };
+
+    public static RichTextRun CharacterSpacing(this RichTextRun run, int spacing) =>
+        run with { CharacterSpacing = spacing };
+
+    public static RichTextHyperlink CharacterSpacing(this RichTextHyperlink link, int spacing) =>
+        link with { CharacterSpacing = spacing };
+
+    public static RichTextRun TextDecorations(this RichTextRun run, global::Windows.UI.Text.TextDecorations decorations) =>
+        run with { TextDecorations = decorations };
+
+    public static RichTextHyperlink TextDecorations(this RichTextHyperlink link, global::Windows.UI.Text.TextDecorations decorations) =>
+        link with { TextDecorations = decorations };
+
+    public static RichTextRun IsTextScaleFactorEnabled(this RichTextRun run, bool enabled = true) =>
+        run with { IsTextScaleFactorEnabled = enabled };
+
+    public static RichTextHyperlink IsTextScaleFactorEnabled(this RichTextHyperlink link, bool enabled = true) =>
+        link with { IsTextScaleFactorEnabled = enabled };
+
+    public static RichTextRun Language(this RichTextRun run, string language) =>
+        run with { Language = language };
+
+    public static RichTextHyperlink Language(this RichTextHyperlink link, string language) =>
+        link with { Language = language };
+
+    public static RichTextRun FlowDirection(this RichTextRun run, FlowDirection direction) =>
+        run with { FlowDirection = direction };
+
+    public static RichTextHyperlink UnderlineStyle(this RichTextHyperlink link, Microsoft.UI.Xaml.Documents.UnderlineStyle style) =>
+        link with { UnderlineStyle = style };
+
+    public static RichTextHyperlink IsTabStop(this RichTextHyperlink link, bool isTabStop = true) =>
+        link with { IsTabStop = isTabStop };
+
+    public static RichTextHyperlink TabIndex(this RichTextHyperlink link, int tabIndex) =>
+        link with { TabIndex = tabIndex };
+
     // ── RichEditBox sugar ───────────────────────────────────────────────
 
     /// <summary>Enable or disable built-in spell-check.</summary>

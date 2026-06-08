@@ -221,6 +221,10 @@ internal static class SelfTestFixtureRegistry
         // Issue #480 follow-up — incremental RTB update preserves child identity
         "InlineUI_IncrementalUpdate_PreservesChildIdentity",
         "InlineUI_IncrementalUpdate_RunMutatedInPlace",
+        "RichTextProps_Block_MountUpdateClear",
+        "RichTextProps_Paragraph_MountUpdateClear",
+        "RichTextProps_Run_MountUpdateClear",
+        "RichTextProps_Hyperlink_MountUpdateClear",
         // ElementFactory<T> + WinUI ItemsRepeater recycle contract — regression
         // for the leak fixed alongside these tests (every realize was Minting
         // a fresh UIElement, orphaning prior ones in Repeater.Children).
@@ -1542,6 +1546,10 @@ internal static class SelfTestFixtureRegistry
         // Issue #480 follow-up — incremental RTB update preserves child identity.
         "InlineUI_IncrementalUpdate_PreservesChildIdentity" => new InlineUIContainerFixtures.InlineUI_IncrementalUpdate_PreservesChildIdentity(harness),
         "InlineUI_IncrementalUpdate_RunMutatedInPlace" => new InlineUIContainerFixtures.InlineUI_IncrementalUpdate_RunMutatedInPlace(harness),
+        "RichTextProps_Block_MountUpdateClear" => new RichTextPropertyFixtures.RichTextProps_Block_MountUpdateClear(harness),
+        "RichTextProps_Paragraph_MountUpdateClear" => new RichTextPropertyFixtures.RichTextProps_Paragraph_MountUpdateClear(harness),
+        "RichTextProps_Run_MountUpdateClear" => new RichTextPropertyFixtures.RichTextProps_Run_MountUpdateClear(harness),
+        "RichTextProps_Hyperlink_MountUpdateClear" => new RichTextPropertyFixtures.RichTextProps_Hyperlink_MountUpdateClear(harness),
         "EFR_Factory_BoundedDistinctControls_AcrossManyRealizeCycles" => new ElementFactoryRecyclingFixtures.Factory_BoundedDistinctControls_AcrossManyRealizeCycles(harness),
         "EFR_Factory_RecycledControlIsReusedOnNextRealize" => new ElementFactoryRecyclingFixtures.Factory_RecycledControlIsReusedOnNextRealize(harness),
         "EFR_Factory_BookkeepingBoundedAcrossCycles" => new ElementFactoryRecyclingFixtures.Factory_BookkeepingBoundedAcrossCycles(harness),

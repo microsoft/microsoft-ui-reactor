@@ -504,9 +504,29 @@ public abstract record Element
             (RichTextBlockElement ra, RichTextBlockElement rb) =>
                 ra.Text == rb.Text
                 && ra.FontSize == rb.FontSize
+                && FontFamiliesEqual(ra.FontFamily, rb.FontFamily)
+                && ra.FontWeight == rb.FontWeight
+                && ra.FontStyle == rb.FontStyle
+                && ra.FontStretch == rb.FontStretch
+                && BrushesEqual(ra.Foreground, rb.Foreground)
                 && ra.IsTextSelectionEnabled == rb.IsTextSelectionEnabled
                 && ra.TextWrapping == rb.TextWrapping
+                && ra.MaxLines == rb.MaxLines
+                && ra.LineHeight == rb.LineHeight
                 && ParagraphsEqual(ra.Paragraphs, rb.Paragraphs)
+                && ra.TextAlignment == rb.TextAlignment
+                && ra.HorizontalTextAlignment == rb.HorizontalTextAlignment
+                && ra.TextTrimming == rb.TextTrimming
+                && ra.CharacterSpacing == rb.CharacterSpacing
+                && ra.TextDecorations == rb.TextDecorations
+                && ra.LineStackingStrategy == rb.LineStackingStrategy
+                && ra.TextIndent == rb.TextIndent
+                && ra.TextLineBounds == rb.TextLineBounds
+                && ra.TextReadingOrder == rb.TextReadingOrder
+                && ra.IsTextScaleFactorEnabled == rb.IsTextScaleFactorEnabled
+                && ra.IsColorFontEnabled == rb.IsColorFontEnabled
+                && ra.OpticalMarginAlignment == rb.OpticalMarginAlignment
+                && BrushesEqual(ra.SelectionHighlightColor, rb.SelectionHighlightColor)
                 && ReferenceEquals(ra.Setters, rb.Setters),
 
             // Container elements: compare own props + children by reference.
@@ -877,14 +897,78 @@ public abstract record Element
     internal static bool ParagraphEqual(RichTextParagraph a, RichTextParagraph b)
     {
         if (ReferenceEquals(a, b)) return true;
+        if (!ParagraphPropertiesEqual(a, b)) return false;
         var ai = a.Inlines;
         var bi = b.Inlines;
         if (ai.Length != bi.Length) return false;
         for (int j = 0; j < ai.Length; j++)
         {
-            if (!ai[j].Equals(bi[j])) return false;
+            if (!RichTextInlineEqual(ai[j], bi[j])) return false;
         }
         return true;
+    }
+
+    private static bool ParagraphPropertiesEqual(RichTextParagraph a, RichTextParagraph b)
+        => a.Margin == b.Margin
+            && a.TextIndent == b.TextIndent
+            && a.TextAlignment == b.TextAlignment
+            && a.HorizontalTextAlignment == b.HorizontalTextAlignment
+            && a.LineHeight == b.LineHeight
+            && a.LineStackingStrategy == b.LineStackingStrategy
+            && a.FontSize == b.FontSize
+            && string.Equals(a.FontFamily, b.FontFamily, StringComparison.Ordinal)
+            && a.FontWeight == b.FontWeight
+            && a.FontStyle == b.FontStyle
+            && a.FontStretch == b.FontStretch
+            && BrushesEqual(a.Foreground, b.Foreground)
+            && a.CharacterSpacing == b.CharacterSpacing
+            && a.TextDecorations == b.TextDecorations
+            && a.IsTextScaleFactorEnabled == b.IsTextScaleFactorEnabled
+            && string.Equals(a.Language, b.Language, StringComparison.Ordinal);
+
+    private static bool RichTextInlineTextPropertiesEqual(RichTextInline a, RichTextInline b)
+        => a.FontSize == b.FontSize
+            && string.Equals(a.FontFamily, b.FontFamily, StringComparison.Ordinal)
+            && a.FontWeight == b.FontWeight
+            && a.FontStyle == b.FontStyle
+            && a.FontStretch == b.FontStretch
+            && BrushesEqual(a.Foreground, b.Foreground)
+            && a.CharacterSpacing == b.CharacterSpacing
+            && a.TextDecorations == b.TextDecorations
+            && a.IsTextScaleFactorEnabled == b.IsTextScaleFactorEnabled
+            && string.Equals(a.Language, b.Language, StringComparison.Ordinal);
+
+    private static bool RichTextInlineEqual(RichTextInline a, RichTextInline b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a.GetType() != b.GetType()) return false;
+        if (!RichTextInlineTextPropertiesEqual(a, b)) return false;
+
+        return (a, b) switch
+        {
+            (RichTextRun ra, RichTextRun rb) =>
+                ra.Text == rb.Text
+                && ra.IsBold == rb.IsBold
+                && ra.IsItalic == rb.IsItalic
+                && ra.IsStrikethrough == rb.IsStrikethrough
+                && ra.FlowDirection == rb.FlowDirection,
+
+            (RichTextHyperlink ha, RichTextHyperlink hb) =>
+                ha.Text == hb.Text
+                && ha.NavigateUri == hb.NavigateUri
+                && ReferenceEquals(ha.OnClick, hb.OnClick)
+                && ha.UnderlineStyle == hb.UnderlineStyle
+                && ha.IsTabStop == hb.IsTabStop
+                && ha.TabIndex == hb.TabIndex,
+
+            (RichTextLineBreak, RichTextLineBreak) => true,
+
+            (RichTextInlineUIContainer ia, RichTextInlineUIContainer ib) =>
+                ReferenceEquals(ia.Child, ib.Child)
+                && ReferenceEquals(ia.Factory, ib.Factory),
+
+            _ => a.Equals(b),
+        };
     }
 
     /// <summary>
@@ -2166,6 +2250,11 @@ internal enum TextPropChanged : ushort
 public record RichTextBlockElement(string Text) : Element
 {
     public double? FontSize { get; init; }
+    public Microsoft.UI.Xaml.Media.FontFamily? FontFamily { get; init; }
+    public global::Windows.UI.Text.FontWeight? FontWeight { get; init; }
+    public global::Windows.UI.Text.FontStyle? FontStyle { get; init; }
+    public global::Windows.UI.Text.FontStretch? FontStretch { get; init; }
+    public Brush? Foreground { get; init; }
     public RichTextParagraph[]? Paragraphs { get; init; }
     public bool IsTextSelectionEnabled { get; init; }
     public TextWrapping? TextWrapping { get; init; }
@@ -2175,26 +2264,65 @@ public record RichTextBlockElement(string Text) : Element
     public double? LineHeight { get; init; }
     /// <summary>Horizontal alignment of text within the block. <c>null</c> uses the WinUI default (Left).</summary>
     public TextAlignment? TextAlignment { get; init; }
+    /// <summary>Horizontal text alignment using the newer WinUI property. <c>null</c> uses the WinUI default.</summary>
+    public TextAlignment? HorizontalTextAlignment { get; init; }
     /// <summary>How overflowing text is truncated. <c>null</c> uses the WinUI default (None).</summary>
     public TextTrimming? TextTrimming { get; init; }
     /// <summary>Extra spacing between characters, in units of 1/1000em. Defaults to <c>0</c>.</summary>
     public int CharacterSpacing { get; init; }
+    public global::Windows.UI.Text.TextDecorations? TextDecorations { get; init; }
+    public LineStackingStrategy? LineStackingStrategy { get; init; }
+    public double? TextIndent { get; init; }
+    public TextLineBounds? TextLineBounds { get; init; }
+    public TextReadingOrder? TextReadingOrder { get; init; }
+    public bool? IsTextScaleFactorEnabled { get; init; }
+    public bool? IsColorFontEnabled { get; init; }
+    public OpticalMarginAlignment? OpticalMarginAlignment { get; init; }
+    public Microsoft.UI.Xaml.Media.SolidColorBrush? SelectionHighlightColor { get; init; }
     internal Action<WinUI.RichTextBlock>[] Setters { get; init; } = [];
 }
 
 // Rich text inline content types
-public record RichTextParagraph(RichTextInline[] Inlines);
+public record RichTextParagraph(RichTextInline[] Inlines)
+{
+    public Thickness? Margin { get; init; }
+    public double? TextIndent { get; init; }
+    public TextAlignment? TextAlignment { get; init; }
+    public TextAlignment? HorizontalTextAlignment { get; init; }
+    public double? LineHeight { get; init; }
+    public LineStackingStrategy? LineStackingStrategy { get; init; }
+    public double? FontSize { get; init; }
+    public string? FontFamily { get; init; }
+    public global::Windows.UI.Text.FontWeight? FontWeight { get; init; }
+    public global::Windows.UI.Text.FontStyle? FontStyle { get; init; }
+    public global::Windows.UI.Text.FontStretch? FontStretch { get; init; }
+    public Brush? Foreground { get; init; }
+    public int? CharacterSpacing { get; init; }
+    public global::Windows.UI.Text.TextDecorations? TextDecorations { get; init; }
+    public bool? IsTextScaleFactorEnabled { get; init; }
+    public string? Language { get; init; }
+}
 
-public abstract record RichTextInline;
+public abstract record RichTextInline
+{
+    public double? FontSize { get; init; }
+    public string? FontFamily { get; init; }
+    public global::Windows.UI.Text.FontWeight? FontWeight { get; init; }
+    public global::Windows.UI.Text.FontStyle? FontStyle { get; init; }
+    public global::Windows.UI.Text.FontStretch? FontStretch { get; init; }
+    public Brush? Foreground { get; init; }
+    public int? CharacterSpacing { get; init; }
+    public global::Windows.UI.Text.TextDecorations? TextDecorations { get; init; }
+    public bool? IsTextScaleFactorEnabled { get; init; }
+    public string? Language { get; init; }
+}
 
 public record RichTextRun(string Text) : RichTextInline
 {
     public bool IsBold { get; init; }
     public bool IsItalic { get; init; }
     public bool IsStrikethrough { get; init; }
-    public double? FontSize { get; init; }
-    public string? FontFamily { get; init; }
-    public Brush? Foreground { get; init; }
+    public FlowDirection? FlowDirection { get; init; }
 }
 
 /// <summary>
@@ -2221,6 +2349,9 @@ public record RichTextHyperlink(string Text, Uri NavigateUri) : RichTextInline
     /// as a pure navigation link using <see cref="NavigateUri"/>.
     /// </summary>
     public Action? OnClick { get; init; }
+    public Microsoft.UI.Xaml.Documents.UnderlineStyle? UnderlineStyle { get; init; }
+    public bool? IsTabStop { get; init; }
+    public int? TabIndex { get; init; }
 }
 
 public record RichTextLineBreak() : RichTextInline;

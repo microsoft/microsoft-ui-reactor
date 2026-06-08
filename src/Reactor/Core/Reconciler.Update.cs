@@ -9,6 +9,7 @@ using Microsoft.UI.Xaml.Media.Imaging;
 using WinUI = Microsoft.UI.Xaml.Controls;
 using WinPrim = Microsoft.UI.Xaml.Controls.Primitives;
 using WinShapes = Microsoft.UI.Xaml.Shapes;
+using WinDocs = Microsoft.UI.Xaml.Documents;
 using Windows.UI.WebUI;
 
 namespace Microsoft.UI.Reactor.Core;
@@ -250,16 +251,11 @@ public sealed partial class Reconciler
         switch (inline)
         {
             case RichTextRun run:
-                var r = new Microsoft.UI.Xaml.Documents.Run { Text = run.Text };
-                if (run.IsBold) r.FontWeight = Microsoft.UI.Text.FontWeights.Bold;
-                if (run.IsItalic) r.FontStyle = global::Windows.UI.Text.FontStyle.Italic;
-                if (run.IsStrikethrough) r.TextDecorations = global::Windows.UI.Text.TextDecorations.Strikethrough;
-                if (run.FontSize.HasValue) r.FontSize = run.FontSize.Value;
-                if (run.FontFamily is not null) r.FontFamily = WinRTCache.GetFontFamily(run.FontFamily);
-                if (run.Foreground is not null) r.Foreground = run.Foreground;
+                var r = new WinDocs.Run { Text = run.Text };
+                ApplyRunProperties(r, run);
                 return r;
             case RichTextHyperlink link:
-                var hl = new Microsoft.UI.Xaml.Documents.Hyperlink();
+                var hl = new WinDocs.Hyperlink();
                 if (link.OnClick is not null)
                 {
                     // Issue #479 click mode: fire delegate, suppress platform
@@ -273,14 +269,22 @@ public sealed partial class Reconciler
                     if (l.ToString().Length < 1) l = new Uri("about:blank");
                     try { hl.NavigateUri = l; } catch { hl.NavigateUri = new Uri("about:blank"); }
                 }
-                hl.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run { Text = link.Text ?? ""});
+                ApplyInlineTextProperties(hl, link);
+                ApplyHyperlinkProperties(hl, link);
+                var linkRun = new WinDocs.Run { Text = link.Text ?? "" };
+                ApplyInlineTextProperties(linkRun, link);
+                hl.Inlines.Add(linkRun);
                 return hl;
             case RichTextLineBreak:
-                return new Microsoft.UI.Xaml.Documents.LineBreak();
+                var lb = new WinDocs.LineBreak();
+                ApplyInlineTextProperties(lb, inline);
+                return lb;
             case RichTextInlineUIContainer iuc:
-                return MountInlineUIContainer(iuc, requestRerender);
+                var container = MountInlineUIContainer(iuc, requestRerender);
+                ApplyInlineTextProperties(container, iuc);
+                return container;
             default:
-                return new Microsoft.UI.Xaml.Documents.Run { Text = "" };
+                return new WinDocs.Run { Text = "" };
         }
     }
 
@@ -294,10 +298,10 @@ public sealed partial class Reconciler
     /// stashed on the container so the surrounding RichTextBlock's unmount /
     /// rebuild paths can walk and tear it down before <c>Blocks.Clear()</c>.
     /// </summary>
-    private Microsoft.UI.Xaml.Documents.InlineUIContainer MountInlineUIContainer(
+    private WinDocs.InlineUIContainer MountInlineUIContainer(
         RichTextInlineUIContainer iuc, Action requestRerender)
     {
-        var container = new Microsoft.UI.Xaml.Documents.InlineUIContainer();
+        var container = new WinDocs.InlineUIContainer();
         UIElement? mounted = null;
         if (iuc.Child is not null)
         {
@@ -355,7 +359,7 @@ public sealed partial class Reconciler
         {
             switch (inline)
             {
-                case Microsoft.UI.Xaml.Documents.InlineUIContainer iuc:
+                case WinDocs.InlineUIContainer iuc:
                     if (iuc.Child is FrameworkElement childFe
                         && (bool)childFe.GetValue(s_inlineUIRouteAProperty))
                     {
@@ -363,16 +367,17 @@ public sealed partial class Reconciler
                     }
                     iuc.Child = null;
                     break;
-                case Microsoft.UI.Xaml.Documents.Span span:
+                case WinDocs.Span span:
                     UnmountInlineUIChildrenInInlines(span.Inlines);
                     break;
             }
         }
     }
 
-    private Microsoft.UI.Xaml.Documents.Paragraph MountParagraph(RichTextParagraph para, Action requestRerender)
+    private WinDocs.Paragraph MountParagraph(RichTextParagraph para, Action requestRerender)
     {
-        var p = new Microsoft.UI.Xaml.Documents.Paragraph();
+        var p = new WinDocs.Paragraph();
+        ApplyParagraphProperties(p, para);
         foreach (var inline in para.Inlines)
             p.Inlines.Add(MountInline(inline, requestRerender));
         return p;
@@ -440,9 +445,9 @@ public sealed partial class Reconciler
         if (prev.Paragraphs is null && next.Paragraphs is null)
         {
             if (rtb.Blocks.Count != 1) return false;
-            if (rtb.Blocks[0] is not Microsoft.UI.Xaml.Documents.Paragraph p1) return false;
+            if (rtb.Blocks[0] is not WinDocs.Paragraph p1) return false;
             if (p1.Inlines.Count != 1) return false;
-            if (p1.Inlines[0] is not Microsoft.UI.Xaml.Documents.Run r1) return false;
+            if (p1.Inlines[0] is not WinDocs.Run r1) return false;
             if (string.Equals(prev.Text, next.Text, global::System.StringComparison.Ordinal))
                 return true;
             r1.Text = next.Text ?? string.Empty;
@@ -464,7 +469,7 @@ public sealed partial class Reconciler
         // etc.) only to discover later we have to tear everything down.
         for (int pi = 0; pi < nextPs.Length; pi++)
         {
-            if (rtb.Blocks[pi] is not Microsoft.UI.Xaml.Documents.Paragraph winPara)
+            if (rtb.Blocks[pi] is not WinDocs.Paragraph winPara)
                 return false;
             var prevInlines = prevPs[pi].Inlines;
             var nextInlines = nextPs[pi].Inlines;
@@ -483,7 +488,7 @@ public sealed partial class Reconciler
         {
             var prevPara = prevPs[pi];
             var nextPara = nextPs[pi];
-            var winPara = (Microsoft.UI.Xaml.Documents.Paragraph)rtb.Blocks[pi];
+            var winPara = (WinDocs.Paragraph)rtb.Blocks[pi];
             if (ReferenceEquals(prevPara, nextPara))
             {
                 // Paragraph object is unchanged at the structural level, but
@@ -496,7 +501,7 @@ public sealed partial class Reconciler
                 {
                     if (nextPara.Inlines[ii] is RichTextInlineUIContainer rinl
                         && rinl.Child is not null
-                        && winPara.Inlines[ii] is Microsoft.UI.Xaml.Documents.InlineUIContainer wc)
+                        && winPara.Inlines[ii] is WinDocs.InlineUIContainer wc)
                     {
                         if (UpdateInlineUIContainerInPlace(rinl, rinl, wc, requestRerender))
                             anyMutation = true;
@@ -504,6 +509,8 @@ public sealed partial class Reconciler
                 }
                 continue;
             }
+            if (UpdateParagraphProperties(prevPara, nextPara, winPara))
+                anyMutation = true;
             for (int ii = 0; ii < nextPara.Inlines.Length; ii++)
             {
                 var prevInline = prevPara.Inlines[ii];
@@ -526,15 +533,15 @@ public sealed partial class Reconciler
     private static bool CanUpdateInlineInPlace(
         RichTextInline prev,
         RichTextInline next,
-        Microsoft.UI.Xaml.Documents.Inline existing)
+        WinDocs.Inline existing)
     {
         return (prev, next, existing) switch
         {
-            (RichTextRun, RichTextRun, Microsoft.UI.Xaml.Documents.Run) => true,
-            (RichTextHyperlink, RichTextHyperlink, Microsoft.UI.Xaml.Documents.Hyperlink hl)
-                => hl.Inlines.Count == 1 && hl.Inlines[0] is Microsoft.UI.Xaml.Documents.Run,
-            (RichTextLineBreak, RichTextLineBreak, Microsoft.UI.Xaml.Documents.LineBreak) => true,
-            (RichTextInlineUIContainer p, RichTextInlineUIContainer n, Microsoft.UI.Xaml.Documents.InlineUIContainer)
+            (RichTextRun, RichTextRun, WinDocs.Run) => true,
+            (RichTextHyperlink, RichTextHyperlink, WinDocs.Hyperlink hl)
+                => hl.Inlines.Count == 1 && hl.Inlines[0] is WinDocs.Run,
+            (RichTextLineBreak, RichTextLineBreak, WinDocs.LineBreak) => true,
+            (RichTextInlineUIContainer p, RichTextInlineUIContainer n, WinDocs.InlineUIContainer)
                 => CanUpdateInlineUIContainerInPlace(p, n),
             _ => false,
         };
@@ -563,26 +570,26 @@ public sealed partial class Reconciler
     private bool UpdateInlineInPlace(
         RichTextInline prev,
         RichTextInline next,
-        Microsoft.UI.Xaml.Documents.Inline existing,
+        WinDocs.Inline existing,
         Action requestRerender)
     {
         switch (prev, next, existing)
         {
-            case (RichTextRun p, RichTextRun n, Microsoft.UI.Xaml.Documents.Run wr):
+            case (RichTextRun p, RichTextRun n, WinDocs.Run wr):
                 return UpdateRunInPlace(p, n, wr);
-            case (RichTextHyperlink p, RichTextHyperlink n, Microsoft.UI.Xaml.Documents.Hyperlink wh):
+            case (RichTextHyperlink p, RichTextHyperlink n, WinDocs.Hyperlink wh):
                 return UpdateHyperlinkInPlace(p, n, wh);
-            case (RichTextLineBreak, RichTextLineBreak, _):
-                return false;
+            case (RichTextLineBreak p, RichTextLineBreak n, WinDocs.LineBreak wb):
+                return UpdateInlineTextProperties(p, n, wb);
             case (RichTextInlineUIContainer p, RichTextInlineUIContainer n,
-                  Microsoft.UI.Xaml.Documents.InlineUIContainer wc):
+                  WinDocs.InlineUIContainer wc):
                 return UpdateInlineUIContainerInPlace(p, n, wc, requestRerender);
             default:
                 return false; // unreachable per preflight
         }
     }
 
-    private static bool UpdateRunInPlace(RichTextRun prev, RichTextRun next, Microsoft.UI.Xaml.Documents.Run wr)
+    private static bool UpdateRunInPlace(RichTextRun prev, RichTextRun next, WinDocs.Run wr)
     {
         bool any = false;
         if (!string.Equals(prev.Text, next.Text, global::System.StringComparison.Ordinal))
@@ -590,45 +597,40 @@ public sealed partial class Reconciler
             wr.Text = next.Text ?? string.Empty;
             any = true;
         }
-        if (prev.IsBold != next.IsBold)
+        if (UpdateInlineTextProperties(prev, next, wr, includeFontShape: false))
+            any = true;
+
+        var oldWeight = EffectiveFontWeight(prev);
+        var newWeight = EffectiveFontWeight(next);
+        if (oldWeight != newWeight)
         {
-            wr.FontWeight = next.IsBold
-                ? Microsoft.UI.Text.FontWeights.Bold
-                : Microsoft.UI.Text.FontWeights.Normal;
+            if (newWeight.HasValue) wr.FontWeight = newWeight.Value;
+            else wr.ClearValue(WinDocs.TextElement.FontWeightProperty);
             any = true;
         }
-        if (prev.IsItalic != next.IsItalic)
+
+        var oldStyle = EffectiveFontStyle(prev);
+        var newStyle = EffectiveFontStyle(next);
+        if (oldStyle != newStyle)
         {
-            wr.FontStyle = next.IsItalic
-                ? global::Windows.UI.Text.FontStyle.Italic
-                : global::Windows.UI.Text.FontStyle.Normal;
+            if (newStyle.HasValue) wr.FontStyle = newStyle.Value;
+            else wr.ClearValue(WinDocs.TextElement.FontStyleProperty);
             any = true;
         }
-        if (prev.IsStrikethrough != next.IsStrikethrough)
+
+        var oldDecorations = EffectiveTextDecorations(prev);
+        var newDecorations = EffectiveTextDecorations(next);
+        if (oldDecorations != newDecorations)
         {
-            wr.TextDecorations = next.IsStrikethrough
-                ? global::Windows.UI.Text.TextDecorations.Strikethrough
-                : global::Windows.UI.Text.TextDecorations.None;
+            if (newDecorations.HasValue) wr.TextDecorations = newDecorations.Value;
+            else wr.ClearValue(WinDocs.TextElement.TextDecorationsProperty);
             any = true;
         }
-        if (prev.FontSize != next.FontSize)
+
+        if (prev.FlowDirection != next.FlowDirection)
         {
-            if (next.FontSize.HasValue) wr.FontSize = next.FontSize.Value;
-            else wr.ClearValue(Microsoft.UI.Xaml.Documents.TextElement.FontSizeProperty);
-            any = true;
-        }
-        if (!string.Equals(prev.FontFamily, next.FontFamily, global::System.StringComparison.Ordinal))
-        {
-            if (next.FontFamily is not null)
-                wr.FontFamily = WinRTCache.GetFontFamily(next.FontFamily);
-            else
-                wr.ClearValue(Microsoft.UI.Xaml.Documents.TextElement.FontFamilyProperty);
-            any = true;
-        }
-        if (!ReferenceEquals(prev.Foreground, next.Foreground))
-        {
-            if (next.Foreground is not null) wr.Foreground = next.Foreground;
-            else wr.ClearValue(Microsoft.UI.Xaml.Documents.TextElement.ForegroundProperty);
+            if (next.FlowDirection.HasValue) wr.FlowDirection = next.FlowDirection.Value;
+            else wr.ClearValue(WinDocs.Run.FlowDirectionProperty);
             any = true;
         }
         return any;
@@ -637,7 +639,7 @@ public sealed partial class Reconciler
     private static bool UpdateHyperlinkInPlace(
         RichTextHyperlink prev,
         RichTextHyperlink next,
-        Microsoft.UI.Xaml.Documents.Hyperlink wh)
+        WinDocs.Hyperlink wh)
     {
         bool any = false;
         // Issue #479 — handle OnClick attach/detach + NavigateUri transitions.
@@ -680,16 +682,227 @@ public sealed partial class Reconciler
                 any = true;
             }
         }
+        var innerRun = wh.Inlines.Count > 0
+            ? wh.Inlines[0] as WinDocs.Run
+            : null;
+
         if (!string.Equals(prev.Text, next.Text, global::System.StringComparison.Ordinal))
         {
-            if (wh.Inlines.Count > 0
-                && wh.Inlines[0] is Microsoft.UI.Xaml.Documents.Run innerRun)
+            if (innerRun is not null)
             {
                 innerRun.Text = next.Text ?? string.Empty;
                 any = true;
             }
         }
+        if (UpdateInlineTextProperties(prev, next, wh))
+            any = true;
+        if (innerRun is not null && UpdateInlineTextProperties(prev, next, innerRun))
+            any = true;
+        if (UpdateHyperlinkProperties(prev, next, wh))
+            any = true;
         return any;
+    }
+
+    private static void ApplyParagraphProperties(WinDocs.Paragraph target, RichTextParagraph paragraph)
+    {
+        if (paragraph.Margin.HasValue) target.Margin = paragraph.Margin.Value;
+        if (paragraph.TextIndent.HasValue) target.TextIndent = paragraph.TextIndent.Value;
+        if (paragraph.TextAlignment.HasValue) target.TextAlignment = paragraph.TextAlignment.Value;
+        if (paragraph.HorizontalTextAlignment.HasValue) target.HorizontalTextAlignment = paragraph.HorizontalTextAlignment.Value;
+        if (paragraph.LineHeight.HasValue) target.LineHeight = paragraph.LineHeight.Value;
+        if (paragraph.LineStackingStrategy.HasValue) target.LineStackingStrategy = paragraph.LineStackingStrategy.Value;
+        ApplyParagraphTextProperties(target, paragraph);
+    }
+
+    private static bool UpdateParagraphProperties(
+        RichTextParagraph prev,
+        RichTextParagraph next,
+        WinDocs.Paragraph target)
+    {
+        bool any = false;
+        if (UpdateNullableStruct(prev.Margin, next.Margin, target, WinDocs.Block.MarginProperty, v => target.Margin = v)) any = true;
+        if (UpdateNullableStruct(prev.TextIndent, next.TextIndent, target, WinDocs.Paragraph.TextIndentProperty, v => target.TextIndent = v)) any = true;
+        if (UpdateNullableStruct(prev.TextAlignment, next.TextAlignment, target, WinDocs.Block.TextAlignmentProperty, v => target.TextAlignment = v)) any = true;
+        if (UpdateNullableStruct(prev.HorizontalTextAlignment, next.HorizontalTextAlignment, target, WinDocs.Block.HorizontalTextAlignmentProperty, v => target.HorizontalTextAlignment = v)) any = true;
+        if (UpdateNullableStruct(prev.LineHeight, next.LineHeight, target, WinDocs.Block.LineHeightProperty, v => target.LineHeight = v)) any = true;
+        if (UpdateNullableStruct(prev.LineStackingStrategy, next.LineStackingStrategy, target, WinDocs.Block.LineStackingStrategyProperty, v => target.LineStackingStrategy = v)) any = true;
+        if (UpdateParagraphTextProperties(prev, next, target)) any = true;
+        return any;
+    }
+
+    private static void ApplyParagraphTextProperties(WinDocs.TextElement target, RichTextParagraph paragraph)
+    {
+        if (paragraph.FontSize.HasValue) target.FontSize = paragraph.FontSize.Value;
+        if (paragraph.FontFamily is not null) target.FontFamily = WinRTCache.GetFontFamily(paragraph.FontFamily);
+        if (paragraph.FontWeight.HasValue) target.FontWeight = paragraph.FontWeight.Value;
+        if (paragraph.FontStyle.HasValue) target.FontStyle = paragraph.FontStyle.Value;
+        if (paragraph.FontStretch.HasValue) target.FontStretch = paragraph.FontStretch.Value;
+        if (paragraph.Foreground is not null) target.Foreground = paragraph.Foreground;
+        if (paragraph.CharacterSpacing.HasValue) target.CharacterSpacing = paragraph.CharacterSpacing.Value;
+        if (paragraph.TextDecorations.HasValue) target.TextDecorations = paragraph.TextDecorations.Value;
+        if (paragraph.IsTextScaleFactorEnabled.HasValue) target.IsTextScaleFactorEnabled = paragraph.IsTextScaleFactorEnabled.Value;
+        if (paragraph.Language is not null) target.Language = paragraph.Language;
+    }
+
+    private static bool UpdateParagraphTextProperties(
+        RichTextParagraph prev,
+        RichTextParagraph next,
+        WinDocs.TextElement target)
+    {
+        bool any = false;
+        if (UpdateNullableStruct(prev.FontSize, next.FontSize, target, WinDocs.TextElement.FontSizeProperty, v => target.FontSize = v)) any = true;
+        if (UpdateFontFamily(prev.FontFamily, next.FontFamily, target)) any = true;
+        if (UpdateNullableStruct(prev.FontWeight, next.FontWeight, target, WinDocs.TextElement.FontWeightProperty, v => target.FontWeight = v)) any = true;
+        if (UpdateNullableStruct(prev.FontStyle, next.FontStyle, target, WinDocs.TextElement.FontStyleProperty, v => target.FontStyle = v)) any = true;
+        if (UpdateNullableStruct(prev.FontStretch, next.FontStretch, target, WinDocs.TextElement.FontStretchProperty, v => target.FontStretch = v)) any = true;
+        if (UpdateReference(prev.Foreground, next.Foreground, target, WinDocs.TextElement.ForegroundProperty, v => target.Foreground = v)) any = true;
+        if (UpdateNullableStruct(prev.CharacterSpacing, next.CharacterSpacing, target, WinDocs.TextElement.CharacterSpacingProperty, v => target.CharacterSpacing = v)) any = true;
+        if (UpdateNullableStruct(prev.TextDecorations, next.TextDecorations, target, WinDocs.TextElement.TextDecorationsProperty, v => target.TextDecorations = v)) any = true;
+        if (UpdateNullableStruct(prev.IsTextScaleFactorEnabled, next.IsTextScaleFactorEnabled, target, WinDocs.TextElement.IsTextScaleFactorEnabledProperty, v => target.IsTextScaleFactorEnabled = v)) any = true;
+        if (UpdateString(prev.Language, next.Language, target, WinDocs.TextElement.LanguageProperty, v => target.Language = v)) any = true;
+        return any;
+    }
+
+    private static void ApplyRunProperties(WinDocs.Run target, RichTextRun run)
+    {
+        ApplyInlineTextProperties(target, run, includeFontShape: false);
+
+        var weight = EffectiveFontWeight(run);
+        if (weight.HasValue) target.FontWeight = weight.Value;
+
+        var style = EffectiveFontStyle(run);
+        if (style.HasValue) target.FontStyle = style.Value;
+
+        var decorations = EffectiveTextDecorations(run);
+        if (decorations.HasValue) target.TextDecorations = decorations.Value;
+
+        if (run.FlowDirection.HasValue) target.FlowDirection = run.FlowDirection.Value;
+    }
+
+    private static void ApplyInlineTextProperties(
+        WinDocs.TextElement target,
+        RichTextInline inline,
+        bool includeFontShape = true)
+    {
+        if (inline.FontSize.HasValue) target.FontSize = inline.FontSize.Value;
+        if (inline.FontFamily is not null) target.FontFamily = WinRTCache.GetFontFamily(inline.FontFamily);
+        if (includeFontShape && inline.FontWeight.HasValue) target.FontWeight = inline.FontWeight.Value;
+        if (includeFontShape && inline.FontStyle.HasValue) target.FontStyle = inline.FontStyle.Value;
+        if (inline.FontStretch.HasValue) target.FontStretch = inline.FontStretch.Value;
+        if (inline.Foreground is not null) target.Foreground = inline.Foreground;
+        if (inline.CharacterSpacing.HasValue) target.CharacterSpacing = inline.CharacterSpacing.Value;
+        if (includeFontShape && inline.TextDecorations.HasValue) target.TextDecorations = inline.TextDecorations.Value;
+        if (inline.IsTextScaleFactorEnabled.HasValue) target.IsTextScaleFactorEnabled = inline.IsTextScaleFactorEnabled.Value;
+        if (inline.Language is not null) target.Language = inline.Language;
+    }
+
+    private static bool UpdateInlineTextProperties(
+        RichTextInline prev,
+        RichTextInline next,
+        WinDocs.TextElement target,
+        bool includeFontShape = true)
+    {
+        bool any = false;
+        if (UpdateNullableStruct(prev.FontSize, next.FontSize, target, WinDocs.TextElement.FontSizeProperty, v => target.FontSize = v)) any = true;
+        if (UpdateFontFamily(prev.FontFamily, next.FontFamily, target)) any = true;
+        if (includeFontShape && UpdateNullableStruct(prev.FontWeight, next.FontWeight, target, WinDocs.TextElement.FontWeightProperty, v => target.FontWeight = v)) any = true;
+        if (includeFontShape && UpdateNullableStruct(prev.FontStyle, next.FontStyle, target, WinDocs.TextElement.FontStyleProperty, v => target.FontStyle = v)) any = true;
+        if (UpdateNullableStruct(prev.FontStretch, next.FontStretch, target, WinDocs.TextElement.FontStretchProperty, v => target.FontStretch = v)) any = true;
+        if (UpdateReference(prev.Foreground, next.Foreground, target, WinDocs.TextElement.ForegroundProperty, v => target.Foreground = v)) any = true;
+        if (UpdateNullableStruct(prev.CharacterSpacing, next.CharacterSpacing, target, WinDocs.TextElement.CharacterSpacingProperty, v => target.CharacterSpacing = v)) any = true;
+        if (includeFontShape && UpdateNullableStruct(prev.TextDecorations, next.TextDecorations, target, WinDocs.TextElement.TextDecorationsProperty, v => target.TextDecorations = v)) any = true;
+        if (UpdateNullableStruct(prev.IsTextScaleFactorEnabled, next.IsTextScaleFactorEnabled, target, WinDocs.TextElement.IsTextScaleFactorEnabledProperty, v => target.IsTextScaleFactorEnabled = v)) any = true;
+        if (UpdateString(prev.Language, next.Language, target, WinDocs.TextElement.LanguageProperty, v => target.Language = v)) any = true;
+        return any;
+    }
+
+    private static void ApplyHyperlinkProperties(WinDocs.Hyperlink target, RichTextHyperlink link)
+    {
+        if (link.UnderlineStyle.HasValue) target.UnderlineStyle = link.UnderlineStyle.Value;
+        if (link.IsTabStop.HasValue) target.IsTabStop = link.IsTabStop.Value;
+        if (link.TabIndex.HasValue) target.TabIndex = link.TabIndex.Value;
+    }
+
+    private static bool UpdateHyperlinkProperties(
+        RichTextHyperlink prev,
+        RichTextHyperlink next,
+        WinDocs.Hyperlink target)
+    {
+        bool any = false;
+        if (UpdateNullableStruct(prev.UnderlineStyle, next.UnderlineStyle, target, WinDocs.Hyperlink.UnderlineStyleProperty, v => target.UnderlineStyle = v)) any = true;
+        if (UpdateNullableStruct(prev.IsTabStop, next.IsTabStop, target, WinDocs.Hyperlink.IsTabStopProperty, v => target.IsTabStop = v)) any = true;
+        if (UpdateNullableStruct(prev.TabIndex, next.TabIndex, target, WinDocs.Hyperlink.TabIndexProperty, v => target.TabIndex = v)) any = true;
+        return any;
+    }
+
+    private static global::Windows.UI.Text.FontWeight? EffectiveFontWeight(RichTextRun run)
+        => run.FontWeight ?? (run.IsBold ? Microsoft.UI.Text.FontWeights.Bold : null);
+
+    private static global::Windows.UI.Text.FontStyle? EffectiveFontStyle(RichTextRun run)
+        => run.FontStyle ?? (run.IsItalic ? global::Windows.UI.Text.FontStyle.Italic : null);
+
+    private static global::Windows.UI.Text.TextDecorations? EffectiveTextDecorations(RichTextRun run)
+        => run.TextDecorations
+            ?? (run.IsStrikethrough ? global::Windows.UI.Text.TextDecorations.Strikethrough : null);
+
+    private static bool UpdateNullableStruct<T>(
+        T? prev,
+        T? next,
+        DependencyObject target,
+        DependencyProperty property,
+        Action<T> set)
+        where T : struct
+    {
+        if (EqualityComparer<T?>.Default.Equals(prev, next))
+            return false;
+
+        if (next.HasValue) set(next.Value);
+        else target.ClearValue(property);
+        return true;
+    }
+
+    private static bool UpdateReference<T>(
+        T? prev,
+        T? next,
+        DependencyObject target,
+        DependencyProperty property,
+        Action<T> set)
+        where T : class
+    {
+        if (ReferenceEquals(prev, next))
+            return false;
+
+        if (next is not null) set(next);
+        else target.ClearValue(property);
+        return true;
+    }
+
+    private static bool UpdateString(
+        string? prev,
+        string? next,
+        DependencyObject target,
+        DependencyProperty property,
+        Action<string> set)
+    {
+        if (string.Equals(prev, next, global::System.StringComparison.Ordinal))
+            return false;
+
+        if (next is not null) set(next);
+        else target.ClearValue(property);
+        return true;
+    }
+
+    private static bool UpdateFontFamily(
+        string? prev,
+        string? next,
+        WinDocs.TextElement target)
+    {
+        if (string.Equals(prev, next, global::System.StringComparison.Ordinal))
+            return false;
+
+        if (next is not null) target.FontFamily = WinRTCache.GetFontFamily(next);
+        else target.ClearValue(WinDocs.TextElement.FontFamilyProperty);
+        return true;
     }
 
     // Issue #479 — backing storage for the static Click handler. CWT keys are
@@ -699,11 +912,11 @@ public sealed partial class Reconciler
     // across renders are a cheap dictionary update, never an event detach +
     // re-attach.
     private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<
-        Microsoft.UI.Xaml.Documents.Hyperlink, Action> s_hyperlinkClickActions = new();
+        WinDocs.Hyperlink, Action> s_hyperlinkClickActions = new();
 
     private static void OnHyperlinkClick(
-        Microsoft.UI.Xaml.Documents.Hyperlink sender,
-        Microsoft.UI.Xaml.Documents.HyperlinkClickEventArgs args)
+        WinDocs.Hyperlink sender,
+        WinDocs.HyperlinkClickEventArgs args)
     {
         if (s_hyperlinkClickActions.TryGetValue(sender, out var action))
             action?.Invoke();
@@ -712,7 +925,7 @@ public sealed partial class Reconciler
     private bool UpdateInlineUIContainerInPlace(
         RichTextInlineUIContainer prev,
         RichTextInlineUIContainer next,
-        Microsoft.UI.Xaml.Documents.InlineUIContainer container,
+        WinDocs.InlineUIContainer container,
         Action requestRerender)
     {
         // Route A both (preflight already confirmed Child ↔ Child).

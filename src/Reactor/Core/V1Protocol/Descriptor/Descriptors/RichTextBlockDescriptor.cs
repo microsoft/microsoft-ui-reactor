@@ -60,45 +60,99 @@ internal static class RichTextBlockDescriptor
         .OneWay(
             get: static e => e.IsTextSelectionEnabled,
             set: static (c, v) => c.IsTextSelectionEnabled = v)
-        .OneWayConditional(
-            get:         static e => e.TextWrapping,
-            set:         static (c, v) => c.TextWrapping = v!.Value,
-            shouldWrite: static e => e.TextWrapping.HasValue)
-        .OneWayConditional(
-            get:         static e => e.FontSize,
-            set:         static (c, v) => c.FontSize = v!.Value,
-            shouldWrite: static e => e.FontSize.HasValue)
-        .OneWayConditional(
-            get:         static e => e.MaxLines,
-            set:         static (c, v) => c.MaxLines = v,
-            shouldWrite: static e => e.MaxLines > 0)
-        .OneWayConditional(
-            get:         static e => e.LineHeight,
-            set:         static (c, v) => c.LineHeight = v!.Value,
-            shouldWrite: static e => e.LineHeight.HasValue)
-        .OneWayConditional(
-            get:         static e => e.TextAlignment,
-            set:         static (c, v) => c.TextAlignment = v!.Value,
-            shouldWrite: static e => e.TextAlignment.HasValue)
-        .OneWayConditional(
-            get:         static e => e.TextTrimming,
-            set:         static (c, v) => c.TextTrimming = v!.Value,
-            shouldWrite: static e => e.TextTrimming.HasValue)
-        .OneWayConditional(
-            get:         static e => e.CharacterSpacing,
-            set:         static (c, v) => c.CharacterSpacing = v,
-            shouldWrite: static e => e.CharacterSpacing != 0)
-        // RichTextBlock.Padding maps directly from the standard Element.Padding
-        // modifier (Layout.Padding sub-record). Without this OneWayConditional
-        // any .Padding(...) on the cell silently no-ops because the
-        // descriptor's Children=None handler doesn't fall back to a generic
-        // FrameworkElement padding writer. Verified via WinUI reflection that
-        // Microsoft.UI.Xaml.Controls.RichTextBlock exposes a Padding property
-        // of type Thickness; we just have to write to it.
-        .OneWayConditional(
-            get:         static e => e.Padding,
-            set:         static (c, v) => c.Padding = v!.Value,
-            shouldWrite: static e => e.Padding.HasValue);
+        .OneWay(
+            get: static e => e.TextWrapping.HasValue ? e.TextWrapping.Value : Optional<TextWrapping>.Unset,
+            set: static (c, v) => c.TextWrapping = v,
+            dp:  WinUI.RichTextBlock.TextWrappingProperty)
+        .OneWay(
+            get: static e => e.FontSize.HasValue ? e.FontSize.Value : Optional<double>.Unset,
+            set: static (c, v) => c.FontSize = v,
+            dp:  WinUI.RichTextBlock.FontSizeProperty)
+        .OneWay(
+            get: static e => e.FontFamily is null ? Optional<Microsoft.UI.Xaml.Media.FontFamily>.Unset : e.FontFamily,
+            set: static (c, v) => c.FontFamily = v,
+            dp:  WinUI.RichTextBlock.FontFamilyProperty)
+        .OneWay(
+            get: static e => e.FontWeight.HasValue ? e.FontWeight.Value : Optional<global::Windows.UI.Text.FontWeight>.Unset,
+            set: static (c, v) => c.FontWeight = v,
+            dp:  WinUI.RichTextBlock.FontWeightProperty)
+        .OneWay(
+            get: static e => e.FontStyle.HasValue ? e.FontStyle.Value : Optional<global::Windows.UI.Text.FontStyle>.Unset,
+            set: static (c, v) => c.FontStyle = v,
+            dp:  WinUI.RichTextBlock.FontStyleProperty)
+        .OneWay(
+            get: static e => e.FontStretch.HasValue ? e.FontStretch.Value : Optional<global::Windows.UI.Text.FontStretch>.Unset,
+            set: static (c, v) => c.FontStretch = v,
+            dp:  WinUI.RichTextBlock.FontStretchProperty)
+        .OneWay(
+            get: static e => e.Foreground is null ? Optional<Microsoft.UI.Xaml.Media.Brush>.Unset : e.Foreground,
+            set: static (c, v) => c.Foreground = v,
+            dp:  WinUI.RichTextBlock.ForegroundProperty)
+        .OneWay(
+            get: static e => e.MaxLines,
+            set: static (c, v) => c.MaxLines = v)
+        .OneWay(
+            get: static e => e.LineHeight.HasValue ? e.LineHeight.Value : Optional<double>.Unset,
+            set: static (c, v) => c.LineHeight = v,
+            dp:  WinUI.RichTextBlock.LineHeightProperty)
+        .OneWay(
+            get: static e => e.LineStackingStrategy.HasValue ? e.LineStackingStrategy.Value : Optional<LineStackingStrategy>.Unset,
+            set: static (c, v) => c.LineStackingStrategy = v,
+            dp:  WinUI.RichTextBlock.LineStackingStrategyProperty)
+        .OneWay(
+            get: static e => e.TextAlignment.HasValue ? e.TextAlignment.Value : Optional<TextAlignment>.Unset,
+            set: static (c, v) => c.TextAlignment = v,
+            dp:  WinUI.RichTextBlock.TextAlignmentProperty)
+        .OneWay(
+            get: static e => e.HorizontalTextAlignment.HasValue ? e.HorizontalTextAlignment.Value : Optional<TextAlignment>.Unset,
+            set: static (c, v) => c.HorizontalTextAlignment = v,
+            dp:  WinUI.RichTextBlock.HorizontalTextAlignmentProperty)
+        .OneWay(
+            get: static e => e.TextTrimming.HasValue ? e.TextTrimming.Value : Optional<TextTrimming>.Unset,
+            set: static (c, v) => c.TextTrimming = v,
+            dp:  WinUI.RichTextBlock.TextTrimmingProperty)
+        .OneWay(
+            get: static e => e.CharacterSpacing,
+            set: static (c, v) => c.CharacterSpacing = v)
+        .OneWay(
+            get: static e => e.TextDecorations.HasValue ? e.TextDecorations.Value : Optional<global::Windows.UI.Text.TextDecorations>.Unset,
+            set: static (c, v) => c.TextDecorations = v,
+            dp:  WinUI.RichTextBlock.TextDecorationsProperty)
+        .OneWay(
+            get: static e => e.TextIndent.HasValue ? e.TextIndent.Value : Optional<double>.Unset,
+            set: static (c, v) => c.TextIndent = v,
+            dp:  WinUI.RichTextBlock.TextIndentProperty)
+        .OneWay(
+            get: static e => e.TextLineBounds.HasValue ? e.TextLineBounds.Value : Optional<TextLineBounds>.Unset,
+            set: static (c, v) => c.TextLineBounds = v,
+            dp:  WinUI.RichTextBlock.TextLineBoundsProperty)
+        .OneWay(
+            get: static e => e.TextReadingOrder.HasValue ? e.TextReadingOrder.Value : Optional<TextReadingOrder>.Unset,
+            set: static (c, v) => c.TextReadingOrder = v,
+            dp:  WinUI.RichTextBlock.TextReadingOrderProperty)
+        .OneWay(
+            get: static e => e.IsTextScaleFactorEnabled.HasValue ? e.IsTextScaleFactorEnabled.Value : Optional<bool>.Unset,
+            set: static (c, v) => c.IsTextScaleFactorEnabled = v,
+            dp:  WinUI.RichTextBlock.IsTextScaleFactorEnabledProperty)
+        .OneWay(
+            get: static e => e.IsColorFontEnabled.HasValue ? e.IsColorFontEnabled.Value : Optional<bool>.Unset,
+            set: static (c, v) => c.IsColorFontEnabled = v,
+            dp:  WinUI.RichTextBlock.IsColorFontEnabledProperty)
+        .OneWay(
+            get: static e => e.OpticalMarginAlignment.HasValue ? e.OpticalMarginAlignment.Value : Optional<OpticalMarginAlignment>.Unset,
+            set: static (c, v) => c.OpticalMarginAlignment = v,
+            dp:  WinUI.RichTextBlock.OpticalMarginAlignmentProperty)
+        .OneWay(
+            get: static e => e.SelectionHighlightColor is null ? Optional<Microsoft.UI.Xaml.Media.SolidColorBrush>.Unset : e.SelectionHighlightColor,
+            set: static (c, v) => c.SelectionHighlightColor = v,
+            dp:  WinUI.RichTextBlock.SelectionHighlightColorProperty)
+        // RichTextBlock.Padding maps from the standard Element.Padding modifier.
+        // Use the Optional + DP path so padded -> unpadded updates clear stale
+        // local padding on recycled controls.
+        .OneWay(
+            get: static e => e.Padding.HasValue ? e.Padding.Value : Optional<Thickness>.Unset,
+            set: static (c, v) => c.Padding = v,
+            dp:  WinUI.RichTextBlock.PaddingProperty);
 }
 
 /// <summary>

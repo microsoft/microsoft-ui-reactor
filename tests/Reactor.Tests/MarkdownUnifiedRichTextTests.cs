@@ -1,5 +1,6 @@
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Markdown;
+using Microsoft.UI.Xaml;
 using Xunit;
 using static Microsoft.UI.Reactor.Factories;
 
@@ -174,5 +175,33 @@ public class MarkdownUnifiedRichTextTests
         Assert.Equal(2, rtb.Paragraphs!.Length);
         Assert.IsType<RichTextRun>(rtb.Paragraphs[0].Inlines[0]);
         Assert.IsType<RichTextRun>(rtb.Paragraphs[1].Inlines[0]);
+    }
+
+    [Fact]
+    public void TableCellPadding_IsAppliedToInlineTableCells()
+    {
+        var padding = new Thickness(3, 4, 5, 6);
+        var rtb = BuildRich(
+            """
+            | A | B |
+            |---|---|
+            | 1 | 2 |
+            """,
+            new MarkdownOptions
+            {
+                TableHeaderBackground = null,
+                TableCellPadding = padding,
+            });
+
+        var paragraph = Assert.Single(rtb.Paragraphs!);
+        var inlineTable = Assert.IsType<RichTextInlineUIContainer>(Assert.Single(paragraph.Inlines));
+        var grid = Assert.IsType<GridElement>(inlineTable.Child);
+
+        Assert.Equal(4, grid.Children.Length);
+        foreach (var child in grid.Children)
+        {
+            var cell = Assert.IsType<RichTextBlockElement>(child);
+            Assert.Equal(padding, cell.Padding);
+        }
     }
 }
