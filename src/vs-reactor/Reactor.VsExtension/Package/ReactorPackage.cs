@@ -30,6 +30,8 @@ namespace Microsoft.UI.Reactor.VsExtension.Package
 
         internal EditorTracker? EditorTracker { get; private set; }
 
+        internal SolutionStateTracker? SolutionState { get; private set; }
+
         protected override async Task InitializeAsync(CancellationToken cancellationToken, IProgress<ServiceProgressData> progress)
         {
             try
@@ -53,8 +55,18 @@ namespace Microsoft.UI.Reactor.VsExtension.Package
                 await ForceReloadCommand.InitializeAsync(this, cancellationToken).ConfigureAwait(true);
                 await ShowReactorPreviewCommand.InitializeAsync(this, cancellationToken).ConfigureAwait(true);
 
+                var solution = await GetServiceAsync(typeof(SVsSolution)).ConfigureAwait(true) as IVsSolution;
                 var rdt = await GetServiceAsync(typeof(SVsRunningDocumentTable)).ConfigureAwait(true) as IVsRunningDocumentTable;
                 var dte = await GetServiceAsync(typeof(DTE)).ConfigureAwait(true) as DTE;
+                if (solution != null && dte != null)
+                {
+                    SolutionState = new SolutionStateTracker(solution, dte, JoinableTaskFactory);
+                }
+                else
+                {
+                    await OutputChannel.WriteLineAsync("Solution tracker unavailable; preview launches will require explicit project readiness.").ConfigureAwait(true);
+                }
+
                 if (rdt != null && dte != null)
                 {
                     EditorTracker = new EditorTracker(rdt, dte, JoinableTaskFactory);
@@ -87,6 +99,8 @@ namespace Microsoft.UI.Reactor.VsExtension.Package
                 {
                     EditorTracker?.Dispose();
                     EditorTracker = null;
+                    SolutionState?.Dispose();
+                    SolutionState = null;
                     if (ReferenceEquals(Instance, this))
                     {
                         Instance = null;

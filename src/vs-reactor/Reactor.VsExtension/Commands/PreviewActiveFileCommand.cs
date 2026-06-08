@@ -58,6 +58,12 @@ namespace Microsoft.UI.Reactor.VsExtension.Commands
                     return;
                 }
 
+                if (package.SolutionState != null && !package.SolutionState.CanPreviewProject(csproj, out var message))
+                {
+                    await OutputChannel.WriteLineAsync(message).ConfigureAwait(true);
+                    return;
+                }
+
                 await ShowToolWindowAndStartAsync(csproj, componentName: null).ConfigureAwait(true);
             }, "PreviewActiveFileCommand");
         }

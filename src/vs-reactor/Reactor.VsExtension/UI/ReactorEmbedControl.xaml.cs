@@ -15,6 +15,7 @@ namespace Microsoft.UI.Reactor.VsExtension.UI
     {
         private EmbedSession? _session;
         private bool _editorTrackerSubscribed;
+        private bool _solutionStateSubscribed;
 
         public ReactorEmbedControl()
         {
@@ -25,6 +26,7 @@ namespace Microsoft.UI.Reactor.VsExtension.UI
             ViewModel.PlaceholderRectChanged += OnViewModelPlaceholderRectChanged;
             ViewModel.ForceReloadRequested += OnForceReloadRequested;
             TrySubscribeEditorTracker();
+            TrySubscribeSolutionState();
         }
 
         internal HwndHostPlaceholder Placeholder => PlaceholderHost;
@@ -109,6 +111,7 @@ namespace Microsoft.UI.Reactor.VsExtension.UI
             }
 
             UnsubscribeEditorTracker();
+            UnsubscribeSolutionState();
         }
 
         private void AttachSession(EmbedSession session)
@@ -133,6 +136,32 @@ namespace Microsoft.UI.Reactor.VsExtension.UI
             _editorTrackerSubscribed = true;
         }
 
+        private void TrySubscribeSolutionState()
+        {
+            var solutionState = ReactorPackage.Instance?.SolutionState;
+            if (solutionState == null || _solutionStateSubscribed)
+            {
+                return;
+            }
+
+            solutionState.SolutionClosing += OnSolutionClosing;
+            solutionState.ProjectUnloading += OnProjectUnloading;
+            _solutionStateSubscribed = true;
+        }
+
+        private void UnsubscribeSolutionState()
+        {
+            var solutionState = ReactorPackage.Instance?.SolutionState;
+            if (solutionState == null || !_solutionStateSubscribed)
+            {
+                return;
+            }
+
+            solutionState.SolutionClosing -= OnSolutionClosing;
+            solutionState.ProjectUnloading -= OnProjectUnloading;
+            _solutionStateSubscribed = false;
+        }
+
         private void UnsubscribeEditorTracker()
         {
             var tracker = ReactorPackage.Instance?.EditorTracker;
@@ -149,7 +178,7 @@ namespace Microsoft.UI.Reactor.VsExtension.UI
         {
             var package = ReactorPackage.Instance;
             var session = _session;
-            if (package == null || session == null)
+            if (package == null || session == null || package.SolutionState?.IsSolutionReady == false)
             {
                 return;
             }
@@ -203,9 +232,27 @@ namespace Microsoft.UI.Reactor.VsExtension.UI
             ForceReload();
         }
 
+        private void OnSolutionClosing(object? sender, EventArgs e)
+        {
+            Stop();
+        }
+
+        private void OnProjectUnloading(object? sender, string projectPath)
+        {
+            var session = _session;
+            var currentProject = session == null
+                ? null
+                : System.IO.Path.GetFullPath(session.CsprojPath).TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
+            if (currentProject != null && string.Equals(currentProject, projectPath, StringComparison.OrdinalIgnoreCase))
+            {
+                Stop();
+            }
+        }
+
         private void OnLoaded(object sender, RoutedEventArgs e)
         {
             TrySubscribeEditorTracker();
+            TrySubscribeSolutionState();
             ViewModel.OnLoaded();
         }
 

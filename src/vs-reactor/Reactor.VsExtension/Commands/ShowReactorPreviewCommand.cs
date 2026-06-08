@@ -88,6 +88,12 @@ namespace Microsoft.UI.Reactor.VsExtension.Commands
                     return;
                 }
 
+                if (package.SolutionState != null && !package.SolutionState.CanPreviewProject(csproj, out var message))
+                {
+                    await OutputChannel.WriteLineAsync("Reactor Preview opened. " + message).ConfigureAwait(true);
+                    return;
+                }
+
                 await OutputChannel.WriteLineAsync("Reactor Preview opened; auto-starting against " + csproj).ConfigureAwait(true);
                 window.Control.StartSession(csproj, componentName: null);
             }, "ShowReactorPreviewCommand");
