@@ -1,3 +1,4 @@
+using System.Linq;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Markdown;
 using Microsoft.UI.Xaml;
@@ -198,9 +199,8 @@ public class MarkdownUnifiedRichTextTests
         var grid = Assert.IsType<GridElement>(inlineTable.Child);
 
         Assert.Equal(4, grid.Children.Length);
-        foreach (var child in grid.Children)
+        foreach (var cell in grid.Children.Select(child => Assert.IsType<RichTextBlockElement>(child)))
         {
-            var cell = Assert.IsType<RichTextBlockElement>(child);
             Assert.Equal(padding, cell.Padding);
         }
     }

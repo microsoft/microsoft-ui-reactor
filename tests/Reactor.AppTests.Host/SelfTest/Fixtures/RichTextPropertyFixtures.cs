@@ -89,8 +89,8 @@ internal static class RichTextPropertyFixtures
             H.Check("RichTextProps_Block_TextIndent", IsClose(rtb.TextIndent, 11));
             H.Check("RichTextProps_Block_TextLineBounds", rtb.TextLineBounds == TextLineBounds.Tight);
             H.Check("RichTextProps_Block_TextReadingOrder", rtb.TextReadingOrder == TextReadingOrder.DetectFromContent);
-            H.Check("RichTextProps_Block_IsTextScaleFactorEnabled", rtb.IsTextScaleFactorEnabled == false);
-            H.Check("RichTextProps_Block_IsColorFontEnabled", rtb.IsColorFontEnabled == false);
+            H.Check("RichTextProps_Block_IsTextScaleFactorEnabled", !rtb.IsTextScaleFactorEnabled);
+            H.Check("RichTextProps_Block_IsColorFontEnabled", !rtb.IsColorFontEnabled);
             H.Check("RichTextProps_Block_OpticalMarginAlignment", rtb.OpticalMarginAlignment == OpticalMarginAlignment.TrimSideBearings);
             H.Check("RichTextProps_Block_SelectionHighlightColor", IsColor(rtb.SelectionHighlightColor, 10, 20, 200));
             H.Check("RichTextProps_Block_Padding", rtb.Padding == new Thickness(1, 2, 3, 4));
@@ -185,7 +185,7 @@ internal static class RichTextPropertyFixtures
             H.Check("RichTextProps_Paragraph_Foreground", IsColor(paragraph.Foreground, 20, 160, 80));
             H.Check("RichTextProps_Paragraph_CharacterSpacing", paragraph.CharacterSpacing == 75);
             H.Check("RichTextProps_Paragraph_TextDecorations", paragraph.TextDecorations == global::Windows.UI.Text.TextDecorations.Underline);
-            H.Check("RichTextProps_Paragraph_IsTextScaleFactorEnabled", paragraph.IsTextScaleFactorEnabled == false);
+            H.Check("RichTextProps_Paragraph_IsTextScaleFactorEnabled", !paragraph.IsTextScaleFactorEnabled);
             H.Check("RichTextProps_Paragraph_Language", paragraph.Language == "fr-FR");
 
             H.ClickButton("ToggleParagraphProps");
@@ -262,7 +262,7 @@ internal static class RichTextPropertyFixtures
             H.Check("RichTextProps_Run_CharacterSpacing", run.CharacterSpacing == 90);
             H.Check("RichTextProps_Run_TextDecorations", run.TextDecorations.HasFlag(global::Windows.UI.Text.TextDecorations.Underline)
                 && run.TextDecorations.HasFlag(global::Windows.UI.Text.TextDecorations.Strikethrough));
-            H.Check("RichTextProps_Run_IsTextScaleFactorEnabled", run.IsTextScaleFactorEnabled == false);
+            H.Check("RichTextProps_Run_IsTextScaleFactorEnabled", !run.IsTextScaleFactorEnabled);
             H.Check("RichTextProps_Run_Language", run.Language == "es-ES");
             H.Check("RichTextProps_Run_FlowDirection", run.FlowDirection == FlowDirection.RightToLeft);
 
@@ -337,10 +337,10 @@ internal static class RichTextPropertyFixtures
             H.Check("RichTextProps_Hyperlink_Foreground", IsColor(link.Foreground, 220, 110, 20));
             H.Check("RichTextProps_Hyperlink_CharacterSpacing", link.CharacterSpacing == 130);
             H.Check("RichTextProps_Hyperlink_TextDecorations", linkRun?.TextDecorations == global::Windows.UI.Text.TextDecorations.Underline);
-            H.Check("RichTextProps_Hyperlink_IsTextScaleFactorEnabled", link.IsTextScaleFactorEnabled == false);
+            H.Check("RichTextProps_Hyperlink_IsTextScaleFactorEnabled", !link.IsTextScaleFactorEnabled);
             H.Check("RichTextProps_Hyperlink_Language", link.Language == "de-DE");
             H.Check("RichTextProps_Hyperlink_UnderlineStyle", link.UnderlineStyle == WinUnderlineStyle.None);
-            H.Check("RichTextProps_Hyperlink_IsTabStop", link.IsTabStop == false);
+            H.Check("RichTextProps_Hyperlink_IsTabStop", !link.IsTabStop);
             H.Check("RichTextProps_Hyperlink_TabIndex", link.TabIndex == 7);
 
             H.ClickButton("ToggleHyperlinkProps");
@@ -428,7 +428,7 @@ internal static class RichTextPropertyFixtures
             H.Check("RichTextProps_LineBreak_Foreground", IsColor(lineBreak.Foreground, 30, 60, 180));
             H.Check("RichTextProps_LineBreak_CharacterSpacing", lineBreak.CharacterSpacing == 42);
             H.Check("RichTextProps_LineBreak_TextDecorations", lineBreak.TextDecorations == global::Windows.UI.Text.TextDecorations.Underline);
-            H.Check("RichTextProps_LineBreak_IsTextScaleFactorEnabled", lineBreak.IsTextScaleFactorEnabled == false);
+            H.Check("RichTextProps_LineBreak_IsTextScaleFactorEnabled", !lineBreak.IsTextScaleFactorEnabled);
             H.Check("RichTextProps_LineBreak_Language", lineBreak.Language == "it-IT");
 
             H.Check("RichTextProps_InlineUI_FontSize", IsClose(inlineUi.FontSize, 17));
@@ -439,7 +439,7 @@ internal static class RichTextPropertyFixtures
             H.Check("RichTextProps_InlineUI_Foreground", IsColor(inlineUi.Foreground, 80, 30, 160));
             H.Check("RichTextProps_InlineUI_CharacterSpacing", inlineUi.CharacterSpacing == 55);
             H.Check("RichTextProps_InlineUI_TextDecorations", inlineUi.TextDecorations == global::Windows.UI.Text.TextDecorations.Strikethrough);
-            H.Check("RichTextProps_InlineUI_IsTextScaleFactorEnabled", inlineUi.IsTextScaleFactorEnabled == false);
+            H.Check("RichTextProps_InlineUI_IsTextScaleFactorEnabled", !inlineUi.IsTextScaleFactorEnabled);
             H.Check("RichTextProps_InlineUI_Language", inlineUi.Language == "pt-BR");
 
             H.ClickButton("ToggleLineBreakInlineUIProps");
