@@ -618,9 +618,10 @@ public sealed class ReactorWindow : IDisposable
     {
         if (style == WindowEmbedStyle.Child)
         {
-            ApplyWindowStyleBits(
-                remove: NativeShell.WS_OVERLAPPEDWINDOW | NativeShell.WS_POPUP,
-                add: NativeShell.WS_CHILD | NativeShell.WS_CLIPSIBLINGS);
+            // Keep the window top-level until the devtools embed ack. WinUI initializes
+            // its DesktopChildSiteBridge during Window.Activate(); converting to WS_CHILD
+            // before activation can leave the content site at 0x0 even though SetParent
+            // later succeeds, producing a blank embedded preview.
             ApplyExtendedStyleBits(remove: NativeShell.WS_EX_APPWINDOW, add: 0);
             return;
         }

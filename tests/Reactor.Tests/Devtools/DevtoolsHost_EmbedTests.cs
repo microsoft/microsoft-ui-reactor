@@ -9,14 +9,14 @@ namespace Microsoft.UI.Reactor.Tests.Devtools;
 public sealed class DevtoolsHost_EmbedTests
 {
     [Fact]
-    public void EmbedHost_HidesWindowUntilAck()
+    public void EmbedHost_ChildMode_ActivatesWindowBeforeAck()
     {
         var options = DevtoolsCliParser.Parse(["app.exe", "--devtools", "run", "--embed", "--embed-host-pid", "1234"]);
 
         var spec = DevtoolsHost.BuildEmbedWindowSpec(options, "Preview — Counter", 800, 600);
 
         Assert.NotNull(spec.Embed);
-        Assert.False(spec.Embed.InitialVisibility);
+        Assert.True(spec.Embed.InitialVisibility);
         Assert.Equal(WindowEmbedStyle.Child, spec.Embed.Style);
         Assert.Equal(1234, spec.Embed.HostPid);
         Assert.False(spec.PersistPlacement);

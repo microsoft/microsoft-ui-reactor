@@ -408,7 +408,7 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
             Width = width,
             Height = height,
             Presenter = PresenterKind.Overlapped,
-            Embed = new EmbedRequest(options.EmbedStyle, hostPid, InitialVisibility: false),
+            Embed = new EmbedRequest(options.EmbedStyle, hostPid, InitialVisibility: options.EmbedStyle == WindowEmbedStyle.Child),
             PersistPlacement = false,
         };
     }
@@ -434,20 +434,81 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
         if (!IsDpiCompatible(parent, hwnd))
             return EmbedAckResult.DpiMismatch;
 
-        host.Window.DispatcherQueue.TryEnqueue(() =>
+        var completed = new ManualResetEventSlim(false);
+        var result = EmbedAckResult.NotReady;
+        var enqueued = host.Window.DispatcherQueue.TryEnqueue(() =>
         {
-            if (options.EmbedStyle == WindowEmbedStyle.Owner)
-                EmbedNative.SetWindowLongPtr(hwnd, EmbedNative.GWLP_HWNDPARENT, parent);
-            else
-                EmbedNative.SetParent(hwnd, parent);
+            try
+            {
+                if (options.EmbedStyle == WindowEmbedStyle.Owner)
+                {
+                    EmbedNative.SetWindowLongPtr(hwnd, EmbedNative.GWLP_HWNDPARENT, parent);
+                }
+                else
+                {
+                    EmbedNative.SetParent(hwnd, parent);
+                    EmbedNative.SetWindowStyleForChildEmbed(hwnd);
+                    if (EmbedNative.GetParent(hwnd) != parent)
+                    {
+                        Console.Error.WriteLine("[reactor] embed attach failed: SetParent did not attach the child window to the VS placeholder.");
+                        result = EmbedAckResult.Rejected;
+                        return;
+                    }
+                }
 
-            EmbedNative.SetWindowPos(hwnd, IntPtr.Zero, 0, 0, w, h,
-                EmbedNative.SWP_NOZORDER | EmbedNative.SWP_NOACTIVATE | EmbedNative.SWP_SHOWWINDOW);
-            EmbedNative.ShowWindow(hwnd, EmbedNative.SW_SHOW);
-            EmbedNative.SetFocus(hwnd);
+                if (!EmbedNative.SetWindowPos(hwnd, IntPtr.Zero, 0, 0, w, h,
+                    EmbedNative.SWP_NOZORDER | EmbedNative.SWP_NOACTIVATE | EmbedNative.SWP_SHOWWINDOW))
+                {
+                    Console.Error.WriteLine("[reactor] embed attach failed: SetWindowPos before activation failed.");
+                    result = EmbedAckResult.Rejected;
+                    return;
+                }
+
+                host.Window.Activate();
+
+                if (!EmbedNative.SetWindowPos(hwnd, IntPtr.Zero, 0, 0, w, h,
+                    EmbedNative.SWP_NOZORDER | EmbedNative.SWP_NOACTIVATE | EmbedNative.SWP_SHOWWINDOW))
+                {
+                    Console.Error.WriteLine("[reactor] embed attach failed: SetWindowPos after activation failed.");
+                    result = EmbedAckResult.Rejected;
+                    return;
+                }
+
+                EmbedNative.ShowWindow(hwnd, EmbedNative.SW_SHOW);
+                if (options.EmbedStyle == WindowEmbedStyle.Child && EmbedNative.GetParent(hwnd) != parent)
+                {
+                    Console.Error.WriteLine("[reactor] embed attach failed: child window parent changed during activation.");
+                    result = EmbedAckResult.Rejected;
+                    return;
+                }
+
+                EmbedNative.SetFocus(hwnd);
+                result = EmbedAckResult.Success;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[reactor] embed attach failed: {ex.GetType().Name}: {ex.Message}");
+                result = EmbedAckResult.Rejected;
+            }
+            finally
+            {
+                completed.Set();
+            }
         });
 
-        return EmbedAckResult.Success;
+        if (!enqueued)
+        {
+            Console.Error.WriteLine("[reactor] embed attach failed: dispatcher queue rejected the attach operation.");
+            return EmbedAckResult.NotReady;
+        }
+
+        if (!completed.Wait(TimeSpan.FromSeconds(2)))
+        {
+            Console.Error.WriteLine("[reactor] embed attach failed: timed out waiting for the UI thread to attach the child window.");
+            return EmbedAckResult.NotReady;
+        }
+
+        return result;
     }
 
     private void ApplyEmbedResize(ReactorHost host, int w, int h)
