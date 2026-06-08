@@ -49,6 +49,7 @@ class TransitionsDemo : Component
             ),
             Border(
                 TextBlock("Fade me").SemiBold()
+                    .Foreground("#FFFFFF")
                     .HAlign(HorizontalAlignment.Center)
                     .VAlign(VerticalAlignment.Center)
             )
@@ -65,6 +66,7 @@ class TransitionsDemo : Component
             ),
             Border(
                 TextBlock("Scale me").SemiBold()
+                    .Foreground("#FFFFFF")
                     .HAlign(HorizontalAlignment.Center)
                     .VAlign(VerticalAlignment.Center)
             )
@@ -82,6 +84,7 @@ class TransitionsDemo : Component
             ),
             Border(
                 TextBlock("Slide me").SemiBold()
+                    .Foreground("#FFFFFF")
                     .HAlign(HorizontalAlignment.Center)
                     .VAlign(VerticalAlignment.Center)
             )
@@ -315,7 +318,7 @@ class WithAnimationScopeDemo : Component
                         setOpacity(opacity > 0.5 ? 0.2 : 1.0);
                     });
             }),
-            Border(TextBlock("WithAnimation target").SemiBold().HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center))
+            Border(TextBlock("WithAnimation target").SemiBold().Foreground("#FFFFFF").HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center))
                 .Size(200, 60).Background("#4A90D9").CornerRadius(8).Padding(12)
                 .Opacity(opacity)
         );
@@ -330,7 +333,7 @@ class AnimateModifierDemo : Component
 
         return VStack(8,
             Button(active ? "Reset" : "Animate", () => setActive(!active)),
-            Border(TextBlock(".Animate()").SemiBold().HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center))
+            Border(TextBlock(".Animate()").SemiBold().Foreground("#FFFFFF").HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center))
                 .Size(200, 60).Background("#E8834A").CornerRadius(8).Padding(12)
                 .Opacity(active ? 0.5 : 1.0)
                 .Animate(Microsoft.UI.Reactor.Animation.Curve.Spring(0.65f))
@@ -343,12 +346,12 @@ class InteractionStatesDemo : Component
     public override Element Render()
     {
         return HStack(12,
-            Border(TextBlock("Hover me").SemiBold().HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center))
+            Border(TextBlock("Hover me").SemiBold().Foreground("#FFFFFF").HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center))
                 .Size(150, 60).Background("#50C878").CornerRadius(8).Padding(12)
                 .InteractionStates(states => states
                     .PointerOver(opacity: 0.85f, scale: 1.05f)
                     .Pressed(scale: 0.95f, opacity: 0.7f)),
-            Border(TextBlock("Press me").SemiBold().HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center))
+            Border(TextBlock("Press me").SemiBold().Foreground("#FFFFFF").HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center))
                 .Size(150, 60).Background("#9B59B6").CornerRadius(8).Padding(12)
                 .InteractionStates(states => states
                     .PointerOver(scale: 1.03f)
@@ -367,7 +370,7 @@ class EnterExitTransitionDemo : Component
         return VStack(8,
             Button(visible ? "Hide (exit)" : "Show (enter)", () => setVisible(!visible)),
             visible
-                ? Border(TextBlock("I fade + slide").SemiBold().HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center))
+                ? Border(TextBlock("I fade + slide").SemiBold().Foreground("#FFFFFF").HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center))
                     .Size(200, 60).Background("#E74C3C").CornerRadius(8).Padding(12)
                     .Transition(Microsoft.UI.Reactor.Animation.Transition.Fade + Microsoft.UI.Reactor.Animation.Transition.Slide(Microsoft.UI.Reactor.Animation.Edge.Bottom))
                 : (Element)TextBlock("(element removed)")
@@ -385,7 +388,7 @@ class StaggerDemo : Component
             Button("Shuffle", () => setItems(items.OrderBy(_ => Random.Shared.Next()).ToArray())),
             VStack(4,
                 items.Select(item =>
-                    Border(TextBlock(item).SemiBold().HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center))
+                    Border(TextBlock(item).SemiBold().Foreground("#FFFFFF").HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center))
                         .Height(40).Background("#4A90D9").CornerRadius(4).Padding(8)
                         .WithKey(item)
                         .LayoutAnimation()
@@ -403,7 +406,7 @@ class KeyframeDemo : Component
 
         return VStack(8,
             Button("Pulse!", () => setCount(count + 1)),
-            Border(TextBlock("Keyframes").SemiBold().HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center))
+            Border(TextBlock("Keyframes").SemiBold().Foreground("#FFFFFF").HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center))
                 .Size(200, 60).Background("#9B59B6").CornerRadius(8).Padding(12)
                 .Keyframes("pulse", count, kf => kf
                     .Duration(600)

@@ -4,6 +4,7 @@ using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
+using static Microsoft.UI.Reactor.Core.Theme;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
@@ -36,7 +37,7 @@ internal static class DslExtensionFixtures
                     .Bold()
                     .FontSize(18)
                     .Foreground(new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Red))
-                    .Background(new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.LightGray))
+                    .Background(SubtleFill)
                     .Padding(8)
                     .Margin(4)
                     .Width(200)

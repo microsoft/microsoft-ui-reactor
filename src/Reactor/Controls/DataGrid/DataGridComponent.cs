@@ -591,7 +591,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                 {
                     var valueStr = value.ToString() ?? "";
                     if (valueStr.Contains(state.SearchQuery, StringComparison.OrdinalIgnoreCase))
-                        cellContent = cellContent.Background("#fff9c4"); // light yellow highlight
+                        cellContent = cellContent.Background(SystemAttentionBackground);
                 }
             }
 
@@ -603,12 +603,12 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                                      && state.EditValidation.HasError(col.Name);
             if (hasValidationError)
             {
-                cell = cell.WithBorder("#c62828", 2);
+                cell = cell.WithBorder(SystemCritical, 2);
             }
             // Focus indicator — property change only, no structural change
             else if (isCellFocused && !isCellEditing && !isColInRowEdit)
             {
-                cell = cell.WithBorder("#0078d4", 2);
+                cell = cell.WithBorder(Accent, 2);
             }
 
             // Click to edit (deferred) — only for Cell edit mode
@@ -685,9 +685,9 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
             }
         }
 
-        var rowBg = isSelected ? "#e3f2fd"
-            : isRowFocused ? "#f0f4ff"
-            : (index % 2 == 0 ? "#ffffff" : "#f9f9f9");
+        var rowBg = isSelected ? SubtleFill
+            : isRowFocused ? ControlFillSecondary
+            : (index % 2 == 0 ? LayerFill : CardBackground);
         // Use a WinUI Grid with pixel column definitions instead of FlexRow.
         // Grid with pixel columns avoids Yoga layout entirely — the dominant
         // cost identified by profiling.
@@ -753,7 +753,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
 
             row = FlexColumn(
                 row,
-                TextBlock(errorSummary).Foreground("#c62828").FontSize(11).Padding(horizontal: 8, vertical: 2)
+                TextBlock(errorSummary).Foreground(SystemCritical).FontSize(11).Padding(horizontal: 8, vertical: 2)
             );
         }
 
@@ -771,7 +771,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
             row = FlexColumn(
                 row,
                 FlexRow(
-                    TextBlock(commitError).Foreground("#c62828").FontSize(11).Flex(grow: 1),
+                    TextBlock(commitError).Foreground(SystemCritical).FontSize(11).Flex(grow: 1),
                     Button("Dismiss", () =>
                     {
                         Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() =>
@@ -793,7 +793,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                 var detail = el.RowDetailTemplate(item!, rowKey).Padding(horizontal: 16, vertical: 8);
                 row = FlexColumn(
                     row,
-                    detail.Background("#f5f5f5")
+                    detail.Background(CardBackground)
                 );
             }
         }
@@ -1292,7 +1292,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         // Vary the bar width per column so it looks organic, not uniform
         var barText = new string('\u2003', Math.Max(1, (int)(colWidth / 24)));
         return TextBlock(barText).Padding(CellPadLeft, CellPadTop, CellPadRight, CellPadBottom)
-            .Background("#e0e0e0").Opacity(0.5);
+            .Background(ControlFillSecondary).Opacity(0.5);
     }
 
     private static Element RenderDefaultLoading()
@@ -1306,7 +1306,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
     private static Element RenderDefaultError(Exception ex)
     {
         return FlexColumn(
-            TextBlock("Failed to load data").FontSize(14).Bold().Foreground("#c62828"),
+            TextBlock("Failed to load data").FontSize(14).Bold().Foreground(SystemCritical),
             TextBlock(ex.GetType().Name).FontSize(11).Opacity(0.6),
             TextBlock(ex.Message).FontSize(12).Opacity(0.8)
         ).Padding(16);

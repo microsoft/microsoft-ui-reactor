@@ -11,6 +11,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 using static Microsoft.UI.Reactor.Factories;
+using static Microsoft.UI.Reactor.Core.Theme;
 
 namespace InteropFirst.Components;
 
@@ -77,7 +78,9 @@ public sealed class OrdersDataGrid : Component<OrdersDataGridProps>
             HeaderCell("Placed", accent).Width(180));
 
         var rows = snapshot.Count == 0
-            ? new[] { TextBlock("No orders yet — click Add.").Foreground(subtle ?? new SolidColorBrush(Microsoft.UI.Colors.Gray)).Margin(horizontal: 0, vertical: 16) }
+            ? new[] { subtle is not null
+                ? TextBlock("No orders yet — click Add.").Foreground(subtle).Margin(horizontal: 0, vertical: 16)
+                : TextBlock("No orders yet — click Add.").Foreground(SecondaryText).Margin(horizontal: 0, vertical: 16) }
             : snapshot.Select(o => Row(o, isSelected: o.Id == selectedId, subtle, OnRowTap: () =>
                 {
                     setSelectedId(o.Id);
@@ -127,7 +130,7 @@ public sealed class OrdersDataGrid : Component<OrdersDataGridProps>
             .OnTapped((_, _) => OnRowTap())
             .Padding(horizontal: 8, vertical: 4);
         return isSelected
-            ? styled.Background(new SolidColorBrush(Microsoft.UI.Colors.LightBlue))
+            ? styled.Background(SubtleFill).WithBorder(Accent, 1)
             : styled;
     }
 }

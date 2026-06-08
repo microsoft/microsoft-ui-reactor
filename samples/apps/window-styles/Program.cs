@@ -1,6 +1,7 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
+using static Microsoft.UI.Reactor.Core.Theme;
 
 ReactorApp.Run(_ =>
 {
@@ -159,7 +160,7 @@ internal sealed class WindowStylesPlayground : Component
                 StatusLabel("Position", $"({winPos.X:0}, {winPos.Y:0})"),
                 StatusLabel("DPI",      $"{(win?.Dpi ?? 96):0}"),
                 StatusLabel("State",    (win?.State.ToString() ?? "—"))))
-            .Background("#1A000000")
+            .Background(SubtleFill)
             .Padding(16, 12, 16, 12);
 
         Element root = Grid(
@@ -209,7 +210,7 @@ internal sealed class WindowStylesPlayground : Component
         var rowList = new List<Element>(rows.Length * 2);
         for (int i = 0; i < rows.Length; i++)
         {
-            if (i > 0) rowList.Add(Border(null).Height(1).Background("#14FFFFFF"));
+            if (i > 0) rowList.Add(Border(null).Height(1).Background(DividerStroke));
             rowList.Add(rows[i]);
         }
         return Border(VStack(0,
@@ -220,8 +221,8 @@ internal sealed class WindowStylesPlayground : Component
                 Border(VStack(0, rowList.ToArray()))
                     .Padding(20, 0, 20, 8)))
             .CornerRadius(8)
-            .Background("#15FFFFFF")
-            .WithBorder("#22FFFFFF", 1);
+            .Background(CardBackground)
+            .WithBorder(CardStroke, 1);
     }
 
     private static Element Row(string label, string hint, Element control)

@@ -732,7 +732,7 @@ internal static class MarkdownFixtures
                         Paragraph = (defaultEl) =>
                         {
                             paragraphCallCount++;
-                            return Border(defaultEl).Background("LightBlue");
+                            return Border(defaultEl).Background(Theme.SystemAttentionBackground);
                         },
                         CodeBlock = (code, lang) =>
                         {

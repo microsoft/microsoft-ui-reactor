@@ -107,7 +107,7 @@ sealed class GesturePanSample : Component
                                 setOffset(committedRef.Current);
                             },
                             withInertia: true)
-                ).Height(220).Background("#f3f3f3").CornerRadius(8).Padding(8),
+                ).Height(220).Background(SubtleFill).CornerRadius(8).Padding(8),
 
                 Button("Reset position", Reset)
             )
@@ -127,7 +127,7 @@ sealed class LongPressSample : Component
             VStack(8,
                 Border(TextBlock("Hold me")
                     .HAlign(HorizontalAlignment.Center).VAlign(VerticalAlignment.Center))
-                    .Height(80).Background("#FFF4CE").CornerRadius(6).Padding(12)
+                    .Height(80).Background(SystemCautionBackground).CornerRadius(6).Padding(12)
                     .OnLongPress(
                         g => setLog($"Long press @ ({g.Position.X:F0}, {g.Position.Y:F0}) after {g.Duration.TotalMilliseconds:F0}ms"),
                         enableMouseEmulation: true),
@@ -201,10 +201,10 @@ sealed class KanbanDragDropSample : Component
                 new[] { GridSize.Star(), GridSize.Star() },
                 new[] { GridSize.Auto },
                 Border(RenderColumn("Todo", todo, setTodo))
-                    .Background("#F7F7F7").CornerRadius(6).Padding(10).Margin(4)
+                    .Background(CardBackground).CornerRadius(6).Padding(10).Margin(4)
                     .Grid(column: 0),
                 Border(RenderColumn("Done", done, setDone))
-                    .Background("#F1FFF4").CornerRadius(6).Padding(10).Margin(4)
+                    .Background(SystemSuccessBackground).CornerRadius(6).Padding(10).Margin(4)
                     .Grid(column: 1)
             )
         );
@@ -226,7 +226,7 @@ sealed class TextDragSample : Component
                     .OnDragStart<BorderElement>(() => new DragData().WithText("hello from Reactor")),
 
                 Border(TextBlock(dropped ?? "drop text here"))
-                    .Background("#E6FFFA").CornerRadius(6).Padding(12).Width(220)
+                    .Background(SystemAttentionBackground).CornerRadius(6).Padding(12).Width(220)
                     .OnDrop<BorderElement>(args =>
                     {
                         if (args.Data.TryGetText(out var text))

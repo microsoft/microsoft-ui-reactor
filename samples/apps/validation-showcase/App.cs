@@ -14,6 +14,7 @@ using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.Controls.Validation.FormFieldDsl;
 using static Microsoft.UI.Reactor.Controls.Validation.ValidationRuleDsl;
 using static Microsoft.UI.Reactor.Controls.Validation.ValidationVisualizerDsl;
+using static Microsoft.UI.Reactor.Core.Theme;
 using Microsoft.UI.Reactor.Animation;
 
 ReactorApp.Run<ShowcaseApp>("Validation Showcase", width: 720, height: 900
@@ -431,8 +432,6 @@ class ShowcaseApp : Component
 
     static Element Separator() =>
         Border(Empty().Height(1))
-            .Set(b => b.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(
-                Microsoft.UI.Colors.Gray))
-            .Opacity(0.15)
+            .Background(DividerStroke)
             .Margin(24, 8, 24, 8);
 }

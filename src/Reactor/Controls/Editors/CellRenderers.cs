@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
+using static Microsoft.UI.Reactor.Core.Theme;
 using WinUIColor = global::Windows.UI.Color;
 
 namespace Microsoft.UI.Reactor.Controls;
@@ -31,7 +32,7 @@ public static class CellRenderers
         {
             var on = (bool)(value ?? false);
             return TextBlock(on ? "✓" : string.Empty)
-                .Foreground(on ? "#2e7d32" : "#9e9e9e")
+                .Foreground(on ? SystemSuccess : DisabledText)
                 .FontSize(16);
         };
 
@@ -43,9 +44,9 @@ public static class CellRenderers
             // pill at its natural content width — without this, Border stretches
             // to the cell's full width and visually bleeds into the next column.
             return Border(TextBlock(on ? "ON" : "OFF")
-                    .Foreground(on ? "#FFFFFF" : "#555555")
+                    .Foreground(on ? Ref("TextOnAccentFillColorPrimaryBrush") : SecondaryText)
                     .FontSize(10))
-                .Background(on ? "#2e7d32" : "#e0e0e0")
+                .Background(on ? SystemSuccess : ControlFillSecondary)
                 .CornerRadius(8)
                 .Padding(horizontal: 6, vertical: 2)
                 .HAlign(Microsoft.UI.Xaml.HorizontalAlignment.Left)
@@ -105,8 +106,8 @@ public static class CellRenderers
                     .Background($"#{color.A:X2}{color.R:X2}{color.G:X2}{color.B:X2}")
                     .Width(16).Height(16)
                     .CornerRadius(3)
-                    .WithBorder("#80000000", 1),
-                TextBlock(color.ToHexString()).FontSize(11).Foreground("#555555")
+                    .WithBorder(ControlStroke, 1),
+                TextBlock(color.ToHexString()).FontSize(11).Foreground(SecondaryText)
             );
         };
 

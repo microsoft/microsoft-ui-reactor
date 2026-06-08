@@ -1,6 +1,7 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
+using static Microsoft.UI.Reactor.Core.Theme;
 
 ReactorApp.Run(_ =>
 {
@@ -31,7 +32,7 @@ internal sealed class MainWindow : Component
             TextBlock("Canvas").FontSize(28).Bold(),
             TextBlock("The floating tool palette stays above this owner window.")))
         .Padding(32)
-        .Background("#FFF7F7F7");
+        .Background(SolidBackground);
 }
 
 internal sealed class ToolsWindow : Component
@@ -44,6 +45,7 @@ internal sealed class ToolsWindow : Component
             Button("Crop", null),
             Button("Text", null)))
         .Padding(16)
-        .Background("#FFFFFFFF")
+        .Background(CardBackground)
+        .WithBorder(CardStroke, 1)
         .CornerRadius(8);
 }

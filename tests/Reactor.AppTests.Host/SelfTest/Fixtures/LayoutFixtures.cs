@@ -5,6 +5,7 @@ using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
+using static Microsoft.UI.Reactor.Core.Theme;
 using WinXC = Microsoft.UI.Xaml.Controls;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
@@ -128,14 +129,14 @@ internal static class LayoutFixtures
                     Grid([GridSize.Star(), GridSize.Star(2), GridSize.Star()], [GridSize.Star()],
                         TextBlock("G1").Grid(row: 0, column: 0).Background("LightCoral"),
                         TextBlock("G2").Grid(row: 0, column: 1).Background("LightGreen"),
-                        TextBlock("G3").Grid(row: 0, column: 2).Background("LightBlue")
+                        TextBlock("G3").Grid(row: 0, column: 2).Background(SystemAttentionBackground)
                     ).Width(ContainerWidth).Height(80),
 
                     // FlexRow with grow 1 / 2 / 1 (basis:0 to match star behavior)
                     FlexRow(
                         TextBlock("F1").Flex(grow: 1, basis: 0).Background("LightCoral"),
                         TextBlock("F2").Flex(grow: 2, basis: 0).Background("LightGreen"),
-                        TextBlock("F3").Flex(grow: 1, basis: 0).Background("LightBlue")
+                        TextBlock("F3").Flex(grow: 1, basis: 0).Background(SystemAttentionBackground)
                     ).Width(ContainerWidth).Height(80)
                 ).Width(ContainerWidth).Height(ContainerHeight * 2)
             );
@@ -188,14 +189,14 @@ internal static class LayoutFixtures
                     Grid([GridSize.Star(), GridSize.Star(2), GridSize.Star()], [GridSize.Auto],
                         TextBlock("Left").Grid(row: 0, column: 0).Background("LightCoral"),
                         TextBlock(longText).Grid(row: 0, column: 1).Background("LightGreen"),
-                        TextBlock("Right").Grid(row: 0, column: 2).Background("LightBlue")
+                        TextBlock("Right").Grid(row: 0, column: 2).Background(SystemAttentionBackground)
                     ).Width(ContainerWidth),
 
                     // Flex: same ratios with long text
                     FlexRow(
                         TextBlock("Left").Flex(grow: 1, basis: 0).Background("LightCoral"),
                         TextBlock(longText).Flex(grow: 2, basis: 0).Background("LightGreen"),
-                        TextBlock("Right").Flex(grow: 1, basis: 0).Background("LightBlue")
+                        TextBlock("Right").Flex(grow: 1, basis: 0).Background(SystemAttentionBackground)
                     ).Width(ContainerWidth)
                 ).Width(ContainerWidth)
             );

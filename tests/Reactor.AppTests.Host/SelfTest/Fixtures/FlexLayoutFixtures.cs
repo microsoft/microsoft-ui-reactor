@@ -5,6 +5,7 @@ using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
+using static Microsoft.UI.Reactor.Core.Theme;
 using WinXC = Microsoft.UI.Xaml.Controls;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
@@ -33,7 +34,7 @@ internal static class FlexLayoutFixtures
                 FlexColumn(
                     FlexRow(
                         TextBlock("Logo").Flex(basis: 0, grow: 1).Background("LightCoral"),
-                        TextBlock("Nav").Flex(basis: 0, grow: 2).Background("LightBlue")
+                        TextBlock("Nav").Flex(basis: 0, grow: 2).Background(SystemAttentionBackground)
                     ).Height(50),
 
                     FlexRow(
@@ -43,7 +44,7 @@ internal static class FlexLayoutFixtures
 
                     FlexRow(
                         TextBlock("Footer").Flex(grow: 1)
-                    ).Height(40).Background("LightGray")
+                    ).Height(40).Background(SubtleFill)
                 ).Width(600).Height(400)
             );
 
@@ -99,7 +100,7 @@ internal static class FlexLayoutFixtures
                     FlexColumn(
                         TextBlock("Title").Height(40),
                         TextBlock("Body text here").Flex(grow: 1)
-                    ).Flex(basis: 0, grow: 3).Background("LightBlue")
+                    ).Flex(basis: 0, grow: 3).Background(SystemAttentionBackground)
                 ).Width(600).Height(300)
             );
 
@@ -184,7 +185,7 @@ internal static class FlexLayoutFixtures
                 Grid([GridSize.Star(), GridSize.Star(2)], [GridSize.Star(), GridSize.Star()],
                     FlexRow(
                         TextBlock("A1").Flex(grow: 1).Background("LightCoral"),
-                        TextBlock("A2").Flex(grow: 1).Background("LightBlue")
+                        TextBlock("A2").Flex(grow: 1).Background(SystemAttentionBackground)
                     ).Grid(row: 0, column: 0),
 
                     FlexColumn(
@@ -251,9 +252,9 @@ internal static class FlexLayoutFixtures
                     Border(
                         FlexRow(
                             TextBlock("Left").Flex(basis: 0, grow: 1).Background("LightCoral"),
-                            TextBlock("Right").Flex(basis: 0, grow: 1).Background("LightBlue")
+                            TextBlock("Right").Flex(basis: 0, grow: 1).Background(SystemAttentionBackground)
                         )
-                    ).Width(600).Background("LightGray"),
+                    ).Width(600).Background(SubtleFill),
 
                     TextBlock("Reference line")
                 ).Width(600).Height(400)
@@ -291,7 +292,7 @@ internal static class FlexLayoutFixtures
 
                     FlexRow(
                         TextBlock("Row1-A").Flex(basis: 0, grow: 1).Background("LightCoral"),
-                        TextBlock("Row1-B").Flex(basis: 0, grow: 2).Background("LightBlue"),
+                        TextBlock("Row1-B").Flex(basis: 0, grow: 2).Background(SystemAttentionBackground),
                         TextBlock("Row1-C").Flex(basis: 0, grow: 1).Background("LightGreen")
                     ),
 
@@ -340,7 +341,7 @@ internal static class FlexLayoutFixtures
                 ScrollViewer(
                     FlexColumn(
                         TextBlock("Item 1").Height(60).Background("LightCoral"),
-                        TextBlock("Item 2").Height(60).Background("LightBlue"),
+                        TextBlock("Item 2").Height(60).Background(SystemAttentionBackground),
                         TextBlock("Item 3").Height(60).Background("LightGreen"),
                         TextBlock("Item 4").Height(60).Background("Wheat"),
                         TextBlock("Item 5").Height(60).Background("Plum")
@@ -387,7 +388,7 @@ internal static class FlexLayoutFixtures
                         )
                     ).Flex(grow: 1),
 
-                    TextBlock("Footer").Height(50).Flex(shrink: 0).Background("LightBlue")
+                    TextBlock("Footer").Height(50).Flex(shrink: 0).Background(SystemAttentionBackground)
                 ).Width(400).Height(400)
             );
 
@@ -421,7 +422,7 @@ internal static class FlexLayoutFixtures
                 FlexColumn(
                     TextBlock("Top").Flex(basis: 0, grow: 1).Background("LightCoral"),
                     TextBlock("Middle").Flex(basis: 0, grow: 2).Background("LightGreen"),
-                    TextBlock("Bottom").Flex(basis: 0, grow: 1).Background("LightBlue")
+                    TextBlock("Bottom").Flex(basis: 0, grow: 1).Background(SystemAttentionBackground)
                 ).Width(400).Height(400)
             );
 
@@ -461,7 +462,7 @@ internal static class FlexLayoutFixtures
                 FlexRow(
                     TextBlock("Fixed1").Width(100).Background("LightCoral"),
                     TextBlock("Grow").Flex(grow: 1).Background("LightGreen"),
-                    TextBlock("Fixed2").Width(100).Background("LightBlue")
+                    TextBlock("Fixed2").Width(100).Background(SystemAttentionBackground)
                 ).Width(600).Height(60)
             );
 
@@ -497,7 +498,7 @@ internal static class FlexLayoutFixtures
                 new FlexElement([
                     TextBlock("A").Flex(basis: 0, grow: 1).Background("LightCoral"),
                     TextBlock("B").Flex(basis: 0, grow: 1).Background("LightGreen"),
-                    TextBlock("C").Flex(basis: 0, grow: 1).Background("LightBlue")
+                    TextBlock("C").Flex(basis: 0, grow: 1).Background(SystemAttentionBackground)
                 ])
                 {
                     Direction = FlexDirection.Row,
@@ -542,7 +543,7 @@ internal static class FlexLayoutFixtures
             host.Mount(ctx =>
                 FlexRow(
                     TextBlock("Padded-A").Flex(basis: 0, grow: 1).Background("LightCoral"),
-                    TextBlock("Padded-B").Flex(basis: 0, grow: 1).Background("LightBlue")
+                    TextBlock("Padded-B").Flex(basis: 0, grow: 1).Background(SystemAttentionBackground)
                 ).FlexPadding(20).Width(600).Height(100)
             );
 
@@ -580,8 +581,8 @@ internal static class FlexLayoutFixtures
                 VStack(8,
                     FlexRow(
                         TextBlock("Sidebar").Width(100).Background("LightCoral"),
-                        TextBlock(longText).Flex(grow: 1).Background("LightBlue")
-                    ).Width(600).Background("LightGray"),
+                        TextBlock(longText).Flex(grow: 1).Background(SystemAttentionBackground)
+                    ).Width(600).Background(SubtleFill),
 
                     TextBlock(longText).Width(500).Background("LightGreen"),
 
@@ -626,7 +627,7 @@ internal static class FlexLayoutFixtures
 
                     Grid([GridSize.Star(), GridSize.Star(2)], [GridSize.Star()],
                         TextBlock("GridLeft").Grid(row: 0, column: 0).Background("LightGreen"),
-                        TextBlock("GridRight").Grid(row: 0, column: 1).Background("LightBlue")
+                        TextBlock("GridRight").Grid(row: 0, column: 1).Background(SystemAttentionBackground)
                     ).Flex(grow: 1),
 
                     TextBlock("Footer").Height(50).Background("Wheat")
@@ -664,7 +665,7 @@ internal static class FlexLayoutFixtures
             host.Mount(ctx =>
                 FlexRow(
                     TextBlock("M1").Flex(basis: 0, grow: 1).Margin(10).Background("LightCoral"),
-                    TextBlock("M2").Flex(basis: 0, grow: 1).Margin(10).Background("LightBlue"),
+                    TextBlock("M2").Flex(basis: 0, grow: 1).Margin(10).Background(SystemAttentionBackground),
                     TextBlock("M3").Flex(basis: 0, grow: 1).Margin(10).Background("LightGreen")
                 ).Width(600).Height(80)
             );
@@ -700,7 +701,7 @@ internal static class FlexLayoutFixtures
                 new FlexElement([
                     TextBlock("J1").Width(100).Background("LightCoral"),
                     TextBlock("J2").Width(100).Background("LightGreen"),
-                    TextBlock("J3").Width(100).Background("LightBlue"),
+                    TextBlock("J3").Width(100).Background(SystemAttentionBackground),
                 ])
                 {
                     Direction = FlexDirection.Row,
@@ -746,7 +747,7 @@ internal static class FlexLayoutFixtures
 
                     FlexRow(
                         TextBlock("Grow-A").Flex(basis: 0, grow: 1).Background("LightGreen"),
-                        TextBlock("Grow-B").Flex(basis: 0, grow: 2).Background("LightBlue")
+                        TextBlock("Grow-B").Flex(basis: 0, grow: 2).Background(SystemAttentionBackground)
                     ).Grid(row: 0, column: 1)
                 ).Width(600).Height(300)
             );
@@ -787,7 +788,7 @@ internal static class FlexLayoutFixtures
 
                             FlexRow(
                                 TextBlock("L4-A").Flex(basis: 0, grow: 1).Background("LightCoral"),
-                                TextBlock("L4-B").Flex(basis: 0, grow: 1).Background("LightBlue"),
+                                TextBlock("L4-B").Flex(basis: 0, grow: 1).Background(SystemAttentionBackground),
                                 TextBlock("L4-C").Flex(basis: 0, grow: 1).Background("LightGreen")
                             ).Flex(grow: 1),
 
@@ -840,7 +841,7 @@ internal static class FlexLayoutFixtures
                 Grid([GridSize.Star(), GridSize.Star(2)], [GridSize.Auto, GridSize.Star()],
                     FlexRow(
                         TextBlock("Label").Width(80).Background("LightCoral"),
-                        TextBlock(longText).Flex(grow: 1).Background("LightBlue")
+                        TextBlock(longText).Flex(grow: 1).Background(SystemAttentionBackground)
                     ).Grid(row: 0, column: 0, columnSpan: 2),
 
                     FlexRow(
@@ -882,7 +883,7 @@ internal static class FlexLayoutFixtures
 
                     ScrollViewer(
                         FlexColumn(
-                            TextBlock("Item-1").Height(50).Background("LightBlue"),
+                            TextBlock("Item-1").Height(50).Background(SystemAttentionBackground),
                             TextBlock("Item-2").Height(50).Background("LightGreen"),
                             TextBlock("Item-3").Height(50).Background("Wheat"),
                             TextBlock("Item-4").Height(50).Background("Plum"),
@@ -891,7 +892,7 @@ internal static class FlexLayoutFixtures
                         ).Width(400)
                     ).Grid(row: 1, column: 0),
 
-                    TextBlock("Footer").Grid(row: 2, column: 0).Background("LightGray")
+                    TextBlock("Footer").Grid(row: 2, column: 0).Background(SubtleFill)
                 ).Width(400).Height(300)
             );
 
@@ -937,7 +938,7 @@ internal static class FlexLayoutFixtures
                 return Wrapit(
                     FlexColumn(
                         TextBlock($"blue: {cur}").Background("LightCoral"),
-                        TextBlock("red").Background("LightBlue").Flex(grow: 1)
+                        TextBlock("red").Background(SystemAttentionBackground).Flex(grow: 1)
                     ).Height(400).Width(400),
                     cur
                 );
@@ -1030,7 +1031,7 @@ internal static class FlexLayoutFixtures
                         .Flex(grow: 1, basis: 0)
                         .Background("LightGreen")
                         .AutomationId("HBF_Body"),
-                    TextBlock("Footer").Height(60).Background("LightBlue")
+                    TextBlock("Footer").Height(60).Background(SystemAttentionBackground)
                         .AutomationId("HBF_Footer"))
                     .AutomationId("HBF_Column"));
 
@@ -1116,7 +1117,7 @@ internal static class FlexLayoutFixtures
                             TextBlock("R3").Height(40))
                             .VAlign(VerticalAlignment.Top)
                             .AutomationId("Auto_TopCol"))
-                        .Background("LightBlue")
+                        .Background(SystemAttentionBackground)
                         .Flex(grow: 1, basis: 0)));
 
             await Harness.Render();

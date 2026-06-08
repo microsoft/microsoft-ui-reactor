@@ -7,6 +7,7 @@ using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
+using static Microsoft.UI.Reactor.Core.Theme;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
@@ -244,7 +245,7 @@ internal static class DataGridScrollFixtures
                             cells[1] = TextBlock($"Emp-{index:D6}").Padding(horizontal: 8, vertical: 4).VAlign(VerticalAlignment.Center).Grid(row: 0, column: 1);
                             cells[2] = TextBlock($"Dept-{index % 12}").Padding(horizontal: 8, vertical: 4).VAlign(VerticalAlignment.Center).Grid(row: 0, column: 2);
                             cells[3] = TextBlock($"Title-{index % 50}").Padding(horizontal: 8, vertical: 4).VAlign(VerticalAlignment.Center).Grid(row: 0, column: 3);
-                            var bg = index % 2 == 0 ? "#ffffff" : "#f9f9f9";
+                            var bg = index % 2 == 0 ? LayerFill : CardBackground;
                             return Grid(colDefs, rowDef, cells).Background(bg);
                         },
                         itemHeight: 36,

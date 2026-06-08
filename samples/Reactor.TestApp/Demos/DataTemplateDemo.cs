@@ -118,8 +118,8 @@ class DataTemplateDemo : Component
                         return Border(
                             VStack(4,
                                 TextBlock(animal.Emoji).FontSize(32).HAlign(HorizontalAlignment.Center),
-                                TextBlock(animal.Name).SemiBold().HAlign(HorizontalAlignment.Center),
-                                Caption(animal.Species).Foreground(SecondaryText).HAlign(HorizontalAlignment.Center)
+                                TextBlock(animal.Name).SemiBold().Foreground("#202020").HAlign(HorizontalAlignment.Center),
+                                Caption(animal.Species).Foreground("#555555").HAlign(HorizontalAlignment.Center)
                             )
                         ).CornerRadius(8).Background(bg).Padding(12).Width(120).Height(120);
                     }

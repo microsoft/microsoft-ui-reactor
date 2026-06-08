@@ -1,6 +1,7 @@
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
+using static Microsoft.UI.Reactor.Core.Theme;
 
 var commands = new[]
 {
@@ -33,7 +34,7 @@ internal sealed class PaletteApp(IReadOnlyList<string> commands) : Component
         var filtered = commands
             .Where(c => query.Length == 0 || c.Contains(query, StringComparison.OrdinalIgnoreCase))
             .Take(5)
-            .Select(c => TextBlock(c).Padding(12).Background("#1AFFFFFF").CornerRadius(6))
+            .Select(c => TextBlock(c).Padding(12).Background(SubtleFill).CornerRadius(6))
             .Cast<Element>()
             .ToArray();
 
@@ -43,7 +44,8 @@ internal sealed class PaletteApp(IReadOnlyList<string> commands) : Component
                 TextBox(query, setQuery, placeholderText: "Type a command…"),
                 VStack(6, filtered)))
             .Padding(20)
-            .Background("#F01F1F1F")
+            .Background(LayerFill)
+            .WithBorder(SurfaceStroke, 1)
             .CornerRadius(12);
     }
 }

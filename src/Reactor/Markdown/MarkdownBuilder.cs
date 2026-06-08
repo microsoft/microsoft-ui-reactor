@@ -452,19 +452,9 @@ internal sealed class MarkdownBuilder
 
         Element element = Border(content)
             .Padding(0, 8, 16, 8)
-            .Background("#F5F5F5")
-            .WithBorder("#D0D0D0", 1);
-
-        // Apply left-accent via native setter for asymmetric border.
-        element = ((BorderElement)element) with
-        {
-            Setters = [.. ((BorderElement)element).Setters, b =>
-            {
-                b.BorderThickness = new Thickness(3, 0, 0, 0);
-                b.BorderBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(
-                    Microsoft.UI.Colors.Gray);
-            }]
-        };
+            .Background(Theme.SubtleFill)
+            .WithBorder(Theme.DividerStroke, 1)
+            .BorderInlineStart(new Thickness(3));
 
         if (_options.BlockQuote is not null)
             element = _options.BlockQuote(element);
@@ -591,7 +581,8 @@ internal sealed class MarkdownBuilder
                     TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap,
                 }
             )
-            .Background("#F5F5F5")
+            .Background(Theme.CardBackground)
+            .WithBorder(Theme.CardStroke, 1)
             .Padding(12)
             .CornerRadius(4);
         }

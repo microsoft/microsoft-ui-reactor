@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
+using static Microsoft.UI.Reactor.Core.Theme;
 using WinUIColor = global::Windows.UI.Color;
 
 namespace Microsoft.UI.Reactor.Controls;
@@ -231,7 +232,7 @@ public static class Editors
                     .Background($"#{color.A:X2}{color.R:X2}{color.G:X2}{color.B:X2}")
                     .Width(20).Height(20)
                     .CornerRadius(3)
-                    .WithBorder("#80000000", 1),
+                    .WithBorder(ControlStroke, 1),
                 TextBox(hex, s =>
                 {
                     if (TryParseHexColor(s, out var parsed))

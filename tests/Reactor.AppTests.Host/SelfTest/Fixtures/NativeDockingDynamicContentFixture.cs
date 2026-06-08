@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
 using static Microsoft.UI.Reactor.Factories;
+using static Microsoft.UI.Reactor.Core.Theme;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
@@ -370,7 +371,7 @@ internal static class NativeDockingDynamicContentFixtures
                     TextBlock("Sample component:"),
                     Border(
                         Component<PixSampleControl>()
-                    ).CornerRadius(8).Background("#f5f5f5").Padding(16)
+                    ).CornerRadius(8).Background(CardBackground).Padding(16)
                 ).Padding(24)
             );
         }
