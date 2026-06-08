@@ -617,6 +617,10 @@ namespace Microsoft.UI.Reactor.VsExtension.Session
             var height = Math.Max(0, (int)rect.Height);
             var acknowledged = false;
             string? lastAckError = null;
+            await SwitchToMainThreadAsync(ct).ConfigureAwait(true);
+            _vm.TransitionTo(ViewStatus.Building);
+            await _delayAsync(TimeSpan.FromMilliseconds(50), ct).ConfigureAwait(false);
+
             for (var attempt = 0; attempt < MaxAckAttempts && !acknowledged; attempt++)
             {
                 try
