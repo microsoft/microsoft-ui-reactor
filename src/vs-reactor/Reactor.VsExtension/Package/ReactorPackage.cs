@@ -18,11 +18,8 @@ namespace Microsoft.UI.Reactor.VsExtension.Package
     [InstalledProductRegistration("#110", "#111", "0.1", IconResourceID = 400)]
     [ProvideMenuResource("PackageCommands.CTMENU", 1)]
     [ProvideToolWindow(typeof(ReactorEmbedToolWindow), Style = VsDockStyle.Tabbed, Window = ToolWindowGuids80.SolutionExplorer)]
-    // Force auto-load on the shell-initialized UIContext (always true once VS is up,
-    // regardless of solution state). This guarantees InitializeAsync runs even if no
-    // menu item ever invokes it — useful for first-launch diagnostics. Once the menu
-    // entries are visible and working, we can downgrade to a solution-bound UIContext.
-    [ProvideAutoLoad(UIContextGuids80.NoSolution, PackageAutoLoadFlags.BackgroundLoad)]
+    // Load when a solution exists so active-document tracking is available for Reactor workspaces
+    // without loading the package for every unrelated empty VS launch.
     [ProvideAutoLoad(UIContextGuids80.SolutionExists, PackageAutoLoadFlags.BackgroundLoad)]
     [Guid(PackageGuids.PackageGuidString)]
     public sealed class ReactorPackage : AsyncPackage

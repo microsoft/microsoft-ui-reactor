@@ -723,6 +723,14 @@ public static class ReactorApp
             return true;
         }
 
+        if (!string.IsNullOrEmpty(options.EmbedValidationError))
+        {
+            Console.Error.WriteLine($"[reactor] {options.EmbedValidationError}");
+            Environment.ExitCode = 2;
+            if (exitOnUnavailable) Environment.Exit(2);
+            return true;
+        }
+
         if (options.Subverb is null) return false;
 
         if (ReactorFeatures.IsDevtoolsSupported && ReactorDevtoolsBootstrap.Current is { } host)

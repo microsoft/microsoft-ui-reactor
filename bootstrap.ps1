@@ -171,6 +171,34 @@ if (-not (Test-DotnetSdk10)) {
 }
 Write-Ok ".NET SDK present"
 
+function Get-ResolvedDotnetSdkVersion {
+    $sdkVersion = (& dotnet --version 2>$null | Select-Object -First 1)
+    $rc = $LASTEXITCODE
+    $global:LASTEXITCODE = 0
+    if ($rc -ne 0 -or [string]::IsNullOrWhiteSpace($sdkVersion)) { return $null }
+    return $sdkVersion.Trim()
+}
+
+function Get-VsExtensionSkipReason {
+    param([Parameter(Mandatory)]$VsInstance)
+
+    $sdkVersion = Get-ResolvedDotnetSdkVersion
+    if (-not $sdkVersion -or $sdkVersion -notmatch '^(\d+)\.(\d+)\.(\d+)') { return $null }
+
+    $sdkMajor = [int]$Matches[1]
+    $sdkPatch = [int]$Matches[3]
+    $sdkRequiresMsBuild18 = ($sdkMajor -gt 10) -or ($sdkMajor -eq 10 -and $sdkPatch -ge 300)
+    if (-not $sdkRequiresMsBuild18) { return $null }
+
+    $vsVersion = [string]$VsInstance.installationVersion
+    if ($vsVersion -notmatch '^(\d+)\.') { return $null }
+
+    $vsMajor = [int]$Matches[1]
+    if ($vsMajor -ge 18) { return $null }
+
+    return "Visual Studio $vsVersion uses MSBuild 17.x, but this checkout resolves .NET SDK $sdkVersion, which requires MSBuild 18+ for desktop VSIX builds."
+}
+
 # Windows App SDK runtime — recommended for samples, perf-tests, and any
 # project that omits WindowsAppSDKSelfContained=true.
 #
@@ -445,19 +473,26 @@ if ($SkipVsExtension) {
             if (-not (Test-Path -LiteralPath $reinstall)) {
                 Write-Host "    [skip] $reinstall not present in this checkout (older branch?). Pull `main` to get the VS extension." -ForegroundColor Yellow
             } else {
-                # Reinstall-Vsix.ps1 chains Build-Vsix.ps1 (desktop MSBuild build) then
-                # the VSIXInstaller against the per-user data dir, plus a synchronous
-                # `devenv /updateconfiguration` to merge the pkgdef so menus appear on
-                # the next launch. -VsInstanceId pins to the same instance we probed.
-                & $reinstall -Configuration $Configuration -VsInstanceId $target.instanceId
-                if ($LASTEXITCODE -ne 0) {
-                    # Don't fail the whole bootstrap — the rest of the install is
-                    # usable without the VS extension. Surface the failure clearly
-                    # so users debugging install issues see it.
-                    Write-Host ''
-                    Write-Host "    [warn] VS extension install reported a non-zero exit code ($LASTEXITCODE). The rest of the bootstrap completed; re-run src\vs-reactor\Reinstall-Vsix.ps1 directly to retry." -ForegroundColor Yellow
+                $skipReason = Get-VsExtensionSkipReason $target
+                if ($skipReason) {
+                    Write-Host "    [skip] $skipReason" -ForegroundColor Yellow
+                    Write-Host "           Install Visual Studio 2026 / MSBuild 18+ to build and install the optional Reactor Preview VSIX from bootstrap."
                 } else {
-                    Write-Ok "VS extension installed into $($target.displayName) — launch VS, then View -> Other Windows -> Reactor Preview."
+                    # Reinstall-Vsix.ps1 chains Build-Vsix.ps1 (desktop MSBuild build) then
+                    # the VSIXInstaller against the per-user data dir, plus a synchronous
+                    # `devenv /updateconfiguration` to merge the pkgdef so menus appear on
+                    # the next launch. -VsInstanceId pins to the same instance we probed.
+                    $powerShellExe = (Get-Process -Id $PID).Path
+                    & $powerShellExe -NoLogo -NoProfile -ExecutionPolicy Bypass -File $reinstall -Configuration $Configuration -VsInstanceId $target.instanceId
+                    if ($LASTEXITCODE -ne 0) {
+                        # Don't fail the whole bootstrap — the rest of the install is
+                        # usable without the VS extension. Surface the failure clearly
+                        # so users debugging install issues see it.
+                        Write-Host ''
+                        Write-Host "    [warn] VS extension install reported a non-zero exit code ($LASTEXITCODE). The rest of the bootstrap completed; re-run src\vs-reactor\Reinstall-Vsix.ps1 directly to retry." -ForegroundColor Yellow
+                    } else {
+                        Write-Ok "VS extension installed into $($target.displayName) — launch VS, then View -> Other Windows -> Reactor Preview."
+                    }
                 }
             }
         }

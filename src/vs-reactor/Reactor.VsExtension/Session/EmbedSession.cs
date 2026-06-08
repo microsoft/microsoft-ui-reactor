@@ -64,7 +64,9 @@ namespace Microsoft.UI.Reactor.VsExtension.Session
         private int _unexpectedRestartAttempts;
         private string? _lastComponentName;
         private string? _lastFailureStderr;
+        private int _launchGeneration;
         private TaskCompletionSource<NewSessionEventArgs>? _initialSessionTcs;
+        private CancellationTokenSource? _lifecycleCts;
 
         public EmbedSession(
             string csprojPath,
@@ -130,7 +132,9 @@ namespace Microsoft.UI.Reactor.VsExtension.Session
 
         public bool OwnerMode => _ownerMode;
 
+#pragma warning disable CS0067 // Automatic cross-project switching is disabled by default; keep event shape for explicit future opt-in.
         public event EventHandler<ProjectSwitchEventArgs>? ProjectSwitchRequested;
+#pragma warning restore CS0067
 
         public Task StartAsync(string? componentName, CancellationToken ct)
         {
@@ -141,41 +145,54 @@ namespace Microsoft.UI.Reactor.VsExtension.Session
         {
             ThrowIfDisposed();
             _stopping = true;
+            var generation = Interlocked.Increment(ref _launchGeneration);
+            var lifecycleCts = _lifecycleCts;
+            _lifecycleCts = null;
+            lifecycleCts?.Cancel();
+            lifecycleCts?.Dispose();
+            _initialSessionTcs?.TrySetCanceled();
+            _initialSessionTcs = null;
             var client = _client;
             _client = null;
             _currentSessionId = 0;
 
-            if (client != null)
+            try
             {
-                using (var releaseCts = CancellationTokenSource.CreateLinkedTokenSource(ct))
+                if (client != null)
                 {
-                    releaseCts.CancelAfter(ReleaseTimeout);
                     try
                     {
+                        using var releaseCts = new CancellationTokenSource(ReleaseTimeout);
                         await client.ReleaseAsync(releaseCts.Token).ConfigureAwait(false);
                     }
-                    catch (Exception ex) when (!(ex is OperationCanceledException && ct.IsCancellationRequested))
+                    catch (Exception ex)
                     {
                         Log("Release failed: " + ex.Message);
                     }
+                    finally
+                    {
+                        client.Dispose();
+                    }
                 }
 
-                client.Dispose();
-            }
+                var launcher = _launcher;
+                _launcher = null;
+                if (launcher != null)
+                {
+                    UnsubscribeLauncher(launcher);
+                    launcher.Dispose();
+                }
 
-            var launcher = _launcher;
-            _launcher = null;
-            if (launcher != null)
+                await SwitchToMainThreadAsync(CancellationToken.None).ConfigureAwait(true);
+                if (_launchGeneration == generation)
+                {
+                    _vm.TransitionTo(ViewStatus.Idle);
+                }
+            }
+            finally
             {
-                UnsubscribeLauncher(launcher);
-                launcher.Dispose();
+                _stopping = false;
             }
-
-            _initialSessionTcs = null;
-
-            await SwitchToMainThreadAsync(ct).ConfigureAwait(true);
-            _vm.TransitionTo(ViewStatus.Idle);
-            _stopping = false;
         }
 
         public async Task ForceReloadAsync(string? componentName, CancellationToken ct)
@@ -223,13 +240,7 @@ namespace Microsoft.UI.Reactor.VsExtension.Session
 
                 if (!string.Equals(csproj, CsprojPath, StringComparison.OrdinalIgnoreCase))
                 {
-                    var componentToSelect = FindFirstComponentInFile(path);
-                    await SwitchToMainThreadAsync(ct).ConfigureAwait(true);
-                    _vm.ClearPin();
-                    _vm.TransitionTo(ViewStatus.ProjectSwitching);
-                    await StopAsync(ct).ConfigureAwait(false);
-                    var newSession = _projectSwitchSessionFactory(csproj);
-                    ProjectSwitchRequested?.Invoke(this, new ProjectSwitchEventArgs(newSession, componentToSelect));
+                    Log("Ignoring automatic project switch to " + csproj + "; use Preview Active File to launch a different project explicitly.");
                     return;
                 }
 
@@ -282,6 +293,11 @@ namespace Microsoft.UI.Reactor.VsExtension.Session
 
             _disposed = true;
             _stopping = true;
+            Interlocked.Increment(ref _launchGeneration);
+            _lifecycleCts?.Cancel();
+            _lifecycleCts?.Dispose();
+            _lifecycleCts = null;
+            _initialSessionTcs?.TrySetCanceled();
             // StopAsync performs the graceful /embed/release path. Dispose is intentionally
             // synchronous so tool-window teardown cannot deadlock the UI thread; the job kill
             // below is the guaranteed cleanup path for direct Dispose callers.
@@ -310,20 +326,27 @@ namespace Microsoft.UI.Reactor.VsExtension.Session
             }
 
             _stopping = false;
+            var generation = Interlocked.Increment(ref _launchGeneration);
+            var previousLifecycleCts = _lifecycleCts;
+            previousLifecycleCts?.Cancel();
+            previousLifecycleCts?.Dispose();
+            var lifecycleCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            _lifecycleCts = lifecycleCts;
+            var opCt = lifecycleCts.Token;
             _lastComponentName = componentName;
             if (resetRestartBudget)
             {
                 _unexpectedRestartAttempts = 0;
             }
 
-            await SwitchToMainThreadAsync(ct).ConfigureAwait(true);
+            await SwitchToMainThreadAsync(opCt).ConfigureAwait(true);
             _vm.TransitionTo(ViewStatus.Launching);
 
             var workspaceRoot = Path.GetDirectoryName(CsprojPath) ?? Environment.CurrentDirectory;
             var dotnet = _dotnetResolver(workspaceRoot);
             if (dotnet == null)
             {
-                await SwitchToMainThreadAsync(ct).ConfigureAwait(true);
+                await SwitchToMainThreadAsync(opCt).ConfigureAwait(true);
                 _vm.ShowError("Cannot find dotnet", "Install the .NET SDK or add dotnet.exe to PATH, then reload the preview.");
                 _vm.TransitionTo(ViewStatus.BuildFailed);
                 return;
@@ -338,7 +361,7 @@ namespace Microsoft.UI.Reactor.VsExtension.Session
                 OwnerMode = OwnerMode,
             };
 
-            var firstSession = new TaskCompletionSource<NewSessionEventArgs>();
+            var firstSession = new TaskCompletionSource<NewSessionEventArgs>(TaskCreationOptions.RunContinuationsAsynchronously);
             _initialSessionTcs = firstSession;
 
             var previousLauncher = _launcher;
@@ -353,19 +376,42 @@ namespace Microsoft.UI.Reactor.VsExtension.Session
             _client = null;
             _currentSessionId = 0;
 
-            var launcher = _launcherFactory(options);
-            _launcher = launcher;
-            SubscribeLauncher(launcher);
+            IReactorChildLauncher launcher;
+            try
+            {
+                launcher = _launcherFactory(options);
+                if (!IsCurrentGeneration(generation))
+                {
+                    launcher.Dispose();
+                    return;
+                }
+
+                _launcher = launcher;
+                SubscribeLauncher(launcher);
+            }
+            catch (Exception ex)
+            {
+                _initialSessionTcs = null;
+                await SwitchToMainThreadAsync(CancellationToken.None).ConfigureAwait(true);
+                _vm.ShowError("Preview startup failed", BuildStartupFailureDetail(ex));
+                _vm.TransitionTo(ViewStatus.BuildFailed);
+                return;
+            }
 
             NewSessionEventArgs args;
-            using (var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct))
+            using (var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(opCt))
             {
                 var timeoutTask = _delayAsync(_firstSessionTimeout, timeoutCts.Token);
                 var completed = await Task.WhenAny(firstSession.Task, timeoutTask).ConfigureAwait(false);
                 if (completed != firstSession.Task)
                 {
                     var stderr = string.IsNullOrWhiteSpace(launcher.LastStderr) ? _lastFailureStderr : launcher.LastStderr;
-                    await SwitchToMainThreadAsync(ct).ConfigureAwait(true);
+                    if (!IsCurrentGeneration(generation))
+                    {
+                        return;
+                    }
+
+                    await SwitchToMainThreadAsync(opCt).ConfigureAwait(true);
 
                     // Clear the TCS so a late handshake from the still-spawning child
                     // routes through OnLauncherNewSession → HandleNewSessionAsync (which
@@ -400,13 +446,23 @@ namespace Microsoft.UI.Reactor.VsExtension.Session
                 }
 
                 timeoutCts.Cancel();
+                if (firstSession.Task.IsCanceled)
+                {
+                    return;
+                }
+
                 args = await firstSession.Task.ConfigureAwait(false);
             }
 
+            if (!IsCurrentGeneration(generation))
+            {
+                return;
+            }
+
             _initialSessionTcs = null;
-            await SwitchToMainThreadAsync(ct).ConfigureAwait(true);
+            await SwitchToMainThreadAsync(opCt).ConfigureAwait(true);
             _vm.TransitionTo(ViewStatus.WaitingForHandshake);
-            await HandleNewSessionAsync(args, ct).ConfigureAwait(false);
+            await HandleNewSessionAsync(args, generation, opCt).ConfigureAwait(false);
         }
 
         private void SubscribeLauncher(IReactorChildLauncher launcher)
@@ -439,7 +495,8 @@ namespace Microsoft.UI.Reactor.VsExtension.Session
                 return;
             }
 
-            SafeAsync.Run(_jtf, () => HandleNewSessionAsync(args, CancellationToken.None), "EmbedSession.NewSession");
+            var generation = _launchGeneration;
+            SafeAsync.Run(_jtf, () => HandleNewSessionAsync(args, generation, CancellationToken.None), "EmbedSession.NewSession");
         }
 
         private void OnLauncherStderrLine(object? sender, string line)
@@ -482,8 +539,13 @@ namespace Microsoft.UI.Reactor.VsExtension.Session
             SafeAsync.Run(_jtf, () => HandleSupervisorExitedAsync(source, CancellationToken.None), "EmbedSession.SupervisorExited");
         }
 
-        private async Task HandleNewSessionAsync(NewSessionEventArgs args, CancellationToken ct)
+        private async Task HandleNewSessionAsync(NewSessionEventArgs args, int generation, CancellationToken ct)
         {
+            if (!IsCurrentGeneration(generation))
+            {
+                return;
+            }
+
             if (_currentSessionId == args.SessionId)
             {
                 return;
@@ -493,16 +555,39 @@ namespace Microsoft.UI.Reactor.VsExtension.Session
             _lastFailureStderr = null;
             _client?.Dispose();
             var client = _clientFactory(args.Port, args.Token);
-            client.GenerationMismatch += (_, mismatch) => Log("Generation mismatch during embed ack: expected " + mismatch.Expected + ", got " + mismatch.Got);
-            _client = client;
-
             try
             {
+                if (!IsCurrentGeneration(generation))
+                {
+                    return;
+                }
+
+                client.GenerationMismatch += (_, mismatch) => Log("Generation mismatch during embed ack: expected " + mismatch.Expected + ", got " + mismatch.Got);
+                _client = client;
+
                 await client.StatusAsync(ct).ConfigureAwait(false);
             }
             catch (EmbedProtocolMismatchException ex)
             {
+                if (!IsCurrentGeneration(generation))
+                {
+                    return;
+                }
+
                 await FailHandshakeAsync("Reactor version mismatch", ex.Message, ct).ConfigureAwait(false);
+                return;
+            }
+            finally
+            {
+                if (!IsCurrentGeneration(generation) && !ReferenceEquals(_client, client))
+                {
+                    client.Dispose();
+                }
+            }
+
+            if (!IsCurrentGeneration(generation))
+            {
+                client.Dispose();
                 return;
             }
 
@@ -513,7 +598,17 @@ namespace Microsoft.UI.Reactor.VsExtension.Session
             }
             catch (TimeoutException ex)
             {
+                if (!IsCurrentGeneration(generation))
+                {
+                    return;
+                }
+
                 await FailHandshakeAsync("Preview window not ready", ex.Message, ct).ConfigureAwait(false);
+                return;
+            }
+
+            if (!IsCurrentGeneration(generation))
+            {
                 return;
             }
 
@@ -527,6 +622,10 @@ namespace Microsoft.UI.Reactor.VsExtension.Session
                 try
                 {
                     acknowledged = await client.AckEmbedAsync(_placeholderHwnd, width, height, hwnd.Generation, ct).ConfigureAwait(false);
+                    if (!IsCurrentGeneration(generation))
+                    {
+                        return;
+                    }
                 }
                 catch (EmbedDpiMismatchException)
                 {
@@ -539,6 +638,11 @@ namespace Microsoft.UI.Reactor.VsExtension.Session
                     var detail = _ownerModeFallbackUsed
                         ? "DPI mismatch in both child and owner modes — see troubleshooting."
                         : "Tool window DPI ≠ Reactor app DPI. Try docking the tool window on the same monitor, or run the app as PerMonitorV2.";
+                    if (!IsCurrentGeneration(generation))
+                    {
+                        return;
+                    }
+
                     await FailHandshakeAsync("DPI mismatch", detail, ct).ConfigureAwait(false);
                     return;
                 }
@@ -562,7 +666,16 @@ namespace Microsoft.UI.Reactor.VsExtension.Session
                     detail += " Last error: " + lastAckError;
                 }
 
-                await FailHandshakeAsync("Embed handshake failed", detail, ct).ConfigureAwait(false);
+                if (IsCurrentGeneration(generation))
+                {
+                    await FailHandshakeAsync("Embed handshake failed", detail, ct).ConfigureAwait(false);
+                }
+
+                return;
+            }
+
+            if (!IsCurrentGeneration(generation))
+            {
                 return;
             }
 
@@ -584,21 +697,20 @@ namespace Microsoft.UI.Reactor.VsExtension.Session
         {
             using (var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct))
             {
-                var timeoutTask = _delayAsync(_hwndTimeout, timeoutCts.Token);
+                timeoutCts.CancelAfter(_hwndTimeout);
                 while (true)
                 {
-                    var hwndTask = client.GetHwndAsync(ct);
-                    var completed = await Task.WhenAny(hwndTask, timeoutTask).ConfigureAwait(false);
-                    if (completed == timeoutTask)
+                    try
+                    {
+                        var hwnd = await client.GetHwndAsync(timeoutCts.Token).ConfigureAwait(false);
+                        if (hwnd.Hwnd != IntPtr.Zero)
+                        {
+                            return hwnd;
+                        }
+                    }
+                    catch (OperationCanceledException) when (!ct.IsCancellationRequested && timeoutCts.IsCancellationRequested)
                     {
                         throw new TimeoutException("Timed out waiting for the Reactor window HWND.");
-                    }
-
-                    var hwnd = await hwndTask.ConfigureAwait(false);
-                    if (hwnd.Hwnd != IntPtr.Zero)
-                    {
-                        timeoutCts.Cancel();
-                        return hwnd;
                     }
 
                     await _delayAsync(TimeSpan.FromMilliseconds(100), ct).ConfigureAwait(false);
@@ -627,7 +739,7 @@ namespace Microsoft.UI.Reactor.VsExtension.Session
             }
 
             _ownerMode = true;
-            await StartCoreAsync(_lastComponentName, ct, resetRestartBudget: false).ConfigureAwait(false);
+            await StartCoreAsync(_lastComponentName, CancellationToken.None, resetRestartBudget: false).ConfigureAwait(false);
         }
 
         private async Task FailHandshakeAsync(string title, string detail, CancellationToken ct)
@@ -684,6 +796,26 @@ namespace Microsoft.UI.Reactor.VsExtension.Session
         private static string? FindFirstComponentInFile(string path)
         {
             return ReadComponentsInFile(path).FirstOrDefault();
+        }
+
+        private bool IsCurrentGeneration(int generation)
+        {
+            return !_disposed && !_stopping && generation == _launchGeneration && !(_lifecycleCts?.IsCancellationRequested ?? true);
+        }
+
+        private static string BuildStartupFailureDetail(Exception ex)
+        {
+            var detail = new StringBuilder();
+            detail.Append(ex.GetType().Name);
+            detail.Append(": ");
+            detail.AppendLine(ex.Message);
+            if (ex is System.ComponentModel.Win32Exception win32 && win32.NativeErrorCode == 5)
+            {
+                detail.AppendLine();
+                detail.AppendLine("Windows denied assigning the preview process to the cleanup job object. This usually means Visual Studio is already running inside a restrictive job. Restart VS outside that wrapper or use the standalone preview.");
+            }
+
+            return detail.ToString();
         }
 
         private void Log(string message)

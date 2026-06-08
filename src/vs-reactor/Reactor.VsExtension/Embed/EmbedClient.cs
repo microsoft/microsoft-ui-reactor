@@ -14,11 +14,11 @@ using System.Threading.Tasks;
 
 namespace Microsoft.UI.Reactor.VsExtension.Embed
 {
-    public sealed record EmbedStatus(bool Building, int Fps, int Port, string Protocol, int Generation);
+    internal sealed record EmbedStatus(bool Building, int Fps, int Port, string Protocol, int Generation);
 
-    public sealed record EmbedComponentsResponse(IReadOnlyList<string> Components, string? Current);
+    internal sealed record EmbedComponentsResponse(IReadOnlyList<string> Components, string? Current);
 
-    public sealed class EmbedGenerationMismatchEventArgs : EventArgs
+    internal sealed class EmbedGenerationMismatchEventArgs : EventArgs
     {
         public EmbedGenerationMismatchEventArgs(int expected, int got)
         {
@@ -52,7 +52,7 @@ namespace Microsoft.UI.Reactor.VsExtension.Embed
         Task<bool> PreviewAsync(string componentName, CancellationToken ct = default);
     }
 
-    public sealed class EmbedClient : IEmbedClient
+    internal sealed class EmbedClient : IEmbedClient
     {
         private const string ExpectedProtocol = "embed-v1";
         private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };

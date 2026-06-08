@@ -120,6 +120,25 @@ public class WindowSpecTests
     }
 
     [Fact]
+    public void Child_Embed_Dpi_Failure_Is_Catchable()
+    {
+        var window = (ReactorWindow)global::System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(ReactorWindow));
+        var method = typeof(ReactorWindow).GetMethod("VerifyEmbedDpiAwareness", global::System.Reflection.BindingFlags.Instance | global::System.Reflection.BindingFlags.NonPublic)!;
+
+        try
+        {
+            method.Invoke(window, [WindowEmbedStyle.Child]);
+        }
+        catch (global::System.Reflection.TargetInvocationException ex) when (ex.InnerException is InvalidOperationException inner)
+        {
+            Assert.Contains("PerMonitorV2", inner.Message, StringComparison.Ordinal);
+            return;
+        }
+
+        // The current process is already PerMonitorV2; no exception is also valid.
+    }
+
+    [Fact]
     public void Validate_Rejects_Embed_With_PersistPlacement()
     {
         var spec = new WindowSpec

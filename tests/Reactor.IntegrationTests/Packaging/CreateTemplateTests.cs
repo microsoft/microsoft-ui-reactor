@@ -47,6 +47,15 @@ public sealed class CreateTemplateTests : IClassFixture<TemplatePackageTestFixtu
             appDir,
             projectName,
             _fixture.RunArchitecture,
+            configuration: null,
+            _fixture.CommandEnvironment,
+            timeoutMs: 120_000);
+
+        RunDotnetRun(
+            appDir,
+            projectName,
+            _fixture.RunArchitecture,
+            configuration: "Release",
             _fixture.CommandEnvironment,
             timeoutMs: 120_000);
     }
@@ -110,6 +119,7 @@ public sealed class CreateTemplateTests : IClassFixture<TemplatePackageTestFixtu
         string workingDirectory,
         string projectName,
         string architecture,
+        string? configuration,
         IReadOnlyDictionary<string, string?> environmentVariables,
         int timeoutMs)
     {
@@ -119,7 +129,8 @@ public sealed class CreateTemplateTests : IClassFixture<TemplatePackageTestFixtu
         var sawChildProcess = false;
         string? lastUiDetails = null;
 
-        using var process = RunHelpers.CreateProcess("dotnet", $"run -a {architecture}", workingDirectory, environmentVariables);
+        var configurationArg = configuration is null ? string.Empty : $" -c {configuration}";
+        using var process = RunHelpers.CreateProcess("dotnet", $"run{configurationArg} -a {architecture}", workingDirectory, environmentVariables);
         process.OutputDataReceived += (_, args) =>
         {
             if (args.Data is null)
@@ -194,14 +205,14 @@ public sealed class CreateTemplateTests : IClassFixture<TemplatePackageTestFixtu
             {
                 process.WaitForExit();
                 throw new XunitException(
-                    $"Command failed: dotnet run -a {architecture}{Environment.NewLine}" +
+                    $"Command failed: dotnet run{configurationArg} -a {architecture}{Environment.NewLine}" +
                     $"Exit code: {process.ExitCode}{Environment.NewLine}" +
                     $"Working directory: {workingDirectory}{Environment.NewLine}" +
                     RunHelpers.FormatCommandOutput(stdout.ToString(), stderr.ToString()));
             }
 
             throw new XunitException(
-                $"Timed out waiting for '{projectName}.exe' to start from 'dotnet run -a {architecture}'. " +
+                $"Timed out waiting for '{projectName}.exe' to start from 'dotnet run{configurationArg} -a {architecture}'. " +
                 $"Child process observed: {sawChildProcess}.{Environment.NewLine}" +
                 $"UI Automation details: {lastUiDetails ?? "None captured."}{Environment.NewLine}" +
                 $"Working directory: {workingDirectory}{Environment.NewLine}" +
@@ -242,7 +253,8 @@ public sealed class TemplatePackageTestFixture : IDisposable
         Directory.CreateDirectory(_tempRoot);
 
         RepoRoot = FindRepoRoot();
-        PackageVersion = $"0.0.0-template-smoke-{Guid.NewGuid():N}";
+        var packageSuffix = Guid.NewGuid().ToString("N")[..12];
+        PackageVersion = $"0.0.0-template-smoke-{packageSuffix}";
         PackageSourceDir = CreateDirectory("packages");
         NugetPackagesDir = CreateDirectory("nuget-global-packages");
         var nugetHttpCacheDir = CreateDirectory("nuget-http-cache");

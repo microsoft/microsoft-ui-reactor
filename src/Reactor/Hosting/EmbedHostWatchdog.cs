@@ -8,7 +8,9 @@ internal sealed class EmbedHostWatchdog : IDisposable
     private const uint INFINITE = 0xFFFFFFFF;
     private const uint WAIT_OBJECT_0 = 0x00000000;
 
-    private nint _handle;
+    private nint _processHandle;
+    private nint _stopEvent;
+    private Thread? _thread;
     private int _stopped;
 
     public void Start(int hostPid, Action onParentDied)
@@ -17,43 +19,65 @@ internal sealed class EmbedHostWatchdog : IDisposable
         if (hostPid <= 0) throw new ArgumentOutOfRangeException(nameof(hostPid));
 
         Stop();
-        var handle = OpenProcess(SYNCHRONIZE, false, hostPid);
-        if (handle == 0)
+        var processHandle = OpenProcess(SYNCHRONIZE, false, hostPid);
+        if (processHandle == 0)
         {
             Console.Error.WriteLine($"[reactor] embed parent pid {hostPid} not found; watchdog disabled.");
             return;
         }
 
-        _handle = handle;
+        var stopEvent = CreateEventW(IntPtr.Zero, true, false, null);
+        if (stopEvent == 0)
+        {
+            CloseHandle(processHandle);
+            Console.Error.WriteLine($"[reactor] could not create embed watchdog stop event (Win32 error {Marshal.GetLastWin32Error()}); watchdog disabled.");
+            return;
+        }
+
+        _processHandle = processHandle;
+        _stopEvent = stopEvent;
         Volatile.Write(ref _stopped, 0);
-        var context = SynchronizationContext.Current;
-        var thread = new Thread(() => Watch(handle, context, onParentDied))
+        var thread = new Thread(() => Watch(processHandle, stopEvent, onParentDied))
         {
             IsBackground = true,
             Name = "Reactor embed host watchdog",
         };
+        _thread = thread;
         thread.Start();
     }
 
     public void Stop()
     {
         Volatile.Write(ref _stopped, 1);
-        var handle = Interlocked.Exchange(ref _handle, 0);
-        if (handle != 0) CloseHandle(handle);
+        var stopEvent = Volatile.Read(ref _stopEvent);
+        if (stopEvent != 0)
+        {
+            SetEvent(stopEvent);
+        }
+
+        var thread = _thread;
+        if (thread is not null && thread.ManagedThreadId != Environment.CurrentManagedThreadId)
+        {
+            thread.Join(TimeSpan.FromSeconds(2));
+        }
+
+        _thread = null;
+        var processHandle = Interlocked.Exchange(ref _processHandle, 0);
+        if (processHandle != 0) CloseHandle(processHandle);
+        stopEvent = Interlocked.Exchange(ref _stopEvent, 0);
+        if (stopEvent != 0) CloseHandle(stopEvent);
     }
 
     public void Dispose() => Stop();
 
-    private void Watch(nint handle, SynchronizationContext? context, Action onParentDied)
+    private void Watch(nint processHandle, nint stopEvent, Action onParentDied)
     {
-        var wait = WaitForSingleObject(handle, INFINITE);
+        var handles = new[] { processHandle, stopEvent };
+        var wait = WaitForMultipleObjects((uint)handles.Length, handles, false, INFINITE);
         if (Volatile.Read(ref _stopped) != 0) return;
         if (wait != WAIT_OBJECT_0) return;
 
-        if (context is not null)
-            context.Post(_ => onParentDied(), null);
-        else
-            onParentDied();
+        onParentDied();
     }
 
     [DllImport("kernel32.dll", SetLastError = true)]
@@ -64,5 +88,12 @@ internal sealed class EmbedHostWatchdog : IDisposable
     private static extern bool CloseHandle(nint hObject);
 
     [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern uint WaitForSingleObject(nint hHandle, uint dwMilliseconds);
+    private static extern uint WaitForMultipleObjects(uint nCount, nint[] lpHandles, [MarshalAs(UnmanagedType.Bool)] bool bWaitAll, uint dwMilliseconds);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern nint CreateEventW(nint lpEventAttributes, [MarshalAs(UnmanagedType.Bool)] bool bManualReset, [MarshalAs(UnmanagedType.Bool)] bool bInitialState, string? lpName);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetEvent(nint hEvent);
 }

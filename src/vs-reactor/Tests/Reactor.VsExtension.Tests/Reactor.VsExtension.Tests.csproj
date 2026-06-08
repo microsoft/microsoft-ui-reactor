@@ -14,4 +14,8 @@
     <PackageReference Include="xunit" Version="2.5.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
   </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Reactor.VsExtension\Reactor.VsExtension.csproj" ReferenceOutputAssembly="true" CopyLocalSatelliteAssemblies="false" PrivateAssets="all" />
+  </ItemGroup>
 </Project>

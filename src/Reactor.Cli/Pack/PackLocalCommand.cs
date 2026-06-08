@@ -131,9 +131,7 @@ public static class PackLocalCommand
         // produces a MissingMethodException at runtime instead of a build error.
         // Clearing the extracted directories here forces the next restore to
         // re-extract from the freshly-packed feed.
-        var globalPackages = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".nuget", "packages");
+        var globalPackages = ResolveNuGetGlobalPackagesPath(repoRoot);
         if (Directory.Exists(globalPackages))
         {
             foreach (var packageId in new[]
@@ -177,6 +175,48 @@ public static class PackLocalCommand
         Console.WriteLine($"Outside the clone, copy nuget.config to your project parent or add the absolute");
         Console.WriteLine($"path '{feed}' as a NuGet source on your machine.");
         return 0;
+    }
+
+    static string ResolveNuGetGlobalPackagesPath(string repoRoot)
+    {
+        try
+        {
+            using var proc = Process.Start(new ProcessStartInfo("dotnet")
+            {
+                UseShellExecute = false,
+                WorkingDirectory = repoRoot,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                ArgumentList = { "nuget", "locals", "global-packages", "--list" },
+            });
+            if (proc is not null)
+            {
+                var stdout = proc.StandardOutput.ReadToEnd();
+                var stderr = proc.StandardError.ReadToEnd();
+                proc.WaitForExit();
+                if (proc.ExitCode == 0)
+                {
+                    foreach (var line in stdout.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        const string prefix = "global-packages:";
+                        if (line.TrimStart().StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return line[(line.IndexOf(prefix, StringComparison.OrdinalIgnoreCase) + prefix.Length)..].Trim();
+                        }
+                    }
+                }
+                else
+                {
+                    Console.Error.WriteLine($"warning: 'dotnet nuget locals global-packages --list' exited with code {proc.ExitCode}: {stderr.Trim()}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"warning: could not resolve NuGet global packages path ({ex.GetType().Name}: {ex.Message}); falling back to the default user profile cache.");
+        }
+
+        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget", "packages");
     }
 
     static int RunPack(string repoRoot, string projectRelative, string configuration, string version, string feed, string? arch)

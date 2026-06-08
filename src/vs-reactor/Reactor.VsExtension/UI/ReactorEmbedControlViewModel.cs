@@ -9,6 +9,7 @@ using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
+using Microsoft.VisualStudio.Threading;
 
 namespace Microsoft.UI.Reactor.VsExtension.UI
 {
@@ -28,9 +29,11 @@ namespace Microsoft.UI.Reactor.VsExtension.UI
         private string _placeholderTitle = "Reactor preview";
         private string _placeholderDetail = "Waiting for the preview to start.";
         private Rect _lastPlaceholderRect;
+        private readonly JoinableTaskFactory? _jtf;
 
-        public ReactorEmbedControlViewModel()
+        public ReactorEmbedControlViewModel(JoinableTaskFactory? jtf = null)
         {
+            _jtf = jtf;
             ForceReloadCommand = new RelayCommand(
                 _ => ForceReloadRequested?.Invoke(this, EventArgs.Empty),
                 _ => _status != EmbedStatus.Idle && _status != EmbedStatus.Launching);
@@ -158,14 +161,15 @@ namespace Microsoft.UI.Reactor.VsExtension.UI
             var dispatcher = Application.Current?.Dispatcher;
             if (dispatcher != null && !dispatcher.HasShutdownStarted && !dispatcher.CheckAccess())
             {
-                // Sync dispatch is intentional: TransitionTo is called from non-async
-                // session callbacks that must observe the post-transition VM state.
-#pragma warning disable VSTHRD001
-                dispatcher.Invoke(new Action(() => TransitionTo(status)));
-#pragma warning restore VSTHRD001
+                RunOnMainThread(() => ApplyTransitionTo(status));
                 return;
             }
 
+            ApplyTransitionTo(status);
+        }
+
+        private void ApplyTransitionTo(EmbedStatus status)
+        {
             _status = status;
             StatusText = EmbedStatusInfo.GetText(status);
             StatusBrush = EmbedStatusInfo.GetBrush(status);
@@ -212,15 +216,18 @@ namespace Microsoft.UI.Reactor.VsExtension.UI
                 // CollectionView; mutating it from a background thread throws
                 // "This type of CollectionView does not support changes to its
                 // SourceCollection from a thread different from the Dispatcher
-                // thread." Sync-dispatch so call sites (refresh after handshake,
+                // thread." Dispatch so call sites (refresh after handshake,
                 // active-document changed) can keep their straight-line shape.
                 var snapshot = components as IList<string> ?? components.ToList();
-#pragma warning disable VSTHRD001
-                dispatcher.Invoke(new Action(() => SetComponents(snapshot, selected)));
-#pragma warning restore VSTHRD001
+                RunOnMainThread(() => ApplyComponents(snapshot, selected));
                 return;
             }
 
+            ApplyComponents(components, selected);
+        }
+
+        private void ApplyComponents(IEnumerable<string> components, string? selected)
+        {
             var componentList = components.Where(component => !string.IsNullOrWhiteSpace(component)).Distinct(StringComparer.Ordinal).ToList();
             var previousSelection = SelectedComponent;
             Components.Clear();
@@ -263,12 +270,15 @@ namespace Microsoft.UI.Reactor.VsExtension.UI
             if (dispatcher != null && !dispatcher.HasShutdownStarted && !dispatcher.CheckAccess())
             {
                 var snapshot = componentsInDoc as IList<string> ?? componentsInDoc.ToList();
-#pragma warning disable VSTHRD001
-                dispatcher.Invoke(new Action(() => OnActiveDocumentChanged(path, snapshot)));
-#pragma warning restore VSTHRD001
+                RunOnMainThread(() => ApplyActiveDocumentChanged(path, snapshot));
                 return;
             }
 
+            ApplyActiveDocumentChanged(path, componentsInDoc);
+        }
+
+        private void ApplyActiveDocumentChanged(string? path, IEnumerable<string> componentsInDoc)
+        {
             var firstComponent = componentsInDoc.FirstOrDefault(component => !string.IsNullOrWhiteSpace(component));
             if (firstComponent == null || string.Equals(firstComponent, SelectedComponent, StringComparison.Ordinal))
             {
@@ -328,6 +338,21 @@ namespace Microsoft.UI.Reactor.VsExtension.UI
                 _manuallyPinned = true;
                 OnPropertyChanged(nameof(IsManuallyPinned));
             }
+        }
+
+        private void RunOnMainThread(Action action)
+        {
+            if (_jtf == null)
+            {
+                action();
+                return;
+            }
+
+            _jtf.Run(async () =>
+            {
+                await _jtf.SwitchToMainThreadAsync();
+                action();
+            });
         }
 
         private void ShowErrorIfEmpty(string title, string detail)

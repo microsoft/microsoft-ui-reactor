@@ -2,6 +2,7 @@
 
 using System;
 using System.ComponentModel.Design;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using EnvDTE;
@@ -74,6 +75,12 @@ namespace Microsoft.UI.Reactor.VsExtension.Commands
                 }
 
                 var activePath = docPath!;
+                if (!IsUnderLoadedSolution(dte, activePath))
+                {
+                    await OutputChannel.WriteLineAsync("Reactor Preview opened. Active file is outside the loaded solution; use Preview Active File to launch it explicitly.").ConfigureAwait(true);
+                    return;
+                }
+
                 var csproj = await Task.Run(() => ProjectContextResolver.FindContainingCsproj(activePath), package.DisposalToken).ConfigureAwait(true);
                 if (csproj == null)
                 {
@@ -84,6 +91,25 @@ namespace Microsoft.UI.Reactor.VsExtension.Commands
                 await OutputChannel.WriteLineAsync("Reactor Preview opened; auto-starting against " + csproj).ConfigureAwait(true);
                 window.Control.StartSession(csproj, componentName: null);
             }, "ShowReactorPreviewCommand");
+        }
+
+        private static bool IsUnderLoadedSolution(DTE? dte, string filePath)
+        {
+            var solutionPath = dte?.Solution?.FullName;
+            if (string.IsNullOrWhiteSpace(solutionPath))
+            {
+                return false;
+            }
+
+            var solutionDir = Path.GetDirectoryName(solutionPath);
+            if (string.IsNullOrWhiteSpace(solutionDir))
+            {
+                return false;
+            }
+
+            var root = Path.GetFullPath(solutionDir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            var fullPath = Path.GetFullPath(filePath);
+            return fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase);
         }
     }
 }

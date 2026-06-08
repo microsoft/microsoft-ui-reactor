@@ -326,6 +326,36 @@ public class CliFlagParsingTests
 public class DevtoolsHostCliTests
 {
     [Fact]
+    public void TryRunDevtoolsForTest_InvalidEmbed_PrintsValidationErrorToStderr()
+    {
+        using var stderr = new StringWriter();
+        var originalError = Console.Error;
+        var originalExitCode = Environment.ExitCode;
+
+        try
+        {
+            Environment.ExitCode = 0;
+            Console.SetError(stderr);
+
+            var handled = ReactorApp.TryRunDevtoolsForTest(
+                ["app.exe", "--devtools", "list", "--embed", "--embed-host-pid", "1234"],
+                title: "Preview",
+                width: 800,
+                height: 600);
+
+            Assert.True(handled);
+            Assert.Equal(2, Environment.ExitCode);
+        }
+        finally
+        {
+            Console.SetError(originalError);
+            Environment.ExitCode = originalExitCode;
+        }
+
+        Assert.Contains("[reactor] --embed requires '--devtools run'", stderr.ToString());
+    }
+
+    [Fact]
     public void TryHandleCommandLine_InvalidEmbed_PrintsValidationErrorToStderr()
     {
         var options = DevtoolsCliParser.Parse(["app.exe", "--devtools", "list", "--embed", "--embed-host-pid", "1234"]);

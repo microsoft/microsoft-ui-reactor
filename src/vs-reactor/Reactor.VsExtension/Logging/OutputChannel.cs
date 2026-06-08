@@ -34,6 +34,7 @@ namespace Microsoft.UI.Reactor.VsExtension.Logging
             {
                 _serviceProvider = serviceProvider;
                 _jtf = serviceProvider is AsyncPackage package ? package.JoinableTaskFactory : ThreadHelper.JoinableTaskFactory;
+                _pane = null;
                 _testSink = null;
             }
         }

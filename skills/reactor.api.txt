@@ -491,10 +491,27 @@ RichEditBoxElement.Set(Action<RichEditBox> configure) → RichEditBoxElement
 RichEditBoxElement.TextChanged(Action<string> handler) → RichEditBoxElement
 RichEditBoxElement.TextWrapping(TextWrapping wrapping = TextWrapping.Wrap) → RichEditBoxElement
 RichTextBlockElement.CharacterSpacing(int spacing) → RichTextBlockElement
+RichTextBlockElement.FontFamily(FontFamily family) → RichTextBlockElement
+RichTextBlockElement.FontFamily(string family) → RichTextBlockElement
+RichTextBlockElement.FontStretch(FontStretch stretch) → RichTextBlockElement
+RichTextBlockElement.FontStyle(FontStyle style) → RichTextBlockElement
+RichTextBlockElement.FontWeight(FontWeight weight) → RichTextBlockElement
+RichTextBlockElement.Foreground(Brush brush) → RichTextBlockElement
+RichTextBlockElement.Foreground(string color) → RichTextBlockElement
+RichTextBlockElement.HorizontalTextAlignment(TextAlignment alignment) → RichTextBlockElement
+RichTextBlockElement.IsColorFontEnabled(bool enabled = true) → RichTextBlockElement
+RichTextBlockElement.IsTextScaleFactorEnabled(bool enabled = true) → RichTextBlockElement
 RichTextBlockElement.LineHeight(double height) → RichTextBlockElement
+RichTextBlockElement.LineStackingStrategy(LineStackingStrategy strategy) → RichTextBlockElement
 RichTextBlockElement.MaxLines(int maxLines) → RichTextBlockElement
+RichTextBlockElement.OpticalMarginAlignment(OpticalMarginAlignment alignment) → RichTextBlockElement
+RichTextBlockElement.SelectionHighlightColor(SolidColorBrush brush) → RichTextBlockElement
 RichTextBlockElement.Set(Action<RichTextBlock> configure) → RichTextBlockElement
 RichTextBlockElement.TextAlignment(TextAlignment alignment) → RichTextBlockElement
+RichTextBlockElement.TextDecorations(TextDecorations decorations) → RichTextBlockElement
+RichTextBlockElement.TextIndent(double indent) → RichTextBlockElement
+RichTextBlockElement.TextLineBounds(TextLineBounds bounds) → RichTextBlockElement
+RichTextBlockElement.TextReadingOrder(TextReadingOrder order) → RichTextBlockElement
 RichTextBlockElement.TextTrimming(TextTrimming trimming) → RichTextBlockElement
 ScrollViewElement.AnchorRatio(double horizontal, double vertical) → ScrollViewElement
 ScrollViewElement.ContentOrientation(ScrollingContentOrientation orientation) → ScrollViewElement

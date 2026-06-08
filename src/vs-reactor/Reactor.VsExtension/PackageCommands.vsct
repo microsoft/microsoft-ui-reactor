@@ -6,7 +6,8 @@
 
   <Commands package="guidReactorPreviewPackage">
     <Menus>
-      <Menu guid="guidReactorPreviewPackageCmdSet" id="IDM_REACTOR_PREVIEW_TOOLBAR" priority="0x0100" type="Toolbar">
+      <Menu guid="guidReactorPreviewPackageCmdSet" id="IDM_REACTOR_PREVIEW_TOOLBAR" priority="0x0100" type="ToolWindowToolbar">
+        <Parent guid="guidReactorPreviewPackageCmdSet" id="IDM_REACTOR_PREVIEW_TOOLBAR" />
         <Strings>
           <ButtonText>Reactor Preview</ButtonText>
           <CommandName>Reactor Preview Toolbar</CommandName>

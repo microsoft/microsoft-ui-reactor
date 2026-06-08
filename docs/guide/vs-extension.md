@@ -9,7 +9,7 @@ Use the Visual Studio extension when you are building a Reactor desktop app in V
 
 ## Install
 
-Build and install the VSIX using the developer instructions in [`src/vs-reactor/README.md`](../../src/vs-reactor/README.md). For local validation, install into the Experimental hive first, then open a Reactor sample or app project and show the **Reactor Preview** tool window.
+Build and install the VSIX using the developer instructions in the [VS extension README](https://github.com/microsoft/microsoft-ui-reactor/blob/main/src/vs-reactor/README.md). For local validation, install into the Experimental hive first, then open a Reactor sample or app project and show the **Reactor Preview** tool window.
 
 ## Tool window basics
 
@@ -32,7 +32,7 @@ The component picker is a ComboBox in the tool window chrome. By default it auto
 
 ## Troubleshooting
 
-See the VSIX README troubleshooting section: [`src/vs-reactor/README.md`](../../src/vs-reactor/README.md#troubleshooting).
+See the [VSIX README troubleshooting section](https://github.com/microsoft/microsoft-ui-reactor/blob/main/src/vs-reactor/README.md#troubleshooting).
 
 ## Phase 2 roadmap
 

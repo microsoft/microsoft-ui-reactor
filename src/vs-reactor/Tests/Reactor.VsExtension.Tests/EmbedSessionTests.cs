@@ -50,6 +50,19 @@ namespace Reactor.VsExtension.Tests
         }
 
         [Fact]
+        public async Task EmbedSession_LauncherFactoryThrows_TransitionsToBuildFailed()
+        {
+            var harness = new SessionHarness(launcherException: new Win32Exception(5, "access denied"));
+
+            await harness.Session.StartAsync(null, CancellationToken.None);
+
+            Assert.Equal(ViewStatus.BuildFailed, harness.ViewModel.CurrentStatus);
+            Assert.Equal("Preview startup failed", harness.ViewModel.ErrorTitle);
+            Assert.Contains("access denied", harness.ViewModel.ErrorDetail);
+            Assert.Contains("cleanup job object", harness.ViewModel.ErrorDetail);
+        }
+
+        [Fact]
         public async Task EmbedSession_DpiMismatch_TransitionsToBuildFailed_WithActionableMessage()
         {
             var client = new FakeEmbedClient { AckException = new EmbedDpiMismatchException("dpi") };
@@ -208,6 +221,36 @@ namespace Reactor.VsExtension.Tests
         }
 
         [Fact]
+        public async Task EmbedSession_Stop_DisposesLocalState_WhenReleaseFails()
+        {
+            var client = new FakeEmbedClient { ReleaseException = new OperationCanceledException("release canceled") };
+            var harness = new SessionHarness(client: client);
+
+            await harness.Session.StartAsync("Counter", CancellationToken.None);
+            await harness.Session.StopAsync(CancellationToken.None);
+
+            Assert.True(client.ReleaseCalled);
+            Assert.True(client.Disposed);
+            Assert.True(harness.Launchers[0].Disposed);
+            Assert.Equal(ViewStatus.Idle, harness.ViewModel.CurrentStatus);
+        }
+
+        [Fact]
+        public async Task EmbedSession_LateSessionAfterStop_DoesNotResurrectPreview()
+        {
+            var harness = new SessionHarness(autoEmitLaunchers: new[] { false }, firstSessionTimeout: TimeSpan.FromSeconds(30));
+            var startTask = harness.Session.StartAsync("Counter", CancellationToken.None);
+            await EventuallyAsync(() => harness.Launchers.Count == 1);
+
+            await harness.Session.StopAsync(CancellationToken.None);
+            harness.Launchers[0].EmitNewSession();
+            await startTask;
+
+            Assert.Equal(ViewStatus.Idle, harness.ViewModel.CurrentStatus);
+            Assert.Empty(harness.ViewModel.Components);
+        }
+
+        [Fact]
         public async Task EmbedSession_OnActiveDocumentChanged_AutoSelectsAndPreviewsComponent()
         {
             var root = CreateProjectWorkspace("AutoSelect");
@@ -320,7 +363,7 @@ namespace Reactor.VsExtension.Tests
         }
 
         [Fact]
-        public async Task Lifecycle_ProjectSwitch_TransitionsThroughSwitching_AndStartsNewSession()
+        public async Task Lifecycle_ProjectSwitch_IsNotAutomatic_ForDifferentProject()
         {
             var root = CreateProjectWorkspace("ProjectSwitch");
             try
@@ -337,28 +380,17 @@ namespace Reactor.VsExtension.Tests
                 File.WriteAllText(secondFile, "public class Switched : Component { }");
                 var harness = new SessionHarness(csprojPath: firstCsproj);
                 var transitions = CaptureTransitions(harness.ViewModel);
-                Task? startTask = null;
                 ProjectSwitchEventArgs? switchArgs = null;
-                harness.Session.ProjectSwitchRequested += (_, args) =>
-                {
-                    switchArgs = args;
-                    startTask = args.NewSession.StartAsync(args.ComponentToSelect, CancellationToken.None);
-                };
+                harness.Session.ProjectSwitchRequested += (_, args) => switchArgs = args;
                 await harness.Session.StartAsync("Counter", CancellationToken.None);
 
                 await harness.Session.OnActiveDocumentChangedAsync(secondFile, CancellationToken.None);
-                if (startTask != null)
-                {
-                    await startTask;
-                }
 
-                Assert.NotNull(switchArgs);
-                Assert.Equal("Switched", switchArgs!.ComponentToSelect);
-                Assert.Contains(ViewStatus.ProjectSwitching, transitions);
+                Assert.Null(switchArgs);
+                Assert.DoesNotContain(ViewStatus.ProjectSwitching, transitions);
                 Assert.Equal(ViewStatus.Embedded, harness.ViewModel.CurrentStatus);
-                Assert.Equal(2, harness.Launchers.Count);
-                Assert.Equal(secondCsproj, harness.Launchers[1].Options?.CsprojPath);
-                Assert.Equal("Switched", harness.Launchers[1].Options?.ComponentName);
+                Assert.Single(harness.Launchers);
+                Assert.Equal(firstCsproj, harness.Launchers[0].Options?.CsprojPath);
             }
             finally
             {
@@ -433,6 +465,7 @@ namespace Reactor.VsExtension.Tests
             private readonly bool _elevated;
             private readonly bool _ownerMode;
             private readonly TimeSpan _firstSessionTimeout;
+            private readonly Exception? _launcherException;
 
             public SessionHarness(
                 bool dotnetAvailable = true,
@@ -442,13 +475,15 @@ namespace Reactor.VsExtension.Tests
                 IEnumerable<bool>? autoEmitLaunchers = null,
                 bool elevated = false,
                 bool ownerMode = false,
-                TimeSpan? firstSessionTimeout = null)
+                TimeSpan? firstSessionTimeout = null,
+                Exception? launcherException = null)
             {
                 _dotnetAvailable = dotnetAvailable;
                 _autoEmitLaunchers = new Queue<bool>(autoEmitLaunchers ?? new[] { true });
                 _elevated = elevated;
                 _ownerMode = ownerMode;
                 _firstSessionTimeout = firstSessionTimeout ?? TimeSpan.FromSeconds(1);
+                _launcherException = launcherException;
                 if (clients != null)
                 {
                     foreach (var queuedClient in clients)
@@ -461,7 +496,7 @@ namespace Reactor.VsExtension.Tests
                     _clients.Enqueue(client);
                 }
 
-                ViewModel = new ReactorEmbedControlViewModel();
+                ViewModel = new ReactorEmbedControlViewModel(_context.Factory);
                 Session = CreateSession(csprojPath ?? @"C:\workspace\App\App.csproj");
             }
 
@@ -505,6 +540,11 @@ namespace Reactor.VsExtension.Tests
 
             private IReactorChildLauncher CreateLauncher(ReactorChildLauncher.StartOptions options)
             {
+                if (_launcherException != null)
+                {
+                    throw _launcherException;
+                }
+
                 var launcher = new FakeReactorChildLauncher
                 {
                     AutoEmitOnSubscribe = _autoEmitLaunchers.Count == 0 || _autoEmitLaunchers.Dequeue(),
@@ -609,6 +649,8 @@ namespace Reactor.VsExtension.Tests
 
             public bool ReleaseCalled { get; private set; }
 
+            public Exception? ReleaseException { get; set; }
+
             public string? PreviewedComponent { get; private set; }
 
             public bool Disposed { get; private set; }
@@ -658,6 +700,11 @@ namespace Reactor.VsExtension.Tests
             public Task ReleaseAsync(CancellationToken ct = default)
             {
                 ReleaseCalled = true;
+                if (ReleaseException != null)
+                {
+                    throw ReleaseException;
+                }
+
                 return Task.CompletedTask;
             }
 

@@ -9,7 +9,7 @@ using System.Text.RegularExpressions;
 
 namespace Microsoft.UI.Reactor.VsExtension.Embed
 {
-    public static class ProjectContextResolver
+    internal static class ProjectContextResolver
     {
         private static readonly Regex ComponentClassRegex = new Regex(@"class\s+(\w+)\s*(?:<[^>]*>)?\s*:\s*Component(?:<[^>]*>)?\b", RegexOptions.Compiled);
         private static readonly HashSet<string> ExcludedDirectoryNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)

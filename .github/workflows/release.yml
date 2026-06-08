@@ -162,19 +162,23 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path artifacts/vsix | Out-Null
           $desktopVsix = 'src\vs-reactor\Reactor.VsExtension\bin\Release\Reactor.VsExtension.vsix'
-          $structuralVsix = 'src\vs-reactor\Reactor.VsExtension\bin\Release\net472\Reactor.VsExtension.vsix'
-          try {
-            pwsh -File src\vs-reactor\Build-Vsix.ps1 -Configuration Release -NoRestore
-            $source = $desktopVsix
-          } catch {
-            Write-Warning "Desktop VSIX build failed; falling back to structural dotnet VSIX. $_"
-            dotnet build src\vs-reactor\Reactor.VsExtension\Reactor.VsExtension.csproj --no-restore --configuration Release
-            $source = $structuralVsix
+          pwsh -File src\vs-reactor\Build-Vsix.ps1 -Configuration Release -NoRestore -Version '${{ steps.version.outputs.version }}'
+          $buildExit = $LASTEXITCODE
+          if ($buildExit -ne 0) {
+            if ('${{ github.event_name }}' -eq 'pull_request') {
+              Write-Warning "Desktop VSIX build failed with exit code $buildExit; PR package validation will not publish a structural VSIX fallback."
+              return
+            }
+            throw "Desktop VSIX build failed with exit code $buildExit"
           }
-          if (-not (Test-Path $source)) {
-            throw "VSIX was not produced at $source"
+          if (-not (Test-Path $desktopVsix)) {
+            if ('${{ github.event_name }}' -eq 'pull_request') {
+              Write-Warning "Desktop VSIX was not produced; PR package validation will not publish a structural VSIX fallback."
+              return
+            }
+            throw "VSIX was not produced at $desktopVsix"
           }
-          Copy-Item $source artifacts\vsix\Reactor.VsExtension.vsix -Force
+          Copy-Item $desktopVsix artifacts\vsix\Reactor.VsExtension.vsix -Force
 
       # Framework-dependent: the consumer's machine supplies the .NET 10
       # runtime — saves ~70 MB per RID. install-skill-kit.ps1 checks for it

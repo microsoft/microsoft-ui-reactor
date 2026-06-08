@@ -9,7 +9,7 @@ using Microsoft.Win32.SafeHandles;
 
 namespace Microsoft.UI.Reactor.VsExtension.Embed
 {
-    public static class DotnetResolver
+    internal static class DotnetResolver
     {
         private static readonly string[] CandidateNames =
         {
@@ -19,7 +19,7 @@ namespace Microsoft.UI.Reactor.VsExtension.Embed
             "dotnet.com",
         };
 
-        public sealed record Result(string Path, string Source);
+        internal sealed record Result(string Path, string Source);
 
         public static Result? Resolve(string workspaceRoot, IReadOnlyDictionary<string, string>? envOverride = null)
         {

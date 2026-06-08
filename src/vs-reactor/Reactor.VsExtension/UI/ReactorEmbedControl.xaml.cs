@@ -19,7 +19,7 @@ namespace Microsoft.UI.Reactor.VsExtension.UI
         public ReactorEmbedControl()
         {
             InitializeComponent();
-            ViewModel = new ReactorEmbedControlViewModel();
+            ViewModel = new ReactorEmbedControlViewModel(ReactorPackage.Instance?.Jtf);
             DataContext = ViewModel;
             Placeholder.PlaceholderResized += OnPlaceholderResized;
             ViewModel.PlaceholderRectChanged += OnViewModelPlaceholderRectChanged;
@@ -168,12 +168,14 @@ namespace Microsoft.UI.Reactor.VsExtension.UI
             SafeAsync.Run(package.Jtf, async () =>
             {
                 await package.Jtf.SwitchToMainThreadAsync();
-                if (sender is EmbedSession oldSession && ReferenceEquals(_session, oldSession))
+                if (sender is not EmbedSession oldSession || !ReferenceEquals(_session, oldSession))
                 {
-                    DetachSession(oldSession);
-                    oldSession.Dispose();
+                    args.NewSession.Dispose();
+                    return;
                 }
 
+                DetachSession(oldSession);
+                oldSession.Dispose();
                 _session = args.NewSession;
                 AttachSession(args.NewSession);
                 await args.NewSession.StartAsync(args.ComponentToSelect, CancellationToken.None).ConfigureAwait(true);

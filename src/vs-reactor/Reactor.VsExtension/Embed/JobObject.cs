@@ -8,7 +8,7 @@ using System.Threading;
  
 namespace Microsoft.UI.Reactor.VsExtension.Embed
 {
-    public sealed class JobObject : IDisposable
+    internal sealed class JobObject : IDisposable
     {
         private static int s_aliveCount;
         private IntPtr _handle;

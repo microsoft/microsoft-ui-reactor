@@ -5,7 +5,7 @@ using System.Net;
 
 namespace Microsoft.UI.Reactor.VsExtension.Embed
 {
-    public sealed class EmbedProtocolMismatchException : Exception
+    internal sealed class EmbedProtocolMismatchException : Exception
     {
         public EmbedProtocolMismatchException(string message)
             : base(message)
@@ -18,7 +18,7 @@ namespace Microsoft.UI.Reactor.VsExtension.Embed
         }
     }
 
-    public sealed class EmbedDpiMismatchException : Exception
+    internal sealed class EmbedDpiMismatchException : Exception
     {
         public EmbedDpiMismatchException(string message)
             : base(message)
@@ -26,7 +26,7 @@ namespace Microsoft.UI.Reactor.VsExtension.Embed
         }
     }
 
-    public sealed class EmbedRequestException : Exception
+    internal sealed class EmbedRequestException : Exception
     {
         public EmbedRequestException(HttpStatusCode statusCode, string message, string? responseBody = null)
             : base(message)

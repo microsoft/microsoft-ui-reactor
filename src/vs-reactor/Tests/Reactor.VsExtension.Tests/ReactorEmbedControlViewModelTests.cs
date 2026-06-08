@@ -6,6 +6,7 @@ using System.Threading;
 using System.Windows;
 using System.Windows.Media;
 using Microsoft.UI.Reactor.VsExtension.UI;
+using Microsoft.VisualStudio.Threading;
 using Xunit;
 
 namespace Reactor.VsExtension.Tests
@@ -338,6 +339,7 @@ namespace Reactor.VsExtension.Tests
                         _ = new Application();
                     }
                     created = System.Windows.Threading.Dispatcher.CurrentDispatcher;
+                    SynchronizationContext.SetSynchronizationContext(new System.Windows.Threading.DispatcherSynchronizationContext(created));
                     ready.Set();
                     System.Windows.Threading.Dispatcher.Run();
                 });
@@ -360,7 +362,11 @@ namespace Reactor.VsExtension.Tests
             // the calling thread so it can spawn a *different* worker thread
             // to exercise the cross-thread guards.
             ReactorEmbedControlViewModel? vm = null;
-            dispatcher.Invoke(() => vm = new ReactorEmbedControlViewModel());
+            dispatcher.Invoke(() =>
+            {
+                var context = new JoinableTaskContext();
+                vm = new ReactorEmbedControlViewModel(context.Factory);
+            });
             body(vm!);
         }
 

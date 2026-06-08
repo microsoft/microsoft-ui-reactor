@@ -71,15 +71,24 @@
             <local:HwndHostPlaceholder x:Name="PlaceholderHost"
                                        Visibility="{Binding EmbeddedHostVisible, Converter={StaticResource BoolToHiddenVisibility}}" />
             <Border Visibility="{Binding ErrorOverlayVisible, Converter={StaticResource BoolToVisibility}}"
-                    Background="#CC000000">
+                    Background="{DynamicResource {x:Static vs:EnvironmentColors.ToolWindowBackgroundBrushKey}}"
+                    Opacity="0.96">
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="20">
-                    <TextBlock Text="{Binding ErrorTitle}" Foreground="White" FontWeight="Bold" FontSize="16" />
-                    <TextBlock Text="{Binding ErrorDetail}" Foreground="White" TextWrapping="Wrap" Margin="0,8,0,0" />
+                    <TextBlock Text="{Binding ErrorTitle}"
+                               Foreground="{DynamicResource {x:Static vs:EnvironmentColors.ToolWindowTextBrushKey}}"
+                               FontWeight="Bold" FontSize="16" />
+                    <TextBlock Text="{Binding ErrorDetail}"
+                               Foreground="{DynamicResource {x:Static vs:EnvironmentColors.ToolWindowTextBrushKey}}"
+                               TextWrapping="Wrap" Margin="0,8,0,0" />
                 </StackPanel>
             </Border>
             <Border Visibility="{Binding BuildingVisible, Converter={StaticResource BoolToVisibility}}"
-                    Background="#80000000" Height="24" VerticalAlignment="Top">
-                <TextBlock Text="Building…" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    Background="{DynamicResource {x:Static vs:EnvironmentColors.ToolWindowBackgroundBrushKey}}"
+                    Opacity="0.92"
+                    Height="24" VerticalAlignment="Top">
+                <TextBlock Text="Building…"
+                           Foreground="{DynamicResource {x:Static vs:EnvironmentColors.ToolWindowTextBrushKey}}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" />
             </Border>
         </Grid>
 

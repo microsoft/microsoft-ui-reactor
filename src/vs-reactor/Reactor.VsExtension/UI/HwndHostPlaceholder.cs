@@ -98,7 +98,6 @@ namespace Microsoft.UI.Reactor.VsExtension.UI
             }
 
             NativeMethods.TranslateMessage(ref msg);
-            NativeMethods.DispatchMessageW(ref msg);
             return true;
         }
 

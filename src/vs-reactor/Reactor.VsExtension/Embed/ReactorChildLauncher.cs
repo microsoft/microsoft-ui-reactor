@@ -23,7 +23,7 @@ namespace Microsoft.UI.Reactor.VsExtension.Embed
         string LastStderr { get; }
     }
 
-    public sealed class ReactorChildLauncher : IReactorChildLauncher
+    internal sealed class ReactorChildLauncher : IReactorChildLauncher
     {
         private const int StderrTailLimit = 16 * 1024;
         private static readonly Regex PortRegex = new Regex("^CAPTURE_PORT=(\\d+)$", RegexOptions.Compiled);
@@ -315,7 +315,7 @@ namespace Microsoft.UI.Reactor.VsExtension.Embed
             SupervisorExited?.Invoke(this, EventArgs.Empty);
         }
 
-        public sealed class StartOptions
+        internal sealed class StartOptions
         {
             public string CsprojPath { get; init; } = string.Empty;
 
@@ -331,7 +331,7 @@ namespace Microsoft.UI.Reactor.VsExtension.Embed
         }
     }
 
-    public sealed class NewSessionEventArgs : EventArgs
+    internal sealed class NewSessionEventArgs : EventArgs
     {
         public int SessionId { get; init; }
 

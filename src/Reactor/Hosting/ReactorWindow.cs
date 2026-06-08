@@ -598,9 +598,8 @@ public sealed class ReactorWindow : IDisposable
 
         if (style == WindowEmbedStyle.Child)
         {
-            Console.Error.WriteLine("[reactor] --embed requires PerMonitorV2 DPI awareness.");
-            Console.Error.WriteLine("[reactor] Add <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode> to your csproj's <PropertyGroup>.");
-            Environment.Exit(2);
+            throw new InvalidOperationException(
+                "--embed requires PerMonitorV2 DPI awareness. Add <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode> to your csproj's <PropertyGroup>.");
         }
 
         Console.Error.WriteLine("[reactor] --embed owner mode is running without PerMonitorV2 DPI awareness; DPI fallback may be less precise.");
