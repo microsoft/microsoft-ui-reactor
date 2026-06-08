@@ -225,6 +225,7 @@ internal static class SelfTestFixtureRegistry
         "RichTextProps_Paragraph_MountUpdateClear",
         "RichTextProps_Run_MountUpdateClear",
         "RichTextProps_Hyperlink_MountUpdateClear",
+        "RichTextProps_LineBreakInlineUI_MountUpdateClear",
         // ElementFactory<T> + WinUI ItemsRepeater recycle contract — regression
         // for the leak fixed alongside these tests (every realize was Minting
         // a fresh UIElement, orphaning prior ones in Repeater.Children).
@@ -1550,6 +1551,7 @@ internal static class SelfTestFixtureRegistry
         "RichTextProps_Paragraph_MountUpdateClear" => new RichTextPropertyFixtures.RichTextProps_Paragraph_MountUpdateClear(harness),
         "RichTextProps_Run_MountUpdateClear" => new RichTextPropertyFixtures.RichTextProps_Run_MountUpdateClear(harness),
         "RichTextProps_Hyperlink_MountUpdateClear" => new RichTextPropertyFixtures.RichTextProps_Hyperlink_MountUpdateClear(harness),
+        "RichTextProps_LineBreakInlineUI_MountUpdateClear" => new RichTextPropertyFixtures.RichTextProps_LineBreakInlineUI_MountUpdateClear(harness),
         "EFR_Factory_BoundedDistinctControls_AcrossManyRealizeCycles" => new ElementFactoryRecyclingFixtures.Factory_BoundedDistinctControls_AcrossManyRealizeCycles(harness),
         "EFR_Factory_RecycledControlIsReusedOnNextRealize" => new ElementFactoryRecyclingFixtures.Factory_RecycledControlIsReusedOnNextRealize(harness),
         "EFR_Factory_BookkeepingBoundedAcrossCycles" => new ElementFactoryRecyclingFixtures.Factory_BookkeepingBoundedAcrossCycles(harness),

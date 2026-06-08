@@ -583,7 +583,12 @@ public sealed partial class Reconciler
                 return UpdateInlineTextProperties(p, n, wb);
             case (RichTextInlineUIContainer p, RichTextInlineUIContainer n,
                   WinDocs.InlineUIContainer wc):
-                return UpdateInlineUIContainerInPlace(p, n, wc, requestRerender);
+            {
+                var any = UpdateInlineUIContainerInPlace(p, n, wc, requestRerender);
+                if (UpdateInlineTextProperties(p, n, wc))
+                    any = true;
+                return any;
+            }
             default:
                 return false; // unreachable per preflight
         }

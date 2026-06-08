@@ -1,5 +1,7 @@
+using System;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
+using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Documents;
@@ -7,6 +9,8 @@ using Microsoft.UI.Xaml.Media;
 using static Microsoft.UI.Reactor.Factories;
 using WinBlock = Microsoft.UI.Xaml.Documents.Block;
 using WinHyperlink = Microsoft.UI.Xaml.Documents.Hyperlink;
+using WinInlineUIContainer = Microsoft.UI.Xaml.Documents.InlineUIContainer;
+using WinLineBreak = Microsoft.UI.Xaml.Documents.LineBreak;
 using WinParagraph = Microsoft.UI.Xaml.Documents.Paragraph;
 using WinRichTextBlock = Microsoft.UI.Xaml.Controls.RichTextBlock;
 using WinRun = Microsoft.UI.Xaml.Documents.Run;
@@ -17,6 +21,8 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
 internal static class RichTextPropertyFixtures
 {
+    private static readonly FontFamily s_consolas = WinRTCache.GetFontFamily("Consolas");
+
     internal class RichTextProps_Block_MountUpdateClear(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()
@@ -31,7 +37,7 @@ internal static class RichTextPropertyFixtures
                     block = block with
                     {
                         FontSize = 23,
-                        FontFamily = new FontFamily("Consolas"),
+                        FontFamily = s_consolas,
                         FontWeight = Microsoft.UI.Text.FontWeights.Bold,
                         FontStyle = global::Windows.UI.Text.FontStyle.Italic,
                         FontStretch = global::Windows.UI.Text.FontStretch.Expanded,
@@ -64,21 +70,23 @@ internal static class RichTextPropertyFixtures
 
             var rtb = H.FindControl<WinRichTextBlock>(_ => true);
             H.Check("RichTextProps_Block_Mounted", rtb is not null);
-            H.Check("RichTextProps_Block_FontSize", rtb!.FontSize == 23);
+            if (rtb is null) return;
+
+            H.Check("RichTextProps_Block_FontSize", IsClose(rtb.FontSize, 23));
             H.Check("RichTextProps_Block_FontFamily", rtb.FontFamily.Source.Contains("Consolas", StringComparison.OrdinalIgnoreCase));
             H.Check("RichTextProps_Block_FontWeight", rtb.FontWeight.Weight >= 700);
             H.Check("RichTextProps_Block_FontStyle", rtb.FontStyle == global::Windows.UI.Text.FontStyle.Italic);
             H.Check("RichTextProps_Block_FontStretch", rtb.FontStretch == global::Windows.UI.Text.FontStretch.Expanded);
             H.Check("RichTextProps_Block_Foreground", IsColor(rtb.Foreground, 200, 20, 30));
             H.Check("RichTextProps_Block_MaxLines", rtb.MaxLines == 3);
-            H.Check("RichTextProps_Block_LineHeight", rtb.LineHeight == 31);
+            H.Check("RichTextProps_Block_LineHeight", IsClose(rtb.LineHeight, 31));
             H.Check("RichTextProps_Block_TextAlignment", rtb.TextAlignment == TextAlignment.Center);
             H.Check("RichTextProps_Block_HorizontalTextAlignment", rtb.HorizontalTextAlignment == TextAlignment.Center);
             H.Check("RichTextProps_Block_TextTrimming", rtb.TextTrimming == TextTrimming.WordEllipsis);
             H.Check("RichTextProps_Block_CharacterSpacing", rtb.CharacterSpacing == 120);
             H.Check("RichTextProps_Block_TextDecorations", rtb.TextDecorations == global::Windows.UI.Text.TextDecorations.Underline);
             H.Check("RichTextProps_Block_LineStackingStrategy", rtb.LineStackingStrategy == LineStackingStrategy.BlockLineHeight);
-            H.Check("RichTextProps_Block_TextIndent", rtb.TextIndent == 11);
+            H.Check("RichTextProps_Block_TextIndent", IsClose(rtb.TextIndent, 11));
             H.Check("RichTextProps_Block_TextLineBounds", rtb.TextLineBounds == TextLineBounds.Tight);
             H.Check("RichTextProps_Block_TextReadingOrder", rtb.TextReadingOrder == TextReadingOrder.DetectFromContent);
             H.Check("RichTextProps_Block_IsTextScaleFactorEnabled", rtb.IsTextScaleFactorEnabled == false);
@@ -156,15 +164,20 @@ internal static class RichTextPropertyFixtures
             await Harness.Render();
 
             var rtb = H.FindControl<WinRichTextBlock>(_ => true);
-            var paragraph = FirstParagraph(rtb!);
+            H.Check("RichTextProps_Paragraph_RTBMounted", rtb is not null);
+            if (rtb is null) return;
+
+            var paragraph = FirstParagraph(rtb);
             H.Check("RichTextProps_Paragraph_Mounted", paragraph is not null);
-            H.Check("RichTextProps_Paragraph_Margin", paragraph!.Margin == new Thickness(2, 3, 4, 5));
-            H.Check("RichTextProps_Paragraph_TextIndent", paragraph.TextIndent == 9);
+            if (paragraph is null) return;
+
+            H.Check("RichTextProps_Paragraph_Margin", paragraph.Margin == new Thickness(2, 3, 4, 5));
+            H.Check("RichTextProps_Paragraph_TextIndent", IsClose(paragraph.TextIndent, 9));
             H.Check("RichTextProps_Paragraph_TextAlignment", paragraph.TextAlignment == TextAlignment.Right);
             H.Check("RichTextProps_Paragraph_HorizontalTextAlignment", paragraph.HorizontalTextAlignment == TextAlignment.Right);
-            H.Check("RichTextProps_Paragraph_LineHeight", paragraph.LineHeight == 28);
+            H.Check("RichTextProps_Paragraph_LineHeight", IsClose(paragraph.LineHeight, 28));
             H.Check("RichTextProps_Paragraph_LineStackingStrategy", paragraph.LineStackingStrategy == LineStackingStrategy.BlockLineHeight);
-            H.Check("RichTextProps_Paragraph_FontSize", paragraph.FontSize == 18);
+            H.Check("RichTextProps_Paragraph_FontSize", IsClose(paragraph.FontSize, 18));
             H.Check("RichTextProps_Paragraph_FontFamily", paragraph.FontFamily.Source.Contains("Consolas", StringComparison.OrdinalIgnoreCase));
             H.Check("RichTextProps_Paragraph_FontWeight", paragraph.FontWeight.Weight >= 600);
             H.Check("RichTextProps_Paragraph_FontStyle", paragraph.FontStyle == global::Windows.UI.Text.FontStyle.Italic);
@@ -178,7 +191,7 @@ internal static class RichTextPropertyFixtures
             H.ClickButton("ToggleParagraphProps");
             await Harness.Render();
 
-            H.Check("RichTextProps_Paragraph_IdentityPreserved", ReferenceEquals(paragraph, FirstParagraph(rtb!)));
+            H.Check("RichTextProps_Paragraph_IdentityPreserved", ReferenceEquals(paragraph, FirstParagraph(rtb)));
             H.Check("RichTextProps_Paragraph_MarginCleared", IsUnset(paragraph, WinBlock.MarginProperty));
             H.Check("RichTextProps_Paragraph_TextIndentCleared", IsUnset(paragraph, WinParagraph.TextIndentProperty));
             H.Check("RichTextProps_Paragraph_TextAlignmentCleared", IsUnset(paragraph, WinBlock.TextAlignmentProperty));
@@ -233,9 +246,14 @@ internal static class RichTextPropertyFixtures
             await Harness.Render();
 
             var rtb = H.FindControl<WinRichTextBlock>(_ => true);
-            var run = FirstRun(rtb!);
+            H.Check("RichTextProps_Run_RTBMounted", rtb is not null);
+            if (rtb is null) return;
+
+            var run = FirstRun(rtb);
             H.Check("RichTextProps_Run_Mounted", run is not null);
-            H.Check("RichTextProps_Run_FontSize", run!.FontSize == 19);
+            if (run is null) return;
+
+            H.Check("RichTextProps_Run_FontSize", IsClose(run.FontSize, 19));
             H.Check("RichTextProps_Run_FontFamily", run.FontFamily.Source.Contains("Consolas", StringComparison.OrdinalIgnoreCase));
             H.Check("RichTextProps_Run_FontWeight", run.FontWeight.Weight >= 600);
             H.Check("RichTextProps_Run_FontStyle", run.FontStyle == global::Windows.UI.Text.FontStyle.Italic);
@@ -251,7 +269,7 @@ internal static class RichTextPropertyFixtures
             H.ClickButton("ToggleRunProps");
             await Harness.Render();
 
-            H.Check("RichTextProps_Run_IdentityPreserved", ReferenceEquals(run, FirstRun(rtb!)));
+            H.Check("RichTextProps_Run_IdentityPreserved", ReferenceEquals(run, FirstRun(rtb)));
             H.Check("RichTextProps_Run_FontSizeCleared", IsUnset(run, WinTextElement.FontSizeProperty));
             H.Check("RichTextProps_Run_FontFamilyCleared", IsUnset(run, WinTextElement.FontFamilyProperty));
             H.Check("RichTextProps_Run_FontWeightCleared", IsUnset(run, WinTextElement.FontWeightProperty));
@@ -303,10 +321,15 @@ internal static class RichTextPropertyFixtures
             await Harness.Render();
 
             var rtb = H.FindControl<WinRichTextBlock>(_ => true);
-            var link = FirstHyperlink(rtb!);
-            var linkRun = FirstHyperlinkRun(rtb!);
+            H.Check("RichTextProps_Hyperlink_RTBMounted", rtb is not null);
+            if (rtb is null) return;
+
+            var link = FirstHyperlink(rtb);
+            var linkRun = FirstHyperlinkRun(rtb);
             H.Check("RichTextProps_Hyperlink_Mounted", link is not null);
-            H.Check("RichTextProps_Hyperlink_FontSize", link!.FontSize == 20);
+            if (link is null) return;
+
+            H.Check("RichTextProps_Hyperlink_FontSize", IsClose(link.FontSize, 20));
             H.Check("RichTextProps_Hyperlink_FontFamily", link.FontFamily.Source.Contains("Consolas", StringComparison.OrdinalIgnoreCase));
             H.Check("RichTextProps_Hyperlink_FontWeight", link.FontWeight.Weight >= 700);
             H.Check("RichTextProps_Hyperlink_FontStyle", link.FontStyle == global::Windows.UI.Text.FontStyle.Italic);
@@ -323,7 +346,7 @@ internal static class RichTextPropertyFixtures
             H.ClickButton("ToggleHyperlinkProps");
             await Harness.Render();
 
-            H.Check("RichTextProps_Hyperlink_IdentityPreserved", ReferenceEquals(link, FirstHyperlink(rtb!)));
+            H.Check("RichTextProps_Hyperlink_IdentityPreserved", ReferenceEquals(link, FirstHyperlink(rtb)));
             H.Check("RichTextProps_Hyperlink_FontSizeCleared", IsUnset(link, WinTextElement.FontSizeProperty));
             H.Check("RichTextProps_Hyperlink_FontFamilyCleared", IsUnset(link, WinTextElement.FontFamilyProperty));
             H.Check("RichTextProps_Hyperlink_FontWeightCleared", IsUnset(link, WinTextElement.FontWeightProperty));
@@ -340,6 +363,114 @@ internal static class RichTextPropertyFixtures
         }
     }
 
+    internal class RichTextProps_LineBreakInlineUI_MountUpdateClear(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (styled, setStyled) = ctx.UseState(true);
+                var lineBreak = new RichTextLineBreak();
+                var inlineUi = InlineUI(Button("InlineChild", () => { }));
+                if (styled)
+                {
+                    lineBreak = lineBreak with
+                    {
+                        FontSize = 16,
+                        FontFamily = "Consolas",
+                        FontWeight = Microsoft.UI.Text.FontWeights.Bold,
+                        FontStyle = global::Windows.UI.Text.FontStyle.Italic,
+                        FontStretch = global::Windows.UI.Text.FontStretch.Expanded,
+                        Foreground = Brush(30, 60, 180),
+                        CharacterSpacing = 42,
+                        TextDecorations = global::Windows.UI.Text.TextDecorations.Underline,
+                        IsTextScaleFactorEnabled = false,
+                        Language = "it-IT",
+                    };
+                    inlineUi = inlineUi with
+                    {
+                        FontSize = 17,
+                        FontFamily = "Consolas",
+                        FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                        FontStyle = global::Windows.UI.Text.FontStyle.Italic,
+                        FontStretch = global::Windows.UI.Text.FontStretch.Condensed,
+                        Foreground = Brush(80, 30, 160),
+                        CharacterSpacing = 55,
+                        TextDecorations = global::Windows.UI.Text.TextDecorations.Strikethrough,
+                        IsTextScaleFactorEnabled = false,
+                        Language = "pt-BR",
+                    };
+                }
+
+                return VStack(
+                    Button("ToggleLineBreakInlineUIProps", () => setStyled(!styled)),
+                    RichTextBlock(new[] { Paragraph(Run("before"), lineBreak, inlineUi, Run("after")) }));
+            });
+
+            await Harness.Render();
+
+            var rtb = H.FindControl<WinRichTextBlock>(_ => true);
+            H.Check("RichTextProps_LineBreakInlineUI_RTBMounted", rtb is not null);
+            if (rtb is null) return;
+
+            var lineBreak = FirstLineBreak(rtb);
+            var inlineUi = FirstInlineUIContainer(rtb);
+            H.Check("RichTextProps_LineBreak_Mounted", lineBreak is not null);
+            H.Check("RichTextProps_InlineUI_Mounted", inlineUi is not null);
+            if (lineBreak is null || inlineUi is null) return;
+
+            H.Check("RichTextProps_LineBreak_FontSize", IsClose(lineBreak.FontSize, 16));
+            H.Check("RichTextProps_LineBreak_FontFamily", lineBreak.FontFamily.Source.Contains("Consolas", StringComparison.OrdinalIgnoreCase));
+            H.Check("RichTextProps_LineBreak_FontWeight", lineBreak.FontWeight.Weight >= 700);
+            H.Check("RichTextProps_LineBreak_FontStyle", lineBreak.FontStyle == global::Windows.UI.Text.FontStyle.Italic);
+            H.Check("RichTextProps_LineBreak_FontStretch", lineBreak.FontStretch == global::Windows.UI.Text.FontStretch.Expanded);
+            H.Check("RichTextProps_LineBreak_Foreground", IsColor(lineBreak.Foreground, 30, 60, 180));
+            H.Check("RichTextProps_LineBreak_CharacterSpacing", lineBreak.CharacterSpacing == 42);
+            H.Check("RichTextProps_LineBreak_TextDecorations", lineBreak.TextDecorations == global::Windows.UI.Text.TextDecorations.Underline);
+            H.Check("RichTextProps_LineBreak_IsTextScaleFactorEnabled", lineBreak.IsTextScaleFactorEnabled == false);
+            H.Check("RichTextProps_LineBreak_Language", lineBreak.Language == "it-IT");
+
+            H.Check("RichTextProps_InlineUI_FontSize", IsClose(inlineUi.FontSize, 17));
+            H.Check("RichTextProps_InlineUI_FontFamily", inlineUi.FontFamily.Source.Contains("Consolas", StringComparison.OrdinalIgnoreCase));
+            H.Check("RichTextProps_InlineUI_FontWeight", inlineUi.FontWeight.Weight >= 600);
+            H.Check("RichTextProps_InlineUI_FontStyle", inlineUi.FontStyle == global::Windows.UI.Text.FontStyle.Italic);
+            H.Check("RichTextProps_InlineUI_FontStretch", inlineUi.FontStretch == global::Windows.UI.Text.FontStretch.Condensed);
+            H.Check("RichTextProps_InlineUI_Foreground", IsColor(inlineUi.Foreground, 80, 30, 160));
+            H.Check("RichTextProps_InlineUI_CharacterSpacing", inlineUi.CharacterSpacing == 55);
+            H.Check("RichTextProps_InlineUI_TextDecorations", inlineUi.TextDecorations == global::Windows.UI.Text.TextDecorations.Strikethrough);
+            H.Check("RichTextProps_InlineUI_IsTextScaleFactorEnabled", inlineUi.IsTextScaleFactorEnabled == false);
+            H.Check("RichTextProps_InlineUI_Language", inlineUi.Language == "pt-BR");
+
+            H.ClickButton("ToggleLineBreakInlineUIProps");
+            await Harness.Render();
+
+            H.Check("RichTextProps_LineBreak_IdentityPreserved", ReferenceEquals(lineBreak, FirstLineBreak(rtb)));
+            H.Check("RichTextProps_InlineUI_IdentityPreserved", ReferenceEquals(inlineUi, FirstInlineUIContainer(rtb)));
+            H.Check("RichTextProps_LineBreak_FontSizeCleared", IsUnset(lineBreak, WinTextElement.FontSizeProperty));
+            H.Check("RichTextProps_LineBreak_FontFamilyCleared", IsUnset(lineBreak, WinTextElement.FontFamilyProperty));
+            H.Check("RichTextProps_LineBreak_FontWeightCleared", IsUnset(lineBreak, WinTextElement.FontWeightProperty));
+            H.Check("RichTextProps_LineBreak_FontStyleCleared", IsUnset(lineBreak, WinTextElement.FontStyleProperty));
+            H.Check("RichTextProps_LineBreak_FontStretchCleared", IsUnset(lineBreak, WinTextElement.FontStretchProperty));
+            H.Check("RichTextProps_LineBreak_ForegroundCleared", IsUnset(lineBreak, WinTextElement.ForegroundProperty));
+            H.Check("RichTextProps_LineBreak_CharacterSpacingCleared", IsUnset(lineBreak, WinTextElement.CharacterSpacingProperty));
+            H.Check("RichTextProps_LineBreak_TextDecorationsCleared", IsUnset(lineBreak, WinTextElement.TextDecorationsProperty));
+            H.Check("RichTextProps_LineBreak_IsTextScaleFactorEnabledCleared", IsUnset(lineBreak, WinTextElement.IsTextScaleFactorEnabledProperty));
+            H.Check("RichTextProps_LineBreak_LanguageCleared", IsUnset(lineBreak, WinTextElement.LanguageProperty));
+
+            H.Check("RichTextProps_InlineUI_FontSizeCleared", IsUnset(inlineUi, WinTextElement.FontSizeProperty));
+            H.Check("RichTextProps_InlineUI_FontFamilyCleared", IsUnset(inlineUi, WinTextElement.FontFamilyProperty));
+            H.Check("RichTextProps_InlineUI_FontWeightCleared", IsUnset(inlineUi, WinTextElement.FontWeightProperty));
+            H.Check("RichTextProps_InlineUI_FontStyleCleared", IsUnset(inlineUi, WinTextElement.FontStyleProperty));
+            H.Check("RichTextProps_InlineUI_FontStretchCleared", IsUnset(inlineUi, WinTextElement.FontStretchProperty));
+            H.Check("RichTextProps_InlineUI_ForegroundCleared", IsUnset(inlineUi, WinTextElement.ForegroundProperty));
+            H.Check("RichTextProps_InlineUI_CharacterSpacingCleared", IsUnset(inlineUi, WinTextElement.CharacterSpacingProperty));
+            H.Check("RichTextProps_InlineUI_TextDecorationsCleared", IsUnset(inlineUi, WinTextElement.TextDecorationsProperty));
+            H.Check("RichTextProps_InlineUI_IsTextScaleFactorEnabledCleared", IsUnset(inlineUi, WinTextElement.IsTextScaleFactorEnabledProperty));
+            H.Check("RichTextProps_InlineUI_LanguageCleared", IsUnset(inlineUi, WinTextElement.LanguageProperty));
+        }
+    }
+
     private static WinParagraph? FirstParagraph(WinRichTextBlock rtb)
         => rtb.Blocks.OfType<WinParagraph>().FirstOrDefault();
 
@@ -351,6 +482,12 @@ internal static class RichTextPropertyFixtures
 
     private static WinRun? FirstHyperlinkRun(WinRichTextBlock rtb)
         => FirstHyperlink(rtb)?.Inlines.OfType<WinRun>().FirstOrDefault();
+
+    private static WinLineBreak? FirstLineBreak(WinRichTextBlock rtb)
+        => FirstParagraph(rtb)?.Inlines.OfType<WinLineBreak>().FirstOrDefault();
+
+    private static WinInlineUIContainer? FirstInlineUIContainer(WinRichTextBlock rtb)
+        => FirstParagraph(rtb)?.Inlines.OfType<WinInlineUIContainer>().FirstOrDefault();
 
     private static SolidColorBrush Brush(byte r, byte g, byte b) =>
         new(global::Windows.UI.Color.FromArgb(255, r, g, b));
@@ -364,4 +501,7 @@ internal static class RichTextPropertyFixtures
 
     private static bool IsUnset(DependencyObject target, DependencyProperty property) =>
         ReferenceEquals(target.ReadLocalValue(property), DependencyProperty.UnsetValue);
+
+    private static bool IsClose(double actual, double expected) =>
+        Math.Abs(actual - expected) < 0.001d;
 }
