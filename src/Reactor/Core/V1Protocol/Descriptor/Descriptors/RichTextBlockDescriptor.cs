@@ -87,7 +87,18 @@ internal static class RichTextBlockDescriptor
         .OneWayConditional(
             get:         static e => e.CharacterSpacing,
             set:         static (c, v) => c.CharacterSpacing = v,
-            shouldWrite: static e => e.CharacterSpacing != 0);
+            shouldWrite: static e => e.CharacterSpacing != 0)
+        // RichTextBlock.Padding maps directly from the standard Element.Padding
+        // modifier (Layout.Padding sub-record). Without this OneWayConditional
+        // any .Padding(...) on the cell silently no-ops because the
+        // descriptor's Children=None handler doesn't fall back to a generic
+        // FrameworkElement padding writer. Verified via WinUI reflection that
+        // Microsoft.UI.Xaml.Controls.RichTextBlock exposes a Padding property
+        // of type Thickness; we just have to write to it.
+        .OneWayConditional(
+            get:         static e => e.Padding,
+            set:         static (c, v) => c.Padding = v!.Value,
+            shouldWrite: static e => e.Padding.HasValue);
 }
 
 /// <summary>

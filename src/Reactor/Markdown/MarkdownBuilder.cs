@@ -42,6 +42,27 @@ public record MarkdownOptions
     /// <summary>Override image rendering. (altText, src)</summary>
     public Func<string, Uri, Element>? Image { get; init; }
 
+    /// <summary>
+    /// Per-cell padding applied to every cell of the default markdown table
+    /// renderer. Default <c>(12, 6, 12, 6)</c> — wide enough that adjacent
+    /// numeric columns don't visually touch on Star-sized auto-shrunk tables
+    /// (as happens when the table is hosted inside an
+    /// <see cref="RichTextInlineUIContainer"/> under
+    /// <see cref="UnifiedRichText"/>). Ignored when <see cref="Table"/> is
+    /// overridden.
+    /// </summary>
+    public Microsoft.UI.Xaml.Thickness TableCellPadding { get; init; } = new(12, 6, 12, 6);
+
+    /// <summary>
+    /// Background brush applied to header-row cells (<c>th</c>) of the default
+    /// markdown table renderer. Defaults to <see cref="Core.Theme.SubtleFill"/>
+    /// so the header is visually distinct in both light and dark themes (the
+    /// historical hardcoded <c>#F0F0F0</c> was invisible in dark mode). Set to
+    /// <c>null</c> to skip the highlight. Ignored when <see cref="Table"/> is
+    /// overridden.
+    /// </summary>
+    public Core.ThemeRef? TableHeaderBackground { get; init; } = Core.Theme.SubtleFill;
+
     /// <summary>Font family for inline code and code blocks. Default: "Consolas".</summary>
     public string CodeFontFamily { get; init; } = "Consolas";
     /// <summary>Parser flags. Default: DialectGitHub (tables, strikethrough, task lists).</summary>
@@ -682,14 +703,18 @@ internal sealed class MarkdownBuilder
             _ => cell.HAlign(HorizontalAlignment.Left),
         };
 
-        // Position in grid and add padding.
+        // Apply padding directly on the cell — RichTextBlockDescriptor now
+        // wires the standard Element.Padding modifier through to
+        // Microsoft.UI.Xaml.Controls.RichTextBlock.Padding, so no extra Border
+        // layer is needed (which would change the layout-bounds shape).
+        var pad = _options.TableCellPadding;
         cell = cell
-            .Grid(row: _tableRowIndex, column: _tableCellIndex)
-            .Padding(4, 2, 4, 2);
+            .Padding(pad.Left, pad.Top, pad.Right, pad.Bottom)
+            .Grid(row: _tableRowIndex, column: _tableCellIndex);
 
-        // Header row gets subtle background.
-        if (isHeader)
-            cell = cell.Background("#F0F0F0");
+        // Header row gets a theme-aware background (default Theme.SubtleFill).
+        if (isHeader && _options.TableHeaderBackground is { } headerBg)
+            cell = cell.Background(headerBg);
 
         _tableAllCells.Add(cell);
         _tableCellIndex++;
