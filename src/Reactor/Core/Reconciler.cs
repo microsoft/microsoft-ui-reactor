@@ -1072,6 +1072,19 @@ public sealed partial class Reconciler : IDisposable
         return edge;
     }
 
+    internal static ReferenceListEdge GetOrCreateReferenceListEdge(FrameworkElement ctrl, int slot)
+    {
+        var state = GetOrCreateReactorState(ctrl);
+        state.ReferenceEdges ??= new ReferenceEdgeBag();
+        if (!state.ReferenceEdges.ListEdges.TryGetValue(slot, out var edge))
+        {
+            edge = new ReferenceListEdge();
+            state.ReferenceEdges.ListEdges[slot] = edge;
+        }
+
+        return edge;
+    }
+
     internal static void WireReferenceEdge(
         FrameworkElement ctrl,
         int slot,
@@ -1101,6 +1114,45 @@ public sealed partial class Reconciler : IDisposable
         apply(ctrl, cell.Current);
     }
 
+    internal static void WireReferenceListEdge(
+        FrameworkElement ctrl,
+        int slot,
+        IReadOnlyList<Microsoft.UI.Reactor.Input.ElementRef>? cells,
+        Action<FrameworkElement> recompute)
+    {
+        var edge = GetOrCreateReferenceListEdge(ctrl, slot);
+        edge.Recompute = recompute;
+        edge.Handler ??= _ => edge.Recompute?.Invoke(ctrl);
+
+        var next = new List<Microsoft.UI.Reactor.Input.ElementRef>();
+        if (cells is not null)
+        {
+            foreach (var cell in cells)
+            {
+                if (cell is null) continue;
+                if (!next.Any(existing => ReferenceEquals(existing, cell)))
+                    next.Add(cell);
+            }
+        }
+
+        for (int i = edge.Cells.Count - 1; i >= 0; i--)
+        {
+            var existing = edge.Cells[i];
+            if (next.Any(cell => ReferenceEquals(cell, existing))) continue;
+            existing.CurrentChanged -= edge.Handler;
+            edge.Cells.RemoveAt(i);
+        }
+
+        foreach (var cell in next)
+        {
+            if (edge.Cells.Any(existing => ReferenceEquals(existing, cell))) continue;
+            edge.Cells.Add(cell);
+            cell.CurrentChanged += edge.Handler;
+        }
+
+        recompute(ctrl);
+    }
+
     internal static void TeardownReferenceEdges(FrameworkElement ctrl)
     {
         if (ctrl.GetValue(ReactorAttached.StateProperty) is not ReactorState state
@@ -1115,7 +1167,17 @@ public sealed partial class Reconciler : IDisposable
             edge.Handler = null;
         }
 
+        foreach (var edge in state.ReferenceEdges.ListEdges.Values)
+        {
+            foreach (var cell in edge.Cells)
+                cell.CurrentChanged -= edge.Handler;
+            edge.Cells.Clear();
+            edge.Handler = null;
+            edge.Recompute = null;
+        }
+
         state.ReferenceEdges.Edges.Clear();
+        state.ReferenceEdges.ListEdges.Clear();
         state.ReferenceEdges = null;
     }
 

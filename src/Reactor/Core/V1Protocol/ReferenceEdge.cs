@@ -6,12 +6,20 @@ namespace Microsoft.UI.Reactor.Core
     internal sealed class ReferenceEdgeBag
     {
         public readonly Dictionary<int, ReferenceEdge> Edges = new();
+        public readonly Dictionary<int, ReferenceListEdge> ListEdges = new();
     }
 
     internal sealed class ReferenceEdge
     {
         public ElementRef? Cell;
         public Action<FrameworkElement?>? Handler;
+    }
+
+    internal sealed class ReferenceListEdge
+    {
+        public readonly List<ElementRef> Cells = new();
+        public Action<FrameworkElement?>? Handler;
+        public Action<FrameworkElement>? Recompute;
     }
 }
 

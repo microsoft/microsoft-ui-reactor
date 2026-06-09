@@ -475,6 +475,84 @@ internal sealed class ReferencePropEntry<TElement, TControl, TTarget> : PropEntr
     }
 }
 
+/// <summary>
+/// Spec 057 Phase 2 list-reference binding. The referrer owns a list-valued
+/// property populated from several <see cref="Microsoft.UI.Reactor.Input.ElementRef{T}"/>
+/// cells. Q3 resolution: the engine preserves author declaration order, omits
+/// unresolved/null targets, and rebuilds the control list idempotently on any
+/// referenced cell change.
+/// </summary>
+internal sealed class ReferenceListPropEntry<TElement, TControl, TTarget> : PropEntry<TElement, TControl>
+    where TElement : Element
+    where TControl : FrameworkElement
+    where TTarget : FrameworkElement
+{
+    private readonly Func<TElement, IReadOnlyList<Microsoft.UI.Reactor.Input.ElementRef<TTarget>>?> _get;
+    private readonly Action<TControl, IReadOnlyList<TTarget>> _apply;
+    private readonly int _slot;
+
+    public ReferenceListPropEntry(
+        Func<TElement, IReadOnlyList<Microsoft.UI.Reactor.Input.ElementRef<TTarget>>?> get,
+        Action<TControl, IReadOnlyList<TTarget>> apply,
+        int slot)
+    {
+        _get = get;
+        _apply = apply;
+        _slot = slot;
+    }
+
+    public override void Mount(TControl ctrl, TElement el)
+    {
+        ApplyResolved(ctrl, el);
+    }
+
+    public override void Update(TControl ctrl, TElement oldEl, TElement newEl)
+    {
+        // Cell changes drive writes; ref-list add/remove/order changes are handled by EnsureSubscribed.
+    }
+
+    public override void EnsureSubscribed(
+        ReactorBinding<TElement> binding,
+        TControl ctrl,
+        TElement el)
+    {
+        var refs = _get(el);
+        List<Microsoft.UI.Reactor.Input.ElementRef>? cells = null;
+        if (refs is not null)
+        {
+            cells = new(refs.Count);
+            foreach (var r in refs)
+                if (r is not null)
+                    cells.Add(r.Inner);
+        }
+
+        Reconciler.WireReferenceListEdge(
+            ctrl,
+            _slot,
+            cells,
+            c => ApplyResolved((TControl)c, el));
+    }
+
+    private void ApplyResolved(TControl ctrl, TElement el)
+    {
+        var refs = _get(el);
+        if (refs is null || refs.Count == 0)
+        {
+            _apply(ctrl, Array.Empty<TTarget>());
+            return;
+        }
+
+        var resolved = new List<TTarget>(refs.Count);
+        foreach (var r in refs)
+        {
+            if (r?.Inner.Current is TTarget target)
+                resolved.Add(target);
+        }
+
+        _apply(ctrl, resolved);
+    }
+}
+
 /// <summary>§9.2 typed payload for the descriptor model's controlled-prop
 /// entries. One closed generic per (<typeparamref name="TElement"/>,
 /// <typeparamref name="TControl"/>, <typeparamref name="TValue"/>,

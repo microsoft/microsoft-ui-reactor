@@ -771,6 +771,12 @@ dirty-set drain has a perf gate before it ships. No production wiring yet.
 - **Q3 — list-reference identity.** For `LabeledBy`-style lists, is target order
   significant to WinUI/UIA? If yes the keyed diff must preserve order; if no a set
   diff is cheaper. Resolve during Phase 2 against UIA behavior.
+  **Resolution (Phase 2 / task 2.1):** list references preserve the author's
+  declaration order, omit unresolved or unmounted targets, and rebuild the
+  destination list on every cell/list change. This is intentionally an
+  idempotent set-write rather than an in-place keyed reconcile: UIA relationship
+  lists such as `DescribedBy` / `FlowsTo` should reflect author intent, and the
+  lists are small enough that clear-and-repopulate keeps the engine simpler.
 - **Q4 — public `CurrentChanged`.** Exposing the event invites imperative misuse
   (subscribing without unsubscribing → the exact leak §6.4 guards against in the
   engine). Ship it `public` with a documented "the engine manages this for you;

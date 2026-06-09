@@ -216,6 +216,54 @@ public readonly struct ReactorBinding<TElement> where TElement : Element
             (c, target) => set(c, target as TTarget));
     }
 
+    /// <summary>
+    /// Registers a list-valued reference-property edge for hand-coded handlers.
+    /// The target list is rebuilt from resolved cells in author declaration order.
+    /// </summary>
+    public void ReferenceList<TTarget>(
+        Func<TElement, IReadOnlyList<Microsoft.UI.Reactor.Input.ElementRef<TTarget>>?> get,
+        Action<FrameworkElement, IReadOnlyList<TTarget>> apply)
+        where TTarget : FrameworkElement
+    {
+        ArgumentNullException.ThrowIfNull(get);
+        ArgumentNullException.ThrowIfNull(apply);
+
+        var slot = ReferenceSlotBase + s_referenceSlotCount++;
+        var element = _element;
+        var refs = get(element);
+        List<Microsoft.UI.Reactor.Input.ElementRef>? cells = null;
+        if (refs is not null)
+        {
+            cells = new(refs.Count);
+            foreach (var r in refs)
+                if (r is not null)
+                    cells.Add(r.Inner);
+        }
+
+        Reconciler.WireReferenceListEdge(
+            _control,
+            slot,
+            cells,
+            c =>
+            {
+                var liveRefs = get(element);
+                if (liveRefs is null || liveRefs.Count == 0)
+                {
+                    apply(c, Array.Empty<TTarget>());
+                    return;
+                }
+
+                var resolved = new List<TTarget>(liveRefs.Count);
+                foreach (var r in liveRefs)
+                {
+                    if (r?.Inner.Current is TTarget target)
+                        resolved.Add(target);
+                }
+
+                apply(c, resolved);
+            });
+    }
+
     /// <summary>Per-binding wrapper around the 1.4 primitive
     /// (<see cref="ReactorBinding.WriteSuppressed(UIElement, Action)"/>).</summary>
     public void WriteSuppressed(Action mutate) => ReactorBinding.WriteSuppressed(_control, mutate);

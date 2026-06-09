@@ -77,7 +77,6 @@ internal sealed partial class RefNode : Control
         set => SetValue(PeerProperty, value);
     }
 
-    // TODO spec-057 §9.1 Phase 2: .ReferenceList for Related.
     public IList<FrameworkElement> Related { get; } = new List<FrameworkElement>();
 }
 
@@ -88,7 +87,8 @@ internal sealed record RefNodeElement(
     ElementRef<RefNode>? Up = null,
     ElementRef<RefNode>? Down = null,
     ElementRef<RefNode>? Parent = null,
-    ElementRef<RefNode>? Peer = null) : Element
+    ElementRef<RefNode>? Peer = null,
+    IReadOnlyList<ElementRef<RefNode>>? Related = null) : Element
 {
     internal Action<RefNode>[] Setters { get; init; } = [];
 }
@@ -106,8 +106,15 @@ internal static class RefNodeDescriptor
         .Reference<RefNode>(get: static e => e.Up, set: static (c, t) => c.Up = t)
         .Reference<RefNode>(get: static e => e.Down, set: static (c, t) => c.Down = t)
         .Reference<RefNode>(get: static e => e.Parent, set: static (c, t) => c.Parent = t)
-        .Reference<RefNode>(get: static e => e.Peer, set: static (c, t) => c.Peer = t);
-    // TODO spec-057 §9.1 Phase 2: add .ReferenceList<RefNode>(Related).
+        .Reference<RefNode>(get: static e => e.Peer, set: static (c, t) => c.Peer = t)
+        .ReferenceList<RefNode>(
+            get: static e => e.Related,
+            apply: static (c, list) =>
+            {
+                c.Related.Clear();
+                foreach (var target in list)
+                    c.Related.Add(target);
+            });
 }
 
 internal sealed class RefNodeDescriptorHandler()
@@ -125,8 +132,9 @@ internal static class RefNodeFactory
         ElementRef<RefNode>? up = null,
         ElementRef<RefNode>? down = null,
         ElementRef<RefNode>? parent = null,
-        ElementRef<RefNode>? peer = null) =>
-        new(nodeId, left, right, up, down, parent, peer);
+        ElementRef<RefNode>? peer = null,
+        IReadOnlyList<ElementRef<RefNode>>? related = null) =>
+        new(nodeId, left, right, up, down, parent, peer, related);
 }
 
 internal static class RefNodeElementExtensions
@@ -142,6 +150,9 @@ internal static class RefNodeElementExtensions
     public static RefNodeElement Parent(this RefNodeElement e, ElementRef<RefNode> r) => e with { Parent = r };
 
     public static RefNodeElement Peer(this RefNodeElement e, ElementRef<RefNode> r) => e with { Peer = r };
+
+    public static RefNodeElement Related(this RefNodeElement e, IReadOnlyList<ElementRef<RefNode>> refs) =>
+        e with { Related = refs };
 }
 
 internal static class RefNodeFixtures

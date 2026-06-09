@@ -172,6 +172,19 @@ public sealed class ControlDescriptor<TElement, TControl>
         return this;
     }
 
+    /// <summary>
+    /// Add a list-valued reference binding. The control list is rebuilt from
+    /// currently-resolved targets, preserving the author's declaration order.
+    /// </summary>
+    public ControlDescriptor<TElement, TControl> ReferenceList<TTarget>(
+        Func<TElement, IReadOnlyList<Microsoft.UI.Reactor.Input.ElementRef<TTarget>>?> get,
+        Action<TControl, IReadOnlyList<TTarget>> apply)
+        where TTarget : FrameworkElement
+    {
+        _properties.Add(new ReferenceListPropEntry<TElement, TControl, TTarget>(get, apply, _referenceSlotCount++));
+        return this;
+    }
+
     // Spec 050 Phase 2 intentionally removes the plain-T Controlled overload.
     // Existing plain-T descriptor getters can still compile through the implicit
     // T -> Optional<T> conversion; the broad build break starts when Phase 3

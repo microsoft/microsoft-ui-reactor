@@ -9,8 +9,7 @@ using static Microsoft.UI.Reactor.Factories;
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
 /// <summary>
-/// Spec 057 §9.2 topology matrix for scalar ElementRef reference edges.
-/// Row 3 (.ReferenceList) is Phase 2 and intentionally omitted.
+/// Spec 057 §9.2 topology matrix for scalar and list-valued ElementRef reference edges.
 /// </summary>
 internal static class RefNodeTopologyFixtures
 {
@@ -32,6 +31,21 @@ internal static class RefNodeTopologyFixtures
     }
 
     private static bool Missing(Harness h, string id) => Node(h, id) is null;
+
+    private static bool Related(Harness h, string from, params string[] targetIds)
+    {
+        var source = Node(h, from);
+        if (source is null || source.Related.Count != targetIds.Length) return false;
+
+        for (int i = 0; i < targetIds.Length; i++)
+        {
+            var target = Node(h, targetIds[i]);
+            if (target is null || !ReferenceEquals(source.Related[i], target))
+                return false;
+        }
+
+        return true;
+    }
 
     private static async Task StableRerender(
         Harness h,
@@ -135,6 +149,81 @@ internal static class RefNodeTopologyFixtures
                 NullSlot(H, "R02_R1", n => n.Right) &&
                 NullSlot(H, "R02_R2", n => n.Right) &&
                 sRef?.Inner.CurrentChangedSubscriberCount == 2));
+        }
+    }
+
+    internal sealed class Row03_FanIn(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            ElementRef<RefNode>? s1Ref = null, s2Ref = null, s3Ref = null;
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                s1Ref = ctx.UseElementRef<RefNode>();
+                s2Ref = ctx.UseElementRef<RefNode>();
+                s3Ref = ctx.UseElementRef<RefNode>();
+                var (showR, setShowR) = ctx.UseState(true);
+                var (showS1, setShowS1) = ctx.UseState(true);
+                var (showS2, setShowS2) = ctx.UseState(true);
+                var (showS3, setShowS3) = ctx.UseState(true);
+                var (tick, setTick) = ctx.UseState(0);
+                var related = new[] { s1Ref, s2Ref, s3Ref };
+                return VStack(
+                    TextBlock($"r03 {tick}"),
+                    showR ? Keyed(RefNodeFactory.Of("R03_R", related: related), "R03_R") : Empty(),
+                    showS1 ? Keyed(RefNodeFactory.Of("R03_S1").Ref(s1Ref), "R03_S1") : Empty(),
+                    showS2 ? Keyed(RefNodeFactory.Of("R03_S2").Ref(s2Ref), "R03_S2") : Empty(),
+                    showS3 ? Keyed(RefNodeFactory.Of("R03_S3").Ref(s3Ref), "R03_S3") : Empty(),
+                    Button("R03_Rerender", () => setTick(tick + 1)),
+                    Button("R03_ToggleS1", () => setShowS1(!showS1)),
+                    Button("R03_ToggleS2", () => setShowS2(!showS2)),
+                    Button("R03_ToggleS3", () => setShowS3(!showS3)),
+                    Button("R03_ToggleR", () => setShowR(!showR)));
+            });
+
+            await Harness.Render();
+            H.Check("RefNode_Row03_FanIn_CommitOrder", await Harness.WaitFor(() =>
+                Related(H, "R03_R", "R03_S1", "R03_S2", "R03_S3") &&
+                s1Ref?.Inner.CurrentChangedSubscriberCount == 1 &&
+                s2Ref?.Inner.CurrentChangedSubscriberCount == 1 &&
+                s3Ref?.Inner.CurrentChangedSubscriberCount == 1));
+
+            await StableRerender(H, "R03_Rerender", "RefNode_Row03_FanIn_StableRerender", () =>
+                Related(H, "R03_R", "R03_S1", "R03_S2", "R03_S3") &&
+                s1Ref?.Inner.CurrentChangedSubscriberCount == 1 &&
+                s2Ref?.Inner.CurrentChangedSubscriberCount == 1 &&
+                s3Ref?.Inner.CurrentChangedSubscriberCount == 1);
+
+            H.ClickButton("R03_ToggleS2");
+            await Harness.Render();
+            H.Check("RefNode_Row03_FanIn_SourceUnmountDropsOneAndPreservesOrder", await Harness.WaitFor(() =>
+                Missing(H, "R03_S2") &&
+                Related(H, "R03_R", "R03_S1", "R03_S3") &&
+                s1Ref?.Inner.CurrentChangedSubscriberCount == 1 &&
+                s2Ref?.Inner.CurrentChangedSubscriberCount == 1 &&
+                s3Ref?.Inner.CurrentChangedSubscriberCount == 1));
+
+            H.ClickButton("R03_ToggleS1");
+            H.ClickButton("R03_ToggleS3");
+            await Harness.Render();
+            H.Check("RefNode_Row03_FanIn_AllSourcesUnmountClearList", await Harness.WaitFor(() =>
+            {
+                var r = Node(H, "R03_R");
+                return r is not null &&
+                    r.Related.Count == 0 &&
+                    s1Ref?.Inner.CurrentChangedSubscriberCount == 1 &&
+                    s2Ref?.Inner.CurrentChangedSubscriberCount == 1 &&
+                    s3Ref?.Inner.CurrentChangedSubscriberCount == 1;
+            }));
+
+            H.ClickButton("R03_ToggleR");
+            await Harness.Render();
+            H.Check("RefNode_Row03_FanIn_ReferrerUnmountDropsAllSubscriptions", await Harness.WaitFor(() =>
+                Missing(H, "R03_R") &&
+                s1Ref?.Inner.CurrentChangedSubscriberCount == 0 &&
+                s2Ref?.Inner.CurrentChangedSubscriberCount == 0 &&
+                s3Ref?.Inner.CurrentChangedSubscriberCount == 0));
         }
     }
 
