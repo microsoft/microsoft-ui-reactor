@@ -2,7 +2,7 @@
 
 ## Status
 
-**Draft — design + phased plan.** Resolves [issue #456](https://github.com/microsoft/microsoft-ui-reactor/issues/456)
+**Accepted — design + phased plan; implemented through Phase 3.1.** Resolves [issue #456](https://github.com/microsoft/microsoft-ui-reactor/issues/456)
 ("general model for control properties that reference another control"). The
 first external consumer is already shipping against the gap this spec closes —
 the ArcGIS Maps SDK .NET Toolkit's Reactor bindings
@@ -750,11 +750,18 @@ dirty-set drain has a perf gate before it ships. No production wiring yet.
 **Phase 3 — graph-grade polish.**
 - Devtools: render the reference overlay as edges in the element-tree inspector;
   surface cycles and unresolved (perpetually-null) references as diagnostics.
+  **Landed (3.1):** the `references` MCP tool + `ReferenceOverlay` engine, the
+  `GET /references` preview endpoint, and the VS Code **References** overlay
+  toggle, with cycle / unresolved diagnostics.
 - Optional weak-subscription mode for refs intentionally held far longer than
-  their referrers.
+  their referrers. **Deferred:** gated on a public `CurrentChanged`, which Q4
+  resolved to keep `internal` (no imperative consumer appeared). Non-breaking to
+  add later.
 - Source-generate the per-property fluents + descriptor reference entries from a
   `[ReferenceProp(nameof(Control.Target))]` marker on the element record, folding
-  into the spec-047 §7 source-gen track when it lands.
+  into the spec-047 §7 source-gen track when it lands. **Deferred by design**
+  until that source-gen track lands; the hand-written fluents + descriptor entries
+  ship today.
 
 ---
 
@@ -764,10 +771,23 @@ dirty-set drain has a perf gate before it ships. No production wiring yet.
   commits (a referrer whose edge write triggers a state set → re-render) need a
   bounded multi-pass settle? Lean: single drain + depth cap; revisit only if a
   real control needs settle.
+  **Resolution (Phase 3):** the single end-of-commit drain plus the depth cap
+  (`ReferenceDirtySet`, guard ≤ 64) is sufficient. The full §9 topology matrix —
+  including the n-cycle, self-reference, and late-mount rows — and the Phase 2
+  real-control torture matrix all converge in one drain; no shipping control has
+  required a bounded multi-pass settle. The dirty-set's `while` loop already
+  absorbs the rare case where a flush enqueues further cells within the same
+  commit, so the granularity question is closed at "single drain + depth cap."
 - **Q2 — `binding.Reference` vs descriptor migration timeline.** Do we keep the
   imperative `binding.Reference` bridge as a permanent public surface, or
   deprecate it once descriptors cover the catalog? It is non-breaking either way;
   default to keeping it (downstream handler authors like ArcGIS may prefer it).
+  **Resolution (Phase 3):** keep `binding.Reference`/`.ReferenceList` as a
+  permanent, supported public surface. Descriptors are the primary path, but the
+  imperative bridge stays first-class — out-of-`Reactor.dll` handler authors
+  (e.g. the ArcGIS toolkit, generated wrappers) rely on it, and it shares the
+  exact engine machinery, so there is no maintenance cost to keeping it. Not
+  deprecated.
 - **Q3 — list-reference identity.** For `LabeledBy`-style lists, is target order
   significant to WinUI/UIA? If yes the keyed diff must preserve order; if no a set
   diff is cheaper. Resolve during Phase 2 against UIA behavior.
@@ -783,4 +803,12 @@ dirty-set drain has a perf gate before it ships. No production wiring yet.
   manual subscribers own their teardown" note, or keep it `internal` and force all
   consumption through reference entries? Lean: `internal` in Phase 1, promote with
   guidance only if a concrete imperative need appears.
-```
+  **Resolution (Phase 3):** keep `CurrentChanged` `internal`. No concrete
+  imperative consumer surfaced across Phases 1–3 — every reference relationship is
+  expressible through descriptor reference entries, the `binding.Reference`
+  bridge, or the modifier fluents, all of which let the engine own subscription
+  and teardown. Leaving the event `internal` keeps the §6.4 leak guarantee total
+  (no external subscriber can strand a subscription). The optional
+  weak-subscription mode (§11 Phase 3) is therefore deferred too: it only earns
+  its keep alongside a public `CurrentChanged`, which is not warranted yet. Both
+  remain non-breaking to add later if a real imperative need appears.

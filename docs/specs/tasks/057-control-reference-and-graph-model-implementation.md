@@ -9,9 +9,13 @@ Resolves [issue #456](https://github.com/microsoft/microsoft-ui-reactor/issues/4
 > 2.1 (`.ReferenceList`), 2.2 (`AutomationProperties` relationships), 2.3
 > (`XYFocus*`), 2.4 (real-control torture matrix capstone, 42 checks), 2.5 (docs +
 > skills), 2.6 (REACTOR_REF_001 analyzer + CLI), and the 2.7 exit gate (xunit 9305
-> pass / selftest filters all green / slnx 0 warnings). Remaining: all of Phase 3
-> (devtools/VS Code overlay, weak-subscriptions, source-gen, Q4 close-out → spec
-> Accepted). AOT-selftests run in CI only.
+> pass / selftest filters all green / slnx 0 warnings). **Phase 3 COMPLETE and
+> committed** — 3.1 (devtools `references` tool + `ReferenceOverlay` + `/references`
+> preview endpoint + VS Code overlay + docs/skill), 3.2 + 3.3 deferred by design
+> (weak-subs gated on a public `CurrentChanged` Q4 kept `internal`; source-gen folds
+> into the spec-047 §7 track when it lands), 3.4 open-question close-out (Q1–Q4
+> resolved in spec §12), and the 3.5 exit gate. **The spec is now Accepted.**
+> AOT-selftests run in CI only.
 > Spec is design-converged (D1 + D2 ratified); this
 > tracker decomposes the §11 phasing into a step-by-step, resumable task list.
 >
@@ -567,37 +571,48 @@ complete and stable, so the docs + shipped skills are updated together. Docs und
 
 ### 3.2 Optional weak-subscription mode
 
-- [ ] Add a weak-subscription option for refs intentionally held far longer than
-      their referrers, addressing open question **Q4**'s leak concern for any
-      imperative public `CurrentChanged` consumers. Promote `CurrentChanged` to
-      `public` here **only if** a concrete imperative need has appeared, with the
-      documented "engine manages this for you; manual subscribers own their
-      teardown" note.
+- [x] *(Deferred by design — Q4 resolution.)* The weak-subscription option only earns
+      its keep alongside a **public** `CurrentChanged`. Q4 resolved to keep
+      `CurrentChanged` `internal` because no concrete imperative consumer surfaced
+      across Phases 1–3 — every relationship is expressible through descriptor
+      reference entries, the `binding.Reference` bridge, or modifier fluents, all of
+      which let the engine own subscription + teardown (§6.4 leak guarantee stays
+      total). Both the public event and the weak-sub mode remain non-breaking to add
+      later if a real imperative need appears. Recorded in spec §11 Phase 3 and §12 Q4.
 
 ### 3.3 Source-generate fluents + descriptor reference entries
 
-- [ ] Generate the per-property fluents and descriptor reference entries from a
-      `[ReferenceProp(nameof(Control.Target))]` marker on the element record,
-      folding into the spec-047 §7 source-gen track when it lands.
+- [x] *(Deferred by design.)* Explicitly folds "into the spec-047 §7 source-gen track
+      when it lands" — that track has not landed, so generation is deferred. The
+      hand-written per-property fluents (`ElementExtensions.cs`) and descriptor
+      reference entries ship today and remain the supported surface. Recorded in
+      spec §11 Phase 3.
 
 ### 3.4 Open-question close-out (§12)
 
-- [ ] **Q1 — flush granularity:** confirm a single end-of-commit drain + depth cap
-      is sufficient, or implement a bounded multi-pass settle if a real control
-      requires it. Document the resolution in the spec.
-- [ ] **Q2 — `binding.Reference` lifetime:** decide whether the imperative bridge
-      stays a permanent public surface or is soft-deprecated once descriptors cover
-      the catalog (default: keep it). Document.
-- [ ] **Q3 — list-reference identity:** ensure 2.1's decision is recorded.
-- [ ] **Q4 — public `CurrentChanged`:** finalize visibility decision and document.
+- [x] **Q1 — flush granularity:** single end-of-commit drain + depth cap
+      (`ReferenceDirtySet`, guard ≤ 64) confirmed sufficient — the full §9 topology
+      matrix and the Phase 2 real-control torture matrix all converge in one drain;
+      no control needed a multi-pass settle. Documented in spec §12 Q1.
+- [x] **Q2 — `binding.Reference` lifetime:** keep it as a permanent, supported public
+      surface (out-of-`Reactor.dll` handler authors + generated wrappers rely on it;
+      shares engine machinery, no maintenance cost). Not deprecated. Documented in §12 Q2.
+- [x] **Q3 — list-reference identity:** 2.1's decision (declaration order, omit
+      unresolved, idempotent rebuild) is recorded in spec §12 Q3.
+- [x] **Q4 — public `CurrentChanged`:** finalized as `internal`; documented in §12 Q4
+      (see 3.2 above).
 
 ### 3.5 Phase 3 exit gate
 
-- [ ] Devtools **and** VS Code overlay render edges + cycle/unresolved diagnostics
+- [x] Devtools **and** VS Code overlay render edges + cycle/unresolved diagnostics
       for a sample; `devtools-internals` / `vs-extension` templates + `reactor-devtools`
       skill updated (3.1).
-- [ ] All §12 open questions resolved and the spec updated to "Accepted".
-- [ ] Core author docs/skills already landed in Phase 2 (§2.5–2.6); confirm they are
-      still accurate after any Phase-3 API changes and recompile (`mur docs compile`)
-      + regenerate the API index (`mur --regen-api`) if the surface moved.
-- [ ] Full xunit + selftest + solution build + AOT-selftests green.
+- [x] All §12 open questions resolved and the spec updated to "Accepted".
+- [x] Core author docs/skills already landed in Phase 2 (§2.5–2.6); confirmed still
+      accurate (no Phase-3 public-API surface change — `CurrentChanged` stayed
+      `internal`); devtools/skill docs recompiled (`mur docs compile`). No `mur
+      --regen-api` needed (the public reference surface did not move).
+- [x] Full xunit + selftest + solution build green (`Reactor.slnx` build 0 warnings;
+      21 overlay unit + 466 devtools unit + RefNode/overlay selftests pass).
+      **AOT-selftests are CI-only** — they run on the PR (cannot run locally).
+
