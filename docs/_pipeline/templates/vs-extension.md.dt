@@ -50,4 +50,4 @@ See the [VSIX README troubleshooting section](https://github.com/microsoft/micro
 
 ## Phase 2 roadmap
 
-Planned follow-ups include a Tools → Options page, richer solution-load behavior, optional marketplace distribution, expanded ARM64/signing validation, and enough soak time to decide whether the VSIX should graduate out of "rough experiment" status.
+Planned follow-ups include a Tools → Options page, richer solution-load behavior, optional marketplace distribution, expanded ARM64/signing validation, surfacing the reactive reference-graph overlay (today exposed by the VS Code preview and the `references` devtools tool) inside the embedded tool window, and enough soak time to decide whether the VSIX should graduate out of "rough experiment" status.

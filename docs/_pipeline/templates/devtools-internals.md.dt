@@ -161,6 +161,29 @@ diverge only at the read boundary (`HttpListenerContext` vs
 `McpDispatcher.Dispatch(body)` call, the dispatcher hop, the tool
 handler — is shared code.
 
+## The reference-graph overlay
+
+The `references` MCP tool walks the visual tree and returns the app's
+reactive reference graph: the reference edges every control declares
+through `descriptor.Reference`/`.ReferenceList`, the `binding.Reference`
+bridge, and the modifier-level edges (`.LabeledBy`, `.DescribedBy`,
+`.FlowsTo`/`.FlowsFrom`, `.XYFocusUp/Down/Left/Right`). Each edge is
+emitted as `{from, to, label, slot, kind, resolved}` keyed to the same
+node ids the `tree` tool uses, plus diagnostics for **cycles** and
+**unresolved** (perpetually-null) references. Cycles are a supported
+topology — push resolution converges on them by design — so they are
+reported informationally, not as errors. The edges live in each
+control's own `ReactorState.ReferenceEdges` bag; the overlay
+(`ReferenceOverlay`) reads those bags after the `TreeWalker` records its
+element→id map, so it never re-walks or re-renders.
+
+The same overlay is served over the preview loopback at `GET /references`
+(`PreviewCaptureServer`) so the VS Code live-preview extension can draw
+the graph next to the streamed frame. Like every tool handler, the build
+hops the UI dispatcher first, because reading the per-control reference
+state touches attached dependency properties that only the UI thread may
+read.
+
 ## The in-app menu
 
 `DevtoolsMenu(...)` is the in-app counterpart to the MCP server: a

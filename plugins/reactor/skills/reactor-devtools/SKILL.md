@@ -138,6 +138,27 @@ indented JSON.
 | `ancestors <selector>` | Walk the visual tree upward — returns type, name, and automationId for each ancestor up to the root. |
 | `call <tool\|method> [--args JSON]` | Generic JSON-RPC passthrough — parity escape hatch. |
 
+### Reference-graph overlay
+
+The `references` tool (Spec 057) returns the app's reactive reference
+graph — `descriptor.Reference`/`.ReferenceList`, the `binding.Reference`
+bridge, and modifier edges like `.LabeledBy`/`.DescribedBy`/`.FlowsTo`/
+`.XYFocus*` — as `{from, to, label, slot, kind, resolved}` edges keyed to
+the same node ids `tree` uses, plus diagnostics for **cycles** and
+**unresolved** (perpetually-null) references. Reach it through the
+generic passthrough:
+
+```bash
+mur devtools call references --pretty
+mur devtools call references --args '{"selector":"#login-form"}'   # scope to a subtree
+```
+
+Use it to confirm an accessibility relationship (`LabeledBy`/`DescribedBy`)
+or an `XYFocus*` ring actually resolved to the control you expect, or to
+spot a reference that never resolved. Cycles are a supported topology and
+are reported informationally, not as errors. The same overlay also backs
+the **References** toggle in the VS Code live-preview panel.
+
 ### Session management
 
 ```bash

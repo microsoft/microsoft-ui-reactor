@@ -208,6 +208,12 @@ a side panel that:
 - Highlights the source line for any element you click in the tree.
 - Renders the latest screenshot capture next to your editor (the same
   PNGs the doc pipeline produces).
+- Toggles a **References** overlay that draws the app's reactive
+  reference graph — `descriptor.Reference`/`.ReferenceList`, the
+  `binding.Reference` bridge, and modifier edges such as `.LabeledBy`
+  or `.XYFocusDown` — and flags reference cycles and perpetually-null
+  (unresolved) references as diagnostics. See
+  [focus &amp; input internals](focus-and-input-internals.md).
 - Exposes a "compile docs" button that shells out to `mur docs compile`.
 
 The extension talks to the MCP server (above), so a panel session is
