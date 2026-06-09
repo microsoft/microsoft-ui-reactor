@@ -110,6 +110,7 @@ via `.editorconfig`.
 | `REACTOR_HOOKS_005` | Warning | Hook called outside Render or a custom-hook method | `HookRulesAnalyzer.cs` |
 | `REACTOR_HOOKS_006` | Info | Resource fetcher looks non-idempotent | `HookRulesAnalyzer.cs` |
 | `REACTOR_HOOKS_007` | Warning | UseMemoCells builder captures variable not in deps | `UseMemoCellsAnalyzer.cs` |
+| `REACTOR_HOOKS_008` | Info | State variable read after its setter in the same synchronous handler | `HookRulesAnalyzer.cs` |
 | `REACTOR_A11Y_001` | Warning | Icon-only button needs an accessible name | `AccessibilityAnalyzers.cs` |
 | `REACTOR_A11Y_002` | Warning | Image needs alt text or AccessibilityHidden | `AccessibilityAnalyzers.cs` |
 | `REACTOR_A11Y_003` | Warning | Form field needs a label | `AccessibilityAnalyzers.cs` |

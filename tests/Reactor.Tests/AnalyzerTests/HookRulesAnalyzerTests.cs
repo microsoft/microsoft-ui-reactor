@@ -437,4 +437,532 @@ class Program
         };
         await analyzerTest.RunAsync();
     }
+
+    // ── REACTOR_HOOKS_008 — stale state read after setter ─────────────
+
+    // Generic UseState/UsePersisted stubs so tests can exercise both the value form
+    // (`UseState(0)`) and the delegate-value form used by the functional-arg exemption.
+    // Kept separate from `Stubs` so its line count doesn't shift WithSpan assertions.
+    private const string StaleStubs = @"
+namespace Microsoft.UI.Reactor.Core
+{
+    public class RenderContext { }
+
+    public abstract class Component
+    {
+        protected internal RenderContext Context { get; } = new RenderContext();
+        public abstract string Render();
+        protected (T Value, System.Action<T> Set) UseState<T>(T initial) => (initial, _ => { });
+        protected (T Value, System.Action<T> Set) UsePersisted<T>(string key, T initial) => (initial, _ => { });
+        protected (T Value, System.Action<System.Func<T, T>> Update) UseReducer<T>(T initial) => (initial, _ => { });
+    }
+}
+";
+
+    [Fact]
+    public async Task Setter_Then_Read_Same_Block_Flags()
+    {
+        var test = StaleStubs + @"
+class C : Microsoft.UI.Reactor.Core.Component
+{
+    public override string Render()
+    {
+        var (count, setCount) = UseState(0);
+        setCount(5);
+        System.Console.WriteLine({|REACTOR_HOOKS_008:count|});
+        return """";
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync();
+    }
+
+    [Fact]
+    public async Task Read_In_If_Branch_After_Setter_Flags()
+    {
+        var test = StaleStubs + @"
+class C : Microsoft.UI.Reactor.Core.Component
+{
+    public override string Render()
+    {
+        var (count, setCount) = UseState(0);
+        setCount(5);
+        if ({|REACTOR_HOOKS_008:count|} > 0) System.Console.WriteLine(""hi"");
+        return """";
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync();
+    }
+
+    [Fact]
+    public async Task UsePersisted_Setter_Then_Read_Flags()
+    {
+        var test = StaleStubs + @"
+class C : Microsoft.UI.Reactor.Core.Component
+{
+    public override string Render()
+    {
+        var (theme, setTheme) = UsePersisted(""theme"", 0);
+        setTheme(1);
+        System.Console.WriteLine({|REACTOR_HOOKS_008:theme|});
+        return """";
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync();
+    }
+
+    [Fact]
+    public async Task Lambda_Value_Setter_Then_Read_Flags()
+    {
+        // UseState<T> returns Action<T>; when T is a delegate the lambda IS the new value,
+        // so a later read of the state local is still stale. (Not a functional updater —
+        // that is UseReducer.) The lambda argument must NOT suppress the diagnostic.
+        var test = StaleStubs + @"
+class C : Microsoft.UI.Reactor.Core.Component
+{
+    public override string Render()
+    {
+        var (fn, setFn) = UseState<System.Func<int, int>>(x => x);
+        setFn(p => p + 1);
+        var stale = {|REACTOR_HOOKS_008:fn|};
+        return """";
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync();
+    }
+
+    [Fact]
+    public async Task UseReducer_Updater_Then_Read_Flags()
+    {
+        // UseReducer's updater also only queues a re-render, so reading the captured value
+        // afterwards is stale.
+        var test = StaleStubs + @"
+class C : Microsoft.UI.Reactor.Core.Component
+{
+    public override string Render()
+    {
+        var (count, updateCount) = UseReducer(0);
+        updateCount(c => c + 1);
+        System.Console.WriteLine({|REACTOR_HOOKS_008:count|});
+        return """";
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync();
+    }
+
+    [Fact]
+    public async Task Immediately_Invoked_Lambda_Read_Flags()
+    {
+        // The lambda is assigned to a local and invoked synchronously before any rerender,
+        // so the read inside its body runs now and is stale.
+        var test = StaleStubs + @"
+class C : Microsoft.UI.Reactor.Core.Component
+{
+    public override string Render()
+    {
+        var (count, setCount) = UseState(0);
+        setCount(5);
+        System.Action later = () => System.Console.WriteLine({|REACTOR_HOOKS_008:count|});
+        later();
+        return """";
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync();
+    }
+
+    [Fact]
+    public async Task Immediately_Invoked_Local_Function_Read_Flags()
+    {
+        var test = StaleStubs + @"
+class C : Microsoft.UI.Reactor.Core.Component
+{
+    public override string Render()
+    {
+        var (count, setCount) = UseState(0);
+        setCount(5);
+        void Apply() => System.Console.WriteLine({|REACTOR_HOOKS_008:count|});
+        Apply();
+        return """";
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync();
+    }
+
+    [Fact]
+    public async Task Deferred_Callback_Not_Invoked_No_Diagnostic()
+    {
+        // The handler is handed off (not invoked) — it runs on a later render and sees the
+        // fresh value, so the read inside it is not stale.
+        var test = StaleStubs + @"
+class C : Microsoft.UI.Reactor.Core.Component
+{
+    void Defer(System.Action a) { }
+    public override string Render()
+    {
+        var (count, setCount) = UseState(0);
+        setCount(5);
+        System.Action later = () => System.Console.WriteLine(count);
+        Defer(later);
+        return """";
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync();
+    }
+
+    [Fact]
+    public async Task Read_Before_Setter_No_Diagnostic()
+    {
+        var test = StaleStubs + @"
+class C : Microsoft.UI.Reactor.Core.Component
+{
+    public override string Render()
+    {
+        var (count, setCount) = UseState(0);
+        System.Console.WriteLine(count);
+        setCount(5);
+        return """";
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync();
+    }
+
+    [Fact]
+    public async Task Two_Setters_Then_Read_Flags_Once()
+    {
+        // Only the read after the LAST setter is reported; the first setter's scan stops
+        // when it reaches the second setter call.
+        var test = StaleStubs + @"
+class C : Microsoft.UI.Reactor.Core.Component
+{
+    public override string Render()
+    {
+        var (count, setCount) = UseState(0);
+        setCount(1);
+        setCount(2);
+        System.Console.WriteLine({|REACTOR_HOOKS_008:count|});
+        return """";
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync();
+    }
+
+    [Fact]
+    public async Task Multiple_UseState_Pairs_Flags_Only_The_Set_One()
+    {
+        // setA is called; reading `a` afterwards is stale and flagged, but `b` (whose
+        // setter was never called) is left alone.
+        var test = StaleStubs + @"
+class C : Microsoft.UI.Reactor.Core.Component
+{
+    public override string Render()
+    {
+        var (a, setA) = UseState(0);
+        var (b, setB) = UseState(0);
+        setA(5);
+        System.Console.WriteLine({|REACTOR_HOOKS_008:a|});
+        System.Console.WriteLine(b);
+        return """";
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync();
+    }
+
+    [Fact]
+    public async Task Setter_In_Event_Lambda_Then_Read_Flags()
+    {
+        // Mirrors the real-world ComboBox handler: setter and read share the lambda body.
+        var test = StaleStubs + @"
+class C : Microsoft.UI.Reactor.Core.Component
+{
+    void Apply(int v) { }
+    public override string Render()
+    {
+        var (idx, setIdx) = UseState(0);
+        System.Action<int> onChanged = i =>
+        {
+            setIdx(i);
+            Apply({|REACTOR_HOOKS_008:idx|});
+        };
+        return """";
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync();
+    }
+
+    [Fact]
+    public async Task ReSetter_With_Stale_Argument_Flags()
+    {
+        // `setCount(count + 1)` reads the stale `count` to compute the new value — the
+        // increment anti-pattern. The read inside the second setter's argument is flagged.
+        var test = StaleStubs + @"
+class C : Microsoft.UI.Reactor.Core.Component
+{
+    public override string Render()
+    {
+        var (count, setCount) = UseState(0);
+        setCount(1);
+        setCount({|REACTOR_HOOKS_008:count|} + 1);
+        return """";
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync();
+    }
+
+    [Fact]
+    public async Task Nested_ReSetter_In_If_Does_Not_Stop_Outer_Scan()
+    {
+        // A setter buried in a conditional branch may not run, so it must not stop the
+        // outer scan from reaching the stale read after the if.
+        var test = StaleStubs + @"
+class C : Microsoft.UI.Reactor.Core.Component
+{
+    public override string Render()
+    {
+        var (count, setCount) = UseState(0);
+        setCount(1);
+        if (System.DateTime.Now.Ticks > 0) { setCount(2); }
+        System.Console.WriteLine({|REACTOR_HOOKS_008:count|});
+        return """";
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync();
+    }
+
+    [Fact]
+    public async Task Write_To_State_Local_No_Diagnostic()
+    {
+        // Assigning the local (`count = 5`) is a write, not a stale read.
+        var test = StaleStubs + @"
+class C : Microsoft.UI.Reactor.Core.Component
+{
+    public override string Render()
+    {
+        var (count, setCount) = UseState(0);
+        setCount(1);
+        count = 5;
+        return """";
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync();
+    }
+
+    [Fact]
+    public async Task Setter_In_Expression_Lambda_Then_Outer_Read_No_Diagnostic()
+    {
+        // The setter runs later (inside the event handler). The read happens during the
+        // current render, before the handler fires, so it is not stale.
+        var test = StaleStubs + @"
+class C : Microsoft.UI.Reactor.Core.Component
+{
+    public override string Render()
+    {
+        var (count, setCount) = UseState(0);
+        System.Action handler = () => setCount(1);
+        System.Console.WriteLine(count);
+        return """";
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync();
+    }
+
+    [Fact]
+    public async Task Compound_Assignment_And_Increment_Read_Flag()
+    {
+        // `+=`, `++`, and `--` all read the current value, so they are stale reads.
+        var test = StaleStubs + @"
+class C : Microsoft.UI.Reactor.Core.Component
+{
+    public override string Render()
+    {
+        var (count, setCount) = UseState(0);
+        setCount(5);
+        {|REACTOR_HOOKS_008:count|} += 1;
+        {|REACTOR_HOOKS_008:count|}++;
+        --{|REACTOR_HOOKS_008:count|};
+        return """";
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync();
+    }
+
+    [Fact]
+    public async Task Member_Access_Tuple_And_Switch_Reads_Flag()
+    {
+        var test = StaleStubs + @"
+class C : Microsoft.UI.Reactor.Core.Component
+{
+    void Use(object o) { }
+    public override string Render()
+    {
+        var (count, setCount) = UseState(0);
+        setCount(5);
+        Use({|REACTOR_HOOKS_008:count|}.ToString());
+        Use(({|REACTOR_HOOKS_008:count|}, 1));
+        var label = {|REACTOR_HOOKS_008:count|} switch { 0 => ""zero"", _ => ""other"" };
+        return label;
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync();
+    }
+
+    [Fact]
+    public async Task Out_Argument_Is_A_Write_No_Diagnostic()
+    {
+        // `out count` assigns the local; it is not a stale read.
+        var test = StaleStubs + @"
+class C : Microsoft.UI.Reactor.Core.Component
+{
+    public override string Render()
+    {
+        var (count, setCount) = UseState(0);
+        setCount(5);
+        System.Int32.TryParse(""7"", out count);
+        return """";
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync();
+    }
+
+    [Fact]
+    public async Task Expression_Bodied_Local_Function_Returning_State_Flags()
+    {
+        // The whole body is the state identifier; invoking it synchronously reads it stale.
+        var test = StaleStubs + @"
+class C : Microsoft.UI.Reactor.Core.Component
+{
+    public override string Render()
+    {
+        var (count, setCount) = UseState(0);
+        setCount(5);
+        int Get() => {|REACTOR_HOOKS_008:count|};
+        System.Console.WriteLine(Get());
+        return """";
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync();
+    }
+
+    [Fact]
+    public async Task Expression_Bodied_Lambda_Local_Returning_State_Flags()
+    {
+        var test = StaleStubs + @"
+class C : Microsoft.UI.Reactor.Core.Component
+{
+    public override string Render()
+    {
+        var (count, setCount) = UseState(0);
+        setCount(5);
+        System.Func<int> get = () => {|REACTOR_HOOKS_008:count|};
+        var x = get();
+        return """";
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync();
+    }
+
+    [Fact]
+    public async Task Invoke_Form_Of_Lambda_Local_Read_Flags()
+    {
+        // `later.Invoke()` is the explicit delegate-call form of `later()`.
+        var test = StaleStubs + @"
+class C : Microsoft.UI.Reactor.Core.Component
+{
+    public override string Render()
+    {
+        var (count, setCount) = UseState(0);
+        setCount(5);
+        System.Action later = () => System.Console.WriteLine({|REACTOR_HOOKS_008:count|});
+        later.Invoke();
+        return """";
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync();
+    }
 }

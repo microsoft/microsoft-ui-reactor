@@ -551,6 +551,44 @@ setter is the right shape. The auto-marshal path for cross-thread setters
 described above relies on the same overload — every queued write reads
 the latest committed value, not a snapshot.
 
+### Reading state right after calling its setter
+
+```csharp
+// Don't:
+var (sizeFitIdx, setSizeFitIdx) = UseState(0);
+ComboBox(SizeFitNames, sizeFitIdx, i =>
+{
+    setSizeFitIdx(i);
+    Apply(sizeFitIdx); // reads the PREVIOUS index — the setter only queued a re-render
+});
+```
+
+A setter never mutates the local variable in the current closure; it
+schedules a re-render that produces a fresh `sizeFitIdx` on the *next*
+render pass. Reading `sizeFitIdx` again later in the same handler returns
+the stale, pre-update value — switching the dropdown appears to activate
+the previously selected item. Use the value you already have in hand:
+
+```csharp
+ComboBox(SizeFitNames, sizeFitIdx, i =>
+{
+    setSizeFitIdx(i);
+    Apply(i); // use the new value directly
+});
+```
+
+The **REACTOR_HOOKS_008** analyzer flags a state variable read after its
+setter is called in the same synchronous handler — including reads inside
+helper lambdas or local functions that are invoked before the next render.
+This applies to `UseState`, `UsePersisted`, and `UseReducer`. Truly deferred
+callbacks (an event handler you hand off without invoking) are exempt,
+because they run on a later render and observe the fresh value.
+
+> Note: for `UseState<T>`/`UsePersisted<T>` the setter is `Action<T>`, so a
+> lambda argument is the *new value* (when `T` is a delegate), not a
+> functional updater. The functional-updater API is `UseReducer`. A lambda
+> setter argument therefore does **not** exempt a later stale read.
+
 ## Tips
 
 **Use the functional setter for derived updates.** `setCount(c => c + 1)` is

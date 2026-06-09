@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using Microsoft.CodeAnalysis;
@@ -29,6 +30,12 @@ namespace Microsoft.UI.Reactor.Analyzers;
 ///   re-run on deps change, retry, and focus revalidation — use <c>UseMutation</c> for
 ///   writes. This is a name-based heuristic and is <see cref="DiagnosticSeverity.Info"/>.
 ///   </description></item>
+/// <item><description><c>REACTOR_HOOKS_008</c> — a state variable is read after its
+///   setter was called in the same synchronous handler (<c>setX(v); Apply(x);</c>). The
+///   setter only queues a re-render, so <c>x</c> still holds the previous value. Reads
+///   inside helper lambdas / local functions that are invoked synchronously before the
+///   next render are also flagged; truly deferred callbacks (event handlers) are exempt.
+///   <see cref="DiagnosticSeverity.Info"/>.</description></item>
 /// </list>
 ///
 /// See <c>docs/specs/tasks/async-resources-implementation.md</c> §4.3 for the full
@@ -42,6 +49,7 @@ public sealed class HookRulesAnalyzer : DiagnosticAnalyzer
     public const string UnstableDepsId = "REACTOR_HOOKS_004";
     public const string HookOutsideRenderId = "REACTOR_HOOKS_005";
     public const string NonIdempotentFetcherId = "REACTOR_HOOKS_006";
+    public const string StaleStateReadId = "REACTOR_HOOKS_008";
 
     private static readonly DiagnosticDescriptor ConditionalHookRule = new(
         ConditionalHookId,
@@ -79,8 +87,17 @@ public sealed class HookRulesAnalyzer : DiagnosticAnalyzer
         isEnabledByDefault: true,
         description: "UseResource / UseInfiniteResource fetchers must be idempotent reads. A fetcher named Post/Create/Delete/Generate/... can execute multiple times per user action as the cache restarts on deps change or stale revalidation.");
 
+    private static readonly DiagnosticDescriptor StaleStateReadRule = new(
+        StaleStateReadId,
+        "State read after its setter in the same handler",
+        "State variable '{0}' is read after its setter was called in the same synchronous handler. The setter only queues a re-render, so '{0}' still holds the previous value here. Use the value you passed to the setter, or read from the live source of truth.",
+        "Reactor.Hooks",
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "Hook setters (UseState/UsePersisted/UseReducer) do not mutate the local value in the current closure — they schedule a re-render. Reading the state variable later in the same synchronous handler (including helper lambdas and local functions invoked before the next render) returns the stale, pre-update value.");
+
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
-        ImmutableArray.Create(ConditionalHookRule, UnstableDepsRule, HookOutsideRenderRule, NonIdempotentFetcherRule);
+        ImmutableArray.Create(ConditionalHookRule, UnstableDepsRule, HookOutsideRenderRule, NonIdempotentFetcherRule, StaleStateReadRule);
 
     // Hooks that take a `deps` params-array. Only these are candidates for
     // REACTOR_HOOKS_004. For params-arrays, we skip the check if the caller
@@ -130,6 +147,7 @@ public sealed class HookRulesAnalyzer : DiagnosticAnalyzer
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
         context.EnableConcurrentExecution();
         context.RegisterSyntaxNodeAction(AnalyzeInvocation, SyntaxKind.InvocationExpression);
+        context.RegisterSyntaxNodeAction(AnalyzeSetterStaleRead, SyntaxKind.InvocationExpression);
     }
 
     private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
@@ -570,4 +588,303 @@ public sealed class HookRulesAnalyzer : DiagnosticAnalyzer
 
     private static string StripAsyncSuffix(string name)
         => name.EndsWith("Async") && name.Length > "Async".Length ? name.Substring(0, name.Length - "Async".Length) : name;
+
+    // ────────────────────────────────────────────────────────────
+    // REACTOR_HOOKS_008 — state read after its setter in the same handler
+    // ────────────────────────────────────────────────────────────
+
+    // Hooks whose deconstruction yields a `(value, setValue)` pair: reading the value
+    // local after calling its setter/updater returns the stale, pre-update value. This
+    // includes UseReducer — its updater also only queues a re-render, so a same-handler
+    // read of the captured value is stale.
+    private static readonly ImmutableHashSet<string> StatePairHooks =
+        ImmutableHashSet.Create("UseState", "UsePersisted", "UseReducer");
+
+    /// <summary>
+    /// Detects the canonical setState stale-read trap:
+    /// <code>
+    /// var (x, setX) = UseState(0);
+    /// setX(v);
+    /// Apply(x);   // x is still the PREVIOUS value here
+    /// </code>
+    /// Anchored on the <c>setX(...)</c> invocation. Scans the statements that follow the
+    /// setter call in the same block for reads of the paired state variable, including
+    /// reads inside helper lambdas / local functions that are invoked synchronously before
+    /// the next render. Truly deferred callbacks (lambdas/local functions that are not
+    /// invoked in this synchronous path) are skipped — they run on a later render and
+    /// observe the fresh value.
+    /// </summary>
+    private static void AnalyzeSetterStaleRead(SyntaxNodeAnalysisContext context)
+    {
+        var invocation = (InvocationExpressionSyntax)context.Node;
+
+        // The setter is invoked as a bare local: `setX(...)`.
+        if (invocation.Expression is not IdentifierNameSyntax) return;
+
+        var model = context.SemanticModel;
+        if (model.GetSymbolInfo(invocation.Expression).Symbol is not ILocalSymbol setterSymbol) return;
+
+        if (!TryGetPairedStateSymbol(context, setterSymbol, out var stateSymbol) || stateSymbol is null) return;
+
+        // Locate the setter's enclosing statement that is a direct child of a block. Bail
+        // if a deferred-execution boundary (lambda / local function) sits between the
+        // setter call and that statement — the call then runs on a later render.
+        if (FindBlockStatement(invocation, out var block) is not { } setterStatement || block is null) return;
+
+        int startIndex = block.Statements.IndexOf(setterStatement);
+        if (startIndex < 0) return;
+
+        var visitedCallables = new HashSet<ISymbol>(SymbolEqualityComparer.Default);
+
+        for (int i = startIndex + 1; i < block.Statements.Count; i++)
+        {
+            var statement = block.Statements[i];
+
+            // A later top-level re-call of the same setter owns the statements after it —
+            // its own scan reports those reads. Scan the re-call's own arguments for stale
+            // reads (e.g. `setX(x + 1)`), then stop so we don't double-report.
+            if (IsDirectSetterStatement(statement, setterSymbol, model, out var reInvocation))
+            {
+                ReportStaleReads(context, reInvocation.ArgumentList, stateSymbol, model, visitedCallables);
+                return;
+            }
+
+            ReportStaleReads(context, statement, stateSymbol, model, visitedCallables);
+        }
+    }
+
+    /// <summary>
+    /// Reports every stale read of <paramref name="stateSymbol"/> reachable from
+    /// <paramref name="node"/> in this synchronous path, in document order. Lambda /
+    /// local-function <em>definitions</em> are not executed here and are pruned, but a
+    /// synchronous <em>invocation</em> of a local lambda or local function is followed into
+    /// its body (its reads run now and are therefore stale). Writes to the state local,
+    /// <c>out</c> arguments and <c>nameof</c> references are not reads and are skipped.
+    /// <paramref name="visitedCallables"/> guards against infinite recursion through
+    /// (mutually) recursive local callables.
+    /// </summary>
+    private static void ReportStaleReads(
+        SyntaxNodeAnalysisContext context,
+        SyntaxNode node,
+        ILocalSymbol stateSymbol,
+        SemanticModel model,
+        HashSet<ISymbol> visitedCallables)
+    {
+        // A lambda / local-function definition does not execute at its definition site.
+        if (IsDeferredExecutionBoundary(node)) return;
+
+        // Check the node itself, then recurse — so an expression-bodied callable whose
+        // whole body is `count` (an IdentifierNameSyntax) is still inspected.
+        if (node is IdentifierNameSyntax id && IsStaleRead(id, stateSymbol, model))
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                StaleStateReadRule,
+                id.GetLocation(),
+                stateSymbol.Name));
+        }
+
+        // A synchronous call of a local lambda / local function runs its body now, so
+        // reads of the state local inside it are stale too. Follow into the body once
+        // (kept in visitedCallables to avoid re-reporting the same body or recursing
+        // through cyclic local callables).
+        if (node is InvocationExpressionSyntax invocation
+            && TryGetSynchronousCallableBody(invocation, model, visitedCallables, out var body, out var callableSymbol))
+        {
+            visitedCallables.Add(callableSymbol);
+            ReportStaleReads(context, body, stateSymbol, model, visitedCallables);
+        }
+
+        foreach (var child in node.ChildNodes())
+        {
+            ReportStaleReads(context, child, stateSymbol, model, visitedCallables);
+        }
+    }
+
+    private static bool IsStaleRead(IdentifierNameSyntax id, ILocalSymbol stateSymbol, SemanticModel model)
+    {
+        if (model.GetSymbolInfo(id).Symbol is not { } symbol) return false;
+        if (!SymbolEqualityComparer.Default.Equals(symbol, stateSymbol)) return false;
+
+        // Pure write `x = ...` (not compound `+=`, which also reads) is not a stale read.
+        if (id.Parent is AssignmentExpressionSyntax assign
+            && assign.IsKind(SyntaxKind.SimpleAssignmentExpression)
+            && assign.Left == id)
+        {
+            return false;
+        }
+
+        // `out x` writes the local; it is not a stale read. (`ref`/`in` read the value.)
+        if (id.Parent is ArgumentSyntax argument && argument.RefKindKeyword.IsKind(SyntaxKind.OutKeyword))
+        {
+            return false;
+        }
+
+        // `nameof(x)` is a compile-time reference, not a runtime read.
+        for (var ancestor = id.Parent; ancestor is not null and not StatementSyntax; ancestor = ancestor.Parent)
+        {
+            if (ancestor is InvocationExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.Text: "nameof" } })
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// If <paramref name="invocation"/> is a synchronous call of a local lambda-valued
+    /// variable (<c>Action a = () =&gt; …; a();</c>) or a local function
+    /// (<c>void Apply() {…} Apply();</c>), returns the callable's body so the caller can
+    /// scan it. Returns false for ordinary method calls, already-visited callables, or
+    /// anything else.
+    /// </summary>
+    private static bool TryGetSynchronousCallableBody(
+        InvocationExpressionSyntax invocation,
+        SemanticModel model,
+        HashSet<ISymbol> visitedCallables,
+        out SyntaxNode body,
+        out ISymbol callableSymbol)
+    {
+        body = null!;
+        callableSymbol = null!;
+
+        // Accept `later(...)` and the explicit delegate form `later.Invoke(...)`.
+        ExpressionSyntax calleeExpression;
+        if (invocation.Expression is IdentifierNameSyntax)
+        {
+            calleeExpression = invocation.Expression;
+        }
+        else if (invocation.Expression is MemberAccessExpressionSyntax { Name.Identifier.Text: "Invoke", Expression: IdentifierNameSyntax receiver })
+        {
+            calleeExpression = receiver;
+        }
+        else
+        {
+            return false;
+        }
+
+        if (model.GetSymbolInfo(calleeExpression).Symbol is not { } symbol) return false;
+        if (visitedCallables.Contains(symbol)) return false;
+
+        switch (symbol)
+        {
+            case IMethodSymbol { MethodKind: MethodKind.LocalFunction }:
+            {
+                if (symbol.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() is not LocalFunctionStatementSyntax decl)
+                    return false;
+                var local = (SyntaxNode?)decl.Body ?? decl.ExpressionBody?.Expression;
+                if (local is null) return false;
+                body = local;
+                callableSymbol = symbol;
+                return true;
+            }
+
+            case ILocalSymbol:
+            {
+                if (symbol.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() is not VariableDeclaratorSyntax declarator)
+                    return false;
+                if (declarator.Initializer?.Value is not { } initializer) return false;
+                SyntaxNode? lambdaBody = UnwrapCasts(initializer) switch
+                {
+                    SimpleLambdaExpressionSyntax sl => sl.Body,
+                    ParenthesizedLambdaExpressionSyntax pl => pl.Body,
+                    AnonymousMethodExpressionSyntax am => am.Block,
+                    _ => null,
+                };
+                if (lambdaBody is null) return false;
+                body = lambdaBody;
+                callableSymbol = symbol;
+                return true;
+            }
+
+            default:
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// Returns true if <paramref name="statement"/> is a bare <c>setX(...);</c> call of
+    /// <paramref name="setterSymbol"/> (a direct expression statement, not nested inside a
+    /// conditional or loop). Only such top-level re-calls own the statements after them.
+    /// </summary>
+    private static bool IsDirectSetterStatement(
+        StatementSyntax statement,
+        ILocalSymbol setterSymbol,
+        SemanticModel model,
+        out InvocationExpressionSyntax invocation)
+    {
+        invocation = null!;
+        if (statement is not ExpressionStatementSyntax { Expression: InvocationExpressionSyntax inv }) return false;
+        if (inv.Expression is not IdentifierNameSyntax) return false;
+        if (model.GetSymbolInfo(inv.Expression).Symbol is not ILocalSymbol symbol) return false;
+        if (!SymbolEqualityComparer.Default.Equals(symbol, setterSymbol)) return false;
+
+        invocation = inv;
+        return true;
+    }
+
+    /// <summary>
+    /// Given the setter local from <c>var (x, setX) = UseState(...)</c>, resolves the
+    /// paired state local <c>x</c>. Returns false unless the setter is the second element
+    /// of a two-element deconstruction whose initializer is a Reactor state-pair hook.
+    /// </summary>
+    private static bool TryGetPairedStateSymbol(SyntaxNodeAnalysisContext context, ILocalSymbol setterSymbol, out ILocalSymbol? stateSymbol)
+    {
+        stateSymbol = null;
+        var model = context.SemanticModel;
+
+        var declRef = setterSymbol.DeclaringSyntaxReferences.FirstOrDefault();
+        if (declRef?.GetSyntax() is not SingleVariableDesignationSyntax setterDesignation) return false;
+        if (setterDesignation.Parent is not ParenthesizedVariableDesignationSyntax pvds) return false;
+
+        // Require the `(value, setter)` shape: exactly two slots, setter is the second.
+        if (pvds.Variables.Count != 2) return false;
+        if (!ReferenceEquals(pvds.Variables[1], setterDesignation)) return false;
+        if (pvds.Variables[0] is not SingleVariableDesignationSyntax stateDesignation) return false;
+
+        if (pvds.Parent is not DeclarationExpressionSyntax decl) return false;
+        if (decl.Parent is not AssignmentExpressionSyntax assign || assign.Left != decl) return false;
+        if (assign.Right is not InvocationExpressionSyntax hookCall) return false;
+
+        var hookName = GetInvokedMethodName(hookCall);
+        if (hookName is null || !StatePairHooks.Contains(hookName)) return false;
+
+        // Anchor to Reactor hooks so unrelated `UseState`/`UsePersisted` lookalikes that
+        // happen to return a deconstructable pair aren't flagged.
+        if (!IsLikelyReactorHook(context, hookCall)) return false;
+
+        stateSymbol = model.GetDeclaredSymbol(stateDesignation) as ILocalSymbol;
+        return stateSymbol is not null;
+    }
+
+    private static bool IsDeferredExecutionBoundary(SyntaxNode node)
+        => node is SimpleLambdaExpressionSyntax
+            or ParenthesizedLambdaExpressionSyntax
+            or AnonymousMethodExpressionSyntax
+            or LocalFunctionStatementSyntax;
+
+    /// <summary>
+    /// Walks up from <paramref name="node"/> to its nearest enclosing statement. Returns
+    /// that statement and its block when the statement is a direct child of a
+    /// <see cref="BlockSyntax"/>. Returns null when a deferred-execution boundary (lambda /
+    /// local function) is crossed first (the call runs on a later render) or when the
+    /// statement is an unbraced embedded body (e.g. <c>if (c) setX(v);</c>).
+    /// </summary>
+    private static StatementSyntax? FindBlockStatement(SyntaxNode node, out BlockSyntax? block)
+    {
+        block = null;
+        for (var current = node.Parent; current is not null; current = current.Parent)
+        {
+            if (IsDeferredExecutionBoundary(current)) return null;
+            if (current is StatementSyntax statement)
+            {
+                if (statement.Parent is BlockSyntax parentBlock)
+                {
+                    block = parentBlock;
+                    return statement;
+                }
+                return null;
+            }
+        }
+
+        return null;
+    }
 }
