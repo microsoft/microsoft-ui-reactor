@@ -269,7 +269,10 @@ devtools menu and the docked devtools window. The Reactor Visual
 Studio embedded-preview extension (spec 056) also relies on this
 Debug wiring — its `dotnet watch run -- --devtools run --embed
 --embed-host-pid <pid>` activation needs the devtools assembly
-loadable in the user's process. Release builds drop both the package
+loadable in the user's process. That VSIX is the roughest and most
+experimental consumer of this wiring today; keep the Debug-only
+boundary in place unless you are deliberately testing the embedded
+preview. Release builds drop both the package
 and the host-config switch so the trim / AOT analyzers stay quiet;
 move the ItemGroup out of the Debug condition if you want devtools
 in Release too.

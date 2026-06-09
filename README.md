@@ -120,8 +120,9 @@ Reactor spans a core framework and a set of higher-level features. Each area bel
 | **Lists & virtualization** | Virtualized `ListView`, `GridView`, `ItemsRepeater`, `LazyStack` with recycling | Early |
 | **Data system** | `DataGrid`, `PropertyGrid`, `FormField`, metadata model, async validation, inline editing | Early |
 | **Preview / hot reload** | `MetadataUpdateHandler` hot reload, CLI `--preview` flag, VS Code live preview | Early |
+| **Visual Studio embedded preview** | Experimental VSIX that reparents a live WinUI app into a Visual Studio tool window | Experimental / roughest |
 
-> Maturity labels reflect the breadth of testing and the likelihood of API churn, not feature completeness. *Preview* areas have selftest and e2e coverage and are the most stable. *Draft* areas work on the golden path but may have rough edges or partial AOT support. *Early* areas are usable but expect bigger shape changes as we iterate.
+> Maturity labels reflect the breadth of testing and the likelihood of API churn, not feature completeness. *Preview* areas have selftest and e2e coverage and are the most stable. *Draft* areas work on the golden path but may have rough edges or partial AOT support. *Early* areas are usable but expect bigger shape changes as we iterate. The Visual Studio embedded preview is intentionally called out separately: in a repository of experiments, it is currently the roughest and most experimental surface.
 
 ---
 
@@ -196,6 +197,10 @@ code --install-extension vscode-reactor
 ```
 
 Open a C# file with a Reactor `Component`, run **Reactor: Preview Component** from the command palette, and a preview panel opens beside your editor. It auto-detects components in the current file, hot-reloads on save via `dotnet watch`, follows your editor between files in the same project, and only relaunches when you cross project boundaries.
+
+### Visual Studio extension
+
+The Visual Studio embedded preview VSIX is available for hands-on experimentation, but it is the roughest surface in this experimental repo. Expect install friction, solution-load races, HWND/DPI edge cases, and breaking changes while it is hardened; use it for smoke testing and feedback, not as a reliable daily-driver workflow yet.
 
 ---
 

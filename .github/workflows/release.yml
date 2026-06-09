@@ -292,7 +292,7 @@ jobs:
 
             ## New in this release
 
-            `Reactor.VsExtension.vsix` — live embedded preview for Visual Studio 2022. Requires Windows 11 23H2+ and WinAppSDK 1.6+. See [VS extension guide](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/vs-extension.md) or [src/vs-reactor/README.md](https://github.com/microsoft/microsoft-ui-reactor/blob/main/src/vs-reactor/README.md). Phase 1 dev distribution may be unsigned.
+            `Reactor.VsExtension.vsix` — very rough, experimental live embedded preview for Visual Studio 2022. This is the roughest surface in the experimental Reactor repo; expect install friction, solution-load races, HWND/DPI edge cases, and breaking changes. Requires Windows 11 23H2+ and WinAppSDK 1.6+. See [VS extension guide](https://github.com/microsoft/microsoft-ui-reactor/blob/main/docs/guide/vs-extension.md) or [src/vs-reactor/README.md](https://github.com/microsoft/microsoft-ui-reactor/blob/main/src/vs-reactor/README.md). Phase 1 dev distribution may be unsigned.
 
             ## Five assets
 
@@ -342,4 +342,4 @@ jobs:
 
             ### `Reactor.VsExtension.vsix` — Visual Studio 2022 embedded preview
 
-            Double-click to install per-user, or install into the Experimental hive for smoke testing. See `src/vs-reactor/TESTING.md` before release promotion.
+            Double-click to install per-user, or install into the Experimental hive for smoke testing. This VSIX is intentionally rougher than the rest of the release assets and should be treated as an experimental feedback vehicle, not a stable workflow. See `src/vs-reactor/TESTING.md` before release promotion.

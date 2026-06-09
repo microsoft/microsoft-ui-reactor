@@ -2,6 +2,8 @@
 
 Live embedded preview pane for Microsoft.UI.Reactor apps in Visual Studio 2022.
 
+> ⚠️ **Very rough / experimental.** This VSIX is the roughest surface in an already experimental repository. It exists to validate the embedded-preview direction and collect feedback; expect install friction, solution-load races, HWND/DPI quirks, blank-window bugs, and breaking changes while it is hardened.
+
 ## Install
 
 Build the full VSIX, double-click it, install into the target Visual Studio hive, then restart Visual Studio:
@@ -10,7 +12,7 @@ Build the full VSIX, double-click it, install into the target Visual Studio hive
 pwsh -File src\vs-reactor\Build-Vsix.ps1
 ```
 
-This requires Visual Studio 2022 (17.8+) or Visual Studio 2026 (18.x) with the **Visual Studio extension development** workload. Phase 1 may ship unsigned for dev distribution, so Visual Studio may show an unsigned-extension warning.
+This requires Visual Studio 2022 (17.8+) or Visual Studio 2026 (18.x) with the **Visual Studio extension development** workload. Phase 1 may ship unsigned for dev distribution, so Visual Studio may show an unsigned-extension warning. Treat installs as developer smoke builds, not stable product drops.
 
 ## Debug
 
@@ -24,6 +26,7 @@ None yet. Phase 2 adds a Tools → Options page for Reactor Preview settings.
 
 ## Troubleshooting
 
+- **First rule: assume the VSIX is experimental.** If a preview session behaves strangely, restart the preview and inspect the **Reactor Preview** output pane before assuming the app is broken.
 - **Tool window shows error: DPI mismatch** — move Visual Studio and the embedded Reactor window to monitors with matching DPI awareness, then reload.
 - **Embedded preview window is blank or crashes immediately** — the embedded Reactor app must use WinAppSDK 1.6+ (Windows App SDK). Older versions don't support the cross-process HWND reparenting that the embed protocol relies on. Update the target app's `Microsoft.WindowsAppSDK` PackageReference to 1.6 or newer.
 - **"PerMonitorV2" exit on app startup** — the embedded Reactor app must declare PerMonitorV2 DPI awareness. Add `<ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>` to the csproj's `<PropertyGroup>`.

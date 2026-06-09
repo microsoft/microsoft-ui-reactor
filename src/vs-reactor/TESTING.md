@@ -1,5 +1,7 @@
 # Manual smoke checklist for Reactor VS Extension (Tier C.1)
 
+> ⚠️ **Roughest experimental surface.** The VSIX is intentionally the least mature part of this repo right now. Passing this checklist means "acceptable for experimental feedback", not "stable daily-driver quality".
+
 **Must pass before every release.** Release engineers should check every item below on a release-candidate VSIX and attach the results to the release PR description.
 
 ## Setup
