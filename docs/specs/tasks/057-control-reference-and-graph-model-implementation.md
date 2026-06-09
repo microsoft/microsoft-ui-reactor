@@ -3,7 +3,15 @@
 Derived from: [`docs/specs/057-control-reference-and-graph-model.md`](../057-control-reference-and-graph-model.md).
 Resolves [issue #456](https://github.com/microsoft/microsoft-ui-reactor/issues/456).
 
-> **Status:** Not started. Spec is design-converged (D1 + D2 ratified); this
+> **Status:** Phase 0 + Phase 1 COMPLETE and committed — #456 is closed (reactive
+> `ElementRef`, full reference-edge engine, TeachingTip.Target proof, §9 topology
+> matrix, surface-parity, perf gate passing). Phase 2: 2.1 (`.ReferenceList`), 2.2
+> (`AutomationProperties` relationships), 2.3 (`XYFocus*`), 2.4 (real-control torture
+> matrix capstone, 42 checks), 2.6 (REACTOR_REF_001 analyzer + CLI) all COMPLETE and
+> committed. **2.5 (docs + skills) is in-flight (uncommitted on disk).** Remaining:
+> finish/commit 2.5, the 2.7 Phase-2 exit gate, and all of Phase 3 (devtools/VS Code
+> overlay, weak-subscriptions, source-gen, Q4 close-out). AOT-selftests run in CI only.
+> Spec is design-converged (D1 + D2 ratified); this
 > tracker decomposes the §11 phasing into a step-by-step, resumable task list.
 >
 > **Conventions** (mirroring `048-control-registration-and-trimming-implementation.md`):
@@ -416,42 +424,42 @@ the realized control** (not the element record). Register each in both
 Build a `RealRefTorture` fixture family wiring these real reference DPs into a
 single, deliberately-tangled graph:
 
-- [ ] **`TeachingTip.Target` → `Button` mounted in a different subtree**, tip
+- [x] **`TeachingTip.Target` → `Button` mounted in a different subtree**, tip
       open/close animation active — asserts the §3.4 glitch-free flush (no observable
       transient-null on same-commit mount) against a DP that *animates* on change.
-- [ ] **`XYFocusUp/Down/Left/Right` bidirectional ring** across 3–4 real `Button`s
+- [x] **`XYFocusUp/Down/Left/Right` bidirectional ring** across 3–4 real `Button`s
       (`A.Right=B`, `B.Left=A`, plus an `A→B→C→A` focus cycle) — the real-control
       analogue of §9 rows 4/5/6; asserts cycle convergence on shipping focus DPs.
-- [ ] **`AutomationProperties.LabeledBy` (scalar)** + **`DescribedBy`/`FlowsTo`/
+- [x] **`AutomationProperties.LabeledBy` (scalar)** + **`DescribedBy`/`FlowsTo`/
       `FlowsFrom` (list-valued)** wiring real controls together — asserts the UIA
       relationship is present on the automation tree after commit and **dropped on
       teardown** (the §2.2 dangling-ref fix at the accessibility layer).
-- [ ] **A placement/anchor target** — e.g. `Flyout`/`MenuFlyout` placement target or
+- [x] **A placement/anchor target** — e.g. `Flyout`/`MenuFlyout` placement target or
       `CommandBar` overflow anchor — referencing a sibling, covering a non-focus,
       non-automation real reference DP.
 
 Then drive the **mutation / recreation stressors** through the *same* real-control
 graph (each asserts the real DP re-resolves or clears correctly):
 
-- [ ] **Recreation by keyed reorder** — shuffle a keyed list whose items hold these
+- [x] **Recreation by keyed reorder** — shuffle a keyed list whose items hold these
       real reference DPs; assert every DP re-points to the surviving/recreated peer
       (cell re-point under keyed reconcile, §9 row 11 against real DPs).
-- [ ] **Pool recycle** — scroll a long `ListView`/`ItemsRepeater` of items each
+- [x] **Pool recycle** — scroll a long `ListView`/`ItemsRepeater` of items each
       carrying a real reference DP; assert no double-subscribe and correct re-bind
       after rent/return (KD-3, §9 row 12 against real DPs).
-- [ ] **Conditional remount** — toggle a referenced real control in/out via state;
+- [x] **Conditional remount** — toggle a referenced real control in/out via state;
       assert the real DP clears on unmount and re-links on remount (§9 row 10).
-- [ ] **Late/async target** — referrer mounts before its real target (target behind
+- [x] **Late/async target** — referrer mounts before its real target (target behind
       `UseAsyncResource`/a later route); assert the real DP fills in via push when
       the target finally mounts (§2.3 mount-order bug, against a real DP).
-- [ ] **Source swap** — change which `ElementRef` a real referrer uses between
+- [x] **Source swap** — change which `ElementRef` a real referrer uses between
       renders; assert the old subscription detaches and the DP follows the new cell
       (`EnsureSubscribed` rewire, §9 row 14 against real DPs).
-- [ ] **Leak/subscriber-count assertion** — after each teardown, assert the cell's
+- [x] **Leak/subscriber-count assertion** — after each teardown, assert the cell's
       subscriber count returns to the live-referrer baseline (no retained dead real
       controls), mirroring the §6.4 guarantee on real-control graphs.
 
-- [ ] **Combined "everything at once" fixture** — one screen holding the TeachingTip
+- [x] **Combined "everything at once" fixture** — one screen holding the TeachingTip
       + XYFocus ring + LabeledBy/DescribedBy set + placement target simultaneously,
       then run a scripted churn sequence (reorder → recycle → conditional toggle →
       source swap → unmount) and assert the whole graph stays consistent at every
@@ -499,14 +507,14 @@ complete and stable, so the docs + shipped skills are updated together. Docs und
 
 ### 2.6 Tooling: analyzer + CLI scaffolding
 
-- [ ] **`src/Reactor.Analyzers`** — add a steering analyzer + code-fix (same shape as
+- [x] **`src/Reactor.Analyzers`** — add a steering analyzer + code-fix (same shape as
       the existing `OneWayClearValueAnalyzer` / `UseThemeRefAnalyzer`): flag a handler
       that reads `ElementRef.Current` to set a reference DP (the §2.3 anti-pattern) and
       suggest `descriptor.Reference` / `binding.Reference`. Register the new
       `REACTOR_*` diagnostic id and document it in `analyzer-architecture.md.dt`. (If
       this proves noisy, gate it behind Phase 3 — but at minimum land the diagnostic id
       + doc entry.)
-- [ ] **`src/Reactor.Cli` (`mur`)** — the new-control scaffolding template should emit
+- [x] **`src/Reactor.Cli` (`mur`)** — the new-control scaffolding template should emit
       a commented `.Reference<TTarget>(get, set)` stub so authors discover the surface;
       confirm `mur --regen-api` and `mur docs compile` both run clean after the API +
       template changes land.
