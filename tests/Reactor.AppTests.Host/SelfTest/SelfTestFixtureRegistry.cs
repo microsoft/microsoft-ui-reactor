@@ -1320,6 +1320,10 @@ internal static class SelfTestFixtureRegistry
         "XYFocus_BidirectionalRing",
         "Accessibility_LabeledBy_Scalar",
         "Accessibility_DescribedBy_List",
+        // Spec 057 §11 Phase 3 (3.1) — devtools reference-graph overlay, live tree.
+        "ReferenceOverlay_ResolvedModifierEdge",
+        "ReferenceOverlay_UnresolvedDiagnostic",
+        "ReferenceOverlay_CycleDiagnostic",
         // Spec 057 §10 — first-party TeachingTip.Target reference proof.
         "TeachingTip_TargetReferenceResolvesBothMountOrders",
         "TeachingTip_SurfaceParity",
@@ -2657,6 +2661,9 @@ internal static class SelfTestFixtureRegistry
         "XYFocus_BidirectionalRing" => new ModifierReferenceFixtures.XYFocusBidirectionalRing(harness),
         "Accessibility_LabeledBy_Scalar" => new ModifierReferenceFixtures.AccessibilityLabeledByScalar(harness),
         "Accessibility_DescribedBy_List" => new ModifierReferenceFixtures.AccessibilityDescribedByList(harness),
+        "ReferenceOverlay_ResolvedModifierEdge" => new ReferenceOverlaySelfHostFixtures.ResolvedModifierEdge(harness),
+        "ReferenceOverlay_UnresolvedDiagnostic" => new ReferenceOverlaySelfHostFixtures.UnresolvedDiagnostic(harness),
+        "ReferenceOverlay_CycleDiagnostic" => new ReferenceOverlaySelfHostFixtures.CycleDiagnostic(harness),
         "TeachingTip_TargetReferenceResolvesBothMountOrders" => new TeachingTipTargetFixtures.TargetReferenceResolvesBothMountOrders(harness),
         "TeachingTip_SurfaceParity" => new RefNodeSurfaceParityFixtures.Execution(harness),
         "RealRef_TeachingTipTarget_CrossSubtree" => new RealRefTortureFixtures.TeachingTipTargetCrossSubtree(harness),
