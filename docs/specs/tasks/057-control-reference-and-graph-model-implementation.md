@@ -144,18 +144,18 @@ changes behavior yet.
 
 ### 0.4 Perf gate baseline for the post-commit flush (§6.3, §11 Phase 0)
 
-- [ ] Capture a baseline re-render micro-bench (reuse the existing stress/bench
+- [x] Capture a baseline re-render micro-bench (reuse the existing stress/bench
       harness used by spec 034/048 perf gates) for a tree with no reference edges,
       so the Phase-1 dirty-set drain has a measured "no regression on edge-free
       trees" gate. Record the number under `docs/specs/057/perf-results/`.
 
 ### 0.5 Phase 0 exit gate
 
-- [ ] Headless `ReactiveElementRefTests` compile and run RED only on the
+- [x] Headless `ReactiveElementRefTests` compile and run RED only on the
       not-yet-implemented `SetCurrent` surface (no other failures).
-- [ ] `RefNode` fixtures discovered by the self-host filter.
-- [ ] Baseline perf number recorded.
-- [ ] Full xunit green: `dotnet test tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64`.
+- [x] `RefNode` fixtures discovered by the self-host filter.
+- [x] Baseline perf number recorded.
+- [x] Full xunit green: `dotnet test tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64`.
 
 ---
 
@@ -335,15 +335,15 @@ writes). Register each fixture in both `SelfTestFixtureRegistry.cs` spots (0.3).
 
 ### 1.12 Phase 1 exit gate
 
-- [ ] Headless `ReactiveElementRefTests` green.
-- [ ] Full §9 matrix (rows 1, 2, 4–14) green via
+- [x] Headless `ReactiveElementRefTests` green.
+- [x] Full §9 matrix (rows 1, 2, 4–14) green via
       `dotnet run --project tests/Reactor.AppTests.Host -- --self-test --filter RefNode`
       **and** through `dotnet test tests/Reactor.SelfTests`.
-- [ ] `TeachingTip.Target` first-party proof + ArcGIS (or in-repo fan-out) external
+- [x] `TeachingTip.Target` first-party proof + ArcGIS (or in-repo fan-out) external
       proof green.
-- [ ] **Surface-parity test (1.8) green** — record construction, fluent, and factory
+- [x] **Surface-parity test (1.8) green** — record construction, fluent, and factory
       argument all resolve the same reference edge identically.
-- [ ] Perf gate (1.5) shows no edge-free regression vs the 0.4 baseline.
+- [x] Perf gate (1.5) shows no edge-free regression vs the 0.4 baseline.
 - [ ] Full xunit + selftest + solution build green; AOT-selftests CI job green.
       (Per repo convention, verify any suspected matrix flake in isolation with
       `--filter` before treating it as a regression.)
