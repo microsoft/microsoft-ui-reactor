@@ -548,13 +548,22 @@ complete and stable, so the docs + shipped skills are updated together. Docs und
 
 ### 3.1 Devtools + VS Code reference-overlay (§11 Phase 3)
 
-- [ ] Render the reference graph as edges in the element-tree inspector (devtools).
-- [ ] Surface cycles and perpetually-null (unresolved) references as diagnostics.
-- [ ] Plumb the overlay through the `src/vscode-reactor` live-preview extension so the
+- [x] Render the reference graph as edges in the element-tree inspector (devtools).
+      `ReferenceOverlay` + the `references` MCP tool walk the tree and emit
+      `{from,to,label,slot,kind,resolved}` edges keyed to the `tree` node ids
+      (`src/Reactor.Devtools/ReferenceOverlay.cs`, `DevtoolsUiaTools.cs`, `TreeWalker.cs`).
+      Headless shape/logic tests in `tests/Reactor.Tests/Devtools/ReferenceOverlayTests.cs`;
+      live-tree proof in `ReferenceOverlay_*` selftest fixtures.
+- [x] Surface cycles and perpetually-null (unresolved) references as diagnostics.
+      DFS back-edge cycle detection + unresolved flagging in `ReferenceOverlay.BuildDiagnostics`;
+      cycles reported informationally (supported topology, spec §3.3).
+- [x] Plumb the overlay through the `src/vscode-reactor` live-preview extension so the
       reference edges + cycle/unresolved diagnostics are visible in the VS Code
       inspector; update `devtools-internals.md.dt` / `dev-tooling.md.dt` /
       `vs-extension.md.dt` templates and the `plugins/reactor/skills/reactor-devtools`
-      skill to describe the overlay.
+      skill to describe the overlay. `PreviewCaptureServer` serves `GET /references`;
+      the webview gains a **References** toggle that renders edges + diagnostics. Docs
+      recompiled (`mur docs compile`) and the skill describes the `references` tool.
 
 ### 3.2 Optional weak-subscription mode
 
