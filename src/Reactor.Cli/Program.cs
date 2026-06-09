@@ -282,6 +282,9 @@ string GenerateProgram(string name) =>
     using static Microsoft.UI.Reactor.Factories;
     using Microsoft.UI.Xaml;
 
+    // Custom control descriptor scaffolds can declare reactive reference edges:
+    // .Reference<FrameworkElement>(get: e => e.Target, set: (c, t) => c.Target = t) // spec 057
+
     ReactorApp.Run<App>("{{name}}", width: 800, height: 600);
 
     class App : Component
