@@ -67,6 +67,7 @@ you get inside the callback is a typed `TextBlock`, not a base
 | Theme-bound brushes | `ThemeBindings[propertyName]` | `.Background(Theme.Accent)`, `.Foreground(Theme.Ref(...))` |
 | Container-attached values | `Attached[typeof(TAttached)]` | `.Grid(row: 1)`, `.Flex(grow: 1)`, `.Canvas(left: 8)` |
 | Event callbacks | typed `OnXxx` property on the leaf record | `.Click(handler)`, `.TextChanged(handler)` |
+| Reference cells | `Modifiers.Ref` / reference slots | `.Ref(cell)`, `.Target(cell)`, `.LabeledBy(cell)`, `.XYFocusRight(cell)` |
 | Imperative escape hatch | element callback list | `.Set(control => …)` |
 
 ![Modifier fold: a Text element gets .Bold, .Margin, .Background, .Grid, .Set in sequence; each call merges into one element with Modifiers / ThemeBindings / Attached slots populated, then the reconciler reads them on commit.](images/modifier-system/modifier-fold.svg)
@@ -76,6 +77,17 @@ doesn't displace the `.Background`, it just merges into the same
 record. That is why "modifier order doesn't matter" is true for almost
 every Reactor modifier: the merge target is a field on a flat record,
 not a position in a wrapper chain.
+
+Reference modifiers are the exception to "just write this value" in the
+implementation, but not in the authoring model. `.Ref(cell)` binds the
+current element into an `ElementRef` cell; reference-property modifiers
+such as `.Target(cell)`, `.LabeledBy(cell)`, `.DescribedBy(cells...)`,
+`.FlowsTo(cells...)`, `.FlowsFrom(cells...)`, and
+`.XYFocusUp/Down/Left/Right(cell)` subscribe to those cells and write the
+native property when the target resolves. Removing the modifier on a
+later render clears the slot and unsubscribes. Unmounting the target
+sets the cell to `null`, so every referrer clears without a handler
+sampling `cell.Current`.
 
 > **Caveat:** `Modify` calls `el.Modifiers.Merge(mods)` with the *new* modifier as
 > the right-hand side. `Merge`'s rule for scalar properties is

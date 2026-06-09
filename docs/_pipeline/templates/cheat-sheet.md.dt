@@ -44,6 +44,7 @@ Doc apps inherit `Reactor.DevtoolsSupport=true` from `docs/_pipeline/apps/Direct
 | `UseAsync(factory, deps)` | `AsyncResource<T>` | [`async-resources`](async-resources.md). |
 | `UseFocusTrap()` | `FocusTrapHandle` | Trap Tab inside a sub-tree. |
 | `UseAnnounce()` | `Action<string>` | Push a screen-reader announcement. |
+| `UseElementRef<T>()` | `ElementRef<T>` | Reference a realized element for focus, `TeachingTip.Target`, UIA relationships, or XYFocus. |
 | `UseDevtools()` | `DevtoolsApi` | [Dev-tooling](dev-tooling.md) hooks. |
 
 ```csharp snippet="cheat-sheet/state-vignette"
@@ -99,6 +100,7 @@ Full coverage on [Controls](controls.md).
 | Transition | `.OpacityTransition()` `.ScaleTransition()` `.TranslationTransition()` |
 | Compositor anim | `.Animate(Curve, prop?)` `.Transition(t, c?)` `.InteractionStates(b, c?)` |
 | Layout anim | `.LayoutAnimation()` `.SpringLayoutAnimation()` `.ConnectedAnimation(key)` |
+| References | `.Ref(r)` `.Target(r)` `.LabeledBy(r)` `.DescribedBy(...)` `.XYFocusRight(r)` |
 | Escape hatch | `.Set(ctrl => { /* raw WinUI */ })` |
 
 Full coverage on [Styling](styling.md), [Animation](animation.md),
@@ -145,6 +147,12 @@ out of the tree when `cond` is false — see the
 
 **List with stable keys.** `ForEach(items, x => Card(x).WithKey(x.Id))`
 so the reconciler can move rows rather than rebuild them.
+
+**Reference prop.** `var target = UseElementRef<FrameworkElement>()` →
+`Button("Open", show).Ref(target)` →
+`TeachingTip("Tip", target: target)`. Use reference props, not
+`target.Current`, for relationships that must survive late mount or
+unmount.
 
 **Memoized subtree.** Wrap the expensive child in `Memo(ctx => …)`;
 the function-component cache holds it across parent re-renders.

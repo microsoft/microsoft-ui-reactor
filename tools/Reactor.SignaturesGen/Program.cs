@@ -6,6 +6,7 @@
 // Layout:
 //   ## Factories             (Microsoft.UI.Reactor.Factories — public static partial)
 //   ## Modifiers             (extension methods on Element / on T : Element)
+//   ## Reference builders    (descriptor/binding reference-edge authoring)
 //   ## Hooks                 (extension methods on RenderContext / Component)
 //   ## Theme                 (Microsoft.UI.Reactor.Core.Theme tokens → resource keys)
 //   ## Enums                 (public enums under Microsoft.UI.Reactor.*)
@@ -47,6 +48,7 @@ sb.AppendLine();
 
 EmitFactories(asm, sb);
 EmitModifiers(asm, sb);
+EmitReferenceBuilders(asm, sb);
 EmitHooks(asm, sb);
 EmitTheme(asm, sb);
 EmitEnums(asm, sb);
@@ -143,6 +145,33 @@ static void EmitHooks(Assembly asm, StringBuilder sb)
         .Select(FormatMethod);
 
     var lines = instanceHooks.Concat(extHooks)
+        .Distinct()
+        .OrderBy(s => s, StringComparer.Ordinal);
+
+    foreach (var line in lines) sb.AppendLine(line);
+    sb.AppendLine();
+}
+
+static void EmitReferenceBuilders(Assembly asm, StringBuilder sb)
+{
+    sb.AppendLine("## Reference builders (custom controls)");
+    sb.AppendLine("# Use descriptor.Reference/ReferenceList for regular custom controls;");
+    sb.AppendLine("# use binding.Reference/ReferenceList from hand-coded handlers.");
+    sb.AppendLine();
+
+    var typeNames = new[]
+    {
+        "Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor`2",
+        "Microsoft.UI.Reactor.Core.V1Protocol.ReactorBinding`1",
+    };
+
+    var lines = typeNames
+        .Select(asm.GetType)
+        .Where(t => t is not null)
+        .SelectMany(t => t!.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+            .Where(m => m.Name is "Reference" or "ReferenceList")
+            .Where(m => !IsObsolete(m))
+            .Select(m => Short(t) + "." + FormatMethod(m)))
         .Distinct()
         .OrderBy(s => s, StringComparer.Ordinal);
 

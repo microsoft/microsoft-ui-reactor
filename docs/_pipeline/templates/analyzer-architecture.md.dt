@@ -117,6 +117,7 @@ via `.editorconfig`.
 | `REACTOR_THEME_001` | Warning | Use ThemeRef instead of hard-coded color | `UseThemeRefAnalyzer.cs` |
 | `REACTOR_THEME_002` | Warning | Prefer lightweight styling | `UseLightweightStylingAnalyzer.cs` |
 | `REACTOR_THEME_003` | Warning | RequestedTheme set on a non-root element | `RequestedThemeSetAnalyzer.cs` |
+| `REACTOR_REF_001` | Warning | ElementRef.Current assigned to a reference property instead of a reactive edge | `ReferenceCurrentReadAnalyzer.cs` |
 | `REACTOR_DSL_001` | Warning | Dynamic list item missing .WithKey | `MissingWithKeyAnalyzer.cs` |
 | `REACTOR_DOC_001` | Warning | Public API missing XML doc summary | `XmlDocSummaryAnalyzer.cs` |
 | `REACTOR_DOC_002` | Warning | XML doc cref does not resolve | `XmlDocCrefAnalyzer.cs` |

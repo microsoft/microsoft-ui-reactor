@@ -29,6 +29,23 @@ Use this skill when adding immediate-mode Win2D drawing through `Microsoft.UI.Re
 
 Treat `Ref.Current` from `UseDrawState` like a volatile field. Re-read it and make the referenced object safe for any cross-thread mutation. Debug builds add a sentinel that appends `docs/guide/win2d-canvas.md#threading` to likely WinUI thread-affinity exceptions from animated callbacks.
 
+## Reference graph model
+
+Element refs are reactive cells. `.Ref(cell)` writes the mounted
+`FrameworkElement` into the cell and writes `null` on unmount.
+Reference properties (`TeachingTip.Target`, `.LabeledBy`, `.DescribedBy`,
+`.FlowsTo`, `.FlowsFrom`, `.XYFocus*`, and custom descriptor
+`.Reference` / `.ReferenceList`) subscribe to those cells instead of
+sampling `.Current`.
+
+Resolution is one-way and push-based: cells enqueue dirty reference
+edges during commit, then Reactor flushes the dirty set after the tree is
+stable. Cycles are allowed because each property slot is a one-way edge.
+List references preserve author declaration order and omit unresolved
+targets. Advanced authors should use `descriptor.Reference` for regular
+controls and `binding.Reference` only as the bridge for hand-coded
+handlers.
+
 ## Hooks and recipes
 
 ```csharp

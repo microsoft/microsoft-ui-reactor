@@ -183,6 +183,37 @@ this surface — the entire item array is interchangeable.
 
 WinUI design page: [Command bar flyout](https://learn.microsoft.com/en-us/windows/apps/design/controls/command-bar-flyout).
 
+## TeachingTip target references
+
+`TeachingTip` can anchor to an element that lives in another container.
+Create an `ElementRef<FrameworkElement>`, attach it to the target with
+`.Ref(target)`, and pass the same cell to the tip with the factory
+`target:` parameter or the `.Target(target)` fluent:
+
+```csharp
+var target = UseElementRef<FrameworkElement>();
+
+return HStack(16,
+    Border(
+        Button("Show anchored tip", () => setShow(true))
+            .Ref(target)),
+    Border(
+        TeachingTip(
+            "Cross-container target",
+            "This TeachingTip is declared in a different subtree.",
+            target: target) with
+        {
+            IsOpen = show,
+            OnClosed = () => setShow(false),
+        }));
+```
+
+The target is a reactive reference property, not a one-time
+`target.Current` read. The tip can mount before or after the button,
+and if the button is recreated the edge re-resolves before the next
+open. The gallery's `TeachingTipPage` uses this pattern for its
+"TeachingTip targeting another subtree" sample.
+
 ## Popup
 
 ```csharp

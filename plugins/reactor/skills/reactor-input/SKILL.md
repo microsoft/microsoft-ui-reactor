@@ -30,6 +30,7 @@ etc.) when you attach a handler, so you never need to set those manually.
 | `.OnGotFocus()` / `.OnLostFocus()` | Focus change events |
 | `UseElementFocus()` | Untyped ref + dispatcher-scheduled focus |
 | `UseElementRef<T>()` | Typed element ref — `.Current` is `T` (no cast) |
+| `.XYFocusUp/Down/Left/Right(ref)` | Directional focus reference props |
 | `.AccessKey("S")` | Alt+key keyboard shortcut |
 | `.OnDragStart(...)` / `.OnDrop(...)` | Drag-and-drop |
 
@@ -194,6 +195,26 @@ return TextBox(query, setQuery).Ref(inputRef);
 The constraint is `T : FrameworkElement`. In `DEBUG` builds Reactor asserts
 the actual mounted element is a `T`; in release the mismatch is silent and
 `.Current` returns `null`. Spec 033 §3.
+
+### XYFocus reference props
+
+Use XYFocus refs for gamepad/keyboard directional navigation graphs.
+The target can mount before or after the referrer; Reactor rewrites the
+WinUI `UIElement.XYFocus*` property when the referenced element becomes
+available and clears it when that element unmounts.
+
+```csharp
+var left = UseElementRef<FrameworkElement>();
+var right = UseElementRef<FrameworkElement>();
+
+return HStack(8,
+    Button("Left").Ref(left).XYFocusRight(right),
+    Button("Right").Ref(right).XYFocusLeft(left));
+```
+
+For cyclic focus rings, declare both directions. Do not assign
+`button.XYFocusRight = right.Current` in a handler; that snapshot will
+not survive late mount or recreation.
 
 ### Focus events
 

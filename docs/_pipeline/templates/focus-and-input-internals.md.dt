@@ -67,6 +67,8 @@ event-args records.
 | Focus trap | `UseFocusTrap(active)` | `UIElement.LosingFocus` | Modal / flyout containment |
 | Live region | `UseAnnounce()` | `FrameworkElementAutomationPeer.RaiseNotificationEvent` | Screen-reader announcements |
 | Element focus | `UseElementFocus()` | `Control.Focus()` via dispatcher | Imperative focus on a single element |
+| Element reference | `UseElementRef<T>()` + `.Ref(...)` | `ElementRef.SetCurrent` / `CurrentChanged` | Reactive cell for reference props and targeted imperative calls |
+| XY focus references | `.XYFocusUp/Down/Left/Right(ref)` | `UIElement.XYFocus*` | Directional focus graph that survives mount order and recreation |
 | Window-focus revalidation | `FocusRevalidationService` | `Window.Activated` | Refetch stale [`UseResource`](hooks.md) data |
 
 ## The FocusManager
@@ -87,6 +89,31 @@ the manager. Programmatic focus calls
 `control.Focus(FocusState.Programmatic)`, which is the WinUI
 mechanism for "I, the app, decided to move focus" rather than a
 user-initiated tab.
+
+## ElementRef as a reactive cell
+
+`UseElementRef<T>()` returns an `ElementRef<T>` whose inner cell is
+owned by the reconciler. Applying `.Ref(ref)` to an element writes the
+realized `FrameworkElement` with `SetCurrent` on mount and writes
+`null` on unmount. `SetCurrent` first checks `ReferenceEquals`, so the
+normal stable-rerender path is a hot no-op; real changes raise
+`CurrentChanged`.
+
+Reference properties subscribe to that event instead of sampling
+`.Current` from a handler. That is what lets a `TeachingTip.Target`,
+`AutomationProperties.LabeledBy`, or `XYFocusRight` resolve even when
+the target mounts after the referrer, and clear when the target
+unmounts. The cell dispatch has a same-cell re-entrancy guard plus a
+small thread-static depth cap: a subscriber that writes back into the
+same reference edge is treated as a reference-edge no-echo violation
+and does not recurse to stack overflow.
+
+Directional focus uses the same machinery. The `.XYFocusUp(ref)`,
+`.XYFocusDown(ref)`, `.XYFocusLeft(ref)`, and `.XYFocusRight(ref)`
+modifiers store reference slots on the referrer and write WinUI's
+`UIElement.XYFocus*` properties after cells resolve. Cycles are allowed:
+each slot is just a one-way edge, and the dirty-set flush applies the
+final graph after the commit.
 
 <!-- ai:caveat -->
 `Register` is called in render order, on every render. That means

@@ -219,6 +219,9 @@ public UIElement? Reconcile(
     UIElement? existingControl,
     Action requestRerender)
 {
+    ReferenceDirtySet.BeginCommit();
+    try
+    {
     // Trace only top-level reconcile passes (depth == 0) to avoid flooding
     // the provider with per-subtree entries; nested Reconcile() calls during
     // the same pass don't emit their own start/stop. Gate the depth counter

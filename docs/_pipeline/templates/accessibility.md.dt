@@ -43,6 +43,7 @@ how often you need them.
 |---|---|---|
 | Tier 1 modifiers | `.AutomationName`, `.HeadingLevel`, `.TabIndex`, `.AccessKey`, `.IsTabStop` | Inline on every render — labels, headings, keyboard order. |
 | Tier 2 modifiers | `.HelpText`, `.FullDescription`, `.AccessibilityHidden`, `.AccessibilityView`, `.Landmark`, `.Required`, `.LiveRegion` | Lazy-allocated; descriptions, landmarks, hidden subtrees, regions. |
+| Relationship refs | `.LabeledBy(ref)`, `.DescribedBy(refs...)`, `.FlowsTo(refs...)`, `.FlowsFrom(refs...)` | Reactive AutomationProperties relationships between realized elements. |
 | `UseFocusTrap(isActive)` | hook | Returns a `FocusTrapHandle`; apply with `.FocusTrap(handle)` on a container. |
 | `UseAnnounce()` | hook | Returns an `AnnounceHandle` with `.Region` (zero-size element) and `.Announce(message, assertive?)`. |
 | `SemanticPanel` | wrapper | Custom automation peer (role / value / range) for composites. |
@@ -97,6 +98,35 @@ you use them, keeping the common case lightweight.
 
 The tiered design means you pay zero cost for Tier 2 on elements that only
 need a label and heading level.
+
+## Relationship reference properties
+
+Some accessibility properties point at another realized element rather
+than a string. Use `ElementRef<FrameworkElement>` for those
+relationships:
+
+```csharp
+var label = UseElementRef<FrameworkElement>();
+var help = UseElementRef<FrameworkElement>();
+
+return VStack(4,
+    TextBlock("Email").Ref(label),
+    Caption("Use your work address.").Ref(help),
+    TextBox(email, setEmail)
+        .LabeledBy(label)
+        .DescribedBy(help));
+```
+
+`.LabeledBy(ref)` writes `AutomationProperties.LabeledBy`.
+`.DescribedBy(refs...)`, `.FlowsTo(refs...)`, and
+`.FlowsFrom(refs...)` rebuild the corresponding
+`IList<DependencyObject>` in declaration order, omitting unresolved
+targets. Because these are reactive reference edges, the relationship
+survives mount order differences, source unmounts, and referrer
+recreation: when either side is recreated the edge re-subscribes and
+re-applies after the commit. This is the preferred form when screen
+reader relationships span containers; use the string `.LabeledBy(id)`
+only for static AutomationId relationships.
 
 ## Accessible Form
 

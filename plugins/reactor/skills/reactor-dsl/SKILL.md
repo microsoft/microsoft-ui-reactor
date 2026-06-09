@@ -19,6 +19,7 @@ big enough to need their own page:
 | Topic | File | When to load |
 |---|---|---|
 | Keyed list reconciliation | [`references/keyed-lists.md`](references/keyed-lists.md) | Choosing between `IReactorKeyed`, an explicit `keySelector`, and the three `.WithKey(...)` overloads; debugging a list that re-mounts on insert; understanding the bulk-replace bailout or the duplicate-key diagnostic. (Spec 042.) |
+| Element refs and reference props | [`references/element-refs.md`](references/element-refs.md) | Wiring `UseElementRef<T>()`, `.Ref(...)`, `.Target(...)`, accessibility relationships, `XYFocus*`, or custom descriptor `.Reference` / `.ReferenceList` entries. (Spec 057.) |
 
 ## When to load this skill
 

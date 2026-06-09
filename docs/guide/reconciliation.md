@@ -36,6 +36,15 @@ source pointers that let you verify it.
 
 Every section below explains how one of those rows is implemented.
 
+Reference props add one post-commit step to the table. `.Ref(cell)` sets
+the cell to the mounted control and clears it on unmount; referrers such
+as `TeachingTip.Target`, automation relationships, and `XYFocus*`
+subscribe to those cells. During reconciliation, changed cells enqueue
+their reference edges in a dirty set. After the tree commit finishes,
+the reconciler flushes that set so every reference write observes the
+final mounted/unmounted state. Referrer unmount and pool return tear
+down their edge bag, so subscriptions do not leak.
+
 ## Reconcile — the entry point
 
 ```csharp
@@ -45,6 +54,9 @@ public UIElement? Reconcile(
     UIElement? existingControl,
     Action requestRerender)
 {
+    ReferenceDirtySet.BeginCommit();
+    try
+    {
     // Trace only top-level reconcile passes (depth == 0) to avoid flooding
     // the provider with per-subtree entries; nested Reconcile() calls during
     // the same pass don't emit their own start/stop. Gate the depth counter
@@ -166,6 +178,9 @@ public UIElement? Reconcile(
     UIElement? existingControl,
     Action requestRerender)
 {
+    ReferenceDirtySet.BeginCommit();
+    try
+    {
     // Trace only top-level reconcile passes (depth == 0) to avoid flooding
     // the provider with per-subtree entries; nested Reconcile() calls during
     // the same pass don't emit their own start/stop. Gate the depth counter

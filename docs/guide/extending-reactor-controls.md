@@ -267,6 +267,41 @@ Decision tree for descriptor authors:
 | One-way with WinUI fallback | `Optional<T>` | `.OneWay(get, set, dp: SomeControl.SomeProperty)` |
 | Mount-only seed | `T` | `.InitialOnly(get, set)` |
 | Always write, no callback | `T` | `.OneWay(get, set)` |
+| Reference to another realized element | `ElementRef<TTarget>?` | `.Reference<TTarget>(get, set)` |
+| Ordered references to several elements | `IReadOnlyList<ElementRef<TTarget>>?` | `.ReferenceList<TTarget>(get, apply)` |
+
+### Reference properties
+
+Use reference entries when a native control property points at another
+realized `FrameworkElement`: `TeachingTip.Target`, relationship
+properties such as automation `LabeledBy`, or custom owner/source slots
+on a control. The element record stores an `ElementRef<TTarget>` (or an
+ordered list of them). The descriptor declares the edge:
+
+```csharp
+descriptor.Reference<FrameworkElement>(
+    get: e => e.Target,
+    set: (c, target) => c.Target = target);
+
+descriptor.ReferenceList<FrameworkElement>(
+    get: e => e.Related,
+    apply: (c, targets) =>
+    {
+        c.Related.Clear();
+        foreach (var target in targets)
+            c.Related.Add(target);
+    });
+```
+
+`.Reference` writes the current target on mount, subscribes to the
+cell, and rewrites the property when the target mounts later or
+unmounts. `.ReferenceList` rebuilds the target list in author
+declaration order and omits unresolved cells. Hand-coded handlers use
+`binding.Reference` / `binding.ReferenceList` for the same edge when no
+descriptor entry can express the control. **D1 rule:** do not read
+`ref.Current` inside a handler and assign it to a reference property;
+that is only a snapshot and breaks late binding and clear-on-unmount.
+`REACTOR_REF_001` steers that anti-pattern back to a reactive edge.
 
 > **Caveat:** For reference-type optionals, the implicit conversion is deliberate
 > but easy to misread: `with { Background = null }` for an

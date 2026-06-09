@@ -230,6 +230,12 @@ Required: `using Microsoft.UI.Reactor.Layout;`
 | `RefreshContainer(content, onRefreshRequested?)` | `(Element, Action?)` |
 | `CommandBarFlyout(target, primaryCommands?, secondaryCommands?)` | See type |
 
+Reference props: create `var target = UseElementRef<FrameworkElement>()`,
+attach it with `.Ref(target)`, then pass it to `TeachingTip(...,
+target: target)` or `.Target(target)`. The same pattern powers
+`.LabeledBy`, `.DescribedBy`, `.FlowsTo`, `.FlowsFrom`, and
+`.XYFocusUp/Down/Left/Right`.
+
 ## Menus
 
 | Factory | Signature |

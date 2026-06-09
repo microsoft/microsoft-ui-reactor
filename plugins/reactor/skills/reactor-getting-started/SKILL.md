@@ -16,6 +16,7 @@ description: "Reactor essentials in one place — React-to-Reactor mental model,
 | `useMemo(() => v, [dep])` | `UseMemo(() => v, dep)` |
 | `useCallback(fn, [dep])` | `UseCallback(fn, dep)` |
 | `useRef(v)` | `UseRef(v)` |
+| callback ref / `ref={node => …}` | `UseElementRef<T>()` + `.Ref(r)` |
 | `useContext(Ctx)` | `UseContext(Ctx)` |
 | `<Provider value={x}>{c}</Provider>` | `c.Provide(Ctx, x)` |
 | `<div>` (linear layout) | `FlexColumn(...)` / `FlexRow(...)` (CSS-flexbox semantics) |
@@ -240,6 +241,8 @@ items.Select(i => Component<Card, CardProps>(new CardProps(i)).WithKey(i.Id)).To
                                 // (Button click → ctor arg, see Controls section)
                                 // ⚠️ For UIA/automation: always pair with .AutomationName("...")
 .AutomationName("Submit")       // a11y — sets AutomationProperties.Name
+.Ref(targetRef)                 // bind an ElementRef<T>; Compose FocusRequester / React callback-ref shape
+.Target(targetRef)              // reference prop, e.g. TeachingTip.Target; also .LabeledBy/.XYFocusRight
 .Set(native => native.MaxWidth = 400)   // native escape hatch (lambda receives the WinUI control)
 ```
 
@@ -272,6 +275,26 @@ TextBlock("Saved").Foreground(Theme.SystemSuccess)         // NOT Theme.Success
 8. **`.Flex(grow: 1)` is `flex-grow`, not the CSS `flex: 1` shorthand.** Default basis is `auto` (content size), so a growing child with large intrinsic content overflows the container. Pass `.Flex(grow: 1, basis: 0)` (matches CSS `flex: 1`) or add `.Flex(shrink: 0)` to each fixed-size sibling.
 9. **Don't pass freshly-allocated objects/arrays/lambdas as hook deps.** They compare unequal every render → hook never hits its stable path. The `REACTOR_HOOKS_004` analyzer catches this. **Tuples also trigger this** — `(x, y)` allocates a new `ValueTuple` each render. Instead, use a string key: `$"{x}|{y}"`, or pass individual values as separate deps: `UseEffect(fn, x, y)`.
 10. **`UseResource` is reads-only.** Never call `Post*`/`Create*`/`Delete*`/`Save*` from a `UseResource` fetcher — it can re-run on deps change, retry, and focus revalidation. Use `UseMutation` for writes.
+
+### Element refs and reference props
+
+Use `UseElementRef<T>()` when one element needs to point at another real
+WinUI element. Attach the cell with `.Ref(...)`, then pass it to a
+reference prop such as `TeachingTip.Target`, `.LabeledBy(...)`, or
+`.XYFocusRight(...)`. This is Reactor's callback-ref / Compose
+`FocusRequester` shape: the graph updates when the target mounts late,
+unmounts, or is recreated.
+
+```csharp
+var target = UseElementRef<FrameworkElement>();
+
+return HStack(
+    Button("Show tip", () => setOpen(true)).Ref(target),
+    TeachingTip("Hint", target: target) with { IsOpen = open });
+```
+
+Do **not** set relationship properties by reading `target.Current` in a
+handler; use the reference prop so Reactor can clear and re-resolve it.
 
 ## Common patterns (paste-ready)
 

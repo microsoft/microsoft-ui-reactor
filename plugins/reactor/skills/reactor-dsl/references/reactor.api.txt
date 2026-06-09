@@ -180,7 +180,7 @@ Tab(string header, Element content) → TabViewItemData
 TabView(Optional<int> selectedIndex, Action<int> onSelectedIndexChanged = null, TabViewItemData[] tabs) → TabViewElement
 TabView(TabViewItemData[] tabs) → TabViewElement
 TabView(int? selectedIndex, Action<int> onSelectedIndexChanged = null, TabViewItemData[] tabs) → TabViewElement
-TeachingTip(string title, string subtitle = null) → TeachingTipElement
+TeachingTip(string title, string subtitle = null, ElementRef<FrameworkElement> target = null) → TeachingTipElement
 TextBlock(string content) → TextBlockElement
 TextBox(Optional<string> value = null, Action<string> onChanged = null, string placeholderText = null, string header = null) → TextBoxElement
 Thick(double horizontal, double vertical) → Thickness
@@ -572,9 +572,12 @@ T.CenterPoint<T>(Vector3 center) → T
 T.ConnectedAnimation<T>(string key) → T
 T.CornerRadius<T>(double radius) → T
 T.CornerRadius<T>(double topLeft, double topRight, double bottomRight, double bottomLeft) → T
+T.DescribedBy<T>(ElementRef<FrameworkElement>[] targets) → T
 T.Drag<T>(bool enabled) → T
 T.DraggableWhen<T>(Func<bool> canDrag) → T
 T.Flex<T>(double grow = 0, double shrink = 1, double? basis = null, double? minWidth = null, double? minHeight = null, FlexAlign? alignSelf = null, FlexPositionType position = FlexPositionType.Relative, double? left = null, double? top = null, double? right = null, double? bottom = null) → T
+T.FlowsFrom<T>(ElementRef<FrameworkElement>[] targets) → T
+T.FlowsTo<T>(ElementRef<FrameworkElement>[] targets) → T
 T.FocusMeta<T>(FocusManager fm, string fieldName, bool autoFocus = false) → T
 T.FocusTrap<T>(FocusTrapHandle handle) → T
 T.FontFamily<T>(FontFamily family) → T
@@ -602,6 +605,7 @@ T.IsVisible<T>(bool isVisible) → T
 T.ItemContainerTransitions<T>(Transition[] transitions) → T
 T.ItemStatus<T>(string status) → T
 T.Keyframes<T>(string name, object trigger, Func<KeyframeBuilder, KeyframeBuilder> configure) → T
+T.LabeledBy<T>(ElementRef<FrameworkElement> target) → T
 T.LabeledBy<T>(string labelAutomationId) → T
 T.Landmark<T>(AutomationLandmarkType type) → T
 T.LayoutAnimation<T>() → T
@@ -709,7 +713,11 @@ T.WithToolTip<T>(Element tooltip) → T
 T.WithTransitions<T>(Transition[] transitions) → T
 T.WrapGridColumnSpan<T>(int columnSpan) → T
 T.WrapGridRowSpan<T>(int rowSpan) → T
+T.XYFocusDown<T>(ElementRef<FrameworkElement> target) → T
 T.XYFocusKeyboardNavigation<T>(XYFocusKeyboardNavigationMode mode) → T
+T.XYFocusLeft<T>(ElementRef<FrameworkElement> target) → T
+T.XYFocusRight<T>(ElementRef<FrameworkElement> target) → T
+T.XYFocusUp<T>(ElementRef<FrameworkElement> target) → T
 TabViewElement.AddTabButtonClick(Action handler) → TabViewElement
 TabViewElement.AllowDropTabs(bool allow = true) → TabViewElement
 TabViewElement.CanDragTabs(bool canDrag = true) → TabViewElement
@@ -731,6 +739,7 @@ TeachingTipElement.IconSource(IconData icon) → TeachingTipElement
 TeachingTipElement.PlacementMargin(Thickness margin) → TeachingTipElement
 TeachingTipElement.PreferredPlacement(TeachingTipPlacementMode placement) → TeachingTipElement
 TeachingTipElement.Set(Action<TeachingTip> configure) → TeachingTipElement
+TeachingTipElement.Target(ElementRef<FrameworkElement> target) → TeachingTipElement
 TemplatedFlipViewElement<T>.SelectedIndexChanged<T>(Action<int> handler) → TemplatedFlipViewElement<T>
 TemplatedFlipViewElement<T>.Set<T>(Action<FlipView> configure) → TemplatedFlipViewElement<T>
 TemplatedGridViewElement<T>.ItemClick<T>(Action<T> handler) → TemplatedGridViewElement<T>
@@ -819,6 +828,15 @@ WebView2Element.NavigationStarting(Action<Uri> handler) → WebView2Element
 WebView2Element.Set(Action<WebView2> configure) → WebView2Element
 WebView2Element.WebMessageReceived(Action<string> handler) → WebView2Element
 WrapGridElement.Set(Action<VariableSizedWrapGrid> configure) → WrapGridElement
+
+## Reference builders (custom controls)
+# Use descriptor.Reference/ReferenceList for regular custom controls;
+# use binding.Reference/ReferenceList from hand-coded handlers.
+
+ControlDescriptor<TElement, TControl>.Reference<TTarget>(Func<TElement, ElementRef<TTarget>> get, Action<TControl, TTarget> set) → ControlDescriptor<TElement, TControl>
+ControlDescriptor<TElement, TControl>.ReferenceList<TTarget>(Func<TElement, IReadOnlyList<ElementRef<TTarget>>> get, Action<TControl, IReadOnlyList<TTarget>> apply) → ControlDescriptor<TElement, TControl>
+ReactorBinding<TElement>.Reference<TTarget>(Func<TElement, ElementRef<TTarget>> get, Action<FrameworkElement, TTarget> set) → void
+ReactorBinding<TElement>.ReferenceList<TTarget>(Func<TElement, IReadOnlyList<ElementRef<TTarget>>> get, Action<FrameworkElement, IReadOnlyList<TTarget>> apply) → void
 
 ## Hooks (RenderContext / Component)
 # Call from Render() / function-component body. Same order every render —

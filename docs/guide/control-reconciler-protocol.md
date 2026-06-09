@@ -625,6 +625,8 @@ hatches a hand-coded handler would otherwise need:
 | `.HandCodedControlled<TPayload, TValue, TDelegate>` | Two-way prop with a multi-event control where the standard `Controlled` shape would collide on the per-control event payload (`TextBox.Text` alongside `SelectionChanged`). |
 | `.HandCodedEvent<TPayload, TDelegate>` | Fire-and-forget event with no associated DP (`Button.Click`, `Image.ImageOpened`). |
 | `.CollectionDiffControlled<…>` | Two-way prop whose value is an `IReadOnlyList<TItem>` round-tripped against a control-side `IList<TItem>` (`CalendarView.SelectedDates`). |
+| `.Reference<TTarget>(get, set)` | One-way reference prop whose value comes from an `ElementRef<TTarget>` cell; rewrites on target mount/unmount and clears when unresolved. |
+| `.ReferenceList<TTarget>(get, apply)` | One-way list of reference props; resolves currently-mounted cells in declaration order and rebuilds the control list. |
 | `.OneWayBridged(get, set, shouldWrite)` | One-way prop whose `set` lambda needs access to the reconciler (used by the button-family flyout port). |
 | `.Imperative(mount, update)` | Property-level escape hatch — the lambdas receive `(control, element)` and `(control, oldEl, newEl)` so an entry can express a diff the standard builders cannot. |
 | `.ImperativeBridged(mount, update)` | Same shape with the `MountContext` / `UpdateContext` available — primary use is a secondary Element slot that needs structural reconcile via `ReconcileV1Child`. |
@@ -635,6 +637,19 @@ descriptor's children strategy runs first when it is an items binder
 otherwise the strategy fires after the entry loop. The mount-then-
 subscribe ordering invariant is preserved by running every entry's
 `Mount` body before any entry's `EnsureSubscribed`.
+
+`ReferencePropEntry` and `ReferenceListPropEntry` are deliberately
+one-way. The element owns the cell or cell list; the native control
+receives the resolved target(s). `EnsureSubscribed` stores a reference
+edge on the control's `ReactorState.ReferenceEdges` bag, diffs the
+currently declared cells against existing subscriptions, and applies
+once immediately. When a target cell's `CurrentChanged` fires during a
+commit, the edge is added to `ReferenceDirtySet`; the reconciler flushes
+that dirty set after the tree commit so relationship writes see a
+stable mounted tree. Unmounting a referenced target calls
+`SetCurrent(null)`, so referrers clear automatically. Unmounting or
+pool-returning the referrer tears down scalar and list edges from the
+bag, unsubscribing every cell.
 
 ## Registration
 
