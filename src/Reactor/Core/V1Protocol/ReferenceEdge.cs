@@ -21,6 +21,18 @@ namespace Microsoft.UI.Reactor.Core
         public Action<FrameworkElement?>? Handler;
         public Action<FrameworkElement>? Recompute;
     }
+
+    internal static class ReferenceSlots
+    {
+        public const int ModifierRef_LabeledBy = 200_000;
+        public const int ModifierRef_DescribedBy = 200_001;
+        public const int ModifierRef_FlowsTo = 200_002;
+        public const int ModifierRef_FlowsFrom = 200_003;
+        public const int ModifierRef_XYFocusUp = 200_010;
+        public const int ModifierRef_XYFocusDown = 200_011;
+        public const int ModifierRef_XYFocusLeft = 200_012;
+        public const int ModifierRef_XYFocusRight = 200_013;
+    }
 }
 
 namespace Microsoft.UI.Reactor.Core.V1Protocol

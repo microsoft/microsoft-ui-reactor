@@ -1317,6 +1317,9 @@ internal static class SelfTestFixtureRegistry
         "RefNode_Row13_ReferrerUnmount",
         "RefNode_Row14_SourceSwap",
         "RefNode_SurfaceParity",
+        "XYFocus_BidirectionalRing",
+        "Accessibility_LabeledBy_Scalar",
+        "Accessibility_DescribedBy_List",
         // Spec 057 §10 — first-party TeachingTip.Target reference proof.
         "TeachingTip_TargetReferenceResolvesBothMountOrders",
         "TeachingTip_SurfaceParity",
@@ -2639,6 +2642,9 @@ internal static class SelfTestFixtureRegistry
         "RefNode_Row13_ReferrerUnmount" => new RefNodeTopologyFixtures.Row13_ReferrerUnmount(harness),
         "RefNode_Row14_SourceSwap" => new RefNodeTopologyFixtures.Row14_SourceSwap(harness),
         "RefNode_SurfaceParity" => new RefNodeSurfaceParityFixtures.Execution(harness),
+        "XYFocus_BidirectionalRing" => new ModifierReferenceFixtures.XYFocusBidirectionalRing(harness),
+        "Accessibility_LabeledBy_Scalar" => new ModifierReferenceFixtures.AccessibilityLabeledByScalar(harness),
+        "Accessibility_DescribedBy_List" => new ModifierReferenceFixtures.AccessibilityDescribedByList(harness),
         "TeachingTip_TargetReferenceResolvesBothMountOrders" => new TeachingTipTargetFixtures.TargetReferenceResolvesBothMountOrders(harness),
         "TeachingTip_SurfaceParity" => new RefNodeSurfaceParityFixtures.Execution(harness),
 

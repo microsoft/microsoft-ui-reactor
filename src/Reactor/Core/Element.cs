@@ -1063,6 +1063,10 @@ public abstract record Element
             && a.IsTabStop == b.IsTabStop
             && a.TabIndex == b.TabIndex
             && a.AccessKey == b.AccessKey
+            && ReferenceEquals(a.XYFocusUpRef, b.XYFocusUpRef)
+            && ReferenceEquals(a.XYFocusDownRef, b.XYFocusDownRef)
+            && ReferenceEquals(a.XYFocusLeftRef, b.XYFocusLeftRef)
+            && ReferenceEquals(a.XYFocusRightRef, b.XYFocusRightRef)
             // Accessibility Tier 2/3. AccessibilityModifiers is a record of
             // scalar/string fields, but every fluent helper (.AccessibilityView,
             // .LiveRegion, .ItemStatus, …) allocates a fresh instance per render
@@ -1615,6 +1619,10 @@ public record ElementModifiers
     public int? TabIndex { get; init; }
     public string? AccessKey { get; init; }
     public Microsoft.UI.Xaml.Input.XYFocusKeyboardNavigationMode? XYFocusKeyboardNavigation { get; init; }
+    public Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>? XYFocusUpRef { get; init; }
+    public Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>? XYFocusDownRef { get; init; }
+    public Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>? XYFocusLeftRef { get; init; }
+    public Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>? XYFocusRightRef { get; init; }
     public Action<UIElement, Microsoft.UI.Xaml.Input.AccessKeyDisplayRequestedEventArgs>? OnAccessKeyDisplayRequested { get; init; }
 
     /// <summary>
@@ -1695,6 +1703,10 @@ public record ElementModifiers
             TabIndex = other.TabIndex ?? TabIndex,
             AccessKey = other.AccessKey ?? AccessKey,
             XYFocusKeyboardNavigation = other.XYFocusKeyboardNavigation ?? XYFocusKeyboardNavigation,
+            XYFocusUpRef = other.XYFocusUpRef ?? XYFocusUpRef,
+            XYFocusDownRef = other.XYFocusDownRef ?? XYFocusDownRef,
+            XYFocusLeftRef = other.XYFocusLeftRef ?? XYFocusLeftRef,
+            XYFocusRightRef = other.XYFocusRightRef ?? XYFocusRightRef,
             OnAccessKeyDisplayRequested = other.OnAccessKeyDisplayRequested ?? OnAccessKeyDisplayRequested,
             Ref = other.Ref ?? Ref,
             Backdrop = other.Backdrop ?? Backdrop,
@@ -1851,6 +1863,18 @@ public record AccessibilityModifiers
     /// <summary>AutomationProperties.LabeledBy target AutomationId — resolved by the reconciler.</summary>
     public string? LabeledBy { get; init; }
 
+    /// <summary>AutomationProperties.LabeledBy target resolved from an ElementRef.</summary>
+    public Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>? LabeledByRef { get; init; }
+
+    /// <summary>AutomationProperties.DescribedBy targets resolved from ElementRefs.</summary>
+    public IReadOnlyList<Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>>? DescribedByRefs { get; init; }
+
+    /// <summary>AutomationProperties.FlowsTo targets resolved from ElementRefs.</summary>
+    public IReadOnlyList<Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>>? FlowsToRefs { get; init; }
+
+    /// <summary>AutomationProperties.FlowsFrom targets resolved from ElementRefs.</summary>
+    public IReadOnlyList<Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>>? FlowsFromRefs { get; init; }
+
     /// <summary>UIElement.TabFocusNavigation — Tab behavior within a container (Local, Once, Cycle).</summary>
     public Microsoft.UI.Xaml.Input.KeyboardNavigationMode? TabFocusNavigation { get; init; }
 
@@ -1869,6 +1893,10 @@ public record AccessibilityModifiers
             Level = other.Level ?? Level,
             ItemStatus = other.ItemStatus ?? ItemStatus,
             LabeledBy = other.LabeledBy ?? LabeledBy,
+            LabeledByRef = other.LabeledByRef ?? LabeledByRef,
+            DescribedByRefs = other.DescribedByRefs ?? DescribedByRefs,
+            FlowsToRefs = other.FlowsToRefs ?? FlowsToRefs,
+            FlowsFromRefs = other.FlowsFromRefs ?? FlowsFromRefs,
             TabFocusNavigation = other.TabFocusNavigation ?? TabFocusNavigation,
         };
     }

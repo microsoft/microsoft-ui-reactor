@@ -2368,6 +2368,26 @@ public static partial class ElementExtensions
     public static T XYFocusKeyboardNavigation<T>(this T el, Microsoft.UI.Xaml.Input.XYFocusKeyboardNavigationMode mode) where T : Element =>
         Modify(el, new ElementModifiers { XYFocusKeyboardNavigation = mode });
 
+    public static T XYFocusUp<T>(
+        this T el,
+        Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement> target) where T : Element =>
+        Modify(el, new ElementModifiers { XYFocusUpRef = target });
+
+    public static T XYFocusDown<T>(
+        this T el,
+        Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement> target) where T : Element =>
+        Modify(el, new ElementModifiers { XYFocusDownRef = target });
+
+    public static T XYFocusLeft<T>(
+        this T el,
+        Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement> target) where T : Element =>
+        Modify(el, new ElementModifiers { XYFocusLeftRef = target });
+
+    public static T XYFocusRight<T>(
+        this T el,
+        Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement> target) where T : Element =>
+        Modify(el, new ElementModifiers { XYFocusRightRef = target });
+
     /// <summary>
     /// Handler for UIElement.AccessKeyDisplayRequested — fires when the access-key
     /// bubble should appear (e.g., user pressed Alt). Use to customize the visual.
@@ -2505,6 +2525,29 @@ public static partial class ElementExtensions
     /// <example>TextBox(email, setEmail).LabeledBy("EmailLabel")</example>
     public static T LabeledBy<T>(this T el, string labelAutomationId) where T : Element =>
         ModifyA11y(el, new AccessibilityModifiers { LabeledBy = labelAutomationId });
+
+    /// <summary>
+    /// Associates this element with a labelling element through a reactive ElementRef.
+    /// </summary>
+    public static T LabeledBy<T>(
+        this T el,
+        Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement> target) where T : Element =>
+        ModifyA11y(el, new AccessibilityModifiers { LabeledByRef = target });
+
+    public static T DescribedBy<T>(
+        this T el,
+        params Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>[] targets) where T : Element =>
+        ModifyA11y(el, new AccessibilityModifiers { DescribedByRefs = targets });
+
+    public static T FlowsTo<T>(
+        this T el,
+        params Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>[] targets) where T : Element =>
+        ModifyA11y(el, new AccessibilityModifiers { FlowsToRefs = targets });
+
+    public static T FlowsFrom<T>(
+        this T el,
+        params Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>[] targets) where T : Element =>
+        ModifyA11y(el, new AccessibilityModifiers { FlowsFromRefs = targets });
 
     /// <summary>
     /// Sets UIElement.TabFocusNavigation — how Tab navigates within a container.

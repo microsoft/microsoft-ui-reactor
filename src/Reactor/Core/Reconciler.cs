@@ -1100,6 +1100,7 @@ public sealed partial class Reconciler : IDisposable
                 edge.Cell = null;
                 edge.Handler = null;
             }
+            apply(ctrl, null);
             return;
         }
 
@@ -3696,6 +3697,114 @@ public sealed partial class Reconciler : IDisposable
             m.Ref.SetCurrent(fe);
             AssertTypedRefMatch(m.Ref, fe);
         }
+
+        ApplyModifierReferenceEdges(fe, oldM, m);
+    }
+
+    private static void ApplyModifierReferenceEdges(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
+    {
+        WireModifierScalarReference(
+            fe,
+            ReferenceSlots.ModifierRef_LabeledBy,
+            m.Accessibility?.LabeledByRef,
+            oldM?.Accessibility?.LabeledByRef,
+            static (c, target) => Microsoft.UI.Xaml.Automation.AutomationProperties.SetLabeledBy(c, target));
+
+        WireModifierReferenceList(
+            fe,
+            ReferenceSlots.ModifierRef_DescribedBy,
+            m.Accessibility?.DescribedByRefs,
+            oldM?.Accessibility?.DescribedByRefs,
+            static c => Microsoft.UI.Xaml.Automation.AutomationProperties.GetDescribedBy(c));
+
+        WireModifierReferenceList(
+            fe,
+            ReferenceSlots.ModifierRef_FlowsTo,
+            m.Accessibility?.FlowsToRefs,
+            oldM?.Accessibility?.FlowsToRefs,
+            static c => Microsoft.UI.Xaml.Automation.AutomationProperties.GetFlowsTo(c));
+
+        WireModifierReferenceList(
+            fe,
+            ReferenceSlots.ModifierRef_FlowsFrom,
+            m.Accessibility?.FlowsFromRefs,
+            oldM?.Accessibility?.FlowsFromRefs,
+            static c => Microsoft.UI.Xaml.Automation.AutomationProperties.GetFlowsFrom(c));
+
+        WireModifierScalarReference(
+            fe,
+            ReferenceSlots.ModifierRef_XYFocusUp,
+            m.XYFocusUpRef,
+            oldM?.XYFocusUpRef,
+            static (c, target) => c.XYFocusUp = target);
+
+        WireModifierScalarReference(
+            fe,
+            ReferenceSlots.ModifierRef_XYFocusDown,
+            m.XYFocusDownRef,
+            oldM?.XYFocusDownRef,
+            static (c, target) => c.XYFocusDown = target);
+
+        WireModifierScalarReference(
+            fe,
+            ReferenceSlots.ModifierRef_XYFocusLeft,
+            m.XYFocusLeftRef,
+            oldM?.XYFocusLeftRef,
+            static (c, target) => c.XYFocusLeft = target);
+
+        WireModifierScalarReference(
+            fe,
+            ReferenceSlots.ModifierRef_XYFocusRight,
+            m.XYFocusRightRef,
+            oldM?.XYFocusRightRef,
+            static (c, target) => c.XYFocusRight = target);
+    }
+
+    private static void WireModifierScalarReference(
+        FrameworkElement fe,
+        int slot,
+        Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>? current,
+        Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>? old,
+        Action<FrameworkElement, FrameworkElement?> apply)
+    {
+        if (current is not null || old is not null)
+            WireReferenceEdge(fe, slot, current?.Inner, apply);
+    }
+
+    private static void WireModifierReferenceList(
+        FrameworkElement fe,
+        int slot,
+        IReadOnlyList<Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>>? current,
+        IReadOnlyList<Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>>? old,
+        Func<FrameworkElement, IList<DependencyObject>> getDestination)
+    {
+        if (current is null && old is null) return;
+
+        List<Microsoft.UI.Reactor.Input.ElementRef>? cells = null;
+        if (current is not null)
+        {
+            cells = new(current.Count);
+            foreach (var r in current)
+                if (r is not null)
+                    cells.Add(r.Inner);
+        }
+
+        WireReferenceListEdge(
+            fe,
+            slot,
+            cells,
+            ctrl =>
+            {
+                var dst = getDestination(ctrl);
+                dst.Clear();
+                if (cells is null) return;
+
+                foreach (var cell in cells)
+                {
+                    if (cell.Current is FrameworkElement target)
+                        dst.Add(target);
+                }
+            });
     }
 
     [global::System.Diagnostics.Conditional("DEBUG")]

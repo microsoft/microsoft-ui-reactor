@@ -361,28 +361,28 @@ writes). Register each fixture in both `SelfTestFixtureRegistry.cs` spots (0.3).
 
 ### 2.1 List-valued references — `.ReferenceList<T>` (§11 Phase 2, row 3)
 
-- [ ] Add `ReferenceListPropEntry<TElement, TControl, TTarget>` reusing the
+- [x] Add `ReferenceListPropEntry<TElement, TControl, TTarget>` reusing the
       `CollectionDiffControlled` keyed-diff shape (`PropEntry.cs:983` area) so a
       target *list* is diffed by key on cell changes.
-- [ ] Add `ControlDescriptor.ReferenceList<TTarget>(...)` and
+- [x] Add `ControlDescriptor.ReferenceList<TTarget>(...)` and
       `binding.ReferenceList<TTarget>(...)`.
-- [ ] Wire the `RefNode.Related` slot (§9.1) and land §9.2 **row 3 — Fan-in
+- [x] Wire the `RefNode.Related` slot (§9.1) and land §9.2 **row 3 — Fan-in
       `N sources → 1 referrer's list`** as a selftest fixture.
-- [ ] Provides the `.ReferenceList<T>` entry the **2.4 real-control capstone**
+- [x] Provides the `.ReferenceList<T>` entry the **2.4 real-control capstone**
       list-valued `AutomationProperties` rows depend on.
-- [ ] Resolve open question **Q3** (list-reference identity / order significance to
+- [x] Resolve open question **Q3** (list-reference identity / order significance to
       UIA) against actual UIA behavior; choose ordered keyed diff vs set diff and
       document the decision in the spec.
 
 ### 2.2 `AutomationProperties` relationship props
 
-- [ ] Land `.ReferenceList` descriptor entries for `AutomationProperties`
+- [x] Land `.ReferenceList` descriptor entries for `AutomationProperties`
       `LabeledBy` (scalar/`UIElement`), `DescribedBy`, `FlowsTo`, `FlowsFrom`
       (list-valued `IList<DependencyObject>`).
-- [ ] Extend the **1.12 real-control matrix** with the list-valued
+- [x] Extend the **1.12 real-control matrix** with the list-valued
       `DescribedBy`/`FlowsTo`/`FlowsFrom` fixtures and run them through the same
       recreation/pool-recycle/conditional/source-swap stressors.
-- [ ] Accessibility validation: a `LabeledBy`/`DescribedBy` edge **survives control
+- [x] Accessibility validation: a `LabeledBy`/`DescribedBy` edge **survives control
       recreation** (pool recycle / keyed reorder) so screen-reader relationships
       don't drop — assert against the live UIA tree (selftest peer inspection, or an
       E2E/UIA assertion in `tests/Reactor.AppTests/` if the relationship is only
@@ -390,11 +390,11 @@ writes). Register each fixture in both `SelfTestFixtureRegistry.cs` spots (0.3).
 
 ### 2.3 `XYFocus*` family + per-property fluents (§10, §11 Phase 2)
 
-- [ ] Land descriptor reference entries for `XYFocusUp/Down/Left/Right`
+- [x] Land descriptor reference entries for `XYFocusUp/Down/Left/Right`
       (`DependencyObject` targets) across the relevant catalog controls — the
       multi-slot, partly-cyclic proof (four reference props on one control, often
       bidirectional between neighbors).
-- [ ] Hand-author the per-property fluents for the common WinUI reference props
+- [x] Hand-author the per-property fluents for the common WinUI reference props
       (`.XYFocusRight(...)`, `.LabeledBy(...)`, etc.).
 
 ### 2.4 Real-WinUI-control reference torture matrix — Phase 2 capstone (D2, real-element flow)
