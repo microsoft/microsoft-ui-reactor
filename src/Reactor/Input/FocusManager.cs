@@ -16,6 +16,16 @@ namespace Microsoft.UI.Reactor.Input;
 /// </summary>
 public sealed class ElementRef
 {
+    private const int MaxCurrentChangedDispatchDepth = 32;
+
+    [ThreadStatic]
+    private static int s_dispatchDepth;
+
+#if !DEBUG
+    private static int s_loggedReentrancy;
+#endif
+    private bool _dispatching;
+
     internal FrameworkElement? _current;
 
     /// <summary>
@@ -32,6 +42,80 @@ public sealed class ElementRef
     /// (or has been unmounted without a replacement).
     /// </summary>
     public FrameworkElement? Current => _current;
+
+    /// <summary>
+    /// Raised after <see cref="Current"/> changes. Visibility is intentionally
+    /// internal in Phase 1 of spec 057 (Q4) and may be promoted to public once a
+    /// concrete imperative consumer needs it.
+    /// </summary>
+    internal event Action<FrameworkElement?>? CurrentChanged;
+
+    /// <summary>
+    /// Number of current subscribers to <see cref="CurrentChanged"/>. Internal
+    /// diagnostic/test hook for spec 057 topology leak-count assertions.
+    /// </summary>
+    internal int CurrentChangedSubscriberCount => CurrentChanged?.GetInvocationList().Length ?? 0;
+
+    /// <summary>
+    /// Updates the mounted control and raises <see cref="CurrentChanged"/> only
+    /// when the reference actually changes.
+    /// </summary>
+    internal void SetCurrent(FrameworkElement? value)
+    {
+        if (ReferenceEquals(_current, value)) return;
+
+        _current = value;
+        if (Microsoft.UI.Reactor.Core.V1Protocol.ReferenceDirtySet.TryEnqueue(this)) return;
+
+        RaiseCurrentChanged(value);
+    }
+
+    internal void FlushDispatch() => RaiseCurrentChanged(_current);
+
+    private void RaiseCurrentChanged(FrameworkElement? value)
+    {
+        if (_dispatching || s_dispatchDepth >= MaxCurrentChangedDispatchDepth)
+        {
+            ReportReentrantDispatchSuppressed(value);
+            return;
+        }
+
+        var handler = CurrentChanged;
+        if (handler is null) return;
+
+        _dispatching = true;
+        s_dispatchDepth++;
+        try
+        {
+            handler(value);
+        }
+        finally
+        {
+            s_dispatchDepth--;
+            _dispatching = false;
+        }
+    }
+
+    private void ReportReentrantDispatchSuppressed(FrameworkElement? value)
+    {
+        var expected = ExpectedType?.Name ?? nameof(FrameworkElement);
+        var actual = value?.GetType().Name ?? "null";
+        var message =
+            "ElementRef reference-edge no-echo violation: suppressed re-entrant " +
+            $"CurrentChanged dispatch for ElementRef<{expected}> (value={actual}, " +
+            $"depth={s_dispatchDepth}, cap={MaxCurrentChangedDispatchDepth}). " +
+            "CurrentChanged subscribers must not call SetCurrent on the same cell " +
+            "or create synchronous reference-edge cycles.";
+
+#if DEBUG
+        Debug.Fail(message);
+#else
+        if (global::System.Threading.Interlocked.Exchange(ref s_loggedReentrancy, 1) == 0)
+        {
+            Debug.WriteLine(message);
+        }
+#endif
+    }
 }
 
 /// <summary>
@@ -72,6 +156,8 @@ public sealed class ElementRef
 public sealed class ElementRef<T> where T : FrameworkElement
 {
     private readonly ElementRef _inner;
+    private event Action<T?>? _typedCurrentChanged;
+    private bool _typedCurrentChangedForwarderAttached;
 
     internal ElementRef(ElementRef inner)
     {
@@ -94,6 +180,38 @@ public sealed class ElementRef<T> where T : FrameworkElement
     public T? Current => _inner.Current as T;
 
     /// <summary>
+    /// Raised after the inner untyped cell changes, projecting the value as
+    /// <typeparamref name="T"/>. Visibility is intentionally internal in Phase 1
+    /// of spec 057 (Q4); the inner <see cref="ElementRef"/> remains the actual
+    /// subscription target and stable identity.
+    /// </summary>
+    internal event Action<T?>? CurrentChanged
+    {
+        add
+        {
+            if (value is null) return;
+
+            _typedCurrentChanged += value;
+            if (!_typedCurrentChangedForwarderAttached)
+            {
+                _inner.CurrentChanged += OnInnerCurrentChanged;
+                _typedCurrentChangedForwarderAttached = true;
+            }
+        }
+        remove
+        {
+            if (value is null) return;
+
+            _typedCurrentChanged -= value;
+            if (_typedCurrentChanged is null && _typedCurrentChangedForwarderAttached)
+            {
+                _inner.CurrentChanged -= OnInnerCurrentChanged;
+                _typedCurrentChangedForwarderAttached = false;
+            }
+        }
+    }
+
+    /// <summary>
     /// The underlying untyped ref. Internal — callers should rely on the implicit
     /// conversion below or on the typed <c>.Ref(...)</c> overload, which keep the
     /// wrapping invisible.
@@ -108,6 +226,9 @@ public sealed class ElementRef<T> where T : FrameworkElement
     /// </summary>
     public static implicit operator ElementRef(ElementRef<T> typed) =>
         typed?._inner ?? throw new ArgumentNullException(nameof(typed));
+
+    private void OnInnerCurrentChanged(FrameworkElement? value) =>
+        _typedCurrentChanged?.Invoke(value as T);
 
     /// <inheritdoc />
     public override string ToString() => $"ElementRef<{typeof(T).Name}>";

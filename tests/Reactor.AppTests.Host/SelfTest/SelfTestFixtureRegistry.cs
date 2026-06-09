@@ -1298,6 +1298,28 @@ internal static class SelfTestFixtureRegistry
         "EventStateSplit_ModifierStateLazyForIntrinsicOnly",
         "EventStateSplit_AddRawRoutedHandler_HandledEventsToo",
 
+        // Spec 057 §9.3 — ElementRef reactive-cell semantics requiring real WinUI controls.
+        "ReactiveElementRefCell",
+        // Spec 057 §9.1/§9.2 — synthetic reference-DP torture control smoke.
+        "RefNode_Smoke",
+        "RefNode_Row01_LinearChain",
+        "RefNode_Row02_FanOut",
+        "RefNode_Row04_Bidirectional",
+        "RefNode_Row05_ThreeCycle",
+        "RefNode_Row06_SelfReference",
+        "RefNode_Row07_ParentChildBothWays",
+        "RefNode_Row08_Diamond",
+        "RefNode_Row09_LateMount",
+        "RefNode_Row10_Conditional",
+        "RefNode_Row11_Reorder",
+        "RefNode_Row12_PoolRecycle",
+        "RefNode_Row13_ReferrerUnmount",
+        "RefNode_Row14_SourceSwap",
+        "RefNode_SurfaceParity",
+        // Spec 057 §10 — first-party TeachingTip.Target reference proof.
+        "TeachingTip_TargetReferenceResolvesBothMountOrders",
+        "TeachingTip_SurfaceParity",
+
         // Spec 048 §8 — global ControlRegistry dispatch precedence fixtures.
         // Validate that handlers registered via ControlRegistry.Register
         // resolve via the new arm-3 fallback in Reconciler.Mount/Update,
@@ -2598,6 +2620,25 @@ internal static class SelfTestFixtureRegistry
         "EventStateSplit_DualReturnIdempotent" => new Spec047EventStateSplitFixtures.DualReturnIdempotent(harness),
         "EventStateSplit_ModifierStateLazyForIntrinsicOnly" => new Spec047EventStateSplitFixtures.ModifierStateLazyForIntrinsicOnly(harness),
         "EventStateSplit_AddRawRoutedHandler_HandledEventsToo" => new Spec047EventStateSplitFixtures.AddRawRoutedHandler_HandledEventsToo(harness),
+
+        "ReactiveElementRefCell" => new ReactiveElementRefCellFixture.Execution(harness),
+        "RefNode_Smoke" => new RefNodeFixtures.Smoke(harness),
+        "RefNode_Row01_LinearChain" => new RefNodeTopologyFixtures.Row01_LinearChain(harness),
+        "RefNode_Row02_FanOut" => new RefNodeTopologyFixtures.Row02_FanOut(harness),
+        "RefNode_Row04_Bidirectional" => new RefNodeTopologyFixtures.Row04_Bidirectional(harness),
+        "RefNode_Row05_ThreeCycle" => new RefNodeTopologyFixtures.Row05_ThreeCycle(harness),
+        "RefNode_Row06_SelfReference" => new RefNodeTopologyFixtures.Row06_SelfReference(harness),
+        "RefNode_Row07_ParentChildBothWays" => new RefNodeTopologyFixtures.Row07_ParentChildBothWays(harness),
+        "RefNode_Row08_Diamond" => new RefNodeTopologyFixtures.Row08_Diamond(harness),
+        "RefNode_Row09_LateMount" => new RefNodeTopologyFixtures.Row09_LateMount(harness),
+        "RefNode_Row10_Conditional" => new RefNodeTopologyFixtures.Row10_Conditional(harness),
+        "RefNode_Row11_Reorder" => new RefNodeTopologyFixtures.Row11_Reorder(harness),
+        "RefNode_Row12_PoolRecycle" => new RefNodeTopologyFixtures.Row12_PoolRecycle(harness),
+        "RefNode_Row13_ReferrerUnmount" => new RefNodeTopologyFixtures.Row13_ReferrerUnmount(harness),
+        "RefNode_Row14_SourceSwap" => new RefNodeTopologyFixtures.Row14_SourceSwap(harness),
+        "RefNode_SurfaceParity" => new RefNodeSurfaceParityFixtures.Execution(harness),
+        "TeachingTip_TargetReferenceResolvesBothMountOrders" => new TeachingTipTargetFixtures.TargetReferenceResolvesBothMountOrders(harness),
+        "TeachingTip_SurfaceParity" => new RefNodeSurfaceParityFixtures.Execution(harness),
 
         // Spec 048 §8 — global ControlRegistry dispatch precedence fixtures.
         "Spec048_GlobalRegistry_Mount_DispatchesThroughArm3" => new Spec048ControlRegistryFixtures.GlobalRegistry_Mount_DispatchesThroughArm3(harness),

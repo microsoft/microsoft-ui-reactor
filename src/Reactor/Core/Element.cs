@@ -3409,6 +3409,10 @@ public record TeachingTipElement(
     public Action? OnActionButtonClick { get; init; }
     public string? CloseButtonContent { get; init; }
     public Action? OnClosed { get; init; }
+    /// <summary>
+    /// Control the tip anchors to, referenced by <c>ElementRef</c> so it resolves regardless of mount order.
+    /// </summary>
+    public Microsoft.UI.Reactor.Input.ElementRef<Microsoft.UI.Xaml.FrameworkElement>? Target { get; init; }
     /// <summary>Custom icon source rendered in the tip's leading slot.</summary>
     public IconData? IconSource { get; init; }
     /// <summary>Optional "hero" Element (image / banner) rendered above the title.</summary>

@@ -774,10 +774,12 @@ public class MoreCoverageTests2
             Content = TextBlock("body"),
             ActionButtonContent = "Do",
             CloseButtonContent = "Close",
+            Target = Microsoft.UI.Reactor.Input.TypedElementRef.Create<Microsoft.UI.Xaml.FrameworkElement>(),
         };
         Assert.Equal("Title", tt.Title);
         Assert.Equal("Sub", tt.Subtitle);
         Assert.False(tt.IsOpen);
+        Assert.NotNull(tt.Target);
     }
 
     [Fact]

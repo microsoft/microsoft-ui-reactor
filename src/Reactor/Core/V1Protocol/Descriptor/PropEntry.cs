@@ -426,6 +426,55 @@ internal sealed class ControlledPropEntry<TElement, TControl, TValue, TArgs> : P
     }
 }
 
+/// <summary>
+/// Spec 057 reference-binding entry. The mounted control is a referrer: its
+/// property is written from an <see cref="Microsoft.UI.Reactor.Input.ElementRef{T}"/> cell on mount,
+/// then updated by the cell's <c>CurrentChanged</c> signal until unmount.
+/// </summary>
+internal sealed class ReferencePropEntry<TElement, TControl, TTarget> : PropEntry<TElement, TControl>
+    where TElement : Element
+    where TControl : FrameworkElement
+    where TTarget : FrameworkElement
+{
+    private readonly Func<TElement, Microsoft.UI.Reactor.Input.ElementRef<TTarget>?> _get;
+    private readonly Action<TControl, TTarget?> _set;
+    private readonly int _slot;
+
+    public ReferencePropEntry(
+        Func<TElement, Microsoft.UI.Reactor.Input.ElementRef<TTarget>?> get,
+        Action<TControl, TTarget?> set,
+        int slot)
+    {
+        _get = get;
+        _set = set;
+        _slot = slot;
+    }
+
+    public override void Mount(TControl ctrl, TElement el)
+    {
+        var cell = _get(el)?.Inner;
+        _set(ctrl, cell?.Current as TTarget);
+    }
+
+    public override void Update(TControl ctrl, TElement oldEl, TElement newEl)
+    {
+        // Cell changes drive writes; ref-instance swaps are handled by EnsureSubscribed.
+    }
+
+    public override void EnsureSubscribed(
+        ReactorBinding<TElement> binding,
+        TControl ctrl,
+        TElement el)
+    {
+        var cell = _get(el)?.Inner;
+        Reconciler.WireReferenceEdge(
+            ctrl,
+            _slot,
+            cell,
+            (c, target) => _set((TControl)c, target as TTarget));
+    }
+}
+
 /// <summary>§9.2 typed payload for the descriptor model's controlled-prop
 /// entries. One closed generic per (<typeparamref name="TElement"/>,
 /// <typeparamref name="TControl"/>, <typeparamref name="TValue"/>,

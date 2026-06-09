@@ -24,6 +24,10 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///   <item><c>IconSource</c> — <c>.OneWayConditional</c> with reference
 ///   comparer (mirrors legacy <c>!ReferenceEquals</c> gate). Resolved via
 ///   <see cref="IconResolver.ResolveIconSource(IconData?)"/>.</item>
+///   <item><c>Target</c> — spec 057 first-class
+///   <c>.Reference</c> entry to the <see cref="FrameworkElement"/> the
+///   tip anchors to; the engine resolves and clears it across mount-order
+///   changes.</item>
 ///   <item><c>OnActionButtonClick</c>, <c>OnClosed</c> — fire-only
 ///   <c>.HandCodedEvent</c>s. ActionButtonClick fires when the user taps
 ///   the in-tip action button (which only exists when
@@ -33,14 +37,6 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.Descriptors;
 ///
 /// <para><b>Known gaps:</b>
 /// <list type="bullet">
-///   <item><b><c>Target</c> / <c>PlacementTarget</c> is escape-hatched</b>.
-///   TeachingTip's <c>Target</c> property is a
-///   <see cref="FrameworkElement"/> reference — it points at the control
-///   the tip is anchored to, which is a sibling in the visual tree, not a
-///   child the tip mounts. The descriptor framework can't express
-///   "reference another element's mounted control"; legacy authors set
-///   <c>Target</c> directly via a <c>.Set</c> imperative setter. The
-///   descriptor follows the same pattern (setter escape).</item>
 ///   <item>The legacy arm re-mounts <c>HeroContent</c> wholesale on swap
 ///   (no structural reconcile); the descriptor uses the standard
 ///   NamedSlot reconciliation path, which preserves descendant state
@@ -100,6 +96,9 @@ internal static class TeachingTipDescriptor
         .OneWay(
             get: static e => e.PreferredPlacement,
             set: static (c, v) => c.PreferredPlacement = v)
+        .Reference<Microsoft.UI.Xaml.FrameworkElement>(
+            get: static e => e.Target,
+            set: static (c, fe) => c.Target = fe)
         .OneWayConditional(
             get:         static e => e.ActionButtonContent,
             set:         static (c, v) => c.ActionButtonContent = v!,

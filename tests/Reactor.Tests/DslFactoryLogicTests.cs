@@ -284,6 +284,14 @@ public class DslFactoryLogicTests
         Assert.Equal("This is a tip", el.Subtitle);
     }
 
+    [Fact]
+    public void TeachingTip_Creates_With_Target()
+    {
+        var target = Microsoft.UI.Reactor.Input.TypedElementRef.Create<Microsoft.UI.Xaml.FrameworkElement>();
+        var el = TeachingTip("Did you know?", target: target);
+        Assert.Same(target, el.Target);
+    }
+
     // ════════════════════════════════════════════════════════════════
     //  Media factories
     // ════════════════════════════════════════════════════════════════

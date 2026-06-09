@@ -25,6 +25,11 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol;
 /// </summary>
 public readonly struct ReactorBinding<TElement> where TElement : Element
 {
+    private const int ReferenceSlotBase = 100_000;
+
+    [ThreadStatic]
+    private static int s_referenceSlotCount;
+
     private readonly Reconciler _reconciler;
     private readonly FrameworkElement _control;
     private readonly TElement _element;
@@ -34,6 +39,7 @@ public readonly struct ReactorBinding<TElement> where TElement : Element
         _reconciler = reconciler;
         _control = control;
         _element = element;
+        s_referenceSlotCount = 0;
     }
 
     /// <summary>The control the binding is anchored to.</summary>
@@ -185,6 +191,29 @@ public readonly struct ReactorBinding<TElement> where TElement : Element
         // the subscription on the native event source. Stash it in the
         // per-control event state box.
         Reconciler.AnchorCustomEventTrampoline(fe, trampoline);
+    }
+
+    /// <summary>
+    /// Registers a reference-property edge for hand-coded handlers. Slot indices
+    /// are assigned by call order for each <c>BindFor</c> instance and offset away
+    /// from descriptor slots; repeated reconciles of the same handler call order
+    /// therefore hit the same per-control reference slot.
+    /// </summary>
+    public void Reference<TTarget>(
+        Func<TElement, Microsoft.UI.Reactor.Input.ElementRef<TTarget>?> get,
+        Action<FrameworkElement, TTarget?> set)
+        where TTarget : FrameworkElement
+    {
+        ArgumentNullException.ThrowIfNull(get);
+        ArgumentNullException.ThrowIfNull(set);
+
+        var slot = ReferenceSlotBase + s_referenceSlotCount++;
+        var cell = get(_element)?.Inner;
+        Reconciler.WireReferenceEdge(
+            _control,
+            slot,
+            cell,
+            (c, target) => set(c, target as TTarget));
     }
 
     /// <summary>Per-binding wrapper around the 1.4 primitive

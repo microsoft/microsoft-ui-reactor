@@ -417,6 +417,17 @@ public sealed partial class Reconciler : IDisposable
         // is never observable post-rent because GetOrCreateControlEventPayload
         // re-creates the box on a HandlerType mismatch.
         public object? ControlEventState;
+
+        /// <summary>
+        /// Spec 057 reference-edge subscriptions owned by this control when it
+        /// is a referrer. A control may carry many same-typed reference edges
+        /// (RefNode has six) and may also need the single
+        /// <see cref="ControlEventState"/> slot for controlled props
+        /// (e.g. TeachingTip), so reference edges live in their own bag keyed by
+        /// reference-entry slot index. Edges are torn down on unmount before pool
+        /// return; they are not preserved across rent/return cycles.
+        /// </summary>
+        public ReferenceEdgeBag? ReferenceEdges;
     }
 
     internal static class ReactorAttached
@@ -662,6 +673,7 @@ public sealed partial class Reconciler : IDisposable
     {
         if (fe.GetValue(ReactorAttached.StateProperty) is not ReactorState state)
             return;
+        TeardownReferenceEdges(fe);
         state.Element = null;
         state.Modifiers?.ClearCurrentHandlers();
         state.Modifiers = null;
@@ -905,6 +917,7 @@ public sealed partial class Reconciler : IDisposable
         {
             if (fe.GetValue(ReactorAttached.StateProperty) is ReactorState rs)
             {
+                TeardownReferenceEdges(fe);
                 rs.Modifiers?.ClearCurrentHandlers();
                 // Spec 047 §9.2 / Phase 1 KD-3 — typed per-control event
                 // payloads (ToggleSwitch / Slider / TextBox / Button / ...)
@@ -1046,6 +1059,66 @@ public sealed partial class Reconciler : IDisposable
         return null;
     }
 
+    internal static ReferenceEdge GetOrCreateReferenceEdge(FrameworkElement ctrl, int slot)
+    {
+        var state = GetOrCreateReactorState(ctrl);
+        state.ReferenceEdges ??= new ReferenceEdgeBag();
+        if (!state.ReferenceEdges.Edges.TryGetValue(slot, out var edge))
+        {
+            edge = new ReferenceEdge();
+            state.ReferenceEdges.Edges[slot] = edge;
+        }
+
+        return edge;
+    }
+
+    internal static void WireReferenceEdge(
+        FrameworkElement ctrl,
+        int slot,
+        Microsoft.UI.Reactor.Input.ElementRef? cell,
+        Action<FrameworkElement, FrameworkElement?> apply)
+    {
+        var edge = GetOrCreateReferenceEdge(ctrl, slot);
+        if (cell is null)
+        {
+            if (edge.Cell is not null)
+            {
+                edge.Cell.CurrentChanged -= edge.Handler;
+                edge.Cell = null;
+                edge.Handler = null;
+            }
+            return;
+        }
+
+        if (ReferenceEquals(edge.Cell, cell)) return;
+
+        if (edge.Cell is not null)
+            edge.Cell.CurrentChanged -= edge.Handler;
+
+        edge.Cell = cell;
+        edge.Handler = target => apply(ctrl, target);
+        cell.CurrentChanged += edge.Handler;
+        apply(ctrl, cell.Current);
+    }
+
+    internal static void TeardownReferenceEdges(FrameworkElement ctrl)
+    {
+        if (ctrl.GetValue(ReactorAttached.StateProperty) is not ReactorState state
+            || state.ReferenceEdges is null)
+            return;
+
+        foreach (var edge in state.ReferenceEdges.Edges.Values)
+        {
+            if (edge.Cell is not null)
+                edge.Cell.CurrentChanged -= edge.Handler;
+            edge.Cell = null;
+            edge.Handler = null;
+        }
+
+        state.ReferenceEdges.Edges.Clear();
+        state.ReferenceEdges = null;
+    }
+
     // ════════════════════════════════════════════════════════════════════
     //  Disposable wrappers for V1 MountContext (1.6)
     // ════════════════════════════════════════════════════════════════════
@@ -1158,6 +1231,9 @@ public sealed partial class Reconciler : IDisposable
         UIElement? existingControl,
         Action requestRerender)
     {
+        ReferenceDirtySet.BeginCommit();
+        try
+        {
         // Trace only top-level reconcile passes (depth == 0) to avoid flooding
         // the provider with per-subtree entries; nested Reconcile() calls during
         // the same pass don't emit their own start/stop. Gate the depth counter
@@ -1228,6 +1304,11 @@ public sealed partial class Reconciler : IDisposable
                 _forceFullRenderActive = false;
                 _dirtyAncestorPath?.Clear();
             }
+        }
+        }
+        finally
+        {
+            ReferenceDirtySet.EndCommitAndFlush();
         }
     }
 
@@ -1720,6 +1801,9 @@ public sealed partial class Reconciler : IDisposable
                 ClearScrollAnimation(control, animEl.ScrollAnimation);
         }
 
+        if (control is FrameworkElement refFe && GetElementTag(refFe) is Element refEl)
+            CleanupReferenceStateForUnmount(refFe, refEl);
+
         if (_componentNodes.TryGetValue(control, out var node))
         {
             Diagnostics.ReactorEventSource.Log.ComponentUnmount(
@@ -1766,6 +1850,12 @@ public sealed partial class Reconciler : IDisposable
         }
 
         ForEachReactorChildControl(control, UnmountRecursive);
+    }
+
+    private static void CleanupReferenceStateForUnmount(FrameworkElement control, Element element)
+    {
+        element.Modifiers?.Ref?.SetCurrent(null);
+        TeardownReferenceEdges(control);
     }
 
     private static void ForEachReactorChildControl(UIElement control, Action<UIElement> visit)
@@ -2034,6 +2124,9 @@ public sealed partial class Reconciler : IDisposable
             if (animEl.ScrollAnimation is not null)
                 ClearScrollAnimation(control, animEl.ScrollAnimation);
         }
+
+        if (control is FrameworkElement refFe && GetElementTag(refFe) is Element refEl)
+            CleanupReferenceStateForUnmount(refFe, refEl);
 
         // Run cleanup logic (component teardown, etc.)
         if (_componentNodes.TryGetValue(control, out var node))
@@ -3538,7 +3631,7 @@ public sealed partial class Reconciler : IDisposable
         // write) and keeps the ref fresh when the pool recycles elements.
         if (m.Ref is not null)
         {
-            m.Ref._current = fe;
+            m.Ref.SetCurrent(fe);
             AssertTypedRefMatch(m.Ref, fe);
         }
     }

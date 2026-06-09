@@ -56,6 +56,7 @@ public sealed class ControlDescriptor<TElement, TControl>
     where TControl : FrameworkElement, new()
 {
     private readonly List<PropEntry<TElement, TControl>> _properties = new();
+    private int _referenceSlotCount;
 
     /// <summary>Optional factory the engine invokes when the pool is empty
     /// or <see cref="PoolPolicy"/> opts out. Defaults to <c>new TControl()</c>
@@ -155,6 +156,19 @@ public sealed class ControlDescriptor<TElement, TControl>
         Action<TControl, TValue> set)
     {
         _properties.Add(new InitialOnlyPropEntry<TElement, TControl, TValue>(get, set));
+        return this;
+    }
+
+    /// <summary>
+    /// Add a reference property binding. The control property is written from
+    /// the referenced cell at mount and whenever the cell changes.
+    /// </summary>
+    public ControlDescriptor<TElement, TControl> Reference<TTarget>(
+        Func<TElement, Microsoft.UI.Reactor.Input.ElementRef<TTarget>?> get,
+        Action<TControl, TTarget?> set)
+        where TTarget : FrameworkElement
+    {
+        _properties.Add(new ReferencePropEntry<TElement, TControl, TTarget>(get, set, _referenceSlotCount++));
         return this;
     }
 

@@ -1144,10 +1144,13 @@ public static partial class Factories
         return new(target, flyoutContent);
     }
 
-    public static TeachingTipElement TeachingTip(string title, string? subtitle = null)
+    public static TeachingTipElement TeachingTip(
+        string title,
+        string? subtitle = null,
+        Microsoft.UI.Reactor.Input.ElementRef<Microsoft.UI.Xaml.FrameworkElement>? target = null)
     {
         _ = V1.Reg<TeachingTipElement, WinUI.TeachingTip, Desc.TeachingTipDescriptorHandler>.Done;
-        return new(title, subtitle);
+        return new(title, subtitle) { Target = target };
     }
 
     public static ContentFlyoutElement ContentFlyout(Element content, FlyoutPlacementMode placement = FlyoutPlacementMode.Auto) =>

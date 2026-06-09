@@ -1489,6 +1489,12 @@ public static partial class ElementExtensions
     public static TeachingTipElement HeroContent(this TeachingTipElement el, Element hero) =>
         el with { HeroContent = hero };
 
+    /// <summary>Control this tip anchors to, resolved by ElementRef regardless of mount order.</summary>
+    public static TeachingTipElement Target(
+        this TeachingTipElement el,
+        Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement> target) =>
+        el with { Target = target };
+
     /// <summary>Extra margin around the tip when placed relative to its target.</summary>
     public static TeachingTipElement PlacementMargin(this TeachingTipElement el, Thickness margin) =>
         el with { PlacementMargin = margin };
