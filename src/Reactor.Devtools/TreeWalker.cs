@@ -118,6 +118,25 @@ internal sealed class TreeWalker
     private readonly NodeRegistry _registry;
     private readonly TreeView _view;
 
+    /// <summary>
+    /// Spec 057 §11 Phase 3 (3.1) — every <see cref="FrameworkElement"/> visited by the
+    /// last <see cref="Walk"/>, mapped to the node id assigned to it. The reference-edge
+    /// overlay (<see cref="ReferenceOverlay"/>) reuses these exact ids so its edges line up
+    /// with the tree the inspector already rendered. Reference-keyed so two distinct
+    /// controls that compare equal by value still map independently.
+    /// </summary>
+    private readonly Dictionary<FrameworkElement, string> _elementIds =
+        new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>Walked elements in document order (spec 057 §11 Phase 3, 3.1 overlay).</summary>
+    private readonly List<FrameworkElement> _walkedElements = new();
+
+    /// <summary><see cref="FrameworkElement"/> → node-id map from the last <see cref="Walk"/>.</summary>
+    public IReadOnlyDictionary<FrameworkElement, string> ElementIds => _elementIds;
+
+    /// <summary>Framework elements visited by the last <see cref="Walk"/>, in document order.</summary>
+    public IReadOnlyList<FrameworkElement> WalkedElements => _walkedElements;
+
     /// <summary>True when the last <see cref="Walk"/> hit a cap. Callers should
     /// surface this in their response so agents know the result is partial.</summary>
     public bool Truncated { get; private set; }
@@ -134,6 +153,8 @@ internal sealed class TreeWalker
     {
         var list = new List<TreeNode>();
         Truncated = false;
+        _elementIds.Clear();
+        _walkedElements.Clear();
         if (root is null) return list;
         WalkInto(root, parent: null, parentElement: null, ancestor: null, siblingIndex: 0, list, depth: 0);
         return list;
@@ -171,6 +192,12 @@ internal sealed class TreeWalker
             StableAncestor: ancestor);
 
         var id = _registry.GetOrCreate(descriptor, element);
+
+        if (element is FrameworkElement walkedFe)
+        {
+            _elementIds[walkedFe] = id;
+            _walkedElements.Add(walkedFe);
+        }
 
         var node = new TreeNode
         {

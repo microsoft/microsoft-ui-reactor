@@ -24,6 +24,7 @@ internal static class DevtoolsUiaTools
         var resolver = new SelectorResolver(nodes, windows);
 
         Register_Tree(server, nodes, windows);
+        Register_References(server, nodes, windows);
         Register_Click(server, resolver);
         Register_Type(server, resolver);
         Register_Focus(server, resolver);
@@ -610,6 +611,48 @@ internal static class DevtoolsUiaTools
                     Nodes = nodesWalked,
                     Truncated = walker.Truncated ? true : null,
                 };
+            }));
+    }
+
+    private static void Register_References(DevtoolsMcpServer server, NodeRegistry nodes, WindowRegistry windows)
+    {
+        server.Tools.Register(
+            new McpToolDescriptor(
+                Name: "references",
+                Description:
+                    "Spec 057 reference-graph overlay. Walks the visual tree and returns the reactive " +
+                    "reference edges (descriptor .Reference/.ReferenceList, the binding.Reference bridge, " +
+                    "and modifier edges such as LabeledBy/DescribedBy/XYFocus*) as {from,to,label,slot,kind," +
+                    "resolved} plus diagnostics for cycles and unresolved (perpetually-null) references. " +
+                    "Node ids match the `tree` tool. Cycles are a supported topology and are reported " +
+                    "informationally, not as errors.",
+                InputSchema: new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        selector = new { type = "string", description = "Optional scope; if omitted, walks the whole window." },
+                        window = new { type = "string" },
+                    },
+                    additionalProperties = false,
+                }),
+            @params => server.OnDispatcher(() =>
+            {
+                var selector = DevtoolsTools.ReadString(@params, "selector");
+                var windowId = DevtoolsTools.ReadString(@params, "window");
+                var w = ResolveWindowForTools(windows, windowId);
+                var resolvedWindowId = WindowIdFor(windows, w);
+                var walker = new TreeWalker(resolvedWindowId, nodes);
+
+                UIElement? root = w.Content;
+                if (!string.IsNullOrEmpty(selector))
+                {
+                    var resolver = new SelectorResolver(nodes, windows);
+                    root = resolver.Resolve(selector!, windowId);
+                }
+
+                walker.Walk(root);
+                return ReferenceOverlay.Build(walker, resolvedWindowId);
             }));
     }
 
