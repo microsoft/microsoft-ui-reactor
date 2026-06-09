@@ -342,6 +342,9 @@ internal sealed class PreviewCaptureServer : IDisposable
                 case "/components":
                     ServeComponents(response);
                     break;
+                case "/references":
+                    ServeReferences(response);
+                    break;
                 case "/preview":
                     HandleSwitchComponent(ctx.Request, response);
                     break;
@@ -514,6 +517,73 @@ internal sealed class PreviewCaptureServer : IDisposable
         response.OutputStream.Write(bytes, 0, bytes.Length);
         response.Close();
     }
+
+    /// <summary>
+    /// Spec 057 §11 Phase 3 (3.1) — serves the reactive reference-graph overlay for the
+    /// live preview window so the VS Code inspector can draw reference edges and surface
+    /// cycle / unresolved diagnostics alongside the frame. Mirrors the devtools
+    /// <c>references</c> MCP tool: walks the visual tree, reads each control's
+    /// reference-edge state, and returns <c>{edges, diagnostics}</c>. The walk reads
+    /// attached DPs, so it must run on the UI thread — we marshal onto the dispatcher
+    /// and block this pooled handler thread (bounded by the dispatch gate) for the result.
+    /// </summary>
+    private void ServeReferences(HttpListenerResponse response)
+    {
+        if (EmbedMode || _dispatcherQueue is null)
+        {
+            NotFound(response);
+            return;
+        }
+
+        string json;
+        try
+        {
+            json = BuildReferencesJson();
+        }
+        catch (Exception ex)
+        {
+            WriteError(response, 500, "reference overlay failed: " + ex.Message);
+            return;
+        }
+
+        var bytes = Encoding.UTF8.GetBytes(json);
+        response.ContentType = "application/json";
+        response.ContentLength64 = bytes.Length;
+        response.Headers.Add("Cache-Control", "no-store");
+        response.OutputStream.Write(bytes, 0, bytes.Length);
+        response.Close();
+    }
+
+    private string BuildReferencesJson()
+    {
+        var tcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_dispatcherQueue.TryEnqueue(() =>
+        {
+            try
+            {
+                var walker = new TreeWalker("main", new NodeRegistry());
+                walker.Walk(_window.Content);
+                tcs.TrySetResult(SerializeReferenceGraph(ReferenceOverlay.Build(walker, "main")));
+            }
+            catch (Exception ex) { tcs.TrySetException(ex); }
+        }))
+        {
+            throw new InvalidOperationException("preview dispatcher is unavailable");
+        }
+
+        if (!tcs.Task.Wait(5000))
+            throw new TimeoutException("reference overlay timed out building on the UI thread");
+        return tcs.Task.Result;
+    }
+
+    // Reflection-based serialization, intentionally matching the devtools `references`
+    // MCP tool (DevtoolsMcpServer.JsonOpts carries the AOT-fallback resolver). The
+    // overlay payload is internal devtools diagnostics, not a hot-path or AOT-shipped
+    // contract, so a source-generated context is not warranted.
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Devtools overlay; reflection fallback matches the references MCP tool.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Devtools overlay; reflection fallback matches the references MCP tool.")]
+    private static string SerializeReferenceGraph(ReferenceGraphResult graph)
+        => JsonSerializer.Serialize(graph, DevtoolsMcpServer.JsonOpts);
 
     private void HandleSwitchComponent(HttpListenerRequest request, HttpListenerResponse response)
     {
