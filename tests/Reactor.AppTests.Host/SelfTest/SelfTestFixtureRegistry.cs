@@ -1323,6 +1323,18 @@ internal static class SelfTestFixtureRegistry
         // Spec 057 §10 — first-party TeachingTip.Target reference proof.
         "TeachingTip_TargetReferenceResolvesBothMountOrders",
         "TeachingTip_SurfaceParity",
+        // Spec 057 §2.4 — real WinUI reference-DP torture matrix.
+        "RealRef_TeachingTipTarget_CrossSubtree",
+        "RealRef_XYFocusRing",
+        "RealRef_AutomationRelationships",
+        "RealRef_PlacementTarget",
+        "RealRef_KeyedReorder",
+        "RealRef_PoolRecycle",
+        "RealRef_ConditionalRemount",
+        "RealRef_LateAsyncTarget",
+        "RealRef_SourceSwap",
+        "RealRef_LeakBaseline",
+        "RealRef_EverythingAtOnce",
 
         // Spec 048 §8 — global ControlRegistry dispatch precedence fixtures.
         // Validate that handlers registered via ControlRegistry.Register
@@ -2647,6 +2659,17 @@ internal static class SelfTestFixtureRegistry
         "Accessibility_DescribedBy_List" => new ModifierReferenceFixtures.AccessibilityDescribedByList(harness),
         "TeachingTip_TargetReferenceResolvesBothMountOrders" => new TeachingTipTargetFixtures.TargetReferenceResolvesBothMountOrders(harness),
         "TeachingTip_SurfaceParity" => new RefNodeSurfaceParityFixtures.Execution(harness),
+        "RealRef_TeachingTipTarget_CrossSubtree" => new RealRefTortureFixtures.TeachingTipTargetCrossSubtree(harness),
+        "RealRef_XYFocusRing" => new RealRefTortureFixtures.XYFocusRing(harness),
+        "RealRef_AutomationRelationships" => new RealRefTortureFixtures.AutomationRelationships(harness),
+        "RealRef_PlacementTarget" => new RealRefTortureFixtures.PlacementTarget(harness),
+        "RealRef_KeyedReorder" => new RealRefTortureFixtures.KeyedReorder(harness),
+        "RealRef_PoolRecycle" => new RealRefTortureFixtures.PoolRecycle(harness),
+        "RealRef_ConditionalRemount" => new RealRefTortureFixtures.ConditionalRemount(harness),
+        "RealRef_LateAsyncTarget" => new RealRefTortureFixtures.LateAsyncTarget(harness),
+        "RealRef_SourceSwap" => new RealRefTortureFixtures.SourceSwap(harness),
+        "RealRef_LeakBaseline" => new RealRefTortureFixtures.LeakBaseline(harness),
+        "RealRef_EverythingAtOnce" => new RealRefTortureFixtures.EverythingAtOnce(harness),
 
         // Spec 048 §8 — global ControlRegistry dispatch precedence fixtures.
         "Spec048_GlobalRegistry_Mount_DispatchesThroughArm3" => new Spec048ControlRegistryFixtures.GlobalRegistry_Mount_DispatchesThroughArm3(harness),
