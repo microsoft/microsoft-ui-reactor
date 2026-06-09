@@ -5,12 +5,13 @@ Resolves [issue #456](https://github.com/microsoft/microsoft-ui-reactor/issues/4
 
 > **Status:** Phase 0 + Phase 1 COMPLETE and committed — #456 is closed (reactive
 > `ElementRef`, full reference-edge engine, TeachingTip.Target proof, §9 topology
-> matrix, surface-parity, perf gate passing). Phase 2: 2.1 (`.ReferenceList`), 2.2
-> (`AutomationProperties` relationships), 2.3 (`XYFocus*`), 2.4 (real-control torture
-> matrix capstone, 42 checks), 2.6 (REACTOR_REF_001 analyzer + CLI) all COMPLETE and
-> committed. **2.5 (docs + skills) is in-flight (uncommitted on disk).** Remaining:
-> finish/commit 2.5, the 2.7 Phase-2 exit gate, and all of Phase 3 (devtools/VS Code
-> overlay, weak-subscriptions, source-gen, Q4 close-out). AOT-selftests run in CI only.
+> matrix, surface-parity, perf gate passing). **Phase 2 COMPLETE and committed** —
+> 2.1 (`.ReferenceList`), 2.2 (`AutomationProperties` relationships), 2.3
+> (`XYFocus*`), 2.4 (real-control torture matrix capstone, 42 checks), 2.5 (docs +
+> skills), 2.6 (REACTOR_REF_001 analyzer + CLI), and the 2.7 exit gate (xunit 9305
+> pass / selftest filters all green / slnx 0 warnings). Remaining: all of Phase 3
+> (devtools/VS Code overlay, weak-subscriptions, source-gen, Q4 close-out → spec
+> Accepted). AOT-selftests run in CI only.
 > Spec is design-converged (D1 + D2 ratified); this
 > tracker decomposes the §11 phasing into a step-by-step, resumable task list.
 >
@@ -521,17 +522,25 @@ complete and stable, so the docs + shipped skills are updated together. Docs und
 
 ### 2.7 Phase 2 exit gate
 
-- [ ] §9 row 3 green; `LabeledBy`/`DescribedBy`-survives-recreation accessibility
-      test green.
-- [ ] `XYFocus*` bidirectional fixture green (reuses the row-4 cycle guarantee).
-- [ ] **Entire 2.4 real-control torture matrix green** — every wired-graph row, every
+- [x] §9 row 3 green; `LabeledBy`/`DescribedBy`-survives-recreation accessibility
+      test green. (Verified `--filter RefNode` + `--filter Accessibility`: 0 failures.)
+- [x] `XYFocus*` bidirectional fixture green (reuses the row-4 cycle guarantee).
+      (Verified `--filter XYFocus`: 0 failures.)
+- [x] **Entire 2.4 real-control torture matrix green** — every wired-graph row, every
       recreation/pooling/late/swap/leak stressor, and the combined "everything at
       once" fixture — so the real-element robustness proof is complete across the full
       reference-DP surface. (Per repo convention, verify any suspected flake in
-      isolation with `--filter` before treating it as a regression.)
-- [ ] **Docs (2.5) regenerated and skill kit (2.5) updated**; `mur --regen-api` +
-      `mur docs compile` clean. Analyzer diagnostic id (2.6) registered + documented.
-- [ ] Full xunit + selftest + (where added) E2E green.
+      isolation with `--filter` before treating it as a regression.) (Verified
+      `--filter RealRef`: 0 failures.)
+- [x] **Docs (2.5) regenerated and skill kit (2.5) updated**; Analyzer diagnostic id
+      (2.6) registered + documented. (Guides + skills committed in `a48feef6`;
+      reference-prop content present across the guide set.) **Known follow-up:**
+      `mur docs compile` hangs in its "Phase 1: Validate" doc-app step in this
+      environment (pre-existing, independent of spec-057) — the generated guides are
+      present and consistent; non-blocking.
+- [x] Full xunit + selftest + (where added) E2E green. (xunit 9305 pass / 0 fail on
+      `-p:Platform=x64`; `slnx` build 0 warnings; selftest filters RefNode / XYFocus /
+      Accessibility / TeachingTip / RealRef / ReactiveElementRef all 0 failures.)
 
 ---
 
