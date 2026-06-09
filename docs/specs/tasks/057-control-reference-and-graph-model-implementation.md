@@ -474,24 +474,24 @@ complete and stable, so the docs + shipped skills are updated together. Docs und
 `docs/guide/` are **generated** from `docs/_pipeline/templates/*.md.dt` via
 `mur docs compile` — edit the templates, not the compiled output.
 
-- [ ] **`extending-reactor-controls.md.dt`** — add a "reference properties" section
+- [x] **`extending-reactor-controls.md.dt`** — add a "reference properties" section
       to the authoring-shape decision tree: when to declare `descriptor.Reference` /
       `.ReferenceList` vs the imperative `binding.Reference` bridge; the D1 rule that
       authors never read `ref.Current` from a handler.
-- [ ] **`control-reconciler-protocol.md.dt`** — document `ReferencePropEntry` /
+- [x] **`control-reconciler-protocol.md.dt`** — document `ReferencePropEntry` /
       `ReferenceEdgePayload` in the PropEntry family, the cell subscription/teardown
       lifecycle, and the post-commit dirty-set flush (§6.3).
-- [ ] **`focus-and-input-internals.md.dt`** — document `ElementRef` as a reactive
+- [x] **`focus-and-input-internals.md.dt`** — document `ElementRef` as a reactive
       cell (`SetCurrent`/`CurrentChanged`, the §6.5 guard) and `XYFocus*` wiring.
-- [ ] **`accessibility.md.dt`** — `AutomationProperties.LabeledBy`/`DescribedBy`/
+- [x] **`accessibility.md.dt`** — `AutomationProperties.LabeledBy`/`DescribedBy`/
       `FlowsTo`/`FlowsFrom` as reference props, and the "survives recreation" guarantee.
-- [ ] **`dialogs-and-flyouts.md.dt`** — `TeachingTip.Target` (and placement targets)
+- [x] **`dialogs-and-flyouts.md.dt`** — `TeachingTip.Target` (and placement targets)
       via `.Target(ref)` with the cross-container example from the gallery sample.
-- [ ] **`reconciliation.md.dt`** + **`modifier-system.md.dt`** + **`cheat-sheet.md.dt`**
+- [x] **`reconciliation.md.dt`** + **`modifier-system.md.dt`** + **`cheat-sheet.md.dt`**
       — clear-on-unmount + flush note; the `.Ref` / `.Target` / `.XYFocus*` fluents;
       one quick-reference line for reference props.
-- [ ] Run `mur docs compile` and verify the generated `docs/guide/*` outputs match.
-- [ ] **Shipped skills** (the `reactor-skill-kit` zip published by
+- [x] Run `mur docs compile` and verify the generated `docs/guide/*` outputs match.
+- [x] **Shipped skills** (the `reactor-skill-kit` zip published by
       `.github/workflows/release.yml`):
   - `plugins/reactor/skills/reactor-getting-started/SKILL.md` — add the reference-prop
     pattern (`UseElementRef` + `.Ref` + a reference prop like `.Target`) to the 90%
