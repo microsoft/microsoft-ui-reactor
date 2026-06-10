@@ -63,7 +63,21 @@ down their edge bag, so subscriptions do not leak.
 
 ## Reconcile — the entry point
 
-```csharp snippet="source:src/Reactor/Core/Reconciler.cs#reconciler-entry"
+```csharp
+public UIElement? Reconcile(
+    Element? oldElement,
+    Element? newElement,
+    UIElement? existingControl,
+    Action requestRerender)
+{
+    return (oldElement, newElement) switch
+    {
+        (null, not null) => Mount(newElement, requestRerender),
+        (not null, null) => UnmountAndReturnNull(existingControl),
+        (not null, not null) => Update(oldElement, newElement, existingControl!, requestRerender),
+        _ => null,
+    };
+}
 ```
 
 `Reconcile` is short on purpose. The interesting work is in `Mount`,
@@ -118,7 +132,15 @@ don't end up paying GC cost proportional to scroll velocity.
 
 ## Update — patching in place
 
-```csharp snippet="source:src/Reactor/Core/Reconciler.cs#reconciler-entry"
+```csharp
+private void UpdateButton(ButtonElement oldEl, ButtonElement newEl, Button control)
+{
+    if (oldEl.Content != newEl.Content)
+        control.Content = newEl.Content;
+
+    ApplyModifiers(control, oldEl.Modifiers, newEl.Modifiers);
+    ReconcileChildren(oldEl.Children, newEl.Children, control);
+}
 ```
 
 `Update` is the other type-switch. For each subclass, `UpdateXxx`

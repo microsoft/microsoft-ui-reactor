@@ -112,7 +112,18 @@ Every reconcile pass starts here. The event-id pair is `1` / `2`
 (`ReconcileStart` / `ReconcileStop`) and the counters reported on
 `ReconcileStop` are the per-pass cost summary:
 
-```csharp snippet="source:src/Reactor/Core/Reconciler.cs#reconciler-entry"
+```csharp
+ReconcileStart(elementType);
+ResetDebugCounters();
+
+var result = ReconcileCore(oldElement, newElement, existingControl);
+
+ReconcileStop(
+    elementsDiffed,
+    elementsSkipped,
+    uiElementsCreated,
+    uiElementsModified);
+return result;
 ```
 
 In a flame-graph viewer you see a band whose top edge is

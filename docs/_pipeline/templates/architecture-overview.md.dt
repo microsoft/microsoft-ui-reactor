@@ -117,7 +117,24 @@ re-uses the same control whenever the keyed identity matches.
 
 ## Reconciler — the only mutator
 
-```csharp snippet="source:src/Reactor/Core/Reconciler.cs#reconciler-entry"
+```csharp
+public UIElement? Reconcile(
+    Element? oldElement,
+    Element? newElement,
+    UIElement? existingControl,
+    Action requestRerender)
+{
+    if (oldElement is null && newElement is not null)
+        return Mount(newElement, requestRerender);
+
+    if (oldElement is not null && newElement is null)
+    {
+        Unmount(existingControl);
+        return null;
+    }
+
+    return Update(oldElement!, newElement!, existingControl!, requestRerender);
+}
 ```
 
 `Reconcile` is a tri-state dispatch: `(oldElement, newElement)` resolves
