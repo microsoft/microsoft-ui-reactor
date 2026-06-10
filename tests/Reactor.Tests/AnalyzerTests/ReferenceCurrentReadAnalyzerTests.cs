@@ -128,4 +128,99 @@ class DescriptorBuilder
 
         await analyzerTest.RunAsync();
     }
+
+    [Fact]
+    public async Task Detects_Current_Passed_To_Attached_SetLabeledBy()
+    {
+        // CR-006: AutomationProperties.SetLabeledBy(control, ref.Current) is just as
+        // non-reactive as a direct property assignment.
+        var test = @"
+namespace Microsoft.UI.Reactor.Input
+{
+    class ElementRef { public Microsoft.UI.Xaml.FrameworkElement Current => null; }
+}
+namespace Microsoft.UI.Xaml
+{
+    class FrameworkElement { }
+}
+namespace Microsoft.UI.Xaml.Automation
+{
+    static class AutomationProperties
+    {
+        public static void SetLabeledBy(Microsoft.UI.Xaml.FrameworkElement e, Microsoft.UI.Xaml.FrameworkElement v) { }
+    }
+}
+class MyControlHandler
+{
+    void Update(Microsoft.UI.Xaml.FrameworkElement control, Microsoft.UI.Reactor.Input.ElementRef targetRef)
+    {
+        Microsoft.UI.Xaml.Automation.AutomationProperties.SetLabeledBy(control, {|REACTOR_REF_001:targetRef.Current|});
+    }
+}";
+
+        await new CSharpAnalyzerTest<ReferenceCurrentReadAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        }.RunAsync();
+    }
+
+    [Fact]
+    public async Task Detects_Current_Added_To_Attached_Relationship_List()
+    {
+        // CR-006: pushing ref.Current into an AutomationProperties relationship list
+        // (GetDescribedBy(control).Add(ref.Current)) is the list-valued variant.
+        var test = @"
+namespace Microsoft.UI.Reactor.Input
+{
+    class ElementRef { public Microsoft.UI.Xaml.FrameworkElement Current => null; }
+}
+namespace Microsoft.UI.Xaml
+{
+    class FrameworkElement { }
+}
+namespace Microsoft.UI.Xaml.Automation
+{
+    static class AutomationProperties
+    {
+        public static System.Collections.Generic.IList<Microsoft.UI.Xaml.FrameworkElement> GetDescribedBy(Microsoft.UI.Xaml.FrameworkElement e) => null;
+    }
+}
+class MyControlDescriptor
+{
+    void Mount(Microsoft.UI.Xaml.FrameworkElement control, Microsoft.UI.Reactor.Input.ElementRef targetRef)
+    {
+        Microsoft.UI.Xaml.Automation.AutomationProperties.GetDescribedBy(control).Add({|REACTOR_REF_001:targetRef.Current|});
+    }
+}";
+
+        await new CSharpAnalyzerTest<ReferenceCurrentReadAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        }.RunAsync();
+    }
+
+    [Fact]
+    public async Task No_Diagnostic_For_Unrelated_Property_Named_Target()
+    {
+        // CR-007: a property merely named 'Target' on a non-WinUI type must not warn,
+        // even inside a handler-like class.
+        var test = @"
+namespace Microsoft.UI.Reactor.Input
+{
+    class ElementRef { public object Current => null; }
+}
+class Unrelated { public object Target { get; set; } }
+class MyControlHandler
+{
+    void Update(Unrelated thing, Microsoft.UI.Reactor.Input.ElementRef r)
+    {
+        thing.Target = r.Current;
+    }
+}";
+
+        await new CSharpAnalyzerTest<ReferenceCurrentReadAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        }.RunAsync();
+    }
 }

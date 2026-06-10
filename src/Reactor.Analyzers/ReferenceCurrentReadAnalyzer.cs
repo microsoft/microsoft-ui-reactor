@@ -38,11 +38,31 @@ public sealed class ReferenceCurrentReadAnalyzer : DiagnosticAnalyzer
         ImmutableHashSet.Create(
             "Target",
             "LabeledBy",
+            "PlacementTarget",
             "XYFocusUp",
             "XYFocusDown",
             "XYFocusLeft",
             "XYFocusRight",
             "GeoView");
+
+    // Static/attached reference setters, e.g. AutomationProperties.SetLabeledBy(control, ref.Current).
+    private static readonly ImmutableHashSet<string> KnownReferenceSetterMethods =
+        ImmutableHashSet.Create(
+            "SetLabeledBy",
+            "SetDescribedBy",
+            "SetFlowsTo",
+            "SetFlowsFrom");
+
+    // Attached relationship-list accessors whose returned list gets a ref.Current
+    // pushed into it, e.g. AutomationProperties.GetDescribedBy(control).Add(ref.Current).
+    private static readonly ImmutableHashSet<string> KnownReferenceListAccessors =
+        ImmutableHashSet.Create(
+            "GetDescribedBy",
+            "GetFlowsTo",
+            "GetFlowsFrom");
+
+    private static readonly ImmutableHashSet<string> ListMutatorMethods =
+        ImmutableHashSet.Create("Add", "Insert");
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
         ImmutableArray.Create(Rule);
@@ -52,6 +72,7 @@ public sealed class ReferenceCurrentReadAnalyzer : DiagnosticAnalyzer
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
         context.EnableConcurrentExecution();
         context.RegisterSyntaxNodeAction(AnalyzeAssignment, SyntaxKind.SimpleAssignmentExpression);
+        context.RegisterSyntaxNodeAction(AnalyzeInvocation, SyntaxKind.InvocationExpression);
     }
 
     private static void AnalyzeAssignment(SyntaxNodeAnalysisContext context)
@@ -71,10 +92,126 @@ public sealed class ReferenceCurrentReadAnalyzer : DiagnosticAnalyzer
         if (!IsElementRefCurrent(currentAccess, context.SemanticModel, context.CancellationToken))
             return;
 
+        // CR-007: a bare property-name match (e.g. an unrelated `Target` property) is
+        // not enough — require the assigned member to live on a WinUI control
+        // (FrameworkElement-derived, which also covers third-party controls such as
+        // ArcGIS GeoView). Only fall back to the name/context heuristic when the symbol
+        // cannot be resolved, so incomplete compilations still surface the anti-pattern.
+        if (!IsReferencePropertyOwner(assignment.Left, context.SemanticModel, context.CancellationToken))
+            return;
+
         if (!IsLikelyHandlerOrDescriptorContext(assignment))
             return;
 
         context.ReportDiagnostic(Diagnostic.Create(Rule, currentAccess.GetLocation()));
+    }
+
+    private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
+    {
+        var invocation = (InvocationExpressionSyntax)context.Node;
+
+        if (invocation.Expression is not MemberAccessExpressionSyntax memberAccess)
+            return;
+
+        var methodName = memberAccess.Name.Identifier.ValueText;
+
+        // CR-006: AutomationProperties.SetLabeledBy(control, ref.Current) and the
+        // relationship-list .Add/.Insert(ref.Current) forms are just as non-reactive as
+        // the assignment form but were previously missed.
+        bool isAttachedSetter =
+            KnownReferenceSetterMethods.Contains(methodName) &&
+            IsAutomationPropertiesReceiver(memberAccess.Expression, context.SemanticModel, context.CancellationToken);
+
+        bool isRelationshipListMutation =
+            ListMutatorMethods.Contains(methodName) &&
+            ReceiverIsRelationshipListAccessor(memberAccess.Expression, context.SemanticModel, context.CancellationToken);
+
+        if (!isAttachedSetter && !isRelationshipListMutation)
+            return;
+
+        if (!IsLikelyHandlerOrDescriptorContext(invocation))
+            return;
+
+        foreach (var argument in invocation.ArgumentList.Arguments)
+        {
+            var currentAccess = TryFindCurrentAccess(argument.Expression);
+            if (currentAccess is null)
+                continue;
+
+            if (!IsElementRefCurrent(currentAccess, context.SemanticModel, context.CancellationToken))
+                continue;
+
+            context.ReportDiagnostic(Diagnostic.Create(Rule, currentAccess.GetLocation()));
+        }
+    }
+
+    private static bool IsAutomationPropertiesReceiver(
+        ExpressionSyntax receiver,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        // Symbol-resolved type name is the reliable signal; fall back to the textual
+        // receiver name when symbols are unavailable (incomplete compilation).
+        var type = semanticModel.GetTypeInfo(receiver, cancellationToken).Type
+                   ?? (semanticModel.GetSymbolInfo(receiver, cancellationToken).Symbol as INamedTypeSymbol);
+        if (type is not null)
+            return type.Name == "AutomationProperties";
+
+        return receiver is IdentifierNameSyntax id && id.Identifier.ValueText == "AutomationProperties"
+            || receiver is MemberAccessExpressionSyntax ma && ma.Name.Identifier.ValueText == "AutomationProperties";
+    }
+
+    private static bool ReceiverIsRelationshipListAccessor(
+        ExpressionSyntax receiver,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        if (StripParentheses(receiver) is not InvocationExpressionSyntax accessorInvocation)
+            return false;
+
+        if (accessorInvocation.Expression is not MemberAccessExpressionSyntax accessorMember)
+            return false;
+
+        return KnownReferenceListAccessors.Contains(accessorMember.Name.Identifier.ValueText)
+            && IsAutomationPropertiesReceiver(accessorMember.Expression, semanticModel, cancellationToken);
+    }
+
+    /// <summary>
+    /// CR-007: returns true when the assignment target is a member of a WinUI control
+    /// (a <c>Microsoft.UI.Xaml.FrameworkElement</c> subtype, which also covers third-party
+    /// controls like ArcGIS <c>GeoView</c>). When the symbol cannot be resolved we keep
+    /// the looser behavior so incomplete builds still flag the anti-pattern.
+    /// </summary>
+    private static bool IsReferencePropertyOwner(
+        ExpressionSyntax left,
+        SemanticModel semanticModel,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var symbol = semanticModel.GetSymbolInfo(left, cancellationToken).Symbol;
+        var owner = symbol switch
+        {
+            IPropertySymbol property => property.ContainingType,
+            IFieldSymbol field => field.ContainingType,
+            _ => null,
+        };
+
+        if (owner is null)
+            return true; // unresolved — preserve existing detection.
+
+        return InheritsFromFrameworkElement(owner);
+    }
+
+    private static bool InheritsFromFrameworkElement(INamedTypeSymbol? type)
+    {
+        for (var current = type; current is not null; current = current.BaseType)
+        {
+            if (current.Name == "FrameworkElement" &&
+                current.ContainingNamespace?.ToDisplayString() == "Microsoft.UI.Xaml")
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static MemberAccessExpressionSyntax? TryFindCurrentAccess(ExpressionSyntax expression)
