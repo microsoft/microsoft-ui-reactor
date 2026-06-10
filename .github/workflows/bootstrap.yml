@@ -151,7 +151,11 @@ jobs:
           New-Item -ItemType Directory -Path TestProjects | Out-Null
           Push-Location TestProjects
           try {
-              dotnet new reactorapp -n TestApp
+              # Bootstrap validates the local 0.0.0-local feed produced by
+              # mur pack-local. The template's normal default may point at a
+              # not-yet-published public preview while a release-prep PR is in
+              # flight, so opt into the local package version explicitly here.
+              dotnet new reactorapp -n TestApp --MSUIReactorVersion 0.0.0-local
               if ($LASTEXITCODE -ne 0) { throw "dotnet new reactorapp exited $LASTEXITCODE" }
               if (-not (Test-Path 'TestApp/TestApp.csproj')) { throw "TestApp/TestApp.csproj not produced" }
 
