@@ -242,11 +242,10 @@ never ships. That split is the whole reason Advanced is a sibling
 package and not a folder inside `Reactor.dll`.
 
 **`Reactor.dll` is in your publish output as a managed assembly,
-not a tucked-away framework package.** Reactor ships as
-`Microsoft.UI.Reactor` (see [spec 022 / Phase 0 release-asset
-flow](https://github.com/microsoft/microsoft-ui-reactor) — local
-builds get `0.0.0-local` via `mur pack-local`). Trim-friendly
-deployments don't get any framework-side magic; the same trimmer
+not a tucked-away framework package.** Reactor ships as the public preview
+NuGet package `Microsoft.UI.Reactor` version `0.1.0-preview.3`; local
+source-built smoke packages still use `0.0.0-local` via `mur pack-local`.
+Trim-friendly deployments don't get any framework-side magic; the same trimmer
 configuration that works for any WinUI 3 app works here.
 
 **`Microsoft.WindowsAppSDK` is explicitly pinned in the template, not
