@@ -136,6 +136,8 @@ After pushing the tag:
 4. Verify the packages appear on NuGet.org.
 5. Install the released template package or a locally packed template and create a smoke app that restores against NuGet.org.
 
+> **Two-person rule (submitter ≠ approver).** Publishing passes through two distinct gates, not one: the ADO Environment approval *and* the OneBranch ApprovalService / ServiceTree compliance check. The OneBranch approver **must be a different person than whoever pushed the release tag** — a self-approval by the tag pusher will be rejected by the compliance gate (and has bitten past release cycles). Line up a second approver before tagging so the publish is not blocked.
+
 ## If a release tag is wrong
 
 Do not move or rewrite a pushed release tag after release workflows or publishing have started. Instead:
