@@ -1,0 +1,124 @@
+# Widget Creator — an app that creates apps
+
+A Reactor (WinUI 3) desktop app that turns a one-line prompt into a **single-file
+Reactor app**, builds it, and launches the result inside an **MXC sandbox** with
+UI + remote network but **no local filesystem** — a web-like, run-untrusted-UI
+experience. The creator itself is, of course, a Reactor app.
+
+```
+prompt ─▶ GitHub Copilot SDK ─▶ single-file Reactor app (.cs)
+       ─▶ dotnet build          ─▶ widget.exe
+       ─▶ MXC wxc-exec          ─▶ sandboxed window (UI ✓, network ✓, local files ✗)
+```
+
+## What it demonstrates
+
+- **Generation** — the [`GitHub.Copilot.SDK`](https://www.nuget.org/packages/GitHub.Copilot.SDK)
+  streams a complete single-file Reactor app from your prompt (same engine the
+  `demo-script-tool` sample uses; rides your `gh auth` Copilot subscription). The
+  system prompt bakes in the Reactor **Windows 11 design** rules (TitleBar, theme
+  tokens, cards, 4px grid) so generated widgets look like first-class Win11 apps.
+- **Build** — the generated `widget.cs` is scaffolded into a tiny
+  self-contained Reactor project and built with the same platform-shaped output
+  layout as the Reactor app template.
+- **Sandboxed run** — the built `widget.exe` is launched by
+  [MXC](https://github.com/microsoft/mxc) (Microsoft eXecution Containers) via the
+  native `wxc-exec` binary under a policy that allows a visible window and
+  outbound network but denies the local filesystem. MXC grants the sandbox
+  read+execute on **only the app's own directory** (from
+  `filesystem.readonlyPaths`); the user's profile, Documents, etc. are
+  unreachable. We never touch filesystem ACLs ourselves.
+- **Runtime repair** — each saved widget persists the Copilot session ID that
+  created it. If the sandboxed app exits non-zero later, Widget Creator resumes
+  that session, sends the crash code/output plus the current source back to the
+  agent, rebuilds the repaired widget, saves the updated session metadata, and
+  relaunches it.
+- **Render-error visibility** — generated widgets include a fail-fast root
+  `ErrorBoundary` wrapper. Render exceptions are written to stderr with a
+  `WIDGET_CREATOR_RENDER_CRASH` marker and exit code `70`, so Reactor's normal
+  visual fallback does not hide the failure from the repair agent. The generated
+  helper also reports unhandled managed exceptions (`71`) and unobserved task
+  exceptions (`72`) to stderr. It does not write crash files because the
+  sandboxed app has no write access to its app directory.
+
+## Run it
+
+```pwsh
+dotnet run --project samples/apps/widget-creator/widget-creator.csproj -p:Platform=ARM64
+```
+
+(Use `-p:Platform=x64` on an x64 machine.)
+
+### Prerequisites
+
+1. **Copilot auth** — install the [GitHub CLI](https://cli.github.com/) and run
+   `gh auth login --web` with a Copilot-enabled account (`gh auth status` to
+   confirm). The bundled Copilot CLI rides that account.
+2. **MXC** — a build of `wxc-exec.exe`. By default the app prefers a freshly
+   built source binary under `…\mxc\src\target\<triple>\release\wxc-exec.exe`,
+   then the bundled `…\mxc\sdk\bin\<arch>\wxc-exec.exe`. Override with:
+   - `WIDGET_CREATOR_WXC_EXEC` — full path to `wxc-exec.exe`,
+   - `WIDGET_CREATOR_MXC_BIN` — a `sdk\bin` dir (the app appends `arm64`/`x64`), or
+   - `WIDGET_CREATOR_MXC_ROOT` — the MXC checkout root (default
+     `C:\Users\andersonch\Code\mxc`).
+3. **Local Reactor package** — generated widgets reference
+   `Microsoft.UI.Reactor 0.0.0-local`, resolved from this repo's `local-nupkgs`
+   feed. Run `mur pack-local` if it's missing. Override the feed path with
+   `WIDGET_CREATOR_NUPKGS`.
+
+Type a prompt, click **Generate & Run**. The generated source streams into the
+right panel; the build + `wxc-exec` log streams below it. The widget window opens
+sandboxed — close it to finish the run. If it crashes instead, the creator keeps
+watching the sandbox process, restores the widget's saved Copilot session, and
+asks the agent to repair the app from the crash details.
+
+## How the sandbox policy works
+
+The app emits an MXC `ContainerConfig` (schema `0.6.0-alpha`, `processcontainer`
+backend) and runs `wxc-exec <config>.json`:
+
+| Surface | Setting | Effect |
+|---|---|---|
+| UI / display | `ui.disable = false` | the widget renders a real WinUI window |
+| Network | `network.defaultPolicy = allow` + `internetClient` capability | outbound HTTP(S) works |
+| Filesystem | `filesystem.readonlyPaths = [appDir]` | MXC grants read+exec to **only** the app's own dir; everything else under the user profile is default-deny |
+| Clipboard / input | `clipboard = none`, `injection = false` | no clipboard, no synthetic input |
+
+MXC's tier detector chooses how to enforce that grant (BaseContainer, AppContainer
++ BFS, or AppContainer + DACL). The app never edits ACLs — declaring the app
+directory in `readonlyPaths` is enough; MXC's DACL manager stamps the grant.
+
+> **Host note (this dev machine).** The newer BaseContainer backend is gated by
+> the OS build here (`Experimental_CreateProcessInSandbox → E_NOTIMPL`). The app
+> sets `MXC_DISABLE_BASE_CONTAINER=1` on the `wxc-exec` process so the tier
+> detector uses **AppContainer + DACL** instead, which grants the app dir and
+> runs. This is harmless on hosts where BaseContainer works (it just uses the
+> DACL tier). Pre-set the variable yourself to override. Requires a `wxc-exec`
+> build new enough to honor that variable — hence the source-binary preference
+> above.
+
+## Layout
+
+```
+samples/apps/widget-creator/
+  Program.cs                 ← ReactorApp.Run<WidgetCreatorShell>
+  WidgetCreatorShell.cs      ← the UI + generate→build→sandbox pipeline
+  Services/
+    CopilotSdkClient.cs      ← streaming text completion via GitHub.Copilot.SDK
+    IModelClient.cs
+    WidgetGenerator.cs       ← system prompt + stream + ```csharp fence extraction
+    WidgetWorkspace.cs       ← scaffolds widget.cs + widget.csproj + nuget.config
+    WidgetBuilder.cs         ← dotnet publish (no ACL edits — MXC grants the app dir)
+    MxcSandbox.cs            ← builds the ContainerConfig + runs wxc-exec
+    SessionLog.cs
+  Resources/SystemPrompt.txt ← instructs the model to emit one single-file Reactor app
+```
+
+## Notes & caveats
+
+- This is a demo wired against a local MXC checkout and the repo's `local-nupkgs`
+  feed — paths and schema choices are host-specific and meant to be cleaned up
+  before any real submission.
+- MXC is an early preview; its sandbox profiles are **not** a security boundary
+  yet (see the MXC README).
+- A real generation call opens an interactive Copilot CLI auth flow on first use.

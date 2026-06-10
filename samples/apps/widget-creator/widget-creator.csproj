@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <Platforms>x64;ARM64</Platforms>
+    <RootNamespace>WidgetCreator</RootNamespace>
+    <AssemblyName>WidgetCreator</AssemblyName>
+    <Product>Widget Creator</Product>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>preview</LangVersion>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Generation engine: rides the user's logged-in Copilot subscription via
+         the bundled Copilot CLI. Same package the demo-script-tool sample uses. -->
+    <PackageReference Include="GitHub.Copilot.SDK" Version="0.3.0" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
+    <!-- Pin transitive Nerdbank.MessagePack (via GitHub.Copilot.SDK -> StreamJsonRpc)
+         to a patched version, matching demo-script-tool. -->
+    <PackageReference Include="Nerdbank.MessagePack" Version="1.2.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Reactor\Reactor.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\SystemPrompt.txt" />
+  </ItemGroup>
+
+  <!-- Vendored MXC sandbox runtime (no NuGet exists for it). These prebuilt
+       wxc-exec binaries + helpers are copied next to the app under mxc/<rid>/ so
+       Widget Creator runs sandboxed straight after `git clone` + `dotnet run`,
+       with no external mxc checkout. MxcSandbox.ResolveWxcExec() looks here
+       first (after env overrides). Refresh by re-copying mxc/sdk/bin/<arch>/.
+       Only win-arm64 is vendored today; add tools/mxc/win-x64/ for x64 hosts. -->
+  <ItemGroup>
+    <None Include="tools\mxc\**\*.exe">
+      <Link>mxc\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>
