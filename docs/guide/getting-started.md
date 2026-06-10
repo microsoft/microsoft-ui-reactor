@@ -19,7 +19,7 @@ the rest of the docset elaborates.
 <!-- /ai:lock -->
 
 > **Public preview package available.** Reactor ships `Microsoft.UI.Reactor`
-> `0.1.0-preview.3` on NuGet.org. The project template package is still
+> `0.1.0-preview.4` on NuGet.org. The project template package is still
 > installed from source for now; `bootstrap.ps1` installs `mur`, packs/registers
 > the local `reactorapp` template, and stamps generated apps to reference the
 > public preview package by default. Broader signed distribution is tracked in
@@ -43,7 +43,7 @@ install (so it's on PATH cross-shell with no manual `$env:Path` edits), runs
 matching `ProjectTemplates` nupkg, registers the `dotnet new reactorapp`
 template, and drops the Reactor agent plugin under `~/.claude/plugins/reactor`
 (symlink when allowed, copy otherwise). Apps created from that template reference
-`Microsoft.UI.Reactor` version `0.1.0-preview.3` from NuGet.org by default.
+`Microsoft.UI.Reactor` version `0.1.0-preview.4` from NuGet.org by default.
 
 When it finishes you can immediately run:
 
@@ -81,7 +81,7 @@ with a one-line remediation for anything broken.
 > **What this gets you.** A globally-resolvable `mur` (via `~/.dotnet/tools`),
 > a locally installed `reactorapp` template that references
 > `<PackageReference Include="Microsoft.UI.Reactor"
-> Version="0.1.0-preview.3" />`, a local NuGet feed at `<repo>/local-nupkgs/`
+> Version="0.1.0-preview.4" />`, a local NuGet feed at `<repo>/local-nupkgs/`
 > for source-built smoke tests, and an agent plugin so AI assistants generate
 > against the real factories (`mur --skill` / `mur --api` print the same
 > content). Run `mur upgrade` whenever you pull new template, CLI, plugin, or
@@ -171,7 +171,7 @@ New PowerShell windows pick up the user-PATH change on their own.
 **5. Pack local framework snapshots and project templates.** This produces the
 source-built `0.0.0-local` framework nupkgs for smoke tests plus the local
 `ProjectTemplates` nupkg that installs `dotnet new reactorapp`. The template's
-normal default references the public `Microsoft.UI.Reactor` `0.1.0-preview.3`
+normal default references the public `Microsoft.UI.Reactor` `0.1.0-preview.4`
 package.
 
 ```powershell
@@ -268,7 +268,7 @@ Reactor component. No `App.xaml`, no `MainWindow.xaml.cs` — just one C#
 file.
 
 By default that package reference is
-`<PackageReference Include="Microsoft.UI.Reactor" Version="0.1.0-preview.3" />`.
+`<PackageReference Include="Microsoft.UI.Reactor" Version="0.1.0-preview.4" />`.
 For local framework smoke tests, generate with
 `dotnet new reactorapp -n MyLocalApp --MSUIReactorVersion 0.0.0-local` and run
 from inside the source checkout or another folder that has the local feed

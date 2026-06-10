@@ -243,7 +243,7 @@ package and not a folder inside `Reactor.dll`.
 
 **`Reactor.dll` is in your publish output as a managed assembly,
 not a tucked-away framework package.** Reactor ships as the public preview
-NuGet package `Microsoft.UI.Reactor` version `0.1.0-preview.3`; local
+NuGet package `Microsoft.UI.Reactor` version `0.1.0-preview.4`; local
 source-built smoke packages still use `0.0.0-local` via `mur pack-local`.
 Trim-friendly deployments don't get any framework-side magic; the same trimmer
 configuration that works for any WinUI 3 app works here.

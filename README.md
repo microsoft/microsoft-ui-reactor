@@ -69,7 +69,7 @@ Many of the experiments in this repo — the charting stack, accessibility valid
 
 ## Quick start
 
-Reactor ships the public preview package `Microsoft.UI.Reactor` version `0.1.0-preview.3` on NuGet.org. The project template is still installed from source for now; `bootstrap.ps1` installs the `mur` CLI, packs/registers the local `reactorapp` template, and that template references the public preview package by default.
+Reactor ships the public preview package `Microsoft.UI.Reactor` version `0.1.0-preview.4` on NuGet.org. The project template is still installed from source for now; `bootstrap.ps1` installs the `mur` CLI, packs/registers the local `reactorapp` template, and that template references the public preview package by default.
 
 ```powershell
 git clone https://github.com/microsoft/microsoft-ui-reactor.git
@@ -88,7 +88,7 @@ dotnet run -p:Platform=x64
 > causes `WindowsAppSDKSelfContained` errors. This applies to `dotnet build`,
 > `dotnet run`, and `mur check` invocations alike.
 
-`bootstrap.ps1` packs `mur` as a `dotnet tool` global install (cross-shell PATH, no per-arch `$env:Path` edits), packs local framework snapshots plus project templates into `local-nupkgs/`, registers the `dotnet new reactorapp` template, and installs the Reactor agent plugin under `~/.claude/plugins/reactor`. Apps created by the template reference `Microsoft.UI.Reactor` `0.1.0-preview.3` from NuGet.org by default; pass `--MSUIReactorVersion 0.0.0-local` when you intentionally want a scaffolded app to consume the local source-built package instead. The optional `Microsoft.UI.Reactor.Advanced` and `Microsoft.UI.Reactor.Devtools` sibling packages are version-matched to the framework package when published. Re-run `bootstrap.ps1` (or `mur upgrade` for a lighter refresh) after `git pull` when you want updated local templates or CLI/plugin bits. Verify a working developer install with `mur doctor`.
+`bootstrap.ps1` packs `mur` as a `dotnet tool` global install (cross-shell PATH, no per-arch `$env:Path` edits), packs local framework snapshots plus project templates into `local-nupkgs/`, registers the `dotnet new reactorapp` template, and installs the Reactor agent plugin under `~/.claude/plugins/reactor`. Apps created by the template reference `Microsoft.UI.Reactor` `0.1.0-preview.4` from NuGet.org by default; pass `--MSUIReactorVersion 0.0.0-local` when you intentionally want a scaffolded app to consume the local source-built package instead. The optional `Microsoft.UI.Reactor.Advanced` and `Microsoft.UI.Reactor.Devtools` sibling packages are version-matched to the framework package when published. Re-run `bootstrap.ps1` (or `mur upgrade` for a lighter refresh) after `git pull` when you want updated local templates or CLI/plugin bits. Verify a working developer install with `mur doctor`.
 
 Prefer to wire it up by hand? **[Getting Started](https://microsoft.github.io/microsoft-ui-reactor/getting-started/#manual-setup)** has a no-magic walkthrough of the exact `dotnet pack` / `dotnet tool install` / `dotnet new install` calls `bootstrap.ps1` makes, plus the full hello-world → todo → calculator tour.
 

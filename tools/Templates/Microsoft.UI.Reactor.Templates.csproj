@@ -18,7 +18,7 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <NoWarn>$(NoWarn);NU5128</NoWarn> <!-- Ignore warning generated when setting IncludeBuildOutput=False https://github.com/nuget/home/issues/8583 -->
     <Version Condition="'$(Version)' == ''">0.0.0-local</Version>
-    <MicrosoftUIReactorVersion Condition="'$(MicrosoftUIReactorVersion)' == ''">0.1.0-preview.3</MicrosoftUIReactorVersion> <!-- NuGet version generated apps should reference by default. Override for local framework smoke tests. -->
+    <MicrosoftUIReactorVersion Condition="'$(MicrosoftUIReactorVersion)' == ''">0.1.0-preview.4</MicrosoftUIReactorVersion> <!-- NuGet version generated apps should reference by default. Override for local framework smoke tests. -->
   </PropertyGroup>
 
   <ItemGroup>
