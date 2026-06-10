@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
@@ -17,12 +18,47 @@ public sealed record SandboxResult(int ExitCode, string Output)
     public string ExitCodeHex => $"0x{(uint)ExitCode:X8}";
 
     /// <summary>
-    /// True when the widget exited abnormally. A cleanly-closed WinUI window
-    /// exits 0; a Reactor cross-thread fast-fail is <c>0xC0000409</c>, an access
-    /// violation <c>0xC0000005</c>, a CLR unhandled exception <c>0xE0434352</c> —
-    /// all non-zero. We treat any non-zero exit as a crash to repair.
+    /// True once the widget process actually started its Reactor window — i.e. the
+    /// sandbox launched it. Used to tell a real widget crash apart from a failure
+    /// to even launch (a sandbox/policy/host problem).
     /// </summary>
-    public bool Crashed => ExitCode != 0;
+    public bool WidgetStarted =>
+        Output.Contains("MountAndActivate ok", StringComparison.OrdinalIgnoreCase)
+        || Output.Contains("OpenWindowCore", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// True when <c>wxc-exec</c> itself failed to set up the sandbox and never ran
+    /// the widget — e.g. the host's BaseContainer tier is gated and the DACL
+    /// fallback can't grant the requested path (no <c>WRITE_DAC</c>), or a
+    /// capability is unimplemented. These are permission/host problems, NOT widget
+    /// bugs, so they must not trigger the Copilot crash-repair loop.
+    /// </summary>
+    public bool LaunchFailed =>
+        ExitCode != 0 && !WidgetStarted && HasSandboxError;
+
+    /// <summary>First <c>wxc-exec</c> <c>error:</c> line, if any, for user-facing messaging.</summary>
+    public string? LaunchErrorMessage =>
+        Output.Split('\n')
+            .Select(l => l.Trim())
+            .FirstOrDefault(l => l.StartsWith("error:", StringComparison.OrdinalIgnoreCase))
+            ?.Substring("error:".Length).Trim();
+
+    bool HasSandboxError =>
+        Output.Contains("BaseContainer is unavailable", StringComparison.OrdinalIgnoreCase)
+        || Output.Contains("DACL fallback", StringComparison.OrdinalIgnoreCase)
+        || Output.Contains("WRITE_DAC", StringComparison.OrdinalIgnoreCase)
+        || Output.Contains("E_NOTIMPL", StringComparison.OrdinalIgnoreCase)
+        || Output.Contains("Experimental_CreateProcessInSandbox", StringComparison.OrdinalIgnoreCase)
+        || Output.Split('\n').Any(l => l.TrimStart().StartsWith("error:", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// True when the widget started and then exited abnormally. A cleanly-closed
+    /// WinUI window exits 0; a Reactor cross-thread fast-fail is <c>0xC0000409</c>,
+    /// an access violation <c>0xC0000005</c>, a CLR unhandled exception
+    /// <c>0xE0434352</c> — all non-zero. A non-zero exit that is actually a
+    /// <see cref="LaunchFailed"/> sandbox error is excluded (not a widget bug).
+    /// </summary>
+    public bool Crashed => ExitCode != 0 && !LaunchFailed;
 }
 
 /// <summary>
@@ -112,46 +148,53 @@ public sealed class MxcSandbox
 
     public bool IsAvailable => File.Exists(WxcExecPath);
 
-    /// <summary>Build the wxc-exec ContainerConfig JSON for a widget exe.</summary>
-    public static string BuildConfigJson(string exePath, string appDir, string? extraArgs = null, int timeoutSeconds = 0)
+    /// <summary>
+    /// Build the wxc-exec ContainerConfig JSON for a widget exe. Starts from a
+    /// per-widget permission policy template (<paramref name="policyTemplateJson"/>;
+    /// the default UI+internet policy when null/blank/invalid), then merges the
+    /// run-specific fields: the process command line/cwd/timeout, and a guaranteed
+    /// read grant on the app's own directory so the widget can always launch
+    /// regardless of the chosen policy.
+    /// </summary>
+    public static string BuildConfigJson(
+        string exePath, string appDir, string? extraArgs = null, int timeoutSeconds = 0,
+        string? policyTemplateJson = null)
     {
         var commandLine = Quote(exePath);
         if (!string.IsNullOrWhiteSpace(extraArgs))
             commandLine += " " + extraArgs;
 
-        var config = new JsonObject
+        var config = MxcPolicy.TryParse(policyTemplateJson, out var parsed, out _)
+            ? parsed
+            : MxcPolicy.DefaultTemplate();
+
+        // Required base fields (fill only if the policy omitted them).
+        config["version"] ??= SchemaVersion;
+        config["containment"] ??= "processcontainer";
+
+        // Process is always run-controlled — overwrite whatever the policy had.
+        config["process"] = new JsonObject
         {
-            ["version"] = SchemaVersion,
-            ["containment"] = "processcontainer",
-            ["process"] = new JsonObject
-            {
-                ["commandLine"] = commandLine,
-                ["cwd"] = appDir,
-                ["timeout"] = timeoutSeconds <= 0 ? 0 : timeoutSeconds * 1000, // ms; 0 = run until the window closes
-            },
-            // MXC grants read+execute to exactly this directory (the app's own
-            // run dir) — nothing else under the user profile is reachable.
-            ["filesystem"] = new JsonObject
-            {
-                ["readonlyPaths"] = new JsonArray(appDir),
-            },
-            ["appContainer"] = new JsonObject
-            {
-                ["leastPrivilege"] = false,
-                ["capabilities"] = new JsonArray("internetClient"),
-            },
-            ["network"] = new JsonObject
-            {
-                ["defaultPolicy"] = "allow",
-                ["enforcementMode"] = "capabilities",
-            },
-            ["ui"] = new JsonObject
-            {
-                ["disable"] = false,
-                ["clipboard"] = "none",
-                ["injection"] = false,
-            },
+            ["commandLine"] = commandLine,
+            ["cwd"] = appDir,
+            ["timeout"] = timeoutSeconds <= 0 ? 0 : timeoutSeconds * 1000, // ms; 0 = run until the window closes
         };
+
+        // Always grant read+execute on the app's own run dir, even under a custom
+        // policy — otherwise the widget cannot be launched.
+        if (config["filesystem"] is not JsonObject fs)
+        {
+            fs = new JsonObject();
+            config["filesystem"] = fs;
+        }
+        if (fs["readonlyPaths"] is not JsonArray readonlyPaths)
+        {
+            readonlyPaths = new JsonArray();
+            fs["readonlyPaths"] = readonlyPaths;
+        }
+        if (!readonlyPaths.Any(n => string.Equals((string?)n, appDir, StringComparison.OrdinalIgnoreCase)))
+            readonlyPaths.Add(JsonValue.Create(appDir));
+
         return config.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
     }
 
@@ -167,7 +210,7 @@ public sealed class MxcSandbox
     /// </summary>
     public async Task<SandboxResult> RunAsync(
         string exePath, string appDir, Action<string>? onLine, CancellationToken ct,
-        string? extraArgs = null, int timeoutSeconds = 0)
+        string? extraArgs = null, int timeoutSeconds = 0, string? policyTemplateJson = null)
     {
         if (!IsAvailable)
         {
@@ -176,7 +219,7 @@ public sealed class MxcSandbox
             return new SandboxResult(-1, msg);
         }
 
-        var configJson = BuildConfigJson(exePath, appDir, extraArgs, timeoutSeconds);
+        var configJson = BuildConfigJson(exePath, appDir, extraArgs, timeoutSeconds, policyTemplateJson);
         var configPath = Path.Combine(Path.GetTempPath(), "widget-creator", $"mxc-{Guid.NewGuid():N}.json");
         Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
         await File.WriteAllTextAsync(configPath, configJson, ct).ConfigureAwait(false);

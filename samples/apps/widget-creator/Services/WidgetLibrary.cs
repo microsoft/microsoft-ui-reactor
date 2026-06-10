@@ -100,6 +100,48 @@ public sealed class WidgetLibrary
         }
     }
 
+    /// <summary>Read a widget's saved permission policy, or null if it uses the default.</summary>
+    public string? ReadPolicy(WidgetApp app)
+    {
+        try { return File.Exists(app.PolicyPath) ? ReadAllTextShared(app.PolicyPath) : null; }
+        catch (Exception ex)
+        {
+            SessionLog.Write($"[Library] read policy for {app.Id} failed: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>Persist a widget's permission policy JSON.</summary>
+    public async Task SavePolicyAsync(WidgetApp app, string json)
+    {
+        await IoGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            Directory.CreateDirectory(app.Dir);
+            await WriteAtomicWithRetriesAsync(app.PolicyPath, json).ConfigureAwait(false);
+            SessionLog.Write($"[Library] saved policy for {app.Id}");
+        }
+        finally
+        {
+            IoGate.Release();
+        }
+    }
+
+    /// <summary>Remove a widget's permission policy so it reverts to the default.</summary>
+    public void ResetPolicy(WidgetApp app)
+    {
+        IoGate.Wait();
+        try
+        {
+            try { if (File.Exists(app.PolicyPath)) File.Delete(app.PolicyPath); }
+            catch (Exception ex) { SessionLog.Write($"[Library] reset policy for {app.Id} failed: {ex.Message}"); }
+        }
+        finally
+        {
+            IoGate.Release();
+        }
+    }
+
     static string ReadAllTextShared(string path)
     {
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);

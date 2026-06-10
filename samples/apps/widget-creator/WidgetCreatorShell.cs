@@ -76,6 +76,11 @@ public sealed class WidgetCreatorShell : Component
         var (isWorking, setIsWorking) = UseState(false, threadSafe: true);
         var operationCtsRef = UseRef<CancellationTokenSource?>(null);
 
+        // Per-widget MXC permissions dialog state.
+        var (permApp, setPermApp) = UseState<WidgetApp?>(null, threadSafe: true);
+        var (policyJson, setPolicyJson) = UseState("", threadSafe: true);
+        var (policyAdvanced, setPolicyAdvanced) = UseState(false, threadSafe: true);
+
         UseEffect(() =>
         {
             void OnTurnStart() => ReplaceSource("", setSource);
@@ -313,6 +318,47 @@ public sealed class WidgetCreatorShell : Component
             setStatus($"Deleted '{app.Title}'.");
         }
 
+        void OpenPermissions(WidgetApp app)
+        {
+            setBanner(null);
+            setPolicyJson(_library.ReadPolicy(app) ?? MxcPolicy.DefaultJson);
+            setPolicyAdvanced(false);
+            setPermApp(app);
+        }
+
+        void ClosePermissions() => setPermApp(null);
+
+        void SavePermissions(WidgetApp app)
+        {
+            // Normalize and decide: a policy equal to the default reverts to "no
+            // stored policy" (absent file) so the app keeps using today's behavior.
+            var normalized = MxcPolicy.TryParse(policyJson, out var obj, out _)
+                ? MxcPolicy.Prettify(obj)
+                : policyJson;
+            var isDefault = string.Equals(normalized.Trim(), MxcPolicy.DefaultJson.Trim(), StringComparison.Ordinal);
+
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    if (isDefault)
+                        _library.ResetPolicy(app);
+                    else
+                        await _library.SavePolicyAsync(app, normalized).ConfigureAwait(false);
+
+                    setStatus(isDefault
+                        ? $"Reset '{app.Title}' to the default permissions (UI + internet)."
+                        : $"Saved custom permissions for '{app.Title}'. They apply next time it runs.");
+                }
+                catch (Exception ex)
+                {
+                    SessionLog.Write($"[Shell] save policy for {app.Id} failed: {ex}");
+                    setBanner($"Could not save permissions for '{app.Title}': {ex.Message}");
+                }
+            });
+            ClosePermissions();
+        }
+
         void StartMonitor(WidgetApp app)
         {
             _ = Task.Run(async () =>
@@ -323,7 +369,22 @@ public sealed class WidgetCreatorShell : Component
                         app.ExePath,
                         app.PublishDir,
                         line => AppendLog(line, setLog),
-                        CancellationToken.None).ConfigureAwait(false);
+                        CancellationToken.None,
+                        policyTemplateJson: _library.ReadPolicy(app)).ConfigureAwait(false);
+
+                    if (result.LaunchFailed)
+                    {
+                        var detail = result.LaunchErrorMessage
+                            ?? "the sandbox could not be set up with the current permissions";
+                        setStatus($"'{app.Title}' couldn't launch under its permissions.");
+                        setBanner($"'{app.Title}' couldn't start — this is a sandbox/permissions problem, not an "
+                            + $"app bug, so it was NOT sent for repair. {detail}. Open Permissions to adjust it "
+                            + "(e.g. a read-write or read-only grant on a folder you don't own, like C:\\temp, "
+                            + "needs WRITE_DAC the sandbox can't get on this host — pick a folder under your "
+                            + "profile, or remove the grant).");
+                        AppendLog($"# '{app.Title}' did not launch — MXC sandbox/permissions error: {detail}", setLog);
+                        return;
+                    }
 
                     if (!result.Crashed)
                     {
@@ -561,15 +622,190 @@ public sealed class WidgetCreatorShell : Component
             RightHeader = Caption(MxcSandbox.WxcExecPath).Foreground(Theme.TertiaryText),
         };
 
-        return FlexColumn(
-            titleBar,
+        return Grid(
+            [GridSize.Star()], [GridSize.Star()],
             (FlexColumn(
-                banner is null ? Empty() : Banner(banner),
-                (FlexRow(leftPanel, rightPanel) with { ColumnGap = 12 }).Flex(grow: 1, basis: 0))
-                with { RowGap = 12 })
-            .Padding(16)
-            .Flex(grow: 1, basis: 0))
+                titleBar,
+                (FlexColumn(
+                    banner is null ? Empty() : Banner(banner),
+                    (FlexRow(leftPanel, rightPanel) with { ColumnGap = 12 }).Flex(grow: 1, basis: 0))
+                    with { RowGap = 12 })
+                .Padding(16)
+                .Flex(grow: 1, basis: 0))),
+            permApp is null ? null : PermissionsOverlay(permApp))
             .Backdrop(BackdropKind.Mica);
+
+        // Inline modal overlay (rendered in the root Grid so it reconciles on
+        // every render — unlike Reactor's ContentDialog, whose content is a
+        // one-shot snapshot taken when it opens).
+        Element PermissionsOverlay(WidgetApp app)
+        {
+            var valid = MxcPolicy.TryParse(policyJson, out var policy, out var parseError);
+
+            Element body;
+            if (policyAdvanced)
+            {
+                var jsonBox = (TextBox(policyJson, setPolicyJson,
+                        placeholderText: "MXC ContainerConfig policy JSON...")
+                    with { AcceptsReturn = true, TextWrapping = TextWrapping.NoWrap })
+                    .FontFamily("Cascadia Mono")
+                    .MinHeight(280)
+                    .AutomationName("Policy JSON");
+
+                body = FlexColumn(
+                    Caption("Edit the raw MXC ContainerConfig policy. The process command line, working "
+                        + "directory, and a read grant on the app's own folder are added automatically at launch.")
+                        .Foreground(Theme.SecondaryText)
+                        .TextWrapping(TextWrapping.Wrap),
+                    jsonBox,
+                    valid
+                        ? (Element)Empty()
+                        : Caption($"Invalid JSON: {parseError}").Foreground(Theme.SystemCaution).TextWrapping(TextWrapping.Wrap))
+                    with { RowGap = 8 };
+            }
+            else
+            {
+                var showWindow = MxcPolicy.GetShowWindow(policy);
+                var injection = MxcPolicy.GetInjection(policy);
+                var clipboard = MxcPolicy.GetClipboard(policy);
+                var network = MxcPolicy.GetNetwork(policy);
+                var allowLocal = MxcPolicy.GetAllowLocalNetwork(policy);
+                var leastPrivilege = MxcPolicy.GetLeastPrivilege(policy);
+                var fileEntries = MxcPolicy.GetFileEntries(policy);
+
+                string[] clipLevels = ["none", "read", "readwrite"];
+                string[] clipLabels = ["No access", "Read only", "Read & write"];
+                var clipIndex = Array.IndexOf(clipLevels, clipboard);
+                Optional<int> clipSelected = clipIndex >= 0 ? clipIndex : default;
+
+                string[] accessLabels = ["Read only", "Read & write", "Denied"];
+
+                Element fileList = fileEntries.Length == 0
+                    ? Caption("No extra folders yet.").Foreground(Theme.TertiaryText)
+                    : (FlexColumn(fileEntries.Select(e => (Element)
+                        HStack(8,
+                            Caption(e.Path)
+                                .FontFamily("Cascadia Mono")
+                                .TextWrapping(TextWrapping.Wrap)
+                                .VAlign(VerticalAlignment.Center)
+                                .Flex(grow: 1, basis: 0),
+                            ComboBox(accessLabels, (int)e.Access,
+                                i => setPolicyJson(MxcPolicy.WithFileAccess(policyJson, e.Path, (PathAccess)i)))
+                                .Width(150),
+                            Button("Remove", () => setPolicyJson(MxcPolicy.WithoutPath(policyJson, e.Path)))
+                                .SubtleButton()))
+                        .ToArray())
+                        with { RowGap = 8 });
+
+                body = FlexColumn(
+                    PermSection("Window & input",
+                        ToggleSwitch(showWindow,
+                            v => setPolicyJson(MxcPolicy.WithShowWindow(policyJson, v)),
+                            header: "Show the app window"),
+                        CheckBox(injection,
+                            v => setPolicyJson(MxcPolicy.WithInjection(policyJson, v)),
+                            "Allow simulated keyboard / mouse input (injection)"),
+                        HStack(8,
+                            TextBlock("Clipboard").VAlign(VerticalAlignment.Center).MinWidth(80),
+                            ComboBox(clipLabels, clipSelected,
+                                i => setPolicyJson(MxcPolicy.WithClipboard(policyJson, clipLevels[i])))
+                                .Width(180))),
+
+                    PermSection("Network",
+                        RadioButtons(["No network access", "Internet access"],
+                            network == NetworkAccess.Internet ? 1 : 0,
+                            i => setPolicyJson(MxcPolicy.WithNetwork(policyJson,
+                                i == 1 ? NetworkAccess.Internet : NetworkAccess.None))),
+                        CheckBox(allowLocal,
+                            v => setPolicyJson(MxcPolicy.WithAllowLocalNetwork(policyJson, v)),
+                            "Allow local network (localhost / LAN)")),
+
+                    PermSection("Isolation",
+                        CheckBox(leastPrivilege,
+                            v => setPolicyJson(MxcPolicy.WithLeastPrivilege(policyJson, v)),
+                            "Run with least privilege (stricter AppContainer)")),
+
+                    PermSection("File access",
+                        Caption("The app can always read its own folder. Add folders below and choose each "
+                            + "one's access level. (Add individual files via Advanced.)")
+                            .Foreground(Theme.SecondaryText)
+                            .TextWrapping(TextWrapping.Wrap),
+                        fileList,
+                        HStack(8,
+                            Button("Add folder…", AddFolder).SubtleButton())))
+                    with { RowGap = 16 };
+
+                void AddFolder() => _ = AddFolderAsync();
+
+                async Task AddFolderAsync()
+                {
+                    try
+                    {
+                        var window = ReactorApp.PrimaryWindow?.NativeWindow;
+                        if (window is null)
+                        {
+                            setBanner("Folder picker unavailable (no active window).");
+                            return;
+                        }
+                        var picker = new Windows.Storage.Pickers.FolderPicker();
+                        picker.FileTypeFilter.Add("*");
+                        var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
+                        WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+                        var folder = await picker.PickSingleFolderAsync();
+                        if (folder is not null)
+                            setPolicyJson(MxcPolicy.WithFileAccess(policyJson, folder.Path, PathAccess.ReadOnly));
+                    }
+                    catch (Exception ex)
+                    {
+                        SessionLog.Write($"[Shell] folder picker failed: {ex}");
+                        setBanner($"Folder picker failed: {ex.Message}");
+                    }
+                }
+            }
+
+            var card = Border(
+                (FlexColumn(
+                    HStack(8,
+                        SubHeading("Adjust permissions").Flex(grow: 1, basis: 0),
+                        TextBlock("Advanced").VAlign(VerticalAlignment.Center),
+                        ToggleSwitch(policyAdvanced, setPolicyAdvanced)),
+                    Caption($"Permissions for '{app.Title}' — applied the next time it runs.")
+                        .Foreground(Theme.SecondaryText)
+                        .TextWrapping(TextWrapping.Wrap),
+                    body,
+                    HStack(8,
+                        Button("Reset to default", () => setPolicyJson(MxcPolicy.DefaultJson))
+                            .SubtleButton()
+                            .Flex(grow: 1, basis: 0),
+                        Button("Cancel", ClosePermissions).SubtleButton(),
+                        Button("Save", () => SavePermissions(app)).AccentButton().IsEnabled(valid)))
+                    with { RowGap = 12 }))
+                .Background(Theme.SolidBackground)
+                .WithBorder(Theme.CardStroke)
+                .CornerRadius(10)
+                .Padding(20)
+                .Width(560);
+
+            // Full-bleed scrim dimming the app; a flex column centers the
+            // content-sized card both axes (Border-child alignment isn't honored
+            // by the layout here, so center via flex instead).
+            return Border(
+                (FlexColumn(card)
+                    with
+                    {
+                        JustifyContent = Microsoft.UI.Reactor.Layout.FlexJustify.Center,
+                        AlignItems = Microsoft.UI.Reactor.Layout.FlexAlign.Center,
+                    })
+                .Padding(24))
+                .Background(Theme.SmokeFill);
+        }
+
+        static Element PermSection(string title, params Element[] children) =>
+            FlexColumn(
+                new Element[] { TextBlock(title).Bold() }
+                    .Concat(children)
+                    .ToArray())
+            with { RowGap = 8 };
 
         Element AppCard(WidgetApp app)
         {
@@ -591,6 +827,7 @@ public sealed class WidgetCreatorShell : Component
                     HStack(8,
                         Button(isSelected ? "Selected" : "Select", () => SelectApp(app)).IsEnabled(!isSelected),
                         Button("Run", () => RunApp(app)).IsEnabled(app.IsRunnable),
+                        Button("Permissions", () => OpenPermissions(app)).SubtleButton(),
                         Button("Delete", () => DeleteApp(app)).SubtleButton()))
                 with { RowGap = 8 })
             .Background(isSelected ? Theme.SubtleFill : Theme.LayerFill)
