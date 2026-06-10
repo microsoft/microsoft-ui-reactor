@@ -443,7 +443,7 @@ async function killPreviewProcess() {
 async function connectToPreview(context: vscode.ExtensionContext) {
   const portStr = await vscode.window.showInputBox({
     prompt:
-      "Enter the capture server port (shown in the preview window title bar)",
+      "Enter the capture server port (CAPTURE_PORT=... from the preview output)",
     placeHolder: "e.g. 52431",
   });
   if (!portStr) return;
@@ -454,11 +454,28 @@ async function connectToPreview(context: vscode.ExtensionContext) {
     return;
   }
 
+  const token = await vscode.window.showInputBox({
+    prompt:
+      "Enter the capture server token (CAPTURE_TOKEN=... from the preview output)",
+    placeHolder: "CAPTURE_TOKEN value",
+    password: true,
+  });
+  if (!token) return;
+
+  const trimmedToken = token.trim();
+  if (!/^[A-Za-z0-9_-]+$/.test(trimmedToken)) {
+    vscode.window.showErrorMessage("Invalid capture token.");
+    return;
+  }
+
+  const previousToken = captureToken;
+  captureToken = trimmedToken;
   try {
     await httpGetJson(`http://localhost:${port}/status`);
   } catch {
+    captureToken = previousToken;
     vscode.window.showErrorMessage(
-      `Could not connect to capture server on port ${port}.`
+      `Could not connect to authenticated capture server on port ${port}.`
     );
     return;
   }

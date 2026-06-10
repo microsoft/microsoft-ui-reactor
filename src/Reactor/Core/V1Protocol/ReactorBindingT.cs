@@ -261,7 +261,8 @@ public readonly struct ReactorBinding<TElement> where TElement : Element
                 }
 
                 apply(c, resolved);
-            });
+            },
+            clearTarget: c => apply(c, Array.Empty<TTarget>()));
     }
 
     /// <summary>Per-binding wrapper around the 1.4 primitive

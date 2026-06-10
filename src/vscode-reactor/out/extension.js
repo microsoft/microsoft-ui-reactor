@@ -393,7 +393,7 @@ async function killPreviewProcess() {
 // -- Connect to existing Preview ---------------------------------------------
 async function connectToPreview(context) {
     const portStr = await vscode.window.showInputBox({
-        prompt: "Enter the capture server port (shown in the preview window title bar)",
+        prompt: "Enter the capture server port (CAPTURE_PORT=... from the preview output)",
         placeHolder: "e.g. 52431",
     });
     if (!portStr)
@@ -403,11 +403,26 @@ async function connectToPreview(context) {
         vscode.window.showErrorMessage("Invalid port number.");
         return;
     }
+    const token = await vscode.window.showInputBox({
+        prompt: "Enter the capture server token (CAPTURE_TOKEN=... from the preview output)",
+        placeHolder: "CAPTURE_TOKEN value",
+        password: true,
+    });
+    if (!token)
+        return;
+    const trimmedToken = token.trim();
+    if (!/^[A-Za-z0-9_-]+$/.test(trimmedToken)) {
+        vscode.window.showErrorMessage("Invalid capture token.");
+        return;
+    }
+    const previousToken = captureToken;
+    captureToken = trimmedToken;
     try {
         await httpGetJson(`http://localhost:${port}/status`);
     }
     catch {
-        vscode.window.showErrorMessage(`Could not connect to capture server on port ${port}.`);
+        captureToken = previousToken;
+        vscode.window.showErrorMessage(`Could not connect to authenticated capture server on port ${port}.`);
         return;
     }
     capturePort = port;
@@ -557,17 +572,70 @@ function getWebviewHtml(port, token, components, selectedComponent) {
       opacity: 0.5;
       font-size: 13px;
     }
+    .preview-container { position: relative; }
+    .refs-panel {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      bottom: 8px;
+      width: 320px;
+      max-width: 60%;
+      overflow: auto;
+      background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+      border: 1px solid var(--vscode-panel-border);
+      border-radius: 3px;
+      padding: 8px 10px;
+      font-size: 11px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    .refs-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .refs-title { font-weight: 600; font-size: 12px; }
+    .refs-summary { opacity: 0.7; }
+    .refs-diagnostics { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
+    .refs-diag {
+      padding: 3px 6px;
+      border-radius: 2px;
+      border-left: 3px solid transparent;
+      background: var(--vscode-textBlockQuote-background);
+    }
+    .refs-diag.cycle { border-left-color: var(--vscode-charts-orange); }
+    .refs-diag.unresolved { border-left-color: var(--vscode-errorForeground); }
+    .refs-edges { list-style: none; display: flex; flex-direction: column; gap: 2px; }
+    .refs-edge { display: flex; gap: 6px; align-items: baseline; padding: 2px 0; }
+    .refs-edge .label {
+      font-weight: 600;
+      color: var(--vscode-charts-blue);
+      flex-shrink: 0;
+    }
+    .refs-edge .nodes { opacity: 0.85; word-break: break-all; }
+    .refs-edge.unresolved .nodes { color: var(--vscode-errorForeground); }
+    .refs-empty { opacity: 0.6; font-style: italic; }
   </style>
 </head>
 <body>
   <div class="toolbar">
     ${selectorHtml}
     <button id="focusBtn" title="Bring native preview window to front">Focus Window</button>
+    <button id="refsBtn" title="Toggle the Spec 057 reference-graph overlay">References</button>
     <span id="status" class="status">Connecting...</span>
   </div>
   <div class="preview-container">
     <img id="preview" alt="Reactor Preview" style="display:none" />
     <div id="placeholder" class="placeholder">Waiting for first frame...</div>
+    <div id="refsPanel" class="refs-panel" style="display:none">
+      <div class="refs-header">
+        <span class="refs-title">Reference graph</span>
+        <span id="refsSummary" class="refs-summary"></span>
+      </div>
+      <div id="refsDiagnostics" class="refs-diagnostics"></div>
+      <ul id="refsEdges" class="refs-edges"></ul>
+      <div id="refsEmpty" class="refs-empty">No reference edges in the current tree.</div>
+    </div>
   </div>
 
   <script nonce="${nonce}">
@@ -585,8 +653,16 @@ function getWebviewHtml(port, token, components, selectedComponent) {
     let frameUrl = 'http://localhost:' + PORT + '/frame';
     let statusUrl = 'http://localhost:' + PORT + '/status';
     let focusUrl = 'http://localhost:' + PORT + '/focus';
+    let referencesUrl = 'http://localhost:' + PORT + '/references';
     let failCount = 0;
     let visible = true;
+    let refsOpen = false;
+    const refsBtn = document.getElementById('refsBtn');
+    const refsPanel = document.getElementById('refsPanel');
+    const refsSummary = document.getElementById('refsSummary');
+    const refsDiagnostics = document.getElementById('refsDiagnostics');
+    const refsEdges = document.getElementById('refsEdges');
+    const refsEmpty = document.getElementById('refsEmpty');
 
     if (componentSelect) {
       componentSelect.addEventListener('change', (e) => {
@@ -677,6 +753,71 @@ function getWebviewHtml(port, token, components, selectedComponent) {
 
     focusBtn.addEventListener('click', () => {
       fetch(focusUrl, AUTH_POST).catch(() => {});
+    });
+
+    // -- Reference-graph overlay (Spec 057 §11 Phase 3) ----------------------
+    // Node ids, labels, and diagnostic messages come from the loopback server
+    // and may echo author-controlled strings, so every value is rendered via
+    // textContent / DOM APIs — never innerHTML.
+    function renderReferences(graph) {
+      while (refsDiagnostics.firstChild) refsDiagnostics.removeChild(refsDiagnostics.firstChild);
+      while (refsEdges.firstChild) refsEdges.removeChild(refsEdges.firstChild);
+
+      const edges = Array.isArray(graph && graph.edges) ? graph.edges : [];
+      const diags = Array.isArray(graph && graph.diagnostics) ? graph.diagnostics : [];
+      const cycles = diags.filter((d) => d && d.kind === 'cycle').length;
+      const unresolved = diags.filter((d) => d && d.kind === 'unresolved').length;
+
+      refsSummary.textContent =
+        edges.length + ' edge' + (edges.length === 1 ? '' : 's') +
+        (cycles ? ', ' + cycles + ' cycle' + (cycles === 1 ? '' : 's') : '') +
+        (unresolved ? ', ' + unresolved + ' unresolved' : '');
+
+      for (const d of diags) {
+        if (!d) continue;
+        const row = document.createElement('div');
+        row.className = 'refs-diag ' + (d.kind === 'cycle' ? 'cycle' : 'unresolved');
+        row.textContent = String(d.message || d.kind || '');
+        refsDiagnostics.appendChild(row);
+      }
+
+      refsEmpty.style.display = edges.length === 0 ? 'block' : 'none';
+      for (const e of edges) {
+        if (!e) continue;
+        const li = document.createElement('li');
+        li.className = 'refs-edge' + (e.resolved ? '' : ' unresolved');
+
+        const label = document.createElement('span');
+        label.className = 'label';
+        label.textContent = String(e.label || 'reference');
+        li.appendChild(label);
+
+        const nodes = document.createElement('span');
+        nodes.className = 'nodes';
+        const target = e.resolved
+          ? (e.to ? String(e.to) : (e.outOfTree ? '(out of tree)' : '?'))
+          : '(unresolved)';
+        nodes.textContent = String(e.from || '?') + ' \u2192 ' + target;
+        li.appendChild(nodes);
+
+        refsEdges.appendChild(li);
+      }
+    }
+
+    async function refreshReferences() {
+      if (!refsOpen) return;
+      try {
+        const resp = await fetch(referencesUrl, { cache: 'no-store', headers: { Authorization: AUTH } });
+        if (resp.ok) renderReferences(await resp.json());
+      } catch { /* preview may be mid-rebuild; keep last render */ }
+      if (refsOpen) setTimeout(refreshReferences, 1000);
+    }
+
+    refsBtn.addEventListener('click', () => {
+      refsOpen = !refsOpen;
+      refsPanel.style.display = refsOpen ? 'block' : 'none';
+      refsBtn.style.opacity = refsOpen ? '1' : '0.7';
+      if (refsOpen) refreshReferences();
     });
 
     img.addEventListener('click', () => {

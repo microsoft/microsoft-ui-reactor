@@ -173,6 +173,20 @@ public sealed class ControlDescriptor<TElement, TControl>
     }
 
     /// <summary>
+    /// CR-004 untyped reference binding: accepts an element-record slot that stores an
+    /// untyped <see cref="Microsoft.UI.Reactor.Input.ElementRef"/> (so authors can supply
+    /// any <c>ElementRef&lt;TConcrete&gt;</c>). The resolved target is surfaced as a
+    /// <see cref="FrameworkElement"/>.
+    /// </summary>
+    public ControlDescriptor<TElement, TControl> Reference(
+        Func<TElement, Microsoft.UI.Reactor.Input.ElementRef?> get,
+        Action<TControl, FrameworkElement?> set)
+    {
+        _properties.Add(new UntypedReferencePropEntry<TElement, TControl>(get, set, _referenceSlotCount++));
+        return this;
+    }
+
+    /// <summary>
     /// Add a list-valued reference binding. The control list is rebuilt from
     /// currently-resolved targets, preserving the author's declaration order.
     /// </summary>

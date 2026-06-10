@@ -21,14 +21,15 @@ public class SurfaceParityTests
     public void TeachingTip_Target_Record_Fluent_And_Factory_Carry_Same_Cell()
     {
         var target = TypedElementRef.Create<FrameworkElement>();
+        ElementRef targetCell = target;
 
         var record = new TeachingTipElement("record") { Target = target };
         var fluent = TeachingTip("fluent").Target(target);
         var factory = TeachingTip("factory", target: target);
 
-        Assert.Same(target, record.Target);
-        Assert.Same(target, fluent.Target);
-        Assert.Same(target, factory.Target);
+        Assert.Same(targetCell, record.Target);
+        Assert.Same(targetCell, fluent.Target);
+        Assert.Same(targetCell, factory.Target);
         Assert.Same(record.Target, fluent.Target);
         Assert.Same(fluent.Target, factory.Target);
     }
@@ -37,7 +38,7 @@ public class SurfaceParityTests
     public void TeachingTip_Descriptor_Declares_Exactly_One_Target_Reference_Entry()
     {
         var referenceEntries = TeachingTipDescriptor.Descriptor.Properties
-            .OfType<ReferencePropEntry<TeachingTipElement, WinUI.TeachingTip, FrameworkElement>>()
+            .OfType<UntypedReferencePropEntry<TeachingTipElement, WinUI.TeachingTip>>()
             .ToArray();
 
         Assert.Single(referenceEntries);

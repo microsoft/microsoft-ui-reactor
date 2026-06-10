@@ -557,7 +557,29 @@ public sealed partial class Reconciler : IDisposable
     private static bool NeedsTag(Element element) =>
         element.HasCallbacks
         || element.Key is not null
-        || element.Extensions is not null;
+        || element.Extensions is not null
+        || HasReferenceModifiers(element);
+
+    /// <summary>
+    /// True when the element carries any reactive reference modifier — the imperative
+    /// <c>.Ref</c> producer slot, an <c>XYFocus*</c> edge, or an accessibility
+    /// relationship edge. Such elements must be tagged so the unmount path can find the
+    /// element and clear the producer ref / tear the edges down (CR-001).
+    /// </summary>
+    private static bool HasReferenceModifiers(Element element)
+    {
+        var m = element.Modifiers;
+        if (m is null) return false;
+        if (m.Ref is not null
+            || m.XYFocusUpRef is not null || m.XYFocusDownRef is not null
+            || m.XYFocusLeftRef is not null || m.XYFocusRightRef is not null)
+            return true;
+
+        var a = m.Accessibility;
+        return a is not null
+            && (a.LabeledByRef is not null || a.DescribedByRefs is not null
+                || a.FlowsToRefs is not null || a.FlowsFromRefs is not null);
+    }
 
     /// <summary>
     /// Spec 047 §14 Phase 1 (1.3) — promoted from internal. Retrieves the
@@ -1092,6 +1114,7 @@ public sealed partial class Reconciler : IDisposable
         Action<FrameworkElement, FrameworkElement?> apply)
     {
         var edge = GetOrCreateReferenceEdge(ctrl, slot);
+        edge.Apply = apply; // retained so teardown can clear the target property (CR-002)
         if (cell is null)
         {
             if (edge.Cell is not null)
@@ -1119,10 +1142,12 @@ public sealed partial class Reconciler : IDisposable
         FrameworkElement ctrl,
         int slot,
         IReadOnlyList<Microsoft.UI.Reactor.Input.ElementRef>? cells,
-        Action<FrameworkElement> recompute)
+        Action<FrameworkElement> recompute,
+        Action<FrameworkElement>? clearTarget = null)
     {
         var edge = GetOrCreateReferenceListEdge(ctrl, slot);
         edge.Recompute = recompute;
+        edge.Clear = clearTarget; // retained so teardown can empty the target list (CR-002)
         edge.Handler ??= _ => edge.Recompute?.Invoke(ctrl);
 
         var next = new List<Microsoft.UI.Reactor.Input.ElementRef>();
@@ -1164,17 +1189,24 @@ public sealed partial class Reconciler : IDisposable
         {
             if (edge.Cell is not null)
                 edge.Cell.CurrentChanged -= edge.Handler;
+            // Clear the target property so a held/pooled control doesn't keep a stale
+            // relationship (e.g. XYFocusRight / LabeledBy / TeachingTip.Target) — CR-002.
+            edge.Apply?.Invoke(ctrl, null);
             edge.Cell = null;
             edge.Handler = null;
+            edge.Apply = null;
         }
 
         foreach (var edge in state.ReferenceEdges.ListEdges.Values)
         {
             foreach (var cell in edge.Cells)
                 cell.CurrentChanged -= edge.Handler;
+            // Empty the target relationship list (DescribedBy / FlowsTo / FlowsFrom) — CR-002.
+            edge.Clear?.Invoke(ctrl);
             edge.Cells.Clear();
             edge.Handler = null;
             edge.Recompute = null;
+            edge.Clear = null;
         }
 
         state.ReferenceEdges.Edges.Clear();
@@ -1864,8 +1896,12 @@ public sealed partial class Reconciler : IDisposable
                 ClearScrollAnimation(control, animEl.ScrollAnimation);
         }
 
-        if (control is FrameworkElement refFe && GetElementTag(refFe) is Element refEl)
-            CleanupReferenceStateForUnmount(refFe, refEl);
+        // Always tear reference edges down (they live in ReactorState regardless of
+        // whether the element is tagged), and clear the producer ref when the element is
+        // available. Unconditional so descriptor/binding referrers without a tag are also
+        // cleaned up (CR-001 / CR-002).
+        if (control is FrameworkElement refFe)
+            CleanupReferenceStateForUnmount(refFe, GetElementTag(refFe));
 
         if (_componentNodes.TryGetValue(control, out var node))
         {
@@ -1915,9 +1951,9 @@ public sealed partial class Reconciler : IDisposable
         ForEachReactorChildControl(control, UnmountRecursive);
     }
 
-    private static void CleanupReferenceStateForUnmount(FrameworkElement control, Element element)
+    private static void CleanupReferenceStateForUnmount(FrameworkElement control, Element? element)
     {
-        element.Modifiers?.Ref?.SetCurrent(null);
+        element?.Modifiers?.Ref?.SetCurrent(null);
         TeardownReferenceEdges(control);
     }
 
@@ -2188,8 +2224,8 @@ public sealed partial class Reconciler : IDisposable
                 ClearScrollAnimation(control, animEl.ScrollAnimation);
         }
 
-        if (control is FrameworkElement refFe && GetElementTag(refFe) is Element refEl)
-            CleanupReferenceStateForUnmount(refFe, refEl);
+        if (control is FrameworkElement refFe)
+            CleanupReferenceStateForUnmount(refFe, GetElementTag(refFe));
 
         // Run cleanup logic (component teardown, etc.)
         if (_componentNodes.TryGetValue(control, out var node))
@@ -3691,11 +3727,17 @@ public sealed partial class Reconciler : IDisposable
 
         // Element ref — populate on mount/update so imperative APIs (FocusManager.Focus)
         // can target the mounted control. Writing on every update is cheap (single field
-        // write) and keeps the ref fresh when the pool recycles elements.
-        if (m.Ref is not null)
+        // write) and keeps the ref fresh when the pool recycles elements. When the ref is
+        // swapped or removed (oldM.Ref differs from m.Ref), clear the old cell first so it
+        // doesn't dangle pointing at a control it no longer represents (CR-001).
+        var oldRef = oldM?.Ref;
+        var newRef = m.Ref;
+        if (oldRef is not null && !ReferenceEquals(oldRef, newRef))
+            oldRef.SetCurrent(null);
+        if (newRef is not null)
         {
-            m.Ref.SetCurrent(fe);
-            AssertTypedRefMatch(m.Ref, fe);
+            newRef.SetCurrent(fe);
+            AssertTypedRefMatch(newRef, fe);
         }
 
         ApplyModifierReferenceEdges(fe, oldM, m);
@@ -3763,19 +3805,19 @@ public sealed partial class Reconciler : IDisposable
     private static void WireModifierScalarReference(
         FrameworkElement fe,
         int slot,
-        Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>? current,
-        Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>? old,
+        Microsoft.UI.Reactor.Input.ElementRef? current,
+        Microsoft.UI.Reactor.Input.ElementRef? old,
         Action<FrameworkElement, FrameworkElement?> apply)
     {
         if (current is not null || old is not null)
-            WireReferenceEdge(fe, slot, current?.Inner, apply);
+            WireReferenceEdge(fe, slot, current, apply);
     }
 
     private static void WireModifierReferenceList(
         FrameworkElement fe,
         int slot,
-        IReadOnlyList<Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>>? current,
-        IReadOnlyList<Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>>? old,
+        IReadOnlyList<Microsoft.UI.Reactor.Input.ElementRef>? current,
+        IReadOnlyList<Microsoft.UI.Reactor.Input.ElementRef>? old,
         Func<FrameworkElement, IList<DependencyObject>> getDestination)
     {
         if (current is null && old is null) return;
@@ -3786,7 +3828,7 @@ public sealed partial class Reconciler : IDisposable
             cells = new(current.Count);
             foreach (var r in current)
                 if (r is not null)
-                    cells.Add(r.Inner);
+                    cells.Add(r);
         }
 
         WireReferenceListEdge(
@@ -3804,7 +3846,8 @@ public sealed partial class Reconciler : IDisposable
                     if (cell.Current is FrameworkElement target)
                         dst.Add(target);
                 }
-            });
+            },
+            clearTarget: ctrl => getDestination(ctrl).Clear());
     }
 
     [global::System.Diagnostics.Conditional("DEBUG")]

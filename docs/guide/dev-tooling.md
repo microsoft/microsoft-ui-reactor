@@ -221,6 +221,11 @@ just a long-lived `mur devtools serve` plus a UI on top. Reactor has
 no special editor requirement beyond the standard C# Dev Kit — the
 panel is additive.
 
+When you use **Reactor: Connect to Preview** against an already-running
+preview process, enter both the `CAPTURE_PORT=...` and `CAPTURE_TOKEN=...`
+values from that process's output. The capture server requires the bearer
+token before any endpoint probe, including `/status`.
+
 ## In-App Dev Menu
 
 For the dev surface that lives **inside** a running app — a "Dev" item

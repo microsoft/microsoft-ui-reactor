@@ -448,7 +448,9 @@ internal static class RefNodeTopologyFixtures
             host.Mount(ctx =>
             {
                 bRef = ctx.UseElementRef<RefNode>();
-                var (showB, setShowB) = ctx.UseState(true);
+                // Start the target hidden so the reference edge is declared but
+                // unresolved — this is the actual "late mount" scenario.
+                var (showB, setShowB) = ctx.UseState(false);
                 var (tick, setTick) = ctx.UseState(0);
                 return VStack(
                     TextBlock($"r09 {tick}"),
@@ -459,7 +461,15 @@ internal static class RefNodeTopologyFixtures
             });
 
             await Harness.Render();
-            H.Check("RefNode_Row09_LateMount_Commit", await Harness.WaitFor(() =>
+            // Target not yet mounted: A subscribes to the cell, but the slot is null.
+            H.Check("RefNode_Row09_LateMount_InitiallyUnresolved", await Harness.WaitFor(() =>
+                Missing(H, "R09_B") && NullSlot(H, "R09_A", n => n.Right) &&
+                bRef?.Inner.CurrentChangedSubscriberCount == 1));
+
+            // Mount the target late — the reference edge fills reactively, no rewire.
+            H.ClickButton("R09_ToggleB");
+            await Harness.Render();
+            H.Check("RefNode_Row09_LateMount_ResolvesOnLateMount", await Harness.WaitFor(() =>
                 Link(H, "R09_A", n => n.Right, "R09_B") && bRef?.Inner.CurrentChangedSubscriberCount == 1));
 
             await StableRerender(H, "R09_Rerender", "RefNode_Row09_LateMount_StableRerender", () =>

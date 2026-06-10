@@ -200,6 +200,65 @@ class MyControlDescriptor
     }
 
     [Fact]
+    public async Task Detects_Current_Assigned_To_PlacementTarget()
+    {
+        var test = @"
+namespace Microsoft.UI.Reactor.Input
+{
+    class ElementRef { public Microsoft.UI.Xaml.FrameworkElement Current => null; }
+}
+namespace Microsoft.UI.Xaml
+{
+    class FrameworkElement { }
+}
+namespace Microsoft.UI.Xaml.Controls.Primitives
+{
+    class Popup : Microsoft.UI.Xaml.FrameworkElement
+    {
+        public Microsoft.UI.Xaml.FrameworkElement PlacementTarget { get; set; }
+    }
+}
+class PopupDescriptor
+{
+    void Mount(Microsoft.UI.Xaml.Controls.Primitives.Popup popup, Microsoft.UI.Reactor.Input.ElementRef targetRef)
+    {
+        popup.PlacementTarget = {|REACTOR_REF_001:targetRef.Current|};
+    }
+}";
+
+        await new CSharpAnalyzerTest<ReferenceCurrentReadAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        }.RunAsync();
+    }
+
+    [Fact]
+    public async Task Detects_Current_Assignment_In_Binding_Context()
+    {
+        var test = @"
+namespace Microsoft.UI.Reactor.Input
+{
+    class ElementRef { public Microsoft.UI.Xaml.FrameworkElement Current => null; }
+}
+namespace Microsoft.UI.Xaml
+{
+    class FrameworkElement { public FrameworkElement XYFocusDown { get; set; } }
+}
+class FocusBinding
+{
+    void Wire(Microsoft.UI.Xaml.FrameworkElement control, Microsoft.UI.Reactor.Input.ElementRef targetRef)
+    {
+        control.XYFocusDown = {|REACTOR_REF_001:targetRef.Current|};
+    }
+}";
+
+        await new CSharpAnalyzerTest<ReferenceCurrentReadAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        }.RunAsync();
+    }
+
+    [Fact]
     public async Task No_Diagnostic_For_Unrelated_Property_Named_Target()
     {
         // CR-007: a property merely named 'Target' on a non-WinUI type must not warn,
@@ -215,6 +274,29 @@ class MyControlHandler
     void Update(Unrelated thing, Microsoft.UI.Reactor.Input.ElementRef r)
     {
         thing.Target = r.Current;
+    }
+}";
+
+        await new CSharpAnalyzerTest<ReferenceCurrentReadAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        }.RunAsync();
+    }
+
+    [Fact]
+    public async Task No_Diagnostic_For_Unrelated_Property_Named_LabeledBy()
+    {
+        var test = @"
+namespace Microsoft.UI.Reactor.Input
+{
+    class ElementRef { public object Current => null; }
+}
+class Unrelated { public object LabeledBy { get; set; } }
+class MyControlDescriptor
+{
+    void Mount(Unrelated thing, Microsoft.UI.Reactor.Input.ElementRef r)
+    {
+        thing.LabeledBy = r.Current;
     }
 }";
 

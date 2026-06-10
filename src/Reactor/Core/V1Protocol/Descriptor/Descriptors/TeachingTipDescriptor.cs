@@ -96,7 +96,7 @@ internal static class TeachingTipDescriptor
         .OneWay(
             get: static e => e.PreferredPlacement,
             set: static (c, v) => c.PreferredPlacement = v)
-        .Reference<Microsoft.UI.Xaml.FrameworkElement>(
+        .Reference(
             get: static e => e.Target,
             set: static (c, fe) => c.Target = fe)
         .OneWayConditional(

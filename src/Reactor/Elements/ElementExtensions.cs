@@ -1492,7 +1492,7 @@ public static partial class ElementExtensions
     /// <summary>Control this tip anchors to, resolved by ElementRef regardless of mount order.</summary>
     public static TeachingTipElement Target(
         this TeachingTipElement el,
-        Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement> target) =>
+        Microsoft.UI.Reactor.Input.ElementRef target) =>
         el with { Target = target };
 
     /// <summary>Extra margin around the tip when placed relative to its target.</summary>
@@ -2370,22 +2370,22 @@ public static partial class ElementExtensions
 
     public static T XYFocusUp<T>(
         this T el,
-        Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement> target) where T : Element =>
+        Microsoft.UI.Reactor.Input.ElementRef target) where T : Element =>
         Modify(el, new ElementModifiers { XYFocusUpRef = target });
 
     public static T XYFocusDown<T>(
         this T el,
-        Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement> target) where T : Element =>
+        Microsoft.UI.Reactor.Input.ElementRef target) where T : Element =>
         Modify(el, new ElementModifiers { XYFocusDownRef = target });
 
     public static T XYFocusLeft<T>(
         this T el,
-        Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement> target) where T : Element =>
+        Microsoft.UI.Reactor.Input.ElementRef target) where T : Element =>
         Modify(el, new ElementModifiers { XYFocusLeftRef = target });
 
     public static T XYFocusRight<T>(
         this T el,
-        Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement> target) where T : Element =>
+        Microsoft.UI.Reactor.Input.ElementRef target) where T : Element =>
         Modify(el, new ElementModifiers { XYFocusRightRef = target });
 
     /// <summary>
@@ -2531,22 +2531,22 @@ public static partial class ElementExtensions
     /// </summary>
     public static T LabeledBy<T>(
         this T el,
-        Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement> target) where T : Element =>
+        Microsoft.UI.Reactor.Input.ElementRef target) where T : Element =>
         ModifyA11y(el, new AccessibilityModifiers { LabeledByRef = target });
 
     public static T DescribedBy<T>(
         this T el,
-        params Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>[] targets) where T : Element =>
+        params Microsoft.UI.Reactor.Input.ElementRef[] targets) where T : Element =>
         ModifyA11y(el, new AccessibilityModifiers { DescribedByRefs = targets });
 
     public static T FlowsTo<T>(
         this T el,
-        params Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>[] targets) where T : Element =>
+        params Microsoft.UI.Reactor.Input.ElementRef[] targets) where T : Element =>
         ModifyA11y(el, new AccessibilityModifiers { FlowsToRefs = targets });
 
     public static T FlowsFrom<T>(
         this T el,
-        params Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>[] targets) where T : Element =>
+        params Microsoft.UI.Reactor.Input.ElementRef[] targets) where T : Element =>
         ModifyA11y(el, new AccessibilityModifiers { FlowsFromRefs = targets });
 
     /// <summary>

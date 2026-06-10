@@ -247,6 +247,16 @@ public sealed class ElementPool : IDisposable
         fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.LevelProperty);
         fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.ItemStatusProperty);
         fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.LabeledByProperty);
+        // Spec 057 CR-002: also clear the relationship-list automation properties so a
+        // pooled control doesn't carry stale DescribedBy/FlowsTo/FlowsFrom targets, and
+        // drop any XYFocus navigation references for the same reason.
+        fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.DescribedByProperty);
+        fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.FlowsToProperty);
+        fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.FlowsFromProperty);
+        fe.ClearValue(FrameworkElement.XYFocusUpProperty);
+        fe.ClearValue(FrameworkElement.XYFocusDownProperty);
+        fe.ClearValue(FrameworkElement.XYFocusLeftProperty);
+        fe.ClearValue(FrameworkElement.XYFocusRightProperty);
         fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.HeadingLevelProperty);
         fe.AccessKey = "";
 

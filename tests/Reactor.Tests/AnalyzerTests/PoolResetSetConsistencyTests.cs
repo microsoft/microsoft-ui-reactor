@@ -60,6 +60,16 @@ public class PoolResetSetConsistencyTests
             // No matching modifier; FlowDirection is set on the root via app
             // configuration, not via a per-element modifier.
             { "FlowDirection", "no modifier; root-level concern" },
+
+            // The same-named modifiers take ElementRef cells, not raw FrameworkElement
+            // values. Direct .Set writes are non-reactive reference snapshots; those
+            // should be replaced with ref-edge modifiers by hand (and REACTOR_REF_001
+            // catches the common ElementRef.Current form), not auto-fixed by the pool
+            // analyzer.
+            { "XYFocusUp", "modifier takes ElementRef, not FrameworkElement" },
+            { "XYFocusDown", "modifier takes ElementRef, not FrameworkElement" },
+            { "XYFocusLeft", "modifier takes ElementRef, not FrameworkElement" },
+            { "XYFocusRight", "modifier takes ElementRef, not FrameworkElement" },
         };
 
     [Fact]

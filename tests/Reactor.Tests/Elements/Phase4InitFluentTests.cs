@@ -877,8 +877,9 @@ public class Phase4InitFluentTests
     public void TeachingTip_Target_Sets()
     {
         var target = Microsoft.UI.Reactor.Input.TypedElementRef.Create<Microsoft.UI.Xaml.FrameworkElement>();
+        Microsoft.UI.Reactor.Input.ElementRef targetCell = target;
         var el = TeachingTip("t").Target(target);
-        Assert.Same(target, el.Target);
+        Assert.Same(targetCell, el.Target);
     }
 
     [Fact]

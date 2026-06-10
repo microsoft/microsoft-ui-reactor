@@ -476,6 +476,55 @@ internal sealed class ReferencePropEntry<TElement, TControl, TTarget> : PropEntr
 }
 
 /// <summary>
+/// Spec 057 / CR-004 untyped sibling of <see cref="ReferencePropEntry{TElement, TControl, TTarget}"/>.
+/// Used when the element-record reference slot stores an untyped
+/// <see cref="Microsoft.UI.Reactor.Input.ElementRef"/> (so authors can pass any
+/// <c>ElementRef&lt;TConcrete&gt;</c>); the resolved target is surfaced as a
+/// <see cref="FrameworkElement"/>.
+/// </summary>
+internal sealed class UntypedReferencePropEntry<TElement, TControl> : PropEntry<TElement, TControl>
+    where TElement : Element
+    where TControl : FrameworkElement
+{
+    private readonly Func<TElement, Microsoft.UI.Reactor.Input.ElementRef?> _get;
+    private readonly Action<TControl, FrameworkElement?> _set;
+    private readonly int _slot;
+
+    public UntypedReferencePropEntry(
+        Func<TElement, Microsoft.UI.Reactor.Input.ElementRef?> get,
+        Action<TControl, FrameworkElement?> set,
+        int slot)
+    {
+        _get = get;
+        _set = set;
+        _slot = slot;
+    }
+
+    public override void Mount(TControl ctrl, TElement el)
+    {
+        var cell = _get(el);
+        _set(ctrl, cell?.Current);
+    }
+
+    public override void Update(TControl ctrl, TElement oldEl, TElement newEl)
+    {
+        // Cell changes drive writes; ref-instance swaps are handled by EnsureSubscribed.
+    }
+
+    public override void EnsureSubscribed(
+        ReactorBinding<TElement> binding,
+        TControl ctrl,
+        TElement el)
+    {
+        Reconciler.WireReferenceEdge(
+            ctrl,
+            _slot,
+            _get(el),
+            (c, target) => _set((TControl)c, target));
+    }
+}
+
+/// <summary>
 /// Spec 057 Phase 2 list-reference binding. The referrer owns a list-valued
 /// property populated from several <see cref="Microsoft.UI.Reactor.Input.ElementRef{T}"/>
 /// cells. Q3 resolution: the engine preserves author declaration order, omits
@@ -530,7 +579,8 @@ internal sealed class ReferenceListPropEntry<TElement, TControl, TTarget> : Prop
             ctrl,
             _slot,
             cells,
-            c => ApplyResolved((TControl)c, el));
+            c => ApplyResolved((TControl)c, el),
+            clearTarget: c => _apply((TControl)c, Array.Empty<TTarget>()));
     }
 
     private void ApplyResolved(TControl ctrl, TElement el)

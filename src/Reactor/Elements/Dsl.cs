@@ -1147,7 +1147,7 @@ public static partial class Factories
     public static TeachingTipElement TeachingTip(
         string title,
         string? subtitle = null,
-        Microsoft.UI.Reactor.Input.ElementRef<Microsoft.UI.Xaml.FrameworkElement>? target = null)
+        Microsoft.UI.Reactor.Input.ElementRef? target = null)
     {
         _ = V1.Reg<TeachingTipElement, WinUI.TeachingTip, Desc.TeachingTipDescriptorHandler>.Done;
         return new(title, subtitle) { Target = target };

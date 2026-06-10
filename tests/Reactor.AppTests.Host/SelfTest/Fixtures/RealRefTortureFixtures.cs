@@ -22,6 +22,9 @@ internal static class RealRefTortureFixtures
     private static WinUI.Button? FindButton(Harness h, string content) =>
         h.FindControl<WinUI.Button>(b => b.Content is string s && s == content);
 
+    private static WinUI.TextBlock? FindTextBlock(Harness h, string text) =>
+        h.FindControl<WinUI.TextBlock>(tb => tb.Text == text);
+
     private static WinUI.TeachingTip? FindTip(Harness h, string name) =>
         h.FindControl<WinUI.TeachingTip>(t => t.Name == name);
 
@@ -49,6 +52,12 @@ internal static class RealRefTortureFixtures
 
     private static bool PopupTargetNull(Harness h, string popupName) =>
         FindPopup(h, popupName) is { PlacementTarget: null };
+
+    private static bool TextBlockTargets(Harness h, ElementRef<FrameworkElement>? reference, string text)
+    {
+        var textBlock = FindTextBlock(h, text);
+        return textBlock is not null && ReferenceEquals(reference?.Current, textBlock);
+    }
 
     private static bool LabeledBy(Harness h, string inputContent, string labelContent)
     {
@@ -207,6 +216,12 @@ internal static class RealRefTortureFixtures
             H.ClickButton("RR_XY_ToggleLinks");
             await Harness.Render();
             H.Check("RealRef_XYFocusRing_ModifierRemovalDropsSubscribers", await Harness.WaitFor(() =>
+                XYRightNull(H, "RR_XY_A") &&
+                XYLeftNull(H, "RR_XY_A") &&
+                XYRightNull(H, "RR_XY_B") &&
+                XYLeftNull(H, "RR_XY_B") &&
+                XYRightNull(H, "RR_XY_D") &&
+                XYLeftNull(H, "RR_XY_D") &&
                 bRef?.Inner.CurrentChangedSubscriberCount == 0 &&
                 cRef?.Inner.CurrentChangedSubscriberCount == 0 &&
                 dRef?.Inner.CurrentChangedSubscriberCount == 0));
@@ -232,6 +247,17 @@ internal static class RealRefTortureFixtures
                 var (showLabel, setShowLabel) = ctx.UseState(true);
                 var (showD2, setShowD2) = ctx.UseState(true);
                 var (showInput, setShowInput) = ctx.UseState(true);
+                var (links, setLinks) = ctx.UseState(true);
+                Element input = Button("RR_A11y_Input", () => { });
+                if (links)
+                {
+                    input = input
+                        .LabeledBy(labelRef)
+                        .DescribedBy(d1Ref, d2Ref)
+                        .FlowsTo(to1Ref, to2Ref)
+                        .FlowsFrom(from1Ref, from2Ref);
+                }
+
                 return VStack(
                     showLabel ? Button("RR_A11y_Label", () => { }).Ref(labelRef) with { Key = "RR_A11y_Label" } : Empty(),
                     Button("RR_A11y_D1", () => { }).Ref(d1Ref) with { Key = "RR_A11y_D1" },
@@ -241,13 +267,9 @@ internal static class RealRefTortureFixtures
                     Button("RR_A11y_From1", () => { }).Ref(from1Ref) with { Key = "RR_A11y_From1" },
                     Button("RR_A11y_From2", () => { }).Ref(from2Ref) with { Key = "RR_A11y_From2" },
                     showInput
-                        ? Button("RR_A11y_Input", () => { })
-                            .LabeledBy(labelRef)
-                            .DescribedBy(d1Ref, d2Ref)
-                            .FlowsTo(to1Ref, to2Ref)
-                            .FlowsFrom(from1Ref, from2Ref)
-                            with { Key = "RR_A11y_Input" }
+                        ? input with { Key = "RR_A11y_Input" }
                         : Empty(),
+                    Button("RR_A11y_ToggleLinks", () => setLinks(!links)),
                     Button("RR_A11y_ToggleLabel", () => setShowLabel(!showLabel)),
                     Button("RR_A11y_ToggleD2", () => setShowD2(!showD2)),
                     Button("RR_A11y_ToggleInput", () => setShowInput(!showInput)));
@@ -255,6 +277,36 @@ internal static class RealRefTortureFixtures
 
             await Harness.Render();
             H.Check("RealRef_AutomationRelationships_CommitOrder", await Harness.WaitFor(() =>
+                LabeledBy(H, "RR_A11y_Input", "RR_A11y_Label") &&
+                DescribedBy(H, "RR_A11y_Input", "RR_A11y_D1", "RR_A11y_D2") &&
+                FlowsTo(H, "RR_A11y_Input", "RR_A11y_To1", "RR_A11y_To2") &&
+                FlowsFrom(H, "RR_A11y_Input", "RR_A11y_From1", "RR_A11y_From2") &&
+                labelRef?.Inner.CurrentChangedSubscriberCount == 1 &&
+                d1Ref?.Inner.CurrentChangedSubscriberCount == 1 &&
+                d2Ref?.Inner.CurrentChangedSubscriberCount == 1 &&
+                to1Ref?.Inner.CurrentChangedSubscriberCount == 1 &&
+                to2Ref?.Inner.CurrentChangedSubscriberCount == 1 &&
+                from1Ref?.Inner.CurrentChangedSubscriberCount == 1 &&
+                from2Ref?.Inner.CurrentChangedSubscriberCount == 1));
+
+            H.ClickButton("RR_A11y_ToggleLinks");
+            await Harness.Render();
+            H.Check("RealRef_AutomationRelationships_ModifierRemovalClearsPropertiesAndLists", await Harness.WaitFor(() =>
+                LabeledByNull(H, "RR_A11y_Input") &&
+                DescribedBy(H, "RR_A11y_Input") &&
+                FlowsTo(H, "RR_A11y_Input") &&
+                FlowsFrom(H, "RR_A11y_Input") &&
+                labelRef?.Inner.CurrentChangedSubscriberCount == 0 &&
+                d1Ref?.Inner.CurrentChangedSubscriberCount == 0 &&
+                d2Ref?.Inner.CurrentChangedSubscriberCount == 0 &&
+                to1Ref?.Inner.CurrentChangedSubscriberCount == 0 &&
+                to2Ref?.Inner.CurrentChangedSubscriberCount == 0 &&
+                from1Ref?.Inner.CurrentChangedSubscriberCount == 0 &&
+                from2Ref?.Inner.CurrentChangedSubscriberCount == 0));
+
+            H.ClickButton("RR_A11y_ToggleLinks");
+            await Harness.Render();
+            H.Check("RealRef_AutomationRelationships_ModifierRestoreRebinds", await Harness.WaitFor(() =>
                 LabeledBy(H, "RR_A11y_Input", "RR_A11y_Label") &&
                 DescribedBy(H, "RR_A11y_Input", "RR_A11y_D1", "RR_A11y_D2") &&
                 FlowsTo(H, "RR_A11y_Input", "RR_A11y_To1", "RR_A11y_To2") &&
@@ -322,6 +374,72 @@ internal static class RealRefTortureFixtures
                 MissingButton(H, "RR_Popup_Target") &&
                 PopupTargetNull(H, "RR_Popup") &&
                 targetRef?.Inner.CurrentChangedSubscriberCount == 1));
+        }
+    }
+
+    internal sealed class ImperativeRefLifecycle(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            ElementRef<FrameworkElement>? firstRef = null, secondRef = null;
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                firstRef = ctx.UseElementRef<FrameworkElement>();
+                secondRef = ctx.UseElementRef<FrameworkElement>();
+                var (phase, setPhase) = ctx.UseState(0);
+                Element target = phase switch
+                {
+                    0 => TextBlock("RR_Ref_Target").Ref(firstRef),
+                    1 => TextBlock("RR_Ref_Target").Ref(secondRef),
+                    2 => TextBlock("RR_Ref_Target"),
+                    3 => TextBlock("RR_Ref_Target").Ref(firstRef),
+                    4 => Empty(),
+                    _ => TextBlock("RR_Ref_Reused"),
+                };
+
+                return VStack(
+                    target,
+                    Button("RR_Ref_Advance", () => setPhase(phase + 1)));
+            });
+
+            await Harness.Render();
+            H.Check("RealRef_ImperativeRefLifecycle_InitialRefOnlyMount", await Harness.WaitFor(() =>
+                TextBlockTargets(H, firstRef, "RR_Ref_Target") &&
+                secondRef?.Current is null));
+
+            H.ClickButton("RR_Ref_Advance");
+            await Harness.Render();
+            H.Check("RealRef_ImperativeRefLifecycle_SwapClearsOldRef", await Harness.WaitFor(() =>
+                firstRef?.Current is null &&
+                TextBlockTargets(H, secondRef, "RR_Ref_Target")));
+
+            H.ClickButton("RR_Ref_Advance");
+            await Harness.Render();
+            H.Check("RealRef_ImperativeRefLifecycle_RemovalClearsRef", await Harness.WaitFor(() =>
+                FindTextBlock(H, "RR_Ref_Target") is not null &&
+                firstRef?.Current is null &&
+                secondRef?.Current is null));
+
+            H.ClickButton("RR_Ref_Advance");
+            await Harness.Render();
+            H.Check("RealRef_ImperativeRefLifecycle_ReAddWorksAfterRemoval", await Harness.WaitFor(() =>
+                TextBlockTargets(H, firstRef, "RR_Ref_Target") &&
+                secondRef?.Current is null));
+
+            H.ClickButton("RR_Ref_Advance");
+            await Harness.Render();
+            H.Check("RealRef_ImperativeRefLifecycle_RefOnlyUnmountClears", await Harness.WaitFor(() =>
+                FindTextBlock(H, "RR_Ref_Target") is null &&
+                firstRef?.Current is null &&
+                secondRef?.Current is null));
+
+            H.ClickButton("RR_Ref_Advance");
+            await Harness.Render();
+            H.Check("RealRef_ImperativeRefLifecycle_PoolReuseDoesNotRestoreOldRef", await Harness.WaitFor(() =>
+                FindTextBlock(H, "RR_Ref_Reused") is not null &&
+                firstRef?.Current is null &&
+                secondRef?.Current is null));
         }
     }
 

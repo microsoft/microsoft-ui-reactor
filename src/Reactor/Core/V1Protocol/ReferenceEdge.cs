@@ -13,6 +13,12 @@ namespace Microsoft.UI.Reactor.Core
     {
         public ElementRef? Cell;
         public Action<FrameworkElement?>? Handler;
+        /// <summary>
+        /// The target-property writer for this edge (e.g. set XYFocusRight / LabeledBy).
+        /// Retained so teardown can clear the property — <c>Apply(ctrl, null)</c> — and not
+        /// leave a stale relationship on a held or pooled control (spec 057 CR-002).
+        /// </summary>
+        public Action<FrameworkElement, FrameworkElement?>? Apply;
     }
 
     internal sealed class ReferenceListEdge
@@ -20,6 +26,11 @@ namespace Microsoft.UI.Reactor.Core
         public readonly List<ElementRef> Cells = new();
         public Action<FrameworkElement?>? Handler;
         public Action<FrameworkElement>? Recompute;
+        /// <summary>
+        /// Empties the target list on teardown so a held/pooled control doesn't retain
+        /// stale relationship entries (spec 057 CR-002).
+        /// </summary>
+        public Action<FrameworkElement>? Clear;
     }
 
     internal static class ReferenceSlots

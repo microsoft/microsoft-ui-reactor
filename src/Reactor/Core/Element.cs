@@ -1067,6 +1067,10 @@ public abstract record Element
             && ReferenceEquals(a.XYFocusDownRef, b.XYFocusDownRef)
             && ReferenceEquals(a.XYFocusLeftRef, b.XYFocusLeftRef)
             && ReferenceEquals(a.XYFocusRightRef, b.XYFocusRightRef)
+            // Imperative ref slot (.Ref). A ref-only change (add/remove/swap)
+            // must force Update so ApplyModifiers clears the old cell and sets the
+            // new one — otherwise the shallow-skip path strands a stale ElementRef.
+            && ReferenceEquals(a.Ref, b.Ref)
             // Accessibility Tier 2/3. AccessibilityModifiers is a record of
             // scalar/string fields, but every fluent helper (.AccessibilityView,
             // .LiveRegion, .ItemStatus, …) allocates a fresh instance per render
@@ -1619,10 +1623,10 @@ public record ElementModifiers
     public int? TabIndex { get; init; }
     public string? AccessKey { get; init; }
     public Microsoft.UI.Xaml.Input.XYFocusKeyboardNavigationMode? XYFocusKeyboardNavigation { get; init; }
-    public Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>? XYFocusUpRef { get; init; }
-    public Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>? XYFocusDownRef { get; init; }
-    public Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>? XYFocusLeftRef { get; init; }
-    public Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>? XYFocusRightRef { get; init; }
+    public Microsoft.UI.Reactor.Input.ElementRef? XYFocusUpRef { get; init; }
+    public Microsoft.UI.Reactor.Input.ElementRef? XYFocusDownRef { get; init; }
+    public Microsoft.UI.Reactor.Input.ElementRef? XYFocusLeftRef { get; init; }
+    public Microsoft.UI.Reactor.Input.ElementRef? XYFocusRightRef { get; init; }
     public Action<UIElement, Microsoft.UI.Xaml.Input.AccessKeyDisplayRequestedEventArgs>? OnAccessKeyDisplayRequested { get; init; }
 
     /// <summary>
@@ -1864,16 +1868,16 @@ public record AccessibilityModifiers
     public string? LabeledBy { get; init; }
 
     /// <summary>AutomationProperties.LabeledBy target resolved from an ElementRef.</summary>
-    public Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>? LabeledByRef { get; init; }
+    public Microsoft.UI.Reactor.Input.ElementRef? LabeledByRef { get; init; }
 
     /// <summary>AutomationProperties.DescribedBy targets resolved from ElementRefs.</summary>
-    public IReadOnlyList<Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>>? DescribedByRefs { get; init; }
+    public IReadOnlyList<Microsoft.UI.Reactor.Input.ElementRef>? DescribedByRefs { get; init; }
 
     /// <summary>AutomationProperties.FlowsTo targets resolved from ElementRefs.</summary>
-    public IReadOnlyList<Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>>? FlowsToRefs { get; init; }
+    public IReadOnlyList<Microsoft.UI.Reactor.Input.ElementRef>? FlowsToRefs { get; init; }
 
     /// <summary>AutomationProperties.FlowsFrom targets resolved from ElementRefs.</summary>
-    public IReadOnlyList<Microsoft.UI.Reactor.Input.ElementRef<FrameworkElement>>? FlowsFromRefs { get; init; }
+    public IReadOnlyList<Microsoft.UI.Reactor.Input.ElementRef>? FlowsFromRefs { get; init; }
 
     /// <summary>UIElement.TabFocusNavigation — Tab behavior within a container (Local, Once, Cycle).</summary>
     public Microsoft.UI.Xaml.Input.KeyboardNavigationMode? TabFocusNavigation { get; init; }
@@ -3440,7 +3444,7 @@ public record TeachingTipElement(
     /// <summary>
     /// Control the tip anchors to, referenced by <c>ElementRef</c> so it resolves regardless of mount order.
     /// </summary>
-    public Microsoft.UI.Reactor.Input.ElementRef<Microsoft.UI.Xaml.FrameworkElement>? Target { get; init; }
+    public Microsoft.UI.Reactor.Input.ElementRef? Target { get; init; }
     /// <summary>Custom icon source rendered in the tip's leading slot.</summary>
     public IconData? IconSource { get; init; }
     /// <summary>Optional "hero" Element (image / banner) rendered above the title.</summary>
