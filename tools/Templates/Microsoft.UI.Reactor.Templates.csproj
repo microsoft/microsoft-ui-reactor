@@ -8,6 +8,7 @@
     <Description>Project templates for Microsoft.UI.Reactor</Description>
     <Copyright>© Microsoft Corporation. All rights reserved.</Copyright>
     <PackageIcon>Icon.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
     <PackageTags>dotnet-new;templates;WinUI;WinUI3;Windows App SDK;WinAppSDK;Windows;desktop;Reactor</PackageTags>
@@ -23,6 +24,7 @@
 
   <ItemGroup>
     <None Include="..\..\assets\Icon.png" Pack="true" PackagePath="" Visible="false" />
+    <None Include="README.md" Pack="true" PackagePath="" Visible="false" />
   </ItemGroup>
 
  <ItemGroup>

@@ -24,6 +24,7 @@
     <PackageTags>WinUI;WinUI3;Windows App SDK;WinAppSDK;Windows;desktop;Reactor;devtools;diagnostics;hot-reload;preview;MCP</PackageTags>
     <Copyright>© Microsoft Corporation. All rights reserved.</Copyright>
     <PackageIcon>Icon.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
     <PackageProjectUrl>https://github.com/microsoft/microsoft-ui-reactor</PackageProjectUrl>
     <RepositoryUrl>https://github.com/microsoft/microsoft-ui-reactor</RepositoryUrl>
@@ -54,6 +55,7 @@
   <ItemGroup>
     <None Include="..\..\LICENSE" Pack="true" PackagePath="" Visible="false" />
     <None Include="..\..\assets\Icon.png" Pack="true" PackagePath="" Visible="false" />
+    <None Include="README.md" Pack="true" PackagePath="" Visible="false" />
   </ItemGroup>
 
 </Project>

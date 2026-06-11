@@ -37,6 +37,7 @@
     <PackageTags>WinUI;WinUI3;Windows App SDK;WinAppSDK;XAML;Windows;desktop;UI;declarative;functional;reactive;MVU;components;hooks;Reactor</PackageTags>
     <Copyright>© Microsoft Corporation. All rights reserved.</Copyright>
     <PackageIcon>Icon.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
     <PackageProjectUrl>https://github.com/microsoft/microsoft-ui-reactor</PackageProjectUrl>
     <RepositoryUrl>https://github.com/microsoft/microsoft-ui-reactor</RepositoryUrl>
@@ -122,6 +123,7 @@
           Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="" Visible="false" />
     <None Include="..\..\assets\Icon.png" Pack="true" PackagePath="" Visible="false" />
+    <None Include="README.md" Pack="true" PackagePath="" Visible="false" />
     <!-- Packed under the PackageId-matching name so NuGet auto-imports it into
          consuming projects (build/<PackageId>.targets). The source file keeps
          the short name for the repo's own Directory.Build.props import. -->
