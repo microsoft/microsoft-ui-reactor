@@ -1,0 +1,20 @@
+{
+  "//": "Default F5 / `dotnet run` profile for the scaffolded Reactor app. The devtools",
+  "//": "profile pairs --devtools with the Debug-only `Microsoft.UI.Reactor.Devtools` package +",
+  "//": "Reactor.DevtoolsSupport host config option (see Company.ReactorApp1.csproj).",
+  "//": "Release builds exclude the devtools package, so the default profile does not pass",
+  "//": "--devtools. The Reactor Visual Studio embedded-preview extension (spec 056) launches",
+  "//": "with its own argv (`--devtools run --embed --embed-host-pid <pid>`) and does not",
+  "//": "consult this file.",
+  "profiles": {
+    "Company.ReactorApp1": {
+      "commandName": "Project",
+      "nativeDebugging": false
+    },
+    "Company.ReactorApp1 Devtools": {
+      "commandName": "Project",
+      "commandLineArgs": "--devtools",
+      "nativeDebugging": false
+    }
+  }
+}
