@@ -54,6 +54,9 @@
     <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" Version="17.14.15" PrivateAssets="all" />
     <PackageReference Include="Microsoft.VisualStudio.SDK.Analyzers" Version="17.7.113" PrivateAssets="all" />
     <PackageReference Include="System.Text.Json" Version="9.0.0" />
+    <!-- Pin transitive MessagePack (via Microsoft.VisualStudio.SDK → StreamJsonRpc) to a
+         version that includes the GHSA-hv8m-jj95-wg3x LZ4 decompression fix (>= 2.5.301). -->
+    <PackageReference Include="MessagePack" Version="2.5.301" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TF_BUILD)' != 'true'">

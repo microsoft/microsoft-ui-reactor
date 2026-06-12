@@ -23,6 +23,9 @@
     <PackageReference Include="Microsoft.VisualStudio.Utilities" Version="17.14.40264" />
     <PackageReference Include="xunit" Version="2.8.1" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.1" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
+    <!-- Pin transitive MessagePack (via Microsoft.VisualStudio.SDK → StreamJsonRpc) to a
+         version that includes the GHSA-hv8m-jj95-wg3x LZ4 decompression fix (>= 2.5.301). -->
+    <PackageReference Include="MessagePack" Version="2.5.301" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TF_BUILD)' != 'true'">

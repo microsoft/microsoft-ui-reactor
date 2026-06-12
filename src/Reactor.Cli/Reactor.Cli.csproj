@@ -80,6 +80,9 @@
     <!-- Pin the transitive Nerdbank.MessagePack (via GitHub.Copilot.SDK → StreamJsonRpc)
          to a version that includes the GHSA-2cwq-pwfr-wcw3 / CVE-2026-44375 fix. -->
     <PackageReference Include="Nerdbank.MessagePack" Version="1.2.4" />
+    <!-- Pin transitive MessagePack (via GitHub.Copilot.SDK → StreamJsonRpc) to a version
+         that includes the GHSA-hv8m-jj95-wg3x LZ4 decompression fix (>= 2.5.301). -->
+    <PackageReference Include="MessagePack" Version="2.5.301" />
   </ItemGroup>
 
   <ItemGroup>
