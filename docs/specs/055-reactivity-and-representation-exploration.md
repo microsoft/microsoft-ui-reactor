@@ -2,7 +2,8 @@
 
 ## Status
 
-**Exploration / RFC** — 2026-06-05.
+**Exploration / RFC** — 2026-06-05. Updated 2026-06-12 with initial
+P1/P3 prototype results.
 
 Tracking context: GitHub discussion
 [microsoft/microsoft-ui-reactor#531 — *Architectural Inquiry: Rethinking State
@@ -41,6 +42,7 @@ experiment.
 - [§12 Open questions](#12-open-questions)
 - [§13 Out of scope](#13-out-of-scope)
 - [Appendix A — What source generators and language changes could buy](#appendix-a--what-source-generators-and-language-changes-could-buy)
+- [Appendix B — Prototype syntax and hook mappings](#appendix-b--prototype-syntax-and-hook-mappings)
 
 ---
 
@@ -842,16 +844,83 @@ weighting, to be confirmed before scoring begins:
 | Migration cost | 10% | One-time cost, but real. |
 | Runtime properties (echo, async, diag) | weight bundled with perf/ergonomics | Disqualifying if broken. |
 
+### §8.1 Initial measured results — P1 and P3
+
+Two Element-retained prototypes now have local StocksGrid stress results:
+
+- **P1 Lit × Element / dependency-tracked Element bindings** retained Reactor's
+  Element representation but proved a more fine-grained scalar-binding shape
+  than the original "whole component re-renders on property change" P1 sketch
+  in §6: `Build()` runs once, binding lambdas subscribe to the signals they
+  read, and later signal writes update only those bindings.
+- **P3 Solid × Element** retained Reactor's Element representation and used
+  mount-once signals/effects for bound slots, avoiding per-tick virtual
+  render/reconcile work in the measured value-update path.
+
+The numbers below are **initial smoke measurements**, not final scorecards.
+Both runs used x64 Release, the 70×70 StocksGrid stress workload, 10-second
+duration, update percentages 10/50/100, and ReactorOptimized as the nearest
+fair baseline. The P1 and P3 runs happened in different sessions, so compare
+each prototype against its paired ReactorOptimized row rather than comparing
+P1 and P3 FPS directly. In-app FPS / render-like counters are not ETW Present
+rate. TTFF/mount, Gen0/min, and bytes/update were not measured comparably.
+
+| Update % | P1 FPS vs paired ReactorOptimized | P1 render/update proxy | P3 FPS vs paired ReactorOptimized | P3 combined managed cost vs paired ReactorOptimized |
+|---:|---:|---:|---:|---:|
+| 10% | **21.9** vs 17.1 (+28%) | **10.52/sec** vs 7.41/sec (+42%) | **22.7** vs 19.7 (+15%) | **3.5 ms** vs 33.5 ms (9.6× lower) |
+| 50% | **7.7** vs 7.3 (+5%) | **3.62/sec** vs 3.01/sec (+20%) | **8.2** vs 6.6 (+24%) | **15.0 ms** vs 75.3 ms (5.0× lower) |
+| 100% | **5.1** vs 4.7 (+9%) | **2.37/sec** vs 1.90/sec (+25%) | **5.8** vs 4.8 (+21%) | **23.1 ms** vs 107.3 ms (4.6× lower) |
+
+The shared read is that **fine-grained scalar reactivity works in this
+value-heavy workload**. Both prototypes update work proportional to unique
+changed cells rather than rebuilding and reconciling the whole 4,900-cell
+tree. P1 proves the lower-risk Element-retained scalar-binding path can beat
+ReactorOptimized on the available in-app smoke metrics. P3 shows the stronger
+managed-cost result: its per-tick combined cost is 4.6×–9.6× lower than
+ReactorOptimized, and the latest P3 report recorded zero component builds,
+zero native mounts, and zero full-grid refresh fallbacks during measured ticks.
+
+The binding-work counters also line up across the two spikes:
+
+| Update % | Unique changed cells/tick | P1 recomputes/tick | P1 estimated DP sets/tick | P3 signal writes/tick | P3 effect runs/tick | P3 DP writes/tick |
+|---:|---:|---:|---:|---:|---:|---:|
+| 10% | ~466 | 466.1 | 932.2 | 490.0 | 932.2 | 698.2 |
+| 50% | ~1,927 | 1,926.3 | 3,852.5 | 2,450.0 | 3,853.6 | 2,884.4 |
+| 100% | ~3,096 | 3,096.0 | 6,192.0 | 4,900.0 | 6,192.0 | 4,641.2 |
+
+At 100%, unique changed cells are below 4,900 because the stress data source
+samples random indices with replacement. P3 reports more signal writes than
+unique cells because every configured update write still hits a cell signal,
+but downstream binding effects and DP writes collapse to the actual dependent
+slots that change.
+
+What these results do **not** decide:
+
+- They do not test the direct-UIElement representation axis (P2/P4), so the
+  "remove the parallel hierarchy" maintenance hypothesis remains open.
+- They do not prove structural-list ergonomics. P1 still needs a scoped
+  structural region for insert/remove/reorder, and P3 still requires
+  `For`/`When`-style reactive control-flow instead of ordinary C# `.Select`
+  when structure must update after mount.
+- They do not close production-runtime gaps: ETW Present rate, TTFF/mount,
+  Gen0/min, bytes/update, hot reload, DevTools inspection, and production
+  echo-suppression parity remain required before recommendation.
+
+Interim implication: **continue the fine-grained reactivity line of
+investigation**. The measured evidence is already strong enough to retire the
+idea that signal/binding machinery is merely theoretical; the next gating
+question is whether the same win survives structural UI, virtualization,
+hot reload, and service/hook replacement without unacceptable authoring cost.
+
 ---
 
 ## §9 Performance hypothesis
 
-This section is **best-informed guesses, not measurements** — written
-before the prototypes are built so the experiment can confirm or
-falsify it. Concrete predictions are more useful than vague optimism;
-if Phase-2 / Phase-3 results diverge materially from this section,
-that's evidence something is wrong with our mental model and worth
-investigating in its own right.
+This section is the original **best-informed pre-measurement hypothesis**,
+kept as the falsifiable baseline for the experiment. The initial P1/P3
+measurements in §8.1 partially validate the fine-grained value-update bet, but
+they do not yet cover cold start, GC, hot reload, structural UI, virtualization,
+or the direct-UIElement representation axis.
 
 The hypothesis folds in the architectural facts established in §3–§7:
 
@@ -1099,10 +1168,10 @@ Goal: prove the model can render and update at all, and surface the
 divergences §7 identifies *before* committing further. Score ergonomic
 axes (A, B) and capture initial perf numbers (C).
 
-Each prototype lives under `experiments/reactivity/p{1|2|3|4}-*/` as a
-self-contained sketch. Do **not** modify `src/Reactor/`. Each prototype may
-copy whatever subset of the current reconciler / element records it wants
-(or none of them) — the point is to see the irreducible shape.
+Each prototype should be isolated as a self-contained sketch. Do **not** modify
+`src/Reactor/`. Each prototype may copy whatever subset of the current
+reconciler / element records it wants (or none of them) — the point is to see
+the irreducible shape.
 
 Phase 1 ports **all** of these (not just CounterDemo — §7 explains why
 counter alone hides the most important questions):
@@ -1445,3 +1514,378 @@ prototype whose ergonomic critique is *specifically* "the `.Value` /
 lambda-wrap noise is the dominant pain point," Phase 4 considers Appendix
 A options as a follow-up. We do not let a hypothetical future generator
 mask a real ergonomic problem in the prototype.
+
+---
+
+## Appendix B — Prototype syntax and hook mappings
+
+This appendix captures the authoring shapes proven by the two measured
+Element-retained spikes. These are **syntax snapshots**, not final API
+proposals. They are included so the spec preserves the learning even if the
+prototype code is deleted.
+
+### B.1 P1 Lit × Element / dependency-tracked binding syntax
+
+The measured P1 spike kept Reactor's Element representation but shifted scalar
+updates to dependency-tracked bindings:
+
+```csharp
+Build() runs once -> binding lambdas track Signal reads -> signal writes
+re-run only dependent bindings.
+```
+
+The important ergonomic rule is that reactive values must be read inside a
+deferred getter:
+
+```csharp
+Lit.TextBlock(() => $"Count: {_count.Value}")
+```
+
+not:
+
+```csharp
+TextBlock($"Count: {_count.Value}") // snapshots before the tracker can see it
+```
+
+#### Simple counter
+
+```csharp
+using Microsoft.UI.Reactor;
+using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Lit;
+using static Microsoft.UI.Reactor.Factories;
+using Lit = Microsoft.UI.Reactor.Lit.Bindings;
+
+class CounterApp : ReactiveComponent
+{
+    private readonly Signal<int> _count;
+
+    public CounterApp()
+    {
+        _count = Signal(0);
+    }
+
+    protected override Element Build()
+    {
+        return VStack(
+            Lit.TextBlock(() => $"Count: {_count.Value}")
+                .FontSize(24),
+
+            HStack(8,
+                Button("-", () => _count.Set(c => c - 1)),
+                Button("+", () => _count.Set(c => c + 1))
+            )
+        ).Padding(16);
+    }
+}
+```
+
+When `+` is clicked, only the `TextBlock` binding that read `_count.Value`
+re-runs and writes the native `TextBlock.Text` property. `Build()` does not run
+again, and there is no whole-component diff.
+
+#### Projected list with per-row updates
+
+```csharp
+using Microsoft.UI.Reactor;
+using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Lit;
+using Microsoft.UI.Xaml;
+using WinUI = Microsoft.UI.Xaml.Controls;
+using static Microsoft.UI.Reactor.Factories;
+using Lit = Microsoft.UI.Reactor.Lit.Bindings;
+
+record Todo(int Id, string Title, bool Done);
+record TodoRow(int Id, string Title, string StatusText, bool Visible);
+
+class TodoListApp : ReactiveComponent
+{
+    private readonly Signal<Todo>[] _todos;
+    private readonly Signal<string> _filter;
+
+    public TodoListApp()
+    {
+        _todos =
+        [
+            Signal(new Todo(1, "Write prototype", true)),
+            Signal(new Todo(2, "Run perf sweep", true)),
+            Signal(new Todo(3, "Review ergonomics", false)),
+        ];
+
+        _filter = Signal("");
+    }
+
+    protected override Element Build()
+    {
+        return VStack(
+            HStack(8,
+                Button("All", () => _filter.Set("")),
+                Button("Open", () => _filter.Set("open")),
+                Button("Done", () => _filter.Set("done"))
+            ),
+
+            VStack(_todos.Select((todo, index) => TodoRowElement(todo, index)).ToArray())
+        ).Padding(16);
+    }
+
+    private Element TodoRowElement(Signal<Todo> todo, int index)
+    {
+        TodoRow Project()
+        {
+            var value = todo.Value;
+            var filter = _filter.Value;
+            var visible = filter switch
+            {
+                "open" => !value.Done,
+                "done" => value.Done,
+                _ => true,
+            };
+
+            return new TodoRow(
+                value.Id,
+                value.Title,
+                value.Done ? "done" : "open",
+                visible);
+        }
+
+        return HStack(8,
+                Lit.TextBlock(() => Project().StatusText).Width(48),
+                Lit.TextBlock(() => Project().Title).Width(180),
+                Button("Toggle", () => todo.Set(t => t with { Done = !t.Done })),
+                Button("Rename", () => todo.Set(t => t with { Title = t.Title + "!" }))
+            )
+            .BindNative<StackPanelElement, WinUI.StackPanel, bool>(
+                () => Project().Visible,
+                static (panel, visible) =>
+                    panel.Visibility = visible ? Visibility.Visible : Visibility.Collapsed,
+                Scheduler,
+                name: $"todo-row-{index}-visible");
+    }
+}
+```
+
+Updating one row re-runs only that row's bindings. Changing the filter re-runs
+only bindings that read `_filter.Value`. This scalar path is promising, but
+structural insert/remove/reorder still needs a scoped structural-region helper.
+
+### B.2 P3 Solid × Element syntax
+
+The P3 spike also retained Element records, but used Solid-style owner scopes,
+signals, effects, and structural helpers:
+
+```csharp
+Build() runs once -> signals/effects subscribe by read -> changed signals
+flush only dependent bindings.
+```
+
+Ordinary C# control flow is mount-time only. Use `When`/`For` when structure
+must change reactively after mount.
+
+#### Simple counter
+
+```csharp
+using Reactor.P3SolidElement;
+using static Reactor.P3SolidElement.Factories;
+
+public sealed class CounterDemo : SignalComponent
+{
+    protected override void Build()
+    {
+        var count = Signal(0);
+
+        Render(VStack(12,
+            Text(() => $"Count: {count.Value}")
+                .FontSize(24),
+
+            HStack(8,
+                Button("-", () => count.Value--)
+                    .IsEnabled(() => count.Value > 0),
+
+                Button("+", () => count.Value++)),
+
+            Slider(
+                () => (double)count.Value,
+                min: 0,
+                max: 10,
+                onValueChanged: value => count.Value = (int)value),
+
+            When(
+                () => count.Value >= 10,
+                () => Text("Max reached"),
+                () => Text(() => $"{10 - count.Value} steps remaining"))
+        ));
+    }
+}
+```
+
+Direct two-way binding is shorter when the signal type matches the control:
+
+```csharp
+var count = Signal(0d);
+Slider(count, min: 0, max: 10);
+```
+
+#### Keyed list with projection, inline update, and reorder
+
+```csharp
+using Reactor.P3SolidElement;
+using static Reactor.P3SolidElement.Factories;
+
+public readonly record struct TodoItem(int Id, string Title, bool Done);
+
+public sealed class TodoListDemo : SignalComponent
+{
+    private Signal<TodoItem[]>? _items;
+    private Signal<int>? _nextId;
+
+    protected override void Build()
+    {
+        var items = _items = Signal<TodoItem[]>([
+            new TodoItem(1, "Write scorecard", done: true),
+            new TodoItem(2, "Review structural questions", done: false),
+        ]);
+        var nextId = _nextId = Signal(3);
+
+        Render(VStack(10,
+            HStack(8,
+                Button("Add", Add),
+                Button("Rotate", RotateFirstToEnd)
+                    .IsEnabled(() => items.Value.Length > 1)),
+
+            Text(() =>
+            {
+                var done = items.Value.Count(item => item.Done);
+                return $"{done}/{items.Value.Length} complete";
+            }),
+
+            VStack(For(
+                () => items.Value,
+                item => item.Id,
+                (item, index) =>
+                {
+                    var editing = new Signal<bool>(false);
+
+                    return HStack(8,
+                        Text(() => $"{index.Value + 1}."),
+
+                        When(
+                            () => editing.Value,
+                            () => HStack(4,
+                                TextBox(
+                                    () => item.Value.Title,
+                                    text => Rename(item.Value.Id, text)),
+                                Button("Done", () => editing.Value = false)),
+                            () => HStack(4,
+                                Text(() => item.Value.Done
+                                    ? $"[x] {item.Value.Title}"
+                                    : $"[ ] {item.Value.Title}"),
+                                Button("Edit", () => editing.Value = true))),
+
+                        Button("Toggle", () => Toggle(item.Value.Id)),
+                        Button("Remove", () => Remove(item.Value.Id)));
+                }))
+        ));
+    }
+
+    private void Add()
+    {
+        var id = _nextId!.Value;
+        _nextId.Value = id + 1;
+        _items!.Value = [.. _items.Value, new TodoItem(id, $"Item {id}", false)];
+    }
+
+    private void Toggle(int id) =>
+        _items!.Value = [.. _items.Value.Select(item =>
+            item.Id == id ? item with { Done = !item.Done } : item)];
+
+    private void Rename(int id, string title) =>
+        _items!.Value = [.. _items.Value.Select(item =>
+            item.Id == id ? item with { Title = title } : item)];
+
+    private void Remove(int id) =>
+        _items!.Value = [.. _items.Value.Where(item => item.Id != id)];
+
+    private void RotateFirstToEnd()
+    {
+        var current = _items!.Value;
+        if (current.Length > 1)
+        {
+            _items.Value = [.. current[1..], current[0]];
+        }
+    }
+}
+```
+
+The `For` template receives item and index signals, so moves preserve row-local
+state. Ordinary `.Select(...)` in `Build()` is a mount-time snapshot in P3; use
+`For(...)` when child structure needs to insert/remove/reorder reactively.
+
+### B.3 Current hook/API mapping
+
+The mapping below is conceptual. The measured prototypes implemented the core
+scalar primitives; service-layer APIs such as navigation, resources, docking,
+and accessibility remain design work.
+
+| Current Reactor hook/API | P1 dependency-tracked Element shape | P3 Solid × Element shape |
+|---|---|---|
+| `UseState<T>(initial)` | `Signal<T>` / signal field stored on the component; read inside binding lambdas and update with `.Set(...)`. | `var s = Signal(initial);` read/write `s.Value`. |
+| `UseReducer<T>(initial)` | Signal field plus an instance dispatch method that applies the reducer into `.Set(...)`. | `Signal<T>` plus `s.Update(reducer)` or `s.Value = reducer(s.Value)`. |
+| `UseReducer<TState,TAction>(initial, reducer)` | Store `Signal<TState>`; `Dispatch(TAction action) => _state.Set(s => reducer(s, action))`. | `Signal<TState>` plus `void Dispatch(TAction action) => state.Value = reducer(state.Value, action);`. |
+| `UseEffect(Action, deps)` | `ReactiveScope` for signal-dependent effects, or `IReactiveController.OnMount/OnUnmount` for lifecycle. | `Effect(() => { ... signal reads ... });` dependencies are inferred from signal reads. |
+| `UseEffect(Func<Action>, deps)` | Controller or disposable `ReactiveScope` owned by the component. | `Effect(...)` plus `OnCleanup(cleanup)` or owner-scope cleanup. |
+| `UseMemo<T>(factory, deps)` | Usually unnecessary because `Build()` runs once; use derived getter lambdas or a future `Computed<T>` for expensive derived values. | `Memo(factory)` when cached derived state matters, or inline reactive getter `() => expr` for simple bound props. |
+| `UseCallback(callback, deps)` | Usually unnecessary; instance methods and captured fields are stable across the one-time `Build()`. | Usually unnecessary; event handlers read current signals at invocation time. |
+| `UseRef<T>(initial)` | Plain instance field for non-reactive state; `Signal<T>` for reactive state; `ElementRef<T>` for controls. | Plain field for imperative handles, or `Signal<T>` if changes should update UI. |
+| `UsePersisted<T>(key, initial)` | Signal initialized from storage; controller writes back on signal changes. | Likely `PersistedSignal<T>(key, initial, scope)` wrapper over `Signal<T>`. |
+| `UsePersisted<T>(key, initial, scope)` | Same as above, with scope included in the storage key/provider. | Persisted signal scoped by the supplied owner/context. |
+| `UseObservableTree<T>(source)` | Adapter converts object/property changes into one or more signals. | Subscribe once in an effect/owner scope and copy changed state into signals. |
+| `UseObservable<T>(source)` | Controller subscribes to `PropertyChanged`; writes a version signal or property signals. | Observable adapter that writes signals and cleans up with the owner scope. |
+| `UseObservableProperty<T,TProp>(source, selector, propertyName)` | Property-specific controller updates a `Signal<TProp>`. | `Signal<TProp>` updated by `PropertyChanged`; cleanup owned by scope. |
+| `UseCollection<T>(ObservableCollection<T>)` | Collection adapter maintains item signals plus a structural version signal; needs structural-region design for add/remove/reorder. | Adapter to `Signal<T[]>` or `For` source invalidation; structural UI should use `For`. |
+| `UseNavigation<TRoute>(initial)` / `UseNavigation<TRoute>()` | Long-lived navigation controller with current-route signal. | `Signal<TRoute>` plus navigation service/context. |
+| `UseNavigationLifecycle(...)` | Navigation controller callbacks registered once. | Route signals plus effect/cleanup callbacks. |
+| `UseSystemBackButton(...)` | Controller subscribes/unsubscribes to back-button events. | Effect subscribing to back-button events with cleanup. |
+| `UseContext<T>(Context<T>)` | `ContextSignal<T>` or dependency-injected context service; bindings read `.Value`. | Owner-scope ambient context or explicit service injection. |
+| `UseColorScheme()` | Theme controller exposes `Signal<ColorScheme>`. | App/theme service exposing `Signal<ColorScheme>`. |
+| `UseIsDarkTheme()` | Derived getter over the color-scheme signal. | Derived getter/memo from color-scheme signal. |
+| `UseHighContrast()` | Accessibility/settings controller exposes `Signal<bool>`. | Accessibility/theme service signal. |
+| `UseHighContrastScheme()` | Accessibility/settings controller exposes `Signal<string?>`. | Derived signal/getter from high-contrast service. |
+| `UseReducedMotion()` | Accessibility/settings controller exposes `Signal<bool>`. | Accessibility service signal. |
+| `UseIntl()` | Localization accessor backed by a locale signal; needs context design. | Localization service/context, plus culture signal if dynamic. |
+| `UseCommand(Command)` / `UseCommand<T>(Command<T>)` | Command wrapper with `Signal<bool> IsExecuting`, stable `Execute`, optional controller for cancellation. | Direct command/event handler binding; command state can be signals. |
+| `UseWindowSize(window)` / `UseWindowSize()` | `Signal<(double Width,double Height)>` updated by a window controller. | Signal updated from window size events; cleanup on scope dispose. |
+| `UseWindow()` | Direct service/property from component/controller; no signal unless window changes. | Host/window context or service. |
+| `UseWindowPosition()` | Window-position signal updated by a controller. | Window service signal updated from move events. |
+| `UseIsCovered()` | Window z-order/coverage controller exposes `Signal<bool>`. | Window/activation/visibility service signal. |
+| `UseDisplays()` | Display-change controller exposes `Signal<IReadOnlyList<DisplayInfo>>`. | Display service signal/list. |
+| `UseWindowAspectRatio(double?)` | Controller applies/removes aspect lock on mount/update/unmount. | Imperative host/window effect with cleanup/update. |
+| `UseWindowDragMove()` | Instance method or service callback field. | Direct host/window action exposed by context/service. |
+| `UseFilePickerAsync(options)` | Plain async service method; store result in a signal only if UI should react. | Direct injected service call; not reactive unless result is stored in a signal. |
+| `UseFolderPickerAsync(options)` | Same as file picker. | Same as file picker. |
+| `UseWindowState()` | Window-state controller exposes `Signal<WindowState>`. | Window state signal. |
+| `UseIsActive()` | Activation controller exposes `Signal<bool>`. | Activation signal. |
+| `UseClosingGuard(canClose)` | Controller registers/unregisters the predicate. | Effect registering closing handler; cleanup unregisters. |
+| `UseDpi()` | DPI/window controller exposes `Signal<uint>`. | DPI signal from window/display service. |
+| `UseOpenWindow(...)` | Window controller/service keyed by `WindowKey`; expose signals for state if needed. | Imperative host service; returned window handle can be stored in a field/signal. |
+| `UseTrayIcon(spec)` | Controller creates/reuses tray icon on mount and disposes on unmount. | Imperative host service owned by scope; cleanup disposes tray icon. |
+| `UseBreakpoint(window, minWidth)` / `UseBreakpoint(minWidth)` | Derived bool from a window-width signal. | Derived bool from window-size signal. |
+| `UseAnnounce()` | Announcement service/controller field. | Accessibility announcer service handle. |
+| `UseDevtools()` | Direct read of session flag; no signal unless state changes at runtime. | Requires a public debug snapshot before parity. |
+| `UseElementRef<T>()` | `ElementRef<T>` instance field. | Native ref/handle API still needed. |
+| `UseElementFocus()` | ElementRef field plus instance `RequestFocus` method/controller. | Element/native ref plus action, likely an `OnMount`/ref-style API. |
+| `UseFocus()` | `FocusManager` instance field. | Focus manager service/context. |
+| `UseFocusTrap(isActive)` | `FocusTrapHandle` field; active state driven by signal or binding. | Effect installs/uninstalls trap based on signal/condition. |
+| `UseResource<T>(fetcher, deps, options)` | `ResourceSignal<T>` or controller owning cancellation, status signals, and reload; needs design. | `Resource<T>` primitive built from `Signal<AsyncValue<T>>`, effect, cancellation cleanup, and cache signals. |
+| `UseInfiniteResource<TItem,TCursor>(...)` | Paged resource controller with item signals, cursor signal, loading/error signals; needs design. | Paged resource object with signals for pages/items/loading/error. |
+| `UseDataSource<T>(...)` | DataSource controller projecting pages into item signals and a structural region; needs design. | Wrapper over an infinite resource/page signals; needs design. |
+| `UseMutation<TInput,TResult>(...)` | Mutation controller with status/result/error signals and stable `Run`; needs design. | Stable mutation service object with `Signal<bool> IsPending`, `Signal<Exception?> Error`, and cache invalidation. |
+| `UseMemoCells(...)` | Usually replaced by per-cell signals and one-time row/cell construction. | Usually unnecessary for value-only updates; fixed grids use per-cell signals. |
+| `UseMemoCellsByKey(...)` | Keyed item-signal dictionary plus structural region for insert/remove/reorder. | Keyed `For` if structure changes; per-item scope follows the key. |
+| `UseMemoCellsByIndex(...)` | One signal per index; update changed indices only. This is the P1 stress pattern. | Fixed indexed signal array for grids; keyed/indexed `For` for dynamic structure. |
+| `UseDockHost()` | Docking context/service signal; needs design. | Docking context/service signal; needs design. |
+| `UseActivePaneKey()` | Active-pane signal. | Active-pane signal. |
+| `UseIsActivePane()` | Derived bool from pane identity and active-pane signal. | Derived bool from pane identity and active-pane signal. |
+| `UsePane()` | Pane context/service; needs design. | Pane context/service; needs design. |
+| `UseDockState()` | Pane state signal. | Pane state signal. |
+| `UseDockLayout()` | Dock-layout snapshot signal. | Dock-layout snapshot signal. |
+| `UseDockPanePersisted<T>(key, initial)` | Persisted signal scoped by pane key. | Persisted signal scoped by pane key. |
