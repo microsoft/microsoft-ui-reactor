@@ -37,7 +37,7 @@
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.9" />
     <PackageVersion Include="YamlDotNet" Version="18.0.0" />
     <PackageVersion Include="GitHub.Copilot.SDK" Version="1.0.1" />
-    <PackageVersion Include="MessagePack" Version="2.5.301" />
+    <PackageVersion Include="MessagePack" Version="3.1.7" />
   </ItemGroup>
 
   <ItemGroup>
