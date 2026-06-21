@@ -26,6 +26,9 @@ public static partial class Factories
     {
         ControlRegistry.Register<TableViewElement, WinUITableView>(
             static () => new TableViewHandler());
+        // Register the satellite control's XAML metadata provider so the WinUI XAML loader can
+        // resolve the advanced types when the control's style closure is parsed (code-only host).
+        TableViewStyles.RegisterMetadata();
     }
 
     /// <summary>

@@ -15,4 +15,15 @@
     <ApplicationManifest>$(MSBuildThisFileDirectory)app.manifest</ApplicationManifest>
   </PropertyGroup>
 
+  <!--
+    Merge the native control's localized SR_TableView* strings into the consumer's app PRI. The
+    public WinAppSDK 2.0.1 PRI does not carry them, and native row/header realization throws without
+    them, so the control would render a blank body. Unpackaged win-x64 apps only.
+  -->
+  <Target Name="_MergeTableViewStrings" AfterTargets="Build"
+          Condition="'$(WindowsPackageType)' == 'None'">
+    <Exec ContinueOnError="true"
+          Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)merge-tableview-strings.ps1&quot; -OutDir &quot;$(TargetDir.TrimEnd('\'))&quot; -ScriptDir &quot;$(MSBuildThisFileDirectory.TrimEnd('\'))&quot; -AppPriName $(TargetName).pri" />
+  </Target>
+
 </Project>

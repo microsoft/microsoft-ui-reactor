@@ -39,6 +39,10 @@ public sealed class TableViewHandler : IElementHandler<TableViewElement, WinUITa
         if (el.SelectedIndex is { } si)
             tv.SelectedIndex = si;
 
+        // The satellite control's default Style isn't found by implicit lookup for a loose consumer,
+        // and a code-only Reactor host has no XAML metadata for it -- register + apply so it renders.
+        TableViewStyles.EnsureLoadedAndApply(tv);
+
         // Re-attaches on every render so the latest element's callback fires (echo-safe).
         var bind = ctx.BindFor(tv, el);
         bind.OnCustomEvent<TableViewSelectionChangedEventArgs>(
@@ -138,7 +142,8 @@ internal static class SelfTest
             File.AppendAllText(
                 log,
                 "PASS: native " + tv.GetType().FullName + " activated + " + tv.Columns.Count +
-                " columns + ItemsSource set inside Reactor mount via first-class TableViewHandler (WinAppSDK 2.0.1)\n");
+                " columns + ItemsSource set inside Reactor mount via first-class TableViewHandler (WinAppSDK 2.0.1)" +
+                " | render[" + TableViewStyles.Status + "]\n");
         }
         catch
         {

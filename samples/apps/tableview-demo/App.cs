@@ -11,6 +11,7 @@ using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Graphics.Imaging;
 using static Microsoft.UI.Reactor.Factories;
 using static Reactor.Controls.Factories;
+using Reactor.Controls;
 
 namespace TableViewDemo;
 
@@ -23,6 +24,16 @@ public sealed class App : Component
         new("Alice", 30, "Seattle"), new("Bob", 25, "Redmond"),
         new("Charlie", 41, "Bellevue"), new("Diana", 36, "Kirkland"),
         new("Erin", 29, "Tacoma"), new("Frank", 52, "Renton"),
+        new("Grace", 33, "Bothell"), new("Hank", 47, "Sammamish"),
+        new("Ivy", 28, "Issaquah"), new("Jack", 39, "Everett"),
+        new("Kara", 44, "Lynnwood"), new("Leo", 31, "Shoreline"),
+    };
+
+    static readonly System.Collections.Generic.List<TableColumn> Columns = new()
+    {
+        new TableColumn("Name", nameof(Person.Name)),
+        new TableColumn("Age", nameof(Person.Age)),
+        new TableColumn("City", nameof(Person.City)),
     };
 
     public App()
@@ -78,7 +89,7 @@ public sealed class App : Component
 
     public override Element Render() =>
         VStack(12,
-            TextBlock("Native C++/WinRT TableView in Reactor via the idiomatic TableView(...) facade — WinAppSDK 2.0.1"),
-            TableView(Data));
+            TextBlock("Native C++/WinRT TableView — first-class Reactor control (typed element + handler), WinAppSDK 2.0.1"),
+            TableView(Data, Columns, height: 420));
 }
 

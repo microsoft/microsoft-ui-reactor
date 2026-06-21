@@ -1,0 +1,443 @@
+<!-- Copyright (c) Microsoft Corporation. All rights reserved. Licensed under the MIT License. See LICENSE in the project root for license information. -->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Microsoft.UI.Xaml.Controls"
+    xmlns:primitives="using:Microsoft.UI.Xaml.Controls.Primitives">
+
+    <!--
+        Fallback theme tokens at the TableView.xaml ResourceDictionary scope.
+        These mirror the values declared per-theme in TableView_themeresources.xaml
+        so {ThemeResource} lookups in the Style setters below resolve even when
+        the Style is applied in a context where the merged themeresources.xaml
+        ThemeDictionaries are not in scope (e.g. when a TableView is hosted
+        directly under a test framework Border that bypasses the App.Resources
+        chain a Page would normally provide). Without these, the implicit
+        TableViewRow style throws E_XAMLPARSEFAILED at template inflation.
+    -->
+    <x:Double x:Key="TableViewRowMinHeight">28</x:Double>
+    <Thickness x:Key="TableViewHeaderCellPadding">8,4,8,4</Thickness>
+    <Thickness x:Key="TableViewHeaderIndicatorsMargin">0,0,12,0</Thickness>
+    <x:Double x:Key="TableViewResizeGripperWidth">8</x:Double>
+
+    <!--
+        Selection-gutter fallbacks. The canonical definitions live in
+        TableView_themeresources.xaml at the top-level RD scope (not inside
+        ThemeDictionaries), but downstream apps occasionally end up with a
+        resource chain in which those entries aren't reachable from the
+        template's ThemeResource lookup — in that case the CheckBox falls
+        back to DefaultCheckBoxStyle which has MinWidth=120, producing a
+        ~90px visible gap between the selection gutter and the first
+        column. Duplicating both here at TableView.xaml's RD scope rescues
+        that case without depending on merged-dictionary plumbing.
+    -->
+    <x:Double x:Key="TableViewSelectionGutterWidth">32</x:Double>
+    <Style x:Key="TableViewSelectionGutterCheckBoxStyle"
+           TargetType="CheckBox"
+           BasedOn="{StaticResource DefaultCheckBoxStyle}">
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="MinHeight" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Margin" Value="0" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+
+    <!--
+        TableView default style — Phase 2.1 (display-only).
+
+        Composition:
+          - StackPanel hosts header cells horizontally (one per TableViewColumn.Header).
+          - ScrollViewer hosts an ItemsRepeater of TableViewRow per row data item.
+          - TableViewRow has its own ItemTemplate-equivalent: it builds horizontal cells
+            from owning TableView's Columns when its OwningTableView is set.
+
+        Phase 2.2 swaps the row's StackPanel cell host for TwoAxisLayout (variable
+        column widths) and adds horizontal virtualization. Phase 2.4 wraps the header
+        StackPanel in PinnedRegionPresenter for sticky headers + frozen columns.
+    -->
+    <Style TargetType="controls:TableView">
+        <Setter Property="Background" Value="{ThemeResource TabularSurfaceRowBackgroundBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource TabularSurfaceRowForegroundBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource TabularSurfaceGridLineBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="VerticalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Stretch" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="controls:TableView">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+
+                            <!-- Header row. C++ control populates PART_HeaderHost.Children
+                                 in OnApplyTemplate / when Columns changes. PART_HeaderScroller
+                                 is H-scroll-synced to PART_BodyScroller in C++ so the header
+                                 tracks the body's horizontal scroll position (sticky headers). -->
+                            <Border x:Name="PART_HeaderRow"
+                                    Grid.Row="0"
+                                    Background="{ThemeResource TabularSurfaceHeaderBackgroundBrush}"
+                                    BorderBrush="{ThemeResource TabularSurfaceGridLineBrush}"
+                                    BorderThickness="0,0,0,1">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <CheckBox x:Name="PART_SelectAllCheckBox"
+                                              Grid.Column="0"
+                                              IsThreeState="True"
+                                              Style="{ThemeResource TableViewSelectionGutterCheckBoxStyle}"
+                                              Width="{ThemeResource TableViewSelectionGutterWidth}"
+                                              Visibility="Collapsed"
+                                              IsTabStop="False" />
+
+                                    <ScrollViewer x:Name="PART_HeaderScroller"
+                                                  Grid.Column="1"
+                                                  HorizontalScrollMode="Auto"
+                                                  VerticalScrollMode="Disabled"
+                                                  HorizontalScrollBarVisibility="Hidden"
+                                                  VerticalScrollBarVisibility="Disabled">
+                                        <Grid x:Name="PART_HeaderLayer">
+                                            <!-- K1/R6 zone-split: header host is a PinnedRegionPresenter so leading/trailing
+                                                 frozen columns get deterministic per-zone widths (fixes the leading "Last name"
+                                                 sliver) and a deterministic trailing anchor X (fixes Salary/Join date overlap).
+                                                 RebuildHeaders tags each header Grid with PinnedRegionPresenter.Zone before append. -->
+                                            <primitives:PinnedRegionPresenter x:Name="PART_HeaderHost" />
+                                            <Rectangle x:Name="PART_ColumnDropIndicator"
+                                                       IsHitTestVisible="False"
+                                                       HorizontalAlignment="Left"
+                                                       VerticalAlignment="Stretch"
+                                                       Width="2"
+                                                       Visibility="Collapsed"
+                                                       Fill="{ThemeResource AccentFillColorDefaultBrush}" />
+                                            <ContentControl x:Name="PART_ColumnDragAdorner"
+                                                            IsHitTestVisible="False"
+                                                            HorizontalAlignment="Left"
+                                                            VerticalAlignment="Stretch"
+                                                            Visibility="Collapsed"
+                                                            Opacity="0.6"
+                                                            Background="{ThemeResource TabularSurfaceHeaderBackgroundBrush}"
+                                                            BorderBrush="{ThemeResource AccentFillColorDefaultBrush}"
+                                                            BorderThickness="1"
+                                                            Padding="8,4,8,4" />
+                                        </Grid>
+                                    </ScrollViewer>
+                                </Grid>
+                            </Border>
+
+                            <!-- Body. ItemsRepeater virtualizes rows along its primary
+                                 (vertical) axis: only rows whose realization rect intersects
+                                 the ScrollViewer's effective viewport (plus 2 viewports of
+                                 cache on each side, per HorizontalCacheLength /
+                                 VerticalCacheLength) are materialized as TableViewRow
+                                 instances. Off-screen rows live in the recycle pool.
+
+                                 Column virtualization is intentionally NOT done in v1 —
+                                 each realized row's TableViewRow walks the entire Columns
+                                 collection and renders a cell per column. That's the right
+                                 trade for typical tabular workloads (5-50 cols, many rows);
+                                 column virtualization would only matter at 100+ cols and
+                                 conflicts with the variable-column-width model the rest of
+                                 the control assumes. Tracked as Advanced-phase work in
+                                 docs/design-notes/TableView/primitives/TwoAxisLayout.md.
+
+                                 ItemsSource is set imperatively in TableView.cpp's
+                                 UpdateRowsItemsSource so the control can swap between
+                                 TableView.ItemsSource (flat) and a
+                                 GroupedSourceAdapter.Entries view (grouped — P2.8). -->
+                            <ScrollViewer x:Name="PART_BodyScroller"
+                                          Grid.Row="1"
+                                          HorizontalScrollMode="Auto"
+                                          HorizontalScrollBarVisibility="Auto"
+                                          VerticalScrollMode="Auto"
+                                          VerticalScrollBarVisibility="Auto"
+                                          VerticalContentAlignment="Stretch">
+                                <!-- Issue #8 (marquee). VerticalContentAlignment="Stretch" makes
+                                     PART_BodyContent (Grid) stretch to fill the body viewport
+                                     when row content is shorter than the viewport, exposing a
+                                     hit-testable Grid surface BELOW the last row so the marquee
+                                     pointer-pressed gesture (subscribed in C++ on m_bodyContent)
+                                     actually has a "blank area" to land on. When row content is
+                                     taller than the viewport the ScrollViewer falls back to the
+                                     usual content-size + scroll behavior (no regression for
+                                     large / virtualized datasets). -->
+                                <!-- P3.4 — wraps PART_RowsRepeater so PART_MarqueeAdornment can paint
+                                     above the rows in scroll-content space (i.e. it scrolls with
+                                     the rows). The adornment is IsHitTestVisible=False so it never
+                                     interferes with row clicks; the gesture itself is wired in C++
+                                     against PointerPressed on this Grid (handledEventsToo=false so
+                                     rows that mark the press handled win — marquee only starts when
+                                     the press lands on empty body space below the rows).
+
+                                     KNOWN ISSUE (inherited from basic): row virtualization uses
+                                     StackLayout which is affected by ADO 46242350 / GH
+                                     microsoft/microsoft-ui-xaml#1829 ("ItemsRepeater breaks when
+                                     scrolling through variable-height items"). TableView row
+                                     heights vary today (default MinHeight=28 only; group-header
+                                     rows; RowTemplate (P3.2); RowStyleSelector (P3.1); inline-edit
+                                     ECP swap), and incremental loading (P3.12) grows past extents
+                                     at which the bug manifests. TwoAxisLayout cannot replace
+                                     StackLayout here: its cellHeight is uniform per Size, not
+                                     per-row. Tracked in docs/design-notes/TableView/
+                                     Phase2-Review-Status.md "#1829 Mitigation Plan". Do NOT swap
+                                     back to a different StackLayout variant without consulting
+                                     that tracker first. -->
+                                <Grid x:Name="PART_BodyContent" Background="Transparent">
+                                    <ItemsRepeater x:Name="PART_RowsRepeater"
+                                                   HorizontalCacheLength="2.0"
+                                                   VerticalCacheLength="2.0">
+                                        <ItemsRepeater.Layout>
+                                            <StackLayout Orientation="Vertical" />
+                                        </ItemsRepeater.Layout>
+                                        <ItemsRepeater.ItemTemplate>
+                                            <DataTemplate>
+                                                <controls:TableViewRow />
+                                            </DataTemplate>
+                                        </ItemsRepeater.ItemTemplate>
+                                    </ItemsRepeater>
+                                    <Rectangle x:Name="PART_MarqueeAdornment"
+                                               IsHitTestVisible="False"
+                                               HorizontalAlignment="Left"
+                                               VerticalAlignment="Top"
+                                               Visibility="Collapsed"
+                                               StrokeThickness="1"
+                                               Stroke="{ThemeResource MUX_TableViewMarqueeSelectionStrokeBrush}"
+                                               Fill="{ThemeResource MUX_TableViewMarqueeSelectionFillBrush}" />
+                                    <!-- P3.5 — global drop indicator. Single horizontal line painted
+                                         above the rows at the would-be insertion Y so the user can see
+                                         where a row will land. IsHitTestVisible=False so it never
+                                         interferes with DragOver/Drop bubbling. Translated by C++ via
+                                         a TranslateTransform applied dynamically; HorizontalAlignment
+                                         stretches to span the full body width. Default Collapsed. -->
+                                    <Rectangle x:Name="PART_RowDropIndicator"
+                                               IsHitTestVisible="False"
+                                               HorizontalAlignment="Stretch"
+                                               VerticalAlignment="Top"
+                                               Height="2"
+                                               Visibility="Collapsed"
+                                               Fill="{ThemeResource AccentFillColorDefaultBrush}" />
+                                </Grid>
+                            </ScrollViewer>
+
+                            <TextBlock x:Name="PART_LiveRegion"
+                                       Grid.RowSpan="2"
+                                       Width="0"
+                                       Height="0"
+                                       Opacity="0"
+                                       IsHitTestVisible="False"
+                                       AutomationProperties.LiveSetting="Polite" />
+                        </Grid>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style TargetType="controls:TableViewRow">
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <!-- MinHeight uses a literal value instead of {ThemeResource TableViewRowMinHeight}
+             because ItemsRepeater inflates this Style during DataTemplate realization, when
+             the spawned TableViewRow has no parent yet, so the resource lookup walks up an
+             empty chain and throws E_XAMLPARSEFAILED. Brushes below stay as ThemeResource —
+             they are referenced in template content (PART_RootBorder) where the runtime
+             does have a parent chain at storyboard-target resolution time. -->
+        <Setter Property="MinHeight" Value="28" />
+        <Setter Property="Padding" Value="0" />
+        <!-- Background must be a non-null brush (even Transparent) so the row hit-tests on
+             empty cell space — without this, only direct clicks on text glyphs reach
+             OnPointerPressed and selection feels unresponsive. TableView::ApplyRowAppearanceTo
+             overrides this only when the consumer sets RowBackground / AlternatingRowBackground;
+             when those DPs are null, the row keeps this implicit theme brush so the table stays
+             unbanded by default. -->
+        <Setter Property="Background" Value="{ThemeResource TabularSurfaceRowBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource TabularSurfaceGridLineBrush}" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="controls:TableViewRow">
+                    <Border x:Name="PART_RootBorder"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Padding="{TemplateBinding Padding}">
+                        <VisualStateManager.VisualStateGroups>
+                            <!-- B:5: VSM PRECEDENCE NOTE.
+                                 BOTH CommonStates (PointerOver/Pressed/Disabled) and SelectionStates
+                                 (Selected*) animate `PART_RootBorder.Background`. WinUI's VSM applies
+                                 state-group storyboards in the order GoToState() is called, with the
+                                 last writer winning per-property. TableViewRow.cpp MUST call
+                                 GoToState("Selected*") AFTER GoToState("PointerOver"/"Pressed") so the
+                                 selected-row background dominates the hover/press background — without
+                                 that ordering invariant, a hovered selected row shows the pointer-over
+                                 brush instead of the selected brush. The corollary: a state's
+                                 background-removing storyboard does NOT undo a later state's
+                                 background-setting storyboard via the same property channel; for
+                                 hover-off on a selected row we rely on the SelectedPointerOver state
+                                 being re-entered with the selected-pointer-over brush rather than
+                                 reverting to the hover brush. Keep this contract in mind when adding
+                                 new states.
+                                 (For UISD's WinUI ListViewItem we could rely on the property-channel
+                                 priority system, but VSM precedence here is purely call-order based.) -->
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PART_RootBorder" Storyboard.TargetProperty="Background">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource TabularSurfaceRowBackgroundPointerOverBrush}" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PART_RootBorder" Storyboard.TargetProperty="Background">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource TabularSurfaceRowBackgroundPressedBrush}" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                                <!-- W6-6: Disabled state. ListViewItem parity — disabled rows route to *Disabled* brushes,
+                                     including HighContrast where the Disabled brush maps to SystemColorGrayTextColor. -->
+                                <VisualState x:Name="Disabled">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PART_RootBorder" Storyboard.TargetProperty="Background">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource TabularSurfaceRowBackgroundDisabledBrush}" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PART_RootBorder" Storyboard.TargetProperty="Foreground">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource TabularSurfaceRowForegroundDisabledBrush}" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+
+                            <!-- Advanced P1-ANIM-04: keep a dedicated row-level hierarchy state
+                                 group so the template can react to expand/collapse alongside the
+                                 code-driven chevron/row-height animations. -->
+                            <VisualStateGroup x:Name="HierarchyStates">
+                                <VisualState x:Name="HierarchyCollapsed" />
+                                <VisualState x:Name="HierarchyExpanded" />
+                            </VisualStateGroup>
+
+                            <VisualStateGroup x:Name="SelectionStates">
+                                <VisualState x:Name="Unselected" />
+                                <VisualState x:Name="Selected">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PART_RootBorder" Storyboard.TargetProperty="Background">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource TabularSurfaceRowBackgroundSelectedBrush}" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <DoubleAnimation Storyboard.TargetName="PART_SelectionIndicator" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.083" />
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="SelectedPointerOver">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PART_RootBorder" Storyboard.TargetProperty="Background">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource TabularSurfaceRowBackgroundSelectedPointerOverBrush}" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <DoubleAnimation Storyboard.TargetName="PART_SelectionIndicator" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.083" />
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="SelectedPressed">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PART_RootBorder" Storyboard.TargetProperty="Background">
+                                            <DiscreteObjectKeyFrame KeyTime="0" Value="{ThemeResource TabularSurfaceRowBackgroundSelectedPressedBrush}" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <DoubleAnimation Storyboard.TargetName="PART_SelectionIndicator" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.083" />
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <!-- === N8 (Wave-4b) === RowDefinitions for the per-row details slot.
+                                 Row 0 holds the row body (existing chrome). Row 1 hosts the optional
+                                 PART_RowDetailsHost ContentPresenter (collapsed unless RowDetailsTemplate
+                                 + RowDetailsVisibilityMode opt-in). Height="Auto" so a Collapsed
+                                 details host has zero impact on row height. -->
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <CheckBox x:Name="PART_SelectionCheckBox"
+                                      Grid.Column="0"
+                                      Grid.Row="0"
+                                      Style="{ThemeResource TableViewSelectionGutterCheckBoxStyle}"
+                                      Width="{ThemeResource TableViewSelectionGutterWidth}"
+                                      Visibility="Collapsed"
+                                      IsTabStop="False"
+                                      AutomationProperties.AccessibilityView="Content" />
+
+                            <!-- K1/R6 zone-split: cell host is a PinnedRegionPresenter so frozen leading/trailing
+                                 cell wrappers get deterministic per-zone widths. TableViewRow tags each wrapper
+                                 with PinnedRegionPresenter.Zone before append. See design doc K1-PinnedRegionPresenter-ZoneSplit-Design.md. -->
+                            <primitives:PinnedRegionPresenter x:Name="PART_CellHost" Grid.Column="1" Grid.Row="0" />
+
+                            <!-- Selection indicator pill (Fluent canonical pattern, mirrors ListViewItem).
+                                 Overlays the leading edge; 4px wide pill leaves the first cell's 12px text
+                                 padding undisturbed. Opacity 0 by default; visual states animate to 1. -->
+                            <Rectangle x:Name="PART_SelectionIndicator"
+                                       Grid.ColumnSpan="2"
+                                       Grid.Row="0"
+                                       Width="3"
+                                       Height="16"
+                                       RadiusX="1.5"
+                                       RadiusY="1.5"
+                                       Fill="{ThemeResource TabularSurfaceSelectionIndicatorBrush}"
+                                       HorizontalAlignment="Left"
+                                       VerticalAlignment="Center"
+                                       Margin="2,0,0,0"
+                                       IsHitTestVisible="False"
+                                       Opacity="0" />
+
+                            <!-- N8 (Wave-4b) — per-row details host. Spans both columns under the row
+                                 body. Default Collapsed; TableView::ApplyRowDetailsTo flips Visibility +
+                                 sets ContentTemplate / DataContext when RowDetailsTemplate is set and the
+                                 mode allows. -->
+                            <ContentPresenter x:Name="PART_RowDetailsHost"
+                                              Grid.ColumnSpan="2"
+                                              Grid.Row="1"
+                                              Visibility="Collapsed"
+                                              IsTabStop="False" />
+                        </Grid>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <!--
+        TableViewCellWrapperStyle now lives at top level of
+        controls/dev/TableView/TableView_themeresources.xaml (not here in
+        generic.xaml DefaultStyle scope). This was the d6ce51b0f3-Option-F
+        forward-fix (commit ec2c17eb07).
+
+        Why: keys defined in this file are loaded into the dll's aggregated
+        generic.xaml DefaultStyle dictionary, which the framework consults
+        ONLY during DefaultStyleKey expansion. Programmatic resource lookups
+        (LookupElementResource, TryFindResource, {StaticResource} /
+        {ThemeResource} markup resolution) never reach generic.xaml content
+        — they walk ancestor FrameworkElement.Resources → Application.Resources
+        and stop there. So TableViewRow::RebuildCells's
+        LookupElementResource(*this, L"TableViewCellWrapperStyle") call
+        silently returned null (cellWrapper.Style(nullptr) leaves BorderBrush
+        unset → vertical lines invisible in Dark theme).
+
+        Moving the Style into the per-control _themeresources.xaml file at
+        top level puts it in Application.Resources scope after the build
+        aggregation pipeline merges it into the dll's themeresources.xaml.
+    -->
+</ResourceDictionary>

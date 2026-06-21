@@ -55,6 +55,17 @@
           Pack="true" PackagePath="build/" Visible="false" />
     <None Include="build\app.manifest"
           Pack="true" PackagePath="build/" Visible="false" />
+    <None Include="build\Resources.resw"
+          Pack="true" PackagePath="build/" Visible="false" />
+    <None Include="build\merge-tableview-strings.ps1"
+          Pack="true" PackagePath="build/" Visible="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Satellite control default Style + theme-resource closure, embedded so it travels with the
+         assembly and renders for ProjectReference and PackageReference consumers alike. -->
+    <Page Remove="Styles\*.xaml" />
+    <EmbeddedResource Include="Styles\*.xaml" />
   </ItemGroup>
 
   <!-- Bundle the non-published CsWinRT projection assembly into the package's lib/ folder. -->

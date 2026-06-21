@@ -52,6 +52,26 @@ dotnet run --project TableViewDemo.csproj -c Release -p:Platform=x64
    each TableView runtimeclass to `Microsoft.UI.Xaml.Controls.Advanced.dll`; the WinAppSDK
    detour handles framework activation.
 
+## Rendering (the blank-body fix)
+
+The native control *activates* with data in any host, but it ships its default Style/ControlTemplate
+in its own `generic.xbf` under the framework resource path — which a loosely-consumed control can't
+find — so in a **code-only Reactor app** (no XAML-compiled metadata) it renders a **blank body**
+until three things are supplied. The first-class control does all three automatically:
+
+1. **Register the satellite XAML metadata provider** via `ReactorApp.RegisterControlAssembly(...)`
+   so the WinUI XAML loader can resolve `controls:TableView` (and the template's primitive types)
+   when the style closure is parsed — a code-only app has no compiler-generated provider to auto-chain.
+2. **Merge + apply the default Style** — the control's Style/theme closure ships as embedded XAML in
+   `Reactor.Controls.TableView.dll`; it's parsed into `Application.Resources` and assigned explicitly
+   (implicit-style lookup misses a loose satellite control), so the template inflates.
+3. **Merge the localized strings** — public WinAppSDK 2.0.1's PRI lacks the control's `SR_TableView*`
+   keys and native row/header realization throws without them, so `TableViewStrings/` are merged into
+   the app PRI post-build (and into a consumer's PRI by the package's `build/.targets`).
+
+With these, the control renders headers + rows + cells (see the 12-row demo). Verified headlessly via
+`RenderTargetBitmap` (`TVDEMO_SHOT=1`) and through the package by `pack-and-verify.ps1`.
+
 ## First-class control
 
 `Reactor.Controls.TableView/` makes `TableView` a **first-class Reactor control**: a typed

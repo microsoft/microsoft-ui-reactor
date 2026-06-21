@@ -35,4 +35,14 @@
   <ItemGroup>
     <Content Include="Microsoft.UI.Xaml.Controls.Advanced.dll" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <!-- Native TableView localized strings + post-build PRI merge. The public WinAppSDK 2.0.1 PRI does
+       not carry the Advanced control's SR_TableView* keys, so row/header realization throws without
+       this merge into the app's MainResourceMap. -->
+  <ItemGroup>
+    <None Include="TableViewStrings\Resources.resw" />
+    <None Include="TableViewStrings\merge-tableview-strings.ps1" />
+  </ItemGroup>
+  <Target Name="MergeTableViewStrings" AfterTargets="Build">
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\TableViewStrings\merge-tableview-strings.ps1&quot; -OutDir &quot;$(TargetDir.TrimEnd('\'))&quot; -ScriptDir &quot;$(MSBuildProjectDirectory)\TableViewStrings&quot; -AppPriName TableViewDemo.pri" />
+  </Target>
 </Project>
