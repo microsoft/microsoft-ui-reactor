@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <RootNamespace>TableViewDemo</RootNamespace>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <SelfContained>true</SelfContained>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="TableView.Projection\**\*.cs" />
+    <Content Remove="TableView.Projection\**" />
+    <None Remove="TableView.Projection\**" />
+    <Page Remove="TableView.Projection\**" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Reactor\Reactor.csproj" />
+    <ProjectReference Include="TableView.Projection\TableView.Projection.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Microsoft.UI.Xaml.Controls.Advanced.dll" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
