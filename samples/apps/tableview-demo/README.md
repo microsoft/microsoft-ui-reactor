@@ -64,3 +64,41 @@ documented on `Microsoft.UI.Reactor.Advanced.Factories`. Authors write `TableVie
 control, not a raw `XamlHostElement`. The library is kept **out of core** (`src/Reactor`) because core
 must not depend on the POC control binary; it consumes the control purely through the public
 extensibility API.
+
+## Consume as a NuGet package
+
+The control can also ship as a self-contained NuGet package so a consumer references it with a
+single `<PackageReference>` instead of committing the native binary. `pack-and-verify.ps1` packs and
+verifies the whole flow end-to-end:
+
+```pwsh
+./pack-and-verify.ps1
+```
+
+It produces `Microsoft.UI.Reactor.TableView` (`Reactor.Controls.TableView/` made packable), which bundles:
+
+| Package path | Content |
+|---|---|
+| `lib/net10.0-windows…/Reactor.Controls.TableView.dll` | the first-class control (element + handler + factories) |
+| `lib/net10.0-windows…/TableView.Projection.dll` | the CsWinRT projection (bundled; not a separate package) |
+| `runtimes/win-x64/native/Microsoft.UI.Xaml.Controls.Advanced.dll` | the native control DLL (NuGet auto-deploys it next to the consumer's exe) |
+| `build/Microsoft.UI.Reactor.TableView.targets` + `build/app.manifest` | supplies the WinRT activation manifest if the consumer hasn't declared one |
+
+It depends on `Microsoft.UI.Reactor` + `Microsoft.WindowsAppSDK`. A consumer then needs only:
+
+```xml
+<ItemGroup>
+  <PackageReference Include="Microsoft.UI.Reactor.TableView" Version="0.0.0-poc" />
+</ItemGroup>
+```
+
+```csharp
+using static Microsoft.UI.Reactor.Factories;
+using static Reactor.Controls.Factories;
+// …
+public override Element Render() => VStack(12, TextBlock("Native TableView"), TableView(data));
+```
+
+`pack-and-verify.ps1` then scaffolds exactly such a consumer, builds it against a local feed, and runs
+it headlessly — asserting the native control activates purely through the package. (For a real
+distribution the package would be pushed to a feed; the POC uses a generated local feed.)

@@ -12,16 +12,56 @@
     <IsAotCompatible>false</IsAotCompatible>
   </PropertyGroup>
 
+  <!-- == NuGet packaging: consumers reference the native control as a package, not a
+       committed binary. The native Advanced.dll ships as a win-x64 native runtime asset
+       (NuGet auto-deploys it next to the consumer exe); the CsWinRT projection is bundled
+       into lib/; a build/.targets supplies the WinRT activation manifest. == -->
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageId>Microsoft.UI.Reactor.TableView</PackageId>
+    <Version Condition="'$(Version)' == ''">0.0.0-poc</Version>
+    <Authors>Microsoft</Authors>
+    <Company>Microsoft</Company>
+    <Description>POC — the native C++/WinRT TableView (separate-binary Microsoft.UI.Xaml.Controls.Advanced.dll, projected vs public WinAppSDK 2.0.1) as a first-class Reactor control.</Description>
+    <PackageTags>WinUI;WinUI3;WinAppSDK;Reactor;TableView;control</PackageTags>
+    <PackageProjectUrl>https://github.com/microsoft/microsoft-ui-reactor</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/microsoft/microsoft-ui-reactor</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);_BundleTableViewProjection</TargetsForTfmSpecificBuildOutput>
+    <!-- A WinUI control package legitimately ships a RID-native asset + a build/ manifest. -->
+    <NoWarn>$(NoWarn);NU5100;NU5118;NU5128</NoWarn>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Core Reactor framework (the reconciler + IElementHandler/ControlRegistry extensibility API). -->
+    <!-- Core Reactor framework — a normal (published) package dependency of this control. -->
     <ProjectReference Include="..\..\..\..\src\Reactor\Reactor.csproj"
                       GlobalPropertiesToRemove="PublishTrimmed;PublishAot;RuntimeIdentifier;SelfContained" />
-    <!-- CsWinRT projection of the native split-binary TableView (vs public WinAppSDK 2.0.1). -->
-    <ProjectReference Include="..\TableView.Projection\TableView.Projection.csproj" />
+    <!-- CsWinRT projection of the native split-binary TableView (vs public WinAppSDK 2.0.1).
+         Not a published package, so PrivateAssets=all + bundled into lib/ below. -->
+    <ProjectReference Include="..\TableView.Projection\TableView.Projection.csproj"
+                      PrivateAssets="all" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- native control DLL -> NuGet auto-deploys runtimes/<rid>/native/* to win-x64 consumers -->
+    <None Include="..\Microsoft.UI.Xaml.Controls.Advanced.dll"
+          Pack="true" PackagePath="runtimes/win-x64/native/" Visible="false" />
+    <!-- consumer-side targets + WinRT activation manifest -->
+    <None Include="build\Microsoft.UI.Reactor.TableView.targets"
+          Pack="true" PackagePath="build/" Visible="false" />
+    <None Include="build\app.manifest"
+          Pack="true" PackagePath="build/" Visible="false" />
+  </ItemGroup>
+
+  <!-- Bundle the non-published CsWinRT projection assembly into the package's lib/ folder. -->
+  <Target Name="_BundleTableViewProjection">
+    <ItemGroup>
+      <BuildOutputInPackage Include="$(OutputPath)TableView.Projection.dll" />
+    </ItemGroup>
+  </Target>
 
 </Project>

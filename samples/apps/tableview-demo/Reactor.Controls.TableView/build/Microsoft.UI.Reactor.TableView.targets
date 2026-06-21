@@ -1,0 +1,18 @@
+<Project>
+
+  <!--
+    Microsoft.UI.Reactor.TableView — consumer-side targets.
+
+    The native TableView ships as a separate WinRT component (Microsoft.UI.Xaml.Controls.Advanced.dll,
+    deployed by NuGet from runtimes/win-x64/native/). WinRT activation needs the consumer's application
+    manifest to map the TableView runtimeclasses to that DLL. If the consuming app has not declared its
+    own ApplicationManifest, supply the one bundled in this package so the control activates out of the box.
+
+    Unpackaged (WindowsPackageType=None) win-x64 apps only — packaged (MSIX) apps declare activation in
+    their package manifest instead.
+  -->
+  <PropertyGroup Condition="'$(ApplicationManifest)' == '' and '$(WindowsPackageType)' == 'None'">
+    <ApplicationManifest>$(MSBuildThisFileDirectory)app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+</Project>
