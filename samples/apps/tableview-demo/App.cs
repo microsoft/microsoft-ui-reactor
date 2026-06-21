@@ -10,7 +10,7 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Graphics.Imaging;
 using static Microsoft.UI.Reactor.Factories;
-using static TableViewDemo.TableViewFacade;
+using static Reactor.Controls.Factories;
 
 namespace TableViewDemo;
 
@@ -41,7 +41,7 @@ public sealed class App : Component
         var dir = AppContext.BaseDirectory; var log = Path.Combine(dir, "tvdemo-shot.log");
         try
         {
-            var tv = LastInstance;
+            var tv = Reactor.Controls.TableViewHandler.LastInstance;
             try { tv?.XamlRoot?.Content?.UpdateLayout(); tv?.UpdateLayout(); tv?.Measure(new Windows.Foundation.Size(900, 600)); tv?.Arrange(new Windows.Foundation.Rect(0, 0, 900, 600)); tv?.UpdateLayout(); } catch { }
             await System.Threading.Tasks.Task.Delay(500);
             UIElement root = tv;

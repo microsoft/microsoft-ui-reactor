@@ -14,15 +14,16 @@ satellite binary** `Microsoft.UI.Xaml.Controls.Advanced.dll` and projected to C#
   used from Reactor — it ships as its own DLL and is consumed via a C#/WinRT projection.
 - It is **ABI-compatible with public 2.0.1**: the satellite DLL has no static framework
   imports and resolves framework/MUXC types via runtime WinRT activation (version-agnostic).
-- Idiomatic Reactor authoring: `TableView(items)` (see `TableViewFacade.cs`) renders the
-  native control declaratively, with reactive `ItemsSource` updates.
+- Idiomatic Reactor authoring: `TableView(items)` (see `Reactor.Controls.TableView/`) renders the
+  native control declaratively as a **first-class, reconciled** Reactor element, with reactive
+  `ItemsSource` updates.
 
 ## Layout
 
 | File | Role |
 |------|------|
 | `App.cs` | Reactor `Component` rendering `TableView(Data)` |
-| `TableViewFacade.cs` | the `TableView(...)` DSL facade (wraps the native control via `XamlHostElement`) |
+| `Reactor.Controls.TableView/` | the **first-class** control library: `TableViewElement` + `TableViewHandler` (`IElementHandler`) + `Factories.TableView(...)`, registered via `ControlRegistry` |
 | `Program.cs` | `ReactorApp.Run<App>(...)` entry |
 | `TableView.Projection/` | cswinrt projection of the native component winmd vs WinAppSDK 2.0.1 |
 | `Microsoft.UI.Xaml.Controls.Advanced.dll` | the native satellite control DLL (deployed as Content) |
@@ -51,9 +52,15 @@ dotnet run --project TableViewDemo.csproj -c Release -p:Platform=x64
    each TableView runtimeclass to `Microsoft.UI.Xaml.Controls.Advanced.dll`; the WinAppSDK
    detour handles framework activation.
 
-## Extending to a first-class control
+## First-class control
 
-`TableViewFacade` is the thin W2 facade. To make `TableView` a first-class Reactor control
-(typed `TableViewElement`, columns, selection props, pooling), implement a
-`ControlDescriptor<TableViewElement, TableView>` per the repo `AGENTS.md` "Adding a new WinUI
-control" guide and add a selftest fixture under `tests/Reactor.AppTests.Host/SelfTest/Fixtures/`.
+`Reactor.Controls.TableView/` makes `TableView` a **first-class Reactor control**: a typed
+`TableViewElement` record reconciled by `TableViewHandler`
+(`IElementHandler<TableViewElement, Microsoft.UI.Xaml.Controls.TableView>`), registered with
+`ControlRegistry` from a `Factories` static constructor — the opt-in third-party-control pattern
+documented on `Microsoft.UI.Reactor.Advanced.Factories`. Authors write `TableView(items)` or
+`TableView(items, columns)` and get reconciled columns, reactive `ItemsSource`, `SelectionMode` /
+`SelectedIndex`, and an `OnSelectionChanged` callback — diffed as minimal writes on a single pooled
+control, not a raw `XamlHostElement`. The library is kept **out of core** (`src/Reactor`) because core
+must not depend on the POC control binary; it consumes the control purely through the public
+extensibility API.

@@ -18,13 +18,19 @@
     <Content Remove="TableView.Projection\**" />
     <None Remove="TableView.Projection\**" />
     <Page Remove="TableView.Projection\**" />
+    <!-- The first-class control library is a nested project; keep its sources out of the app's glob. -->
+    <Compile Remove="Reactor.Controls.TableView\**\*.cs" />
+    <Content Remove="Reactor.Controls.TableView\**" />
+    <None Remove="Reactor.Controls.TableView\**" />
+    <Page Remove="Reactor.Controls.TableView\**" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\Reactor\Reactor.csproj" />
     <ProjectReference Include="TableView.Projection\TableView.Projection.csproj" />
+    <ProjectReference Include="Reactor.Controls.TableView\Reactor.Controls.TableView.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="Microsoft.UI.Xaml.Controls.Advanced.dll" CopyToOutputDirectory="PreserveNewest" />
