@@ -147,7 +147,14 @@ internal sealed class OneWayClearValuePropEntry<TElement, TControl, TValue> : Pr
         var nvOpt = _get(newEl);
         if (!nvOpt.HasValue)
         {
-            if (ovOpt.HasValue)
+            // Mirror the Mount-path guard (#539): only clear when a local value
+            // is actually present. Issuing ClearValue on a property that already
+            // holds DependencyProperty.UnsetValue forces an unnecessary native
+            // re-evaluation of the style/theme precedence chain — the path
+            // implicated in the low-rate STATUS_STACK_BUFFER_OVERRUN (0xC0000409)
+            // stress crashes on the Update(Of → Unset) edge.
+            if (ovOpt.HasValue
+                && !ReferenceEquals(ctrl.ReadLocalValue(_dp), DependencyProperty.UnsetValue))
                 ctrl.ClearValue(_dp);
             return;
         }

@@ -141,12 +141,32 @@ jobs:
       - name: Build (once)
         run: dotnet build tests/Reactor.SelfTests/Reactor.SelfTests.csproj --no-restore --configuration Debug -p:Platform=x64
 
+      - name: Configure crash dump capture
+        shell: pwsh
+        run: |
+          $dir = "${{ runner.temp }}\crashdumps"
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          # WER LocalDumps catches native fail-fasts / AVs (e.g. the 0xC0000409
+          # STATUS_STACK_BUFFER_OVERRUN crash) that bypass the CLR's createdump
+          # handler. Global key => applies to the spawned Reactor.AppTests.Host.exe.
+          $wer = 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps'
+          New-Item -Path $wer -Force | Out-Null
+          New-ItemProperty -Path $wer -Name DumpFolder -Value $dir -PropertyType ExpandString -Force | Out-Null
+          New-ItemProperty -Path $wer -Name DumpType   -Value 2   -PropertyType DWord       -Force | Out-Null
+          New-ItemProperty -Path $wer -Name DumpCount   -Value 10  -PropertyType DWord       -Force | Out-Null
+          Write-Host "Crash dumps -> $dir (WER full + CLR createdump heap)"
+
       - name: Stress loop
         shell: pwsh
         env:
           PER_SHARD: ${{ needs.plan.outputs.per-shard }}
           REMAINDER: ${{ needs.plan.outputs.remainder }}
           SHARD_INDEX: ${{ matrix.shard }}
+          # CLR createdump for the spawned host subprocess (env is inherited).
+          DOTNET_DbgEnableMiniDump: "1"
+          COMPlus_DbgEnableMiniDump: "1"
+          DOTNET_DbgMiniDumpType: "2"
+          DOTNET_DbgMiniDumpName: ${{ runner.temp }}\crashdumps\coreclr.%p.dmp
         run: |
           $per = [int]$env:PER_SHARD
           $rem = [int]$env:REMAINDER
@@ -169,6 +189,35 @@ jobs:
             exit 1
           }
           Write-Host "Shard ${idx}: $count iterations passed."
+
+      - name: Analyze crash dumps (SOS)
+        if: ${{ failure() }}
+        shell: pwsh
+        run: |
+          $dir = "${{ runner.temp }}\crashdumps"
+          $dumps = Get-ChildItem $dir -Filter *.dmp -ErrorAction SilentlyContinue
+          if (-not $dumps) { Write-Host "No dumps to analyze."; exit 0 }
+          dotnet tool install --global dotnet-dump 2>&1 | Out-Host
+          $tool = Join-Path $env:USERPROFILE ".dotnet\tools\dotnet-dump.exe"
+          foreach ($d in $dumps) {
+            $txt = "$($d.FullName).sos.txt"
+            Write-Host "::group::SOS analyze $($d.Name)"
+            & $tool analyze $d.FullName `
+              -c "clrthreads" `
+              -c "clrstack -all" `
+              -c "pe -nested" `
+              -c "dumpheap -stat -type Exception" `
+              -c "exit" 2>&1 | Tee-Object -FilePath $txt | Out-Host
+            Write-Host "::endgroup::"
+          }
+
+      - name: Upload crash dumps
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: selftest-crashdumps-shard-${{ matrix.shard }}
+          path: ${{ runner.temp }}/crashdumps/*
+          if-no-files-found: ignore
 
   integration-tests:
     name: Integration (shard ${{ matrix.shard }})
@@ -252,6 +301,18 @@ jobs:
           -o ${{ runner.temp }}/aot-publish
           --nologo
 
+      - name: Configure crash dump capture
+        shell: pwsh
+        run: |
+          $dir = "${{ runner.temp }}\crashdumps"
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          $wer = 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps'
+          New-Item -Path $wer -Force | Out-Null
+          New-ItemProperty -Path $wer -Name DumpFolder -Value $dir -PropertyType ExpandString -Force | Out-Null
+          New-ItemProperty -Path $wer -Name DumpType   -Value 2   -PropertyType DWord       -Force | Out-Null
+          New-ItemProperty -Path $wer -Name DumpCount   -Value 10  -PropertyType DWord       -Force | Out-Null
+          Write-Host "Crash dumps -> $dir (WER full + CLR createdump heap)"
+
       - name: Stress loop
         shell: pwsh
         env:
@@ -259,6 +320,10 @@ jobs:
           REMAINDER: ${{ needs.plan.outputs.remainder }}
           SHARD_INDEX: ${{ matrix.shard }}
           FILTER: ${{ inputs.filter }}
+          DOTNET_DbgEnableMiniDump: "1"
+          COMPlus_DbgEnableMiniDump: "1"
+          DOTNET_DbgMiniDumpType: "2"
+          DOTNET_DbgMiniDumpName: ${{ runner.temp }}\crashdumps\coreclr.%p.dmp
         run: |
           $exe = Join-Path '${{ runner.temp }}/aot-publish' 'Reactor.AppTests.Host.exe'
           if (-not (Test-Path $exe)) { Write-Host "::error::AOT host not found at $exe"; exit 1 }
@@ -294,6 +359,14 @@ jobs:
         with:
           name: aot-stress-tap-shard-${{ matrix.shard }}
           path: aot-*.tap
+          if-no-files-found: ignore
+
+      - name: Upload crash dumps
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: aot-crashdumps-shard-${{ matrix.shard }}
+          path: ${{ runner.temp }}/crashdumps/*
           if-no-files-found: ignore
 
   summary:
