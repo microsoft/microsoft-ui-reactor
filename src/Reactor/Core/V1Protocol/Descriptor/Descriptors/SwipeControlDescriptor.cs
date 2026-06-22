@@ -43,7 +43,14 @@ internal static class SwipeControlDescriptor
     {
         if (data is not { Length: > 0 }) return null;
         var items = new WinUI.SwipeItems { Mode = mode };
-        foreach (var entry in data) items.Add(CreateSwipeItem(entry));
+        // WinUI constraint: an Execute-mode SwipeItems may contain only ONE item.
+        // Adding a second throws ArgumentException ("Execute items should only have
+        // one item") from native WinUI; that exception escapes the imperative
+        // reconciler into the XAML dispatcher and the framework fail-fasts the
+        // whole process with a stowed exception (0xC000027B / exit 0xC0000409).
+        // Honor the constraint here so invalid authoring can never crash the host.
+        var count = mode == WinUI.SwipeMode.Execute ? 1 : data.Length;
+        for (var i = 0; i < count; i++) items.Add(CreateSwipeItem(data[i]));
         return items;
     }
 
