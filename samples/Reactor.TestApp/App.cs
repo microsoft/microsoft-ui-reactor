@@ -13,6 +13,7 @@ using Microsoft.UI.Reactor.Controls;
 using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.Core.Theme;
 
+
 ReactorApp.Run<DemoApp>("Reactor Demo", width: 1200, height: 800
     // Spec 045 — register the native docking renderer once at the
     // root host. Lets any component in the app (e.g. the DockingDemo
@@ -32,7 +33,11 @@ static class AppFlags
 
 // ─── Root application component ────────────────────────────────────────────────
 
-enum Tab { Counter, TodoList, ConditionalUI, Form, DynamicList, PerfStress, Virtualization, ItemsView, Flyout, DataTemplate, FlexPanel, Transitions, PropertyGrid, DataSystem, DataGrid, IntegratedData, AsyncValueSamples, Context, Memo, Persisted, Slots, Navigation, Commanding, InputGestures, SpecializedEditors, Windows, Docking, RichText, OptionalSnapBack, ReferenceGraph }
+enum Tab { Counter, TodoList, ConditionalUI, Form, DynamicList, PerfStress, Virtualization, ItemsView, Flyout, DataTemplate, FlexPanel, Transitions, PropertyGrid, DataSystem, DataGrid,
+#if INCLUDE_TABLEVIEW
+    TableView,
+#endif
+    IntegratedData, AsyncValueSamples, Context, Memo, Persisted, Slots, Navigation, Commanding, InputGestures, SpecializedEditors, Windows, Docking, RichText, OptionalSnapBack, ReferenceGraph }
 
 class DemoApp : Component
 {
@@ -59,6 +64,9 @@ class DemoApp : Component
             Tab.PropertyGrid => ("PropertyGrid", "propertygrid"),
             Tab.DataSystem => ("Data System", "datasystem"),
             Tab.DataGrid => ("DataGrid", "datagrid"),
+#if INCLUDE_TABLEVIEW
+            Tab.TableView => ("TableView", "datagrid"),
+#endif
             Tab.IntegratedData => ("Integrated Data", "integrateddata"),
             Tab.AsyncValueSamples => ("AsyncValue", "datasystem"),
             Tab.Context => ("Context", "context"),
@@ -85,7 +93,13 @@ class DemoApp : Component
 
     public override Element Render()
     {
-        var (currentTab, setTab) = UseState(Tab.Counter);
+        var (currentTab, setTab) = UseState(
+#if INCLUDE_TABLEVIEW
+            Tab.TableView
+#else
+            Tab.Counter
+#endif
+        );
         var (langIndex, setLangIndex) = UseState(0);
 
         // Subscribe so toggling a flag from the Dev menu re-renders the root
@@ -141,6 +155,9 @@ class DemoApp : Component
                     Tab.PropertyGrid => Component<PropertyGridDemo>(),
                     Tab.DataSystem => Component<DataSystemDemo>(),
                     Tab.DataGrid => Component<DataGridDemo>(),
+#if INCLUDE_TABLEVIEW
+                    Tab.TableView => Component<TableViewDemo>(),
+#endif
                     Tab.IntegratedData => Component<IntegratedDataDemo>(),
                     Tab.AsyncValueSamples => Component<AsyncValueSamplesDemo>(),
                     Tab.Context => Component<ContextDemo>(),

@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="TableViewSamples.Pages.ColumnReorderGesturePage"
+    NavigationCacheMode="Enabled"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
+    xmlns:controls="using:TableViewSamples.Controls">
+
+    <controls:SamplePresenter
+        Header="Column drag-reorder gesture"
+        Description="Drag any column header sideways to reorder it; a drop indicator shows the target slot. CanUserReorderColumns toggles the gesture globally, and the ColumnReordered event lets you observe the new order."
+        SourceCaption="ColumnReorderGesturePage.xaml (excerpt)"
+        SourceSnippet="ColumnReorderGesture.xaml.txt"
+        StretchExample="True">
+
+        <controls:SamplePresenter.Example>
+            <Grid RowSpacing="12">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <muxc:InfoBar Grid.Row="0" IsOpen="True" Severity="Informational" IsClosable="False" Title="Try it" MinHeight="104" Message="Turn on CanUserReorderColumns, then drag a column header sideways to a new spot. Toggle Email.CanUserReorder off to see a column reject the drop."/>
+                <Border Grid.Row="1" Style="{StaticResource TableHostBorderStyle}" VerticalAlignment="Stretch">
+                    <muxc:TableView x:Name="PeopleTable" AutomationProperties.AutomationId="PeopleTable" SelectionMode="Single" ItemsSource="{x:Bind People}" ColumnReordering="OnColumnReordering" ColumnReordered="OnColumnReordered" VerticalAlignment="Stretch" MinHeight="320">
+                        <muxc:TableViewTextColumn Header="Name" ColumnId="name" Width="{StaticResource ColWidthLongName}" Binding="{Binding FullName}" SortMemberPath="FullName" CanUserSort="False" CanUserFilter="False"/>
+                        <muxc:TableViewTextColumn Header="Email" ColumnId="email" Width="{StaticResource ColWidthEmail}" Binding="{Binding Email}" SortMemberPath="Email" CanUserSort="False" CanUserFilter="False"/>
+                        <muxc:TableViewTextColumn Header="Department" ColumnId="department" Width="{StaticResource ColWidthDepartment}" Binding="{Binding Department}" SortMemberPath="Department" CanUserSort="False" CanUserFilter="False"/>
+                        <muxc:TableViewTextColumn Header="Role" ColumnId="role" Width="{StaticResource ColWidthLongName}" Binding="{Binding Role}" SortMemberPath="Role" CanUserSort="False" CanUserFilter="False"/>
+                    </muxc:TableView>
+                </Border>
+            </Grid>
+        </controls:SamplePresenter.Example>
+
+        <controls:SamplePresenter.Options>
+            <StackPanel Spacing="12">
+                <TextBlock Text="Gesture controls" Style="{StaticResource SectionHeaderTextStyle}"/>
+                <TextBlock Text="Try dragging the Email or Department header. On touch, press and hold first to enter reorder. Use the toggles to see gesture gating and per-column opt-out." Style="{StaticResource SectionDescriptionTextStyle}" TextWrapping="Wrap"/>
+                <ToggleSwitch x:Name="GestureGateToggle" AutomationProperties.AutomationId="GestureGateToggle" Header="CanUserReorderColumns" IsOn="True" OnContent="Gesture on" OffContent="Gesture off" Toggled="OnGestureGateToggled" HorizontalAlignment="Stretch"/>
+                <ToggleSwitch x:Name="EmailCanReorderToggle" AutomationProperties.AutomationId="EmailCanReorderToggle" Header="Email.CanUserReorder" IsOn="True" OnContent="Drop target" OffContent="No drag/drop" Toggled="OnEmailCanReorderToggled" HorizontalAlignment="Stretch"/>
+                <StackPanel Spacing="8">
+                    <Button x:Name="FreezeNameButton" AutomationProperties.AutomationId="FreezeNameButton" Content="Toggle frozen Name" Click="OnFreezeNameClick" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                    <Button x:Name="ResetButton" AutomationProperties.AutomationId="ResetButton" Content="Reset order" Click="OnResetClick" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                </StackPanel>
+                <TextBlock Text="Status" Style="{StaticResource SectionHeaderTextStyle}" Margin="0,8,0,0"/>
+                <Grid ColumnSpacing="12" RowSpacing="4">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Column order" Style="{StaticResource StatusReadoutLabelStyle}" VerticalAlignment="Top"/>
+                    <TextBlock Grid.Row="0" Grid.Column="1" x:Name="ColumnOrderText" Style="{StaticResource StatusReadoutValueStyle}" AutomationProperties.AutomationId="ColumnOrderText" TextWrapping="Wrap"/>
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Last event" Style="{StaticResource StatusReadoutLabelStyle}"/>
+                    <TextBlock Grid.Row="1" Grid.Column="1" x:Name="LastEventText" Style="{StaticResource StatusReadoutValueStyle}" AutomationProperties.AutomationId="LastEventText" Text="(none)" TextWrapping="Wrap"/>
+                </Grid>
+            </StackPanel>
+        </controls:SamplePresenter.Options>
+
+    </controls:SamplePresenter>
+</Page>
