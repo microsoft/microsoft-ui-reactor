@@ -13,12 +13,13 @@
   </PropertyGroup>
 
   <!-- ───────────────────────────────────────────────────────────────────────
-    Native TableView gallery (opt-in). The "TableView" tab hosts the full
-    TableViewSamples gallery compiled against the projected native split-binary
-    Advanced TableView. It pulls a ~9 MB native dll + a 93-file embedded gallery
-    + a CsWinRT projection, so it defaults OFF in shared CI (GITHUB_ACTIONS) to
-    keep every Reactor PR build byte-identical, and ON for local dev + the
-    on-demand tableview-gallery.yml workflow. Force with -p:IncludeTableView=true|false.
+    Native TableView control (opt-in). The "TableView" tab consumes the
+    Reactor.Controls.TableView first-class control (the projected native
+    split-binary Advanced TableView), exactly as a Reactor consumer would. It
+    pulls a ~9 MB native dll + a CsWinRT projection, so it defaults OFF in shared
+    CI (GITHUB_ACTIONS) to keep every Reactor PR build byte-identical, and ON for
+    local dev + the on-demand tableview-control.yml workflow. Force with
+    -p:IncludeTableView=true|false.
   ──────────────────────────────────────────────────────────────────────── -->
   <PropertyGroup>
     <IncludeTableView Condition="'$(IncludeTableView)' == '' and '$(GITHUB_ACTIONS)' == 'true'">false</IncludeTableView>
@@ -56,27 +57,18 @@
     <Content Include="Assets\*.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
-  <!-- ── TableView gallery items (gated by IncludeTableView) ─────────────────── -->
+  <!-- ── Native TableView control items (gated by IncludeTableView) ──────────── -->
   <ItemGroup Condition="'$(IncludeTableView)' == 'true'">
     <ProjectReference Include="..\TableView.Projection\TableView.Projection.csproj" />
-    <ProjectReference Include="..\TableViewSamples.Embedded\TableViewSamples.Embedded.csproj" />
+    <!-- The consumable first-class control (referenced exactly as a Reactor consumer would). -->
+    <ProjectReference Include="..\Reactor.Controls.TableView\Reactor.Controls.TableView.csproj" />
     <Content Include="Microsoft.UI.Xaml.Controls.Advanced.dll" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="AdvancedStyles\**\*.xaml" CopyToOutputDirectory="PreserveNewest" />
     <None Include="TableViewStrings\Resources.resw" />
     <None Include="TableViewStrings\merge-tableview-strings.ps1" />
   </ItemGroup>
   <ItemGroup Condition="'$(IncludeTableView)' != 'true'">
-    <Compile Remove="Demos\TableViewDemo.cs" />
+    <Compile Remove="Demos\TableViewControlDemo.cs" />
     <Compile Remove="GlobalUsings.TableView.cs" />
-  </ItemGroup>
-
-  <!-- AdvancedStyles are the native TableView control's resource dictionaries:
-       they reference projected native types and are parsed at RUNTIME (XamlReader
-       over the loose Content copies), never build-time Page-compiled. Exclude them
-       from the default Page glob unconditionally so an IncludeTableView=false build
-       (shared CI) does not try to XAML-compile them without the projection. -->
-  <ItemGroup>
-    <Page Remove="AdvancedStyles\**\*.xaml" />
   </ItemGroup>
 
   <!-- Native TableView localized strings -> merged into the app PRI (see merge-tableview-strings.ps1). -->

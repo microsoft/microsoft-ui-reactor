@@ -156,7 +156,7 @@ class DemoApp : Component
                     Tab.DataSystem => Component<DataSystemDemo>(),
                     Tab.DataGrid => Component<DataGridDemo>(),
 #if INCLUDE_TABLEVIEW
-                    Tab.TableView => Component<TableViewDemo>(),
+                    Tab.TableView => Component<TableViewControlDemo>(),
 #endif
                     Tab.IntegratedData => Component<IntegratedDataDemo>(),
                     Tab.AsyncValueSamples => Component<AsyncValueSamplesDemo>(),
