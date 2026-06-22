@@ -152,9 +152,9 @@ jobs:
           $wer = 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps'
           New-Item -Path $wer -Force | Out-Null
           New-ItemProperty -Path $wer -Name DumpFolder -Value $dir -PropertyType ExpandString -Force | Out-Null
-          New-ItemProperty -Path $wer -Name DumpType   -Value 1   -PropertyType DWord       -Force | Out-Null
-          New-ItemProperty -Path $wer -Name DumpCount   -Value 25  -PropertyType DWord       -Force | Out-Null
-          Write-Host "Crash dumps -> $dir (WER mini + CLR createdump heap)"
+          New-ItemProperty -Path $wer -Name DumpType   -Value 2   -PropertyType DWord       -Force | Out-Null
+          New-ItemProperty -Path $wer -Name DumpCount   -Value 10  -PropertyType DWord       -Force | Out-Null
+          Write-Host "Crash dumps -> $dir (WER full + CLR createdump heap)"
 
       - name: Stress loop
         shell: pwsh
@@ -189,6 +189,27 @@ jobs:
             exit 1
           }
           Write-Host "Shard ${idx}: $count iterations passed."
+
+      - name: Analyze crash dumps (SOS)
+        if: ${{ failure() }}
+        shell: pwsh
+        run: |
+          $dir = "${{ runner.temp }}\crashdumps"
+          $dumps = Get-ChildItem $dir -Filter *.dmp -ErrorAction SilentlyContinue
+          if (-not $dumps) { Write-Host "No dumps to analyze."; exit 0 }
+          dotnet tool install --global dotnet-dump 2>&1 | Out-Host
+          $tool = Join-Path $env:USERPROFILE ".dotnet\tools\dotnet-dump.exe"
+          foreach ($d in $dumps) {
+            $txt = "$($d.FullName).sos.txt"
+            Write-Host "::group::SOS analyze $($d.Name)"
+            & $tool analyze $d.FullName `
+              -c "clrthreads" `
+              -c "clrstack -all" `
+              -c "pe -nested" `
+              -c "dumpheap -stat -type Exception" `
+              -c "exit" 2>&1 | Tee-Object -FilePath $txt | Out-Host
+            Write-Host "::endgroup::"
+          }
 
       - name: Upload crash dumps
         if: ${{ failure() }}
@@ -288,9 +309,9 @@ jobs:
           $wer = 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting\LocalDumps'
           New-Item -Path $wer -Force | Out-Null
           New-ItemProperty -Path $wer -Name DumpFolder -Value $dir -PropertyType ExpandString -Force | Out-Null
-          New-ItemProperty -Path $wer -Name DumpType   -Value 1   -PropertyType DWord       -Force | Out-Null
-          New-ItemProperty -Path $wer -Name DumpCount   -Value 25  -PropertyType DWord       -Force | Out-Null
-          Write-Host "Crash dumps -> $dir (WER mini + CLR createdump heap)"
+          New-ItemProperty -Path $wer -Name DumpType   -Value 2   -PropertyType DWord       -Force | Out-Null
+          New-ItemProperty -Path $wer -Name DumpCount   -Value 10  -PropertyType DWord       -Force | Out-Null
+          Write-Host "Crash dumps -> $dir (WER full + CLR createdump heap)"
 
       - name: Stress loop
         shell: pwsh
