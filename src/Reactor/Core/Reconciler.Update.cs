@@ -430,6 +430,13 @@ public sealed partial class Reconciler
         RichTextBlockElement next,
         Action requestRerender)
     {
+        // Issue #487 — arm scroll-offset preservation BEFORE mutating the
+        // document. WinUI re-measures any inline-UI-bearing paragraph from
+        // scratch (RemoveEmbeddedElements + desiredSize=0), which silently
+        // clamps an ancestor ScrollViewer/ScrollView's VerticalOffset up. The
+        // anchor restores the user's real offset once layout settles.
+        PreserveScrollAroundInlineUiMutation(rtb, next);
+
         if (TryIncrementalUpdateRichTextBlocks(rtb, prev, next, requestRerender))
             return;
         RebuildRichTextBlocks(next, rtb, requestRerender);
