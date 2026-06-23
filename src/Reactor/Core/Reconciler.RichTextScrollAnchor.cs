@@ -24,6 +24,12 @@ namespace Microsoft.UI.Reactor.Core;
 // ancestor scroll host; after layout settles we restore the user's real offset if
 // the content recovered. Five mechanisms — learned from the hand-rolled prototype —
 // are ALL load-bearing (see the numbered notes inline below).
+//
+// This is a client-side guard for a WinUI text-engine bug (the transient
+// RemoveEmbeddedElements re-measure permanently clamps the scroll host's
+// VerticalOffset). An upstream WinUI issue tracks the root cause; once the text
+// engine preserves the offset across that re-measure this whole anchor can be
+// retired. See microsoft/microsoft-ui-reactor#487 for the full diagnosis.
 public sealed partial class Reconciler
 {
     // Mechanism #1 — per-scroll-host state keyed off the host instance via an
