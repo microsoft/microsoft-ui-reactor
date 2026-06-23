@@ -219,10 +219,18 @@ internal static class NativeDockingReliabilityFixtures
             host.Mount(_ => managerEl);
             await Harness.Render();
 
-            H.Check("Reliability_Effect_MountedOnce", mountedCount == 1);
-            H.Check("Reliability_Effect_NoCleanupBeforeClose", cleanupCount == 0);
+            // Pump until the pane body realizes behind the TabView content
+            // presenter BEFORE probing the mount/cleanup counters. The
+            // nested component's OnMount effect — which increments
+            // mountedCount — only fires once the body is committed, and on
+            // the NativeAOT dispatcher-timing window that realization can
+            // land a wave later than Harness.Render drains. Gating the count
+            // asserts on the body sentinel closes the residual cascade where
+            // Reliability_Effect_MountedOnce probes a count of 0.
             H.Check("Reliability_Effect_BodyRendered",
                 await Harness.WaitFor(() => H.FindText("effect-body-p1") is not null));
+            H.Check("Reliability_Effect_MountedOnce", mountedCount == 1);
+            H.Check("Reliability_Effect_NoCleanupBeforeClose", cleanupCount == 0);
 
             var model = DockHostModelBridge.Get(managerEl);
             H.Check("Reliability_Effect_BridgeYieldsModel", model is not null);
