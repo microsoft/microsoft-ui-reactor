@@ -82,4 +82,83 @@ static class TableViewSampleData
         }
         return list;
     }
+
+    /// <summary>
+    /// A mutable, observable person — its <see cref="Salary"/> / <see cref="IsActive"/> raise
+    /// PropertyChanged so bound cells (incl. the tint/chip converters) re-render in place during live
+    /// updates, and it carries <see cref="Children"/> so the same model also drives hierarchy mode.
+    /// </summary>
+    public sealed class LivePerson : System.ComponentModel.INotifyPropertyChanged
+    {
+        public string FirstName { get; init; } = "";
+        public string LastName { get; init; } = "";
+        public string Email { get; init; } = "";
+        public string Department { get; init; } = "";
+        public string Role { get; init; } = "";
+        public DateTimeOffset JoinDate { get; init; }
+        public string JoinDateText => JoinDate.ToString("yyyy-MM-dd");
+        public string Name => $"{FirstName} {LastName}";
+
+        private bool _isActive = true;
+        public bool IsActive { get => _isActive; set { if (_isActive != value) { _isActive = value; Raise(nameof(IsActive)); Raise(nameof(Status)); } } }
+        public string Status => IsActive ? "Active" : "Inactive";
+
+        private double _salary;
+        public double Salary { get => _salary; set { if (_salary != value) { _salary = value; Raise(nameof(Salary)); } } }
+
+        public List<LivePerson> Children { get; init; } = new();
+
+        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+        private void Raise(string n) => PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(n));
+    }
+
+    private static LivePerson MakeLive(int i)
+    {
+        var first = s_first[i % s_first.Length];
+        var last = s_last[(i / s_first.Length) % s_last.Length];
+        var (dept, role) = s_deptRole[i % s_deptRole.Length];
+        return new LivePerson
+        {
+            FirstName = first,
+            LastName = last,
+            Email = $"{first.ToLowerInvariant()}.{last.ToLowerInvariant()}{i}@contoso.com",
+            Department = dept,
+            Role = role,
+            JoinDate = new DateTimeOffset(2016, 1, 1, 0, 0, 0, TimeSpan.Zero).AddDays((i * 37) % 3200),
+            Salary = 60000 + (i * 1373) % 180000,
+            IsActive = i % 4 != 0,
+        };
+    }
+
+    /// <summary>Observable mutable rows for live-update pages (mutate Salary in place to recolor tints).</summary>
+    public static System.Collections.ObjectModel.ObservableCollection<LivePerson> LivePeople(int n)
+    {
+        var col = new System.Collections.ObjectModel.ObservableCollection<LivePerson>();
+        for (int i = 0; i < n; i++) col.Add(MakeLive(i));
+        return col;
+    }
+
+    /// <summary>A 2-level org hierarchy (managers → reports) for hierarchy / tree-grid mode.</summary>
+    public static List<LivePerson> HierarchyRoots()
+    {
+        var roots = new List<LivePerson>();
+        int idx = 0;
+        // 4 managers, each with 4–6 reports (one report itself has 2 sub-reports for an N-level demo).
+        for (int m = 0; m < 4; m++)
+        {
+            var mgr = MakeLive(idx++);
+            int reports = 4 + (m % 3);
+            for (int r = 0; r < reports; r++)
+            {
+                var rep = MakeLive(idx++);
+                if (m == 0 && r == 0)
+                {
+                    for (int s = 0; s < 2; s++) rep.Children.Add(MakeLive(idx++));
+                }
+                mgr.Children.Add(rep);
+            }
+            roots.Add(mgr);
+        }
+        return roots;
+    }
 }

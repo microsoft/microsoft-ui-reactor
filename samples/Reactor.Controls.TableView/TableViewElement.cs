@@ -44,6 +44,23 @@ public sealed record TableViewElement : Element
     /// <summary>Layout height of the hosted control.</summary>
     public double Height { get; init; } = 360;
 
+    /// <summary>
+    /// When true, the control stretches to fill its layout slot (VerticalAlignment/HorizontalAlignment =
+    /// Stretch + a MinHeight) instead of using a fixed <see cref="Height"/>. The gallery pages set this so
+    /// the table fills the available vertical space (matching the reference SamplePresenter's stretched example).
+    /// </summary>
+    public bool Stretch { get; init; }
+
+    /// <summary>
+    /// Hierarchical (tree-grid) roots. When set, the control binds <c>HierarchicalItemsSource</c> +
+    /// <see cref="HierarchicalChildrenPath"/> instead of the flat <see cref="Items"/>, so the first column
+    /// shows an expand chevron and child rows.
+    /// </summary>
+    public System.Collections.IEnumerable? HierarchicalItems { get; init; }
+
+    /// <summary>Name of the child-collection property on each hierarchical node (e.g. "Children").</summary>
+    public string? HierarchicalChildrenPath { get; init; }
+
     /// <summary>Minimum layout width of the hosted control.</summary>
     public double MinWidth { get; init; } = 520;
 

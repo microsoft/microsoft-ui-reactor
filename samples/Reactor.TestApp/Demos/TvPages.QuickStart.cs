@@ -31,49 +31,114 @@ class TvShowcasePage : Component
     static readonly string[] RowCounts = { "10", "100", "500", "1000" };
     static readonly int[] RowCountVals = { 10, 100, 500, 1000 };
     static readonly string[] Banding = { "Default theme row colors", "Custom banding" };
+    static readonly string[] Intervals = { "Off", "1000 ms", "500 ms", "200 ms" };
+    static readonly int[] IntervalVals = { 0, 1000, 500, 200 };
+
+    private System.Collections.ObjectModel.ObservableCollection<LivePerson>? _flat;
+    private List<LivePerson>? _roots;
+    private List<LivePerson>? _flatView;
+    private int _flatViewN = -1;
+    private readonly Random _rng = new(12345);
 
     public override Element Render()
     {
-        var (mode, setMode) = UseState(0);
+        var (mode, setMode) = UseState(2);   // Hierarchical default — matches the reference Showcase.
         var (rc, setRc) = UseState(1);
         var (vibrant, setVibrant) = UseState(true);
         var (banding, setBanding) = UseState(0);
         var (gutter, setGutter) = UseState(false);
+        var (live, setLive) = UseState(0);
 
-        var data = mode == 0 ? ManyPeople(RowCountVals[rc]) : (IReadOnlyList<Person>)People;
+        _flat ??= LivePeople(1000);
+        _roots ??= HierarchyRoots();
+
+        // Live updates: a DispatcherTimer mutates a few visible rows' Salary/IsActive in place; because
+        // LivePerson raises PropertyChanged, the bound cells + tint converters re-run WITHOUT a re-bind
+        // (so scroll + selection are preserved). UseEffect (re)starts the timer when interval/mode change.
+        UseEffect(() =>
+        {
+            if (live == 0) return () => { };
+            var src = mode == 2 ? FlattenRoots(_roots!) : (IList<LivePerson>)_flat!;
+            var timer = new Microsoft.UI.Xaml.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(IntervalVals[live]) };
+            timer.Tick += (_, __) =>
+            {
+                int top = Math.Min(src.Count, 28);
+                for (int k = 0; k < 3 && top > 0; k++)
+                {
+                    var p = src[_rng.Next(top)];
+                    p.Salary = 60000 + _rng.Next(0, 180000);
+                    if (_rng.Next(6) == 0) p.IsActive = !p.IsActive;
+                }
+            };
+            timer.Start();
+            return () => timer.Stop();
+        }, live, mode);
+
+        int flatN = RowCountVals[rc];
+        if (_flatViewN != flatN) { _flatView = _flat!.Take(flatN).ToList(); _flatViewN = flatN; }
+
         var setters = banding == 1
             ? new Action<WinTV>[] { tv => tv.AlternatingRowBackground = TvFx.Brush(0x22, 0x66, 0x7E, 0xEA) }
             : new Action<WinTV>[] { tv => tv.AlternatingRowBackground = null! };
+        var cols = vibrant ? VibrantColumns() : TextColumns();
 
-        var table = TableView(data, vibrant ? VibrantColumns() : TextColumns(), height: 460) with
+        TableViewElement table;
+        if (mode == 2)
         {
-            CanSortColumns = true,
-            CanResizeColumns = true,
-            CanFilterColumns = true,
-            FrozenColumnCount = 1,
-            IsSelectionGutterVisible = gutter,
-            SelectionMode = TVSel.Extended,
-            Setters = setters,
-        };
+            table = TableView(Array.Empty<object>(), cols) with
+            {
+                HierarchicalItems = _roots,
+                HierarchicalChildrenPath = nameof(LivePerson.Children),
+                CanResizeColumns = true,
+                Setters = setters,
+            };
+        }
+        else
+        {
+            var data = mode == 1 ? _flatView!.OrderBy(p => p.Department).ToList() : _flatView!;
+            table = TableView(data, cols) with
+            {
+                CanSortColumns = true,
+                CanFilterColumns = true,
+                CanResizeColumns = true,
+                FrozenColumnCount = 1,
+                IsSelectionGutterVisible = gutter,
+                SelectionMode = TVSel.Extended,
+                Setters = setters,
+            };
+        }
+
+        string source = mode switch { 1 => $"Grouped · {flatN:N0} rows", 2 => $"Hierarchical · {_roots!.Count} roots", _ => $"Flat · {flatN:N0} rows" };
 
         var options = VStack(16,
             TvSample.Section("Mode", "Switch the source between flat, grouped, and hierarchical.",
                 RadioButtons(Modes, mode, setMode),
-                mode != 0 ? Caption("Grouped / hierarchical shapes are provided by the native control; this gallery shows the flat source.") : TextBlock("")),
+                mode == 1 ? Caption("Grouped headers are a native shaping feature; this view orders by Department.") : TextBlock("")),
             TvSample.Section("Row count", "Flat mode only — grouped and hierarchical use a curated set.",
                 ComboBox(RowCounts, rc, setRc)),
+            TvSample.Section("Live updates", "Refresh a few rows' Salary on a timer; the bound tint re-runs per cell, in place.",
+                RadioButtons(Intervals, live, setLive)),
             TvSample.Section("Appearance", null,
                 ToggleSwitch(vibrant, setVibrant, onContent: "Vibrant cells", offContent: "Plain text"),
                 RadioButtons(Banding, banding, setBanding)),
             TvSample.Section("Selection", "Ctrl/Shift/marquee multi-select works either way. On shows a checkbox gutter; off is gutter-free.",
                 ToggleSwitch(gutter, setGutter, onContent: "Multi-select gutter", offContent: "Off")),
             TvSample.Section("Status", null,
-                TvSample.Readout("Source", mode == 0 ? $"Flat · {RowCountVals[rc]:N0} rows" : Modes[mode])));
+                TvSample.Readout("Source", source),
+                TvSample.Readout("Live updates", live == 0 ? "Off" : Intervals[live])));
 
         return TvSample.Page("Showcase",
-            "Toggle vibrant cells, change the flat row count, switch banding, and show / hide the selection gutter. " +
-            "Click a header to sort; click a funnel to filter; drag a header edge to resize.",
+            "Default is Hierarchical (expand a row's chevron to drill in). Switch modes, change the flat row count, turn on " +
+            "Live updates to watch Salary tints recolor in place, toggle banding / the selection gutter. Click a header to sort; a funnel to filter.",
             table, options);
+    }
+
+    static IList<LivePerson> FlattenRoots(List<LivePerson> roots)
+    {
+        var list = new List<LivePerson>();
+        void Walk(LivePerson p) { list.Add(p); foreach (var c in p.Children) Walk(c); }
+        foreach (var r in roots) Walk(r);
+        return list;
     }
 }
 

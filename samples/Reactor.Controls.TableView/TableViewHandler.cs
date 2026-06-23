@@ -51,7 +51,7 @@ public sealed class TableViewHandler : IElementHandler<TableViewElement, WinUITa
         var tv = ctx.RentControl<WinUITableView>();
         Reconciler.SetElementTag(tv, el);
 
-        tv.Height = el.Height;
+        ApplyLayout(tv, el);
         tv.MinWidth = el.MinWidth;
         ApplyTableProps(tv, el);
 
@@ -106,14 +106,16 @@ public sealed class TableViewHandler : IElementHandler<TableViewElement, WinUITa
     {
         Reconciler.SetElementTag(tv, newEl);
 
-        if (oldEl.Height != newEl.Height)
-            tv.Height = newEl.Height;
+        if (oldEl.Height != newEl.Height || oldEl.Stretch != newEl.Stretch)
+            ApplyLayout(tv, newEl);
         if (oldEl.MinWidth != newEl.MinWidth)
             tv.MinWidth = newEl.MinWidth;
         ApplyTableProps(tv, newEl);
         if (!ColumnsEqual(oldEl.Columns, newEl.Columns) || oldEl.FrozenColumnCount != newEl.FrozenColumnCount)
             ApplyColumns(tv, newEl);
-        if (!ReferenceEquals(oldEl.Items, newEl.Items))
+        if (!ReferenceEquals(oldEl.Items, newEl.Items)
+            || !ReferenceEquals(oldEl.HierarchicalItems, newEl.HierarchicalItems)
+            || oldEl.HierarchicalChildrenPath != newEl.HierarchicalChildrenPath)
             BindItems(tv, newEl);
         if (newEl.SelectedIndex is { } si && oldEl.SelectedIndex != newEl.SelectedIndex)
             tv.SelectedIndex = si;
@@ -195,10 +197,39 @@ public sealed class TableViewHandler : IElementHandler<TableViewElement, WinUITa
     /// </summary>
     private static void BindItems(WinUITableView tv, TableViewElement el)
     {
+        if (el.HierarchicalItems != null)
+        {
+            // Tree-grid mode: the native control shapes the hierarchy itself (the flat sort/filter
+            // reshape doesn't apply). Bind HierarchicalItemsSource + the children-property name.
+            if (!string.IsNullOrEmpty(el.HierarchicalChildrenPath))
+                tv.HierarchicalChildrenPropertyName = el.HierarchicalChildrenPath;
+            tv.ItemsSource = null;
+            tv.HierarchicalItemsSource = el.HierarchicalItems;
+            return;
+        }
+        tv.HierarchicalItemsSource = null;
         var st = s_shape.GetOrCreateValue(tv);
         st.Master = el.Items?.Cast<object>().ToList() ?? new List<object>();
         st.View = new ObservableCollection<object>(st.Master);
         tv.ItemsSource = st.View;
+    }
+
+    /// <summary>Applies fixed-height vs stretch-to-fill layout.</summary>
+    private static void ApplyLayout(WinUITableView tv, TableViewElement el)
+    {
+        if (el.Stretch)
+        {
+            tv.VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Stretch;
+            tv.HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Stretch;
+            tv.Height = double.NaN;
+            tv.MinHeight = 320;
+        }
+        else
+        {
+            tv.VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Top;
+            tv.Height = el.Height;
+            tv.MinHeight = 0;
+        }
     }
 
     private static void HookSortFilter(WinUITableView tv)

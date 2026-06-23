@@ -181,21 +181,23 @@ static class TvMeta
 // ── Shared SamplePresenter-style page chrome ─────────────────────────────────────────────────────
 static class TvSample
 {
-    public static Element Page(string tag, string tryIt, Element table, Element? options = null, Element? extraInfo = null)
+    public static Element Page(string tag, string tryIt, TableViewElement table, Element? options = null, Element? extraInfo = null)
     {
         var (header, desc) = TvMeta.Of(tag);
-        var head = VStack(16,
-            Heading(header),
-            TextBlock(desc),
-            InfoBar("Try it", tryIt));
-        if (extraInfo != null)
-            head = VStack(16, head, extraInfo);
+        var headItems = new List<Element> { Heading(header), TextBlock(desc), InfoBar("Try it", tryIt) };
+        if (extraInfo != null) headItems.Add(extraInfo);
+        var head = VStack(12, headItems.ToArray());
 
+        // Stretch the table to fill the available vertical space (matches the reference SamplePresenter,
+        // whose example row stretches with MinHeight 320). The options rail scrolls independently.
+        var filled = table with { Stretch = true };
         Element body = options is null
-            ? table
-            : HStack(16, table.Flex(grow: 1), Card(VStack(12, options)).Width(300).VAlign(Microsoft.UI.Xaml.VerticalAlignment.Top));
+            ? filled.Flex(grow: 1)
+            : HStack(16,
+                filled.Flex(grow: 1),
+                ScrollView(Card(VStack(12, options))).Width(320).VAlign(Microsoft.UI.Xaml.VerticalAlignment.Stretch));
 
-        return ScrollView(VStack(16, head, body)).Padding(4);
+        return VStack(16, head, body.Flex(grow: 1)).Padding(12).VAlign(Microsoft.UI.Xaml.VerticalAlignment.Stretch);
     }
 
     public static Element Group(string header, Element control) => VStack(6, SubHeading(header), control);
