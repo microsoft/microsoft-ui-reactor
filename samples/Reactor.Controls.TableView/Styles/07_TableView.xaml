@@ -63,6 +63,8 @@
         <Setter Property="Foreground" Value="{ThemeResource TabularSurfaceRowForegroundBrush}" />
         <Setter Property="BorderBrush" Value="{ThemeResource TabularSurfaceGridLineBrush}" />
         <Setter Property="BorderThickness" Value="1" />
+        <!-- Rounded outer container; the root Border clips the header + body to this radius (Fluent card corners). Mirrors the native control's TableView.xaml (advanced-poc-v2 f0ca535ec4). -->
+        <Setter Property="CornerRadius" Value="8" />
         <Setter Property="HorizontalAlignment" Value="Stretch" />
         <Setter Property="VerticalAlignment" Value="Stretch" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
@@ -72,7 +74,8 @@
                 <ControlTemplate TargetType="controls:TableView">
                     <Border Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}">
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{TemplateBinding CornerRadius}">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
@@ -264,6 +267,8 @@
         <Setter Property="Background" Value="{ThemeResource TabularSurfaceRowBackgroundBrush}" />
         <Setter Property="BorderBrush" Value="{ThemeResource TabularSurfaceGridLineBrush}" />
         <Setter Property="BorderThickness" Value="0,0,0,1" />
+        <!-- Rounded row selection/hover fill + rounded keyboard-focus rect (UseSystemFocusVisuals follows CornerRadius). Mirrors the native control's TableView.xaml (advanced-poc-v2 f0ca535ec4). -->
+        <Setter Property="CornerRadius" Value="4" />
         <Setter Property="UseSystemFocusVisuals" Value="True" />
         <Setter Property="Template">
             <Setter.Value>
@@ -272,6 +277,7 @@
                             Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
                             Padding="{TemplateBinding Padding}">
                         <VisualStateManager.VisualStateGroups>
                             <!-- B:5: VSM PRECEDENCE NOTE.
