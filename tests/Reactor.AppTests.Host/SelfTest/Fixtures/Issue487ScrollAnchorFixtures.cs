@@ -1,5 +1,4 @@
 using System;
-using Microsoft.UI.Dispatching;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting;
@@ -138,29 +137,18 @@ internal static class Issue487ScrollAnchorFixtures
         await Harness.Render();
 
         // Let the anchor's dispatcher-deferred restore (mechanism #5) run to
-        // completion. The anchor re-defers itself on the dispatcher until the
-        // offset lands at the intent, so we pump the queue (and keep layout dirty
-        // so LayoutUpdated also fires) and poll until the offset has recovered to
-        // the full scrollable height, bounded so a clamped-and-stuck offset (fix
-        // absent) still falls through and preserves the red signal.
-        var dq = DispatcherQueue.GetForCurrentThread();
-        for (int k = 0; k < 80; k++)
-        {
-            // Drain one deferred restore tick: pump a Low-priority queue item so the
-            // anchor's enqueued ChangeView (and its self-retry) runs, then force a
-            // layout pass so that ChangeView actually commits — in the headless
-            // harness a ScrollViewer only realizes a ChangeView during UpdateLayout,
-            // so rendering every iteration (not every Nth) gives each retry a real
-            // chance to land instead of burning the anchor's retry budget on
-            // dropped no-op calls.
-            var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            if (!dq.TryEnqueue(DispatcherQueuePriority.Low, () => tcs.SetResult())) tcs.SetResult();
-            await tcs.Task;
-            await Harness.Render();
-
-            if (sv.VerticalOffset + 0.5 >= sv.ScrollableHeight && sv.ScrollableHeight > InlineHeight)
-                break; // recovered to the parked bottom — restore landed.
-        }
+        // completion. The anchor re-defers the ChangeView on the dispatcher until
+        // the offset lands at the intent, and each ChangeView only commits during a
+        // ScrollViewer layout pass with a little compositor breathing room. Use the
+        // harness's contention-proof convergence primitive — Harness.WaitFor runs a
+        // full Render() (WaitForIdle → UpdateLayout → Low-yield → 16ms settle) per
+        // pass and re-queries the live tree — so the restore reliably lands across
+        // platforms/load instead of racing a fixed-cadence pump. When the fix is
+        // absent the offset stays clamped, WaitFor exhausts its passes and returns
+        // false, and the caller's offset assertion still fails (red preserved).
+        await Harness.WaitFor(
+            () => sv.VerticalOffset + 0.5 >= sv.ScrollableHeight && sv.ScrollableHeight > InlineHeight,
+            maxPasses: 60, perPassMs: 12);
     }
 
     /// <summary>

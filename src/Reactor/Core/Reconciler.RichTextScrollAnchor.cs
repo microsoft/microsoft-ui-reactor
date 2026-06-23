@@ -35,7 +35,9 @@ public sealed partial class Reconciler
         public bool Wired;            // Mechanism #2 — one-time wiring guard.
         public bool Armed;            // Set just before a mutation; gates restore.
         public bool RestorePending;   // Single in-flight deferred restore.
+        public bool SawClamp;         // True once we've observed the clamp (drift) this arm.
         public int RestoreAttempts;   // Bounded self-retry counter (mechanism #5).
+        public int PreClampWaits;     // Bounded passes spent armed-but-not-yet-clamped.
         public double Intended = double.NaN;            // User's last committed offset.
         public double LastScrollableHeight = double.NaN; // Full (pre-clamp) content height.
     }
@@ -58,6 +60,13 @@ public sealed partial class Reconciler
     // no-drift branch once the offset lands (or a genuine user scroll updates the
     // intent so it is no longer "drifted").
     private const int MaxRestoreAttempts = 64;
+
+    // Upper bound on how many armed-but-not-yet-clamped layout passes we tolerate
+    // before disarming. In production the clamp materializes in the very first
+    // post-arm layout pass, so this is effectively never reached; it only exists so
+    // an arm that never sees a clamp (e.g. the mutation didn't actually shrink the
+    // block) eventually releases instead of staying armed forever.
+    private const int MaxPreClampWaits = 64;
 
     private static RichTextScrollAnchorState GetAnchorState(FrameworkElement host)
     {
@@ -147,6 +156,15 @@ public sealed partial class Reconciler
     // clamped value. We only disarm once the offset has recovered with no drift, so
     // we never fight a later genuine user scroll (a real user scroll updates the
     // intent through the committed-ViewChanged path and lands here as "no drift").
+    //
+    // Clamp-observed gate: we arm BEFORE the document mutation, but the silent clamp
+    // only materializes once WinUI re-measures the inline UI in a later layout pass.
+    // A no-drift LayoutUpdated can fire in that window (offset still == intent,
+    // content not yet shrunk). Disarming on it would release the anchor a beat before
+    // the clamp lands, and the clamp would then go uncorrected. So we refuse to
+    // disarm-on-no-drift until we've actually observed the clamp (a drift) at least
+    // once this arm; until then a no-drift pass just waits (bounded by
+    // MaxPreClampWaits so an arm whose mutation never shrank anything still releases).
     private static void EvaluateRestore(
         RichTextScrollAnchorState st,
         Func<(double offset, double scrollableHeight)> read,
@@ -164,12 +182,30 @@ public sealed partial class Reconciler
         bool drifted = verticalOffset + ScrollAnchorEpsilon < st.Intended;
         if (!drifted)
         {
-            // Recovered with the offset already correct — disarm so we never fight
-            // a later genuine user scroll, and reset the retry budget.
+            if (!st.SawClamp)
+            {
+                // Armed but the clamp hasn't materialized yet — don't disarm into the
+                // pre-clamp window. Wait a bounded number of passes for it to appear.
+                if (++st.PreClampWaits >= MaxPreClampWaits)
+                {
+                    st.Armed = false;
+                    st.PreClampWaits = 0;
+                }
+                return;
+            }
+
+            // Recovered with the offset already correct after the clamp was handled —
+            // disarm so we never fight a later genuine user scroll, and reset state.
             st.Armed = false;
             st.RestoreAttempts = 0;
+            st.PreClampWaits = 0;
+            st.SawClamp = false;
             return;
         }
+
+        // Observed the clamp (or a still-clamped offset) — from here disarm-on-no-drift
+        // is allowed because we know the correction is genuine, not the pre-clamp window.
+        st.SawClamp = true;
 
         if (st.RestoreAttempts >= MaxRestoreAttempts)
         {
@@ -177,6 +213,8 @@ public sealed partial class Reconciler
             // shrank) — give up rather than fight the user indefinitely.
             st.Armed = false;
             st.RestoreAttempts = 0;
+            st.PreClampWaits = 0;
+            st.SawClamp = false;
             return;
         }
 
@@ -203,6 +241,8 @@ public sealed partial class Reconciler
             st.RestorePending = false;
             st.Armed = false;
             st.RestoreAttempts = 0;
+            st.PreClampWaits = 0;
+            st.SawClamp = false;
         }
     }
 
@@ -241,6 +281,8 @@ public sealed partial class Reconciler
             st.LastScrollableHeight = sv.ScrollableHeight;
         }
         st.RestoreAttempts = 0;
+        st.PreClampWaits = 0;
+        st.SawClamp = false;
         st.Armed = true;
     }
 
@@ -276,6 +318,8 @@ public sealed partial class Reconciler
             st.LastScrollableHeight = sv.ScrollableHeight;
         }
         st.RestoreAttempts = 0;
+        st.PreClampWaits = 0;
+        st.SawClamp = false;
         st.Armed = true;
     }
 }
