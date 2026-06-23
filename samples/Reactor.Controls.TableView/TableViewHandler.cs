@@ -43,6 +43,29 @@ public sealed class TableViewHandler : IElementHandler<TableViewElement, WinUITa
         // and a code-only Reactor host has no XAML metadata for it -- register + apply so it renders.
         TableViewStyles.EnsureLoadedAndApply(tv);
 
+        // The native control populates its header host (PinnedRegionPresenter) and body rows
+        // (ItemsRepeater) from Columns/ItemsSource only after its ControlTemplate is applied. In a
+        // code-only host the control is data-bound during Mount -- BEFORE it enters the live tree, so
+        // its template isn't applied yet and the initial population is a no-op (declarative XAML hosts
+        // avoid this because the template is parsed first, then data is bound). Re-assert columns + items
+        // once Loaded fires (template now present) so headers + rows actually realize.
+        void OnLoaded(object _, Microsoft.UI.Xaml.RoutedEventArgs __)
+        {
+            tv.Loaded -= OnLoaded;
+            try
+            {
+                ApplyColumns(tv, el);
+                var items = el.Items;
+                tv.ItemsSource = null;
+                tv.ItemsSource = items;
+                if (el.SelectedIndex is { } si2)
+                    tv.SelectedIndex = si2;
+                try { tv.UpdateLayout(); } catch { }
+            }
+            catch { /* best-effort realization nudge */ }
+        }
+        tv.Loaded += OnLoaded;
+
         // Re-attaches on every render so the latest element's callback fires (echo-safe).
         var bind = ctx.BindFor(tv, el);
         bind.OnCustomEvent<TableViewSelectionChangedEventArgs>(

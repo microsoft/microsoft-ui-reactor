@@ -32,15 +32,18 @@
   </PropertyGroup>
 
   <!--
-    Debug builds only: bundle the WindowsAppSDK runtime self-contained. The VS
-    embedded preview panel (spec 056) runs through `dotnet watch run` which
-    incrementally re-evaluates the project graph on each save; transitive
-    WindowsAppSDK.* references get double-counted and trip
-    Microsoft.WindowsAppSDK.ComponentReference.targets' strict version check
-    ("version 2.0.20;2.0.20 was referenced"). Self-contained sidesteps the
-    check. Only matters in Debug because Release/CI builds don't hot-reload.
+    Bundle the WindowsAppSDK runtime self-contained when (a) Debug, or (b) the native TableView is
+    included. (a) The VS embedded preview panel (spec 056) runs through `dotnet watch run` which
+    incrementally re-evaluates the project graph on each save; transitive WindowsAppSDK.* references get
+    double-counted and trip Microsoft.WindowsAppSDK.ComponentReference.targets' strict version check
+    ("version 2.0.20;2.0.20 was referenced"). Self-contained sidesteps the check.
+    (b) REQUIRED for the native split-binary TableView (Advanced.dll) to RENDER: framework-dependent
+    activation resolves a WinAppSDK runtime build whose ABI the dev-framework-built Advanced.dll's internal
+    realization is not compatible with, so column headers + cells silently fail to generate (empty grid).
+    The self-contained local runtime restores full rendering. This only engages when IncludeTableView=true
+    (local / on-demand), never in shared CI where IncludeTableView=false.
   -->
-  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug' or '$(IncludeTableView)' == 'true'">
     <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
   </PropertyGroup>
 
@@ -62,12 +65,15 @@
     <ProjectReference Include="..\TableView.Projection\TableView.Projection.csproj" />
     <!-- The consumable first-class control (referenced exactly as a Reactor consumer would). -->
     <ProjectReference Include="..\Reactor.Controls.TableView\Reactor.Controls.TableView.csproj" />
+    <!-- The full 37-page native TableViewSamples gallery (compiled WinUI pages). -->
+    <ProjectReference Include="..\TableViewSamples.Embedded\TableViewSamples.Embedded.csproj" />
     <Content Include="Microsoft.UI.Xaml.Controls.Advanced.dll" CopyToOutputDirectory="PreserveNewest" />
     <None Include="TableViewStrings\Resources.resw" />
     <None Include="TableViewStrings\merge-tableview-strings.ps1" />
   </ItemGroup>
   <ItemGroup Condition="'$(IncludeTableView)' != 'true'">
     <Compile Remove="Demos\TableViewControlDemo.cs" />
+    <Compile Remove="Demos\TableViewDemo.cs" />
     <Compile Remove="GlobalUsings.TableView.cs" />
   </ItemGroup>
 

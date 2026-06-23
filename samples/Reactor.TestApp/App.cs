@@ -14,6 +14,18 @@ using static Microsoft.UI.Reactor.Factories;
 using static Microsoft.UI.Reactor.Core.Theme;
 
 
+#if INCLUDE_TABLEVIEW
+// Register the embedded TableView gallery's compiler-generated XAML metadata provider as the SINGLE
+// authority for the native (projected) TableView types, BEFORE any tab loads. The gallery is a
+// separately XAML-compiled library, so its pages resolve the native types through their own baked
+// provider; the consumable control separately registers the projection's advanced provider. With both
+// present, the same WinRT type would get two native CCustomClassInfo descriptors and a 0xC0000005
+// access-violates during Frame.Navigate. Registering the gallery's provider first makes it win the
+// resolution chain so both paths share one authority.
+try { Microsoft.UI.Reactor.ReactorApp.RegisterControlAssembly(typeof(TableViewSamples.SampleShell).Assembly); }
+catch (Exception ex) { System.Diagnostics.Debug.WriteLine("[App] gallery provider register failed: " + ex); }
+#endif
+
 ReactorApp.Run<DemoApp>("Reactor Demo", width: 1200, height: 800
     // Spec 045 — register the native docking renderer once at the
     // root host. Lets any component in the app (e.g. the DockingDemo
@@ -36,6 +48,7 @@ static class AppFlags
 enum Tab { Counter, TodoList, ConditionalUI, Form, DynamicList, PerfStress, Virtualization, ItemsView, Flyout, DataTemplate, FlexPanel, Transitions, PropertyGrid, DataSystem, DataGrid,
 #if INCLUDE_TABLEVIEW
     TableView,
+    TableViewGallery,
 #endif
     IntegratedData, AsyncValueSamples, Context, Memo, Persisted, Slots, Navigation, Commanding, InputGestures, SpecializedEditors, Windows, Docking, RichText, OptionalSnapBack, ReferenceGraph }
 
@@ -66,6 +79,7 @@ class DemoApp : Component
             Tab.DataGrid => ("DataGrid", "datagrid"),
 #if INCLUDE_TABLEVIEW
             Tab.TableView => ("TableView", "datagrid"),
+            Tab.TableViewGallery => ("TableView Gallery", "datagrid"),
 #endif
             Tab.IntegratedData => ("Integrated Data", "integrateddata"),
             Tab.AsyncValueSamples => ("AsyncValue", "datasystem"),
@@ -157,6 +171,7 @@ class DemoApp : Component
                     Tab.DataGrid => Component<DataGridDemo>(),
 #if INCLUDE_TABLEVIEW
                     Tab.TableView => Component<TableViewControlDemo>(),
+                    Tab.TableViewGallery => Component<TableViewDemo>(),
 #endif
                     Tab.IntegratedData => Component<IntegratedDataDemo>(),
                     Tab.AsyncValueSamples => Component<AsyncValueSamplesDemo>(),
