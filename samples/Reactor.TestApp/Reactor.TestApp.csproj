@@ -72,7 +72,7 @@
     <None Include="TableViewStrings\merge-tableview-strings.ps1" />
   </ItemGroup>
   <ItemGroup Condition="'$(IncludeTableView)' != 'true'">
-    <Compile Remove="Demos\TableViewControlDemo.cs" />
+    <Compile Remove="Demos\TableViewFirstClassGallery.cs" />
     <Compile Remove="Demos\TableViewDemo.cs" />
     <Compile Remove="GlobalUsings.TableView.cs" />
   </ItemGroup>

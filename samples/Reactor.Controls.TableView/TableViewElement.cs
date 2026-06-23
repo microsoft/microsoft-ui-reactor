@@ -4,15 +4,19 @@ using System.Collections.Generic;
 using Microsoft.UI.Reactor.Core;
 using WinUITableView = Microsoft.UI.Xaml.Controls.TableView;
 using TableViewSelectionMode = Microsoft.UI.Xaml.Controls.TableViewSelectionMode;
+using TableViewSelectionUnit = Microsoft.UI.Xaml.Controls.TableViewSelectionUnit;
+using TableViewGridLinesVisibility = Microsoft.UI.Xaml.Controls.TableViewGridLinesVisibility;
+using TableViewHeadersVisibility = Microsoft.UI.Xaml.Controls.TableViewHeadersVisibility;
 using TableViewSelectionChangedEventArgs = Microsoft.UI.Xaml.Controls.TableViewSelectionChangedEventArgs;
 
 namespace Reactor.Controls;
 
 /// <summary>
-/// A column definition for <see cref="TableViewElement"/>: a header plus the
-/// item property the column binds to.
+/// A column definition for <see cref="TableViewElement"/>: a header, the item property the column
+/// binds to, an optional cell <see cref="CellStyle"/> (text / pill / chip / tint), and an optional
+/// pixel width.
 /// </summary>
-public sealed record TableColumn(string Header, string PropertyPath);
+public sealed record TableColumn(string Header, string PropertyPath, CellStyle Style = CellStyle.Text, double Width = double.NaN);
 
 /// <summary>
 /// First-class Reactor element for the native C++/WinRT
@@ -45,6 +49,33 @@ public sealed record TableViewElement : Element
 
     /// <summary>Selection mode. When <c>null</c>, the control's default is used.</summary>
     public TableViewSelectionMode? SelectionMode { get; init; }
+
+    /// <summary>Selection unit (row / cell / cell-or-row). When <c>null</c>, the control's default is used.</summary>
+    public TableViewSelectionUnit? SelectionUnit { get; init; }
+
+    /// <summary>Grid-line visibility (none / horizontal / vertical / all).</summary>
+    public TableViewGridLinesVisibility? GridLinesVisibility { get; init; }
+
+    /// <summary>Header visibility (none / column / row / all).</summary>
+    public TableViewHeadersVisibility? HeadersVisibility { get; init; }
+
+    /// <summary>Allow the user to sort by clicking column headers.</summary>
+    public bool? CanSortColumns { get; init; }
+
+    /// <summary>Allow the user to filter columns via the header funnels.</summary>
+    public bool? CanFilterColumns { get; init; }
+
+    /// <summary>Allow the user to reorder columns by dragging headers.</summary>
+    public bool? CanReorderColumns { get; init; }
+
+    /// <summary>Allow the user to resize columns by dragging header edges.</summary>
+    public bool? CanResizeColumns { get; init; }
+
+    /// <summary>Show the leading selection gutter (checkbox column).</summary>
+    public bool? IsSelectionGutterVisible { get; init; }
+
+    /// <summary>Freeze the first N columns to the leading edge (pinned during horizontal scroll).</summary>
+    public int? FrozenColumnCount { get; init; }
 
     /// <summary>One-way selected row index. When <c>null</c>, selection is left to the user.</summary>
     public int? SelectedIndex { get; init; }

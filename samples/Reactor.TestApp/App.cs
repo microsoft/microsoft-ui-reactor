@@ -170,7 +170,7 @@ class DemoApp : Component
                     Tab.DataSystem => Component<DataSystemDemo>(),
                     Tab.DataGrid => Component<DataGridDemo>(),
 #if INCLUDE_TABLEVIEW
-                    Tab.TableView => Component<TableViewControlDemo>(),
+                    Tab.TableView => Component<TableViewFirstClassGallery>(),
                     Tab.TableViewGallery => Component<TableViewDemo>(),
 #endif
                     Tab.IntegratedData => Component<IntegratedDataDemo>(),

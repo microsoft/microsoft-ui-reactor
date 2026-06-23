@@ -9,6 +9,10 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 using WinUITableView = Microsoft.UI.Xaml.Controls.TableView;
 using TableViewTextColumn = Microsoft.UI.Xaml.Controls.TableViewTextColumn;
+using TableViewTemplateColumn = Microsoft.UI.Xaml.Controls.TableViewTemplateColumn;
+using TableViewColumn = Microsoft.UI.Xaml.Controls.TableViewColumn;
+using TableViewFrozenEdge = Microsoft.UI.Xaml.Controls.TableViewFrozenEdge;
+using GridLength = Microsoft.UI.Xaml.GridLength;
 using TableViewSelectionChangedEventArgs = Microsoft.UI.Xaml.Controls.TableViewSelectionChangedEventArgs;
 
 namespace Reactor.Controls;
@@ -31,8 +35,7 @@ public sealed class TableViewHandler : IElementHandler<TableViewElement, WinUITa
 
         tv.Height = el.Height;
         tv.MinWidth = el.MinWidth;
-        if (el.SelectionMode is { } mode)
-            tv.SelectionMode = mode;
+        ApplyTableProps(tv, el);
 
         ApplyColumns(tv, el);
         tv.ItemsSource = el.Items;
@@ -88,9 +91,8 @@ public sealed class TableViewHandler : IElementHandler<TableViewElement, WinUITa
             tv.Height = newEl.Height;
         if (oldEl.MinWidth != newEl.MinWidth)
             tv.MinWidth = newEl.MinWidth;
-        if (newEl.SelectionMode is { } mode && oldEl.SelectionMode != newEl.SelectionMode)
-            tv.SelectionMode = mode;
-        if (!ColumnsEqual(oldEl.Columns, newEl.Columns))
+        ApplyTableProps(tv, newEl);
+        if (!ColumnsEqual(oldEl.Columns, newEl.Columns) || oldEl.FrozenColumnCount != newEl.FrozenColumnCount)
             ApplyColumns(tv, newEl);
         if (!ReferenceEquals(oldEl.Items, newEl.Items))
             tv.ItemsSource = newEl.Items;
@@ -98,6 +100,20 @@ public sealed class TableViewHandler : IElementHandler<TableViewElement, WinUITa
             tv.SelectedIndex = si;
 
         ctx.ApplySetters(newEl.Setters, tv);
+    }
+
+    /// <summary>Applies the table-level feature properties (idempotent; only writes the ones set).</summary>
+    private static void ApplyTableProps(WinUITableView tv, TableViewElement el)
+    {
+        if (el.SelectionMode is { } sm) tv.SelectionMode = sm;
+        if (el.SelectionUnit is { } su) tv.SelectionUnit = su;
+        if (el.GridLinesVisibility is { } gl) tv.GridLinesVisibility = gl;
+        if (el.HeadersVisibility is { } hv) tv.HeadersVisibility = hv;
+        if (el.CanSortColumns is { } cs) tv.CanUserSortColumns = cs;
+        if (el.CanFilterColumns is { } cf) tv.CanUserFilterColumns = cf;
+        if (el.CanReorderColumns is { } cr) tv.CanUserReorderColumns = cr;
+        if (el.CanResizeColumns is { } cz) tv.CanUserResizeColumns = cz;
+        if (el.IsSelectionGutterVisible is { } sg) tv.IsSelectionGutterVisible = sg;
     }
 
     /// <summary>Clears item/column state and returns the control to the Reactor pool.</summary>
@@ -112,13 +128,33 @@ public sealed class TableViewHandler : IElementHandler<TableViewElement, WinUITa
     {
         tv.Columns.Clear();
         IReadOnlyList<TableColumn> cols = el.Columns ?? AutoColumns(el.Items);
-        foreach (var c in cols)
+        int frozen = el.FrozenColumnCount ?? 0;
+        for (int i = 0; i < cols.Count; i++)
         {
-            tv.Columns.Add(new TableViewTextColumn
+            var c = cols[i];
+            TableViewColumn col;
+            if (c.Style == CellStyle.Text)
             {
-                Header = c.Header,
-                Binding = new Binding { Path = new PropertyPath(c.PropertyPath) },
-            });
+                col = new TableViewTextColumn
+                {
+                    Header = c.Header,
+                    Binding = new Binding { Path = new PropertyPath(c.PropertyPath) },
+                };
+            }
+            else
+            {
+                var tmpl = TableViewCellTemplates.Create(c.PropertyPath, c.Style);
+                col = new TableViewTemplateColumn { Header = c.Header };
+                if (tmpl != null)
+                    ((TableViewTemplateColumn)col).CellTemplate = tmpl;
+            }
+
+            if (!double.IsNaN(c.Width))
+                col.Width = new GridLength(c.Width);
+            if (i < frozen)
+                col.FrozenEdge = TableViewFrozenEdge.Leading;
+
+            tv.Columns.Add(col);
         }
     }
 
