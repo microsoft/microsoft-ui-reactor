@@ -62,7 +62,27 @@ class TvConditionalStylingPage : Component
 
         return TvSample.Page("ConditionalStyling",
             "Pick a rule to re-tint rows by department, salary tier, or active state. Rows pick up the style as they scroll into view; selection still highlights on top.",
-            table, options);
+            table, options,
+            sourceCode:
+@"var (selector, setSelector) = UseState(0);
+
+var setters = selector switch
+{
+    1 => new Action<WinTV>[] { tv => tv.AlternatingRowBackground = TvFx.Brush(0x1F, 0x00, 0x78, 0xD4) },
+    2 => new Action<WinTV>[] { tv => tv.AlternatingRowBackground = TvFx.Brush(0x1F, 0x16, 0xA3, 0x4A) },
+    3 => new Action<WinTV>[] { tv => tv.AlternatingRowBackground = TvFx.Brush(0x1F, 0xDC, 0x26, 0x26) },
+    _ => new Action<WinTV>[] { tv => tv.AlternatingRowBackground = null! },
+};
+
+var table = TableView(People, selector == 0 ? TextColumns() : VibrantColumns()) with
+{
+    SelectionMode = TVSel.Single,
+    Setters = setters,
+};
+
+var options = TvSample.Section(""Row style selector"",
+    ""Pick a selector. The native sample swaps RowStyleSelector; this wrapper uses row banding."",
+    RadioButtons(Selectors, selector, setSelector));");
     }
 }
 
@@ -124,7 +144,32 @@ class TvCellStylingPage : Component
 
         return TvSample.Page("CellStyling",
             "Pick a styling rule to tint specific columns; only the targeted columns change. Selecting a row still highlights the whole row on top.",
-            table, options);
+            table, options,
+            sourceCode:
+@"_rows ??= LivePeople(100);
+
+UseEffect(() =>
+{
+    if (!live) return () => { };
+    var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(Math.Max(25, (int)interval)) };
+    timer.Tick += (_, __) =>
+    {
+        int top = Math.Min(_rows!.Count, 12);
+        for (int k = 0; k < 3 && top > 0; k++)
+        {
+            var p = _rows[_rng.Next(top)];
+            p.Salary = 45000 + _rng.Next(0, 115000);
+            if (_rng.Next(5) == 0) p.IsActive = !p.IsActive;
+        }
+    };
+    timer.Start();
+    return () => timer.Stop();
+}, live, interval);
+
+TableView(_rows, config == 0 ? TextColumns() : VibrantColumns()) with
+{
+    SelectionMode = TVSel.Single,
+};");
     }
 }
 
@@ -183,7 +228,32 @@ class TvAdvancedFilterPage : Component
 
         return TvSample.Page("AdvancedFilter",
             "Click the funnel on each column header to build filters. Click Clear all filters to reset.",
-            table, options);
+            table, options,
+            sourceCode:
+@"WinTV? _tv;
+int _filteredFires;
+
+void RefreshFilters()
+{
+    if (_tv == null) return;
+    var active = _tv.FilteredColumns
+        .Select(c => Convert.ToString(c.Header, CultureInfo.InvariantCulture) ?? ""(column)"")
+        .ToList();
+    setActiveFilters(active.Count == 0 ? ""(none)"" : string.Join("", "", active));
+    setVisibleRows($""{(_tv.ItemsSource as ICollection)?.Count ?? People.Count} / {People.Count}"");
+}
+
+TableView(People, TextColumns()) with
+{
+    SelectionMode = TVSel.Single,
+    CanFilterColumns = true,
+    CanSortColumns = true,
+    OnControlReady = tv =>
+    {
+        _tv = tv;
+        tv.Filtered += (_, __) => { setFilteredFires(++_filteredFires); RefreshFilters(); };
+    },
+};");
     }
 }
 
@@ -231,7 +301,28 @@ class TvClipboardPage : Component
 
         return TvSample.Page("Clipboard",
             "Click a row and press Ctrl+C to copy it as TSV. Ctrl+V pastes, Ctrl+D fills down. The switches mirror the native sample's option surface.",
-            table, options);
+            table, options,
+            sourceCode:
+@"WinTV? _tv;
+
+void CaptureSelection(string action)
+{
+    var selected = _tv?.SelectedItems?.Cast<Person>().ToList() ?? new List<Person>();
+    setLastAction($""{action} requested · {selected.Count} selected row(s)"");
+    setClipboardPreview(selected.Count == 0
+        ? ""(select rows first)""
+        : TvPowerHelpers.ToDelimited(selected.Take(10), ""\t""));
+}
+
+var table = TableView(People, TextColumns()) with
+{
+    SelectionMode = TVSel.Extended,
+    OnControlReady = tv => _tv = tv,
+};
+
+Button(""Copy (Ctrl+C)"", () => CaptureSelection(canCopy ? ""Copy"" : ""Copy disabled in options""));
+Button(""Cut (Ctrl+X)"", () => CaptureSelection(canCut ? ""Cut"" : ""Cut disabled in options""));
+Button(""Paste (Ctrl+V)"", () => setLastAction(canPaste ? ""Paste requested"" : ""Paste disabled in options""));");
     }
 }
 
@@ -284,7 +375,30 @@ class TvLayoutPage : Component
 
         return TvSample.Page("Layout",
             "Reorder columns and sort, then click Save layout to capture the state as a token. Reset to defaults, then Load layout to restore it.",
-            table, options);
+            table, options,
+            sourceCode:
+@"WinTV? _tv;
+
+string CurrentColumnToken() => _tv?.Columns == null
+    ? ""(table not ready)""
+    : string.Join("","", _tv.Columns.Select(c => Convert.ToString(c.Header, CultureInfo.InvariantCulture) ?? ""(column)""));
+
+var table = TableView(People, TextColumns()) with
+{
+    SelectionMode = TVSel.Single,
+    CanReorderColumns = true,
+    CanResizeColumns = true,
+    CanSortColumns = true,
+    FrozenColumnCount = frozen ? 1 : 0,
+    OnControlReady = tv =>
+    {
+        _tv = tv;
+        tv.Sorted += (_, __) =>
+            setSortState(string.Join(""  ·  "", tv.SortedColumns
+                .OrderBy(c => c.SortIndex)
+                .Select(c => $""{c.SortIndex}. {c.Header} {c.SortDirection}"")));
+    },
+};");
     }
 }
 
@@ -324,7 +438,30 @@ class TvRtlPage : Component
 
         return TvSample.Page("RTLPlayground",
             "Toggle FlowDirection to flip the page right-to-left. Columns, resize grippers, and frozen edges all mirror.",
-            table, options);
+            table, options,
+            sourceCode:
+@"var (rtl, setRtl) = UseState(true);
+
+var table = TableView(People, TextColumns()) with
+{
+    SelectionMode = TVSel.Extended,
+    CanReorderColumns = true,
+    CanResizeColumns = true,
+    FrozenColumnCount = 1,
+    OnControlReady = tv => _tv = tv,
+    OnSelectionChanged = _ => setSelectedCount(_tv?.SelectedItems?.Count ?? 0),
+    Setters = new Action<WinTV>[]
+    {
+        tv => tv.FlowDirection = rtl
+            ? Microsoft.UI.Xaml.FlowDirection.RightToLeft
+            : Microsoft.UI.Xaml.FlowDirection.LeftToRight,
+    },
+};
+
+ToggleSwitch(rtl, setRtl,
+    onContent: ""RightToLeft"",
+    offContent: ""LeftToRight"",
+    header: ""FlowDirection"");");
     }
 }
 
@@ -371,7 +508,28 @@ class TvVirtualizationPage : Component
 
         return TvSample.Page("Virtualization",
             "Switch the source mode and dataset size. Scroll fast — memory stays flat because only the viewport is realized.",
-            table, options, tableHeight: 520);
+            table, options, tableHeight: 520,
+            sourceCode:
+@"static readonly string[] Sizes = { ""100"", ""1,000"", ""10,000"", ""50,000"" };
+static readonly int[] SizeValues = { 100, 1000, 10000, 50000 };
+
+var (mode, setMode) = UseState(0);
+var (size, setSize) = UseState(2);
+var (scroll, setScroll) = UseState(""Home"");
+
+var total = mode == 0 ? SizeValues[size] : Math.Min(SizeValues[size], 1000);
+var rows = ManyPeople(total);
+var realized = Math.Min(50, total);
+var ratio = total == 0 ? ""0%"" : $""~{(realized * 100.0 / total):0.##}%"";
+
+var table = TableView(rows, TextColumns()) with
+{
+    SelectionMode = TVSel.Single,
+    OnControlReady = tv => _tv = tv,
+};
+
+// Keep a fixed tableHeight: 520 on this page so 50,000 rows stay virtualized.
+Button(""Scroll End"", () => { _tv?.Select(Math.Max(0, total - 1)); setScroll(""End""); });");
     }
 }
 
@@ -426,7 +584,31 @@ class TvPaginationPage : Component
 
         return TvSample.Page("Pagination",
             "Use First / Prev / Next / Last or type a page number. Change the page size to rebuild the current page.",
-            table, options);
+            table, options,
+            sourceCode:
+@"static readonly IReadOnlyList<Person> AllRows = ManyPeople(1000);
+
+var (page, setPage) = UseState(0);
+var (pageSizeIndex, setPageSizeIndex) = UseState(1);
+var (pageText, setPageText) = UseState(""1"");
+
+var pageSize = PageSizes[pageSizeIndex];
+var pageCount = (int)Math.Ceiling(AllRows.Count / (double)pageSize);
+var currentPage = Math.Min(page, pageCount - 1);
+var start = currentPage * pageSize;
+var rows = AllRows.Skip(start).Take(pageSize).ToList();
+
+void Go(int p)
+{
+    var clamped = Math.Max(0, Math.Min(pageCount - 1, p));
+    setPage(clamped);
+    setPageText((clamped + 1).ToString(CultureInfo.InvariantCulture));
+}
+
+var table = TableView(rows, TextColumns()) with
+{
+    SelectionMode = TVSel.Single,
+};");
     }
 }
 
@@ -472,7 +654,33 @@ class TvDataExportPage : Component
 
         return TvSample.Page("DataExport",
             "Pick a format, click Export, and check the preview.",
-            table, options);
+            table, options,
+            sourceCode:
+@"void Export()
+{
+    var text = format switch
+    {
+        1 => TvPowerHelpers.ToDelimited(rows, ""\t""),
+        2 => TvPowerHelpers.ToJson(rows),
+        _ => TvPowerHelpers.ToDelimited(rows, "",""),
+    };
+    setPreview(text);
+    setStatus($""Exported {rows.Count} rows as {Formats[format]}"");
+}
+
+var table = TableView(People, TextColumns()) with
+{
+    SelectionMode = TVSel.Single,
+    CanReorderColumns = true,
+};
+public static string ToDelimited(IEnumerable<Person> rows, string delimiter)
+{
+    var sb = new StringBuilder();
+    sb.AppendLine(string.Join(delimiter, ExportColumns.Select(c => EscapeDelimited(c.Header, delimiter))));
+    foreach (var row in rows)
+        sb.AppendLine(string.Join(delimiter, ExportColumns.Select(c => EscapeDelimited(Convert.ToString(c.Value(row), CultureInfo.InvariantCulture) ?? string.Empty, delimiter))));
+    return sb.ToString();
+}");
     }
 }
 
@@ -582,7 +790,31 @@ class TvPerformancePage : Component
 
         return TvSample.Page("Performance",
             "Click each Run button to time that operation; the readout shows elapsed milliseconds. Run a scenario twice and use the second number — the first can include JIT warmup.",
-            table, options, tableHeight: 520);
+            table, options, tableHeight: 520,
+            sourceCode:
+@"var (rows, setRows) = UseState<IReadOnlyList<Person>>(ManyPeople(10000));
+var (load100k, setLoad100k) = UseState(""—"");
+
+void SetRowsMeasured(IReadOnlyList<Person> source, Action<string> setResult, string label)
+{
+    GC.Collect();
+    GC.WaitForPendingFinalizers();
+    GC.Collect();
+    var sw = Stopwatch.StartNew();
+    setRows(source);
+    sw.Stop();
+    setResult($""{sw.Elapsed.TotalMilliseconds:0.##} ms · {source.Count:N0} rows"");
+    setRunAll(label);
+}
+
+void RunLoad100k() => SetRowsMeasured(ManyPeople(100000), setLoad100k, ""Load 100,000 rows"");
+void RunFilter() => SetRowsMeasured(
+    ManyPeople(50000).Where(p => p.Salary >= 100000).ToList(),
+    setFilterMs,
+    ""Filter current dataset (Salary 100k+)"");
+
+TableView(rows, TextColumns()) with { SelectionMode = TVSel.Single };
+// Keep tableHeight: 520 on this page so 100,000 rows stay in a fixed virtualizing viewport.");
     }
 }
 

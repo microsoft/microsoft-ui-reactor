@@ -181,7 +181,7 @@ static class TvMeta
 // ── Shared SamplePresenter-style page chrome ─────────────────────────────────────────────────────
 static class TvSample
 {
-    public static Element Page(string tag, string tryIt, TableViewElement table, Element? options = null, Element? extraInfo = null, double? tableHeight = null)
+    public static Element Page(string tag, string tryIt, TableViewElement table, Element? options = null, Element? extraInfo = null, double? tableHeight = null, string? sourceCode = null)
     {
         var (header, desc) = TvMeta.Of(tag);
         var headItems = new List<Element> { Heading(header), TextBlock(desc), InfoBar("Try it", tryIt) };
@@ -199,8 +199,19 @@ static class TvSample
                 tbl.Flex(grow: 1),
                 Card(VStack(12, options)).Width(320).VAlign(Microsoft.UI.Xaml.VerticalAlignment.Top));
 
-        return ScrollView(VStack(16, head, body)).Padding(12);
+        var pageItems = new List<Element> { head, body };
+        if (!string.IsNullOrEmpty(sourceCode))
+            pageItems.Add(SourceCode(sourceCode!));
+
+        return ScrollView(VStack(16, pageItems.ToArray())).Padding(12);
     }
+
+    /// <summary>A collapsed "Source code" expander showing the page's key Reactor usage (monospace, scrollable).</summary>
+    public static Element SourceCode(string code) =>
+        Expander("Source code (C#)",
+            ScrollView(
+                TextBlock(code).FontFamily("Cascadia Mono, Consolas, Courier New").FontSize(12.5).Padding(14))
+            with { ContentOrientation = Microsoft.UI.Xaml.Controls.ScrollingContentOrientation.Horizontal });
 
     public static Element Group(string header, Element control) => VStack(6, SubHeading(header), control);
 

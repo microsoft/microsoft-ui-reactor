@@ -131,7 +131,28 @@ class TvShowcasePage : Component
         return TvSample.Page("Showcase",
             "Default is Hierarchical (expand a row's chevron to drill in). Switch modes, change the flat row count, turn on " +
             "Live updates to watch Salary tints recolor in place, toggle banding / the selection gutter. Click a header to sort; a funnel to filter.",
-            table, options);
+            table, options,
+            sourceCode:
+@"// Hierarchical (tree-grid) mode — bind roots + the child-collection property, expand the first level:
+var roots = HierarchyRoots();                       // List<LivePerson>, each with .Children
+TableView(items: Array.Empty<object>(), columns: VibrantColumns()) with
+{
+    HierarchicalItems        = roots,
+    HierarchicalChildrenPath = nameof(LivePerson.Children),
+    ExpandFirstLevel         = true,
+    CanResizeColumns         = true,
+};
+
+// Live updates — a timer mutates Salary in place; LivePerson raises PropertyChanged so the
+// bound tint cell re-runs its converter WITHOUT a re-bind (selection + scroll preserved):
+UseEffect(() =>
+{
+    if (intervalMs == 0) return () => { };
+    var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(intervalMs) };
+    timer.Tick += (_, _) => row.Salary = 60000 + rng.Next(180000);
+    timer.Start();
+    return () => timer.Stop();
+}, intervalMs);");
     }
 
     static IList<LivePerson> FlattenRoots(List<LivePerson> roots)
@@ -195,7 +216,25 @@ class TvSelectionPage : Component
 
         return TvSample.Page("Selection",
             "Pick a mode, then click rows or use the buttons to drive the selection from code. The Status panel updates live.",
-            table, options);
+            table, options,
+            sourceCode:
+@"WinTV? tv = null;
+var table = TableView(People, TextColumns()) with
+{
+    SelectionMode            = TableViewSelectionMode.Extended,
+    IsSelectionGutterVisible = gutter,
+    OnControlReady           = t => tv = t,                 // capture for imperative APIs
+    OnSelectionChanged       = _ =>                          // live readouts
+    {
+        setChanges(changes + 1);
+        setCount(tv!.SelectedItems?.Count ?? 0);
+        setIndex(tv!.SelectedIndex);
+    },
+};
+// Quick-action buttons:
+Button(""Select all"", () => tv?.SelectAll());
+Button(""Select first"", () => tv?.Select(0));
+Button(""Clear"", () => tv?.DeselectAll());");
     }
 }
 
@@ -237,7 +276,18 @@ class TvCellSelectionPage : Component
 
         return TvSample.Page("CellSelection",
             "Pick a unit. In Cell / CellOrRow, click a cell to select it; Ctrl+click toggles, Shift+click selects a range.",
-            table, options);
+            table, options,
+            sourceCode:
+@"// SelectionUnit chooses what a click selects: a whole Row, a single Cell, or CellOrRow.
+var table = TableView(People, TextColumns()) with
+{
+    SelectionMode            = TableViewSelectionMode.Extended,
+    SelectionUnit            = unit,        // TableViewSelectionUnit.Row / Cell / CellOrRow
+    IsSelectionGutterVisible = true,
+    OnControlReady           = t => _tv = t,
+    OnSelectionChanged       = _ => setChanges(changes + 1),
+};
+Button(""Clear selection"", () => _tv?.DeselectAll());");
     }
 }
 
@@ -280,7 +330,22 @@ class TvSortPage : Component
 
         return TvSample.Page("Sort",
             "Click a column header to sort; click again to reverse; Ctrl-click another header to layer a secondary sort. Or use the buttons for programmatic presets.",
-            table, options);
+            table, options,
+            sourceCode:
+@"// The control owns sort STATE + raises Sorted; the consumer re-orders the data. The
+// Reactor TableView handler does that re-shape for you — columns just need a SortMemberPath
+// (set automatically from each TableColumn's property path). Drive it imperatively too:
+var table = TableView(People, VibrantColumns()) with
+{
+    CanSortColumns   = true,
+    FrozenColumnCount = 1,
+    OnControlReady   = tv => { _tv = tv; tv.Sorted += (_, _) => { setFires(fires + 1); Refresh(); }; },
+};
+// Programmatic presets:
+_tv.SortByColumn(Column(""Salary""), SortDirection.Descending);    // replace sort
+_tv.SetSortColumn(Column(""Department""), SortDirection.Ascending); // add a level
+_tv.ToggleSortDirection(Column(""Salary""), TableViewSortToggleMode.Replace);
+_tv.ClearSort();");
     }
 }
 
@@ -309,7 +374,27 @@ class TvFilterPage : Component
 
         return TvSample.Page("Filter",
             "Open a column header's funnel and choose values to narrow the rows; clear a column's filter to restore it.",
-            table, options);
+            table, options,
+            sourceCode:
+@"// Funnels appear when CanFilterColumns = true. The control raises Filtered; the Reactor
+// handler re-shapes the bound rows. Read the visible count from the live ItemsSource:
+var table = TableView(People, TextColumns()) with
+{
+    CanFilterColumns = true,
+    CanSortColumns   = true,
+    OnControlReady   = tv =>
+    {
+        _tv = tv;
+        tv.Filtered += (_, _) =>
+        {
+            setFires(fires + 1);
+            int visible = (tv.ItemsSource as System.Collections.ICollection)?.Count ?? People.Count;
+            setVisible($""{visible} / {People.Count}"");
+        };
+    },
+};
+// Clear every column filter:
+foreach (var c in _tv.FilteredColumns.ToList()) c.Filter = null!;");
     }
 }
 
@@ -332,7 +417,15 @@ class TvInlineEditPage : Component
 
         return TvSample.Page("InlineEdit",
             "With editing allowed, double-click a text cell (or F2) to edit in place; Enter commits, Esc discards. Toggle the table read-only to lock it.",
-            table, options);
+            table, options,
+            sourceCode:
+@"// Text columns are editable unless the control is read-only. Toggle IsReadOnly via a Setter:
+var table = TableView(People, TextColumns()) with
+{
+    SelectionMode = TableViewSelectionMode.Single,
+    Setters       = new Action<WinTV>[] { tv => tv.IsReadOnly = readOnly },
+};
+// Double-click / F2 a cell to edit; Enter commits, Esc discards.");
     }
 }
 
@@ -353,7 +446,16 @@ class TvKeyboardNavPage : Component
 
         return TvSample.Page("KeyboardNav",
             "Click a cell, then use the arrow keys, Tab, Home / End, and Page Up / Page Down to move focus across cells.",
-            table, options);
+            table, options,
+            sourceCode:
+@"// Keyboard navigation + UI Automation are built in — just render the table:
+var table = TableView(People, TextColumns()) with
+{
+    SelectionMode            = TableViewSelectionMode.Single,
+    IsSelectionGutterVisible = true,
+};
+// Arrow keys / Tab / Home / End / PageUp / PageDown move focus across cells;
+// the grid exposes RowCount / ColumnCount to Narrator automatically.");
     }
 }
 

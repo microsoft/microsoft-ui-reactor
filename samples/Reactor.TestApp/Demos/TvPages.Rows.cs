@@ -87,7 +87,31 @@ class TvRowReorderPage : Component
 
         return TvSample.Page("RowReorder",
             "Click and drag any row by its cells onto another row to drop it before or after. Toggle CanUserReorderRows to enable or disable the gesture.",
-            table, options);
+            table, options,
+            sourceCode:
+@"readonly ObservableCollection<Person> _rows = new(People);
+
+var table = TableView(_rows, TextColumns()) with
+{
+    SelectionMode      = TVSel.Single,
+    CanReorderColumns  = false,
+    OnControlReady     = tv =>
+    {
+        _tv = tv;
+        if (!_watching)
+        {
+            _rows.CollectionChanged += OnRowsChanged;   // reports committed moves
+            _watching = true;
+        }
+    },
+    Setters = new Action<WinTV>[]
+    {
+        tv => tv.CanUserReorderRows = on,
+    },
+};
+
+Button(""Reset order"", Reset);
+Button(""Move 0→3 (API)"", () => _rows.Move(0, 3));");
     }
 
     void OnRowsChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -168,7 +192,26 @@ class TvGroupsPage : Component
 
         return TvSample.Page("Groups",
             "Toggle grouping, then expand / collapse groups or click a header to sort within each group. Funnels filter rows inside each group.",
-            table, options);
+            table, options,
+            sourceCode:
+@"var source = ShuffledPeople(shuffle);
+var rows = grouping
+    ? source.OrderBy(p => p.Department).ThenBy(p => p.FirstName).ToList()
+    : source;
+var groups = rows.GroupBy(p => p.Department).OrderBy(g => g.Key).ToList();
+
+var table = TableView(rows, TextColumns()) with
+{
+    CanSortColumns   = true,
+    CanFilterColumns = true,
+    OnControlReady   = tv => _tv = tv,
+};
+
+Button(""Expand all"", () => _tv?.ExpandAllGroups());
+Button(""Collapse all"", () => _tv?.CollapseAllGroups());
+
+// The Reactor wrapper uses a Department-ordered flat view here; the buttons
+// still exercise the native bulk group APIs when grouped headers are present.");
     }
 
     static List<Person> ShuffledPeople(int shuffle)
@@ -246,7 +289,24 @@ class TvHierarchyPage : Component
 
         return TvSample.Page("Hierarchy",
             "Click a chevron to expand / collapse a node. Sorting and filtering work per level and keep the tree path visible. Use Expand all / Collapse all too.",
-            table, options);
+            table, options,
+            sourceCode:
+@"var roots = HierarchyRoots();                       // List<LivePerson>, each with .Children
+TableView(Array.Empty<object>(), VibrantColumns()) with
+{
+    HierarchicalItems        = roots,
+    HierarchicalChildrenPath = nameof(LivePerson.Children),
+    ExpandFirstLevel         = true,
+    OnControlReady           = tv => _tv = tv,   // for ExpandItem / readouts
+};
+
+Button(""Expand all"",    () => InvokeHierarchy(""ExpandAllItems"", null, ""expand-all"", setLastAction));
+Button(""Collapse all"",  () => InvokeHierarchy(""CollapseAllItems"", null, ""collapse-all"", setLastAction));
+Button(""Toggle selected"", () =>
+{
+    var node = _tv?.SelectedItems?.OfType<LivePerson>().FirstOrDefault();
+    if (node != null) InvokeHierarchy(""ToggleItem"", node, $""toggle({node.Name})"", setLastAction);
+});");
     }
 
     void InvokeHierarchy(string methodName, object? arg, string success, Action<string> setLastAction)
@@ -335,8 +395,27 @@ class TvRowColorsPage : Component
                 TvSample.Readout("Salary update ticks", ticks.ToString())));
 
         return TvSample.Page("RowColors",
-            "Pick a preset to set row and alternating-row background / foreground colors. Each click instantly re-tints the rows; 'No banding' clears them.",
-            table, options);
+            "Pick a preset to set alternating-row background colors. Each click instantly re-tints the rows; None clears them.",
+            table, options,
+            sourceCode:
+@"var setters = preset switch
+{
+    2 => new Action<WinTV>[]
+    {
+        tv => tv.AlternatingRowBackground = TvFx.Brush(0x33, 0x38, 0xB5, 0xFF),
+    },
+    1 => new Action<WinTV>[]
+    {
+        tv => tv.AlternatingRowBackground = TvFx.Brush(0x18, 0x80, 0x80, 0x80),
+    },
+    _ => new Action<WinTV>[] { tv => tv.AlternatingRowBackground = null! },
+};
+
+TableView(_rows, VibrantColumns()) with
+{
+    SelectionMode = TVSel.Extended,
+    Setters       = setters,
+};");
     }
 }
 
@@ -399,7 +478,27 @@ class TvGridLinesPage : Component
 
         return TvSample.Page("GridLines",
             "Choose which grid lines show — All, Horizontal, Vertical, or None. Switch mode or banding to see the lines stay on-theme.",
-            table, options);
+            table, options,
+            sourceCode:
+@"var grid = lines switch
+{
+    0 => TVGrid.None,
+    1 => TVGrid.Horizontal,
+    2 => TVGrid.Vertical,
+    _ => TVGrid.All,
+};
+
+var setters = new Action<WinTV>[]
+{
+    tv => tv.AlternatingRowBackground = TvFx.Brush(0x18, 0x80, 0x80, 0x80),
+};
+
+TableView(People, TextColumns()) with
+{
+    SelectionMode        = TVSel.Single,
+    GridLinesVisibility = grid,
+    Setters             = setters,
+};");
     }
 }
 
@@ -438,7 +537,23 @@ class TvRowTemplatePage : Component
 
         return TvSample.Page("RowTemplate",
             "Switch templates to rebuild every row in place. Selection and keyboard nav keep working; 'None' restores the default cells.",
-            table, options);
+            table, options,
+            sourceCode:
+@"var columns = template switch
+{
+    1 => CardColumns(),     // name + role/status
+    2 => CompactColumns(),  // name + email
+    3 => MixedColumns(),    // department + salary
+    _ => TextColumns(),     // default per-column cells
+};
+
+TableView(People, columns) with
+{
+    SelectionMode = TVSel.Single,
+};
+
+RadioButtons(Templates, template, setTemplate);
+TvSample.Readout(""Active template"", Templates[template]);");
     }
 
     static List<TableColumn> CardColumns() => new()
@@ -500,7 +615,23 @@ class TvRowDetailsPage : Component
 
         return TvSample.Page("RowDetails",
             "Pick a visibility mode to show each row's details panel — always, never, or only when selected. The readouts track each change.",
-            table, options);
+            table, options,
+            sourceCode:
+@"var table = TableView(People, TextColumns()) with
+{
+    SelectionMode      = TVSel.Single,
+    OnControlReady     = tv => _tv = tv,
+    OnSelectionChanged = _ =>
+    {
+        setChanges(changes + 1);
+        setSelectedIndex(_tv?.SelectedIndex ?? -1);
+    },
+};
+
+// RowDetailsTemplate / RowDetailsVisibilityMode are native-only for this
+// consumable wrapper today, so the sample tracks the intended mode + selection.
+RadioButtons(Modes, mode, setMode);
+TvSample.Readout(""Last event"", selected);");
     }
 }
 
@@ -525,7 +656,23 @@ class TvMixedControlsPage : Component
 
         return TvSample.Page("MixedControls",
             "Edit any row's date, time, department, or Active checkbox — changes bind straight back to the row and the readout below updates live.",
-            table, options);
+            table, options,
+            sourceCode:
+@"var first = People[0];
+
+TableView(People, VibrantColumns()) with
+{
+    SelectionMode = TVSel.Single,
+};
+
+// Native TableViewTemplateColumn cell templates host DatePicker, TimePicker,
+// ComboBox, and CheckBox. The Reactor wrapper shows the same data with typed
+// text / pill / chip / tint columns plus a live first-row readout.
+TvSample.Readout(""Name"",       $""{first.FirstName} {first.LastName}"");
+TvSample.Readout(""Join date"",  first.JoinDateText);
+TvSample.Readout(""Department"", first.Department);
+TvSample.Readout(""Role"",       first.Role);
+TvSample.Readout(""Active"",     first.IsActive.ToString());");
     }
 }
 
@@ -582,7 +729,27 @@ class TvMarqueePage : Component
 
         return TvSample.Page("Marquee",
             "Click and drag in an empty area of the table to draw a selection rectangle; on release, the rows it touches are selected.",
-            table, options);
+            table, options,
+            sourceCode:
+@"var sel = mode switch
+{
+    0 => TVSel.None,
+    1 => TVSel.Single,
+    2 => TVSel.Multiple,
+    _ => TVSel.Extended,
+};
+
+TableView(People, TextColumns()) with
+{
+    SelectionMode             = sel,
+    IsSelectionGutterVisible  = true,
+    OnControlReady            = tv => _tv = tv,
+    OnSelectionChanged        = _ => setSelectedCount(SelectedIndices().Count),
+    Setters = new Action<WinTV>[]
+    {
+        tv => tv.CanUserMarqueeSelect = marquee,
+    },
+};");
     }
 
     List<int> SelectedIndices()

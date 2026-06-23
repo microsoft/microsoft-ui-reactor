@@ -38,7 +38,6 @@ class TvColumnResizePage : Component
         var (minWidth, setMinWidth) = UseState(20.0);
         var (width, setWidth) = UseState(160.0);
         var (maxWidth, setMaxWidth) = UseState(500.0);
-        var (canResize, setCanResize) = UseState(true);
         var (widthReadout, setWidthReadout) = UseState("?");
 
         TVColumn? ColumnAt(int i) => _tv != null && i >= 0 && i < _tv.Columns.Count ? _tv.Columns[i] : null;
@@ -66,7 +65,7 @@ class TvColumnResizePage : Component
         var table = TableView(People, Columns()) with
         {
             SelectionMode = TVSel.Single,
-            CanResizeColumns = canResize,
+            CanResizeColumns = true,
             OnControlReady = tv => { _tv = tv; ApplySizing(tv); RefreshReadout(); },
             Setters = new Action<WinTV>[] { ApplySizing },
         };
@@ -84,7 +83,6 @@ class TvColumnResizePage : Component
                         RefreshReadout(c);
                     }
                 }),
-                ToggleSwitch(canResize, setCanResize, onContent: "Resizing allowed", offContent: "Resizing blocked", header: "Resizing"),
                 TvSample.Group("MinWidth", VStack(4,
                     Slider(minWidth, 0, 400, v => { setMinWidth(v); if (ActiveColumn() is { } c) c.MinWidth = v; RefreshReadout(); }),
                     TvSample.Readout("Value", minWidth.ToString("0", CultureInfo.InvariantCulture)))),
@@ -100,7 +98,31 @@ class TvColumnResizePage : Component
 
         return TvSample.Page("ColumnResize",
             "Drag the right edge of any header to resize (Role is locked). Or use the sliders to set Width / Min / Max programmatically and watch ActualWidth clamp.",
-            table, options);
+            table, options,
+            sourceCode:
+@"// Capture the native control so sliders can drive the selected TableViewColumn:
+WinTV? tv = null;
+var table = TableView(People, Columns()) with
+{
+    SelectionMode     = TVSel.Single,
+    CanResizeColumns = true,
+    OnControlReady   = t => tv = t,
+    Setters          = new Action<WinTV>[] { ApplySizing },
+};
+
+void ApplySizing(WinTV t)
+{
+    foreach (var col in t.Columns)
+        if (Equals(col.Header, ""Role (locked)""))
+            col.CanUserResize = false;
+
+    var c = t.Columns[selected];
+    c.MinWidth = minWidth;
+    c.Width    = new GridLength(width);
+    c.MaxWidth = maxWidth;
+}
+
+// Slider onChanged: tv!.Columns[selected].Width = new GridLength(value);");
     }
 }
 
@@ -201,7 +223,33 @@ class TvColumnReorderPage : Component
 
         return TvSample.Page("ColumnReorder",
             "Pick a column, then click Move left / right or Autosize. The order list updates as you go.",
-            table, options);
+            table, options,
+            sourceCode:
+@"// Use the live control for programmatic reorder, autosize, reset, and event readouts:
+WinTV? tv = null;
+var table = TableView(People, DefaultOrder.Select(Column).ToList()) with
+{
+    SelectionMode      = TVSel.Single,
+    CanReorderColumns = canReorder,
+    OnControlReady    = t =>
+    {
+        tv = t;
+        t.ColumnReordered += (_, args) =>
+            setLastAction($""ColumnReordered: {args.Column.Header} {args.FromIndex}->{args.ToIndex}"");
+    },
+};
+
+void MoveSelected(int direction)
+{
+    var col  = tv!.Columns[selected];
+    int from = tv.Columns.IndexOf(col);
+    bool moved = tv.MoveColumn(from, from + direction);
+}
+
+var col = tv!.Columns[selected];
+tv.AutoSizeColumn(col);
+tv.AutoSizeAllColumns();
+tv.ResetColumnOrder();");
     }
 }
 
@@ -293,7 +341,32 @@ class TvColumnReorderGesturePage : Component
 
         return TvSample.Page("ColumnReorderGesture",
             "Turn on CanUserReorderColumns, then drag a column header sideways to a new spot. Toggle Email.CanUserReorder off to see a column reject the drop.",
-            table, options);
+            table, options,
+            sourceCode:
+@"// Column drag-reorder is declarative at the table level; per-column gates are set on the native columns:
+WinTV? tv = null;
+var table = TableView(People, DefaultOrder.Select(Column).ToList()) with
+{
+    SelectionMode      = TVSel.Single,
+    CanReorderColumns = canReorder,
+    OnControlReady    = t =>
+    {
+        tv = t;
+        ApplyColumnGates(t);
+        t.ColumnReordering += (_, args) =>
+            setLastEvent($""ColumnReordering: {args.Column.Header} {args.FromIndex}->{args.ToIndex}"");
+        t.ColumnReordered += (_, args) =>
+            setLastEvent($""ColumnReordered: {args.Column.Header} {args.FromIndex}->{args.ToIndex}"");
+    },
+    Setters = new Action<WinTV>[] { ApplyColumnGates },
+};
+
+void ApplyColumnGates(WinTV t)
+{
+    t.Columns.First(c => Equals(c.Header, ""Email"")).CanUserReorder = emailCanReorder;
+    t.Columns.First(c => Equals(c.Header, ""Name"")).FrozenEdge =
+        nameFrozen ? TVFrozenEdge.Leading : TVFrozenEdge.None;
+}");
     }
 }
 
@@ -343,7 +416,27 @@ class TvDynamicColumnsPage : Component
 
         return TvSample.Page("DynamicColumns",
             "Toggle the checkboxes to show or hide each column. Each column keeps its width and position when you bring it back.",
-            table, options);
+            table, options,
+            sourceCode:
+@"// Keep the full column collection and collapse individual TableViewColumn instances:
+const int First = 1 << 0, Last = 1 << 1, Department = 1 << 2, Role = 1 << 3, Salary = 1 << 4;
+var table = TableView(People, AllColumns.Select(c => c.Column).ToList()) with
+{
+    Setters = new Action<WinTV>[] { ApplyVisibility },
+};
+
+void ApplyVisibility(WinTV tv)
+{
+    foreach (var (bit, column) in AllColumns)
+    {
+        var native = tv.Columns.FirstOrDefault(c => Equals(c.Header, column.Header));
+        if (native != null)
+            native.Visibility = (mask & bit) != 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+}
+
+// CheckBox onChanged:
+// setMask(checked ? mask | First : mask & ~First);");
     }
 }
 
@@ -410,7 +503,29 @@ class TvStickyHeadersPage : Component
 
         return TvSample.Page("StickyHeaders",
             "Scroll horizontally — the header glides with the body. Scroll vertically — it stays pinned. Use the buttons to scroll programmatically.",
-            table, options);
+            table, options,
+            sourceCode:
+@"// Sticky headers are built into TableView; capture the control for scroll buttons + offsets:
+WinTV? tv = null;
+var table = TableView(employees, columns) with
+{
+    SelectionMode   = TVSel.Single,
+    OnControlReady = t =>
+    {
+        tv = t;
+        t.ViewChanged += (_, args) =>
+        {
+            if (!args.IsIntermediate)
+                Refresh();
+        };
+    },
+};
+
+// The header tracks HorizontalOffset automatically and stays pinned vertically:
+tv!.ChangeView(0.0, null, null);
+tv.ChangeView(400.0, null, null);
+tv.ChangeView(tv.ScrollableWidth, null, null);
+tv.ChangeView(null, 200.0, null);");
     }
 
     sealed record EmployeeRow(string EmployeeId, string FirstName, string LastName, string Email, string Department, string Role, string Office, string Phone, string Manager);
@@ -452,7 +567,28 @@ class TvHeadersPage : Component
 
         return TvSample.Page("HeadersVisibility",
             "Pick a mode to show or hide the column headers and the row checkbox gutter — All, Column, Row, or None.",
-            table, options);
+            table, options,
+            sourceCode:
+@"// Bind the selected radio button to TableView.HeadersVisibility:
+var visibility = mode switch
+{
+    1 => TVHeaders.Column,
+    2 => TVHeaders.Row,
+    3 => TVHeaders.None,
+    _ => TVHeaders.All,
+};
+
+var table = TableView(rows, columns) with
+{
+    SelectionMode             = TVSel.Multiple,
+    IsSelectionGutterVisible = true,
+    HeadersVisibility        = visibility,
+};
+
+// All    = column headers + row/selection gutter
+// Column = column headers only
+// Row    = row/selection gutter only
+// None   = neither surface");
     }
 
     sealed record HeaderRow(string Value1, string Value2, string Value3, string Value4, string Value5);
@@ -525,7 +661,29 @@ class TvFrozenLeadingPage : Component
 
         return TvSample.Page("FrozenColumns",
             "Toggle a switch to freeze that column at the leading edge, then scroll horizontally — frozen columns stay pinned to the left while the rest scroll.",
-            table, options);
+            table, options,
+            sourceCode:
+@"// Set TableViewColumn.FrozenEdge on the live columns to pin them to the leading edge:
+WinTV? tv = null;
+var table = TableView(ManyPeople(60), columns) with
+{
+    SelectionMode   = TVSel.Single,
+    OnControlReady = Ready,
+    Setters        = new Action<WinTV>[] { ApplyFrozen },
+};
+
+void ApplyFrozen(WinTV t)
+{
+    tv = t;
+    foreach (var c in t.Columns)
+    {
+        c.FrozenEdge =
+            Equals(c.Header, ""First name"") && first ? TVFrozenEdge.Leading :
+            Equals(c.Header, ""Last name"")  && last  ? TVFrozenEdge.Leading :
+            Equals(c.Header, ""Email"")      && email ? TVFrozenEdge.Leading :
+            TVFrozenEdge.None;
+    }
+}");
     }
 }
 
@@ -605,6 +763,29 @@ class TvFrozenTrailingPage : Component
 
         return TvSample.Page("FrozenTrailingColumns",
             "Toggle a switch to pin that column to the trailing (right) edge, then scroll horizontally — pinned columns stay anchored at the right while the rest scroll.",
-            table, options);
+            table, options,
+            sourceCode:
+@"// The same FrozenEdge property pins trailing columns; First name is leading for contrast:
+WinTV? tv = null;
+var table = TableView(ManyPeople(60), columns) with
+{
+    SelectionMode   = TVSel.Single,
+    OnControlReady = Ready,
+    Setters        = new Action<WinTV>[] { ApplyFrozen },
+};
+
+void ApplyFrozen(WinTV t)
+{
+    tv = t;
+    foreach (var c in t.Columns)
+    {
+        c.FrozenEdge =
+            Equals(c.Header, ""First name"") ? TVFrozenEdge.Leading :
+            Equals(c.Header, ""Salary"") && salary ? TVFrozenEdge.Trailing :
+            Equals(c.Header, ""Active"") && active ? TVFrozenEdge.Trailing :
+            Equals(c.Header, ""Role"")   && role   ? TVFrozenEdge.Trailing :
+            TVFrozenEdge.None;
+    }
+}");
     }
 }
