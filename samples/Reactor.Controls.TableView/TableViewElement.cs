@@ -61,6 +61,9 @@ public sealed record TableViewElement : Element
     /// <summary>Name of the child-collection property on each hierarchical node (e.g. "Children").</summary>
     public string? HierarchicalChildrenPath { get; init; }
 
+    /// <summary>When hierarchical, expand the root nodes (first level) by default after binding.</summary>
+    public bool ExpandFirstLevel { get; init; }
+
     /// <summary>Minimum layout width of the hosted control.</summary>
     public double MinWidth { get; init; } = 520;
 

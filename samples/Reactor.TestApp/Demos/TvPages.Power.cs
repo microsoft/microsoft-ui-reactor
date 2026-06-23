@@ -371,7 +371,7 @@ class TvVirtualizationPage : Component
 
         return TvSample.Page("Virtualization",
             "Switch the source mode and dataset size. Scroll fast — memory stays flat because only the viewport is realized.",
-            table, options);
+            table, options, tableHeight: 520);
     }
 }
 
@@ -582,7 +582,7 @@ class TvPerformancePage : Component
 
         return TvSample.Page("Performance",
             "Click each Run button to time that operation; the readout shows elapsed milliseconds. Run a scenario twice and use the second number — the first can include JIT warmup.",
-            table, options);
+            table, options, tableHeight: 520);
     }
 }
 

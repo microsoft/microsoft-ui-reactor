@@ -89,6 +89,7 @@ class TvShowcasePage : Component
             {
                 HierarchicalItems = _roots,
                 HierarchicalChildrenPath = nameof(LivePerson.Children),
+                ExpandFirstLevel = true,
                 CanResizeColumns = true,
                 Setters = setters,
             };

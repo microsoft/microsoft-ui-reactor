@@ -205,6 +205,15 @@ public sealed class TableViewHandler : IElementHandler<TableViewElement, WinUITa
                 tv.HierarchicalChildrenPropertyName = el.HierarchicalChildrenPath;
             tv.ItemsSource = null;
             tv.HierarchicalItemsSource = el.HierarchicalItems;
+            if (el.ExpandFirstLevel)
+            {
+                // Expand the roots once the tree is realized (ExpandItem before the rows exist is a no-op).
+                var roots = el.HierarchicalItems;
+                tv.DispatcherQueue?.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+                {
+                    try { foreach (var item in roots) tv.ExpandItem(item); } catch { /* best-effort */ }
+                });
+            }
             return;
         }
         tv.HierarchicalItemsSource = null;

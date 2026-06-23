@@ -215,6 +215,7 @@ class TvHierarchyPage : Component
             CanResizeColumns = true,
             HierarchicalItems = _roots,
             HierarchicalChildrenPath = nameof(LivePerson.Children),
+            ExpandFirstLevel = true,
             OnControlReady = tv =>
             {
                 _tv = tv;
@@ -363,6 +364,7 @@ class TvGridLinesPage : Component
             {
                 HierarchicalItems = _roots,
                 HierarchicalChildrenPath = nameof(LivePerson.Children),
+                ExpandFirstLevel = true,
                 SelectionMode = TVSel.Single,
                 GridLinesVisibility = grid,
                 Setters = setters,

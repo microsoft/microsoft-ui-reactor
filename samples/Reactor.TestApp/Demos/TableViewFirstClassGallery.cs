@@ -181,23 +181,25 @@ static class TvMeta
 // ── Shared SamplePresenter-style page chrome ─────────────────────────────────────────────────────
 static class TvSample
 {
-    public static Element Page(string tag, string tryIt, TableViewElement table, Element? options = null, Element? extraInfo = null)
+    public static Element Page(string tag, string tryIt, TableViewElement table, Element? options = null, Element? extraInfo = null, double? tableHeight = null)
     {
         var (header, desc) = TvMeta.Of(tag);
         var headItems = new List<Element> { Heading(header), TextBlock(desc), InfoBar("Try it", tryIt) };
         if (extraInfo != null) headItems.Add(extraInfo);
         var head = VStack(12, headItems.ToArray());
 
-        // Stretch the table to fill the available vertical space (matches the reference SamplePresenter,
-        // whose example row stretches with MinHeight 320). The options rail scrolls independently.
-        var filled = table with { Stretch = true };
+        // The whole page scrolls (like the reference SamplePresenter's ScrollViewer). By default the table
+        // is content-height (Stretch resolves to its content inside the vertical scroll), so it grows with
+        // its rows and never leaves dead space below a short table. Data-heavy pages (virtualization /
+        // performance) pass an explicit tableHeight so the table stays a fixed, virtualizing viewport.
+        var tbl = tableHeight is { } h ? table with { Stretch = false, Height = h } : table with { Stretch = true };
         Element body = options is null
-            ? filled.Flex(grow: 1)
+            ? tbl.Flex(grow: 1)
             : HStack(16,
-                filled.Flex(grow: 1),
-                ScrollView(Card(VStack(12, options))).Width(320).VAlign(Microsoft.UI.Xaml.VerticalAlignment.Stretch));
+                tbl.Flex(grow: 1),
+                Card(VStack(12, options)).Width(320).VAlign(Microsoft.UI.Xaml.VerticalAlignment.Top));
 
-        return VStack(16, head, body.Flex(grow: 1)).Padding(12).VAlign(Microsoft.UI.Xaml.VerticalAlignment.Stretch);
+        return ScrollView(VStack(16, head, body)).Padding(12);
     }
 
     public static Element Group(string header, Element control) => VStack(6, SubHeading(header), control);
