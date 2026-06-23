@@ -86,7 +86,10 @@
   </ItemGroup>
   <ItemGroup Condition="'$(IncludeTableView)' != 'true'">
     <Compile Remove="Demos\TableViewFirstClassGallery.cs" />
-    <Compile Remove="Demos\TableViewGalleryPages.cs" />
+    <Compile Remove="Demos\TvPages.QuickStart.cs" />
+    <Compile Remove="Demos\TvPages.Columns.cs" />
+    <Compile Remove="Demos\TvPages.Rows.cs" />
+    <Compile Remove="Demos\TvPages.Power.cs" />
     <Compile Remove="Demos\TableViewSampleData.cs" />
     <Compile Remove="Demos\TableViewDemo.cs" />
     <Compile Remove="GlobalUsings.TableView.cs" />

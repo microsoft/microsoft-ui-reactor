@@ -83,6 +83,13 @@ public sealed record TableViewElement : Element
     /// <summary>Raised when the native control's selection changes (added/removed items).</summary>
     public Action<TableViewSelectionChangedEventArgs>? OnSelectionChanged { get; init; }
 
+    /// <summary>
+    /// Invoked once with the live native control after its template is applied (on Loaded). Lets a
+    /// page capture the instance to drive imperative APIs (SortByColumn, SelectAll, AutoSizeColumn,
+    /// scrolling, clipboard) and subscribe to events (Sorted/Filtered/...) for live readouts.
+    /// </summary>
+    public Action<WinUITableView>? OnControlReady { get; init; }
+
     /// <summary>Raw control setters applied after typed properties (escape hatch).</summary>
     public Action<WinUITableView>[] Setters { get; init; } = Array.Empty<Action<WinUITableView>>();
 

@@ -93,41 +93,41 @@ class TableViewFirstClassGallery : Component
     static Element Route(string tag) => tag switch
     {
         "Home" => TvDisplayPages.Home(),
+        "About" => TvDisplayPages.About(),
         "Showcase" => Component<TvShowcasePage>(),
         "Selection" => Component<TvSelectionPage>(),
         "CellSelection" => Component<TvCellSelectionPage>(),
-        "Sort" => TvDisplayPages.Sort(),
-        "Filter" => TvDisplayPages.Filter(),
-        "InlineEdit" => TvDisplayPages.InlineEdit(),
-        "KeyboardNav" => TvDisplayPages.KeyboardNav(),
+        "Sort" => Component<TvSortPage>(),
+        "Filter" => Component<TvFilterPage>(),
+        "InlineEdit" => Component<TvInlineEditPage>(),
+        "KeyboardNav" => Component<TvKeyboardNavPage>(),
         "ColumnResize" => Component<TvColumnResizePage>(),
-        "ColumnReorder" => TvDisplayPages.ColumnReorder(),
-        "ColumnReorderGesture" => TvDisplayPages.ColumnReorderGesture(),
+        "ColumnReorder" => Component<TvColumnReorderPage>(),
+        "ColumnReorderGesture" => Component<TvColumnReorderGesturePage>(),
         "DynamicColumns" => Component<TvDynamicColumnsPage>(),
-        "StickyHeaders" => TvDisplayPages.StickyHeaders(),
+        "StickyHeaders" => Component<TvStickyHeadersPage>(),
         "HeadersVisibility" => Component<TvHeadersPage>(),
         "FrozenColumns" => Component<TvFrozenLeadingPage>(),
         "FrozenTrailingColumns" => Component<TvFrozenTrailingPage>(),
-        "RowReorder" => TvDisplayPages.RowReorder(),
-        "Groups" => TvDisplayPages.Groups(),
-        "Hierarchy" => TvDisplayPages.Hierarchy(),
+        "RowReorder" => Component<TvRowReorderPage>(),
+        "Groups" => Component<TvGroupsPage>(),
+        "Hierarchy" => Component<TvHierarchyPage>(),
         "RowColors" => Component<TvRowColorsPage>(),
         "GridLines" => Component<TvGridLinesPage>(),
-        "RowTemplate" => TvDisplayPages.RowTemplate(),
-        "RowDetails" => TvDisplayPages.RowDetails(),
-        "MixedControls" => TvDisplayPages.MixedControls(),
-        "Marquee" => TvDisplayPages.Marquee(),
+        "RowTemplate" => Component<TvRowTemplatePage>(),
+        "RowDetails" => Component<TvRowDetailsPage>(),
+        "MixedControls" => Component<TvMixedControlsPage>(),
+        "Marquee" => Component<TvMarqueePage>(),
         "ConditionalStyling" => Component<TvConditionalStylingPage>(),
         "CellStyling" => Component<TvCellStylingPage>(),
-        "AdvancedFilter" => TvDisplayPages.AdvancedFilter(),
-        "Clipboard" => TvDisplayPages.Clipboard(),
-        "Layout" => TvDisplayPages.Layout(),
+        "AdvancedFilter" => Component<TvAdvancedFilterPage>(),
+        "Clipboard" => Component<TvClipboardPage>(),
+        "Layout" => Component<TvLayoutPage>(),
         "RTLPlayground" => Component<TvRtlPage>(),
         "Virtualization" => Component<TvVirtualizationPage>(),
         "Pagination" => Component<TvPaginationPage>(),
         "DataExport" => Component<TvDataExportPage>(),
         "Performance" => Component<TvPerformancePage>(),
-        "About" => TvDisplayPages.About(),
         _ => TvDisplayPages.Home(),
     };
 }
@@ -200,9 +200,77 @@ static class TvSample
 
     public static Element Group(string header, Element control) => VStack(6, SubHeading(header), control);
 
+    /// <summary>A live readout row: a secondary label and a bold value (mirrors the reference Status panels).</summary>
+    public static Element Readout(string label, string value) =>
+        HStack(8, Caption(label).Flex(grow: 1), TextBlock(value));
+
+    /// <summary>A titled options section: a SubHeading, an optional caption, then the controls.</summary>
+    public static Element Section(string header, string? caption, params Element[] children)
+    {
+        var items = new List<Element> { SubHeading(header) };
+        if (caption != null) items.Add(Caption(caption));
+        items.AddRange(children);
+        return VStack(8, items.ToArray());
+    }
+
     // A note shown on pages whose behaviour is provided by the native control's built-in gestures
     // (so there is no extra Options panel to drive) or that need control surface not yet exposed
     // by the consumable wrapper.
     public static Element NativeNote(string message) =>
         InfoBar("Native control feature", message);
+}
+
+// ── Shared helpers used across the gallery page section files ────────────────────────────────────
+static class TvFx
+{
+    public static Windows.UI.Color Argb(byte a, byte r, byte g, byte b) => new() { A = a, R = r, G = g, B = b };
+
+    public static Microsoft.UI.Xaml.Media.SolidColorBrush Brush(byte a, byte r, byte g, byte b) => new(Argb(a, r, g, b));
+
+    /// <summary>Marks the last <paramref name="count"/> columns frozen to the trailing edge (post-ApplyColumns setter).</summary>
+    public static Action<Microsoft.UI.Xaml.Controls.TableView> FreezeTrailing(int count) => tv =>
+    {
+        int n = tv.Columns.Count;
+        for (int i = 0; i < n; i++)
+            tv.Columns[i].FrozenEdge = (i >= n - count && count > 0)
+                ? Microsoft.UI.Xaml.Controls.TableViewFrozenEdge.Trailing
+                : Microsoft.UI.Xaml.Controls.TableViewFrozenEdge.None;
+    };
+}
+
+// ── Home + About (no table / options) ─────────────────────────────────────────────────────────────
+static class TvDisplayPages
+{
+    public static Element Home() =>
+        ScrollView(VStack(16,
+            Heading("TableView"),
+            TextBlock("A native WinUI 3 tabular control for data-heavy desktop experiences — typed columns, " +
+                "multi-column sort and filter, inline edit, frozen leading and trailing columns, hierarchical and " +
+                "grouped rows, and two-axis virtualization with built-in keyboard navigation, accessibility, and " +
+                "Excel-style clipboard."),
+            InfoBar("First-class Reactor gallery", "Every page on the left is a pure-C# Reactor (MVU) component that " +
+                "consumes the consumable TableView(items, columns) control — mirroring the native TableViewSamples gallery."),
+            Card(VStack(8,
+                SubHeading("Sections"),
+                TextBlock("\u2022 Quick start — Showcase, Selection, Cell selection, Multi-column sort, Per-column filtering, Inline editing, Keyboard nav"),
+                TextBlock("\u2022 Columns — resize, reorder, dynamic columns, sticky headers, headers visibility, frozen leading / trailing"),
+                TextBlock("\u2022 Rows & cells — reorder, groups, hierarchy, banding, grid lines, row templates / details, mixed controls, marquee"),
+                TextBlock("\u2022 Styling — conditional row + per-cell styling"),
+                TextBlock("\u2022 Power user — advanced filter, clipboard, persisted layout, RTL, virtualization, pagination, data export"))).Padding(16),
+            TableView(People, VibrantColumns(), height: 320) with { CanSortColumns = true, FrozenColumnCount = 1 }
+        )).Padding(4);
+
+    public static Element About()
+    {
+        var (_, desc) = TvMeta.Of("About");
+        return ScrollView(VStack(16,
+            Heading("About"),
+            TextBlock(desc),
+            Card(VStack(8,
+                SubHeading("Native control"),
+                TextBlock("Microsoft.UI.Xaml.Controls.TableView — a separate-binary split control " +
+                          "(Microsoft.UI.Xaml.Controls.Advanced.dll), projected via CsWinRT vs public WinAppSDK 2.0.1."),
+                TextBlock("The Release sample consumes the optimized (fre) binary; Debug consumes the checked (chk) binary."))).Padding(16)
+        )).Padding(4);
+    }
 }

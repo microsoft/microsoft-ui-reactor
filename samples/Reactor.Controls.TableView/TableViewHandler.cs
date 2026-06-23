@@ -80,6 +80,7 @@ public sealed class TableViewHandler : IElementHandler<TableViewElement, WinUITa
                 if (el.SelectedIndex is { } si2)
                     tv.SelectedIndex = si2;
                 try { tv.UpdateLayout(); } catch { }
+                try { el.OnControlReady?.Invoke(tv); } catch { /* page-supplied callback */ }
             }
             catch { /* best-effort realization nudge */ }
         }
