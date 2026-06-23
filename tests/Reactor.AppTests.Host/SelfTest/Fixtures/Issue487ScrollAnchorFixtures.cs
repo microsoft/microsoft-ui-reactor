@@ -140,8 +140,18 @@ internal static class Issue487ScrollAnchorFixtures
         // shrank below the parked content AND the host clamped the offset down. If
         // this is ever false the red-then-green fixtures would be silently vacuous
         // (no clamp ⇒ nothing for the anchor to restore), so the callers assert it.
-        bool clampObserved =
-            getScrollable() < beforeHeight - 0.5 && getOffset() < beforeOffset - 0.5;
+        //
+        // Wait for the clamp to manifest rather than sampling after a single Render:
+        // the classic ScrollViewer clamps synchronously inside the first layout pass
+        // (so this returns on pass 1), but the modern ScrollView is
+        // InteractionTracker-backed and re-clamps its position on a compositor pass
+        // that can land a pass or two after the measure invalidation — headless CI
+        // runners surface that lag. Polling until the clamp is observed makes the
+        // detection deterministic across both scroll hosts and environments.
+        Func<bool> clampSignature =
+            () => getScrollable() < beforeHeight - 0.5 && getOffset() < beforeOffset - 0.5;
+        await Harness.WaitFor(clampSignature, maxPasses: 30, perPassMs: 12);
+        bool clampObserved = clampSignature();
 
         for (int i = 0; i < detachCount; i++)
             inlineChildren[i].Height = savedHeights[i];
