@@ -54,4 +54,32 @@ static class TableViewSampleData
         new("Role", nameof(Person.Role), Width: 170),
         new("Email", nameof(Person.Email)),
     };
+
+    private static readonly string[] s_first =
+        { "Ava","Noah","Mia","Ethan","Sophia","Liam","Olivia","James","Emma","Lucas","Zoe","Henry","Aria","Leo","Nora","Owen","Isla","Max","Ruby","Eli" };
+    private static readonly string[] s_last =
+        { "Chen","Patel","Garcia","Nguyen","Jones","Wright","Smith","Lopez","Brown","Taylor","Hernandez","Wilson","Kim","Singh","Rossi","Khan","Davis","Cohen","Ali","Park" };
+    private static readonly (string Dept, string Role)[] s_deptRole =
+    {
+        ("Engineering","Software Engineer"), ("Design","Product Designer"), ("Product","Product Manager"),
+        ("Sales","Account Executive"), ("Marketing","Brand Manager"), ("Operations","Ops Manager"),
+        ("Finance","Financial Analyst"), ("HR","Recruiter"),
+    };
+
+    /// <summary>Synthesizes <paramref name="n"/> deterministic rows (for pagination / perf / virtualization).</summary>
+    public static List<Person> ManyPeople(int n)
+    {
+        var list = new List<Person>(n);
+        for (int i = 0; i < n; i++)
+        {
+            var first = s_first[i % s_first.Length];
+            var last = s_last[(i / s_first.Length) % s_last.Length];
+            var (dept, role) = s_deptRole[i % s_deptRole.Length];
+            var join = new DateTimeOffset(2016, 1, 1, 0, 0, 0, TimeSpan.Zero).AddDays((i * 37) % 3200);
+            double salary = 60000 + (i * 1373) % 180000;
+            list.Add(new Person(first, $"{last}", $"{first.ToLowerInvariant()}.{last.ToLowerInvariant()}{i}@contoso.com",
+                dept, role, join, salary, i % 4 != 0));
+        }
+        return list;
+    }
 }

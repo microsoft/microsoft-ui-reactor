@@ -1,18 +1,28 @@
 using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Linq;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Reactor.Controls;
 using static Microsoft.UI.Reactor.Factories;
 using static Reactor.Controls.Factories;
 using static Reactor.TestApp.TableViewGallery.TableViewSampleData;
+using WinTV = Microsoft.UI.Xaml.Controls.TableView;
 using TVGrid = Microsoft.UI.Xaml.Controls.TableViewGridLinesVisibility;
 using TVHeaders = Microsoft.UI.Xaml.Controls.TableViewHeadersVisibility;
 using TVSel = Microsoft.UI.Xaml.Controls.TableViewSelectionMode;
+using TVUnit = Microsoft.UI.Xaml.Controls.TableViewSelectionUnit;
+using TVFrozenEdge = Microsoft.UI.Xaml.Controls.TableViewFrozenEdge;
 
-// FIRST-CLASS Reactor TableView gallery, styled to mimic the native TableViewSamples gallery:
-// a NavigationView shell with grouped sections, and per-page "SamplePresenter" chrome — title,
-// description, a "Try it" callout, an interactive Options panel, and the table — all pure-C# Reactor
-// (MVU) consuming the consumable TableView(items, columns) control (no XamlHostElement interop).
+namespace Reactor.TestApp.TableViewGallery;
+
+// FIRST-CLASS Reactor TableView gallery, built to mirror the real TableViewSamples reference gallery:
+// the same NavigationView shell, the same grouped sections + page set (Quick start / Columns /
+// Rows & cells / Styling / Power user + Performance / About), and the same per-page SamplePresenter
+// chrome (heading + description + a "Try it" InfoBar + an interactive Options panel + the live table) —
+// all pure-C# Reactor (MVU) consuming the consumable TableView(items, columns) control. No XamlHostElement.
 class TableViewFirstClassGallery : Component
 {
     public override Element Render()
@@ -22,20 +32,56 @@ class TableViewFirstClassGallery : Component
         var menu = new[]
         {
             NavItem("Home", "Home", "Home"),
+
             NavItemHeader("Quick start"),
             NavItem("Showcase", "ViewAll", "Showcase"),
-            NavItem("Selection", "SelectAll", "Selection"),
-            NavItem("Sort + filter", "Sort", "Sort"),
+            NavItem("Selection", "\uE73A", "Selection"),
+            NavItem("Cell selection", "\uF0E2", "CellSelection"),
+            NavItem("Multi-column sort", "\uE8CB", "Sort"),
+            NavItem("Per-column filtering", "\uE16E", "Filter"),
+            NavItem("Inline editing", "\uE70F", "InlineEdit"),
+            NavItem("Keyboard nav + a11y", "\uE765", "KeyboardNav"),
+
             NavItemHeader("Columns"),
-            NavItem("Frozen columns", "Pin", "Frozen"),
-            NavItem("Headers", "ViewAll", "Headers"),
+            NavItem("Column resize", "\uE740", "ColumnResize"),
+            NavItem("Column reorder + autosize", "\uE8AB", "ColumnReorder"),
+            NavItem("Column drag-reorder gesture", "\uE8B0", "ColumnReorderGesture"),
+            NavItem("Dynamic columns", "\uE8B7", "DynamicColumns"),
+            NavItem("Sticky headers", "\uE73E", "StickyHeaders"),
+            NavItem("Headers visibility", "\uE8A7", "HeadersVisibility"),
+            NavItem("Frozen columns", "\uE840", "FrozenColumns"),
+            NavItem("Frozen trailing columns", "\uE840", "FrozenTrailingColumns"),
+
             NavItemHeader("Rows & cells"),
-            NavItem("Grid lines", "List", "GridLines"),
-            NavItemHeader("About"),
+            NavItem("Row drag-and-drop reorder", "\uE8A6", "RowReorder"),
+            NavItem("Grouped rows", "\uE8FD", "Groups"),
+            NavItem("N-level hierarchy", "\uE8A2", "Hierarchy"),
+            NavItem("Row colors (banding)", "Highlight", "RowColors"),
+            NavItem("Grid lines visibility", "\uF0E2", "GridLines"),
+            NavItem("Custom row templates", "\uE8B5", "RowTemplate"),
+            NavItem("Row details template", "\uE7C3", "RowDetails"),
+            NavItem("Mixed controls in cells", "\uE950", "MixedControls"),
+            NavItem("Marquee selection", "\uE8FF", "Marquee"),
+
+            NavItemHeader("Styling"),
+            NavItem("Conditional row styling", "\uE790", "ConditionalStyling"),
+            NavItem("Per-cell conditional styling", "\uE7C8", "CellStyling"),
+
+            NavItemHeader("Power user"),
+            NavItem("Advanced filter UI", "\uE71C", "AdvancedFilter"),
+            NavItem("Clipboard / Excel-style", "\uE8C8", "Clipboard"),
+            NavItem("Persisted layout state", "\uE74E", "Layout"),
+            NavItem("Right-to-left layout", "\uE7AF", "RTLPlayground"),
+            NavItem("Virtualization", "\uE8C6", "Virtualization"),
+            NavItem("Pagination", "\uE8FD", "Pagination"),
+            NavItem("Data export", "\uE74E", "DataExport"),
+
+            NavItemHeader("More"),
+            NavItem("Performance", "Clock", "Performance"),
             NavItem("About", "Help", "About"),
         };
 
-        return NavigationView(menu, content: Content(tag)) with
+        return NavigationView(menu, content: Route(tag)) with
         {
             SelectedTag = tag,
             OnSelectedTagChanged = t => { if (t != null) setTag(t); },
@@ -44,237 +90,119 @@ class TableViewFirstClassGallery : Component
         };
     }
 
-    static Element Content(string tag) => tag switch
+    static Element Route(string tag) => tag switch
     {
-        "Home" => Component<TvHomePage>(),
+        "Home" => TvDisplayPages.Home(),
         "Showcase" => Component<TvShowcasePage>(),
         "Selection" => Component<TvSelectionPage>(),
-        "Sort" => Component<TvSortPage>(),
-        "Frozen" => Component<TvFrozenPage>(),
-        "Headers" => Component<TvHeadersPage>(),
+        "CellSelection" => Component<TvCellSelectionPage>(),
+        "Sort" => TvDisplayPages.Sort(),
+        "Filter" => TvDisplayPages.Filter(),
+        "InlineEdit" => TvDisplayPages.InlineEdit(),
+        "KeyboardNav" => TvDisplayPages.KeyboardNav(),
+        "ColumnResize" => Component<TvColumnResizePage>(),
+        "ColumnReorder" => TvDisplayPages.ColumnReorder(),
+        "ColumnReorderGesture" => TvDisplayPages.ColumnReorderGesture(),
+        "DynamicColumns" => Component<TvDynamicColumnsPage>(),
+        "StickyHeaders" => TvDisplayPages.StickyHeaders(),
+        "HeadersVisibility" => Component<TvHeadersPage>(),
+        "FrozenColumns" => Component<TvFrozenLeadingPage>(),
+        "FrozenTrailingColumns" => Component<TvFrozenTrailingPage>(),
+        "RowReorder" => TvDisplayPages.RowReorder(),
+        "Groups" => TvDisplayPages.Groups(),
+        "Hierarchy" => TvDisplayPages.Hierarchy(),
+        "RowColors" => Component<TvRowColorsPage>(),
         "GridLines" => Component<TvGridLinesPage>(),
-        "About" => Component<TvAboutPage>(),
-        _ => Component<TvShowcasePage>(),
+        "RowTemplate" => TvDisplayPages.RowTemplate(),
+        "RowDetails" => TvDisplayPages.RowDetails(),
+        "MixedControls" => TvDisplayPages.MixedControls(),
+        "Marquee" => TvDisplayPages.Marquee(),
+        "ConditionalStyling" => Component<TvConditionalStylingPage>(),
+        "CellStyling" => Component<TvCellStylingPage>(),
+        "AdvancedFilter" => TvDisplayPages.AdvancedFilter(),
+        "Clipboard" => TvDisplayPages.Clipboard(),
+        "Layout" => TvDisplayPages.Layout(),
+        "RTLPlayground" => Component<TvRtlPage>(),
+        "Virtualization" => Component<TvVirtualizationPage>(),
+        "Pagination" => Component<TvPaginationPage>(),
+        "DataExport" => Component<TvDataExportPage>(),
+        "Performance" => Component<TvPerformancePage>(),
+        "About" => TvDisplayPages.About(),
+        _ => TvDisplayPages.Home(),
     };
 }
 
+// ── Reference metadata (header + description verbatim from the TableViewSamples pages) ───────────────
+static class TvMeta
+{
+    public static readonly Dictionary<string, (string Header, string Desc)> Pages = new()
+    {
+        ["Showcase"] = ("Showcase", "A rich people-directory dashboard composing the full TableView feature set: vibrant data-bound Department pills and stoplight Salary tints, status chips, plus sort, filter, resize, reorder, a frozen leading column, grid lines, and an optional selection gutter."),
+        ["Selection"] = ("Selection", "Switch SelectionMode between None, Single, Multiple, and Extended, then watch the selection update as you select rows. Toggle the leading selection gutter (checkbox column) on or off."),
+        ["CellSelection"] = ("Cell selection", "Switch SelectionUnit between Row, Cell, and CellOrRow. In Cell / CellOrRow, clicking selects an individual cell; Ctrl+click toggles a cell, and Shift+click selects a rectangular range."),
+        ["Sort"] = ("Multi-column sort", "Click a header to sort; click again to reverse, and Ctrl-click another header to layer a secondary sort. The chevron shows direction and the badge shows priority order (1, 2, 3…) when 2+ columns are sorted."),
+        ["Filter"] = ("Per-column filtering", "Per-column filtering. Open a column's header funnel and choose values to narrow the rows; the funnel marks which columns are filtered, and clearing it resets them."),
+        ["InlineEdit"] = ("Inline editing", "Edit cell values in place: double-click or F2 opens the editor, Enter commits, Esc discards. Text columns are editable unless marked read-only."),
+        ["KeyboardNav"] = ("Keyboard navigation + accessibility", "Arrow keys, Tab, Home / End, and Page Up / Page Down move focus across cells. The grid exposes its structure to UI Automation so Narrator can announce rows and the table's dimensions."),
+        ["ColumnResize"] = ("Column resize", "Drag a column's right edge to resize it interactively, or toggle resizing on and off. Each column keeps its own width."),
+        ["ColumnReorder"] = ("Column reorder + autosize (programmatic)", "Columns keep their own width as they move, so reordering never disturbs your sizing. Drag a header sideways to reorder, or enable reordering below."),
+        ["ColumnReorderGesture"] = ("Column drag-reorder gesture", "Drag any column header sideways to reorder it; a drop indicator shows the target slot. CanUserReorderColumns toggles the gesture globally."),
+        ["DynamicColumns"] = ("Dynamic columns", "Show or hide columns at runtime. Toggle a column below and it appears or disappears instantly while the rest keep their place and width."),
+        ["StickyHeaders"] = ("Sticky headers", "The column headers stay pinned at the top of the table as you scroll down — the rows scroll under them. A wide employee roster makes the effect visible."),
+        ["HeadersVisibility"] = ("Headers visibility", "Show or hide the table's column headers and the row selection gutter with HeadersVisibility. Switch between All, Column, Row, and None to see each surface appear and disappear."),
+        ["FrozenColumns"] = ("Frozen leading columns", "Pin one or more columns to the leading edge: as you scroll horizontally, the leading-frozen columns stay visible while the middle columns scroll under them."),
+        ["FrozenTrailingColumns"] = ("Frozen trailing columns", "Pin one or more columns to the trailing edge: as the user scrolls horizontally, the trailing-frozen columns stay visible — useful for keeping a 'Total' or 'Status' column always in view."),
+        ["RowReorder"] = ("Row drag-and-drop reorder", "Drag any row by its cells to move it to a new position. CanUserReorderRows enables the gesture, and the RowReordered event reports the (from, to) index pair."),
+        ["Groups"] = ("Grouped rows", "Grouped data shape, group headers, and bulk expand / collapse — here the directory is grouped by Department."),
+        ["Hierarchy"] = ("N-level hierarchy", "Tree-grid mode: each row exposes its child rows through a named children property, and an expand chevron in the first column lets the user drill in. Supports arbitrary nesting depth."),
+        ["RowColors"] = ("Row colors (banding)", "Opt in to per-row brushes: RowBackground / AlternatingRowBackground paint row backgrounds. Both default to null, so rows stay unbanded until you set them — set both to enable zebra striping."),
+        ["GridLines"] = ("Grid lines visibility", "GridLinesVisibility — None / Horizontal / Vertical / All — controls per-row bottom borders and per-cell right borders for WPF DataGrid parity."),
+        ["RowTemplate"] = ("Custom row templates", "Replace the default per-column cells with a single DataTemplate that renders the whole row — useful for card-style rosters or two-line compact lists. Selection, keyboard nav, and the header row keep working."),
+        ["RowDetails"] = ("Row details template", "Per-row expansion area shown below the row body. RowDetailsTemplate sets the visual, RowDetailsVisibilityMode picks Collapsed / Visible / VisibleWhenSelected."),
+        ["MixedControls"] = ("Mixed controls in cells", "Host non-text controls — DatePicker, ComboBox, CheckBox — directly inside cells via TableViewTemplateColumn. TwoWay bindings push the user's edits straight back into the row's data object."),
+        ["Marquee"] = ("Drag-selection rectangle", "Press and drag in the table's empty space to draw a rectangular marquee. On release, every row the rectangle touches is selected, replacing the current selection."),
+        ["ConditionalStyling"] = ("Conditional row styling", "Apply a different row Style based on the data — tint by department, by salary tier, or call out inactive employees. Rows re-tint as they scroll into view."),
+        ["CellStyling"] = ("Per-cell conditional styling", "Tint individual cells based on the cell's value. The vibrant preset resembles a sales-dashboard look with saturated category pills, stoplight Salary, and a status chip on Active."),
+        ["AdvancedFilter"] = ("Advanced filter UI", "The funnel button on each column header opens a flyout where users build typed predicates (Contains, Equals, IsEmpty, …) per column. Narrow the operator vocabulary per column or suppress the funnel entirely."),
+        ["Clipboard"] = ("Clipboard / Excel-style operations", "Ctrl+C / Ctrl+X / Ctrl+V over cell ranges using Excel-compatible TSV (so paste into Excel just works), plus Ctrl+D fill-down."),
+        ["Layout"] = ("Persisted layout state", "Capture the table's current sort, column order, and frozen-edge configuration into a single string token, then restore it later — handy for saving per-user view preferences across sessions."),
+        ["RTLPlayground"] = ("Right-to-left layout", "Set FlowDirection on the TableView and the whole layout mirrors: columns flow right-to-left, the resize gripper moves to the visual-left edge of each header, and frozen-leading columns pin to the visual-right."),
+        ["Virtualization"] = ("Row + data virtualization", "Bind tens of thousands of in-memory rows — only the visible viewport is realized, so memory and scroll responsiveness stay flat. Pick a dataset size below."),
+        ["Pagination"] = ("Pagination", "Page through 1,000 records, 50 at a time. Demonstrates driving TableView.ItemsSource from a paged window over a large in-memory list."),
+        ["DataExport"] = ("Data export", "Serialize the rows currently displayed to CSV, TSV (Excel-compatible), or JSON. The exporter walks the columns so it honors column order."),
+        ["Performance"] = ("Performance", "Repeatable timing measurements for common TableView workloads. Click Run to sort / filter a large dataset; the readout shows elapsed wall-clock ms."),
+        ["About"] = ("About", "This first-class Reactor TableView gallery mirrors the native TableViewSamples gallery — same NavigationView shell, sections, and pages — built entirely in C# with Microsoft.UI.Reactor (MVU over WinUI 3), consuming the consumable Reactor.Controls.TableView control. No XamlHostElement interop."),
+    };
+
+    public static (string Header, string Desc) Of(string tag) =>
+        Pages.TryGetValue(tag, out var v) ? v : (tag, "");
+}
+
 // ── Shared SamplePresenter-style page chrome ─────────────────────────────────────────────────────
-static class TvPage
+static class TvSample
 {
-    public static Element Render(string title, string description, string tryIt, Element table, Element? options = null) =>
-        ScrollView(VStack(16,
-            Heading(title),
-            TextBlock(description),
-            InfoBar("Try it", tryIt),
-            options is null
-                ? table
-                : HStack(16, table.Flex(grow: 1), Card(VStack(10, options)).Width(300).VAlign(Microsoft.UI.Xaml.VerticalAlignment.Top))
-        )).Padding(4);
-
-    public static Element OptionGroup(string header, Element control) =>
-        VStack(6, SubHeading(header), control);
-}
-
-// ── Pages ────────────────────────────────────────────────────────────────────────────────────────
-class TvHomePage : Component
-{
-    public override Element Render() =>
-        ScrollView(VStack(14,
-            Heading("TableView"),
-            TextBlock(
-                "A native WinUI 3 tabular control for data-heavy desktop experiences — typed columns, " +
-                "multi-column sort and filter, frozen columns, grid lines, selection, and colored cell " +
-                "visuals. This gallery is the first-class Reactor (MVU) rebuild: every page consumes the " +
-                "consumable TableView(items, columns) control directly in pure C# — no XamlHostElement interop."),
-            Card(VStack(8,
-                SubHeading("What's shown"),
-                TextBlock("\u2022 Showcase — colored Department pills, Status chips, stoplight Salary tints (template columns)"),
-                TextBlock("\u2022 Selection — row selection modes + the leading selection gutter"),
-                TextBlock("\u2022 Sort + filter — sortable / filterable columns via header funnels"),
-                TextBlock("\u2022 Frozen columns — pin leading columns during horizontal scroll"),
-                TextBlock("\u2022 Headers + Grid lines — visibility toggles, applied live")
-            )).Padding(16)
-        )).Padding(4);
-}
-
-class TvShowcasePage : Component
-{
-    public override Element Render()
+    public static Element Page(string tag, string tryIt, Element table, Element? options = null, Element? extraInfo = null)
     {
-        var (vibrant, setVibrant) = UseState(true);
-        var (grid, setGrid) = UseState(true);
+        var (header, desc) = TvMeta.Of(tag);
+        var head = VStack(16,
+            Heading(header),
+            TextBlock(desc),
+            InfoBar("Try it", tryIt));
+        if (extraInfo != null)
+            head = VStack(16, head, extraInfo);
 
-        var table = TableView(People, vibrant ? VibrantColumns() : TextColumns(), height: 460) with
-        {
-            GridLinesVisibility = grid ? TVGrid.Horizontal : TVGrid.None,
-            CanSortColumns = true,
-            CanResizeColumns = true,
-            FrozenColumnCount = 1,
-        };
+        Element body = options is null
+            ? table
+            : HStack(16, table.Flex(grow: 1), Card(VStack(12, options)).Width(300).VAlign(Microsoft.UI.Xaml.VerticalAlignment.Top));
 
-        var options = VStack(14,
-            TvPage.OptionGroup("Vibrant cells",
-                ToggleSwitch(vibrant, v => setVibrant(v), onContent: "Pills / chips / tints", offContent: "Plain text")),
-            TvPage.OptionGroup("Grid lines",
-                ToggleSwitch(grid, v => setGrid(v), onContent: "Horizontal", offContent: "None")));
-
-        return TvPage.Render(
-            "Showcase",
-            "A people-directory dashboard composing the full feature set: colored Department pills, " +
-            "Active / Inactive Status chips, and stoplight Salary tints (template columns), a frozen first " +
-            "column, and sortable + resizable columns.",
-            "Toggle Vibrant cells to switch the Department / Status / Salary columns between colored template " +
-            "cells and plain text. Click a header to sort, drag a header edge to resize.",
-            table, options);
+        return ScrollView(VStack(16, head, body)).Padding(4);
     }
-}
 
-class TvSelectionPage : Component
-{
-    static readonly string[] Modes = { "None", "Single", "Multiple", "Extended" };
+    public static Element Group(string header, Element control) => VStack(6, SubHeading(header), control);
 
-    public override Element Render()
-    {
-        var (mode, setMode) = UseState(2); // Multiple
-        var (gutter, setGutter) = UseState(true);
-
-        var sel = mode switch { 0 => TVSel.None, 1 => TVSel.Single, 3 => TVSel.Extended, _ => TVSel.Multiple };
-        var table = TableView(People, TextColumns(), height: 460) with
-        {
-            SelectionMode = sel,
-            IsSelectionGutterVisible = gutter,
-        };
-
-        var options = VStack(14,
-            TvPage.OptionGroup("Selection mode", RadioButtons(Modes, mode, setMode)),
-            TvPage.OptionGroup("Selection gutter",
-                ToggleSwitch(gutter, v => setGutter(v), onContent: "Visible", offContent: "Hidden")));
-
-        return TvPage.Render(
-            "Selection",
-            "Choose how rows are selected — none, single, multiple, or extended (Shift / Ctrl) — and show or " +
-            "hide the leading selection gutter (the checkbox column).",
-            "Pick a selection mode, then click rows (and the header checkbox) to select. Toggle the gutter " +
-            "to show / hide the leading checkbox column.",
-            table, options);
-    }
-}
-
-class TvSortPage : Component
-{
-    public override Element Render()
-    {
-        var (sort, setSort) = UseState(true);
-        var (filter, setFilter) = UseState(true);
-
-        var table = TableView(People, TextColumns(), height: 460) with
-        {
-            CanSortColumns = sort,
-            CanFilterColumns = filter,
-            CanResizeColumns = true,
-        };
-
-        var options = VStack(14,
-            TvPage.OptionGroup("Sorting",
-                ToggleSwitch(sort, v => setSort(v), onContent: "Click headers to sort", offContent: "Off")),
-            TvPage.OptionGroup("Filtering",
-                ToggleSwitch(filter, v => setFilter(v), onContent: "Header funnels", offContent: "Off")));
-
-        return TvPage.Render(
-            "Sort + filter",
-            "Sortable and filterable columns. Clicking a header cycles ascending / descending / none; the " +
-            "header funnel opens a per-column filter.",
-            "Click a column header to sort by it. Click the funnel icon to filter that column. Toggle either " +
-            "capability off in the options.",
-            table, options);
-    }
-}
-
-class TvFrozenPage : Component
-{
-    public override Element Render()
-    {
-        var (count, setCount) = UseState(2);
-
-        var table = TableView(People, TextColumns(), height: 460) with
-        {
-            FrozenColumnCount = count,
-            CanResizeColumns = true,
-        };
-
-        var options = VStack(10,
-            SubHeading($"Frozen columns: {count}"),
-            Slider((double)count, 0, 4, v => setCount((int)Math.Round(v))),
-            TextBlock("The first N columns stay pinned to the leading edge during horizontal scroll."));
-
-        return TvPage.Render(
-            "Frozen columns",
-            "Pin the leading columns so they stay visible while the rest of the table scrolls horizontally.",
-            "Set the frozen count, then scroll the table horizontally — the first N columns stay put.",
-            table, options);
-    }
-}
-
-class TvHeadersPage : Component
-{
-    static readonly string[] Vis = { "None", "Column", "Row", "All" };
-
-    public override Element Render()
-    {
-        var (idx, setIdx) = UseState(1); // Column
-
-        var hv = idx switch { 0 => TVHeaders.None, 2 => TVHeaders.Row, 3 => TVHeaders.All, _ => TVHeaders.Column };
-        var table = TableView(People, TextColumns(), height: 460) with
-        {
-            HeadersVisibility = hv,
-            GridLinesVisibility = TVGrid.Horizontal,
-        };
-
-        var options = TvPage.OptionGroup("Headers visibility", RadioButtons(Vis, idx, setIdx));
-
-        return TvPage.Render(
-            "Headers",
-            "Control which headers are shown — column headers, row headers, both, or none.",
-            "Switch the headers visibility and watch the column-header band appear / disappear live.",
-            table, options);
-    }
-}
-
-class TvGridLinesPage : Component
-{
-    static readonly string[] Vis = { "None", "Horizontal", "Vertical", "All" };
-
-    public override Element Render()
-    {
-        var (idx, setIdx) = UseState(3); // All
-
-        var gl = idx switch { 0 => TVGrid.None, 1 => TVGrid.Horizontal, 2 => TVGrid.Vertical, _ => TVGrid.All };
-        var table = TableView(People, TextColumns(), height: 460) with { GridLinesVisibility = gl };
-
-        var options = TvPage.OptionGroup("Grid lines", RadioButtons(Vis, idx, setIdx));
-
-        return TvPage.Render(
-            "Grid lines",
-            "Show horizontal grid lines, vertical grid lines, both, or none.",
-            "Pick a grid-lines option and watch the table redraw live.",
-            table, options);
-    }
-}
-
-class TvAboutPage : Component
-{
-    public override Element Render() =>
-        ScrollView(VStack(14,
-            Heading("About"),
-            TextBlock(
-                "This first-class Reactor TableView gallery is built entirely in C# with Microsoft.UI.Reactor " +
-                "(an MVU framework over WinUI 3). Each page is a Reactor component that consumes the consumable " +
-                "Reactor.Controls.TableView control via TableView(items, columns) and reconfigures it reactively " +
-                "from its Options panel — no XAML files, no XamlHostElement interop."),
-            Card(VStack(8,
-                SubHeading("Native control"),
-                TextBlock("Microsoft.UI.Xaml.Controls.TableView — a separate-binary split control " +
-                          "(Microsoft.UI.Xaml.Controls.Advanced.dll), projected via CsWinRT vs public WinAppSDK 2.0.1.")
-            )).Padding(16)
-        )).Padding(4);
+    // A note shown on pages whose behaviour is provided by the native control's built-in gestures
+    // (so there is no extra Options panel to drive) or that need control surface not yet exposed
+    // by the consumable wrapper.
+    public static Element NativeNote(string message) =>
+        InfoBar("Native control feature", message);
 }

@@ -1,8 +1,11 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Core.V1Protocol;
 using Microsoft.UI.Xaml;
@@ -14,6 +17,7 @@ using TableViewColumn = Microsoft.UI.Xaml.Controls.TableViewColumn;
 using TableViewFrozenEdge = Microsoft.UI.Xaml.Controls.TableViewFrozenEdge;
 using GridLength = Microsoft.UI.Xaml.GridLength;
 using TableViewSelectionChangedEventArgs = Microsoft.UI.Xaml.Controls.TableViewSelectionChangedEventArgs;
+using SortDirection = Microsoft.UI.Xaml.Controls.Primitives.SortDirection;
 
 namespace Reactor.Controls;
 
@@ -27,6 +31,20 @@ public sealed class TableViewHandler : IElementHandler<TableViewElement, WinUITa
     /// <summary>The most recently mounted native control (used by the demo's headless capture).</summary>
     public static WinUITableView? LastInstance { get; private set; }
 
+    // Per-control sort/filter reshape state. The native TableView owns sort/filter STATE (the column
+    // SortMemberPath/SortDirection/SortIndex + Filter + header chevrons/funnels) and raises Sorted/Filtered;
+    // the CONSUMER owns the DATA -- it must re-order/-filter the items source itself. We honour that
+    // contract by binding an ObservableCollection "view" and rebuilding it from a master snapshot on each
+    // event (matching the reference TableViewSamples SortPage's Sorted/Filtered re-shape model).
+    private sealed class ShapeState
+    {
+        public List<object> Master = new();
+        public ObservableCollection<object> View = new();
+        public bool Hooked;
+    }
+
+    private static readonly ConditionalWeakTable<WinUITableView, ShapeState> s_shape = new();
+
     /// <summary>Creates/rents the native control, builds columns, binds items + selection.</summary>
     public WinUITableView Mount(MountContext ctx, TableViewElement el)
     {
@@ -38,7 +56,7 @@ public sealed class TableViewHandler : IElementHandler<TableViewElement, WinUITa
         ApplyTableProps(tv, el);
 
         ApplyColumns(tv, el);
-        tv.ItemsSource = el.Items;
+        BindItems(tv, el);
         if (el.SelectedIndex is { } si)
             tv.SelectedIndex = si;
 
@@ -58,9 +76,7 @@ public sealed class TableViewHandler : IElementHandler<TableViewElement, WinUITa
             try
             {
                 ApplyColumns(tv, el);
-                var items = el.Items;
-                tv.ItemsSource = null;
-                tv.ItemsSource = items;
+                BindItems(tv, el);
                 if (el.SelectedIndex is { } si2)
                     tv.SelectedIndex = si2;
                 try { tv.UpdateLayout(); } catch { }
@@ -68,6 +84,8 @@ public sealed class TableViewHandler : IElementHandler<TableViewElement, WinUITa
             catch { /* best-effort realization nudge */ }
         }
         tv.Loaded += OnLoaded;
+
+        HookSortFilter(tv);
 
         // Re-attaches on every render so the latest element's callback fires (echo-safe).
         var bind = ctx.BindFor(tv, el);
@@ -95,7 +113,7 @@ public sealed class TableViewHandler : IElementHandler<TableViewElement, WinUITa
         if (!ColumnsEqual(oldEl.Columns, newEl.Columns) || oldEl.FrozenColumnCount != newEl.FrozenColumnCount)
             ApplyColumns(tv, newEl);
         if (!ReferenceEquals(oldEl.Items, newEl.Items))
-            tv.ItemsSource = newEl.Items;
+            BindItems(tv, newEl);
         if (newEl.SelectedIndex is { } si && oldEl.SelectedIndex != newEl.SelectedIndex)
             tv.SelectedIndex = si;
 
@@ -121,6 +139,11 @@ public sealed class TableViewHandler : IElementHandler<TableViewElement, WinUITa
     {
         tv.ItemsSource = null;
         tv.Columns.Clear();
+        if (s_shape.TryGetValue(tv, out var st))
+        {
+            st.Master.Clear();
+            st.View.Clear();
+        }
         ctx.ReturnControl(tv);
     }
 
@@ -149,12 +172,116 @@ public sealed class TableViewHandler : IElementHandler<TableViewElement, WinUITa
                     ((TableViewTemplateColumn)col).CellTemplate = tmpl;
             }
 
+            // Make the column sortable/filterable by the bound property. The native control needs an
+            // explicit SortMemberPath to know which member to sort/filter on (template columns have no
+            // Binding to infer it from, and even text columns require it to participate). Header clicks
+            // then raise Sorted/Filtered, which Reshape() honours.
+            if (!string.IsNullOrEmpty(c.PropertyPath))
+                col.SortMemberPath = c.PropertyPath;
+
             if (!double.IsNaN(c.Width))
                 col.Width = new GridLength(c.Width);
             if (i < frozen)
                 col.FrozenEdge = TableViewFrozenEdge.Leading;
 
             tv.Columns.Add(col);
+        }
+    }
+
+    /// <summary>
+    /// Binds the items through an ObservableCollection "view" so the consumer-owned sort/filter
+    /// reshape can rebuild it in place when the native control raises Sorted/Filtered.
+    /// </summary>
+    private static void BindItems(WinUITableView tv, TableViewElement el)
+    {
+        var st = s_shape.GetOrCreateValue(tv);
+        st.Master = el.Items?.Cast<object>().ToList() ?? new List<object>();
+        st.View = new ObservableCollection<object>(st.Master);
+        tv.ItemsSource = st.View;
+    }
+
+    private static void HookSortFilter(WinUITableView tv)
+    {
+        var st = s_shape.GetOrCreateValue(tv);
+        if (st.Hooked)
+            return;
+        st.Hooked = true;
+        tv.Sorted += static (s, _) => Reshape(s);
+        tv.Filtered += static (s, _) => Reshape(s);
+    }
+
+    /// <summary>
+    /// Rebuilds the bound view from the master snapshot: intersect every active column filter, then
+    /// apply the active sort chain in priority order. This is the data half of the control's
+    /// consumer-owned re-shape contract.
+    /// </summary>
+    private static void Reshape(WinUITableView tv)
+    {
+        if (!s_shape.TryGetValue(tv, out var st))
+            return;
+
+        IEnumerable<object> visible = st.Master;
+
+        var filters = tv.FilteredColumns
+            .Select(c => c.Filter)
+            .Where(f => f is not null)
+            .ToList();
+        if (filters.Count > 0)
+            visible = visible.Where(item => filters.All(f => f!.Matches(item)));
+
+        var sortedColumns = tv.SortedColumns.OrderBy(c => c.SortIndex).ToList();
+        if (sortedColumns.Count > 0)
+        {
+            IOrderedEnumerable<object>? ordered = null;
+            foreach (var column in sortedColumns)
+            {
+                var path = column.SortMemberPath;
+                if (string.IsNullOrEmpty(path))
+                    continue;
+                Func<object, object?> key = item => GetMember(item, path);
+                bool desc = column.SortDirection == SortDirection.Descending;
+                ordered = ordered is null
+                    ? (desc ? visible.OrderByDescending(key, MemberComparer.Instance) : visible.OrderBy(key, MemberComparer.Instance))
+                    : (desc ? ordered.ThenByDescending(key, MemberComparer.Instance) : ordered.ThenBy(key, MemberComparer.Instance));
+            }
+            if (ordered is not null)
+                visible = ordered;
+        }
+
+        var snapshot = visible.ToList();
+        st.View.Clear();
+        foreach (var item in snapshot)
+            st.View.Add(item);
+    }
+
+    private static readonly Dictionary<(Type, string), PropertyInfo?> s_propCache = new();
+
+    private static object? GetMember(object item, string path)
+    {
+        if (item is null)
+            return null;
+        var keyT = (item.GetType(), path);
+        if (!s_propCache.TryGetValue(keyT, out var pi))
+        {
+            pi = item.GetType().GetProperty(path, BindingFlags.Public | BindingFlags.Instance);
+            s_propCache[keyT] = pi;
+        }
+        return pi?.GetValue(item);
+    }
+
+    /// <summary>Null-safe comparer that uses IComparable when available, else string compare.</summary>
+    private sealed class MemberComparer : IComparer<object?>
+    {
+        public static readonly MemberComparer Instance = new();
+
+        public int Compare(object? x, object? y)
+        {
+            if (ReferenceEquals(x, y)) return 0;
+            if (x is null) return -1;
+            if (y is null) return 1;
+            if (x is IComparable cx && x.GetType() == y.GetType())
+                return cx.CompareTo(y);
+            return string.Compare(x.ToString(), y.ToString(), StringComparison.CurrentCulture);
         }
     }
 
