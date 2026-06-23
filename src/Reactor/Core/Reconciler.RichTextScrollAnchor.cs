@@ -210,7 +210,10 @@ public sealed partial class Reconciler
         if (st.RestoreAttempts >= MaxRestoreAttempts)
         {
             // Intent unreachable after the retry budget (e.g. the content genuinely
-            // shrank) — give up rather than fight the user indefinitely.
+            // shrank below the old intent and will never hold it again) — give up
+            // rather than fight the user indefinitely. This budget is the intentional
+            // backstop for the permanent-shrink case (corr-b): a clamp we can never
+            // satisfy still self-disarms here instead of staying armed forever.
             st.Armed = false;
             st.RestoreAttempts = 0;
             st.PreClampWaits = 0;
@@ -220,11 +223,17 @@ public sealed partial class Reconciler
 
         st.RestorePending = true;
         st.RestoreAttempts++;
-        double target = st.Intended;
         if (!dispatcher.TryEnqueue(() =>
             {
                 st.RestorePending = false;
-                applyOffset(target);
+                // corr-a: re-read the intent at apply time rather than capturing it
+                // at enqueue time. A genuine user scroll that commits between arming
+                // and this deferred callback updates st.Intended through the
+                // committed-ViewChanged path; applying a stale captured offset would
+                // yank the user back and violate the "never fight a real scroll"
+                // contract. If the anchor was disarmed in the interim, skip the write.
+                if (st.Armed && !double.IsNaN(st.Intended))
+                    applyOffset(st.Intended);
                 // Self-retry independent of LayoutUpdated: a live window raises
                 // LayoutUpdated every frame, but under load (or once layout goes
                 // quiescent) it may not, and a single ChangeView can be dropped
@@ -322,4 +331,12 @@ public sealed partial class Reconciler
         st.SawClamp = false;
         st.Armed = true;
     }
+
+    // corr-c: invoked from ElementPool.CleanElement when a pooled ScrollViewer/
+    // ScrollView is returned, so a recycled host can't inherit a prior renter's
+    // anchor intent (the attached-DP state survives Content = null otherwise).
+    // Same pool-contamination class as issue #162 — clear the attached state on
+    // return alongside the other ClearValue resets.
+    internal static void ClearRichTextScrollAnchor(FrameworkElement host)
+        => host.ClearValue(s_richTextScrollAnchorProperty);
 }

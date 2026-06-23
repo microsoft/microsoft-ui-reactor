@@ -224,6 +224,8 @@ internal static class SelfTestFixtureRegistry
         // Issue #487 — RichTextBlock + inline UI inside ScrollViewer scroll anchor
         "Issue487_ScrollOffsetRestoredAfterRunMutation",
         "Issue487_RepeatedMutationDoesNotDrift",
+        "Issue487_ScrollViewOffsetRestoredAfterRunMutation",
+        "Issue487_GenuineUserScrollAfterArmingNotFought",
         "RichTextProps_Block_MountUpdateClear",
         "RichTextProps_Paragraph_MountUpdateClear",
         "RichTextProps_Run_MountUpdateClear",
@@ -1630,6 +1632,8 @@ internal static class SelfTestFixtureRegistry
         "InlineUI_IncrementalUpdate_RunMutatedInPlace" => new InlineUIContainerFixtures.InlineUI_IncrementalUpdate_RunMutatedInPlace(harness),
         "Issue487_ScrollOffsetRestoredAfterRunMutation" => new Issue487ScrollAnchorFixtures.Issue487_ScrollOffsetRestoredAfterRunMutation(harness),
         "Issue487_RepeatedMutationDoesNotDrift" => new Issue487ScrollAnchorFixtures.Issue487_RepeatedMutationDoesNotDrift(harness),
+        "Issue487_ScrollViewOffsetRestoredAfterRunMutation" => new Issue487ScrollAnchorFixtures.Issue487_ScrollViewOffsetRestoredAfterRunMutation(harness),
+        "Issue487_GenuineUserScrollAfterArmingNotFought" => new Issue487ScrollAnchorFixtures.Issue487_GenuineUserScrollAfterArmingNotFought(harness),
         "RichTextProps_Block_MountUpdateClear" => new RichTextPropertyFixtures.RichTextProps_Block_MountUpdateClear(harness),
         "RichTextProps_Paragraph_MountUpdateClear" => new RichTextPropertyFixtures.RichTextProps_Paragraph_MountUpdateClear(harness),
         "RichTextProps_Run_MountUpdateClear" => new RichTextPropertyFixtures.RichTextProps_Run_MountUpdateClear(harness),

@@ -291,7 +291,19 @@ Conventions for contributors:
 
 ### Fixed
 
-- **Virtualized rows now reset per-item component state on recycle when keyed
+- **RichTextBlock inline-UI mutations no longer scroll the ancestor scroll host to
+  the top (issue #487).** Mutating any `Run.Text` inside a paragraph that hosts an
+  `InlineUIContainer` (charts/sliders/buttons embedded via `InlineUI(...)`) made the
+  enclosing `ScrollViewer`/`ScrollView` silently scroll up by the combined height of
+  the embedded inline elements. WinUI's text engine re-measures the whole paragraph
+  from scratch (`ParagraphNode::Measure` → `RemoveEmbeddedElements()` + `desiredSize=0`
+  for one layout pass), so the block transiently shrinks, the scroll host clamps
+  `VerticalOffset` down to the smaller `ScrollableHeight`, and never restores it once
+  the inline UI re-attaches. The fix is invisible to authors — `ScrollViewer(RichTextBlock(...))`
+  "Just Works": `UpdateRichTextBlocks` now arms a scroll anchor on the nearest ancestor
+  scroll host before mutating an inline-UI-bearing block and restores the user's real
+  offset once layout settles, while never fighting a genuine user scroll. No new API
+  surface, no per-app boilerplate.
   (issue #326).** `LazyVStack` / `LazyHStack` / `ItemsRepeater<T>` / `ItemsView<T>`
   now propagate the `keySelector` projection onto each realized row's top-level
   `Element.Key`. Post-#324 the ItemsRepeater recycle path reuses a realized
