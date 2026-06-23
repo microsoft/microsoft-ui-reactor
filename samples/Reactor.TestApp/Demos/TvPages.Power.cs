@@ -26,6 +26,14 @@ class TvConditionalStylingPage : Component
         "Highlight inactive — critical-fill background",
     };
 
+    static readonly string[] ActiveSelectors =
+    {
+        "(none) — implicit theme style",
+        "DepartmentRowStyleSelector",
+        "SalaryTierRowStyleSelector",
+        "InactiveRowStyleSelector",
+    };
+
     public override Element Render()
     {
         var (selector, setSelector) = UseState(0);
@@ -38,7 +46,7 @@ class TvConditionalStylingPage : Component
             _ => new Action<WinTV>[] { tv => tv.AlternatingRowBackground = null! },
         };
 
-        var table = TableView(People, selector == 0 ? TextColumns() : VibrantColumns(), height: 460) with
+        var table = TableView(People, selector == 0 ? TextColumns() : VibrantColumns()) with
         {
             SelectionMode = TVSel.Single,
             Setters = setters,
@@ -48,8 +56,8 @@ class TvConditionalStylingPage : Component
             TvSample.Section("Row style selector", "Pick a selector. The native sample swaps RowStyleSelector; this consumable page swaps supported row banding and vibrant column visuals.",
                 RadioButtons(Selectors, selector, setSelector)),
             TvSample.Section("Live readouts", null,
-                TvSample.Readout("Active selector", selector == 0 ? "(none) — implicit theme style" : Selectors[selector]),
-                TvSample.Readout("Selector invocations", "native-only")),
+                TvSample.Readout("Active selector", ActiveSelectors[selector]),
+                TvSample.Readout("Selector invocations", "not exposed by wrapper")),
             TvSample.NativeNote("RowStyleSelector itself is a native TableView surface not exposed by the Reactor wrapper yet; this page keeps the same option surface and applies the closest supported styling knobs."));
 
         return TvSample.Page("ConditionalStyling",
@@ -63,11 +71,14 @@ class TvCellStylingPage : Component
     static readonly string[] Configs =
     {
         "None — no cell styles",
-        "Salary tier — Salary column only",
-        "Department + Active — category and status tints",
-        "All three columns — Salary + Department + Active",
-        "Vibrant sales dashboard — saturated pills, Salary tint, status chip",
+        "Salary tier — green ≥ 100k, amber 60–100k, red < 60k (Salary column only)",
+        "Department + Active — Department column tints by category; Active column flags inactive",
+        "All three columns — Salary tier + Department + Active",
+        "Vibrant sales dashboard — saturated pills, stoplight Salary, status chip",
     };
+
+    private System.Collections.ObjectModel.ObservableCollection<LivePerson>? _rows;
+    private readonly Random _rng = new(24680);
 
     public override Element Render()
     {
@@ -75,7 +86,27 @@ class TvCellStylingPage : Component
         var (live, setLive) = UseState(true);
         var (interval, setInterval) = UseState(500.0);
 
-        var table = TableView(People, config == 0 ? TextColumns() : VibrantColumns(), height: 460) with
+        _rows ??= LivePeople(100);
+
+        UseEffect(() =>
+        {
+            if (!live) return () => { };
+            var timer = new Microsoft.UI.Xaml.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(Math.Max(25, (int)interval)) };
+            timer.Tick += (_, __) =>
+            {
+                int top = Math.Min(_rows!.Count, 12);
+                for (int k = 0; k < 3 && top > 0; k++)
+                {
+                    var p = _rows[_rng.Next(top)];
+                    p.Salary = 45000 + _rng.Next(0, 115000);
+                    if (_rng.Next(5) == 0) p.IsActive = !p.IsActive;
+                }
+            };
+            timer.Start();
+            return () => timer.Stop();
+        }, live, interval);
+
+        var table = TableView(_rows, config == 0 ? TextColumns() : VibrantColumns()) with
         {
             SelectionMode = TVSel.Single,
         };
@@ -85,11 +116,11 @@ class TvCellStylingPage : Component
                 RadioButtons(Configs, config, setConfig)),
             TvSample.Section("Status", null,
                 TvSample.Readout("Active config", Configs[config])),
-            TvSample.Section("Live updates", "Keep the same live-update controls as the native sample. A real timer is native binding behavior; this Reactor sample records the settings.",
+            TvSample.Section("Live updates", "Update visible sample rows at the chosen interval. Salary text and tint update live in place from PropertyChanged.",
                 ToggleSwitch(live, setLive, onContent: "On", offContent: "Off", header: "Live updates"),
                 TvSample.Group("Update interval (ms)", Slider(interval, 25, 2000, setInterval)),
                 TvSample.Readout("Update interval (ms)", ((int)interval).ToString(CultureInfo.InvariantCulture)),
-                TvSample.NativeNote("Native live tint updates rely on data-bound cell converters and property-change notifications. The consumable wrapper exposes static cell visual presets, so no timer is started here.")));
+                InfoBar("How this works", "LivePerson.Salary raises PropertyChanged; bound tint cells re-run their converters in place without rebinding the table.")));
 
         return TvSample.Page("CellStyling",
             "Pick a styling rule to tint specific columns; only the targeted columns change. Selecting a row still highlights the whole row on top.",
@@ -100,6 +131,7 @@ class TvCellStylingPage : Component
 class TvAdvancedFilterPage : Component
 {
     WinTV? _tv;
+    int _filteredFires;
 
     public override Element Render()
     {
@@ -116,7 +148,7 @@ class TvAdvancedFilterPage : Component
             setVisibleRows($"{(_tv.ItemsSource as ICollection)?.Count ?? People.Count} / {People.Count}");
         }
 
-        var table = TableView(People, TextColumns(), height: 460) with
+        var table = TableView(People, TextColumns()) with
         {
             SelectionMode = TVSel.Single,
             CanFilterColumns = true,
@@ -126,7 +158,7 @@ class TvAdvancedFilterPage : Component
                 _tv = tv;
                 tv.Filtered += (_, __) =>
                 {
-                    setFilteredFires(filteredFires + 1);
+                    setFilteredFires(++_filteredFires);
                     RefreshFilters();
                 };
             },
@@ -174,7 +206,7 @@ class TvClipboardPage : Component
             setClipboardPreview(selected.Count == 0 ? "(select rows first)" : TvPowerHelpers.ToDelimited(selected.Take(10), "\t"));
         }
 
-        var table = TableView(People, TextColumns(), height: 460) with
+        var table = TableView(People, TextColumns()) with
         {
             SelectionMode = TVSel.Extended,
             OnControlReady = tv => _tv = tv,
@@ -218,7 +250,7 @@ class TvLayoutPage : Component
             ? "(table not ready)"
             : string.Join(",", _tv.Columns.Select(c => Convert.ToString(c.Header, CultureInfo.InvariantCulture) ?? "(column)"));
 
-        var table = TableView(People, TextColumns(), height: 460) with
+        var table = TableView(People, TextColumns()) with
         {
             SelectionMode = TVSel.Single,
             CanReorderColumns = true,
@@ -266,7 +298,7 @@ class TvRtlPage : Component
         var (selectedCount, setSelectedCount) = UseState(0);
         var (lastReorder, setLastReorder) = UseState("(none)");
 
-        var table = TableView(People, TextColumns(), height: 460) with
+        var table = TableView(People, TextColumns()) with
         {
             SelectionMode = TVSel.Extended,
             CanReorderColumns = true,
@@ -315,7 +347,7 @@ class TvVirtualizationPage : Component
         var realized = Math.Min(50, total);
         var ratio = total == 0 ? "0%" : $"~{(realized * 100.0 / total):0.##}%";
 
-        var table = TableView(rows, TextColumns(), height: 460) with
+        var table = TableView(rows, TextColumns()) with
         {
             SelectionMode = TVSel.Single,
             OnControlReady = tv => _tv = tv,
@@ -376,7 +408,7 @@ class TvPaginationPage : Component
             if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var oneBased)) Go(oneBased - 1);
         }
 
-        var table = TableView(rows, TextColumns(), height: 460) with
+        var table = TableView(rows, TextColumns()) with
         {
             SelectionMode = TVSel.Single,
         };
@@ -422,7 +454,7 @@ class TvDataExportPage : Component
             setStatus($"Exported {rows.Count} rows as {Formats[format]}");
         }
 
-        var table = TableView(People, TextColumns(), height: 460) with
+        var table = TableView(People, TextColumns()) with
         {
             SelectionMode = TVSel.Single,
             CanReorderColumns = true,
@@ -449,47 +481,107 @@ class TvPerformancePage : Component
     public override Element Render()
     {
         var (rows, setRows) = UseState<IReadOnlyList<Person>>(ManyPeople(10000));
-        var (last, setLast) = UseState("—");
+        var (load10k, setLoad10k) = UseState("—");
+        var (load100k, setLoad100k) = UseState("—");
         var (sortMs, setSortMs) = UseState("—");
         var (filterMs, setFilterMs) = UseState("—");
+        var (clearMs, setClearMs) = UseState("—");
+        var (snapshot, setSnapshot) = UseState("—");
+        var (runAll, setRunAll) = UseState("—");
+        var (baselineManaged, setBaselineManaged) = UseState(GC.GetTotalMemory(false));
+        var (baselineWorking, setBaselineWorking) = UseState(Process.GetCurrentProcess().WorkingSet64);
+
+        void SetRowsMeasured(IReadOnlyList<Person> source, Action<string> setResult, string label)
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            var sw = Stopwatch.StartNew();
+            setRows(source);
+            sw.Stop();
+            setResult($"{sw.Elapsed.TotalMilliseconds:0.##} ms · {source.Count:N0} rows");
+            setRunAll(label);
+        }
+
+        void RunLoad10k() => SetRowsMeasured(ManyPeople(10000), setLoad10k, "Load 10,000 rows");
+
+        void RunLoad100k() => SetRowsMeasured(ManyPeople(100000), setLoad100k, "Load 100,000 rows");
 
         void RunSort()
         {
             var source = ManyPeople(50000).OrderBy(p => p.LastName).ThenBy(p => p.FirstName).ToList();
-            var sw = Stopwatch.StartNew();
-            setRows(source);
-            sw.Stop();
-            setSortMs($"{sw.Elapsed.TotalMilliseconds:0.##} ms · {source.Count:N0} rows");
-            setLast("Run sort");
+            SetRowsMeasured(source, setSortMs, "Sort current dataset by Name asc");
         }
 
         void RunFilter()
         {
             var source = ManyPeople(50000).Where(p => p.Salary >= 100000).ToList();
-            var sw = Stopwatch.StartNew();
-            setRows(source);
-            sw.Stop();
-            setFilterMs($"{sw.Elapsed.TotalMilliseconds:0.##} ms · {source.Count:N0} rows");
-            setLast("Run filter");
+            SetRowsMeasured(source, setFilterMs, "Filter current dataset (Salary 100k+)");
         }
 
-        var table = TableView(rows, TextColumns(), height: 460) with
+        void RunClearFilter() => SetRowsMeasured(ManyPeople(50000), setClearMs, "Clear filter");
+
+        void SnapshotMemory()
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            long managed = GC.GetTotalMemory(true);
+            long working = Process.GetCurrentProcess().WorkingSet64;
+            setSnapshot($"managed Δ {(managed - baselineManaged) / 1024.0 / 1024.0:0.##} MB · working set Δ {(working - baselineWorking) / 1024.0 / 1024.0:0.##} MB");
+            setRunAll("Snapshot memory");
+        }
+
+        void Rebaseline()
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            setBaselineManaged(GC.GetTotalMemory(true));
+            setBaselineWorking(Process.GetCurrentProcess().WorkingSet64);
+            setSnapshot("baseline reset");
+            setRunAll("Re-baseline memory");
+        }
+
+        void RunAll()
+        {
+            RunLoad10k();
+            RunLoad100k();
+            RunSort();
+            RunFilter();
+            RunClearFilter();
+            SnapshotMemory();
+            setRunAll("Run all complete");
+        }
+
+        var table = TableView(rows, TextColumns()) with
         {
             SelectionMode = TVSel.Single,
         };
 
         var options = VStack(16,
-            TvSample.Section("Performance actions", "Run repeatable sort and filter operations over 50,000 generated rows; elapsed time measures the MVU state update request.",
-                Button("Run sort", RunSort),
-                Button("Run filter", RunFilter)),
+            TvSample.Section("Performance actions", "Run repeatable load, sort, filter, clear, and memory scenarios. The readouts show wall-clock state-update request time.",
+                Button("Load 10,000 rows", RunLoad10k),
+                Button("Load 100,000 rows", RunLoad100k),
+                Button("Sort current dataset by Name asc", RunSort),
+                Button("Filter current dataset (Salary 100k+)", RunFilter),
+                Button("Clear filter (restore full dataset)", RunClearFilter),
+                Button("Snapshot memory", SnapshotMemory),
+                Button("Re-baseline memory", Rebaseline),
+                Button("Run all", RunAll)),
             TvSample.Section("Status", null,
-                TvSample.Readout("Last action", last),
-                TvSample.Readout("Sort elapsed", sortMs),
-                TvSample.Readout("Filter elapsed", filterMs),
-                TvSample.Readout("Rows displayed", rows.Count.ToString("N0", CultureInfo.InvariantCulture))));
+                TvSample.Readout("Load 10,000 rows", load10k),
+                TvSample.Readout("Load 100,000 rows", load100k),
+                TvSample.Readout("Sort current dataset by Name asc", sortMs),
+                TvSample.Readout("Filter current dataset (Salary 100k+)", filterMs),
+                TvSample.Readout("Clear filter (restore full dataset)", clearMs),
+                TvSample.Readout("Snapshot memory (delta from baseline)", snapshot),
+                TvSample.Readout("Run all (sequential)", runAll),
+                TvSample.Readout("Rows displayed", rows.Count.ToString("N0", CultureInfo.InvariantCulture))),
+            TvSample.Section("Live data preview", "The TableView binds to the scenario's working dataset; sort and filter operations update the visible rows."));
 
         return TvSample.Page("Performance",
-            "Click Run sort or Run filter to time common large-dataset updates. Run twice; the first can include JIT warmup.",
+            "Click each Run button to time that operation; the readout shows elapsed milliseconds. Run a scenario twice and use the second number — the first can include JIT warmup.",
             table, options);
     }
 }

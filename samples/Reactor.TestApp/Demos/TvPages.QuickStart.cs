@@ -164,7 +164,7 @@ class TvSelectionPage : Component
             _ => "Click + Ctrl / Shift to extend a contiguous or disjoint selection.",
         };
 
-        var table = TableView(People, TextColumns(), height: 460) with
+        var table = TableView(People, TextColumns()) with
         {
             SelectionMode = sel,
             IsSelectionGutterVisible = gutter,
@@ -215,7 +215,7 @@ class TvCellSelectionPage : Component
             _ => "Cell selection in the cell area; row selection via the gutter.",
         };
 
-        var table = TableView(People, TextColumns(), height: 460) with
+        var table = TableView(People, TextColumns()) with
         {
             SelectionMode = TVSel.Extended,
             SelectionUnit = unit,
@@ -259,7 +259,7 @@ class TvSortPage : Component
             setPriority(sc.Any() ? string.Join("  ·  ", sc) : "(none)");
         }
 
-        var table = TableView(People, VibrantColumns(), height: 460) with
+        var table = TableView(People, VibrantColumns()) with
         {
             CanSortColumns = true,
             CanResizeColumns = true,
@@ -292,7 +292,7 @@ class TvFilterPage : Component
         var (fires, setFires) = UseState(0);
         var (visible, setVisible) = UseState($"{People.Count} / {People.Count}");
 
-        var table = TableView(People, TextColumns(), height: 460) with
+        var table = TableView(People, TextColumns()) with
         {
             CanFilterColumns = true,
             CanSortColumns = true,
@@ -317,7 +317,7 @@ class TvInlineEditPage : Component
     public override Element Render()
     {
         var (readOnly, setReadOnly) = UseState(false);
-        var table = TableView(People, TextColumns(), height: 460) with
+        var table = TableView(People, TextColumns()) with
         {
             SelectionMode = TVSel.Single,
             Setters = new Action<WinTV>[] { tv => tv.IsReadOnly = readOnly },
@@ -339,7 +339,7 @@ class TvKeyboardNavPage : Component
 {
     public override Element Render()
     {
-        var table = TableView(People, TextColumns(), height: 460) with { SelectionMode = TVSel.Single, IsSelectionGutterVisible = true };
+        var table = TableView(People, TextColumns()) with { SelectionMode = TVSel.Single, IsSelectionGutterVisible = true };
 
         var options = VStack(16,
             TvSample.Section("Keyboard shortcuts", "Click any row to take focus, then use the keyboard.",

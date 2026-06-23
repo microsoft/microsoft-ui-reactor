@@ -9,6 +9,7 @@ using static Microsoft.UI.Reactor.Factories;
 using static Reactor.Controls.Factories;
 using static Reactor.TestApp.TableViewGallery.TableViewSampleData;
 using GridLength = Microsoft.UI.Xaml.GridLength;
+using Visibility = Microsoft.UI.Xaml.Visibility;
 using TVFrozenEdge = Microsoft.UI.Xaml.Controls.TableViewFrozenEdge;
 using TVHeaders = Microsoft.UI.Xaml.Controls.TableViewHeadersVisibility;
 using TVSel = Microsoft.UI.Xaml.Controls.TableViewSelectionMode;
@@ -62,7 +63,7 @@ class TvColumnResizePage : Component
             }
         }
 
-        var table = TableView(People, Columns(), height: 460) with
+        var table = TableView(People, Columns()) with
         {
             SelectionMode = TVSel.Single,
             CanResizeColumns = canResize,
@@ -136,20 +137,23 @@ class TvColumnReorderPage : Component
             int from = _tv.Columns.IndexOf(col);
             int to = from + direction;
             if (to < 0 || to >= _tv.Columns.Count) { setLastAction($"MoveColumn({from}, {to}) skipped — would move past edge."); return; }
-            _tv.Columns.RemoveAt(from);
-            _tv.Columns.Insert(to, col);
-            setSelected(to);
-            CaptureOrder();
-            setLastAction($"MoveColumn({from}, {to}) -> True (\"{col.Header}\")");
+            bool moved = _tv.MoveColumn(from, to);
+            if (moved)
+            {
+                setSelected(to);
+                CaptureOrder();
+            }
+            setLastAction($"MoveColumn({from}, {to}) -> {moved} (\"{col.Header}\")");
         }
         void Reset()
         {
-            setOrder(DefaultOrder.ToArray());
+            _tv?.ResetColumnOrder();
+            CaptureOrder();
             setSelected(0);
             setLastAction("Reset -> restored original column order.");
         }
 
-        var table = TableView(People, order.Select(Column).ToList(), height: 460) with
+        var table = TableView(People, DefaultOrder.Select(Column).ToList()) with
         {
             SelectionMode = TVSel.Single,
             CanReorderColumns = canReorder,
@@ -185,8 +189,9 @@ class TvColumnReorderPage : Component
                     }),
                     Button("Autosize all", () =>
                     {
-                        if (_tv != null) foreach (var c in _tv.Columns.ToList()) _tv.AutoSizeColumn(c);
-                        setLastAction("AutoSizeColumn(...) -> all columns sized to content.");
+                        _tv?.AutoSizeAllColumns();
+                        CaptureOrder();
+                        setLastAction("AutoSizeAllColumns() -> all columns sized to content.");
                     }),
                     Button("Reset", Reset)),
                 ToggleSwitch(canReorder, setCanReorder, onContent: "Allowed", offContent: "Blocked", header: "CanUserReorderColumns (control-wide gate)")),
@@ -245,7 +250,7 @@ class TvColumnReorderGesturePage : Component
                 return $"{c.Header}{pin}{reorder}";
             }));
 
-        var table = TableView(People, order.Select(Column).ToList(), height: 460) with
+        var table = TableView(People, DefaultOrder.Select(Column).ToList()) with
         {
             SelectionMode = TVSel.Single,
             CanReorderColumns = canReorder,
@@ -273,7 +278,15 @@ class TvColumnReorderGesturePage : Component
                 ToggleSwitch(emailCanReorder, v => { setEmailCanReorder(v); if (_tv?.Columns?.FirstOrDefault(c => Equals(c.Header, "Email")) is { } c) c.CanUserReorder = v; setLastEvent($"Email.CanUserReorder={v}"); }, onContent: "Drop target", offContent: "No drag/drop", header: "Email.CanUserReorder"),
                 VStack(8,
                     Button("Toggle frozen Name", () => { var next = !nameFrozen; setNameFrozen(next); setLastEvent($"Name.FrozenEdge={(next ? TVFrozenEdge.Leading : TVFrozenEdge.None)}; frozen columns can't be dragged."); }),
-                    Button("Reset order", () => { setOrder(DefaultOrder.ToArray()); setCanReorder(true); setEmailCanReorder(true); setNameFrozen(false); setLastEvent("Reset order and gesture gates."); }))),
+                    Button("Reset order", () =>
+                    {
+                        _tv?.ResetColumnOrder();
+                        setCanReorder(true);
+                        setEmailCanReorder(true);
+                        setNameFrozen(false);
+                        CaptureOrder();
+                        setLastEvent("Reset order and gesture gates.");
+                    }))),
             TvSample.Section("Status", null,
                 TvSample.Readout("Column order", Readout()),
                 TvSample.Readout("Last event", lastEvent)));
@@ -301,8 +314,21 @@ class TvDynamicColumnsPage : Component
         var (mask, setMask) = UseState(First | Last | Department | Role | Salary);
         bool Has(int bit) => (mask & bit) != 0;
         void Set(int bit, bool on) => setMask(on ? mask | bit : mask & ~bit);
+        void ApplyVisibility(WinTV tv)
+        {
+            foreach (var (bit, column) in AllColumns)
+            {
+                var native = tv.Columns.FirstOrDefault(c => Equals(c.Header, column.Header));
+                if (native != null)
+                    native.Visibility = Has(bit) ? Visibility.Visible : Visibility.Collapsed;
+            }
+        }
 
-        var table = TableView(People, AllColumns.Where(c => Has(c.Bit)).Select(c => c.Column).ToList(), height: 460);
+        var table = TableView(People, AllColumns.Select(c => c.Column).ToList()) with
+        {
+            Setters = new Action<WinTV>[] { ApplyVisibility },
+        };
+        var visible = AllColumns.Where(c => Has(c.Bit)).Select(c => c.Column.Header).ToArray();
 
         var options = VStack(16,
             TvSample.Section("Column visibility", "Toggle each column by setting TableViewColumn.Visibility. Width and position are preserved.",
@@ -310,7 +336,10 @@ class TvDynamicColumnsPage : Component
                 CheckBox(Has(Last), v => Set(Last, v), label: "Last name"),
                 CheckBox(Has(Department), v => Set(Department, v), label: "Department"),
                 CheckBox(Has(Role), v => Set(Role, v), label: "Role"),
-                CheckBox(Has(Salary), v => Set(Salary, v), label: "Salary")));
+                CheckBox(Has(Salary), v => Set(Salary, v), label: "Salary")),
+            TvSample.Section("Status", null,
+                TvSample.Readout("Visible columns", visible.Length == 0 ? "(none)" : string.Join(", ", visible)),
+                TvSample.Readout("Column objects", "Preserved; Visibility toggles only")));
 
         return TvSample.Page("DynamicColumns",
             "Toggle the checkboxes to show or hide each column. Each column keeps its width and position when you bring it back.",
@@ -363,7 +392,7 @@ class TvStickyHeadersPage : Component
             new("Phone", nameof(EmployeeRow.Phone), Width: 170),
             new("Manager", nameof(EmployeeRow.Manager), Width: 170),
         };
-        var table = TableView(employees, columns, height: 460) with { SelectionMode = TVSel.Single, OnControlReady = Ready };
+        var table = TableView(employees, columns) with { SelectionMode = TVSel.Single, OnControlReady = Ready };
 
         var options = VStack(16,
             TvSample.Section("Programmatic scroll", "Use these buttons to move the table's scroll position horizontally and vertically without dragging the scrollbars.",
@@ -411,7 +440,7 @@ class TvHeadersPage : Component
             new("Column 5", nameof(HeaderRow.Value5), Width: 100),
         };
 
-        var table = TableView(rows, columns, height: 460) with
+        var table = TableView(rows, columns) with
         {
             SelectionMode = TVSel.Multiple,
             IsSelectionGutterVisible = true,
@@ -477,7 +506,7 @@ class TvFrozenLeadingPage : Component
             new("Salary", nameof(Person.Salary), Width: 110),
             new("Active", nameof(Person.IsActive), Width: 90),
         };
-        var table = TableView(ManyPeople(60), columns, height: 460) with
+        var table = TableView(ManyPeople(60), columns) with
         {
             SelectionMode = TVSel.Single,
             OnControlReady = Ready,
@@ -556,7 +585,7 @@ class TvFrozenTrailingPage : Component
             new("Salary", nameof(Person.Salary), Width: 110),
             new("Active", nameof(Person.IsActive), Width: 90),
         };
-        var table = TableView(ManyPeople(60), columns, height: 460) with
+        var table = TableView(ManyPeople(60), columns) with
         {
             SelectionMode = TVSel.Single,
             OnControlReady = Ready,

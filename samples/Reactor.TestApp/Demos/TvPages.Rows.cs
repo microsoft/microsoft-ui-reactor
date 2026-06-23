@@ -55,7 +55,7 @@ class TvRowReorderPage : Component
             setDiag("(press Diagnose)");
         }
 
-        var table = TableView(_rows, TextColumns(), height: 460) with
+        var table = TableView(_rows, TextColumns()) with
         {
             SelectionMode = TVSel.Single,
             CanReorderColumns = false,
@@ -130,6 +130,8 @@ class TvRowReorderPage : Component
 
 class TvGroupsPage : Component
 {
+    WinTV? _tv;
+
     public override Element Render()
     {
         var (grouping, setGrouping) = UseState(true);
@@ -141,25 +143,26 @@ class TvGroupsPage : Component
         var groups = rows.GroupBy(p => p.Department).OrderBy(g => g.Key).ToList();
         var perGroup = string.Join(" · ", groups.Select(g => $"{g.Key}: {g.Count()}"));
 
-        var table = TableView(rows, TextColumns(), height: 460) with
+        var table = TableView(rows, TextColumns()) with
         {
             CanSortColumns = true,
             CanFilterColumns = true,
+            OnControlReady = tv => _tv = tv,
         };
 
         var options = VStack(16,
-            TvSample.NativeNote("Grouped row headers and ExpandAllGroups / CollapseAllGroups are native TableView features not yet exposed by the consumable Reactor wrapper. This page keeps the same controls, orders rows by Department when grouping is on, and reports real group counts from the bound data."),
+            TvSample.NativeNote("GroupedItemsSource is still a native-only source shape for the consumable Reactor wrapper. This page keeps a Department-ordered flat view, calls the native bulk group APIs when requested, and reports real group counts from the bound data."),
             TvSample.Section("Grouping controls", "Toggle grouping, reshuffle departments, or expand/collapse every group using the sample's grouped-row headers.",
                 ToggleSwitch(grouping, setGrouping, onContent: "On", offContent: "Off", header: "Group by Department"),
                 VStack(8,
                     Button("Shuffle ~25% of people across departments", () => { setShuffle(shuffle + 1); setLastAction("Departments reshuffled"); }),
-                    Button("Expand all", () => setLastAction("Expand all requested — native grouping not exposed")),
-                    Button("Collapse all", () => setLastAction("Collapse all requested — native grouping not exposed")))),
+                    Button("Expand all", () => { _tv?.ExpandAllGroups(); setLastAction(grouping ? "ExpandAllGroups called" : "Expand all ignored — grouping off"); }),
+                    Button("Collapse all", () => { _tv?.CollapseAllGroups(); setLastAction(grouping ? "CollapseAllGroups called" : "Collapse all ignored — grouping off"); }))),
             TvSample.Section("Status", null,
                 TvSample.Readout("IsGrouping", grouping.ToString()),
-                TvSample.Readout("Group count", grouping ? groups.Count.ToString() : "0"),
+                TvSample.Readout("Group count", grouping ? groups.Count.ToString() : "(n/a)"),
                 TvSample.Readout("Total people", rows.Count.ToString()),
-                TvSample.Readout("Source shape", grouping ? "Flat rows ordered by Department" : "Flat rows"),
+                TvSample.Readout("Source shape", grouping ? $"Flat rows ordered by Department ({groups.Count} groups)" : $"Flat rows ({rows.Count} items)"),
                 TvSample.Readout("Per-group counts", grouping ? perGroup : "(grouping off)"),
                 TvSample.Readout("Last action", lastAction)));
 
@@ -181,53 +184,131 @@ class TvGroupsPage : Component
 class TvHierarchyPage : Component
 {
     WinTV? _tv;
+    readonly List<LivePerson> _roots = HierarchyRoots();
 
     public override Element Render()
     {
-        var (selectedIndex, setSelectedIndex) = UseState(-1);
+        var (selectedNode, setSelectedNode) = UseState("(none)");
+        var (sorted, setSorted) = UseState("(none)");
+        var (filtered, setFiltered) = UseState("(none)");
         var (lastAction, setLastAction) = UseState("(none)");
 
-        string selected = selectedIndex >= 0 && selectedIndex < People.Count
-            ? $"{selectedIndex}: {People[selectedIndex].FirstName} {People[selectedIndex].LastName}"
-            : "(none)";
+        void RefreshReadouts(string action)
+        {
+            if (_tv != null)
+            {
+                var node = _tv.SelectedItems?.OfType<LivePerson>().FirstOrDefault();
+                setSelectedNode(node == null
+                    ? "(none)"
+                    : $"{node.Name} (Depth={DepthOf(_roots, node)}, HasChildren={node.Children.Count > 0})");
+                setSorted(FormatColumnList(_tv.SortedColumns, c => $"{c.Header} ({c.SortDirection})"));
+                setFiltered(FormatColumnList(_tv.FilteredColumns, c => $"{c.Header}"));
+            }
+            setLastAction(action);
+        }
 
-        var table = TableView(People, TextColumns(), height: 460) with
+        var table = TableView(Array.Empty<object>(), VibrantColumns()) with
         {
             SelectionMode = TVSel.Single,
             CanSortColumns = true,
             CanFilterColumns = true,
-            OnControlReady = tv => _tv = tv,
-            OnSelectionChanged = _ => setSelectedIndex(_tv?.SelectedIndex ?? -1),
+            CanResizeColumns = true,
+            HierarchicalItems = _roots,
+            HierarchicalChildrenPath = nameof(LivePerson.Children),
+            OnControlReady = tv =>
+            {
+                _tv = tv;
+                tv.Sorted += (_, __) => RefreshReadouts("sort");
+                tv.Filtered += (_, __) => RefreshReadouts("filter");
+            },
+            OnSelectionChanged = _ => RefreshReadouts("selection"),
         };
 
         var options = VStack(16,
-            TvSample.NativeNote("HierarchicalItemsSource, HierarchicalChildrenPropertyName, chevrons, and ExpandAllItems / CollapseAllItems are native TableView features not yet exposed by the consumable Reactor wrapper. This page renders the flat data and reports the selected row it can observe."),
             TvSample.Section("Hierarchy actions", "Expand, collapse, or toggle the selected node without using chevrons.",
                 VStack(8,
-                    Button("Expand all", () => setLastAction("Expand all requested — native hierarchy not exposed")),
-                    Button("Collapse all", () => setLastAction("Collapse all requested — native hierarchy not exposed")),
-                    Button("Toggle selected", () => setLastAction(selectedIndex >= 0 ? $"Toggle requested for {selected}" : "No selected node to toggle")))),
+                    Button("Expand all", () => InvokeHierarchy("ExpandAllItems", null, "expand-all", setLastAction)),
+                    Button("Collapse all", () => InvokeHierarchy("CollapseAllItems", null, "collapse-all", setLastAction)),
+                    Button("Toggle selected", () =>
+                    {
+                        var node = _tv?.SelectedItems?.OfType<LivePerson>().FirstOrDefault();
+                        if (node == null) setLastAction("toggle: (no selection)");
+                        else InvokeHierarchy("ToggleItem", node, $"toggle({node.Name})", setLastAction);
+                    }))),
             TvSample.Section("Status", null,
-                TvSample.Readout("IsHierarchical", "False"),
-                TvSample.Readout("ChildrenPropertyName", "(native-only)"),
-                TvSample.Readout("Selected node", selected),
-                TvSample.Readout("Sorted columns", "(use headers)"),
-                TvSample.Readout("Filtered columns", "(use funnels)"),
+                TvSample.Readout("IsHierarchical", "True"),
+                TvSample.Readout("ChildrenPropertyName", nameof(LivePerson.Children)),
+                TvSample.Readout("Selected node", selectedNode),
+                TvSample.Readout("Sorted columns", sorted),
+                TvSample.Readout("Filtered columns", filtered),
                 TvSample.Readout("Last action", lastAction)));
 
         return TvSample.Page("Hierarchy",
             "Click a chevron to expand / collapse a node. Sorting and filtering work per level and keep the tree path visible. Use Expand all / Collapse all too.",
             table, options);
     }
+
+    void InvokeHierarchy(string methodName, object? arg, string success, Action<string> setLastAction)
+    {
+        if (_tv == null) { setLastAction($"{success} requested before table ready"); return; }
+        var method = _tv.GetType().GetMethods()
+            .FirstOrDefault(m => m.Name == methodName && m.GetParameters().Length == (arg == null ? 0 : 1));
+        if (method == null)
+        {
+            setLastAction($"{success} requested — native {methodName} API not available on this build");
+            return;
+        }
+        method.Invoke(_tv, arg == null ? null : new[] { arg });
+        setLastAction(success);
+    }
+
+    static string FormatColumnList<T>(IEnumerable<T>? columns, Func<T, string> formatter) =>
+        columns == null || !columns.Any() ? "(none)" : string.Join(", ", columns.Select(formatter));
+
+    static int DepthOf(IEnumerable<LivePerson> nodes, LivePerson target, int depth = 0)
+    {
+        foreach (var n in nodes)
+        {
+            if (ReferenceEquals(n, target)) return depth;
+            var found = DepthOf(n.Children, target, depth + 1);
+            if (found >= 0) return found;
+        }
+        return -1;
+    }
 }
 
 class TvRowColorsPage : Component
 {
     static readonly string[] Presets = { "None", "Default theme", "Custom colors" };
+    static readonly string[] Intervals = { "Off", "1000 ms", "500 ms", "200 ms" };
+    static readonly int[] IntervalVals = { 0, 1000, 500, 200 };
+    readonly Random _rng = new(2468);
+    readonly ObservableCollection<LivePerson> _rows = LivePeople(24);
+    int _liveTicks;
 
     public override Element Render()
     {
         var (preset, setPreset) = UseState(1);
+        var (live, setLive) = UseState(0);
+        var (ticks, setTicks) = UseState(0);
+
+        UseEffect(() =>
+        {
+            if (live == 0) return () => { };
+            var timer = new Microsoft.UI.Xaml.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(IntervalVals[live]) };
+            timer.Tick += (_, __) =>
+            {
+                int top = Math.Min(_rows.Count, 12);
+                for (int k = 0; k < 3 && top > 0; k++)
+                {
+                    var p = _rows[_rng.Next(top)];
+                    p.Salary = 60000 + _rng.Next(0, 180000);
+                }
+                setTicks(++_liveTicks);
+            };
+            timer.Start();
+            return () => timer.Stop();
+        }, live);
 
         var setters = preset switch
         {
@@ -236,7 +317,7 @@ class TvRowColorsPage : Component
             _ => new Action<WinTV>[] { tv => tv.AlternatingRowBackground = null! },
         };
 
-        var table = TableView(People, TextColumns(), height: 460) with
+        var table = TableView(_rows, VibrantColumns()) with
         {
             SelectionMode = TVSel.Extended,
             Setters = setters,
@@ -245,8 +326,12 @@ class TvRowColorsPage : Component
         var options = VStack(16,
             TvSample.Section("Row banding", "Pick a preset to set alternating-row background colors. Each click instantly re-tints the rows; None clears them.",
                 RadioButtons(Presets, preset, setPreset)),
+            TvSample.Section("Live updates", "Mutate several visible LivePerson.Salary values in place; INotifyPropertyChanged refreshes the tint cells without rebinding.",
+                RadioButtons(Intervals, live, setLive)),
             TvSample.Section("Status", null,
-                TvSample.Readout("Active mode", Presets[preset])));
+                TvSample.Readout("Active mode", Presets[preset]),
+                TvSample.Readout("Live updates", live == 0 ? "Off" : Intervals[live]),
+                TvSample.Readout("Salary update ticks", ticks.ToString())));
 
         return TvSample.Page("RowColors",
             "Pick a preset to set row and alternating-row background / foreground colors. Each click instantly re-tints the rows; 'No banding' clears them.",
@@ -259,6 +344,7 @@ class TvGridLinesPage : Component
     static readonly string[] Lines = { "None", "Horizontal", "Vertical", "All" };
     static readonly string[] Modes = { "Flat", "Grouped", "Hierarchical" };
     static readonly string[] Banding = { "Default theme", "Custom colors" };
+    readonly List<LivePerson> _roots = HierarchyRoots();
 
     public override Element Render()
     {
@@ -271,11 +357,28 @@ class TvGridLinesPage : Component
             ? new Action<WinTV>[] { tv => tv.AlternatingRowBackground = TvFx.Brush(0x33, 0x38, 0xB5, 0xFF) }
             : new Action<WinTV>[] { tv => tv.AlternatingRowBackground = TvFx.Brush(0x18, 0x80, 0x80, 0x80) };
 
-        var table = TableView(People, TextColumns(), height: 460) with
+        var rows = mode == 1 ? People.OrderBy(p => p.Department).ThenBy(p => p.FirstName).ToList() : People;
+        TableViewElement table = mode == 2
+            ? TableView(Array.Empty<object>(), TextColumns()) with
+            {
+                HierarchicalItems = _roots,
+                HierarchicalChildrenPath = nameof(LivePerson.Children),
+                SelectionMode = TVSel.Single,
+                GridLinesVisibility = grid,
+                Setters = setters,
+            }
+            : TableView(rows, TextColumns()) with
+            {
+                SelectionMode = TVSel.Single,
+                GridLinesVisibility = grid,
+                Setters = setters,
+            };
+
+        var status = mode switch
         {
-            SelectionMode = TVSel.Single,
-            GridLinesVisibility = grid,
-            Setters = setters,
+            1 => $"Grouped · {People.Select(p => p.Department).Distinct().Count():N0} departments · {People.Count:N0} people",
+            2 => $"Hierarchical · {_roots.Count:N0} roots · {_roots.Sum(r => r.Children.Count):N0} child rows",
+            _ => $"Flat · {People.Count:N0} rows",
         };
 
         var options = VStack(16,
@@ -283,13 +386,14 @@ class TvGridLinesPage : Component
                 RadioButtons(Lines, lines, setLines)),
             TvSample.Section("Mode", null,
                 RadioButtons(Modes, mode, setMode),
-                mode == 0 ? TextBlock("") : Caption("Grouped and hierarchical layouts are native-only in the consumable wrapper; the flat table remains visible so you can compare grid-line styling.")),
+                mode == 1 ? Caption("GroupedItemsSource is native-only in the consumable wrapper; this mode orders rows by Department while keeping grid-line styling live.") : TextBlock("")),
             TvSample.Section("Row banding", null,
                 RadioButtons(Banding, banding, setBanding)),
             TvSample.Section("Status", null,
                 TvSample.Readout("GridLinesVisibility", Lines[lines]),
                 TvSample.Readout("Mode", Modes[mode]),
-                TvSample.Readout("Row banding", Banding[banding])));
+                TvSample.Readout("Row banding", Banding[banding]),
+                TvSample.Readout("Source", $"{status} · {Lines[lines].ToLowerInvariant()} lines · {Banding[banding].ToLowerInvariant()}")));
 
         return TvSample.Page("GridLines",
             "Choose which grid lines show — All, Horizontal, Vertical, or None. Switch mode or banding to see the lines stay on-theme.",
@@ -318,7 +422,7 @@ class TvRowTemplatePage : Component
             _ => TextColumns(),
         };
 
-        var table = TableView(People, columns, height: 460) with
+        var table = TableView(People, columns) with
         {
             SelectionMode = TVSel.Single,
         };
@@ -373,7 +477,7 @@ class TvRowDetailsPage : Component
             ? $"{People[selectedIndex].FirstName} {People[selectedIndex].LastName}"
             : "(none)";
 
-        var table = TableView(People, TextColumns(), height: 460) with
+        var table = TableView(People, TextColumns()) with
         {
             SelectionMode = TVSel.Single,
             OnControlReady = tv => _tv = tv,
@@ -389,9 +493,8 @@ class TvRowDetailsPage : Component
             TvSample.Section("Visibility mode", "Pick how row details are shown. VisibleWhenSelected is the default for this sample.",
                 RadioButtons(Modes, mode, setMode)),
             TvSample.Section("Status", null,
-                TvSample.Readout("Visibility mode", Modes[mode]),
-                TvSample.Readout("SelectionChanged fires", changes.ToString()),
-                TvSample.Readout("Selected row", selected)));
+                TvSample.Readout("Visibility events", changes.ToString()),
+                TvSample.Readout("Last event", selected == "(none)" ? "(none yet)" : $"{selected} — details would be visible")));
 
         return TvSample.Page("RowDetails",
             "Pick a visibility mode to show each row's details panel — always, never, or only when selected. The readouts track each change.",
@@ -404,7 +507,7 @@ class TvMixedControlsPage : Component
     public override Element Render()
     {
         var first = People[0];
-        var table = TableView(People, VibrantColumns(), height: 460) with
+        var table = TableView(People, VibrantColumns()) with
         {
             SelectionMode = TVSel.Single,
         };
@@ -435,6 +538,8 @@ class TvMarqueePage : Component
         var (mode, setMode) = UseState(3);
         var (selectedCount, setSelectedCount) = UseState(0);
         var (selectedIndex, setSelectedIndex) = UseState(-1);
+        var (selectedIndices, setSelectedIndices) = UseState("(none)");
+        var (commitRanges, setCommitRanges) = UseState("(none)");
 
         var sel = mode switch { 0 => TVSel.None, 1 => TVSel.Single, 2 => TVSel.Multiple, _ => TVSel.Extended };
         var gesture = !marquee
@@ -443,15 +548,18 @@ class TvMarqueePage : Component
                 ? "Gesture unavailable in None / Single mode — choose Multiple or Extended."
                 : $"Ready — drag in the blank area below the last row ({People.Count} rows loaded).";
 
-        var table = TableView(People, TextColumns(), height: 460) with
+        var table = TableView(People, TextColumns()) with
         {
             SelectionMode = sel,
             IsSelectionGutterVisible = true,
             OnControlReady = tv => _tv = tv,
             OnSelectionChanged = _ =>
             {
-                setSelectedCount(_tv?.SelectedItems?.Count ?? 0);
+                var indices = SelectedIndices();
+                setSelectedCount(indices.Count);
                 setSelectedIndex(_tv?.SelectedIndex ?? -1);
+                setSelectedIndices(indices.Count == 0 ? "(none)" : string.Join(", ", indices));
+                setCommitRanges(indices.Count == 0 ? "(none)" : DescribeRanges(indices));
             },
             Setters = new Action<WinTV>[] { tv => tv.CanUserMarqueeSelect = marquee },
         };
@@ -466,10 +574,38 @@ class TvMarqueePage : Component
                 TvSample.Readout("Gesture state", gesture),
                 TvSample.Readout("Rows loaded", People.Count.ToString()),
                 TvSample.Readout("Selected count", selectedCount.ToString()),
-                TvSample.Readout("SelectedIndex", selectedIndex.ToString())));
+                TvSample.Readout("SelectedIndex", selectedIndex.ToString()),
+                TvSample.Readout("Selected indices / ranges", selectedIndices),
+                TvSample.Readout("Commit ranges", commitRanges)));
 
         return TvSample.Page("Marquee",
             "Click and drag in an empty area of the table to draw a selection rectangle; on release, the rows it touches are selected.",
             table, options);
+    }
+
+    List<int> SelectedIndices()
+    {
+        var selected = _tv?.SelectedItems;
+        if (selected == null || selected.Count == 0) return new();
+        return selected.OfType<Person>()
+            .Select(p => People.IndexOf(p))
+            .Where(i => i >= 0)
+            .OrderBy(i => i)
+            .ToList();
+    }
+
+    static string DescribeRanges(List<int> sortedIndices)
+    {
+        var ranges = new List<string>();
+        int start = sortedIndices[0], prev = start;
+        for (int i = 1; i < sortedIndices.Count; i++)
+        {
+            int v = sortedIndices[i];
+            if (v == prev + 1) { prev = v; continue; }
+            ranges.Add(start == prev ? $"{start}" : $"{start}..{prev}");
+            start = prev = v;
+        }
+        ranges.Add(start == prev ? $"{start}" : $"{start}..{prev}");
+        return string.Join(", ", ranges);
     }
 }
