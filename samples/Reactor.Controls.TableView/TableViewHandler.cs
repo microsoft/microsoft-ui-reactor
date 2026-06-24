@@ -41,6 +41,10 @@ public sealed class TableViewHandler : IElementHandler<TableViewElement, WinUITa
         public List<object> Master = new();
         public ObservableCollection<object> View = new();
         public bool Hooked;
+        // A live source we track so in-place add/remove/move/reset reflect in the table (re-applying the
+        // active sort/filter), honouring the standard ItemsSource = ObservableCollection contract.
+        public System.Collections.Specialized.INotifyCollectionChanged? Source;
+        public System.Collections.Specialized.NotifyCollectionChangedEventHandler? SourceHandler;
     }
 
     private static readonly ConditionalWeakTable<WinUITableView, ShapeState> s_shape = new();
@@ -52,7 +56,6 @@ public sealed class TableViewHandler : IElementHandler<TableViewElement, WinUITa
         Reconciler.SetElementTag(tv, el);
 
         ApplyLayout(tv, el);
-        tv.MinWidth = el.MinWidth;
         ApplyTableProps(tv, el);
 
         ApplyColumns(tv, el);
@@ -108,8 +111,6 @@ public sealed class TableViewHandler : IElementHandler<TableViewElement, WinUITa
 
         if (oldEl.Height != newEl.Height || oldEl.Stretch != newEl.Stretch)
             ApplyLayout(tv, newEl);
-        if (oldEl.MinWidth != newEl.MinWidth)
-            tv.MinWidth = newEl.MinWidth;
         ApplyTableProps(tv, newEl);
         if (!ColumnsEqual(oldEl.Columns, newEl.Columns) || oldEl.FrozenColumnCount != newEl.FrozenColumnCount)
             ApplyColumns(tv, newEl);
@@ -144,6 +145,7 @@ public sealed class TableViewHandler : IElementHandler<TableViewElement, WinUITa
         tv.Columns.Clear();
         if (s_shape.TryGetValue(tv, out var st))
         {
+            DetachSource(st);
             st.Master.Clear();
             st.View.Clear();
         }
@@ -218,12 +220,35 @@ public sealed class TableViewHandler : IElementHandler<TableViewElement, WinUITa
         }
         tv.HierarchicalItemsSource = null;
         var st = s_shape.GetOrCreateValue(tv);
+        DetachSource(st);
         st.Master = el.Items?.Cast<object>().ToList() ?? new List<object>();
         st.View = new ObservableCollection<object>(st.Master);
         tv.ItemsSource = st.View;
+
+        // Track a live source so in-place add/remove/move/reset on the consumer's collection reflect in
+        // the table, re-applying the active sort/filter. (Sort/filter still go through the Sorted/Filtered
+        // re-shape; here we keep Master in sync with the source.)
+        if (el.Items is System.Collections.Specialized.INotifyCollectionChanged incc)
+        {
+            st.Source = incc;
+            st.SourceHandler = (_, _) =>
+            {
+                st.Master = (el.Items?.Cast<object>() ?? Enumerable.Empty<object>()).ToList();
+                Reshape(tv);
+            };
+            incc.CollectionChanged += st.SourceHandler;
+        }
     }
 
-    /// <summary>Applies fixed-height vs stretch-to-fill layout.</summary>
+    private static void DetachSource(ShapeState st)
+    {
+        if (st.Source != null && st.SourceHandler != null)
+            st.Source.CollectionChanged -= st.SourceHandler;
+        st.Source = null;
+        st.SourceHandler = null;
+    }
+
+    /// <summary>Applies stretch-to-fill, explicit fixed height, or leaves height to layout/modifiers.</summary>
     private static void ApplyLayout(WinUITableView tv, TableViewElement el)
     {
         if (el.Stretch)
@@ -233,11 +258,17 @@ public sealed class TableViewHandler : IElementHandler<TableViewElement, WinUITa
             tv.Height = double.NaN;
             tv.MinHeight = 320;
         }
-        else
+        else if (el.Height is { } h)
         {
             tv.VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Top;
-            tv.Height = el.Height;
+            tv.Height = h;
             tv.MinHeight = 0;
+        }
+        else
+        {
+            // No explicit height + not stretching: leave sizing to layout modifiers (.Height()/.MinHeight()).
+            tv.VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Top;
+            tv.Height = double.NaN;
         }
     }
 

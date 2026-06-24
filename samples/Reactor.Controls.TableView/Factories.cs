@@ -35,7 +35,7 @@ public static partial class Factories
     /// A native TableView bound to <paramref name="items"/>, with columns
     /// auto-generated from the first item's public properties.
     /// </summary>
-    public static TableViewElement TableView(IEnumerable items, double height = 360) =>
+    public static TableViewElement TableView(IEnumerable items, double? height = null) =>
         new() { Items = items, Height = height };
 
     /// <summary>
@@ -45,6 +45,6 @@ public static partial class Factories
     public static TableViewElement TableView(
         IEnumerable items,
         IReadOnlyList<TableColumn> columns,
-        double height = 360) =>
+        double? height = null) =>
         new() { Items = items, Columns = columns, Height = height };
 }

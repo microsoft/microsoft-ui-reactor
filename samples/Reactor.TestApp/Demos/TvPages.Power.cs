@@ -472,6 +472,8 @@ class TvVirtualizationPage : Component
     static readonly int[] SizeValues = { 100, 1000, 10000, 50000 };
 
     WinTV? _tv;
+    List<Person>? _cache;
+    int _cacheTotal = -1;
 
     public override Element Render()
     {
@@ -480,7 +482,10 @@ class TvVirtualizationPage : Component
         var (scroll, setScroll) = UseState("Home");
 
         var total = mode == 0 ? SizeValues[size] : Math.Min(SizeValues[size], 1000);
-        var rows = ManyPeople(total);
+        // Cache the dataset by size so the Items reference is stable across renders (a fresh ManyPeople(total)
+        // every render would re-bind + reset scroll + re-allocate ~150k objects per scroll-button click).
+        if (_cacheTotal != total) { _cache = ManyPeople(total); _cacheTotal = total; }
+        var rows = _cache!;
         var realized = Math.Min(50, total);
         var ratio = total == 0 ? "0%" : $"~{(realized * 100.0 / total):0.##}%";
 

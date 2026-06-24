@@ -22,10 +22,21 @@
     -p:IncludeTableView=true|false.
   ──────────────────────────────────────────────────────────────────────── -->
   <PropertyGroup>
+    <!-- The native split-binary TableView ships as an x64-only satellite (native\{chk,fre}\...Advanced.dll),
+         so the opt-in path is x64-only: default OFF on non-x64 so an ARM64 build never deploys the x64 DLL
+         (which would fail to activate at runtime). Shared CI (GITHUB_ACTIONS) is also OFF to keep every
+         Reactor PR build byte-identical. Force with -p:IncludeTableView=true|false. -->
+    <IncludeTableView Condition="'$(IncludeTableView)' == '' and '$(Platform)' != 'x64'">false</IncludeTableView>
     <IncludeTableView Condition="'$(IncludeTableView)' == '' and '$(GITHUB_ACTIONS)' == 'true'">false</IncludeTableView>
     <IncludeTableView Condition="'$(IncludeTableView)' == ''">true</IncludeTableView>
     <DefineConstants Condition="'$(IncludeTableView)' == 'true'">$(DefineConstants);INCLUDE_TABLEVIEW</DefineConstants>
   </PropertyGroup>
+
+  <!-- Guard: the checked-in native Advanced.dll is x64 only; forcing the TableView on for another arch
+       would copy an incompatible binary that fails WinRT activation at runtime. Fail the build early. -->
+  <Target Name="_TableViewArchGuard" BeforeTargets="Build" Condition="'$(IncludeTableView)' == 'true' and '$(Platform)' != 'x64'">
+    <Error Text="IncludeTableView is x64-only (the native Microsoft.UI.Xaml.Controls.Advanced.dll is an x64 satellite). Build for x64, or set -p:IncludeTableView=false." />
+  </Target>
 
   <PropertyGroup Condition="'$(IncludeTableView)' == 'true'">
     <ApplicationManifest>app.manifest</ApplicationManifest>

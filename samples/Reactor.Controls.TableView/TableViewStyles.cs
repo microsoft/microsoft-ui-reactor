@@ -33,6 +33,7 @@ namespace Reactor.Controls;
 public static class TableViewStyles
 {
     private static bool s_init;
+    private static bool s_metaRegistered;
     private static Style? s_tvStyle;
     private static readonly object s_gate = new object();
 
@@ -52,11 +53,25 @@ public static class TableViewStyles
     /// <summary>The satellite control's default Style (captured from the single merged closure).</summary>
     public static Style? DefaultStyle { get { EnsureInit(); return s_tvStyle; } }
 
-    /// <summary>Registers the satellite XAML metadata provider. Idempotent; safe to call early.</summary>
+    /// <summary>Registers the satellite XAML metadata provider EXACTLY ONCE (idempotent across all callers).</summary>
     internal static void RegisterMetadata()
     {
-        try { ReactorApp.RegisterControlAssembly(new AdvancedXamlMetadataProvider()); }
-        catch (Exception ex) { System.Diagnostics.Debug.WriteLine("[TableViewStyles] register failed: " + ex); }
+        if (s_metaRegistered)
+            return;
+        lock (s_gate)
+        {
+            if (s_metaRegistered)
+                return;
+            try
+            {
+                // A single provider instance, registered once. RegisterControlAssembly is idempotent only
+                // per-instance, so a fresh provider on every call would accumulate duplicate registrations
+                // (startup/memory cost + ambiguous provider order). Both EnsureInit() and Factories funnel here.
+                ReactorApp.RegisterControlAssembly(new AdvancedXamlMetadataProvider());
+                s_metaRegistered = true;
+            }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine("[TableViewStyles] register failed: " + ex); }
+        }
     }
 
     /// <summary>Ensures metadata + style closure are loaded and applies the default Style to <paramref name="tv"/>.</summary>

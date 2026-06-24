@@ -131,7 +131,7 @@ class TvShowcasePage : Component
         return TvSample.Page("Showcase",
             "Default is Hierarchical (expand a row's chevron to drill in). Switch modes, change the flat row count, turn on " +
             "Live updates to watch Salary tints recolor in place, toggle banding / the selection gutter. Click a header to sort; a funnel to filter.",
-            table, options,
+            table, options, tableHeight: 560,
             sourceCode:
 @"// Hierarchical (tree-grid) mode — bind roots + the child-collection property, expand the first level:
 var roots = HierarchyRoots();                       // List<LivePerson>, each with .Children

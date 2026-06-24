@@ -41,8 +41,13 @@ public sealed record TableViewElement : Element
     /// </summary>
     public IReadOnlyList<TableColumn>? Columns { get; init; }
 
-    /// <summary>Layout height of the hosted control.</summary>
-    public double Height { get; init; } = 360;
+    /// <summary>
+    /// Explicit fixed viewport height for the hosted control. When <c>null</c> (the default), the control's
+    /// height is left to layout — i.e. a <c>.Height(...)</c>/<c>.MinHeight(...)</c> modifier or <see cref="Stretch"/>.
+    /// A virtualizing data control needs a bounded viewport to virtualize, so set this (or <see cref="Stretch"/>)
+    /// for large data sets.
+    /// </summary>
+    public double? Height { get; init; }
 
     /// <summary>
     /// When true, the control stretches to fill its layout slot (VerticalAlignment/HorizontalAlignment =
@@ -63,9 +68,6 @@ public sealed record TableViewElement : Element
 
     /// <summary>When hierarchical, expand the root nodes (first level) by default after binding.</summary>
     public bool ExpandFirstLevel { get; init; }
-
-    /// <summary>Minimum layout width of the hosted control.</summary>
-    public double MinWidth { get; init; } = 520;
 
     /// <summary>Selection mode. When <c>null</c>, the control's default is used.</summary>
     public TableViewSelectionMode? SelectionMode { get; init; }
