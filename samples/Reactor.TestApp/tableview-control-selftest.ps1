@@ -14,7 +14,7 @@
 
   The BUILD is the hard gate (a failure fails the script / CI): it proves the
   consumable control library + its CsWinRT projection + the ~9 MB native
-  Advanced.dll all compile and integrate. The RENDER check is best-effort because
+  Tabular.dll all compile and integrate. The RENDER check is best-effort because
   GitHub's windows-latest runners are non-interactive (session 0) and may not
   compose a WinUI 3 swapchain; an inconclusive render does not fail the script.
   Render is verified locally (see the screenshots referenced in PR #621).

@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
   <assemblyIdentity version="1.0.0.0" name="tvapp.app"/>
-  <file name="Microsoft.UI.Xaml.Controls.Advanced.dll">
+  <file name="Microsoft.UI.Xaml.Controls.Tabular.dll">
     <activatableClass name="Microsoft.UI.Xaml.Automation.Peers.EditableContentPresenterAutomationPeer" threadingModel="both" xmlns="urn:schemas-microsoft-com:winrt.v1"/>
     <activatableClass name="Microsoft.UI.Xaml.Automation.Peers.SortIndicatorAutomationPeer" threadingModel="both" xmlns="urn:schemas-microsoft-com:winrt.v1"/>
-    <activatableClass name="Microsoft.UI.Xaml.Controls.AdvancedControlsResources" threadingModel="both" xmlns="urn:schemas-microsoft-com:winrt.v1"/>
+    <activatableClass name="Microsoft.UI.Xaml.Controls.TabularControlsResources" threadingModel="both" xmlns="urn:schemas-microsoft-com:winrt.v1"/>
     <activatableClass name="Microsoft.UI.Xaml.Controls.Primitives.ColumnResizeGripper" threadingModel="both" xmlns="urn:schemas-microsoft-com:winrt.v1"/>
     <activatableClass name="Microsoft.UI.Xaml.Controls.Primitives.ColumnResizeRequestedEventArgs" threadingModel="both" xmlns="urn:schemas-microsoft-com:winrt.v1"/>
     <activatableClass name="Microsoft.UI.Xaml.Controls.Primitives.EditableContentPresenter" threadingModel="both" xmlns="urn:schemas-microsoft-com:winrt.v1"/>
@@ -100,6 +100,6 @@
     <activatableClass name="Microsoft.UI.Xaml.Data.ShapedCollectionKeySelector" threadingModel="both" xmlns="urn:schemas-microsoft-com:winrt.v1"/>
     <activatableClass name="Microsoft.UI.Xaml.Data.ShapedCollectionView" threadingModel="both" xmlns="urn:schemas-microsoft-com:winrt.v1"/>
     <activatableClass name="Microsoft.UI.Xaml.Data.SortDescription" threadingModel="both" xmlns="urn:schemas-microsoft-com:winrt.v1"/>
-    <activatableClass name="Microsoft.UI.Xaml.XamlTypeInfo.XamlControlsAdvancedXamlMetaDataProvider" threadingModel="both" xmlns="urn:schemas-microsoft-com:winrt.v1"/>
+    <activatableClass name="Microsoft.UI.Xaml.XamlTypeInfo.XamlControlsTabularXamlMetaDataProvider" threadingModel="both" xmlns="urn:schemas-microsoft-com:winrt.v1"/>
   </file>
 </assembly>

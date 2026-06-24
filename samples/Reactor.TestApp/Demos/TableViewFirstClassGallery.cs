@@ -284,7 +284,7 @@ static class TvDisplayPages
             Card(VStack(8,
                 SubHeading("Native control"),
                 TextBlock("Microsoft.UI.Xaml.Controls.TableView — a separate-binary split control " +
-                          "(Microsoft.UI.Xaml.Controls.Advanced.dll), projected via CsWinRT vs public WinAppSDK 2.0.1."),
+                          "(Microsoft.UI.Xaml.Controls.Tabular.dll), projected via CsWinRT vs public WinAppSDK 2.0.1."),
                 TextBlock("The Release sample consumes the optimized (fre) binary; Debug consumes the checked (chk) binary."))).Padding(16)
         )).Padding(4);
     }

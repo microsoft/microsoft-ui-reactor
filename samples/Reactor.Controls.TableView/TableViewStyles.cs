@@ -7,7 +7,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Markup;
 using WinUITableView = Microsoft.UI.Xaml.Controls.TableView;
-using AdvancedXamlMetadataProvider = Microsoft.UI.Xaml.XamlTypeInfo.XamlControlsAdvancedXamlMetaDataProvider;
+using AdvancedXamlMetadataProvider = Microsoft.UI.Xaml.XamlTypeInfo.XamlControlsTabularXamlMetaDataProvider;
 
 namespace Reactor.Controls;
 
@@ -179,7 +179,7 @@ public static class TableViewStyles
                 bool advMerged = false;
                 try
                 {
-                    var advRes = new Microsoft.UI.Xaml.Controls.AdvancedControlsResources();
+                    var advRes = new Microsoft.UI.Xaml.Controls.TabularControlsResources();
                     if (appRes != null && !appRes.MergedDictionaries.Contains(advRes))
                     {
                         appRes.MergedDictionaries.Add(advRes);
@@ -189,7 +189,7 @@ public static class TableViewStyles
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine("[TableViewStyles] AdvancedControlsResources merge failed: " + ex);
+                    System.Diagnostics.Debug.WriteLine("[TableViewStyles] TabularControlsResources merge failed: " + ex);
                 }
 
                 Status = "ok: syncCtxWasPresent=" + hadCtx + ", advResources=" + advMerged + ", styleFound=" + (s_tvStyle != null);

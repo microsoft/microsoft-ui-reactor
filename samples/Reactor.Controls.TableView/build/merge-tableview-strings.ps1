@@ -4,7 +4,7 @@
 #
 # The control's default-style lookup is satisfied app-side (see TableViewDemo.cs), but
 # its localized UIA / live-region strings are resolved at runtime via the app's
-# MainResourceMap. The public WinAppSDK 2.0.1 PRI does not carry the Advanced control's
+# MainResourceMap. The public WinAppSDK 2.0.1 PRI does not carry the Tabular control's
 # SR_TableView* keys, so row realization (TableViewRow.cpp) throws without this merge.
 #
 # Runs as a post-build step. Idempotent.

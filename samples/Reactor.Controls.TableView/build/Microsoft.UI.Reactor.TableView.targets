@@ -3,7 +3,7 @@
   <!--
     Microsoft.UI.Reactor.TableView — consumer-side targets.
 
-    The native TableView ships as a separate WinRT component (Microsoft.UI.Xaml.Controls.Advanced.dll,
+    The native TableView ships as a separate WinRT component (Microsoft.UI.Xaml.Controls.Tabular.dll,
     deployed by NuGet from runtimes/win-x64/native/). WinRT activation needs the consumer's application
     manifest to map the TableView runtimeclasses to that DLL. If the consuming app has not declared its
     own ApplicationManifest, supply the one bundled in this package so the control activates out of the box.
@@ -16,7 +16,7 @@
   </PropertyGroup>
 
   <!--
-    This POC ships an UNSHIPPED native satellite (Microsoft.UI.Xaml.Controls.Advanced.dll) whose WinRT
+    This POC ships an UNSHIPPED native satellite (Microsoft.UI.Xaml.Controls.Tabular.dll) whose WinRT
     types are not in the installed public WinAppSDK runtime. Framework-dependent activation then resolves
     an incompatible runtime and the control renders a blank body. Until the native TableView ships in
     public WinAppSDK, the consuming app must deploy a matching local runtime via

@@ -5,7 +5,7 @@
 # The control's default-style lookup is satisfied by the Reactor.Controls.TableView
 # library (embedded Styles closure), but its localized UIA / live-region strings are
 # resolved at runtime via the app's MainResourceMap. The public WinAppSDK 2.0.1 PRI
-# does not carry the Advanced control's SR_TableView* keys, so row realization
+# does not carry the Tabular control's SR_TableView* keys, so row realization
 # (TableViewRow.cpp) throws without this merge.
 #
 # Runs as a post-build step. Idempotent.

@@ -22,7 +22,7 @@
     -p:IncludeTableView=true|false.
   ──────────────────────────────────────────────────────────────────────── -->
   <PropertyGroup>
-    <!-- The native split-binary TableView ships as an x64-only satellite (native\{chk,fre}\...Advanced.dll),
+    <!-- The native split-binary TableView ships as an x64-only satellite (native\{chk,fre}\...Tabular.dll),
          so the opt-in path is x64-only: default OFF on non-x64 so an ARM64 build never deploys the x64 DLL
          (which would fail to activate at runtime). Shared CI (GITHUB_ACTIONS) is also OFF to keep every
          Reactor PR build byte-identical. Force with -p:IncludeTableView=true|false. -->
@@ -32,10 +32,10 @@
     <DefineConstants Condition="'$(IncludeTableView)' == 'true'">$(DefineConstants);INCLUDE_TABLEVIEW</DefineConstants>
   </PropertyGroup>
 
-  <!-- Guard: the checked-in native Advanced.dll is x64 only; forcing the TableView on for another arch
+  <!-- Guard: the checked-in native Tabular.dll is x64 only; forcing the TableView on for another arch
        would copy an incompatible binary that fails WinRT activation at runtime. Fail the build early. -->
   <Target Name="_TableViewArchGuard" BeforeTargets="Build" Condition="'$(IncludeTableView)' == 'true' and '$(Platform)' != 'x64'">
-    <Error Text="IncludeTableView is x64-only (the native Microsoft.UI.Xaml.Controls.Advanced.dll is an x64 satellite). Build for x64, or set -p:IncludeTableView=false." />
+    <Error Text="IncludeTableView is x64-only (the native Microsoft.UI.Xaml.Controls.Tabular.dll is an x64 satellite). Build for x64, or set -p:IncludeTableView=false." />
   </Target>
 
   <PropertyGroup Condition="'$(IncludeTableView)' == 'true'">
@@ -48,8 +48,8 @@
     incrementally re-evaluates the project graph on each save; transitive WindowsAppSDK.* references get
     double-counted and trip Microsoft.WindowsAppSDK.ComponentReference.targets' strict version check
     ("version 2.0.20;2.0.20 was referenced"). Self-contained sidesteps the check.
-    (b) REQUIRED for the native split-binary TableView (Advanced.dll) to RENDER: framework-dependent
-    activation resolves a WinAppSDK runtime build whose ABI the dev-framework-built Advanced.dll's internal
+    (b) REQUIRED for the native split-binary TableView (Tabular.dll) to RENDER: framework-dependent
+    activation resolves a WinAppSDK runtime build whose ABI the dev-framework-built Tabular.dll's internal
     realization is not compatible with, so column headers + cells silently fail to generate (empty grid).
     The self-contained local runtime restores full rendering. This only engages when IncludeTableView=true
     (local / on-demand), never in shared CI where IncludeTableView=false.
@@ -74,7 +74,7 @@
   <!-- ── Native TableView control items (gated by IncludeTableView) ──────────── -->
   <PropertyGroup Condition="'$(IncludeTableView)' == 'true'">
     <!--
-      Native Advanced.dll flavor selected by sample Configuration. Both flavors are checked in:
+      Native Tabular.dll flavor selected by sample Configuration. Both flavors are checked in:
         native\fre\  = fre  (free / optimized, NDEBUG)  -> consumed by Release builds, for performance.
         native\chk\  = chk  (checked / asserts, debug)  -> consumed by Debug builds, for debugging.
       ("fre"/"chk" are the WinUI free/checked build flavors; named so to avoid the [Rr]elease/[Dd]ebug
@@ -82,8 +82,8 @@
     -->
     <_AdvancedDllDir>fre</_AdvancedDllDir>
     <_AdvancedDllDir Condition="'$(Configuration)' != 'Release'">chk</_AdvancedDllDir>
-    <_AdvancedDll>$(MSBuildProjectDirectory)\native\$(_AdvancedDllDir)\Microsoft.UI.Xaml.Controls.Advanced.dll</_AdvancedDll>
-    <_AdvancedDll Condition="!Exists('$(_AdvancedDll)')">$(MSBuildProjectDirectory)\native\chk\Microsoft.UI.Xaml.Controls.Advanced.dll</_AdvancedDll>
+    <_AdvancedDll>$(MSBuildProjectDirectory)\native\$(_AdvancedDllDir)\Microsoft.UI.Xaml.Controls.Tabular.dll</_AdvancedDll>
+    <_AdvancedDll Condition="!Exists('$(_AdvancedDll)')">$(MSBuildProjectDirectory)\native\chk\Microsoft.UI.Xaml.Controls.Tabular.dll</_AdvancedDll>
   </PropertyGroup>
   <ItemGroup Condition="'$(IncludeTableView)' == 'true'">
     <ProjectReference Include="..\TableView.Projection\TableView.Projection.csproj" />
@@ -91,7 +91,7 @@
     <ProjectReference Include="..\Reactor.Controls.TableView\Reactor.Controls.TableView.csproj" />
     <!-- The full 37-page native TableViewSamples gallery (compiled WinUI pages). -->
     <ProjectReference Include="..\TableViewSamples.Embedded\TableViewSamples.Embedded.csproj" />
-    <Content Include="$(_AdvancedDll)" Link="Microsoft.UI.Xaml.Controls.Advanced.dll" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="$(_AdvancedDll)" Link="Microsoft.UI.Xaml.Controls.Tabular.dll" CopyToOutputDirectory="PreserveNewest" />
     <None Include="TableViewStrings\Resources.resw" />
     <None Include="TableViewStrings\merge-tableview-strings.ps1" />
   </ItemGroup>
