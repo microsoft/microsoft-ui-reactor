@@ -53,8 +53,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- native control DLL -> NuGet auto-deploys runtimes/<rid>/native/* to win-x64 consumers -->
-    <None Include="..\Reactor.TestApp\Microsoft.UI.Xaml.Controls.Advanced.dll"
+    <!-- native control DLL -> NuGet auto-deploys runtimes/<rid>/native/* to win-x64 consumers.
+         Ship the optimized fre (release) satellite; the chk flavor under native\chk\ is for
+         local Debug perf parity in the sample only. -->
+    <None Include="..\Reactor.TestApp\native\fre\Microsoft.UI.Xaml.Controls.Advanced.dll"
           Pack="true" PackagePath="runtimes/win-x64/native/" Visible="false" />
     <!-- consumer-side targets + WinRT activation manifest -->
     <None Include="build\Microsoft.UI.Reactor.TableView.targets"
