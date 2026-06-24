@@ -16,6 +16,20 @@
   </PropertyGroup>
 
   <!--
+    This POC ships an UNSHIPPED native satellite (Microsoft.UI.Xaml.Controls.Advanced.dll) whose WinRT
+    types are not in the installed public WinAppSDK runtime. Framework-dependent activation then resolves
+    an incompatible runtime and the control renders a blank body. Until the native TableView ships in
+    public WinAppSDK, the consuming app must deploy a matching local runtime via
+    WindowsAppSDKSelfContained=true. Warn (don't fail) so the requirement is visible instead of surfacing
+    as a mystifying empty grid. Unpackaged win-x64 apps only.
+  -->
+  <Target Name="_WarnTableViewSelfContained" BeforeTargets="Build"
+          Condition="'$(WindowsAppSDKSelfContained)' != 'true' and '$(WindowsPackageType)' == 'None'">
+    <Warning Code="RTV0001"
+             Text="Microsoft.UI.Reactor.TableView (POC) needs &lt;WindowsAppSDKSelfContained&gt;true&lt;/WindowsAppSDKSelfContained&gt; in your app project to render. Without it, the vendored native TableView activates against an incompatible installed WinAppSDK runtime and shows a blank table. This requirement goes away once the native control ships in public WinAppSDK." />
+  </Target>
+
+  <!--
     Merge the native control's localized SR_TableView* strings into the consumer's app PRI. The
     public WinAppSDK 2.0.1 PRI does not carry them, and native row/header realization throws without
     them, so the control would render a blank body. Unpackaged win-x64 apps only.
