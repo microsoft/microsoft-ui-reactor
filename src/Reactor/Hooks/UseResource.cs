@@ -152,10 +152,15 @@ public static class UseResourceExtensions
         // #57: only rebuild the DepsHash-based cache key when the deps actually
         // changed since the last transition. The hash string was previously rebuilt
         // every render even on the steady-state path where deps are identical.
+        bool keyIsExplicit = options.CacheKey is not null;
         string newKey;
-        if (options.CacheKey is not null)
-            newKey = options.CacheKey;
-        else if (state.LastDeps is not null && DepsEqual(state.LastDeps, deps))
+        if (keyIsExplicit)
+            newKey = options.CacheKey!;
+        // Reuse the prior hashed key only when the previous render was ALSO in
+        // deps-hash mode. If CacheKey just transitioned explicit -> null, the stored
+        // key is the old explicit string and must be recomputed even though deps are
+        // unchanged (matches the pre-#57 behaviour of always recomputing).
+        else if (state.LastDeps is not null && !state.LastKeyWasExplicit && DepsEqual(state.LastDeps, deps))
             newKey = state.CacheKey;
         else
             newKey = $"{hookIdRef.Current}/{DepsHash(deps)}";
@@ -165,7 +170,7 @@ public static class UseResourceExtensions
 
         if (firstRender || depsChanged)
         {
-            state.TransitionToKey(newKey, deps);
+            state.TransitionToKey(newKey, deps, keyIsExplicit);
             EnterKey(state, fetcher, options);
         }
         else
@@ -420,6 +425,10 @@ internal sealed class ResourceHookState<T> : IDisposable
     public readonly PendingScope? PendingScope;
     public string CacheKey = "";
     public object[]? LastDeps;
+    // True when CacheKey currently holds an explicit options.CacheKey rather than a
+    // deps-hash key. Lets the #57 rehash-skip path detect an explicit -> null
+    // transition and recompute instead of reusing the stale explicit key.
+    public bool LastKeyWasExplicit;
     public CancellationTokenSource? Cts;
     private AsyncValue<T> _lastValue = AsyncValue<T>.Loading.Instance;
     public AsyncValue<T> LastValue
@@ -473,7 +482,7 @@ internal sealed class ResourceHookState<T> : IDisposable
         PendingScope.SetLoading(this, loading);
     }
 
-    public void TransitionToKey(string newKey, object[] newDeps)
+    public void TransitionToKey(string newKey, object[] newDeps, bool keyIsExplicit)
     {
         // Cancel outstanding work for the previous key.
         Cts?.Cancel();
@@ -491,6 +500,7 @@ internal sealed class ResourceHookState<T> : IDisposable
         Cache.Subscribe(newKey);
         _focusService?.Enroll(newKey);
         LastDeps = newDeps.ToArray();
+        LastKeyWasExplicit = keyIsExplicit;
     }
 
     public void ScheduleRetry(TimeSpan delay, Action afterDelay)

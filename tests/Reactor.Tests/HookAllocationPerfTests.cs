@@ -201,10 +201,14 @@ public class HookAllocationPerfTests
         var (_, update) = ctx.UseReducer(0, threadSafe: true);
 
         const int threads = 8, perThread = 1000;
+        // A start barrier maximizes real contention: every worker blocks until all
+        // threads are ready, so the increments actually race on the lock.
+        using var barrier = new Barrier(threads);
         var tasks = new Task[threads];
         for (int t = 0; t < threads; t++)
             tasks[t] = Task.Run(() =>
             {
+                barrier.SignalAndWait(TestContext.Current.CancellationToken);
                 for (int i = 0; i < perThread; i++)
                     update(prev => prev + 1);
             }, TestContext.Current.CancellationToken);
@@ -437,5 +441,276 @@ public class HookAllocationPerfTests
 
         Assert.Same(ref1, ref2);
         Assert.Same(requestFocus1, requestFocus2);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  H1 — a lone object[]-typed dep keeps element-wise (params) semantics
+    //  (covariant ref-type arrays must NOT be reference-compared as one dep)
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void UseEffect_Arity1_ObjectArray_Dep_Uses_ElementWise_Comparison()
+    {
+        // A fresh string[] of equal contents each render must NOT re-run the effect.
+        // (If the array were wrapped as one reference-compared dep it would re-run.)
+        var ctx = NewCtx();
+        int runs = 0;
+        ctx.UseEffect(() => { runs++; }, new[] { "a", "b" });
+        ctx.FlushEffects();
+        Assert.Equal(1, runs);
+
+        Rerender(ctx);
+        ctx.UseEffect(() => { runs++; }, new[] { "a", "b" }); // new array, equal contents
+        ctx.FlushEffects();
+        Assert.Equal(1, runs); // element-wise equal → skipped
+
+        Rerender(ctx);
+        ctx.UseEffect(() => { runs++; }, new[] { "a", "c" }); // contents changed
+        ctx.FlushEffects();
+        Assert.Equal(2, runs);
+    }
+
+    [Fact]
+    public void UseMemo_Arity1_ObjectArray_Dep_Uses_ElementWise_Comparison()
+    {
+        var ctx = NewCtx();
+        int calls = 0;
+        var v1 = ctx.UseMemo(() => { calls++; return calls; }, new[] { "a", "b" });
+        Rerender(ctx);
+        var v2 = ctx.UseMemo(() => { calls++; return calls; }, new[] { "a", "b" }); // equal contents
+        Rerender(ctx);
+        var v3 = ctx.UseMemo(() => { calls++; return calls; }, new[] { "a", "c" }); // changed
+
+        Assert.Equal(1, v1);
+        Assert.Equal(1, v2); // reused
+        Assert.Equal(2, v3); // recomputed
+        Assert.Equal(2, calls);
+    }
+
+    [Fact]
+    public void UseCallback_Arity1_ObjectArray_Dep_Uses_ElementWise_Comparison()
+    {
+        var ctx = NewCtx();
+        Action cb1 = () => { };
+        Action cb2 = () => { };
+        Action cb3 = () => { };
+        var r1 = ctx.UseCallback(cb1, new[] { "a", "b" });
+        Rerender(ctx);
+        var r2 = ctx.UseCallback(cb2, new[] { "a", "b" }); // equal contents → retain cb1
+        Rerender(ctx);
+        var r3 = ctx.UseCallback(cb3, new[] { "a", "c" }); // changed → adopt cb3
+
+        Assert.Same(cb1, r1);
+        Assert.Same(cb1, r2); // deps equal element-wise → cached callback retained
+        Assert.Same(cb3, r3); // deps changed → new callback
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  #45/#46 — remaining deps-overload matrix (arity 2/3 + cleanup flavor)
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void UseEffect_Arity2_And_Arity3_Fire_Once_While_Deps_Unchanged()
+    {
+        var ctx = NewCtx();
+        int runs2 = 0, runs3 = 0;
+        for (int r = 0; r < 3; r++)
+        {
+            ctx.BeginRender(() => { });
+            ctx.UseEffect(() => { runs2++; }, 1, "x");
+            ctx.UseEffect(() => { runs3++; }, 1, "x", 2.5);
+            ctx.FlushEffects();
+        }
+
+        Assert.Equal(1, runs2);
+        Assert.Equal(1, runs3);
+    }
+
+    [Fact]
+    public void UseEffect_Cleanup_Arity1_Reruns_And_Cleans_Up_On_Dep_Change()
+    {
+        var ctx = NewCtx();
+        int runs = 0, cleanups = 0;
+        ctx.UseEffect(() => { runs++; return () => cleanups++; }, 1);
+        ctx.FlushEffects();
+        Assert.Equal(1, runs);
+        Assert.Equal(0, cleanups);
+
+        Rerender(ctx);
+        ctx.UseEffect(() => { runs++; return () => cleanups++; }, 1); // unchanged
+        ctx.FlushEffects();
+        Assert.Equal(1, runs);
+        Assert.Equal(0, cleanups);
+
+        Rerender(ctx);
+        ctx.UseEffect(() => { runs++; return () => cleanups++; }, 2); // changed → cleanup + rerun
+        ctx.FlushEffects();
+        Assert.Equal(2, runs);
+        Assert.Equal(1, cleanups);
+    }
+
+    [Fact]
+    public void UseCallback_Arity2_And_Arity3_Recompute_On_Change()
+    {
+        var ctx = NewCtx();
+        Action a1 = () => { };
+        Action a2 = () => { };
+        ctx.UseCallback(a1, 1, "x");
+        ctx.UseCallback(a1, 1, "x", 2.5);
+        Rerender(ctx);
+        var c2 = ctx.UseCallback(a2, 1, "x");      // unchanged deps → keep a1
+        var c3 = ctx.UseCallback(a2, 1, "x", 9.9); // changed dep → adopt a2
+
+        Assert.Same(a1, c2);
+        Assert.Same(a2, c3);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  #56 — UseDisposableEffect: dispose exactly once on unmount
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void UseDisposableEffect_Disposes_Resource_Once_On_Unmount()
+    {
+        var ctx = NewCtx();
+        var probe = new DisposeProbe();
+        ctx.UseDisposableEffect(probe);
+        ctx.FlushEffects();
+
+        for (int i = 0; i < 3; i++) // re-render: mount-once effect must not re-fire
+        {
+            Rerender(ctx);
+            ctx.UseDisposableEffect(probe);
+            ctx.FlushEffects();
+        }
+        Assert.Equal(0, probe.Disposals); // still mounted
+
+        ctx.RunCleanups();
+        Assert.Equal(1, probe.Disposals); // disposed exactly once on unmount
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  #52 — UseCommand<T> caches its wrapped Execute across renders
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void UseCommand_Generic_Wrapped_Execute_Is_Same_Instance_When_Command_Unchanged()
+    {
+        var ctx = NewCtx();
+        var cmd = new Command<string> { Label = "Delete", ExecuteAsync = _ => Task.CompletedTask };
+
+        var r1 = ctx.UseCommand(cmd);
+        Rerender(ctx);
+        var r2 = ctx.UseCommand(cmd);
+
+        Assert.NotNull(r1.Execute);
+        Assert.Same(r1.Execute, r2.Execute);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  M1 — UseMemoCellsByKey full-reuse requires KEY stability, not just value
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void UseMemoCellsByKey_Rebuilds_When_Key_Changes_Despite_Equal_Items()
+    {
+        // The full-reuse fast path must also require key stability. With equal items
+        // but changed keys, cells are rebuilt (keyed identity changed) rather than
+        // wrongly reused — matching the slow path's key-identity reuse.
+        var ctx = NewCtx();
+        int delta = 0;
+        var items = new[] { 1, 2, 3 };
+        int builds = 0;
+        var first = ctx.UseMemoCellsByKey<int, int>(items, x => x + delta, (item, i) => { builds++; return MakeCell(item); }, "d");
+        Rerender(ctx);
+        delta = 100; // same items, but every key now differs
+        var second = ctx.UseMemoCellsByKey<int, int>(items, x => x + delta, (item, i) => { builds++; return MakeCell(item); }, "d");
+
+        Assert.NotSame(first, second);       // fast path skipped (keys changed)
+        Assert.NotSame(first[0], second[0]); // cell rebuilt under its new key
+        Assert.Equal(6, builds);             // 3 first render + 3 rebuilt
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  #57 / M2 — UseResource cache-key recompute correctness
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void UseResource_Stable_Deps_Does_Not_Refetch_But_Changed_Deps_Does()
+    {
+        // #57: identical deps + no explicit key reuses the deps-hash key (no spurious
+        // refetch); changed deps recompute the key and fetch again.
+        var cache = NewCache();
+        var dispatcher = new InlineDispatcher();
+        int calls = 0;
+        Func<CancellationToken, Task<int>> fetcher = _ => { calls++; return Task.FromResult(calls); };
+        var opts = new ResourceOptions(StaleTime: TimeSpan.FromMinutes(5));
+
+        var ctx = new RenderContext();
+        ctx.BeginRender(() => { });
+        ctx.UseResource(fetcher, cache, new object[] { 1 }, opts, dispatcher);
+        ctx.FlushEffects();
+        Assert.Equal(1, calls);
+
+        ctx.BeginRender(() => { });
+        ctx.UseResource(fetcher, cache, new object[] { 1 }, opts, dispatcher); // same deps
+        ctx.FlushEffects();
+        Assert.Equal(1, calls); // reused key → no refetch
+
+        ctx.BeginRender(() => { });
+        ctx.UseResource(fetcher, cache, new object[] { 2 }, opts, dispatcher); // changed deps
+        ctx.FlushEffects();
+        Assert.Equal(2, calls); // recomputed key → refetch
+
+        ctx.RunCleanups();
+    }
+
+    [Fact]
+    public void UseResource_Explicit_To_Null_CacheKey_With_Equal_Deps_Recomputes_Key()
+    {
+        // M2 regression: when options.CacheKey transitions non-null -> null while deps
+        // are unchanged, the #57 rehash-skip must NOT reuse the stale explicit key. It
+        // must fall back to the deps-hash key (a key change → a fresh fetch), matching
+        // the pre-#57 behaviour of always recomputing when no explicit key is supplied.
+        var cache = NewCache();
+        var dispatcher = new InlineDispatcher();
+        int calls = 0;
+        Func<CancellationToken, Task<int>> fetcher = _ => { calls++; return Task.FromResult(calls); };
+
+        var ctx = new RenderContext();
+        ctx.BeginRender(() => { });
+        ctx.UseResource(fetcher, cache, new object[] { 1 }, new ResourceOptions(CacheKey: "explicit"), dispatcher);
+        ctx.FlushEffects();
+        Assert.Equal(1, calls);
+
+        ctx.BeginRender(() => { });
+        ctx.UseResource(fetcher, cache, new object[] { 1 }, null, dispatcher); // CacheKey now null, deps equal
+        ctx.FlushEffects();
+        Assert.Equal(2, calls); // key recomputed → new fetch (would stay 1 if stale key reused)
+
+        ctx.RunCleanups();
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Test helpers
+    // ════════════════════════════════════════════════════════════════
+
+    private sealed class DisposeProbe : IDisposable
+    {
+        public int Disposals;
+        public void Dispose() => Disposals++;
+    }
+
+    private sealed class InlineDispatcher : IHookDispatcher
+    {
+        public void Post(Action action) => action();
+    }
+
+    private static QueryCache NewCache()
+    {
+        var cache = new QueryCache();
+        var t = DateTime.UtcNow;
+        cache.UtcNow = () => t; // frozen clock so cached entries stay fresh within a test
+        return cache;
     }
 }
