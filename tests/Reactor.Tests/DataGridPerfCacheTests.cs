@@ -343,4 +343,171 @@ public class DataGridPerfCacheTests
         // "to" key absent -> range select no-ops; selection is unchanged.
         Assert.Equal(before, after);
     }
+
+    [Fact]
+    public async Task ShiftClick_Reversed_KeyCache_Scan_Selects_Same_Range_As_Forward()
+    {
+        // Anchor on the LAST row, shift-click the FIRST -> the index scan runs "backwards"
+        // (start = Min, end = Max), so it must still select the whole inclusive range.
+        var a = await CreateClientFallbackLoadedState();
+        var order = Enumerable.Range(0, a.ItemCount)
+            .Select(i => new RowKey(a.GetRowKeyAt(i)!))
+            .ToList();
+
+        a.HandleRowClick(order[^1]);
+        a.HandleRowClick(order[0], shiftKey: true); // no visibleOrder -> reversed key-cache scan
+        Assert.Equal(a.ItemCount, a.SelectedKeys.Count);
+
+        // The same reversed clicks with an explicit visibleOrder select the identical set.
+        var b = await CreateClientFallbackLoadedState();
+        b.HandleRowClick(order[^1]);
+        b.HandleRowClick(order[0], shiftKey: true, visibleOrder: order);
+
+        Assert.Equal(
+            b.SelectedKeys.Select(k => k.Value).OrderBy(v => v),
+            a.SelectedKeys.Select(k => k.Value).OrderBy(v => v));
+    }
+
+    [Fact]
+    public void SelectRange_Reversed_Missing_And_Empty_Behave_Like_Old_Loop()
+    {
+        var state = CreateState();
+        var order = new List<RowKey> { new("1"), new("2"), new("3"), new("4") };
+
+        // Reversed (from after to) selects the same inclusive range as forward (Min/Max).
+        state.SelectRange(new RowKey("4"), new RowKey("2"), order);
+        Assert.Equal(new[] { "2", "3", "4" },
+            state.SelectedKeys.Select(k => k.Value).OrderBy(v => v).ToArray());
+
+        // Missing "from" anchor -> no-op (early return before clearing), selection preserved.
+        state.SelectRange(new RowKey("nope"), new RowKey("2"), order);
+        Assert.Equal(new[] { "2", "3", "4" },
+            state.SelectedKeys.Select(k => k.Value).OrderBy(v => v).ToArray());
+
+        // Missing "to" target -> no-op.
+        state.SelectRange(new RowKey("1"), new RowKey("nope"), order);
+        Assert.Equal(new[] { "2", "3", "4" },
+            state.SelectedKeys.Select(k => k.Value).OrderBy(v => v).ToArray());
+
+        // Empty visibleOrder -> no-op.
+        state.SelectRange(new RowKey("1"), new RowKey("4"), new List<RowKey>());
+        Assert.Equal(new[] { "2", "3", "4" },
+            state.SelectedKeys.Select(k => k.Value).OrderBy(v => v).ToArray());
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Column-layout cache (#125): keyed on the caller-supplied column list too
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void GetColumnLayout_Invalidates_When_Columns_Reference_Changes()
+    {
+        var state = CreateState();
+        var colsA = state.Columns; // 3 columns
+        var (wA, dA) = state.GetColumnLayout(colsA, false, false, false);
+        Assert.Equal(3, wA.Length);
+
+        // A different column-list reference (e.g. the app swapped el.Columns) with a different
+        // count must NOT be served colsA's cached layout, even though no internal column mutation
+        // bumped ColumnVersion. Returning the stale 3-wide arrays here would mis-size the grid (and
+        // index out of range when the row renderer walks the new, shorter column set).
+        var colsB = new List<FieldDescriptor> { state.AllColumns[0], state.AllColumns[1] };
+        var (wB, dB) = state.GetColumnLayout(colsB, false, false, false);
+
+        Assert.NotSame(wA, wB);
+        Assert.NotSame(dA, dB);
+        Assert.Equal(2, wB.Length);
+        Assert.Equal(2, dB.Columns.Length);
+
+        // Re-passing the original reference rebuilds for it again (cache now holds colsB).
+        var (wA2, _) = state.GetColumnLayout(colsA, false, false, false);
+        Assert.Equal(3, wA2.Length);
+    }
+
+    [Fact]
+    public void GetColumnLayout_Rebuilds_When_Same_Reference_Is_Mutated_In_Place()
+    {
+        var state = CreateState();
+        var live = new List<FieldDescriptor>(state.AllColumns); // 3 columns
+        var (w1, _) = state.GetColumnLayout(live, false, false, false);
+        Assert.Equal(3, w1.Length);
+
+        // Same reference, but its element count changed (pathological in-place edit). The count
+        // guard forces a rebuild so we never return an array sized for the old column count.
+        live.RemoveAt(2);
+        var (w2, _) = state.GetColumnLayout(live, false, false, false);
+
+        Assert.NotSame(w1, w2);
+        Assert.Equal(2, w2.Length);
+    }
+
+    [Fact]
+    public void GetColumnLayout_Invalidates_On_Reorder_Pin_And_ToggleVisibility()
+    {
+        var state = CreateState();
+        var (_, d0) = state.GetColumnLayout(state.Columns, false, false, false);
+
+        state.ReorderColumn(0, 2);
+        var (_, dReorder) = state.GetColumnLayout(state.Columns, false, false, false);
+        Assert.NotSame(d0, dReorder);
+
+        state.PinColumn("Id", PinPosition.Left);
+        var (_, dPin) = state.GetColumnLayout(state.Columns, false, false, false);
+        Assert.NotSame(dReorder, dPin);
+
+        state.ToggleColumnVisibility("Name"); // hide Name
+        var (_, dToggle) = state.GetColumnLayout(state.Columns, false, false, false);
+        Assert.NotSame(dPin, dToggle);
+        Assert.Equal(state.Columns.Count, dToggle.Columns.Length);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Visible-columns snapshot (#127): a returned list is never mutated later
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void Columns_Returns_A_Stable_Snapshot_Not_Mutated_By_Later_Column_Changes()
+    {
+        var state = CreateState();
+
+        var before = state.Columns; // [Id, Name, Score]
+        Assert.Equal(new[] { "Id", "Name", "Score" }, before.Select(c => c.Name).ToArray());
+
+        // Mutations that bump ColumnVersion must not retroactively rewrite a previously returned
+        // list (the old Where(...).ToList() handed out an independent snapshot each call). This
+        // guards against the cache being a live shared buffer that Hide/Reorder edits in place.
+        state.HideColumn("Name");
+        state.ReorderColumn(0, 1);
+
+        Assert.Equal(new[] { "Id", "Name", "Score" }, before.Select(c => c.Name).ToArray());
+
+        // A fresh read reflects the new state and is a distinct instance.
+        var after = state.Columns;
+        Assert.NotSame(before, after);
+        Assert.DoesNotContain(after, c => c.Name == "Name"); // hidden
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  O(1) lookups: unknown-column parity with the old LINQ FirstOrDefault
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void Lookups_Match_Linq_FirstOrDefault_For_Unknown_Columns()
+    {
+        var state = CreateState();
+        state.ToggleSort("Name");
+        state.SetFilter(new FilterDescriptor("Score", FilterOperator.GreaterThan, 90));
+
+        // GetSortDirection / GetFilter on an unknown column return null, matching FirstOrDefault.
+        Assert.Equal(
+            state.Sorts.Where(s => s.Field == "Nope").Select(s => (SortDirection?)s.Direction).FirstOrDefault(),
+            state.GetSortDirection("Nope"));
+        Assert.Null(state.GetSortDirection("Nope"));
+
+        Assert.Equal(state.Filters.FirstOrDefault(f => f.Field == "Nope"), state.GetFilter("Nope"));
+        Assert.Null(state.GetFilter("Nope"));
+
+        // GetColumnWidth on an unknown column falls back to the 120 default (no resize, no descriptor).
+        Assert.Equal(120, state.GetColumnWidth("Nope"));
+    }
 }
