@@ -8,6 +8,7 @@
 // are synced to Yoga nodes in SyncYogaTree(). MeasureFunc bridge lets Yoga call
 // back into WinUI Measure for leaf children that need intrinsic sizing.
 
+using System.Runtime.CompilerServices;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Reactor.Layout;
@@ -37,10 +38,20 @@ public partial class FlexPanel : Panel
     // an attached DP via GetValue boxes the double/enum; for a large grid that
     // is ~11 boxed allocations per child per MeasureOverride. Attached DPs can
     // only change through the property system, which raises
-    // OnChildPropertyChanged — so the cache is invalidated there (and on
-    // add/remove). FrameworkElement Width/Height/Margin/Visibility are NOT
-    // cached: they change without our callback, so they are re-read each pass.
+    // OnChildPropertyChanged — which drops the child's entry while it is parented
+    // to this panel; the SyncYogaTree sweep drops entries for removed children.
+    // FrameworkElement Width/Height/Margin/Visibility are NOT cached: they change
+    // without our callback, so they are re-read each pass.
     private readonly Dictionary<UIElement, AttachedProps> _attachedCache = new();
+
+    // AI-HINT (perf #147 correctness): an attached DP can change while a child is
+    // detached from its panel (e.g. removed, re-styled, then re-added before the
+    // next measure). OnChildPropertyChanged then cannot reach the owning panel to
+    // drop its cache entry, so the child is flagged here instead; the next
+    // ApplyAttachedProperties re-reads it rather than trusting a stale snapshot.
+    // Static + weak-keyed: shared across panels, no per-panel state, no leak.
+    private static readonly ConditionalWeakTable<UIElement, object> s_detachedAttachedDirty = new();
+    private static readonly object s_detachedDirtyMarker = new();
 
     private struct AttachedProps
     {
@@ -275,12 +286,22 @@ public partial class FlexPanel : Panel
 
     private static void OnChildPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        if (d is UIElement el && Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(el) is FlexPanel panel)
+        if (d is not UIElement el)
+            return;
+
+        if (Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(el) is FlexPanel panel)
         {
             // Invalidate the cached attached-property snapshot for this child so
             // the next sync re-reads the changed value (#147).
             panel._attachedCache.Remove(el);
             panel.InvalidateMeasure();
+        }
+        else
+        {
+            // Detached (or not yet parented): we cannot reach the owning panel's
+            // cache, so flag the element. The next ApplyAttachedProperties (after
+            // it is (re-)added) re-reads it instead of using a stale entry (#147).
+            s_detachedAttachedDirty.AddOrUpdate(el, s_detachedDirtyMarker);
         }
     }
 
@@ -780,10 +801,19 @@ public partial class FlexPanel : Panel
     {
         // Read attached properties from the per-child cache (#147); only the
         // first sync after a change boxes the GetValue results. The cache is
-        // invalidated in OnChildPropertyChanged / on add/remove, so a missing
-        // entry means the values may have changed and must be re-read.
-        if (!_attachedCache.TryGetValue(el, out var ap))
+        // invalidated in OnChildPropertyChanged (while the child is parented) and
+        // by the SyncYogaTree removal sweep; a change made while the child was
+        // detached is flagged in s_detachedAttachedDirty and honored here. A
+        // missing or invalidated entry means the values must be re-read.
+        bool hit = _attachedCache.TryGetValue(el, out var ap);
+        if (hit && s_detachedAttachedDirty.TryGetValue(el, out _))
         {
+            // Snapshot was invalidated while the child was detached from a panel.
+            hit = false;
+        }
+        if (!hit)
+        {
+            s_detachedAttachedDirty.Remove(el);
             ap = new AttachedProps
             {
                 Grow = GetGrow(el),
