@@ -729,27 +729,35 @@ public static partial class AccessibilityScanner
             var children = t_buildCtxChildren ??= new List<Element>();
             children.Clear();
             string? childText = null;
-            foreach (var c in GetChildren(el))
-            {
-                if (c is null or EmptyElement) continue;
-                children.Add(c);
-                if (childText is null && c is TextBlockElement tb)
-                    childText = tb.Content;
-            }
-
             string? childContent = null;
             string[]? childTypes = null;
 
-            if (children.Count > 0)
+            // Wrap the scratch populate/use in try/finally so a mid-population
+            // exception can't leave element refs pinned on the thread-static list
+            // until the next BuildContext call on this thread (Copilot review).
+            try
             {
-                childTypes = new string[children.Count];
-                for (int i = 0; i < children.Count; i++)
-                    childTypes[i] = children[i].GetType().Name;
-                if (children.Count == 1)
-                    childContent = children[0].ToString();
-            }
+                foreach (var c in GetChildren(el))
+                {
+                    if (c is null or EmptyElement) continue;
+                    children.Add(c);
+                    if (childText is null && c is TextBlockElement tb)
+                        childText = tb.Content;
+                }
 
-            children.Clear();
+                if (children.Count > 0)
+                {
+                    childTypes = new string[children.Count];
+                    for (int i = 0; i < children.Count; i++)
+                        childTypes[i] = children[i].GetType().Name;
+                    if (children.Count == 1)
+                        childContent = children[0].ToString();
+                }
+            }
+            finally
+            {
+                children.Clear();
+            }
 
             // For ButtonElement, use ContentElement if present
             if (el is ButtonElement btn && btn.ContentElement is not null)
