@@ -1103,7 +1103,10 @@ public abstract record Element
     /// Brushes and FontFamily are compared structurally because fluent helpers
     /// (<c>.Background("#color")</c>, <c>.FontFamily("Segoe UI")</c>) allocate
     /// fresh instances on every render even when the underlying values match.
-    /// Ignores OnMountAction and OnUpdateAction (side-effect hooks, not render state).
+    /// Ignores OnMountAction (fires once at mount, gated on oldM is null, so a later
+    /// change is inert), but compares OnUnmountAction by reference — the latest
+    /// teardown is re-registered on every Update and fires at unmount, so a changed
+    /// teardown closure must decline the skip.
     /// </summary>
     internal static bool ModifiersEqual(ElementModifiers? a, ElementModifiers? b)
     {
@@ -1165,6 +1168,18 @@ public abstract record Element
             // must force Update so ApplyModifiers clears the old cell and sets the
             // new one — otherwise the shallow-skip path strands a stale ElementRef.
             && ReferenceEquals(a.Ref, b.Ref)
+            // Imperative teardown slot (.OnUnmount). ApplyModifiers re-registers the
+            // latest OnUnmountAction (Reconciler._onUnmountActions) on every non-skip
+            // Update, and that captured delegate is what fires at unmount — so a
+            // changed teardown closure must decline the skip or the stale (first-render)
+            // action is stranded and runs in place of the current one. Unlike
+            // OnMountAction (fired once at mount, gated on oldM is null, so a later
+            // change is inert and is intentionally ignored), OnUnmountAction has live
+            // update-path semantics. ReferenceEquals mirrors the handler/.Ref treatment:
+            // both null ⇒ equal (no teardown either render ⇒ zero skip-rate cost for
+            // plain leaves), a reference-stable teardown still skips, a fresh closure
+            // forces Update so the latest teardown is registered.
+            && ReferenceEquals(a.OnUnmountAction, b.OnUnmountAction)
             // Accessibility Tier 2/3. AccessibilityModifiers is a record of
             // scalar/string fields, but every fluent helper (.AccessibilityView,
             // .LiveRegion, .ItemStatus, …) allocates a fresh instance per render

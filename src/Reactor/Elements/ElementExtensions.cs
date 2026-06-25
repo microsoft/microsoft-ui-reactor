@@ -1089,16 +1089,14 @@ public static partial class ElementExtensions
     // ── Background (Panel, Control, Border) ────────────────────────
 
     /// <summary>
-    /// Sets the background from a color string. The parsed <see cref="SolidColorBrush"/>
-    /// is cached per color (per UI thread) and shared across calls, so repeated
-    /// hot-path use (e.g. one brush color per grid cell) allocates at most one
-    /// brush per distinct color instead of a new WinRT brush on every call. The
-    /// diff compares brushes structurally (color + opacity), so behavior is
-    /// unchanged. Use the <see cref="Background{T}(T, Brush)"/> overload if you
-    /// need a distinct brush instance.
+    /// Sets the background from a color string (named color or #RRGGBB / #AARRGGBB).
+    /// Returns a fresh, caller-independent brush per call (see
+    /// <see cref="BrushHelper.Parse"/> — the parsed color is cached, the brush is
+    /// not); the diff compares brushes structurally (color + opacity). Use the
+    /// <see cref="Background{T}(T, Brush)"/> overload to supply an explicit brush.
     /// </summary>
     public static T Background<T>(this T el, string color) where T : Element =>
-        ModifyVisual(el, new VisualModifiers { Background = BrushHelper.ParseShared(color) });
+        ModifyVisual(el, new VisualModifiers { Background = BrushHelper.Parse(color) });
 
     public static T Background<T>(this T el, Brush brush) where T : Element =>
         ModifyVisual(el, new VisualModifiers { Background = brush });
@@ -1114,16 +1112,14 @@ public static partial class ElementExtensions
     // ── Foreground (Control, TextBlock) ──────────────────────────
 
     /// <summary>
-    /// Sets the foreground from a color string. The parsed <see cref="SolidColorBrush"/>
-    /// is cached per color (per UI thread) and shared across calls, so repeated
-    /// hot-path use (e.g. one brush color per grid cell) allocates at most one
-    /// brush per distinct color instead of a new WinRT brush on every call. The
-    /// diff compares brushes structurally (color + opacity), so behavior is
-    /// unchanged. Use the <see cref="Foreground{T}(T, Brush)"/> overload if you
-    /// need a distinct brush instance.
+    /// Sets the foreground from a color string (named color or #RRGGBB / #AARRGGBB).
+    /// Returns a fresh, caller-independent brush per call (see
+    /// <see cref="BrushHelper.Parse"/> — the parsed color is cached, the brush is
+    /// not); the diff compares brushes structurally (color + opacity). Use the
+    /// <see cref="Foreground{T}(T, Brush)"/> overload to supply an explicit brush.
     /// </summary>
     public static T Foreground<T>(this T el, string color) where T : Element =>
-        ModifyVisual(el, new VisualModifiers { Foreground = BrushHelper.ParseShared(color) });
+        ModifyVisual(el, new VisualModifiers { Foreground = BrushHelper.Parse(color) });
 
     public static T Foreground<T>(this T el, Brush brush) where T : Element =>
         ModifyVisual(el, new VisualModifiers { Foreground = brush });
@@ -1147,16 +1143,14 @@ public static partial class ElementExtensions
     // ── Border brush/thickness (on Control and Border) ─────────────
 
     /// <summary>
-    /// Sets the border from a color string. The parsed <see cref="SolidColorBrush"/>
-    /// is cached per color (per UI thread) and shared across calls, so repeated
-    /// hot-path use allocates at most one brush per distinct color instead of a
-    /// new WinRT brush on every call. The diff compares brushes structurally
-    /// (color + opacity), so behavior is unchanged. Use the
-    /// <see cref="WithBorder{T}(T, Brush, double)"/> overload if you need a
-    /// distinct brush instance.
+    /// Sets the border from a color string (named color or #RRGGBB / #AARRGGBB).
+    /// Returns a fresh, caller-independent brush per call (see
+    /// <see cref="BrushHelper.Parse"/> — the parsed color is cached, the brush is
+    /// not); the diff compares brushes structurally (color + opacity). Use the
+    /// <see cref="WithBorder{T}(T, Brush, double)"/> overload to supply an explicit brush.
     /// </summary>
     public static T WithBorder<T>(this T el, string color, double thickness = 1) where T : Element =>
-        ModifyVisual(el, new VisualModifiers { BorderBrush = BrushHelper.ParseShared(color), BorderThickness = new Thickness(thickness) });
+        ModifyVisual(el, new VisualModifiers { BorderBrush = BrushHelper.Parse(color), BorderThickness = new Thickness(thickness) });
 
     public static T WithBorder<T>(this T el, Brush brush, double thickness = 1) where T : Element =>
         ModifyVisual(el, new VisualModifiers { BorderBrush = brush, BorderThickness = new Thickness(thickness) });
