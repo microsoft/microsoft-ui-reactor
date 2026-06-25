@@ -328,6 +328,7 @@ public class ReconcilerInteropPerfTests
         int sourceCalls = 0;
         global::System.Action source = () => sourceCalls++;
         var wrapped = reconciler.GetOrCreateComponentRerender(node, source);
+        Assert.NotNull(wrapped);
 
         Assert.False(node.SelfTriggered);
         wrapped(); // headless: no UI dispatcher captured ⇒ runs inline
@@ -348,6 +349,7 @@ public class ReconcilerInteropPerfTests
         int sourceCalls = 0;
         global::System.Action source = () => sourceCalls++;
         var wrapped = reconciler.GetOrCreateComponentRerender(node, source);
+        Assert.NotNull(wrapped);
 
         node.Unmounted = true; // mirrors ClearSelfTriggered(node, unmounting: true)
         wrapped();
