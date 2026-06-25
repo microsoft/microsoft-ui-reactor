@@ -657,6 +657,12 @@ public sealed class RenderContext
         return hook;
     }
 
+    // The caller is responsible for passing an isolated deps array — either a
+    // freshly packed array (PackDeps, arity overloads) or a defensive clone
+    // (SnapshotDeps, params/AsParamsArrayDep paths). Storing it by reference here
+    // is therefore safe: no caller-owned array is ever aliased onto the hook slot,
+    // so an in-place mutation of a reused caller array cannot make prev/next deps
+    // alias and wrongly short-circuit DepsEqual.
     private static void ScheduleEffect(EffectHookState hook, Action? effect, Func<Action>? withCleanup, object[] dependencies)
     {
         hook.PendingCleanup = hook.Cleanup;
