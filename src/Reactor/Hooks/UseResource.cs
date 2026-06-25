@@ -66,6 +66,12 @@ internal sealed class WindowsDispatcherHookDispatcher : IHookDispatcher
 /// </remarks>
 public static class UseResourceExtensions
 {
+    // #57: monotonic counter for per-call-site hook ids — replaces a
+    // Guid.NewGuid() (16 random bytes + 32-char format) per mounted resource hook
+    // with a single interlocked increment. The id only needs process-unique
+    // identity for the cache-key prefix, which a counter satisfies.
+    private static int _hookIdCounter;
+
     /// <summary>
     /// Runs an async fetch keyed on <paramref name="deps"/>, returning an
     /// <see cref="AsyncValue{T}"/> that tracks the fetch's lifecycle. The hook
@@ -114,10 +120,10 @@ public static class UseResourceExtensions
     {
         options ??= ResourceOptions.Default;
 
-        // Stable per-call-site identity. UseRef persists across renders; the GUID is
+        // Stable per-call-site identity. UseRef persists across renders; the id is
         // chosen once on first render for this component instance + hook index.
         var hookIdRef = ctx.UseRef<string?>(null);
-        hookIdRef.Current ??= Guid.NewGuid().ToString("N");
+        hookIdRef.Current ??= Interlocked.Increment(ref _hookIdCounter).ToString(global::System.Globalization.CultureInfo.InvariantCulture);
 
         var stateRef = ctx.UseRef<ResourceHookState<T>?>(null);
         var (_, rerenderTick) = ctx.UseReducer(0, threadSafe: true);
@@ -136,11 +142,24 @@ public static class UseResourceExtensions
             pendingScope: pendingScope,
             focusService: options.RefetchOnWindowFocus ? focusService : null);
 
-        // Run-once-on-unmount cleanup. Deps-change is driven synchronously below rather than
-        // via UseEffect, because we need the updated value inside this same render.
-        ctx.UseEffect(() => () => state.Dispose());
+        // #56: run-once-on-unmount cleanup. Equivalent to
+        // `UseEffect(() => () => state.Dispose())` but without allocating the two
+        // lambdas every render — the teardown is captured a single time on mount.
+        // Deps-change is driven synchronously below rather than via UseEffect,
+        // because we need the updated value inside this same render.
+        ctx.UseDisposableEffect(state);
 
-        string newKey = options.CacheKey ?? $"{hookIdRef.Current}/{DepsHash(deps)}";
+        // #57: only rebuild the DepsHash-based cache key when the deps actually
+        // changed since the last transition. The hash string was previously rebuilt
+        // every render even on the steady-state path where deps are identical.
+        string newKey;
+        if (options.CacheKey is not null)
+            newKey = options.CacheKey;
+        else if (state.LastDeps is not null && DepsEqual(state.LastDeps, deps))
+            newKey = state.CacheKey;
+        else
+            newKey = $"{hookIdRef.Current}/{DepsHash(deps)}";
+
         bool firstRender = state.LastDeps is null;
         bool depsChanged = !firstRender && (!string.Equals(state.CacheKey, newKey, StringComparison.Ordinal));
 
@@ -373,6 +392,16 @@ public static class UseResourceExtensions
                 h = h * 31 + (d?.GetHashCode() ?? 0);
             return h;
         }
+    }
+
+    private static bool DepsEqual(object[] prev, object[] next)
+    {
+        if (prev.Length != next.Length) return false;
+        for (int i = 0; i < prev.Length; i++)
+        {
+            if (!Equals(prev[i], next[i])) return false;
+        }
+        return true;
     }
 
     private static bool IsCanceledOrDropped<T>(this Task<T> t) =>

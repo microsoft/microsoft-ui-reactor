@@ -121,58 +121,93 @@ public partial record WrapGridElement
 
 public partial record RelativePanelElement
 {
+    // #60: reconcile can run very frequently for panels with many children; the
+    // name→control map was allocated fresh on every pass. Pool it per-thread and
+    // clear-and-reuse instead. RelativePanels can nest, so reconcile may re-enter
+    // on the same thread mid-build — the reentrancy guard hands nested calls a
+    // private instance and leaves the pooled one untouched.
+    [global::System.ThreadStatic] private static Dictionary<string, UIElement>? _nameMapPool;
+    [global::System.ThreadStatic] private static bool _nameMapInUse;
+
     // Two-pass: build a name → control map across siblings, then write the
     // RelativePanel sibling-referencing + panel-alignment attached DPs.
     private static void ApplyRelativePanelAttachedProps(
         WinUI.RelativePanel panel,
         IReadOnlyList<(UIElement Mounted, Element ChildElement)> pairs)
     {
-        var nameMap = new Dictionary<string, UIElement>(pairs.Count, global::System.StringComparer.Ordinal);
-        for (int i = 0; i < pairs.Count; i++)
+        Dictionary<string, UIElement> nameMap;
+        bool usingPool;
+        if (_nameMapInUse)
         {
-            var (mounted, child) = pairs[i];
-            ClearRelativePanelAttached(mounted);
-
-            var rpa = child.GetAttached<RelativePanelAttached>();
-            if (mounted is FrameworkElement fe)
-                fe.Name = rpa?.Name ?? string.Empty;
-            if (rpa is not null)
-                nameMap[rpa.Name] = mounted;
+            nameMap = new Dictionary<string, UIElement>(pairs.Count, global::System.StringComparer.Ordinal);
+            usingPool = false;
+        }
+        else
+        {
+            nameMap = _nameMapPool ??= new Dictionary<string, UIElement>(global::System.StringComparer.Ordinal);
+            nameMap.Clear();
+            _nameMapInUse = true;
+            usingPool = true;
         }
 
-        for (int i = 0; i < pairs.Count; i++)
+        try
         {
-            var (mounted, child) = pairs[i];
-            var rpa = child.GetAttached<RelativePanelAttached>();
-            if (rpa is null) continue;
+            for (int i = 0; i < pairs.Count; i++)
+            {
+                var (mounted, child) = pairs[i];
+                ClearRelativePanelAttached(mounted);
 
-            if (rpa.RightOf is not null && nameMap.TryGetValue(rpa.RightOf, out var rightOf))
-                WinUI.RelativePanel.SetRightOf(mounted, rightOf);
-            if (rpa.Below is not null && nameMap.TryGetValue(rpa.Below, out var below))
-                WinUI.RelativePanel.SetBelow(mounted, below);
-            if (rpa.LeftOf is not null && nameMap.TryGetValue(rpa.LeftOf, out var leftOf))
-                WinUI.RelativePanel.SetLeftOf(mounted, leftOf);
-            if (rpa.Above is not null && nameMap.TryGetValue(rpa.Above, out var above))
-                WinUI.RelativePanel.SetAbove(mounted, above);
-            if (rpa.AlignLeftWith is not null && nameMap.TryGetValue(rpa.AlignLeftWith, out var alw))
-                WinUI.RelativePanel.SetAlignLeftWith(mounted, alw);
-            if (rpa.AlignRightWith is not null && nameMap.TryGetValue(rpa.AlignRightWith, out var arw))
-                WinUI.RelativePanel.SetAlignRightWith(mounted, arw);
-            if (rpa.AlignTopWith is not null && nameMap.TryGetValue(rpa.AlignTopWith, out var atw))
-                WinUI.RelativePanel.SetAlignTopWith(mounted, atw);
-            if (rpa.AlignBottomWith is not null && nameMap.TryGetValue(rpa.AlignBottomWith, out var abw))
-                WinUI.RelativePanel.SetAlignBottomWith(mounted, abw);
-            if (rpa.AlignHorizontalCenterWith is not null && nameMap.TryGetValue(rpa.AlignHorizontalCenterWith, out var ahcw))
-                WinUI.RelativePanel.SetAlignHorizontalCenterWith(mounted, ahcw);
-            if (rpa.AlignVerticalCenterWith is not null && nameMap.TryGetValue(rpa.AlignVerticalCenterWith, out var avcw))
-                WinUI.RelativePanel.SetAlignVerticalCenterWith(mounted, avcw);
+                var rpa = child.GetAttached<RelativePanelAttached>();
+                if (mounted is FrameworkElement fe)
+                    fe.Name = rpa?.Name ?? string.Empty;
+                if (rpa is not null)
+                    nameMap[rpa.Name] = mounted;
+            }
 
-            WinUI.RelativePanel.SetAlignLeftWithPanel(mounted, rpa.AlignLeftWithPanel);
-            WinUI.RelativePanel.SetAlignRightWithPanel(mounted, rpa.AlignRightWithPanel);
-            WinUI.RelativePanel.SetAlignTopWithPanel(mounted, rpa.AlignTopWithPanel);
-            WinUI.RelativePanel.SetAlignBottomWithPanel(mounted, rpa.AlignBottomWithPanel);
-            WinUI.RelativePanel.SetAlignHorizontalCenterWithPanel(mounted, rpa.AlignHorizontalCenterWithPanel);
-            WinUI.RelativePanel.SetAlignVerticalCenterWithPanel(mounted, rpa.AlignVerticalCenterWithPanel);
+            for (int i = 0; i < pairs.Count; i++)
+            {
+                var (mounted, child) = pairs[i];
+                var rpa = child.GetAttached<RelativePanelAttached>();
+                if (rpa is null) continue;
+
+                if (rpa.RightOf is not null && nameMap.TryGetValue(rpa.RightOf, out var rightOf))
+                    WinUI.RelativePanel.SetRightOf(mounted, rightOf);
+                if (rpa.Below is not null && nameMap.TryGetValue(rpa.Below, out var below))
+                    WinUI.RelativePanel.SetBelow(mounted, below);
+                if (rpa.LeftOf is not null && nameMap.TryGetValue(rpa.LeftOf, out var leftOf))
+                    WinUI.RelativePanel.SetLeftOf(mounted, leftOf);
+                if (rpa.Above is not null && nameMap.TryGetValue(rpa.Above, out var above))
+                    WinUI.RelativePanel.SetAbove(mounted, above);
+                if (rpa.AlignLeftWith is not null && nameMap.TryGetValue(rpa.AlignLeftWith, out var alw))
+                    WinUI.RelativePanel.SetAlignLeftWith(mounted, alw);
+                if (rpa.AlignRightWith is not null && nameMap.TryGetValue(rpa.AlignRightWith, out var arw))
+                    WinUI.RelativePanel.SetAlignRightWith(mounted, arw);
+                if (rpa.AlignTopWith is not null && nameMap.TryGetValue(rpa.AlignTopWith, out var atw))
+                    WinUI.RelativePanel.SetAlignTopWith(mounted, atw);
+                if (rpa.AlignBottomWith is not null && nameMap.TryGetValue(rpa.AlignBottomWith, out var abw))
+                    WinUI.RelativePanel.SetAlignBottomWith(mounted, abw);
+                if (rpa.AlignHorizontalCenterWith is not null && nameMap.TryGetValue(rpa.AlignHorizontalCenterWith, out var ahcw))
+                    WinUI.RelativePanel.SetAlignHorizontalCenterWith(mounted, ahcw);
+                if (rpa.AlignVerticalCenterWith is not null && nameMap.TryGetValue(rpa.AlignVerticalCenterWith, out var avcw))
+                    WinUI.RelativePanel.SetAlignVerticalCenterWith(mounted, avcw);
+
+                WinUI.RelativePanel.SetAlignLeftWithPanel(mounted, rpa.AlignLeftWithPanel);
+                WinUI.RelativePanel.SetAlignRightWithPanel(mounted, rpa.AlignRightWithPanel);
+                WinUI.RelativePanel.SetAlignTopWithPanel(mounted, rpa.AlignTopWithPanel);
+                WinUI.RelativePanel.SetAlignBottomWithPanel(mounted, rpa.AlignBottomWithPanel);
+                WinUI.RelativePanel.SetAlignHorizontalCenterWithPanel(mounted, rpa.AlignHorizontalCenterWithPanel);
+                WinUI.RelativePanel.SetAlignVerticalCenterWithPanel(mounted, rpa.AlignVerticalCenterWithPanel);
+            }
+        }
+        finally
+        {
+            if (usingPool)
+            {
+                // Drop UIElement references promptly so the pooled map doesn't pin
+                // mounted controls alive between reconciles.
+                nameMap.Clear();
+                _nameMapInUse = false;
+            }
         }
     }
 

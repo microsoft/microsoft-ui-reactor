@@ -135,7 +135,9 @@ public static class UseMutationExtensions
         state.Mutator = mutator;
         state.Options = options;
 
-        ctx.UseEffect(() => () => state.Dispose());
+        // #56: run-once-on-unmount cleanup without the per-render double-lambda
+        // allocation (see UseResource / UseDisposableEffect).
+        ctx.UseDisposableEffect(state);
 
         return state.Handle;
     }

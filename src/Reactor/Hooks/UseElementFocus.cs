@@ -28,25 +28,54 @@ public static class UseElementFocusExtensions
         FocusState state = FocusState.Programmatic)
     {
         var (elRef, _) = ctx.UseState(new ElementRef());
-        // Capture the UI dispatcher at render time — RequestFocus may be called from a
-        // background thread (e.g. from UseEffect cleanup, task continuations), where
-        // GetForCurrentThread() would return the wrong queue or null.
-        // Guard the call itself: in unit-test / headless contexts the WinUI activation
-        // factory isn't registered and GetForCurrentThread throws a COMException.
-        Microsoft.UI.Dispatching.DispatcherQueue? uiQueue;
-        try { uiQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread(); }
-        catch { uiQueue = null; }
-        Action requestFocus = () =>
+
+        // #55: previously this hook captured the UI dispatcher via a
+        // GetForCurrentThread() COM call AND allocated a fresh `requestFocus`
+        // closure on EVERY render (multiplied by every focusable cell). Both are
+        // now built exactly once and stashed in a UseRef cell:
+        //   • the dispatcher is resolved a single time (it never changes for the
+        //     component's UI thread), and
+        //   • the closure is allocated once and reused; the latest `state` is
+        //     written into the cache each render (a cheap field store, no
+        //     allocation) and read at invoke time, so focus still uses the
+        //     current render's focus state.
+        var cacheRef = ctx.UseRef<FocusHookCache?>(null);
+        var cache = cacheRef.Current;
+        if (cache is null)
         {
-            if (uiQueue is null)
+            cache = new FocusHookCache { State = state };
+            // Capture the UI dispatcher once — RequestFocus may be called from a
+            // background thread (UseEffect cleanup, task continuations) where
+            // GetForCurrentThread() would return the wrong queue or null. Guard the
+            // call: in unit-test / headless contexts the WinUI activation factory
+            // isn't registered and GetForCurrentThread throws a COMException.
+            try { cache.UiQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread(); }
+            catch { cache.UiQueue = null; }
+            cache.RequestFocus = () =>
             {
-                // No dispatcher available (headless/tests) — invoke synchronously.
-                Microsoft.UI.Reactor.Input.FocusManager.Focus(elRef, state);
-                return;
-            }
-            uiQueue.TryEnqueue(() => Microsoft.UI.Reactor.Input.FocusManager.Focus(elRef, state));
-        };
-        return (elRef, requestFocus);
+                if (cache.UiQueue is null)
+                {
+                    // No dispatcher available (headless/tests) — invoke synchronously.
+                    Microsoft.UI.Reactor.Input.FocusManager.Focus(elRef, cache.State);
+                    return;
+                }
+                cache.UiQueue.TryEnqueue(() => Microsoft.UI.Reactor.Input.FocusManager.Focus(elRef, cache.State));
+            };
+            cacheRef.Current = cache;
+        }
+        else
+        {
+            cache.State = state;
+        }
+
+        return (elRef, cache.RequestFocus);
+    }
+
+    private sealed class FocusHookCache
+    {
+        public Microsoft.UI.Dispatching.DispatcherQueue? UiQueue;
+        public FocusState State;
+        public Action RequestFocus = default!;
     }
 
     /// <summary>
