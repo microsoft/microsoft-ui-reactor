@@ -343,10 +343,13 @@ public sealed class RenderContext
     public void UseEffect(Action effect, params object[] dependencies)
     {
         var hook = AcquireEffectSlot();
-        // #48: the params array is freshly minted at the call site and never
-        // aliased, so store it directly instead of copying it again via ToArray().
+        // Snapshot the deps on store (SnapshotDeps): a caller can pass — and then
+        // reuse and mutate in place — the same array instance across renders, so the
+        // stored copy must be isolated or DepsEqual would alias prev/next and skip a
+        // real change. Only the deps-CHANGED path stores, so this adds no
+        // steady-state allocation.
         if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, dependencies))
-            ScheduleEffect(hook, effect, null, dependencies);
+            ScheduleEffect(hook, effect, null, SnapshotDeps(dependencies));
     }
     // </snippet:effect-schedule>
 
@@ -357,7 +360,7 @@ public sealed class RenderContext
     {
         var hook = AcquireEffectSlot();
         if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, dependencies))
-            ScheduleEffect(hook, null, effectWithCleanup, dependencies);
+            ScheduleEffect(hook, null, effectWithCleanup, SnapshotDeps(dependencies));
     }
 
     // #45: arity 1-3 overloads so the common "a couple of deps" call avoids the
@@ -383,7 +386,7 @@ public sealed class RenderContext
         if (AsParamsArrayDep(d1) is { } arr)
         {
             if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, arr))
-                ScheduleEffect(hook, effect, null, arr);
+                ScheduleEffect(hook, effect, null, SnapshotDeps(arr));
             return;
         }
         if (!DepsEqual1(hook.Dependencies, d1)) ScheduleEffect(hook, effect, null, PackDeps(d1));
@@ -422,7 +425,7 @@ public sealed class RenderContext
         if (AsParamsArrayDep(d1) is { } arr)
         {
             if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, arr))
-                ScheduleEffect(hook, null, effectWithCleanup, arr);
+                ScheduleEffect(hook, null, effectWithCleanup, SnapshotDeps(arr));
             return;
         }
         if (!DepsEqual1(hook.Dependencies, d1)) ScheduleEffect(hook, null, effectWithCleanup, PackDeps(d1));
@@ -486,7 +489,7 @@ public sealed class RenderContext
         if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, dependencies))
         {
             hook.Value = factory();
-            hook.Dependencies = dependencies; // #48: store the fresh params array directly
+            hook.Dependencies = SnapshotDeps(dependencies);
         }
         return hook.Value;
     }
@@ -508,7 +511,7 @@ public sealed class RenderContext
             if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, arr))
             {
                 hook.Value = factory();
-                hook.Dependencies = arr;
+                hook.Dependencies = SnapshotDeps(arr);
             }
             return hook.Value;
         }
@@ -564,7 +567,7 @@ public sealed class RenderContext
         if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, dependencies))
         {
             hook.Value = callback;
-            hook.Dependencies = dependencies;
+            hook.Dependencies = SnapshotDeps(dependencies);
         }
         return hook.Value;
     }
@@ -584,7 +587,7 @@ public sealed class RenderContext
             if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, arr))
             {
                 hook.Value = callback;
-                hook.Dependencies = arr;
+                hook.Dependencies = SnapshotDeps(arr);
             }
             return hook.Value;
         }
@@ -667,6 +670,24 @@ public sealed class RenderContext
     private static object[] PackDeps<T1>(T1 d1) => new object[] { d1! };
     private static object[] PackDeps<T1, T2>(T1 d1, T2 d2) => new object[] { d1!, d2! };
     private static object[] PackDeps<T1, T2, T3>(T1 d1, T2 d2, T3 d3) => new object[] { d1!, d2!, d3! };
+
+    // Snapshot a caller-supplied deps array before persisting it on a hook slot.
+    // Callers can pass — and then reuse and mutate in place — the same array
+    // instance across renders (a params target, or a covariant array routed through
+    // AsParamsArrayDep). Storing it by reference would alias prev/next so an in-place
+    // mutation is invisible to DepsEqual and would wrongly skip the effect or memo
+    // recompute. Cloning isolates the stored copy. This runs only on the
+    // deps-CHANGED store path (the deps-equal path short-circuits before storing), so
+    // it adds no steady-state allocation; the empty "run once" case reuses the shared
+    // empty array. Always returns a genuine object[] even when the source is a
+    // covariant array (e.g. string[]).
+    private static object[] SnapshotDeps(object[] dependencies)
+    {
+        if (dependencies.Length == 0) return Array.Empty<object>();
+        var copy = new object[dependencies.Length];
+        Array.Copy(dependencies, copy, dependencies.Length);
+        return copy;
+    }
 
     // A lone arity-1 dependency that is itself an object[] at runtime — e.g. a
     // covariant string[]/Element[] — historically bound to the params overload and

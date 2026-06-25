@@ -470,6 +470,79 @@ public class HookAllocationPerfTests
         Assert.Equal(2, runs);
     }
 
+    // ════════════════════════════════════════════════════════════════
+    //  Aliasing guard (Copilot review) — a caller that reuses AND mutates the
+    //  SAME deps array instance across renders must still observe the change.
+    //  Stored deps are snapshotted (SnapshotDeps) so prev/next can never alias
+    //  the caller's live array.
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void UseEffect_Reused_Mutated_Deps_Array_Still_Detects_Change()
+    {
+        var ctx = NewCtx();
+        var deps = new object[] { "a" };
+        int runs = 0;
+
+        ctx.UseEffect(() => { runs++; }, deps);
+        ctx.FlushEffects();
+        Assert.Equal(1, runs);
+
+        deps[0] = "b"; // mutate in place, reuse the SAME instance
+        Rerender(ctx);
+        ctx.UseEffect(() => { runs++; }, deps);
+        ctx.FlushEffects();
+        Assert.Equal(2, runs); // change detected despite array aliasing
+
+        Rerender(ctx);
+        ctx.UseEffect(() => { runs++; }, deps); // same instance, same contents
+        ctx.FlushEffects();
+        Assert.Equal(2, runs); // unchanged → skipped
+    }
+
+    [Fact]
+    public void UseMemo_Reused_Mutated_Deps_Array_Still_Recomputes()
+    {
+        var ctx = NewCtx();
+        var deps = new object[] { 1 };
+        int factoryCalls = 0;
+
+        int Render() => ctx.UseMemo(() => { factoryCalls++; return (int)deps[0]; }, deps);
+
+        Assert.Equal(1, Render());
+        Assert.Equal(1, factoryCalls);
+
+        deps[0] = 2; // mutate in place
+        Rerender(ctx);
+        Assert.Equal(2, Render());
+        Assert.Equal(2, factoryCalls); // recomputed despite aliasing
+
+        Rerender(ctx);
+        Assert.Equal(2, Render()); // unchanged contents
+        Assert.Equal(2, factoryCalls); // cached, not recomputed
+    }
+
+    [Fact]
+    public void UseCallback_Reused_Mutated_Deps_Array_Returns_Updated_Callback()
+    {
+        var ctx = NewCtx();
+        var deps = new object[] { 1 };
+        // Capture a distinct value so each callback is a unique delegate instance
+        // (a non-capturing lambda would be compiler-cached and defeat NotSame).
+        static Action Cb(int tag) => () => { _ = tag; };
+
+        Action cb1 = ctx.UseCallback(Cb(1), deps);
+
+        deps[0] = 2; // mutate the same instance in place
+        Rerender(ctx);
+        Action cb2 = ctx.UseCallback(Cb(2), deps);
+        Assert.NotSame(cb1, cb2); // deps change detected despite aliasing → new callback
+
+        Rerender(ctx);
+        Action cb3 = ctx.UseCallback(Cb(3), deps); // unchanged contents
+        Assert.Same(cb2, cb3); // cached
+    }
+
     [Fact]
     public void UseMemo_Arity1_ObjectArray_Dep_Uses_ElementWise_Comparison()
     {
