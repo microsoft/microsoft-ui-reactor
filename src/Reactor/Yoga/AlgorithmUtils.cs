@@ -405,26 +405,26 @@ internal static class FlexLineHelper
     // CalculateLayoutImpl and is never stored beyond it, so returning it at the
     // loop tail is safe. Recursive layout of children rents distinct FlexLines
     // (LIFO stack), so no aliasing.
+    // The line is reset on RETURN (not on rent), matching ReturnList's
+    // clear-before-pool contract: ItemsInFlow holds YogaNode references that
+    // reach whole UI subtrees, so clearing on return keeps the thread-static
+    // pool from pinning that memory between layout passes. The only way into the
+    // pool is ReturnFlexLine, so a popped line is always clean at rent time.
     [ThreadStatic]
     private static Stack<FlexLine>? s_flexLinePool;
 
     internal static FlexLine RentFlexLine()
     {
         var pool = s_flexLinePool ??= new Stack<FlexLine>();
-        if (pool.Count > 0)
-        {
-            var line = pool.Pop();
-            line.ItemsInFlow.Clear();
-            line.SizeConsumed = 0;
-            line.NumberOfAutoMargins = 0;
-            line.Layout = default;
-            return line;
-        }
-        return new FlexLine();
+        return pool.Count > 0 ? pool.Pop() : new FlexLine();
     }
 
     internal static void ReturnFlexLine(FlexLine line)
     {
+        line.ItemsInFlow.Clear();
+        line.SizeConsumed = 0;
+        line.NumberOfAutoMargins = 0;
+        line.Layout = default;
         var pool = s_flexLinePool ??= new Stack<FlexLine>();
         pool.Push(line);
     }
