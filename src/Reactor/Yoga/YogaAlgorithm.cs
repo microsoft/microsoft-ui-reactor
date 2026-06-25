@@ -434,6 +434,13 @@ internal static class YogaAlgorithm
         var layoutChildren = FlexLineHelper.RentList();
         node.CollectLayoutChildren(layoutChildren);
 
+        // #148: baseline-ness depends only on this node's FlexDirection /
+        // AlignItems and its children's AlignSelf / PositionType — all invariant
+        // within a single layout pass. Compute it ONCE here instead of per flex
+        // line inside JustifyMainAxis (and again at STEP 8). No cross-frame cache,
+        // so no invalidation hazard.
+        bool isNodeBaselineLayout = BaselineHelper.IsBaselineLayout(node);
+
         while (startOfLineIndex < layoutChildren.Count)
         {
             int currentIndex = startOfLineIndex;
@@ -510,7 +517,7 @@ internal static class YogaAlgorithm
                 sizingModeMainDim, sizingModeCrossDim,
                 mainAxisOwnerSize, ownerWidth,
                 availableInnerMainDim, availableInnerCrossDim, availableInnerWidth,
-                performLayout);
+                performLayout, isNodeBaselineLayout);
 
             float containerCrossAxis = availableInnerCrossDim;
             if (sizingModeCrossDim == SizingMode.MaxContent || sizingModeCrossDim == SizingMode.FitContent)
@@ -636,7 +643,7 @@ internal static class YogaAlgorithm
         }
 
         // STEP 8: MULTI-LINE CONTENT ALIGNMENT
-        if (performLayout && (isNodeFlexWrap || BaselineHelper.IsBaselineLayout(node)))
+        if (performLayout && (isNodeFlexWrap || isNodeBaselineLayout))
         {
             float leadPerLine = 0;
             float currentLead = leadingPaddingAndBorderCross;
@@ -1678,7 +1685,7 @@ internal static class YogaAlgorithm
         SizingMode sizingModeMainDim, SizingMode sizingModeCrossDim,
         float mainAxisOwnerSize, float ownerWidth,
         float availableInnerMainDim, float availableInnerCrossDim,
-        float availableInnerWidth, bool performLayout)
+        float availableInnerWidth, bool performLayout, bool isNodeBaselineLayout)
     {
         var style = node.Style;
 
@@ -1745,7 +1752,6 @@ internal static class YogaAlgorithm
 
         float maxAscentForCurrentLine = 0;
         float maxDescentForCurrentLine = 0;
-        bool isNodeBaselineLayout = BaselineHelper.IsBaselineLayout(node);
         bool isMainAxisRow = FlexDirectionHelper.IsRow(mainAxis);
 
         for (int ci = 0; ci < flexLine.ItemsInFlow.Count; ci++)
