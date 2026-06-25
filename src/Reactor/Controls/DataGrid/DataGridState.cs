@@ -34,6 +34,22 @@ public class DataGridState<T>
     /// <summary>Current filter descriptors.</summary>
     public IReadOnlyList<FilterDescriptor> Filters => _filters;
 
+    // Version counters + O(1) lookup maps kept in sync with _sorts / _filters. They let the
+    // component memoize sort/filter-derived render output (the sort key, the DataRequest) and
+    // let header rendering look up per-column sort/filter state without re-running LINQ each
+    // render. _sorts is mutated only in ToggleSort; _filters only in Set/Clear/ClearAll — every
+    // one of those bumps the matching version and refreshes the matching map.
+    private int _sortVersion;
+    private int _filterVersion;
+    private readonly Dictionary<string, SortDirection> _sortDirByField = new();
+    private readonly Dictionary<string, FilterDescriptor> _filterByField = new();
+
+    /// <summary>Monotonically increasing version, bumped whenever sort state changes.</summary>
+    internal int SortVersion => _sortVersion;
+
+    /// <summary>Monotonically increasing version, bumped whenever filter state changes.</summary>
+    internal int FilterVersion => _filterVersion;
+
     // ── Selection state ──────────────────────────────────────────
 
     private readonly HashSet<RowKey> _selectedKeys = new();
@@ -125,9 +141,53 @@ public class DataGridState<T>
     private readonly Dictionary<string, double> _columnWidths = new();
     private readonly HashSet<string> _hiddenColumns = new();
 
+    // Bumped on every column add/remove/reorder/resize/pin/hide/show. Drives the visible-column
+    // cache and the per-render column-layout cache (GetColumnLayout), and lets the component
+    // treat column-derived render output as stable while it is unchanged.
+    private int _columnVersion;
+
+    // O(1) name -> index map over the full _columns list. First-wins, mirroring the prior
+    // FirstOrDefault/FindIndex(c => c.Name == name) semantics. Rebuilt only when column
+    // membership/order changes (ctor + ReorderColumn); pin replaces a descriptor in place so the
+    // index is unaffected.
+    private readonly Dictionary<string, int> _columnIndexByName = new();
+
+    // Cached visible-column projection (excludes hidden). Rebuilt lazily when _columnVersion
+    // advances past the version it was last built at — avoids a Where + ToList on every access.
+    private List<FieldDescriptor>? _visibleColumns;
+    private int _visibleColumnsBuiltVersion = -1;
+
+    // Per-render column-layout cache: pixel widths + a shared GridDefinition reused by the header
+    // row and every data row. Keyed on _columnVersion + the layout "shape" bitfield. The stable
+    // GridDefinition reference lets the reconciler skip re-applying ColumnDefinitions each render.
+    private static readonly string[] RowDefStar = { "*" };
+    private double[]? _cachedColWidths;
+    private GridDefinition? _cachedGridDef;
+    private int _layoutCacheVersion = -1;
+    private int _layoutCacheShape = -1;
+
+    /// <summary>Monotonically increasing version, bumped whenever column order/size/visibility changes.</summary>
+    internal int ColumnVersion => _columnVersion;
+
     /// <summary>Current column definitions (in display order), excluding hidden columns.</summary>
-    public IReadOnlyList<FieldDescriptor> Columns =>
-        _hiddenColumns.Count == 0 ? _columns : _columns.Where(c => !_hiddenColumns.Contains(c.Name)).ToList();
+    public IReadOnlyList<FieldDescriptor> Columns
+    {
+        get
+        {
+            if (_hiddenColumns.Count == 0) return _columns;
+            if (_visibleColumns is null || _visibleColumnsBuiltVersion != _columnVersion)
+            {
+                (_visibleColumns ??= new List<FieldDescriptor>(_columns.Count)).Clear();
+                for (int i = 0; i < _columns.Count; i++)
+                {
+                    if (!_hiddenColumns.Contains(_columns[i].Name))
+                        _visibleColumns.Add(_columns[i]);
+                }
+                _visibleColumnsBuiltVersion = _columnVersion;
+            }
+            return _visibleColumns;
+        }
+    }
 
     /// <summary>All column definitions, including hidden ones.</summary>
     public IReadOnlyList<FieldDescriptor> AllColumns => _columns;
@@ -418,6 +478,7 @@ public class DataGridState<T>
         _columns = new List<FieldDescriptor>(columns);
         _selectionMode = selectionMode;
         _blockSize = blockSize;
+        RebuildColumnIndex();
     }
 
     // ── Sort operations ──────────────────────────────────────────
@@ -463,12 +524,23 @@ public class DataGridState<T>
             }
         }
 
+        BumpSortVersion();
         StateChanged?.Invoke();
+    }
+
+    // Rebuilds the field -> direction map from _sorts. ToggleSort keeps at most one descriptor
+    // per field, so last-write-wins here matches the prior FirstOrDefault(field).Direction.
+    private void BumpSortVersion()
+    {
+        _sortVersion++;
+        _sortDirByField.Clear();
+        for (int i = 0; i < _sorts.Count; i++)
+            _sortDirByField[_sorts[i].Field] = _sorts[i].Direction;
     }
 
     /// <summary>Gets the current sort direction for a column, or null if unsorted.</summary>
     public SortDirection? GetSortDirection(string field)
-        => _sorts.FirstOrDefault(s => s.Field == field)?.Direction;
+        => _sortDirByField.TryGetValue(field, out var dir) ? dir : null;
 
     // ── Filter operations ───────────────────────────────────────
 
@@ -477,6 +549,7 @@ public class DataGridState<T>
     {
         _filters.RemoveAll(f => f.Field == filter.Field);
         _filters.Add(filter);
+        BumpFilterVersion();
         StateChanged?.Invoke();
     }
 
@@ -484,7 +557,10 @@ public class DataGridState<T>
     public void ClearFilter(string field)
     {
         if (_filters.RemoveAll(f => f.Field == field) > 0)
+        {
+            BumpFilterVersion();
             StateChanged?.Invoke();
+        }
     }
 
     /// <summary>Remove all filters.</summary>
@@ -493,13 +569,24 @@ public class DataGridState<T>
         if (_filters.Count > 0)
         {
             _filters.Clear();
+            BumpFilterVersion();
             StateChanged?.Invoke();
         }
     }
 
+    // Rebuilds the field -> filter map from _filters. SetFilter keeps at most one filter per
+    // field, so last-write-wins here matches the prior FirstOrDefault(field).
+    private void BumpFilterVersion()
+    {
+        _filterVersion++;
+        _filterByField.Clear();
+        for (int i = 0; i < _filters.Count; i++)
+            _filterByField[_filters[i].Field] = _filters[i];
+    }
+
     /// <summary>Gets the active filter for a column, or null.</summary>
     public FilterDescriptor? GetFilter(string field)
-        => _filters.FirstOrDefault(f => f.Field == field);
+        => _filterByField.TryGetValue(field, out var filter) ? filter : null;
 
     // ── Search state ────────────────────────────────────────────
 
@@ -533,14 +620,17 @@ public class DataGridState<T>
             return;
         }
 
-        // Multiple selection mode — use internal key cache for range selection if no explicit order
-        var order = visibleOrder;
-        if (order is null && _rowKeyCache.Length > 0)
-            order = _rowKeyCache.Select(k => new RowKey(k)).ToList();
-
-        if (shiftKey && AnchorKey is not null && order is not null)
+        // Multiple selection mode. For range (shift) selection we need an ordering: prefer the
+        // explicit visibleOrder, otherwise fall back to the internal row-key cache. The cache
+        // fallback scans by index (SelectRangeByKeyCache) instead of materializing the entire
+        // _rowKeyCache into a List<RowKey> — that materialization boxed/allocated one RowKey per
+        // row (100k+ on large client-fallback loads) on every click, not just shift-clicks.
+        if (shiftKey && AnchorKey is not null && (visibleOrder is not null || _rowKeyCache.Length > 0))
         {
-            SelectRange(AnchorKey.Value, key, order);
+            if (visibleOrder is not null)
+                SelectRange(AnchorKey.Value, key, visibleOrder);
+            else
+                SelectRangeByKeyCache(AnchorKey.Value, key);
         }
         else if (ctrlKey)
         {
@@ -584,6 +674,37 @@ public class DataGridState<T>
         StateChanged?.Invoke();
     }
 
+    // Range-select against the internal _rowKeyCache (string[]) without materializing a
+    // List<RowKey>. Behaviourally identical to SelectRange(from, to, _rowKeyCache.Select(k =>
+    // new RowKey(k)).ToList()): RowKey is a record struct whose equality is its ordinal Value
+    // string, so comparing cache strings is the same as comparing the constructed RowKeys, and
+    // last-occurrence-wins matches SelectRange's loop. No-ops (no version bump) when either key
+    // is absent, exactly as SelectRange does.
+    private void SelectRangeByKeyCache(RowKey from, RowKey to)
+    {
+        var fromValue = from.Value;
+        var toValue = to.Value;
+        var fromIndex = -1;
+        var toIndex = -1;
+        for (int i = 0; i < _rowKeyCache.Length; i++)
+        {
+            if (_rowKeyCache[i] == fromValue) fromIndex = i;
+            if (_rowKeyCache[i] == toValue) toIndex = i;
+        }
+
+        if (fromIndex < 0 || toIndex < 0) return;
+
+        var start = Math.Min(fromIndex, toIndex);
+        var end = Math.Max(fromIndex, toIndex);
+
+        _selectedKeys.Clear();
+        for (int i = start; i <= end; i++)
+            _selectedKeys.Add(new RowKey(_rowKeyCache[i]));
+
+        _selectionVersion++;
+        StateChanged?.Invoke();
+    }
+
     /// <summary>Select all provided keys.</summary>
     public void SelectAll(IReadOnlyList<RowKey> allKeys)
     {
@@ -615,18 +736,72 @@ public class DataGridState<T>
         if (_columnWidths.TryGetValue(columnName, out var width))
             return width;
 
-        var col = _columns.FirstOrDefault(c => c.Name == columnName);
+        var col = _columnIndexByName.TryGetValue(columnName, out var i) ? _columns[i] : null;
         return col?.Width ?? 120;
     }
 
     /// <summary>Resize a column and trigger a re-render.</summary>
     public void ResizeColumn(string columnName, double newWidth)
     {
-        var col = _columns.FirstOrDefault(c => c.Name == columnName);
+        var col = _columnIndexByName.TryGetValue(columnName, out var i) ? _columns[i] : null;
         var minWidth = col?.MinWidth ?? 40;
         var maxWidth = col?.MaxWidth ?? double.MaxValue;
         _columnWidths[columnName] = Math.Clamp(newWidth, minWidth, maxWidth);
+        _columnVersion++;
         StateChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// Returns the cached per-column pixel widths and the shared <see cref="GridDefinition"/> for
+    /// the current visible columns + layout shape. Stable across renders (same array and
+    /// definition references) until a column is added/removed/reordered/resized/pinned/hidden/
+    /// shown — tracked by <see cref="ColumnVersion"/>. The header row and every data row share the
+    /// one returned definition so the reconciler can skip re-applying ColumnDefinitions.
+    /// </summary>
+    /// <param name="columns">Current visible columns (i.e. <see cref="Columns"/>).</param>
+    /// <param name="hasRowDetailColumn">Whether a 24px row-detail expander column leads the grid.</param>
+    /// <param name="hasSelectColumn">Whether a 40px selection column leads the grid.</param>
+    /// <param name="hasRowEditActionsColumn">Whether an Auto-width row-edit actions column trails the grid.</param>
+    internal (double[] ColWidths, GridDefinition GridDef) GetColumnLayout(
+        IReadOnlyList<FieldDescriptor> columns,
+        bool hasRowDetailColumn,
+        bool hasSelectColumn,
+        bool hasRowEditActionsColumn)
+    {
+        int shape = (hasRowDetailColumn ? 1 : 0)
+                  | (hasSelectColumn ? 2 : 0)
+                  | (hasRowEditActionsColumn ? 4 : 0);
+
+        if (_cachedColWidths is not null && _cachedGridDef is not null
+            && _layoutCacheVersion == _columnVersion && _layoutCacheShape == shape)
+        {
+            return (_cachedColWidths, _cachedGridDef);
+        }
+
+        int colCount = columns.Count;
+        var colWidths = new double[colCount];
+        for (int c = 0; c < colCount; c++)
+            colWidths[c] = GetColumnWidth(columns[c].Name);
+
+        int gridColCount = colCount
+            + (hasRowDetailColumn ? 1 : 0)
+            + (hasSelectColumn ? 1 : 0)
+            + (hasRowEditActionsColumn ? 1 : 0);
+        var gridColDefs = new string[gridColCount];
+        int idx = 0;
+        if (hasRowDetailColumn) gridColDefs[idx++] = "24";
+        if (hasSelectColumn) gridColDefs[idx++] = "40";
+        for (int c = 0; c < colCount; c++)
+            gridColDefs[idx++] = colWidths[c].ToString(global::System.Globalization.CultureInfo.InvariantCulture);
+        if (hasRowEditActionsColumn) gridColDefs[idx] = "Auto";
+
+        var gridDef = new GridDefinition(gridColDefs, RowDefStar);
+
+        _cachedColWidths = colWidths;
+        _cachedGridDef = gridDef;
+        _layoutCacheVersion = _columnVersion;
+        _layoutCacheShape = shape;
+        return (colWidths, gridDef);
     }
 
 
@@ -640,21 +815,41 @@ public class DataGridState<T>
         var col = _columns[fromIndex];
         _columns.RemoveAt(fromIndex);
         _columns.Insert(toIndex, col);
+        RebuildColumnIndex();
+        _columnVersion++;
         StateChanged?.Invoke();
+    }
+
+    // Rebuilds the name -> index map over _columns. First-wins so it mirrors the prior
+    // FirstOrDefault/FindIndex(c => c.Name == name) behaviour for any duplicate names.
+    private void RebuildColumnIndex()
+    {
+        _columnIndexByName.Clear();
+        for (int i = 0; i < _columns.Count; i++)
+        {
+            if (!_columnIndexByName.ContainsKey(_columns[i].Name))
+                _columnIndexByName[_columns[i].Name] = i;
+        }
     }
 
     /// <summary>Hide a column.</summary>
     public void HideColumn(string columnName)
     {
         if (_hiddenColumns.Add(columnName))
+        {
+            _columnVersion++;
             StateChanged?.Invoke();
+        }
     }
 
     /// <summary>Show a previously hidden column.</summary>
     public void ShowColumn(string columnName)
     {
         if (_hiddenColumns.Remove(columnName))
+        {
+            _columnVersion++;
             StateChanged?.Invoke();
+        }
     }
 
     /// <summary>Toggle column visibility.</summary>
@@ -662,6 +857,7 @@ public class DataGridState<T>
     {
         if (!_hiddenColumns.Remove(columnName))
             _hiddenColumns.Add(columnName);
+        _columnVersion++;
         StateChanged?.Invoke();
     }
 
@@ -692,9 +888,11 @@ public class DataGridState<T>
     /// <summary>Pin a column to a position at runtime.</summary>
     public void PinColumn(string columnName, PinPosition position)
     {
-        var idx = _columns.FindIndex(c => c.Name == columnName);
-        if (idx < 0) return;
+        if (!_columnIndexByName.TryGetValue(columnName, out var idx)) return;
         _columns[idx] = _columns[idx] with { Pin = position };
+        // Pin replaces the descriptor in place — name/index unchanged, so _columnIndexByName stays
+        // valid — but bump the version so the visible-column and layout caches pick up the new Pin.
+        _columnVersion++;
         StateChanged?.Invoke();
     }
 
@@ -981,7 +1179,7 @@ public class DataGridState<T>
         var rowIndex = GetRowIndex(rowKey);
         if (rowIndex < 0) { CancelEdit(); return null; }
 
-        var col = _columns.FirstOrDefault(c => c.Name == colName);
+        var col = _columnIndexByName.TryGetValue(colName, out var colIdx) ? _columns[colIdx] : null;
         if (col?.SetValue is null) { CancelEdit(); return null; }
 
         var item = GetItemAt(rowIndex);
@@ -1118,7 +1316,7 @@ public class DataGridState<T>
         // Apply all pending values via return-new-owner SetValue
         foreach (var (colName, newValue) in _rowEditValues)
         {
-            var col = _columns.FirstOrDefault(c => c.Name == colName);
+            var col = _columnIndexByName.TryGetValue(colName, out var colIdx) ? _columns[colIdx] : null;
             if (col?.SetValue is null) continue;
             current = (T)col.SetValue(current, newValue);
         }
@@ -1242,7 +1440,7 @@ public class DataGridState<T>
     {
         if (_editValidation is null) return;
 
-        var col = _columns.FirstOrDefault(c => c.Name == fieldName);
+        var col = _columnIndexByName.TryGetValue(fieldName, out var fieldIdx) ? _columns[fieldIdx] : null;
         if (col is null) return;
 
         _editValidation.ClearInternal(fieldName);
@@ -1266,7 +1464,7 @@ public class DataGridState<T>
     {
         if (_editValidation is null) return;
 
-        var col = _columns.FirstOrDefault(c => c.Name == fieldName);
+        var col = _columnIndexByName.TryGetValue(fieldName, out var fieldIdx) ? _columns[fieldIdx] : null;
         if (col?.AsyncValidators is not { Count: > 0 }) return;
 
         foreach (var validator in col.AsyncValidators)
