@@ -591,20 +591,31 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     }
 
     /// <summary>
-    /// Subscribes to ActualThemeChanged on the root content element so that
-    /// ThemeRef-bound properties are re-resolved when the theme switches.
-    /// WinUI controls handle theme changes natively via {ThemeResource} bindings,
-    /// but Reactor's ThemeRef values are resolved once during reconciliation —
-    /// this listener triggers a re-render so they pick up the new theme.
+    /// Subscribes to ActualThemeChanged on the host control itself (stable across
+    /// rendered-root swaps) so that ThemeRef-bound properties are re-resolved when
+    /// the theme switches. WinUI controls handle theme changes natively via
+    /// {ThemeResource} bindings, but Reactor's ThemeRef values are resolved once
+    /// during reconciliation — this listener triggers a re-render so they pick up
+    /// the new theme.
     /// </summary>
     private void AttachThemeListener(UIElement? control)
     {
-        if (_themeListenerAttached || control is not FrameworkElement fe) return;
+        // Gate on a mounted FrameworkElement root (so headless hosts that never
+        // mount don't activate the WinRT UISettings projection below), but
+        // subscribe ActualThemeChanged on the host control itself — a ContentControl
+        // stable across rendered-root swaps — rather than on the rendered root. The
+        // root UIElement instance changes whenever the top-level element type
+        // changes (newControl != _currentControl); a listener left on a
+        // since-replaced root would stop delivering theme changes and leave
+        // ThemeRef-resolved brushes stale after a flip (Copilot review). The host
+        // instance is always in the visual tree, so a single subscription suffices
+        // and the _themeListenerAttached latch never needs to move it.
+        if (_themeListenerAttached || control is not FrameworkElement) return;
         _themeListenerAttached = true;
 
-        fe.ActualThemeChanged += (_, _) =>
+        ActualThemeChanged += (_, _) =>
         {
-            _logger?.LogDebug("Theme changed to {Theme} — re-rendering", fe.ActualTheme);
+            _logger?.LogDebug("Theme changed to {Theme} — re-rendering", ActualTheme);
             // Drop the ThemeRef resolution caches so the re-render below resolves
             // brushes against the new theme (#85/#86).
             ThemeRef.InvalidateCache();
@@ -614,7 +625,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         // Accent / system-palette changes that keep the same Light/Dark theme do
         // not raise ActualThemeChanged, but can still change the brushes a
         // ThemeRef resolves to. Subscribe to UISettings.ColorValuesChanged so
-        // those drop the resolution caches and re-render too (#86). Tied to the
+        // those drop the resolution caches and re-render too (#86). Gated on a
         // mounted root, so headless hosts that never mount don't activate the
         // WinRT projection.
         try
