@@ -398,6 +398,37 @@ internal static class FlexLineHelper
         s_listPool.Push(list);
     }
 
+    // AI-HINT (perf #144): FlexLine is allocated once per flex line per frame.
+    // Pool the object together with its ItemsInFlow list (the list travels with
+    // the FlexLine across rent/return cycles, so it is NOT drawn from s_listPool).
+    // A FlexLine is used entirely within one per-line loop iteration in
+    // CalculateLayoutImpl and is never stored beyond it, so returning it at the
+    // loop tail is safe. Recursive layout of children rents distinct FlexLines
+    // (LIFO stack), so no aliasing.
+    [ThreadStatic]
+    private static Stack<FlexLine>? s_flexLinePool;
+
+    internal static FlexLine RentFlexLine()
+    {
+        var pool = s_flexLinePool ??= new Stack<FlexLine>();
+        if (pool.Count > 0)
+        {
+            var line = pool.Pop();
+            line.ItemsInFlow.Clear();
+            line.SizeConsumed = 0;
+            line.NumberOfAutoMargins = 0;
+            line.Layout = default;
+            return line;
+        }
+        return new FlexLine();
+    }
+
+    internal static void ReturnFlexLine(FlexLine line)
+    {
+        var pool = s_flexLinePool ??= new Stack<FlexLine>();
+        pool.Push(line);
+    }
+
     /// <summary>
     /// Calculates where a line starting at a given child index should break.
     /// Assumes all children have their computedFlexBasis computed.
@@ -408,7 +439,8 @@ internal static class FlexLineHelper
         ref int childIndex, int lineCount,
         List<YogaNode> layoutChildren)
     {
-        var itemsInFlow = RentList();
+        var line = RentFlexLine();
+        var itemsInFlow = line.ItemsInFlow;
         float sizeConsumed = 0;
         float totalFlexGrowFactors = 0;
         float totalFlexShrinkScaledFactors = 0;
@@ -472,16 +504,13 @@ internal static class FlexLineHelper
         if (totalFlexShrinkScaledFactors > 0 && totalFlexShrinkScaledFactors < 1)
             totalFlexShrinkScaledFactors = 1;
 
-        return new FlexLine
+        line.SizeConsumed = sizeConsumed;
+        line.NumberOfAutoMargins = numberOfAutoMargins;
+        line.Layout = new FlexLineRunningLayout
         {
-            ItemsInFlow = itemsInFlow,
-            SizeConsumed = sizeConsumed,
-            NumberOfAutoMargins = numberOfAutoMargins,
-            Layout = new FlexLineRunningLayout
-            {
-                TotalFlexGrowFactors = totalFlexGrowFactors,
-                TotalFlexShrinkScaledFactors = totalFlexShrinkScaledFactors,
-            }
+            TotalFlexGrowFactors = totalFlexGrowFactors,
+            TotalFlexShrinkScaledFactors = totalFlexShrinkScaledFactors,
         };
+        return line;
     }
 }
