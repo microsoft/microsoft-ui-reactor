@@ -928,8 +928,8 @@ public abstract record Element
                 la.Orientation == lb.Orientation
                 && la.Spacing == lb.Spacing
                 && la.EstimatedItemSize == lb.EstimatedItemSize
-                && ReferenceEquals(la.ScrollViewerSetters, lb.ScrollViewerSetters)
-                && ReferenceEquals(la.RepeaterSetters, lb.RepeaterSetters),
+                && SettersEqual(la.ScrollViewerSetters, lb.ScrollViewerSetters)
+                && SettersEqual(la.RepeaterSetters, lb.RepeaterSetters),
 
             // Non-container / leaf types: return false → always captured
             _ => false,
@@ -1071,26 +1071,31 @@ public abstract record Element
     }
 
     /// <summary>
-    /// FLAGSHIP-2 — element-wise reference comparison of two <c>Setters</c> arrays.
-    /// The fluent <c>.Set(x => …)</c> helpers append to a fresh array each render
-    /// (<c>[.. Setters, configure]</c>), so the array reference always differs even
-    /// when the chain is unchanged — defeating the old <see cref="object.ReferenceEquals(object, object)"/>
-    /// fast-path and forcing a full Update on every grid cell. Comparing the array
-    /// <em>contents</em> by reference restores the skip: non-capturing lambdas and
-    /// method groups are cached as compiler statics, so an unchanged chain yields
-    /// element-wise reference-equal setters across renders. Capturing closures
-    /// allocate per render and correctly decline the fast-path.
+    /// Conservative equality for two <c>Setters</c> arrays (the imperative
+    /// <c>.Set(x =&gt; …)</c> escape hatch). Returns true only when the arrays are the
+    /// <em>same instance</em> (a memoized/unchanged element) or <em>both empty</em>
+    /// (no imperative writes to apply). It deliberately does <b>not</b> compare
+    /// element-wise by delegate identity.
+    /// <para>
+    /// Why not element-wise identity: a setter is an apply-time imperative write
+    /// whose effect can read mutable external state (statics, singletons, captured
+    /// mutable objects). Non-capturing lambdas and method groups are cached by the
+    /// C# compiler to a single static delegate, so identity-equality across renders
+    /// does <b>not</b> imply the write is unnecessary. Skipping a reference-stable
+    /// setter would strand a stale value on the control — a regression versus the
+    /// documented contract that <c>.Set</c> re-applies on every update. Setters
+    /// therefore keep the element on the Update path whenever any are present
+    /// (mirroring the <c>!HasSetters</c> guards used by the templated/lazy element
+    /// arms). Handler modifiers differ and <em>are</em> safe to compare by identity
+    /// (FLAGSHIP-1): they dispatch later through
+    /// <c>ModifierEventHandlerState.Current*</c> and read fresh state at fire time,
+    /// rather than being re-applied imperatively during Update.
+    /// </para>
     /// </summary>
     internal static bool SettersEqual<T>(T[]? a, T[]? b) where T : class
     {
         if (ReferenceEquals(a, b)) return true;
-        if (a is null || b is null) return false;
-        if (a.Length != b.Length) return false;
-        for (int i = 0; i < a.Length; i++)
-        {
-            if (!ReferenceEquals(a[i], b[i])) return false;
-        }
-        return true;
+        return (a is null || a.Length == 0) && (b is null || b.Length == 0);
     }
 
     /// <summary>
