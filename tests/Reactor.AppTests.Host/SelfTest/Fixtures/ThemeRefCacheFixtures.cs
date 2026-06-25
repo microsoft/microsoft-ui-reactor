@@ -9,15 +9,20 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// <summary>
 /// Perf #85/#86 — <see cref="ThemeRef"/> resolution caches. These need
 /// <c>Application.Current.Resources</c> + real <see cref="FrameworkElement"/>s,
-/// so they live as a selftest (not a headless xUnit) fixture. The single
-/// fixture guards, in order:
+/// so they live as selftest (not headless xUnit) fixtures. They guard:
 /// <list type="bullet">
 ///   <item>effective theme drives the resolved brush (Light vs Dark) — #85/#86
 ///     correctness;</item>
 ///   <item>a per-element <c>RequestedTheme</c> flip is picked up WITHOUT a
 ///     global <see cref="ThemeRef.InvalidateCache"/> — the per-element name
 ///     cache is validated against the element's cheap RequestedTheme/ActualTheme
-///     DP reads (the regression the PR review's H1 finding flagged; #85);</item>
+///     DP reads (#85);</item>
+///   <item>a Default-themed child inheriting an ANCESTOR's <c>RequestedTheme</c>
+///     re-resolves correctly when the ancestor flips and a new reconcile pass
+///     opens — the reconcile-scoped name cache, fixing the PR-review H1 finding
+///     that a generation-only cache could serve such a child a stale theme;</item>
+///   <item>a Light-themed element falls back to the <c>"Default"</c> theme
+///     dictionary when no <c>"Light"</c> entry exists (#86 resolver fallback);</item>
 ///   <item>the (key, theme) brush cache is real (a swapped dictionary brush is
 ///     returned stale) and <see cref="ThemeRef.InvalidateCache"/> drops it — the
 ///     invalidation the host wires to ActualThemeChanged / ColorValuesChanged
@@ -107,6 +112,90 @@ internal static class ThemeRefCacheFixtures
                 ThemeRef.InvalidateCache();
                 var afterInvalidate = ThemeRef.Resolve(Key, feLight);
                 H.Check("ThemeRefCache_FreshAfterInvalidate", ReferenceEquals(afterInvalidate, lightV2));
+            }
+            finally
+            {
+                Application.Current.Resources.MergedDictionaries.Remove(merged);
+                ThemeRef.InvalidateCache();
+                H.SetContent(null);
+            }
+        }
+    }
+
+    // #85 (PR review H1): a Default-themed child inherits its effective theme
+    // from the nearest ANCESTOR with an explicit RequestedTheme. The child's own
+    // RequestedTheme stays Default across an ancestor flip, so the element-local
+    // DP comparison cannot detect it — only re-walking the ancestors does. The
+    // reconcile-scoped name cache forces that re-walk once per render
+    // (BeginReconcilePass), so the child never serves a theme stale w.r.t. its
+    // ancestor (the regression a generation-only cache left in the propagation
+    // window before WinUI updates the child's ActualTheme).
+    internal class ThemeRefCache_AncestorThemeFlipInheritedByDefaultChild(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var light = NewBrush(10, 20, 30);
+            var dark = NewBrush(200, 210, 220);
+            var (merged, _) = InstallThemeDictionaries(light, dark);
+            ThemeRef.InvalidateCache();
+
+            try
+            {
+                var ancestor = new StackPanel { RequestedTheme = ElementTheme.Light };
+                var child = new Border();   // Default — no own RequestedTheme override
+                ancestor.Children.Add(child);
+                H.SetContent(ancestor);
+                await Harness.Render();
+
+                var inheritedLight = ThemeRef.Resolve(Key, child);
+                H.Check("ThemeRefCache_DefaultChildInheritsAncestorLight",
+                    ReferenceEquals(inheritedLight, light));
+
+                // Flip the ANCESTOR, then open a new reconcile pass exactly as the
+                // host does at the top of each render. The child re-walks to the
+                // ancestor and resolves the dark brush WITHOUT relying on WinUI's
+                // ActualTheme having propagated to the child yet — the propagation
+                // window the previous generation-only cache could serve stale.
+                ancestor.RequestedTheme = ElementTheme.Dark;
+                ThemeRef.BeginReconcilePass();
+                var inheritedDark = ThemeRef.Resolve(Key, child);
+                H.Check("ThemeRefCache_DefaultChildPicksUpAncestorFlip",
+                    ReferenceEquals(inheritedDark, dark));
+            }
+            finally
+            {
+                Application.Current.Resources.MergedDictionaries.Remove(merged);
+                ThemeRef.InvalidateCache();
+                H.SetContent(null);
+            }
+        }
+    }
+
+    // #86 resolver fallback: when no theme-specific (e.g. "Light") entry exists,
+    // ResolveForThemeUncached falls back to the "Default" theme dictionary — the
+    // XamlControlsResources shape where the base brushes live under "Default".
+    internal class ThemeRefCache_DefaultDictionaryFallback(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var def = NewBrush(123, 45, 67);
+            var defaultDict = new ResourceDictionary { [Key] = def };
+            var merged = new ResourceDictionary();
+            merged.ThemeDictionaries["Default"] = defaultDict;
+            Application.Current.Resources.MergedDictionaries.Add(merged);
+            ThemeRef.InvalidateCache();
+
+            try
+            {
+                var feLight = new Border { RequestedTheme = ElementTheme.Light };
+                H.SetContent(feLight);
+                await Harness.Render();
+
+                // themeName resolves to "Light", which is absent, so the resolver
+                // falls back to the "Default" theme dictionary entry.
+                var resolved = ThemeRef.Resolve(Key, feLight);
+                H.Check("ThemeRefCache_DefaultDictionaryFallbackResolves",
+                    ReferenceEquals(resolved, def));
             }
             finally
             {

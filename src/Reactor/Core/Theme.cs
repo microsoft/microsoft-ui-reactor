@@ -42,31 +42,59 @@ public readonly record struct ThemeRef(string ResourceKey)
     // render. Both the per-element effective-theme tree walk (#85) and the
     // recursive MergedDictionaries scan (#86) were uncached and re-run on every
     // ThemeRef.Resolve. These caches collapse that to one tree walk per element
-    // per theme generation and one dictionary scan per (key, theme) pair.
+    // per reconcile pass and one dictionary scan per (key, theme) pair.
 
     // #86: resolved brush per (resourceKey, themeName). The themeName is part of
     // the key, so Light/Dark entries coexist; cleared on theme/colour change so
     // a runtime theme-dictionary swap is observed. Only non-null hits are
     // cached, so a genuinely-absent key is re-resolved (and picked up if added
-    // later) exactly as before.
+    // later) exactly as before. Publication is generation-guarded (see
+    // ResolveForTheme) so a resolve racing an InvalidateCache cannot republish a
+    // pre-invalidation brush into the just-cleared cache.
     private static readonly ConcurrentDictionary<(string Key, string Theme), Brush> _brushCache = new();
 
-    // #85: effective theme name per element, validated by a global generation
-    // stamp AND the element's own RequestedTheme / ActualTheme dependency
-    // properties. A host theme change bumps the generation (see InvalidateCache);
-    // a subtree-local RequestedTheme change (applied by the reconciler without a
-    // generation bump) is caught by the cheap per-element DP comparison in
-    // GetEffectiveThemeName, so every element's cached name is lazily recomputed
-    // on its next resolve.
+    // Bumped by InvalidateCache on every theme / system-colour change. Used only
+    // to guard brush-cache publication against a concurrent invalidation — the
+    // brush cache itself is keyed by (key, theme), not by generation.
+    private static int _themeGeneration;
+
+    // #85: effective theme name per element, scoped to a single reconcile pass.
+    // The effective theme of a Default-themed element is inherited from the
+    // nearest ANCESTOR with an explicit RequestedTheme — a value none of the
+    // element's own dependency properties reflect until WinUI propagates
+    // ActualTheme, which is not guaranteed within the synchronous reconcile that
+    // applied the ancestor override. Caching the name across reconciles would
+    // therefore let a subtree-local RequestedTheme flip serve a stale theme
+    // (PR-review H1). Instead the cache is reconcile-scoped: the host bumps
+    // _reconcilePass once per render (BeginReconcilePass), so each element walks
+    // at most once per pass — collapsing the dozens of per-token resolves on one
+    // element into a single walk (the #85 win) while matching the original
+    // always-walk result exactly (ancestors are applied top-down before the
+    // descendant is reconciled, so the per-pass walk observes the current theme).
+    // The cheap per-element RequestedTheme / ActualTheme comparison additionally
+    // re-walks mid-pass if an app-level theme flip propagates to this element.
     private sealed class ThemeNameBox
     {
-        public int Generation = -1;
+        public int Pass = -1;
         public ElementTheme RequestedTheme = (ElementTheme)(-1);
         public ElementTheme ActualTheme = (ElementTheme)(-1);
         public string? Name;
     }
     private static readonly ConditionalWeakTable<FrameworkElement, ThemeNameBox> _themeNameCache = new();
-    private static int _themeGeneration;
+    private static int _reconcilePass;
+
+    /// <summary>
+    /// Opens a new reconcile pass for the per-element effective-theme-name cache,
+    /// so every element recomputes its effective theme at most once this pass.
+    /// Called by the host at the start of each render (before reconciliation) so a
+    /// subtree-local <see cref="FrameworkElement.RequestedTheme"/> change applied
+    /// during the pass is observed by descendants resolved later in the same pass.
+    /// Cheap and allocation-free; safe to call from any thread.
+    /// </summary>
+    internal static void BeginReconcilePass()
+    {
+        Interlocked.Increment(ref _reconcilePass);
+    }
 
     /// <summary>
     /// Drops all cached theme resolution (effective theme names and resolved
@@ -78,6 +106,9 @@ public readonly record struct ThemeRef(string ResourceKey)
     internal static void InvalidateCache()
     {
         Interlocked.Increment(ref _themeGeneration);
+        // Also open a new name-cache pass so a theme change invalidates cached
+        // effective-theme names immediately, independent of render timing.
+        Interlocked.Increment(ref _reconcilePass);
         _brushCache.Clear();
     }
 
@@ -87,10 +118,18 @@ public readonly record struct ThemeRef(string ResourceKey)
         if (_brushCache.TryGetValue(cacheKey, out var cached))
             return cached;
 
+        // Capture the generation BEFORE the uncached scan. If an InvalidateCache()
+        // races us — it bumps the generation and clears the cache, e.g. from
+        // UISettings.ColorValuesChanged on a WinRT pool thread while we resolve on
+        // the UI thread — `resolved` may predate the theme change, so writing it
+        // back into the just-cleared cache would serve a stale brush until the
+        // next invalidation. Publish only when no invalidation raced us; otherwise
+        // return the value but leave the cache empty so the next resolve re-scans.
+        var gen = Volatile.Read(ref _themeGeneration);
         var resolved = ResolveForThemeUncached(resourceKey, themeName);
         // Only cache successful resolves so an absent key stays re-resolvable
         // (matches the pre-cache behaviour where each call re-scanned).
-        if (resolved is not null)
+        if (resolved is not null && Volatile.Read(ref _themeGeneration) == gen)
             _brushCache[cacheKey] = resolved;
         return resolved;
     }
@@ -125,24 +164,21 @@ public readonly record struct ThemeRef(string ResourceKey)
     private static string GetEffectiveThemeName(FrameworkElement fe)
     {
         // #85: the effective theme depends on fe + its ancestors' RequestedTheme
-        // / ActualTheme. Cache it per element and reuse the cached name (one tree
-        // walk) across the dozens of token resolves in a render. The cache is
-        // valid only while three cheap, always-current inputs are unchanged:
-        //   • the global generation stamp (bumped on host theme/colour changes),
-        //   • fe.RequestedTheme — a subtree-local override the reconciler applies
-        //     WITHOUT bumping the generation, so the generation alone would miss
-        //     it; the O(1) DP compare catches it on the next resolve, and
-        //   • fe.ActualTheme — covers an ancestor/app theme flip once it has
-        //     propagated to this element.
-        // The only residual lag is a Default-themed descendant of an ancestor
-        // whose RequestedTheme flips within the same synchronous pass, before
-        // ActualTheme propagates; it self-heals on the next render — the same
-        // propagation caveat the uncached ActualTheme fallback already carried.
-        int gen = Volatile.Read(ref _themeGeneration);
+        // / ActualTheme. Within a single reconcile pass these are fixed once fe is
+        // reached (ancestors are applied top-down first), so cache the walked name
+        // per element for the duration of the pass and reuse it across the dozens
+        // of token resolves on this element. A new pass (BeginReconcilePass —
+        // bumped by the host once per render, and by InvalidateCache on a theme
+        // change) forces a re-walk, so an ancestor RequestedTheme flip is
+        // reflected on the very next render, matching the original always-walk
+        // behaviour exactly. The cheap per-element RequestedTheme / ActualTheme
+        // comparison additionally catches an app-level theme flip that propagates
+        // to this element mid-pass.
+        int pass = Volatile.Read(ref _reconcilePass);
         var requested = fe.RequestedTheme;
         var actual = fe.ActualTheme;
         var box = _themeNameCache.GetValue(fe, static _ => new ThemeNameBox());
-        if (box.Generation == gen
+        if (box.Pass == pass
             && box.Name is not null
             && box.RequestedTheme == requested
             && box.ActualTheme == actual)
@@ -150,7 +186,7 @@ public readonly record struct ThemeRef(string ResourceKey)
 
         var name = ComputeEffectiveThemeName(fe);
         box.Name = name;
-        box.Generation = gen;
+        box.Pass = pass;
         box.RequestedTheme = requested;
         box.ActualTheme = actual;
         return name;
