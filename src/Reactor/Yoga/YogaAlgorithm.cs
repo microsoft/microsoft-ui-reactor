@@ -638,7 +638,7 @@ internal static class YogaAlgorithm
             float appliedCrossGap = lineCount != 0 ? crossAxisGap : 0.0f;
             totalLineCrossDim += flexLine.Layout.CrossDim + appliedCrossGap;
             maxLineMainDim = YogaFloat.MaxOrDefined(maxLineMainDim, flexLine.Layout.MainDim);
-            FlexLineHelper.ReturnList(flexLine.ItemsInFlow);
+            FlexLineHelper.ReturnFlexLine(flexLine);
             lineCount++;
         }
 
