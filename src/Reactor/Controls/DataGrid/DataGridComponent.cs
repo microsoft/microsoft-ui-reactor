@@ -330,15 +330,18 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
 
         // Commit active edit when focus leaves the DataGrid entirely.
         // Attached once at mount via Setters; the handler reads current state from the ref.
+        // Hooks must run unconditionally and in the same order every render, so both refs are
+        // declared outside the el.Editable branch (Editable can toggle between renders, which
+        // would otherwise change the hook call sequence and throw HookOrderException).
+        var lostFocusWired = UseRef(false);
+        var lostFocusSetters = UseRef<Action<global::Microsoft.UI.Xaml.Controls.Grid>[]?>(null);
         if (el.Editable)
         {
-            var lostFocusWired = UseRef(false);
             // Cache the LostFocus setter array (and its closure) in a ref so the spread + lambda
             // aren't re-allocated every render. The handler wires g.LostFocus exactly once (guarded
             // by lostFocusWired) and reads live state through the captured refs, so a once-built
             // setter is equivalent to rebuilding it each render. gridEl is freshly constructed
             // above with no setters, so assigning Setters here matches the old spread.
-            var lostFocusSetters = UseRef<Action<global::Microsoft.UI.Xaml.Controls.Grid>[]?>(null);
             lostFocusSetters.Current ??= new Action<global::Microsoft.UI.Xaml.Controls.Grid>[]
             {
                 g =>
