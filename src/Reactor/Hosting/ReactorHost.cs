@@ -83,6 +83,10 @@ public sealed class ReactorHost : IDisposable
     // cost (15–30 ms each) and the Charting.D3Charts cctor cascade.
     private global::Windows.UI.ViewManagement.AccessibilitySettings? _accessibilitySettings;
     private global::Windows.UI.ViewManagement.UISettings? _uiSettings;
+    // Always-on (independent of charting) UISettings used purely to drop the
+    // ThemeRef resolution caches on accent/palette changes that don't flip the
+    // Light/Dark theme and so don't raise ActualThemeChanged (#86).
+    private global::Windows.UI.ViewManagement.UISettings? _themeColorSettings;
     private volatile bool _isForcedColors;
     private volatile bool _isReducedMotion;
     // Opaque forced-colors theme payload produced by the charting bridge
@@ -830,6 +834,22 @@ public sealed class ReactorHost : IDisposable
 
         _themeListenerElement = fe;
         fe.ActualThemeChanged += OnActualThemeChanged;
+
+        // Accent / system-palette changes that keep the same Light/Dark theme do
+        // not raise ActualThemeChanged, but can still change the brushes a
+        // ThemeRef resolves to. Subscribe to UISettings.ColorValuesChanged (once,
+        // when a root is first mounted) so those drop the resolution caches and
+        // re-render too (#86). Independent of the charting UISettings so it works
+        // in apps that never activate charts.
+        if (_themeColorSettings is null)
+        {
+            try
+            {
+                _themeColorSettings = new global::Windows.UI.ViewManagement.UISettings();
+                _themeColorSettings.ColorValuesChanged += OnThemeColorValuesChanged;
+            }
+            catch { /* headless / unit-test host — no UI settings */ }
+        }
     }
 
     private void OnActualThemeChanged(FrameworkElement sender, object args)
@@ -868,6 +888,18 @@ public sealed class ReactorHost : IDisposable
         // (#184). The palette change also affects resolved ThemeRef brushes, so
         // drop the resolution caches (#86).
         _chartingStateDirty = true;
+        ThemeRef.InvalidateCache();
+        RequestRender();
+    }
+
+    private void OnThemeColorValuesChanged(
+        global::Windows.UI.ViewManagement.UISettings sender, object args)
+    {
+        // Fires on a WinRT pool thread for accent/palette changes. Drop the
+        // ThemeRef resolution caches and re-render so directly-applied resolved
+        // brushes pick up the new palette (#86). Both calls are thread-safe.
+        // Charting apps may also receive this via OnColorValuesChanged;
+        // InvalidateCache is idempotent and the render requests coalesce.
         ThemeRef.InvalidateCache();
         RequestRender();
     }
@@ -964,6 +996,11 @@ public sealed class ReactorHost : IDisposable
         // Accessibility listener cleanup
         if (_uiSettings is not null)
             _uiSettings.ColorValuesChanged -= OnColorValuesChanged;
+        if (_themeColorSettings is not null)
+        {
+            _themeColorSettings.ColorValuesChanged -= OnThemeColorValuesChanged;
+            _themeColorSettings = null;
+        }
 
         _rootComponent?.Context.RunCleanups();
         _funcContext?.RunCleanups();
