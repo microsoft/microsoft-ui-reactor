@@ -231,30 +231,51 @@ public class PerfDiffSkipPathTests
     // ════════════════════════════════════════════════════════════════
 
     [Fact]
-    public void ForEach_IReadOnlyList_FastPath_Preserves_Order_And_Count()
+    public void ForEach_IReadOnlyList_FastPath_Preserves_Order_And_Content()
     {
         var items = new List<string> { "a", "b", "c" };
         var group = Assert.IsType<GroupElement>(ForEach(items, s => TextBlock(s)));
-        Assert.Equal(3, group.Children.Length);
-        Assert.All(group.Children, c => Assert.IsType<TextBlockElement>(c));
+        Assert.Equal(
+            new[] { "a", "b", "c" },
+            group.Children.Select(c => Assert.IsType<TextBlockElement>(c).Content));
     }
 
     [Fact]
     public void ForEach_NonList_Enumerable_Matches_FastPath()
     {
         // A Where-iterator is IEnumerable but not IReadOnlyList → exercises the
-        // fallback; result must match the fast-path exactly.
+        // fallback; result must match the fast-path exactly (same order/content).
         IEnumerable<string> seq = new List<string> { "a", "b", "c" }.Where(_ => true);
         var group = Assert.IsType<GroupElement>(ForEach(seq, s => TextBlock(s)));
-        Assert.Equal(3, group.Children.Length);
+        Assert.Equal(
+            new[] { "a", "b", "c" },
+            group.Children.Select(c => Assert.IsType<TextBlockElement>(c).Content));
     }
 
     [Fact]
-    public void ForEach_Indexed_Overload_Preserves_Count()
+    public void ForEach_Indexed_Overload_Preserves_Index_And_Content()
     {
         var items = new List<string> { "x", "y" };
         var group = Assert.IsType<GroupElement>(ForEach(items, (s, i) => TextBlock($"{i}:{s}")));
-        Assert.Equal(2, group.Children.Length);
+        Assert.Equal(
+            new[] { "0:x", "1:y" },
+            group.Children.Select(c => Assert.IsType<TextBlockElement>(c).Content));
+    }
+
+    [Fact]
+    public void ForEach_Empty_Input_Produces_Empty_Group()
+    {
+        // Both the IReadOnlyList fast-path and the indexed overload must yield an
+        // empty child set (no off-by-one, no phantom element) for empty input.
+        var list = Assert.IsType<GroupElement>(ForEach(new List<string>(), s => TextBlock(s)));
+        Assert.Empty(list.Children);
+
+        var indexed = Assert.IsType<GroupElement>(ForEach(new List<string>(), (s, i) => TextBlock(s)));
+        Assert.Empty(indexed.Children);
+
+        IEnumerable<string> emptySeq = new List<string>().Where(_ => true);
+        var seq = Assert.IsType<GroupElement>(ForEach(emptySeq, s => TextBlock(s)));
+        Assert.Empty(seq.Children);
     }
 
     [Fact]
@@ -280,6 +301,32 @@ public class PerfDiffSkipPathTests
     }
 
     [Fact]
+    public void UniformGrid_Does_Not_Mutate_Caller_Items_Array()
+    {
+        // FilterChildren's #173 fast path returns a null-free input array aliased
+        // (no copy). UniformGrid must position cells into its OWN array — writing
+        // .Grid(...) wrappers back into `items` would corrupt a caller-supplied,
+        // reusable array. Lock that in: the source array's elements must be
+        // unchanged (and un-positioned) after the call.
+        var cellA = TextBlock("a");
+        var cellB = TextBlock("b");
+        var items = new Element?[] { cellA, cellB };
+
+        var grid = UniformGrid(Orientation.Vertical, items);
+
+        // Source array untouched — same instances, no Grid attached-data added.
+        Assert.Same(cellA, items[0]);
+        Assert.Same(cellB, items[1]);
+        Assert.Null(((Element)items[0]!).GetAttached<GridAttached>());
+        Assert.Null(((Element)items[1]!).GetAttached<GridAttached>());
+
+        // The grid's own children ARE positioned.
+        Assert.Equal(2, grid.Children.Length);
+        Assert.NotNull(grid.Children[0].GetAttached<GridAttached>());
+        Assert.Equal(1, grid.Children[1].GetAttached<GridAttached>()!.Row);
+    }
+
+    [Fact]
     public void InterspersedGrid_Builds_Item_And_Separator_Tracks()
     {
         var grid = InterspersedGrid(
@@ -292,6 +339,36 @@ public class PerfDiffSkipPathTests
         Assert.Equal(5, grid.Children.Length);
         Assert.Equal(5, grid.Definition.Columns.Length);
         Assert.Single(grid.Definition.Rows);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  #168 — BrushHelper.ParseColor cache (the color path behind the
+    //  shared-brush fluent modifiers). Brush *instance* identity needs a
+    //  UI thread, so it's covered by the selftest tier; here we lock down
+    //  the headless-safe color parse the hot path depends on.
+    // ════════════════════════════════════════════════════════════════
+
+    [Theory]
+    [InlineData("red", 255, 255, 0, 0)]
+    [InlineData("transparent", 0, 0, 0, 0)]
+    [InlineData("#FF8800", 255, 255, 0x88, 0)]
+    [InlineData("#8000FF00", 0x80, 0, 255, 0)]
+    public void ParseColor_Resolves_Named_And_Hex(string input, int a, int r, int g, int b)
+    {
+        var color = BrushHelper.ParseColor(input);
+        Assert.Equal((byte)a, color.A);
+        Assert.Equal((byte)r, color.R);
+        Assert.Equal((byte)g, color.G);
+        Assert.Equal((byte)b, color.B);
+    }
+
+    [Fact]
+    public void ParseColor_Is_Deterministic_Across_Calls()
+    {
+        // Repeated parses (served from the string cache on the second call) must
+        // yield the same Color value — the shared-brush cache is keyed on this.
+        Assert.Equal(BrushHelper.ParseColor("#123456"), BrushHelper.ParseColor("#123456"));
+        Assert.Equal(BrushHelper.ParseColor("blue"), BrushHelper.ParseColor("blue"));
     }
 
     // ════════════════════════════════════════════════════════════════

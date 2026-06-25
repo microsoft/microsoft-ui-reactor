@@ -856,16 +856,23 @@ public static partial class Factories
         var oneStar = s_oneStar;
         bool isHorizontal = orientation == Orientation.Horizontal;
 
+        // Position each cell into its OWN array — never write back into
+        // `filtered`. FilterChildren's fast path returns the caller's array
+        // aliased (no copy), so mutating it in place would corrupt a
+        // caller-supplied `items` array with .Grid(...) wrappers. This matches
+        // the historical behavior, where FilterChildren always returned a fresh
+        // owned array that was safe to fill.
+        var positioned = new Element[filtered.Length];
         for (int i = 0; i < filtered.Length; i++)
         {
-            filtered[i] = isHorizontal
+            positioned[i] = isHorizontal
                 ? filtered[i].Grid(row: 0, column: i)
                 : filtered[i].Grid(row: i, column: 0);
         }
 
         return isHorizontal
-            ? Grid(sizes, oneStar, filtered)
-            : Grid(oneStar, sizes, filtered);
+            ? Grid(sizes, oneStar, positioned)
+            : Grid(oneStar, sizes, positioned);
     }
 
     // ── Navigation ──────────────────────────────────────────────────
