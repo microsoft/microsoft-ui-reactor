@@ -1178,4 +1178,142 @@ public class YogaEdgeCaseTests
         node.HasNewLayout = false;
         Assert.False(node.HasNewLayout);
     }
+
+    // ════════════════════════════════════════════════════════════════════
+    // 6. Setter equality guards (#138 — layout cache enablement)
+    //    A setter assigned its current value must NOT re-dirty the node, so
+    //    FlexPanel's per-frame re-apply of stable style does not defeat the
+    //    Yoga layout cache. A genuine change must still dirty.
+    // ════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void Setter_SameValue_DoesNotMarkDirty()
+    {
+        var node = new YogaNode();
+        // Prime each input to a known value, then clear the dirty flag.
+        node.FlexDirection = FlexDirection.Row;
+        node.JustifyContent = FlexJustify.Center;
+        node.AlignItems = FlexAlign.Center;
+        node.FlexGrow = 1f;
+        node.FlexShrink = 0f;
+        node.FlexBasis = YogaValue.Point(50f);
+        node.Width = YogaValue.Point(100f);
+        node.Height = YogaValue.Percent(50f);
+        node.MinWidth = YogaValue.Point(10f);
+        node.MaxHeight = YogaValue.Point(200f);
+        node.AspectRatio = 1.5f;
+        node.SetMargin(YogaEdge.Left, YogaValue.Point(8f));
+        node.SetPadding(YogaEdge.Top, YogaValue.Point(4f));
+        node.SetBorder(YogaEdge.Right, 2f);
+        node.SetPosition(YogaEdge.Bottom, YogaValue.Point(3f));
+        node.SetGap(YogaGutter.Row, 6f);
+        node.SetDirty(false);
+        Assert.False(node.IsDirty);
+
+        // Re-assign every input its current value — none should dirty.
+        node.FlexDirection = FlexDirection.Row;
+        node.JustifyContent = FlexJustify.Center;
+        node.AlignItems = FlexAlign.Center;
+        node.FlexGrow = 1f;
+        node.FlexShrink = 0f;
+        node.FlexBasis = YogaValue.Point(50f);
+        node.Width = YogaValue.Point(100f);
+        node.Height = YogaValue.Percent(50f);
+        node.MinWidth = YogaValue.Point(10f);
+        node.MaxHeight = YogaValue.Point(200f);
+        node.AspectRatio = 1.5f;
+        node.SetMargin(YogaEdge.Left, YogaValue.Point(8f));
+        node.SetPadding(YogaEdge.Top, YogaValue.Point(4f));
+        node.SetBorder(YogaEdge.Right, 2f);
+        node.SetPosition(YogaEdge.Bottom, YogaValue.Point(3f));
+        node.SetGap(YogaGutter.Row, 6f);
+
+        Assert.False(node.IsDirty);
+    }
+
+    [Fact]
+    public void Setter_UndefinedToUndefined_DoesNotMarkDirty()
+    {
+        // YogaValue.Undefined carries a NaN payload; the record-struct == must
+        // treat two Undefined values as equal so re-applying Undefined (e.g. a
+        // child with no margin) does not dirty.
+        var node = new YogaNode();
+        node.SetMargin(YogaEdge.Left, YogaValue.Undefined);
+        node.Width = YogaValue.Auto;
+        node.SetDirty(false);
+
+        node.SetMargin(YogaEdge.Left, YogaValue.Undefined);
+        node.Width = YogaValue.Auto;
+
+        Assert.False(node.IsDirty);
+    }
+
+    [Theory]
+    [InlineData("flexDirection")]
+    [InlineData("justify")]
+    [InlineData("width")]
+    [InlineData("flexGrow")]
+    [InlineData("margin")]
+    [InlineData("gap")]
+    [InlineData("display")]
+    public void Setter_RealChange_MarksDirty(string which)
+    {
+        var node = new YogaNode();
+        node.FlexDirection = FlexDirection.Row;
+        node.JustifyContent = FlexJustify.Center;
+        node.Width = YogaValue.Point(100f);
+        node.FlexGrow = 1f;
+        node.SetMargin(YogaEdge.Left, YogaValue.Point(8f));
+        node.SetGap(YogaGutter.Row, 6f);
+        node.Display = YogaDisplay.Flex;
+        node.SetDirty(false);
+        Assert.False(node.IsDirty);
+
+        switch (which)
+        {
+            case "flexDirection": node.FlexDirection = FlexDirection.Column; break;
+            case "justify": node.JustifyContent = FlexJustify.FlexEnd; break;
+            case "width": node.Width = YogaValue.Point(101f); break;
+            case "flexGrow": node.FlexGrow = 2f; break;
+            case "margin": node.SetMargin(YogaEdge.Left, YogaValue.Point(9f)); break;
+            case "gap": node.SetGap(YogaGutter.Row, 7f); break;
+            case "display": node.Display = YogaDisplay.None; break;
+        }
+
+        Assert.True(node.IsDirty);
+    }
+
+    [Fact]
+    public void Setter_SameValue_KeepsLayoutCacheHot()
+    {
+        // End-to-end: after a layout, re-assigning identical style must not
+        // re-dirty, so the next layout reuses the cache instead of recomputing.
+        // Observable: the child's measure function is NOT invoked again.
+        var config = new YogaConfig();
+        var root = new YogaNode(config);
+        root.Width = YogaValue.Point(200f);
+        root.Height = YogaValue.Point(100f);
+        root.FlexDirection = FlexDirection.Row;
+
+        int measureCalls = 0;
+        var child = new YogaNode(config);
+        child.MeasureFunction = (n, w, wm, h, hm) => { measureCalls++; return new YogaSize(20f, 10f); };
+        root.InsertChild(child, 0);
+
+        root.CalculateLayout(200f, 100f, FlexLayoutDirection.LTR);
+        int callsAfterFirst = measureCalls;
+        Assert.True(callsAfterFirst > 0);
+
+        // Re-apply identical container style (what FlexPanel does every
+        // MeasureOverride). With the equality guards this must not dirty.
+        root.FlexDirection = FlexDirection.Row;
+        root.Width = YogaValue.Point(200f);
+        root.Height = YogaValue.Point(100f);
+        Assert.False(root.IsDirty);
+        Assert.False(child.IsDirty);
+
+        root.CalculateLayout(200f, 100f, FlexLayoutDirection.LTR);
+        // Cache hit ⇒ measure function not invoked again.
+        Assert.Equal(callsAfterFirst, measureCalls);
+    }
 }

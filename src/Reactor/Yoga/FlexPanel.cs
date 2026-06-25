@@ -762,11 +762,16 @@ public partial class FlexPanel : Panel
         var minWidthExplicit = GetMinWidth(el);
         var minHeightExplicit = GetMinHeight(el);
 
-        node.Style.FlexGrow = (float)grow;
-        node.Style.FlexShrink = (float)shrink;
-        node.Style.FlexBasis = double.IsNaN(basis) ? YogaValue.Auto : YogaValue.Point((float)basis);
-        node.Style.AlignSelf = alignSelf;
-        node.Style.PositionType = position;
+        // Route through the YogaNode setters (not node.Style.X directly) so the
+        // equality-guarded setters (#138) dirty the node only on a real change.
+        // Writing node.Style.X directly would bypass dirty tracking and, now
+        // that Width/Height/Margin no longer unconditionally dirty, could leave
+        // a changed flex item stale.
+        node.FlexGrow = (float)grow;
+        node.FlexShrink = (float)shrink;
+        node.FlexBasis = double.IsNaN(basis) ? YogaValue.Auto : YogaValue.Point((float)basis);
+        node.AlignSelf = alignSelf;
+        node.PositionType = position;
 
         // ── CSS Flexbox §4.5 automatic minimum size ──
         // Compute effective MinWidth / MinHeight per CSS spec:
@@ -787,16 +792,16 @@ public partial class FlexPanel : Panel
             el, axisIsMain: !mainAxisIsRow,
             explicitMin: minHeightExplicit, basis: basis, isWidth: false);
 
-        // Position insets
+        // Position insets (via SetPosition so the guarded setter dirties only on change)
         var left = GetLeft(el);
         var top = GetTop(el);
         var right = GetRight(el);
         var bottom = GetBottom(el);
 
-        node.Style.Position[(int)YogaEdge.Left] = double.IsNaN(left) ? YogaValue.Undefined : YogaValue.Point((float)left);
-        node.Style.Position[(int)YogaEdge.Top] = double.IsNaN(top) ? YogaValue.Undefined : YogaValue.Point((float)top);
-        node.Style.Position[(int)YogaEdge.Right] = double.IsNaN(right) ? YogaValue.Undefined : YogaValue.Point((float)right);
-        node.Style.Position[(int)YogaEdge.Bottom] = double.IsNaN(bottom) ? YogaValue.Undefined : YogaValue.Point((float)bottom);
+        node.SetPosition(YogaEdge.Left, double.IsNaN(left) ? YogaValue.Undefined : YogaValue.Point((float)left));
+        node.SetPosition(YogaEdge.Top, double.IsNaN(top) ? YogaValue.Undefined : YogaValue.Point((float)top));
+        node.SetPosition(YogaEdge.Right, double.IsNaN(right) ? YogaValue.Undefined : YogaValue.Point((float)right));
+        node.SetPosition(YogaEdge.Bottom, double.IsNaN(bottom) ? YogaValue.Undefined : YogaValue.Point((float)bottom));
 
         // If the child has explicit Width/Height set, pass them to Yoga
         if (el is FrameworkElement fe)

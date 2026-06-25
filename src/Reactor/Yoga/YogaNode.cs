@@ -212,13 +212,20 @@ internal sealed class YogaNode
 
     // ── Public style property accessors ──
 
-    public FlexDirection FlexDirection { get => _style.FlexDirection; set { _style.FlexDirection = value; MarkDirtyAndPropagate(); } }
-    public FlexJustify JustifyContent { get => _style.JustifyContent; set { _style.JustifyContent = value; MarkDirtyAndPropagate(); } }
-    public FlexAlign AlignItems { get => _style.AlignItems; set { _style.AlignItems = value; MarkDirtyAndPropagate(); } }
-    public FlexAlign AlignSelf { get => _style.AlignSelf; set { _style.AlignSelf = value; MarkDirtyAndPropagate(); } }
-    public FlexAlign AlignContent { get => _style.AlignContent; set { _style.AlignContent = value; MarkDirtyAndPropagate(); } }
-    public FlexWrap FlexWrap { get => _style.FlexWrap; set { _style.FlexWrap = value; MarkDirtyAndPropagate(); } }
-    public FlexPositionType PositionType { get => _style.PositionType; set { _style.PositionType = value; MarkDirtyAndPropagate(); } }
+    // AI-HINT (perf #138): every setter guards with an equality check before
+    // dirtying. FlexPanel re-applies the same container/child style every
+    // MeasureOverride; without these guards the root + every cell are
+    // re-dirtied each frame and the Yoga layout cache NEVER hits. The guards
+    // mirror upstream Yoga's updateStyle, which only dirties on a real change.
+    // YogaValue is a record struct whose == treats two Undefined (NaN) values
+    // as equal; raw floats use float.Equals so NaN==NaN is also a no-op.
+    public FlexDirection FlexDirection { get => _style.FlexDirection; set { if (_style.FlexDirection == value) return; _style.FlexDirection = value; MarkDirtyAndPropagate(); } }
+    public FlexJustify JustifyContent { get => _style.JustifyContent; set { if (_style.JustifyContent == value) return; _style.JustifyContent = value; MarkDirtyAndPropagate(); } }
+    public FlexAlign AlignItems { get => _style.AlignItems; set { if (_style.AlignItems == value) return; _style.AlignItems = value; MarkDirtyAndPropagate(); } }
+    public FlexAlign AlignSelf { get => _style.AlignSelf; set { if (_style.AlignSelf == value) return; _style.AlignSelf = value; MarkDirtyAndPropagate(); } }
+    public FlexAlign AlignContent { get => _style.AlignContent; set { if (_style.AlignContent == value) return; _style.AlignContent = value; MarkDirtyAndPropagate(); } }
+    public FlexWrap FlexWrap { get => _style.FlexWrap; set { if (_style.FlexWrap == value) return; _style.FlexWrap = value; MarkDirtyAndPropagate(); } }
+    public FlexPositionType PositionType { get => _style.PositionType; set { if (_style.PositionType == value) return; _style.PositionType = value; MarkDirtyAndPropagate(); } }
     public YogaDisplay Display
     {
         get => _style.Display;
@@ -226,22 +233,23 @@ internal sealed class YogaNode
         {
             if (value == YogaDisplay.Grid)
                 throw new NotImplementedException("Grid layout is not yet implemented in this C# port of Yoga.");
+            if (_style.Display == value) return;
             _style.Display = value;
             MarkDirtyAndPropagate();
         }
     }
-    public YogaOverflow Overflow { get => _style.Overflow; set { _style.Overflow = value; MarkDirtyAndPropagate(); } }
+    public YogaOverflow Overflow { get => _style.Overflow; set { if (_style.Overflow == value) return; _style.Overflow = value; MarkDirtyAndPropagate(); } }
 
-    public float FlexGrow { get => _style.FlexGrow; set { _style.FlexGrow = value; MarkDirtyAndPropagate(); } }
-    public float FlexShrink { get => _style.FlexShrink; set { _style.FlexShrink = value; MarkDirtyAndPropagate(); } }
-    public YogaValue FlexBasis { get => _style.FlexBasis; set { _style.FlexBasis = value; MarkDirtyAndPropagate(); } }
+    public float FlexGrow { get => _style.FlexGrow; set { if (_style.FlexGrow.Equals(value)) return; _style.FlexGrow = value; MarkDirtyAndPropagate(); } }
+    public float FlexShrink { get => _style.FlexShrink; set { if (_style.FlexShrink.Equals(value)) return; _style.FlexShrink = value; MarkDirtyAndPropagate(); } }
+    public YogaValue FlexBasis { get => _style.FlexBasis; set { if (_style.FlexBasis == value) return; _style.FlexBasis = value; MarkDirtyAndPropagate(); } }
 
-    public YogaValue Width { get => _style.Dimensions[(int)YogaDimension.Width]; set { _style.Dimensions[(int)YogaDimension.Width] = value; MarkDirtyAndPropagate(); } }
-    public YogaValue Height { get => _style.Dimensions[(int)YogaDimension.Height]; set { _style.Dimensions[(int)YogaDimension.Height] = value; MarkDirtyAndPropagate(); } }
-    public YogaValue MinWidth { get => _style.MinDimensions[(int)YogaDimension.Width]; set { _style.MinDimensions[(int)YogaDimension.Width] = value; MarkDirtyAndPropagate(); } }
-    public YogaValue MinHeight { get => _style.MinDimensions[(int)YogaDimension.Height]; set { _style.MinDimensions[(int)YogaDimension.Height] = value; MarkDirtyAndPropagate(); } }
-    public YogaValue MaxWidth { get => _style.MaxDimensions[(int)YogaDimension.Width]; set { _style.MaxDimensions[(int)YogaDimension.Width] = value; MarkDirtyAndPropagate(); } }
-    public YogaValue MaxHeight { get => _style.MaxDimensions[(int)YogaDimension.Height]; set { _style.MaxDimensions[(int)YogaDimension.Height] = value; MarkDirtyAndPropagate(); } }
+    public YogaValue Width { get => _style.Dimensions[(int)YogaDimension.Width]; set { if (_style.Dimensions[(int)YogaDimension.Width] == value) return; _style.Dimensions[(int)YogaDimension.Width] = value; MarkDirtyAndPropagate(); } }
+    public YogaValue Height { get => _style.Dimensions[(int)YogaDimension.Height]; set { if (_style.Dimensions[(int)YogaDimension.Height] == value) return; _style.Dimensions[(int)YogaDimension.Height] = value; MarkDirtyAndPropagate(); } }
+    public YogaValue MinWidth { get => _style.MinDimensions[(int)YogaDimension.Width]; set { if (_style.MinDimensions[(int)YogaDimension.Width] == value) return; _style.MinDimensions[(int)YogaDimension.Width] = value; MarkDirtyAndPropagate(); } }
+    public YogaValue MinHeight { get => _style.MinDimensions[(int)YogaDimension.Height]; set { if (_style.MinDimensions[(int)YogaDimension.Height] == value) return; _style.MinDimensions[(int)YogaDimension.Height] = value; MarkDirtyAndPropagate(); } }
+    public YogaValue MaxWidth { get => _style.MaxDimensions[(int)YogaDimension.Width]; set { if (_style.MaxDimensions[(int)YogaDimension.Width] == value) return; _style.MaxDimensions[(int)YogaDimension.Width] = value; MarkDirtyAndPropagate(); } }
+    public YogaValue MaxHeight { get => _style.MaxDimensions[(int)YogaDimension.Height]; set { if (_style.MaxDimensions[(int)YogaDimension.Height] == value) return; _style.MaxDimensions[(int)YogaDimension.Height] = value; MarkDirtyAndPropagate(); } }
 
     public float AspectRatio
     {
@@ -249,17 +257,19 @@ internal sealed class YogaNode
         set
         {
             // Degenerate aspect ratios act as auto
-            _style.AspectRatio = (value == 0 || float.IsInfinity(value)) ? float.NaN : value;
+            float normalized = (value == 0 || float.IsInfinity(value)) ? float.NaN : value;
+            if (_style.AspectRatio.Equals(normalized)) return;
+            _style.AspectRatio = normalized;
             MarkDirtyAndPropagate();
         }
     }
 
-    public void SetMargin(YogaEdge edge, YogaValue value) { _style.Margin[(int)edge] = value; MarkDirtyAndPropagate(); }
-    public void SetPadding(YogaEdge edge, YogaValue value) { _style.Padding[(int)edge] = value; MarkDirtyAndPropagate(); }
-    public void SetBorder(YogaEdge edge, float value) { _style.Border[(int)edge] = YogaValue.Point(value); MarkDirtyAndPropagate(); }
-    public void SetPosition(YogaEdge edge, YogaValue value) { _style.Position[(int)edge] = value; MarkDirtyAndPropagate(); }
-    public void SetGap(YogaGutter gutter, float value) { _style.Gap[(int)gutter] = YogaValue.Point(value); MarkDirtyAndPropagate(); }
-    public void SetGap(YogaGutter gutter, YogaValue value) { _style.Gap[(int)gutter] = value; MarkDirtyAndPropagate(); }
+    public void SetMargin(YogaEdge edge, YogaValue value) { if (_style.Margin[(int)edge] == value) return; _style.Margin[(int)edge] = value; MarkDirtyAndPropagate(); }
+    public void SetPadding(YogaEdge edge, YogaValue value) { if (_style.Padding[(int)edge] == value) return; _style.Padding[(int)edge] = value; MarkDirtyAndPropagate(); }
+    public void SetBorder(YogaEdge edge, float value) { var v = YogaValue.Point(value); if (_style.Border[(int)edge] == v) return; _style.Border[(int)edge] = v; MarkDirtyAndPropagate(); }
+    public void SetPosition(YogaEdge edge, YogaValue value) { if (_style.Position[(int)edge] == value) return; _style.Position[(int)edge] = value; MarkDirtyAndPropagate(); }
+    public void SetGap(YogaGutter gutter, float value) { var v = YogaValue.Point(value); if (_style.Gap[(int)gutter] == v) return; _style.Gap[(int)gutter] = v; MarkDirtyAndPropagate(); }
+    public void SetGap(YogaGutter gutter, YogaValue value) { if (_style.Gap[(int)gutter] == value) return; _style.Gap[(int)gutter] = value; MarkDirtyAndPropagate(); }
 
     // ── Measure/baseline callbacks ──
 
