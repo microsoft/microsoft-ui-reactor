@@ -1110,6 +1110,29 @@ public class YogaEdgeCaseTests
         Assert.Empty(list2);
     }
 
+    [Fact]
+    public void FlexLineHelper_RentAndReturnFlexLine_ReusesAndResets()
+    {
+        var line1 = FlexLineHelper.RentFlexLine();
+        line1.ItemsInFlow.Add(new YogaNode());
+        line1.SizeConsumed = 42f;
+        line1.NumberOfAutoMargins = 3;
+        line1.Layout.MainDim = 7f;
+        line1.Layout.CrossDim = 9f;
+        FlexLineHelper.ReturnFlexLine(line1);
+
+        var line2 = FlexLineHelper.RentFlexLine();
+        // The pooled FlexLine is reused AND fully reset on return (#144), so no
+        // stale scalar state or pinned YogaNode references leak across layout
+        // passes (the ItemsInFlow refs reach whole UI subtrees).
+        Assert.Same(line1, line2);
+        Assert.Empty(line2.ItemsInFlow);
+        Assert.Equal(0f, line2.SizeConsumed);
+        Assert.Equal(0, line2.NumberOfAutoMargins);
+        Assert.Equal(0f, line2.Layout.MainDim);
+        Assert.Equal(0f, line2.Layout.CrossDim);
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // 12. Additional layout integration tests for edge cases
     // ════════════════════════════════════════════════════════════════════
@@ -1253,6 +1276,7 @@ public class YogaEdgeCaseTests
     [InlineData("justify")]
     [InlineData("width")]
     [InlineData("flexGrow")]
+    [InlineData("aspectRatio")]
     [InlineData("margin")]
     [InlineData("gap")]
     [InlineData("display")]
@@ -1263,6 +1287,7 @@ public class YogaEdgeCaseTests
         node.JustifyContent = FlexJustify.Center;
         node.Width = YogaValue.Point(100f);
         node.FlexGrow = 1f;
+        node.AspectRatio = 1.5f;
         node.SetMargin(YogaEdge.Left, YogaValue.Point(8f));
         node.SetGap(YogaGutter.Row, 6f);
         node.Display = YogaDisplay.Flex;
@@ -1275,11 +1300,37 @@ public class YogaEdgeCaseTests
             case "justify": node.JustifyContent = FlexJustify.FlexEnd; break;
             case "width": node.Width = YogaValue.Point(101f); break;
             case "flexGrow": node.FlexGrow = 2f; break;
+            case "aspectRatio": node.AspectRatio = 2.0f; break;
             case "margin": node.SetMargin(YogaEdge.Left, YogaValue.Point(9f)); break;
             case "gap": node.SetGap(YogaGutter.Row, 7f); break;
             case "display": node.Display = YogaDisplay.None; break;
         }
 
+        Assert.True(node.IsDirty);
+    }
+
+    [Fact]
+    public void Setter_AspectRatio_DegenerateNormalizesToAuto()
+    {
+        // AspectRatio normalizes degenerate inputs (0 or Infinity) to NaN ("auto"),
+        // and the .Equals guard must treat NaN==NaN as a no-op so re-applying a
+        // degenerate ratio each frame does not dirty (which would defeat the layout
+        // cache). A genuine ratio change must still dirty.
+        var node = new YogaNode();
+        node.AspectRatio = 1.5f;
+        node.SetDirty(false);
+
+        // 1.5 -> 0 is a real change (0 normalizes to auto/NaN): must dirty.
+        node.AspectRatio = 0f;
+        Assert.True(node.IsDirty);
+
+        // 0 -> +Infinity: both normalize to NaN, so NaN==NaN must be a no-op.
+        node.SetDirty(false);
+        node.AspectRatio = float.PositiveInfinity;
+        Assert.False(node.IsDirty);
+
+        // NaN ("auto") -> a real ratio: must dirty.
+        node.AspectRatio = 2.0f;
         Assert.True(node.IsDirty);
     }
 
