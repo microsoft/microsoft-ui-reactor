@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Charting;
@@ -91,11 +92,10 @@ internal static class Issue487ScrollAnchorFixtures
     {
         var result = new global::System.Collections.Generic.List<FrameworkElement>();
         if (rtb is null) return result;
-        foreach (var block in rtb.Blocks)
+        foreach (var p in rtb.Blocks.OfType<Microsoft.UI.Xaml.Documents.Paragraph>())
         {
-            if (block is not Microsoft.UI.Xaml.Documents.Paragraph p) continue;
-            foreach (var inline in p.Inlines)
-                if (inline is Microsoft.UI.Xaml.Documents.InlineUIContainer c && c.Child is FrameworkElement fe)
+            foreach (var c in p.Inlines.OfType<Microsoft.UI.Xaml.Documents.InlineUIContainer>())
+                if (c.Child is FrameworkElement fe)
                     result.Add(fe);
         }
         return result;

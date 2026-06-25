@@ -107,6 +107,9 @@ public sealed partial class Reconciler
     private static bool HasInlineUi(RichTextBlockElement el)
     {
         if (el.Paragraphs is null) return false;
+        // Explicit filter: avoid per-call LINQ allocation on the reconcile path —
+        // HasInlineUi runs on every RichTextBlock update before the document is
+        // mutated, so an early-returning foreach is preferred over .Any(i => ...).
         foreach (var para in el.Paragraphs)
         {
             foreach (var inline in para.Inlines)
