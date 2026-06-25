@@ -73,12 +73,20 @@ public sealed partial class Reconciler
         ArgumentNullException.ThrowIfNull(buildItemView);
         ArgumentNullException.ThrowIfNull(requestRerender);
 
-        // Refresh the stashed view source on every call. The closure
-        // captures the *current* `items` + `buildItemView` references, so
-        // realizations + container refreshes after this point see the
-        // updated data. Cheap allocation; happens at most once per render.
-        var viewSource = new ClosureItemViewSource<TItem>(items, buildItemView);
-        SetItemViewSource(control, viewSource);
+        // Refresh the stashed view source. The closure captures the *current*
+        // `items` + `buildItemView` references, so realizations + container
+        // refreshes after this point see the updated data. When neither
+        // reference changed since the last bind (parent re-rendered but this
+        // list's data + builder are stable) the previously stashed source is
+        // still exact — reuse it and skip both the allocation and the COM
+        // attached-DP stash write (perf #39).
+        ClosureItemViewSource<TItem>? viewSource =
+            GetItemViewSource(control) as ClosureItemViewSource<TItem>;
+        if (viewSource is null || !viewSource.Matches(items, buildItemView))
+        {
+            viewSource = new ClosureItemViewSource<TItem>(items, buildItemView);
+            SetItemViewSource(control, viewSource);
+        }
 
         switch (control)
         {
@@ -581,5 +589,8 @@ public sealed partial class Reconciler
 
         public int ItemCount => _items.Count;
         public Element BuildItemView(int index) => _buildItemView(_items[index], index);
+
+        public bool Matches(IReadOnlyList<TItem> items, Func<TItem, int, Element> buildItemView)
+            => ReferenceEquals(_items, items) && ReferenceEquals(_buildItemView, buildItemView);
     }
 }

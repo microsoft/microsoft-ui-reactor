@@ -110,7 +110,10 @@ public sealed partial class Reconciler
 
         // Issue #345 — one-time debug warning for HStack/VStack collapsing to 0×0 inside a
         // Grid Auto track. Gated so Release builds with the flag off pay a single flag read.
-        if (global::Microsoft.UI.Reactor.Diagnostics.LayoutFootgunDetector.AlwaysOnInDebug || ReactorFeatureFlags.WarnLayoutFootguns)
+        // Inspect() is a no-op for non-GridElement, so pre-filter on type to skip the call
+        // (and its redundant internal flag re-check) for every non-Grid element (perf #40).
+        if ((global::Microsoft.UI.Reactor.Diagnostics.LayoutFootgunDetector.AlwaysOnInDebug || ReactorFeatureFlags.WarnLayoutFootguns)
+            && element is GridElement)
             global::Microsoft.UI.Reactor.Diagnostics.LayoutFootgunDetector.Inspect(element);
 
         // Apply inline modifiers after mounting
@@ -625,13 +628,13 @@ public sealed partial class Reconciler
         var node = new ComponentNode
         {
             Component = component, RenderedElement = null, Element = compElement,
-            PreviousProps = compElement.Props,
+            PreviousProps = compElement.Props, Control = wrapper,
         };
         _componentNodes[wrapper] = node;
 
         // Pass the component's own wrapped rerender to children so that child state
         // changes propagate SelfTriggered up through all component ancestors.
-        var componentRerender = CreateComponentRerender(node, requestRerender);
+        var componentRerender = GetOrCreateComponentRerender(node, requestRerender);
 
         Element childElement;
         try
@@ -658,13 +661,13 @@ public sealed partial class Reconciler
         var wrapper = new Border();
         var node = new ComponentNode
         {
-            Context = ctx, RenderedElement = null, Element = funcElement,
+            Context = ctx, RenderedElement = null, Element = funcElement, Control = wrapper,
         };
         _componentNodes[wrapper] = node;
 
         // Pass the component's own wrapped rerender to children so that child state
         // changes propagate SelfTriggered up through all component ancestors.
-        var componentRerender = CreateComponentRerender(node, requestRerender);
+        var componentRerender = GetOrCreateComponentRerender(node, requestRerender);
 
         Element childElement;
         try
@@ -692,13 +695,13 @@ public sealed partial class Reconciler
         var node = new ComponentNode
         {
             Context = ctx, RenderedElement = null, Element = memoElement,
-            MemoDependencies = memoElement.Dependencies,
+            MemoDependencies = memoElement.Dependencies, Control = wrapper,
         };
         _componentNodes[wrapper] = node;
 
         // Pass the component's own wrapped rerender to children so that child state
         // changes propagate SelfTriggered up through all component ancestors.
-        var componentRerender = CreateComponentRerender(node, requestRerender);
+        var componentRerender = GetOrCreateComponentRerender(node, requestRerender);
 
         Element childElement;
         try

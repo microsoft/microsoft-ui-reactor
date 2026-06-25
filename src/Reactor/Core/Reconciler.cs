@@ -83,6 +83,25 @@ public sealed partial class Reconciler : IDisposable
             typeof(Reconciler),
             new PropertyMetadata(null));
 
+    // Effective theme (ActualTheme) captured the last time ApplyStyleToElement wrote
+    // a themed Style. Lets the apply guard (perf #23) skip the load-bearing
+    // null-then-set re-resolution when neither the Style ref nor the effective theme
+    // changed. ElementTheme.Default is never returned by ActualTheme, so it doubles
+    // as the "never applied" sentinel.
+    private static readonly DependencyProperty ReactorAppliedThemeProperty =
+        DependencyProperty.RegisterAttached(
+            "ReactorAppliedTheme",
+            typeof(Microsoft.UI.Xaml.ElementTheme),
+            typeof(Reconciler),
+            new PropertyMetadata(Microsoft.UI.Xaml.ElementTheme.Default));
+
+    // Reused scratch so the per-call cache-key build doesn't allocate a keys array
+    // + StringBuilder for every themed element update (perf #24).
+    [ThreadStatic] private static global::System.Text.StringBuilder? t_cacheKeySb;
+    [ThreadStatic] private static KeyValuePair<string, ThemeRef>[]? t_cacheKeyPairs;
+    private static readonly IComparer<KeyValuePair<string, ThemeRef>> s_themeBindingKeyComparer =
+        Comparer<KeyValuePair<string, ThemeRef>>.Create(static (a, b) => string.CompareOrdinal(a.Key, b.Key));
+
     /// <summary>
     /// Builds a deterministic cache key for a style based on its target type and
     /// the set of ThemeRef bindings. Keys are sorted by property name so that
@@ -91,14 +110,25 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     internal static string BuildCacheKey(string targetType, IReadOnlyDictionary<string, ThemeRef> bindings)
     {
-        // Format: "TargetType|Prop1=Key1|Prop2=Key2" with properties sorted by Ordinal
-        var sortedKeys = bindings.Keys.ToArray();
-        Array.Sort(sortedKeys, StringComparer.Ordinal);
-        var sb = new global::System.Text.StringBuilder(targetType);
-        foreach (var key in sortedKeys)
-        {
-            sb.Append('|').Append(key).Append('=').Append(bindings[key].ResourceKey);
-        }
+        // Format: "TargetType|Prop1=Key1|Prop2=Key2" with properties sorted by Ordinal.
+        int count = bindings.Count;
+        if (count == 0) return targetType;
+
+        var pairs = t_cacheKeyPairs;
+        if (pairs is null || pairs.Length < count)
+            pairs = t_cacheKeyPairs = new KeyValuePair<string, ThemeRef>[count < 4 ? 4 : count];
+        int n = 0;
+        foreach (var kvp in bindings)
+            pairs[n++] = kvp;
+        Array.Sort(pairs, 0, count, s_themeBindingKeyComparer);
+
+        var sb = t_cacheKeySb ??= new global::System.Text.StringBuilder();
+        sb.Clear();
+        sb.Append(targetType);
+        for (int i = 0; i < count; i++)
+            sb.Append('|').Append(pairs[i].Key).Append('=').Append(pairs[i].Value.ResourceKey);
+
+        Array.Clear(pairs, 0, count); // drop refs so the scratch doesn't pin strings
         return sb.ToString();
     }
 
@@ -1199,6 +1229,15 @@ public sealed partial class Reconciler : IDisposable
         apply(ctrl, cell.Current);
     }
 
+    private static bool ContainsByRef(
+        List<Microsoft.UI.Reactor.Input.ElementRef> list,
+        Microsoft.UI.Reactor.Input.ElementRef item)
+    {
+        for (int i = 0; i < list.Count; i++)
+            if (ReferenceEquals(list[i], item)) return true;
+        return false;
+    }
+
     internal static void WireReferenceListEdge(
         FrameworkElement ctrl,
         int slot,
@@ -1211,13 +1250,15 @@ public sealed partial class Reconciler : IDisposable
         edge.Clear = clearTarget; // retained so teardown can empty the target list (CR-002)
         edge.Handler ??= _ => edge.Recompute?.Invoke(ctrl);
 
-        var next = new List<Microsoft.UI.Reactor.Input.ElementRef>();
+        // Dedupe input into `next` with a manual scan instead of LINQ Any(lambda),
+        // which allocated a capturing closure per cell (perf #27).
+        var next = new List<Microsoft.UI.Reactor.Input.ElementRef>(cells?.Count ?? 0);
         if (cells is not null)
         {
             foreach (var cell in cells)
             {
                 if (cell is null) continue;
-                if (!next.Any(existing => ReferenceEquals(existing, cell)))
+                if (!ContainsByRef(next, cell))
                     next.Add(cell);
             }
         }
@@ -1225,14 +1266,14 @@ public sealed partial class Reconciler : IDisposable
         for (int i = edge.Cells.Count - 1; i >= 0; i--)
         {
             var existing = edge.Cells[i];
-            if (next.Any(cell => ReferenceEquals(cell, existing))) continue;
+            if (ContainsByRef(next, existing)) continue;
             existing.CurrentChanged -= edge.Handler;
             edge.Cells.RemoveAt(i);
         }
 
         foreach (var cell in next)
         {
-            if (edge.Cells.Any(existing => ReferenceEquals(existing, cell))) continue;
+            if (ContainsByRef(edge.Cells, cell)) continue;
             edge.Cells.Add(cell);
             cell.CurrentChanged += edge.Handler;
         }
@@ -1287,8 +1328,8 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     internal IDisposable PushContextDisposable<T>(Context<T> context, T value)
     {
-        var dict = new Dictionary<ContextBase, object?>(1) { [context] = value };
-        _contextScope.Push(dict);
+        // Single-pair push — no one-entry dictionary allocation (perf #29).
+        _contextScope.Push(context, value);
         return new PopOnDispose(_contextScope, 1);
     }
 
@@ -1468,15 +1509,75 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
+    // ── Self-triggered component tracking (perf #20) ───────────────────────────
+    // Explicitly tracking the self-triggered nodes lets PopulateDirtyAncestorPath
+    // skip scanning every entry in _componentNodes each pass. The set is mutated
+    // from the rerender closure (which may run on a worker thread in headless
+    // hosts) as well as the UI-thread reconcile/unmount paths, so the flag write
+    // and the set membership change are kept atomic under _selfTriggeredLock — that
+    // way PopulateDirtyAncestorPath always observes a consistent (flag, set) view.
+    private readonly HashSet<ComponentNode> _selfTriggeredNodes = new();
+    private readonly object _selfTriggeredLock = new();
+    // Reused buffer so the dirty-path snapshot doesn't allocate per pass.
+    private readonly List<ComponentNode> _selfTriggeredScratch = new();
+
+    private void MarkSelfTriggered(ComponentNode node)
+    {
+        lock (_selfTriggeredLock)
+        {
+            node.SelfTriggered = true;
+            _selfTriggeredNodes.Add(node);
+        }
+    }
+
+    private void ClearSelfTriggered(ComponentNode node)
+    {
+        // Fast path: a volatile false read means no Mark has committed, so the node
+        // is not in the set — skip the lock entirely. This is the common case on the
+        // hot path (only the component that called setState is self-triggered).
+        if (!node.SelfTriggered) return;
+        lock (_selfTriggeredLock)
+        {
+            node.SelfTriggered = false;
+            _selfTriggeredNodes.Remove(node);
+        }
+    }
+
+    /// <summary>
+    /// Returns the component's wrapped rerender delegate, building it once and caching
+    /// it on the node (perf #15). A fresh closure is only created when the upstream
+    /// requestRerender identity changes, so steady-state re-renders reuse the delegate
+    /// instead of allocating one per component per frame.
+    /// </summary>
+    private Action GetOrCreateComponentRerender(ComponentNode node, Action requestRerender)
+    {
+        if (node.CachedRerender is { } cached && ReferenceEquals(node.CachedRerenderSource, requestRerender))
+            return cached;
+        var wrapped = CreateComponentRerender(this, node, requestRerender);
+        node.CachedRerender = wrapped;
+        node.CachedRerenderSource = requestRerender;
+        return wrapped;
+    }
+
     private void PopulateDirtyAncestorPath()
     {
-        // Hot path — most renders have zero self-triggered nodes (the
-        // pass was triggered by a prop change higher up). Avoid the
-        // HashSet allocation entirely until we find one.
+        // Hot path — most renders have zero self-triggered nodes (the pass was
+        // triggered by a prop change higher up). Snapshot the tracked set (perf #20)
+        // under the lock into a reused buffer so the background-thread rerender path
+        // can't mutate it mid-walk, then walk the visual tree without holding the lock.
+        _selfTriggeredScratch.Clear();
+        lock (_selfTriggeredLock)
+        {
+            foreach (var n in _selfTriggeredNodes)
+                _selfTriggeredScratch.Add(n);
+        }
+
         HashSet<UIElement>? set = null;
-        foreach (var (control, node) in _componentNodes)
+        foreach (var node in _selfTriggeredScratch)
         {
             if (!node.SelfTriggered) continue;
+            var control = node.Control;
+            if (control is null) continue;
             set ??= _dirtyAncestorPath ?? new HashSet<UIElement>();
             // Add the control itself first — Update on the wrapper
             // element that owns this control needs to bypass too so it
@@ -1599,6 +1700,9 @@ public sealed partial class Reconciler : IDisposable
         // inside ReconcileImperative; overwrite defensively regardless.
         _componentNodes.Remove(replacement);
         _componentNodes[realized] = freshNode;
+        // Keep the migrated node's cached control in sync so the self-triggered
+        // dirty-path pass (perf #20) resolves it to the still-parented wrapper.
+        freshNode.Control = realized;
 
         // Move the fresh visual subtree into the parented wrapper. Assigning
         // Border.Child detaches it from `replacementWrapper` first (and detaches the
@@ -1624,7 +1728,7 @@ public sealed partial class Reconciler : IDisposable
 
         // ── Memo check: skip render if props/context unchanged and not self-triggered ──
         bool selfTriggered = node.SelfTriggered;
-        node.SelfTriggered = false;
+        ClearSelfTriggered(node);
 
         // Hot reload forces every component to re-run Render(); the new method
         // body lives only on the type, not in props/deps, so the memo gate
@@ -1697,7 +1801,7 @@ public sealed partial class Reconciler : IDisposable
         // ── Render the component ──
         // Pass the component's own wrapped rerender to children so that child state
         // changes propagate SelfTriggered up through all component ancestors.
-        var componentRerender = CreateComponentRerender(node, requestRerender);
+        var componentRerender = GetOrCreateComponentRerender(node, requestRerender);
 
         // Only compute component name + timestamps when the Render keyword is
         // enabled, so the disabled path avoids the reflection and Stopwatch work.
@@ -1821,7 +1925,7 @@ public sealed partial class Reconciler : IDisposable
     /// before invoking the parent requestRerender, so the memo check is bypassed.
     /// Captures the node directly to avoid accessing _componentNodes from background threads.
     /// </summary>
-    private static Action CreateComponentRerender(ComponentNode node, Action requestRerender)
+    private static Action CreateComponentRerender(Reconciler self, ComponentNode node, Action requestRerender)
     {
         return () =>
         {
@@ -1853,7 +1957,7 @@ public sealed partial class Reconciler : IDisposable
             {
                 uiDq.TryEnqueue(() =>
                 {
-                    node.SelfTriggered = true;
+                    self.MarkSelfTriggered(node);
                     InvokeRerenderTracked(requestRerender);
                 });
                 return;
@@ -1861,7 +1965,7 @@ public sealed partial class Reconciler : IDisposable
 
             // Either we're on the UI thread, or no UI DQ has been captured
             // (test/headless host) — run inline.
-            node.SelfTriggered = true;
+            self.MarkSelfTriggered(node);
             InvokeRerenderTracked(requestRerender);
         };
     }
@@ -1883,8 +1987,9 @@ public sealed partial class Reconciler : IDisposable
 
         foreach (var ctxHook in renderCtx.ContextHooks)
         {
-            var currentValue = _contextScope.Read(ctxHook.Context);
-            if (!Equals(currentValue, ctxHook.LastValue))
+            // Generic compare via Context<T> — avoids boxing the current context
+            // value the non-generic Read + object.Equals path incurred (perf #25).
+            if (!ctxHook.Context.CurrentValueEquals(_contextScope, ctxHook.LastValue))
                 return true;
         }
         return false;
@@ -1996,9 +2101,16 @@ public sealed partial class Reconciler : IDisposable
 
     private void UnmountRecursive(UIElement control)
     {
+        // Read the FrameworkElement RCW + attached Reactor element tag once. Every
+        // branch below otherwise re-crosses the COM boundary via GetElementTag
+        // (GetValue on ReactorAttached.StateProperty). The tag is stable through
+        // unmount (Clear*/TeardownReferenceEdges never null state.Element), so a
+        // single read is behavior-identical (perf #16).
+        var fe = control as FrameworkElement;
+        var tagEl = fe is not null ? GetElementTag(fe) : null;
+
         // Capture connected animation snapshot while element is still in the visual tree
-        if (control is FrameworkElement caFe && GetElementTag(caFe) is Element caEl
-            && caEl.ConnectedAnimationKey is not null)
+        if (fe is not null && tagEl is { ConnectedAnimationKey: not null } caEl)
         {
             try
             {
@@ -2009,7 +2121,7 @@ public sealed partial class Reconciler : IDisposable
         }
 
         // Clean up animation state (mirrors UnmountAndCollect)
-        if (control is FrameworkElement animFe && GetElementTag(animFe) is Element animEl)
+        if (fe is not null && tagEl is Element animEl)
         {
             if (animEl.InteractionStates is not null)
                 ClearInteractionStates(control);
@@ -2023,14 +2135,14 @@ public sealed partial class Reconciler : IDisposable
         // whether the element is tagged), and clear the producer ref when the element is
         // available. Unconditional so descriptor/binding referrers without a tag are also
         // cleaned up (CR-001 / CR-002).
-        if (control is FrameworkElement refFe)
-            CleanupReferenceStateForUnmount(refFe, GetElementTag(refFe));
+        if (fe is not null)
+            CleanupReferenceStateForUnmount(fe, tagEl);
 
         // OnUnmountAction (.OnUnmount) — imperative teardown half of .OnMount.
-        if (control is FrameworkElement umFe && _onUnmountActions.TryGetValue(umFe, out var onUnmount))
+        if (fe is not null && _onUnmountActions.TryGetValue(fe, out var onUnmount))
         {
-            _onUnmountActions.Remove(umFe);
-            onUnmount(umFe);
+            _onUnmountActions.Remove(fe);
+            onUnmount(fe);
         }
 
         if (_componentNodes.TryGetValue(control, out var node))
@@ -2039,6 +2151,7 @@ public sealed partial class Reconciler : IDisposable
                 node.Component?.GetType().Name ?? node.Element?.GetType().Name ?? "unknown");
             node.Component?.Context.RunCleanups();
             node.Context?.RunCleanups();
+            ClearSelfTriggered(node);
             _componentNodes.Remove(control);
         }
 
@@ -2052,7 +2165,7 @@ public sealed partial class Reconciler : IDisposable
         // wrapped child whose control they returned (e.g., FlyoutElement returns
         // the Target's mounted control; the Target's children still need their
         // own unmount).
-        if (control is FrameworkElement v1Fe && GetElementTag(v1Fe) is Element v1TagEl
+        if (fe is not null && tagEl is Element v1TagEl
             && _v1Handlers.TryGet(v1TagEl.GetType(), out var v1Entry) && v1Entry.HasUnmount)
         {
             var v1Disposition = v1Entry.Unmount(control, this);
@@ -2061,8 +2174,8 @@ public sealed partial class Reconciler : IDisposable
         }
 
         // Check registered type unmount handlers via the attached element
-        if (control is FrameworkElement fe && GetElementTag(fe) is Element tagEl
-            && _typeRegistry.TryGetValue(tagEl.GetType(), out var reg) && reg.HasUnmount)
+        if (fe is not null && tagEl is Element regTagEl
+            && _typeRegistry.TryGetValue(regTagEl.GetType(), out var reg) && reg.HasUnmount)
         {
             reg.Unmount(control, this);
             return;
@@ -2318,22 +2431,45 @@ public sealed partial class Reconciler : IDisposable
         }
     }
 
+    // Reused scratch buffer so the common (non-reentrant) unmount doesn't allocate
+    // a List per call (perf #21). Borrowed for the duration of one UnmountAndPool;
+    // a reentrant unmount falls back to a fresh list.
+    private List<FrameworkElement>? _unmountPoolScratch = new();
+
     internal void UnmountAndPool(UIElement control)
     {
-        var toPool = new List<FrameworkElement>();
-        UnmountAndCollect(control, toPool);
+        var toPool = _unmountPoolScratch;
+        if (toPool is null)
+            toPool = new List<FrameworkElement>();
+        else
+            _unmountPoolScratch = null;
 
-        // Pool top-down: parent's CleanElement calls Children.Clear() which
-        // detaches children, so by the time children are pooled they're parentless.
-        for (int i = 0; i < toPool.Count; i++)
-            _pool.Return(toPool[i]);
+        try
+        {
+            UnmountAndCollect(control, toPool);
+
+            // Pool top-down: parent's CleanElement calls Children.Clear() which
+            // detaches children, so by the time children are pooled they're parentless.
+            for (int i = 0; i < toPool.Count; i++)
+                _pool.Return(toPool[i]);
+        }
+        finally
+        {
+            toPool.Clear();
+            _unmountPoolScratch ??= toPool;
+        }
     }
 
     private void UnmountAndCollect(UIElement control, List<FrameworkElement> toPool)
     {
+        // Read the FrameworkElement RCW + attached element tag once (perf #17):
+        // every branch below otherwise repeats the GetElementTag COM read. The tag
+        // is stable through unmount, so a single read is behavior-identical.
+        var fe = control as FrameworkElement;
+        var tagEl = fe is not null ? GetElementTag(fe) : null;
+
         // Capture connected animation snapshot while element is still in the visual tree
-        if (control is FrameworkElement caFe && GetElementTag(caFe) is Element caEl
-            && caEl.ConnectedAnimationKey is not null)
+        if (fe is not null && tagEl is { ConnectedAnimationKey: not null } caEl)
         {
             try
             {
@@ -2344,7 +2480,7 @@ public sealed partial class Reconciler : IDisposable
         }
 
         // Clean up animation state
-        if (control is FrameworkElement animFe && GetElementTag(animFe) is Element animEl)
+        if (fe is not null && tagEl is Element animEl)
         {
             if (animEl.InteractionStates is not null)
                 ClearInteractionStates(control);
@@ -2354,14 +2490,14 @@ public sealed partial class Reconciler : IDisposable
                 ClearScrollAnimation(control, animEl.ScrollAnimation);
         }
 
-        if (control is FrameworkElement refFe)
-            CleanupReferenceStateForUnmount(refFe, GetElementTag(refFe));
+        if (fe is not null)
+            CleanupReferenceStateForUnmount(fe, tagEl);
 
         // OnUnmountAction (.OnUnmount) — imperative teardown half of .OnMount.
-        if (control is FrameworkElement umFe && _onUnmountActions.TryGetValue(umFe, out var onUnmount))
+        if (fe is not null && _onUnmountActions.TryGetValue(fe, out var onUnmount))
         {
-            _onUnmountActions.Remove(umFe);
-            onUnmount(umFe);
+            _onUnmountActions.Remove(fe);
+            onUnmount(fe);
         }
 
         // Run cleanup logic (component teardown, etc.)
@@ -2371,6 +2507,7 @@ public sealed partial class Reconciler : IDisposable
                 node.Component?.GetType().Name ?? node.Element?.GetType().Name ?? "unknown");
             node.Component?.Context.RunCleanups();
             node.Context?.RunCleanups();
+            ClearSelfTriggered(node);
             _componentNodes.Remove(control);
         }
 
@@ -2382,7 +2519,7 @@ public sealed partial class Reconciler : IDisposable
         // to the default child traversal (ContinueDefaultTraversal —
         // wrapped child owns the control identity, default recursion
         // reaches the wrapped element's own unmount).
-        if (control is FrameworkElement v1Fe && GetElementTag(v1Fe) is Element v1TagEl
+        if (fe is not null && tagEl is Element v1TagEl
             && _v1Handlers.TryGet(v1TagEl.GetType(), out var v1Entry) && v1Entry.HasUnmount)
         {
             var v1Disposition = v1Entry.Unmount(control, this);
@@ -2399,8 +2536,8 @@ public sealed partial class Reconciler : IDisposable
             }
         }
 
-        if (control is FrameworkElement fe && GetElementTag(fe) is Element tagEl
-            && _typeRegistry.TryGetValue(tagEl.GetType(), out var reg) && reg.HasUnmount)
+        if (fe is not null && tagEl is Element regTagEl
+            && _typeRegistry.TryGetValue(regTagEl.GetType(), out var reg) && reg.HasUnmount)
         {
             reg.Unmount(control, this);
             // Collect this control for pooling, but do NOT recurse into children —
@@ -2550,7 +2687,7 @@ public sealed partial class Reconciler : IDisposable
         // changed the hook shape, reconciles the child element against the
         // preserved wrapper, and updates node.Element / node.PreviousProps.
         node.Component = newComponent;
-        node.SelfTriggered = true;
+        MarkSelfTriggered(node);
         ReconcileComponent(oldEl, newEl, existingControl, requestRerender);
 
         Diagnostics.ReactorEventSource.Log.HotReloadStateMigrated(newType.FullName ?? newType.Name);
@@ -2690,6 +2827,12 @@ public sealed partial class Reconciler : IDisposable
             (oldCaption is null || !string.Equals(current, oldCaption, StringComparison.Ordinal));
         if (authorOverride) return;
         var trimmed = newCaption.Length > 100 ? newCaption.Substring(0, 100) : newCaption;
+        // Skip the SetName COM write when the resolved name is already current
+        // (perf #18). This is the common steady-state case — a captioned cell whose
+        // caption text didn't change across re-renders. The GetName read above can't
+        // be skipped (it's needed to honor an author-set override + re-derive a
+        // name that was externally cleared), but a no-op write can.
+        if (string.Equals(current, trimmed, StringComparison.Ordinal)) return;
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(fe, trimmed);
     }
 
@@ -3331,6 +3474,9 @@ public sealed partial class Reconciler : IDisposable
     /// Applies stagger delays to an element's Visual's implicit animations.
     /// Called after layout/property animations are set up on children.
     /// </summary>
+    internal static readonly string[] s_staggerAnimationKeys =
+        { "Offset", "Opacity", "Scale", "RotationAngle", "Size", "CenterPoint" };
+
     internal static void ApplyStaggerDelays(UIElement parent, StaggerConfig config)
     {
         if (parent is not WinUI.Panel panel) return;
@@ -3342,7 +3488,7 @@ public sealed partial class Reconciler : IDisposable
             if (visual.ImplicitAnimations is null) continue;
 
             var delay = TimeSpan.FromTicks(config.Delay.Ticks * i);
-            foreach (var key in new[] { "Offset", "Opacity", "Scale", "RotationAngle", "Size", "CenterPoint" })
+            foreach (var key in s_staggerAnimationKeys)
             {
                 try
                 {
@@ -3583,8 +3729,16 @@ public sealed partial class Reconciler : IDisposable
     private static void ApplyDragAttached(FrameworkElement fe, DragAttached? attached)
         => DragAttachedProperties.SetIsDragEnabled(fe, attached?.IsEnabled);
 
-    internal void ApplyModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m, Action requestRerender)
+    private static readonly ElementModifiers s_emptyModifiers = new();
+
+    internal void ApplyModifiers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers? m, Action requestRerender)
     {
+        // A null `m` means "clear all" — substitute a shared empty instance so the
+        // clear-modifiers update path doesn't allocate a throwaway ElementModifiers
+        // per call (perf #19). ApplyModifiers only ever reads from `m`, so sharing
+        // a singleton is safe.
+        m ??= s_emptyModifiers;
+
         // Guard each property: only call into WinUI when the value actually changed.
         // Each WinUI property set is a managed→native interop call, so avoiding
         // unnecessary sets is critical for large element counts.
@@ -4731,6 +4885,22 @@ public sealed partial class Reconciler : IDisposable
     /// </summary>
     private static void ApplyStyleToElement(FrameworkElement fe, Style cachedStyle)
     {
+        // The null-then-set dance forces WinUI to re-resolve {ThemeResource} setters
+        // against the element's current effective theme (which can change via a parent
+        // RequestedTheme override even when the same cached Style ref is re-applied).
+        // That re-resolution only matters when either the applied Style changed or the
+        // effective theme changed since we last wrote it. When BOTH are unchanged the
+        // clear+set is a guaranteed no-op, so skip the two COM DP writes + visual-state
+        // re-eval (perf #23) — the dominant case on a steady-state data re-render.
+        var currentTheme = fe.ActualTheme;
+        if (ReferenceEquals(fe.Style, cachedStyle)
+            && ReferenceEquals(fe.GetValue(ReactorAppliedThemeStyleProperty), cachedStyle)
+            && fe.GetValue(ReactorAppliedThemeProperty) is Microsoft.UI.Xaml.ElementTheme appliedTheme
+            && appliedTheme == currentTheme)
+        {
+            return;
+        }
+
         // Clearing first forces WinUI to process the subsequent set as a
         // genuine change, re-resolving {ThemeResource} values. Without this,
         // re-applying the same cached Style reference is a no-op.
@@ -4742,6 +4912,7 @@ public sealed partial class Reconciler : IDisposable
         // #522). Always overwrite so an A → B ThemeBindings transition
         // updates the marker to the new Style.
         fe.SetValue(ReactorAppliedThemeStyleProperty, cachedStyle);
+        fe.SetValue(ReactorAppliedThemeProperty, currentTheme);
     }
 
     private static string? GetStyleTargetType(FrameworkElement fe) => fe switch
@@ -4798,13 +4969,25 @@ public sealed partial class Reconciler : IDisposable
         // Track which keys Reactor has set on this element
         var managed = _managedResourceKeys.GetOrCreateValue(fe);
 
-        // Remove old keys that are no longer present in the new overrides
-        if (oldOverrides is not null)
+        // Remove old keys that are no longer present in the new overrides. Skip the
+        // whole scan when the override sets are the same instance (no key could have
+        // been removed). Membership is tested directly against the new Literals/
+        // ThemeRefs dictionaries (O(1) ContainsKey) instead of materializing
+        // AllKeys.ToHashSet(), and removals are deferred into a lazily-allocated list
+        // so the common no-removal case doesn't allocate managed.ToArray() (perf #26).
+        if (oldOverrides is not null && !ReferenceEquals(oldOverrides, newOverrides) && managed.Count > 0)
         {
-            var newKeys = newOverrides?.AllKeys.ToHashSet() ?? new HashSet<string>();
-            foreach (var key in managed.ToArray())
+            List<string>? toRemove = null;
+            foreach (var key in managed)
             {
-                if (!newKeys.Contains(key))
+                bool stillPresent = newOverrides is not null
+                    && (newOverrides.Literals.ContainsKey(key) || newOverrides.ThemeRefs.ContainsKey(key));
+                if (!stillPresent)
+                    (toRemove ??= new List<string>()).Add(key);
+            }
+            if (toRemove is not null)
+            {
+                foreach (var key in toRemove)
                 {
                     fe.Resources.Remove(key);
                     managed.Remove(key);
@@ -4995,6 +5178,16 @@ public sealed partial class Reconciler : IDisposable
         /// Accessed from background threads (UseState callbacks) — use volatile field.</summary>
         private volatile bool _selfTriggered;
         public bool SelfTriggered { get => _selfTriggered; set => _selfTriggered = value; }
+        /// <summary>The component's Border wrapper — the key this node is registered under
+        /// in <c>_componentNodes</c>. Cached so the self-triggered dirty-path pass (perf #20)
+        /// can resolve the control without scanning the dictionary; kept in sync on re-key.</summary>
+        public UIElement? Control { get; set; }
+        /// <summary>Cached wrapped rerender delegate (perf #15). Rebuilt only when the upstream
+        /// requestRerender identity changes, so steady-state re-renders of a stateful row/cell
+        /// don't allocate a fresh closure every frame.</summary>
+        public Action? CachedRerender { get; set; }
+        /// <summary>The requestRerender the cached delegate was built from.</summary>
+        public Action? CachedRerenderSource { get; set; }
     }
 
     /// <summary>

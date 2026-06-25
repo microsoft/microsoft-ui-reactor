@@ -17,6 +17,16 @@ internal sealed class ContextScope
         _version++;
     }
 
+    /// <summary>
+    /// Single-pair push — avoids allocating a one-entry dictionary on the common
+    /// typed-context push path (perf #29).
+    /// </summary>
+    internal void Push(ContextBase context, object? value)
+    {
+        _stack.Add((context, value));
+        _version++;
+    }
+
     internal void Pop(int count)
     {
         _stack.RemoveRange(_stack.Count - count, count);

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 
 namespace Microsoft.UI.Reactor.Core;
@@ -8,6 +9,13 @@ namespace Microsoft.UI.Reactor.Core;
 public abstract class ContextBase
 {
     internal abstract object? DefaultValueBoxed { get; }
+
+    /// <summary>
+    /// Compares this context's current value in <paramref name="scope"/> against a
+    /// previously-recorded boxed value, without boxing the current value (perf #25).
+    /// Semantically equivalent to <c>object.Equals(scope.Read(this), lastBoxed)</c>.
+    /// </summary>
+    internal abstract bool CurrentValueEquals(ContextScope scope, object? lastBoxed);
 }
 
 /// <summary>
@@ -26,4 +34,12 @@ public sealed class Context<T> : ContextBase
     }
 
     internal override object? DefaultValueBoxed => DefaultValue;
+
+    internal override bool CurrentValueEquals(ContextScope scope, object? lastBoxed)
+    {
+        var current = scope.Read(this); // strongly-typed read — no boxing of the current value
+        if (lastBoxed is null)
+            return current is null;
+        return current is not null && EqualityComparer<T>.Default.Equals(current, (T)lastBoxed);
+    }
 }
