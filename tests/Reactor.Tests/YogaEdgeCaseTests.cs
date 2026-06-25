@@ -1203,7 +1203,7 @@ public class YogaEdgeCaseTests
     }
 
     // ════════════════════════════════════════════════════════════════════
-    // 6. Setter equality guards (#138 — layout cache enablement)
+    // 13. Setter equality guards (#138 — layout cache enablement)
     //    A setter assigned its current value must NOT re-dirty the node, so
     //    FlexPanel's per-frame re-apply of stable style does not defeat the
     //    Yoga layout cache. A genuine change must still dirty.
@@ -1369,7 +1369,7 @@ public class YogaEdgeCaseTests
     }
 
     // ════════════════════════════════════════════════════════════════════
-    // 7. Flex-basis cache invalidation across layout generations (#138 follow-up)
+    // 14. Flex-basis cache invalidation across layout generations (#138 follow-up)
     //    The equality guards stop FlexPanel re-dirtying stable children every
     //    MeasureOverride, so a child's resolved flex-basis must be invalidated
     //    per layout generation rather than relying on the dirty flag. Without
