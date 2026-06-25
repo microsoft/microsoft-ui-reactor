@@ -128,22 +128,17 @@ public sealed partial class Reconciler : IDisposable
         for (int i = 0; i < count; i++)
             sb.Append('|').Append(pairs[i].Key).Append('=').Append(pairs[i].Value.ResourceKey);
 
-        Array.Clear(pairs, 0, count); // drop refs so the scratch doesn't pin strings
-        // perf #24 follow-up: a one-off element with an unusually large binding set
-        // would otherwise pin an oversized scratch array for the thread's lifetime —
-        // release it so the next call re-allocates a small buffer.
-        const int cacheKeyScratchRetainCap = 64;
-        if (pairs.Length > cacheKeyScratchRetainCap)
-            t_cacheKeyPairs = null;
-
-        var key = sb.ToString();
-        // Same one-off-outlier guard for the StringBuilder: a single unusually large
-        // key would otherwise pin an oversized backing buffer for the thread's
-        // lifetime — release it so the next call re-grows from a small buffer.
-        const int cacheKeySbRetainCap = 1024;
-        if (sb.Capacity > cacheKeySbRetainCap)
-            t_cacheKeySb = null;
-        return key;
+        Array.Clear(pairs, 0, count); // drop refs so the retained scratch doesn't pin strings/ThemeRefs
+        // Retain both scratch buffers unconditionally (no size cap). They are sized to
+        // a single element's theme-binding count (pairs) and one key (sb), so the
+        // high-water is tiny and bounded by realistic per-element binding counts, and
+        // Array.Clear/sb.Clear already drop the referenced strings/ThemeRefs so nothing
+        // is pinned. A size cap was trialed but a multi-model perf cross-check showed
+        // discarding reallocates a KeyValuePair[] (2x a string[]) plus a fresh
+        // StringBuilder — i.e. WORSE than the pre-#24 baseline for an element that trips
+        // the cap every frame — whereas unconditional retain is strictly cheaper than
+        // that baseline (the dominant StringBuilder backing buffer is reused, not realloc'd).
+        return sb.ToString();
     }
 
     /// <summary>
