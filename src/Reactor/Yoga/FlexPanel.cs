@@ -32,6 +32,23 @@ public partial class FlexPanel : Panel
     private readonly HashSet<UIElement> _syncCurrentChildren = new();
     private readonly List<UIElement> _syncToRemove = new();
 
+    // AI-HINT (perf #147): per-child cache of the last-read attached-property
+    // values (Grow/Shrink/Basis/AlignSelf/Position/FlexMin*/insets). Reading
+    // an attached DP via GetValue boxes the double/enum; for a large grid that
+    // is ~11 boxed allocations per child per MeasureOverride. Attached DPs can
+    // only change through the property system, which raises
+    // OnChildPropertyChanged — so the cache is invalidated there (and on
+    // add/remove). FrameworkElement Width/Height/Margin/Visibility are NOT
+    // cached: they change without our callback, so they are re-read each pass.
+    private readonly Dictionary<UIElement, AttachedProps> _attachedCache = new();
+
+    private struct AttachedProps
+    {
+        public double Grow, Shrink, Basis, MinWidth, MinHeight, Left, Top, Right, Bottom;
+        public FlexAlign AlignSelf;
+        public FlexPositionType Position;
+    }
+
     public FlexPanel()
     {
         _rootNode = new YogaNode(_yogaConfig);
@@ -62,6 +79,7 @@ public partial class FlexPanel : Panel
         foreach (var node in _nodeCache.Values)
             _rootNode.RemoveChild(node);
         _nodeCache.Clear();
+        _attachedCache.Clear();
     }
 
     // ── Container dependency properties ──
@@ -258,7 +276,12 @@ public partial class FlexPanel : Panel
     private static void OnChildPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is UIElement el && Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(el) is FlexPanel panel)
+        {
+            // Invalidate the cached attached-property snapshot for this child so
+            // the next sync re-reads the changed value (#147).
+            panel._attachedCache.Remove(el);
             panel.InvalidateMeasure();
+        }
     }
 
     // ── Layout ──
@@ -619,6 +642,7 @@ public partial class FlexPanel : Panel
             if (_nodeCache.TryGetValue(el, out var node))
                 _rootNode.RemoveChild(node);
             _nodeCache.Remove(el);
+            _attachedCache.Remove(el);
         }
 
         // Ensure each child has a YogaNode at the correct index
@@ -754,13 +778,36 @@ public partial class FlexPanel : Panel
 
     private void ApplyAttachedProperties(UIElement el, YogaNode node)
     {
-        var grow = GetGrow(el);
-        var shrink = GetShrink(el);
-        var basis = GetBasis(el);
-        var alignSelf = GetAlignSelf(el);
-        var position = GetPosition(el);
-        var minWidthExplicit = GetMinWidth(el);
-        var minHeightExplicit = GetMinHeight(el);
+        // Read attached properties from the per-child cache (#147); only the
+        // first sync after a change boxes the GetValue results. The cache is
+        // invalidated in OnChildPropertyChanged / on add/remove, so a missing
+        // entry means the values may have changed and must be re-read.
+        if (!_attachedCache.TryGetValue(el, out var ap))
+        {
+            ap = new AttachedProps
+            {
+                Grow = GetGrow(el),
+                Shrink = GetShrink(el),
+                Basis = GetBasis(el),
+                AlignSelf = GetAlignSelf(el),
+                Position = GetPosition(el),
+                MinWidth = GetMinWidth(el),
+                MinHeight = GetMinHeight(el),
+                Left = GetLeft(el),
+                Top = GetTop(el),
+                Right = GetRight(el),
+                Bottom = GetBottom(el),
+            };
+            _attachedCache[el] = ap;
+        }
+
+        var grow = ap.Grow;
+        var shrink = ap.Shrink;
+        var basis = ap.Basis;
+        var alignSelf = ap.AlignSelf;
+        var position = ap.Position;
+        var minWidthExplicit = ap.MinWidth;
+        var minHeightExplicit = ap.MinHeight;
 
         // Route through the YogaNode setters (not node.Style.X directly) so the
         // equality-guarded setters (#138) dirty the node only on a real change.
@@ -793,10 +840,10 @@ public partial class FlexPanel : Panel
             explicitMin: minHeightExplicit, basis: basis, isWidth: false);
 
         // Position insets (via SetPosition so the guarded setter dirties only on change)
-        var left = GetLeft(el);
-        var top = GetTop(el);
-        var right = GetRight(el);
-        var bottom = GetBottom(el);
+        var left = ap.Left;
+        var top = ap.Top;
+        var right = ap.Right;
+        var bottom = ap.Bottom;
 
         node.SetPosition(YogaEdge.Left, double.IsNaN(left) ? YogaValue.Undefined : YogaValue.Point((float)left));
         node.SetPosition(YogaEdge.Top, double.IsNaN(top) ? YogaValue.Undefined : YogaValue.Point((float)top));
