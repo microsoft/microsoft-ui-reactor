@@ -12,24 +12,10 @@ internal static class ControlledOptionalTextInputFamilyFixture
     {
         public override async Task RunAsync()
         {
-            try
-            {
-                await Run(TextBoxScenario());
-                await Run(PasswordBoxScenario());
-                await Run(RichEditBoxScenario());
-                await Run(AutoSuggestBoxScenario());
-            }
-            finally
-            {
-                // #539 isolation, generalized: this fixture's AutoSuggestBox
-                // scenario leaves popup / template-part machinery in the visual
-                // tree. Drain it (detach + pump a render) so the next fixture
-                // does not install + ClearValue-churn atop a half-torn-down
-                // popup — the STATUS_STACK_BUFFER_OVERRUN (0xC0000409) stress
-                // crash documented in #539.
-                H.SetContent(null);
-                await Harness.Render();
-            }
+            await Run(TextBoxScenario());
+            await Run(PasswordBoxScenario());
+            await Run(RichEditBoxScenario());
+            await Run(AutoSuggestBoxScenario());
         }
 
         private async Task Run<TControl>(ControlledOptionalSelfTestHelpers.Scenario<TControl, string> scenario)
