@@ -711,6 +711,54 @@ public class HookAllocationPerfTests
     }
 
     // ════════════════════════════════════════════════════════════════
+    //  Nullable-dep semantics (Copilot review — verified FALSE POSITIVE). It was
+    //  suggested that DepEquals<T>'s `stored is T t` always fails for T = Nullable<U>
+    //  (because boxing a non-null nullable stores a boxed U), making an unchanged
+    //  nullable dep re-run every render. That is NOT how the generic `is T` pattern
+    //  behaves: the CLR special-cases nullable type-tests, so a boxed U satisfies
+    //  `o is U?` and binds the nullable-wrapped value (the symmetric counterpart of
+    //  `(U?)(object)u` unboxing). This locks in that a nullable value-type dep is
+    //  SKIPPED while unchanged (incl. null↔null) and re-runs on every change
+    //  (incl. value↔null), matching the legacy `(T)prev[0]` semantics.
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void UseEffect_Arity1_Nullable_ValueType_Dep_Skips_While_Unchanged_And_Reruns_On_Change()
+    {
+        var ctx = NewCtx();
+        int runs = 0;
+
+        ctx.UseEffect(() => { runs++; }, (int?)5);    // T1=int? → boxed int stored at slot 0
+        ctx.FlushEffects();
+        Assert.Equal(1, runs);
+
+        Rerender(ctx);
+        ctx.UseEffect(() => { runs++; }, (int?)5);    // unchanged → skipped
+        ctx.FlushEffects();
+        Assert.Equal(1, runs);
+
+        Rerender(ctx);
+        ctx.UseEffect(() => { runs++; }, (int?)6);    // value changed → re-run
+        ctx.FlushEffects();
+        Assert.Equal(2, runs);
+
+        Rerender(ctx);
+        ctx.UseEffect(() => { runs++; }, (int?)null); // value → null → re-run
+        ctx.FlushEffects();
+        Assert.Equal(3, runs);
+
+        Rerender(ctx);
+        ctx.UseEffect(() => { runs++; }, (int?)null); // null unchanged → skipped
+        ctx.FlushEffects();
+        Assert.Equal(3, runs);
+
+        Rerender(ctx);
+        ctx.UseEffect(() => { runs++; }, (int?)7);    // null → value → re-run
+        ctx.FlushEffects();
+        Assert.Equal(4, runs);
+    }
+
+    // ════════════════════════════════════════════════════════════════
     //  Aliasing guard (Copilot review) — a caller that reuses AND mutates the
     //  SAME deps array instance across renders must still observe the change.
     //  Stored deps are snapshotted (SnapshotDeps) so prev/next can never alias
