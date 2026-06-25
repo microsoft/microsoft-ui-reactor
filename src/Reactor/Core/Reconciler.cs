@@ -1551,7 +1551,17 @@ public sealed partial class Reconciler : IDisposable
         if (!unmounting && !node.SelfTriggered) return;
         lock (_selfTriggeredLock)
         {
-            if (unmounting) node.Unmounted = true;
+            if (unmounting)
+            {
+                node.Unmounted = true;
+                // A cached rerender closure (perf #15) handed to a long-lived or cross-thread
+                // subscriber can outlive unmount and keep `node` alive; drop the wrapper-control
+                // reference so a leaked closure can't also pin the unmounted visual subtree. The
+                // dirty-path pass is the only reader of Control and never visits an unmounted node
+                // (it is removed from the set just below and MarkSelfTriggered refuses to re-add
+                // it), so this is observably a no-op — it only releases the subtree for GC.
+                node.Control = null;
+            }
             node.SelfTriggered = false;
             _selfTriggeredNodes.Remove(node);
         }
