@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -63,6 +64,108 @@ public class PerfDiffSkipPathTests
         // null → non-null presence change must run Update so the trampoline subscribes.
         Assert.False(Element.ShallowEquals(plain, interactive));
         Assert.False(Element.ShallowEquals(interactive, plain));
+    }
+
+    [Fact]
+    public void ShallowEquals_False_When_OnUnmount_Changes_With_Stable_Handler()
+    {
+        // FLAGSHIP-1 lets a stable .OnTapped element take the skip path. The
+        // imperative .OnUnmount teardown is re-registered ONLY on the non-skip Update
+        // path (the reconciler's _onUnmountActions), and the latest registered
+        // delegate is what fires at unmount — so a *changed* teardown closure must
+        // decline the skip, or the stale (first-render) action is stranded and runs
+        // in place of the current one. Pre-FLAGSHIP-1 this was masked because any
+        // handler present forced Update every render; the per-slot ref-equality skip
+        // re-exposed it, so OnUnmountAction is compared by reference in ModifiersEqual.
+        Action<FrameworkElement> teardown1 = _ => { };
+        Action<FrameworkElement> teardown2 = _ => { };
+
+        var changedA = TextBlock("AAPL").OnTapped(SharedTap).OnUnmount(teardown1);
+        var changedB = TextBlock("AAPL").OnTapped(SharedTap).OnUnmount(teardown2);
+        Assert.False(Element.ShallowEquals(changedA, changedB));
+
+        // A reference-stable teardown (same delegate instance) stays skip-eligible.
+        var stableA = TextBlock("AAPL").OnTapped(SharedTap).OnUnmount(teardown1);
+        var stableB = TextBlock("AAPL").OnTapped(SharedTap).OnUnmount(teardown1);
+        Assert.True(Element.ShallowEquals(stableA, stableB));
+
+        // Presence change (add / remove the teardown) must also decline the skip.
+        var withTeardown = TextBlock("AAPL").OnTapped(SharedTap).OnUnmount(teardown1);
+        var withoutTeardown = TextBlock("AAPL").OnTapped(SharedTap);
+        Assert.False(Element.ShallowEquals(withTeardown, withoutTeardown));
+        Assert.False(Element.ShallowEquals(withoutTeardown, withTeardown));
+    }
+
+    [Fact]
+    public void ModifierCallbacksEqual_Every_Slot_Participates_By_Reference()
+    {
+        // FLAGSHIP-1 compares 27 event/gesture/drag-drop handler slots by per-slot
+        // ReferenceEquals. This sweeps EACH slot to prove it participates: setting a
+        // slot to the same instance on both sides stays skip-eligible, while changing
+        // that one slot's instance (or adding/removing it) declines the skip. Guards
+        // against a forgotten slot or a mis-paired comparison (e.g. a.X vs a.X). One
+        // distinct instance pair per delegate/config type; only one slot is set per
+        // case, so a sibling mis-pair (a.OnKeyDown vs b.OnKeyUp) is caught too.
+        Action<object, SizeChangedEventArgs> sc1 = (s, e) => { }, sc2 = (s, e) => { };
+        Action<object, PointerRoutedEventArgs> p1 = (s, e) => { }, p2 = (s, e) => { };
+        Action<object, TappedRoutedEventArgs> tap1 = (s, e) => { }, tap2 = (s, e) => { };
+        Action<object, DoubleTappedRoutedEventArgs> dt1 = (s, e) => { }, dt2 = (s, e) => { };
+        Action<object, RightTappedRoutedEventArgs> rt1 = (s, e) => { }, rt2 = (s, e) => { };
+        Action<object, HoldingRoutedEventArgs> hd1 = (s, e) => { }, hd2 = (s, e) => { };
+        Action<object, KeyRoutedEventArgs> k1 = (s, e) => { }, k2 = (s, e) => { };
+        Action<UIElement, CharacterReceivedRoutedEventArgs> cr1 = (s, e) => { }, cr2 = (s, e) => { };
+        Action<object, RoutedEventArgs> f1 = (s, e) => { }, f2 = (s, e) => { };
+        Action<UIElement, AccessKeyDisplayRequestedEventArgs> ak1 = (s, e) => { }, ak2 = (s, e) => { };
+        PanGestureConfig pan1 = new(_ => { }), pan2 = new(_ => { });
+        PinchGestureConfig pin1 = new(_ => { }), pin2 = new(_ => { });
+        RotateGestureConfig rot1 = new(_ => { }), rot2 = new(_ => { });
+        LongPressGestureConfig lp1 = new(_ => { }), lp2 = new(_ => { });
+        DragSourceConfig ds1 = new(() => default!), ds2 = new(() => default!);
+        DropTargetConfig dp1 = new(), dp2 = new();
+
+        // (name, equalA, equalB [same instance as A], diff [different instance])
+        var cases = new (string Name, ElementModifiers A, ElementModifiers B, ElementModifiers Diff)[]
+        {
+            ("OnSizeChanged",        new() { OnSizeChanged = sc1 },        new() { OnSizeChanged = sc1 },        new() { OnSizeChanged = sc2 }),
+            ("OnPointerPressed",     new() { OnPointerPressed = p1 },      new() { OnPointerPressed = p1 },      new() { OnPointerPressed = p2 }),
+            ("OnPointerMoved",       new() { OnPointerMoved = p1 },        new() { OnPointerMoved = p1 },        new() { OnPointerMoved = p2 }),
+            ("OnPointerReleased",    new() { OnPointerReleased = p1 },     new() { OnPointerReleased = p1 },     new() { OnPointerReleased = p2 }),
+            ("OnPointerEntered",     new() { OnPointerEntered = p1 },      new() { OnPointerEntered = p1 },      new() { OnPointerEntered = p2 }),
+            ("OnPointerExited",      new() { OnPointerExited = p1 },       new() { OnPointerExited = p1 },       new() { OnPointerExited = p2 }),
+            ("OnPointerCanceled",    new() { OnPointerCanceled = p1 },     new() { OnPointerCanceled = p1 },     new() { OnPointerCanceled = p2 }),
+            ("OnPointerCaptureLost", new() { OnPointerCaptureLost = p1 },  new() { OnPointerCaptureLost = p1 },  new() { OnPointerCaptureLost = p2 }),
+            ("OnPointerWheelChanged",new() { OnPointerWheelChanged = p1 }, new() { OnPointerWheelChanged = p1 }, new() { OnPointerWheelChanged = p2 }),
+            ("OnTapped",             new() { OnTapped = tap1 },            new() { OnTapped = tap1 },            new() { OnTapped = tap2 }),
+            ("OnDoubleTapped",       new() { OnDoubleTapped = dt1 },       new() { OnDoubleTapped = dt1 },       new() { OnDoubleTapped = dt2 }),
+            ("OnRightTapped",        new() { OnRightTapped = rt1 },        new() { OnRightTapped = rt1 },        new() { OnRightTapped = rt2 }),
+            ("OnHolding",            new() { OnHolding = hd1 },            new() { OnHolding = hd1 },            new() { OnHolding = hd2 }),
+            ("OnKeyDown",            new() { OnKeyDown = k1 },             new() { OnKeyDown = k1 },             new() { OnKeyDown = k2 }),
+            ("OnKeyUp",              new() { OnKeyUp = k1 },               new() { OnKeyUp = k1 },               new() { OnKeyUp = k2 }),
+            ("OnPreviewKeyDown",     new() { OnPreviewKeyDown = k1 },      new() { OnPreviewKeyDown = k1 },      new() { OnPreviewKeyDown = k2 }),
+            ("OnPreviewKeyUp",       new() { OnPreviewKeyUp = k1 },        new() { OnPreviewKeyUp = k1 },        new() { OnPreviewKeyUp = k2 }),
+            ("OnCharacterReceived",  new() { OnCharacterReceived = cr1 },  new() { OnCharacterReceived = cr1 },  new() { OnCharacterReceived = cr2 }),
+            ("OnGotFocus",           new() { OnGotFocus = f1 },            new() { OnGotFocus = f1 },            new() { OnGotFocus = f2 }),
+            ("OnLostFocus",          new() { OnLostFocus = f1 },           new() { OnLostFocus = f1 },           new() { OnLostFocus = f2 }),
+            ("OnAccessKeyDisplayRequested", new() { OnAccessKeyDisplayRequested = ak1 }, new() { OnAccessKeyDisplayRequested = ak1 }, new() { OnAccessKeyDisplayRequested = ak2 }),
+            ("Pan",                  new() { Pan = pan1 },                 new() { Pan = pan1 },                 new() { Pan = pan2 }),
+            ("Pinch",                new() { Pinch = pin1 },               new() { Pinch = pin1 },               new() { Pinch = pin2 }),
+            ("Rotate",               new() { Rotate = rot1 },              new() { Rotate = rot1 },              new() { Rotate = rot2 }),
+            ("LongPress",            new() { LongPress = lp1 },            new() { LongPress = lp1 },            new() { LongPress = lp2 }),
+            ("DragSource",           new() { DragSource = ds1 },           new() { DragSource = ds1 },           new() { DragSource = ds2 }),
+            ("DropTarget",           new() { DropTarget = dp1 },           new() { DropTarget = dp1 },           new() { DropTarget = dp2 }),
+        };
+
+        var empty = new ElementModifiers();
+        foreach (var (name, a, b, diff) in cases)
+        {
+            Assert.True(Element.ModifiersEqual(a, b), $"{name}: same handler instance ⇒ skip-eligible");
+            Assert.False(Element.ModifiersEqual(a, diff), $"{name}: changed handler instance ⇒ must Update");
+            Assert.False(Element.ModifiersEqual(a, empty), $"{name}: adding handler ⇒ must Update");
+            Assert.False(Element.ModifiersEqual(empty, a), $"{name}: removing handler ⇒ must Update");
+        }
+
+        // Tracks the slot count in Element.ModifierCallbacksEqual; bump both together.
+        Assert.Equal(27, cases.Length);
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -342,10 +445,11 @@ public class PerfDiffSkipPathTests
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  #168 — BrushHelper.ParseColor cache (the color path behind the
-    //  shared-brush fluent modifiers). Brush *instance* identity needs a
-    //  UI thread, so it's covered by the selftest tier; here we lock down
-    //  the headless-safe color parse the hot path depends on.
+    //  #168 — BrushHelper.ParseColor cache. The string→Color parse is
+    //  cached (an immutable value, safe to share); the public Parse still
+    //  returns a FRESH SolidColorBrush per call (a brush is a mutable,
+    //  thread-affine DependencyObject and must not be shared across
+    //  controls). These headless tests lock down the cached color parse.
     // ════════════════════════════════════════════════════════════════
 
     [Theory]
@@ -366,7 +470,7 @@ public class PerfDiffSkipPathTests
     public void ParseColor_Is_Deterministic_Across_Calls()
     {
         // Repeated parses (served from the string cache on the second call) must
-        // yield the same Color value — the shared-brush cache is keyed on this.
+        // yield the same Color value.
         Assert.Equal(BrushHelper.ParseColor("#123456"), BrushHelper.ParseColor("#123456"));
         Assert.Equal(BrushHelper.ParseColor("blue"), BrushHelper.ParseColor("blue"));
     }
