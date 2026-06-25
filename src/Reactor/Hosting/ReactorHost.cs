@@ -54,6 +54,22 @@ public sealed class ReactorHost : IDisposable
     internal BackdropApplier BackdropApplier => _backdropApplier;
     private readonly global::Windows.Foundation.TypedEventHandler<object, WindowEventArgs> _closedHandler;
 
+    // Cached render-loop delegates (perf #179/#180). RenderLoop is enqueued on
+    // every frame, and the rerender wrapper is handed to BeginRender/Reconcile
+    // every render — caching both keeps the method-group/closure conversions
+    // off the per-frame allocation path. Assigned in the ctor because instance
+    // method groups can't sit in field initialisers. RequestRender has an
+    // optional `force` parameter so it can't bind to a method group directly.
+    private readonly DispatcherQueueHandler _renderLoopHandler;
+    private readonly Action _rerenderAction;
+
+    // #184: PushChartingState re-marshals accessibility thread-statics every
+    // render, but the underlying values only change at InitChartingState and on
+    // OnColorValuesChanged. This flag gates the per-render push so a
+    // chart-bearing app calls the bridge only when the state actually changed.
+    // Defaults true so the first render after charting activates syncs once.
+    private volatile bool _chartingStateDirty = true;
+
     // Accessibility: forced-colors and reduced-motion auto-propagation.
     // Allocation is deferred until the first chart element is created (see
     // EnsureChartingActive). Apps without charts skip the WinRT activation
@@ -180,6 +196,8 @@ public sealed class ReactorHost : IDisposable
         _window = window;
         _backdropApplier = new BackdropApplier(window);
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
+        _renderLoopHandler = RenderLoop;
+        _rerenderAction = () => RequestRender();
         // Off-thread rerenders marshal via ReactorApp.UIDispatcher (captured
         // in OnLaunched). For embedded ReactorHostControl scenarios where
         // there's no Reactor.Run, fall back to seeding UIDispatcher with this
@@ -197,7 +215,12 @@ public sealed class ReactorHost : IDisposable
         var defaultCache = AppContexts.QueryCache.DefaultValue;
         defaultCache.DispatcherPost ??= action =>
         {
-            if (!dq.TryEnqueue(() => action()))
+            // #178: hand the Action's Invoke method group straight to
+            // TryEnqueue instead of wrapping it in a fresh `() => action()`
+            // closure per dispatch (this fires per data tick). Method-group
+            // conversion allocates a single delegate bound to `action`, with
+            // no display-class capture.
+            if (!dq.TryEnqueue(action.Invoke))
                 action(); // dispatcher shut down — fall back to inline
         };
 
@@ -354,9 +377,18 @@ public sealed class ReactorHost : IDisposable
         // setter that fires from a Task.Run that never awaits back would
         // otherwise lose the ambient. This snapshot is the explicit
         // insurance against that case (spec 042 §9 Q3).
-        var captured = Microsoft.UI.Reactor.Core.Internal.AnimationAmbient.Current;
-        if (captured is not null)
-            _pendingAmbientAnimation = captured;
+        //
+        // #183: AnimationAmbient.Current is an AsyncLocal read (walks the
+        // ExecutionContext) on every setState — gate it behind the cheap HasAny
+        // sentinel so apps that never call Animations.Animate skip it. The
+        // value is provably null until the first Animate scope is entered, so
+        // this preserves behaviour exactly.
+        if (Microsoft.UI.Reactor.Core.Internal.AnimationAmbient.HasAny)
+        {
+            var captured = Microsoft.UI.Reactor.Core.Internal.AnimationAmbient.Current;
+            if (captured is not null)
+                _pendingAmbientAnimation = captured;
+        }
 
         // During render: just flag — the render loop will re-enqueue after Render().
         if (_isRendering)
@@ -394,7 +426,7 @@ public sealed class ReactorHost : IDisposable
         // in Render() so an off-UI-thread caller observes the latest value.
         _dispatcherQueue.TryEnqueue(
             RenderPriorityPolicy.PickPriority(Volatile.Read(ref _lastRenderMs)),
-            RenderLoop);
+            _renderLoopHandler);
     }
 
     private void RenderLoop()
@@ -417,7 +449,7 @@ public sealed class ReactorHost : IDisposable
         if (_needsRerender)
         {
             if (Interlocked.CompareExchange(ref _renderPending, 1, 0) == 0)
-                _dispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, RenderLoop);
+                _dispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, _renderLoopHandler);
         }
     }
 
@@ -514,11 +546,20 @@ public sealed class ReactorHost : IDisposable
             // that flipped _chartingActiveFlag is observed by this UI-thread
             // render. Plain reads can hoist past the Interlocked write under
             // sufficiently aggressive JITs.
-            if (Volatile.Read(ref _chartingActiveFlag) != 0) PushChartingState();
+            if (Volatile.Read(ref _chartingActiveFlag) != 0 && _chartingStateDirty)
+            {
+                // #184: only re-push when the accessibility state actually
+                // changed (InitChartingState / OnColorValuesChanged set the
+                // flag). The D3Charts thread-statics persist between renders, so
+                // a steady-state render skips the bridge marshal entirely.
+                _chartingStateDirty = false;
+                PushChartingState();
+            }
 
             // RequestRender has an optional `force` parameter, so it can't bind
-            // directly to an Action method group — wrap once and reuse.
-            Action rerender = () => RequestRender();
+            // directly to an Action method group — reuse the ctor-cached wrapper
+            // (#179) instead of allocating a new closure on every render frame.
+            Action rerender = _rerenderAction;
 
             if (_rootComponent is not null)
             {
@@ -684,9 +725,11 @@ public sealed class ReactorHost : IDisposable
             // to demote to Low priority. Stored as the most-recent measurement
             // — no smoothing — so a single slow render is enough to back off,
             // and a single fast render is enough to return to Normal priority.
-            // Interlocked publishes the value to off-UI-thread RequestRender
-            // callers; the matching Volatile.Read is in RequestRender.
-            Interlocked.Exchange(ref _lastRenderMs, treeBuildMs + reconcileMs + effectsMs);
+            // Volatile.Write publishes the value to off-UI-thread RequestRender
+            // callers (single writer here); the matching Volatile.Read is in
+            // RequestRender. No read-modify-write, so a plain release fence
+            // suffices — no Interlocked LOCK needed (#185).
+            Volatile.Write(ref _lastRenderMs, treeBuildMs + reconcileMs + effectsMs);
 
             OnRenderComplete?.Invoke(treeBuildMs, reconcileMs, effectsMs);
 
@@ -705,7 +748,7 @@ public sealed class ReactorHost : IDisposable
             _renderCount++;
             _totalRenderCount++;
 
-            if (_reportClock.Elapsed.TotalSeconds >= 1.0 && _renderCount > 0)
+            if (_reportClock.ElapsedMilliseconds >= 1000 && _renderCount > 0)
             {
                 double avgTree = _treeBuildSum / _renderCount;
                 double avgReconcile = _reconcileSum / _renderCount;
@@ -784,6 +827,9 @@ public sealed class ReactorHost : IDisposable
         //     the cache here would create a window where a coincident
         //     ThemeBindings removal in the same render frame would silently
         //     fail to drop the prior themed Style.
+        // Drop the ThemeRef resolution caches (effective theme names + resolved
+        // brushes) so the re-render below resolves against the new theme (#85/#86).
+        ThemeRef.InvalidateCache();
         RequestRender();
     }
 
@@ -799,6 +845,12 @@ public sealed class ReactorHost : IDisposable
             _isForcedColors = a11y.HighContrast;
             _forcedColorsTheme = _isForcedColors ? s_chartingBridge?.CaptureForcedColorsTheme() : null;
         }
+        // The a11y thread-statics pushed to the D3Charts bridge are derived from
+        // the values re-read above, so mark them dirty for the next render
+        // (#184). The palette change also affects resolved ThemeRef brushes, so
+        // drop the resolution caches (#86).
+        _chartingStateDirty = true;
+        ThemeRef.InvalidateCache();
         RequestRender();
     }
 

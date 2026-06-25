@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
+using System.Runtime.CompilerServices;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using WinUI = Microsoft.UI.Xaml.Controls;
@@ -22,6 +22,10 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 /// </summary>
 internal sealed class GridViewHandler : IElementHandler<GridViewElement, WinUI.GridView>
 {
+    // #99: per-control ping-pong range source (shared RangeSourceState defined
+    // in ListViewHandler.cs). Keyed weakly on the GridView.
+    private static readonly ConditionalWeakTable<WinUI.GridView, RangeSourceState> s_rangeSources = new();
+
     public WinUI.GridView Mount(MountContext ctx, GridViewElement gv)
     {
         var reconciler = ctx.Reconciler;
@@ -77,18 +81,30 @@ internal sealed class GridViewHandler : IElementHandler<GridViewElement, WinUI.G
             el.OnSelectedIndexChanged?.Invoke(g.SelectedIndex);
             if (el.OnSelectionChanged is { } h)
             {
-                h(g.SelectedItems.OfType<int>().ToList());
+                // #100: typed copy loop instead of OfType<int>().ToList() — see
+                // the ListViewHandler analog.
+                var sel = g.SelectedItems;
+                var copy = new List<int>(sel.Count);
+                for (int i = 0; i < sel.Count; i++)
+                    if (sel[i] is int v) copy.Add(v);
+                h(copy);
             }
         };
-        if (gv.OnItemClick is not null)
-            gridView.ItemClick += (s, args) =>
-            {
-                var g = (WinUI.GridView)s!;
-                if (args.ClickedItem is int idx)
-                    (Reconciler.GetElementTag(g) as GridViewElement)?.OnItemClick?.Invoke(idx);
-            };
+        // #110: subscribe ItemClick ONCE at Mount (see ListViewHandler). The
+        // previous null→non-null re-subscribe in Update leaked handlers.
+        gridView.ItemClick += (s, args) =>
+        {
+            var g = (WinUI.GridView)s!;
+            if (args.ClickedItem is int idx)
+                (Reconciler.GetElementTag(g) as GridViewElement)?.OnItemClick?.Invoke(idx);
+        };
 
-        gridView.ItemsSource = Enumerable.Range(0, gv.Items.Length).ToList();
+        // #99: ping-pong cached [0..N-1] range list — see RangeSourceState /
+        // the ListViewHandler analog. Different reference each call so WinUI
+        // recycles + re-realizes containers (Issue #464/#495).
+        gridView.ItemsSource = s_rangeSources
+            .GetValue(gridView, static _ => new RangeSourceState())
+            .Next(gv.Items.Length);
 
         // Issue #464 — wrap the initial SelectedIndex write so the deferred
         // SelectionChanged that GridView fires after container realization is
@@ -139,21 +155,17 @@ internal sealed class GridViewHandler : IElementHandler<GridViewElement, WinUI.G
         {
             if (gv.SelectedIndex >= 0)
                 ChangeEchoSuppressor.BeginSuppress(gv);
-            gv.ItemsSource = Enumerable.Range(0, n.Items.Length).ToList();
+            // #99: ping-pong cached range list — see Mount.
+            gv.ItemsSource = s_rangeSources
+                .GetValue(gv, static _ => new RangeSourceState())
+                .Next(n.Items.Length);
         }
 
         Reconciler.SetElementTag(gv, n);
 
-        // SelectionChanged is wired unconditionally in Mount (see comment in
-        // ListViewHandler.Update). Tag refresh suffices to pick up a later-attached
-        // OnSelectedIndexChanged / OnSelectionChanged.
-        if (o.OnItemClick is null && n.OnItemClick is not null)
-            gv.ItemClick += (s, args) =>
-            {
-                var g = (WinUI.GridView)s!;
-                if (args.ClickedItem is int idx)
-                    (Reconciler.GetElementTag(g) as GridViewElement)?.OnItemClick?.Invoke(idx);
-            };
+        // SelectionChanged AND ItemClick are wired unconditionally in Mount
+        // (#110). Tag refresh suffices to pick up a later-attached
+        // OnSelectedIndexChanged / OnSelectionChanged / OnItemClick.
 
         // Issue #464 — wrap the SelectedIndex write so the deferred
         // SelectionChanged GridView fires after the property set doesn't echo

@@ -45,6 +45,25 @@ internal static class AnimationAmbient
 {
     private static readonly global::System.Threading.AsyncLocal<AmbientAnimation?> _current = new();
 
+    // #183: one-way latch flipped the first time a non-null ambient is pushed.
+    // Host setState paths read AnimationAmbient.Current (an AsyncLocal walk over
+    // the ExecutionContext) on every state update; gating that read behind this
+    // cheap volatile bool lets animation-free apps skip it entirely. Behaviour-
+    // preserving: while this stays false no Scope has ever published a non-null
+    // ambient, so Current is provably null and the gated read would have
+    // returned null anyway. Never reset — once any Animate scope has run,
+    // callers always read Current.
+    private static volatile bool _hasAny;
+
+    /// <summary>
+    /// True once any non-null ambient has been pushed via <see cref="Scope"/>
+    /// during the process lifetime. A cheap sentinel that lets hot setState
+    /// paths skip the <see cref="Current"/> AsyncLocal read until the first
+    /// <see cref="Animations.Animate(AnimationKind, global::System.Action)"/>
+    /// transaction is entered. (#183)
+    /// </summary>
+    public static bool HasAny => _hasAny;
+
     /// <summary>
     /// The currently-active ambient, or <see langword="null"/> when no
     /// <see cref="Animations.Animate(AnimationKind, global::System.Action)"/>
@@ -68,6 +87,10 @@ internal static class AnimationAmbient
             _previous = _current.Value;
             _current.Value = next;
             _entered = true;
+            // Latch the sentinel so subsequent setState paths know an ambient
+            // may be observable (#183). Only a non-null push matters — a null
+            // push leaves Current null, which the gate already handles.
+            if (next is not null) _hasAny = true;
         }
 
         /// <summary>Restore the ambient that was displaced when this scope was constructed.</summary>

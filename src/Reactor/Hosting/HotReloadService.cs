@@ -41,8 +41,17 @@ internal static class HotReloadService
     /// if another <c>UpdateApplication</c> fires concurrently from the
     /// hot-reload thread.
     /// </summary>
-    internal static bool ConsumeUpdatePending() =>
-        Interlocked.Exchange(ref _updatePending, 0) == 1;
+    internal static bool ConsumeUpdatePending()
+    {
+        // #182: this runs at the top of every render (UI thread), but hot
+        // reload almost never fires. A bare Interlocked.Exchange issues a
+        // full-barrier LOCK XCHG every frame regardless. Take a relaxed
+        // Volatile.Read fast-path first and only pay for the atomic
+        // capture-and-clear when an update is actually pending. The Exchange
+        // still closes the race window in the rare set→consume overlap.
+        if (Volatile.Read(ref _updatePending) == 0) return false;
+        return Interlocked.Exchange(ref _updatePending, 0) == 1;
+    }
 
     // True for the duration of a single hot-reload-flagged render pass on the
     // UI dispatcher thread. Where UpdatePending/ConsumeUpdatePending is the

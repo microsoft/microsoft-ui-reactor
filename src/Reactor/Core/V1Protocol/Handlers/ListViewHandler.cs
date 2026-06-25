@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
+using System.Runtime.CompilerServices;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using WinUI = Microsoft.UI.Xaml.Controls;
@@ -23,6 +23,10 @@ namespace Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 /// </summary>
 internal sealed class ListViewHandler : IElementHandler<ListViewElement, WinUI.ListView>
 {
+    // #98: per-control ping-pong range source. Keyed weakly on the ListView so
+    // the buffers are collected with the control. See RangeSourceState below.
+    private static readonly ConditionalWeakTable<WinUI.ListView, RangeSourceState> s_rangeSources = new();
+
     public WinUI.ListView Mount(MountContext ctx, ListViewElement lv)
     {
         var reconciler = ctx.Reconciler;
@@ -84,20 +88,41 @@ internal sealed class ListViewHandler : IElementHandler<ListViewElement, WinUI.L
             el.OnSelectedIndexChanged?.Invoke(l.SelectedIndex);
             if (el.OnSelectionChanged is { } h)
             {
-                // SelectedItems is List<object> of int — copy into a typed snapshot.
-                h(l.SelectedItems.OfType<int>().ToList());
+                // #100: SelectedItems is IList<object> of int — copy into a
+                // typed snapshot with a plain loop instead of
+                // OfType<int>().ToList() (an OfType iterator + a growable List
+                // allocated per SelectionChanged). Pre-size to the count.
+                var sel = l.SelectedItems;
+                var copy = new List<int>(sel.Count);
+                for (int i = 0; i < sel.Count; i++)
+                    if (sel[i] is int v) copy.Add(v);
+                h(copy);
             }
         };
-        if (lv.OnItemClick is not null)
-            listView.ItemClick += (s, args) =>
-            {
-                var l = (WinUI.ListView)s!;
-                if (args.ClickedItem is int idx)
-                    (Reconciler.GetElementTag(l) as ListViewElement)?.OnItemClick?.Invoke(idx);
-            };
+        // #110: subscribe ItemClick ONCE at Mount (not gated on OnItemClick),
+        // mirroring the SelectionChanged wiring above. IsItemClickEnabled (set
+        // from `OnItemClick is not null` in Mount/Update) gates whether WinUI
+        // raises the event, and the trampoline reads the live handler from the
+        // tag — so a later-attached OnItemClick fires without re-subscribing and
+        // a detached one no-ops. The previous null→non-null re-subscribe in
+        // Update accumulated duplicate handlers (leak + multi-fire) across
+        // record-with cycles.
+        listView.ItemClick += (s, args) =>
+        {
+            var l = (WinUI.ListView)s!;
+            if (args.ClickedItem is int idx)
+                (Reconciler.GetElementTag(l) as ListViewElement)?.OnItemClick?.Invoke(idx);
+        };
 
         // Set ItemsSource LAST — triggers container creation which needs the handler above
-        listView.ItemsSource = Enumerable.Range(0, lv.Items.Length).ToList();
+        // #98: ping-pong two cached [0..N-1] lists instead of allocating a fresh
+        // Enumerable.Range(...).ToList() every render. RangeSourceState returns a
+        // different List reference on each call (so WinUI still sees a reference
+        // change and recycles/re-realizes containers — Issue #495), rebuilding
+        // the backing buffers in place only when the count changes.
+        listView.ItemsSource = s_rangeSources
+            .GetValue(listView, static _ => new RangeSourceState())
+            .Next(lv.Items.Length);
 
         // Issue #495 — wrap the initial SelectedIndex write so the deferred
         // SelectionChanged ListView fires after container realization is
@@ -155,22 +180,21 @@ internal sealed class ListViewHandler : IElementHandler<ListViewElement, WinUI.L
         {
             if (lv.SelectedIndex >= 0)
                 ChangeEchoSuppressor.BeginSuppress(lv);
-            lv.ItemsSource = Enumerable.Range(0, n.Items.Length).ToList();
+            // #98: ping-pong cached range list — see Mount. The returned
+            // reference always differs from the currently-assigned ItemsSource,
+            // preserving the container recycle/re-realize that Issue #495 needs.
+            lv.ItemsSource = s_rangeSources
+                .GetValue(lv, static _ => new RangeSourceState())
+                .Next(n.Items.Length);
         }
 
         Reconciler.SetElementTag(lv, n);
 
-        // Mount subscribes SelectionChanged unconditionally and reads handlers
-        // via GetElementTag, so no lazy wire here — the tag refresh above
-        // makes a newly-attached OnSelectedIndexChanged / OnSelectionChanged
-        // pick up on the very next selection.
-        if (o.OnItemClick is null && n.OnItemClick is not null)
-            lv.ItemClick += (s, args) =>
-            {
-                var l = (WinUI.ListView)s!;
-                if (args.ClickedItem is int idx)
-                    (Reconciler.GetElementTag(l) as ListViewElement)?.OnItemClick?.Invoke(idx);
-            };
+        // Mount subscribes SelectionChanged AND ItemClick unconditionally and
+        // reads handlers via GetElementTag, so no lazy wire here — the tag
+        // refresh above makes a newly-attached OnSelectedIndexChanged /
+        // OnSelectionChanged / OnItemClick pick up on the next event. (#110:
+        // the previous null→non-null ItemClick re-subscribe leaked handlers.)
 
         // Issue #495 — wrap the SelectedIndex write so the SelectionChanged
         // ListView fires after the property set doesn't echo back into
@@ -186,4 +210,60 @@ internal sealed class ListViewHandler : IElementHandler<ListViewElement, WinUI.L
     }
 
     public ChildrenStrategy<ListViewElement, WinUI.ListView>? Children => null;
+}
+
+/// <summary>
+/// #98/#99 — backing store for the <c>ItemsSource = [0..N-1]</c> contract shared
+/// by <see cref="ListViewHandler"/> and <see cref="GridViewHandler"/>.
+///
+/// <para>WinUI's <c>ItemsSource</c> DP setter short-circuits on a
+/// reference-equal value, so the same <c>List&lt;int&gt;</c> instance can't be
+/// reused to force a container recycle/re-realize (the behaviour Issue #495 /
+/// #464 lock down for same-length content changes). Instead of allocating a
+/// fresh <c>Enumerable.Range(0, N).ToList()</c> every render, this ping-pongs
+/// two buffers: each <see cref="Next"/> call returns the buffer that was
+/// <i>not</i> returned last time, so the reference always changes while the
+/// content stays <c>[0, 1, …, count-1]</c>. Buffers are rebuilt in place
+/// (capacity retained) only when the requested count differs from what that
+/// buffer last held, so steady-state renders allocate nothing.</para>
+///
+/// <para>Only the dormant buffer is ever rebuilt: <see cref="Next"/> toggles
+/// before filling, so the buffer currently assigned to <c>ItemsSource</c>
+/// (the one returned last call) is never mutated while WinUI observes it.
+/// Pure C# (no WinUI dependency) so it is directly unit-testable.</para>
+/// </summary>
+internal sealed class RangeSourceState
+{
+    private readonly List<int> _a = new();
+    private readonly List<int> _b = new();
+    private int _countA = -1;
+    private int _countB = -1;
+    private bool _useA;
+
+    /// <summary>
+    /// Returns a <c>List&lt;int&gt;</c> holding <c>[0 … count-1]</c>. Consecutive
+    /// calls return alternating buffer references (never the same reference
+    /// twice in a row), so assigning the result to <c>ItemsSource</c> always
+    /// changes the reference.
+    /// </summary>
+    public List<int> Next(int count)
+    {
+        _useA = !_useA;
+        if (_useA)
+        {
+            Fill(_a, ref _countA, count);
+            return _a;
+        }
+        Fill(_b, ref _countB, count);
+        return _b;
+    }
+
+    private static void Fill(List<int> buffer, ref int builtCount, int count)
+    {
+        if (builtCount == count) return;
+        buffer.Clear();
+        if (buffer.Capacity < count) buffer.Capacity = count;
+        for (int i = 0; i < count; i++) buffer.Add(i);
+        builtCount = count;
+    }
 }
