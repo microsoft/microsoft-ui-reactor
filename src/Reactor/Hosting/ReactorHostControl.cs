@@ -265,7 +265,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         // Demote to Low priority after a slow render so input/layout/paint
         // catch up. See RenderPriorityPolicy and the matching code in
         // ReactorHost.RequestRender. Volatile.Read pairs with the
-        // Interlocked.Exchange in Render().
+        // Volatile.Write in Render().
         _dispatcherQueue.TryEnqueue(
             RenderPriorityPolicy.PickPriority(Volatile.Read(ref _lastRenderMs)),
             _renderLoopHandler);

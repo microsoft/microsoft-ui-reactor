@@ -67,8 +67,13 @@ public sealed class ReactorHost : IDisposable
     // render, but the underlying values only change at InitChartingState and on
     // OnColorValuesChanged. This flag gates the per-render push so a
     // chart-bearing app calls the bridge only when the state actually changed.
-    // Defaults true so the first render after charting activates syncs once.
-    private volatile bool _chartingStateDirty = true;
+    // Defaults 1 (dirty) so the first render after charting activates syncs
+    // once. An int consumed via Interlocked.Exchange (not a bool cleared by a
+    // separate check-then-write) so a concurrent OnColorValuesChanged "mark
+    // dirty" from the WinRT pool thread can't be lost to the UI-thread clear —
+    // a plain clear could overwrite that mark back to clean and skip the
+    // palette change. 0 = clean, 1 = dirty.
+    private int _chartingStateDirty = 1;
 
     // Accessibility: forced-colors and reduced-motion auto-propagation.
     // Allocation is deferred until the first chart element is created (see
@@ -125,7 +130,7 @@ public sealed class ReactorHost : IDisposable
     // Last render's total duration (tree + reconcile + effects), in ms.
     // Read by RequestRender to demote the next enqueue to Low priority when a
     // slow render is starving the dispatcher of input/layout/paint slots.
-    // Published via Interlocked.Exchange / read via Volatile.Read because the
+    // Published via Volatile.Write / read via Volatile.Read because the
     // write happens on the UI thread inside Render() but RequestRender() can
     // be called from any thread — a plain double write is not guaranteed
     // atomic on 32-bit and lacks the publication semantics this contract
@@ -426,7 +431,7 @@ public sealed class ReactorHost : IDisposable
         // budget — high-frequency setState sources (animation, simulation,
         // streaming data) otherwise pack the dispatcher with back-to-back
         // Normal-priority renders and starve input/layout/paint. See
-        // RenderPriorityPolicy. Volatile.Read pairs with Interlocked.Exchange
+        // RenderPriorityPolicy. Volatile.Read pairs with the Volatile.Write
         // in Render() so an off-UI-thread caller observes the latest value.
         _dispatcherQueue.TryEnqueue(
             RenderPriorityPolicy.PickPriority(Volatile.Read(ref _lastRenderMs)),
@@ -550,13 +555,16 @@ public sealed class ReactorHost : IDisposable
             // that flipped _chartingActiveFlag is observed by this UI-thread
             // render. Plain reads can hoist past the Interlocked write under
             // sufficiently aggressive JITs.
-            if (Volatile.Read(ref _chartingActiveFlag) != 0 && _chartingStateDirty)
+            // Short-circuit leaves the flag untouched (still dirty) until charting
+            // is active, so the first render after activation always pushes. Once
+            // active, atomically read-and-clear the dirty flag with
+            // Interlocked.Exchange so a concurrent OnColorValuesChanged mark from
+            // the WinRT pool thread can't be dropped by a non-atomic clear (#184).
+            // The D3Charts thread-statics persist between renders, so a
+            // steady-state render skips the bridge marshal entirely.
+            if (Volatile.Read(ref _chartingActiveFlag) != 0
+                && Interlocked.Exchange(ref _chartingStateDirty, 0) == 1)
             {
-                // #184: only re-push when the accessibility state actually
-                // changed (InitChartingState / OnColorValuesChanged set the
-                // flag). The D3Charts thread-statics persist between renders, so
-                // a steady-state render skips the bridge marshal entirely.
-                _chartingStateDirty = false;
                 PushChartingState();
             }
 
@@ -867,9 +875,10 @@ public sealed class ReactorHost : IDisposable
         }
         // The a11y thread-statics pushed to the D3Charts bridge are derived from
         // the values re-read above, so mark them dirty for the next render
-        // (#184). The palette change also affects resolved ThemeRef brushes, so
-        // drop the resolution caches (#86).
-        _chartingStateDirty = true;
+        // (#184). Release-fenced so the mark is published before RequestRender
+        // schedules the consuming render. The palette change also affects
+        // resolved ThemeRef brushes, so drop the resolution caches (#86).
+        Volatile.Write(ref _chartingStateDirty, 1);
         ThemeRef.InvalidateCache();
         RequestRender();
     }
