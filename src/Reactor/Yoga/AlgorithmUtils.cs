@@ -283,9 +283,13 @@ internal static class PixelGridHelper
                 - RoundValueToPixelGrid(absoluteNodeTop, pointScaleFactor, false, textRounding));
         }
 
-        foreach (var child in node.Children)
+        // #145: iterate by index via ChildCount/GetChild instead of foreach over
+        // the IReadOnlyList Children (which boxes List<T>.Enumerator per node).
+        // Note: this rounds ALL children (no Display.Contents flattening), matching
+        // the original traversal.
+        for (int i = 0; i < node.ChildCount; i++)
         {
-            RoundLayoutResultsToPixelGrid(child, absoluteNodeLeft, absoluteNodeTop);
+            RoundLayoutResultsToPixelGrid(node.GetChild(i), absoluteNodeLeft, absoluteNodeTop);
         }
     }
 
