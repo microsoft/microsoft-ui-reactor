@@ -586,7 +586,9 @@ internal sealed class ReferenceListPropEntry<TElement, TControl, TTarget> : Prop
     // ref-list add/remove/reorder). WireReferenceListEdge copies the list into
     // its own edge state synchronously and does not retain it, so a cleared-on-
     // use thread-static buffer removes the per-Update allocation without racing
-    // across windows (same rationale as CollectionDiff's scratch above).
+    // across windows (same rationale as CollectionDiff's scratch above). The
+    // buffer is drained in a finally so it never retains cell references
+    // (FrameworkElements) between calls.
     [ThreadStatic] private static List<Microsoft.UI.Reactor.Input.ElementRef>? s_scratchCells;
 
     public ReferenceListPropEntry(
@@ -619,19 +621,28 @@ internal sealed class ReferenceListPropEntry<TElement, TControl, TTarget> : Prop
         var refs = _get(el);
         var cells = s_scratchCells ??= new List<Microsoft.UI.Reactor.Input.ElementRef>();
         cells.Clear();
-        if (refs is not null)
+        try
         {
-            foreach (var r in refs)
-                if (r is not null)
-                    cells.Add(r.Inner);
-        }
+            if (refs is not null)
+            {
+                foreach (var r in refs)
+                    if (r is not null)
+                        cells.Add(r.Inner);
+            }
 
-        Reconciler.WireReferenceListEdge(
-            ctrl,
-            _slot,
-            cells,
-            c => ApplyResolved((TControl)c, el),
-            clearTarget: c => _apply((TControl)c, Array.Empty<TTarget>()));
+            Reconciler.WireReferenceListEdge(
+                ctrl,
+                _slot,
+                cells,
+                c => ApplyResolved((TControl)c, el),
+                clearTarget: c => _apply((TControl)c, Array.Empty<TTarget>()));
+        }
+        finally
+        {
+            // WireReferenceListEdge copies synchronously; drop the cell references
+            // (FrameworkElements) so the scratch doesn't retain them between calls.
+            cells.Clear();
+        }
     }
 
     private void ApplyResolved(TControl ctrl, TElement el)
@@ -1219,15 +1230,21 @@ internal sealed class CollectionDiffControlledPropEntry<TElement, TControl, TPay
     // (mirroring the reconciler's own [ThreadStatic] scratch, and supporting a
     // component that owns a separate DispatcherQueue/UI thread) the scratch is
     // thread-static rather than an instance field: each UI thread keeps its own
-    // cleared-on-use sets. That removes the two per-Update HashSet allocations
+    // sets. That removes the two per-Update HashSet allocations
     // (CalendarView.SelectedDates and peers rebuild their list every render)
-    // with no cross-window race. Each Update fully drains both sets before it
-    // returns, so reuse within a thread is safe. (Two CollectionDiff entries
-    // with an identical closed generic on one control would share these — the
-    // same accepted collision caveat as DescriptorControlledPayload above; the
-    // handler still runs entries sequentially, so each drains before the next.)
+    // with no cross-window race. Each Update drains both sets in a finally before
+    // it returns, so reuse within a thread always starts clean.
+    //
+    // The sets hash by _keyComparer, which is per entry instance. Two CollectionDiff
+    // entries of the same closed generic on one thread share these sets but may
+    // carry different comparers, so s_scratchComparer records the comparer the
+    // current sets were built with and the sets are rebuilt when a differing
+    // comparer runs — never diffing with another entry's comparer. (The handler
+    // runs entries sequentially and the finally drains before the next entry, so
+    // the only rebuild cost is a genuine comparer change, not normal alternation.)
     [ThreadStatic] private static HashSet<TKey>? s_scratchNewKeys;
     [ThreadStatic] private static HashSet<TKey>? s_scratchPresentKeys;
+    [ThreadStatic] private static IEqualityComparer<TKey>? s_scratchComparer;
 
     public CollectionDiffControlledPropEntry(
         Func<TElement, IReadOnlyList<TItem>> get,
@@ -1269,30 +1286,47 @@ internal sealed class CollectionDiffControlledPropEntry<TElement, TControl, TPay
         // Fast path: same items, no work.
         if (ReferenceEquals(oldItems, newItems)) return;
 
-        // Build new key set; track which old indices are still present.
-        var newKeys = s_scratchNewKeys ??= new HashSet<TKey>(_keyComparer);
-        newKeys.Clear();
-        for (int i = 0; i < newItems.Count; i++) newKeys.Add(_key(newItems[i]));
-
-        var vec = _getVector(ctrl);
-        ChangeEchoSuppressor.BeginSuppress(ctrl);
-
-        // Remove items not in newKeys, in descending index order so earlier
-        // indices stay stable.
-        for (int i = vec.Count - 1; i >= 0; i--)
+        // Acquire the per-thread scratch sets. Rebuild them when the active entry's
+        // key comparer differs from the one the current sets were created with, so a
+        // custom-comparer entry never diffs with another entry's comparer (#119).
+        var newKeys = s_scratchNewKeys;
+        var presentKeys = s_scratchPresentKeys;
+        if (newKeys is null || presentKeys is null || !ReferenceEquals(s_scratchComparer, _keyComparer))
         {
-            if (!newKeys.Contains(_key(vec[i])))
-                vec.RemoveAt(i);
+            newKeys = s_scratchNewKeys = new HashSet<TKey>(_keyComparer);
+            presentKeys = s_scratchPresentKeys = new HashSet<TKey>(_keyComparer);
+            s_scratchComparer = _keyComparer;
         }
 
-        // Add items that aren't already present.
-        var presentKeys = s_scratchPresentKeys ??= new HashSet<TKey>(_keyComparer);
-        presentKeys.Clear();
-        for (int i = 0; i < vec.Count; i++) presentKeys.Add(_key(vec[i]));
-        for (int i = 0; i < newItems.Count; i++)
+        try
         {
-            var k = _key(newItems[i]);
-            if (presentKeys.Add(k)) vec.Add(newItems[i]);
+            // Build new key set; track which old indices are still present.
+            for (int i = 0; i < newItems.Count; i++) newKeys.Add(_key(newItems[i]));
+
+            var vec = _getVector(ctrl);
+            ChangeEchoSuppressor.BeginSuppress(ctrl);
+
+            // Remove items not in newKeys, in descending index order so earlier
+            // indices stay stable.
+            for (int i = vec.Count - 1; i >= 0; i--)
+            {
+                if (!newKeys.Contains(_key(vec[i])))
+                    vec.RemoveAt(i);
+            }
+
+            // Add items that aren't already present.
+            for (int i = 0; i < vec.Count; i++) presentKeys.Add(_key(vec[i]));
+            for (int i = 0; i < newItems.Count; i++)
+            {
+                var k = _key(newItems[i]);
+                if (presentKeys.Add(k)) vec.Add(newItems[i]);
+            }
+        }
+        finally
+        {
+            // Drain before returning so the next reuse on this thread starts clean.
+            newKeys.Clear();
+            presentKeys.Clear();
         }
     }
 
