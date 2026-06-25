@@ -221,6 +221,34 @@ public class HookAllocationPerfTests
         Assert.Same(newHandler, cbChanged);
     }
 
+    [Fact]
+    public void UseCallback_And_Setter_Satisfy_ReferenceEquals_Contract_DiffSkipPath()
+    {
+        // Literal ReferenceEquals form of the DIFF skip-path contract (PR #665), the
+        // exact predicate the Element-layer skip path evaluates on handler delegates:
+        //   deps unchanged  ⇒ ReferenceEquals(prev, next) == true  (cell can be skipped)
+        //   deps changed     ⇒ ReferenceEquals(prev, next) == false (cell must re-apply)
+        // The UseState setter identity is dep-independent (cached once on the slot), so it
+        // is stable regardless.
+        var ctx = NewCtx();
+        Action handler = () => { };
+        var (_, set1) = ctx.UseState(0);
+        var cb1 = ctx.UseCallback(handler, "k");
+
+        Rerender(ctx);
+        var (_, set2) = ctx.UseState(0);
+        var cb2 = ctx.UseCallback(handler, "k"); // deps unchanged
+        Assert.True(ReferenceEquals(set1, set2));
+        Assert.True(ReferenceEquals(cb1, cb2));
+
+        Rerender(ctx);
+        var (_, set3) = ctx.UseState(0);
+        int s = 1;
+        var cb3 = ctx.UseCallback(() => { _ = s; }, "k2"); // deps changed
+        Assert.True(ReferenceEquals(set1, set3));
+        Assert.False(ReferenceEquals(cb1, cb3));
+    }
+
     // ════════════════════════════════════════════════════════════════
     //  #42 — thread-safe lock retained; default path leaves it null
     // ════════════════════════════════════════════════════════════════
