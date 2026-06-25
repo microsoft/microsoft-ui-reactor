@@ -1,3 +1,5 @@
+using System.Buffers;
+using System.Collections.Concurrent;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Reactor.Core.Internal;
 using WinUI = Microsoft.UI.Xaml.Controls;
@@ -153,16 +155,43 @@ internal static class ChildReconciler
         int oldLen = oldChildren.Length;
         int newLen = newChildren.Length;
 
+        // Cache the child count once (#37). Both the prefix and suffix loops
+        // only ever Replace (RemoveAt+Insert — count-neutral) or skip, so the
+        // panel count is stable across them. This avoids re-reading the COM
+        // IVector.get_Size on every iteration of the suffix loop.
+        int childCount = children.Count;
+
         // Phase 1: Common prefix
         int prefixLen = 0;
         while (prefixLen < oldLen && prefixLen < newLen &&
                KeyMatch(oldChildren[prefixLen], newChildren[prefixLen]) &&
                reconciler.CanUpdate(oldChildren[prefixLen], newChildren[prefixLen]))
         {
-            // Update in place
-            if (prefixLen < children.Count)
+            var oldEl = oldChildren[prefixLen];
+            var newEl = newChildren[prefixLen];
+
+            // Early skip (#30): when the element is structurally identical we
+            // can avoid the children.Get COM call and the full property diff
+            // inside UpdateChild — exactly mirroring the positional path. The
+            // keyed prefix is the steady-state path for stable lists (e.g. grid
+            // rows whose keys never change), so without this they re-diff every
+            // tick.
+            if (Element.CanSkipUpdate(oldEl, newEl)
+                && !reconciler.ForceRenderThroughWrapper(newEl))
             {
-                var replacement = reconciler.UpdateChild(oldChildren[prefixLen], newChildren[prefixLen], children.Get(prefixLen), requestRerender);
+                reconciler.DebugElementsSkipped++;
+                // Refresh the Tag when the element carries callbacks so the
+                // event trampoline dispatches through the latest closure.
+                if (newEl.HasCallbacks && prefixLen < childCount && children.Get(prefixLen) is FrameworkElement fe)
+                    Reconciler.SetElementTag(fe, newEl);
+                prefixLen++;
+                continue;
+            }
+
+            // Update in place
+            if (prefixLen < childCount)
+            {
+                var replacement = reconciler.UpdateChild(oldEl, newEl, children.Get(prefixLen), requestRerender);
                 if (replacement is not null)
                 {
                     reconciler.UnmountChild(children.Get(prefixLen));
@@ -180,10 +209,26 @@ internal static class ChildReconciler
         {
             // Update in place (from end)
             int oldIdx = oldLen - 1 - suffixLen;
-            int panelIdx = children.Count - 1 - suffixLen;
-            if (panelIdx >= 0 && panelIdx < children.Count)
+            int newIdx = newLen - 1 - suffixLen;
+            var oldEl = oldChildren[oldIdx];
+            var newEl = newChildren[newIdx];
+            int panelIdx = childCount - 1 - suffixLen;
+
+            // Early skip (#30): same fast-path as the prefix loop, applied from
+            // the end of the list.
+            if (Element.CanSkipUpdate(oldEl, newEl)
+                && !reconciler.ForceRenderThroughWrapper(newEl))
             {
-                var replacement = reconciler.UpdateChild(oldChildren[oldIdx], newChildren[newLen - 1 - suffixLen], children.Get(panelIdx), requestRerender);
+                reconciler.DebugElementsSkipped++;
+                if (newEl.HasCallbacks && panelIdx >= 0 && panelIdx < childCount && children.Get(panelIdx) is FrameworkElement fe)
+                    Reconciler.SetElementTag(fe, newEl);
+                suffixLen++;
+                continue;
+            }
+
+            if (panelIdx >= 0 && panelIdx < childCount)
+            {
+                var replacement = reconciler.UpdateChild(oldEl, newEl, children.Get(panelIdx), requestRerender);
                 if (replacement is not null)
                 {
                     reconciler.UnmountChild(children.Get(panelIdx));
@@ -251,126 +296,151 @@ internal static class ChildReconciler
         Action requestRerender,
         AnimationKind? ambientKind)
     {
-        // Build old key → index map
-        var oldKeyMap = new Dictionary<string, int>(oldMidLen);
-        for (int i = 0; i < oldMidLen; i++)
+        // Pool the per-call working buffers (#33). ChildReconciler recurses
+        // via UpdateChild below, so each (re-entrant) call must own distinct
+        // buffers — ArrayPool and the dict pool guarantee that, whereas a
+        // single ThreadStatic scratch would corrupt the outer diff.
+        var intPool = ArrayPool<int>.Shared;
+        var boolPool = ArrayPool<bool>.Shared;
+        var oldKeyMap = RentKeyIndexDict(oldMidLen);
+        var keyToIndex = RentKeyIndexDict(newMidLen);
+        int[] newToOld = intPool.Rent(newMidLen);
+        bool[] matched = boolPool.Rent(oldMidLen);
+        bool[] inLis = boolPool.Rent(newMidLen);
+        try
         {
-            var key = GetKey(oldChildren[oldStart + i], oldStart + i);
-            oldKeyMap[key] = i;
-        }
+            // A rented bool array can carry stale `true` markers; `matched`
+            // must default to false for the unmatched-removal pass below.
+            global::System.Array.Clear(matched, 0, oldMidLen);
 
-        // Map new keys to old indices
-        var newToOld = new int[newMidLen];
-        var matched = new bool[oldMidLen];
-        for (int i = 0; i < newMidLen; i++)
-        {
-            var key = GetKey(newChildren[newStart + i], newStart + i);
-            if (oldKeyMap.TryGetValue(key, out int oldIdx) &&
-                reconciler.CanUpdate(oldChildren[oldStart + oldIdx], newChildren[newStart + i]))
+            // Build old key → index map
+            for (int i = 0; i < oldMidLen; i++)
             {
-                newToOld[i] = oldIdx;
-                matched[oldIdx] = true;
+                var key = GetKey(oldChildren[oldStart + i], oldStart + i);
+                oldKeyMap[key] = i;
             }
-            else
-            {
-                newToOld[i] = -1;
-            }
-        }
 
-        // Compute LIS on newToOld
-        var lisIndices = ComputeLIS(newToOld);
-        var inLIS = new HashSet<int>(lisIndices);
-
-        // Step 1: Remove unmatched old items (reverse order for stable indices)
-        for (int i = oldMidLen - 1; i >= 0; i--)
-        {
-            if (!matched[i])
+            // Map new keys to old indices
+            for (int i = 0; i < newMidLen; i++)
             {
-                int panelIdx = prefixLen + i;
-                if (panelIdx < children.Count)
+                var key = GetKey(newChildren[newStart + i], newStart + i);
+                if (oldKeyMap.TryGetValue(key, out int oldIdx) &&
+                    reconciler.CanUpdate(oldChildren[oldStart + oldIdx], newChildren[newStart + i]))
                 {
-                    reconciler.RemoveChildWithExitTransition(children, panelIdx);
+                    newToOld[i] = oldIdx;
+                    matched[oldIdx] = true;
+                }
+                else
+                {
+                    newToOld[i] = -1;
                 }
             }
-        }
 
-        // Build key→panel-index lookup for O(1) FindItemByOldIndex (CR-011).
-        var keyToIndex = new Dictionary<string, int>();
-        int searchEnd = children.Count - suffixLen;
-        for (int i = prefixLen; i < searchEnd && i < children.Count; i++)
-        {
-            var child = children.Get(i);
-            if (child is FrameworkElement fe && Reconciler.GetElementTag(fe) is Element tagElement)
+            // Compute LIS on newToOld into a pooled membership mask — avoids
+            // the HashSet allocation and the redundant identical-set copy that
+            // the old `new HashSet<int>(ComputeLIS(...))` pair did (#31/#32).
+            ComputeLISInto(newToOld, newMidLen, inLis);
+
+            // Step 1: Remove unmatched old items (reverse order for stable indices)
+            for (int i = oldMidLen - 1; i >= 0; i--)
             {
-                var key = GetKey(tagElement, i);
-                keyToIndex.TryAdd(key, i);
-            }
-        }
-
-        // Step 2: Process new items - insert new, move existing not in LIS
-        for (int i = 0; i < newMidLen; i++)
-        {
-            int targetPanelIdx = prefixLen + i;
-
-            if (newToOld[i] == -1)
-            {
-                var ctrl = reconciler.Mount(newChildren[newStart + i], requestRerender);
-                if (ctrl is not null)
+                if (!matched[i])
                 {
-                    children.Insert(targetPanelIdx, ctrl);
-                    ApplyAmbientEnterIfActive(ctrl, newChildren[newStart + i], ambientKind);
-                }
-            }
-            else if (inLIS.Contains(i))
-            {
-                if (targetPanelIdx < children.Count)
-                {
-                    var replacement = reconciler.UpdateChild(
-                        oldChildren[oldStart + newToOld[i]],
-                        newChildren[newStart + i],
-                        children.Get(targetPanelIdx),
-                        requestRerender);
-                    if (replacement is not null)
+                    int panelIdx = prefixLen + i;
+                    if (panelIdx < children.Count)
                     {
-                        reconciler.UnmountChild(children.Get(targetPanelIdx));
-                        children.Replace(targetPanelIdx, replacement);
+                        reconciler.RemoveChildWithExitTransition(children, panelIdx);
                     }
                 }
             }
-            else
+
+            // Build key→panel-index lookup for O(1) FindItemByOldIndex (CR-011).
+            int searchEnd = children.Count - suffixLen;
+            for (int i = prefixLen; i < searchEnd && i < children.Count; i++)
             {
-                int oldRelIdx = newToOld[i];
-                int oldAbsIdx = oldStart + oldRelIdx;
-                var lookupKey = oldAbsIdx < oldChildren.Length ? GetKey(oldChildren[oldAbsIdx], oldAbsIdx) : null;
-                int currentPos = lookupKey != null && keyToIndex.TryGetValue(lookupKey, out var pos) ? pos : -1;
-                if (currentPos >= 0 && currentPos != targetPanelIdx)
+                var child = children.Get(i);
+                if (child is FrameworkElement fe && Reconciler.GetElementTag(fe) is Element tagElement)
                 {
-                    var movedChild = children.Get(currentPos);
-                    children.Move(currentPos, targetPanelIdx);
-                    // Update lookup: moved element is now at targetPanelIdx.
-                    if (lookupKey != null) keyToIndex[lookupKey] = targetPanelIdx;
-                    // Spec 042 §6 — implicit Offset animation on the moved
-                    // child so the reorder reads visually under an ambient.
-                    // Attach via the existing Composition helper rather
-                    // than the per-element LayoutAnimation modifier (which
-                    // remains the user's per-element opt-in).
-                    if (ambientKind is { } k && movedChild is UIElement movedUi)
-                        ApplyAmbientMove(movedUi, k);
+                    var key = GetKey(tagElement, i);
+                    keyToIndex.TryAdd(key, i);
                 }
-                if (targetPanelIdx < children.Count)
+            }
+
+            // Step 2: Process new items - insert new, move existing not in LIS
+            for (int i = 0; i < newMidLen; i++)
+            {
+                int targetPanelIdx = prefixLen + i;
+
+                if (newToOld[i] == -1)
                 {
-                    var replacement = reconciler.UpdateChild(
-                        oldChildren[oldStart + oldRelIdx],
-                        newChildren[newStart + i],
-                        children.Get(targetPanelIdx),
-                        requestRerender);
-                    if (replacement is not null)
+                    var ctrl = reconciler.Mount(newChildren[newStart + i], requestRerender);
+                    if (ctrl is not null)
                     {
-                        reconciler.UnmountChild(children.Get(targetPanelIdx));
-                        children.Replace(targetPanelIdx, replacement);
+                        children.Insert(targetPanelIdx, ctrl);
+                        ApplyAmbientEnterIfActive(ctrl, newChildren[newStart + i], ambientKind);
+                    }
+                }
+                else if (inLis[i])
+                {
+                    if (targetPanelIdx < children.Count)
+                    {
+                        var replacement = reconciler.UpdateChild(
+                            oldChildren[oldStart + newToOld[i]],
+                            newChildren[newStart + i],
+                            children.Get(targetPanelIdx),
+                            requestRerender);
+                        if (replacement is not null)
+                        {
+                            reconciler.UnmountChild(children.Get(targetPanelIdx));
+                            children.Replace(targetPanelIdx, replacement);
+                        }
+                    }
+                }
+                else
+                {
+                    int oldRelIdx = newToOld[i];
+                    int oldAbsIdx = oldStart + oldRelIdx;
+                    var lookupKey = oldAbsIdx < oldChildren.Length ? GetKey(oldChildren[oldAbsIdx], oldAbsIdx) : null;
+                    int currentPos = lookupKey != null && keyToIndex.TryGetValue(lookupKey, out var pos) ? pos : -1;
+                    if (currentPos >= 0 && currentPos != targetPanelIdx)
+                    {
+                        var movedChild = children.Get(currentPos);
+                        children.Move(currentPos, targetPanelIdx);
+                        // Update lookup: moved element is now at targetPanelIdx.
+                        if (lookupKey != null) keyToIndex[lookupKey] = targetPanelIdx;
+                        // Spec 042 §6 — implicit Offset animation on the moved
+                        // child so the reorder reads visually under an ambient.
+                        // Attach via the existing Composition helper rather
+                        // than the per-element LayoutAnimation modifier (which
+                        // remains the user's per-element opt-in).
+                        if (ambientKind is { } k && movedChild is UIElement movedUi)
+                            ApplyAmbientMove(movedUi, k);
+                    }
+                    if (targetPanelIdx < children.Count)
+                    {
+                        var replacement = reconciler.UpdateChild(
+                            oldChildren[oldStart + oldRelIdx],
+                            newChildren[newStart + i],
+                            children.Get(targetPanelIdx),
+                            requestRerender);
+                        if (replacement is not null)
+                        {
+                            reconciler.UnmountChild(children.Get(targetPanelIdx));
+                            children.Replace(targetPanelIdx, replacement);
+                        }
                     }
                 }
             }
+        }
+        finally
+        {
+            // Clear + return on every exit (including exceptions) so pooled
+            // buffers never leak references or stale markers across frames.
+            ReturnKeyIndexDict(oldKeyMap);
+            ReturnKeyIndexDict(keyToIndex);
+            intPool.Return(newToOld);
+            boolPool.Return(matched, clearArray: true);
+            boolPool.Return(inLis, clearArray: true);
         }
     }
 
@@ -400,81 +470,123 @@ internal static class ChildReconciler
     }
 
     /// <summary>
-    /// Compute Longest Increasing Subsequence.
-    /// Returns indices into the input array that form the LIS.
-    /// Skips entries with value -1 (unmapped items).
-    /// O(n log n) using patience sorting.
+    /// Compute the Longest Increasing Subsequence over the first
+    /// <paramref name="length"/> entries of <paramref name="arr"/>, writing the
+    /// membership mask into <paramref name="inLis"/> (<c>inLis[i] == true</c> iff
+    /// index <c>i</c> participates in the LIS). Entries with value -1 are skipped
+    /// (unmapped items). O(n log n) patience sorting. All working buffers are
+    /// rented from <see cref="ArrayPool{T}"/>, so the hot reconcile path pays no
+    /// per-call heap allocation (#32).
+    /// </summary>
+    internal static void ComputeLISInto(int[] arr, int length, bool[] inLis)
+    {
+        if (length > 0) Array.Clear(inLis, 0, length);
+        if (length == 0) return;
+
+        var pool = ArrayPool<int>.Shared;
+        int[] tails = pool.Rent(length);        // Smallest tail values
+        int[] tailIndices = pool.Rent(length);  // arr indices matching tails
+        int[] predecessors = pool.Rent(length); // back-pointers for reconstruction
+        try
+        {
+            int tailsCount = 0;
+            for (int i = 0; i < length; i++)
+            {
+                if (arr[i] == -1) continue; // Skip unmapped
+
+                int val = arr[i];
+
+                // Binary search for insertion position in tails[0..tailsCount).
+                int lo = 0, hi = tailsCount;
+                while (lo < hi)
+                {
+                    int mid = (lo + hi) / 2;
+                    if (tails[mid] < val) lo = mid + 1;
+                    else hi = mid;
+                }
+
+                // Predecessor is the previous tail's arr-index (read before the
+                // tails[lo] write — index lo-1 is unaffected by it).
+                predecessors[i] = lo > 0 ? tailIndices[lo - 1] : -1;
+
+                if (lo == tailsCount)
+                {
+                    tails[tailsCount] = val;
+                    tailIndices[tailsCount] = i;
+                    tailsCount++;
+                }
+                else
+                {
+                    tails[lo] = val;
+                    tailIndices[lo] = i;
+                }
+            }
+
+            // Backtrack from the last tail to mark LIS membership. Only
+            // non-skipped indices ever enter the chain, so unwritten
+            // predecessor slots for skipped entries are never read.
+            if (tailsCount == 0) return;
+            int idx = tailIndices[tailsCount - 1];
+            while (idx != -1)
+            {
+                inLis[idx] = true;
+                idx = predecessors[idx];
+            }
+        }
+        finally
+        {
+            pool.Return(tails);
+            pool.Return(tailIndices);
+            pool.Return(predecessors);
+        }
+    }
+
+    /// <summary>
+    /// Compute Longest Increasing Subsequence, returning the set of
+    /// participating indices. Convenience wrapper over
+    /// <see cref="ComputeLISInto"/> for tests and set-shaped callers; the hot
+    /// reconcile path uses the allocation-free <see cref="ComputeLISInto"/>.
     /// </summary>
     internal static HashSet<int> ComputeLIS(int[] arr)
     {
-        if (arr.Length == 0) return new HashSet<int>();
-
-        var tails = new List<int>();     // Smallest tail values
-        var tailIndices = new List<int>(); // Indices in arr corresponding to tails
-        var predecessors = new int[arr.Length];
-        Array.Fill(predecessors, -1);
-
-        for (int i = 0; i < arr.Length; i++)
-        {
-            if (arr[i] == -1) continue; // Skip unmapped
-
-            int val = arr[i];
-
-            // Binary search for insertion position
-            int lo = 0, hi = tails.Count;
-            while (lo < hi)
-            {
-                int mid = (lo + hi) / 2;
-                if (tails[mid] < val) lo = mid + 1;
-                else hi = mid;
-            }
-
-            if (lo == tails.Count)
-            {
-                tails.Add(val);
-                tailIndices.Add(i);
-            }
-            else
-            {
-                tails[lo] = val;
-                tailIndices[lo] = i;
-            }
-
-            if (lo > 0)
-                predecessors[i] = tailIndices[lo - 1];
-        }
-
-        // Backtrack to find actual LIS indices
         var result = new HashSet<int>();
-        if (tailIndices.Count == 0) return result;
+        if (arr.Length == 0) return result;
 
-        int idx = tailIndices[^1];
-        while (idx != -1)
+        var pool = ArrayPool<bool>.Shared;
+        bool[] mask = pool.Rent(arr.Length);
+        try
         {
-            result.Add(idx);
-            idx = predecessors[idx];
+            ComputeLISInto(arr, arr.Length, mask);
+            for (int i = 0; i < arr.Length; i++)
+                if (mask[i]) result.Add(i);
         }
-
+        finally
+        {
+            pool.Return(mask, clearArray: true);
+        }
         return result;
     }
 
     private static Element[] Filter(Element[] elements)
     {
-        // Fast path: if no filtering needed, return as-is
-        bool needsFilter = false;
+        // Single count pass; the result array is then sized exactly and filled
+        // in one more pass — no intermediate List + ToArray double-allocation
+        // (#36). The common no-null case still returns the input untouched.
+        int keep = 0;
         for (int i = 0; i < elements.Length; i++)
         {
-            if (elements[i] is null or EmptyElement) { needsFilter = true; break; }
+            if (elements[i] is not null and not EmptyElement) keep++;
         }
-        if (!needsFilter) return elements;
+        if (keep == elements.Length) return elements;
 
-        var result = new List<Element>(elements.Length);
+        var result = new Element[keep];
+        int j = 0;
         for (int i = 0; i < elements.Length; i++)
         {
             if (elements[i] is not null and not EmptyElement)
-                result.Add(elements[i]);
+                result[j++] = elements[i];
         }
-        return result.ToArray();
+        return result;
     }
 
     private static bool HasAnyKeys(Element[] elements)
@@ -493,11 +605,45 @@ internal static class ChildReconciler
         return a.Key == b.Key;
     }
 
+    // Cache the per-Type display name used by the unkeyed GetKey fallback so we
+    // don't reflect over the runtime type on every diff (#38). Explicit keys
+    // are strongly preferred and bypass this path entirely.
+    private static readonly ConcurrentDictionary<Type, string> _typeNameCache = new();
+
     private static string GetKey(Element element, int positionalIndex)
     {
         // Use explicit key if available, otherwise fall back to type+position
         if (element.Key is not null) return element.Key;
-        return $"__pos_{positionalIndex}_{element.GetType().Name}";
+        var typeName = _typeNameCache.GetOrAdd(element.GetType(), static t => t.Name);
+        return $"__pos_{positionalIndex}_{typeName}";
+    }
+
+    // ── Re-entrancy-safe Dictionary&lt;string,int&gt; pool ────────────────────
+    // ReconcileKeyedMiddle needs two transient key→index maps per call, and it
+    // recurses through UpdateChild. A per-thread stack hands each (nested) call
+    // its own instances: rented dicts are not in the pool, so an inner call can
+    // never grab a buffer the outer call is still using. Pool size is capped so
+    // deep trees don't retain an unbounded number of dictionaries.
+    [ThreadStatic] private static Stack<Dictionary<string, int>>? _keyIndexDictPool;
+    private const int KeyIndexDictPoolCap = 16;
+
+    private static Dictionary<string, int> RentKeyIndexDict(int capacity)
+    {
+        var pool = _keyIndexDictPool;
+        if (pool is { Count: > 0 })
+        {
+            var d = pool.Pop();
+            if (capacity > 0) d.EnsureCapacity(capacity);
+            return d;
+        }
+        return new Dictionary<string, int>(capacity > 0 ? capacity : 0, StringComparer.Ordinal);
+    }
+
+    private static void ReturnKeyIndexDict(Dictionary<string, int> dict)
+    {
+        dict.Clear();
+        var pool = _keyIndexDictPool ??= new Stack<Dictionary<string, int>>();
+        if (pool.Count < KeyIndexDictPoolCap) pool.Push(dict);
     }
 
     /// <summary>
