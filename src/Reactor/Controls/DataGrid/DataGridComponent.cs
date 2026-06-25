@@ -252,6 +252,11 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
 
         var itemCount = state.ItemCount;
 
+        // Stable identity for the search box's onChanged delegate. Declared unconditionally here so
+        // the hook order is fixed even though the search box is conditional (ShowSearch can toggle);
+        // built lazily where the search box is rendered below.
+        var onSearchRef = UseRef<Action<string>?>(null);
+
         // ── Build the UI ────────────────────────────────────────────
         // Use a WinUI Grid instead of FlexColumn for the DataGrid root container.
         // This breaks the FlexPanel ancestor chain so header column width changes
@@ -263,15 +268,21 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         if (el.ShowSearch)
         {
             var searchQuery = state.SearchQuery ?? "";
-            gridChildren.Add(
-                TextBox(searchQuery, q =>
+            // Cache the onChanged delegate so it keeps a stable identity across renders. It only
+            // captures the stable `state`, so a once-built handler is equivalent to rebuilding it
+            // every render — this drops a per-render closure allocation and lets the search box reuse
+            // its control on the reconciler's skip path instead of re-running Update.
+            onSearchRef.Current ??= q =>
+            {
+                Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() =>
                 {
-                    Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() =>
-                    {
-                        state.SetSearchQuery(q);
-                        _ = state.LoadDataAsync();
-                    });
-                }).Padding(horizontal: 8, vertical: 4).Grid(row: gridRow, column: 0)
+                    state.SetSearchQuery(q);
+                    _ = state.LoadDataAsync();
+                });
+            };
+            gridChildren.Add(
+                TextBox(searchQuery, onSearchRef.Current)
+                    .Padding(horizontal: 8, vertical: 4).Grid(row: gridRow, column: 0)
             );
             gridRow++;
         }
