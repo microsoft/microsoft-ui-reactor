@@ -135,7 +135,15 @@ public sealed partial class Reconciler : IDisposable
         const int cacheKeyScratchRetainCap = 64;
         if (pairs.Length > cacheKeyScratchRetainCap)
             t_cacheKeyPairs = null;
-        return sb.ToString();
+
+        var key = sb.ToString();
+        // Same one-off-outlier guard for the StringBuilder: a single unusually large
+        // key would otherwise pin an oversized backing buffer for the thread's
+        // lifetime — release it so the next call re-grows from a small buffer.
+        const int cacheKeySbRetainCap = 1024;
+        if (sb.Capacity > cacheKeySbRetainCap)
+            t_cacheKeySb = null;
+        return key;
     }
 
     /// <summary>
@@ -2491,7 +2499,12 @@ public sealed partial class Reconciler : IDisposable
         finally
         {
             toPool.Clear();
-            _unmountPoolScratch ??= toPool;
+            // perf #21 follow-up: mirror the _realizedScratch cap so a one-off unmount
+            // of a very large subtree doesn't pin an oversized backing array on the
+            // reconciler for the rest of its lifetime — only retain a modest scratch.
+            const int unmountScratchRetainCap = 256;
+            if (toPool.Capacity <= unmountScratchRetainCap)
+                _unmountPoolScratch ??= toPool;
         }
     }
 
