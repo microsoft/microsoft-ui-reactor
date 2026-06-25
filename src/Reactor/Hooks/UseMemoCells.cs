@@ -173,6 +173,12 @@ public static class UseMemoCellsExtensions
             keys = count == 0 ? Array.Empty<TKey>() : new TKey[count];
         for (int i = 0; i < count; i++)
             keys[i] = keySelector(items[i]);
+        // When the buffer is reused from a render that had more rows, null out the
+        // stale [count..] tail so keys for rows that scrolled/shrank away are not held
+        // alive until the slots are next overwritten. Zero-alloc: writes null over the
+        // unused region only, and is skipped in the steady state where Length == count.
+        if (keys.Length > count)
+            Array.Clear(keys, count, keys.Length - count);
 
         // #47: full-reuse fast path — deps unchanged, same length, every item equal
         // in order AND every key still maps to its own position. Returns the prior

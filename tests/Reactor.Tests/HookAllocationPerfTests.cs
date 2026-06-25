@@ -421,6 +421,58 @@ public class HookAllocationPerfTests
     }
 
     // ════════════════════════════════════════════════════════════════
+    //  Review (test-coverage) — arity-2/3 cleanup-flavor UseEffect overloads:
+    //  the prior cleanup runs exactly once when a dependency changes, and the
+    //  effect+cleanup are skipped entirely while every dependency is unchanged.
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void UseEffect_Arity2_Cleanup_Skips_While_Unchanged_And_Cleans_Up_Once_On_Change()
+    {
+        var ctx = NewCtx();
+        int runs = 0, cleanups = 0;
+        ctx.UseEffect(() => { runs++; return () => cleanups++; }, "a", 1);
+        ctx.FlushEffects();
+        Assert.Equal(1, runs);
+        Assert.Equal(0, cleanups);
+
+        Rerender(ctx);
+        ctx.UseEffect(() => { runs++; return () => cleanups++; }, "a", 1); // unchanged
+        ctx.FlushEffects();
+        Assert.Equal(1, runs);     // skipped
+        Assert.Equal(0, cleanups); // no cleanup while skipped
+
+        Rerender(ctx);
+        ctx.UseEffect(() => { runs++; return () => cleanups++; }, "a", 2); // d2 changed
+        ctx.FlushEffects();
+        Assert.Equal(2, runs);
+        Assert.Equal(1, cleanups); // prior cleanup ran exactly once
+    }
+
+    [Fact]
+    public void UseEffect_Arity3_Cleanup_Skips_While_Unchanged_And_Cleans_Up_Once_On_Change()
+    {
+        var ctx = NewCtx();
+        int runs = 0, cleanups = 0;
+        ctx.UseEffect(() => { runs++; return () => cleanups++; }, "a", 1, true);
+        ctx.FlushEffects();
+        Assert.Equal(1, runs);
+        Assert.Equal(0, cleanups);
+
+        Rerender(ctx);
+        ctx.UseEffect(() => { runs++; return () => cleanups++; }, "a", 1, true); // unchanged
+        ctx.FlushEffects();
+        Assert.Equal(1, runs);
+        Assert.Equal(0, cleanups);
+
+        Rerender(ctx);
+        ctx.UseEffect(() => { runs++; return () => cleanups++; }, "a", 1, false); // d3 changed
+        ctx.FlushEffects();
+        Assert.Equal(2, runs);
+        Assert.Equal(1, cleanups);
+    }
+
+    // ════════════════════════════════════════════════════════════════
     //  #47 — UseMemoCells full-reuse returns the SAME array (zero alloc)
     // ════════════════════════════════════════════════════════════════
 
@@ -558,6 +610,23 @@ public class HookAllocationPerfTests
         Assert.Same(requestFocus1, requestFocus2);
     }
 
+    [Fact]
+    public void UseElementFocus_RequestFocus_Invokes_Safely_When_Unmounted()
+    {
+        // In headless tests no UI dispatcher is registered, so the cached requestFocus
+        // takes its synchronous fallback branch and calls FocusManager.Focus directly.
+        // With an unmounted ref (no target) Focus is a no-op, so invoking must not throw —
+        // this exercises the invoke/fallback path, not just delegate identity.
+        var ctx = NewCtx();
+        var (_, requestFocus) = ctx.UseElementFocus();
+        Assert.Null(Record.Exception(() => requestFocus()));
+
+        Rerender(ctx);
+        var (_, requestFocus2) = ctx.UseElementFocus();
+        Assert.Same(requestFocus, requestFocus2);             // still the cached delegate
+        Assert.Null(Record.Exception(() => requestFocus2())); // still invocable after re-render
+    }
+
     // ════════════════════════════════════════════════════════════════
     //  H1 — a lone object[]-typed dep keeps element-wise (params) semantics
     //  (covariant ref-type arrays must NOT be reference-compared as one dep)
@@ -583,6 +652,62 @@ public class HookAllocationPerfTests
         ctx.UseEffect(() => { runs++; }, new[] { "a", "c" }); // contents changed
         ctx.FlushEffects();
         Assert.Equal(2, runs);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  CORR-1 (correctness review) — an arity-1 dep whose STATIC type is NOT an
+    //  array (here object) but whose RUNTIME value is object[] must be compared as
+    //  ONE value, exactly as the legacy params overload did (it wrapped such a value
+    //  as new object[]{ dep } and reference-compared it). Only UseMemo is affected:
+    //  its two overloads are both generic, so the arity-1 generic wins overload
+    //  resolution (UseEffect/UseCallback bind their non-generic params overload here).
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void UseMemo_Arity1_ObjectTyped_ArrayValue_Is_Compared_By_Reference_Like_Params()
+    {
+        var ctx = NewCtx();
+        int factoryRuns = 0;
+        object dep = new object[] { "a" };          // static type object, runtime object[]
+        ctx.UseMemo(() => { factoryRuns++; return factoryRuns; }, dep);
+        Assert.Equal(1, factoryRuns);
+
+        Rerender(ctx);
+        ctx.UseMemo(() => { factoryRuns++; return factoryRuns; }, dep); // same ref → cached
+        Assert.Equal(1, factoryRuns);
+
+        Rerender(ctx);
+        object depNewEqual = new object[] { "a" };  // NEW reference, equal contents
+        ctx.UseMemo(() => { factoryRuns++; return factoryRuns; }, depNewEqual);
+        Assert.Equal(2, factoryRuns); // reference changed → recompute (NOT element-wise)
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  Cast-safety (Copilot review) — a hot-reload edit or dynamic call site can
+    //  change a dependency's runtime type at the same hook slot across renders. The
+    //  typed comparer must treat a type mismatch as "changed" (re-run) rather than
+    //  throwing InvalidCastException while comparing deps.
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void Arity1_Deps_Comparer_Treats_Runtime_Type_Change_As_Changed_Without_Throwing()
+    {
+        var ctx = NewCtx();
+        int runs = 0;
+        ctx.UseEffect(() => { runs++; }, 42);    // T1=int → stores boxed int at slot 0
+        ctx.FlushEffects();
+        Assert.Equal(1, runs);
+
+        Rerender(ctx);
+        // Same slot, but the dep is now a string. Comparing (string)prev[0] over a
+        // boxed int must NOT throw; the mismatch is treated as "changed".
+        Exception? ex = Record.Exception(() =>
+        {
+            ctx.UseEffect(() => { runs++; }, "now-a-string"); // T1=string at the same slot
+            ctx.FlushEffects();
+        });
+        Assert.Null(ex);
+        Assert.Equal(2, runs); // type changed → effect re-ran (no crash)
     }
 
     // ════════════════════════════════════════════════════════════════
