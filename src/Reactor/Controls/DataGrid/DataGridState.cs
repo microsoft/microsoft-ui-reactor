@@ -165,6 +165,12 @@ public class DataGridState<T>
     private GridDefinition? _cachedGridDef;
     private int _layoutCacheVersion = -1;
     private int _layoutCacheShape = -1;
+    // The column list the cache was built against. _columnVersion only tracks internal mutations
+    // (resize/hide/show/reorder/pin); the caller-supplied columns (el.Columns / auto-generated)
+    // can change independently, so reference identity is part of the cache key to avoid returning
+    // a layout sized for a stale column set.
+    private IReadOnlyList<FieldDescriptor>? _layoutCacheColumns;
+    private int _layoutCacheColumnCount = -1;
 
     /// <summary>Monotonically increasing version, bumped whenever column order/size/visibility changes.</summary>
     internal int ColumnVersion => _columnVersion;
@@ -174,15 +180,21 @@ public class DataGridState<T>
     {
         get
         {
-            if (_hiddenColumns.Count == 0) return _columns;
+            // Cache the visible-column snapshot per column-version so repeated reads within a render
+            // don't re-run the Where+ToList. On invalidation a *fresh* list is built (never an
+            // in-place Clear/refill, and never the internal _columns list itself) so any reference
+            // previously handed out keeps the contents it was observed with — preserving the
+            // snapshot semantics of the old Where(...).ToList() across later column mutations
+            // (ReorderColumn/PinColumn mutate _columns in place).
             if (_visibleColumns is null || _visibleColumnsBuiltVersion != _columnVersion)
             {
-                (_visibleColumns ??= new List<FieldDescriptor>(_columns.Count)).Clear();
+                var snapshot = new List<FieldDescriptor>(_columns.Count);
                 for (int i = 0; i < _columns.Count; i++)
                 {
-                    if (!_hiddenColumns.Contains(_columns[i].Name))
-                        _visibleColumns.Add(_columns[i]);
+                    if (_hiddenColumns.Count == 0 || !_hiddenColumns.Contains(_columns[i].Name))
+                        snapshot.Add(_columns[i]);
                 }
+                _visibleColumns = snapshot;
                 _visibleColumnsBuiltVersion = _columnVersion;
             }
             return _visibleColumns;
@@ -773,7 +785,9 @@ public class DataGridState<T>
                   | (hasRowEditActionsColumn ? 4 : 0);
 
         if (_cachedColWidths is not null && _cachedGridDef is not null
-            && _layoutCacheVersion == _columnVersion && _layoutCacheShape == shape)
+            && _layoutCacheVersion == _columnVersion && _layoutCacheShape == shape
+            && ReferenceEquals(_layoutCacheColumns, columns)
+            && _layoutCacheColumnCount == columns.Count)
         {
             return (_cachedColWidths, _cachedGridDef);
         }
@@ -801,6 +815,8 @@ public class DataGridState<T>
         _cachedGridDef = gridDef;
         _layoutCacheVersion = _columnVersion;
         _layoutCacheShape = shape;
+        _layoutCacheColumns = columns;
+        _layoutCacheColumnCount = columns.Count;
         return (colWidths, gridDef);
     }
 
