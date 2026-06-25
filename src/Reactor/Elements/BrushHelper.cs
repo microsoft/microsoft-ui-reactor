@@ -6,13 +6,17 @@ namespace Microsoft.UI.Reactor;
 /// <summary>
 /// Color and brush parsing utilities.
 /// Supports named colors, hex (#RRGGBB, #AARRGGBB), and direct Color values.
-/// Colors are cached by string, and the resulting <see cref="SolidColorBrush"/>
-/// is cached per-thread keyed by ARGB so hot fluent chains
-/// (<c>.Foreground("#color")</c>, <c>.Background("#color")</c>) reuse one brush
-/// instance per color instead of allocating a WinRT DependencyObject per cell
-/// per render. The cache is <see cref="ThreadStaticAttribute">thread-static</see>
-/// so a brush is only ever handed back on the same thread that created it,
-/// honoring DependencyObject thread affinity.
+/// Parsed colors are cached by string. Two brush entry points exist: the public
+/// <see cref="Parse(string)"/> returns a fresh, caller-owned brush (unchanged
+/// historical behavior — safe to mutate), while <see cref="GetBrush"/>
+/// returns a shared, read-only brush from a per-thread ARGB cache. Reactor's own
+/// hot fluent chains (<c>.Foreground("#color")</c>, <c>.Background("#color")</c>)
+/// route through the shared cache via the internal <c>ParseShared</c> path so
+/// thousands of identical cells reuse one brush instead of allocating a WinRT
+/// DependencyObject per cell per render. The brush cache is
+/// <see cref="ThreadStaticAttribute">thread-static</see> so a brush is only ever
+/// handed back on the same thread that created it, honoring DependencyObject
+/// thread affinity.
 /// </summary>
 public static class BrushHelper
 {
@@ -27,15 +31,30 @@ public static class BrushHelper
     private static Dictionary<global::Windows.UI.Color, SolidColorBrush>? _brushCache;
 
     /// <summary>
-    /// Parses a color string into a SolidColorBrush.
+    /// Parses a color string into a <b>fresh</b> SolidColorBrush owned by the caller.
     /// Supports named colors (red, green, blue, white, black, gray, lightgray, transparent)
     /// and hex codes (#RRGGBB or #AARRGGBB).
-    /// Both the parsed color and the resulting brush are cached, so repeated calls
-    /// with the same color on the same thread return the same brush instance.
+    /// The parsed color is cached, but a new brush instance is returned on every call,
+    /// so callers may safely mutate it. Reactor's internal fluent modifiers use the
+    /// shared-cache path (<c>ParseShared</c>) instead; prefer <see cref="GetBrush"/>
+    /// directly if you have a Color and want the shared read-only brush.
     /// </summary>
-    public static SolidColorBrush Parse(string color)
-    {
-        var parsed = _colorCache.GetOrAdd(color, static c =>
+    public static SolidColorBrush Parse(string color) => new(ParseColor(color));
+
+    /// <summary>
+    /// Parses a color string and returns the <b>shared</b>, read-only brush for it
+    /// from the per-thread ARGB cache. Internal hot-path equivalent of
+    /// <see cref="Parse(string)"/> for Reactor's own fluent modifiers, which never
+    /// mutate the brush. Callers must treat the result as immutable.
+    /// </summary>
+    internal static SolidColorBrush ParseShared(string color) => GetBrush(ParseColor(color));
+
+    /// <summary>
+    /// Parses a color string into a <see cref="global::Windows.UI.Color"/>.
+    /// The result is cached by string so repeated parses are allocation-free.
+    /// </summary>
+    internal static global::Windows.UI.Color ParseColor(string color) =>
+        _colorCache.GetOrAdd(color, static c =>
             c.ToLowerInvariant() switch
             {
                 "red" => global::Windows.UI.Color.FromArgb(255, 255, 0, 0),
@@ -49,8 +68,6 @@ public static class BrushHelper
                 _ when c.StartsWith('#') => ParseHex(c),
                 _ => global::Windows.UI.Color.FromArgb(255, 128, 128, 128),
             });
-        return GetBrush(parsed);
-    }
 
     /// <summary>
     /// Returns a cached <see cref="SolidColorBrush"/> for the given color, creating

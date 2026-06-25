@@ -66,7 +66,13 @@ public class PerfDiffSkipPathTests
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  FLAGSHIP-2 — an unchanged .Set(...) chain preserves skip-equality
+    //  Setters (.Set) — the imperative escape hatch always re-applies on
+    //  Update; only the no-setter case is skip-eligible. A reference-stable
+    //  setter is NOT skippable: it is an apply-time imperative write that can
+    //  read mutable external state (statics/singletons), and non-capturing
+    //  lambdas are compiler-cached to a stable identity — so identity-equality
+    //  must not be mistaken for "the write is unnecessary". (Safety counterpart
+    //  to FLAGSHIP-1, where handlers dispatch later via Current* and are safe.)
     // ════════════════════════════════════════════════════════════════
 
     // Same source location, non-capturing lambda → the compiler caches a single
@@ -79,20 +85,49 @@ public class PerfDiffSkipPathTests
         TextBlock("Hdr").Set(tb => tb.FontSize = size);
 
     [Fact]
-    public void ShallowEquals_True_For_Unchanged_Set_Chain()
+    public void ShallowEquals_True_When_Neither_Element_Has_Setters()
     {
-        // The fluent `.Set` helper appends to a fresh array each render, so the old
-        // ReferenceEquals(Setters) always failed. Element-wise reference compare now
-        // restores the skip when the chain (and its cached static lambda) is unchanged.
-        Assert.True(Element.ShallowEquals(BuildWithStaticSetter(), BuildWithStaticSetter()));
+        // Both Setters arrays are the empty singleton → no imperative writes to
+        // re-apply → the cell stays skip-eligible.
+        Assert.True(Element.ShallowEquals(TextBlock("Hdr"), TextBlock("Hdr")));
+    }
+
+    [Fact]
+    public void ShallowEquals_False_For_Stable_Set_Chain()
+    {
+        // Even a cached, reference-stable (non-capturing) setter must decline the
+        // skip: `.Set` is an apply-time imperative write whose effect can depend on
+        // mutable external state, so the reconciler has to re-apply it every update.
+        Assert.False(Element.ShallowEquals(BuildWithStaticSetter(), BuildWithStaticSetter()));
     }
 
     [Fact]
     public void ShallowEquals_False_For_Capturing_Set_Chain()
     {
-        // A capturing setter allocates a new delegate per render, so it correctly
-        // declines the fast-path even when the captured value is equal.
+        // A capturing setter allocates a new delegate per render and likewise
+        // declines the fast-path.
         Assert.False(Element.ShallowEquals(BuildWithCapturingSetter(12), BuildWithCapturingSetter(12)));
+    }
+
+    [Fact]
+    public void SettersEqual_True_For_Same_Instance_Or_Both_Empty()
+    {
+        Action a = () => { };
+        var arr = new[] { a };
+        Assert.True(Element.SettersEqual(arr, arr));                              // same instance
+        Assert.True(Element.SettersEqual(Array.Empty<Action>(), new Action[0])); // both empty
+        Assert.True(Element.SettersEqual<Action>(null, null));                    // both null
+        Assert.True(Element.SettersEqual(Array.Empty<Action>(), null));          // empty + null
+    }
+
+    [Fact]
+    public void SettersEqual_False_When_Setters_Present_In_Distinct_Arrays()
+    {
+        Action shared = () => { };
+        // Distinct arrays holding the IDENTICAL (cached/stable) delegate must still
+        // decline — the imperative write has to re-run every update.
+        Assert.False(Element.SettersEqual(new[] { shared }, new[] { shared }));
+        Assert.False(Element.SettersEqual(new[] { shared }, Array.Empty<Action>()));
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -257,5 +292,126 @@ public class PerfDiffSkipPathTests
         Assert.Equal(5, grid.Children.Length);
         Assert.Equal(5, grid.Definition.Columns.Length);
         Assert.Single(grid.Definition.Rows);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  #165 / #157 — ModifyLayout / ModifyVisual fluent helpers merge the
+    //  delta straight into the Layout / Visual bucket (skipping a throwaway
+    //  parent ElementModifiers + shim-built bucket per chained call). The
+    //  resulting ElementModifiers must be value-identical to the historical
+    //  `Modify(el, new ElementModifiers { <field> })` path so the diff and
+    //  reconciler see no behavioural change — only fewer allocations.
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void Fluent_Layout_Chain_Equals_HandBuilt_Modifiers()
+    {
+        var fluent = TextBlock("x").Margin(8).Width(120).Height(40).MinWidth(10);
+        var handBuilt = new ElementModifiers
+        {
+            Margin = new Thickness(8),
+            Width = 120,
+            Height = 40,
+            MinWidth = 10,
+        };
+        Assert.Equal(handBuilt, fluent.Modifiers);
+        // Every layout field landed in a single Layout bucket; no Visual allocated.
+        Assert.NotNull(fluent.Modifiers!.Layout);
+        Assert.Null(fluent.Modifiers.Visual);
+    }
+
+    [Fact]
+    public void Fluent_Visual_Chain_Equals_HandBuilt_Modifiers()
+    {
+        var fluent = TextBlock("x").Opacity(0.5).Scale(2f).Rotation(45f)
+            .CornerRadius(4);
+        var handBuilt = new ElementModifiers
+        {
+            Opacity = 0.5,
+            Scale = new global::System.Numerics.Vector3(2f, 2f, 1f),
+            Rotation = 45f,
+            CornerRadius = new Microsoft.UI.Xaml.CornerRadius(4),
+        };
+        Assert.Equal(handBuilt, fluent.Modifiers);
+        Assert.NotNull(fluent.Modifiers!.Visual);
+        Assert.Null(fluent.Modifiers.Layout);
+    }
+
+    [Fact]
+    public void Fluent_Mixed_Chain_Populates_Both_Buckets_Like_HandBuilt()
+    {
+        var fluent = TextBlock("x").Margin(8).Opacity(0.5).Width(120).Rotation(90f);
+        var handBuilt = new ElementModifiers
+        {
+            Margin = new Thickness(8),
+            Width = 120,
+            Opacity = 0.5,
+            Rotation = 90f,
+        };
+        Assert.Equal(handBuilt, fluent.Modifiers);
+    }
+
+    [Fact]
+    public void ModifyLayout_Preserves_Existing_NonBucket_Field()
+    {
+        // IsEnabled is a top-level (non-bucketed) ElementModifiers field. Routing the
+        // following .Margin() through ModifyLayout must not drop it — the bucket merge
+        // only touches the Layout slot and copies every other field unchanged.
+        var fluent = TextBlock("x").IsEnabled(false).Margin(8);
+        var handBuilt = new ElementModifiers { IsEnabled = false, Margin = new Thickness(8) };
+        Assert.Equal(handBuilt, fluent.Modifiers);
+        Assert.False(fluent.Modifiers!.IsEnabled);
+        Assert.Equal(new Thickness(8), fluent.Modifiers.Margin);
+    }
+
+    [Fact]
+    public void ModifyVisual_Preserves_Existing_Layout_Bucket()
+    {
+        // A pure-visual modifier applied after a pure-layout one must leave the
+        // existing Layout bucket intact (regression guard for the `mods with { Visual }`
+        // merge not clobbering Layout).
+        var fluent = TextBlock("x").Width(120).Opacity(0.5);
+        Assert.Equal(120, fluent.Modifiers!.Width);
+        Assert.Equal(0.5, fluent.Modifiers.Opacity);
+        Assert.Equal(new ElementModifiers { Width = 120, Opacity = 0.5 }, fluent.Modifiers);
+    }
+
+    [Fact]
+    public void Fluent_Layout_Chain_Is_ShallowEquals_Across_Identical_Builds()
+    {
+        // The end-to-end skip-path payoff: an unchanged layout/visual chain compares
+        // equal so the cell takes the fast path.
+        var a = TextBlock("x").Margin(8).Width(120).Opacity(0.5);
+        var b = TextBlock("x").Margin(8).Width(120).Opacity(0.5);
+        Assert.True(Element.ShallowEquals(a, b));
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  #174 — ApplyStyle caches the OnMount delegate per style name so an
+    //  unchanged `.ApplyStyle("X")` chain reuses one delegate instance
+    //  instead of allocating a fresh capturing closure + display class every
+    //  render. (OnMountAction is intentionally excluded from the diff
+    //  equality — it runs at mount only — so this is a pure allocation cut,
+    //  not a skip-path change.)
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void ApplyStyle_Same_Name_Produces_ReferenceStable_OnMountAction()
+    {
+        var a = TextBlock("x").ApplyStyle("BodyTextBlockStyle");
+        var b = TextBlock("x").ApplyStyle("BodyTextBlockStyle");
+        // Same cached delegate instance for the same style name — no fresh closure
+        // allocated on the second (and every subsequent) render.
+        Assert.Same(a.Modifiers!.OnMountAction, b.Modifiers!.OnMountAction);
+    }
+
+    [Fact]
+    public void ApplyStyle_Different_Name_Produces_Distinct_OnMountAction()
+    {
+        var a = TextBlock("x").ApplyStyle("BodyTextBlockStyle");
+        var b = TextBlock("x").ApplyStyle("TitleTextBlockStyle");
+        // Distinct style names map to distinct cached delegates (each applies its
+        // own resource key).
+        Assert.NotSame(a.Modifiers!.OnMountAction, b.Modifiers!.OnMountAction);
     }
 }
