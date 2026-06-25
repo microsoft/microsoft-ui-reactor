@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.V1Protocol;
 using Microsoft.UI.Reactor.Core.V1Protocol.Descriptor;
 using WinUI = Microsoft.UI.Xaml.Controls;
 using Xunit;
@@ -206,6 +207,38 @@ public class PropEntryDiffDispatchTests
         Assert.Empty(GetPrivateArray(handler, "_subscribeEntries"));
     }
 
+    // #114: when the subscribe subset is empty, handler.Update skips BindFor and the
+    // subscribe loop entirely. This guards that the *update* loop still runs every
+    // OneWay entry in that path — i.e. the BindFor skip never gates the prop writes.
+    [Fact]
+    public void DescriptorHandler_Update_StillWritesOneWayEntries_WhenSubscribeSubsetEmpty()
+    {
+        int aWrites = 0, bWrites = 0;
+        int aLast = -1, bLast = -1;
+        var descriptor = new ControlDescriptor<IntElement, WinUI.TextBlock>()
+            .OneWay(e => e.Value, (c, v) => { aWrites++; aLast = v; })
+            .OneWay(e => e.Value + 100, (c, v) => { bWrites++; bLast = v; });
+
+        var handler = new DescriptorHandler<IntElement, WinUI.TextBlock>(descriptor);
+        Assert.Empty(GetPrivateArray(handler, "_subscribeEntries"));
+
+        var reconciler = new Reconciler();
+        var ctx = new UpdateContext(reconciler, static () => { });
+
+        // Changed value → both OneWay entries write. ctrl is null; the recording
+        // setters ignore it (headless — no live control needed for OneWay writes).
+        handler.Update(ctx, new IntElement(1), new IntElement(2), null!);
+        Assert.Equal(1, aWrites);
+        Assert.Equal(2, aLast);
+        Assert.Equal(1, bWrites);
+        Assert.Equal(102, bLast);
+
+        // Unchanged value → both skip (proves the writes are real diffs, not unconditional).
+        handler.Update(ctx, new IntElement(2), new IntElement(2), null!);
+        Assert.Equal(1, aWrites);
+        Assert.Equal(1, bWrites);
+    }
+
     // ── #119: CollectionDiff scratch reuse stays correct across updates ──────
 
     [Fact]
@@ -242,8 +275,31 @@ public class PropEntryDiffDispatchTests
         Assert.Equal(new[] { 1, 2, 3 }, backing);
     }
 
+    // #119: two CollectionDiff entries of the SAME closed generic share the
+    // thread-static scratch sets, but each must diff with its OWN key comparer.
+    // Guards the s_scratchComparer sentinel that rebuilds the sets when a
+    // differing comparer runs (a leaked comparer would corrupt the diff).
+    [Fact]
+    public void CollectionDiff_PerEntryKeyComparer_NotLeakedAcrossSharedScratch()
+    {
+        // Run the parity entry first so the shared scratch is built with ParityComparer.
+        // Target [4], new items [2]: under parity 2 ≡ 4, so 4 stays and 2 is not added.
+        var parityBacking = new List<int> { 4 };
+        var parityEntry = MakeCollectionDiffEntry(_ => parityBacking, ParityComparer.Instance);
+        parityEntry.Update(null!, new ItemsElement(new[] { 4 }), new ItemsElement(new[] { 2 }));
+        Assert.Equal(new[] { 4 }, parityBacking);
+
+        // Now a DEFAULT-comparer entry. If the scratch leaked ParityComparer, this would
+        // wrongly keep [4]; with the per-entry rebuild it diffs with default equality:
+        // 2 ≠ 4, so 4 is removed and 2 is added.
+        var defaultBacking = new List<int> { 4 };
+        var defaultEntry = MakeCollectionDiffEntry(_ => defaultBacking);
+        defaultEntry.Update(null!, new ItemsElement(new[] { 4 }), new ItemsElement(new[] { 2 }));
+        Assert.Equal(new[] { 2 }, defaultBacking);
+    }
+
     private static CollectionDiffControlledPropEntry<ItemsElement, WinUI.CalendarView, DummyPayload, int, int, Action>
-        MakeCollectionDiffEntry(Func<WinUI.CalendarView, IList<int>> getVector)
+        MakeCollectionDiffEntry(Func<WinUI.CalendarView, IList<int>> getVector, IEqualityComparer<int>? keyComparer = null)
         => new(
             get: e => e.Items,
             getVector: getVector,
@@ -252,7 +308,8 @@ public class PropEntryDiffDispatchTests
             callbackPresent: e => null,
             trampoline: () => { },
             slotIsNull: p => true,
-            setSlot: (p, d) => { });
+            setSlot: (p, d) => { },
+            keyComparer: keyComparer);
 
     private static Array GetPrivateArray(object owner, string field)
     {
