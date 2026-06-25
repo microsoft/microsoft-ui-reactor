@@ -164,8 +164,13 @@ public static class UseMemoCellsExtensions
 
         // #59: compute each item's key exactly once and reuse it in both the reuse
         // scan and the snapshot-map build (keySelector was previously invoked twice
-        // per item per render).
-        var keys = count == 0 ? Array.Empty<TKey>() : new TKey[count];
+        // per item per render). The key buffer is carried on the hook state and
+        // reused across renders — grown only when the row count exceeds the prior
+        // capacity — so the steady-state full-reuse fast path below allocates nothing
+        // (the buffer is scratch: the authoritative key map is the stored Dictionary).
+        var keys = prev?.KeyBuffer;
+        if (keys is null || keys.Length < count)
+            keys = count == 0 ? Array.Empty<TKey>() : new TKey[count];
         for (int i = 0; i < count; i++)
             keys[i] = keySelector(items[i]);
 
@@ -220,7 +225,7 @@ public static class UseMemoCellsExtensions
             // items[i], so the key computed above lines up by index.
             snapshotKeyMap[keys[i]] = i;
         }
-        stateRef.Current = new MemoCellsByKeyState<T, TKey>(snapshotItems, children, SnapshotDeps(dependencies), snapshotKeyMap);
+        stateRef.Current = new MemoCellsByKeyState<T, TKey>(snapshotItems, children, SnapshotDeps(dependencies), snapshotKeyMap, keys);
         return children;
     }
 
@@ -342,7 +347,7 @@ public static class UseMemoCellsExtensions
 
     private sealed record MemoCellsState<T>(T[] Items, Element[] Children, object[] Deps);
 
-    private sealed record MemoCellsByKeyState<T, TKey>(T[] Items, Element[] Children, object[] Deps, Dictionary<TKey, int> KeyToIndex)
+    private sealed record MemoCellsByKeyState<T, TKey>(T[] Items, Element[] Children, object[] Deps, Dictionary<TKey, int> KeyToIndex, TKey[] KeyBuffer)
         where TKey : notnull;
 }
 

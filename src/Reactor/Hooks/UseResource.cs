@@ -69,8 +69,10 @@ public static class UseResourceExtensions
     // #57: monotonic counter for per-call-site hook ids — replaces a
     // Guid.NewGuid() (16 random bytes + 32-char format) per mounted resource hook
     // with a single interlocked increment. The id only needs process-unique
-    // identity for the cache-key prefix, which a counter satisfies.
-    private static int _hookIdCounter;
+    // identity for the cache-key prefix, which a counter satisfies. A long avoids
+    // any wrap-around (and resulting cache-key prefix collisions) over the process
+    // lifetime, at no cost over an int.
+    private static long _hookIdCounter;
 
     /// <summary>
     /// Runs an async fetch keyed on <paramref name="deps"/>, returning an
