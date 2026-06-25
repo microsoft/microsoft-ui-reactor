@@ -43,31 +43,56 @@ internal sealed class YogaStyle
     public float FlexShrink = float.NaN;
     public YogaValue FlexBasis = YogaValue.Auto;
 
-    // Edge-indexed arrays (indexed by YogaEdge: Left=0..All=8)
-    public readonly YogaValue[] Margin = CreateUndefinedEdges();
-    public readonly YogaValue[] Position = CreateUndefinedEdges();
-    public readonly YogaValue[] Padding = CreateUndefinedEdges();
-    public readonly YogaValue[] Border = CreateUndefinedEdges();
+    // Edge / gutter / dimension values are stored inline (see #143 InlineArray
+    // structs at the bottom of this file) instead of 8 separate YogaValue[]
+    // arrays. Exposed as ref-returning properties so existing indexer reads and
+    // writes (style.Margin[i], style.Position[i] = v) keep working unchanged.
+    private EdgeValues _margin;
+    private EdgeValues _position;
+    private EdgeValues _padding;
+    private EdgeValues _border;
+    private GutterValues _gap;            // Column=0, Row=1, All=2
+    private DimensionValues _dimensions;  // Width=0, Height=1
+    private DimensionValues _minDimensions;
+    private DimensionValues _maxDimensions;
 
-    // Gutter-indexed array (Column=0, Row=1, All=2)
-    public readonly YogaValue[] Gap = new YogaValue[3]
-    {
-        YogaValue.Undefined, YogaValue.Undefined, YogaValue.Undefined
-    };
+    // Edge-indexed values (indexed by YogaEdge: Left=0..All=8)
+    public ref EdgeValues Margin => ref _margin;
+    public ref EdgeValues Position => ref _position;
+    public ref EdgeValues Padding => ref _padding;
+    public ref EdgeValues Border => ref _border;
 
-    // Dimension-indexed arrays (Width=0, Height=1)
-    public readonly YogaValue[] Dimensions = new YogaValue[2]
+    // Gutter-indexed values (Column=0, Row=1, All=2)
+    public ref GutterValues Gap => ref _gap;
+
+    // Dimension-indexed values (Width=0, Height=1)
+    public ref DimensionValues Dimensions => ref _dimensions;
+    public ref DimensionValues MinDimensions => ref _minDimensions;
+    public ref DimensionValues MaxDimensions => ref _maxDimensions;
+
+    public YogaStyle()
     {
-        YogaValue.Auto, YogaValue.Auto
-    };
-    public readonly YogaValue[] MinDimensions = new YogaValue[2]
-    {
-        YogaValue.Undefined, YogaValue.Undefined
-    };
-    public readonly YogaValue[] MaxDimensions = new YogaValue[2]
-    {
-        YogaValue.Undefined, YogaValue.Undefined
-    };
+        // Explicitly seed the inline buffers to match the historic array
+        // initializers. default(YogaValue) is (0, Undefined) — NOT the
+        // (NaN, Undefined) sentinel — so leaving them zero-initialized would
+        // subtly change == and Resolve() behavior. Dimensions default to Auto.
+        for (int i = 0; i < 9; i++)
+        {
+            _margin[i] = YogaValue.Undefined;
+            _position[i] = YogaValue.Undefined;
+            _padding[i] = YogaValue.Undefined;
+            _border[i] = YogaValue.Undefined;
+        }
+        _gap[0] = YogaValue.Undefined;
+        _gap[1] = YogaValue.Undefined;
+        _gap[2] = YogaValue.Undefined;
+        _dimensions[0] = YogaValue.Auto;
+        _dimensions[1] = YogaValue.Auto;
+        _minDimensions[0] = YogaValue.Undefined;
+        _minDimensions[1] = YogaValue.Undefined;
+        _maxDimensions[0] = YogaValue.Undefined;
+        _maxDimensions[1] = YogaValue.Undefined;
+    }
 
     // Aspect ratio (NaN = undefined)
     private float _aspectRatio = float.NaN;
@@ -90,30 +115,22 @@ internal sealed class YogaStyle
         }
     }
 
-    private static YogaValue[] CreateUndefinedEdges()
-    {
-        var arr = new YogaValue[9];
-        for (int i = 0; i < 9; i++)
-            arr[i] = YogaValue.Undefined;
-        return arr;
-    }
-
     // ── Edge computation (resolves Start/End/Horizontal/Vertical/All fallbacks) ──
 
     public YogaValue ComputeColumnGap()
     {
-        var col = Gap[(int)YogaGutter.Column];
-        return col.IsDefined ? col : Gap[(int)YogaGutter.All];
+        var col = _gap[(int)YogaGutter.Column];
+        return col.IsDefined ? col : _gap[(int)YogaGutter.All];
     }
 
     public YogaValue ComputeRowGap()
     {
-        var row = Gap[(int)YogaGutter.Row];
-        return row.IsDefined ? row : Gap[(int)YogaGutter.All];
+        var row = _gap[(int)YogaGutter.Row];
+        return row.IsDefined ? row : _gap[(int)YogaGutter.All];
     }
 
     /// <summary>Resolve the left edge value considering Start/End/Left/Horizontal/All fallbacks.</summary>
-    private YogaValue ComputeLeftEdge(YogaValue[] edges, FlexLayoutDirection layoutDirection)
+    private static YogaValue ComputeLeftEdge(ReadOnlySpan<YogaValue> edges, FlexLayoutDirection layoutDirection)
     {
         if (layoutDirection == FlexLayoutDirection.LTR && edges[(int)YogaEdge.Start].IsDefined)
             return edges[(int)YogaEdge.Start];
@@ -126,14 +143,14 @@ internal sealed class YogaStyle
         return edges[(int)YogaEdge.All];
     }
 
-    private YogaValue ComputeTopEdge(YogaValue[] edges)
+    private static YogaValue ComputeTopEdge(ReadOnlySpan<YogaValue> edges)
     {
         if (edges[(int)YogaEdge.Top].IsDefined) return edges[(int)YogaEdge.Top];
         if (edges[(int)YogaEdge.Vertical].IsDefined) return edges[(int)YogaEdge.Vertical];
         return edges[(int)YogaEdge.All];
     }
 
-    private YogaValue ComputeRightEdge(YogaValue[] edges, FlexLayoutDirection layoutDirection)
+    private static YogaValue ComputeRightEdge(ReadOnlySpan<YogaValue> edges, FlexLayoutDirection layoutDirection)
     {
         if (layoutDirection == FlexLayoutDirection.LTR && edges[(int)YogaEdge.End].IsDefined)
             return edges[(int)YogaEdge.End];
@@ -146,14 +163,14 @@ internal sealed class YogaStyle
         return edges[(int)YogaEdge.All];
     }
 
-    private YogaValue ComputeBottomEdge(YogaValue[] edges)
+    private static YogaValue ComputeBottomEdge(ReadOnlySpan<YogaValue> edges)
     {
         if (edges[(int)YogaEdge.Bottom].IsDefined) return edges[(int)YogaEdge.Bottom];
         if (edges[(int)YogaEdge.Vertical].IsDefined) return edges[(int)YogaEdge.Vertical];
         return edges[(int)YogaEdge.All];
     }
 
-    private YogaValue ComputeEdge(YogaValue[] edges, YogaPhysicalEdge edge, FlexLayoutDirection direction)
+    private static YogaValue ComputeEdge(ReadOnlySpan<YogaValue> edges, YogaPhysicalEdge edge, FlexLayoutDirection direction)
     {
         return edge switch
         {
@@ -168,32 +185,32 @@ internal sealed class YogaStyle
     // ── Position queries ──
 
     public YogaValue ComputePosition(YogaPhysicalEdge edge, FlexLayoutDirection direction)
-        => ComputeEdge(Position, edge, direction);
+        => ComputeEdge(_position, edge, direction);
 
     public YogaValue ComputeMargin(YogaPhysicalEdge edge, FlexLayoutDirection direction)
-        => ComputeEdge(Margin, edge, direction);
+        => ComputeEdge(_margin, edge, direction);
 
     public YogaValue ComputePadding(YogaPhysicalEdge edge, FlexLayoutDirection direction)
-        => ComputeEdge(Padding, edge, direction);
+        => ComputeEdge(_padding, edge, direction);
 
     public YogaValue ComputeBorder(YogaPhysicalEdge edge, FlexLayoutDirection direction)
-        => ComputeEdge(Border, edge, direction);
+        => ComputeEdge(_border, edge, direction);
 
     // ── Inset queries ──
 
     public bool HorizontalInsetsDefined =>
-        Position[(int)YogaEdge.Left].IsDefined ||
-        Position[(int)YogaEdge.Right].IsDefined ||
-        Position[(int)YogaEdge.All].IsDefined ||
-        Position[(int)YogaEdge.Horizontal].IsDefined ||
-        Position[(int)YogaEdge.Start].IsDefined ||
-        Position[(int)YogaEdge.End].IsDefined;
+        _position[(int)YogaEdge.Left].IsDefined ||
+        _position[(int)YogaEdge.Right].IsDefined ||
+        _position[(int)YogaEdge.All].IsDefined ||
+        _position[(int)YogaEdge.Horizontal].IsDefined ||
+        _position[(int)YogaEdge.Start].IsDefined ||
+        _position[(int)YogaEdge.End].IsDefined;
 
     public bool VerticalInsetsDefined =>
-        Position[(int)YogaEdge.Top].IsDefined ||
-        Position[(int)YogaEdge.Bottom].IsDefined ||
-        Position[(int)YogaEdge.All].IsDefined ||
-        Position[(int)YogaEdge.Vertical].IsDefined;
+        _position[(int)YogaEdge.Top].IsDefined ||
+        _position[(int)YogaEdge.Bottom].IsDefined ||
+        _position[(int)YogaEdge.All].IsDefined ||
+        _position[(int)YogaEdge.Vertical].IsDefined;
 
     // ── Flex-direction-aware computed values ──
 
@@ -328,7 +345,7 @@ internal sealed class YogaStyle
 
     public float ResolvedMinDimension(FlexLayoutDirection direction, YogaDimension axis, float referenceLength, float ownerWidth)
     {
-        float value = MinDimensions[(int)axis].Resolve(referenceLength);
+        float value = _minDimensions[(int)axis].Resolve(referenceLength);
         if (BoxSizing == YogaBoxSizing.BorderBox)
             return value;
 
@@ -341,7 +358,7 @@ internal sealed class YogaStyle
 
     public float ResolvedMaxDimension(FlexLayoutDirection direction, YogaDimension axis, float referenceLength, float ownerWidth)
     {
-        float value = MaxDimensions[(int)axis].Resolve(referenceLength);
+        float value = _maxDimensions[(int)axis].Resolve(referenceLength);
         if (BoxSizing == YogaBoxSizing.BorderBox)
             return value;
 
@@ -350,4 +367,36 @@ internal sealed class YogaStyle
         float pb = YogaFloat.IsDefined(paddingAndBorder) ? paddingAndBorder : 0;
         return value + pb;
     }
+}
+
+// AI-HINT (perf #143): fixed-size inline value buffers embedded directly in the
+// YogaStyle heap object. These replace 8 separate YogaValue[] arrays per node —
+// for a ~200-node tree that removes ~1600 GC objects (a dominant Yoga memory
+// regression vs the C++ original, which uses inline members). InlineArray is a
+// first-class C# 12 feature: indexing is compiler-generated and fully AOT/trim
+// safe (no reflection, no Unsafe). Each struct has exactly one instance field,
+// as InlineArray requires. They are explicitly initialized in the YogaStyle
+// constructor (default(YogaValue) is (0, Undefined), not the (NaN, Undefined)
+// sentinel — and dimensions default to Auto), so == and Resolve() semantics
+// stay byte-identical to the previous arrays.
+
+/// <summary>Edge-indexed inline buffer (YogaEdge: Left=0 .. All=8).</summary>
+[global::System.Runtime.CompilerServices.InlineArray(9)]
+internal struct EdgeValues
+{
+    private YogaValue _element0;
+}
+
+/// <summary>Gutter-indexed inline buffer (Column=0, Row=1, All=2).</summary>
+[global::System.Runtime.CompilerServices.InlineArray(3)]
+internal struct GutterValues
+{
+    private YogaValue _element0;
+}
+
+/// <summary>Dimension-indexed inline buffer (Width=0, Height=1).</summary>
+[global::System.Runtime.CompilerServices.InlineArray(2)]
+internal struct DimensionValues
+{
+    private YogaValue _element0;
 }
