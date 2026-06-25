@@ -857,6 +857,9 @@ RenderContext.UseAnnounce() → AnnounceHandle
 RenderContext.UseBreakpoint(Window window, double minWidth) → bool
 RenderContext.UseBreakpoint(double minWidth) → bool
 RenderContext.UseCallback(Action callback, object[] dependencies) → Action
+RenderContext.UseCallback<T1, T2, T3>(Action callback, T1 d1, T2 d2, T3 d3) → Action
+RenderContext.UseCallback<T1, T2>(Action callback, T1 d1, T2 d2) → Action
+RenderContext.UseCallback<T1>(Action callback, T1 d1) → Action
 RenderContext.UseChildValidationContext() → ValueTuple<ValidationContext, ValidationContext>
 RenderContext.UseClosingGuard(Func<bool> canClose) → void
 RenderContext.UseCollection<T>(ObservableCollection<T> collection) → IReadOnlyList<T>
@@ -875,6 +878,12 @@ RenderContext.UseDockState() → DockPaneState
 RenderContext.UseDpi() → UInt32
 RenderContext.UseEffect(Action effect, object[] dependencies) → void
 RenderContext.UseEffect(Func<Action> effectWithCleanup, object[] dependencies) → void
+RenderContext.UseEffect<T1, T2, T3>(Action effect, T1 d1, T2 d2, T3 d3) → void
+RenderContext.UseEffect<T1, T2, T3>(Func<Action> effectWithCleanup, T1 d1, T2 d2, T3 d3) → void
+RenderContext.UseEffect<T1, T2>(Action effect, T1 d1, T2 d2) → void
+RenderContext.UseEffect<T1, T2>(Func<Action> effectWithCleanup, T1 d1, T2 d2) → void
+RenderContext.UseEffect<T1>(Action effect, T1 d1) → void
+RenderContext.UseEffect<T1>(Func<Action> effectWithCleanup, T1 d1) → void
 RenderContext.UseElementFocus(FocusState state = FocusState.Programmatic) → ValueTuple<ElementRef, Action>
 RenderContext.UseElementRef<T>() → ElementRef<T>
 RenderContext.UseFilePickerAsync(FilePickerOptions options) → Task<StorageFile>
@@ -890,6 +899,9 @@ RenderContext.UseIsActive() → bool
 RenderContext.UseIsActivePane() → bool
 RenderContext.UseIsCovered() → bool
 RenderContext.UseIsDarkTheme() → bool
+RenderContext.UseMemo<T, T1, T2, T3>(Func<T> factory, T1 d1, T2 d2, T3 d3) → T
+RenderContext.UseMemo<T, T1, T2>(Func<T> factory, T1 d1, T2 d2) → T
+RenderContext.UseMemo<T, T1>(Func<T> factory, T1 d1) → T
 RenderContext.UseMemo<T>(Func<T> factory, object[] dependencies) → T
 RenderContext.UseMemoCells<T>(IReadOnlyList<T> items, Func<T, int, Element> builder, object[] dependencies) → Element[]
 RenderContext.UseMemoCellsByIndex<T>(IReadOnlyList<T> items, IReadOnlyList<int> changedIndices, Func<T, int, Element> builder, object[] dependencies) → Element[]
@@ -5700,6 +5712,9 @@ new()
 UseBreakpoint(Window window, double minWidth) → bool
 UseBreakpoint(double minWidth) → bool
 UseCallback(Action callback, object[] dependencies) → Action
+UseCallback<T1, T2, T3>(Action callback, T1 d1, T2 d2, T3 d3) → Action
+UseCallback<T1, T2>(Action callback, T1 d1, T2 d2) → Action
+UseCallback<T1>(Action callback, T1 d1) → Action
 UseClosingGuard(Func<bool> canClose) → void
 UseCollection<T>(ObservableCollection<T> collection) → IReadOnlyList<T>
 UseColorScheme() → ColorScheme
@@ -5710,6 +5725,12 @@ UseDisplays() → IReadOnlyList<DisplayInfo>
 UseDpi() → UInt32
 UseEffect(Action effect, object[] dependencies) → void
 UseEffect(Func<Action> effectWithCleanup, object[] dependencies) → void
+UseEffect<T1, T2, T3>(Action effect, T1 d1, T2 d2, T3 d3) → void
+UseEffect<T1, T2, T3>(Func<Action> effectWithCleanup, T1 d1, T2 d2, T3 d3) → void
+UseEffect<T1, T2>(Action effect, T1 d1, T2 d2) → void
+UseEffect<T1, T2>(Func<Action> effectWithCleanup, T1 d1, T2 d2) → void
+UseEffect<T1>(Action effect, T1 d1) → void
+UseEffect<T1>(Func<Action> effectWithCleanup, T1 d1) → void
 UseFilePickerAsync(FilePickerOptions options) → Task<StorageFile>
 UseFolderPickerAsync(FolderPickerOptions options) → Task<StorageFolder>
 UseHighContrast() → bool
@@ -5718,6 +5739,9 @@ UseIntl() → IntlAccessor
 UseIsActive() → bool
 UseIsCovered() → bool
 UseIsDarkTheme() → bool
+UseMemo<T, T1, T2, T3>(Func<T> factory, T1 d1, T2 d2, T3 d3) → T
+UseMemo<T, T1, T2>(Func<T> factory, T1 d1, T2 d2) → T
+UseMemo<T, T1>(Func<T> factory, T1 d1) → T
 UseMemo<T>(Func<T> factory, object[] dependencies) → T
 UseNavigation<TRoute>() → NavigationHandle<TRoute>
 UseNavigation<TRoute>(TRoute initial) → NavigationHandle<TRoute>

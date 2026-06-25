@@ -81,6 +81,25 @@ public static class UseMemoCellsExtensions
         var prev = stateRef.Current;
         var depsChanged = prev is null || !DepsEqual(prev.Deps, dependencies);
         var count = items.Count;
+
+        // #47: full-reuse fast path. When deps are unchanged and every item still
+        // compares equal (in order, same count) to the previous snapshot, nothing
+        // changed — return the prior children array directly and skip the
+        // children[] + SnapshotItems + SnapshotDeps + state-record allocations
+        // entirely. This is the dominant steady-state case for a grid whose
+        // visible rows didn't change between renders.
+        if (!depsChanged && prev!.Items.Length == count)
+        {
+            var prevSnapshot = prev.Items;
+            bool allReused = true;
+            for (int i = 0; i < count; i++)
+            {
+                if (!Equals(items[i], prevSnapshot[i])) { allReused = false; break; }
+            }
+            if (allReused)
+                return prev.Children;
+        }
+
         var children = new Element[count];
 
         if (depsChanged)
@@ -142,6 +161,29 @@ public static class UseMemoCellsExtensions
         var prev = stateRef.Current;
         var depsChanged = prev is null || !DepsEqual(prev.Deps, dependencies);
         var count = items.Count;
+
+        // #59: compute each item's key exactly once and reuse it in both the reuse
+        // scan and the snapshot-map build (keySelector was previously invoked twice
+        // per item per render).
+        var keys = count == 0 ? Array.Empty<TKey>() : new TKey[count];
+        for (int i = 0; i < count; i++)
+            keys[i] = keySelector(items[i]);
+
+        // #47: full-reuse fast path — deps unchanged, same length, every item equal
+        // in order. Returns the prior children and skips the children[] + Dictionary
+        // rebuild + snapshot allocations.
+        if (!depsChanged && prev!.Items.Length == count)
+        {
+            var prevSnapshot = prev.Items;
+            bool allReused = true;
+            for (int i = 0; i < count; i++)
+            {
+                if (!Equals(items[i], prevSnapshot[i])) { allReused = false; break; }
+            }
+            if (allReused)
+                return prev.Children;
+        }
+
         var children = new Element[count];
         var keyToIndex = depsChanged ? null : prev!.KeyToIndex;
 
@@ -149,7 +191,7 @@ public static class UseMemoCellsExtensions
         {
             var item = items[i];
             if (keyToIndex is not null
-                && keyToIndex.TryGetValue(keySelector(item), out var prevIdx)
+                && keyToIndex.TryGetValue(keys[i], out var prevIdx)
                 && Equals(item, prev!.Items[prevIdx]))
             {
                 children[i] = prev!.Children[prevIdx];
@@ -164,8 +206,9 @@ public static class UseMemoCellsExtensions
         var snapshotKeyMap = new Dictionary<TKey, int>(count);
         for (int i = 0; i < count; i++)
         {
-            // Last-write-wins on duplicate keys.
-            snapshotKeyMap[keySelector(snapshotItems[i])] = i;
+            // Last-write-wins on duplicate keys. snapshotItems[i] is a 1:1 copy of
+            // items[i], so the key computed above lines up by index.
+            snapshotKeyMap[keys[i]] = i;
         }
         stateRef.Current = new MemoCellsByKeyState<T, TKey>(snapshotItems, children, SnapshotDeps(dependencies), snapshotKeyMap);
         return children;
@@ -212,6 +255,13 @@ public static class UseMemoCellsExtensions
         var prev = stateRef.Current;
         var depsChanged = prev is null || !DepsEqual(prev.Deps, dependencies);
         var count = items.Count;
+
+        // #47: nothing-changed fast path — deps unchanged, no named changed
+        // indices, and the count matches. Return the prior children directly and
+        // skip the children[] + snapshot + state-record allocations.
+        if (!depsChanged && changedIndices.Count == 0 && prev!.Children.Length == count)
+            return prev.Children;
+
         var children = new Element[count];
 
         if (depsChanged || prev!.Children.Length != count)

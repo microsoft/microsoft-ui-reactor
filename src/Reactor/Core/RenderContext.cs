@@ -10,7 +10,9 @@ namespace Microsoft.UI.Reactor.Core;
 /// </summary>
 public sealed class RenderContext
 {
-    private readonly List<HookState> _hooks = new();
+    // #50: seed a small capacity so the common 1-8 hook component doesn't churn
+    // through the List's 0→4→8 doubling reallocations at mount.
+    private readonly List<HookState> _hooks = new(8);
     private int _hookIndex;
     private Action? _requestRerender;
     private ContextScope? _contextScope;
@@ -137,43 +139,52 @@ public sealed class RenderContext
 
         T current;
         if (hook.ThreadSafe)
-            lock (hook.Lock) { current = hook.Value; }
+            lock (hook.Lock!) { current = hook.Value; }
         else
             current = hook.Value;
 
         // <snippet:set-state>
-        void Setter(T newValue)
+        // #43: build the setter once and cache it on the hook slot. `this` and
+        // `currentIndex` are both stable across renders, so the cached delegate
+        // is observably identical to re-creating it every render — minus the
+        // per-render display-class + Action<T> allocation.
+        if (hook.CachedDelegate is not Action<T> setter)
         {
-            var h = (ValueHookState<T>)_hooks[currentIndex];
-            bool changed;
-            if (h.ThreadSafe)
+            void Setter(T newValue)
             {
-                lock (h.Lock)
+                var h = (ValueHookState<T>)_hooks[currentIndex];
+                bool changed;
+                if (h.ThreadSafe)
                 {
+                    lock (h.Lock!)
+                    {
+                        changed = !EqualityComparer<T>.Default.Equals(h.Value, newValue);
+                        if (changed) h.Value = newValue;
+                    }
+                    if (Diagnostics.ReactorEventSource.Log.IsEnabled(
+                            global::System.Diagnostics.Tracing.EventLevel.Verbose,
+                            Diagnostics.ReactorEventSource.Keywords.State))
+                        Diagnostics.ReactorEventSource.Log.StateChange("UseState", typeof(T).Name, changed);
+                    if (changed) _requestRerender?.Invoke();
+                }
+                else
+                {
+                    if (MarshalIfOffUIThread("UseState", () => Setter(newValue))) return;
                     changed = !EqualityComparer<T>.Default.Equals(h.Value, newValue);
                     if (changed) h.Value = newValue;
+                    if (Diagnostics.ReactorEventSource.Log.IsEnabled(
+                            global::System.Diagnostics.Tracing.EventLevel.Verbose,
+                            Diagnostics.ReactorEventSource.Keywords.State))
+                        Diagnostics.ReactorEventSource.Log.StateChange("UseState", typeof(T).Name, changed);
+                    if (changed) _requestRerender?.Invoke();
                 }
-                if (Diagnostics.ReactorEventSource.Log.IsEnabled(
-                        global::System.Diagnostics.Tracing.EventLevel.Verbose,
-                        Diagnostics.ReactorEventSource.Keywords.State))
-                    Diagnostics.ReactorEventSource.Log.StateChange("UseState", typeof(T).Name, changed);
-                if (changed) _requestRerender?.Invoke();
             }
-            else
-            {
-                if (MarshalIfOffUIThread("UseState", () => Setter(newValue))) return;
-                changed = !EqualityComparer<T>.Default.Equals(h.Value, newValue);
-                if (changed) h.Value = newValue;
-                if (Diagnostics.ReactorEventSource.Log.IsEnabled(
-                        global::System.Diagnostics.Tracing.EventLevel.Verbose,
-                        Diagnostics.ReactorEventSource.Keywords.State))
-                    Diagnostics.ReactorEventSource.Log.StateChange("UseState", typeof(T).Name, changed);
-                if (changed) _requestRerender?.Invoke();
-            }
+            setter = Setter;
+            hook.CachedDelegate = setter;
         }
         // </snippet:set-state>
 
-        return (current, Setter);
+        return (current, setter);
     }
 
     /// <summary>
@@ -201,45 +212,52 @@ public sealed class RenderContext
 
         T current;
         if (hook.ThreadSafe)
-            lock (hook.Lock) { current = hook.Value; }
+            lock (hook.Lock!) { current = hook.Value; }
         else
             current = hook.Value;
 
-        void Updater(Func<T, T> reducer)
+        // #44: the updater takes its reducer as an argument and otherwise closes
+        // only over `this` + `currentIndex` (both stable), so cache it once.
+        if (hook.CachedDelegate is not Action<Func<T, T>> updater)
         {
-            var h = (ValueHookState<T>)_hooks[currentIndex];
-            bool changed;
-            if (h.ThreadSafe)
+            void Updater(Func<T, T> reducer)
             {
-                lock (h.Lock)
+                var h = (ValueHookState<T>)_hooks[currentIndex];
+                bool changed;
+                if (h.ThreadSafe)
                 {
+                    lock (h.Lock!)
+                    {
+                        var prev = h.Value;
+                        var next = reducer(prev);
+                        changed = !EqualityComparer<T>.Default.Equals(prev, next);
+                        if (changed) h.Value = next;
+                    }
+                    if (Diagnostics.ReactorEventSource.Log.IsEnabled(
+                            global::System.Diagnostics.Tracing.EventLevel.Verbose,
+                            Diagnostics.ReactorEventSource.Keywords.State))
+                        Diagnostics.ReactorEventSource.Log.StateChange("UseReducer", typeof(T).Name, changed);
+                    if (changed) _requestRerender?.Invoke();
+                }
+                else
+                {
+                    if (MarshalIfOffUIThread("UseReducer", () => Updater(reducer))) return;
                     var prev = h.Value;
                     var next = reducer(prev);
                     changed = !EqualityComparer<T>.Default.Equals(prev, next);
                     if (changed) h.Value = next;
+                    if (Diagnostics.ReactorEventSource.Log.IsEnabled(
+                            global::System.Diagnostics.Tracing.EventLevel.Verbose,
+                            Diagnostics.ReactorEventSource.Keywords.State))
+                        Diagnostics.ReactorEventSource.Log.StateChange("UseReducer", typeof(T).Name, changed);
+                    if (changed) _requestRerender?.Invoke();
                 }
-                if (Diagnostics.ReactorEventSource.Log.IsEnabled(
-                        global::System.Diagnostics.Tracing.EventLevel.Verbose,
-                        Diagnostics.ReactorEventSource.Keywords.State))
-                    Diagnostics.ReactorEventSource.Log.StateChange("UseReducer", typeof(T).Name, changed);
-                if (changed) _requestRerender?.Invoke();
             }
-            else
-            {
-                if (MarshalIfOffUIThread("UseReducer", () => Updater(reducer))) return;
-                var prev = h.Value;
-                var next = reducer(prev);
-                changed = !EqualityComparer<T>.Default.Equals(prev, next);
-                if (changed) h.Value = next;
-                if (Diagnostics.ReactorEventSource.Log.IsEnabled(
-                        global::System.Diagnostics.Tracing.EventLevel.Verbose,
-                        Diagnostics.ReactorEventSource.Keywords.State))
-                    Diagnostics.ReactorEventSource.Log.StateChange("UseReducer", typeof(T).Name, changed);
-                if (changed) _requestRerender?.Invoke();
-            }
+            updater = Updater;
+            hook.CachedDelegate = updater;
         }
 
-        return (current, Updater);
+        return (current, updater);
     }
 
     /// <summary>
@@ -269,39 +287,51 @@ public sealed class RenderContext
 
         TState current;
         if (hook.ThreadSafe)
-            lock (hook.Lock) { current = hook.Value; }
+            lock (hook.Lock!) { current = hook.Value; }
         else
             current = hook.Value;
 
-        void Dispatch(TAction action)
+        // #44: the dispatch closure also captures the per-render `reducer`. Stash
+        // the latest reducer on the hook slot and have the cached dispatch read it
+        // back, so the returned dispatch is stable across renders yet always runs
+        // the current reducer (the prior code returned a fresh dispatch bound to
+        // that render's reducer — observably the same for the latest dispatch).
+        hook.Reducer = reducer;
+        if (hook.CachedDelegate is not Action<TAction> dispatch)
         {
-            var h = (ValueHookState<TState>)_hooks[currentIndex];
-            if (h.ThreadSafe)
+            void Dispatch(TAction action)
             {
-                bool changed;
-                lock (h.Lock)
+                var h = (ValueHookState<TState>)_hooks[currentIndex];
+                var currentReducer = (Func<TState, TAction, TState>)h.Reducer!;
+                if (h.ThreadSafe)
                 {
+                    bool changed;
+                    lock (h.Lock!)
+                    {
+                        var prev = h.Value;
+                        var next = currentReducer(prev, action);
+                        changed = !EqualityComparer<TState>.Default.Equals(prev, next);
+                        if (changed) h.Value = next;
+                    }
+                    if (changed) _requestRerender?.Invoke();
+                }
+                else
+                {
+                    if (MarshalIfOffUIThread("UseReducer", () => Dispatch(action))) return;
                     var prev = h.Value;
-                    var next = reducer(prev, action);
-                    changed = !EqualityComparer<TState>.Default.Equals(prev, next);
-                    if (changed) h.Value = next;
-                }
-                if (changed) _requestRerender?.Invoke();
-            }
-            else
-            {
-                if (MarshalIfOffUIThread("UseReducer", () => Dispatch(action))) return;
-                var prev = h.Value;
-                var next = reducer(prev, action);
-                if (!EqualityComparer<TState>.Default.Equals(prev, next))
-                {
-                    h.Value = next;
-                    _requestRerender?.Invoke();
+                    var next = currentReducer(prev, action);
+                    if (!EqualityComparer<TState>.Default.Equals(prev, next))
+                    {
+                        h.Value = next;
+                        _requestRerender?.Invoke();
+                    }
                 }
             }
+            dispatch = Dispatch;
+            hook.CachedDelegate = dispatch;
         }
 
-        return (current, Dispatch);
+        return (current, dispatch);
     }
 
     /// <summary>
@@ -312,25 +342,11 @@ public sealed class RenderContext
     // <snippet:effect-schedule>
     public void UseEffect(Action effect, params object[] dependencies)
     {
-        if (_hookIndex >= _hooks.Count)
-        {
-            _hooks.Add(new EffectHookState { Dependencies = null, Effect = effect });
-        }
-
-        if (_hooks[_hookIndex] is not EffectHookState hook)
-            throw new HookOrderException(
-                $"Hook at index {_hookIndex} is {_hooks[_hookIndex].GetType().Name}, expected EffectHookState. " +
-                "Hooks must be called in the same order every render.");
-        _hookIndex++;
-
+        var hook = AcquireEffectSlot();
+        // #48: the params array is freshly minted at the call site and never
+        // aliased, so store it directly instead of copying it again via ToArray().
         if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, dependencies))
-        {
-            hook.PendingCleanup = hook.Cleanup;
-            hook.Cleanup = null;
-            hook.Dependencies = dependencies.ToArray();
-            hook.Effect = effect;
-            hook.Pending = true;
-        }
+            ScheduleEffect(hook, effect, null, dependencies);
     }
     // </snippet:effect-schedule>
 
@@ -339,25 +355,80 @@ public sealed class RenderContext
     /// </summary>
     public void UseEffect(Func<Action> effectWithCleanup, params object[] dependencies)
     {
+        var hook = AcquireEffectSlot();
+        if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, dependencies))
+            ScheduleEffect(hook, null, effectWithCleanup, dependencies);
+    }
+
+    // #45: arity 1-3 overloads so the common "a couple of deps" call avoids the
+    // params-array allocation AND the value-type boxing on the steady-state
+    // (deps-unchanged) path. Storage stays object[] for hot-reload / snapshot /
+    // DepsEqual compatibility; the array is only allocated when deps actually
+    // change. Comparison unboxes the stored value (no new allocation) and uses
+    // the typed EqualityComparer so the incoming dep is never boxed.
+    public void UseEffect<T1>(Action effect, T1 d1)
+    {
+        var hook = AcquireEffectSlot();
+        if (!DepsEqual1(hook.Dependencies, d1)) ScheduleEffect(hook, effect, null, PackDeps(d1));
+    }
+
+    public void UseEffect<T1, T2>(Action effect, T1 d1, T2 d2)
+    {
+        var hook = AcquireEffectSlot();
+        if (!DepsEqual2(hook.Dependencies, d1, d2)) ScheduleEffect(hook, effect, null, PackDeps(d1, d2));
+    }
+
+    public void UseEffect<T1, T2, T3>(Action effect, T1 d1, T2 d2, T3 d3)
+    {
+        var hook = AcquireEffectSlot();
+        if (!DepsEqual3(hook.Dependencies, d1, d2, d3)) ScheduleEffect(hook, effect, null, PackDeps(d1, d2, d3));
+    }
+
+    public void UseEffect<T1>(Func<Action> effectWithCleanup, T1 d1)
+    {
+        var hook = AcquireEffectSlot();
+        if (!DepsEqual1(hook.Dependencies, d1)) ScheduleEffect(hook, null, effectWithCleanup, PackDeps(d1));
+    }
+
+    public void UseEffect<T1, T2>(Func<Action> effectWithCleanup, T1 d1, T2 d2)
+    {
+        var hook = AcquireEffectSlot();
+        if (!DepsEqual2(hook.Dependencies, d1, d2)) ScheduleEffect(hook, null, effectWithCleanup, PackDeps(d1, d2));
+    }
+
+    public void UseEffect<T1, T2, T3>(Func<Action> effectWithCleanup, T1 d1, T2 d2, T3 d3)
+    {
+        var hook = AcquireEffectSlot();
+        if (!DepsEqual3(hook.Dependencies, d1, d2, d3)) ScheduleEffect(hook, null, effectWithCleanup, PackDeps(d1, d2, d3));
+    }
+
+    /// <summary>
+    /// Runs <paramref name="resource"/>'s <see cref="IDisposable.Dispose"/> once on
+    /// unmount (mount-once effect with a stable teardown). Equivalent to
+    /// <c>UseEffect(() =&gt; () =&gt; resource.Dispose())</c> but allocates nothing per
+    /// render — the resource is passed by reference and the cleanup delegate is
+    /// captured a single time on first mount (#56). Internal helper used by the
+    /// resource hooks; not part of the public hook surface.
+    /// </summary>
+    internal void UseDisposableEffect(IDisposable resource)
+    {
         if (_hookIndex >= _hooks.Count)
         {
-            _hooks.Add(new EffectHookState { Dependencies = null });
+            // Schedule once: empty (non-null) deps never compare unequal again, so
+            // the mount effect runs exactly once and its cleanup is resource.Dispose.
+            _hooks.Add(new EffectHookState
+            {
+                Dependencies = Array.Empty<object>(),
+                EffectWithCleanup = () => resource.Dispose,
+                Pending = true,
+            });
         }
 
-        if (_hooks[_hookIndex] is not EffectHookState hook)
+        if (_hooks[_hookIndex] is not EffectHookState)
             throw new HookOrderException(
                 $"Hook at index {_hookIndex} is {_hooks[_hookIndex].GetType().Name}, expected EffectHookState. " +
                 "Hooks must be called in the same order every render.");
         _hookIndex++;
-
-        if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, dependencies))
-        {
-            hook.PendingCleanup = hook.Cleanup;
-            hook.Cleanup = null;
-            hook.Dependencies = dependencies.ToArray();
-            hook.EffectWithCleanup = effectWithCleanup;
-            hook.Pending = true;
-        }
     }
 
     /// <summary>
@@ -365,23 +436,47 @@ public sealed class RenderContext
     /// </summary>
     public T UseMemo<T>(Func<T> factory, params object[] dependencies)
     {
-        if (_hookIndex >= _hooks.Count)
-        {
-            _hooks.Add(new MemoHookState<T> { Dependencies = null });
-        }
-
-        if (_hooks[_hookIndex] is not MemoHookState<T> hook)
-            throw new HookOrderException(
-                $"Hook at index {_hookIndex} is {_hooks[_hookIndex].GetType().Name}, expected MemoHookState<{typeof(T).Name}>. " +
-                "Hooks must be called in the same order every render.");
-        _hookIndex++;
-
+        var hook = AcquireMemoSlot<T>();
         if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, dependencies))
         {
             hook.Value = factory();
-            hook.Dependencies = dependencies.ToArray();
+            hook.Dependencies = dependencies; // #48: store the fresh params array directly
         }
+        return hook.Value;
+    }
 
+    // #46: arity overloads mirror UseEffect — no params array / boxing on the
+    // deps-unchanged path; factory only runs (and array only allocates) on change.
+    public T UseMemo<T, T1>(Func<T> factory, T1 d1)
+    {
+        var hook = AcquireMemoSlot<T>();
+        if (!DepsEqual1(hook.Dependencies, d1))
+        {
+            hook.Value = factory();
+            hook.Dependencies = PackDeps(d1);
+        }
+        return hook.Value;
+    }
+
+    public T UseMemo<T, T1, T2>(Func<T> factory, T1 d1, T2 d2)
+    {
+        var hook = AcquireMemoSlot<T>();
+        if (!DepsEqual2(hook.Dependencies, d1, d2))
+        {
+            hook.Value = factory();
+            hook.Dependencies = PackDeps(d1, d2);
+        }
+        return hook.Value;
+    }
+
+    public T UseMemo<T, T1, T2, T3>(Func<T> factory, T1 d1, T2 d2, T3 d3)
+    {
+        var hook = AcquireMemoSlot<T>();
+        if (!DepsEqual3(hook.Dependencies, d1, d2, d3))
+        {
+            hook.Value = factory();
+            hook.Dependencies = PackDeps(d1, d2, d3);
+        }
         return hook.Value;
     }
 
@@ -390,8 +485,111 @@ public sealed class RenderContext
     /// </summary>
     public Action UseCallback(Action callback, params object[] dependencies)
     {
-        return UseMemo(() => callback, dependencies);
+        // #46: store the callback directly in the memo slot instead of routing
+        // through UseMemo(() => callback, ...), whose `() => callback` factory
+        // lambda allocated on every render before the deps short-circuit. The slot
+        // is still MemoHookState<Action> so hook-order checks / devtools labels are
+        // unchanged.
+        var hook = AcquireMemoSlot<Action>();
+        if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, dependencies))
+        {
+            hook.Value = callback;
+            hook.Dependencies = dependencies;
+        }
+        return hook.Value;
     }
+
+    public Action UseCallback<T1>(Action callback, T1 d1)
+    {
+        var hook = AcquireMemoSlot<Action>();
+        if (!DepsEqual1(hook.Dependencies, d1))
+        {
+            hook.Value = callback;
+            hook.Dependencies = PackDeps(d1);
+        }
+        return hook.Value;
+    }
+
+    public Action UseCallback<T1, T2>(Action callback, T1 d1, T2 d2)
+    {
+        var hook = AcquireMemoSlot<Action>();
+        if (!DepsEqual2(hook.Dependencies, d1, d2))
+        {
+            hook.Value = callback;
+            hook.Dependencies = PackDeps(d1, d2);
+        }
+        return hook.Value;
+    }
+
+    public Action UseCallback<T1, T2, T3>(Action callback, T1 d1, T2 d2, T3 d3)
+    {
+        var hook = AcquireMemoSlot<Action>();
+        if (!DepsEqual3(hook.Dependencies, d1, d2, d3))
+        {
+            hook.Value = callback;
+            hook.Dependencies = PackDeps(d1, d2, d3);
+        }
+        return hook.Value;
+    }
+
+    // ── Hook-slot + deps helpers (shared by the effect / memo / callback hooks) ──
+
+    private EffectHookState AcquireEffectSlot()
+    {
+        if (_hookIndex >= _hooks.Count)
+            _hooks.Add(new EffectHookState { Dependencies = null });
+
+        if (_hooks[_hookIndex] is not EffectHookState hook)
+            throw new HookOrderException(
+                $"Hook at index {_hookIndex} is {_hooks[_hookIndex].GetType().Name}, expected EffectHookState. " +
+                "Hooks must be called in the same order every render.");
+        _hookIndex++;
+        return hook;
+    }
+
+    private MemoHookState<T> AcquireMemoSlot<T>()
+    {
+        if (_hookIndex >= _hooks.Count)
+            _hooks.Add(new MemoHookState<T> { Dependencies = null });
+
+        if (_hooks[_hookIndex] is not MemoHookState<T> hook)
+            throw new HookOrderException(
+                $"Hook at index {_hookIndex} is {_hooks[_hookIndex].GetType().Name}, expected MemoHookState<{typeof(T).Name}>. " +
+                "Hooks must be called in the same order every render.");
+        _hookIndex++;
+        return hook;
+    }
+
+    private static void ScheduleEffect(EffectHookState hook, Action? effect, Func<Action>? withCleanup, object[] dependencies)
+    {
+        hook.PendingCleanup = hook.Cleanup;
+        hook.Cleanup = null;
+        hook.Dependencies = dependencies;
+        hook.Effect = effect;
+        hook.EffectWithCleanup = withCleanup;
+        hook.Pending = true;
+    }
+
+    private static object[] PackDeps<T1>(T1 d1) => new object[] { d1! };
+    private static object[] PackDeps<T1, T2>(T1 d1, T2 d2) => new object[] { d1!, d2! };
+    private static object[] PackDeps<T1, T2, T3>(T1 d1, T2 d2, T3 d3) => new object[] { d1!, d2!, d3! };
+
+    // Returns true when the stored deps already match — unboxing the stored value
+    // (no allocation) and comparing through the typed comparer so the incoming dep
+    // is never boxed. A null/wrong-arity stored array counts as "changed".
+    private static bool DepsEqual1<T1>(object[]? prev, T1 d1)
+        => prev is { Length: 1 } && EqualityComparer<T1>.Default.Equals((T1)prev[0], d1);
+
+    private static bool DepsEqual2<T1, T2>(object[]? prev, T1 d1, T2 d2)
+        => prev is { Length: 2 }
+           && EqualityComparer<T1>.Default.Equals((T1)prev[0], d1)
+           && EqualityComparer<T2>.Default.Equals((T2)prev[1], d2);
+
+    private static bool DepsEqual3<T1, T2, T3>(object[]? prev, T1 d1, T2 d2, T3 d3)
+        => prev is { Length: 3 }
+           && EqualityComparer<T1>.Default.Equals((T1)prev[0], d1)
+           && EqualityComparer<T2>.Default.Equals((T2)prev[1], d2)
+           && EqualityComparer<T3>.Default.Equals((T3)prev[2], d3);
 
     /// <summary>
     /// Returns a mutable ref object that persists across renders.
@@ -468,18 +666,23 @@ public sealed class RenderContext
 
         T current = hook.Value;
 
-        void Setter(T newValue)
+        if (hook.CachedSetter is not Action<T> setter)
         {
-            if (MarshalIfOffUIThread("UsePersisted", () => Setter(newValue))) return;
-            var h = (PersistedHookState<T>)_hooks[currentIndex];
-            if (!EqualityComparer<T>.Default.Equals(h.Value, newValue))
+            void Setter(T newValue)
             {
-                h.Value = newValue;
-                _requestRerender?.Invoke();
+                if (MarshalIfOffUIThread("UsePersisted", () => Setter(newValue))) return;
+                var h = (PersistedHookState<T>)_hooks[currentIndex];
+                if (!EqualityComparer<T>.Default.Equals(h.Value, newValue))
+                {
+                    h.Value = newValue;
+                    _requestRerender?.Invoke();
+                }
             }
+            setter = Setter;
+            hook.CachedSetter = setter;
         }
 
-        return (current, Setter);
+        return (current, setter);
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -728,15 +931,68 @@ public sealed class RenderContext
     /// <summary>
     /// Enumerates ContextHookState entries for memo change detection (Phase 3).
     /// </summary>
-    internal IEnumerable<ContextHookState> ContextHooks
+    /// <remarks>
+    /// #51: returns a struct enumerable (not an iterator block) so the per-render
+    /// change-detection walk in the reconciler doesn't heap-allocate an enumerator.
+    /// The sole consumer (<c>Reconciler.HasConsumedContextChanged</c>) only foreach-es,
+    /// which binds to <see cref="ContextHookEnumerable.GetEnumerator"/> by duck typing.
+    /// </remarks>
+    internal ContextHookEnumerable ContextHooks => new(_hooks);
+
+    /// <summary>Allocation-free enumerable over the <see cref="ContextHookState"/> slots.</summary>
+    /// <remarks>
+    /// Implements <see cref="IEnumerable{T}"/> so LINQ (e.g. tests calling
+    /// <c>ContextHooks.ToList()</c>) still works, but the hot-path
+    /// <c>foreach</c> in the reconciler binds to the public struct
+    /// <see cref="GetEnumerator"/> below and never boxes.
+    /// </remarks>
+    internal readonly struct ContextHookEnumerable : IEnumerable<ContextHookState>
     {
-        get
+        private readonly List<HookState> _hooks;
+        internal ContextHookEnumerable(List<HookState> hooks) => _hooks = hooks;
+
+        public Enumerator GetEnumerator() => new(_hooks);
+
+        IEnumerator<ContextHookState> IEnumerable<ContextHookState>.GetEnumerator() => GetEnumerator();
+        global::System.Collections.IEnumerator global::System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+
+        /// <summary>Struct enumerator — skips non-context slots without allocating.</summary>
+        internal struct Enumerator : IEnumerator<ContextHookState>
         {
-            for (int i = 0; i < _hooks.Count; i++)
+            private readonly List<HookState> _hooks;
+            private int _index;
+            private ContextHookState? _current;
+
+            internal Enumerator(List<HookState> hooks)
             {
-                if (_hooks[i] is ContextHookState ctx)
-                    yield return ctx;
+                _hooks = hooks;
+                _index = 0;
+                _current = null;
             }
+
+            public readonly ContextHookState Current => _current!;
+            readonly object global::System.Collections.IEnumerator.Current => _current!;
+
+            public bool MoveNext()
+            {
+                while (_index < _hooks.Count)
+                {
+                    if (_hooks[_index++] is ContextHookState ctx)
+                    {
+                        _current = ctx;
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            public void Reset()
+            {
+                _index = 0;
+                _current = null;
+            }
+
+            public readonly void Dispose() { }
         }
     }
 
@@ -944,10 +1200,22 @@ public sealed class RenderContext
         var asyncAction = command.ExecuteAsync;
         var syncAction = command.Execute;
         int debounceMs = command.DebounceMs;
+        object depA = (object?)command.ExecuteAsync ?? NullDep;
+        object depB = (object?)command.Execute ?? NullDep;
 
-        var wrappedExecute = UseMemo<Action>(() => () =>
-            DispatchCommand(asyncAction, syncAction, debounceMs, guardRef, debounceRef, setIsExecuting, setIsDebouncing),
-            (object?)command.ExecuteAsync ?? NullDep, (object?)command.Execute ?? NullDep, debounceMs);
+        // #52: inline the memo slot so the `() => () => DispatchCommand(...)`
+        // factory closure (which captures 7 locals) isn't allocated on every
+        // render before the deps short-circuit. The slot is still
+        // MemoHookState<Action>, so the hook shape and devtools label are
+        // unchanged; the inner dispatch closure is built only when deps change.
+        var memo = AcquireMemoSlot<Action>();
+        if (!DepsEqual3(memo.Dependencies, depA, depB, debounceMs))
+        {
+            memo.Value = () =>
+                DispatchCommand(asyncAction, syncAction, debounceMs, guardRef, debounceRef, setIsExecuting, setIsDebouncing);
+            memo.Dependencies = PackDeps(depA, depB, debounceMs);
+        }
+        var wrappedExecute = memo.Value;
 
         // Branch on VALUES, never on hook calls: a pure sync, non-debounced, not-yet-wrapped
         // command is returned unchanged (preserves identity / Assert.Same and today's behavior).
@@ -977,13 +1245,22 @@ public sealed class RenderContext
         var asyncAction = command.ExecuteAsync;
         var syncAction = command.Execute;
         int debounceMs = command.DebounceMs;
+        object depA = (object?)command.ExecuteAsync ?? NullDep;
+        object depB = (object?)command.Execute ?? NullDep;
 
-        var wrappedExecute = UseMemo<Action<T>>(() => (arg) =>
-            DispatchCommand(
-                asyncAction is null ? null : () => asyncAction(arg),
-                syncAction is null ? null : () => syncAction(arg),
-                debounceMs, guardRef, debounceRef, setIsExecuting, setIsDebouncing),
-            (object?)command.ExecuteAsync ?? NullDep, (object?)command.Execute ?? NullDep, debounceMs);
+        // #52: inline memo slot (see UseCommand(Command)); avoids the per-render
+        // factory + wrapper closure allocation while keeping the MemoHookState<Action<T>> shape.
+        var memo = AcquireMemoSlot<Action<T>>();
+        if (!DepsEqual3(memo.Dependencies, depA, depB, debounceMs))
+        {
+            memo.Value = (arg) =>
+                DispatchCommand(
+                    asyncAction is null ? null : () => asyncAction(arg),
+                    syncAction is null ? null : () => syncAction(arg),
+                    debounceMs, guardRef, debounceRef, setIsExecuting, setIsDebouncing);
+            memo.Dependencies = PackDeps(depA, depB, debounceMs);
+        }
+        var wrappedExecute = memo.Value;
 
         if (!CommandNeedsWrapping(command.ExecuteAsync, command.DebounceMs, command.DebounceHandled))
             return command;
@@ -1970,11 +2247,24 @@ public sealed class RenderContext
     {
         public T Value;
         public readonly bool ThreadSafe;
-        public readonly object Lock = new();
+        // #42: only the threadSafe path locks, so allocate the monitor object
+        // lazily. The default (threadSafe:false) leaves this null — N rows × M
+        // hooks of unused lock objects were pure gen0/gen2 churn otherwise.
+        public readonly object? Lock;
+        // #43/#44: the setter / updater / dispatch delegate for this slot. Hook
+        // call order is stable (rules of hooks) and the hook instance is stable
+        // across renders (hot-reload mutates Value in place), so the delegate can
+        // be built once and reused instead of re-allocating a closure per render.
+        public Delegate? CachedDelegate;
+        // #44: latest reducer for the UseReducer<TState,TAction> dispatch path,
+        // refreshed each render so the cached dispatch always runs the current
+        // reducer (matches the prior per-render-dispatch behaviour and React).
+        public object? Reducer;
         public ValueHookState(T value, bool threadSafe = false)
         {
             Value = value;
             ThreadSafe = threadSafe;
+            Lock = threadSafe ? new object() : null;
         }
     }
 
@@ -2022,6 +2312,10 @@ public sealed class RenderContext
     private class PersistedHookState<T> : PersistedHookStateBase
     {
         public T Value;
+        // #53: the setter is built once on first render and reused, so a
+        // component holding a persisted value doesn't mint a fresh display-class +
+        // Action<T> every render.
+        public Action<T>? CachedSetter;
         public PersistedHookState(T value) => Value = value;
         public override void SaveToCache()
         {

@@ -70,7 +70,9 @@ public static class UseInfiniteResourceExtensions
         state.SetFetcher(fetchPage);
         state.CursorFromPageIndex = cursorFromPageIndex;
 
-        ctx.UseEffect(() => () => state.Dispose());
+        // #56: run-once-on-unmount cleanup without the per-render double-lambda
+        // allocation (see UseResource / UseDisposableEffect).
+        ctx.UseDisposableEffect(state);
 
         // Deps-change restart.
         string newKeyPrefix = BuildKeyPrefix(hookIdRef.Current!, deps, options);
