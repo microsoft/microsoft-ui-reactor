@@ -434,13 +434,23 @@ internal static class ChildReconciler
         }
         finally
         {
-            // Clear + return on every exit (including exceptions) so pooled
-            // buffers never leak references or stale markers across frames.
+            // Return every pooled buffer on all exits (including exceptions).
+            // The dict pool clears entries on return (ReturnKeyIndexDict), so
+            // element-key references never leak across frames. The bool buffers
+            // hold no references and have their used range fully (re)initialized
+            // before any read — `matched` via the Array.Clear-on-rent above and
+            // `inLis` via ComputeLISInto's own leading clear — so they return
+            // dirty (clearArray:false) and skip an avoidable O(rented-capacity)
+            // wipe on this hot path. `newToOld` (int) is likewise overwritten in
+            // full for [0,newMidLen) before each read, so it too returns without
+            // clearing. (Reference-typed pooled buffers elsewhere — e.g. the
+            // string[]/ReactorRow[] in KeyedListDiff — DO clear, to avoid pinning
+            // objects across frames.)
             ReturnKeyIndexDict(oldKeyMap);
             ReturnKeyIndexDict(keyToIndex);
             intPool.Return(newToOld);
-            boolPool.Return(matched, clearArray: true);
-            boolPool.Return(inLis, clearArray: true);
+            boolPool.Return(matched);
+            boolPool.Return(inLis);
         }
     }
 
