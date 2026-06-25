@@ -273,6 +273,26 @@ public class ReconcilerInteropPerfTests
         scope.Pop(1);
     }
 
+    private static readonly Context<int?> NullableCountCtx = new(defaultValue: null);
+
+    [Fact]
+    public void CurrentValueEquals_NullableValueType_BoxedUnderlying_MatchesExactly()
+    {
+        // Guards the boxed-Nullable<T> edge: a non-null int? boxes to a boxed underlying
+        // int, and the value-type `is T` guard (T = int?) still matches it, so an
+        // UNCHANGED nullable context value is not spuriously treated as changed.
+        var scope = new ContextScope();
+        scope.Push(new Dictionary<ContextBase, object?> { [NullableCountCtx] = 5 });
+
+        Assert.True(NullableCountCtx.CurrentValueEquals(scope, 5));      // unchanged (boxed int 5)
+        Assert.False(NullableCountCtx.CurrentValueEquals(scope, 6));     // changed
+        Assert.False(NullableCountCtx.CurrentValueEquals(scope, null));  // 5 vs null
+        scope.Pop(1);
+
+        // Default (null) current vs a null record is unchanged.
+        Assert.True(NullableCountCtx.CurrentValueEquals(scope, null));
+    }
+
     // ════════════════════════════════════════════════════════════════
     //  #15 — component rerender delegate caching
     //  (and #20 — unmount tombstone refuses a late self-trigger)
