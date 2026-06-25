@@ -1134,7 +1134,12 @@ public sealed partial class Reconciler
         finally
         {
             realized.Clear();
-            _realizedScratch ??= realized;
+            // perf #22 follow-up: don't pin an oversized backing array from a one-off
+            // large refresh — only retain the scratch at a modest capacity; otherwise
+            // let it be collected and re-allocate (sized to the viewport) next call.
+            const int realizedScratchRetainCap = 256;
+            if (realized.Capacity <= realizedScratchRetainCap)
+                _realizedScratch ??= realized;
         }
     }
 

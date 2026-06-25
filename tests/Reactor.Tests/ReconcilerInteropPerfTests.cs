@@ -180,6 +180,22 @@ public class ReconcilerInteropPerfTests
     }
 
     [Fact]
+    public void Scanner_EmitsFindings_InStableWalkOrder()
+    {
+        // #62-66 refactored the GetChildren-once walk, sibling cache and single-pass
+        // BuildContext. Scanner_ReScan_ProducesIdenticalFindings sorts before comparing,
+        // so it cannot catch an emission-ORDER regression. Pin the natural walk order:
+        // per-element findings emit depth-first during Walk (icon button, then image),
+        // and the tree-wide tab-index-gap check emits afterward in the post-walk phase.
+        var ids = AccessibilityScanner.Scan(BuildScanTree())
+            .Select(f => f.Id)
+            .Where(id => id is "A11Y_001" or "A11Y_002" or "A11Y_007")
+            .ToArray();
+
+        Assert.Equal(new[] { "A11Y_001", "A11Y_002", "A11Y_007" }, ids);
+    }
+
+    [Fact]
     public void Scanner_IconButton_StillCarriesChildTypeContext()
     {
         // Exercises the single-pass BuildContext child extraction (#64).
@@ -259,16 +275,81 @@ public class ReconcilerInteropPerfTests
         scope.Pop(1);
     }
 
+    // A reference type whose object.Equals is NON-reflexive (returns false even for the
+    // same instance). object.Equals(x, x) short-circuits via ReferenceEquals and returns
+    // true, so the context compare must keep that fast-path, NOT call x.Equals(x).
+    private sealed class NonReflexive
+    {
+        public override bool Equals(object? obj) => false;
+        public override int GetHashCode() => 0;
+    }
+
+    private static readonly Context<NonReflexive> NonReflexiveCtx = new(new NonReflexive());
+
+    [Fact]
+    public void CurrentValueEquals_ReferenceType_SameInstance_UsesReferenceEqualityFastPath()
+    {
+        var x = new NonReflexive();
+        var scope = new ContextScope();
+        scope.Push(new Dictionary<ContextBase, object?> { [NonReflexiveCtx] = x });
+
+        // Same instance recorded and current: object.Equals(x, x) == true via the
+        // ReferenceEquals short-circuit even though x.Equals(x) == false. Match it exactly.
+        Assert.Equal(object.Equals(x, x), NonReflexiveCtx.CurrentValueEquals(scope, x));
+        Assert.True(NonReflexiveCtx.CurrentValueEquals(scope, x));
+
+        scope.Pop(1);
+    }
+
     [Fact]
     public void CurrentValueEquals_ValueType_TypeMismatch_ReturnsFalseWithoutThrowing()
     {
         // A same-slot context-type swap can leave a boxed value of a DIFFERENT type as
         // the recorded LastValue. The old object.Equals returned false there (it never
-        // threw); the guarded unbox must do the same — not an InvalidCastException.
+        // threw); current.Equals(lastBoxed) — the Equals(object) override — does the same
+        // (int.Equals(object) returns false for a non-int), not an InvalidCastException.
         var scope = new ContextScope();
         scope.Push(new Dictionary<ContextBase, object?> { [CountCtx] = 7 });
 
         Assert.False(CountCtx.CurrentValueEquals(scope, "not-an-int"));
+
+        scope.Pop(1);
+    }
+
+    // A struct whose IEquatable<T>.Equals INTENTIONALLY disagrees with its object.Equals
+    // override: object.Equals compares Value AND Tag; IEquatable<T> ignores Tag. The context
+    // change-detection must follow object.Equals (the documented pre-#25 semantics), NOT
+    // IEquatable<T> — otherwise EqualityComparer<T>.Default would mask a real Tag change and
+    // skip a required rerender.
+    private readonly struct SplitEq : global::System.IEquatable<SplitEq>
+    {
+        public readonly int Value;
+        public readonly int Tag;
+        public SplitEq(int value, int tag) { Value = value; Tag = tag; }
+
+        public bool Equals(SplitEq other) => Value == other.Value;                 // ignores Tag
+        public override bool Equals(object? obj) => obj is SplitEq o && o.Value == Value && o.Tag == Tag;
+        public override int GetHashCode() => Value;
+    }
+
+    private static readonly Context<SplitEq> SplitEqCtx = new(default);
+
+    [Fact]
+    public void CurrentValueEquals_ValueIEquatable_UsesObjectEqualsNotIEquatable()
+    {
+        // Current value = (Value 5, Tag 1).
+        var scope = new ContextScope();
+        scope.Push(new Dictionary<ContextBase, object?> { [SplitEqCtx] = new SplitEq(5, 1) });
+
+        // Same Value, DIFFERENT Tag: object.Equals => CHANGED. EqualityComparer<T>.Default
+        // (IEquatable<T>) would wrongly say UNCHANGED. Assert we match object.Equals exactly.
+        Assert.Equal(
+            object.Equals(new SplitEq(5, 1), (object)new SplitEq(5, 2)),
+            SplitEqCtx.CurrentValueEquals(scope, new SplitEq(5, 2)));
+        Assert.False(SplitEqCtx.CurrentValueEquals(scope, new SplitEq(5, 2)));
+
+        // Fully equal (Value AND Tag) is unchanged.
+        Assert.True(SplitEqCtx.CurrentValueEquals(scope, new SplitEq(5, 1)));
 
         scope.Pop(1);
     }
@@ -279,8 +360,9 @@ public class ReconcilerInteropPerfTests
     public void CurrentValueEquals_NullableValueType_BoxedUnderlying_MatchesExactly()
     {
         // Guards the boxed-Nullable<T> edge: a non-null int? boxes to a boxed underlying
-        // int, and the value-type `is T` guard (T = int?) still matches it, so an
-        // UNCHANGED nullable context value is not spuriously treated as changed.
+        // int, and Nullable<int>.Equals(object) (the constrained-call target) unwraps and
+        // compares it, so an UNCHANGED nullable context value is not spuriously treated as
+        // changed.
         var scope = new ContextScope();
         scope.Push(new Dictionary<ContextBase, object?> { [NullableCountCtx] = 5 });
 

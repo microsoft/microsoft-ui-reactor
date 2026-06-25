@@ -129,6 +129,12 @@ public sealed partial class Reconciler : IDisposable
             sb.Append('|').Append(pairs[i].Key).Append('=').Append(pairs[i].Value.ResourceKey);
 
         Array.Clear(pairs, 0, count); // drop refs so the scratch doesn't pin strings
+        // perf #24 follow-up: a one-off element with an unusually large binding set
+        // would otherwise pin an oversized scratch array for the thread's lifetime —
+        // release it so the next call re-allocates a small buffer.
+        const int cacheKeyScratchRetainCap = 64;
+        if (pairs.Length > cacheKeyScratchRetainCap)
+            t_cacheKeyPairs = null;
         return sb.ToString();
     }
 
