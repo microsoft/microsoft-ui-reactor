@@ -5270,6 +5270,7 @@ GetHashCode() → int
 ToString() → string
 
 ### class PropEntry<TElement, TControl>
+bool Subscribes { get; }
 EnsureSubscribed(ReactorBinding<TElement> binding, TControl ctrl, TElement el) → void
 Mount(TControl ctrl, TElement el) → void
 Mount(ref MountContext ctx, TControl ctrl, TElement el) → void
