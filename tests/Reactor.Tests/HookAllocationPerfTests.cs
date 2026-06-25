@@ -168,6 +168,59 @@ public class HookAllocationPerfTests
         Assert.Same(r1.Execute, r2.Execute);
     }
 
+    [Fact]
+    public void Hook_Delegates_Stay_Reference_Stable_Across_Many_Renders_DiffSkipPath()
+    {
+        // The Element-layer DIFF skip-path (PR #665) skips a cell's update only when
+        // its event-handler delegates are REFERENCE-STABLE across renders (presence-only
+        // comparison was unsafe). That makes UseState/UseReducer setters and UseCallback
+        // (deps unchanged) load-bearing for DIFF, not merely an allocation win: a
+        // component passing these as handlers must receive the SAME delegate instance on
+        // every steady-state render so the diff can prove the handler is unchanged. This
+        // guards that contract across many renders, with fresh reducer/callback lambdas
+        // supplied each render (as a real component would).
+        var ctx = NewCtx();
+        Action handler = () => { };
+
+        var (_, set0) = ctx.UseState(0);
+        var (_, update0) = ctx.UseReducer(0);
+        var (_, dispatch0) = ctx.UseReducer<int, string>((s, a) => s, 0);
+        var cb0 = ctx.UseCallback(handler, "stable-dep");
+
+        for (int i = 0; i < 50; i++)
+        {
+            Rerender(ctx);
+            var (_, set) = ctx.UseState(0);
+            var (_, update) = ctx.UseReducer(0);
+            var (_, dispatch) = ctx.UseReducer<int, string>((s, a) => s, 0);
+            // Pass a FRESH, distinct handler lambda each render (capturing i) — exactly
+            // what a real component does. UseCallback must ignore it and return the
+            // render-0 instance while the dep is unchanged, proving it truly caches
+            // rather than echoing back whatever was passed in.
+            int captured = i;
+            var cb = ctx.UseCallback(() => { _ = captured; }, "stable-dep");
+
+            Assert.Same(set0, set);
+            Assert.Same(update0, update);
+            Assert.Same(dispatch0, dispatch);
+            Assert.Same(cb0, cb);
+        }
+
+        // Precision: when a callback dep actually changes, the skip-path must NOT skip —
+        // UseCallback hands back the fresh instance so the diff re-applies the handler.
+        // Hook order/count is preserved (all four hooks, in order) so only the dep varies,
+        // and a distinct handler instance is supplied so the change is observable.
+        Rerender(ctx);
+        ctx.UseState(0);
+        ctx.UseReducer(0);
+        ctx.UseReducer<int, string>((s, a) => s, 0);
+        int sentinel = -1;
+        Action newHandler = () => { _ = sentinel; };
+        var cbChanged = ctx.UseCallback(newHandler, "new-dep");
+        Assert.NotSame(cb0, cbChanged);
+        Assert.Same(newHandler, cbChanged);
+    }
+
     // ════════════════════════════════════════════════════════════════
     //  #42 — thread-safe lock retained; default path leaves it null
     // ════════════════════════════════════════════════════════════════
