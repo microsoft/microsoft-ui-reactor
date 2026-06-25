@@ -94,7 +94,8 @@ public abstract class PropEntry<TElement, TControl>
     /// to <c>false</c> (the base <see cref="EnsureSubscribed"/> is a no-op);
     /// every entry type that overrides <see cref="EnsureSubscribed"/> overrides
     /// this to <c>true</c>. A reflection-backed test
-    /// (<c>PropEntrySubscribesDiscriminatorTests</c>) guards that invariant.</summary>
+    /// (<c>PropEntryDiffDispatchTests.Subscribes_OverrideMatches_EnsureSubscribedOverride_ForEveryEntry</c>)
+    /// guards that invariant.</summary>
     public virtual bool Subscribes => false;
 }
 
@@ -591,6 +592,14 @@ internal sealed class ReferenceListPropEntry<TElement, TControl, TTarget> : Prop
     // (FrameworkElements) between calls.
     [ThreadStatic] private static List<Microsoft.UI.Reactor.Input.ElementRef>? s_scratchCells;
 
+    // Lazily allocate the per-thread scratch through a static helper so the
+    // [ThreadStatic] write doesn't happen inside the instance EnsureSubscribed body
+    // (CodeQL cs/static-field-written-by-instance) while keeping the per-thread
+    // reuse. The list is always empty on return: freshly allocated, or drained by
+    // the previous call's finally below.
+    private static List<Microsoft.UI.Reactor.Input.ElementRef> RentScratchCells()
+        => s_scratchCells ??= new List<Microsoft.UI.Reactor.Input.ElementRef>();
+
     public ReferenceListPropEntry(
         Func<TElement, IReadOnlyList<Microsoft.UI.Reactor.Input.ElementRef<TTarget>>?> get,
         Action<TControl, IReadOnlyList<TTarget>> apply,
@@ -619,8 +628,7 @@ internal sealed class ReferenceListPropEntry<TElement, TControl, TTarget> : Prop
         TElement el)
     {
         var refs = _get(el);
-        var cells = s_scratchCells ??= new List<Microsoft.UI.Reactor.Input.ElementRef>();
-        cells.Clear();
+        var cells = RentScratchCells();
         try
         {
             if (refs is not null)
@@ -1246,6 +1254,26 @@ internal sealed class CollectionDiffControlledPropEntry<TElement, TControl, TPay
     [ThreadStatic] private static HashSet<TKey>? s_scratchPresentKeys;
     [ThreadStatic] private static IEqualityComparer<TKey>? s_scratchComparer;
 
+    // Rent the per-thread scratch sets through a static helper so the
+    // [ThreadStatic] writes don't happen inside the instance Update body (CodeQL
+    // cs/static-field-written-by-instance) while keeping the per-thread reuse.
+    // Rebuilds both sets when the active entry's key comparer differs from the one
+    // the current sets were created with, so a custom-comparer entry never diffs
+    // with another entry's comparer (#119). Both sets are empty on return: freshly
+    // allocated, or drained by the previous call's finally.
+    private static (HashSet<TKey> NewKeys, HashSet<TKey> PresentKeys) RentScratchSets(IEqualityComparer<TKey> keyComparer)
+    {
+        var newKeys = s_scratchNewKeys;
+        var presentKeys = s_scratchPresentKeys;
+        if (newKeys is null || presentKeys is null || !ReferenceEquals(s_scratchComparer, keyComparer))
+        {
+            newKeys = s_scratchNewKeys = new HashSet<TKey>(keyComparer);
+            presentKeys = s_scratchPresentKeys = new HashSet<TKey>(keyComparer);
+            s_scratchComparer = keyComparer;
+        }
+        return (newKeys, presentKeys);
+    }
+
     public CollectionDiffControlledPropEntry(
         Func<TElement, IReadOnlyList<TItem>> get,
         Func<TControl, IList<TItem>> getVector,
@@ -1286,17 +1314,9 @@ internal sealed class CollectionDiffControlledPropEntry<TElement, TControl, TPay
         // Fast path: same items, no work.
         if (ReferenceEquals(oldItems, newItems)) return;
 
-        // Acquire the per-thread scratch sets. Rebuild them when the active entry's
-        // key comparer differs from the one the current sets were created with, so a
-        // custom-comparer entry never diffs with another entry's comparer (#119).
-        var newKeys = s_scratchNewKeys;
-        var presentKeys = s_scratchPresentKeys;
-        if (newKeys is null || presentKeys is null || !ReferenceEquals(s_scratchComparer, _keyComparer))
-        {
-            newKeys = s_scratchNewKeys = new HashSet<TKey>(_keyComparer);
-            presentKeys = s_scratchPresentKeys = new HashSet<TKey>(_keyComparer);
-            s_scratchComparer = _keyComparer;
-        }
+        // Rent the per-thread scratch sets (rebuilt if this entry's key comparer
+        // differs from the one they were created with — see RentScratchSets).
+        var (newKeys, presentKeys) = RentScratchSets(_keyComparer);
 
         try
         {
