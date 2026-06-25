@@ -170,15 +170,25 @@ public static class UseMemoCellsExtensions
             keys[i] = keySelector(items[i]);
 
         // #47: full-reuse fast path — deps unchanged, same length, every item equal
-        // in order. Returns the prior children and skips the children[] + Dictionary
-        // rebuild + snapshot allocations.
+        // in order AND every key still maps to its own position. Returns the prior
+        // children and skips the children[] + Dictionary rebuild + snapshot
+        // allocations. The key check (via the existing KeyToIndex map, zero-alloc)
+        // keeps this provably equivalent to the slow path's key-identity reuse even
+        // when keySelector is not a pure function of the item value.
         if (!depsChanged && prev!.Items.Length == count)
         {
             var prevSnapshot = prev.Items;
+            var prevKeyMap = prev.KeyToIndex;
             bool allReused = true;
             for (int i = 0; i < count; i++)
             {
-                if (!Equals(items[i], prevSnapshot[i])) { allReused = false; break; }
+                if (!Equals(items[i], prevSnapshot[i])
+                    || !prevKeyMap.TryGetValue(keys[i], out var prevPos)
+                    || prevPos != i)
+                {
+                    allReused = false;
+                    break;
+                }
             }
             if (allReused)
                 return prev.Children;

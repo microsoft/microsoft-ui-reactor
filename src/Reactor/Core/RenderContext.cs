@@ -366,36 +366,82 @@ public sealed class RenderContext
     // DepsEqual compatibility; the array is only allocated when deps actually
     // change. Comparison unboxes the stored value (no new allocation) and uses
     // the typed EqualityComparer so the incoming dep is never boxed.
+    /// <summary>
+    /// Single-dependency <c>UseEffect</c> overload that avoids the
+    /// <c>params object[]</c> allocation (and value-type boxing) on the
+    /// deps-unchanged path. Semantically identical to the params overload called
+    /// with one dependency: the effect re-runs only when <paramref name="d1"/>
+    /// changes.
+    /// </summary>
     public void UseEffect<T1>(Action effect, T1 d1)
     {
         var hook = AcquireEffectSlot();
+        // A lone dependency that is itself an object[] at runtime (e.g. a covariant
+        // string[]) bound to the params overload before this generic existed and was
+        // compared element-wise — preserve that so an array re-allocated each render
+        // with equal contents does not spuriously re-run the effect.
+        if (AsParamsArrayDep(d1) is { } arr)
+        {
+            if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, arr))
+                ScheduleEffect(hook, effect, null, arr);
+            return;
+        }
         if (!DepsEqual1(hook.Dependencies, d1)) ScheduleEffect(hook, effect, null, PackDeps(d1));
     }
 
+    /// <summary>
+    /// Two-dependency <c>UseEffect</c> overload that avoids the
+    /// <c>params object[]</c> allocation on the deps-unchanged path. Re-runs when
+    /// either dependency changes.
+    /// </summary>
     public void UseEffect<T1, T2>(Action effect, T1 d1, T2 d2)
     {
         var hook = AcquireEffectSlot();
         if (!DepsEqual2(hook.Dependencies, d1, d2)) ScheduleEffect(hook, effect, null, PackDeps(d1, d2));
     }
 
+    /// <summary>
+    /// Three-dependency <c>UseEffect</c> overload that avoids the
+    /// <c>params object[]</c> allocation on the deps-unchanged path. Re-runs when
+    /// any dependency changes.
+    /// </summary>
     public void UseEffect<T1, T2, T3>(Action effect, T1 d1, T2 d2, T3 d3)
     {
         var hook = AcquireEffectSlot();
         if (!DepsEqual3(hook.Dependencies, d1, d2, d3)) ScheduleEffect(hook, effect, null, PackDeps(d1, d2, d3));
     }
 
+    /// <summary>
+    /// Single-dependency cleanup-flavor <c>UseEffect</c> overload that avoids the
+    /// <c>params object[]</c> allocation on the deps-unchanged path. Semantically
+    /// identical to the params overload called with one dependency.
+    /// </summary>
     public void UseEffect<T1>(Func<Action> effectWithCleanup, T1 d1)
     {
         var hook = AcquireEffectSlot();
+        if (AsParamsArrayDep(d1) is { } arr)
+        {
+            if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, arr))
+                ScheduleEffect(hook, null, effectWithCleanup, arr);
+            return;
+        }
         if (!DepsEqual1(hook.Dependencies, d1)) ScheduleEffect(hook, null, effectWithCleanup, PackDeps(d1));
     }
 
+    /// <summary>
+    /// Two-dependency cleanup-flavor <c>UseEffect</c> overload that avoids the
+    /// <c>params object[]</c> allocation on the deps-unchanged path.
+    /// </summary>
     public void UseEffect<T1, T2>(Func<Action> effectWithCleanup, T1 d1, T2 d2)
     {
         var hook = AcquireEffectSlot();
         if (!DepsEqual2(hook.Dependencies, d1, d2)) ScheduleEffect(hook, null, effectWithCleanup, PackDeps(d1, d2));
     }
 
+    /// <summary>
+    /// Three-dependency cleanup-flavor <c>UseEffect</c> overload that avoids the
+    /// <c>params object[]</c> allocation on the deps-unchanged path.
+    /// </summary>
     public void UseEffect<T1, T2, T3>(Func<Action> effectWithCleanup, T1 d1, T2 d2, T3 d3)
     {
         var hook = AcquireEffectSlot();
@@ -447,9 +493,25 @@ public sealed class RenderContext
 
     // #46: arity overloads mirror UseEffect — no params array / boxing on the
     // deps-unchanged path; factory only runs (and array only allocates) on change.
+
+    /// <summary>
+    /// Single-dependency <c>UseMemo</c> overload that avoids the
+    /// <c>params object[]</c> allocation (and value-type boxing) on the
+    /// deps-unchanged path. Recomputes only when <paramref name="d1"/> changes.
+    /// </summary>
     public T UseMemo<T, T1>(Func<T> factory, T1 d1)
     {
         var hook = AcquireMemoSlot<T>();
+        // See UseEffect<T1>: a lone object[]-typed dep keeps element-wise semantics.
+        if (AsParamsArrayDep(d1) is { } arr)
+        {
+            if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, arr))
+            {
+                hook.Value = factory();
+                hook.Dependencies = arr;
+            }
+            return hook.Value;
+        }
         if (!DepsEqual1(hook.Dependencies, d1))
         {
             hook.Value = factory();
@@ -458,6 +520,10 @@ public sealed class RenderContext
         return hook.Value;
     }
 
+    /// <summary>
+    /// Two-dependency <c>UseMemo</c> overload that avoids the
+    /// <c>params object[]</c> allocation on the deps-unchanged path.
+    /// </summary>
     public T UseMemo<T, T1, T2>(Func<T> factory, T1 d1, T2 d2)
     {
         var hook = AcquireMemoSlot<T>();
@@ -469,6 +535,10 @@ public sealed class RenderContext
         return hook.Value;
     }
 
+    /// <summary>
+    /// Three-dependency <c>UseMemo</c> overload that avoids the
+    /// <c>params object[]</c> allocation on the deps-unchanged path.
+    /// </summary>
     public T UseMemo<T, T1, T2, T3>(Func<T> factory, T1 d1, T2 d2, T3 d3)
     {
         var hook = AcquireMemoSlot<T>();
@@ -499,9 +569,25 @@ public sealed class RenderContext
         return hook.Value;
     }
 
+    /// <summary>
+    /// Single-dependency <c>UseCallback</c> overload that avoids the
+    /// <c>params object[]</c> allocation (and value-type boxing) on the
+    /// deps-unchanged path. Returns a stable reference until <paramref name="d1"/>
+    /// changes.
+    /// </summary>
     public Action UseCallback<T1>(Action callback, T1 d1)
     {
         var hook = AcquireMemoSlot<Action>();
+        // See UseEffect<T1>: a lone object[]-typed dep keeps element-wise semantics.
+        if (AsParamsArrayDep(d1) is { } arr)
+        {
+            if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, arr))
+            {
+                hook.Value = callback;
+                hook.Dependencies = arr;
+            }
+            return hook.Value;
+        }
         if (!DepsEqual1(hook.Dependencies, d1))
         {
             hook.Value = callback;
@@ -510,6 +596,10 @@ public sealed class RenderContext
         return hook.Value;
     }
 
+    /// <summary>
+    /// Two-dependency <c>UseCallback</c> overload that avoids the
+    /// <c>params object[]</c> allocation on the deps-unchanged path.
+    /// </summary>
     public Action UseCallback<T1, T2>(Action callback, T1 d1, T2 d2)
     {
         var hook = AcquireMemoSlot<Action>();
@@ -521,6 +611,10 @@ public sealed class RenderContext
         return hook.Value;
     }
 
+    /// <summary>
+    /// Three-dependency <c>UseCallback</c> overload that avoids the
+    /// <c>params object[]</c> allocation on the deps-unchanged path.
+    /// </summary>
     public Action UseCallback<T1, T2, T3>(Action callback, T1 d1, T2 d2, T3 d3)
     {
         var hook = AcquireMemoSlot<Action>();
@@ -573,6 +667,17 @@ public sealed class RenderContext
     private static object[] PackDeps<T1>(T1 d1) => new object[] { d1! };
     private static object[] PackDeps<T1, T2>(T1 d1, T2 d2) => new object[] { d1!, d2! };
     private static object[] PackDeps<T1, T2, T3>(T1 d1, T2 d2, T3 d3) => new object[] { d1!, d2!, d3! };
+
+    // A lone arity-1 dependency that is itself an object[] at runtime — e.g. a
+    // covariant string[]/Element[] — historically bound to the params overload and
+    // was compared element-wise. The generic arity-1 overload would otherwise wrap
+    // the whole array as ONE reference-compared dep, so an array re-allocated each
+    // render with equal contents would spuriously re-run. Detect that exact case and
+    // route it back through the element-wise path. typeof(T1).IsValueType is a
+    // JIT-time constant for value-type instantiations, so value-type deps fold this
+    // to null and never box; int[] (not assignable to object[]) returns null too.
+    private static object[]? AsParamsArrayDep<T1>(T1 d1)
+        => !typeof(T1).IsValueType && d1 is object[] arr ? arr : null;
 
     // Returns true when the stored deps already match — unboxing the stored value
     // (no allocation) and comparing through the typed comparer so the incoming dep
