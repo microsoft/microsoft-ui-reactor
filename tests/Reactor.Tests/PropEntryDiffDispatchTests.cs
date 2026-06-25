@@ -298,6 +298,69 @@ public class PropEntryDiffDispatchTests
         Assert.Equal(new[] { 2 }, defaultBacking);
     }
 
+    // C2: if a lambda throws mid-diff, the finally (ReturnScratchSets) must still
+    // drain the shared scratch so the NEXT diff on this thread starts clean — a
+    // leaked newKeys set would let removed items wrongly survive.
+    [Fact]
+    public void CollectionDiff_ScratchDrainedAfterException_NoStaleKeyLeak()
+    {
+        var backing = new List<int> { 1, 2, 3 };
+        int getVectorCalls = 0;
+        var entry = MakeCollectionDiffEntry(_ =>
+        {
+            getVectorCalls++;
+            // Throw on the first diff, AFTER newKeys {1,2} has been populated.
+            if (getVectorCalls == 1) throw new InvalidOperationException("boom");
+            return backing;
+        });
+
+        // Update 1: builds newKeys {1,2}, then getVector throws → finally must drain.
+        Assert.Throws<InvalidOperationException>(() =>
+            entry.Update(null!, new ItemsElement(new[] { 1, 2 }), new ItemsElement(new[] { 1, 2 })));
+
+        // Update 2: vec [1,2,3] -> [3]. If {1,2} leaked into newKeys, keys 1 and 2 would
+        // be treated as still-wanted and never removed (wrong result [1,2,3]); a clean
+        // drain removes them, leaving [3].
+        entry.Update(null!, new ItemsElement(new[] { 1, 2, 3 }), new ItemsElement(new[] { 3 }));
+        Assert.Equal(new[] { 3 }, backing);
+    }
+
+    // FINDING A (reentrancy): a CollectionDiff mutation can echo synchronously and
+    // re-enter Update on the same thread + closed generic while the outer diff still
+    // holds the shared scratch. The in-use guard must hand the nested call FRESH sets
+    // so it neither pollutes nor drains the outer's populated newKeys.
+    [Fact]
+    public void CollectionDiff_NestedReentrantUpdate_DoesNotCorruptOuterDiff()
+    {
+        var outerVec = new RecordingList(new[] { 1, 2, 3 });
+        var innerBacking = new List<int> { 10, 20 };
+        var innerEntry = MakeCollectionDiffEntry(_ => innerBacking);
+
+        bool reentered = false;
+        var outerEntry = MakeCollectionDiffEntry(_ =>
+        {
+            if (!reentered)
+            {
+                reentered = true;
+                // Nested diff on a DIFFERENT entry of the SAME closed generic — it shares
+                // the thread-static scratch with the outer call that is mid-flight.
+                innerEntry.Update(null!, new ItemsElement(new[] { 10, 20 }), new ItemsElement(new[] { 20, 30 }));
+            }
+            return outerVec;
+        });
+
+        // Outer [1,2,3] -> [2,3,4]: a correct diff drops only key 1 and appends key 4
+        // (exactly 1 RemoveAt + 1 Add). Without the guard the nested call drains the
+        // outer's newKeys in its finally, so the outer instead removes all three and
+        // re-adds three — same final state, but 4 extra WinUI mutations (and echo churn).
+        outerEntry.Update(null!, new ItemsElement(new[] { 1, 2, 3 }), new ItemsElement(new[] { 2, 3, 4 }));
+
+        Assert.Equal(new[] { 20, 30 }, innerBacking);       // nested diff correct
+        Assert.Equal(new[] { 2, 3, 4 }, outerVec.Snapshot); // outer final state correct
+        Assert.Equal(1, outerVec.Removes);                  // minimal churn — proves newKeys survived
+        Assert.Equal(1, outerVec.Adds);
+    }
+
     private static CollectionDiffControlledPropEntry<ItemsElement, WinUI.CalendarView, DummyPayload, int, int, Action>
         MakeCollectionDiffEntry(Func<WinUI.CalendarView, IList<int>> getVector, IEqualityComparer<int>? keyComparer = null)
         => new(
@@ -327,5 +390,33 @@ public class PropEntryDiffDispatchTests
             toCheck = toCheck.BaseType;
         }
         return false;
+    }
+
+    // IList<int> that counts Add/RemoveAt so a test can assert how much a diff churned
+    // the target vector (used by the reentrancy test, where the corruption shows up as
+    // extra mutations rather than a different final state).
+    private sealed class RecordingList : IList<int>
+    {
+        private readonly List<int> _inner;
+        public int Removes;
+        public int Adds;
+
+        public RecordingList(IEnumerable<int> items) => _inner = new List<int>(items);
+
+        public IReadOnlyList<int> Snapshot => _inner;
+
+        public int this[int index] { get => _inner[index]; set => _inner[index] = value; }
+        public int Count => _inner.Count;
+        public bool IsReadOnly => false;
+        public void Add(int item) { Adds++; _inner.Add(item); }
+        public void RemoveAt(int index) { Removes++; _inner.RemoveAt(index); }
+        public void Clear() => _inner.Clear();
+        public bool Contains(int item) => _inner.Contains(item);
+        public void CopyTo(int[] array, int arrayIndex) => _inner.CopyTo(array, arrayIndex);
+        public int IndexOf(int item) => _inner.IndexOf(item);
+        public void Insert(int index, int item) => _inner.Insert(index, item);
+        public bool Remove(int item) => _inner.Remove(item);
+        public IEnumerator<int> GetEnumerator() => _inner.GetEnumerator();
+        global::System.Collections.IEnumerator global::System.Collections.IEnumerable.GetEnumerator() => _inner.GetEnumerator();
     }
 }

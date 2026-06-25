@@ -95,7 +95,13 @@ public abstract class PropEntry<TElement, TControl>
     /// every entry type that overrides <see cref="EnsureSubscribed"/> overrides
     /// this to <c>true</c>. A reflection-backed test
     /// (<c>PropEntryDiffDispatchTests.Subscribes_OverrideMatches_EnsureSubscribedOverride_ForEveryEntry</c>)
-    /// guards that invariant.</summary>
+    /// guards that invariant.
+    /// <para><b>Note for subclassers:</b> the base is a deliberate <c>false</c> so the
+    /// dominant no-op entries (e.g. <c>OneWay</c>) stay out of the subscribe subset.
+    /// If you derive from <see cref="PropEntry{TElement,TControl}"/> and override
+    /// <see cref="EnsureSubscribed"/> to do real wiring, you <b>must</b> also override
+    /// this to return <c>true</c> — otherwise the interpreter omits your entry from the
+    /// subscribe pass and your subscription is silently never wired.</para></summary>
     public virtual bool Subscribes => false;
 }
 
@@ -591,14 +597,36 @@ internal sealed class ReferenceListPropEntry<TElement, TControl, TTarget> : Prop
     // buffer is drained in a finally so it never retains cell references
     // (FrameworkElements) between calls.
     [ThreadStatic] private static List<Microsoft.UI.Reactor.Input.ElementRef>? s_scratchCells;
+    [ThreadStatic] private static bool s_scratchCellsInUse;
 
-    // Lazily allocate the per-thread scratch through a static helper so the
-    // [ThreadStatic] write doesn't happen inside the instance EnsureSubscribed body
-    // (CodeQL cs/static-field-written-by-instance) while keeping the per-thread
-    // reuse. The list is always empty on return: freshly allocated, or drained by
-    // the previous call's finally below.
-    private static List<Microsoft.UI.Reactor.Input.ElementRef> RentScratchCells()
-        => s_scratchCells ??= new List<Microsoft.UI.Reactor.Input.ElementRef>();
+    // Rent the per-thread scratch through a static helper so the [ThreadStatic]
+    // write doesn't happen inside the instance EnsureSubscribed body (CodeQL
+    // cs/static-field-written-by-instance) while keeping the per-thread reuse.
+    //
+    // Reentrancy: like CollectionDiff's scratch above, if a synchronous nested
+    // rerender re-enters EnsureSubscribed on this thread while the shared list is
+    // still in use, `Rented` is false and the caller gets a fresh per-call list
+    // (the pre-#120 always-allocate behavior) so the in-flight outer projection is
+    // never corrupted. The list is empty on return either way. Always pair with
+    // ReturnScratchCells in a finally.
+    private static (List<Microsoft.UI.Reactor.Input.ElementRef> Cells, bool Rented) RentScratchCells()
+    {
+        if (s_scratchCellsInUse)
+            return (new List<Microsoft.UI.Reactor.Input.ElementRef>(), false);
+        var cells = s_scratchCells ??= new List<Microsoft.UI.Reactor.Input.ElementRef>();
+        s_scratchCellsInUse = true;
+        return (cells, true);
+    }
+
+    private static void ReturnScratchCells(List<Microsoft.UI.Reactor.Input.ElementRef> cells, bool rented)
+    {
+        // Fresh per-call lists from the reentrant path are just dropped to GC.
+        if (!rented) return;
+        // WireReferenceListEdge copies synchronously; drop the cell references
+        // (FrameworkElements) so the shared scratch doesn't retain them between calls.
+        cells.Clear();
+        s_scratchCellsInUse = false;
+    }
 
     public ReferenceListPropEntry(
         Func<TElement, IReadOnlyList<Microsoft.UI.Reactor.Input.ElementRef<TTarget>>?> get,
@@ -628,7 +656,7 @@ internal sealed class ReferenceListPropEntry<TElement, TControl, TTarget> : Prop
         TElement el)
     {
         var refs = _get(el);
-        var cells = RentScratchCells();
+        var (cells, rented) = RentScratchCells();
         try
         {
             if (refs is not null)
@@ -647,9 +675,7 @@ internal sealed class ReferenceListPropEntry<TElement, TControl, TTarget> : Prop
         }
         finally
         {
-            // WireReferenceListEdge copies synchronously; drop the cell references
-            // (FrameworkElements) so the scratch doesn't retain them between calls.
-            cells.Clear();
+            ReturnScratchCells(cells, rented);
         }
     }
 
@@ -1253,16 +1279,30 @@ internal sealed class CollectionDiffControlledPropEntry<TElement, TControl, TPay
     [ThreadStatic] private static HashSet<TKey>? s_scratchNewKeys;
     [ThreadStatic] private static HashSet<TKey>? s_scratchPresentKeys;
     [ThreadStatic] private static IEqualityComparer<TKey>? s_scratchComparer;
+    [ThreadStatic] private static bool s_scratchInUse;
 
     // Rent the per-thread scratch sets through a static helper so the
     // [ThreadStatic] writes don't happen inside the instance Update body (CodeQL
     // cs/static-field-written-by-instance) while keeping the per-thread reuse.
+    //
     // Rebuilds both sets when the active entry's key comparer differs from the one
     // the current sets were created with, so a custom-comparer entry never diffs
-    // with another entry's comparer (#119). Both sets are empty on return: freshly
-    // allocated, or drained by the previous call's finally.
-    private static (HashSet<TKey> NewKeys, HashSet<TKey> PresentKeys) RentScratchSets(IEqualityComparer<TKey> keyComparer)
+    // with another entry's comparer (#119).
+    //
+    // Reentrancy: a CollectionDiff mutation can echo synchronously (a leaked
+    // SelectedDates change → user callback → inline rerender) and re-enter Update
+    // on this thread for the same closed generic while the shared sets are still
+    // populated. When that happens `Rented` is false and the caller gets fresh
+    // per-call sets — restoring the pre-#119 always-allocate behavior for that rare
+    // path so the in-flight outer diff is never corrupted; the shared scratch and
+    // comparer sentinel are left untouched. The common (non-reentrant) path keeps
+    // the allocation-free shared scratch. Always pair this with ReturnScratchSets
+    // in a finally.
+    private static (HashSet<TKey> NewKeys, HashSet<TKey> PresentKeys, bool Rented) RentScratchSets(IEqualityComparer<TKey> keyComparer)
     {
+        if (s_scratchInUse)
+            return (new HashSet<TKey>(keyComparer), new HashSet<TKey>(keyComparer), false);
+
         var newKeys = s_scratchNewKeys;
         var presentKeys = s_scratchPresentKeys;
         if (newKeys is null || presentKeys is null || !ReferenceEquals(s_scratchComparer, keyComparer))
@@ -1271,7 +1311,19 @@ internal sealed class CollectionDiffControlledPropEntry<TElement, TControl, TPay
             presentKeys = s_scratchPresentKeys = new HashSet<TKey>(keyComparer);
             s_scratchComparer = keyComparer;
         }
-        return (newKeys, presentKeys);
+        s_scratchInUse = true;
+        return (newKeys, presentKeys, true);
+    }
+
+    private static void ReturnScratchSets(HashSet<TKey> newKeys, HashSet<TKey> presentKeys, bool rented)
+    {
+        // Fresh per-call sets from the reentrant path are just dropped to GC.
+        if (!rented) return;
+        // Drain the shared scratch so the next reuse on this thread starts clean,
+        // then release it for the next (non-nested) caller.
+        newKeys.Clear();
+        presentKeys.Clear();
+        s_scratchInUse = false;
     }
 
     public CollectionDiffControlledPropEntry(
@@ -1315,8 +1367,8 @@ internal sealed class CollectionDiffControlledPropEntry<TElement, TControl, TPay
         if (ReferenceEquals(oldItems, newItems)) return;
 
         // Rent the per-thread scratch sets (rebuilt if this entry's key comparer
-        // differs from the one they were created with — see RentScratchSets).
-        var (newKeys, presentKeys) = RentScratchSets(_keyComparer);
+        // differs; fresh per-call if a nested rerender re-entered — see RentScratchSets).
+        var (newKeys, presentKeys, rented) = RentScratchSets(_keyComparer);
 
         try
         {
@@ -1344,9 +1396,7 @@ internal sealed class CollectionDiffControlledPropEntry<TElement, TControl, TPay
         }
         finally
         {
-            // Drain before returning so the next reuse on this thread starts clean.
-            newKeys.Clear();
-            presentKeys.Clear();
+            ReturnScratchSets(newKeys, presentKeys, rented);
         }
     }
 
