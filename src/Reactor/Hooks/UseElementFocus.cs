@@ -50,7 +50,7 @@ public static class UseElementFocusExtensions
             // call: in unit-test / headless contexts the WinUI activation factory
             // isn't registered and GetForCurrentThread throws a COMException.
             try { cache.UiQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread(); }
-            catch { cache.UiQueue = null; }
+            catch (global::System.Runtime.InteropServices.COMException) { cache.UiQueue = null; }
             cache.RequestFocus = () =>
             {
                 if (cache.UiQueue is null)
