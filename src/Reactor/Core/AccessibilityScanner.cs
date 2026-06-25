@@ -117,6 +117,12 @@ public static partial class AccessibilityScanner
     // implementation and its dependency chain.
     private static IScanExtension? s_scanExtension;
 
+    // Reused per-thread scratch list for BuildContext's child extraction so a
+    // per-finding Where(...).ToList() is not allocated each call (perf #64).
+    // Cleared before and after use so it never pins Element references.
+    [ThreadStatic]
+    private static List<Element>? t_buildCtxChildren;
+
     /// <summary>
     /// Registration hook for a subsystem-specific scanner extension (e.g. the
     /// Charting accessibility checker). Installed once when the subsystem
@@ -175,7 +181,13 @@ public static partial class AccessibilityScanner
     {
         if (el is null or EmptyElement) return;
 
-        ctx.Push(el);
+        // Compute children once and reuse for both sibling-text collection
+        // (inside Push) and the recursion below. GetChildren does a full
+        // switch dispatch and (for the single-child arms) allocates a fresh
+        // array literal on every call, so calling it twice per element
+        // doubles that cost (perf #62).
+        var children = GetChildren(el);
+        ctx.Push(el, children);
 
         // Per-element checks
         CheckIconButton(el, ctx, findings);
@@ -196,7 +208,7 @@ public static partial class AccessibilityScanner
         CollectLandmark(el, ctx);
 
         // Recurse into children
-        foreach (var child in GetChildren(el))
+        foreach (var child in children)
             Walk(child, ctx, findings);
 
         ctx.Pop();
@@ -480,30 +492,42 @@ public static partial class AccessibilityScanner
     /// <summary>A11Y_007: Non-sequential TabIndex values (gaps > 1).</summary>
     private static void CheckTabIndexGaps(ScanContext ctx, List<A11yDiagnostic> findings)
     {
-        if (ctx.TabIndices.Count < 2) return;
+        int count = ctx.TabIndices.Count;
+        if (count < 2) return;
 
-        var sorted = ctx.TabIndices.OrderBy(t => t).ToList();
-        for (int i = 1; i < sorted.Count; i++)
+        // Snapshot the set into a rented buffer and sort in place instead of
+        // OrderBy(...).ToList() (which allocates an iterator + a List) — perf #66.
+        var buffer = global::System.Buffers.ArrayPool<int>.Shared.Rent(count);
+        try
         {
-            if (sorted[i] - sorted[i - 1] > 1)
+            ctx.TabIndices.CopyTo(buffer);
+            Array.Sort(buffer, 0, count);
+            for (int i = 1; i < count; i++)
             {
-                findings.Add(new A11yDiagnostic
+                if (buffer[i] - buffer[i - 1] > 1)
                 {
-                    Id = "A11Y_007",
-                    Severity = "info",
-                    Message = $"TabIndex gap: {sorted[i - 1]} → {sorted[i]}. Non-sequential values may confuse keyboard navigation order",
-                    WcagCriterion = "2.1.1",
-                    ElementType = "(tree-wide)",
-                    Fix = new A11yFixSuggestion
+                    findings.Add(new A11yDiagnostic
                     {
-                        Modifier = "TabIndex",
-                        SuggestedValue = null,
-                        CodeSnippet = "Renumber TabIndex values sequentially",
-                    },
-                    Context = new A11yContext(),
-                });
-                break; // Report only the first gap
+                        Id = "A11Y_007",
+                        Severity = "info",
+                        Message = $"TabIndex gap: {buffer[i - 1]} → {buffer[i]}. Non-sequential values may confuse keyboard navigation order",
+                        WcagCriterion = "2.1.1",
+                        ElementType = "(tree-wide)",
+                        Fix = new A11yFixSuggestion
+                        {
+                            Modifier = "TabIndex",
+                            SuggestedValue = null,
+                            CodeSnippet = "Renumber TabIndex values sequentially",
+                        },
+                        Context = new A11yContext(),
+                    });
+                    break; // Report only the first gap
+                }
             }
+        }
+        finally
+        {
+            global::System.Buffers.ArrayPool<int>.Shared.Return(buffer);
         }
     }
 
@@ -584,18 +608,29 @@ public static partial class AccessibilityScanner
     private static bool IsLikelyEmoji(string? text)
     {
         if (string.IsNullOrEmpty(text)) return false;
+        var span = text.AsSpan();
         // Single character or very short string that's non-ASCII → likely emoji/icon
-        if (text.Length <= 2 && text.Any(c => c > 0x2000)) return true;
-        // Unicode symbol ranges commonly used for icons
-        return text.Length <= 4 && text.All(c =>
-            c > 0x2000 || char.IsHighSurrogate(c) || char.IsLowSurrogate(c));
+        if (span.Length <= 2)
+        {
+            foreach (var c in span)
+                if (c > 0x2000) return true;
+        }
+        // Unicode symbol ranges commonly used for icons: short string where
+        // every char is a high symbol or a surrogate half.
+        if (span.Length > 4) return false;
+        foreach (var c in span)
+        {
+            if (!(c > 0x2000 || char.IsHighSurrogate(c) || char.IsLowSurrogate(c)))
+                return false;
+        }
+        return true;
     }
 
     private static string Truncate(string text, int maxLen) =>
         text.Length <= maxLen ? text : text[..(maxLen - 3)] + "...";
 
     private static string[] GetSiblingTexts(ScanContext ctx) =>
-        ctx.CurrentSiblingTexts.ToArray();
+        ctx.SiblingTextsCached;
 
     // ════════════════════════════════════════════════════════════════
     //  Scan context (maintained during tree walk)
@@ -615,6 +650,14 @@ public static partial class AccessibilityScanner
         // Current sibling context (texts of siblings in the same container)
         public readonly List<string> CurrentSiblingTexts = new();
 
+        // Cached array snapshot of CurrentSiblingTexts for the current frame.
+        // Multiple findings on the same element previously each allocated a
+        // fresh ToArray() copy; this caches one snapshot per element and
+        // invalidates it on Push (perf #63). The array is immutable once
+        // exposed, so sharing it across that element's findings is safe.
+        private string[]? _siblingTextsCache;
+        public string[] SiblingTextsCached => _siblingTextsCache ??= CurrentSiblingTexts.ToArray();
+
         public string? CurrentComponent => _stack.Count > 0 ? _stack.Peek().ComponentType : null;
 
         // ── IScanContext (issue #498): exposes the scanner's private helpers to
@@ -623,7 +666,7 @@ public static partial class AccessibilityScanner
         bool IScanContext.HasAutomationName(Element el) => AccessibilityScanner.HasAutomationName(el);
         A11yContext IScanContext.BuildContext(Element el) => BuildContext(el, AccessibilityScanner.GetSiblingTexts(this));
 
-        public void Push(Element el)
+        public void Push(Element el, IEnumerable<Element?> children)
         {
             var frame = new ContextFrame();
 
@@ -651,15 +694,19 @@ public static partial class AccessibilityScanner
             if (el is ComponentElement comp)
                 frame.ComponentType = comp.ComponentType?.Name;
 
-            // Collect sibling texts from container children
+            // Collect sibling texts from the already-computed children
+            // (passed in by Walk so GetChildren runs once per element — #62).
             CurrentSiblingTexts.Clear();
-            foreach (var child in GetChildren(el))
+            foreach (var child in children)
             {
                 if (child is TextBlockElement t)
                     CurrentSiblingTexts.Add(t.Content);
                 else if (child is ButtonElement b && !string.IsNullOrEmpty(b.Label))
                     CurrentSiblingTexts.Add(b.Label);
             }
+            // Invalidate the per-element sibling-text snapshot; it is
+            // recomputed lazily on first read for this frame (perf #63).
+            _siblingTextsCache = null;
 
             _stack.Push(frame);
         }
@@ -674,21 +721,35 @@ public static partial class AccessibilityScanner
         {
             var frame = _stack.Count > 0 ? _stack.Peek() : new ContextFrame();
 
-            // Extract child info
-            var children = GetChildren(el).Where(c => c is not null and not EmptyElement).ToList();
-            string? childContent = null;
+            // Extract child info in a single pass over GetChildren(el),
+            // replacing the previous Where/Select/OfType LINQ chains (perf #64).
+            // A reused thread-static scratch list avoids the per-finding
+            // intermediate List allocation; the only allocation kept is the
+            // childTypes result array (pre-sized), which the LINQ path also built.
+            var children = t_buildCtxChildren ??= new List<Element>();
+            children.Clear();
             string? childText = null;
+            foreach (var c in GetChildren(el))
+            {
+                if (c is null or EmptyElement) continue;
+                children.Add(c);
+                if (childText is null && c is TextBlockElement tb)
+                    childText = tb.Content;
+            }
+
+            string? childContent = null;
             string[]? childTypes = null;
 
             if (children.Count > 0)
             {
-                childTypes = children.Select(c => c!.GetType().Name).ToArray();
-                var firstText = children.OfType<TextBlockElement>().FirstOrDefault();
-                if (firstText is not null)
-                    childText = firstText.Content;
+                childTypes = new string[children.Count];
+                for (int i = 0; i < children.Count; i++)
+                    childTypes[i] = children[i].GetType().Name;
                 if (children.Count == 1)
-                    childContent = children[0]!.ToString();
+                    childContent = children[0].ToString();
             }
+
+            children.Clear();
 
             // For ButtonElement, use ContentElement if present
             if (el is ButtonElement btn && btn.ContentElement is not null)
