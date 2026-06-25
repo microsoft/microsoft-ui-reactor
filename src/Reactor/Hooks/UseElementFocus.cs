@@ -27,7 +27,11 @@ public static class UseElementFocusExtensions
     public static (ElementRef Ref, Action RequestFocus) UseElementFocus(this RenderContext ctx,
         FocusState state = FocusState.Programmatic)
     {
-        var (elRef, _) = ctx.UseState(new ElementRef());
+        // The ElementRef must survive re-renders but never changes after the first.
+        // UseMemo with empty deps allocates it exactly once via a non-capturing static
+        // factory; UseState(new ElementRef()) would eagerly allocate (and discard) a
+        // fresh ElementRef on EVERY render even though only the first is ever kept.
+        var elRef = ctx.UseMemo(static () => new ElementRef(), Array.Empty<object>());
 
         // #55: previously this hook captured the UI dispatcher via a
         // GetForCurrentThread() COM call AND allocated a fresh `requestFocus`

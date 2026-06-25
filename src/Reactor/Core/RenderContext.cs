@@ -376,13 +376,20 @@ public sealed class RenderContext
     /// with one dependency: the effect re-runs only when <paramref name="d1"/>
     /// changes.
     /// </summary>
+    /// <remarks>
+    /// If <paramref name="d1"/>'s compile-time type is an array of reference types
+    /// (e.g. <c>string[]</c>), it is treated as a dependency <em>list</em> and compared
+    /// element-wise — matching the <c>params object[]</c> overload — not as a single
+    /// reference-compared value. A dependency whose static type is not an array is
+    /// always compared as one value, even if its runtime value happens to be an array.
+    /// </remarks>
     public void UseEffect<T1>(Action effect, T1 d1)
     {
         var hook = AcquireEffectSlot();
-        // A lone dependency that is itself an object[] at runtime (e.g. a covariant
-        // string[]) bound to the params overload before this generic existed and was
-        // compared element-wise — preserve that so an array re-allocated each render
-        // with equal contents does not spuriously re-run the effect.
+        // A lone dependency whose compile-time type is a reference-type array (e.g. a
+        // covariant string[]) binds this generic but historically went through the
+        // params overload and was compared element-wise — preserve that so an array
+        // re-allocated each render with equal contents does not spuriously re-run.
         if (AsParamsArrayDep(d1) is { } arr)
         {
             if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, arr))
@@ -419,6 +426,13 @@ public sealed class RenderContext
     /// <c>params object[]</c> allocation on the deps-unchanged path. Semantically
     /// identical to the params overload called with one dependency.
     /// </summary>
+    /// <remarks>
+    /// If <paramref name="d1"/>'s compile-time type is an array of reference types
+    /// (e.g. <c>string[]</c>), it is treated as a dependency <em>list</em> and compared
+    /// element-wise — matching the <c>params object[]</c> overload — not as a single
+    /// reference-compared value. A dependency whose static type is not an array is
+    /// always compared as one value, even if its runtime value happens to be an array.
+    /// </remarks>
     public void UseEffect<T1>(Func<Action> effectWithCleanup, T1 d1)
     {
         var hook = AcquireEffectSlot();
@@ -502,10 +516,17 @@ public sealed class RenderContext
     /// <c>params object[]</c> allocation (and value-type boxing) on the
     /// deps-unchanged path. Recomputes only when <paramref name="d1"/> changes.
     /// </summary>
+    /// <remarks>
+    /// If <paramref name="d1"/>'s compile-time type is an array of reference types
+    /// (e.g. <c>string[]</c>), it is treated as a dependency <em>list</em> and compared
+    /// element-wise — matching the <c>params object[]</c> overload — not as a single
+    /// reference-compared value. A dependency whose static type is not an array is
+    /// always compared as one value, even if its runtime value happens to be an array.
+    /// </remarks>
     public T UseMemo<T, T1>(Func<T> factory, T1 d1)
     {
         var hook = AcquireMemoSlot<T>();
-        // See UseEffect<T1>: a lone object[]-typed dep keeps element-wise semantics.
+        // See UseEffect<T1>: a compile-time array dep keeps element-wise semantics.
         if (AsParamsArrayDep(d1) is { } arr)
         {
             if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, arr))
@@ -578,10 +599,17 @@ public sealed class RenderContext
     /// deps-unchanged path. Returns a stable reference until <paramref name="d1"/>
     /// changes.
     /// </summary>
+    /// <remarks>
+    /// If <paramref name="d1"/>'s compile-time type is an array of reference types
+    /// (e.g. <c>string[]</c>), it is treated as a dependency <em>list</em> and compared
+    /// element-wise — matching the <c>params object[]</c> overload — not as a single
+    /// reference-compared value. A dependency whose static type is not an array is
+    /// always compared as one value, even if its runtime value happens to be an array.
+    /// </remarks>
     public Action UseCallback<T1>(Action callback, T1 d1)
     {
         var hook = AcquireMemoSlot<Action>();
-        // See UseEffect<T1>: a lone object[]-typed dep keeps element-wise semantics.
+        // See UseEffect<T1>: a compile-time array dep keeps element-wise semantics.
         if (AsParamsArrayDep(d1) is { } arr)
         {
             if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, arr))
@@ -695,33 +723,52 @@ public sealed class RenderContext
         return copy;
     }
 
-    // A lone arity-1 dependency that is itself an object[] at runtime — e.g. a
-    // covariant string[]/Element[] — historically bound to the params overload and
-    // was compared element-wise. The generic arity-1 overload would otherwise wrap
-    // the whole array as ONE reference-compared dep, so an array re-allocated each
-    // render with equal contents would spuriously re-run. Detect that exact case and
-    // route it back through the element-wise path. typeof(T1).IsValueType is a
-    // JIT-time constant for value-type instantiations, so value-type deps fold this
-    // to null and never box; int[] (not assignable to object[]) returns null too.
+    // A lone arity-1 dependency whose COMPILE-TIME type is an array of reference types
+    // — e.g. a covariant string[]/Element[] — is treated as a dependency LIST and
+    // compared element-wise, matching how the params overload behaved before these
+    // generics existed. The gate is on the *static* type (typeof(T1)) on purpose: a
+    // value whose static type is object/Array/an interface but whose runtime value
+    // happens to be an object[] historically bound the params overload in EXPANDED
+    // form (wrapped as new object[]{ dep }) and was compared as ONE reference dep, so
+    // it must stay a single dep here too — unwrapping it would be a silent semantic
+    // change (observable for UseMemo, whose two overloads are both generic so the
+    // arity-1 wins overload resolution). typeof(T1).IsArray is a JIT-time constant per
+    // instantiation, so value-type and non-array deps fold this to null and never
+    // reach the IsAssignableFrom check or box.
     private static object[]? AsParamsArrayDep<T1>(T1 d1)
-        => !typeof(T1).IsValueType && d1 is object[] arr ? arr : null;
+        => typeof(T1).IsArray && typeof(object[]).IsAssignableFrom(typeof(T1)) && d1 is object[] arr ? arr : null;
 
-    // Returns true when the stored deps already match — unboxing the stored value
-    // (no allocation) and comparing through the typed comparer so the incoming dep
-    // is never boxed. A null/wrong-arity stored array counts as "changed".
+    // Returns true when the stored deps already match. Each element is compared via
+    // DepEquals, which unboxes the stored value (no allocation) and compares through
+    // the typed comparer so the incoming dep is never boxed. A null/wrong-arity stored
+    // array counts as "changed".
     private static bool DepsEqual1<T1>(object[]? prev, T1 d1)
-        => prev is { Length: 1 } && EqualityComparer<T1>.Default.Equals((T1)prev[0], d1);
+        => prev is { Length: 1 } && DepEquals(prev[0], d1);
 
     private static bool DepsEqual2<T1, T2>(object[]? prev, T1 d1, T2 d2)
         => prev is { Length: 2 }
-           && EqualityComparer<T1>.Default.Equals((T1)prev[0], d1)
-           && EqualityComparer<T2>.Default.Equals((T2)prev[1], d2);
+           && DepEquals(prev[0], d1)
+           && DepEquals(prev[1], d2);
 
     private static bool DepsEqual3<T1, T2, T3>(object[]? prev, T1 d1, T2 d2, T3 d3)
         => prev is { Length: 3 }
-           && EqualityComparer<T1>.Default.Equals((T1)prev[0], d1)
-           && EqualityComparer<T2>.Default.Equals((T2)prev[1], d2)
-           && EqualityComparer<T3>.Default.Equals((T3)prev[2], d3);
+           && DepEquals(prev[0], d1)
+           && DepEquals(prev[1], d2)
+           && DepEquals(prev[2], d3);
+
+    // Compare a stored (boxed) dependency against the current typed value without an
+    // unconditional (T)stored cast. A hot-reload edit or a dynamic call site can change
+    // a dependency's runtime type at the same hook slot across renders; an
+    // InvalidCastException while COMPARING deps is worse than simply treating the slot
+    // as changed, so a type mismatch returns false ("changed"). This mirrors the
+    // non-generic params DepsEqual, which compares via object.Equals and never throws.
+    // Value-type T unboxes through the `is T` pattern with no extra allocation, and the
+    // current dep is still passed through EqualityComparer<T> unboxed.
+    private static bool DepEquals<T>(object? stored, T current)
+    {
+        if (stored is null) return current is null;
+        return stored is T t && EqualityComparer<T>.Default.Equals(t, current);
+    }
 
     /// <summary>
     /// Returns a mutable ref object that persists across renders.
