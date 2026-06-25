@@ -1,3 +1,6 @@
+using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 
@@ -34,7 +37,55 @@ public readonly record struct ThemeRef(string ResourceKey)
         return ResolveForTheme(resourceKey, isDark ? "Dark" : "Light");
     }
 
+    // ── Resolution caches (perf #85/#86) ─────────────────────────────
+    // The data-grid stress path resolves dozens of theme tokens per cell per
+    // render. Both the per-element effective-theme tree walk (#85) and the
+    // recursive MergedDictionaries scan (#86) were uncached and re-run on every
+    // ThemeRef.Resolve. These caches collapse that to one tree walk per element
+    // per theme generation and one dictionary scan per (key, theme) pair.
+
+    // #86: resolved brush per (resourceKey, themeName). The themeName is part of
+    // the key, so Light/Dark entries coexist; cleared on theme/colour change so
+    // a runtime theme-dictionary swap is observed. Only non-null hits are
+    // cached, so a genuinely-absent key is re-resolved (and picked up if added
+    // later) exactly as before.
+    private static readonly ConcurrentDictionary<(string Key, string Theme), Brush> _brushCache = new();
+
+    // #85: effective theme name per element, validated by a global generation
+    // stamp. A theme change bumps the generation (see InvalidateCache), so every
+    // element's cached name is lazily recomputed on its next resolve.
+    private sealed class ThemeNameBox { public int Generation = -1; public string? Name; }
+    private static readonly ConditionalWeakTable<FrameworkElement, ThemeNameBox> _themeNameCache = new();
+    private static int _themeGeneration;
+
+    /// <summary>
+    /// Drops all cached theme resolution (effective theme names and resolved
+    /// brushes). Called by the host when the effective theme or system colours
+    /// change (ActualThemeChanged / UISettings.ColorValuesChanged) so the next
+    /// <see cref="Resolve(string, FrameworkElement)"/> recomputes against the
+    /// new theme. Cheap and allocation-free; safe to call from any thread.
+    /// </summary>
+    internal static void InvalidateCache()
+    {
+        Interlocked.Increment(ref _themeGeneration);
+        _brushCache.Clear();
+    }
+
     private static Brush? ResolveForTheme(string resourceKey, string themeName)
+    {
+        var cacheKey = (resourceKey, themeName);
+        if (_brushCache.TryGetValue(cacheKey, out var cached))
+            return cached;
+
+        var resolved = ResolveForThemeUncached(resourceKey, themeName);
+        // Only cache successful resolves so an absent key stays re-resolvable
+        // (matches the pre-cache behaviour where each call re-scanned).
+        if (resolved is not null)
+            _brushCache[cacheKey] = resolved;
+        return resolved;
+    }
+
+    private static Brush? ResolveForThemeUncached(string resourceKey, string themeName)
     {
         var resources = Application.Current?.Resources;
         if (resources is null) return null;
@@ -62,6 +113,24 @@ public readonly record struct ThemeRef(string ResourceKey)
     /// may not have propagated yet within the same synchronous update pass.
     /// </summary>
     private static string GetEffectiveThemeName(FrameworkElement fe)
+    {
+        // #85: the effective theme depends on fe + its ancestors' RequestedTheme
+        // / ActualTheme, which only change on a theme switch. Cache it per
+        // element and validate against the global generation stamp so repeated
+        // resolves (per colour token, per render) reuse one tree walk until the
+        // next theme change bumps the generation.
+        int gen = Volatile.Read(ref _themeGeneration);
+        var box = _themeNameCache.GetValue(fe, static _ => new ThemeNameBox());
+        if (box.Generation == gen && box.Name is not null)
+            return box.Name;
+
+        var name = ComputeEffectiveThemeName(fe);
+        box.Name = name;
+        box.Generation = gen;
+        return name;
+    }
+
+    private static string ComputeEffectiveThemeName(FrameworkElement fe)
     {
         // Check the element's own RequestedTheme first
         if (fe.RequestedTheme != ElementTheme.Default)

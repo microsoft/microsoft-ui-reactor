@@ -85,9 +85,18 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     // Last render's total duration (tree + reconcile + effects), in ms.
     // Read by RequestRender to demote the next enqueue to Low priority when a
     // slow render is starving the dispatcher of input/layout/paint slots.
-    // Published via Interlocked.Exchange / read via Volatile.Read — see the
+    // Published via Volatile.Write / read via Volatile.Read — see the
     // matching note in ReactorHost.
     private double _lastRenderMs;
+
+    // Cached delegates to avoid per-render allocations on the hot path.
+    // _renderLoopHandler binds RenderLoop once for every TryEnqueue (#180);
+    // _requestRenderAction binds the parameterless RequestRender once for the
+    // BeginRender / Reconcile re-render callbacks (#181). Both are stable for
+    // the control's lifetime, so caching them removes a fresh delegate per
+    // dispatch / per render frame.
+    private readonly DispatcherQueueHandler _renderLoopHandler;
+    private readonly Action _requestRenderAction;
 
     // Public perf snapshot — updated every ~1 second, readable from components
     private RenderStats _stats;
@@ -131,6 +140,8 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         _logger = logger ?? ReactorApp.AppLogger;
         _reconciler = new Reconciler(_logger);
         _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
+        _renderLoopHandler = RenderLoop;
+        _requestRenderAction = RequestRender;
         HorizontalContentAlignment = HorizontalAlignment.Stretch;
         VerticalContentAlignment = VerticalAlignment.Stretch;
         // ContentControl inherits IsTabStop=true from Control. Set it to false
@@ -222,9 +233,18 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         // Spec 042 §6 — snapshot the AmbientAnimation set by Animations.Animate
         // so the reconcile pass can re-push it around the diff. Same
         // last-writer-wins rule as the curve capture above.
-        var capturedAmbient = Microsoft.UI.Reactor.Core.Internal.AnimationAmbient.Current;
-        if (capturedAmbient is not null)
-            _pendingAmbientAnimation = capturedAmbient;
+        //
+        // #183: AnimationAmbient.Current is an AsyncLocal read (walks the
+        // ExecutionContext) on every setState — gate it behind the cheap HasAny
+        // sentinel so apps that never call Animations.Animate skip it entirely.
+        // HasAny is false until the first Animate scope is entered, at which
+        // point Current is provably null, so this preserves behaviour exactly.
+        if (Microsoft.UI.Reactor.Core.Internal.AnimationAmbient.HasAny)
+        {
+            var capturedAmbient = Microsoft.UI.Reactor.Core.Internal.AnimationAmbient.Current;
+            if (capturedAmbient is not null)
+                _pendingAmbientAnimation = capturedAmbient;
+        }
 
         // Flag re-render before the _isRendering / CAS checks so the request
         // survives the TOCTOU window between Render()'s finally
@@ -244,7 +264,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         // Interlocked.Exchange in Render().
         _dispatcherQueue.TryEnqueue(
             RenderPriorityPolicy.PickPriority(Volatile.Read(ref _lastRenderMs)),
-            RenderLoop);
+            _renderLoopHandler);
     }
 
     private void RenderLoop()
@@ -267,7 +287,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         if (_needsRerender)
         {
             if (Interlocked.CompareExchange(ref _renderPending, 1, 0) == 0)
-                _dispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, RenderLoop);
+                _dispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, _renderLoopHandler);
         }
     }
 
@@ -358,7 +378,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
 
             if (_rootComponent is not null)
             {
-                _rootComponent.Context.BeginRender(RequestRender);
+                _rootComponent.Context.BeginRender(_requestRenderAction);
                 try
                 {
                     newTree = _rootComponent.Render();
@@ -377,7 +397,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
             }
             else if (_rootRenderFunc is not null && _funcContext is not null)
             {
-                _funcContext.BeginRender(RequestRender);
+                _funcContext.BeginRender(_requestRenderAction);
                 try
                 {
                     newTree = _rootRenderFunc(_funcContext);
@@ -419,7 +439,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
                     _currentTree,
                     newTree,
                     _currentControl,
-                    RequestRender
+                    _requestRenderAction
                 );
             }
             finally
@@ -495,9 +515,11 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
 
             double effectsMs = _phaseSw.Elapsed.TotalMilliseconds;
 
-            // Feed RenderPriorityPolicy. Interlocked publishes to off-UI-thread
-            // RequestRender callers. See matching note in ReactorHost.Render.
-            Interlocked.Exchange(ref _lastRenderMs, treeBuildMs + reconcileMs + effectsMs);
+            // Feed RenderPriorityPolicy. Volatile.Write publishes to
+            // off-UI-thread RequestRender callers (single writer here, so a
+            // release fence suffices — no Interlocked LOCK needed). See matching
+            // note in ReactorHost.Render (#185).
+            Volatile.Write(ref _lastRenderMs, treeBuildMs + reconcileMs + effectsMs);
 
             OnRenderComplete?.Invoke(treeBuildMs, reconcileMs, effectsMs);
 
@@ -516,7 +538,7 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
             _renderCount++;
             _totalRenderCount++;
 
-            if (_reportClock.Elapsed.TotalSeconds >= 1.0 && _renderCount > 0)
+            if (_reportClock.ElapsedMilliseconds >= 1000 && _renderCount > 0)
             {
                 double avgTree = _treeBuildSum / _renderCount;
                 double avgReconcile = _reconcileSum / _renderCount;
@@ -574,6 +596,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         fe.ActualThemeChanged += (_, _) =>
         {
             _logger?.LogDebug("Theme changed to {Theme} — re-rendering", fe.ActualTheme);
+            // Drop the ThemeRef resolution caches so the re-render below resolves
+            // brushes against the new theme (#85/#86).
+            ThemeRef.InvalidateCache();
             RequestRender();
         };
     }

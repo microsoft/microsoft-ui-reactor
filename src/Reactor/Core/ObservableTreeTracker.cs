@@ -16,9 +16,24 @@ internal class ObservableTreeTracker : IDisposable
 {
     private readonly Action _requestRerender;
     private readonly Dictionary<INotifyPropertyChanged, PropertyChangedEventHandler> _subscriptions = new();
-    // _visiting was an instance field; that meant re-entrant Walks would
-    // share state and could lose nodes. Replaced with a stack-local set
-    // passed through recursion. TASK-062.
+    // #6: the per-node PropertyChanged handler is the same method for every
+    // subscription, so bind the delegate once instead of allocating a fresh one
+    // for each newly-subscribed INPC node.
+    private readonly PropertyChangedEventHandler _onNestedPropertyChanged;
+
+    // #5: scratch containers reused across the common (non-re-entrant)
+    // SyncSubscriptions path so a steady stream of PropertyChanged fires doesn't
+    // allocate two HashSets + a List every time. Cleared before and after each
+    // top-level sync. _visiting was historically a stack-local (TASK-062) so
+    // re-entrant Walks couldn't share state — the _syncing guard below preserves
+    // exactly that: a synchronous re-entrant sync (a side-effecting getter
+    // firing PropertyChanged mid-Walk) falls back to fresh allocations and never
+    // touches these fields.
+    private readonly HashSet<INotifyPropertyChanged> _desiredSetScratch = new(ReferenceEqualityComparer.Instance);
+    private readonly HashSet<INotifyPropertyChanged> _visitingScratch = new(ReferenceEqualityComparer.Instance);
+    private readonly List<INotifyPropertyChanged> _toRemoveScratch = new();
+    private bool _syncing;
+
     private INotifyPropertyChanged? _root;
     private readonly Microsoft.UI.Dispatching.DispatcherQueue? _dispatcherQueue;
 
@@ -27,6 +42,7 @@ internal class ObservableTreeTracker : IDisposable
     public ObservableTreeTracker(Action requestRerender)
     {
         _requestRerender = requestRerender;
+        _onNestedPropertyChanged = OnNestedPropertyChanged;
         try { _dispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread(); }
         catch { /* No WinUI runtime (e.g. unit tests) */ }
     }
@@ -54,11 +70,49 @@ internal class ObservableTreeTracker : IDisposable
     public void SyncSubscriptions(INotifyPropertyChanged root)
     {
         _root = root;
-        var desiredSet = new HashSet<INotifyPropertyChanged>(ReferenceEqualityComparer.Instance);
-        Walk(root, desiredSet);
+
+        // #5: re-entrant (synchronous) sync — a side-effecting property getter
+        // fired PropertyChanged during the outer Walk and re-entered here on the
+        // same stack. Don't touch the scratch fields the outer call is using;
+        // allocate fresh, exactly like the original always-allocate path.
+        if (_syncing)
+        {
+            SyncCore(
+                root,
+                new HashSet<INotifyPropertyChanged>(ReferenceEqualityComparer.Instance),
+                new HashSet<INotifyPropertyChanged>(ReferenceEqualityComparer.Instance),
+                new List<INotifyPropertyChanged>());
+            return;
+        }
+
+        _syncing = true;
+        try
+        {
+            _desiredSetScratch.Clear();
+            _visitingScratch.Clear();
+            _toRemoveScratch.Clear();
+            SyncCore(root, _desiredSetScratch, _visitingScratch, _toRemoveScratch);
+        }
+        finally
+        {
+            // Drop references so the tracker doesn't pin the walked graph between
+            // fires; HashSet/List capacity is retained for reuse.
+            _desiredSetScratch.Clear();
+            _visitingScratch.Clear();
+            _toRemoveScratch.Clear();
+            _syncing = false;
+        }
+    }
+
+    private void SyncCore(
+        INotifyPropertyChanged root,
+        HashSet<INotifyPropertyChanged> desiredSet,
+        HashSet<INotifyPropertyChanged> visiting,
+        List<INotifyPropertyChanged> toRemove)
+    {
+        Walk(root, desiredSet, visiting);
 
         // Unsubscribe from objects no longer in the graph
-        var toRemove = new List<INotifyPropertyChanged>();
         foreach (var kvp in _subscriptions)
         {
             if (!desiredSet.Contains(kvp.Key))
@@ -70,14 +124,13 @@ internal class ObservableTreeTracker : IDisposable
         foreach (var obj in toRemove)
             _subscriptions.Remove(obj);
 
-        // Subscribe to new objects in the graph
+        // Subscribe to new objects in the graph (#6: shared cached delegate)
         foreach (var obj in desiredSet)
         {
             if (!_subscriptions.ContainsKey(obj))
             {
-                PropertyChangedEventHandler handler = OnNestedPropertyChanged;
-                obj.PropertyChanged += handler;
-                _subscriptions[obj] = handler;
+                obj.PropertyChanged += _onNestedPropertyChanged;
+                _subscriptions[obj] = _onNestedPropertyChanged;
             }
         }
     }
@@ -95,11 +148,6 @@ internal class ObservableTreeTracker : IDisposable
     /// every reachable property-changed node on every property change.
     /// </summary>
     private const int MaxNodesPerWalk = 1024;
-
-    private void Walk(INotifyPropertyChanged? node, HashSet<INotifyPropertyChanged> desiredSet)
-    {
-        Walk(node, desiredSet, visiting: new HashSet<INotifyPropertyChanged>(global::System.Collections.Generic.ReferenceEqualityComparer.Instance));
-    }
 
     [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "Object.GetType() does not carry DynamicallyAccessedMembers; INPC types are preserved because they implement INotifyPropertyChanged.")]
     private void Walk(INotifyPropertyChanged? node, HashSet<INotifyPropertyChanged> desiredSet, HashSet<INotifyPropertyChanged> visiting)
