@@ -36,6 +36,10 @@ public class PerfDiffSkipPathTests
     // skip path dispatches identically — skipping is safe.
     private static readonly Action<object, TappedRoutedEventArgs> SharedTap = (s, e) => { };
 
+    // The other half of the DataGrid cell shape — cells carry OnPointerPressed +
+    // OnTapped, every other routed slot null. Reference-stable across renders.
+    private static readonly Action<object, PointerRoutedEventArgs> SharedPointerPressed = (s, e) => { };
+
     [Fact]
     public void ShallowEquals_True_For_Interactive_Element_With_Stable_Handler()
     {
@@ -168,6 +172,49 @@ public class PerfDiffSkipPathTests
 
         // Tracks the slot count in Element.ModifierCallbacksEqual; bump both together.
         Assert.Equal(27, cases.Length);
+    }
+
+    [Fact]
+    public void ShallowEquals_GridCell_Stable_Primary_Plus_Changing_Secondary_Declines_Skip()
+    {
+        // Combined FLAGSHIP-1 regression at the ShallowEquals/element level, mirroring
+        // the realistic DataGrid cell shape (OnPointerPressed + OnTapped, every other
+        // routed slot null). The per-slot sweep above proves each slot participates in
+        // isolation; this locks the combined case the coordinator called out: a cell
+        // with reference-STABLE primary handlers must STILL decline the skip the instant
+        // ANY secondary routed slot (OnDoubleTapped/OnGotFocus/OnLostFocus/…) changes
+        // identity — otherwise that secondary's ModifierEventHandlerState.Current*
+        // (refreshed only on the non-skip Update path) would dispatch a stale closure.
+        static Element Cell(
+            Action<object, DoubleTappedRoutedEventArgs>? dbl = null,
+            Action<object, RoutedEventArgs>? got = null,
+            Action<object, RoutedEventArgs>? lost = null)
+        {
+            var cell = TextBlock("AAPL").OnPointerPressed(SharedPointerPressed).OnTapped(SharedTap);
+            if (dbl is not null) cell = cell.OnDoubleTapped(dbl);
+            if (got is not null) cell = cell.OnGotFocus(got);
+            if (lost is not null) cell = cell.OnLostFocus(lost);
+            return cell;
+        }
+
+        // GRID WIN INTACT — the actual cell shape (stable primary handlers, all
+        // secondaries null) stays reference-stable across renders ⇒ skips.
+        Assert.True(Element.ShallowEquals(Cell(), Cell()));
+
+        // STALE-DISPATCH GUARDS — stable primaries, but a per-render (changing)
+        // secondary closure ⇒ must NOT skip so the secondary's Current* is refreshed.
+        Action<object, DoubleTappedRoutedEventArgs> dt1 = (s, e) => { }, dt2 = (s, e) => { };
+        Assert.False(Element.ShallowEquals(Cell(dbl: dt1), Cell(dbl: dt2)));
+
+        Action<object, RoutedEventArgs> g1 = (s, e) => { }, g2 = (s, e) => { };
+        Assert.False(Element.ShallowEquals(Cell(got: g1), Cell(got: g2)));
+
+        Action<object, RoutedEventArgs> l1 = (s, e) => { }, l2 = (s, e) => { };
+        Assert.False(Element.ShallowEquals(Cell(lost: l1), Cell(lost: l2)));
+
+        // A reference-STABLE secondary (same instance both renders) keeps the cell
+        // skip-eligible — the win is not over-narrowed to "any secondary ⇒ never skip".
+        Assert.True(Element.ShallowEquals(Cell(dbl: dt1), Cell(dbl: dt1)));
     }
 
     // ════════════════════════════════════════════════════════════════
