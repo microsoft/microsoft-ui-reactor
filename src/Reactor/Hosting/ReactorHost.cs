@@ -407,9 +407,10 @@ public sealed class ReactorHost : IDisposable
         //
         // #183: AnimationAmbient.Current is an AsyncLocal read (walks the
         // ExecutionContext) on every setState — gate it behind the cheap HasAny
-        // sentinel so apps that never call Animations.Animate skip it. The
-        // value is provably null until the first Animate scope is entered, so
-        // this preserves behaviour exactly.
+        // sentinel so apps that never call Animations.Animate skip it. While
+        // HasAny is false no Animate scope has published a non-null ambient, so
+        // Current is provably null and the gated read would return null anyway —
+        // skipping it preserves behaviour exactly.
         if (Microsoft.UI.Reactor.Core.Internal.AnimationAmbient.HasAny)
         {
             var captured = Microsoft.UI.Reactor.Core.Internal.AnimationAmbient.Current;
