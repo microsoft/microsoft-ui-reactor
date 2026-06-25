@@ -58,6 +58,10 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     private volatile bool _isRendering;       // only touched on UI thread
     private volatile bool _needsRerender;     // only touched on UI thread
     private bool _themeListenerAttached;
+    // Always-on UISettings used purely to drop the ThemeRef resolution caches on
+    // accent/palette changes that don't flip the Light/Dark theme and so don't
+    // raise ActualThemeChanged (#86). Unsubscribed in Dispose to avoid a leak.
+    private global::Windows.UI.ViewManagement.UISettings? _themeColorSettings;
     private volatile bool _disposed;
     private Curve? _pendingAnimationCurve;
     // Snapshot of AnimationAmbient.Current at setter dispatch time
@@ -601,6 +605,29 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
             ThemeRef.InvalidateCache();
             RequestRender();
         };
+
+        // Accent / system-palette changes that keep the same Light/Dark theme do
+        // not raise ActualThemeChanged, but can still change the brushes a
+        // ThemeRef resolves to. Subscribe to UISettings.ColorValuesChanged so
+        // those drop the resolution caches and re-render too (#86). Tied to the
+        // mounted root, so headless hosts that never mount don't activate the
+        // WinRT projection.
+        try
+        {
+            _themeColorSettings = new global::Windows.UI.ViewManagement.UISettings();
+            _themeColorSettings.ColorValuesChanged += OnThemeColorValuesChanged;
+        }
+        catch { /* headless / unit-test host — no UI settings */ }
+    }
+
+    private void OnThemeColorValuesChanged(
+        global::Windows.UI.ViewManagement.UISettings sender, object args)
+    {
+        // Fires on a WinRT pool thread for accent/palette changes. InvalidateCache
+        // and RequestRender are both thread-safe; mirror the ActualThemeChanged
+        // path so directly-applied resolved brushes pick up the new palette (#86).
+        ThemeRef.InvalidateCache();
+        RequestRender();
     }
 
     private void ShowErrorFallback(Exception ex)
@@ -625,6 +652,12 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
 
         Loaded -= OnLoaded;
         Unloaded -= OnUnloaded;
+
+        if (_themeColorSettings is not null)
+        {
+            _themeColorSettings.ColorValuesChanged -= OnThemeColorValuesChanged;
+            _themeColorSettings = null;
+        }
 
         _rootComponent?.Context.RunCleanups();
         _funcContext?.RunCleanups();

@@ -226,4 +226,39 @@ public class AnimationAmbientTests
         Assert.True(new AmbientAnimation(AnimationKind.EaseOut).HasEffect);
         Assert.True(new AmbientAnimation(AnimationKind.EaseInOut).HasEffect);
     }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  #183 — HasAny one-way sentinel that gates the hot setState read
+    // ════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void HasAny_Is_Latched_True_While_Ambient_Is_Active()
+    {
+        // Inside a non-None Animate, a non-null ambient has been published, so
+        // the sentinel host setState paths read before touching the Current
+        // AsyncLocal (#183) must be set — and gating on it (HasAny ? Current :
+        // null) is then behaviour-equivalent to reading Current directly.
+        bool insideHasAny = false;
+        Animations.Animate(AnimationKind.Spring, () =>
+        {
+            insideHasAny = AnimationAmbient.HasAny;
+            Assert.NotNull(AnimationAmbient.Current);
+        });
+
+        Assert.True(insideHasAny);
+    }
+
+    [Fact]
+    public void HasAny_Stays_True_After_Scope_Disposes_OneWay_Latch()
+    {
+        // The latch never resets — once any Animate scope has published an
+        // ambient, hot paths keep reading Current. Current itself unwinds to
+        // null when the scope disposes, but HasAny does not: it is a cheap,
+        // monotonic "animations have been used in this process" flag, so the
+        // gate stays correct (Current is the source of truth from here on).
+        Animations.Animate(AnimationKind.EaseOut, () => { });
+
+        Assert.Null(AnimationAmbient.Current);
+        Assert.True(AnimationAmbient.HasAny);
+    }
 }

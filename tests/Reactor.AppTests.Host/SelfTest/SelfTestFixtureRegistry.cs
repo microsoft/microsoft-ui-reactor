@@ -1307,6 +1307,13 @@ internal static class SelfTestFixtureRegistry
         "Issue495_ListView_SameLengthContentChange_RefreshesContainers",
         "Issue495_GridView_SameLengthContentChange_RefreshesContainers",
 
+        // perf PR — ThemeRef resolution caches (#85/#86) + ListView/GridView
+        // handler selection/item-click behaviour (#100/#110).
+        "ThemeRefCache_ResolvesCachesAndInvalidates",
+        "ListViewHandler_MultiSelection_TypedSnapshot",
+        "GridViewHandler_MultiSelection_TypedSnapshot",
+        "ListViewHandler_ItemClick_SubscribeOnce_TracksEnabled",
+
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         // The MarqueeHandler is authored in tests/external_proof/
         // Reactor.External.TestControl, references Reactor as a regular
@@ -2693,6 +2700,13 @@ internal static class SelfTestFixtureRegistry
         "Issue495_TypedGridViewLoop_StateBound_NoLoopAfterSelection" => new ListViewLoopReproFixtures.TypedGridView_StateBound_NoLoopAfterSelection(harness),
         "Issue495_ListView_SameLengthContentChange_RefreshesContainers" => new ListViewLoopReproFixtures.ListView_SameLengthContentChange_RefreshesContainers(harness),
         "Issue495_GridView_SameLengthContentChange_RefreshesContainers" => new ListViewLoopReproFixtures.GridView_SameLengthContentChange_RefreshesContainers(harness),
+
+        // perf PR — ThemeRef resolution caches (#85/#86) + ListView/GridView
+        // handler selection/item-click behaviour (#100/#110).
+        "ThemeRefCache_ResolvesCachesAndInvalidates" => new ThemeRefCacheFixtures.ThemeRefCache_ResolvesCachesAndInvalidates(harness),
+        "ListViewHandler_MultiSelection_TypedSnapshot" => new ListViewHandlerSelectionFixtures.ListView_MultiSelection_TypedSnapshot(harness),
+        "GridViewHandler_MultiSelection_TypedSnapshot" => new ListViewHandlerSelectionFixtures.GridView_MultiSelection_TypedSnapshot(harness),
+        "ListViewHandler_ItemClick_SubscribeOnce_TracksEnabled" => new ListViewHandlerSelectionFixtures.ListView_ItemClick_SubscribeOnce_TracksEnabled(harness),
 
         // Spec 047 §14 Phase 1 (1.16) — external-assembly proof fixtures.
         "Spec047ExternalProof_Marquee_MountUpdate" => new Spec047ExternalProofFixtures.MarqueeMountUpdate(harness),

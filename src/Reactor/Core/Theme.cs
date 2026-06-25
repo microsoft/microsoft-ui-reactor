@@ -52,9 +52,19 @@ public readonly record struct ThemeRef(string ResourceKey)
     private static readonly ConcurrentDictionary<(string Key, string Theme), Brush> _brushCache = new();
 
     // #85: effective theme name per element, validated by a global generation
-    // stamp. A theme change bumps the generation (see InvalidateCache), so every
-    // element's cached name is lazily recomputed on its next resolve.
-    private sealed class ThemeNameBox { public int Generation = -1; public string? Name; }
+    // stamp AND the element's own RequestedTheme / ActualTheme dependency
+    // properties. A host theme change bumps the generation (see InvalidateCache);
+    // a subtree-local RequestedTheme change (applied by the reconciler without a
+    // generation bump) is caught by the cheap per-element DP comparison in
+    // GetEffectiveThemeName, so every element's cached name is lazily recomputed
+    // on its next resolve.
+    private sealed class ThemeNameBox
+    {
+        public int Generation = -1;
+        public ElementTheme RequestedTheme = (ElementTheme)(-1);
+        public ElementTheme ActualTheme = (ElementTheme)(-1);
+        public string? Name;
+    }
     private static readonly ConditionalWeakTable<FrameworkElement, ThemeNameBox> _themeNameCache = new();
     private static int _themeGeneration;
 
@@ -115,18 +125,34 @@ public readonly record struct ThemeRef(string ResourceKey)
     private static string GetEffectiveThemeName(FrameworkElement fe)
     {
         // #85: the effective theme depends on fe + its ancestors' RequestedTheme
-        // / ActualTheme, which only change on a theme switch. Cache it per
-        // element and validate against the global generation stamp so repeated
-        // resolves (per colour token, per render) reuse one tree walk until the
-        // next theme change bumps the generation.
+        // / ActualTheme. Cache it per element and reuse the cached name (one tree
+        // walk) across the dozens of token resolves in a render. The cache is
+        // valid only while three cheap, always-current inputs are unchanged:
+        //   • the global generation stamp (bumped on host theme/colour changes),
+        //   • fe.RequestedTheme — a subtree-local override the reconciler applies
+        //     WITHOUT bumping the generation, so the generation alone would miss
+        //     it; the O(1) DP compare catches it on the next resolve, and
+        //   • fe.ActualTheme — covers an ancestor/app theme flip once it has
+        //     propagated to this element.
+        // The only residual lag is a Default-themed descendant of an ancestor
+        // whose RequestedTheme flips within the same synchronous pass, before
+        // ActualTheme propagates; it self-heals on the next render — the same
+        // propagation caveat the uncached ActualTheme fallback already carried.
         int gen = Volatile.Read(ref _themeGeneration);
+        var requested = fe.RequestedTheme;
+        var actual = fe.ActualTheme;
         var box = _themeNameCache.GetValue(fe, static _ => new ThemeNameBox());
-        if (box.Generation == gen && box.Name is not null)
+        if (box.Generation == gen
+            && box.Name is not null
+            && box.RequestedTheme == requested
+            && box.ActualTheme == actual)
             return box.Name;
 
         var name = ComputeEffectiveThemeName(fe);
         box.Name = name;
         box.Generation = gen;
+        box.RequestedTheme = requested;
+        box.ActualTheme = actual;
         return name;
     }
 
