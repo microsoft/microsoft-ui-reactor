@@ -982,9 +982,22 @@ internal static class YogaAlgorithm
 
         if (useResolvedFlexBasis)
         {
+            // AI-HINT (perf #138): invalidate the resolved flex-basis cache by
+            // layout generation, not only under WebFlexBasis. FlexPanel runs each
+            // nested panel as its own Yoga tree and measures a child across several
+            // top-level CalculateLayout calls within a single WinUI layout — e.g. a
+            // min-content probe (undefined main axis → basis measured from CONTENT)
+            // followed by the definite-main-axis pass (where an explicit
+            // `flex-basis: 0` must apply). Before the #138 setter guards, FlexPanel
+            // re-dirtied every child each pass, which reset ComputedFlexBasis to NaN
+            // (see YogaNode.MarkDirtyAndPropagate) and forced this recompute. The
+            // guards intentionally stop that re-dirtying so the layout cache can hit
+            // across frames; the per-generation check below restores the same basis
+            // freshness without re-dirtying the root. Without it the stale
+            // content-measured basis from the probe leaks into the definite pass and
+            // breaks flex-grow distribution (basis 0 items grow from min-content).
             if (YogaFloat.IsUndefined(child.Layout.ComputedFlexBasis) ||
-                (child.Config.IsExperimentalFeatureEnabled(YogaExperimentalFeature.WebFlexBasis) &&
-                 child.Layout.ComputedFlexBasisGeneration != generationCount))
+                child.Layout.ComputedFlexBasisGeneration != generationCount)
             {
                 float paddingAndBorder = BoundAxisHelper.PaddingAndBorderForAxis(child, mainAxis, direction, ownerWidth);
                 child.SetLayoutComputedFlexBasis(YogaFloat.MaxOrDefined(resolvedFlexBasis, paddingAndBorder));
