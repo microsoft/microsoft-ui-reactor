@@ -179,13 +179,18 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
             var rowH = el.RowHeight ?? el.EstimatedRowHeight;
             var pageSize = Math.Max(50, (int)Math.Ceiling(2160.0 / rowH));
 
-            var request = new DataRequest
+            // Memoize the DataRequest on the sort/filter/search/pageSize identity. Rebuilding it
+            // every render allocated two fresh List copies (Sort/Filters) whose references then
+            // changed UseDataSource's deps every render, restarting pagination. Keyed on the
+            // version counters, the request and its list references stay stable until the
+            // underlying sort/filter/search actually change.
+            var request = UseMemo(() => new DataRequest
             {
                 PageSize = pageSize,
                 Sort = state.Sorts.Count > 0 ? state.Sorts.ToList() : null,
                 Filters = state.Filters.Count > 0 ? state.Filters.ToList() : null,
                 SearchQuery = state.SearchQuery,
-            };
+            }, state.SortVersion, state.FilterVersion, state.SearchQuery ?? string.Empty, pageSize);
 
             var resource = UseDataSource(
                 source,
@@ -221,7 +226,11 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
 
         // Load data on mount and when sort changes (legacy path only — hook path
         // reacts to sort/filter changes through its own deps).
-        var sortKey = string.Join(",", state.Sorts.Select(s => $"{s.Field}:{s.Direction}"));
+        // Memoize the sort key so the Select + interpolation + Join only runs when sorts change,
+        // not on every render. It feeds the LoadDataAsync effect's deps below.
+        var sortKey = UseMemo(
+            () => string.Join(",", state.Sorts.Select(s => $"{s.Field}:{s.Direction}")),
+            state.SortVersion);
 
         UseEffect(() =>
         {
@@ -309,26 +318,30 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         }
         gridChildren.Add(dataContent.Grid(row: gridRow, column: 0));
 
-        // Build row definitions: "Auto" for header + count, "*" for data area.
-        var rootRowDefs = new string[gridRow + 1];
-        for (int r = 0; r < gridRow; r++) rootRowDefs[r] = "Auto";
-        rootRowDefs[gridRow] = "*";
-
-        // DataGrid builds row-track strings dynamically via its existing
-        // string-based path; the typed migration is tracked as a follow-up to
-        // spec 033 §1 because it requires reshaping rootRowDefs all the way up.
-#pragma warning disable CS0618 // Use string-form Grid overload (deprecated, scheduled for removal)
-        var gridEl = Grid(new[] { "*" }, rootRowDefs, gridChildren.ToArray());
-#pragma warning restore CS0618
+        // Root grid: one "*" column, with `gridRow` leading "Auto" rows (search / headers / count)
+        // and a final "*" row for the data area. gridRow is 0..3, so the row-def arrays and their
+        // GridDefinitions are precomputed once (RootGridDefCache) instead of allocating a string[]
+        // + GridDefinition every render. The stable definition reference also lets the reconciler
+        // skip re-applying the root grid's row/column definitions when the row count is unchanged.
+        var rootDef = gridRow < RootGridDefCache.Length
+            ? RootGridDefCache[gridRow]
+            : new GridDefinition(RootColsStar, BuildRootRowDefs(gridRow));
+        var gridEl = new GridElement(rootDef, FilterRowChildren(gridChildren.ToArray()));
 
         // Commit active edit when focus leaves the DataGrid entirely.
         // Attached once at mount via Setters; the handler reads current state from the ref.
         if (el.Editable)
         {
             var lostFocusWired = UseRef(false);
-            gridEl = gridEl with
+            // Cache the LostFocus setter array (and its closure) in a ref so the spread + lambda
+            // aren't re-allocated every render. The handler wires g.LostFocus exactly once (guarded
+            // by lostFocusWired) and reads live state through the captured refs, so a once-built
+            // setter is equivalent to rebuilding it each render. gridEl is freshly constructed
+            // above with no setters, so assigning Setters here matches the old spread.
+            var lostFocusSetters = UseRef<Action<global::Microsoft.UI.Xaml.Controls.Grid>[]?>(null);
+            lostFocusSetters.Current ??= new Action<global::Microsoft.UI.Xaml.Controls.Grid>[]
             {
-                Setters = [.. gridEl.Setters, g =>
+                g =>
                 {
                     if (lostFocusWired.Current) return;
                     lostFocusWired.Current = true;
@@ -370,8 +383,9 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                             }
                         });
                     };
-                }]
+                }
             };
+            gridEl = gridEl with { Setters = lostFocusSetters.Current };
         }
 
         Element grid = gridEl;
@@ -423,36 +437,22 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         var totalItems = state.ItemCount;
         var selectable = el.SelectionMode != SelectionMode.None;
         var editable = el.Editable;
-        var colCount = columns.Count;
 
-        var colWidths = new double[colCount];
-        for (int c = 0; c < colCount; c++)
-            colWidths[c] = state.GetColumnWidth(columns[c].Name);
-
-        // Build Grid column definitions: one pixel column per data column,
-        // plus an optional expand column for row details,
-        // plus an optional 40px selection checkbox column at the start,
-        // plus an optional actions column for Row edit mode.
+        // Cache the per-column pixel widths + the shared GridDefinition in state. Rebuilt only when
+        // a column changes (see DataGridState.GetColumnLayout) — this eliminates the per-render
+        // double[] + string[] + per-column double.ToString. The header row and every data row reuse
+        // the same GridDefinition reference, so the reconciler skips re-applying its
+        // ColumnDefinitions each render.
         var hasRowDetailTemplate = el.RowDetailTemplate is not null;
         var hasRowEditActions = editable && el.EditMode == EditMode.Row;
-        var gridColCount = colCount
-            + (hasRowDetailTemplate ? 1 : 0)
-            + (selectable ? 1 : 0)
-            + (hasRowEditActions ? 1 : 0);
-        var gridColDefs = new string[gridColCount];
-        var idx = 0;
-        if (hasRowDetailTemplate) gridColDefs[idx++] = "24";
-        if (selectable) gridColDefs[idx++] = "40";
-        for (int c = 0; c < colCount; c++)
-            gridColDefs[idx++] = colWidths[c].ToString(global::System.Globalization.CultureInfo.InvariantCulture);
-        if (hasRowEditActions) gridColDefs[idx] = "Auto";
-        var rowDef = new string[] { "*" };
+        var (colWidths, gridDef) = state.GetColumnLayout(
+            columns, hasRowDetailTemplate, selectable, hasRowEditActions);
 
         return VirtualList(
             itemCount: totalItems,
             renderItem: index =>
             {
-                return RenderRow(index, state, columns, el, registry, colWidths, gridColDefs, rowDef);
+                return RenderRow(index, state, columns, el, registry, colWidths, gridDef);
             },
             itemHeight: el.RowHeight,
             estimatedItemHeight: el.EstimatedRowHeight,
@@ -496,8 +496,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         DataGridElement<T> el,
         TypeRegistry registry,
         double[] colWidths,
-        string[] gridColDefs,
-        string[] rowDef)
+        GridDefinition gridDef)
     {
         var item = state.GetItemAt(index);
         var keyStr = state.GetRowKeyAt(index);
@@ -690,10 +689,10 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
             : (index % 2 == 0 ? LayerFill : CardBackground);
         // Use a WinUI Grid with pixel column definitions instead of FlexRow.
         // Grid with pixel columns avoids Yoga layout entirely — the dominant
-        // cost identified by profiling.
-#pragma warning disable CS0618 // dynamic gridColDefs string[] — typed migration tracked
-        Element row = Grid(gridColDefs, rowDef, cells);
-#pragma warning restore CS0618
+        // cost identified by profiling. Construct it directly with the cached, shared
+        // GridDefinition (FilterRowChildren mirrors the Grid(...) factory's child handling) so the
+        // reconciler reuses the definition reference and skips rebuilding ColumnDefinitions.
+        Element row = new GridElement(gridDef, FilterRowChildren(cells));
         row = row.Background(rowBg);
 
         // Click handler — always present (maintains element tree structure).
@@ -889,16 +888,10 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         var editable = el.Editable;
         var hasRowEditActions = editable && el.EditMode == EditMode.Row;
 
-        // Build column definition strings for the header Grid.
-        var gridColDefs = new string[colCount + cellOffset + (hasRowEditActions ? 1 : 0)];
-        var idx = 0;
-        if (hasRowDetailTemplate) gridColDefs[idx++] = "24";
-        if (selectable) gridColDefs[idx++] = "40";
-        for (int c = 0; c < colCount; c++)
-            gridColDefs[idx++] = state.GetColumnWidth(columns[c].Name)
-                .ToString(global::System.Globalization.CultureInfo.InvariantCulture);
-        if (hasRowEditActions) gridColDefs[idx] = "Auto";
-        var rowDef = new string[] { "*" };
+        // Reuse the cached column layout (shared with the data rows) so the header doesn't
+        // rebuild the column-definition strings or re-run double.ToString each render.
+        var (_, gridDef) = state.GetColumnLayout(
+            columns, hasRowDetailTemplate, selectable, hasRowEditActions);
 
         var headerCells = new List<Element?>();
 
@@ -970,15 +963,82 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                     .Grid(row: 0, column: colCount + cellOffset));
         }
 
-#pragma warning disable CS0618 // dynamic gridColDefs string[] — typed migration tracked
-        return Grid(gridColDefs, rowDef, headerCells.ToArray());
-#pragma warning restore CS0618
+        return new GridElement(gridDef, FilterRowChildren(headerCells.ToArray()));
     }
 
     // Cached GridDefinition for the resize grip overlay. Using a static instance
     // ensures the reconciler sees the same reference across renders and takes the
     // fast update path (property changes only) instead of remounting the Grid.
     private static readonly GridDefinition ResizeOverlayDef = new(["*"], ["*"]);
+
+    // Root grid layout caches (#129). The root grid always has a single "*" column and `gridRow`
+    // leading "Auto" rows (optional search box / header row / total-count row) followed by a final
+    // "*" data row. gridRow is 0..3, so all four row-definition arrays and their GridDefinitions
+    // are built once and reused — avoiding a per-render string[] + GridDefinition allocation. The
+    // stable GridDefinition reference also lets the reconciler skip re-applying the root grid's
+    // row/column definitions when the optional-row count is unchanged.
+    private static readonly string[] RootColsStar = ["*"];
+
+    private static readonly string[][] RootRowDefsCache =
+    [
+        BuildRootRowDefs(0),
+        BuildRootRowDefs(1),
+        BuildRootRowDefs(2),
+        BuildRootRowDefs(3),
+    ];
+
+    private static readonly GridDefinition[] RootGridDefCache =
+    [
+        new GridDefinition(RootColsStar, RootRowDefsCache[0]),
+        new GridDefinition(RootColsStar, RootRowDefsCache[1]),
+        new GridDefinition(RootColsStar, RootRowDefsCache[2]),
+        new GridDefinition(RootColsStar, RootRowDefsCache[3]),
+    ];
+
+    // Builds the root grid's row definitions: `gridRow` leading "Auto" rows + a final "*" data row.
+    private static string[] BuildRootRowDefs(int gridRow)
+    {
+        var rows = new string[gridRow + 1];
+        for (int i = 0; i < gridRow; i++) rows[i] = "Auto";
+        rows[gridRow] = "*";
+        return rows;
+    }
+
+    // Mirrors Dsl.FilterChildren (which is private): flattens GroupElements and removes null /
+    // EmptyElement children, with a fast path that aliases the input array when no expansion is
+    // needed. Replicated here so the DataGrid can build GridElements directly with a cached
+    // GridDefinition while preserving the exact child semantics of the Grid(...) factory.
+    private static Element[] FilterRowChildren(Element?[] children)
+    {
+        bool needsExpansion = false;
+        for (int i = 0; i < children.Length; i++)
+        {
+            if (children[i] is null or GroupElement or EmptyElement)
+            {
+                needsExpansion = true;
+                break;
+            }
+        }
+        if (!needsExpansion) return (Element[])(object)children;
+
+        var result = new List<Element>();
+        for (int i = 0; i < children.Length; i++)
+        {
+            if (children[i] is GroupElement group)
+            {
+                foreach (var gc in group.Children)
+                {
+                    if (gc is not null and not EmptyElement)
+                        result.Add(gc);
+                }
+            }
+            else if (children[i] is not null and not EmptyElement)
+            {
+                result.Add(children[i]!);
+            }
+        }
+        return result.ToArray();
+    }
 
     private static readonly Microsoft.UI.Xaml.Media.SolidColorBrush TransparentBrush =
         new(Microsoft.UI.Colors.Transparent);
