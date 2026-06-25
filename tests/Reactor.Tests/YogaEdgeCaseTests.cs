@@ -1316,4 +1316,59 @@ public class YogaEdgeCaseTests
         // Cache hit ⇒ measure function not invoked again.
         Assert.Equal(callsAfterFirst, measureCalls);
     }
+
+    // ════════════════════════════════════════════════════════════════════
+    // 7. Flex-basis cache invalidation across layout generations (#138 follow-up)
+    //    The equality guards stop FlexPanel re-dirtying stable children every
+    //    MeasureOverride, so a child's resolved flex-basis must be invalidated
+    //    per layout generation rather than relying on the dirty flag. Without
+    //    that, a flex-basis:0 grow item measured at content during an
+    //    undefined-main-axis pass leaks that content size into a later
+    //    definite-width pass and mis-distributes the grow space. The 704
+    //    single-generation Yoga fixtures never exercise this; only a repeated
+    //    (multi-generation) layout of the same un-dirtied tree does.
+    // ════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void FlexBasis_StaleAcrossGenerations_RecomputedOnDefinitePass()
+    {
+        // Two flex-grow children with flex-basis:0 in a row, content width 50
+        // each (via measure function). In a definite 600px row the basis:0 grow
+        // split 1:2 must be 200 / 400 — the content size must NOT enter the base.
+        var config = new YogaConfig();
+        var root = new YogaNode(config);
+        root.FlexDirection = FlexDirection.Row;
+        root.Height = YogaValue.Point(50f);
+
+        var child0 = new YogaNode(config);
+        child0.FlexGrow = 1f;
+        child0.FlexShrink = 0f;
+        child0.FlexBasis = YogaValue.Point(0f);
+        child0.MeasureFunction = (n, w, wm, h, hm) => new YogaSize(50f, 10f);
+        root.InsertChild(child0, 0);
+
+        var child1 = new YogaNode(config);
+        child1.FlexGrow = 2f;
+        child1.FlexShrink = 0f;
+        child1.FlexBasis = YogaValue.Point(0f);
+        child1.MeasureFunction = (n, w, wm, h, hm) => new YogaSize(50f, 10f);
+        root.InsertChild(child1, 1);
+
+        // Generation 1: undefined main axis (no root width, undefined available
+        // width). flex-basis:0 is not applied in an indefinite main axis, so the
+        // children are measured at content and each ComputedFlexBasis becomes 50.
+        root.CalculateLayout(float.NaN, 50f, FlexLayoutDirection.LTR);
+
+        // Generation 2: definite 600px main axis. Only the root constraint
+        // changed (what FlexPanel does each frame); the children were never
+        // re-dirtied, so their stale gen-1 content basis must be invalidated by
+        // layout generation, not by the dirty flag.
+        root.Width = YogaValue.Point(600f);
+        root.CalculateLayout(600f, 50f, FlexLayoutDirection.LTR);
+
+        // flex-basis:0 grow 1:2 across 600px ⇒ 200 / 400.
+        // A leaked content basis (50 each) would instead give ~217 / 383.
+        Assert.Equal(200f, child0.LayoutWidth);
+        Assert.Equal(400f, child1.LayoutWidth);
+    }
 }
