@@ -276,11 +276,61 @@ public abstract record Element
     /// </summary>
     internal Element SetAttached(object data)
     {
-        var dict = Attached is not null
-            ? new Dictionary<Type, object>(Attached)
-            : new Dictionary<Type, object>();
-        dict[data.GetType()] = data;
+        var key = data.GetType();
+        var existing = Attached;
+        // #155 — the overwhelmingly common case is a single attached value per
+        // element (e.g. one .Grid(row, column) per cell, re-applied every render).
+        // Store it in a tiny single-entry dictionary instead of allocating a full
+        // Dictionary<Type, object> (bucket + entry arrays) for every cell, every
+        // frame. A real Dictionary is only materialized when an element actually
+        // carries two or more distinct attached types (rare).
+        if (existing is null || (existing.Count == 1 && existing.ContainsKey(key)))
+        {
+            return this with { Attached = new SingleAttachedDictionary(key, data) };
+        }
+        var dict = new Dictionary<Type, object>(existing.Count + 1);
+        foreach (var kv in existing) dict[kv.Key] = kv.Value;
+        dict[key] = data;
         return this with { Attached = dict };
+    }
+
+    /// <summary>
+    /// Minimal immutable single-entry <see cref="IReadOnlyDictionary{TKey,TValue}"/>
+    /// used by <see cref="SetAttached"/> for the common one-attached-value case
+    /// (spec 047 §4.4 hot path). Avoids the per-cell <see cref="Dictionary{TKey,TValue}"/>
+    /// allocation while remaining a drop-in for every consumer
+    /// (<see cref="GetAttached{T}"/>, <see cref="AttachedEqual"/>), which only ever
+    /// call <c>Count</c>, <c>TryGetValue</c>, <c>ContainsKey</c>, or enumerate.
+    /// </summary>
+    internal sealed class SingleAttachedDictionary : IReadOnlyDictionary<Type, object>
+    {
+        private readonly Type _key;
+        private readonly object _value;
+        internal SingleAttachedDictionary(Type key, object value)
+        {
+            _key = key;
+            _value = value;
+        }
+        public object this[Type key] => key == _key ? _value : throw new KeyNotFoundException();
+        public IEnumerable<Type> Keys { get { yield return _key; } }
+        public IEnumerable<object> Values { get { yield return _value; } }
+        public int Count => 1;
+        public bool ContainsKey(Type key) => key == _key;
+        public bool TryGetValue(Type key, out object value)
+        {
+            if (key == _key)
+            {
+                value = _value;
+                return true;
+            }
+            value = null!;
+            return false;
+        }
+        public IEnumerator<KeyValuePair<Type, object>> GetEnumerator()
+        {
+            yield return new KeyValuePair<Type, object>(_key, _value);
+        }
+        global::System.Collections.IEnumerator global::System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
     }
 
     /// <summary>
@@ -374,7 +424,7 @@ public abstract record Element
                 && ta.Weight == tb.Weight
                 && ta.FontStyle == tb.FontStyle
                 && ta.HorizontalAlignment == tb.HorizontalAlignment
-                && ReferenceEquals(ta.Setters, tb.Setters),
+                && SettersEqual(ta.Setters, tb.Setters),
 
             // Callbacks (OnClick, OnChanged, etc.) are intentionally not compared:
             // dispatch goes through the Tag trampoline, and the Update.cs skip path
@@ -386,26 +436,26 @@ public abstract record Element
                 && ba.IsEnabled == bb.IsEnabled
                 && ba.ContentElement is null && bb.ContentElement is null
                 && CommandBindings.CommandsEqual(ba.Command, bb.Command)
-                && ReferenceEquals(ba.Setters, bb.Setters),
+                && SettersEqual(ba.Setters, bb.Setters),
 
             (HyperlinkButtonElement ha, HyperlinkButtonElement hb) =>
                 ha.Content == hb.Content
                 && ha.NavigateUri == hb.NavigateUri
                 && CommandBindings.CommandsEqual(ha.Command, hb.Command)
-                && ReferenceEquals(ha.Setters, hb.Setters),
+                && SettersEqual(ha.Setters, hb.Setters),
 
             (RepeatButtonElement ra, RepeatButtonElement rb) =>
                 ra.Label == rb.Label
                 && ra.Delay == rb.Delay
                 && ra.Interval == rb.Interval
                 && CommandBindings.CommandsEqual(ra.Command, rb.Command)
-                && ReferenceEquals(ra.Setters, rb.Setters),
+                && SettersEqual(ra.Setters, rb.Setters),
 
             (ToggleButtonElement ta, ToggleButtonElement tb) =>
                 ta.Label == tb.Label
                 && ta.IsChecked == tb.IsChecked
                 && CommandBindings.CommandsEqual(ta.Command, tb.Command)
-                && ReferenceEquals(ta.Setters, tb.Setters),
+                && SettersEqual(ta.Setters, tb.Setters),
 
             // issue #153 (L1) — extend the command fast-path arm to Split / ToggleSplit so all six
             // command-capable buttons memoize consistently. Flyout uses reference-equality (matches
@@ -415,14 +465,14 @@ public abstract record Element
                 sa.Label == sb.Label
                 && ReferenceEquals(sa.Flyout, sb.Flyout)
                 && CommandBindings.CommandsEqual(sa.Command, sb.Command)
-                && ReferenceEquals(sa.Setters, sb.Setters),
+                && SettersEqual(sa.Setters, sb.Setters),
 
             (ToggleSplitButtonElement tsa, ToggleSplitButtonElement tsb) =>
                 tsa.Label == tsb.Label
                 && tsa.IsChecked == tsb.IsChecked
                 && ReferenceEquals(tsa.Flyout, tsb.Flyout)
                 && CommandBindings.CommandsEqual(tsa.Command, tsb.Command)
-                && ReferenceEquals(tsa.Setters, tsb.Setters),
+                && SettersEqual(tsa.Setters, tsb.Setters),
 
             (SliderElement sa, SliderElement sb) =>
                 sa.Value == sb.Value
@@ -430,27 +480,27 @@ public abstract record Element
                 && sa.Max == sb.Max
                 && sa.StepFrequency == sb.StepFrequency
                 && sa.Header == sb.Header
-                && ReferenceEquals(sa.Setters, sb.Setters),
+                && SettersEqual(sa.Setters, sb.Setters),
 
             (ToggleSwitchElement ta, ToggleSwitchElement tb) =>
                 ta.IsOn == tb.IsOn
                 && ta.OnContent == tb.OnContent
                 && ta.OffContent == tb.OffContent
                 && ta.Header == tb.Header
-                && ReferenceEquals(ta.Setters, tb.Setters),
+                && SettersEqual(ta.Setters, tb.Setters),
 
             (CheckBoxElement ca, CheckBoxElement cb) =>
                 ca.IsChecked == cb.IsChecked
                 && ca.Label == cb.Label
                 && ca.IsThreeState == cb.IsThreeState
                 && ca.CheckedState == cb.CheckedState
-                && ReferenceEquals(ca.Setters, cb.Setters),
+                && SettersEqual(ca.Setters, cb.Setters),
 
             (RadioButtonElement ra, RadioButtonElement rb) =>
                 ra.Label == rb.Label
                 && ra.IsChecked == rb.IsChecked
                 && ra.GroupName == rb.GroupName
-                && ReferenceEquals(ra.Setters, rb.Setters),
+                && SettersEqual(ra.Setters, rb.Setters),
 
             (ComboBoxElement ca, ComboBoxElement cb) =>
                 ReferenceEquals(ca.Items, cb.Items)
@@ -459,7 +509,7 @@ public abstract record Element
                 && ca.Header == cb.Header
                 && ca.IsEditable == cb.IsEditable
                 && ReferenceEquals(ca.ItemElements, cb.ItemElements)
-                && ReferenceEquals(ca.Setters, cb.Setters),
+                && SettersEqual(ca.Setters, cb.Setters),
 
             (TextBoxElement ta, TextBoxElement tb) =>
                 ta.Value == tb.Value
@@ -470,7 +520,7 @@ public abstract record Element
                 && ta.TextWrapping == tb.TextWrapping
                 && ta.SelectionStart == tb.SelectionStart
                 && ta.SelectionLength == tb.SelectionLength
-                && ReferenceEquals(ta.Setters, tb.Setters),
+                && SettersEqual(ta.Setters, tb.Setters),
 
             (NumberBoxElement na, NumberBoxElement nb) =>
                 na.Value == nb.Value
@@ -481,12 +531,12 @@ public abstract record Element
                 && na.Header == nb.Header
                 && na.PlaceholderText == nb.PlaceholderText
                 && na.SpinButtonPlacement == nb.SpinButtonPlacement
-                && ReferenceEquals(na.Setters, nb.Setters),
+                && SettersEqual(na.Setters, nb.Setters),
 
             (PasswordBoxElement pa, PasswordBoxElement pb) =>
                 pa.Password == pb.Password
                 && pa.PlaceholderText == pb.PlaceholderText
-                && ReferenceEquals(pa.Setters, pb.Setters),
+                && SettersEqual(pa.Setters, pb.Setters),
 
             (ProgressElement pa, ProgressElement pb) =>
                 pa.Value == pb.Value
@@ -494,24 +544,24 @@ public abstract record Element
                 && pa.Maximum == pb.Maximum
                 && pa.ShowError == pb.ShowError
                 && pa.ShowPaused == pb.ShowPaused
-                && ReferenceEquals(pa.Setters, pb.Setters),
+                && SettersEqual(pa.Setters, pb.Setters),
 
             (ProgressRingElement pa, ProgressRingElement pb) =>
                 pa.Value == pb.Value
                 && pa.Minimum == pb.Minimum
                 && pa.Maximum == pb.Maximum
                 && pa.IsActive == pb.IsActive
-                && ReferenceEquals(pa.Setters, pb.Setters),
+                && SettersEqual(pa.Setters, pb.Setters),
 
             (ImageElement ia, ImageElement ib) =>
                 ia.Source == ib.Source
-                && ReferenceEquals(ia.Setters, ib.Setters),
+                && SettersEqual(ia.Setters, ib.Setters),
 
             (RectangleElement ra, RectangleElement rb) =>
-                ReferenceEquals(ra.Setters, rb.Setters),
+                SettersEqual(ra.Setters, rb.Setters),
 
             (EllipseElement ea, EllipseElement eb) =>
-                ReferenceEquals(ea.Setters, eb.Setters),
+                SettersEqual(ea.Setters, eb.Setters),
 
             // Chart primitives — emitted in bulk by D3Charts. Without these arms,
             // every Path/Line in a chart falls through to UpdatePath/UpdateLine on
@@ -559,7 +609,7 @@ public abstract record Element
                 && ra.IsColorFontEnabled == rb.IsColorFontEnabled
                 && ra.OpticalMarginAlignment == rb.OpticalMarginAlignment
                 && BrushesEqual(ra.SelectionHighlightColor, rb.SelectionHighlightColor)
-                && ReferenceEquals(ra.Setters, rb.Setters),
+                && SettersEqual(ra.Setters, rb.Setters),
 
             // Container elements: compare own props + children by reference.
             // Same children reference = truly unchanged subtree = safe to skip entirely.
@@ -570,7 +620,7 @@ public abstract record Element
                 && sa.HorizontalAlignment == sb.HorizontalAlignment
                 && sa.VerticalAlignment == sb.VerticalAlignment
                 && ReferenceEquals(sa.Children, sb.Children)
-                && ReferenceEquals(sa.Setters, sb.Setters),
+                && SettersEqual(sa.Setters, sb.Setters),
 
             (BorderElement ba, BorderElement bb) =>
                 BrushesEqual(ba.Background, bb.Background)
@@ -578,7 +628,7 @@ public abstract record Element
                 && ba.CornerRadius == bb.CornerRadius
                 && ba.BorderThickness == bb.BorderThickness
                 && ReferenceEquals(ba.Child, bb.Child)
-                && ReferenceEquals(ba.Setters, bb.Setters),
+                && SettersEqual(ba.Setters, bb.Setters),
 
             // ItemContainer is the ItemsView item-root wrapper. Selection
             // state is framework-driven (so the Reactor element's
@@ -588,14 +638,14 @@ public abstract record Element
             (ItemContainerElement ica, ItemContainerElement icb) =>
                 ica.IsSelected == icb.IsSelected
                 && ReferenceEquals(ica.Child, icb.Child)
-                && ReferenceEquals(ica.Setters, icb.Setters),
+                && SettersEqual(ica.Setters, icb.Setters),
 
             (GridElement ga, GridElement gb) =>
                 ga.RowSpacing == gb.RowSpacing
                 && ga.ColumnSpacing == gb.ColumnSpacing
                 && ReferenceEquals(ga.Definition, gb.Definition)
                 && ReferenceEquals(ga.Children, gb.Children)
-                && ReferenceEquals(ga.Setters, gb.Setters),
+                && SettersEqual(ga.Setters, gb.Setters),
 
             (ScrollViewerElement sva, ScrollViewerElement svb) =>
                 sva.Orientation == svb.Orientation
@@ -605,7 +655,7 @@ public abstract record Element
                 && sva.VerticalScrollMode == svb.VerticalScrollMode
                 && sva.ZoomMode == svb.ZoomMode
                 && ReferenceEquals(sva.Child, svb.Child)
-                && ReferenceEquals(sva.Setters, svb.Setters),
+                && SettersEqual(sva.Setters, svb.Setters),
 
             (ScrollViewElement sva, ScrollViewElement svb) =>
                 sva.ContentOrientation == svb.ContentOrientation
@@ -619,7 +669,7 @@ public abstract record Element
                 && sva.HorizontalAnchorRatio == svb.HorizontalAnchorRatio
                 && sva.VerticalAnchorRatio == svb.VerticalAnchorRatio
                 && ReferenceEquals(sva.Child, svb.Child)
-                && ReferenceEquals(sva.Setters, svb.Setters),
+                && SettersEqual(sva.Setters, svb.Setters),
 
             (FlexElement fa, FlexElement fb) =>
                 fa.Direction == fb.Direction
@@ -631,7 +681,7 @@ public abstract record Element
                 && fa.RowGap == fb.RowGap
                 && fa.FlexPadding == fb.FlexPadding
                 && ReferenceEquals(fa.Children, fb.Children)
-                && ReferenceEquals(fa.Setters, fb.Setters),
+                && SettersEqual(fa.Setters, fb.Setters),
 
             (CanvasElement ca, CanvasElement cb) =>
                 ca.Width == cb.Width
@@ -676,13 +726,13 @@ public abstract record Element
                 && sa.Spacing == sb.Spacing
                 && sa.HorizontalAlignment == sb.HorizontalAlignment
                 && sa.VerticalAlignment == sb.VerticalAlignment
-                && ReferenceEquals(sa.Setters, sb.Setters),
+                && SettersEqual(sa.Setters, sb.Setters),
 
             (Core.GridElement ga, Core.GridElement gb) =>
                 ga.RowSpacing == gb.RowSpacing
                 && ga.ColumnSpacing == gb.ColumnSpacing
                 && ReferenceEquals(ga.Definition, gb.Definition)
-                && ReferenceEquals(ga.Setters, gb.Setters),
+                && SettersEqual(ga.Setters, gb.Setters),
 
             (BorderElement ba, BorderElement bb) =>
                 BrushesEqual(ba.Background, bb.Background)
@@ -690,7 +740,7 @@ public abstract record Element
                 && ba.CornerRadius == bb.CornerRadius
                 && ba.Padding == bb.Padding
                 && ba.BorderThickness == bb.BorderThickness
-                && ReferenceEquals(ba.Setters, bb.Setters),
+                && SettersEqual(ba.Setters, bb.Setters),
 
             // ItemContainer: own props (excluding Child) match when
             // IsSelected and Setters agree. The reconcile-highlight gate
@@ -698,7 +748,7 @@ public abstract record Element
             // when the only changes are inside the user-supplied subtree.
             (ItemContainerElement ica, ItemContainerElement icb) =>
                 ica.IsSelected == icb.IsSelected
-                && ReferenceEquals(ica.Setters, icb.Setters),
+                && SettersEqual(ica.Setters, icb.Setters),
 
             (ScrollViewerElement sva, ScrollViewerElement svb) =>
                 sva.Orientation == svb.Orientation
@@ -707,7 +757,7 @@ public abstract record Element
                 && sva.HorizontalScrollMode == svb.HorizontalScrollMode
                 && sva.VerticalScrollMode == svb.VerticalScrollMode
                 && sva.ZoomMode == svb.ZoomMode
-                && ReferenceEquals(sva.Setters, svb.Setters),
+                && SettersEqual(sva.Setters, svb.Setters),
 
             (ScrollViewElement sva, ScrollViewElement svb) =>
                 sva.ContentOrientation == svb.ContentOrientation
@@ -720,7 +770,7 @@ public abstract record Element
                 && sva.MaxZoomFactor == svb.MaxZoomFactor
                 && sva.HorizontalAnchorRatio == svb.HorizontalAnchorRatio
                 && sva.VerticalAnchorRatio == svb.VerticalAnchorRatio
-                && ReferenceEquals(sva.Setters, svb.Setters),
+                && SettersEqual(sva.Setters, svb.Setters),
 
             (FlexElement fa, FlexElement fb) =>
                 fa.Direction == fb.Direction
@@ -731,23 +781,23 @@ public abstract record Element
                 && fa.ColumnGap == fb.ColumnGap
                 && fa.RowGap == fb.RowGap
                 && fa.FlexPadding == fb.FlexPadding
-                && ReferenceEquals(fa.Setters, fb.Setters),
+                && SettersEqual(fa.Setters, fb.Setters),
 
             (CanvasElement ca, CanvasElement cb) =>
-                ReferenceEquals(ca.Setters, cb.Setters),
+                SettersEqual(ca.Setters, cb.Setters),
 
             (WrapGridElement wa, WrapGridElement wb) =>
                 wa.Orientation == wb.Orientation
                 && wa.ItemWidth == wb.ItemWidth
                 && wa.ItemHeight == wb.ItemHeight
                 && wa.MaximumRowsOrColumns == wb.MaximumRowsOrColumns
-                && ReferenceEquals(wa.Setters, wb.Setters),
+                && SettersEqual(wa.Setters, wb.Setters),
 
             (RelativePanelElement ra, RelativePanelElement rb) =>
-                ReferenceEquals(ra.Setters, rb.Setters),
+                SettersEqual(ra.Setters, rb.Setters),
 
             (ViewboxElement va, ViewboxElement vb) =>
-                ReferenceEquals(va.Setters, vb.Setters),
+                SettersEqual(va.Setters, vb.Setters),
 
             // Structural wrappers that only contain children
             (NavigationHostElement, NavigationHostElement) => true,
@@ -765,7 +815,7 @@ public abstract record Element
                 && ta.IsBackButtonVisible == tb.IsBackButtonVisible
                 && ta.IsBackButtonEnabled == tb.IsBackButtonEnabled
                 && ta.IsPaneToggleButtonVisible == tb.IsPaneToggleButtonVisible
-                && ReferenceEquals(ta.Setters, tb.Setters),
+                && SettersEqual(ta.Setters, tb.Setters),
 
             // Pure composition wrappers — they never write their own WinUI
             // properties; their rendered output is diffed separately. Returning
@@ -796,56 +846,56 @@ public abstract record Element
                 && ca.PlaceholderText == cb.PlaceholderText
                 && ca.Header == cb.Header
                 && ca.IsEditable == cb.IsEditable
-                && ReferenceEquals(ca.Setters, cb.Setters),
+                && SettersEqual(ca.Setters, cb.Setters),
 
             (ListViewElement la, ListViewElement lb) =>
                 la.SelectedIndex == lb.SelectedIndex
                 && la.SelectionMode == lb.SelectionMode
                 && la.Header == lb.Header
-                && ReferenceEquals(la.Setters, lb.Setters),
+                && SettersEqual(la.Setters, lb.Setters),
 
             (GridViewElement ga, GridViewElement gb) =>
                 ga.SelectedIndex == gb.SelectedIndex
                 && ga.SelectionMode == gb.SelectionMode
                 && ga.Header == gb.Header
-                && ReferenceEquals(ga.Setters, gb.Setters),
+                && SettersEqual(ga.Setters, gb.Setters),
 
             (FlipViewElement fa, FlipViewElement fb) =>
                 fa.SelectedIndex == fb.SelectedIndex
-                && ReferenceEquals(fa.Setters, fb.Setters),
+                && SettersEqual(fa.Setters, fb.Setters),
 
             (PivotElement pa, PivotElement pb) =>
                 pa.SelectedIndex == pb.SelectedIndex
                 && pa.Title == pb.Title
-                && ReferenceEquals(pa.Setters, pb.Setters),
+                && SettersEqual(pa.Setters, pb.Setters),
 
             (TabViewElement ta, TabViewElement tb) =>
                 ta.SelectedIndex == tb.SelectedIndex
                 && ta.IsAddTabButtonVisible == tb.IsAddTabButtonVisible
-                && ReferenceEquals(ta.Setters, tb.Setters),
+                && SettersEqual(ta.Setters, tb.Setters),
 
             (TreeViewElement ta, TreeViewElement tb) =>
                 ta.SelectionMode == tb.SelectionMode
                 && ta.CanDragItems == tb.CanDragItems
                 && ta.AllowDrop == tb.AllowDrop
                 && ta.CanReorderItems == tb.CanReorderItems
-                && ReferenceEquals(ta.Setters, tb.Setters),
+                && SettersEqual(ta.Setters, tb.Setters),
 
             (SelectorBarElement sa, SelectorBarElement sb) =>
                 sa.SelectedIndex == sb.SelectedIndex
-                && ReferenceEquals(sa.Setters, sb.Setters),
+                && SettersEqual(sa.Setters, sb.Setters),
 
             (ListBoxElement la, ListBoxElement lb) =>
                 la.SelectedIndex == lb.SelectedIndex
-                && ReferenceEquals(la.Setters, lb.Setters),
+                && SettersEqual(la.Setters, lb.Setters),
 
             (RadioButtonsElement ra, RadioButtonsElement rb) =>
                 ra.SelectedIndex == rb.SelectedIndex
                 && ra.Header == rb.Header
-                && ReferenceEquals(ra.Setters, rb.Setters),
+                && SettersEqual(ra.Setters, rb.Setters),
 
             (BreadcrumbBarElement ba, BreadcrumbBarElement bb) =>
-                ReferenceEquals(ba.Setters, bb.Setters),
+                SettersEqual(ba.Setters, bb.Setters),
 
             // Templated (data-driven) collections: own props are the WinUI
             // properties UpdateTemplatedXxx writes back. Items + ViewBuilder
@@ -1021,6 +1071,29 @@ public abstract record Element
     }
 
     /// <summary>
+    /// FLAGSHIP-2 — element-wise reference comparison of two <c>Setters</c> arrays.
+    /// The fluent <c>.Set(x => …)</c> helpers append to a fresh array each render
+    /// (<c>[.. Setters, configure]</c>), so the array reference always differs even
+    /// when the chain is unchanged — defeating the old <see cref="object.ReferenceEquals(object, object)"/>
+    /// fast-path and forcing a full Update on every grid cell. Comparing the array
+    /// <em>contents</em> by reference restores the skip: non-capturing lambdas and
+    /// method groups are cached as compiler statics, so an unchanged chain yields
+    /// element-wise reference-equal setters across renders. Capturing closures
+    /// allocate per render and correctly decline the fast-path.
+    /// </summary>
+    internal static bool SettersEqual<T>(T[]? a, T[]? b) where T : class
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a is null || b is null) return false;
+        if (a.Length != b.Length) return false;
+        for (int i = 0; i < a.Length; i++)
+        {
+            if (!ReferenceEquals(a[i], b[i])) return false;
+        }
+        return true;
+    }
+
+    /// <summary>
     /// Compare two ElementModifiers for rendering equivalence.
     /// Brushes and FontFamily are compared structurally because fluent helpers
     /// (<c>.Background("#color")</c>, <c>.FontFamily("Segoe UI")</c>) allocate
@@ -1032,40 +1105,44 @@ public abstract record Element
         if (ReferenceEquals(a, b)) return true;
         if (a is null || b is null) return false;
 
-        return a.Margin == b.Margin
-            && a.Padding == b.Padding
-            && a.Width == b.Width
-            && a.Height == b.Height
-            && a.MinWidth == b.MinWidth
-            && a.MinHeight == b.MinHeight
-            && a.MaxWidth == b.MaxWidth
-            && a.MaxHeight == b.MaxHeight
-            && a.HorizontalAlignment == b.HorizontalAlignment
-            && a.VerticalAlignment == b.VerticalAlignment
-            && a.Opacity == b.Opacity
-            && a.IsVisible == b.IsVisible
-            && a.IsEnabled == b.IsEnabled
-            && a.CornerRadius == b.CornerRadius
-            && a.BorderThickness == b.BorderThickness
+        // #159 — hoist the Layout/Visual sub-record reads once instead of
+        // dereferencing a.Layout?.X / a.Visual?.X ~20 times through the shim
+        // properties. A null bucket is normalized to a shared empty sentinel so
+        // the field-level semantics match the historical per-shim comparison
+        // (a null Layout reads as all-null fields).
+        var al = a.Layout ?? _emptyLayout;
+        var bl = b.Layout ?? _emptyLayout;
+        // LayoutModifiers is entirely value-typed, so the synthesized record
+        // value-equality is exact — and also covers the logical-inset /
+        // RequestedTheme fields an explicit field list historically forgot,
+        // keeping the skip path faithful to a full Update.
+        if (!ReferenceEquals(al, bl) && !al.Equals(bl)) return false;
+
+        // Visual holds Brush fields that must compare by value (Color/Opacity),
+        // not by record reference-equality, so it is compared field-by-field.
+        if (!VisualModifiersEqual(a.Visual, b.Visual)) return false;
+
+        return a.IsEnabled == b.IsEnabled
             && a.ElementSoundMode == b.ElementSoundMode
             && a.ToolTip == b.ToolTip
             && a.AutomationName == b.AutomationName
             && a.AutomationId == b.AutomationId
-            && BrushesEqual(a.Background, b.Background)
-            && BrushesEqual(a.Foreground, b.Foreground)
-            && BrushesEqual(a.BorderBrush, b.BorderBrush)
             && a.FontSize == b.FontSize
             && a.FontWeight == b.FontWeight
             && FontFamiliesEqual(a.FontFamily, b.FontFamily)
-            // Skip OnMountAction — only runs at mount time
-            // Skip OnUpdateAction — side-effect hook, fired each update from ApplyModifiers
-            // Skip event handlers — delegate comparison is unreliable, conservative false
-            && a.OnSizeChanged is null && b.OnSizeChanged is null
-            && a.OnPointerPressed is null && b.OnPointerPressed is null
-            && a.OnPointerMoved is null && b.OnPointerMoved is null
-            && a.OnPointerReleased is null && b.OnPointerReleased is null
-            && a.OnTapped is null && b.OnTapped is null
-            && a.OnKeyDown is null && b.OnKeyDown is null
+            // FLAGSHIP-1 — modifier event handlers dispatch through the
+            // reconciler's per-element ModifierEventHandlerState.Current* fields,
+            // which are refreshed ONLY on the non-skip Update path
+            // (ApplyEventHandlers). Skipping is therefore safe exactly when every
+            // callback-bearing slot is reference-equal: the stale Current* IS the
+            // new delegate, so dispatch is identical. Reference-stable handlers
+            // (non-capturing lambdas, method groups, memoized closures) now take
+            // the skip path; per-render capturing closures still force Update so
+            // their fresh captures are wired. This replaces the old blanket
+            // "any-handler-present ⇒ never skip" rule and also closes the latent
+            // hole where non-listed handlers (PointerEntered, gestures, …) were
+            // ignored entirely.
+            && ModifierCallbacksEqual(a, b)
             // Skip RichToolTip, AttachedFlyout, ContextFlyout — rare, conservative false
             && a.RichToolTip is null && b.RichToolTip is null
             && a.AttachedFlyout is null && b.AttachedFlyout is null
@@ -1092,6 +1169,75 @@ public abstract record Element
             // overlay, which paints those elements as "modified" every render.
             // Use record value-equality instead.
             && AccessibilityEqual(a.Accessibility, b.Accessibility);
+    }
+
+    // Shared empty buckets so a null Layout/Visual can be compared field-for-field
+    // against a set one without allocating (and without 20+ null-conditional shims).
+    private static readonly LayoutModifiers _emptyLayout = new();
+    private static readonly VisualModifiers _emptyVisual = new();
+
+    /// <summary>
+    /// Compare the Visual buckets by value. Brush fields (Background / Foreground /
+    /// BorderBrush) are compared with <see cref="BrushesEqual"/> (Color + Opacity)
+    /// because fluent helpers allocate a fresh <see cref="SolidColorBrush"/> per
+    /// render; everything else is a value type compared with <c>==</c>.
+    /// </summary>
+    private static bool VisualModifiersEqual(VisualModifiers? a, VisualModifiers? b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        a ??= _emptyVisual;
+        b ??= _emptyVisual;
+        return a.Opacity == b.Opacity
+            && a.CornerRadius == b.CornerRadius
+            && a.BorderThickness == b.BorderThickness
+            && a.Scale == b.Scale
+            && a.Rotation == b.Rotation
+            && a.Translation == b.Translation
+            && a.CenterPoint == b.CenterPoint
+            && BrushesEqual(a.Background, b.Background)
+            && BrushesEqual(a.Foreground, b.Foreground)
+            && BrushesEqual(a.BorderBrush, b.BorderBrush);
+    }
+
+    /// <summary>
+    /// FLAGSHIP-1 — true when every modifier event-handler / gesture / drag-drop
+    /// slot is reference-equal between <paramref name="a"/> and <paramref name="b"/>.
+    /// These callbacks dispatch through the reconciler's
+    /// <c>ModifierEventHandlerState.Current*</c> fields, refreshed only on the
+    /// non-skip Update path, so the skip path is sound iff the delegate identity
+    /// is unchanged. Reference equality (not presence) is the safe predicate:
+    /// a stale Current* that equals the new delegate dispatches identically,
+    /// while a freshly captured closure forces Update so its captures are wired.
+    /// </summary>
+    private static bool ModifierCallbacksEqual(ElementModifiers a, ElementModifiers b)
+    {
+        return ReferenceEquals(a.OnSizeChanged, b.OnSizeChanged)
+            && ReferenceEquals(a.OnPointerPressed, b.OnPointerPressed)
+            && ReferenceEquals(a.OnPointerMoved, b.OnPointerMoved)
+            && ReferenceEquals(a.OnPointerReleased, b.OnPointerReleased)
+            && ReferenceEquals(a.OnPointerEntered, b.OnPointerEntered)
+            && ReferenceEquals(a.OnPointerExited, b.OnPointerExited)
+            && ReferenceEquals(a.OnPointerCanceled, b.OnPointerCanceled)
+            && ReferenceEquals(a.OnPointerCaptureLost, b.OnPointerCaptureLost)
+            && ReferenceEquals(a.OnPointerWheelChanged, b.OnPointerWheelChanged)
+            && ReferenceEquals(a.OnTapped, b.OnTapped)
+            && ReferenceEquals(a.OnDoubleTapped, b.OnDoubleTapped)
+            && ReferenceEquals(a.OnRightTapped, b.OnRightTapped)
+            && ReferenceEquals(a.OnHolding, b.OnHolding)
+            && ReferenceEquals(a.OnKeyDown, b.OnKeyDown)
+            && ReferenceEquals(a.OnKeyUp, b.OnKeyUp)
+            && ReferenceEquals(a.OnPreviewKeyDown, b.OnPreviewKeyDown)
+            && ReferenceEquals(a.OnPreviewKeyUp, b.OnPreviewKeyUp)
+            && ReferenceEquals(a.OnCharacterReceived, b.OnCharacterReceived)
+            && ReferenceEquals(a.OnGotFocus, b.OnGotFocus)
+            && ReferenceEquals(a.OnLostFocus, b.OnLostFocus)
+            && ReferenceEquals(a.OnAccessKeyDisplayRequested, b.OnAccessKeyDisplayRequested)
+            && ReferenceEquals(a.Pan, b.Pan)
+            && ReferenceEquals(a.Pinch, b.Pinch)
+            && ReferenceEquals(a.Rotate, b.Rotate)
+            && ReferenceEquals(a.LongPress, b.LongPress)
+            && ReferenceEquals(a.DragSource, b.DragSource)
+            && ReferenceEquals(a.DropTarget, b.DropTarget);
     }
 
     private static bool AccessibilityEqual(AccessibilityModifiers? a, AccessibilityModifiers? b)
