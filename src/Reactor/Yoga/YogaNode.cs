@@ -157,18 +157,93 @@ internal sealed class YogaNode
     /// Display.None children are NOT skipped here; the algorithm handles them explicitly.
     /// Ported from yoga/node/LayoutableChildren.h
     /// </summary>
-    internal IEnumerable<YogaNode> GetLayoutChildren()
+    /// <remarks>
+    /// AI-HINT (perf #145): returns a value-type <see cref="LayoutChildren"/> so
+    /// the common (no Display.Contents) case iterates <c>_children</c> by index
+    /// with ZERO heap allocations — a <c>yield</c> iterator allocates a
+    /// state-machine enumerator on every call, and these are hot per-frame paths
+    /// (baseline, trailing positions, wrap-reverse, pixel rounding). The rare
+    /// Display.Contents subtree still falls back to the allocating iterator.
+    /// </remarks>
+    internal LayoutChildren GetLayoutChildren() => new LayoutChildren(this);
+
+    // Allocating fallback used only to flatten a Display.Contents subtree.
+    private IEnumerable<YogaNode> EnumerateLayoutChildrenContents()
     {
         foreach (var child in _children)
         {
             if (child._style.Display == YogaDisplay.Contents)
             {
-                foreach (var grandchild in child.GetLayoutChildren())
+                foreach (var grandchild in child.EnumerateLayoutChildrenContents())
                     yield return grandchild;
             }
             else
             {
                 yield return child;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Allocation-free enumerable over a node's layoutable children (see
+    /// <see cref="GetLayoutChildren"/>). Nested in <see cref="YogaNode"/> so the
+    /// struct enumerator can read the private <c>_children</c> / <c>_style</c>.
+    /// </summary>
+    internal readonly struct LayoutChildren
+    {
+        private readonly YogaNode _node;
+        internal LayoutChildren(YogaNode node) => _node = node;
+
+        public Enumerator GetEnumerator() => new Enumerator(_node);
+
+        public struct Enumerator
+        {
+            private readonly List<YogaNode> _children;
+            private int _index;
+            private IEnumerator<YogaNode>? _inner;
+            private YogaNode _current;
+
+            internal Enumerator(YogaNode node)
+            {
+                _children = node._children;
+                _index = 0;
+                _inner = null;
+                _current = null!;
+            }
+
+            public readonly YogaNode Current => _current;
+
+            public bool MoveNext()
+            {
+                // Drain an in-progress Display.Contents subtree first.
+                if (_inner != null)
+                {
+                    if (_inner.MoveNext())
+                    {
+                        _current = _inner.Current;
+                        return true;
+                    }
+                    _inner = null;
+                }
+
+                while (_index < _children.Count)
+                {
+                    var child = _children[_index++];
+                    if (child._style.Display == YogaDisplay.Contents)
+                    {
+                        _inner = child.EnumerateLayoutChildrenContents().GetEnumerator();
+                        if (_inner.MoveNext())
+                        {
+                            _current = _inner.Current;
+                            return true;
+                        }
+                        _inner = null;
+                        continue;
+                    }
+                    _current = child;
+                    return true;
+                }
+                return false;
             }
         }
     }
