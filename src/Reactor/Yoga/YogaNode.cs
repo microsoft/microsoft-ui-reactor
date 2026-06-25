@@ -196,7 +196,13 @@ internal sealed class YogaNode
 
         public Enumerator GetEnumerator() => new Enumerator(_node);
 
-        public struct Enumerator
+        // AI-HINT (perf #145): implements IDisposable so a foreach that breaks
+        // out early (e.g. baseline detection in AlgorithmUtils) while a
+        // Display.Contents subtree is mid-drain still releases the fallback
+        // iterator's captured references. foreach emits a finally-Dispose for a
+        // struct enumerator that implements IDisposable as a non-boxing
+        // constrained call, so the common (no-inner) path stays allocation-free.
+        public struct Enumerator : IDisposable
         {
             private readonly List<YogaNode> _children;
             private int _index;
@@ -223,6 +229,7 @@ internal sealed class YogaNode
                         _current = _inner.Current;
                         return true;
                     }
+                    _inner.Dispose();
                     _inner = null;
                 }
 
@@ -237,6 +244,7 @@ internal sealed class YogaNode
                             _current = _inner.Current;
                             return true;
                         }
+                        _inner.Dispose();
                         _inner = null;
                         continue;
                     }
@@ -244,6 +252,12 @@ internal sealed class YogaNode
                     return true;
                 }
                 return false;
+            }
+
+            public void Dispose()
+            {
+                _inner?.Dispose();
+                _inner = null;
             }
         }
     }
