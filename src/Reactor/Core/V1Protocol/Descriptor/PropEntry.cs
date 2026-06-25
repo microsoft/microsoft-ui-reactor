@@ -428,7 +428,7 @@ internal sealed class ControlledPropEntry<TElement, TControl, TValue, TArgs> : P
             {
                 payload.ExpectedEcho = nv;
                 payload.HasExpectedEcho = true;
-                payload.EchoComparer = _comparer;
+                payload.EchoComparer = _comparer ?? EqualityComparer<TValue>.Default;
             }
         }
 
