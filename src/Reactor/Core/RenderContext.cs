@@ -764,6 +764,15 @@ public sealed class RenderContext
     // non-generic params DepsEqual, which compares via object.Equals and never throws.
     // Value-type T unboxes through the `is T` pattern with no extra allocation, and the
     // current dep is still passed through EqualityComparer<T> unboxed.
+    //
+    // Nullable value-type deps (T = U?) are handled correctly. Boxing a non-null
+    // Nullable<U> stores a boxed U, but the GENERIC `stored is T` test still succeeds for
+    // that boxed U and binds the nullable-wrapped value — the CLR special-cases nullable
+    // type-tests (the symmetric counterpart of `(U?)(object)u` unboxing). So an unchanged
+    // nullable dep compares equal, a null nullable boxes to a null reference handled by
+    // the `stored is null` guard above, and value<->null transitions are detected. This
+    // matches the pre-existing `(T)prev[i]` behavior exactly (verified across
+    // int?/long?/double?/enum? incl. null transitions) — it is NOT a per-render re-run.
     private static bool DepEquals<T>(object? stored, T current)
     {
         if (stored is null) return current is null;
