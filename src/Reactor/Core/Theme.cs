@@ -44,18 +44,23 @@ public readonly record struct ThemeRef(string ResourceKey)
     // ThemeRef.Resolve. These caches collapse that to one tree walk per element
     // per reconcile pass and one dictionary scan per (key, theme) pair.
 
-    // #86: resolved brush per (resourceKey, themeName). The themeName is part of
-    // the key, so Light/Dark entries coexist; cleared on theme/colour change so
-    // a runtime theme-dictionary swap is observed. Only non-null hits are
-    // cached, so a genuinely-absent key is re-resolved (and picked up if added
-    // later) exactly as before. Publication is generation-guarded (see
-    // ResolveForTheme) so a resolve racing an InvalidateCache cannot republish a
-    // pre-invalidation brush into the just-cleared cache.
-    private static readonly ConcurrentDictionary<(string Key, string Theme), Brush> _brushCache = new();
+    // #86: resolved brush per (resourceKey, themeName), stamped with the theme
+    // generation it was resolved under. The themeName is part of the key, so
+    // Light/Dark entries coexist; cleared on theme/colour change so a runtime
+    // theme-dictionary swap is observed. Only non-null hits are cached, so a
+    // genuinely-absent key is re-resolved (and picked up if added later) exactly
+    // as before. Both publication and hits are generation-guarded (see
+    // ResolveForTheme) so a resolve racing an InvalidateCache can neither
+    // republish a pre-invalidation brush into the just-cleared cache nor return a
+    // stale entry during the bump-then-clear window.
+    private static readonly ConcurrentDictionary<(string Key, string Theme), (int Gen, Brush Brush)> _brushCache = new();
 
-    // Bumped by InvalidateCache on every theme / system-colour change. Used only
-    // to guard brush-cache publication against a concurrent invalidation — the
-    // brush cache itself is keyed by (key, theme), not by generation.
+    // Bumped by InvalidateCache on every theme / system-colour change. Stamped
+    // into each cached entry (Gen) and validated on every hit, so an entry that
+    // predates an invalidation is treated as a miss and re-resolved — closing the
+    // window between InvalidateCache's generation bump and its _brushCache.Clear()
+    // where a concurrent hit could otherwise return a pre-invalidation brush
+    // (PR-review L). Also guards publication against a racing invalidation.
     private static int _themeGeneration;
 
     // #85: effective theme name per element, scoped to a single reconcile pass.
@@ -115,22 +120,33 @@ public readonly record struct ThemeRef(string ResourceKey)
     private static Brush? ResolveForTheme(string resourceKey, string themeName)
     {
         var cacheKey = (resourceKey, themeName);
-        if (_brushCache.TryGetValue(cacheKey, out var cached))
-            return cached;
-
-        // Capture the generation BEFORE the uncached scan. If an InvalidateCache()
-        // races us — it bumps the generation and clears the cache, e.g. from
-        // UISettings.ColorValuesChanged on a WinRT pool thread while we resolve on
-        // the UI thread — `resolved` may predate the theme change, so writing it
-        // back into the just-cleared cache would serve a stale brush until the
-        // next invalidation. Publish only when no invalidation raced us; otherwise
-        // return the value but leave the cache empty so the next resolve re-scans.
+        // Capture the generation BEFORE the cache probe and the uncached scan. A
+        // cached entry counts as a hit only when its stamp matches this generation
+        // both before AND after the probe — the same re-read the publish path below
+        // performs. An entry left behind by a not-yet-completed InvalidateCache
+        // (which bumps the generation before it clears the cache) carries an older
+        // Gen, and the post-probe re-read also rejects the case where the bump lands
+        // between our generation read and the dictionary lookup, so neither arm can
+        // hand back a pre-invalidation brush (PR-review L). An invalidation ordered
+        // entirely after the second read is linearisably "after" this resolve and is
+        // corrected by the RequestRender the host pairs with every InvalidateCache.
         var gen = Volatile.Read(ref _themeGeneration);
+        if (_brushCache.TryGetValue(cacheKey, out var cached) && cached.Gen == gen
+            && Volatile.Read(ref _themeGeneration) == gen)
+            return cached.Brush;
+
+        // If an InvalidateCache() races us — it bumps the generation and clears
+        // the cache, e.g. from UISettings.ColorValuesChanged on a WinRT pool thread
+        // while we resolve on the UI thread — `resolved` may predate the theme
+        // change, so writing it back into the just-cleared cache would serve a
+        // stale brush until the next invalidation. Publish only when no
+        // invalidation raced us; otherwise return the value but leave the cache
+        // empty so the next resolve re-scans.
         var resolved = ResolveForThemeUncached(resourceKey, themeName);
         // Only cache successful resolves so an absent key stays re-resolvable
         // (matches the pre-cache behaviour where each call re-scanned).
         if (resolved is not null && Volatile.Read(ref _themeGeneration) == gen)
-            _brushCache[cacheKey] = resolved;
+            _brushCache[cacheKey] = (gen, resolved);
         return resolved;
     }
 
