@@ -387,6 +387,40 @@ public class HookAllocationPerfTests
     }
 
     [Fact]
+    public void UseMemoCellsByKey_FullReuse_Does_Not_Allocate_Per_Render()
+    {
+        // Guards the steady-state full-reuse fast path against per-render allocation
+        // (the key buffer is carried on the hook state and reused). Reference-type
+        // keys avoid boxing in the equality scan; Array.Empty deps avoids the params
+        // call-site allocation; the delegates are hoisted so no delegate is allocated
+        // per call. Only the hook call is bracketed — render passes are excluded.
+        var ctx = NewCtx();
+        var items = new[] { "a", "b", "c" };
+        var deps = Array.Empty<object>();
+        Func<string, string> keySel = x => x;
+        Func<string, int, Element> build = (item, i) => new DivElement($"v={item}");
+
+        for (int w = 0; w < 3; w++) // prime + JIT the fast-path return
+        {
+            ctx.UseMemoCellsByKey(items, keySel, build, deps);
+            Rerender(ctx);
+        }
+
+        long worst = 0;
+        for (int i = 0; i < 64; i++)
+        {
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            var children = ctx.UseMemoCellsByKey(items, keySel, build, deps);
+            long after = GC.GetAllocatedBytesForCurrentThread();
+            worst = Math.Max(worst, after - before);
+            Assert.Equal(3, children.Length); // full-reuse path actually taken
+            Rerender(ctx);
+        }
+
+        Assert.Equal(0, worst);
+    }
+
+    [Fact]
     public void UseMemoCellsByKey_Invokes_KeySelector_Once_Per_Item_Per_Render()
     {
         var ctx = NewCtx();
