@@ -6,17 +6,15 @@ namespace Microsoft.UI.Reactor;
 /// <summary>
 /// Color and brush parsing utilities.
 /// Supports named colors, hex (#RRGGBB, #AARRGGBB), and direct Color values.
-/// Parsed colors are cached by string. Two brush entry points exist: the public
-/// <see cref="Parse(string)"/> returns a fresh, caller-owned brush (unchanged
-/// historical behavior — safe to mutate), while <see cref="GetBrush"/>
-/// returns a shared, read-only brush from a per-thread ARGB cache. Reactor's own
-/// hot fluent chains (<c>.Foreground("#color")</c>, <c>.Background("#color")</c>)
-/// route through the shared cache via the internal <c>ParseShared</c> path so
-/// thousands of identical cells reuse one brush instead of allocating a WinRT
-/// DependencyObject per cell per render. The brush cache is
-/// <see cref="ThreadStaticAttribute">thread-static</see> so a brush is only ever
-/// handed back on the same thread that created it, honoring DependencyObject
-/// thread affinity.
+/// Parsed colors are cached by string. The public <see cref="Parse(string)"/>
+/// returns a fresh, caller-owned brush (unchanged historical behavior — safe to
+/// mutate). Reactor's own hot fluent chains (<c>.Foreground("#color")</c>,
+/// <c>.Background("#color")</c>) instead route through an internal shared-cache
+/// path (<c>ParseShared</c>) so thousands of identical cells reuse one brush
+/// instead of allocating a WinRT DependencyObject per cell per render. That
+/// brush cache is <see cref="ThreadStaticAttribute">thread-static</see> so a
+/// brush is only ever handed back on the same thread that created it, honoring
+/// DependencyObject thread affinity.
 /// </summary>
 public static class BrushHelper
 {
@@ -35,9 +33,9 @@ public static class BrushHelper
     /// Supports named colors (red, green, blue, white, black, gray, lightgray, transparent)
     /// and hex codes (#RRGGBB or #AARRGGBB).
     /// The parsed color is cached, but a new brush instance is returned on every call,
-    /// so callers may safely mutate it. Reactor's internal fluent modifiers use the
-    /// shared-cache path (<c>ParseShared</c>) instead; prefer <see cref="GetBrush"/>
-    /// directly if you have a Color and want the shared read-only brush.
+    /// so callers may safely mutate it. Reactor's internal fluent modifiers use a
+    /// shared-cache path (<c>ParseShared</c>) instead, since they treat the brush
+    /// as immutable.
     /// </summary>
     public static SolidColorBrush Parse(string color) => new(ParseColor(color));
 
@@ -73,8 +71,11 @@ public static class BrushHelper
     /// Returns a cached <see cref="SolidColorBrush"/> for the given color, creating
     /// and caching one on first use for the current thread. The brush must be
     /// treated as immutable by callers (Reactor never mutates modifier brushes).
+    /// Internal: this is the shared-cache primitive behind <c>ParseShared</c>;
+    /// public callers that want a color brush use <see cref="Parse(string)"/>,
+    /// which returns a fresh, caller-owned (mutable) instance.
     /// </summary>
-    public static SolidColorBrush GetBrush(global::Windows.UI.Color color)
+    internal static SolidColorBrush GetBrush(global::Windows.UI.Color color)
     {
         var cache = _brushCache ??= new Dictionary<global::Windows.UI.Color, SolidColorBrush>();
         if (!cache.TryGetValue(color, out var brush))
