@@ -53,29 +53,46 @@ internal sealed class LayoutResults
     public FlexLayoutDirection LastOwnerDirection = FlexLayoutDirection.Inherit;
 
     public uint NextCachedMeasurementsIndex;
-    public readonly CachedMeasurement[] CachedMeasurements = new CachedMeasurement[MaxCachedMeasurements];
+
+    // Inline fixed-size buffer (#142): replaces a CachedMeasurement[8] heap
+    // array. Exposed as a ref-returning property so existing in-place element
+    // mutation (CachedMeasurements[idx].AvailableWidth = ...) is unchanged.
+    private CachedMeasurementArray _cachedMeasurements;
+    public ref CachedMeasurementArray CachedMeasurements => ref _cachedMeasurements;
     public CachedMeasurement CachedLayout;
 
     // Direction and overflow
     private FlexLayoutDirection _direction = FlexLayoutDirection.Inherit;
     private bool _hadOverflow;
 
-    // Dimensions
-    private readonly float[] _dimensions = { float.NaN, float.NaN };
-    private readonly float[] _measuredDimensions = { float.NaN, float.NaN };
-    private readonly float[] _rawDimensions = { float.NaN, float.NaN };
+    // Dimensions / edges stored inline (#142) instead of 7 separate float[]
+    // arrays. For a ~200-node tree this removes ~1400 GC objects (7 arrays/node)
+    // — a major part of the Yoga memory gap vs the C++ original's inline members.
+    private Float2 _dimensions;
+    private Float2 _measuredDimensions;
+    private Float2 _rawDimensions;
 
     // Position, margin, border, padding (indexed by PhysicalEdge: Left=0, Top=1, Right=2, Bottom=3)
-    private readonly float[] _position = new float[4];
-    private readonly float[] _margin = new float[4];
-    private readonly float[] _border = new float[4];
-    private readonly float[] _padding = new float[4];
+    private Float4 _position;
+    private Float4 _margin;
+    private Float4 _border;
+    private Float4 _padding;
 
     public LayoutResults()
     {
+        // CachedMeasurement's field initializers (the -1 sentinels) only run via
+        // its constructor, NOT for default-initialized inline-array elements, so
+        // seed each slot explicitly to preserve the previous array behavior.
         for (int i = 0; i < MaxCachedMeasurements; i++)
-            CachedMeasurements[i] = new CachedMeasurement();
+            _cachedMeasurements[i] = new CachedMeasurement();
         CachedLayout = new CachedMeasurement();
+
+        // The _dimensions family historically defaulted to NaN (the float[]
+        // initializers); _position/_margin/_border/_padding defaulted to 0,
+        // which matches a zero-initialized inline buffer (no seeding needed).
+        _dimensions[0] = float.NaN; _dimensions[1] = float.NaN;
+        _measuredDimensions[0] = float.NaN; _measuredDimensions[1] = float.NaN;
+        _rawDimensions[0] = float.NaN; _rawDimensions[1] = float.NaN;
     }
 
     public FlexLayoutDirection Direction
@@ -132,13 +149,16 @@ internal sealed class LayoutResults
         _rawDimensions[0] = float.NaN;
         _rawDimensions[1] = float.NaN;
 
-        Array.Clear(_position);
-        Array.Clear(_margin);
-        Array.Clear(_border);
-        Array.Clear(_padding);
+        for (int i = 0; i < 4; i++)
+        {
+            _position[i] = 0;
+            _margin[i] = 0;
+            _border[i] = 0;
+            _padding[i] = 0;
+        }
 
         for (int i = 0; i < MaxCachedMeasurements; i++)
-            CachedMeasurements[i] = new CachedMeasurement();
+            _cachedMeasurements[i] = new CachedMeasurement();
         CachedLayout = new CachedMeasurement();
     }
 
@@ -170,4 +190,33 @@ internal sealed class LayoutResults
 
         return true;
     }
+}
+
+// AI-HINT (perf #142): fixed-size inline buffers embedded directly in the
+// LayoutResults heap object, replacing 7 float[] arrays + a CachedMeasurement[8]
+// per node. For a ~200-node tree that removes ~1600 GC objects — a dominant
+// part of the Yoga memory gap vs the C++ original (which uses inline members).
+// InlineArray is a C# 12 feature: element access is compiler-generated and
+// fully AOT/trim safe (no reflection, no Unsafe). Each struct has exactly one
+// instance field, as InlineArray requires.
+
+/// <summary>Inline buffer of 2 floats (YogaDimension: Width=0, Height=1).</summary>
+[global::System.Runtime.CompilerServices.InlineArray(2)]
+internal struct Float2
+{
+    private float _element0;
+}
+
+/// <summary>Inline buffer of 4 floats (YogaPhysicalEdge: Left=0..Bottom=3).</summary>
+[global::System.Runtime.CompilerServices.InlineArray(4)]
+internal struct Float4
+{
+    private float _element0;
+}
+
+/// <summary>Inline buffer of <see cref="LayoutResults.MaxCachedMeasurements"/> (8) cached measurements.</summary>
+[global::System.Runtime.CompilerServices.InlineArray(8)]
+internal struct CachedMeasurementArray
+{
+    private CachedMeasurement _element0;
 }
