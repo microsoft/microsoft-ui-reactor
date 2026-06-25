@@ -15,8 +15,10 @@ namespace Microsoft.UI.Reactor.Tests;
 /// Regression coverage for the perf "restore diff skip-path + cut DSL/element
 /// per-render allocations" work. These are pure C# record/equality tests — no
 /// WinUI thread, and intentionally brush-free (constructing a SolidColorBrush
-/// requires a UI thread, so the #168 brush-cache is validated by the selftest /
-/// AppTests tiers that render on a real thread).
+/// requires a UI thread). BrushHelper caches only the parsed <c>Color</c> (an
+/// immutable value), exercised by the headless ParseColor tests below; the
+/// public <c>Parse</c> still returns a fresh, caller-owned SolidColorBrush per
+/// call, so there is no shared brush instance to validate on a real thread.
 ///
 /// The headline behaviour being locked down: an interactive grid cell whose only
 /// per-render churn is handler identity / appended setters / re-applied attached
