@@ -1525,19 +1525,27 @@ public sealed partial class Reconciler : IDisposable
     {
         lock (_selfTriggeredLock)
         {
+            // A stale cached rerender closure (perf #15) can fire after the node was
+            // unmounted; don't resurrect it into the tracking set or it would linger
+            // forever (the dirty-path pass only clears nodes it actually reconciles) and
+            // pin its captured component tree (correctness — review finding #20).
+            if (node.Unmounted) return;
             node.SelfTriggered = true;
             _selfTriggeredNodes.Add(node);
         }
     }
 
-    private void ClearSelfTriggered(ComponentNode node)
+    private void ClearSelfTriggered(ComponentNode node, bool unmounting = false)
     {
         // Fast path: a volatile false read means no Mark has committed, so the node
         // is not in the set — skip the lock entirely. This is the common case on the
-        // hot path (only the component that called setState is self-triggered).
-        if (!node.SelfTriggered) return;
+        // hot path (only the component that called setState is self-triggered). When
+        // unmounting we must still take the lock to plant the tombstone even if the
+        // node was never self-triggered.
+        if (!unmounting && !node.SelfTriggered) return;
         lock (_selfTriggeredLock)
         {
+            if (unmounting) node.Unmounted = true;
             node.SelfTriggered = false;
             _selfTriggeredNodes.Remove(node);
         }
@@ -1549,7 +1557,9 @@ public sealed partial class Reconciler : IDisposable
     /// requestRerender identity changes, so steady-state re-renders reuse the delegate
     /// instead of allocating one per component per frame.
     /// </summary>
-    private Action GetOrCreateComponentRerender(ComponentNode node, Action requestRerender)
+    /// <remarks>Internal (not private) so the caching contract can be unit-tested
+    /// directly via <c>InternalsVisibleTo("Reactor.Tests")</c>.</remarks>
+    internal Action GetOrCreateComponentRerender(ComponentNode node, Action requestRerender)
     {
         if (node.CachedRerender is { } cached && ReferenceEquals(node.CachedRerenderSource, requestRerender))
             return cached;
@@ -2151,11 +2161,20 @@ public sealed partial class Reconciler : IDisposable
                 node.Component?.GetType().Name ?? node.Element?.GetType().Name ?? "unknown");
             node.Component?.Context.RunCleanups();
             node.Context?.RunCleanups();
-            ClearSelfTriggered(node);
+            ClearSelfTriggered(node, unmounting: true);
             _componentNodes.Remove(control);
         }
 
         _errorBoundaryNodes.Remove(control);
+
+        // Re-read the attached element tag AFTER the user teardown callbacks above
+        // (.OnUnmount and the component/effect RunCleanups) ran. Those receive the live
+        // FrameworkElement and may detach/replace ReactorState via the public state APIs,
+        // so the V1/type unmount dispatch below must observe the post-cleanup tag — exactly
+        // as the pre-coalesce code did, which re-read GetElementTag at each of these sites.
+        // The earlier branches (connected-animation/animation-state/reference cleanup) run
+        // before any user callback and still share the single top-of-method read (perf #16).
+        var postCleanupTagEl = fe is not null ? GetElementTag(fe) : null;
 
         // Spec 047 §14 Phase 1 (1.1) — V1 handler unmount dispatch. Standard
         // handlers return CollectSelf (terminate the traversal — children
@@ -2165,7 +2184,7 @@ public sealed partial class Reconciler : IDisposable
         // wrapped child whose control they returned (e.g., FlyoutElement returns
         // the Target's mounted control; the Target's children still need their
         // own unmount).
-        if (fe is not null && tagEl is Element v1TagEl
+        if (fe is not null && postCleanupTagEl is Element v1TagEl
             && _v1Handlers.TryGet(v1TagEl.GetType(), out var v1Entry) && v1Entry.HasUnmount)
         {
             var v1Disposition = v1Entry.Unmount(control, this);
@@ -2174,7 +2193,7 @@ public sealed partial class Reconciler : IDisposable
         }
 
         // Check registered type unmount handlers via the attached element
-        if (fe is not null && tagEl is Element regTagEl
+        if (fe is not null && postCleanupTagEl is Element regTagEl
             && _typeRegistry.TryGetValue(regTagEl.GetType(), out var reg) && reg.HasUnmount)
         {
             reg.Unmount(control, this);
@@ -2507,9 +2526,16 @@ public sealed partial class Reconciler : IDisposable
                 node.Component?.GetType().Name ?? node.Element?.GetType().Name ?? "unknown");
             node.Component?.Context.RunCleanups();
             node.Context?.RunCleanups();
-            ClearSelfTriggered(node);
+            ClearSelfTriggered(node, unmounting: true);
             _componentNodes.Remove(control);
         }
+
+        // Re-read the tag after the user teardown callbacks (.OnUnmount + RunCleanups),
+        // which may detach/replace ReactorState via the public state APIs — the V1/type
+        // dispatch below must observe the post-cleanup tag, matching the pre-coalesce code
+        // that re-read GetElementTag at each of these sites (perf #17). Earlier branches
+        // run before any user callback and keep sharing the single top-of-method read.
+        var postCleanupTagEl = fe is not null ? GetElementTag(fe) : null;
 
         // Spec 047 §14 Phase 1 (1.1) — V1 handler unmount on the
         // UnmountAndCollect path. Standard handlers return CollectSelf
@@ -2519,7 +2545,7 @@ public sealed partial class Reconciler : IDisposable
         // to the default child traversal (ContinueDefaultTraversal —
         // wrapped child owns the control identity, default recursion
         // reaches the wrapped element's own unmount).
-        if (fe is not null && tagEl is Element v1TagEl
+        if (fe is not null && postCleanupTagEl is Element v1TagEl
             && _v1Handlers.TryGet(v1TagEl.GetType(), out var v1Entry) && v1Entry.HasUnmount)
         {
             var v1Disposition = v1Entry.Unmount(control, this);
@@ -2536,7 +2562,7 @@ public sealed partial class Reconciler : IDisposable
             }
         }
 
-        if (fe is not null && tagEl is Element regTagEl
+        if (fe is not null && postCleanupTagEl is Element regTagEl
             && _typeRegistry.TryGetValue(regTagEl.GetType(), out var reg) && reg.HasUnmount)
         {
             reg.Unmount(control, this);
@@ -4875,6 +4901,12 @@ public sealed partial class Reconciler : IDisposable
         if (ReferenceEquals(fe.Style, ownedStyle))
             fe.ClearValue(FrameworkElement.StyleProperty);
         fe.ClearValue(ReactorAppliedThemeStyleProperty);
+        // Clear the companion effective-theme marker too (written together with the
+        // style marker in ApplyStyleToElement) so the pair stays consistent across a
+        // pool/reuse cycle (#23 / AS1). Harmless either way — the perf-#23 skip guard is
+        // gated on the style marker above, so a lingering theme marker could at most
+        // force an extra (correct) null-then-set, never skip a needed re-resolution.
+        fe.ClearValue(ReactorAppliedThemeProperty);
     }
 
     /// <summary>
@@ -4969,13 +5001,15 @@ public sealed partial class Reconciler : IDisposable
         // Track which keys Reactor has set on this element
         var managed = _managedResourceKeys.GetOrCreateValue(fe);
 
-        // Remove old keys that are no longer present in the new overrides. Skip the
-        // whole scan when the override sets are the same instance (no key could have
-        // been removed). Membership is tested directly against the new Literals/
-        // ThemeRefs dictionaries (O(1) ContainsKey) instead of materializing
-        // AllKeys.ToHashSet(), and removals are deferred into a lazily-allocated list
-        // so the common no-removal case doesn't allocate managed.ToArray() (perf #26).
-        if (oldOverrides is not null && !ReferenceEquals(oldOverrides, newOverrides) && managed.Count > 0)
+        // Remove managed keys that are no longer present in the new overrides. Membership
+        // is tested directly against the new Literals/ThemeRefs dictionaries (O(1)
+        // ContainsKey) instead of materializing AllKeys.ToHashSet(), and removals are
+        // deferred into a lazily-allocated list so the common no-removal case doesn't
+        // allocate managed.ToArray() (perf #26). Note: removal is driven by `managed`
+        // (the keys actually applied to this control) vs `newOverrides`, NOT by an
+        // old-vs-new ref comparison — the shallow-skip fast path calls this with
+        // old===new yet still needs stale managed keys reconciled away.
+        if (oldOverrides is not null && managed.Count > 0)
         {
             List<string>? toRemove = null;
             foreach (var key in managed)
@@ -5188,6 +5222,12 @@ public sealed partial class Reconciler : IDisposable
         public Action? CachedRerender { get; set; }
         /// <summary>The requestRerender the cached delegate was built from.</summary>
         public Action? CachedRerenderSource { get; set; }
+        /// <summary>Tombstone set when the node is unmounted. A cached rerender closure
+        /// (perf #15) can outlive the node and fire after teardown; this flag lets
+        /// <see cref="MarkSelfTriggered"/> refuse to resurrect an unmounted node into
+        /// <c>_selfTriggeredNodes</c> (which would never be cleared again and would pin
+        /// the node's captured component tree). Mutated only under <c>_selfTriggeredLock</c>.</summary>
+        public bool Unmounted { get; set; }
     }
 
     /// <summary>

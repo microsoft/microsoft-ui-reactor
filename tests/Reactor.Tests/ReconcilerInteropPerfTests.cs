@@ -202,4 +202,137 @@ public class ReconcilerInteropPerfTests
 
         Assert.DoesNotContain(findings, f => f.Id == "A11Y_007");
     }
+
+    [Fact]
+    public void Scanner_EmitsExactExpectedMessages()
+    {
+        // Pin the literal finding messages (not just IDs / re-scan determinism) so a
+        // regression in the refactored walk that altered every scan identically would
+        // still be caught (#62-#66 output parity).
+        var findings = AccessibilityScanner.Scan(BuildScanTree());
+
+        Assert.Contains(findings, f =>
+            f.Id == "A11Y_001" &&
+            f.Message == "Icon-only Button has no accessible name — screen readers cannot describe this control");
+        Assert.Contains(findings, f =>
+            f.Id == "A11Y_002" &&
+            f.Message == "Image has no accessible name and is not hidden from assistive technology");
+        Assert.Contains(findings, f =>
+            f.Id == "A11Y_007" &&
+            f.Message == "TabIndex gap: 1 → 7. Non-sequential values may confuse keyboard navigation order");
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  #25 (H1) — reference types implementing IEquatable<T> WITHOUT an
+    //  object.Equals override keep the prior reference-equality change
+    //  detection. A value-equality collapse here would skip a required
+    //  context rerender, so the hybrid compare must NOT route ref types
+    //  through EqualityComparer<T>.Default.
+    // ════════════════════════════════════════════════════════════════
+
+    private sealed class RefId : global::System.IEquatable<RefId>
+    {
+        private readonly int _v;
+        public RefId(int v) => _v = v;
+        // IEquatable<T> value equality, but intentionally NO object.Equals/GetHashCode
+        // override — mirrors a hand-rolled ref type used as a context value.
+        public bool Equals(RefId? other) => other is not null && other._v == _v;
+    }
+
+    private static readonly Context<RefId> RefIdCtx = new(new RefId(0));
+
+    [Fact]
+    public void CurrentValueEquals_ReferenceIEquatable_UsesReferenceEquality()
+    {
+        var a = new RefId(1);
+        var b = new RefId(1); // IEquatable-equal to a, but a distinct instance
+
+        var scope = new ContextScope();
+        scope.Push(new Dictionary<ContextBase, object?> { [RefIdCtx] = b });
+
+        // The old object.Equals path was the virtual object.Equals (reference equality
+        // for this type), so a freshly-built-but-equal instance counts as CHANGED.
+        Assert.False(RefIdCtx.CurrentValueEquals(scope, a));
+        // The same reference is unchanged.
+        Assert.True(RefIdCtx.CurrentValueEquals(scope, b));
+
+        scope.Pop(1);
+    }
+
+    [Fact]
+    public void CurrentValueEquals_ValueType_TypeMismatch_ReturnsFalseWithoutThrowing()
+    {
+        // A same-slot context-type swap can leave a boxed value of a DIFFERENT type as
+        // the recorded LastValue. The old object.Equals returned false there (it never
+        // threw); the guarded unbox must do the same — not an InvalidCastException.
+        var scope = new ContextScope();
+        scope.Push(new Dictionary<ContextBase, object?> { [CountCtx] = 7 });
+
+        Assert.False(CountCtx.CurrentValueEquals(scope, "not-an-int"));
+
+        scope.Pop(1);
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    //  #15 — component rerender delegate caching
+    //  (and #20 — unmount tombstone refuses a late self-trigger)
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void GetOrCreateComponentRerender_ReusesDelegate_UntilSourceIdentityChanges()
+    {
+        var reconciler = new Reconciler();
+        var node = new Reconciler.ComponentNode();
+
+        global::System.Action source = () => { };
+        var first = reconciler.GetOrCreateComponentRerender(node, source);
+        var second = reconciler.GetOrCreateComponentRerender(node, source);
+
+        // Same upstream requestRerender ⇒ same wrapped delegate (no per-frame closure alloc).
+        Assert.Same(first, second);
+        Assert.Same(source, node.CachedRerenderSource);
+
+        // A new upstream identity ⇒ a freshly built wrapper, and the source is updated.
+        global::System.Action source2 = () => { };
+        var third = reconciler.GetOrCreateComponentRerender(node, source2);
+        Assert.NotSame(first, third);
+        Assert.Same(source2, node.CachedRerenderSource);
+    }
+
+    [Fact]
+    public void CachedRerender_WhenInvoked_MarksSelfTriggered_AndBubblesToSource()
+    {
+        var reconciler = new Reconciler();
+        var node = new Reconciler.ComponentNode();
+
+        int sourceCalls = 0;
+        global::System.Action source = () => sourceCalls++;
+        var wrapped = reconciler.GetOrCreateComponentRerender(node, source);
+
+        Assert.False(node.SelfTriggered);
+        wrapped(); // headless: no UI dispatcher captured ⇒ runs inline
+
+        Assert.True(node.SelfTriggered);
+        Assert.Equal(1, sourceCalls);
+    }
+
+    [Fact]
+    public void CachedRerender_AfterUnmountTombstone_DoesNotReSelfTrigger()
+    {
+        // #20: a cached closure can outlive the node and fire after teardown. The
+        // Unmounted tombstone must stop it re-adding the node to the self-triggered set
+        // (which the dirty-path pass would otherwise never clear again, pinning the tree).
+        var reconciler = new Reconciler();
+        var node = new Reconciler.ComponentNode();
+
+        int sourceCalls = 0;
+        global::System.Action source = () => sourceCalls++;
+        var wrapped = reconciler.GetOrCreateComponentRerender(node, source);
+
+        node.Unmounted = true; // mirrors ClearSelfTriggered(node, unmounting: true)
+        wrapped();
+
+        Assert.False(node.SelfTriggered); // refused by the tombstone guard
+        Assert.Equal(1, sourceCalls);     // the upstream callback itself still runs (unchanged)
+    }
 }
