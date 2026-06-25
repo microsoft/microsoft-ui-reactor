@@ -1,7 +1,25 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 using Microsoft.UI.Xaml;
 
 namespace Microsoft.UI.Reactor.Core.V1Protocol.Descriptor;
+
+/// <summary>Issue #115 — devirtualized value comparison for descriptor prop
+/// entries. Entries store their comparer as a <em>nullable</em>
+/// <see cref="IEqualityComparer{T}"/> where <c>null</c> means "use the default
+/// comparer". When it is null this calls <see cref="EqualityComparer{T}.Default"/>'s
+/// <c>Equals</c> directly — a JIT intrinsic the runtime can devirtualize and
+/// inline for value-type <c>TValue</c> (the dominant grid case,
+/// ~300k compares/sec). A custom comparer (non-null) is honored through the
+/// interface call exactly as before, so no comparison behavior changes.</summary>
+internal static class PropValueComparison
+{
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool ValuesEqual<TValue>(IEqualityComparer<TValue>? comparer, TValue x, TValue y)
+        => comparer is null
+            ? EqualityComparer<TValue>.Default.Equals(x, y)
+            : comparer.Equals(x, y);
+}
 
 /// <summary>
 /// Spec 047 §6 / §14 Phase 2 (Q1 spike) — base class for descriptor entries
@@ -65,6 +83,19 @@ public abstract class PropEntry<TElement, TControl>
         ReactorBinding<TElement> binding,
         TControl ctrl,
         TElement el) { }
+
+    /// <summary>Issue #114 — does this entry's <see cref="EnsureSubscribed"/>
+    /// do real work? The interpreter
+    /// (<see cref="DescriptorHandler{TElement,TControl}"/>) partitions entries
+    /// into an all-entries update list and a (typically 1-3 element) subscribe
+    /// subset using this flag, so the per-Update subscribe pass iterates only
+    /// the entries that actually wire/refresh a subscription instead of paying
+    /// a megamorphic no-op virtual call on every prop of every cell. Defaults
+    /// to <c>false</c> (the base <see cref="EnsureSubscribed"/> is a no-op);
+    /// every entry type that overrides <see cref="EnsureSubscribed"/> overrides
+    /// this to <c>true</c>. A reflection-backed test
+    /// (<c>PropEntrySubscribesDiscriminatorTests</c>) guards that invariant.</summary>
+    public virtual bool Subscribes => false;
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -79,7 +110,7 @@ internal sealed class OneWayPropEntry<TElement, TControl, TValue> : PropEntry<TE
 {
     private readonly Func<TElement, TValue> _get;
     private readonly Action<TControl, TValue> _set;
-    private readonly IEqualityComparer<TValue> _comparer;
+    private readonly IEqualityComparer<TValue>? _comparer;
 
     public OneWayPropEntry(
         Func<TElement, TValue> get,
@@ -88,7 +119,7 @@ internal sealed class OneWayPropEntry<TElement, TControl, TValue> : PropEntry<TE
     {
         _get = get;
         _set = set;
-        _comparer = comparer ?? EqualityComparer<TValue>.Default;
+        _comparer = comparer;
     }
 
     public override void Mount(TControl ctrl, TElement el) => _set(ctrl, _get(el));
@@ -96,7 +127,7 @@ internal sealed class OneWayPropEntry<TElement, TControl, TValue> : PropEntry<TE
     public override void Update(TControl ctrl, TElement oldEl, TElement newEl)
     {
         var nv = _get(newEl);
-        if (!_comparer.Equals(_get(oldEl), nv))
+        if (!PropValueComparison.ValuesEqual(_comparer, _get(oldEl), nv))
             _set(ctrl, nv);
     }
 }
@@ -111,7 +142,7 @@ internal sealed class OneWayClearValuePropEntry<TElement, TControl, TValue> : Pr
     private readonly Func<TElement, Optional<TValue>> _get;
     private readonly Action<TControl, TValue> _set;
     private readonly DependencyProperty _dp;
-    private readonly IEqualityComparer<TValue> _comparer;
+    private readonly IEqualityComparer<TValue>? _comparer;
 
     public OneWayClearValuePropEntry(
         Func<TElement, Optional<TValue>> get,
@@ -122,7 +153,7 @@ internal sealed class OneWayClearValuePropEntry<TElement, TControl, TValue> : Pr
         _get = get;
         _set = set;
         _dp = dp;
-        _comparer = comparer ?? EqualityComparer<TValue>.Default;
+        _comparer = comparer;
     }
 
     public override void Mount(TControl ctrl, TElement el)
@@ -152,7 +183,7 @@ internal sealed class OneWayClearValuePropEntry<TElement, TControl, TValue> : Pr
             return;
         }
 
-        if (!ovOpt.HasValue || !_comparer.Equals(ovOpt.Value, nvOpt.Value))
+        if (!ovOpt.HasValue || !PropValueComparison.ValuesEqual(_comparer, ovOpt.Value, nvOpt.Value))
             _set(ctrl, nvOpt.Value);
     }
 }
@@ -169,7 +200,7 @@ internal sealed class OneWayConditionalPropEntry<TElement, TControl, TValue> : P
     private readonly Func<TElement, TValue> _get;
     private readonly Action<TControl, TValue> _set;
     private readonly Func<TElement, bool> _shouldWrite;
-    private readonly IEqualityComparer<TValue> _comparer;
+    private readonly IEqualityComparer<TValue>? _comparer;
 
     public OneWayConditionalPropEntry(
         Func<TElement, TValue> get,
@@ -180,7 +211,7 @@ internal sealed class OneWayConditionalPropEntry<TElement, TControl, TValue> : P
         _get = get;
         _set = set;
         _shouldWrite = shouldWrite;
-        _comparer = comparer ?? EqualityComparer<TValue>.Default;
+        _comparer = comparer;
     }
 
     public override void Mount(TControl ctrl, TElement el)
@@ -194,7 +225,7 @@ internal sealed class OneWayConditionalPropEntry<TElement, TControl, TValue> : P
         var nv = _get(newEl);
         // Re-write when the predicate flips from false to true OR the value
         // genuinely changed. Don't try to be clever about the old element.
-        if (!_shouldWrite(oldEl) || !_comparer.Equals(_get(oldEl), nv))
+        if (!_shouldWrite(oldEl) || !PropValueComparison.ValuesEqual(_comparer, _get(oldEl), nv))
             _set(ctrl, nv);
     }
 }
@@ -269,7 +300,7 @@ internal sealed class ControlledPropEntry<TElement, TControl, TValue, TArgs> : P
     private readonly Action<FrameworkElement, EventHandler<TArgs>> _unsubscribe;
     private readonly Func<TElement, Action<TValue>?> _getCallback;
     private readonly Func<TControl, TValue> _readBack;
-    private readonly IEqualityComparer<TValue> _comparer;
+    private readonly IEqualityComparer<TValue>? _comparer;
 
     // Static trampoline — closes over the closed generic's TElement /
     // TControl / TValue / TArgs but captures no per-instance state.
@@ -343,7 +374,7 @@ internal sealed class ControlledPropEntry<TElement, TControl, TValue, TArgs> : P
         _unsubscribe = unsubscribe;
         _getCallback = getCallback;
         _readBack = readBack;
-        _comparer = comparer ?? EqualityComparer<TValue>.Default;
+        _comparer = comparer;
     }
 
     public override void Mount(TControl ctrl, TElement el)
@@ -366,7 +397,7 @@ internal sealed class ControlledPropEntry<TElement, TControl, TValue, TArgs> : P
         var vOpt = _get(el);
         if (!vOpt.HasValue) return;
         var v = vOpt.Value;
-        if (!_comparer.Equals(_readBack(ctrl), v))
+        if (!PropValueComparison.ValuesEqual(_comparer, _readBack(ctrl), v))
             _set(ctrl, v);
     }
 
@@ -379,7 +410,7 @@ internal sealed class ControlledPropEntry<TElement, TControl, TValue, TArgs> : P
         // Spec 047 §8 echo-suppression contract: write ONLY when the control has
         // drifted from the element's authority. A no-drift write raises no event,
         // so arming would strand the pending flag (the §8 cross-state echo class).
-        if (_comparer.Equals(current, nv))
+        if (PropValueComparison.ValuesEqual(_comparer, current, nv))
             return;
 
         // §8 value-diff echo suppression (PoC) for the controlled fast path: arm
@@ -403,6 +434,8 @@ internal sealed class ControlledPropEntry<TElement, TControl, TValue, TArgs> : P
 
         _set(ctrl, nv);
     }
+
+    public override bool Subscribes => true;
 
     public override void EnsureSubscribed(
         ReactorBinding<TElement> binding,
@@ -465,6 +498,8 @@ internal sealed class ReferencePropEntry<TElement, TControl, TTarget> : PropEntr
         // Cell changes drive writes; ref-instance swaps are handled by EnsureSubscribed.
     }
 
+    public override bool Subscribes => true;
+
     public override void EnsureSubscribed(
         ReactorBinding<TElement> binding,
         TControl ctrl,
@@ -515,6 +550,8 @@ internal sealed class UntypedReferencePropEntry<TElement, TControl> : PropEntry<
         // Cell changes drive writes; ref-instance swaps are handled by EnsureSubscribed.
     }
 
+    public override bool Subscribes => true;
+
     public override void EnsureSubscribed(
         ReactorBinding<TElement> binding,
         TControl ctrl,
@@ -544,6 +581,14 @@ internal sealed class ReferenceListPropEntry<TElement, TControl, TTarget> : Prop
     private readonly Action<TControl, IReadOnlyList<TTarget>> _apply;
     private readonly int _slot;
 
+    // Issue #120 — per-thread reusable scratch for the cells projection built on
+    // every EnsureSubscribed (this entry re-evaluates each Update to detect
+    // ref-list add/remove/reorder). WireReferenceListEdge copies the list into
+    // its own edge state synchronously and does not retain it, so a cleared-on-
+    // use thread-static buffer removes the per-Update allocation without racing
+    // across windows (same rationale as CollectionDiff's scratch above).
+    [ThreadStatic] private static List<Microsoft.UI.Reactor.Input.ElementRef>? s_scratchCells;
+
     public ReferenceListPropEntry(
         Func<TElement, IReadOnlyList<Microsoft.UI.Reactor.Input.ElementRef<TTarget>>?> get,
         Action<TControl, IReadOnlyList<TTarget>> apply,
@@ -564,16 +609,18 @@ internal sealed class ReferenceListPropEntry<TElement, TControl, TTarget> : Prop
         // Cell changes drive writes; ref-list add/remove/order changes are handled by EnsureSubscribed.
     }
 
+    public override bool Subscribes => true;
+
     public override void EnsureSubscribed(
         ReactorBinding<TElement> binding,
         TControl ctrl,
         TElement el)
     {
         var refs = _get(el);
-        List<Microsoft.UI.Reactor.Input.ElementRef>? cells = null;
+        var cells = s_scratchCells ??= new List<Microsoft.UI.Reactor.Input.ElementRef>();
+        cells.Clear();
         if (refs is not null)
         {
-            cells = new(refs.Count);
             foreach (var r in refs)
                 if (r is not null)
                     cells.Add(r.Inner);
@@ -695,7 +742,7 @@ internal sealed class HandCodedControlledPropEntry<TElement, TControl, TPayload,
     private readonly TDelegate _trampoline;
     private readonly Func<TPayload, bool> _slotIsNull;
     private readonly Action<TPayload, TDelegate> _setSlot;
-    private readonly IEqualityComparer<TValue> _comparer;
+    private readonly IEqualityComparer<TValue>? _comparer;
     private readonly bool _valueDiffEcho;
 
     public HandCodedControlledPropEntry(
@@ -718,7 +765,7 @@ internal sealed class HandCodedControlledPropEntry<TElement, TControl, TPayload,
         _trampoline = trampoline;
         _slotIsNull = slotIsNull;
         _setSlot = setSlot;
-        _comparer = comparer ?? EqualityComparer<TValue>.Default;
+        _comparer = comparer;
         _valueDiffEcho = valueDiffEcho;
     }
 
@@ -733,7 +780,7 @@ internal sealed class HandCodedControlledPropEntry<TElement, TControl, TPayload,
         var vOpt = _get(el);
         if (!vOpt.HasValue) return;
         var v = vOpt.Value;
-        if (!_comparer.Equals(_readBack(ctrl), v))
+        if (!PropValueComparison.ValuesEqual(_comparer, _readBack(ctrl), v))
             _set(ctrl, v);
     }
 
@@ -746,7 +793,7 @@ internal sealed class HandCodedControlledPropEntry<TElement, TControl, TPayload,
         // Spec 047 §8: suppress-write only on real drift (see ControlledPropEntry).
         // The prior `oldEl != newEl` disjunct stranded the suppress token on the
         // standard controlled round-trip and swallowed the next real user event.
-        if (_comparer.Equals(current, nv))
+        if (PropValueComparison.ValuesEqual(_comparer, current, nv))
             return;
 
         // §8 value-diff (opt-in via valueDiffEcho): arm the per-control expected
@@ -761,7 +808,7 @@ internal sealed class HandCodedControlledPropEntry<TElement, TControl, TPayload,
             if (_getCallback(newEl) is not null)
             {
                 var expected = nv;
-                var cmp = _comparer;
+                var cmp = _comparer ?? EqualityComparer<TValue>.Default;
                 ChangeEchoSuppressor.ArmExpectedEcho(
                     ctrl, rb => cmp.Equals(rb is TValue tv ? tv : default!, expected));
             }
@@ -770,7 +817,7 @@ internal sealed class HandCodedControlledPropEntry<TElement, TControl, TPayload,
             // dropped the write, the synchronous echo never fired to consume the
             // arm. Clear it so it can't strand and swallow a later real event
             // whose readback happens to equal the never-applied value.
-            if (!_comparer.Equals(_readBack(ctrl), nv))
+            if (!PropValueComparison.ValuesEqual(_comparer, _readBack(ctrl), nv))
                 ChangeEchoSuppressor.ClearExpectedEcho(ctrl);
         }
         else
@@ -778,6 +825,8 @@ internal sealed class HandCodedControlledPropEntry<TElement, TControl, TPayload,
             ReactorBinding.WriteSuppressed(ctrl, () => _set(ctrl, nv));
         }
     }
+
+    public override bool Subscribes => true;
 
     public override void EnsureSubscribed(
         ReactorBinding<TElement> binding,
@@ -832,6 +881,8 @@ internal sealed class HandCodedEventPropEntry<TElement, TControl, TPayload, TDel
 
     public override void Update(TControl ctrl, TElement oldEl, TElement newEl) { /* no DP write */ }
 
+    public override bool Subscribes => true;
+
     public override void EnsureSubscribed(
         ReactorBinding<TElement> binding,
         TControl ctrl,
@@ -862,7 +913,7 @@ internal sealed class CoercingOneWayPropEntry<TElement, TControl, TValue> : Prop
     private readonly Func<TElement, TValue> _get;
     private readonly Action<TControl, TValue> _set;
     private readonly Func<TControl, TValue, bool> _coercesController;
-    private readonly IEqualityComparer<TValue> _comparer;
+    private readonly IEqualityComparer<TValue>? _comparer;
 
     public CoercingOneWayPropEntry(
         Func<TElement, TValue> get,
@@ -873,7 +924,7 @@ internal sealed class CoercingOneWayPropEntry<TElement, TControl, TValue> : Prop
         _get = get;
         _set = set;
         _coercesController = coercesController;
-        _comparer = comparer ?? EqualityComparer<TValue>.Default;
+        _comparer = comparer;
     }
 
     public override void Mount(TControl ctrl, TElement el)
@@ -887,7 +938,7 @@ internal sealed class CoercingOneWayPropEntry<TElement, TControl, TValue> : Prop
     public override void Update(TControl ctrl, TElement oldEl, TElement newEl)
     {
         var nv = _get(newEl);
-        if (_comparer.Equals(_get(oldEl), nv)) return;
+        if (PropValueComparison.ValuesEqual(_comparer, _get(oldEl), nv)) return;
 
         if (_coercesController(ctrl, nv))
             ReactorBinding.WriteSuppressed(ctrl, () => _set(ctrl, nv));
@@ -995,7 +1046,7 @@ internal sealed class OneWayBridgedPropEntry<TElement, TControl, TValue> : PropE
     private readonly Func<TElement, TValue> _get;
     private readonly OneWayBridgedSetter<TControl, TValue> _set;
     private readonly Func<TElement, bool> _shouldWrite;
-    private readonly IEqualityComparer<TValue> _comparer;
+    private readonly IEqualityComparer<TValue>? _comparer;
 
     public OneWayBridgedPropEntry(
         Func<TElement, TValue> get,
@@ -1006,7 +1057,7 @@ internal sealed class OneWayBridgedPropEntry<TElement, TControl, TValue> : PropE
         _get = get;
         _set = set;
         _shouldWrite = shouldWrite;
-        _comparer = comparer ?? EqualityComparer<TValue>.Default;
+        _comparer = comparer;
     }
 
     // Parameterless overloads — unreachable; the bridged entry only goes
@@ -1029,7 +1080,7 @@ internal sealed class OneWayBridgedPropEntry<TElement, TControl, TValue> : PropE
     {
         if (!_shouldWrite(newEl)) return;
         var nv = _get(newEl);
-        if (!_shouldWrite(oldEl) || !_comparer.Equals(_get(oldEl), nv))
+        if (!_shouldWrite(oldEl) || !PropValueComparison.ValuesEqual(_comparer, _get(oldEl), nv))
             _set(ctrl, nv, ctx.Reconciler, ctx.RequestRerender);
     }
 }
@@ -1109,6 +1160,8 @@ internal sealed class ImmediatePropEntry<TElement, TControl, TPayload> : PropEnt
     public override void Mount(TControl ctrl, TElement el) { /* no DP write */ }
     public override void Update(TControl ctrl, TElement oldEl, TElement newEl) { /* no DP write */ }
 
+    public override bool Subscribes => true;
+
     public override void EnsureSubscribed(
         ReactorBinding<TElement> binding,
         TControl ctrl,
@@ -1161,6 +1214,21 @@ internal sealed class CollectionDiffControlledPropEntry<TElement, TControl, TPay
     private readonly Action<TPayload, TDelegate> _setSlot;
     private readonly IEqualityComparer<TKey> _keyComparer;
 
+    // Issue #119 — per-thread reusable scratch sets for the Update diff. This
+    // entry is a process-wide singleton shared by every control of its type, so
+    // (mirroring the reconciler's own [ThreadStatic] scratch, and supporting a
+    // component that owns a separate DispatcherQueue/UI thread) the scratch is
+    // thread-static rather than an instance field: each UI thread keeps its own
+    // cleared-on-use sets. That removes the two per-Update HashSet allocations
+    // (CalendarView.SelectedDates and peers rebuild their list every render)
+    // with no cross-window race. Each Update fully drains both sets before it
+    // returns, so reuse within a thread is safe. (Two CollectionDiff entries
+    // with an identical closed generic on one control would share these — the
+    // same accepted collision caveat as DescriptorControlledPayload above; the
+    // handler still runs entries sequentially, so each drains before the next.)
+    [ThreadStatic] private static HashSet<TKey>? s_scratchNewKeys;
+    [ThreadStatic] private static HashSet<TKey>? s_scratchPresentKeys;
+
     public CollectionDiffControlledPropEntry(
         Func<TElement, IReadOnlyList<TItem>> get,
         Func<TControl, IList<TItem>> getVector,
@@ -1202,7 +1270,8 @@ internal sealed class CollectionDiffControlledPropEntry<TElement, TControl, TPay
         if (ReferenceEquals(oldItems, newItems)) return;
 
         // Build new key set; track which old indices are still present.
-        var newKeys = new HashSet<TKey>(newItems.Count, _keyComparer);
+        var newKeys = s_scratchNewKeys ??= new HashSet<TKey>(_keyComparer);
+        newKeys.Clear();
         for (int i = 0; i < newItems.Count; i++) newKeys.Add(_key(newItems[i]));
 
         var vec = _getVector(ctrl);
@@ -1217,7 +1286,8 @@ internal sealed class CollectionDiffControlledPropEntry<TElement, TControl, TPay
         }
 
         // Add items that aren't already present.
-        var presentKeys = new HashSet<TKey>(vec.Count, _keyComparer);
+        var presentKeys = s_scratchPresentKeys ??= new HashSet<TKey>(_keyComparer);
+        presentKeys.Clear();
         for (int i = 0; i < vec.Count; i++) presentKeys.Add(_key(vec[i]));
         for (int i = 0; i < newItems.Count; i++)
         {
@@ -1225,6 +1295,8 @@ internal sealed class CollectionDiffControlledPropEntry<TElement, TControl, TPay
             if (presentKeys.Add(k)) vec.Add(newItems[i]);
         }
     }
+
+    public override bool Subscribes => true;
 
     public override void EnsureSubscribed(
         ReactorBinding<TElement> binding,

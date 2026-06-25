@@ -47,10 +47,45 @@ public class DescriptorHandler<TElement, TControl> : IElementHandler<TElement, T
 {
     private readonly ControlDescriptor<TElement, TControl> _descriptor;
 
+    // Issue #117 — the per-prop loop ran over IReadOnlyList, paying an
+    // interface-indexer dispatch per prop per cell. Snapshot the descriptor's
+    // property list into concrete arrays once (the descriptor is a process-wide
+    // singleton built before this handler is constructed, so the list is final)
+    // and iterate those instead. _updateEntries holds every entry in declared
+    // order (drives Mount/Update writes); _subscribeEntries is the small subset
+    // (Issue #114) whose EnsureSubscribed override actually wires something —
+    // typically empty (e.g. a grid cell's TextBlock) or 1-3 entries.
+    private readonly PropEntry<TElement, TControl>[] _updateEntries;
+    private readonly PropEntry<TElement, TControl>[] _subscribeEntries;
+
     public DescriptorHandler(ControlDescriptor<TElement, TControl> descriptor)
     {
         ArgumentNullException.ThrowIfNull(descriptor);
         _descriptor = descriptor;
+
+        var properties = descriptor.Properties;
+        var update = new PropEntry<TElement, TControl>[properties.Count];
+        int subscribeCount = 0;
+        for (int i = 0; i < properties.Count; i++)
+        {
+            var entry = properties[i];
+            update[i] = entry;
+            if (entry.Subscribes) subscribeCount++;
+        }
+
+        _updateEntries = update;
+        if (subscribeCount == 0)
+        {
+            _subscribeEntries = Array.Empty<PropEntry<TElement, TControl>>();
+        }
+        else
+        {
+            var subscribe = new PropEntry<TElement, TControl>[subscribeCount];
+            int s = 0;
+            for (int i = 0; i < update.Length; i++)
+                if (update[i].Subscribes) subscribe[s++] = update[i];
+            _subscribeEntries = subscribe;
+        }
     }
 
     /// <summary>The descriptor this handler interprets. Exposed for tests
@@ -112,14 +147,24 @@ public class DescriptorHandler<TElement, TControl> : IElementHandler<TElement, T
         // context-carrying overload so OneWayBridged entries can reach the
         // reconciler/rerender helpers; existing entries forward to the
         // parameterless overload via the virtual default on PropEntry.
-        var props = _descriptor.Properties;
-        for (int i = 0; i < props.Count; i++)
-            props[i].Mount(in ctx, ctrl, el);
+        // Issue #117 — iterate the concrete array (no interface-indexer dispatch).
+        var entries = _updateEntries;
+        for (int i = 0; i < entries.Length; i++)
+            entries[i].Mount(in ctx, ctrl, el);
 
-        // Phase 2: subscribe controlled entries.
-        var binding = ctx.BindFor(ctrl, el);
-        for (int i = 0; i < props.Count; i++)
-            props[i].EnsureSubscribed(binding, ctrl, el);
+        // Phase 2: subscribe controlled entries. Issue #114 — only the entries
+        // that actually wire subscriptions are visited, and when there are none
+        // (the dominant grid-cell case) BindFor is skipped entirely. BindFor's
+        // only side effect is resetting the reference-slot thread-static, which
+        // is consumed solely by reference entries — themselves subscribers — so
+        // skipping it when the subset is empty changes no observable behavior.
+        var subscribers = _subscribeEntries;
+        if (subscribers.Length > 0)
+        {
+            var binding = ctx.BindFor(ctrl, el);
+            for (int i = 0; i < subscribers.Length; i++)
+                subscribers[i].EnsureSubscribed(binding, ctrl, el);
+        }
 
         var getSetters = _descriptor.GetSetters;
         if (getSetters is not null)
@@ -145,8 +190,6 @@ public class DescriptorHandler<TElement, TControl> : IElementHandler<TElement, T
         else if (_descriptor.Children is IItemsBinderStrategy binder && ctrl is FrameworkElement feBinder)
             binder.Bind(feBinder, oldEl, newEl, ctx.Reconciler, ctx.RequestRerender, isMount: false);
 
-        var props = _descriptor.Properties;
-
         // Spec 050: wire trampolines BEFORE the prop Update loop so a
         // controlled write that triggers a DEFERRED change event (TextBox /
         // PasswordBox / NumberBox / AutoSuggest / RichEdit text writes,
@@ -156,12 +199,24 @@ public class DescriptorHandler<TElement, TControl> : IElementHandler<TElement, T
         // ShouldSuppress on, so the token sat at +1 and swallowed the user's
         // next real input. The per-entry CWT gate (slot-is-null) makes the
         // steady-state no-op case cheap.
-        var binding = ctx.BindFor(ctrl, newEl);
-        for (int i = 0; i < props.Count; i++)
-            props[i].EnsureSubscribed(binding, ctrl, newEl);
+        //
+        // Issue #114 — visit only the subscribe subset, and skip BindFor when
+        // there are none (e.g. a grid cell of OneWay-only TextBlocks). This is
+        // the dominant per-cell-per-frame saving: most entries are no-op
+        // EnsureSubscribed overrides that previously paid a vtable dispatch on
+        // every Update.
+        var subscribers = _subscribeEntries;
+        if (subscribers.Length > 0)
+        {
+            var binding = ctx.BindFor(ctrl, newEl);
+            for (int i = 0; i < subscribers.Length; i++)
+                subscribers[i].EnsureSubscribed(binding, ctrl, newEl);
+        }
 
-        for (int i = 0; i < props.Count; i++)
-            props[i].Update(in ctx, ctrl, oldEl, newEl);
+        // Issue #117 — iterate the concrete array (no interface-indexer dispatch).
+        var entries = _updateEntries;
+        for (int i = 0; i < entries.Length; i++)
+            entries[i].Update(in ctx, ctrl, oldEl, newEl);
 
         var getSetters = _descriptor.GetSetters;
         if (getSetters is not null)
