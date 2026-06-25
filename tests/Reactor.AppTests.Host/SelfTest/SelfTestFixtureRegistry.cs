@@ -1331,6 +1331,8 @@ internal static class SelfTestFixtureRegistry
         // perf PR — ThemeRef resolution caches (#85/#86) + ListView/GridView
         // handler selection/item-click behaviour (#100/#110).
         "ThemeRefCache_ResolvesCachesAndInvalidates",
+        "ThemeRefCache_AncestorThemeFlipInheritedByDefaultChild",
+        "ThemeRefCache_DefaultDictionaryFallback",
         "ListViewHandler_MultiSelection_TypedSnapshot",
         "GridViewHandler_MultiSelection_TypedSnapshot",
         "ListViewHandler_ItemClick_SubscribeOnce_TracksEnabled",
@@ -2746,6 +2748,8 @@ internal static class SelfTestFixtureRegistry
         // perf PR — ThemeRef resolution caches (#85/#86) + ListView/GridView
         // handler selection/item-click behaviour (#100/#110).
         "ThemeRefCache_ResolvesCachesAndInvalidates" => new ThemeRefCacheFixtures.ThemeRefCache_ResolvesCachesAndInvalidates(harness),
+        "ThemeRefCache_AncestorThemeFlipInheritedByDefaultChild" => new ThemeRefCacheFixtures.ThemeRefCache_AncestorThemeFlipInheritedByDefaultChild(harness),
+        "ThemeRefCache_DefaultDictionaryFallback" => new ThemeRefCacheFixtures.ThemeRefCache_DefaultDictionaryFallback(harness),
         "ListViewHandler_MultiSelection_TypedSnapshot" => new ListViewHandlerSelectionFixtures.ListView_MultiSelection_TypedSnapshot(harness),
         "GridViewHandler_MultiSelection_TypedSnapshot" => new ListViewHandlerSelectionFixtures.GridView_MultiSelection_TypedSnapshot(harness),
         "ListViewHandler_ItemClick_SubscribeOnce_TracksEnabled" => new ListViewHandlerSelectionFixtures.ListView_ItemClick_SubscribeOnce_TracksEnabled(harness),

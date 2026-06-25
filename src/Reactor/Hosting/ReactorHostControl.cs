@@ -325,6 +325,10 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     private void Render()
     {
         _isRendering = true;
+        // #85: open a new effective-theme-name cache pass so each element walks
+        // the visual tree for its theme at most once this render — and re-walks
+        // next render, observing any subtree RequestedTheme change applied since.
+        ThemeRef.BeginReconcilePass();
         // Atomic capture-and-clear gives us at-most-once recovery per
         // UpdateApplication call:
         //

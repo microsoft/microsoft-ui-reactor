@@ -15,7 +15,9 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 ///   <item>#100 — the multi-select <c>OnSelectionChanged</c> snapshot is built
 ///     with a typed copy loop (was <c>SelectedItems.OfType&lt;int&gt;().ToList()</c>).
 ///     The handler binds <c>ItemsSource = [0..N-1]</c> ints, so selecting two
-///     items must surface a <c>List&lt;int&gt;</c> with exactly those values.</item>
+///     items must surface a <c>List&lt;int&gt;</c> with exactly those values, in
+///     <c>SelectedItems</c> order (the copy loop preserves order), and clearing
+///     the selection must surface an empty snapshot.</item>
 ///   <item>#110 — <c>ItemClick</c> is subscribed ONCE at Mount and only
 ///     <c>IsItemClickEnabled</c> is flipped in Update. This fixture guards the
 ///     observable Update half: toggling <c>OnItemClick</c> across record-with
@@ -71,7 +73,20 @@ internal static class ListViewHandlerSelectionFixtures
             H.Check("MultiSelLV_SnapshotNotNull", snap is not null);
             H.Check("MultiSelLV_SnapshotTypedInts",
                 snap is not null && snap.Count == 2 && snap.Contains(0) && snap.Contains(2));
+            // #100: the typed copy loop walks SelectedItems in order, so the
+            // snapshot must match SelectedItems element-for-element (independent of
+            // how WinUI happens to order the selection).
+            var expectedOrder = lv.SelectedItems.Cast<int>().ToList();
+            H.Check("MultiSelLV_SnapshotMatchesSelectedItemsOrder",
+                snap is not null && snap.SequenceEqual(expectedOrder));
             H.Check("MultiSelLV_CallbackFired", MultiSelectListViewComponent.CallbackCount >= 1);
+
+            // Clearing the selection raises SelectionChanged; the copy loop over an
+            // empty SelectedItems must surface an empty (non-null) snapshot.
+            lv.SelectedItems.Clear();
+            await Harness.Render();
+            var cleared = MultiSelectListViewComponent.LastSnapshot;
+            H.Check("MultiSelLV_EmptyAfterClear", cleared is not null && cleared.Count == 0);
         }
     }
 
@@ -117,7 +132,15 @@ internal static class ListViewHandlerSelectionFixtures
             H.Check("MultiSelGV_SnapshotNotNull", snap is not null);
             H.Check("MultiSelGV_SnapshotTypedInts",
                 snap is not null && snap.Count == 2 && snap.Contains(1) && snap.Contains(2));
+            var expectedOrder = gv.SelectedItems.Cast<int>().ToList();
+            H.Check("MultiSelGV_SnapshotMatchesSelectedItemsOrder",
+                snap is not null && snap.SequenceEqual(expectedOrder));
             H.Check("MultiSelGV_CallbackFired", MultiSelectGridViewComponent.CallbackCount >= 1);
+
+            gv.SelectedItems.Clear();
+            await Harness.Render();
+            var cleared = MultiSelectGridViewComponent.LastSnapshot;
+            H.Check("MultiSelGV_EmptyAfterClear", cleared is not null && cleared.Count == 0);
         }
     }
 

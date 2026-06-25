@@ -11,7 +11,10 @@ namespace Microsoft.UI.Reactor.Tests;
 /// after each top-level sync, with a re-entrancy guard). These tests confirm the
 /// reuse does not leak state across PropertyChanged fires: repeated fires keep
 /// firing, replaced nested nodes are untracked and the replacements tracked, and
-/// a node dropped from the graph stops re-rendering.
+/// a node dropped from the graph stops re-rendering. A final test drives the
+/// re-entrancy guard itself — a side-effecting getter that fires PropertyChanged
+/// mid-walk re-enters the sync, which must fall back to fresh scratch so the
+/// outer walk's reused containers stay intact.
 /// </summary>
 public class ObservableTreeTrackerScratchTests
 {
@@ -153,5 +156,98 @@ public class ObservableTreeTrackerScratchTests
 
             previousLeaf = freshLeaf;
         }
+    }
+
+    // A node whose property getter raises PropertyChanged on itself while it is
+    // being read during the tracker's Walk. Once the node is subscribed, that
+    // synchronous raise re-enters SyncSubscriptions on the same stack — the
+    // re-entrancy guard (#5) must then allocate fresh scratch instead of clearing
+    // the containers the outer sync is mid-walk over.
+    private sealed class ReentrantRoot : INotifyPropertyChanged
+    {
+        private ReentrantLeaf _leaf = new();
+        public ReentrantLeaf Leaf => _leaf;
+
+        private int _reentryBudget;
+        public int RemainingReentryBudget => _reentryBudget;
+        public void ArmGetterReentry(int n) => _reentryBudget = n;
+
+        // Side-effecting getter: when armed, raises PropertyChanged on THIS node
+        // as it is read during the Walk, re-entering the sync. The budget bounds
+        // the recursion so the test can't spin.
+        public object? Probe
+        {
+            get
+            {
+                if (_reentryBudget > 0)
+                {
+                    _reentryBudget--;
+                    Raise(nameof(Probe));
+                }
+                return null;
+            }
+        }
+
+        public void Poke() => Raise(nameof(Probe));
+        public void ReplaceLeaf(ReentrantLeaf leaf) { _leaf = leaf; Raise(nameof(Leaf)); }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+        private void Raise(string n) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
+    }
+
+    private sealed class ReentrantLeaf : INotifyPropertyChanged
+    {
+        private string _value = "";
+        public string Value
+        {
+            get => _value;
+            set { if (_value != value) { _value = value; Raise(nameof(Value)); } }
+        }
+        public event PropertyChangedEventHandler? PropertyChanged;
+        private void Raise(string n) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
+    }
+
+    [Fact]
+    public void ReentrantSync_FromSideEffectingGetter_KeepsSubscriptionsIntact()
+    {
+        var ctx = new RenderContext();
+        var root = new ReentrantRoot();
+        var c = new[] { 0 };
+
+        // First two renders subscribe root + its leaf. The Probe getter is read
+        // during these walks too, but it isn't armed, so nothing re-enters yet.
+        Render(ctx, c, root);
+        Render(ctx, c, root);
+
+        // Arm the getter to fire ONCE during the next walk, then trigger a sync.
+        // The outer SyncSubscriptions walks root, reads the armed Probe getter,
+        // which raises PropertyChanged on the already-subscribed root and
+        // re-enters SyncSubscriptions on the same stack (the #5 guard branch).
+        root.ArmGetterReentry(1);
+        int before = c[0];
+        root.Poke();
+
+        // The re-entry actually happened (the armed getter consumed its budget)
+        // and the tracker re-rendered without throwing or recursing unbounded.
+        Assert.Equal(0, root.RemainingReentryBudget);
+        Assert.True(c[0] > before, "poke should have re-rendered");
+
+        // The outer sync's reused scratch was not corrupted by the re-entrant
+        // sync: the deep leaf is still subscribed and keeps firing.
+        int afterPoke = c[0];
+        root.Leaf.Value = "after-reentry";
+        Assert.True(c[0] > afterPoke, "leaf must remain tracked after a re-entrant sync");
+
+        // And a normal replacement after the re-entry still tracks/untracks
+        // correctly — proving the scratch fields were left in a clean state.
+        var oldLeaf = root.Leaf;
+        root.ReplaceLeaf(new ReentrantLeaf());
+        int afterReplace = c[0];
+
+        oldLeaf.Value = "stale";
+        Assert.Equal(afterReplace, c[0]); // old leaf untracked
+
+        root.Leaf.Value = "fresh";
+        Assert.True(c[0] > afterReplace, "replacement leaf tracked");
     }
 }
