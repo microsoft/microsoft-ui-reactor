@@ -114,4 +114,107 @@ public class ReconcilerModifierMergeTests
             $"({delta / (double)iterations:F1} B/call, cap 64). The redundant " +
             $"x.Merge(x) appears to be back.");
     }
+
+    // ── Lifecycle callbacks survive a merge (regression guard) ─────────────
+    // ModifiersEqual deliberately ignores OnMount/OnUpdate (side-effect hooks,
+    // not render state), but Merge must PRESERVE them. A self-merge that
+    // silently dropped OnUpdateAction is exactly the class of bug that bit a
+    // sibling change — pin it so the self-merge skip stays provably safe for
+    // the callback-bearing fields, not just the Layout/Visual buckets.
+    [Fact]
+    public void Merge_Preserves_Lifecycle_Callbacks()
+    {
+        Action<FrameworkElement> mount = _ => { };
+        Action<FrameworkElement> unmount = _ => { };
+        Action<FrameworkElement> update = _ => { };
+
+        var baseMods = new ElementModifiers
+        {
+            OnMountAction = mount,
+            OnUnmountAction = unmount,
+            OnUpdateAction = update,
+        };
+
+        // Self-merge (the no-wrapper case the reconciler now skips) is value-
+        // identical: every callback is still the very same delegate afterwards.
+        // This is what makes skipping the self-merge safe for callback fields.
+        var self = baseMods.Merge(baseMods);
+        Assert.Same(mount, self.OnMountAction);
+        Assert.Same(unmount, self.OnUnmountAction);
+        Assert.Same(update, self.OnUpdateAction);
+
+        // A real merge with an `other` that leaves callbacks unset keeps the
+        // base callbacks (base fills the gap)…
+        var other = new ElementModifiers { Visual = new VisualModifiers { Opacity = 0.3 } };
+        var filled = baseMods.Merge(other);
+        Assert.Same(mount, filled.OnMountAction);
+        Assert.Same(unmount, filled.OnUnmountAction);
+        Assert.Same(update, filled.OnUpdateAction);
+
+        // …and `other` wins where it sets its own callback.
+        Action<FrameworkElement> update2 = _ => { };
+        var overriding = baseMods.Merge(new ElementModifiers { OnUpdateAction = update2 });
+        Assert.Same(update2, overriding.OnUpdateAction);
+        Assert.Same(mount, overriding.OnMountAction); // base still fills the gap
+    }
+
+    // ── The guard skips ONLY the self-merge: a real wrapper layer still merges ──
+    // Update_DirectModifiers_AvoidsRedundantSelfMergeAllocation pins that the
+    // no-wrapper case is skipped. This pins the *other* half through
+    // Reconciler.Update: when a ModifiedElement wrapper contributes a DISTINCT
+    // modifier instance, the !ReferenceEquals guard's fall-through MUST still run
+    // the real merge (wrapper ⊕ inner). The merged value-correctness is covered
+    // by Merge_Prefers_Other_Fields_And_Fills_Gaps_From_Base; here we prove the
+    // reconciler does not wrongly skip that merge. (End-to-end application of the
+    // resolved modifiers to a live control is covered by the selftest fixtures —
+    // ModifierEventFixtures / ControlUpdateFixtures — which need a UI thread.)
+    [Fact]
+    public void Update_WrapperLayer_StillMergesInnerModifiers()
+    {
+        var reconciler = new Reconciler();
+
+        // No-wrapper leaf: the resolved modifiers ARE the element's own instance,
+        // so the !ReferenceEquals guard skips the self-merge → ~0 B/call.
+        var leaf = new DirectModifierLeaf(1) { Modifiers = CellModifiers() };
+
+        // Wrapped leaf: the outer ModifiedElement contributes a distinct modifier
+        // instance (WrappedModifiers), so the accumulator is no longer reference-
+        // equal to the inner element's own Modifiers — the guard falls through and
+        // performs the real merge, which allocates. Same instance for old and new
+        // so Update still takes the shallow-equality skip and never dereferences
+        // the (null) control.
+        var inner = new DirectModifierLeaf(2) { Modifiers = CellModifiers() };
+        var wrapped = new ModifiedElement(
+            inner,
+            new ElementModifiers { Visual = new VisualModifiers { Rotation = 30f } });
+
+        // Warm up the JIT + both resolution paths.
+        for (int i = 0; i < 2_000; i++)
+        {
+            _ = reconciler.Update(leaf, leaf, control: null!, NoOp);
+            _ = reconciler.Update(wrapped, wrapped, control: null!, NoOp);
+        }
+
+        const int iterations = 50_000;
+
+        long b0 = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < iterations; i++)
+            _ = reconciler.Update(leaf, leaf, control: null!, NoOp);
+        long noWrapper = GC.GetAllocatedBytesForCurrentThread() - b0;
+
+        long b1 = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < iterations; i++)
+            _ = reconciler.Update(wrapped, wrapped, control: null!, NoOp);
+        long wrapper = GC.GetAllocatedBytesForCurrentThread() - b1;
+
+        // The wrapper layer's merge allocates a fresh ElementModifiers (+ a Visual
+        // bucket) per side, per call — comfortably more than 200 B/call above the
+        // guarded no-wrapper path. If anyone broadens the guard so it also skips
+        // the wrapper merge, `wrapper` collapses toward `noWrapper` and the wrapper
+        // layer's modifiers would silently stop applying. This catches that.
+        Assert.True(wrapper > noWrapper + 200L * iterations,
+            $"Wrapper-layer merge appears to have been skipped: wrapper={wrapper} B, " +
+            $"noWrapper={noWrapper} B over {iterations} calls " +
+            $"(delta {(wrapper - noWrapper) / (double)iterations:F1} B/call, expected > 200).");
+    }
 }
