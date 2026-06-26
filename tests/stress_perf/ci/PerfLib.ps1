@@ -508,7 +508,9 @@ function Read-MicroBenchResults {
         delta /perf reports. Rows are ordered by repetition and tagged with their
         repetition index so the paired analysis can align baseline rep i against
         candidate rep i BY REPETITION (not array position) — a dropped/errored rep on
-        one side must not shift every later sample. Malformed lines are skipped.
+        one side must not shift every later sample. Malformed lines are skipped,
+        including any row missing benchId / meanNs / allocBytes or whose repetition
+        is absent or non-numeric (it would otherwise throw on the [int] cast below).
     .OUTPUTS
         OrderedDictionary benchId -> [pscustomobject]@{ BenchId; Name;
         Repetitions [int[]]; MeanNsSamples [double[]]; AllocBytesSamples [double[]] }
@@ -534,7 +536,13 @@ function Read-MicroBenchResults {
         if ($status -and $status -ne 'ok') { continue }
         if (-not $obj.PSObject.Properties['benchId'] -or
             -not $obj.PSObject.Properties['meanNs'] -or
-            -not $obj.PSObject.Properties['allocBytes']) { continue }
+            -not $obj.PSObject.Properties['allocBytes'] -or
+            -not $obj.PSObject.Properties['repetition']) { continue }
+        # repetition drives the rep-keyed pairing and is cast to [int] when ordering /
+        # tagging samples below; a present-but-non-numeric value would throw PAST the
+        # malformed-line guard and break /perf comment generation, so validate the cast
+        # here and skip the row if it won't parse (honors "malformed lines are skipped").
+        try { $null = [int]$obj.repetition } catch { continue }
         $rows.Add($obj)
     }
     if ($rows.Count -eq 0) { return $map }

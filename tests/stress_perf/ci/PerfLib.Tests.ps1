@@ -487,6 +487,25 @@ try {
     Assert-Equal 140 $perOpMap['M1'].AllocBytesSamples[0] 'alloc parsed per-op (allocBytes / iterations)'
     Assert-Equal 100 $perOpMap['M1'].MeanNsSamples[0]     'ns already per-op, carried unchanged'
 
+    # Malformed-line resilience: repetition drives the rep-keyed pairing and is cast to
+    # [int], so a row missing repetition (schema drift / truncation) or carrying a
+    # non-numeric value must be SKIPPED at ingestion, not throw past the guard. Two valid
+    # reps (0, 2) bracket a missing-repetition row and a non-numeric-repetition row.
+    $repJsonl = Join-Path $microTmp 'badrep.jsonl'
+    Set-Content -LiteralPath $repJsonl -Encoding UTF8 -Value @(
+        '{"benchId":"M1","benchName":"PropertyDiff","variant":"Reactor","iterations":1,"repetition":0,"meanNs":100,"allocBytes":500,"status":"ok"}'
+        '{"benchId":"M1","benchName":"PropertyDiff","variant":"Reactor","iterations":1,"meanNs":102,"allocBytes":505,"status":"ok"}'           # missing repetition -> skip
+        '{"benchId":"M1","benchName":"PropertyDiff","variant":"Reactor","iterations":1,"repetition":"x","meanNs":103,"allocBytes":507,"status":"ok"}' # non-numeric -> skip
+        '{"benchId":"M1","benchName":"PropertyDiff","variant":"Reactor","iterations":1,"repetition":2,"meanNs":98,"allocBytes":495,"status":"ok"}'
+    )
+    $repMap = $null
+    $repThrew = $false
+    try { $repMap = Read-MicroBenchResults $repJsonl } catch { $repThrew = $true }
+    Assert-True (-not $repThrew)                            'malformed repetition: parser does not throw'
+    Assert-Equal 2 $repMap['M1'].MeanNsSamples.Count       'malformed repetition: only the 2 numeric-repetition rows kept'
+    Assert-Equal 0 $repMap['M1'].Repetitions[0]            'malformed repetition: surviving reps are the valid ones (0, 2)'
+    Assert-Equal 2 $repMap['M1'].Repetitions[1]            'malformed repetition: non-numeric/missing rows dropped, not mis-cast'
+
     $cmp = @(Get-PerfMicroComparison -Main $mainMap -Pr $prMap)
     Assert-Equal 4 $cmp.Count                              'comparison = overlapping benches only (M99 excluded)'
     # numeric (not lexical) sort: M1, M2, M3, M10 — lexical would put M10 before M2/M3.
