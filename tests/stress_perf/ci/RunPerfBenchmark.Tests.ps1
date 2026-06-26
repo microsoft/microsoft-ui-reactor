@@ -219,6 +219,59 @@ Assert-True (-not (Test-Path $marker4)) `
     '[stage] WebView2 Core DLL missing -> stale marker dropped before restage'
 Remove-Item $exeDir4 -Recurse -Force -ErrorAction SilentlyContinue
 
+# ===========================================================================
+#  Invoke-MicroRun — output-integrity discard paths (timeout / non-zero exit)
+# ===========================================================================
+# PerfBench.ControlModel writes results.jsonl incrementally (one line per rep), so a
+# killed or crashed run leaves a TRUNCATED prefix. Invoke-MicroRun must return $null
+# (omit the micro section) rather than hand back a silent subset. Stub Start-Process so
+# each scenario drives WaitForExit / ExitCode without launching a real child; the stub
+# simulates the child writing output by honoring an --out path it finds in ArgumentList.
+Invoke-Expression (Get-Func 'Invoke-MicroRun')
+
+$global:MicroWaitResult = $true     # $false => WaitForExit timed out
+$global:MicroExit = 0               # process exit code
+$global:MicroWriteContent = $null   # non-null => stub writes it to the --out file
+function Start-Process {
+    param(
+        [string]$FilePath, [string[]]$ArgumentList, [switch]$PassThru,
+        [string]$RedirectStandardOutput, [string]$RedirectStandardError, $WindowStyle
+    )
+    $outIdx = [Array]::IndexOf($ArgumentList, '--out')
+    if ($outIdx -ge 0 -and $global:MicroWriteContent) {
+        Set-Content -LiteralPath $ArgumentList[$outIdx + 1] -Value $global:MicroWriteContent -NoNewline
+    }
+    $exit = $global:MicroExit; $wait = $global:MicroWaitResult
+    [pscustomobject]@{ PriorityClass = $null } |
+        Add-Member -MemberType NoteProperty -Name ExitCode -Value $exit -PassThru |
+        Add-Member -MemberType ScriptMethod -Name WaitForExit -Value { param($ms) $wait }.GetNewClosure() -PassThru |
+        Add-Member -MemberType ScriptMethod -Name Kill -Value { param($entireTree) } -PassThru
+}
+function Start-Sleep { param([int]$Seconds, [int]$Milliseconds) }   # no-op: skip the post-kill settle wait
+
+# A. clean exit 0 + non-empty output -> returns the jsonl path.
+$global:MicroWaitResult = $true; $global:MicroExit = 0; $global:MicroWriteContent = '{"benchId":"M1"}'
+$resA = Invoke-MicroRun -Exe 'x.exe' -Tag 'okrun' -RepCount 2 -IterCount 10
+Assert-True ($resA -eq (Join-Path $OutDir 'micro-okrun.jsonl')) '[micro] clean exit 0 + output -> returns jsonl path'
+
+# B. timeout (WaitForExit=$false) + partial output present -> $null (truncated prefix discarded).
+$global:MicroWaitResult = $false; $global:MicroExit = 0; $global:MicroWriteContent = '{"benchId":"M1"}'
+$resB = Invoke-MicroRun -Exe 'x.exe' -Tag 'timeoutrun' -RepCount 2 -IterCount 10
+Assert-True ($null -eq $resB) '[micro] timeout + partial output -> $null (truncated prefix discarded)'
+
+# C. non-zero exit + non-empty output -> $null (a crash leaves a silent subset).
+$global:MicroWaitResult = $true; $global:MicroExit = 3; $global:MicroWriteContent = '{"benchId":"M1"}'
+$resC = Invoke-MicroRun -Exe 'x.exe' -Tag 'crashrun' -RepCount 2 -IterCount 10
+Assert-True ($null -eq $resC) '[micro] non-zero exit + output -> $null (truncated prefix discarded)'
+
+# D. clean exit 0 but NO output file written -> $null (nothing produced).
+$global:MicroWaitResult = $true; $global:MicroExit = 0; $global:MicroWriteContent = $null
+$resD = Invoke-MicroRun -Exe 'x.exe' -Tag 'emptyrun' -RepCount 2 -IterCount 10
+Assert-True ($null -eq $resD) '[micro] clean exit but empty/no output -> $null'
+
+Remove-Item function:Start-Process -ErrorAction SilentlyContinue
+Remove-Item function:Start-Sleep -ErrorAction SilentlyContinue
+
 # cleanup
 foreach ($d in @($baseTree, $prTree, $OutDir, $exeDir)) {
     if (Test-Path $d) { Remove-Item $d -Recurse -Force -ErrorAction SilentlyContinue }

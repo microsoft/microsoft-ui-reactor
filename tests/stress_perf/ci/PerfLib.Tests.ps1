@@ -403,10 +403,10 @@ Assert-True (-not ($noAllocComment -like '*Allocation (Reactor)*')) 'alloc table
 
 # ── Reconciler micro-suite: Read-MicroBenchResults / comparison / render ──────
 function New-MicroRow {
-    param([string]$BenchId, [string]$Name, [string]$Variant, [int]$Rep, [double]$MeanNs, [double]$AllocBytes, [string]$Status = 'ok')
+    param([string]$BenchId, [string]$Name, [string]$Variant, [int]$Rep, [double]$MeanNs, [double]$AllocBytes, [string]$Status = 'ok', [int]$Iterations = 1)
     [pscustomobject]@{
-        benchId = $BenchId; benchName = $Name; variant = $Variant; iterations = 10000
-        repetition = $Rep; totalMs = ($MeanNs * 10000 / 1e6); meanNs = $MeanNs; allocBytes = $AllocBytes
+        benchId = $BenchId; benchName = $Name; variant = $Variant; iterations = $Iterations
+        repetition = $Rep; totalMs = ($MeanNs * $Iterations / 1e6); meanNs = $MeanNs; allocBytes = $AllocBytes
         gen0 = 0; gen1 = 0; gen2 = 0; heapDeltaBytes = 0; counter = 0; counterLabel = $null
         status = $Status; machineSku = 'x'; architecture = 'X64'; configuration = 'Release'
     } | ConvertTo-Json -Compress
@@ -474,6 +474,18 @@ try {
     $emptyJsonl = Join-Path $microTmp 'empty.jsonl'; Set-Content -LiteralPath $emptyJsonl -Value '' -Encoding UTF8
     Assert-Equal 0 (Read-MicroBenchResults $emptyJsonl).Count 'empty file -> empty map'
     Assert-Equal 0 (Read-MicroBenchResults $null).Count       'null path -> empty map'
+
+    # AllocBytesSamples are PER-OP: allocBytes (the whole-loop total) is divided by the
+    # row's iterations so the "B/op" column and the per-op meanNs share one basis. A row
+    # with iterations=10000 and a 1,400,000-byte loop total must parse to 140 B/op.
+    $perOpJsonl = Join-Path $microTmp 'perop.jsonl'
+    Set-Content -LiteralPath $perOpJsonl -Encoding UTF8 -Value @(
+        (New-MicroRow 'M1' 'PropertyDiff' 'Reactor' 0 100 1400000 'ok' 10000)
+        (New-MicroRow 'M1' 'PropertyDiff' 'Reactor' 1 100 1400000 'ok' 10000)
+    )
+    $perOpMap = Read-MicroBenchResults $perOpJsonl
+    Assert-Equal 140 $perOpMap['M1'].AllocBytesSamples[0] 'alloc parsed per-op (allocBytes / iterations)'
+    Assert-Equal 100 $perOpMap['M1'].MeanNsSamples[0]     'ns already per-op, carried unchanged'
 
     $cmp = @(Get-PerfMicroComparison -Main $mainMap -Pr $prMap)
     Assert-Equal 4 $cmp.Count                              'comparison = overlapping benches only (M99 excluded)'
@@ -562,6 +574,87 @@ try {
     Assert-Equal 20 $a2.MainMeanNs                         'consistent medians: main ns median over aligned reps (20), not all-sample (25)'
     Assert-Equal 20 $a2.PrMeanNs                           'consistent medians: pr ns median over aligned reps'
     Assert-Equal 3  $a2.NsDelta.N                          'consistent medians: ns paired over the 3 common reps'
+
+    # Micro paired-CI contract: a bench whose rep-aligned overlap is < 2 pairs has NO
+    # admissible CI (Get-PerfPairedDeltaStats needs >= 2 deltas), so the row must read
+    # 'na' — never be flagged off the point-delta fallback. Get-PerfMicroComparison
+    # passes -RequirePairedCI so Get-PerfDelta returns 'na' instead of the % -floor band.
+    #   Z1 — exactly ONE common rep (rep 0); the lone pair is a huge alloc drop the old
+    #        point-delta path would have flagged 'better' with N=$null.
+    #   Z0 — ZERO common reps (disjoint repetition indices) -> 'na', N stays $null.
+    $naMain = @(
+        (New-MicroRow 'Z1' 'OneCommonRep' 'Reactor' 0 100 1000)
+        (New-MicroRow 'Z1' 'OneCommonRep' 'Reactor' 1 100 1000)
+        (New-MicroRow 'Z0' 'NoCommonRep'  'Reactor' 0 100 1000)
+        (New-MicroRow 'Z0' 'NoCommonRep'  'Reactor' 1 100 1000)
+    )
+    $naPr = @(
+        (New-MicroRow 'Z1' 'OneCommonRep' 'Reactor' 0 50 100)   # only rep 0 overlaps {0,1}
+        (New-MicroRow 'Z1' 'OneCommonRep' 'Reactor' 7 50 100)
+        (New-MicroRow 'Z0' 'NoCommonRep'  'Reactor' 8 50 100)   # no overlap with {0,1}
+        (New-MicroRow 'Z0' 'NoCommonRep'  'Reactor' 9 50 100)
+    )
+    $naMainJsonl = Join-Path $microTmp 'na-main.jsonl'
+    $naPrJsonl   = Join-Path $microTmp 'na-pr.jsonl'
+    Set-Content -LiteralPath $naMainJsonl -Value $naMain -Encoding UTF8
+    Set-Content -LiteralPath $naPrJsonl   -Value $naPr   -Encoding UTF8
+    $naCmp = @(Get-PerfMicroComparison -Main (Read-MicroBenchResults $naMainJsonl) -Pr (Read-MicroBenchResults $naPrJsonl))
+    $naById = @{}; foreach ($r in $naCmp) { $naById[$r.BenchId] = $r }
+    $z1 = $naById['Z1']; $z0 = $naById['Z0']
+    Assert-Equal 'na' $z1.AllocDelta.Status                'Z1 (1 common rep): alloc na — no point-delta flag off one pair'
+    Assert-True ($null -eq $z1.AllocDelta.N)               'Z1 (1 common rep): alloc N stays $null'
+    Assert-Equal 'na' $z1.NsDelta.Status                   'Z1 (1 common rep): ns na'
+    Assert-Equal 'na' (Get-PerfMicroRowStatus -NsStatus $z1.NsDelta.Status -AllocStatus $z1.AllocDelta.Status) 'Z1 (1 common rep): row na'
+    Assert-Equal 'na' $z0.AllocDelta.Status                'Z0 (0 common reps): alloc na'
+    Assert-True ($null -eq $z0.AllocDelta.N)               'Z0 (0 common reps): alloc N stays $null'
+    Assert-Equal 'na' (Get-PerfMicroRowStatus -NsStatus $z0.NsDelta.Status -AllocStatus $z0.AllocDelta.Status) 'Z0 (0 common reps): row na'
+
+    # Minimum-effect band: not every micro bench is alloc-deterministic. A dispatcher /
+    # background-thread bench can carry a sub-1% systematic process-to-process alloc
+    # offset whose within-process CI is tight enough to EXCLUDE 0 on identical code (the
+    # M5 "Dispatch_Switch_Warm" smoke case). -MinEffectPct keeps such a sub-band delta
+    # 'noise' while a real structural delta (>= the band) still flags.
+    #   Direct Get-PerfDelta: same tight +0.3% delta is 'worse' at the default band (0)
+    #   but 'noise' once a 1% band is required; a large +20% delta flags through both.
+    $bandB = @(1000, 1000, 1000, 1000)
+    $bandC = @(1003, 1004, 1002, 1003)            # per-pair Δ ≈ +0.2..+0.4%, tight CI excludes 0
+    $bandNoFloor = Get-PerfDelta -Baseline 1000 -Candidate 1003 -LowerIsBetter $true `
+        -BaselineSamples $bandB -CandidateSamples $bandC -RequirePairedCI
+    Assert-Equal 'worse' $bandNoFloor.Status               'band: sub-1% tight delta flags worse at MinEffectPct=0 (CI excludes 0)'
+    $bandFloor = Get-PerfDelta -Baseline 1000 -Candidate 1003 -LowerIsBetter $true `
+        -BaselineSamples $bandB -CandidateSamples $bandC -RequirePairedCI -MinEffectPct 1.0
+    Assert-Equal 'noise' $bandFloor.Status                 'band: same sub-1% delta reads noise once the 1% band is required'
+    Assert-True (($bandFloor.DeltaPct -gt 0) -and ($bandFloor.DeltaPct -lt 1)) 'band: DeltaPct still reported (sub-band), only the flag is suppressed'
+    $bigB = @(1000, 1000, 1000, 1000)
+    $bigC = @(1200, 1201, 1199, 1200)             # +20% — well past any 1% band
+    $bandBig = Get-PerfDelta -Baseline 1000 -Candidate 1200 -LowerIsBetter $true `
+        -BaselineSamples $bigB -CandidateSamples $bigC -RequirePairedCI -MinEffectPct 1.0
+    Assert-Equal 'worse' $bandBig.Status                   'band: a real >1% delta still flags through the band'
+
+    # Integration: the micro comparison passes the alloc band, so a bench with a tight
+    # sub-1% alloc rise reads 'noise' at the row level (no false regression), while its
+    # ns context is unaffected.
+    $bandMain = @(
+        (New-MicroRow 'B1' 'BandFloor' 'Reactor' 0 500 1000)
+        (New-MicroRow 'B1' 'BandFloor' 'Reactor' 1 500 1000)
+        (New-MicroRow 'B1' 'BandFloor' 'Reactor' 2 500 1000)
+        (New-MicroRow 'B1' 'BandFloor' 'Reactor' 3 500 1000)
+    )
+    $bandPr = @(
+        (New-MicroRow 'B1' 'BandFloor' 'Reactor' 0 500 1003)
+        (New-MicroRow 'B1' 'BandFloor' 'Reactor' 1 500 1004)
+        (New-MicroRow 'B1' 'BandFloor' 'Reactor' 2 500 1002)
+        (New-MicroRow 'B1' 'BandFloor' 'Reactor' 3 500 1003)
+    )
+    $bandMainJsonl = Join-Path $microTmp 'band-main.jsonl'
+    $bandPrJsonl   = Join-Path $microTmp 'band-pr.jsonl'
+    Set-Content -LiteralPath $bandMainJsonl -Value $bandMain -Encoding UTF8
+    Set-Content -LiteralPath $bandPrJsonl   -Value $bandPr   -Encoding UTF8
+    $bandCmp = @(Get-PerfMicroComparison -Main (Read-MicroBenchResults $bandMainJsonl) -Pr (Read-MicroBenchResults $bandPrJsonl))
+    $b1 = $bandCmp[0]
+    Assert-Equal 'noise' $b1.AllocDelta.Status             'band integration: sub-1% alloc rise reads noise (not worse) through the micro path'
+    Assert-Equal 'noise' (Get-PerfMicroRowStatus -NsStatus $b1.NsDelta.Status -AllocStatus $b1.AllocDelta.Status) 'band integration: row = noise'
+    Assert-Equal 4 $b1.AllocDelta.N                        'band integration: all 4 reps paired (band suppresses the flag, not the pairing)'
 
     # Section rendering.
     Assert-Equal 0 @(Format-PerfMicroSection -Micro $null).Count  'micro section empty when null'

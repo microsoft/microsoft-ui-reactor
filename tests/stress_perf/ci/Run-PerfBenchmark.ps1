@@ -64,6 +64,20 @@
 .PARAMETER RefWarmup
     Warm-up runs discarded for the reference-only legs (default 1).
 
+.PARAMETER MicroReps
+    Measured repetitions per side for the reconciler micro-suite
+    (PerfBench.ControlModel, spec-047 M1&ndash;M13). Default 12; the per-rep
+    samples feed the paired 95% CI on allocated bytes/op.
+
+.PARAMETER MicroIterations
+    Inner iterations per micro repetition (default 10000) over which each bench's
+    mean ns/op and allocated bytes/op are averaged.
+
+.PARAMETER IncludeMicro
+    Run the reconciler micro-suite on each side and append its per-bench ns/op +
+    alloc-bytes/op PR-vs-main table (ns-resolution, WinUI-undiluted) to the
+    comment. Default $true; disable with -IncludeMicro:$false.
+
 .PARAMETER Apps
     Which harnesses to run in single-tree mode: ReactorOptimized, Direct.
     Ignored in compare mode (which always does ReactorOptimized both sides +
