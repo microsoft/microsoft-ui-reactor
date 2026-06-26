@@ -225,15 +225,25 @@ public static class UseMemoCellsExtensions
             // Start with full reuse from prev, then rebuild only the named
             // indices. Validate bounds first so a bad caller can't half-update
             // the array before throwing.
-            for (int k = 0; k < changedIndices.Count; k++)
+            var prevChildren = prev!.Children;
+
+            // Snapshot + dedupe the caller's changed indices up front. Duplicates
+            // are a caller-contract violation; left in place they would (a) double
+            // the incremental theme tally's subtract for a single cell — an
+            // undercount can stay >= 0 and wrongly publish AnyThemeSensitive=false
+            // while a themed cell remains — and (b) make the reconciler update the
+            // same cell twice. Dedupe is order-irrelevant here: each cell is
+            // rebuilt/updated independently of the others.
+            int[] changed = SnapshotChangedIndices(changedIndices);
+            for (int k = 0; k < changed.Length; k++)
             {
-                int idx = changedIndices[k];
+                int idx = changed[k];
                 if ((uint)idx >= (uint)count)
                     throw new ArgumentOutOfRangeException(nameof(changedIndices),
                         $"Index {idx} is out of range for items list of length {count}.");
             }
+            changed = Dedupe(changed);
 
-            var prevChildren = prev!.Children;
             for (int i = 0; i < count; i++)
                 children[i] = prevChildren[i];
 
@@ -241,27 +251,34 @@ public static class UseMemoCellsExtensions
             // the positional reconciler can safely structural-skip the untouched
             // (reference-equal) range. Start from the previous render's hint —
             // O(1); only on the first reuse after a full rebuild do we scan once.
+            // "Theme-sensitive" = ThemeBindings OR a ThemeRef-backed ResourceOverride
+            // (see ChildDiffHints.IsThemeSensitive). The ResourceOverrides arm is
+            // conservative: today the full-walk fallback also skips a reference-equal
+            // ResourceOverrides cell (Element.CanSkipUpdate only un-skips for
+            // ThemeBindings), so gating on it costs a fallback without a re-resolve —
+            // kept deliberately as belt-and-suspenders / future-proofing, and because
+            // making CanSkipUpdate consistent is a framework-wide change out of scope
+            // here.
             int themeSensitiveCount = ChildDiffHints.TryGet(prevChildren, out var prevHint)
                 ? prevHint.ThemeSensitiveCount
                 : CountThemeSensitive(prevChildren);
 
-            for (int k = 0; k < changedIndices.Count; k++)
+            for (int k = 0; k < changed.Length; k++)
             {
-                int idx = changedIndices[k];
+                int idx = changed[k];
                 if (ChildDiffHints.IsThemeSensitive(prevChildren[idx])) themeSensitiveCount--;
                 var built = builder(items[idx], idx);
                 children[idx] = built;
                 if (ChildDiffHints.IsThemeSensitive(built)) themeSensitiveCount++;
             }
 
-            // Defensive: duplicate indices in changedIndices (a caller-contract
-            // violation) could under-count; recompute rather than publish a count
-            // that would let the reconciler unsafely skip a theme-sensitive cell.
+            // With deduped indices the incremental tally is exact; keep a defensive
+            // floor as belt-and-suspenders against any unforeseen drift.
             if (themeSensitiveCount < 0)
                 themeSensitiveCount = CountThemeSensitive(children);
 
             ChildDiffHints.Publish(children, new ChildDiffHint(
-                SnapshotChangedIndices(changedIndices), themeSensitiveCount));
+                changed, themeSensitiveCount, prevChildren));
         }
 
         stateRef.Current = new MemoCellsState<T>(SnapshotItems(items), children, SnapshotDeps(dependencies));
@@ -302,6 +319,30 @@ public static class UseMemoCellsExtensions
         for (int i = 0; i < n; i++)
             arr[i] = changedIndices[i];
         return arr;
+    }
+
+    // PR-C (Spec 034 §C) — remove duplicate indices from the (private, already
+    // snapshotted) changed-index array. Duplicates are a caller-contract violation
+    // that would corrupt the incremental theme tally and double the reconciler's
+    // per-cell work. Sorting in place is acceptable: the array is private to this
+    // call, callers get no ordering guarantee, and each cell reconciles
+    // independently. Returns the same array when already duplicate-free (the
+    // overwhelmingly common case), so steady-state reuse adds only an O(k log k)
+    // sort over the typically-small changed set.
+    private static int[] Dedupe(int[] indices)
+    {
+        if (indices.Length <= 1) return indices;
+        Array.Sort(indices);
+        int w = 1;
+        for (int r = 1; r < indices.Length; r++)
+        {
+            if (indices[r] != indices[w - 1])
+                indices[w++] = indices[r];
+        }
+        if (w == indices.Length) return indices;
+        var trimmed = new int[w];
+        Array.Copy(indices, trimmed, w);
+        return trimmed;
     }
 
     // O(count) theme-sensitivity scan — used only on the first reuse render

@@ -87,7 +87,7 @@ public class ChildReconcilerStructuralSkipTests
         var coll = new TrackingChildCollection(n);
         var reconciler = new Reconciler();
 
-        ChildDiffHints.Publish(newChildren, new ChildDiffHint(new[] { 1, 4 }, themeSensitiveCount: 0));
+        ChildDiffHints.Publish(newChildren, new ChildDiffHint(new[] { 1, 4 }, themeSensitiveCount: 0, previousChildren: oldChildren));
         ChildReconciler.Reconcile(oldChildren, newChildren, coll, reconciler, NoOp);
 
         // Only the changed indices are visited; the untouched range is skipped.
@@ -107,11 +107,12 @@ public class ChildReconcilerStructuralSkipTests
         ChildReconciler.Reconcile(ButtonCells(n), FreshCopyWithSameLabels(n), collFull, rFull, NoOp);
 
         // Fast path (hint present).
+        var oldFast = ButtonCells(n);
         var newChildren = FreshCopyWithSameLabels(n);
         var collFast = new TrackingChildCollection(n);
         var rFast = new Reconciler();
-        ChildDiffHints.Publish(newChildren, new ChildDiffHint(new[] { 2 }, themeSensitiveCount: 0));
-        ChildReconciler.Reconcile(ButtonCells(n), newChildren, collFast, rFast, NoOp);
+        ChildDiffHints.Publish(newChildren, new ChildDiffHint(new[] { 2 }, themeSensitiveCount: 0, previousChildren: oldFast));
+        ChildReconciler.Reconcile(oldFast, newChildren, collFast, rFast, NoOp);
 
         // Both paths skip the same number of elements and mutate nothing.
         Assert.Equal(rFull.DebugElementsSkipped, rFast.DebugElementsSkipped);
@@ -133,7 +134,7 @@ public class ChildReconcilerStructuralSkipTests
         var coll = new TrackingChildCollection(n);
         var reconciler = new Reconciler();
 
-        ChildDiffHints.Publish(newChildren, new ChildDiffHint(new[] { 1 }, themeSensitiveCount: 1));
+        ChildDiffHints.Publish(newChildren, new ChildDiffHint(new[] { 1 }, themeSensitiveCount: 1, previousChildren: oldChildren));
         ChildReconciler.Reconcile(oldChildren, newChildren, coll, reconciler, NoOp);
 
         Assert.Equal(new[] { 0, 1, 2, 3, 4 }, coll.GetCalls);
@@ -151,7 +152,7 @@ public class ChildReconcilerStructuralSkipTests
         var coll = new TrackingChildCollection(n - 1); // mismatched
         var reconciler = new Reconciler();
 
-        ChildDiffHints.Publish(newChildren, new ChildDiffHint(new[] { 1 }, themeSensitiveCount: 0));
+        ChildDiffHints.Publish(newChildren, new ChildDiffHint(new[] { 1 }, themeSensitiveCount: 0, previousChildren: oldChildren));
         ChildReconciler.Reconcile(oldChildren, newChildren, coll, reconciler, NoOp);
 
         // Full walk truncated at the live count; NOT the single hinted index.
@@ -170,7 +171,7 @@ public class ChildReconcilerStructuralSkipTests
         var coll = new TrackingChildCollection(n);
         var reconciler = new Reconciler();
 
-        ChildDiffHints.Publish(newChildren, new ChildDiffHint(new[] { 2, 99 }, themeSensitiveCount: 0));
+        ChildDiffHints.Publish(newChildren, new ChildDiffHint(new[] { 2, 99 }, themeSensitiveCount: 0, previousChildren: oldChildren));
         var ex = Record.Exception(() =>
             ChildReconciler.Reconcile(oldChildren, newChildren, coll, reconciler, NoOp));
 
@@ -188,11 +189,34 @@ public class ChildReconcilerStructuralSkipTests
         var coll = new TrackingChildCollection(n);
         var reconciler = new Reconciler();
 
-        ChildDiffHints.Publish(newChildren, new ChildDiffHint(global::System.Array.Empty<int>(), themeSensitiveCount: 0));
+        ChildDiffHints.Publish(newChildren, new ChildDiffHint(global::System.Array.Empty<int>(), themeSensitiveCount: 0, previousChildren: oldChildren));
         ChildReconciler.Reconcile(oldChildren, newChildren, coll, reconciler, NoOp);
 
         Assert.Empty(coll.GetCalls);       // nothing visited
         Assert.Empty(coll.Structural);     // nothing mutated
         Assert.Equal(n, reconciler.DebugElementsSkipped);
+    }
+
+    [Fact]
+    public void Stale_Old_Array_Defeats_Fast_Path()
+    {
+        // The hint's ChangedIndices were diffed against a SPECIFIC prior array.
+        // If the reconciler's old array is a different instance (e.g. an upstream
+        // defensive copy), the indices can't be trusted, so the fast path must
+        // fall back to the full walk rather than skip a possibly-stale cell.
+        const int n = 5;
+        var oldChildren = ButtonCells(n);
+        var unrelatedPrev = ButtonCells(n); // NOT the array passed to Reconcile
+        var newChildren = FreshCopyWithSameLabels(n);
+        var coll = new TrackingChildCollection(n);
+        var reconciler = new Reconciler();
+
+        ChildDiffHints.Publish(newChildren,
+            new ChildDiffHint(new[] { 1 }, themeSensitiveCount: 0, previousChildren: unrelatedPrev));
+        ChildReconciler.Reconcile(oldChildren, newChildren, coll, reconciler, NoOp);
+
+        // Old-array identity mismatch => full walk visits every common index.
+        Assert.Equal(new[] { 0, 1, 2, 3, 4 }, coll.GetCalls);
+        Assert.Empty(coll.Structural);
     }
 }

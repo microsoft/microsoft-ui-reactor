@@ -81,18 +81,39 @@ internal static class ChildReconciler
         //   • a hint is present for THIS array — a CWT hit also proves Filter
         //     returned the same reference (no null/EmptyElement shifted the index
         //     space), so the hint's indices line up with both filtered arrays;
+        //   • no hot-reload force pass is active — else an untouched, reference-equal
+        //     WRAPPER cell (Component/Memo/Func) must still re-render through the
+        //     wrapper to pick up an edited method body; a structural skip would
+        //     swallow it (the full walk honours ForceRenderThroughWrapper per cell);
+        //   • the reconciler's OLD array IS the array the hint's indices were diffed
+        //     against — a cheap, self-documenting guard for the real invariant that
+        //     every unchanged index is reference-equal old↔new (holds in steady state
+        //     by construction; any defensive copy safely falls back to the full walk);
         //   • no cell is theme-sensitive — else an untouched, reference-equal cell
         //     could still need ApplyThemeBindings / ApplyResourceOverrides
         //     re-resolved against an effective theme that a parent RequestedTheme
         //     toggle changed without touching the element tree;
-        //   • the container is not on #681's dirty-ancestor path — else a
-        //     self-triggered descendant (e.g. a stateful memoized cell) would be
-        //     unreachable through a structural skip and must take the full walk.
+        //   • the container is not on #681's dirty-ancestor path — conservative
+        //     defense-in-depth for a self-triggered descendant (e.g. a stateful
+        //     memoized cell). NOTE: given the gates above this is behaviorally
+        //     redundant — an untouched index is reference-equal old↔new, and a
+        //     reference-equal cell is skipped IDENTICALLY by the full walk (via
+        //     Element.CanSkipUpdate in UpdateCommonChild) and this fast path, so a
+        //     self-triggered reused cell re-renders (or not) through the SAME
+        //     top-level dirty descent either way. The gate is retained as cheap
+        //     insurance so the fast path's early return can never short-circuit a
+        //     dirty subtree if CanSkipUpdate's contract changes. It costs nothing on
+        //     the target workload: a memoized grid's cell panel is a DESCENDANT of
+        //     the self-triggered grid component, not an ancestor, so it is not on the
+        //     ancestor-only dirty path and the fast path still engages.
         if (ambientKind is null
             && oldChildren.Length == newChildren.Length
             && childCount == newChildren.Length
+            && !reconciler.ForceFullRenderActive
             && ChildDiffHints.TryGet(newChildren, out var hint)
             && !hint.AnyThemeSensitive
+            && hint.PreviousChildren.TryGetTarget(out var hintPrev)
+            && ReferenceEquals(oldChildren, hintPrev)
             && !reconciler.IsOnDirtyAncestorPath(parentControl))
         {
             var changed = hint.ChangedIndices;
