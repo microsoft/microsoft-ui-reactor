@@ -30,7 +30,8 @@ internal static class ChildReconciler
         Element[] newChildren,
         IChildCollection children,
         Reconciler reconciler,
-        Action requestRerender)
+        Action requestRerender,
+        UIElement? parentControl = null)
     {
         // Filter out nulls and EmptyElements
         var oldFiltered = Filter(oldChildren);
@@ -48,7 +49,7 @@ internal static class ChildReconciler
         if (hasKeys)
             ReconcileKeyed(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind);
         else
-            ReconcilePositional(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind);
+            ReconcilePositional(oldFiltered, newFiltered, children, reconciler, requestRerender, ambientKind, parentControl);
     }
     // </snippet:child-diff>
 
@@ -62,59 +63,56 @@ internal static class ChildReconciler
         IChildCollection children,
         Reconciler reconciler,
         Action requestRerender,
-        AnimationKind? ambientKind)
+        AnimationKind? ambientKind,
+        UIElement? parentControl)
     {
         int childCount = children.Count; // cache to avoid repeated COM calls
         int common = Math.Min(oldChildren.Length, newChildren.Length);
+
+        // PR-C (Spec 034 §C) — structural skip of untouched child ranges.
+        // When a memoizing producer (UseMemoCellsByIndex) publishes a hint, only
+        // the named indices differ (by reference) from the previous render; every
+        // other cell is provably reference-equal, so we update just those indices
+        // and skip the O(count) walk. Required gates (each preserves correctness):
+        //   • counts match on both element sides AND the live collection equals
+        //     that count (no in-flight exit/enter animation has inflated it) — so
+        //     every changed index maps 1:1 to an existing control;
+        //   • no animation ambient (insert / move / exit reshape the child list);
+        //   • a hint is present for THIS array — a CWT hit also proves Filter
+        //     returned the same reference (no null/EmptyElement shifted the index
+        //     space), so the hint's indices line up with both filtered arrays;
+        //   • no cell is theme-sensitive — else an untouched, reference-equal cell
+        //     could still need ApplyThemeBindings / ApplyResourceOverrides
+        //     re-resolved against an effective theme that a parent RequestedTheme
+        //     toggle changed without touching the element tree;
+        //   • the container is not on #681's dirty-ancestor path — else a
+        //     self-triggered descendant (e.g. a stateful memoized cell) would be
+        //     unreachable through a structural skip and must take the full walk.
+        if (ambientKind is null
+            && oldChildren.Length == newChildren.Length
+            && childCount == newChildren.Length
+            && ChildDiffHints.TryGet(newChildren, out var hint)
+            && !hint.AnyThemeSensitive
+            && !reconciler.IsOnDirtyAncestorPath(parentControl))
+        {
+            var changed = hint.ChangedIndices;
+            for (int k = 0; k < changed.Length; k++)
+            {
+                int idx = changed[k];
+                if ((uint)idx >= (uint)common) continue; // defensive against a bad hint
+                UpdateCommonChild(idx, oldChildren, newChildren, children, reconciler, requestRerender);
+            }
+            // Untouched indices are reference-equal and skipped wholesale; keep the
+            // skipped-element diagnostic consistent with the full-walk path.
+            reconciler.DebugElementsSkipped += common - changed.Length;
+            return;
+        }
 
         // Update common children in place
         for (int i = 0; i < common; i++)
         {
             if (i >= childCount) break;
-
-            // Early skip: if the element is structurally identical (and has no
-            // theme bindings that need re-evaluation), we can avoid the expensive
-            // children.Get(i) COM call entirely. This saves ~2 COM roundtrips per
-            // unchanged child (IVector.GetAt + all the property diffing inside Update).
-            var oldEl = oldChildren[i];
-            var newEl = newChildren[i];
-            if (Element.CanSkipUpdate(oldEl, newEl)
-                && !reconciler.ForceRenderThroughWrapper(newEl))
-            {
-                reconciler.DebugElementsSkipped++;
-                // Refresh Tag when the element carries callbacks. The skip short-
-                // circuits Update, so without this the event trampoline keeps
-                // dispatching through the previous render's closure — stale state
-                // (e.g., Counter's `() => setCount(count + 1)` would keep capturing
-                // the initial count). For callback-free elements we still avoid
-                // the children.Get COM call.
-                if (newEl.HasCallbacks && children.Get(i) is FrameworkElement fe)
-                    Reconciler.SetElementTag(fe, newEl);
-                continue;
-            }
-
-            if (reconciler.CanUpdate(oldEl, newEl))
-            {
-                var existingControl = children.Get(i);
-                var replacement = reconciler.UpdateChild(oldEl, newEl, existingControl, requestRerender);
-                if (replacement is not null)
-                {
-                    // Child type changed at runtime — replace in place
-                    reconciler.UnmountChild(existingControl);
-                    children.Replace(i, replacement);
-                }
-            }
-            else
-            {
-                // Type mismatch — mount new, replace old with exit transition support
-                var newControl = reconciler.Mount(newEl, requestRerender);
-                if (newControl is not null)
-                    reconciler.ReplaceChildWithExitTransition(children, i, newControl);
-                else
-                {
-                    reconciler.UnmountChild(children.Get(i));
-                }
-            }
+            UpdateCommonChild(i, oldChildren, newChildren, children, reconciler, requestRerender);
         }
 
         // Remove excess old children (from end to start to keep indices stable).
@@ -134,6 +132,64 @@ internal static class ChildReconciler
             {
                 children.Insert(children.Count, ctrl);
                 ApplyAmbientEnterIfActive(ctrl, newChildren[i], ambientKind);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Reconciles a single common (overlapping) child position in place. Shared by
+    /// the full positional walk and the PR-C structural-skip fast path so both
+    /// honour identical skip / update / type-mismatch semantics.
+    /// </summary>
+    private static void UpdateCommonChild(
+        int i,
+        Element[] oldChildren,
+        Element[] newChildren,
+        IChildCollection children,
+        Reconciler reconciler,
+        Action requestRerender)
+    {
+        // Early skip: if the element is structurally identical (and has no
+        // theme bindings that need re-evaluation), we can avoid the expensive
+        // children.Get(i) COM call entirely. This saves ~2 COM roundtrips per
+        // unchanged child (IVector.GetAt + all the property diffing inside Update).
+        var oldEl = oldChildren[i];
+        var newEl = newChildren[i];
+        if (Element.CanSkipUpdate(oldEl, newEl)
+            && !reconciler.ForceRenderThroughWrapper(newEl))
+        {
+            reconciler.DebugElementsSkipped++;
+            // Refresh Tag when the element carries callbacks. The skip short-
+            // circuits Update, so without this the event trampoline keeps
+            // dispatching through the previous render's closure — stale state
+            // (e.g., Counter's `() => setCount(count + 1)` would keep capturing
+            // the initial count). For callback-free elements we still avoid
+            // the children.Get COM call.
+            if (newEl.HasCallbacks && children.Get(i) is FrameworkElement fe)
+                Reconciler.SetElementTag(fe, newEl);
+            return;
+        }
+
+        if (reconciler.CanUpdate(oldEl, newEl))
+        {
+            var existingControl = children.Get(i);
+            var replacement = reconciler.UpdateChild(oldEl, newEl, existingControl, requestRerender);
+            if (replacement is not null)
+            {
+                // Child type changed at runtime — replace in place
+                reconciler.UnmountChild(existingControl);
+                children.Replace(i, replacement);
+            }
+        }
+        else
+        {
+            // Type mismatch — mount new, replace old with exit transition support
+            var newControl = reconciler.Mount(newEl, requestRerender);
+            if (newControl is not null)
+                reconciler.ReplaceChildWithExitTransition(children, i, newControl);
+            else
+            {
+                reconciler.UnmountChild(children.Get(i));
             }
         }
     }

@@ -1916,11 +1916,11 @@ public sealed partial class Reconciler : IDisposable
                 global::System.Diagnostics.Tracing.EventLevel.Informational,
                 Diagnostics.ReactorEventSource.Keywords.Reconcile))
         {
-            ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender);
+            ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender, panel);
             return;
         }
         Diagnostics.ReactorEventSource.Log.ChildReconcileStart(oldChildren.Length, newChildren.Length);
-        try { ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender); }
+        try { ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender, panel); }
         finally { Diagnostics.ReactorEventSource.Log.ChildReconcileStop(); }
     }
 
@@ -1932,18 +1932,19 @@ public sealed partial class Reconciler : IDisposable
     // descriptor panels match the legacy hand-coded Update* methods byte-for-byte.
     internal void ReconcilePanelChildrenInto(
         Element[] oldChildren, Element[] newChildren,
-        UIElementCollection collection, Action requestRerender)
+        UIElementCollection collection, Action requestRerender,
+        UIElement? parentControl = null)
     {
         var childCollection = new PanelChildCollection(collection);
         if (!Diagnostics.ReactorEventSource.Log.IsEnabled(
                 global::System.Diagnostics.Tracing.EventLevel.Informational,
                 Diagnostics.ReactorEventSource.Keywords.Reconcile))
         {
-            ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender);
+            ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender, parentControl);
             return;
         }
         Diagnostics.ReactorEventSource.Log.ChildReconcileStart(oldChildren.Length, newChildren.Length);
-        try { ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender); }
+        try { ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender, parentControl); }
         finally { Diagnostics.ReactorEventSource.Log.ChildReconcileStop(); }
     }
 

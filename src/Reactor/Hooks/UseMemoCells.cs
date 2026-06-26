@@ -236,11 +236,32 @@ public static class UseMemoCellsExtensions
             var prevChildren = prev!.Children;
             for (int i = 0; i < count; i++)
                 children[i] = prevChildren[i];
+
+            // PR-C (Spec 034 §C): carry the theme-sensitive cell count forward so
+            // the positional reconciler can safely structural-skip the untouched
+            // (reference-equal) range. Start from the previous render's hint —
+            // O(1); only on the first reuse after a full rebuild do we scan once.
+            int themeSensitiveCount = ChildDiffHints.TryGet(prevChildren, out var prevHint)
+                ? prevHint.ThemeSensitiveCount
+                : CountThemeSensitive(prevChildren);
+
             for (int k = 0; k < changedIndices.Count; k++)
             {
                 int idx = changedIndices[k];
-                children[idx] = builder(items[idx], idx);
+                if (ChildDiffHints.IsThemeSensitive(prevChildren[idx])) themeSensitiveCount--;
+                var built = builder(items[idx], idx);
+                children[idx] = built;
+                if (ChildDiffHints.IsThemeSensitive(built)) themeSensitiveCount++;
             }
+
+            // Defensive: duplicate indices in changedIndices (a caller-contract
+            // violation) could under-count; recompute rather than publish a count
+            // that would let the reconciler unsafely skip a theme-sensitive cell.
+            if (themeSensitiveCount < 0)
+                themeSensitiveCount = CountThemeSensitive(children);
+
+            ChildDiffHints.Publish(children, new ChildDiffHint(
+                SnapshotChangedIndices(changedIndices), themeSensitiveCount));
         }
 
         stateRef.Current = new MemoCellsState<T>(SnapshotItems(items), children, SnapshotDeps(dependencies));
@@ -268,6 +289,30 @@ public static class UseMemoCellsExtensions
         var copy = new object[deps.Length];
         Array.Copy(deps, copy, deps.Length);
         return copy;
+    }
+
+    // PR-C (Spec 034 §C) — snapshot the caller's changed-index list into a
+    // private int[] so the published ChildDiffHint can't be corrupted by a
+    // later caller mutation (the hint outlives the call via the weak-keyed CWT).
+    private static int[] SnapshotChangedIndices(IReadOnlyList<int> changedIndices)
+    {
+        int n = changedIndices.Count;
+        if (n == 0) return Array.Empty<int>();
+        var arr = new int[n];
+        for (int i = 0; i < n; i++)
+            arr[i] = changedIndices[i];
+        return arr;
+    }
+
+    // O(count) theme-sensitivity scan — used only on the first reuse render
+    // after a full rebuild (no prior hint to carry forward) and as the
+    // defensive recompute path; steady-state reuse stays O(changed).
+    private static int CountThemeSensitive(Element[] cells)
+    {
+        int n = 0;
+        for (int i = 0; i < cells.Length; i++)
+            if (ChildDiffHints.IsThemeSensitive(cells[i])) n++;
+        return n;
     }
 
     private static bool DepsEqual(object[] prev, object[] next)

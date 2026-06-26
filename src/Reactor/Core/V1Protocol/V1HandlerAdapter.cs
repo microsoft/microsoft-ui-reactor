@@ -283,7 +283,7 @@ internal sealed class V1HandlerAdapter<TElement, TControl> : IV1HandlerEntry
                 var newChildren = newList as Element[] ?? global::System.Linq.Enumerable.ToArray(newList);
                 var oldChildren = oldList as Element[] ?? global::System.Linq.Enumerable.ToArray(oldList);
 
-                reconciler.ReconcilePanelChildrenInto(oldChildren, newChildren, collection, requestRerender);
+                reconciler.ReconcilePanelChildrenInto(oldChildren, newChildren, collection, requestRerender, control);
 
                 // Re-apply per-child attached props by walking filtered-new
                 // children (null / EmptyElement skipped) in lockstep with the
