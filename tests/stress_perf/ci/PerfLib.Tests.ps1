@@ -402,14 +402,16 @@ Assert-True (-not ($noAllocComment -like '*Allocation (Reactor)*')) 'alloc table
 
 
 # ── Format-PerfSkipFloorSection + Format-PerfComment: low-mutation skip-floor ──
-# 12 paired floor runs with a clear, consistent improvement (reconcile 14->11,
-# diff 12->10) and small jitter, so the paired CI excludes 0 and resolves "better"
-# — proving the skip-floor table reuses the same data-driven CI machinery as Table 1.
+# 12 paired floor runs. EVERY metric moves DOWN main->PR, but the verdicts must
+# differ BY DIRECTION: rps (higher-better) going down is a regression, while
+# reconcile/diff (lower-better) going down are improvements — locking that the
+# section is direction-aware per metric (reusing Table 1's paired-CI machinery),
+# not hard-coded to one direction. Small jitter keeps each paired CI off 0.
 $floorMainRuns = @(); $floorPrRuns = @()
 1..12 | ForEach-Object {
     $j = ($_ % 4) * 0.04
-    $floorMainRuns += [pscustomobject]@{ RendersPerSec = 5.0 + $j; AvgReconcileMs = 14.0 + $j; AvgDiffMs = 12.0 + $j; AvgMemoryMB = 300 + $j; TotalRenders = 50; DurationSeconds = 10 }
-    $floorPrRuns   += [pscustomobject]@{ RendersPerSec = 6.0 + $j; AvgReconcileMs = 11.0 + $j; AvgDiffMs = 10.0 + $j; AvgMemoryMB = 300 + $j; TotalRenders = 60; DurationSeconds = 10 }
+    $floorMainRuns += [pscustomobject]@{ RendersPerSec = 6.0 + $j; AvgReconcileMs = 14.0 + $j; AvgDiffMs = 12.0 + $j; AvgMemoryMB = 300 + $j; TotalRenders = 60; DurationSeconds = 10 }
+    $floorPrRuns   += [pscustomobject]@{ RendersPerSec = 5.0 + $j; AvgReconcileMs = 11.0 + $j; AvgDiffMs = 10.0 + $j; AvgMemoryMB = 300 + $j; TotalRenders = 50; DurationSeconds = 10 }
 }
 $floorMain = Measure-PerfRuns -Runs $floorMainRuns
 $floorPr   = Measure-PerfRuns -Runs $floorPrRuns
@@ -422,7 +424,12 @@ $floorSectionText = $floorSection -join "`n"
 Assert-Match $floorSectionText 'Low-mutation skip-floor' 'skip-floor section has heading'
 Assert-Match $floorSectionText 'Avg Reconcile'           'skip-floor section has reconcile row'
 Assert-Match $floorSectionText 'skip-walk floor'         'skip-floor preamble explains the O(n) skip-walk floor'
-Assert-Match $floorSectionText 'improvement'             'skip-floor reconcile/diff resolve as improvements (paired CI excludes 0)'
+# Direction-awareness: rps and reconcile both DECREASE main->PR, yet rps (higher-is-
+# better) must read regression while reconcile (lower-is-better) reads improvement.
+$floorRpsRow   = ($floorSection | Where-Object { $_ -match 'Renders/sec' })   -join ' '
+$floorReconRow = ($floorSection | Where-Object { $_ -match 'Avg Reconcile' }) -join ' '
+Assert-Match $floorRpsRow   'regression'  'skip-floor: rps DOWN reads regression (higher-is-better honored)'
+Assert-Match $floorReconRow 'improvement' 'skip-floor: reconcile DOWN reads improvement (lower-is-better honored)'
 
 # Threaded through Format-PerfComment, between the regression and cross-framework tables.
 $floorComment = Format-PerfComment -Main $main -Pr $pr -WinUI3 $null -Rust $null -MainFloor $floorMain -PrFloor $floorPr -Context $ctx

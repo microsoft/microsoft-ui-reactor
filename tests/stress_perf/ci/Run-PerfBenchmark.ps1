@@ -78,6 +78,17 @@
     alloc-bytes/op PR-vs-main table (ns-resolution, WinUI-undiluted) to the
     comment. Default $true; disable with -IncludeMicro:$false.
 
+.PARAMETER IncludeSkipFloor
+    Run a second interleaved A/B leg at -SkipFloorPercent and append a low-mutation
+    skip-floor table to the comment (compare mode). Default $true; disable with
+    -IncludeSkipFloor:$false to halve the macro runtime.
+
+.PARAMETER SkipFloorPercent
+    Mutation percent for the skip-floor leg (default 0). At 0 the workload still
+    mutates one cell/tick (StockDataSource.Update clamps the count to Math.Max(1, ...)),
+    so reconcile/diff isolate the O(n) per-tick child skip-walk floor the 50% leg
+    dilutes — the fixed cost a structural-skip optimization targets.
+
 .PARAMETER Apps
     Which harnesses to run in single-tree mode: ReactorOptimized, Direct.
     Ignored in compare mode (which always does ReactorOptimized both sides +
@@ -741,8 +752,10 @@ try {
             $mm = Invoke-OneRun -Exe $mainExe -AppMeta $ro -Index $i -Tag 'main'
             $pm = Invoke-OneRun -Exe $prExe -AppMeta $ro -Index $i -Tag 'pr'
             if ($i -le $Warmup) { Write-Log "  (warmup pair #$i discarded)" 'DarkGray'; continue }
-            if ($mm) { $mainRuns += $mm }
-            if ($pm) { $prRuns += $pm }
+            # Keep the A/B pair index-aligned: the paired CI zips main[i] vs pr[i], so a
+            # one-sided failure must drop BOTH halves of the pair, not shift later runs.
+            if ($mm -and $pm) { $mainRuns += $mm; $prRuns += $pm }
+            elseif ($mm -or $pm) { Write-Log "  pair #$i incomplete (main=$([bool]$mm) pr=$([bool]$pm)) — dropped to keep the paired CI aligned" 'Yellow' }
         }
 
         # Second interleaved A/B leg at near-zero mutation. Same two exes, same paired
@@ -757,8 +770,8 @@ try {
                 $mm = Invoke-OneRun -Exe $mainExe -AppMeta $ro -Index $i -Tag 'main-floor' -RunPercent $SkipFloorPercent
                 $pm = Invoke-OneRun -Exe $prExe -AppMeta $ro -Index $i -Tag 'pr-floor' -RunPercent $SkipFloorPercent
                 if ($i -le $Warmup) { Write-Log "  (floor warmup pair #$i discarded)" 'DarkGray'; continue }
-                if ($mm) { $mainFloorRuns += $mm }
-                if ($pm) { $prFloorRuns += $pm }
+                if ($mm -and $pm) { $mainFloorRuns += $mm; $prFloorRuns += $pm }
+                elseif ($mm -or $pm) { Write-Log "  floor pair #$i incomplete (main=$([bool]$mm) pr=$([bool]$pm)) — dropped to keep the paired CI aligned" 'Yellow' }
             }
             if ($mainFloorRuns.Count -lt $Reps -or $prFloorRuns.Count -lt $Reps) {
                 Write-Log "  skip-floor leg short (main $($mainFloorRuns.Count)/$Reps, PR $($prFloorRuns.Count)/$Reps) — its paired CI uses fewer samples" 'Yellow'

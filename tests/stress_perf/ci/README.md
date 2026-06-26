@@ -201,7 +201,7 @@ is the security control, because the job has a write token.
 
 ### The comment
 
-Two tables plus footnotes:
+Several tables plus footnotes:
 
 - **Regression vs `main`** — `Metric | main | This PR | Δ (95% CI) | Status`,
   where Status is direction-aware (`✅ improvement` / `⚠️ regression` / `≈ within
