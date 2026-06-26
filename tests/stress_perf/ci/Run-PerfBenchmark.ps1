@@ -133,6 +133,9 @@ param(
     [int]$Warmup = 2,
     [int]$RefReps = 3,
     [int]$RefWarmup = 1,
+    [int]$MicroReps = 12,
+    [int]$MicroIterations = 10000,
+    [bool]$IncludeMicro = $true,
     [ValidateSet('ReactorOptimized', 'Direct')]
     [string[]]$Apps = @('ReactorOptimized', 'Direct'),
     [string]$OutDir,
@@ -165,6 +168,7 @@ $tfmGuess = 'net10.0-windows10.0.22621.0'
 $AppRegistry = @{
     ReactorOptimized = @{ AppName = 'StressPerf.ReactorOptimized'; ProjectRel = 'tests\stress_perf\StressPerf.ReactorOptimized\StressPerf.ReactorOptimized.csproj' }
     Direct           = @{ AppName = 'StressPerf.Direct';           ProjectRel = 'tests\stress_perf\StressPerf.Direct\StressPerf.Direct.csproj' }
+    MicroControlModel = @{ AppName = 'PerfBench.ControlModel';     ProjectRel = 'tests\perf_bench\PerfBench.ControlModel\PerfBench.ControlModel.csproj' }
 }
 
 function Write-Log {
@@ -600,6 +604,48 @@ function Measure-Sequential {
     return , $runs
 }
 
+function Invoke-MicroRun {
+    <# Run PerfBench.ControlModel once for the production Reactor variant and return the
+       results .jsonl path (or $null if it produced nothing). The measured region inside
+       BenchRunner is bracketed by per-thread alloc + GC counters, so unlike the macro
+       StressPerf legs this is ns-resolution and free of WinUI render / working-set
+       dilution. We run it once per side (each tree links its own src/Reactor) with no
+       rep-level interleave and no single-core pin — the within-process reps are already
+       GC-bracketed + warmed, and pinning would only contend the app's dispatcher/render
+       threads. Consequence of NOT interleaving: allocated bytes/op is deterministic and
+       flagged, but ns/op is reported informational-only (a process-to-process timing
+       offset can otherwise make its paired CI exclude 0 for identical code). Rep-level
+       interleaving is the documented fast-follow that would promote ns to a flag. #>
+    param([string]$Exe, [string]$Tag, [int]$RepCount, [int]$IterCount)
+
+    $outJson = Join-Path $OutDir ("micro-{0}.jsonl" -f $Tag)
+    if (Test-Path $outJson) { Remove-Item $outJson -Force -ErrorAction SilentlyContinue }
+    $stdout = Join-Path $OutDir ("micro-{0}.out.log" -f $Tag)
+    $stderr = Join-Path $OutDir ("micro-{0}.err.log" -f $Tag)
+    $inv = [System.Globalization.CultureInfo]::InvariantCulture
+    $microArgs = @('--variant', 'Reactor', '--reps', $RepCount.ToString($inv),
+        '--iterations', $IterCount.ToString($inv), '--out', $outJson, '--headless')
+    $timeoutSec = 420
+
+    Write-Log ("  micro [{0}] PerfBench.ControlModel --variant Reactor --reps {1} --iterations {2}" -f $Tag, $RepCount, $IterCount)
+    $proc = Start-Process -FilePath $Exe -ArgumentList $microArgs -PassThru `
+        -RedirectStandardOutput $stdout -RedirectStandardError $stderr -WindowStyle Hidden
+    try { $proc.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High } catch {}
+
+    if (-not $proc.WaitForExit($timeoutSec * 1000)) {
+        Write-Log "  micro TIMEOUT after ${timeoutSec}s — killing PerfBench.ControlModel ($Tag)" 'Yellow'
+        try { $proc.Kill($true) } catch { try { $proc.Kill() } catch {} }
+        Start-Sleep -Seconds 2
+    }
+
+    if (-not (Test-Path $outJson) -or (Get-Item $outJson).Length -eq 0) {
+        Write-Log "  micro produced no results for '$Tag' (exit=$($proc.ExitCode)). stderr tail:" 'Yellow'
+        if (Test-Path $stderr) { Get-Content $stderr -Tail 8 | ForEach-Object { Write-Host "      $_" -ForegroundColor DarkYellow } }
+        return $null
+    }
+    return $outJson
+}
+
 # ── Power plan + Defender (best-effort, restored on exit) ────────────────────
 $prevScheme = $null
 try {
@@ -637,11 +683,21 @@ try {
         # ---- Compare mode: interleaved ReactorOptimized A/B + WinUI3 once -----
         $ro = $AppRegistry.ReactorOptimized
         $direct = $AppRegistry.Direct
+        $microMeta = $AppRegistry.MicroControlModel
 
         if (-not $SkipBuild) {
             Build-Harness -TreeRoot $BaselineRoot -AppMeta $ro
             Build-Harness -TreeRoot $Root -AppMeta $ro
             Build-Harness -TreeRoot $Root -AppMeta $direct
+        }
+        if ($IncludeMicro -and -not $SkipBuild) {
+            try {
+                Build-Harness -TreeRoot $BaselineRoot -AppMeta $microMeta
+                Build-Harness -TreeRoot $Root -AppMeta $microMeta
+            } catch {
+                Write-Log "reconciler micro-suite build failed ($_) — omitting micro-benchmarks" 'Yellow'
+                $IncludeMicro = $false
+            }
         }
         $mainExe = Resolve-HarnessExe -TreeRoot $BaselineRoot -AppMeta $ro
         $prExe = Resolve-HarnessExe -TreeRoot $Root -AppMeta $ro
@@ -668,6 +724,32 @@ try {
         }
 
         $rust = Invoke-RustLeg
+
+        # Reconciler micro-suite (ns-resolution, WinUI-undiluted). Best-effort: any
+        # failure here leaves $micro = $null and the macro comment is unaffected.
+        $micro = $null
+        if ($IncludeMicro) {
+            try {
+                $microMainExe = Resolve-HarnessExe -TreeRoot $BaselineRoot -AppMeta $microMeta
+                $microPrExe   = Resolve-HarnessExe -TreeRoot $Root -AppMeta $microMeta
+                if ($microMainExe -and $microPrExe) {
+                    Write-Log "reconciler micro-suite (PerfBench.ControlModel --variant Reactor, $MicroReps reps each)" 'Green'
+                    $microMainJson = Invoke-MicroRun -Exe $microMainExe -Tag 'main' -RepCount $MicroReps -IterCount $MicroIterations
+                    $microPrJson   = Invoke-MicroRun -Exe $microPrExe   -Tag 'pr'   -RepCount $MicroReps -IterCount $MicroIterations
+                    if ($microMainJson -and $microPrJson) {
+                        $micro = Get-PerfMicroComparison `
+                            -Main (Read-MicroBenchResults $microMainJson) `
+                            -Pr (Read-MicroBenchResults $microPrJson)
+                        Write-Log ("  micro: {0} bench(es) compared" -f @($micro).Count) 'DarkGray'
+                    }
+                } else {
+                    Write-Log "micro-suite exe not found (main=$([bool]$microMainExe) pr=$([bool]$microPrExe)) — omitting micro-benchmarks" 'Yellow'
+                }
+            } catch {
+                Write-Log "reconciler micro-suite leg failed ($_) — omitting micro-benchmarks" 'Yellow'
+                $micro = $null
+            }
+        }
 
         $main = Measure-PerfRuns -Runs $mainRuns
         $pr = Measure-PerfRuns -Runs $prRuns
@@ -697,12 +779,12 @@ try {
             Runner = $runner.Runner; Cpu = $runner.Cpu; Cores = $runner.Cores; MemoryGB = $runner.MemoryGB
             RunUrl = $RunUrl; Timestamp = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'); Note = $note
         }
-        $comment = Format-PerfComment -Main $main -Pr $pr -WinUI3 $winui3 -Rust $rust -Context $ctx
+        $comment = Format-PerfComment -Main $main -Pr $pr -WinUI3 $winui3 -Rust $rust -Micro $micro -Context $ctx
         $commentPath = Join-Path $OutDir 'comment.md'
         Set-Content -LiteralPath $commentPath -Value $comment -Encoding UTF8
         Write-Log "comment.md written -> $commentPath" 'Green'
 
-        $result = [pscustomobject]@{ main = $main; pr = $pr; winui3 = $winui3; rust = $rust; runner = $runner; context = $ctx }
+        $result = [pscustomobject]@{ main = $main; pr = $pr; winui3 = $winui3; rust = $rust; micro = $micro; runner = $runner; context = $ctx }
         $result | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $OutDir 'result.json') -Encoding UTF8
 
         Write-Host "`n----- comment.md -----" -ForegroundColor DarkGray

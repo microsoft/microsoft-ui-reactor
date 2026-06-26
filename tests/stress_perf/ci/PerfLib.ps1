@@ -444,6 +444,156 @@ function Get-PerfStatusGlyph {
     }
 }
 
+# ── Reconciler micro-suite (PerfBench.ControlModel) ──────────────────────────
+# /perf's macro StocksGrid workload is render-bound and WinUI-diluted, so it can
+# neither resolve small Core/Reconciler time deltas nor see allocation changes.
+# The PerfBench.ControlModel micro-suite (spec-047 M1-M13) runs the production
+# `--variant Reactor` control-model path as a headless loop bracketed by
+# per-thread alloc + GC counters at ns-resolution, with no render pipeline in the
+# measured region. These helpers parse its JSON-Lines output and compute the
+# PR-vs-main paired delta per bench, reusing the same CI machinery as the macro
+# table (Get-PerfDelta / Get-PerfPairedDeltaStats).
+
+function Read-MicroBenchResults {
+    <#
+    .SYNOPSIS
+        Parse a PerfBench.ControlModel results.jsonl (JSON-Lines) into a per-bench
+        sample map for the production `Reactor` variant.
+    .DESCRIPTION
+        Each line is one MeasurementResult (camelCase JSON). Only variant == 'Reactor'
+        rows with status 'ok' are kept — the legacy Direct / ReactorToday variants are
+        an intra-build A/B (Reactor-vs-today / Reactor-vs-raw-WinUI), NOT the PR-vs-main
+        delta /perf reports. Rows are ordered by repetition so a paired analysis can zip
+        baseline rep i against candidate rep i. Malformed lines are skipped.
+    .OUTPUTS
+        OrderedDictionary benchId -> [pscustomobject]@{ BenchId; Name;
+        MeanNsSamples [double[]]; AllocBytesSamples [double[]] }. Empty when the file is
+        missing / empty / has no usable Reactor rows.
+    #>
+    param([AllowNull()][string]$Path)
+    $map = [ordered]@{}
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path)) { return $map }
+    $rows = [System.Collections.Generic.List[object]]::new()
+    foreach ($line in [System.IO.File]::ReadLines($Path)) {
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        $obj = $null
+        try { $obj = $line | ConvertFrom-Json } catch { continue }
+        if ($null -eq $obj) { continue }
+        $variant = if ($obj.PSObject.Properties['variant']) { [string]$obj.variant } else { '' }
+        if ($variant -ne 'Reactor') { continue }
+        $status = if ($obj.PSObject.Properties['status']) { [string]$obj.status } else { 'ok' }
+        if ($status -and $status -ne 'ok') { continue }
+        if (-not $obj.PSObject.Properties['benchId'] -or
+            -not $obj.PSObject.Properties['meanNs'] -or
+            -not $obj.PSObject.Properties['allocBytes']) { continue }
+        $rows.Add($obj)
+    }
+    if ($rows.Count -eq 0) { return $map }
+    foreach ($g in ($rows | Group-Object -Property benchId)) {
+        $ordered = @($g.Group | Sort-Object { [int]$_.repetition })
+        $name = ''
+        if ($ordered.Count -gt 0 -and $ordered[0].PSObject.Properties['benchName']) { $name = [string]$ordered[0].benchName }
+        $map[[string]$g.Name] = [pscustomobject]@{
+            BenchId           = [string]$g.Name
+            Name              = $name
+            MeanNsSamples     = [double[]]@($ordered | ForEach-Object { [double]$_.meanNs })
+            AllocBytesSamples = [double[]]@($ordered | ForEach-Object { [double]$_.allocBytes })
+        }
+    }
+    return $map
+}
+
+function Get-PerfMicroComparison {
+    <#
+    .SYNOPSIS
+        Per-bench PR-vs-main paired comparison for the micro-suite. For each bench
+        present in BOTH maps, computes the paired 95%-CI delta of mean ns/op and
+        alloc bytes/op (lower is better), reusing Get-PerfDelta. Returns rows sorted
+        by the numeric bench-id suffix (M1, M2, ... M13).
+    .OUTPUTS
+        Array of [pscustomobject]@{ BenchId; Name; MainMeanNs; PrMeanNs; NsDelta;
+        MainAllocBytes; PrAllocBytes; AllocDelta }. Empty when no bench overlaps.
+    #>
+    param([AllowNull()]$Main, [AllowNull()]$Pr)
+    if ($null -eq $Main -or $null -eq $Pr) { return @() }
+    $rows = [System.Collections.Generic.List[object]]::new()
+    foreach ($benchId in @($Main.Keys)) {
+        if (-not $Pr.Contains($benchId)) { continue }
+        $m = $Main[$benchId]
+        $p = $Pr[$benchId]
+        $nsDelta = Get-PerfDelta -Baseline (Get-PerfMedian $m.MeanNsSamples) -Candidate (Get-PerfMedian $p.MeanNsSamples) `
+            -LowerIsBetter $true -BaselineSamples ([object[]]$m.MeanNsSamples) -CandidateSamples ([object[]]$p.MeanNsSamples)
+        $allocDelta = Get-PerfDelta -Baseline (Get-PerfMedian $m.AllocBytesSamples) -Candidate (Get-PerfMedian $p.AllocBytesSamples) `
+            -LowerIsBetter $true -BaselineSamples ([object[]]$m.AllocBytesSamples) -CandidateSamples ([object[]]$p.AllocBytesSamples)
+        $rows.Add([pscustomobject]@{
+            BenchId        = $benchId
+            Name           = $m.Name
+            MainMeanNs     = Get-PerfMedian $m.MeanNsSamples
+            PrMeanNs       = Get-PerfMedian $p.MeanNsSamples
+            NsDelta        = $nsDelta
+            MainAllocBytes = Get-PerfMedian $m.AllocBytesSamples
+            PrAllocBytes   = Get-PerfMedian $p.AllocBytesSamples
+            AllocDelta     = $allocDelta
+        })
+    }
+    return @($rows | Sort-Object `
+        @{ Expression = { $n = 0; if ([int]::TryParse(($_.BenchId -replace '\D', ''), [ref]$n)) { $n } else { [int]::MaxValue } } }, `
+        @{ Expression = { $_.BenchId } })
+}
+
+function Get-PerfMicroRowStatus {
+    <#
+    .SYNOPSIS
+        Row flag for a micro-bench. v1 tracks the DETERMINISTIC allocation signal
+        only; the ns/op delta is informational and does NOT drive the flag.
+    .DESCRIPTION
+        Allocated bytes/op is deterministic for identical code (an unchanged diff
+        reproduces the same byte count exactly), so its paired CI is a trustworthy
+        flag. ns/op is NOT: the per-side micro runs are not yet rep-interleaved, so a
+        systematic process-to-process timing offset (thermal / scheduling drift
+        between the two back-to-back invocations) shifts every paired ns difference
+        the same way and makes the paired CI exclude 0 even for an identical binary
+        — empirically a no-op diff flagged -14.8% ns on one bench. Flagging ns would
+        therefore emit false improvements/regressions. So the row tracks alloc; ns is
+        shown for context. (Rep-level interleaving is the documented fast-follow that
+        would let ns be promoted to a flagged signal.)
+    #>
+    param([AllowNull()][string]$NsStatus, [AllowNull()][string]$AllocStatus)
+    if ([string]::IsNullOrEmpty($AllocStatus)) { return 'na' }
+    return $AllocStatus
+}
+
+function Format-PerfMicroSection {
+    <#
+    .SYNOPSIS
+        Render the reconciler micro-benchmark table (mean ns/op + alloc bytes/op,
+        PR vs main) as markdown lines. Empty array when there is nothing to show.
+    #>
+    param([AllowNull()][object[]]$Micro)
+    if ($null -eq $Micro -or @($Micro).Count -eq 0) { return @() }
+    $down = [char]0x2193
+    $lines = [System.Collections.Generic.List[string]]::new()
+    $lines.Add("### Reconciler micro-benchmarks (``PerfBench.ControlModel``)")
+    $lines.Add('')
+    $lines.Add("Production ``--variant Reactor`` control-model path, ns-resolution and WinUI-undiluted (spec-047 M1&ndash;M13) &mdash; $down lower is better. **Status tracks allocated bytes/op**, which is deterministic for identical code and the authoritative signal here; **ns/op is shown for context** but is not auto-flagged in v1 (the per-side runs are not yet rep-interleaved, so a process-to-process timing offset can otherwise read as significant). Δ is the mean paired change with a 95% CI.")
+    $lines.Add('')
+    $lines.Add('| Bench | `main` ns/op | Δ ns (95% CI) | `main` B/op | Δ alloc (95% CI) | Status |')
+    $lines.Add('|---|--:|--:|--:|--:|:--|')
+    foreach ($r in $Micro) {
+        $label = if ($r.Name) { ('`{0}` {1}' -f $r.BenchId, $r.Name) } else { ('`{0}`' -f $r.BenchId) }
+        $status = Get-PerfMicroRowStatus -NsStatus $r.NsDelta.Status -AllocStatus $r.AllocDelta.Status
+        $lines.Add(('| {0} | {1} | {2} | {3} | {4} | {5} |' -f `
+                $label, `
+            (Format-PerfNumber $r.MainMeanNs 1), `
+            (Format-PerfDeltaCell $r.NsDelta), `
+            (Format-PerfNumber $r.MainAllocBytes 0), `
+            (Format-PerfDeltaCell $r.AllocDelta), `
+            (Get-PerfStatusGlyph $status)))
+    }
+    $lines.Add('')
+    return $lines.ToArray()
+}
+
 function Format-PerfComment {
     <#
     .SYNOPSIS
@@ -454,6 +604,8 @@ function Format-PerfComment {
     .PARAMETER WinUI3     Aggregated vanilla-WinUI3 (StressPerf.Direct) metrics, or $null.
     .PARAMETER Rust       Aggregated Rust windows-reactor (test_reactor_perf) metrics
                           measured live on this runner, or $null when not run.
+    .PARAMETER Micro      Per-bench reconciler micro-suite comparison rows
+                          (Get-PerfMicroComparison output), or $null when not run.
     .PARAMETER Context    Hashtable: Percent, Duration, Reps, Warmup, BaseSha, HeadSha,
                           Runner, Cpu, Cores, MemoryGB, RunUrl, Timestamp, Note.
     #>
@@ -462,6 +614,7 @@ function Format-PerfComment {
         [Parameter(Mandatory)][pscustomobject]$Pr,
         [AllowNull()][pscustomobject]$WinUI3,
         [AllowNull()][pscustomobject]$Rust,
+        [AllowNull()][object[]]$Micro,
         [Parameter(Mandatory)][hashtable]$Context
     )
 
@@ -528,6 +681,12 @@ function Format-PerfComment {
         & $add ''
     }
 
+    # ── Reconciler micro-benchmarks (ns-resolution, WinUI-undiluted) ──────────
+    # Rendered only when the PerfBench.ControlModel micro leg produced results for
+    # both sides. Resolves Core/Reconciler time + allocation deltas the macro
+    # StocksGrid workload above cannot (it is render-bound and working-set diluted).
+    foreach ($mline in (Format-PerfMicroSection -Micro $Micro)) { & $add $mline }
+
     # ── Table 2: cross-framework reference ───────────────────────────────────
     & $add "### Cross-framework reference (same StocksGrid workload)"
     & $add ''
@@ -554,6 +713,9 @@ function Format-PerfComment {
     }
     & $add "<sub>$up higher is better &middot; $down lower is better. **Within noise** = the 95% confidence interval of the paired Δ includes 0 (no change resolvable at this sample size); $([char]0x2705) improvement / $([char]0x26A0)$([char]0xFE0F) regression require the CI to **exclude** 0.</sub>"
     & $add "<sub>Allocation metrics (alloc bytes/render, Gen0 GC) are the sensitive signal for allocation-reduction work, where the mean-ms / memory figures are largely flat. They read *n/a* for a harness built from a revision that predates them (rebase the PR onto ``main`` to populate them).</sub>"
+    if ($null -ne $Micro -and @($Micro).Count -gt 0) {
+        & $add "<sub>Reconciler micro-benchmarks run ``PerfBench.ControlModel --variant Reactor`` (M1&ndash;M13) as a headless loop bracketed by per-thread alloc + GC counters &mdash; ns-resolution and free of WinUI render / working-set dilution, so they resolve Core/Reconciler allocation deltas the macro StocksGrid workload cannot. ``main`` and PR each link their own ``src/Reactor`` build; Δ is the paired 95% CI over per-rep means. The **Status** column tracks allocated bytes/op (deterministic for identical code); ns/op is informational &mdash; it is not auto-flagged until the per-side runs are rep-interleaved (a documented fast-follow), because a process-to-process timing offset can otherwise make the paired ns CI exclude 0 for an unchanged diff.</sub>"
+    }
     & $add "<sub>$([char]0x00B9) vanilla WinUI3 = ``StressPerf.Direct`` (imperative; no virtual-DOM, so it has no reconcile/diff phase — those cells read *n/a*). Measured live on this runner.</sub>"
     & $add "<sub>$([char]0x00B2) Rust = ``test_reactor_perf`` from [microsoft/windows-rs](https://github.com/microsoft/windows-rs/tree/master/crates/tests/libs/reactor_perf) — a port of this harness (same StocksGrid, same ``--percent``/``--duration`` CLI). $rustNote</sub>"
     & $add "<sub>Absolute numbers are runner-dependent — trust the **Δ vs main**, not the absolute values. Memory (working set) is the noisiest metric.</sub>"

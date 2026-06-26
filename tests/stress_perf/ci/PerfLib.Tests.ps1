@@ -401,6 +401,146 @@ $noAllocComment = Format-PerfComment -Main $main -Pr $pr -WinUI3 $null -Rust $nu
 Assert-True (-not ($noAllocComment -like '*Allocation (Reactor)*')) 'alloc table omitted when no alloc metric present'
 
 
+# ── Reconciler micro-suite: Read-MicroBenchResults / comparison / render ──────
+function New-MicroRow {
+    param([string]$BenchId, [string]$Name, [string]$Variant, [int]$Rep, [double]$MeanNs, [double]$AllocBytes, [string]$Status = 'ok')
+    [pscustomobject]@{
+        benchId = $BenchId; benchName = $Name; variant = $Variant; iterations = 10000
+        repetition = $Rep; totalMs = ($MeanNs * 10000 / 1e6); meanNs = $MeanNs; allocBytes = $AllocBytes
+        gen0 = 0; gen1 = 0; gen2 = 0; heapDeltaBytes = 0; counter = 0; counterLabel = $null
+        status = $Status; machineSku = 'x'; architecture = 'X64'; configuration = 'Release'
+    } | ConvertTo-Json -Compress
+}
+
+$microTmp = Join-Path ([System.IO.Path]::GetTempPath()) ("perflib-micro-" + [guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $microTmp | Out-Null
+try {
+    $mainJsonl = Join-Path $microTmp 'main.jsonl'
+    $prJsonl = Join-Path $microTmp 'pr.jsonl'
+
+    # main side: M1 (fast/cheap), M2 (mid), M10 (cheap), M99 (main-only). Plus a Direct
+    # variant row and a status=error row that MUST be filtered out by the parser.
+    $mainLines = @(
+        (New-MicroRow 'M1'  'PropertyDiff'      'Reactor' 0 100 520)
+        (New-MicroRow 'M1'  'PropertyDiff'      'Reactor' 1 102 525)
+        (New-MicroRow 'M1'  'PropertyDiff'      'Reactor' 2 98  515)
+        (New-MicroRow 'M1'  'PropertyDiff'      'Direct'  0 999 9999)        # filtered: not Reactor
+        (New-MicroRow 'M2'  'StructuralSharing' 'Reactor' 0 200 1000)
+        (New-MicroRow 'M2'  'StructuralSharing' 'Reactor' 1 203 1005)
+        (New-MicroRow 'M2'  'StructuralSharing' 'Reactor' 2 197 995)
+        (New-MicroRow 'M2'  'StructuralSharing' 'Reactor' 9 0   0    'error') # filtered: status error
+        (New-MicroRow 'M3'  'TimeOnly'          'Reactor' 0 300 5000)
+        (New-MicroRow 'M3'  'TimeOnly'          'Reactor' 1 303 5005)
+        (New-MicroRow 'M3'  'TimeOnly'          'Reactor' 2 297 4995)
+        (New-MicroRow 'M10' 'Allocation'        'Reactor' 0 50  300)
+        (New-MicroRow 'M10' 'Allocation'        'Reactor' 1 51  303)
+        (New-MicroRow 'M10' 'Allocation'        'Reactor' 2 49  297)
+        (New-MicroRow 'M99' 'MainOnly'          'Reactor' 0 10  100)         # no PR counterpart
+    )
+    # pr side: M1 faster + fewer allocs; M2 ~unchanged; M3 much faster but SAME allocs
+    # (the no-false-flag case); M10 slower + more allocs.
+    $prLines = @(
+        (New-MicroRow 'M1'  'PropertyDiff'      'Reactor' 0 80  400)
+        (New-MicroRow 'M1'  'PropertyDiff'      'Reactor' 1 79  398)
+        (New-MicroRow 'M1'  'PropertyDiff'      'Reactor' 2 82  403)
+        (New-MicroRow 'M2'  'StructuralSharing' 'Reactor' 0 199 1001)
+        (New-MicroRow 'M2'  'StructuralSharing' 'Reactor' 1 204 1003)
+        (New-MicroRow 'M2'  'StructuralSharing' 'Reactor' 2 198 998)
+        (New-MicroRow 'M3'  'TimeOnly'          'Reactor' 0 200 5004)
+        (New-MicroRow 'M3'  'TimeOnly'          'Reactor' 1 201 4998)
+        (New-MicroRow 'M3'  'TimeOnly'          'Reactor' 2 199 5002)
+        (New-MicroRow 'M10' 'Allocation'        'Reactor' 0 60  360)
+        (New-MicroRow 'M10' 'Allocation'        'Reactor' 1 61  363)
+        (New-MicroRow 'M10' 'Allocation'        'Reactor' 2 59  357)
+    )
+    Set-Content -LiteralPath $mainJsonl -Value $mainLines -Encoding UTF8
+    Set-Content -LiteralPath $prJsonl -Value $prLines -Encoding UTF8
+
+    $mainMap = Read-MicroBenchResults $mainJsonl
+    $prMap = Read-MicroBenchResults $prJsonl
+
+    Assert-Equal 5 $mainMap.Count                          'parser keeps 5 main benches (M1,M2,M3,M10,M99)'
+    Assert-Equal 4 $prMap.Count                            'parser keeps 4 pr benches (M1,M2,M3,M10)'
+    Assert-Equal 3 $mainMap['M1'].MeanNsSamples.Count      'M1 keeps 3 Reactor reps (Direct row dropped)'
+    Assert-Equal 3 $mainMap['M2'].MeanNsSamples.Count      'M2 keeps 3 ok reps (error row dropped)'
+    Assert-True  (-not $mainMap.Contains('XX'))            'no phantom benches from filtered rows'
+    Assert-Equal 'PropertyDiff' $mainMap['M1'].Name        'bench name carried through'
+    # rows ordered by repetition: first sample is rep 0 (=100 / =520).
+    Assert-Equal 100 $mainMap['M1'].MeanNsSamples[0]       'samples ordered by repetition (ns)'
+    Assert-Equal 520 $mainMap['M1'].AllocBytesSamples[0]   'samples ordered by repetition (alloc)'
+
+    # Missing / empty inputs -> empty map (no throw under StrictMode).
+    Assert-Equal 0 (Read-MicroBenchResults (Join-Path $microTmp 'nope.jsonl')).Count 'missing file -> empty map'
+    $emptyJsonl = Join-Path $microTmp 'empty.jsonl'; Set-Content -LiteralPath $emptyJsonl -Value '' -Encoding UTF8
+    Assert-Equal 0 (Read-MicroBenchResults $emptyJsonl).Count 'empty file -> empty map'
+    Assert-Equal 0 (Read-MicroBenchResults $null).Count       'null path -> empty map'
+
+    $cmp = @(Get-PerfMicroComparison -Main $mainMap -Pr $prMap)
+    Assert-Equal 4 $cmp.Count                              'comparison = overlapping benches only (M99 excluded)'
+    # numeric (not lexical) sort: M1, M2, M3, M10 — lexical would put M10 before M2/M3.
+    Assert-Equal 'M1'  $cmp[0].BenchId                     'sorted: M1 first'
+    Assert-Equal 'M2'  $cmp[1].BenchId                     'sorted: M2 second'
+    Assert-Equal 'M3'  $cmp[2].BenchId                     'sorted: M3 third'
+    Assert-Equal 'M10' $cmp[3].BenchId                     'sorted: M10 last (numeric, not lexical)'
+
+    $byId = @{}; foreach ($r in $cmp) { $byId[$r.BenchId] = $r }
+    $m1 = $byId['M1']; $m2 = $byId['M2']; $m3 = $byId['M3']; $m10 = $byId['M10']
+
+    # The row flag tracks the DETERMINISTIC alloc signal; ns is informational.
+    Assert-Equal 'better' $m1.AllocDelta.Status            'M1 alloc improvement flagged'
+    Assert-Equal 'better' (Get-PerfMicroRowStatus -NsStatus $m1.NsDelta.Status -AllocStatus $m1.AllocDelta.Status) 'M1 row = better (alloc down)'
+    Assert-Equal 'noise'  $m2.AllocDelta.Status            'M2 alloc within noise'
+    Assert-Equal 'noise'  (Get-PerfMicroRowStatus -NsStatus $m2.NsDelta.Status -AllocStatus $m2.AllocDelta.Status) 'M2 row = noise'
+    Assert-Equal 'worse'  $m10.AllocDelta.Status           'M10 alloc regression flagged'
+    Assert-Equal 'worse'  (Get-PerfMicroRowStatus -NsStatus $m10.NsDelta.Status -AllocStatus $m10.AllocDelta.Status) 'M10 row = worse (alloc up)'
+
+    # KEY v1 property: M3 has a clear ns improvement but UNCHANGED alloc — the ns delta
+    # must NOT flag the row (ns is informational until per-side runs are rep-interleaved).
+    Assert-Equal 'better' $m3.NsDelta.Status               'M3 ns delta itself reads better (big ns drop)'
+    Assert-Equal 'noise'  $m3.AllocDelta.Status            'M3 alloc unchanged -> noise'
+    Assert-Equal 'noise'  (Get-PerfMicroRowStatus -NsStatus $m3.NsDelta.Status -AllocStatus $m3.AllocDelta.Status) 'M3 row = noise despite ns better (no ns false-flag)'
+
+    Assert-Equal 100 $m1.MainMeanNs                        'M1 main median ns'
+    Assert-Equal 80  $m1.PrMeanNs                          'M1 pr median ns'
+
+    # Empty / null inputs to the comparison.
+    Assert-Equal 0 (@(Get-PerfMicroComparison -Main ([ordered]@{}) -Pr $prMap)).Count 'empty main -> no rows'
+    Assert-Equal 0 (@(Get-PerfMicroComparison -Main $null -Pr $null)).Count           'null maps -> no rows'
+
+    # Row status tracks the deterministic ALLOC signal only; ns is informational and
+    # never drives the flag in v1 (the per-side runs are not yet rep-interleaved).
+    Assert-Equal 'worse'  (Get-PerfMicroRowStatus -NsStatus 'better' -AllocStatus 'worse')  'alloc worse -> row worse (ns ignored)'
+    Assert-Equal 'better' (Get-PerfMicroRowStatus -NsStatus 'worse'  -AllocStatus 'better') 'alloc better -> row better (ns ignored)'
+    Assert-Equal 'noise'  (Get-PerfMicroRowStatus -NsStatus 'better' -AllocStatus 'noise')  'alloc noise -> row noise even when ns better (no ns false-flag)'
+    Assert-Equal 'noise'  (Get-PerfMicroRowStatus -NsStatus 'worse'  -AllocStatus 'noise')  'alloc noise -> row noise even when ns worse'
+    Assert-Equal 'na'     (Get-PerfMicroRowStatus -NsStatus 'better' -AllocStatus 'na')     'alloc na -> row na (ns does not rescue)'
+    Assert-Equal 'na'     (Get-PerfMicroRowStatus -NsStatus 'na'     -AllocStatus 'na')     'na when alloc na'
+
+    # Section rendering.
+    Assert-Equal 0 @(Format-PerfMicroSection -Micro $null).Count  'micro section empty when null'
+    Assert-Equal 0 @(Format-PerfMicroSection -Micro @()).Count    'micro section empty when no rows'
+    $section = Format-PerfMicroSection -Micro $cmp
+    $sectionText = $section -join "`n"
+    Assert-Match $sectionText 'Reconciler micro-benchmarks'      'section has heading'
+    Assert-Match $sectionText 'ns/op'                            'section header names ns/op'
+    Assert-Match $sectionText 'B/op'                             'section header names B/op'
+    Assert-True ($sectionText.Contains('`M1` PropertyDiff'))     'section row labels bench + name'
+    Assert-Match $sectionText '95% CI'                           'section delta cells carry a CI'
+    # numeric sort survives into the rendered table (M2 row appears before M10 row).
+    Assert-True (($sectionText.IndexOf('`M2`')) -lt ($sectionText.IndexOf('`M10`'))) 'rendered rows keep numeric order'
+
+    # Format-PerfComment threads -Micro through into the comment.
+    $microComment = Format-PerfComment -Main $allocMain -Pr $allocPr -WinUI3 $null -Rust $null -Micro $cmp -Context $ctx
+    Assert-Match $microComment 'Reconciler micro-benchmarks'     'comment includes micro section when -Micro supplied'
+    Assert-Match $microComment 'WinUI-undiluted'                 'comment carries the micro footnote'
+    # Omitted / null -Micro -> no micro section (back-compat with existing callers).
+    Assert-True (-not ($allocComment -like '*Reconciler micro-benchmarks*')) 'micro section omitted when -Micro not supplied'
+}
+finally {
+    Remove-Item -LiteralPath $microTmp -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+
 if ($script:Fail -gt 0) {
     Write-Host "FAILED: $($script:Fail) / $($script:Pass + $script:Fail) assertions" -ForegroundColor Red
     foreach ($f in $script:Failures) { Write-Host "  ✗ $f" -ForegroundColor Red }

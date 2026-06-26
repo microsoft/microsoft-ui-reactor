@@ -220,6 +220,44 @@ equivalent is collected) and absent in a harness built before the metric landed.
 > target; its run-to-run swing is larger than the effect. Full rationale in
 > [`ci/README.md`](ci/README.md#variance-trust-the-delta-not-the-absolutes).
 
+## Reconciler micro-benchmarks: ns-resolution Core path
+
+Every metric above is measured **across a live WinUI render pipeline**, which is
+the right scope for "what does the app feel like" but the wrong scope for the
+**Core/Reconciler** layer most perf work targets. The StocksGrid macro workload is
+render-bound (renders/sec is ~76% gated by the render thread) and its reconcile/ms
+and alloc figures are diluted by render + working-set noise — small per-reconcile
+deltas are unresolvable there. (The StocksGrid cells also render through a native
+`Grid` with fixed tracks, structurally separate from FlexPanel/Yoga, so layout-engine
+optimizations don't surface in this workload at all.)
+
+For that layer the repo ships a dedicated micro-suite,
+[`tests/perf_bench/PerfBench.ControlModel`](../perf_bench/PerfBench.ControlModel)
+(spec-047 M1–M13). It runs the production reconciler as a **headless loop whose
+measured region brackets only the reconcile body** — no render pipeline — with
+`Stopwatch` for **ns/op** and the **per-thread** `GC.GetAllocatedBytesForCurrentThread()`
+for **bytes/op** (per-thread, so WinUI and background-thread allocations are
+excluded). That makes it ns-resolution and free of the dilution above.
+
+`/perf` builds and runs this suite once per side — `main` and the PR each link
+their own `src/Reactor` — and reports a per-bench `main`-vs-PR table; see
+[`ci/README.md`](ci/README.md#reconciler-micro-benchmarks-ns-resolution-winui-undiluted).
+The two metrics are read differently. **Allocated bytes/op is deterministic** for
+identical code — an unchanged diff reproduces the byte count exactly — so its paired
+95% CI is trustworthy and **drives each row's flag**. **ns/op is informational only**
+in v1: the two per-side runs are not yet rep-interleaved, so a systematic
+process-to-process timing offset (thermal/scheduling drift between the back-to-back
+invocations) shifts every paired ns difference the same way and makes the paired CI
+exclude 0 even for an identical binary. Local validation confirmed it — running the
+**same** ControlModel binary as both sides, alloc was deterministic (14/16 benches
+exactly 0.0% Δ) while ns spuriously flagged up to −14.8% on a no-op. So ns is shown
+for context but excluded from the flag, and **rep-level interleaving of the two sides
+is the documented fast-follow** that would promote ns to a flagged signal.
+
+It is the **authoritative instrument** for per-reconcile allocation deltas (and,
+once interleaved, reconcile-time deltas); the macro tables remain the user-facing
+throughput sanity check.
+
 ## Don'ts (so we don't redo this analysis)
 
 1. **Don't trust `CompositionTarget.Rendering` for "FPS."** It's UI-thread-
