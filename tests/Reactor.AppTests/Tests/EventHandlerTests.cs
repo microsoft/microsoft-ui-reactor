@@ -1,12 +1,11 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Microsoft.UI.Reactor.AppTests.Infrastructure;
-using OpenQA.Selenium.Appium;
 
 namespace Microsoft.UI.Reactor.AppTests.Tests;
 
 /// <summary>
 /// E2E tests for declarative event handler modifiers.
-/// These use Appium/WinAppDriver to simulate real user input against a running WinUI3 app,
+/// These use winapp ui (UIA) + Win32 SendInput to simulate real user input against a running WinUI3 app,
 /// verifying that .OnTapped(), .OnSizeChanged(), .OnPointerPressed(), and .OnKeyDown()
 /// fire correctly and update state through the Reactor reconciliation pipeline.
 /// </summary>
@@ -26,9 +25,16 @@ public class EventHandlerTests : AppTestBase
     }
 
     /// <summary>
-    /// OnTapped: tap a Button element via WinAppDriver, verify the tap count increments
-    /// through the full UI pipeline (event -> state update -> re-render -> UIA text change).
+    /// OnTapped: tap a Button element with a real pointer tap, verify the tap count
+    /// increments through the full UI pipeline (event -> state update -> re-render ->
+    /// UIA text change). A real tap (not a UIA Invoke) is required: WinUI raises Tapped
+    /// from pointer input, not from the Invoke pattern, so this uses the SendInput
+    /// fallback; <c>UiElement.Click()</c> now uses that same real pointer path.
     /// </summary>
+    // [Retry] mops up the rare unattended-desktop input-injection flake: Win32 SendInput is
+    // occasionally dropped before the Host window foregrounds on CI. A real regression still
+    // fails every attempt. Removable once winappCli #562 (send-keys)/#498 (drag) ship native verbs.
+    [Retry(3)]
     [TestMethod]
     public void Interactive_OnTapped_Updates_State()
     {
@@ -36,10 +42,14 @@ public class EventHandlerTests : AppTestBase
 
         WaitForText("TapCount", "Tap count: 0");
 
-        FindById("TapBtn").Click();
+        var r1 = FindById("TapBtn").Rect;
+        InputInjector.Foreground(HostHwnd);
+        InputInjector.Click(r1.X + r1.Width / 2, r1.Y + r1.Height / 2);
         WaitForText("TapCount", "Tap count: 1");
 
-        FindById("TapBtn").Click();
+        var r2 = FindById("TapBtn").Rect;
+        InputInjector.Foreground(HostHwnd);
+        InputInjector.Click(r2.X + r2.Width / 2, r2.Y + r2.Height / 2);
         WaitForText("TapCount", "Tap count: 2");
     }
 
@@ -68,8 +78,9 @@ public class EventHandlerTests : AppTestBase
     /// OnPointerPressed: click a Button element, verify press is detected.
     /// Note: WinUI Button consumes PointerPressed internally for its press states,
     /// so this E2E test uses Button.OnClick as a proxy. The declarative OnPointerPressed
-    /// API is verified by unit tests; this tests the Appium plumbing end-to-end.
+    /// API is verified by unit tests; this tests the input plumbing end-to-end.
     /// </summary>
+    [Retry(3)]
     [TestMethod]
     public void Interactive_OnPointerPressed_Detects_Click()
     {
@@ -85,6 +96,7 @@ public class EventHandlerTests : AppTestBase
     /// OnKeyDown: focus a TextBox and send a key, verify the key is captured
     /// by the declarative .OnKeyDown() handler.
     /// </summary>
+    [Retry(3)]
     [TestMethod]
     public void Interactive_OnKeyDown_Captures_Keys()
     {

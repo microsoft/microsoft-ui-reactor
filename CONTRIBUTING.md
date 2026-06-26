@@ -75,7 +75,7 @@ Quick reference:
 ```bash
 dotnet test tests/Reactor.Tests       # unit (xUnit, headless, fast)
 dotnet test tests/Reactor.SelfTests   # selftest (real WinUI, in-process)
-dotnet test tests/Reactor.AppTests    # E2E (Appium/WinAppDriver)
+dotnet test tests/Reactor.AppTests    # E2E (winapp ui)
 ```
 
 ---
@@ -124,8 +124,8 @@ src/Reactor.Cli/                  CLI scaffolding tool
 tests/
   Reactor.Tests/                  1. Unit tests — xUnit (no UI window; includes D3 charting tests)
   Reactor.SelfTests/              2. Selftest runner — MSTest wrapper that subprocess-launches the Host and parses TAP
-  Reactor.AppTests.Host/          2. Host app — hosts selftest fixtures and the Appium fixture navigator
-  Reactor.AppTests/               3. E2E tests — MSTest + Appium/WinAppDriver
+  Reactor.AppTests.Host/          2. Host app — hosts selftest fixtures and the winapp ui fixture navigator
+  Reactor.AppTests/               3. E2E tests — MSTest + winapp ui
   stress_perf/                    Performance benchmarks
 samples/
   Reactor.TestApp/                Interactive control showcase / demo app

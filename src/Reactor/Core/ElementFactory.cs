@@ -385,6 +385,17 @@ public sealed partial class ElementFactory<T> : IElementFactory
         {
             _keyByControl[control] = key;
             _lastElementByControl[control] = element;
+
+            // Issue #383: arm the multi-select checkmark flicker guard on the
+            // realized container. Idempotent per container instance.
+            // Intentionally scoped to ItemContainer (the ItemsView item-root
+            // wrapper): LazyVStack/LazyHStack realize into plain panels via
+            // ItemsRepeater, not ItemContainer, and the MultiSelectStates.Multiple
+            // storyboard the guard collapses only ever runs for multi-select
+            // ItemContainers — so widening this to all controls would be inert
+            // work everywhere else. Do not "generalize" it.
+            if (control is ItemContainer itemContainer)
+                ItemContainerSelectionFlickerGuard.Ensure(itemContainer);
         }
 
         return control ?? new TextBlock { Text = "" };

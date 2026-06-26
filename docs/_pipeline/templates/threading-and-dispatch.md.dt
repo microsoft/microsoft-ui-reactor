@@ -45,6 +45,7 @@ UI thread.
 | `Component.Render()` | UI thread | `RenderContext.BeginRender` captures `_uiThreadId`; reconciler invokes on the dispatcher |
 | `setX(...)` / `updateX(...)` from `UseState` / `UseReducer` | Any thread | `MarshalIfOffUIThread` in `RenderContext.cs` |
 | `setX(...)` with `threadSafe: true` | Any thread | per-cell `lock` in `ValueHookState<T>`; no marshal hop |
+| `NavigationHandle` mutators (`Navigate` / `GoBack` / `GoForward` / `Replace` / `Reset` / `PopTo` / `SetState`) from `UseNavigation` | Any thread | `UIThreadMarshal` gate in `NavigationHandle.cs` (auto-marshal; shares `EnqueueOrThrow` with `MarshalIfOffUIThread`) |
 | `UseEffect` body | UI thread | `RenderContext.FlushEffects` runs on the dispatcher |
 | `UseEffect` cleanup | UI thread | same dispatcher as flush |
 | `Reconciler.Reconcile` | UI thread | host calls it from a dispatcher continuation |
@@ -82,6 +83,18 @@ The two failure modes throw immediately rather than swallow:
   loud throw beats a state cell that mysteriously stops advancing
   near window close. Cancel background producers in your effect
   cleanup so they stop before the window closes.
+
+The same machinery now covers `UseNavigation` (issue #234). A
+`NavigationHandle<TRoute>` captures the UI thread id when it is created,
+and its mutators — `Navigate`, `GoBack`, `GoForward`, `Replace`,
+`Reset`, `PopTo`, and `SetState` — auto-marshal the whole operation onto
+that dispatcher when called off-thread, throwing the same two failure
+modes above when no live dispatcher is available. Both paths share one
+`UIThreadMarshal.EnqueueOrThrow` implementation, so the setter marshal
+and the navigation gate stay behaviourally identical. The `bool` the
+mutators return reports whether the operation was *scheduled*, not
+whether the navigation ultimately succeeded — off-thread callers must
+not treat `true` as confirmation that the stack changed.
 
 ## The trampoline guard for non-setter mutators
 

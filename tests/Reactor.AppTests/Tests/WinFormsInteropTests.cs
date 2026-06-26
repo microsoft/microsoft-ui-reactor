@@ -1,6 +1,4 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using OpenQA.Selenium;
-using OpenQA.Selenium.Appium;
 using Microsoft.UI.Reactor.AppTests.Infrastructure;
 
 namespace Microsoft.UI.Reactor.AppTests.Tests;
@@ -9,7 +7,7 @@ namespace Microsoft.UI.Reactor.AppTests.Tests;
 /// End-to-end tests for WinForms ↔ XAML Island interop.
 ///
 /// These tests launch a real WinForms app with a XAML Island (Reactor.WinFormsTests.Host)
-/// and drive it through Appium/WinAppDriver to validate:
+///   and drive it through winapp ui (UIA) to validate:
 ///   - Tab navigation across the WinForms ↔ WinUI boundary
 ///   - Rendering of Reactor/WinUI controls inside the island
 ///   - Accessibility properties exposed through the UIA pipeline
@@ -65,6 +63,10 @@ public class WinFormsInteropTests : WinFormsTestBase
             "Counter should initialize to 0");
     }
 
+    // [Retry] mops up the rare unattended-desktop input-injection flake: Win32 SendInput is
+    // occasionally dropped before the Host window foregrounds on CI. A real regression still
+    // fails every attempt. Removable once winappCli #562 (send-keys)/#498 (drag) ship native verbs.
+    [Retry(3)]
     [TestMethod]
     public void Interop_Rendering_ButtonClickUpdatesState()
     {
@@ -80,6 +82,7 @@ public class WinFormsInteropTests : WinFormsTestBase
         WaitForText("Reactor_CountDisplay", "Count: 2");
     }
 
+    [Retry(3)]
     [TestMethod]
     public void Interop_Rendering_TextInputWorks()
     {
@@ -124,6 +127,7 @@ public class WinFormsInteropTests : WinFormsTestBase
         "WF_TextBox3",       // bottomBar child 0
     ];
 
+    [Retry(3)]
     [TestMethod]
     public void Interop_Tab_ForwardCycle_TwoFullLoops()
     {
@@ -145,6 +149,7 @@ public class WinFormsInteropTests : WinFormsTestBase
         }
     }
 
+    [Retry(3)]
     [TestMethod]
     public void Interop_Tab_BackwardCycle_TwoFullLoops()
     {

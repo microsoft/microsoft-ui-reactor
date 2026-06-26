@@ -309,6 +309,61 @@ public class ChartsBuilderTests
     }
 
     [Fact]
+    public void PieChart_LabelView_WithNameAndInteractive_StoresAndReturnsThis()
+    {
+        var pie = Charts.PieChart(new[] { 1.0, 2.0, 3.0 }, v => v);
+        var ret = pie.LabelView((_, _) => Factories.TextBlock("slice"), name: v => $"v{v}", interactive: true);
+        Assert.Same(pie, ret);
+    }
+
+    [Fact]
+    public void LineChart_TickLabelView_WithNameAndInteractive_StoresAndReturnsThis()
+    {
+        var chart = Charts.LineChart(SampleData, d => d.X, d => d.Y);
+        Assert.Same(chart, chart.XTickLabelView(_ => Factories.TextBlock("x"), name: v => $"x{v}", interactive: true));
+        Assert.Same(chart, chart.YTickLabelView(_ => Factories.TextBlock("y"), name: v => $"y{v}", interactive: true));
+    }
+
+    [Fact]
+    public void PieChart_LabelView_NameProjection_FeedsSliceDescriptor_WhenNoLabelAccessor()
+    {
+        // Issue #162 #3: a LabelView without a string label/DataLabel previously fell
+        // back to "Slice {i+1}" for screen-reader users. The name projection threads
+        // into the chart's own ChartPointDescriptor so the accessible name matches the
+        // visible label.
+        var pie = Charts.PieChart(new[] { "Chrome", "Edge", "Firefox" }, _ => 1.0)
+            .LabelView((s, _) => Factories.TextBlock(s), name: s => s);
+
+        var points = ((IChartAccessibilityData)pie).Series[0].Points;
+        Assert.Equal("Chrome", points[0].XLabel);
+        Assert.Equal("Edge", points[1].XLabel);
+        Assert.Equal("Firefox", points[2].XLabel);
+    }
+
+    [Fact]
+    public void PieChart_LabelView_NoNameProjection_FallsBackToSliceN()
+    {
+        var pie = Charts.PieChart(new[] { "Chrome", "Edge" }, _ => 1.0)
+            .LabelView((s, _) => Factories.TextBlock(s));
+
+        var points = ((IChartAccessibilityData)pie).Series[0].Points;
+        Assert.Equal("Slice 1", points[0].XLabel);
+        Assert.Equal("Slice 2", points[1].XLabel);
+    }
+
+    [Fact]
+    public void PieChart_LabelView_StringLabelAccessor_WinsOverNameProjection()
+    {
+        // An explicit string label accessor (3rd PieChart arg) stays authoritative.
+        var pie = Charts.PieChart(new[] { "Chrome", "Edge" }, _ => 1.0, s => $"L:{s}")
+            .LabelView((s, _) => Factories.TextBlock(s), name: s => $"N:{s}");
+
+        var points = ((IChartAccessibilityData)pie).Series[0].Points;
+        Assert.Equal("L:Chrome", points[0].XLabel);
+        Assert.Equal("L:Edge", points[1].XLabel);
+    }
+
+    [Fact]
     public void PieChart_SetColors_EmptyArray_DoesNotStoreEmptyPalette()
     {
         // Empty .SetColors() previously stored an empty palette which would

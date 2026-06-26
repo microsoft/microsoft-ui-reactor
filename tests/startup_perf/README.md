@@ -148,10 +148,12 @@ What this gives us:
 
 ## Methodology notes
 
-- **PublishAot is off** (`<PublishAot>false</PublishAot>` in both C#
-  csprojs). NativeAOT trims the `EventSource` subclass even when events
-  are declared via manifest-style `[Event]` attributes, producing zero
-  ETW emissions. Non-AOT C# adds ~70–100 ms of CLR bootstrap cost vs.
+- **PublishAot is on for BlankReactorMsix only**
+  (`<PublishAot>true</PublishAot>`, plus `<EventSourceSupport>true</EventSourceSupport>` for NativeAOT ETW). `BenchmarkTracing` uses manifest-based
+  `WriteEvent()` with primitive parameters — no `[EventData]` structs / `EventSource.Write()` payload reflection — so ETW events emit correctly under NativeAOT. BlankReactor
+  (unpackaged) and BlankWinUI3 keep AOT off by default (flip them if you
+  want an AOT run of those variants).
+  Non-AOT C# adds ~70–100 ms of CLR bootstrap cost vs.
   -lift's pure C++ WinUI 3 baseline. Relative comparisons inside this
   repo (BlankWinUI3 vs. BlankReactor vs. BlankRNW) are still
   apples-to-apples; the C++ RNW host doesn't pay this cost (Hermes
@@ -162,10 +164,10 @@ What this gives us:
   cache-cold outlier; the script reports median over N runs so this
   doesn't skew results.
 
-- **Self-describing TraceLogging.** C# uses `EventSource.Write()` with
-  an `[EventData]` payload struct, the same pattern -lift's
-  `Common/BenchmarkTracing.cs` uses, so tracerpt resolves event names
-  and payload fields without an installed manifest. RNW uses C++
+- **Manifest-based EventSource.** C# uses `WriteEvent()` with `[Event]`
+  attributes and primitive parameters. Method names match the event names
+  the run_startup_bench.ps1 parser and -lift Regions XML expect
+  (`wWinMainEntry`, `XamlAppLoaded`, etc.). RNW uses C++
   `TraceLoggingProvider` macros directly.
 
 - **What to expect on the same hardware as -lift's README.** -lift

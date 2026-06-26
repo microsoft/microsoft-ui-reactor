@@ -32,8 +32,19 @@ settings.Close();
 Caveats:
 
 - `Close`, `Show`, `Hide`, `Activate`, `Update`, and mutators are UI-thread only.
-- `ReactorApp.PrimaryWindow` is the first opened window; shutdown policy decides
-  whether closing it exits the process.
+- `Close()` is idempotent: calling it more than once (or while an owner-close
+  cascade is already tearing the window down) performs the native close exactly
+  once. A redundant close is a safe no-op, so converging teardown paths can't
+  re-enter native window destruction.
+- `ReactorApp.PrimaryWindow` is the first *eligible* opened window; shutdown
+  policy decides whether closing it exits the process. Auxiliary windows that
+  opt out of the shutdown policy — notably docking tear-off floating windows —
+  are excluded
+  from primary election: they can never become the fallback primary, and they
+  are never promoted to primary when the real primary closes (re-election skips
+  them, leaving `PrimaryWindow` `null` if only excluded windows remain). This
+  keeps closing a transient floating window from firing
+  `OnPrimaryWindowClosed` and exiting the app.
 - `UseWindow()` returns the owning `ReactorWindow` inside a window component and
   `null` outside one (for example tray flyouts).
 
@@ -199,6 +210,14 @@ VStack(
 
 Caveats:
 
+- Setting `ExtendsContentIntoTitleBar = false` while still rendering a `TitleBar(...)`
+  element is allowed (Reactor skips `SetTitleBar` in that case), but prior to the
+  #537 fix this combination crashed the process with `STATUS_HEAP_CORRUPTION` when
+  the window closed — the WinUI title-bar control only tears down safely in
+  content-extended mode. Reactor now flips the window back into content-extended
+  mode just before the native close, so the close is safe; the value you observe
+  while the window is alive is unchanged. New code can simply omit `TitleBar(...)`
+  when you genuinely want the system title bar.
 - `WindowStyle.None` without `IsMovableByBackground` can strand the user; Reactor
   warns but does not throw.
 - `WindowStyle.ToolWindow` defaults to hidden from the taskbar unless
@@ -353,6 +372,11 @@ static class Startup
 | `OnPrimaryWindowClosed` *(default)* | The primary window closes |
 | `OnLastSurfaceClosed` | The last window and the last tray icon both close |
 | `Explicit` | Never automatically; call `ReactorApp.Exit()` |
+
+Under `OnPrimaryWindowClosed`, only the elected `PrimaryWindow` triggers the
+exit. Auxiliary windows that opt out of the shutdown policy (such as docking
+tear-off floating windows) are never elected primary, so closing one of them
+never exits the app even when it is the last *visible* window.
 
 ## Tips
 

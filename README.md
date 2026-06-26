@@ -231,7 +231,7 @@ src/Reactor.Cli/            CLI scaffolding tool
 src/vscode-reactor/         VS Code extension — live preview panel
 tests/
   Reactor.Tests/            xUnit unit tests — 2,200+ tests incl. 590 Yoga fixtures
-  Reactor.AppTests/         MSTest runner — orchestrates selfhost + Appium
+  Reactor.AppTests/         MSTest runner — orchestrates selfhost + winapp ui
   Reactor.AppTests.Host/    Selfhost test app — 60+ in-process fixtures
   stress_perf/              Performance benchmarks
 samples/

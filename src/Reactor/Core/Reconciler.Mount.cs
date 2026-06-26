@@ -108,6 +108,11 @@ public sealed partial class Reconciler
                 _highlightMounted.Add(control);
         }
 
+        // Issue #345 — one-time debug warning for HStack/VStack collapsing to 0×0 inside a
+        // Grid Auto track. Gated so Release builds with the flag off pay a single flag read.
+        if (global::Microsoft.UI.Reactor.Diagnostics.LayoutFootgunDetector.AlwaysOnInDebug || ReactorFeatureFlags.WarnLayoutFootguns)
+            global::Microsoft.UI.Reactor.Diagnostics.LayoutFootgunDetector.Inspect(element);
+
         // Apply inline modifiers after mounting
         if (modifiers is not null && control is FrameworkElement fe)
             ApplyModifiers(fe, modifiers, requestRerender);
@@ -219,12 +224,21 @@ public sealed partial class Reconciler
             $"  (1) Call the factory method at least once before mounting (e.g. " +
             "`Factories.TextBlock(\"\")` for built-ins) so the handler registers, " +
             "then continue using the direct-record idiom for the hot path.\n" +
-            "  (2) Register the handler explicitly up front: " +
+            "  (2) Opt into the whole built-in catalog at startup with " +
+            "`Microsoft.UI.Reactor.ReactorApp.RegisterAllBuiltIns()` (spec-048 " +
+            "§3.4 option A) so every built-in element record mounts regardless " +
+            "of how it was constructed.\n" +
+            "  (3) Register the handler explicitly up front. For a control-backed " +
+            "element with its own WinUI control, use " +
             $"`Microsoft.UI.Reactor.Core.V1Protocol.ControlRegistry.Register" +
-            $"<{element.GetType().Name}, TControl>(static () => new YourHandler())`.\n" +
-            "  (3) For custom controls authored by your project, follow the " +
+            $"<{element.GetType().Name}, TControl>(static () => new YourHandler())`; " +
+            "for a decorator-backed element (one that wraps/forwards to a child " +
+            "rather than owning a leaf control) use " +
+            $"`Microsoft.UI.Reactor.Core.V1Protocol.ControlRegistry.RegisterDecorator" +
+            $"<{element.GetType().Name}>(static () => new YourDecoratorHandler())`.\n" +
+            "  (4) For custom controls authored by your project, follow the " +
             "Pattern A factory-as-registration recipe in " +
-            "docs/_pipeline/templates/extending-reactor-controls.md.dt.\n\n" +
+            "docs/guide/extending-reactor-controls.md.\n\n" +
             "See https://github.com/microsoft/microsoft-ui-reactor/issues/486 " +
             "for background.");
     }

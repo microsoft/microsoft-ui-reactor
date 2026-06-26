@@ -67,6 +67,19 @@ public sealed class HardenOptions
     /// <summary>Minimum contrast ratio of each color against the background. Default 3.0.</summary>
     public double MinBackgroundContrast { get; init; } = 3.0;
 
+    /// <summary>
+    /// Representative background the palette will actually render on. When set, the
+    /// background-contrast pass scopes its check (and direction-aware nudge) to this single
+    /// active background instead of hardening against <c>both</c> the fixed light and dark
+    /// backgrounds. Mirrors A11Y_CHART_011's active-background scoping (issue #633). Null
+    /// keeps the theme-agnostic both-backgrounds behavior.
+    /// <para>Opacity is ignored: contrast cannot be evaluated against a semi-transparent
+    /// background without knowing what is behind it, so any alpha is dropped to opaque RGB
+    /// inside <see cref="ChartPalette.Harden"/> (matching the
+    /// <c>.ChartBackground(...)</c> DSL modifier).</para>
+    /// </summary>
+    public D3.D3Color? Background { get; init; }
+
     /// <summary>Maximum number of adjustment passes. Default 8.</summary>
     public int MaxPasses { get; init; } = 8;
 }
@@ -277,35 +290,45 @@ public sealed class ChartPalette
                 }
             }
 
-            // Check each color vs light and dark backgrounds
-            var lightBg = new D3.D3Color(255, 255, 255);
-            var darkBg = new D3.D3Color(32, 32, 32);
+            // Check each color against the background(s) it must remain legible on. When
+            // the caller declares a single representative background (issue #633), the set
+            // is just {active} — a palette is only penalized for a background it will
+            // actually render on. Otherwise the palette is theme-agnostic and must clear
+            // contrast against *either* fixed background, so the set is {light, dark}.
+            // Both cases share this one path.
+            var backgrounds = opts.Background is { } activeBg
+                ? new[] { new D3.D3Color(activeBg.R, activeBg.G, activeBg.B) }
+                : new[] { new D3.D3Color(255, 255, 255), new D3.D3Color(32, 32, 32) };
             for (int i = 0; i < adjusted.Length; i++)
             {
-                double lightContrast = ContrastRatio(adjusted[i], lightBg);
-                double darkContrast = ContrastRatio(adjusted[i], darkBg);
-                bool failsLight = lightContrast < opts.MinBackgroundContrast;
-                bool failsDark = darkContrast < opts.MinBackgroundContrast;
-                // A color need only contrast against whichever background is active, so
-                // harden when it fails against *either* (matching the A11Y_CHART_011
-                // detection rule). The adjustment is direction-aware: a near-white color
-                // that fails the light background must get darker, and a near-black color
-                // that fails the dark background must get lighter.
-                if (!failsLight && !failsDark) continue;
+                // Target the worst (lowest-contrast) background this color currently fails.
+                D3.D3Color? worst = null;
+                double worstContrast = double.MaxValue;
+                foreach (var bg in backgrounds)
+                {
+                    double contrast = ContrastRatio(adjusted[i], bg);
+                    if (contrast < opts.MinBackgroundContrast && contrast < worstContrast)
+                    {
+                        worstContrast = contrast;
+                        worst = bg;
+                    }
+                }
+                if (worst is not { } targetBg) continue;
 
-                // At the default 3:1 threshold failsLight and failsDark are mutually
-                // exclusive, but MinBackgroundContrast is configurable: a high threshold
-                // (e.g. >~4:1) lets a mid-tone fail against *both* fixed backgrounds. In
-                // that case darkening improves light contrast while lightening improves
-                // dark contrast, so move toward the worse (lower) of the two ratios to
-                // maximize the attainable minimum rather than always darkening.
-                bool darken = failsLight && failsDark
-                    ? lightContrast <= darkContrast
-                    : failsLight;
-
+                // Pick the nudge direction by *attainable* contrast, not by comparing the
+                // color's luminance to the background's: darkening can never satisfy a
+                // near-black background (you cannot get darker than black) and lightening
+                // can never satisfy a near-white one, so a fixed luminance-ordering rule
+                // would pick an impossible direction and echo a still-failing color back
+                // (issue #633 M2 — the same bad-fix-suggestion class as #628/#629). Build
+                // both candidates and keep whichever raises contrast against the target
+                // background the most.
                 var (l, c, h) = RgbToLch(adjusted[i]);
-                l = darken ? Math.Max(5, l - 15) : Math.Min(95, l + 15);
-                var candidate = LchToRgb(l, c, h);
+                var darker = LchToRgb(Math.Max(5, l - 15), c, h);
+                var lighter = LchToRgb(Math.Min(95, l + 15), c, h);
+                var candidate = ContrastRatio(lighter, targetBg) >= ContrastRatio(darker, targetBg)
+                    ? lighter
+                    : darker;
 
                 // Series distinguishability takes priority: a color and its background
                 // both being legible is impossible to guarantee for every theme when

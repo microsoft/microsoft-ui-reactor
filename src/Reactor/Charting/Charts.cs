@@ -80,6 +80,7 @@ public sealed class ChartElement<T> : IChartAccessibilityData
     private Accessibility.ChartPalette? _palette;
     private bool _colorOnly;
     private bool _rawColors;
+    private D3.D3Color? _chartBackground;
     private Accessibility.MarkerShape[]? _seriesShapes;
     private Accessibility.DashStyle[]? _seriesDashes;
 
@@ -90,6 +91,11 @@ public sealed class ChartElement<T> : IChartAccessibilityData
     // position and rendered non-interactive, hidden from the UIA tree.
     private Func<double, Element>? _xTickLabelView;
     private Func<double, Element>? _yTickLabelView;
+    // Optional accessible-name projection + opt-in interactive flag per axis (issue #162).
+    private Func<double, string>? _xTickName;
+    private Func<double, string>? _yTickName;
+    private bool _xTickInteractive;
+    private bool _yTickInteractive;
 
     // Interactive / keyboard navigation fields
     private bool _interactive;
@@ -129,17 +135,55 @@ public sealed class ChartElement<T> : IChartAccessibilityData
 
     /// <summary>
     /// Replaces the built-in numeric X-axis tick label with a caller-supplied <see cref="Element"/>.
-    /// The element is horizontally centered on the tick mark. Rendered non-interactive and hidden
-    /// from the UIA tree (the chart's accessibility data continues to describe axis ticks).
+    /// The element is horizontally centered on the tick mark. By default it is rendered
+    /// non-interactive and its <em>entire</em> realized subtree is hidden from the UIA tree and
+    /// keyboard tab order (the chart's accessibility data continues to describe axis ticks).
     /// </summary>
-    public ChartElement<T> XTickLabelView(Func<double, Element> render) { _xTickLabelView = render; return this; }
+    /// <param name="render">Renders the tick element from the tick value.</param>
+    /// <param name="name">
+    /// Optional accessible-name projection applied as the rendered element's
+    /// <c>AutomationName</c>. Only observable when <paramref name="interactive"/> is
+    /// <see langword="true"/> — non-interactive ticks are hidden from UIA, so the chart's own
+    /// descriptor remains the single source of truth. (Unlike <see cref="PieChartElement{T}.LabelView"/>,
+    /// an axis tick has no per-tick descriptor for the projection to feed, so it never affects a
+    /// hidden tick's accessible name.)
+    /// </param>
+    /// <param name="interactive">
+    /// Opt-in escape hatch. When <see langword="true"/>, the chart does <b>not</b> force
+    /// <c>AccessibilityView.Raw</c> / remove the subtree from focus — the caller takes
+    /// responsibility for the tick element's accessibility.
+    /// </param>
+    public ChartElement<T> XTickLabelView(Func<double, Element> render, Func<double, string>? name = null, bool interactive = false)
+    {
+        _xTickLabelView = render;
+        _xTickName = name;
+        _xTickInteractive = interactive;
+        return this;
+    }
 
     /// <summary>
     /// Replaces the built-in numeric Y-axis tick label with a caller-supplied <see cref="Element"/>.
-    /// The element is right-anchored to the axis edge and vertically centered on the tick. Rendered
-    /// non-interactive and hidden from the UIA tree.
+    /// The element is right-anchored to the axis edge and vertically centered on the tick. By
+    /// default it is rendered non-interactive and its <em>entire</em> realized subtree is hidden
+    /// from the UIA tree and keyboard tab order.
     /// </summary>
-    public ChartElement<T> YTickLabelView(Func<double, Element> render) { _yTickLabelView = render; return this; }
+    /// <param name="render">Renders the tick element from the tick value.</param>
+    /// <param name="name">
+    /// Optional accessible-name projection applied as the rendered element's
+    /// <c>AutomationName</c>. Only observable when <paramref name="interactive"/> is
+    /// <see langword="true"/>.
+    /// </param>
+    /// <param name="interactive">
+    /// Opt-in escape hatch. When <see langword="true"/>, the chart does <b>not</b> hide the
+    /// subtree from UIA / focus — the caller owns the tick element's accessibility.
+    /// </param>
+    public ChartElement<T> YTickLabelView(Func<double, Element> render, Func<double, string>? name = null, bool interactive = false)
+    {
+        _yTickLabelView = render;
+        _yTickName = name;
+        _yTickInteractive = interactive;
+        return this;
+    }
 
     /// <summary>Axis unit annotations (e.g., "months", "USD").</summary>
     public ChartElement<T> Units(string? xUnits = null, string? yUnits = null) { _xUnits = xUnits; _yUnits = yUnits; return this; }
@@ -162,6 +206,29 @@ public sealed class ChartElement<T> : IChartAccessibilityData
 
     /// <summary>Sets raw series colors — escape hatch with no validation (Tier 4). Triggers scanner warning A11Y_CHART_012.</summary>
     public ChartElement<T> RawColors(params D3.D3Color[] colors) { _palette = Accessibility.ChartPalette.FromRaw(colors); _rawColors = true; return this; }
+
+    /// <summary>
+    /// Declares the representative background color the chart actually renders on.
+    /// Lets the theme-agnostic accessibility scanner scope A11Y_CHART_011's custom-palette
+    /// contrast check to this single active background (a <c>warning</c>) instead of flagging
+    /// failure against either fixed light/dark background (an <c>info</c>). Omit for charts
+    /// that may render on any background.
+    /// <para>The stored value is normalized to opaque RGB: contrast math
+    /// (<see cref="Accessibility.ChartPalette.ContrastRatio"/>) cannot evaluate a semi-transparent
+    /// background without knowing what is behind it, so any alpha is dropped.</para>
+    /// </summary>
+    public ChartElement<T> ChartBackground(D3.D3Color background) { _chartBackground = new D3.D3Color(background.R, background.G, background.B); return this; }
+
+    /// <summary>
+    /// <inheritdoc cref="ChartBackground(D3.D3Color)"/> Parses a CSS color string (hex, rgb(), hsl(), or named).
+    /// </summary>
+    public ChartElement<T> ChartBackground(string background) => ChartBackground(D3Color.Parse(background));
+
+    /// <summary>
+    /// <inheritdoc cref="ChartBackground(D3.D3Color)"/> Accepts a <see cref="global::Windows.UI.Color"/>.
+    /// </summary>
+    public ChartElement<T> ChartBackground(global::Windows.UI.Color background)
+        => ChartBackground(new D3.D3Color(background.R, background.G, background.B, background.A / 255.0));
 
     /// <summary>Disables shape/dash double-encoding — color is sole series differentiator. Triggers scanner warning A11Y_CHART_004.</summary>
     public ChartElement<T> ColorOnly() { _colorOnly = true; return this; }
@@ -281,7 +348,9 @@ public sealed class ChartElement<T> : IChartAccessibilityData
             [.. _showGrid ? D3Grid(yScale, plotLeft, plotWidth) : [],
              .. RenderData(data, xScale, yScale, plotLeft, plotTop, plotWidth, plotHeight),
              .. _showAxes ? D3Axes(xScale, yScale, plotLeft, plotTop, plotWidth, plotHeight,
-                    xTickLabel: _xTickLabelView, yTickLabel: _yTickLabelView) : []]);
+                    xTickLabel: _xTickLabelView, yTickLabel: _yTickLabelView,
+                    xTickInteractive: _xTickInteractive, yTickInteractive: _yTickInteractive,
+                    xTickName: _xTickName, yTickName: _yTickName) : []]);
 
         if (_onReady is { } cb)
             canvas = canvas.Set(c => cb(new ChartHandle<T>(c)));
@@ -314,7 +383,14 @@ public sealed class ChartElement<T> : IChartAccessibilityData
             IsTightHitTest = _tightHitTest,
             CustomFocusColor = _customFocusColor,
             IsAnnounceEveryFrame = _announceEveryFrame,
+            ChartBackground = _chartBackground,
         });
+
+    // Test-only seam (InternalsVisibleTo Reactor.Tests): drives the real AttachChartData
+    // wiring against a caller-supplied canvas so unit tests can pin the accessibility
+    // metadata flow (e.g. .ChartBackground(...)) without building the chart's D3Canvas,
+    // which constructs a SolidColorBrush and therefore needs WinUI COM.
+    internal Core.CanvasElement AttachChartDataForTest(Core.CanvasElement canvas) => AttachChartData(canvas);
 
     private Element[] RenderData(IReadOnlyList<T> data, LinearScale xScale, LinearScale yScale,
         double plotLeft, double plotTop, double plotWidth, double plotHeight)
@@ -458,11 +534,16 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
     // Double-encoding / palette fields
     private Accessibility.ChartPalette? _palette;
     private bool _colorOnly;
+    private D3Color? _chartBackground;
 
     // Custom label rendering — when set, replaces the built-in TextBlock label
     // produced from LabelAccessor. The string LabelAccessor is still consulted
     // for accessibility (slice descriptors), so screen-reader summaries keep working.
     private Func<T, PieSliceLayout, Element>? _labelView;
+    // Optional accessible-name projection used when no LabelAccessor/DataLabel is set,
+    // plus opt-in interactive flag (issue #162).
+    private Func<T, string>? _labelName;
+    private bool _labelViewInteractive;
 
     public PieChartElement<T> Width(double width) { _width = width; return this; }
     public PieChartElement<T> Height(double height) { _height = height; return this; }
@@ -482,6 +563,9 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
     /// the override and restores the default palette — we deliberately don't store an
     /// empty palette because every downstream consumer would have to mod-by-zero
     /// guard, and "no colors" isn't a meaningful render state.
+    /// <para><b>Accessibility note:</b> colors set via <c>.SetColors(...)</c> are NOT seen by
+    /// the a11y scanner, so A11Y_CHART_011 contrast checks do not run on them. Use
+    /// <see cref="Palette(Accessibility.ChartPalette)"/> for a scanner-visible palette.</para>
     /// </summary>
     public PieChartElement<T> SetColors(params D3Color[] colors)
     {
@@ -505,16 +589,65 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
     /// <summary>
     /// Replaces the built-in text label for each slice with a caller-supplied <see cref="Element"/>.
     /// The element is positioned centered on the slice's centroid (it does not need a known size),
-    /// rendered non-interactive by default (no hit-testing), and hidden from the UIA tree so the
-    /// chart's <see cref="IChartAccessibilityData"/> remains the single accessible representation
-    /// of slice data. Set the original string label via the <c>label</c> parameter on
-    /// <see cref="Charts.PieChart{T}"/> or <see cref="DataLabel"/> to keep accessibility metadata
-    /// when overriding the visual.
+    /// rendered non-interactive by default (no hit-testing), and its <em>entire</em> realized
+    /// subtree is hidden from the UIA tree and keyboard tab order so the chart's
+    /// <see cref="IChartAccessibilityData"/> remains the single accessible representation of slice
+    /// data. Set the original string label via the <c>label</c> parameter on
+    /// <see cref="Charts.PieChart{T}"/>, <see cref="DataLabel"/>, or the <paramref name="name"/>
+    /// projection to keep accessibility metadata when overriding the visual.
     /// </summary>
-    public PieChartElement<T> LabelView(Func<T, PieSliceLayout, Element> render) { _labelView = render; return this; }
+    /// <param name="render">Renders the slice label from the data item and its layout.</param>
+    /// <param name="name">
+    /// Optional accessible-name projection. When neither a string <c>label</c> accessor nor
+    /// <see cref="DataLabel"/> is supplied, this becomes the slice's accessible name in the
+    /// chart's descriptor (instead of falling back to <c>"Slice {i+1}"</c>), so screen-reader
+    /// users get the same meaningful label the visual shows. Note the deliberate asymmetry with
+    /// the axis-tick <c>*TickLabelView(name:)</c> overloads: a pie slice <em>has</em> a per-slice
+    /// descriptor, so <paramref name="name"/> feeds that descriptor even for non-interactive
+    /// labels; an axis tick has no per-tick descriptor, so there the projection only sets
+    /// <c>AutomationName</c> and is observable only when <c>interactive: true</c>.
+    /// </param>
+    /// <param name="interactive">
+    /// Opt-in escape hatch. When <see langword="true"/>, the chart does <b>not</b> force
+    /// <c>AccessibilityView.Raw</c> / remove the subtree from focus — the caller takes
+    /// responsibility for the label element's accessibility.
+    /// </param>
+    public PieChartElement<T> LabelView(Func<T, PieSliceLayout, Element> render, Func<T, string>? name = null, bool interactive = false)
+    {
+        _labelView = render;
+        _labelName = name;
+        _labelViewInteractive = interactive;
+        return this;
+    }
 
     /// <summary>Sets a curated accessible palette (Tier 1).</summary>
     public PieChartElement<T> Palette(Accessibility.ChartPalette palette) { _palette = palette; return this; }
+
+    /// <summary>
+    /// Declares the representative background color the chart actually renders on.
+    /// Lets the theme-agnostic accessibility scanner scope A11Y_CHART_011's custom-palette
+    /// contrast check to this single active background (a <c>warning</c>) instead of flagging
+    /// failure against either fixed light/dark background (an <c>info</c>). Omit for charts
+    /// that may render on any background.
+    /// <para><b>Note:</b> only a scanner-visible palette (set via <see cref="Palette(Accessibility.ChartPalette)"/>)
+    /// is contrast-checked against this background. Colors set via <c>.SetColors(...)</c> are
+    /// not seen by the scanner.</para>
+    /// <para>The stored value is normalized to opaque RGB: contrast math
+    /// (<see cref="Accessibility.ChartPalette.ContrastRatio"/>) cannot evaluate a semi-transparent
+    /// background without knowing what is behind it, so any alpha is dropped.</para>
+    /// </summary>
+    public PieChartElement<T> ChartBackground(D3Color background) { _chartBackground = new D3Color(background.R, background.G, background.B); return this; }
+
+    /// <summary>
+    /// <inheritdoc cref="ChartBackground(D3Color)"/> Parses a CSS color string (hex, rgb(), hsl(), or named).
+    /// </summary>
+    public PieChartElement<T> ChartBackground(string background) => ChartBackground(D3Color.Parse(background));
+
+    /// <summary>
+    /// <inheritdoc cref="ChartBackground(D3Color)"/> Accepts a <see cref="global::Windows.UI.Color"/>.
+    /// </summary>
+    public PieChartElement<T> ChartBackground(global::Windows.UI.Color background)
+        => ChartBackground(new D3Color(background.R, background.G, background.B, background.A / 255.0));
 
     /// <summary>Disables shape/dash double-encoding. Triggers scanner warning A11Y_CHART_004.</summary>
     public PieChartElement<T> ColorOnly() { _colorOnly = true; return this; }
@@ -603,7 +736,13 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
         {
             IsColorOnly = _colorOnly,
             CustomPalette = _palette,
+            ChartBackground = _chartBackground,
         });
+
+    // Test-only seam (InternalsVisibleTo Reactor.Tests): mirrors ChartElement<T>'s seam so unit
+    // tests can pin PieChartElement<T>'s own .ChartBackground(...) → ChartA11yData wiring without
+    // building the chart's D3Canvas, which constructs a SolidColorBrush and therefore needs WinUI COM.
+    internal Core.CanvasElement AttachChartDataForTest(Core.CanvasElement canvas) => AttachChartData(canvas);
 
     // Non-finite offsets would propagate NaN/Infinity into Canvas.Left/Top and
     // can crash WinUI layout — treat them as 0 to match how Width/Height/InnerRadius
@@ -676,9 +815,25 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
             // caller put on the returned element. ElementModifiers stores a
             // single OnMountAction, so plain `.OnMount(…)` would silently
             // overwrite the caller's hook.
-            return _labelView!(arc.Data, layout)
+            var labelElement = _labelView!(arc.Data, layout)
                 .CenterAt(labelX, labelY)
-                .OnMountAdd(static fe => fe.IsHitTestVisible = false)
+                // Issue #162: key by the interactive flag so toggling it forces a remount
+                // (the hide is a mount-time side effect; in-place update can't undo it).
+                .WithKey($"__pielabel{arc.Index}_{(_labelViewInteractive ? 1 : 0)}");
+
+            // interactive opt-in (issue #162): caller owns a11y, leave peers intact.
+            if (_labelViewInteractive)
+                return labelElement;
+
+            // Default (issue #162): force-Raw the whole realized subtree and remove
+            // inner focusable children from the tab order, so only the chart's own
+            // descriptor surfaces to UIA / assistive tech. OnUpdateAdd re-asserts the
+            // hide over descendants realized on a later in-place update (M1); OnUnmountAdd
+            // clears the deferred-hide sentinel so a pre-load unmount can't poison reuse (L1).
+            return labelElement
+                .OnMountAdd(Accessibility.ChartLabelA11y.HideSubtreeOnMount)
+                .OnUpdateAdd(Accessibility.ChartLabelA11y.HideSubtreeOnUpdate)
+                .OnUnmountAdd(Accessibility.ChartLabelA11y.ClearPendingHide)
                 .AccessibilityView(Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw);
         }).ToArray();
     }
@@ -699,7 +854,7 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
             var points = Data.Select((d, i) =>
             {
                 var value = ValueAccessor(d);
-                var label = LabelAccessor?.Invoke(d) ?? $"Slice {i + 1}";
+                var label = LabelAccessor?.Invoke(d) ?? _labelName?.Invoke(d) ?? $"Slice {i + 1}";
                 string? customLabel = _dataLabel?.Invoke(d, i);
                 return new ChartPointDescriptor(label, value, customLabel);
             }).ToArray();

@@ -20,7 +20,7 @@ dotnet test tests/Reactor.SelfTests
 # Raw TAP output (faster iteration, supports --filter prefix)
 dotnet run --project tests/Reactor.AppTests.Host -- --self-test --filter "Flex"
 
-# E2E — Appium/WinAppDriver (requires WinAppDriver installed)
+# E2E — winapp ui CLI (install: winget install Microsoft.WinAppCli, or run ./bootstrap.ps1)
 dotnet test tests/Reactor.AppTests
 
 # Single E2E class
@@ -117,7 +117,7 @@ Optionally: a factory method in `src/Reactor/Elements/Dsl.cs`, fluent modifiers 
 |---|---|---|
 | Algorithm, pure function, hook bookkeeping, D3 math | Unit test (xUnit) | `tests/Reactor.Tests/` |
 | Element mount/update against real WinUI controls | Selftest fixture | `tests/Reactor.AppTests.Host/SelfTest/Fixtures/` |
-| Real user input, UIA properties, cross-process | E2E test (Appium) | `tests/Reactor.AppTests/Tests/` |
+| Real user input, UIA properties, cross-process | E2E test (winapp ui) | `tests/Reactor.AppTests/Tests/` |
 
 Start with unit tests. Use selftests only when you need a live WinUI control. E2E is the slowest tier.
 
@@ -156,8 +156,8 @@ src/vscode-reactor/       VS Code live preview extension
 tests/
   Reactor.Tests/          Unit tests (xUnit, headless)
   Reactor.SelfTests/      Selftest runner (MSTest, wraps TAP subprocess)
-  Reactor.AppTests.Host/  Selftest host app + Appium fixture navigator
-  Reactor.AppTests/       E2E tests (MSTest + Appium/WinAppDriver)
+  Reactor.AppTests.Host/  Selftest host app + winapp ui fixture navigator
+  Reactor.AppTests/       E2E tests (MSTest + winapp ui)
 samples/                  Demo apps and samples
 docs/
   guide/                  User documentation (generated from templates)

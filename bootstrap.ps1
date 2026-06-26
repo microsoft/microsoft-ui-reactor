@@ -41,6 +41,14 @@
     non-interactive scripts that explicitly don't want the runtime
     installed. Mutually exclusive with -InstallWinAppSdk.
 
+.PARAMETER SkipWinAppCli
+    Skip installing the winapp CLI (`Microsoft.WinAppCli`). The CLI is the
+    UI automation driver used by the cross-process E2E tests in
+    `tests/Reactor.AppTests`; bootstrap installs it via winget by default so
+    those tests can run locally. Pass this flag if you don't run the E2E
+    suite or manage the CLI yourself. The install is best-effort either way —
+    a missing winget only warns, it never fails the bootstrap.
+
 .PARAMETER Verbose
     Common parameter (enabled by [CmdletBinding]). Surfaces extra
     diagnostic output at every decision point: detected SDK list,
@@ -74,7 +82,8 @@ param(
     [switch]$SkipVsExtension,
     [string]$Configuration = 'Release',
     [switch]$InstallWinAppSdk,
-    [switch]$NoWinAppSdk
+    [switch]$NoWinAppSdk,
+    [switch]$SkipWinAppCli
 )
 
 if ($InstallWinAppSdk -and $NoWinAppSdk) {
@@ -259,6 +268,58 @@ if (-not (Test-WindowsAppRuntime20)) {
     }
 } else {
     Write-Ok 'Windows App Runtime 2.0 installed'
+}
+
+# ---------------------------------------------------------------------------
+# 1.6 winapp CLI (E2E UI test driver)
+# ---------------------------------------------------------------------------
+# The cross-process E2E tests in tests/Reactor.AppTests drive the running app
+# through the `winapp ui` CLI (Microsoft.WinAppCli) instead of WinAppDriver.
+# WinAppUi.ResolveWinAppExe() resolves it from %LOCALAPPDATA%\Microsoft\
+# WindowsApps\winapp.exe (the alias winget's MSIX install drops) or `winapp`
+# on PATH. Install it best-effort so `dotnet test tests/Reactor.AppTests`
+# works out of the box — a missing winget only warns, it never fails bootstrap.
+Write-Step 'Checking winapp CLI (E2E UI test driver)'
+
+function Test-WinAppCli {
+    if (Get-Command winapp -ErrorAction SilentlyContinue) { return $true }
+    $alias = Join-Path $env:LOCALAPPDATA 'Microsoft\WindowsApps\winapp.exe'
+    Write-Dbg "winapp not on PATH; probing alias $alias"
+    return (Test-Path $alias)
+}
+
+if ($SkipWinAppCli) {
+    Write-Host '    [skip] winapp CLI install skipped (per -SkipWinAppCli).' -ForegroundColor Yellow
+} elseif (Test-WinAppCli) {
+    Write-Ok 'winapp CLI present'
+} elseif (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
+    Write-Host '    [warn] winapp CLI not found and winget is unavailable to install it.' -ForegroundColor Yellow
+    Write-Host '           E2E tests (tests/Reactor.AppTests) need it. Install manually with:' -ForegroundColor Yellow
+    Write-Host '           winget install Microsoft.WinAppCli   (or grab winappcli-x64.zip from the WinAppCli releases)' -ForegroundColor Cyan
+} else {
+    Write-Host '    Installing winapp CLI via winget (Microsoft.WinAppCli)...' -ForegroundColor Yellow
+    Write-Dbg 'winget install --id Microsoft.WinAppCli --accept-source-agreements --accept-package-agreements --silent --disable-interactivity'
+    & winget install --id Microsoft.WinAppCli --accept-source-agreements --accept-package-agreements --silent --disable-interactivity
+    $rc = $LASTEXITCODE
+    Write-Dbg "winget exit code: $rc"
+    $global:LASTEXITCODE = 0
+    # -1978335189 = already installed / up-to-date.
+    if ($rc -ne 0 -and $rc -ne -1978335189) {
+        Write-Host "    [warn] winget install Microsoft.WinAppCli reported exit $rc. Install it manually to run the E2E suite." -ForegroundColor Yellow
+    } else {
+        # winget edits Machine + User PATH but not the live process; rebuild it
+        # so a follow-on E2E run in this same shell can resolve winapp.
+        $env:Path = (
+            [Environment]::GetEnvironmentVariable('Path', 'Machine'),
+            [Environment]::GetEnvironmentVariable('Path', 'User')
+        ) -join ';'
+        if (Test-WinAppCli) {
+            Write-Ok 'winapp CLI installed'
+        } else {
+            Write-Host '    [warn] winapp CLI install reported success but the binary is not yet resolvable.' -ForegroundColor Yellow
+            Write-Host '           Open a new shell before running the E2E suite.' -ForegroundColor Cyan
+        }
+    }
 }
 
 # ---------------------------------------------------------------------------
@@ -514,5 +575,8 @@ Write-Host 'Other useful commands:'
 Write-Host '    mur doctor     verify your install'
 Write-Host '    mur upgrade    refresh local packages + plugin after `git pull`'
 Write-Host '    mur --help     full command list'
+Write-Host ''
+Write-Host 'Run the E2E UI tests (needs the winapp CLI installed above):'
+Write-Host "    dotnet test tests/Reactor.AppTests -c Debug -p:Platform=$hostArch"
 Write-Host ''
 Write-Host 'Visual Studio preview (if VS installed): View -> Other Windows -> Reactor Preview'

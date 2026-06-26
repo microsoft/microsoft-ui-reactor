@@ -275,3 +275,30 @@ navigation stack automatically.
    against unsaved-changes navigation.
 6. **Don't forget `backStackFactory` in deep links.** Without it, GoBack
    does nothing after a deep-linked entry.
+
+## Threading
+
+`UseNavigation` mutators are **thread-safe by default** (issue #234). The
+handle captures the UI thread when it is created, so calling `Navigate`,
+`GoBack`, `GoForward`, `Replace`, `Reset`, `PopTo`, or `SetState` from a
+`Task.Run`, a timer, or after `await … ConfigureAwait(false)` auto-marshals
+the operation back onto the captured dispatcher — no `threadSafe:` flag and
+no manual `DispatcherQueue.TryEnqueue` needed:
+
+```csharp
+await Task.Run(async () => {
+    var itemId = await LoadItemIdAsync();
+    nav.Navigate(new Route.Details(itemId)); // marshals onto the UI thread automatically
+});
+```
+
+This mirrors the `UseState` / `UseReducer` contract. Two caveats:
+
+- **No live dispatcher → loud throw.** Off-thread calls in a headless or
+  unit-test context (no `ReactorApp.UIDispatcher`), or after the dispatcher
+  has shut down, throw `InvalidOperationException` instead of silently
+  corrupting the back/forward stacks. On the UI thread the call runs inline.
+- **Off-thread `bool` means "scheduled", not "navigated".** When a mutator
+  marshals, its return value reports that the operation was *enqueued*, not
+  that the navigation ultimately succeeded. Don't branch on it from a
+  background thread.

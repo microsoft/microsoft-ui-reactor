@@ -1,6 +1,4 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using OpenQA.Selenium;
-using OpenQA.Selenium.Appium;
 using Microsoft.UI.Reactor.AppTests.Infrastructure;
 
 namespace Microsoft.UI.Reactor.AppTests.Tests;
@@ -10,7 +8,7 @@ namespace Microsoft.UI.Reactor.AppTests.Tests;
 /// accessibility properties are visible through the real Windows UIA pipeline
 /// (the same path used by Narrator, NVDA, and JAWS).
 ///
-/// These tests run OUT OF PROCESS via Appium/WinAppDriver, reading UIA properties
+/// These tests run OUT OF PROCESS via winapp ui (UIA), reading UIA properties
 /// through the Windows UIA client API. This validates what selftests cannot:
 /// that accessibility annotations survive the cross-process UIA boundary.
 ///
@@ -134,7 +132,7 @@ public class ChartAccessibilityTests : AppTestBase
 
         // This test validates that the chart fixture is accessible regardless
         // of high-contrast mode. Since we cannot toggle high contrast from
-        // Appium, we verify the chart elements are present and accessible.
+        // winapp ui, we verify the chart elements are present and accessible.
         var lineChart = FindById("ChartA11y_E2E_LineChart");
         var barChart = FindById("ChartA11y_E2E_BarChart");
         var pieChart = FindById("ChartA11y_E2E_PieChart");

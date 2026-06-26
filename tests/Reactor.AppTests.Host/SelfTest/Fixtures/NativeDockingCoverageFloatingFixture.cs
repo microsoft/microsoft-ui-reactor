@@ -293,6 +293,99 @@ internal static class NativeDockingCoverageFloatingFixtures
     }
 
     /// <summary>
+    /// Issue #417 — the close-reason discriminator threads end-to-end through
+    /// a real <see cref="DockFloatingWindow.Open"/> window. A genuine
+    /// user/OS close (no stash) reports
+    /// <see cref="DockFloatingCloseReason.ContentClosed"/>; a synthetic
+    /// migration close that stashed
+    /// <see cref="DockFloatingCloseReason.MigratedToHost"/> + the migrated
+    /// pane via <see cref="DockFloatingTracker.SetPendingClose"/> right before
+    /// <c>Close()</c> reports that reason and pane in the args.
+    /// </summary>
+    internal class FloatingWindow_Close_ThreadsCloseReason(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            DockingNativeInterop.Register(host.Reconciler);
+
+            DockFloatingCloseReason? lastReason = null;
+            DockableContent? lastContent = null;
+            int closedCount = 0;
+
+            var userPane = new Document
+            {
+                Title = "UserClose",
+                Key = "reason:user",
+                Content = TextBlock("body-user"),
+                CanFloat = true,
+            };
+            var migratedPane = new Document
+            {
+                Title = "Migrated",
+                Key = "reason:migrated",
+                Content = TextBlock("body-migrated"),
+                CanFloat = true,
+            };
+            var managerEl = new DockManager
+            {
+                Layout = new DockTabGroup(new DockableContent[] { userPane, migratedPane }),
+                OnFloatingWindowClosed = args =>
+                {
+                    closedCount++;
+                    lastReason = args.Reason;
+                    lastContent = args.Content;
+                },
+            };
+            host.Mount(_ => managerEl);
+            await Harness.Render();
+
+            var savedPolicy = ReactorApp.ShutdownPolicy;
+            ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
+            try
+            {
+                // (1) Genuine user/OS close — nothing stashed → ContentClosed.
+                var userWindow = DockFloatingWindow.Open(userPane, manager: managerEl);
+                H.Check("FloatReason_User_OpenSucceeded", userWindow is not null);
+                userWindow?.Close();
+                await Harness.Render();
+                await Harness.Render();
+                H.Check("FloatReason_User_ClosedEventFired", closedCount == 1);
+                H.Check("FloatReason_User_ReasonIsContentClosed",
+                    lastReason == DockFloatingCloseReason.ContentClosed);
+                H.Check("FloatReason_User_ContentIsPane",
+                    ReferenceEquals(lastContent, userPane));
+
+                // (2) Synthetic migration close — stash MigratedToHost + the
+                // migrated pane right before Close() (mirrors the dock-back
+                // auto-close path) → the args carry that reason and pane.
+                var migWindow = DockFloatingWindow.Open(migratedPane, manager: managerEl);
+                H.Check("FloatReason_Migrated_OpenSucceeded", migWindow is not null);
+                if (migWindow is not null)
+                {
+                    DockFloatingTracker.SetPendingClose(
+                        migWindow, DockFloatingCloseReason.MigratedToHost, migratedPane);
+                    migWindow.Close();
+                    await Harness.Render();
+                    await Harness.Render();
+                }
+                H.Check("FloatReason_Migrated_ClosedEventFired", closedCount == 2);
+                H.Check("FloatReason_Migrated_ReasonIsMigratedToHost",
+                    lastReason == DockFloatingCloseReason.MigratedToHost);
+                H.Check("FloatReason_Migrated_ContentIsMigratedPane",
+                    ReferenceEquals(lastContent, migratedPane));
+            }
+            finally
+            {
+                ReactorApp.ShutdownPolicy = savedPolicy;
+            }
+
+            host.Mount(_ => TextBlock("float-reason-done"));
+            await Harness.Render();
+        }
+    }
+
+    /// <summary>
     /// Exercises <see cref="DockFloatingWindow.BuildFloatingRoot"/> directly
     /// without opening a real window — proves the element tree shape (the
     /// returned element is a TabViewElement-rooted chrome with one tab whose

@@ -1,6 +1,4 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using OpenQA.Selenium;
-using OpenQA.Selenium.Appium;
 using Microsoft.UI.Reactor.AppTests.Infrastructure;
 
 namespace Microsoft.UI.Reactor.AppTests.Tests;
@@ -9,7 +7,7 @@ namespace Microsoft.UI.Reactor.AppTests.Tests;
 /// End-to-end accessibility tests that validate UIA properties through the real
 /// UI Automation pipeline — the same path used by Narrator, NVDA, and FlaUI.
 ///
-/// These tests run OUT OF PROCESS via Appium/WinAppDriver, reading properties
+/// These tests run OUT OF PROCESS via winapp ui (UIA), reading properties
 /// through the Windows UIA client API (not WinUI's managed AutomationProperties).
 /// This validates that Reactor's accessibility modifiers produce correct UIA tree
 /// annotations visible to assistive technology.
@@ -74,23 +72,17 @@ public class AccessibilityTests : AppTestBase
         NavigateToA11yFixture();
 
         // Decorative images should be hidden from the UIA tree.
-        // When AccessibilityView=Raw, WinAppDriver may still find the element
+        // When AccessibilityView=Raw, winapp may still find the element
         // but it won't appear in the content/control views that screen readers use.
-        // Use a short timeout since we expect this element to be hidden.
-        Session.Manage().Timeouts().ImplicitWait = TimeSpan.FromMilliseconds(500);
         try
         {
             var img = FindById("A11y_DecorativeImg");
             Assert.IsNotNull(img, "Decorative image element should exist in raw tree");
         }
-        catch (WebDriverException)
+        catch (WinAppException)
         {
             // Element not found in UIA tree — also acceptable,
             // it means AccessibilityView.Raw correctly excluded it
-        }
-        finally
-        {
-            Session.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(2);
         }
     }
 

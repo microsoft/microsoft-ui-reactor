@@ -192,6 +192,34 @@ delta from the loaded run is per-content cost. The published baseline
 report's RN row mostly reflects engine-baseline — note that explicitly
 when comparing.
 
+## Allocation: `Alloc/render` + Gen0/1/2 (C# variants)
+
+Each C# `PerfTracker` also brackets the measured render loop with
+`GC.GetTotalAllocatedBytes()` and `GC.CollectionCount(0/1/2)`, snapshotted on the
+first render (so process-startup allocations are excluded) and read again at
+report time. Every `*.report.txt` now carries three extra lines:
+
+```
+Alloc/render: <managed bytes allocated per render>
+GC Gen0/1/2: <gen0> / <gen1> / <gen2>      (collections during the run)
+Gen0/Krender: <gen0 collections per 1,000 renders>
+```
+
+These are the **sensitive signal for allocation-reduction work**: the mean-ms and
+working-set figures barely move when a PR removes per-render allocations, but
+`Alloc/render` and `Gen0/Krender` track it directly. The `/perf` CI harness
+parses these and reports a Reactor `main`-vs-PR allocation table with the same
+paired 95%-CI gating as the timing metrics — see
+[`ci/README.md`](ci/README.md#the-comment). They are C#-only (no Rust/RN
+equivalent is collected) and absent in a harness built before the metric landed.
+
+> **Statistical gating note.** The `/perf` comparison reports the **median of 12
+> paired runs** per side and flags a metric as a win/regression only when the
+> **95% confidence interval of the paired delta excludes 0** — not a fixed
+> percentage floor. A 2-run median cannot resolve the ~1–3% deltas these PRs
+> target; its run-to-run swing is larger than the effect. Full rationale in
+> [`ci/README.md`](ci/README.md#variance-trust-the-delta-not-the-absolutes).
+
 ## Don'ts (so we don't redo this analysis)
 
 1. **Don't trust `CompositionTarget.Rendering` for "FPS."** It's UI-thread-

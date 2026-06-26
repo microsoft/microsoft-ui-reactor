@@ -28,6 +28,52 @@ Conventions for contributors:
 
 ### Added
 
+- **`DockFloatingWindowClosedEventArgs.Reason` — close-reason discriminator
+  for floating-window closes (spec 045 §5.3.5, issue #417).** A new
+  `required DockFloatingCloseReason Reason { get; init; }` on
+  `DockFloatingWindowClosedEventArgs`, with enum values `ContentClosed`
+  (content is gone — safe to release per-document resources tied to
+  `Content`), `MigratedToHost`, and `MigratedToFloat` (the pane is alive in
+  its new dock/float position — the close is synthetic and resources must
+  **not** be released). Previously every floating `Window.Closed` — including
+  the synthetic close Reactor fires right after a cross-window dock-back —
+  surfaced as one indistinguishable event, so consumers disposed live state
+  (SwapChainPanel, Win2D, file handles) out from under a still-mounted,
+  redocked page. The reason is stashed on the window holder
+  (`DockFloatingTracker.SetPendingClose`) immediately before the synthetic
+  `Close()` and read once by the `Closed` handler; a window with no stash
+  reports `ContentClosed`. The migrated reason is scoped to the **specific**
+  consumed pane (`DockDragSession.LastConsumedPane`), so a multi-pane float
+  that loses one tab to a dock-back still reports `ContentClosed` for a later
+  genuine close of its surviving tabs. `Reason` is intentionally `required`:
+  there is exactly one internal raise site, so it can never silently default a
+  migration to a wrong reason.
+
+- **Command debouncing: `Command.DebounceMs` (issue #136).**
+  Commands can declare a leading-edge debounce window via `DebounceMs` (default
+  `0` = off) to absorb double-clicks without reaching for `Task.Delay`. When
+  routed through `UseCommand`, the first fire is accepted and any subsequent fire
+  within the window is dropped; `IsDebouncing` drives `IsEnabled = false` so the
+  bound control visibly disables and then re-enables when the window elapses. For
+  async commands the disabled window is the longer of the lambda's lifetime
+  (`IsExecuting`) and `DebounceMs`. Debounce state lives in the `UseCommand` hook
+  store, so a raw `new Command { DebounceMs = … }` bound directly (not through
+  `UseCommand`) is inert. `UseCommand` now consumes a stable hook shape regardless
+  of the command's sync/async/debounce shape.
+
+- **`ReactorApp.RegisterAllBuiltIns()` — opt-in bulk registration of the built-in
+  control catalog (spec 048 §3.4, issue #486).** Built-in handler registration is
+  now lazy — each factory registers its own control on first use — so the trimmer
+  can drop controls an app never reaches. That broke the documented direct-record
+  construction idiom (`new TextBlockElement(…) { … }`, the "Hot loops" pattern in
+  `docs/guide/advanced.md`), which bypasses factories and so never triggers
+  registration. Call `RegisterAllBuiltIns()` once at startup to register the whole
+  catalog and keep that idiom working; apps that build UI exclusively through
+  factories don't need it, and a trimmed/NativeAOT build that never calls it still
+  drops unused controls. Relatedly, the reconciler now throws an actionable
+  `InvalidOperationException` (instead of silently mounting nothing) when it meets
+  an element record whose handler was never registered.
+
 - **`Callbacks<T>` — keep delegate props out of memo comparison (issue #151).**
   An opt-in, always-equal wrapper record (`Equals` returns `true`, `GetHashCode`
   returns `0`) for the delegate (callback) portion of a component's props. Because
@@ -304,6 +350,43 @@ Conventions for contributors:
   scroll host before mutating an inline-UI-bearing block and restores the user's real
   offset once layout settles, while never fighting a genuine user scroll. No new API
   surface, no per-app boilerplate.
+- **Multi-window teardown no longer faults with an `ACCESS_VIOLATION`
+  (issue #647).** Closing a docking tear-off floating preview window could
+  terminate the process with `0xC0000005` deep in the WinUI backdrop interop —
+  an unmanaged fault no `try`/`catch` can trap — corrupting the lifecycle of
+  windows opened later in the same process. Root cause: a transient auxiliary
+  window (e.g. a docking tear-off) could be elected the fallback `PrimaryWindow`,
+  so closing it fired `ShutdownPolicy.OnPrimaryWindowClosed` →
+  `Application.Exit()`, tearing down every still-open window mid-process; a
+  surviving host then wrote `Window.SystemBackdrop` on one of those torn-down
+  surfaces. Three reinforcing fixes (spec 036, spec 045): docking floating
+  windows opt out of primary election via `ExcludeFromShutdownPolicy`, and the
+  single election helper that runs on both initial registration and
+  unregister re-election never promotes an excluded window — so an auxiliary
+  window can neither become *nor remain* primary, and `PrimaryWindow` goes
+  `null` rather than to an excluded window when no eligible window remains;
+  `BackdropApplier` records torn-down surfaces in a process-wide closed-window
+  registry and skips every `SystemBackdrop` write (both `Apply` and `Reset`) on
+  them; and `ReactorWindow.Close()` is now idempotent — a redundant or
+  owner-cascade close performs the native close exactly once instead of
+  re-entering native teardown.
+- **TitleBar in a non-content-extended window no longer corrupts the heap on
+  close (issue #537).** A window whose `WindowSpec` set
+  `ExtendsContentIntoTitleBar = false` while its content still rendered a
+  `TitleBar(...)` element could terminate the process with
+  `STATUS_HEAP_CORRUPTION` when the window closed: the WinUI
+  `Microsoft.UI.Xaml.Controls.TitleBar` control only releases its caption-button
+  / AppWindow interop cleanly in content-extended mode, but Reactor allows that
+  combination (skipping `SetTitleBar`). Reactor now flips the window back into
+  content-extended mode just before the native close, while the AppWindow is
+  still alive, so the control tears down via its safe path. The flip is
+  idempotent and runs on every teardown path — `Close()`, the owner-close
+  cascade (including nested owned descendants), the chrome/Alt+F4 close, a direct
+  `Dispose()`, and `ReactorApp.Exit()` / shutdown-policy exit — so still-open
+  windows are covered no matter how the process winds down. The
+  `ExtendsContentIntoTitleBar` value observed while the window is alive is
+  unchanged; the flip happens only at close.
+- **Virtualized rows now reset per-item component state on recycle when keyed
   (issue #326).** `LazyVStack` / `LazyHStack` / `ItemsRepeater<T>` / `ItemsView<T>`
   now propagate the `keySelector` projection onto each realized row's top-level
   `Element.Key`. Post-#324 the ItemsRepeater recycle path reuses a realized
@@ -323,6 +406,22 @@ Conventions for contributors:
   control is no longer orphaned and the per-control tracking stays consistent.
   `ListView<T>` / `GridView<T>` already remount per realize and are unaffected.
 
+- **ItemsView multi-select checkmark no longer flickers during window resize
+  (issue #383).** In a `SelectionMode=Multiple` `ItemsView<T>`, the per-item
+  selection checkmark visibly faded out/in on every realized row while the
+  window was drag-resized. WinUI's `ItemsView` flips each realized
+  `ItemContainer`'s internal multi-select mode on every clear/prepare recycle
+  round-trip, re-running the `MultiSelectStates.Multiple` opacity storyboard with
+  `useTransitions: true`; and because the inner `ItemsRepeater` recycles its
+  realized set on every ancestor arrange pass during a resize, the storyboard
+  re-fired dozens of times per gesture. The recycle is intrinsic WinUI
+  viewport-manager behavior (not eliminable without regressing ItemsView sizing
+  — see the issue #383 investigation), so Reactor now collapses each realized
+  container's `Multiple`-state opacity storyboard keyframes to zero duration: the
+  animated `GoToState` still runs but snaps the checkmark to full opacity in the
+  same UI tick instead of fading it. Selection behavior, the recycle, and the
+  final checkmark visibility are unchanged — only the spurious fade is gone.
+
 - **`UseAnnounce().Announce(...)` now marshals to the UI thread automatically.**
   Previously, calling `Announce` off the UI thread (e.g. from a `Task.Run`
   continuation) threw `RPC_E_WRONG_THREAD` (0x8001010E) — the underlying WinUI
@@ -332,5 +431,20 @@ Conventions for contributors:
   when the live-region `TextBlock` is wired and re-marshals off-thread calls via
   `TryEnqueue`; the UI-thread fast path stays a single `HasThreadAccess` check.
   (issue #130)
+
+- **`UseNavigation` mutators are now thread-safe by default (issue #234).**
+  `NavigationHandle<TRoute>`'s `Navigate`, `GoBack`, `GoForward`, `Replace`,
+  `Reset`, `PopTo`, and `SetState` previously mutated the back/forward stacks
+  with no thread guard, so calling them off the UI thread (from a `Task.Run`,
+  a timer, or after `await … ConfigureAwait(false)`) could corrupt the stacks
+  or silently drop the navigation. Each mutator now auto-marshals the whole
+  operation onto the handle's captured UI dispatcher — completing the
+  thread-safety-by-default story that #212 started for `UseState` / `UseReducer`
+  — via the shared `UIThreadMarshal` gate. The UI-thread fast path stays a
+  single thread-id compare with zero allocation. When no dispatcher is available
+  (headless / unit-test contexts) or it has shut down, the off-thread call throws
+  a loud `InvalidOperationException` instead of corrupting state. On the UI thread
+  behavior is unchanged. The `RenderContext` setter marshal and the navigation
+  gate now share one `UIThreadMarshal.EnqueueOrThrow` implementation.
 
 ### Security

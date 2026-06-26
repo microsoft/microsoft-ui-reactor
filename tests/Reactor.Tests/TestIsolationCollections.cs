@@ -49,3 +49,14 @@ public sealed class JumpListGlobalsCollection { }
 /// </summary>
 [CollectionDefinition("HotReload", DisableParallelization = true)]
 public sealed class HotReloadCollection { }
+
+/// <summary>
+/// xUnit collection marker for tests that mutate process-wide
+/// <see cref="Microsoft.UI.Reactor.Diagnostics.LayoutFootgunDetector"/> state — the diagnostic
+/// <c>Sink</c>, the emit-once dedup set (<c>ResetForTests()</c>), and
+/// <see cref="Microsoft.UI.Reactor.Core.ReactorFeatureFlags.WarnLayoutFootguns"/>. These statics
+/// are global to the test process, so the tests must run exclusively to avoid cross-test
+/// interference.
+/// </summary>
+[CollectionDefinition("LayoutFootgunDetector", DisableParallelization = true)]
+public sealed class LayoutFootgunDetectorCollection { }

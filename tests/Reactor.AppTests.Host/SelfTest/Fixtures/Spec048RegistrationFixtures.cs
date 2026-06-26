@@ -471,4 +471,49 @@ internal static class Spec048RegistrationFixtures
             return Task.CompletedTask;
         }
     }
+
+    /// <summary>
+    /// Issue #486 / spec 048 §3.4 — positive end-to-end proof for the public
+    /// opt-in <see cref="Microsoft.UI.Reactor.ReactorApp.RegisterAllBuiltIns"/>:
+    /// after it runs, an element record constructed <b>directly</b> (bypassing
+    /// its factory — the documented hot-loop idiom in <c>docs/guide/advanced.md</c>
+    /// "Registration contract") mounts to a real WinUI control instead of
+    /// tripping the unregistered-handler throw.
+    ///
+    /// <para>The xunit drift guards in <c>Reactor.Tests</c> assert registry
+    /// presence (<c>ControlRegistry.Contains*</c>); this fixture asserts the
+    /// actual mount, which needs a live reconciler + WinUI control and therefore
+    /// lives in the selftest tier. Covers both registration shapes:
+    /// <see cref="TextBlockElement"/> (generated descriptor-backed) and
+    /// <see cref="ButtonElement"/> (decorator-backed, registered via
+    /// <c>RegDecorator&lt;&gt;</c>).</para>
+    /// </summary>
+    internal class RegisterAllBuiltInsEnablesDirectRecordMount(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            // Opt into the whole built-in catalog up front — the documented
+            // prerequisite for the direct-record idiom. Idempotent: the test
+            // host's module initializer already ran it, so this also exercises
+            // the no-op second-call path.
+            Microsoft.UI.Reactor.ReactorApp.RegisterAllBuiltIns();
+
+            // Construct the cells DIRECTLY (no factory call). Without a
+            // registered handler this mount would throw InvalidOperationException
+            // and fail the fixture before the assertions below.
+            var host = H.CreateHost();
+            host.Mount(_ => VStack(
+                new TextBlockElement("probe-direct-textblock"),
+                new ButtonElement("probe-direct-button")));
+
+            await Harness.Render();
+
+            // A real WinUI TextBlock / Button in the content tree proves the
+            // direct record mounted — not merely that the registry holds a slot.
+            H.Check("Spec048_DirectRecord_TextBlock_Mounted",
+                H.FindText("probe-direct-textblock") is not null);
+            H.Check("Spec048_DirectRecord_Button_Mounted",
+                H.FindControl<Microsoft.UI.Xaml.Controls.Button>(static _ => true) is not null);
+        }
+    }
 }

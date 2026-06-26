@@ -2434,6 +2434,22 @@ public static partial class ElementExtensions
     }
 
     /// <summary>
+    /// Internal update-time counterpart to <see cref="OnMountAdd"/>: composes an
+    /// action that the reconciler runs on every in-place update (never at mount),
+    /// after children are reconciled. Used by framework code (chart label a11y,
+    /// issue #162) to re-assert a hide over descendants realized on update.
+    /// Not exposed publicly — <see cref="ElementModifiers.OnUpdateAction"/> is internal.
+    /// </summary>
+    internal static T OnUpdateAdd<T>(this T el, Action<FrameworkElement> action) where T : Element
+    {
+        var existing = el.Modifiers?.OnUpdateAction;
+        Action<FrameworkElement> combined = existing is null
+            ? action
+            : fe => { existing(fe); action(fe); };
+        return Modify(el, new ElementModifiers { OnUpdateAction = combined });
+    }
+
+    /// <summary>
     /// Opts a subtree in or out of window drag-from-background hit testing.
     /// Use <c>.Drag(false)</c> on custom interactive regions that should not start a window move.
     /// </summary>

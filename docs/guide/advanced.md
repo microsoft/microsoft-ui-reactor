@@ -529,6 +529,29 @@ var cell = new TextBlockElement(label)
 };
 ```
 
+**Registration contract.** Factory methods (`TextBlock(...)`, `Button(...)`,
+…) carry a one-time handler-registration touch that runs the first time the
+factory is called — that is how the reconciler learns which WinUI control to
+mount for an element record. Direct-record construction (`new
+TextBlockElement(...)`) deliberately bypasses the factory, so it also bypasses
+that registration. The idiom is fully supported, but **the caller must ensure
+the handler is registered before the element is first mounted**, otherwise the
+reconciler throws `InvalidOperationException` on mount. Pick one:
+
+- call the matching factory once at startup (`_ = TextBlock("");`), or
+- opt into the full built-in catalog with
+  `ReactorApp.RegisterAllBuiltIns()` at startup (simplest; the right choice
+  unless you are publishing a trimmed/NativeAOT binary that deliberately keeps
+  only the controls it uses), or
+- register the specific handler explicitly with
+  `ControlRegistry.Register<TElement, TControl>(...)` (control-backed
+  elements) or `ControlRegistry.RegisterDecorator<TElement>(...)`
+  (decorator-backed elements that wrap/forward to a child).
+
+The reference app below calls `ReactorApp.RegisterAllBuiltIns()` once in
+`Main` before the hot loop runs, so its `new TextBlockElement(...)` cells mount
+without paying a per-cell factory call.
+
 **Workload shape.** Use this idiom in lists or grids with hundreds-plus
 elements per render — tickers, log tables, observability dashboards.
 Don't adopt it for ordinary screens. The fluent chain is the right tool

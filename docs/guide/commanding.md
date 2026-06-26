@@ -70,11 +70,13 @@ do not set them individually on each control.
 | `ExecuteAsync` | `Func<Task>?` | Async action — pair with [`UseCommand`](hooks.md) for tracking. |
 | `CanExecute` | `bool` (default `true`) | Whether the action can run right now. |
 | `IsExecuting` | `bool` | Managed by `UseCommand` while async work is in flight. |
+| `DebounceMs` | `int` (default `0`) | Leading-edge debounce window in ms. `0` = off. Realized by `UseCommand`. |
+| `IsDebouncing` | `bool` | Managed by `UseCommand` while inside the `DebounceMs` window. |
 | `Icon` | `IconData?` | `SymbolIcon(name)`, `FontIcon(...)`, or `BitmapIcon(uri)`. |
 | `Description` | `string?` | Tooltip / accessibility description. |
 | `Accelerator` | `KeyboardAcceleratorData?` | Keyboard binding (`Accelerator(VirtualKey.S, Control)`). |
 | `AccessKey` | `string?` | Single-character Alt-prefix shortcut for menu items. |
-| `IsEnabled` | `bool` (computed) | `CanExecute && !IsExecuting` — what every surface reads. |
+| `IsEnabled` | `bool` (computed) | `CanExecute && !IsExecuting && !IsDebouncing` — what every surface reads. |
 
 `Command<T>` exposes the same members with `Execute: Action<T>?` and
 `ExecuteAsync: Func<T, Task>?` — the action receives an argument from
@@ -294,6 +296,56 @@ class AsyncWithProgressExample : Component
 > the behavior is correct; recreate it per page (via
 > [`UseMemo`](hooks.md) keyed on page identity) when you want
 > per-surface isolation.
+
+## Debouncing double-clicks: `DebounceMs`
+
+`IsExecuting` tracks the lifetime of an `ExecuteAsync` lambda — great
+when there's real async work to wait on. But the common "stop the
+double-click from re-firing the same action" case has no async work to
+track: the action is synchronous (spawn a process, kick off a parent
+re-render) and returns instantly, so `IsExecuting` blinks for
+microseconds and the second click slips through. The historical
+workaround was to wrap the sync action in `ExecuteAsync` purely to slip
+in a `Task.Delay`, leaving magic numbers in the source.
+
+`DebounceMs` is the framework-owned replacement. It applies a
+**leading-edge** debounce: the first fire is accepted, every subsequent
+fire within `DebounceMs` of it is dropped, and `IsEnabled` reports
+`false` for the duration so the bound control visibly disables and then
+re-enables when the window elapses.
+
+```csharp
+// Sync action + framework-managed debounce — no fake async, no Task.Delay.
+var runCmd = UseCommand(new Command
+{
+    Label = "Run",
+    Execute = () => RunStep(step),
+    DebounceMs = 1500,
+});
+
+// Async action — IsExecuting still tracks the lambda; DebounceMs keeps the
+// button disabled past the lambda's return (the disabled window is the
+// longer of the two).
+var regenCmd = UseCommand(new Command
+{
+    Label = "Re-gen",
+    ExecuteAsync = () => { RegenFromHere(step); return Task.CompletedTask; },
+    DebounceMs = 250,
+});
+```
+
+> **Caveat:** `DebounceMs` requires `UseCommand`. The debounce window and
+> its re-enable timer are persistent state, and a plain `Command` record
+> is immutable and reconstructed on every render — it has nowhere to keep
+> that state. `UseCommand` stores it in the component's hook table (the
+> same place it keeps the async re-entrance guard), so always route a
+> debounced command through `UseCommand`. A raw
+> `new Command { DebounceMs = … }` that is bound directly (never passed to
+> `UseCommand`) does **not** debounce. Debounce is **leading-edge and
+> fixed-duration** by design — fire first, then ignore. Trailing-edge
+> "wait for the input to settle, then fire once" debounce
+> (search-as-you-type) is a different concept and is not what `DebounceMs`
+> provides.
 
 ## Parameterized commands
 

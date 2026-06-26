@@ -9,6 +9,7 @@ namespace Microsoft.UI.Reactor.Tests.Docking.Native;
 /// the object-ref payload that replaces upstream WinUI.Dock's static
 /// GUID→object table.
 /// </summary>
+[Xunit.Collection("DockingGlobals")]
 public class DockDragSessionTests
 {
     private static (DockableContent pane, DockManager mgr) MakePair(string title = "p")

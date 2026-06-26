@@ -737,6 +737,59 @@ hitting `Reg<TextBlockElement, …>` is silently absorbed — spec §10.3.)
       build is clean — i.e., no remaining call sites reference the
       removed method.
 
+#### Issue #486 long-term decision — **Option A (public opt-in `RegisterAllBuiltIns`)**
+
+> **Decision (issue #486 acceptance item 2): adopt option A.** The
+> eager `RegisterV1BuiltInHandlers` is reframed as a public, opt-in
+> `Microsoft.UI.Reactor.ReactorApp.RegisterAllBuiltIns()`
+> (`src/Reactor/Hosting/ReactorApp.BuiltIns.cs`). Apps that want every
+> built-in available — including for the direct-record-initializer hot
+> idiom (`new TextBlockElement(...) { … }`, spec 034 §B / `advanced.md`
+> "Hot loops") — call it once at startup; apps that want a trimmed
+> binary do not call it and let each factory register only what it uses.
+> `StressPerf.ReactorOptimized` calls it as its one-line startup prelude,
+> so the documented 4% direct-record win is preserved.
+>
+> **Why A over B and C:**
+> - **(B) drop §3.4 / built-ins always eager** was rejected: it
+>   abandons the built-in trim story (exit gate #4) that the user asked
+>   for up front. The mechanism to trim built-ins already shipped
+>   (factory-as-registration + `Reg<>` latches); option B would throw
+>   that away.
+> - **(C) source-gen per-record static-field initializer** was rejected
+>   as premature: it is the most magic of the three, re-opens the
+>   precise-cctor-on-the-hot-path concern (spec §4 / §128-130) the design
+>   deliberately avoided, and adds a generator + opt-in attribute surface
+>   for a problem a one-line public call already solves. It remains
+>   available as a future Phase-4 ergonomic layer (spec §13.4) if direct-
+>   record authoring becomes common, but is not needed now.
+>
+> **Why A does not reintroduce the rejected roots (spec §4):** the
+> rejected static-cctor-on-the-record and `[ModuleInitializer]` shapes
+> are *unconditional* — they run on type-load / module-load, so the
+> trimmer can never prove them dead and they root the whole catalog.
+> `RegisterAllBuiltIns()` is an ordinary public method: NativeAOT
+> whole-program reachability removes it (and every handler/control it
+> names) when no reachable code calls it. The Hello-World trim-proof app
+> never calls it, so the §3.5 forbidden-symbol assertion stays green —
+> verified that the trim story is unaffected.
+>
+> **Clear failure mode (acceptance item 1, already landed
+> `c8d1cd41`):** the reconciler throws `InvalidOperationException` from
+> `Reconciler.ThrowNoHandlerRegistered` when an element record reaches
+> mount with no handler in any dispatch arm. The message names the
+> concrete element type and lists all remediation paths — call the
+> factory once, `ReactorApp.RegisterAllBuiltIns()`, or
+> `ControlRegistry.Register<,>`. Composition primitives (Func/Memo/
+> ErrorBoundary/Component) and `EmptyElement` are handled before the
+> throw, so it never fires for a legitimately handler-less element.
+>
+> **Single catalog list:** the test bootstrap
+> (`tests/_shared/BuiltInHandlerBootstrap.cs`) now delegates its
+> `[ModuleInitializer]` to `ReactorApp.RegisterAllBuiltIns()`, so the
+> built-in list lives in exactly one place and the test convenience can
+> never drift from production.
+
 > **§3.4 close-out — pure option A (delete bootstrap; tests register
 > separately).**
 >

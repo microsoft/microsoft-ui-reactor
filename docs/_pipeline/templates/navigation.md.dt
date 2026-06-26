@@ -404,9 +404,16 @@ class Shell : Component
 ```
 
 The handle is bound to the dispatcher of the component that created
-it. Calling `Nav.Navigate(...)` from a background timer or an event
-handler captured in a closure that outlives the page is a silent
-no-op when the bound dispatcher has shut down. Use
+it. As of issue #234 the mutators (`Navigate`, `GoBack`, `GoForward`,
+`Replace`, `Reset`, `PopTo`, `SetState`) are **thread-safe by default**:
+calling `Nav.Navigate(...)` from a background timer or a closure that
+runs off the UI thread auto-marshals the navigation onto that captured
+dispatcher — mirroring the `UseState` / `UseReducer` contract (see
+[Threading and Dispatch](threading-and-dispatch.md)). If the dispatcher
+was never captured, or has already shut down, the call throws
+`InvalidOperationException` loudly rather than silently corrupting the
+back/forward stacks. Stashing the handle in a `static` is still a smell
+— it outlives the page and leaks the dispatcher it captured — so prefer
 `UseNavigation<TRoute>()` (no initial value) in a descendant component
 to access the same handle via context, or pass the handle through
 [Context](context.md) explicitly.

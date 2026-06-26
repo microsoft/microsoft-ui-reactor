@@ -1025,7 +1025,7 @@ public abstract record Element
     /// Brushes and FontFamily are compared structurally because fluent helpers
     /// (<c>.Background("#color")</c>, <c>.FontFamily("Segoe UI")</c>) allocate
     /// fresh instances on every render even when the underlying values match.
-    /// Ignores OnMountAction (only runs at mount time, not during update).
+    /// Ignores OnMountAction and OnUpdateAction (side-effect hooks, not render state).
     /// </summary>
     internal static bool ModifiersEqual(ElementModifiers? a, ElementModifiers? b)
     {
@@ -1058,6 +1058,7 @@ public abstract record Element
             && a.FontWeight == b.FontWeight
             && FontFamiliesEqual(a.FontFamily, b.FontFamily)
             // Skip OnMountAction — only runs at mount time
+            // Skip OnUpdateAction — side-effect hook, fired each update from ApplyModifiers
             // Skip event handlers — delegate comparison is unreliable, conservative false
             && a.OnSizeChanged is null && b.OnSizeChanged is null
             && a.OnPointerPressed is null && b.OnPointerPressed is null
@@ -1592,6 +1593,11 @@ public record ElementModifiers
     public ElementSoundMode? ElementSoundMode { get; init; }
     public Action<FrameworkElement>? OnMountAction { get; init; }
     public Action<FrameworkElement>? OnUnmountAction { get; init; }
+    // Update-time counterpart to OnMountAction: runs on every in-place update
+    // (oldM is not null) after children have been reconciled. Internal-only — the
+    // framework uses it (chart label a11y, issue #162) to re-assert a side effect
+    // over descendants realized during an update; not yet part of the public DSL.
+    internal Action<FrameworkElement>? OnUpdateAction { get; init; }
 
     // ── Typography (applies to any Control or TextBlock) ────────────
     public FontFamily? FontFamily { get; init; }
@@ -1730,6 +1736,7 @@ public record ElementModifiers
             ElementSoundMode = other.ElementSoundMode ?? ElementSoundMode,
             OnMountAction = other.OnMountAction ?? OnMountAction,
             OnUnmountAction = other.OnUnmountAction ?? OnUnmountAction,
+            OnUpdateAction = other.OnUpdateAction ?? OnUpdateAction,
             FontFamily = other.FontFamily ?? FontFamily,
             FontSize = other.FontSize ?? FontSize,
             FontWeight = other.FontWeight ?? FontWeight,
@@ -4255,7 +4262,15 @@ public partial record TitleBarElement(
     {
         if (global::Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal is { } host)
         {
-            var explicitValue = host.OwningWindow?.Spec.ExtendsContentIntoTitleBar;
+            var owningWindow = host.OwningWindow;
+            // Record that a WinUI TitleBar control is mounted in this window —
+            // including the explicit-false case below where we skip SetTitleBar.
+            // The control corrupts the heap on teardown when the window is NOT in
+            // content-extended mode, so the window flips ExtendsContentIntoTitleBar
+            // back to true just before native close. (issue #537)
+            owningWindow?.MarkTitleBarControlPresent();
+
+            var explicitValue = owningWindow?.Spec.ExtendsContentIntoTitleBar;
             if (explicitValue == false) return;
             if (explicitValue is null)
                 host.Window.ExtendsContentIntoTitleBar = true;

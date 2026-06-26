@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using Microsoft.UI.Xaml;
 
 namespace Microsoft.UI.Reactor.Core.V1Protocol;
@@ -315,5 +317,22 @@ public static class ControlRegistry
     /// <see cref="RegisterDecoratorForDerivedTypes{TBase}"/>.
     /// </summary>
     internal static bool ContainsBase(Type baseType) => s_baseEntries.ContainsKey(baseType);
+
+    /// <summary>
+    /// Spec 048 §3.4 — snapshot of every element type registered via an
+    /// exact-type entry (<see cref="Register{TElement,TControl}"/> /
+    /// <see cref="RegisterDecorator{TElement}"/>). Test/diagnostic surface; the
+    /// catalog-drift guard for <c>ReactorApp.RegisterAllBuiltIns()</c> compares
+    /// this against its expected built-in set.
+    /// </summary>
+    internal static IReadOnlyCollection<Type> RegisteredElementTypes => s_entries.Keys.ToArray();
+
+    /// <summary>
+    /// Spec 048 §3.4 — snapshot of every base type registered via a base-derived
+    /// entry (<see cref="RegisterForDerivedTypes{TBase,TControl}"/> /
+    /// <see cref="RegisterDecoratorForDerivedTypes{TBase}"/>). Test/diagnostic
+    /// surface; companion to <see cref="RegisteredElementTypes"/>.
+    /// </summary>
+    internal static IReadOnlyCollection<Type> RegisteredBaseElementTypes => s_baseEntries.Keys.ToArray();
 
 }

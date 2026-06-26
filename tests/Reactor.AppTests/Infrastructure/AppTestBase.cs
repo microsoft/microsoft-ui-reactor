@@ -1,22 +1,33 @@
 using System.Drawing;
+using System.Globalization;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using OpenQA.Selenium;
-using OpenQA.Selenium.Appium;
-using OpenQA.Selenium.Appium.Windows;
-using OpenQA.Selenium.Support.UI;
 
 namespace Microsoft.UI.Reactor.AppTests.Infrastructure;
 
 /// <summary>
-/// Base class for all Appium-based UI test classes.
-/// Provides helpers for navigation, element lookup, waiting, and DPI-aware assertions.
+/// Base class for all UI test classes. Provides helpers for navigation, element lookup,
+/// waiting, and DPI-aware assertions.
+///
+/// Drives the running Host app through <see cref="WinAppUi"/> (the <c>winapp ui</c> CLI,
+/// UIA-based) instead of an Appium <c>WindowsDriver</c> session. Method signatures are kept
+/// identical to the former Appium harness so existing test bodies keep their shape — element
+/// handles are now <see cref="UiElement"/> rather than <c>WindowsElement</c>.
 /// </summary>
 public class AppTestBase
 {
-    /// <summary>
-    /// The active WindowsDriver session.
-    /// </summary>
-    protected static WindowsDriver<WindowsElement> Session => TestSession.Session;
+    /// <summary>The winapp-backed UI automation driver bound to the Host window.</summary>
+    protected static WinAppUi App => TestSession.App;
+
+    /// <summary>In-process UIA property reader (fallback for properties winapp can't surface).</summary>
+    protected static IUiaPropertyReader Uia => TestSession.Uia;
+
+    /// <summary>HWND of the primary Host window.</summary>
+    protected static long HostHwnd => TestSession.HostHwnd;
+
+    /// <summary>Build a <see cref="UiElement"/> handle for a selector against the host window.</summary>
+    protected static UiElement Element(string selector, string? automationId = null, long hwnd = 0,
+        UiRect? cachedBounds = null) =>
+        new(App, Uia, selector, automationId, hwnd == 0 ? TestSession.HostHwnd : hwnd, cachedBounds);
 
     // Per-test interactivity preflight — bails out as Inconclusive (not Failed)
     // when the workstation is locked or the session is disconnected, so flake
@@ -24,7 +35,26 @@ public class AppTestBase
     [TestInitialize]
     public void GuardSessionInteractive()
     {
+        _winappCountAtStart = WinAppUi.InvocationCount;
+        _testStopwatch = System.Diagnostics.Stopwatch.StartNew();
         SessionInteractivityGuard.EnsureInteractive("TestInitialize");
+    }
+
+    /// <summary>Injected by MSTest; used to attribute winapp invocation counts to each test.</summary>
+    public TestContext? TestContext { get; set; }
+
+    private long _winappCountAtStart;
+    private System.Diagnostics.Stopwatch? _testStopwatch;
+
+    // Record how many winapp.exe processes this test spawned (process-per-call overhead).
+    [TestCleanup]
+    public void RecordWinAppInvocations()
+    {
+        var spawned = WinAppUi.InvocationCount - _winappCountAtStart;
+        var seconds = (_testStopwatch?.Elapsed.TotalSeconds) ?? 0;
+        var name = TestContext?.TestName ?? GetType().Name;
+        TestContext?.WriteLine($"winapp-invocations={spawned}");
+        WinAppMetrics.Record(name, spawned, seconds);
     }
 
     private static string? _currentFixture;
@@ -39,38 +69,40 @@ public class AppTestBase
         if (_currentFixture == name)
             return;
 
+        // Navigating to a different fixture breaks any consecutive-send chain.
+        UiElement.ResetTypingContext();
+
         var expected = $"Loaded: {name}";
 
         // Click + wait. If the click is silently absorbed (observed when the
         // previous test left a flyout open, or when a Reset re-render races the
         // navigator's hit-test rebuild), the wait times out — retry the click
-        // once before giving up. This keeps fast paths fast (no extra waits in
-        // the common case) but absorbs the occasional missed click.
+        // once before giving up.
         try
         {
             for (int attempt = 0; attempt < 2; attempt++)
             {
-                Session.FindElement(MobileBy.AccessibilityId($"Nav_{name}")).Click();
-                try
+                App.Invoke($"Nav_{name}");
+                if (App.WaitForValue("FixtureStatus", expected, timeoutMs: 5000))
                 {
-                    WaitForText("FixtureStatus", expected, timeoutMs: 5000);
                     _currentFixture = name;
                     return;
                 }
-                catch (WebDriverTimeoutException) when (attempt == 0)
-                {
-                    // Brief pause before the retry so the next click doesn't land in
-                    // the same window that swallowed the first one.
+                if (attempt == 0)
                     Thread.Sleep(250);
-                }
             }
+
+            var lastSeen = App.GetValue("FixtureStatus") ?? "<not found>";
+            throw new WinAppTimeoutException(
+                $"Timed out waiting for fixture '{name}' to load (FixtureStatus expected " +
+                $"'{expected}', last-seen '{lastSeen}').");
         }
-        catch (WebDriverException)
+        catch (WinAppException)
         {
             // The screen may have locked between the preflight check and the click.
             // Recheck — if locked, surface as Inconclusive; otherwise rethrow as a
             // real test failure.
-            SessionInteractivityGuard.RecheckAfterWebDriverFailure($"NavigateToFixture({name})");
+            SessionInteractivityGuard.RecheckAfterFailure($"NavigateToFixture({name})");
             throw;
         }
     }
@@ -79,13 +111,6 @@ public class AppTestBase
     /// Forces re-navigation to the fixture even if it's the current one.
     /// Use when the test modifies fixture state and needs a fresh start.
     /// </summary>
-    /// <remarks>
-    /// Resets the host to "Ready" first (which un-mounts the fixture's component
-    /// tree, discarding any useState) and then clicks the Nav_ button to remount.
-    /// Without the reset step, clicking the same nav button a second time is a
-    /// no-op in TestHost (setFixture is called with the same value), and state
-    /// from the previous run leaks into the next test.
-    /// </remarks>
     protected void NavigateToFixtureFresh(string name)
     {
         ResetFixture();
@@ -100,45 +125,117 @@ public class AppTestBase
     {
         try
         {
-            var reset = Session.FindElement(MobileBy.AccessibilityId("ResetFixture"));
-            reset.Click();
-            WaitForText("FixtureStatus", "Ready", timeoutMs: 3000);
+            if (!App.Exists("ResetFixture"))
+                return; // not present yet (e.g., before first navigation)
+            App.Invoke("ResetFixture");
         }
-        catch (WebDriverException)
+        catch (WinAppException)
         {
             // Reset button may not be present yet (e.g., before first navigation).
+            return;
         }
+
+        // The reset was invoked, so the fixture must report Ready. If it doesn't, the next
+        // navigation can run against stale fixture state (and a same-name re-nav no-ops in the
+        // host because UseState suppresses a rerender when the value is unchanged), so fail loudly
+        // rather than silently proceeding. Thrown outside the catch above so it isn't swallowed as
+        // a "button not present" case.
+        if (!App.WaitForValue("FixtureStatus", "Ready", timeoutMs: 3000))
+            throw new WinAppException(
+                "ResetFixture was invoked but FixtureStatus never reached 'Ready' within 3000ms; " +
+                "the next navigation could run against stale fixture state.");
+    }
+
+    /// <summary>
+    /// Selects (activates) a tab in a WinUI <c>TabView</c> by its visible header title.
+    /// WinUI surfaces only the *selected* tab's content to UI Automation — an inactive tab's
+    /// content subtree is not in the tree (verified: only the active tab's content elements
+    /// resolve via <c>winapp ui search</c>). Tab *headers*, however, are always present (verified
+    /// on a 3-tab group: inactive tabs still expose their TabItem + caption), so a test that
+    /// needs to read an inactive tab's content activates that tab first.
+    ///
+    /// Resolution is deliberately indirect. The title is an ambiguous text selector — it
+    /// substring-matches the caption TextBlock, the pane Group, and (for pinnable docking tabs)
+    /// the pin button, whose AutomationId embeds the pane key (e.g. <c>pin:dock-input:right</c>).
+    /// Worse, a pinnable tab renders a composite (StackPanel) header, so the <c>TabViewItem</c>
+    /// itself has no Name and is NOT returned by a text search for the title — a direct "find the
+    /// TabItem named X" lookup finds nothing, and a plain Invoke(title) toggles the pin button.
+    /// So resolve the tab from its caption's owning <c>TabItem</c>.
+    ///
+    /// Prefer the <c>invokableAncestor</c> that <c>search</c> already computes in the SAME call:
+    /// resolving via a second <c>inspect --ancestors</c> opens a re-render race (selecting the
+    /// previous tab re-renders the strip and stales the caption's hash slug) — that race is why
+    /// SelectTab worked for the first tab but threw "No tab header found" for the second. The
+    /// inspect walk remains a fallback for older winapp builds that don't emit invokableAncestor.
+    /// </summary>
+    protected void SelectTab(string title)
+    {
+        var matches = App.Search(title);
+
+        // A directly-named TabItem (string-header / non-pinnable tabs) can be invoked as-is.
+        var namedTab = matches.FirstOrDefault(m =>
+            string.Equals(m.Type, "TabItem", StringComparison.OrdinalIgnoreCase) && m.Name == title);
+        if (namedTab is not null)
+        {
+            App.Invoke(namedTab.Selector);
+            return;
+        }
+
+        // Composite/pinnable header: the caption TextBlock (exact Name==title) carries its owning
+        // TabItem as invokableAncestor — race-free, from this one search call.
+        var captionWithTab = matches.FirstOrDefault(m =>
+            m.Name == title &&
+            string.Equals(m.InvokableAncestorType, "TabItem", StringComparison.OrdinalIgnoreCase) &&
+            m.InvokableAncestorSelector is not null);
+        if (captionWithTab is not null)
+        {
+            App.Invoke(captionWithTab.InvokableAncestorSelector!);
+            return;
+        }
+
+        // Fallback (older winapp without invokableAncestor): caption Text → inspect-ancestors walk.
+        var caption = matches.FirstOrDefault(m =>
+                          string.Equals(m.Type, "Text", StringComparison.OrdinalIgnoreCase) && m.Name == title)
+                      ?? matches.FirstOrDefault(m => m.Name == title && !m.IsInvokable);
+        if (caption is not null && App.ResolveAncestorTab(caption.Selector) is { } tabSelector)
+        {
+            App.Invoke(tabSelector);
+            return;
+        }
+
+        throw new WinAppException($"No tab header found for title '{title}'.");
     }
 
     /// <summary>
     /// Finds an element by its AutomationId (UIA accessibility identifier).
+    /// Throws when no element matches, mirroring the former FindElement contract.
     /// </summary>
-    protected WindowsElement FindById(string automationId)
-    {
-        return Session.FindElement(MobileBy.AccessibilityId(automationId));
-    }
+    protected UiElement FindById(string automationId)
+        => UiElementResolver.FindByAutomationId(App, Uia, HostHwnd, automationId);
 
     /// <summary>
     /// Finds an element by its Name property.
     /// </summary>
-    protected WindowsElement FindByName(string name)
-    {
-        return Session.FindElement(MobileBy.Name(name));
-    }
+    protected UiElement FindByName(string name)
+        => UiElementResolver.FindByName(App, Uia, HostHwnd, name);
 
     /// <summary>
     /// Waits for an element with the given AutomationId to appear.
     /// </summary>
-    protected WindowsElement WaitForElement(string automationId, int timeoutMs = 5000)
+    protected UiElement WaitForElement(string automationId, int timeoutMs = 5000)
     {
-        var wait = new DefaultWait<WindowsDriver<WindowsElement>>(Session)
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        Exception? last = null;
+        while (DateTime.UtcNow < deadline)
         {
-            Timeout = TimeSpan.FromMilliseconds(timeoutMs),
-            PollingInterval = TimeSpan.FromMilliseconds(100),
-        };
-        wait.IgnoreExceptionTypes(typeof(WebDriverException));
+            try { return FindById(automationId); }
+            catch (WinAppException ex) { last = ex; }
+            Thread.Sleep(100);
+        }
 
-        return wait.Until(driver => driver.FindElement(MobileBy.AccessibilityId(automationId)));
+        throw new WinAppTimeoutException(
+            $"Timed out after {timeoutMs}ms waiting for AutomationId='{automationId}' to appear." +
+            (last is null ? "" : $" Last error: {last.Message}"));
     }
 
     /// <summary>
@@ -146,29 +243,13 @@ public class AppTestBase
     /// </summary>
     protected void WaitForText(string automationId, string expectedText, int timeoutMs = 5000)
     {
-        var wait = new DefaultWait<WindowsDriver<WindowsElement>>(Session)
-        {
-            Timeout = TimeSpan.FromMilliseconds(timeoutMs),
-            PollingInterval = TimeSpan.FromMilliseconds(100),
-        };
-        wait.IgnoreExceptionTypes(typeof(WebDriverException));
+        if (App.WaitForValue(automationId, expectedText, contains: false, timeoutMs: timeoutMs))
+            return;
 
-        string lastSeen = "<not found>";
-        try
-        {
-            wait.Until(driver =>
-            {
-                var element = driver.FindElement(MobileBy.AccessibilityId(automationId));
-                lastSeen = element.Text ?? "<null>";
-                return lastSeen == expectedText ? element : null;
-            });
-        }
-        catch (WebDriverTimeoutException)
-        {
-            throw new WebDriverTimeoutException(
-                $"Timed out after {timeoutMs}ms waiting for AutomationId='{automationId}' " +
-                $"to have text '{expectedText}'. Last-seen text: '{lastSeen}'.");
-        }
+        var lastSeen = App.GetValue(automationId) ?? "<not found>";
+        throw new WinAppTimeoutException(
+            $"Timed out after {timeoutMs}ms waiting for AutomationId='{automationId}' " +
+            $"to have text '{expectedText}'. Last-seen text: '{lastSeen}'.");
     }
 
     /// <summary>
@@ -177,21 +258,14 @@ public class AppTestBase
     /// </summary>
     protected string WaitForTextContaining(string automationId, string substring, int timeoutMs = 5000)
     {
-        var wait = new DefaultWait<WindowsDriver<WindowsElement>>(Session)
+        if (!App.WaitForValue(automationId, substring, contains: true, timeoutMs: timeoutMs))
         {
-            Timeout = TimeSpan.FromMilliseconds(timeoutMs),
-            PollingInterval = TimeSpan.FromMilliseconds(100),
-        };
-        wait.IgnoreExceptionTypes(typeof(WebDriverException));
-
-        string lastText = "";
-        wait.Until(driver =>
-        {
-            var element = driver.FindElement(MobileBy.AccessibilityId(automationId));
-            lastText = element.Text ?? "";
-            return lastText.Contains(substring) ? element : null;
-        });
-        return lastText;
+            var seen = App.GetValue(automationId) ?? "<not found>";
+            throw new WinAppTimeoutException(
+                $"Timed out after {timeoutMs}ms waiting for AutomationId='{automationId}' " +
+                $"text to contain '{substring}'. Last-seen text: '{seen}'.");
+        }
+        return App.GetValue(automationId) ?? "";
     }
 
     /// <summary>
@@ -200,15 +274,12 @@ public class AppTestBase
     /// </summary>
     protected double GetDpiScale()
     {
-        var root = Session.FindElement(MobileBy.AccessibilityId("TestHostRoot"));
-        var name = root.GetAttribute("Name");
+        var name = App.GetProperty("TestHostRoot", "Name");
 
         // Expected format: "DpiScale:1.5000"
         if (name != null && name.StartsWith("DpiScale:") &&
             double.TryParse(name["DpiScale:".Length..],
-                global::System.Globalization.NumberStyles.Float,
-                global::System.Globalization.CultureInfo.InvariantCulture,
-                out var scale))
+                NumberStyles.Float, CultureInfo.InvariantCulture, out var scale))
         {
             return scale;
         }
@@ -234,8 +305,7 @@ public class AppTestBase
     /// </summary>
     protected Rectangle GetElementRect(string automationId)
     {
-        var element = FindById(automationId);
-        return element.Rect;
+        return FindById(automationId).Rect;
     }
 
     /// <summary>
@@ -253,15 +323,13 @@ public class AppTestBase
     /// </summary>
     protected void ClickButton(string nameOrId)
     {
-        try
+        if (App.Search(nameOrId).Any(m =>
+                string.Equals(m.AutomationId, nameOrId, StringComparison.Ordinal) ||
+                string.Equals(m.Selector, nameOrId, StringComparison.Ordinal)))
         {
-            var element = Session.FindElement(MobileBy.AccessibilityId(nameOrId));
-            element.Click();
+            App.Invoke(nameOrId);
+            return;
         }
-        catch (WebDriverException)
-        {
-            var element = Session.FindElement(MobileBy.Name(nameOrId));
-            element.Click();
-        }
+        FindByName(nameOrId).Invoke();
     }
 }

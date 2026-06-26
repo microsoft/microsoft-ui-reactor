@@ -70,6 +70,13 @@ public class PoolResetSetConsistencyTests
             { "XYFocusDown", "modifier takes ElementRef, not FrameworkElement" },
             { "XYFocusLeft", "modifier takes ElementRef, not FrameworkElement" },
             { "XYFocusRight", "modifier takes ElementRef, not FrameworkElement" },
+
+            // No matching modifier — the framework sets IsHitTestVisible imperatively
+            // (chart label/tick subtree hiding, issue #162) and the pool resets it
+            // alongside IsTabStop. There is deliberately no user-facing .IsHitTestVisible
+            // modifier, so there is nothing to trap; documented here so the reset is
+            // recognized as intentional rather than an oversight.
+            { "IsHitTestVisible", "no modifier; framework-internal, reset for chart-label hiding (#162)" },
         };
 
     [Fact]
@@ -171,7 +178,7 @@ class C
     /// <c>ElementPool.CleanElement</c> — from the method's opening brace up
     /// to (but not including) the <c>switch (fe)</c> that begins type-specific
     /// cleanup. Captures both <c>fe.PROP = ...</c> direct sets and
-    /// <c>fe.ClearValue(FrameworkElement.PROPProperty)</c> calls.
+    /// <c>RECEIVER.ClearValue((FrameworkElement|UIElement|Control).PROPProperty)</c> calls.
     /// </summary>
     private static HashSet<string> ReadResetProperties()
     {
@@ -209,16 +216,23 @@ class C
         var commonBlock = source.Substring(braceStart, switchMatch.Index - braceStart);
 
         // ClearValue() is a method call caught separately by the second regex;
-        // filter it out of the direct-assignment match set. Both regexes use
-        // the captured parameter name so renaming `fe` → `element` keeps working.
+        // filter it out of the direct-assignment match set.
         var escapedParam = Regex.Escape(paramName);
         var directAssignments = Regex.Matches(commonBlock, $@"\b{escapedParam}\.(\w+)\s*=")
             .Cast<Match>()
             .Select(m => m.Groups[1].Value)
             .Where(name => name != "ClearValue");
 
+        // ClearValue(OWNER.PROPProperty) resets. Receiver is `\w+` (not pinned to
+        // the captured param) because some resets run on a narrowed cast — e.g.
+        // `if (fe is Control c) c.ClearValue(Control.IsTabStopProperty)` (issue #162).
+        // The owner is restricted to the DependencyObject base types that actually
+        // back FrameworkElement instance properties (FrameworkElement / UIElement /
+        // Control); this deliberately excludes attached-property owners like
+        // AutomationProperties.* and Layout.FlexPanel.* — those are not per-element
+        // FrameworkElement properties and have never been part of this reset set.
         var clearValueProps = Regex.Matches(commonBlock,
-                $@"\b{escapedParam}\.ClearValue\(\s*FrameworkElement\.(\w+)Property\s*\)")
+                @"\b\w+\.ClearValue\(\s*(?:FrameworkElement|UIElement|Control)\.(\w+)Property\s*\)")
             .Cast<Match>()
             .Select(m => m.Groups[1].Value);
 

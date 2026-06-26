@@ -33,7 +33,7 @@ class Counter : Component
 |---|---|---|
 | Unit | `tests/Reactor.Tests/` | Hook semantics, reducer logic, modifier chains, analyzer rules. Fastest loop. |
 | Self-test | `tests/Reactor.SelfTests/` + `Reactor.AppTests.Host` | Component renders into a real WinUI tree; assertions via `VisualTreeHelper`. |
-| App E2E | `tests/Reactor.AppTests/` | WinAppDriver-driven full apps; click, type, screenshot diff. |
+| App E2E | `tests/Reactor.AppTests/` | winapp ui (winapp CLI)-driven full apps; click, type, assert via UIA. |
 | Doc | `docs/_pipeline/apps/` | Compile + snapshot capture for the docs pipeline. |
 
 ## Unit-level fixtures
@@ -183,7 +183,7 @@ component you ship.
 ## Self-tests (real WinUI tree)
 
 `Reactor.SelfTests` is the layer between the unit suite (pure C#, no
-WinUI) and the full E2E suite (WinAppDriver). A self-test mounts a
+WinUI) and the full E2E suite (winapp ui). A self-test mounts a
 real fixture into the `Reactor.AppTests.Host` window, walks the WinUI
 visual tree, and emits TAP. The xUnit wrapper in `SelfTestBatch.cs`
 parses the TAP and surfaces one test method per fixture.
@@ -218,7 +218,7 @@ cheap, it catches regressions the moment they land, and it puts the
 analyzer's output next to the test that introduced the problem.
 
 **Use `Reactor.AppTests` only where xUnit and self-tests can't reach.**
-WinAppDriver is the slow lane; reserve it for keyboard navigation,
+The winapp ui E2E suite is the slow lane; reserve it for keyboard navigation,
 focus order, and click sequences that depend on Composition or input
 routing.
 

@@ -62,17 +62,6 @@ public sealed class DemoScriptShell : Component
         var watcherRef = UseRef<DemoScriptWatcher?>(null);
         var generationCtsRef = UseRef<CancellationTokenSource?>(null);
         var saveDebounceRef = UseRef<CancellationTokenSource?>(null);
-        // Last-click-fired timestamp guards against Generate / Re-gen / etc.
-        // entry handlers running multiple times per user click. We've observed
-        // (logged at SessionLog) the OnGenerateAll handler firing 3+ times
-        // within 1 ms of a single click — which previously kicked off a run
-        // and then immediately cancelled it. Until the framework-level cause
-        // is found (suspected leaky button click subscription across
-        // re-renders, see PoolableWireFlags + EnsureButtonWiring) a cheap
-        // 200 ms debounce stops the immediate-cancel symptom without changing
-        // the user's perceived behavior on legitimate clicks.
-        var lastGenerateClickRef = UseRef<long>(0);
-        var lastRegenClickRef = UseRef<long>(0);
         // SHA-256 of the bytes of our most recent save (or load). When the
         // file watcher fires for a write WE just made, the disk hash equals
         // this value and we suppress the reload — otherwise our own debounced
@@ -328,15 +317,7 @@ public sealed class DemoScriptShell : Component
         void OnGenerateAll() => SafeClickHandler("OnGenerateAll", OnGenerateAllCore);
         void OnGenerateAllCore()
         {
-            var now = Environment.TickCount64;
-            var delta = now - lastGenerateClickRef.Current;
-            SessionLog.Write($"[Shell] OnGenerateAll projectRoot='{projectRoot ?? "(null)"}' ctsCurrent={(generationCtsRef.Current is null ? "null" : "non-null")} isGenerating={isGenerating} steps={model.Steps.Count} sinceLastClick={delta}ms");
-            if (lastGenerateClickRef.Current != 0 && delta < 200)
-            {
-                SessionLog.Write($"[Shell] OnGenerateAll → debounce drop ({delta}ms since last invocation)");
-                return;
-            }
-            lastGenerateClickRef.Current = now;
+            SessionLog.Write($"[Shell] OnGenerateAll projectRoot='{projectRoot ?? "(null)"}' ctsCurrent={(generationCtsRef.Current is null ? "null" : "non-null")} isGenerating={isGenerating} steps={model.Steps.Count}");
             if (projectRoot is null)
             {
                 _status.ShowToast("Open a folder first (Ctrl+O).", StatusSeverity.Warning);
@@ -422,15 +403,7 @@ public sealed class DemoScriptShell : Component
         void OnRegenFromStep(StepModel step) => SafeClickHandler($"OnRegenFromStep(step={step.Number})", () => OnRegenFromStepCore(step));
         void OnRegenFromStepCore(StepModel step)
         {
-            var now = Environment.TickCount64;
-            var delta = now - lastRegenClickRef.Current;
-            SessionLog.Write($"[Shell] OnRegenFromStep step={step.Number} '{step.Title}' projectRoot='{projectRoot ?? "(null)"}' ctsCurrent={(generationCtsRef.Current is null ? "null" : "non-null")} isGenerating={isGenerating} sinceLastClick={delta}ms");
-            if (lastRegenClickRef.Current != 0 && delta < 200)
-            {
-                SessionLog.Write($"[Shell] OnRegenFromStep → debounce drop ({delta}ms since last invocation)");
-                return;
-            }
-            lastRegenClickRef.Current = now;
+            SessionLog.Write($"[Shell] OnRegenFromStep step={step.Number} '{step.Title}' projectRoot='{projectRoot ?? "(null)"}' ctsCurrent={(generationCtsRef.Current is null ? "null" : "non-null")} isGenerating={isGenerating}");
             if (projectRoot is null)
             {
                 _status.ShowToast("Open a folder first.", StatusSeverity.Warning);
@@ -542,14 +515,26 @@ public sealed class DemoScriptShell : Component
             Icon = SymbolIcon("OpenLocal"),
             Accelerator = Accelerator(VirtualKey.O, VirtualKeyModifiers.Control),
         };
-        var generateCmd = new Command
+        // Generate / Cancel toggle. DebounceMs=200 (via UseCommand) is the
+        // framework-owned leading-edge debounce that replaces the hand-rolled
+        // Environment.TickCount64 guard we used to keep in OnGenerateAllCore:
+        // it drops the duplicate fires of a single click (the multi-fire
+        // symptom of a leaky click subscription, framework #114) while letting
+        // legitimate clicks through. The 200ms window also briefly disables the
+        // button after it relabels to "Cancel" — this is intentional: it's
+        // exactly the duplicate fire that would otherwise instantly cancel the
+        // generation the first click just started. 200ms is well below human
+        // double-click-then-deliberately-cancel timing, so a real cancel is
+        // unaffected.
+        var generateCmd = UseCommand(new Command
         {
             Label = isGenerating ? "Cancel" : "Generate All",
             Execute = OnGenerateAll,
             CanExecute = projectRoot is not null,
             Icon = SymbolIcon(isGenerating ? "Stop" : "Play"),
             Accelerator = Accelerator(VirtualKey.G, VirtualKeyModifiers.Control),
-        };
+            DebounceMs = 200,
+        });
         var exportCmd = new Command
         {
             Label = "Export Speaker Notes",

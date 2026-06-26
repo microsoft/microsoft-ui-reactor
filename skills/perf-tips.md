@@ -101,6 +101,17 @@ new TextBlockElement(label)
 `ElementModifiers` (spec 034 §A). Construct them directly only in the hot
 inner loop — every other call site should keep using the fluent chain.
 
+**Registration prerequisite.** Direct-record construction bypasses the
+factory, and the factory call is what registers the element's handler on first
+use. Since the eager built-in bootstrap was removed (spec 048 §3.4), mounting a
+record whose handler was never registered now throws
+`InvalidOperationException`. Before the hot loop runs, make sure the handler is
+registered: call `ReactorApp.RegisterAllBuiltIns()` once at startup (simplest —
+what the reference app below does), or call the matching factory once
+(`_ = TextBlock("");`), or register the specific handler with
+`ControlRegistry.Register<TElement, TControl>(...)`. See the "Registration
+contract" note in the Advanced guide for the full contract.
+
 The reference implementation lives at
 `tests/stress_perf/StressPerf.ReactorOptimized/Program.cs`. The naive
 sibling at `tests/stress_perf/StressPerf.Reactor/Program.cs` is the

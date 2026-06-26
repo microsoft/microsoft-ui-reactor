@@ -21,6 +21,32 @@ namespace Microsoft.UI.Reactor.Hosting;
 /// </remarks>
 internal sealed class BackdropApplier
 {
+    // Windows whose native surface has been torn down (Window.Closed has fired).
+    // Writing Window.SystemBackdrop on such a window faults with an
+    // ACCESS_VIOLATION (0xC0000005) deep in the WinUI backdrop interop — an
+    // unmanaged fault no try/catch can trap — and the WinUI backdrop machinery
+    // is global, so the corruption takes down later windows in the same process
+    // too. A window can outlive its native surface in two ways that reach a
+    // BackdropApplier: an app-driven Application.Exit() that tears down every
+    // open window mid-process, and a test harness that reuses one Window object
+    // across many hosts. Tracked process-wide (keyed weakly on the Window so a
+    // genuinely collected window doesn't leak) and consulted before every
+    // SystemBackdrop write. (issue #647)
+    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<Window, object> s_closedWindows = new();
+    private static readonly object s_closedMarker = new();
+
+    /// <summary>
+    /// Record that <paramref name="window"/>'s native surface has been torn down
+    /// (its <c>Closed</c> event fired), so no <see cref="BackdropApplier"/> — including
+    /// one created later for a reused window — writes <c>SystemBackdrop</c> on it
+    /// again. Idempotent. (issue #647)
+    /// </summary>
+    internal static void MarkWindowClosed(Window? window)
+    {
+        if (window is null) return;
+        s_closedWindows.AddOrUpdate(window, s_closedMarker);
+    }
+
     private readonly Window? _window;
 
     // Last-applied state — used so the host's per-render apply pass is a no-op
@@ -41,6 +67,10 @@ internal sealed class BackdropApplier
     {
         _window = window;
     }
+
+    // True once the owning window's native surface has been torn down — see
+    // s_closedWindows. SystemBackdrop writes are skipped from here on. (issue #647)
+    private bool WindowSurfaceGone => _window is not null && s_closedWindows.TryGetValue(_window, out _);
 
     /// <summary>
     /// Sets the window-level default backdrop. Used by
@@ -81,6 +111,12 @@ internal sealed class BackdropApplier
             }
             return false;
         }
+
+        // The window's native surface has been torn down (e.g. Application.Exit
+        // closed it, or the harness is reusing a closed Window). Writing
+        // SystemBackdrop now AVs (0xC0000005) — skip it. (issue #647)
+        if (WindowSurfaceGone)
+            return false;
 
         var nextKind = choice?.Kind;
         var nextFactory = choice?.Factory;
@@ -131,17 +167,34 @@ internal sealed class BackdropApplier
     /// Clears the backdrop and resets internal state. Called by the host on dispose
     /// so subsequent non-Reactor hosts on the same window see a clean slate.
     /// </summary>
-    public void Reset()
+    /// <param name="windowClosed">
+    /// When <c>true</c> the owning window has already been closed/destroyed. The
+    /// <c>Window.SystemBackdrop</c> write is then skipped (in addition to the
+    /// process-wide closed-window guard): touching <c>set_SystemBackdrop</c> on a
+    /// torn-down window faults with an <c>ACCESS_VIOLATION</c> (0xC0000005) — an
+    /// unmanaged fault the surrounding <c>try/catch</c> cannot trap — and corrupts
+    /// the WinUI backdrop interop for windows opened later in the same process.
+    /// Clearing the backdrop on a window that is going away is pointless anyway.
+    /// The internal last-applied state is still reset so a reused applier starts
+    /// clean. (issue #647)
+    /// </param>
+    public void Reset(bool windowClosed = false)
     {
         if (_window is null)
         {
             _hasApplied = false;
             return;
         }
-        try { _window.SystemBackdrop = null; }
-        catch (global::System.Exception ex)
+        if (!windowClosed && !WindowSurfaceGone)
         {
-            Debug.WriteLine($"[Reactor] Backdrop reset failed: {ex.GetType().Name}: {ex.Message}");
+            try { _window.SystemBackdrop = null; }
+            catch (global::System.Exception ex)
+                when (ex is global::System.ObjectDisposedException
+                    or global::System.InvalidOperationException
+                    or global::System.ArgumentException)
+            {
+                Debug.WriteLine($"[Reactor] Backdrop reset failed: {ex.GetType().Name}: {ex.Message}");
+            }
         }
         _lastKind = null;
         _lastFactory = null;

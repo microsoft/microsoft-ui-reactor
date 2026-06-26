@@ -12,7 +12,7 @@ Pick the right tier per change (see `AGENTS.md` and `TESTING.md`):
 |---|---|---|
 | Algorithm, pure function, hook bookkeeping, reconciler diff, Yoga math | Unit test (xUnit) | `tests/Reactor.Tests/` |
 | Element mount/update against real WinUI controls | Selftest fixture | `tests/Reactor.AppTests.Host/SelfTest/Fixtures/` (run via `tests/Reactor.SelfTests`) |
-| Real user input, UIA properties, cross-process | E2E (Appium/WinAppDriver) | `tests/Reactor.AppTests/Tests/` |
+| Real user input, UIA properties, cross-process | E2E (winapp ui) | `tests/Reactor.AppTests/Tests/` |
 
 Default expectation: **start at the lowest tier that exercises the change.** A
 new control/handler needs a **selftest fixture** (it requires a live WinUI
@@ -52,7 +52,7 @@ behavior needs an **E2E** test.
   `Console.Out` / `Console.Error` must be in `[Collection("ConsoleTests")]`.
   Flag new console-touching tests that omit it (cross-test interference / flake).
 - **Brittle tests.** New tests that depend on real timing, machine display
-  scaling, external network, or a running WinAppDriver without the proper tier
+  scaling, external network, or a running winapp CLI without the proper tier
   guard. E2E that should be a selftest, or a selftest that should be a unit test,
   is both slower and flakier — flag the tier mismatch.
 

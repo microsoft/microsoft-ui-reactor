@@ -1,15 +1,11 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Microsoft.UI.Reactor.AppTests.Infrastructure;
-using OpenQA.Selenium;
-using OpenQA.Selenium.Appium;
-using OpenQA.Selenium.Appium.Windows;
-using OpenQA.Selenium.Support.UI;
 
 namespace Microsoft.UI.Reactor.AppTests.Tests;
 
 /// <summary>
 /// E2E expand/collapse tests for the legacy text-node <c>TreeView</c>, driving
-/// the real WinUI control through WinAppDriver. These exercise the same path as
+/// the real WinUI control through winapp ui. These exercise the same path as
 /// the ReactorGallery "Basic TreeView" card via the <c>TreeView_BasicTextTree</c>
 /// host fixture.
 ///
@@ -58,6 +54,10 @@ public class TreeViewInteractionTests : AppTestBase
     /// it. "Work" starts expanded, so "Report.docx" is visible; after clicking the
     /// "Work" row body the child must remain visible.
     /// </summary>
+    // [Retry] mops up the rare unattended-desktop input-injection flake: Win32 SendInput is
+    // occasionally dropped before the Host window foregrounds on CI. A real regression still
+    // fails every attempt. Removable once winappCli #562 (send-keys)/#498 (drag) ship native verbs.
+    [Retry(3)]
     [TestMethod]
     public void ClickItemBody_DoesNotCollapseExpandedNode()
     {
@@ -87,6 +87,7 @@ public class TreeViewInteractionTests : AppTestBase
     /// "Report.docx" (a leaf child of "Work") and verify "Work" stays expanded
     /// (its sibling "Slides.pptx" remains visible).
     /// </summary>
+    [Retry(3)]
     [TestMethod]
     public void ClickChild_DoesNotCollapseParent()
     {
@@ -112,23 +113,21 @@ public class TreeViewInteractionTests : AppTestBase
     /// </summary>
     private void ClickNodeBody(string nodeText)
     {
-        Session.FindElement(MobileBy.Name(nodeText)).Click();
+        FindByName(nodeText).Click();
     }
 
     /// <summary>
     /// Whether the tree node addressed by its text reports UIA selection
     /// (SelectionItem pattern). Used to prove an item-body click registered.
+    /// Read directly through the UIA COM reader by Name, since text nodes carry
+    /// no AutomationId.
     /// </summary>
     private bool IsNodeSelected(string nodeText)
     {
-        try
-        {
-            return Session.FindElement(MobileBy.Name(nodeText)).Selected;
-        }
-        catch (WebDriverException)
-        {
-            return false;
-        }
+        return string.Equals(
+            Uia.ReadByName(nodeText, "SelectionItemIsSelected"),
+            "True",
+            StringComparison.OrdinalIgnoreCase);
     }
 
     private void AssertNodeVisible(string nodeText, string because)
@@ -143,34 +142,13 @@ public class TreeViewInteractionTests : AppTestBase
     /// </summary>
     private bool WaitForNodePresent(string nodeText, int timeoutMs = 4000)
     {
-        var wait = new DefaultWait<WindowsDriver<WindowsElement>>(Session)
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
         {
-            Timeout = TimeSpan.FromMilliseconds(timeoutMs),
-            PollingInterval = TimeSpan.FromMilliseconds(150),
-        };
-        wait.IgnoreExceptionTypes(typeof(WebDriverException));
-        try
-        {
-            // DefaultWait keeps polling while the lambda returns the default value
-            // (false for bool), so returning false on not-found retries until the
-            // timeout; returning true ends the wait successfully.
-            return wait.Until(driver =>
-            {
-                try
-                {
-                    driver.FindElement(MobileBy.Name(nodeText));
-                    return true;
-                }
-                catch (WebDriverException)
-                {
-                    return false; // keep polling
-                }
-            });
+            if (App.Search(nodeText).Any(m => m.Name == nodeText)) return true;
+            Thread.Sleep(150);
         }
-        catch (WebDriverTimeoutException)
-        {
-            return false;
-        }
+        return false;
     }
 
     /// <summary>

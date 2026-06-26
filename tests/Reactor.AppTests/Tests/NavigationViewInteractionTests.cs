@@ -1,15 +1,11 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Microsoft.UI.Reactor.AppTests.Infrastructure;
-using OpenQA.Selenium;
-using OpenQA.Selenium.Appium;
-using OpenQA.Selenium.Appium.Windows;
-using OpenQA.Selenium.Support.UI;
 
 namespace Microsoft.UI.Reactor.AppTests.Tests;
 
 /// <summary>
 /// E2E expand/collapse tests for the hierarchical <c>NavigationView</c>, driving
-/// the real WinUI control through WinAppDriver via the
+/// the real WinUI control through winapp ui via the
 /// <c>NavigationView_Hierarchical</c> host fixture (which mirrors the
 /// ReactorGallery shell: stateful, re-renders on every selection, rebuilds its
 /// MenuItems array each render).
@@ -79,47 +75,20 @@ public class NavigationViewInteractionTests : AppTestBase
 
     // ── helpers ─────────────────────────────────────────────────────
 
-    private void ClickItem(string itemText) =>
-        Session.FindElement(MobileBy.Name(itemText)).Click();
+    private void ClickItem(string itemText) => FindByName(itemText).Click();
 
-    private bool IsItemPresent(string itemText)
-    {
-        try
-        {
-            Session.Manage().Timeouts().ImplicitWait = TimeSpan.Zero;
-            Session.FindElement(MobileBy.Name(itemText));
-            return true;
-        }
-        catch (WebDriverException)
-        {
-            return false;
-        }
-        finally
-        {
-            Session.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(2);
-        }
-    }
+    private bool IsItemPresent(string itemText) =>
+        App.Search(itemText).Any(m => m.Name == itemText);
 
     private bool WaitForItemPresent(string itemText, int timeoutMs = 4000)
     {
-        var wait = new DefaultWait<WindowsDriver<WindowsElement>>(Session)
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        while (DateTime.UtcNow < deadline)
         {
-            Timeout = TimeSpan.FromMilliseconds(timeoutMs),
-            PollingInterval = TimeSpan.FromMilliseconds(150),
-        };
-        wait.IgnoreExceptionTypes(typeof(WebDriverException));
-        try
-        {
-            return wait.Until(driver =>
-            {
-                try { driver.FindElement(MobileBy.Name(itemText)); return true; }
-                catch (WebDriverException) { return false; }
-            });
+            if (IsItemPresent(itemText)) return true;
+            Thread.Sleep(150);
         }
-        catch (WebDriverTimeoutException)
-        {
-            return false;
-        }
+        return false;
     }
 
     private static void Settle() => Thread.Sleep(600);

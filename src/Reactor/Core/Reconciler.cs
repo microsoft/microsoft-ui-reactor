@@ -3862,6 +3862,15 @@ public sealed partial class Reconciler : IDisposable
         if (m.OnMountAction is not null && oldM is null)
             m.OnMountAction(fe);
 
+        // OnUpdateAction — the update-time counterpart, run on every in-place
+        // update (oldM is not null) but never at mount. Runs after child
+        // reconciliation (ApplyModifiers is invoked post-dispatch in the update
+        // path), so descendants realized during this update are already in the
+        // visual tree. Chart label a11y uses it to re-hide newly realized
+        // focusable descendants that OnMountAction (mount-only) would miss (#162).
+        if (m.OnUpdateAction is not null && oldM is not null)
+            m.OnUpdateAction(fe);
+
         // OnUnmountAction — captured here (authoritative modifier set) so it fires
         // reliably at teardown regardless of the tagged element's identity. Keep the
         // latest action across re-renders; clear unconditionally when absent so a

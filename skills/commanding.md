@@ -29,8 +29,9 @@ var save = new Command
     Description = "Save the document",               // tooltip + a11y
     Accelerator = Accelerator(VirtualKey.S, VirtualKeyModifiers.Control),
     AccessKey = "S",                                 // Alt+key
+    DebounceMs = 0,                                  // >0 = leading-edge debounce (needs UseCommand)
 };
-// Computed: IsEnabled = CanExecute && !IsExecuting
+// Computed: IsEnabled = CanExecute && !IsExecuting && !IsDebouncing
 ```
 
 `Command<T>` is identical but `Execute`/`ExecuteAsync` receive a typed
@@ -126,6 +127,14 @@ class Editor : Component
 - Consumes 2 hook slots; re-entrance guard ignores clicks while executing.
 - `IsExecuting` resets to false even if `ExecuteAsync` throws.
 - Call unconditionally — don't wrap in `if`.
+- `DebounceMs > 0` adds **leading-edge** debounce: the first fire runs,
+  re-fires within the window are dropped, and `IsEnabled` is false for the
+  duration so the button auto-disables then re-enables. Replaces the
+  `Task.Delay`-to-absorb-double-clicks workaround. Needs `UseCommand` to
+  persist the window — a raw `new Command { DebounceMs = … }` bound
+  directly does **not** debounce. Works on sync `Execute` too (stays on the
+  UI thread; no `Task.Run` hop). For async commands the disabled window is
+  the longer of the lambda lifetime and `DebounceMs`.
 
 ## CommandHost — keyboard-scoped accelerators
 

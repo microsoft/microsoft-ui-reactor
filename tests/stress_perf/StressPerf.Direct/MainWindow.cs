@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -18,12 +17,6 @@ public sealed class MainWindow : Window
     private readonly PerfTracker _perf = new();
     private readonly CliOptions _options;
     private readonly TextBlock[] _cells = new TextBlock[StockDataSource.TotalItems];
-
-    // Phase timing
-    private readonly Stopwatch _phaseSw = new();
-    private double _mutateSum, _propSetSum;
-    private int _tickCount;
-    private readonly Stopwatch _reportClock = Stopwatch.StartNew();
 
     private DispatcherTimer? _updateTimer;
     private DispatcherTimer? _shutdownTimer;
@@ -143,12 +136,9 @@ public sealed class MainWindow : Window
     {
         _perf.BeginUpdate();
 
-        _phaseSw.Restart();
         double pct = _percentSlider!.Value;
         var changed = _source.Update(pct);
-        double mutateMs = _phaseSw.Elapsed.TotalMilliseconds;
 
-        _phaseSw.Restart();
         // Direct update: set TextBlock properties for changed items only
         var items = _source.Items;
         foreach (int idx in changed)
@@ -158,23 +148,11 @@ public sealed class MainWindow : Window
             tb.Text = StockDataSource.FormatCell(in item);
             tb.Foreground = item.IsUp ? GreenBrush : RedBrush;
         }
-        double propSetMs = _phaseSw.Elapsed.TotalMilliseconds;
 
         _perf.EndUpdate();
         // For imperative WinUI variants a "render" = one tick that finished
         // patching cell properties on the live tree. Cross-variant cmp.
         _perf.RecordRender();
-
-        _mutateSum += mutateMs;
-        _propSetSum += propSetMs;
-        _tickCount++;
-        if (_reportClock.Elapsed.TotalSeconds >= 1.0 && _tickCount > 0)
-        {
-            File.AppendAllText(@"C:\temp\direct_perf_phases.log",
-                $"PERF [{_tickCount} ticks]: mutate={_mutateSum / _tickCount:F2}ms  propSet={_propSetSum / _tickCount:F2}ms  total={(_mutateSum + _propSetSum) / _tickCount:F2}ms\n");
-            _mutateSum = 0; _propSetSum = 0; _tickCount = 0;
-            _reportClock.Restart();
-        }
 
         // Update stats display
         _fpsText!.Text = $"FPS: {_perf.CurrentFps:F0}";

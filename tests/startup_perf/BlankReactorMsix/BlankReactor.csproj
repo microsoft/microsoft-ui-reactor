@@ -62,9 +62,17 @@
     -->
     <SelfContained>true</SelfContained>
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
-    <!-- AOT off: the shared EventSource tracing helper relies on EventSource.Write()
-         over [EventData] payloads, which NativeAOT trims and turns into zero ETW events. -->
-    <PublishAot>false</PublishAot>
+    <PublishAot>true</PublishAot>
+    <!--
+      NativeAOT defaults the EventSourceSupport feature switch to false, which
+      no-ops *all* EventSource code (IsEnabled() returns false, WriteEvent is
+      trimmed) and emits zero ETW events — even from the manifest-based,
+      WriteEvent-over-primitives BenchmarkTracing helper. Opt back in so both
+      BenchmarkSyntheticApps and Microsoft-UI-Reactor providers emit under AOT.
+      (The helper already avoids EventSource.Write()/[EventData] structs, which
+      NativeAOT trims separately; that rewrite is necessary but not sufficient.)
+    -->
+    <EventSourceSupport>true</EventSourceSupport>
     <AppxBundle>Never</AppxBundle>
     <AppxAutoIncrementPackageRevision>False</AppxAutoIncrementPackageRevision>
     <AppxSymbolPackageEnabled>False</AppxSymbolPackageEnabled>

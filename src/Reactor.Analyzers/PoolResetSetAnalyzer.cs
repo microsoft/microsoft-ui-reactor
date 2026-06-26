@@ -47,6 +47,7 @@ public sealed class PoolResetSetAnalyzer : DiagnosticAnalyzer
             { "VerticalAlignment",   "VerticalAlignment" },
             { "Opacity",             "Opacity" },
             { "AccessKey",           "AccessKey" },
+            { "IsTabStop",           "IsTabStop" },
         };
 
     private static readonly LocalizableString Title =

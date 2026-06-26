@@ -99,10 +99,31 @@ public sealed class ReactorWindow : IDisposable
     private DipPositionSnapshot _position = new(0, 0);
     private int _stateValue; // backing storage for State (cast WindowState <-> int)
     private bool _disposed;
+    // Issue #647 — latched the first time the native Window.Close() is requested
+    // for this window, on any path (programmatic Close, the owner-close cascade,
+    // or ReactorApp exit). A second native close on an already-closing/closed
+    // window re-enters native teardown and faults with an ACCESS_VIOLATION
+    // (0xC0000005), poisoning later windows in the same process. All native
+    // closes route through CloseNativeWindowOnce so the underlying Window.Close()
+    // happens at most once.
+    private bool _nativeCloseRequested;
     private bool _userResized; // Phase 2: once true we no longer overwrite size on DPI events.
     private bool _firstDpiApplied;
     private bool _persistenceRestoreAttempted;
     private WindowCloseReason _closingReason = WindowCloseReason.UserClosed;
+    // Issue #537 — the WinUI Microsoft.UI.Xaml.Controls.TitleBar control corrupts
+    // the heap (STATUS_HEAP_CORRUPTION) during its teardown when the window's
+    // ExtendsContentIntoTitleBar is false. The control is built for the
+    // content-extended (custom title bar) mode and only releases its
+    // caption-button / AppWindow interop cleanly in that mode. Reactor lets an
+    // app keep ExtendsContentIntoTitleBar=false while still rendering a
+    // TitleBar(...) element (Reactor then skips SetTitleBar), so the control can
+    // reach the unsafe teardown on close. We record that such a control is
+    // mounted and flip the window back into the content-extended mode just before
+    // the native close (see PrepareTitleBarForClose) so the control tears down
+    // via its safe path while the HWND/AppWindow are still alive.
+    private bool _titleBarControlPresent;
+    private bool _titleBarTeardownPrepared;
     private RECT _lastSizingRect;
     private readonly object _aspectRatioOverrideLock = new();
     private AspectRatioOverride[] _aspectRatioOverrides = global::System.Array.Empty<AspectRatioOverride>();
@@ -130,6 +151,15 @@ public sealed class ReactorWindow : IDisposable
     internal WindowMessageMonitor MessageMonitor => _messageMonitor;
 
     internal nint Hwnd => _hwnd;
+
+    /// <summary>
+    /// When <c>true</c>, this window is an auxiliary surface (e.g. a docking
+    /// tear-off floating window) that must never be elected the application's
+    /// <see cref="ReactorApp.PrimaryWindow"/> and so never drives the
+    /// <see cref="ShutdownPolicy.OnPrimaryWindowClosed"/> shutdown when it
+    /// closes. Set once at open time. (issue #647)
+    /// </summary>
+    internal bool ExcludeFromShutdownPolicy { get; set; }
 
     /// <summary>The <see cref="ReactorHost"/> driving this window's render loop.</summary>
     public ReactorHost Host => _host;
@@ -1381,7 +1411,13 @@ public sealed class ReactorWindow : IDisposable
                 var child = owned[i];
                 if (child._disposed) continue;
                 child._closingReason = WindowCloseReason.OwnerClosed;
-                try { child._window.Close(); }
+                // Children close via the programmatic Window.Close() path,
+                // which does not raise AppWindow.Closing — so make each child's
+                // (and every nested owned descendant's) mounted WinUI TitleBar
+                // safe to tear down here, before the native close, mirroring
+                // ReactorWindow.Close(). Idempotent. (#537)
+                child.PrepareTitleBarTreeForClose();
+                try { child.CloseNativeWindowOnce(); }
                 // Iteration sibling-independence (spec 044 §6.7.3): one
                 // failing child must not abort the cascade across its
                 // siblings. The Window.Close call also re-enters the child's
@@ -1402,7 +1438,111 @@ public sealed class ReactorWindow : IDisposable
         }
 
         if (cancel) args.Cancel = true;
-        else _closingReason = WindowCloseReason.UserClosed; // reset for the next attempt
+        else
+        {
+            _closingReason = WindowCloseReason.UserClosed; // reset for the next attempt
+            // The close (user chrome / Alt+F4) is now irrevocable. Make any
+            // mounted WinUI TitleBar safe to tear down — while the AppWindow is
+            // still alive — before the native window teardown runs. (issue #537)
+            PrepareTitleBarForClose();
+        }
+    }
+
+    /// <summary>
+    /// Records that a WinUI <c>TitleBar</c> control is mounted in this window's
+    /// content. Set from the TitleBar element's mount path (see
+    /// <c>RegisterWindowTitleBar</c> in Element.cs) for every TitleBar mount —
+    /// including the <c>ExtendsContentIntoTitleBar=false</c> case where Reactor
+    /// deliberately skips <c>SetTitleBar</c>. Drives
+    /// <see cref="PrepareTitleBarForClose"/>. (issue #537)
+    /// </summary>
+    internal void MarkTitleBarControlPresent() => _titleBarControlPresent = true;
+
+    /// <summary>
+    /// Make a mounted WinUI <c>TitleBar</c> control safe to tear down, before
+    /// the native window close runs. (issue #537)
+    /// <para>
+    /// The WinUI <c>Microsoft.UI.Xaml.Controls.TitleBar</c> control corrupts the
+    /// heap (<c>STATUS_HEAP_CORRUPTION</c>, 0xC0000374) during its teardown when
+    /// the window's <c>ExtendsContentIntoTitleBar</c> is <c>false</c> — the
+    /// control is designed for the content-extended (custom title bar) mode and
+    /// its caption-button / AppWindow interop is only released cleanly in that
+    /// mode. Reactor lets an app set <c>ExtendsContentIntoTitleBar=false</c>
+    /// while still rendering a <c>TitleBar(...)</c> element (in which case
+    /// Reactor skips <c>SetTitleBar</c>), so the control reaches the unsafe
+    /// teardown on close.
+    /// </para>
+    /// <para>
+    /// Flipping the window back into the content-extended mode here — while the
+    /// HWND and AppWindow are still fully alive, before <c>Window.Close()</c>
+    /// initiates the native destroy — routes the control through its safe
+    /// teardown path. The window is closing, so the (otherwise user-visible)
+    /// chrome change has no effect, and the public <c>ExtendsContentIntoTitleBar</c>
+    /// value the app observes during the window's life is unchanged. When no
+    /// TitleBar control was ever mounted, or the window already extends, the flip
+    /// is a no-op.
+    /// </para>
+    /// <para>
+    /// Idempotent (guarded by <see cref="_titleBarTeardownPrepared"/>) so the
+    /// many teardown paths that call it — <see cref="Close"/>, the owner-close
+    /// cascade, the <see cref="OnAppWindowClosing"/> chrome/Alt+F4 path,
+    /// <see cref="Dispose()"/>, and the <c>ReactorApp</c> exit prep — are all
+    /// safe and never double-flip. The guard is only latched <em>after</em> a
+    /// successful flip (or one mooted by an in-flight native teardown); any
+    /// other flip failure leaves the window un-prepared so a later
+    /// close/exit/dispose path retries rather than reaching the unsafe native
+    /// teardown believing the prep is already done.
+    /// </para>
+    /// </summary>
+    private void PrepareTitleBarForClose()
+    {
+        if (!_titleBarControlPresent || _titleBarTeardownPrepared) return;
+
+        try
+        {
+            _window.ExtendsContentIntoTitleBar = true;
+        }
+        catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
+        {
+            // The native teardown is already in flight: the TitleBar control is
+            // no longer reachable and the flip is moot. Fall through and latch
+            // the guard so overlapping paths don't retry into the same reentry.
+            DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.TitleBarClosePrep", ex);
+        }
+
+        // Latch only after the flip actually succeeded (or was mooted by an
+        // in-flight teardown above). A flip that throws any *other* exception
+        // skips this line, leaving the window un-prepared so a later
+        // close/exit/dispose path retries rather than reaching the unsafe native
+        // teardown believing the prep is already done. (issue #537)
+        _titleBarTeardownPrepared = true;
+    }
+
+    /// <summary>
+    /// Make this window and every owned descendant's mounted WinUI
+    /// <c>TitleBar</c> control safe to tear down, depth-first, before a native
+    /// close. (issue #537)
+    /// <para>
+    /// The owner-close cascade and programmatic <see cref="Close"/> close owned
+    /// children via the raw <c>Window.Close()</c> path, which does not raise
+    /// <c>AppWindow.Closing</c> on the child — so the child's own cascade never
+    /// runs and a grandchild's TitleBar would otherwise reach the unsafe
+    /// teardown unprepared. Walking the owned tree here prepares every level.
+    /// Idempotent per window (see <see cref="PrepareTitleBarForClose"/>), so
+    /// overlapping close paths can't double-flip.
+    /// </para>
+    /// </summary>
+    internal void PrepareTitleBarTreeForClose()
+    {
+        PrepareTitleBarForClose();
+
+        var owned = OwnedWindows;
+        for (int i = 0; i < owned.Count; i++)
+        {
+            var child = owned[i];
+            if (child._disposed) continue;
+            child.PrepareTitleBarTreeForClose();
+        }
     }
 
     // ── UseClosingGuard registration ──────────────────────────────────
@@ -1690,6 +1830,32 @@ public sealed class ReactorWindow : IDisposable
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(Close));
         if (_disposed) return;
         _closingReason = WindowCloseReason.AppClosed;
+        // Programmatic Window.Close() does not raise AppWindow.Closing in this
+        // WinUI host, so the PrepareTitleBarForClose call in OnAppWindowClosing
+        // never runs on this path. Do it here, before the native close, while
+        // the AppWindow is still alive: a WinUI TitleBar mounted in an
+        // ExtendsContentIntoTitleBar=false window corrupts the heap during its
+        // teardown unless the window is flipped back into content-extended mode
+        // first. Prepare the owned tree too — closing this window can tear down
+        // owned descendants that likewise never see their own AppWindow.Closing.
+        // Idempotent. (issue #537)
+        PrepareTitleBarTreeForClose();
+        CloseNativeWindowOnce();
+    }
+
+    /// <summary>
+    /// Request the underlying native <see cref="Window.Close"/> at most once for
+    /// this window, regardless of how many close paths converge on it
+    /// (programmatic <see cref="Close"/>, the owner-close cascade, the
+    /// <c>ReactorApp</c> exit prep). A redundant native close on a window whose
+    /// teardown has already started re-enters native destroy and faults with an
+    /// <c>ACCESS_VIOLATION</c> (0xC0000005) that corrupts later windows in the
+    /// process — the multi-window batch teardown crash this guards. (issue #647)
+    /// </summary>
+    private void CloseNativeWindowOnce()
+    {
+        if (_disposed || _nativeCloseRequested) return;
+        _nativeCloseRequested = true;
         try { _window.Close(); }
         catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
         { DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.Close", ex); }
@@ -2327,6 +2493,13 @@ public sealed class ReactorWindow : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+
+        // Non-close teardown path: a direct Dispose() (not preceded by a
+        // Close()/cascade) still tears down the content, including any mounted
+        // WinUI TitleBar control. Make it safe first, while the window is still
+        // alive. Idempotent and a no-op when a close path already prepared it
+        // (the usual order: Window.Closed → Dispose). (issue #537)
+        PrepareTitleBarForClose();
 
         _embedWatchdog?.Stop();
         DetachBackgroundDragRoot();

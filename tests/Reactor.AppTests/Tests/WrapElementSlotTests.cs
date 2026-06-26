@@ -1,13 +1,11 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Microsoft.UI.Reactor.AppTests.Infrastructure;
-using OpenQA.Selenium;
-using OpenQA.Selenium.Appium;
 
 namespace Microsoft.UI.Reactor.AppTests.Tests;
 
 /// <summary>
 /// E2E tests for the generated <c>[WrapElementSlot]</c> bridge. These drive a running
-/// WinUI3 app via Appium/WinAppDriver and verify, through the real UIA tree, that a
+/// WinUI3 app via the winapp CLI (winapp ui) and verify, through the real UIA tree, that a
 /// secondary single-element slot (TabView.TabStripHeader) mounts onto its dedicated control
 /// property, updates in place, and clears when the slot goes null. The in-process selftest
 /// (WrapElementSlotFixtures) covers the same transitions against a live control; this tier
@@ -60,20 +58,7 @@ public class WrapElementSlotTests : AppTestBase
     /// </summary>
     private static void AssertElementAbsent(string automationId, int timeoutMs = 3000)
     {
-        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
-        while (DateTime.UtcNow < deadline)
-        {
-            try
-            {
-                Session.FindElement(MobileBy.AccessibilityId(automationId));
-            }
-            catch (WebDriverException)
-            {
-                return; // No longer present — slot was removed.
-            }
-            Thread.Sleep(100);
-        }
-
-        Assert.Fail($"Expected element '{automationId}' to be absent after slot removal, but it was still present.");
+        if (!App.WaitForGone(automationId, timeoutMs))
+            Assert.Fail($"Expected element '{automationId}' to be absent after slot removal, but it was still present after {timeoutMs}ms.");
     }
 }

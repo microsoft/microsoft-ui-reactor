@@ -6,7 +6,7 @@ Reactor has three test suites. Each lives in its own project, so there are no fi
 |---|-------|---------|--------|---------------|
 | 1 | **Unit** | `tests/Reactor.Tests` | xUnit | Algorithms, reconciliation, Yoga layout, hooks, D3 — no WinUI window |
 | 2 | **Selftest** | `tests/Reactor.SelfTests` | MSTest (wraps TAP subprocess) | Full reconciler pipeline against real WinUI controls, in-process |
-| 3 | **E2E** | `tests/Reactor.AppTests` | MSTest + Appium/WinAppDriver | Cross-process UIA validation, real user input |
+| 3 | **E2E** | `tests/Reactor.AppTests` | MSTest + winapp ui | Cross-process UIA validation, real user input |
 
 ## Three commands
 
@@ -17,7 +17,7 @@ dotnet test tests/Reactor.Tests -p:Platform=x64
 # 2. Selftest (in-process WinUI, ~10s; no filter needed)
 dotnet test tests/Reactor.SelfTests
 
-# 3. E2E (requires WinAppDriver)
+# 3. E2E (requires the winapp CLI)
 dotnet test tests/Reactor.AppTests
 
 # All three
@@ -165,11 +165,11 @@ A native crash terminates the AOT process — the per-fixture managed watchdog c
 
 ---
 
-## 3. E2E tests (`tests/Reactor.AppTests`) — MSTest + WinAppDriver
+## 3. E2E tests (`tests/Reactor.AppTests`) — MSTest + winapp ui
 
-End-to-end tests that use Appium/WinAppDriver to simulate real user input (clicks, keyboard, tab navigation) through the cross-process UI Automation pipeline. These verify the full input → render → output path and validate that UIA properties are visible to assistive technology.
+End-to-end tests that use the winapp CLI (`winapp ui`) to simulate real user input (clicks, keyboard, tab navigation) through the cross-process UI Automation pipeline. These verify the full input → render → output path and validate that UIA properties are visible to assistive technology.
 
-**When to run:** before shipping. Slow, and requires WinAppDriver.
+**When to run:** before shipping. Slow, and requires the winapp CLI.
 
 E2E test classes (across two host apps):
 
@@ -189,7 +189,7 @@ dotnet test tests/Reactor.AppTests
 dotnet test tests/Reactor.AppTests --filter "ClassName=Reactor.AppTests.Tests.AccessibilityTests"
 ```
 
-> **Requires:** [WinAppDriver](https://github.com/microsoft/WinAppDriver/releases) installed at `C:\Program Files (x86)\Windows Application Driver\WinAppDriver.exe`. Unit and selftest runs don't need it.
+> **Requires:** the **winapp CLI** (`winapp ui`). Install it with `winget install Microsoft.WinAppCli` (or run `./bootstrap.ps1`, which installs it for you). The harness resolves it from `%LOCALAPPDATA%\Microsoft\WindowsApps\winapp.exe` or `winapp` on PATH. Unit and selftest runs don't need it.
 >
 > **WinForms tests** also require `Reactor.WinFormsTests.Host` to build. It launches a separate WinForms app with a XAML Island.
 
@@ -229,4 +229,4 @@ dotnet-coverage merge unit.cobertura.xml selftest.cobertura.xml \
   --output merged.cobertura.xml --output-format cobertura
 ```
 
-Replace `$(RuntimeIdentifier)` with `ARM64` or `x64`, or omit the platform segment if you used the default platform from `Directory.Build.props`. The `coverage.settings.xml` file in the repo root controls which modules are included and excludes generated code (`obj/`, `*.g.cs`) and test-host scaffolding exercised only by the Appium/E2E runner.
+Replace `$(RuntimeIdentifier)` with `ARM64` or `x64`, or omit the platform segment if you used the default platform from `Directory.Build.props`. The `coverage.settings.xml` file in the repo root controls which modules are included and excludes generated code (`obj/`, `*.g.cs`) and test-host scaffolding exercised only by the winapp/E2E runner.

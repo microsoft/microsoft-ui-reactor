@@ -35,6 +35,7 @@ UI thread.
 | `Component.Render()` | UI thread | `RenderContext.BeginRender` captures `_uiThreadId`; reconciler invokes on the dispatcher |
 | `setX(...)` / `updateX(...)` from `UseState` / `UseReducer` | Any thread | `MarshalIfOffUIThread` in `RenderContext.cs` |
 | `setX(...)` with `threadSafe: true` | Any thread | per-cell `lock` in `ValueHookState<T>`; no marshal hop |
+| `NavigationHandle` mutators (`Navigate` / `GoBack` / `GoForward` / `Replace` / `Reset` / `PopTo` / `SetState`) from `UseNavigation` | Any thread | `UIThreadMarshal` gate in `NavigationHandle.cs` (auto-marshal; shares `EnqueueOrThrow` with `MarshalIfOffUIThread`) |
 | `UseEffect` body | UI thread | `RenderContext.FlushEffects` runs on the dispatcher |
 | `UseEffect` cleanup | UI thread | same dispatcher as flush |
 | `Reconciler.Reconcile` | UI thread | host calls it from a dispatcher continuation |
@@ -102,6 +103,18 @@ The two failure modes throw immediately rather than swallow:
   near window close. Cancel background producers in your effect
   cleanup so they stop before the window closes.
 
+The same machinery now covers `UseNavigation` (issue #234). A
+`NavigationHandle<TRoute>` captures the UI thread id when it is created,
+and its mutators — `Navigate`, `GoBack`, `GoForward`, `Replace`,
+`Reset`, `PopTo`, and `SetState` — auto-marshal the whole operation onto
+that dispatcher when called off-thread, throwing the same two failure
+modes above when no live dispatcher is available. Both paths share one
+`UIThreadMarshal.EnqueueOrThrow` implementation, so the setter marshal
+and the navigation gate stay behaviourally identical. The `bool` the
+mutators return reports whether the operation was *scheduled*, not
+whether the navigation ultimately succeeded — off-thread callers must
+not treat `true` as confirmation that the stack changed.
+
 ## The trampoline guard for non-setter mutators
 
 Setters reach the UI thread via auto-marshal. Other mutators — opening
@@ -167,6 +180,19 @@ internal static bool ShouldSuppress(UIElement control)
     if (control is not FrameworkElement fe) return false;
     if (fe.GetValue(Reconciler.ReactorAttached.StateProperty) is not Reconciler.ReactorState state)
         return false;
+    return ShouldSuppress(state);
+}
+
+/// <summary>
+/// Issue #207 — suppression check for trampolines that already hold the
+/// control's <see cref="Reconciler.ReactorState"/> (read once via
+/// <see cref="Reconciler.TryGetReactorState"/>). Identical decrement-and-
+/// suppress semantics to <see cref="ShouldSuppress(UIElement)"/>; the
+/// UIElement overload delegates here after a single attached-DP read so a
+/// change handler pays one DP read instead of two.
+/// </summary>
+internal static bool ShouldSuppress(Reconciler.ReactorState state)
+{
     // §8.2 — setter-suppression scope: drop the echo without consuming a
     // counter token. The scope wraps ApplySetters, where the engine can't
     // predict which value-bearing DPs the user's `.Set(...)` will write.

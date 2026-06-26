@@ -1,0 +1,275 @@
+# On-demand perf comparison: comment `/perf` on a PR to benchmark its head
+# against the `main` baseline and post a sticky comparison comment.
+#
+# ── How to use ───────────────────────────────────────────────────────────────
+#   • Comment `/perf` on any open PR (must be an OWNER / MEMBER / COLLABORATOR).
+#   • Or run it manually: Actions ▸ "Perf comparison" ▸ Run workflow ▸ pr_number.
+#
+# It builds StressPerf.ReactorOptimized (the StocksGrid data-grid stress harness)
+# on the PR head and on `main`, runs them INTERLEAVED on the same runner, and
+# posts/updates one sticky comment with four metrics:
+#
+#   Renders/sec       higher is better
+#   Avg Reconcile ms  lower is better
+#   Avg Diff ms       lower is better
+#   Avg Memory MB     lower is better
+#
+# Each metric shows main, PR, a signed Δ%, and an improvement/regression/within-
+# noise status. A second table cross-references vanilla WinUI3 (StressPerf.Direct)
+# and the Rust `windows-reactor` port (test_reactor_perf from microsoft/windows-rs)
+# — both built and measured live on the same runner.
+#
+# ── Why `issue_comment` (not a label) ────────────────────────────────────────
+# `issue_comment` always runs the workflow from the DEFAULT branch, so the perf
+# scripts + `main` baseline always come from trusted `main`, never the PR. Once
+# this lands on `main`, the /perf logic itself works on every already-open PR
+# without touching its branch.
+#
+# One caveat: a PR head opened BEFORE this gate merged won't carry the self-
+# contained build knob (`PerfCiSelfContained`, added here), so its harness may
+# fail to launch on a runner without the WinAppSDK runtime. Rebasing the PR onto
+# `main` (which the in-flight perf fleet does once this merges) fixes that. See
+# tests/stress_perf/ci/README.md.
+#
+# Because the privileged (write-token) job builds + runs PR-authored harness
+# code, it is hardened: triggering is restricted to trusted comment authors via
+# `author_association` (OWNER / MEMBER / COLLABORATOR); the PR checkout uses
+# `persist-credentials: false`; and the GitHub token is scoped to the react +
+# comment steps only — never the build/benchmark step that runs PR code.
+#
+# Local equivalent + script docs: tests/stress_perf/ci/README.md
+name: Perf comparison
+
+on:
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: PR number to benchmark against main
+        required: true
+        type: string
+
+# One in-flight run per PR; a newer /perf supersedes an older one.
+concurrency:
+  group: perf-compare-${{ github.event.issue.number || github.event.inputs.pr_number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read         # checkout
+  pull-requests: write   # post/update the comparison comment
+  issues: write          # PR conversation comments use the issues API
+
+jobs:
+  perf:
+    name: Benchmark PR vs main
+    # Gate: manual dispatch, OR a `/perf` comment on a PR from a trusted author.
+    if: >-
+      ${{
+        github.event_name == 'workflow_dispatch' ||
+        (github.event_name == 'issue_comment' &&
+         github.event.issue.pull_request != null &&
+         startsWith(github.event.comment.body, '/perf') &&
+         contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
+      }}
+    runs-on: windows-latest
+    # 60 (not 40): the Rust cross-framework leg cold-builds the windows-rs port.
+    timeout-minutes: 60
+    env:
+      GH_REPO: ${{ github.repository }}
+      # Pinned microsoft/windows-rs commit whose `test_reactor_perf` crate backs
+      # the Rust column (a port of this harness — same StocksGrid + CLI). Refresh
+      # deliberately; a moving ref would make the Rust numbers non-comparable.
+      RUST_REF: ef02ee6f600e75540653c505b8dbb6821e82c694
+    steps:
+      # Acknowledge the trigger so the author knows it was picked up.
+      - name: React to /perf comment
+        if: github.event_name == 'issue_comment'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+        run: gh api "repos/$env:GH_REPO/issues/comments/$env:COMMENT_ID/reactions" -f content=eyes
+
+      # Trusted checkout: the default branch carries the perf scripts + the main
+      # baseline. fetch-depth: 0 so we can resolve origin/main and PR head SHAs.
+      - name: Checkout default branch (trusted scripts + main baseline)
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          # PR-authored harness code runs later in this job; don't leave a usable
+          # git credential on disk for it. The public PR head fetches anonymously.
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5.3.0
+        with:
+          dotnet-version: 10.0.x
+
+      # Cheap guard: validate PerfLib's pure parser + delta math before spending
+      # ~30 min benchmarking. Also runs standalone in perf-lib-tests.yml on PRs.
+      - name: Test PerfLib (parser + delta math)
+        shell: pwsh
+        run: ./tests/stress_perf/ci/PerfLib.Tests.ps1
+
+      # Resolve the PR number + head SHA. PR head is fetched via refs/pull/N/head
+      # so forks work too. The PR head lives in its own worktree; the workspace
+      # root stays on the trusted main baseline. The PR number is validated to be
+      # digits-only (it reaches a shell) and event context is passed via env, so
+      # a crafted PR number / comment can't be injected into the script body.
+      - name: Resolve PR + create PR worktree
+        id: resolve
+        shell: pwsh
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_PR: ${{ github.event.inputs.pr_number }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          $pr = if ($env:EVENT_NAME -eq 'workflow_dispatch') { $env:DISPATCH_PR } else { $env:ISSUE_NUMBER }
+          if ($pr -notmatch '^\d+$') { throw "Could not resolve a valid PR number (got '$pr')." }
+          Write-Host "PR #$pr"
+          # Public repo: the PR head (incl. forks) fetches anonymously, so this
+          # step needs no token — keeping it token-free shrinks the attack surface.
+          git fetch --no-tags --force origin "pull/$pr/head" 2>&1 | Out-Host
+          $headSha = (git rev-parse FETCH_HEAD).Trim()
+          $baseSha = (git rev-parse origin/main).Trim()
+          $prTree  = Join-Path $env:RUNNER_TEMP 'pr-tree'
+          if (Test-Path $prTree) { git worktree remove --force $prTree 2>&1 | Out-Host }
+          git worktree add --force --detach $prTree $headSha 2>&1 | Out-Host
+          "pr_number=$pr"     | Out-File $env:GITHUB_OUTPUT -Append
+          "head_sha=$headSha" | Out-File $env:GITHUB_OUTPUT -Append
+          "base_sha=$baseSha" | Out-File $env:GITHUB_OUTPUT -Append
+          "pr_tree=$prTree"   | Out-File $env:GITHUB_OUTPUT -Append
+          Write-Host "head=$headSha base=$baseSha tree=$prTree"
+
+      # Clone the pinned windows-rs and flip its perf harness to self-contained so
+      # the Rust column needs no machine-wide WinAppSDK runtime (mirrors the C#
+      # self-contained trick). Best-effort: on any failure the rust_repo output is
+      # empty and the Rust column reads n/a — the C# comparison is unaffected.
+      - name: Prepare Rust harness (windows-rs port)
+        id: rust
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'windows-rs'
+          if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
+          New-Item -ItemType Directory -Path $dir | Out-Null
+          git -C $dir init -q
+          git -C $dir remote add origin https://github.com/microsoft/windows-rs
+          git -C $dir fetch --depth 1 origin $env:RUST_REF 2>&1 | Out-Host
+          git -C $dir checkout -q FETCH_HEAD
+          $buildRs = Join-Path $dir 'crates/tests/libs/reactor_perf/build.rs'
+          if (-not (Test-Path $buildRs)) { throw "reactor_perf/build.rs missing in windows-rs@$env:RUST_REF" }
+          # as_self_contained() is the upstream-supported, benchmark-neutral setup
+          # used by the windows-rs reactor samples (see docs/crates/windows-reactor-setup.md).
+          Set-Content -LiteralPath $buildRs -Value 'fn main() { windows_reactor_setup::as_self_contained(); }' -Encoding UTF8
+          # The harness main() unconditionally calls bootstrap() (MddBootstrapInitialize2)
+          # to locate a *machine-wide* WinAppSDK runtime. as_self_contained() never stages
+          # the framework-dependent bootstrapper, so on the runtime-less runner the exe
+          # carries an unsatisfiable load-time import -> 0xC0000135 (DLL-not-found), exits
+          # instantly with 0-byte output, and the watchdog reports n/a. (Even if the
+          # bootstrap DLL were staged, MddBootstrapInitialize2 fail-fasts headless with no
+          # machine-wide package -> 0xC0000602.) Self-contained apps don't need it: the
+          # embedded reg-free manifest activates the runtime app-local. Neutralize the one
+          # call so the self-contained harness launches. Benchmark-neutral (it only changes
+          # runtime discovery, not the measured StockGrid workload) and best-effort: warn,
+          # don't fail, if upstream ever drops the line.
+          $mainRs = Join-Path $dir 'crates/tests/libs/reactor_perf/src/main.rs'
+          if (Test-Path $mainRs) {
+            $src = Get-Content -LiteralPath $mainRs -Raw
+            $patched = [regex]::Replace($src, '(?m)^(?<indent>[ \t]*)bootstrap\(\)\?;', '${indent}// bootstrap()?; // perf CI self-contained: reg-free manifest provides the runtime app-local; the framework-dependent bootstrapper is not staged and would fail with no machine-wide WinAppSDK runtime')
+            if ($patched -ne $src) {
+              Set-Content -LiteralPath $mainRs -Value $patched -Encoding UTF8 -NoNewline
+              Write-Host "Patched main.rs: neutralized bootstrap() for the self-contained run"
+            } else {
+              Write-Warning "main.rs: bootstrap() call not found (upstream may have changed) - Rust column may read n/a"
+            }
+          } else {
+            Write-Warning "reactor_perf/src/main.rs missing in windows-rs@$env:RUST_REF - Rust column may read n/a"
+          }
+          "rust_repo=$dir" | Out-File $env:GITHUB_OUTPUT -Append
+          Write-Host "Rust harness ready at $dir"
+
+      - name: Cache Rust build
+        if: steps.rust.outcome == 'success'
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: ${{ runner.temp }}/windows-rs
+
+      # Build (self-contained, so no machine-wide WinApp runtime install — same
+      # hermetic trick the WinUI selftests job uses) + run interleaved + render
+      # the sticky comment to perf-out/comment.md. continue-on-error so a flaky
+      # run still posts a comment (with a NOTE) instead of failing silently.
+      # All context flows in via env (never interpolated into the script body).
+      - name: Run perf benchmark (PR vs main)
+        id: bench
+        continue-on-error: true
+        shell: pwsh
+        env:
+          PR_TREE: ${{ steps.resolve.outputs.pr_tree }}
+          HEAD_SHA: ${{ steps.resolve.outputs.head_sha }}
+          BASE_SHA: ${{ steps.resolve.outputs.base_sha }}
+          RUST_REPO: ${{ steps.rust.outputs.rust_repo }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          OUT_DIR: ${{ github.workspace }}/perf-out
+        run: |
+          ./tests/stress_perf/ci/Run-PerfBenchmark.ps1 `
+            -Root $env:PR_TREE `
+            -BaselineRoot $env:GITHUB_WORKSPACE `
+            -Percent 50 -Duration 10 -Reps 12 -Warmup 2 -PinAffinity `
+            -RustRepo "$env:RUST_REPO" `
+            -DefenderExclude `
+            -HeadSha $env:HEAD_SHA `
+            -BaseSha $env:BASE_SHA `
+            -RunUrl $env:RUN_URL `
+            -OutDir $env:OUT_DIR
+
+      - name: Upload perf logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: perf-logs
+          path: perf-out
+          if-no-files-found: warn
+          retention-days: 14
+
+      # Post or update-in-place the sticky comment (hidden marker lookup). Always
+      # runs; synthesizes a failure comment if the benchmark produced none.
+      - name: Post / update sticky comment
+        if: always()
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
+          WORKSPACE: ${{ github.workspace }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          $marker = '<!-- reactor-perf-compare -->'
+          $pr = $env:PR_NUMBER
+          if (-not $pr) { Write-Host 'No PR number; nothing to comment on.'; exit 0 }
+          $file = Join-Path $env:WORKSPACE 'perf-out/comment.md'
+          if (-not (Test-Path $file)) {
+            New-Item -ItemType Directory -Force -Path (Split-Path $file) | Out-Null
+            $body = "$marker`n## ⚡ Reactor perf comparison`n`n> [!CAUTION]`n> The perf benchmark did not produce results (build or harness launch failed). See the [run log]($env:RUN_URL) and the ``perf-logs`` artifact.`n"
+            Set-Content -LiteralPath $file -Value $body -Encoding UTF8
+          }
+          $existing = gh api "repos/$env:GH_REPO/issues/$pr/comments" --paginate --jq "[.[] | select(.body | startswith(""$marker""))][0].id"
+          if ($existing) {
+            Write-Host "Updating existing comment $existing"
+            gh api -X PATCH "repos/$env:GH_REPO/issues/comments/$existing" -F "body=@$file" | Out-Null
+          } else {
+            Write-Host 'Creating new sticky comment'
+            gh api "repos/$env:GH_REPO/issues/$pr/comments" -F "body=@$file" | Out-Null
+          }
+
+      # Surface a red check if the benchmark itself failed (comment still posted).
+      - name: Reflect benchmark status
+        if: always()
+        shell: pwsh
+        env:
+          BENCH_OUTCOME: ${{ steps.bench.outcome }}
+        run: |
+          if ($env:BENCH_OUTCOME -ne 'success') {
+            throw 'Perf benchmark step failed or returned non-zero — see the comparison comment and the perf-logs artifact.'
+          }
+          Write-Host 'Perf benchmark completed successfully.'

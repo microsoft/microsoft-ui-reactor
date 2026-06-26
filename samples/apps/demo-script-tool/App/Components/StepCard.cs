@@ -198,37 +198,32 @@ public sealed class StepCard : Component<StepCardProps>
         // synchronous launcher that flips IsExecuting=true while the action
         // is in flight and back to false on completion — Command.IsEnabled
         // honors that flag, so the button auto-disables for the duration.
-        // - Run: wraps a Task.Delay so the visible disable lasts long enough
-        //   to absorb double-clicks (the spawn itself returns instantly).
-        // - Re-gen: tiny delay so the IsExecuting window overlaps with the
-        //   shell flipping Props.IsGenerating to true on the next render —
-        //   without this the button could re-enable for a frame in between.
+        // - Run: spawning the step exe returns instantly, so there's no async
+        //   work to track. DebounceMs=1500 gives the framework-owned
+        //   leading-edge debounce: the click fires once, the button disables
+        //   for 1.5s, and the rapid re-clicks are dropped (issue #136). No
+        //   more Task.Delay padding a fake async window.
+        // - Re-gen: DebounceMs=250 bridges the gap until the shell flips
+        //   Props.IsGenerating=true on the next render — without it the button
+        //   could re-enable for a frame in between. Sync Execute keeps
+        //   OnRegenFromHere on the UI thread (UseCommand only hops to a
+        //   threadpool thread for ExecuteAsync — see framework #130).
         // - Show / Copy / Delete: plain sync Commands; instant.
         var runCmd = UseCommand(new Command
         {
             Label = "Run",
             CanExecute = canRun,
-            ExecuteAsync = async () =>
-            {
-                Props.Cb.Value.OnRun(step);
-                await Task.Delay(1500).ConfigureAwait(false);
-            },
+            Execute = () => Props.Cb.Value.OnRun(step),
+            DebounceMs = 1500,
         });
 
-        // Plain sync Command (no UseCommand). UseCommand's Task.Run wrapper
-        // would put OnRegenFromHere on a threadpool thread, which made the
-        // shell's announce.Announce throw RPC_E_WRONG_THREAD on the
-        // FrameworkElementAutomationPeer call (the exact issue tracked by
-        // framework #130). The 250 ms IsExecuting bridge is no longer needed
-        // either — the shell's lastRegenClickRef debounce (200 ms) covers
-        // the same multi-fire window without crossing threads, and
-        // Props.IsGenerating disables the button on the next render.
-        var regenCmd = new Command
+        var regenCmd = UseCommand(new Command
         {
             Label = "Re-gen",
             CanExecute = !Props.IsGenerating,
             Execute = () => Props.Cb.Value.OnRegenFromHere(step),
-        };
+            DebounceMs = 250,
+        });
 
         var toggleCmd = new Command
         {

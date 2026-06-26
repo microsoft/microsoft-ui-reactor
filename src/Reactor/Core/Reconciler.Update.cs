@@ -109,6 +109,15 @@ public sealed partial class Reconciler
         }
         DebugUIElementsModified++;
 
+        // Issue #345 — re-run the Grid Auto-track stack collapse check on update so dynamic,
+        // state-driven placements that a static analyzer cannot see still warn: a `columns:`
+        // collection computed to Auto, a state change that moves an HStack into an Auto track, or
+        // an explicit size being dropped on an already-mounted stack. We are past the
+        // structural-equality short-circuit above, so this only runs when something actually
+        // changed; the emit-once dedup keyed on element identity prevents repeat spam.
+        if (global::Microsoft.UI.Reactor.Diagnostics.LayoutFootgunDetector.AlwaysOnInDebug || ReactorFeatureFlags.WarnLayoutFootguns)
+            global::Microsoft.UI.Reactor.Diagnostics.LayoutFootgunDetector.Inspect(newEl);
+
         // Push context values onto scope before processing children
         var ctxValues = newEl.ContextValues;
         int ctxCount = 0;

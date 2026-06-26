@@ -4,7 +4,7 @@ using Microsoft.UI.Reactor.AppTests.Infrastructure;
 namespace Microsoft.UI.Reactor.AppTests.Tests;
 
 /// <summary>
-/// Interactive tests that use Appium/WinAppDriver to simulate real user input.
+/// Interactive tests that use winapp ui (UIA) + Win32 SendInput to simulate real user input.
 /// These are the ~4 scenarios where cross-process input injection is the point
 /// of the test: button clicks, checkbox toggles, navigation.
 ///

@@ -1,74 +1,69 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
-using OpenQA.Selenium.Appium;
-using OpenQA.Selenium.Appium.Windows;
 
 namespace Microsoft.UI.Reactor.AppTests.Infrastructure;
 
 /// <summary>
-/// Manages the Appium WindowsDriver session for WinForms interop tests.
-/// Same two-step pattern as <see cref="TestSession"/> but launches the
-/// WinForms test host (Reactor.WinFormsTests.Host) instead of the WinUI host.
+/// Manages the WinForms interop test host process + winapp UI-automation context.
+/// Same pattern as <see cref="TestSession"/> but launches the WinForms test host
+/// (Reactor.WinFormsTests.Host) instead of the WinUI host. Drives it through
+/// <see cref="WinAppUi"/> (winapp ui) — no Appium/WinAppDriver.
 /// </summary>
 public class WinFormsTestSession
 {
-    private const string WinAppDriverUrl = "http://127.0.0.1:4723";
     private const string WindowTitle = "WinForms Interop Test Host";
     private const string ProcessName = "Reactor.WinFormsTests.Host";
 
-    private static WindowsDriver<WindowsElement>? _session;
     private static Process? _appProcess;
+    private static WinAppUi? _app;
+    private static UiaPropertyReader? _uia;
     private static int _refCount;
 
-    public static WindowsDriver<WindowsElement> Session =>
-        _session ?? throw new InvalidOperationException(
+    public static WinAppUi App =>
+        _app ?? throw new InvalidOperationException(
             "WinForms test session has not been initialized. Ensure [ClassInitialize] has run.");
 
-    public static void Init(TestContext context)
+    public static IUiaPropertyReader Uia =>
+        _uia ?? throw new InvalidOperationException(
+            "WinForms test session has not been initialized. Ensure [ClassInitialize] has run.");
+
+    public static long HostHwnd => App.HostHwnd;
+
+    public static int HostPid => _appProcess?.Id ?? 0;
+
+    public static void Init(object? context = null)
     {
         _refCount++;
 
-        if (_session != null)
+        if (_app != null)
         {
             Console.WriteLine($"WinForms session already active (ref {_refCount}), reusing.");
             return;
         }
 
+        SessionInteractivityGuard.EnsureInteractive("WinFormsTestSession.Init");
+
         KillOrphanedProcesses();
-        WinAppDriverHelper.Start();
 
         var exePath = FindHostExe();
         Console.WriteLine($"WinForms host: {exePath}");
 
-        _appProcess = Process.Start(new ProcessStartInfo(exePath)
-        {
-            UseShellExecute = false,
-        });
+        _appProcess = Process.Start(new ProcessStartInfo(exePath) { UseShellExecute = false });
         Console.WriteLine($"WinForms host launched (PID {_appProcess?.Id}).");
 
-        WaitForWindow();
-
-        // Create a Desktop session and find the app window
-        var desktopOptions = new AppiumOptions();
-        desktopOptions.AddAdditionalCapability("app", "Root");
-        desktopOptions.AddAdditionalCapability("deviceName", "WindowsPC");
-
-        using var desktopSession = new WindowsDriver<WindowsElement>(
-            new Uri(WinAppDriverUrl), desktopOptions);
-
-        var appWindow = desktopSession.FindElementByName(WindowTitle);
-        var appWindowHandle = appWindow.GetAttribute("NativeWindowHandle");
-        var hwnd = int.Parse(appWindowHandle).ToString("x");
-
-        var appOptions = new AppiumOptions();
-        appOptions.AddAdditionalCapability("appTopLevelWindow", $"0x{hwnd}");
-        appOptions.AddAdditionalCapability("deviceName", "WindowsPC");
-
-        _session = new WindowsDriver<WindowsElement>(new Uri(WinAppDriverUrl), appOptions);
-        _session.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(2);
-
-        Console.WriteLine("WindowsDriver session attached to WinForms host.");
+        try
+        {
+            var pid = _appProcess!.Id;
+            var hwnd = WinAppUi.FindWindowHwnd(pid, WindowTitle, timeoutMs: 15000);
+            _app = new WinAppUi(pid, hwnd);
+            _uia = new UiaPropertyReader(hwnd);
+            Console.WriteLine($"winapp UI automation bound to WinForms host (HWND 0x{hwnd:X}).");
+        }
+        catch (Exception ex) when (ex is WinAppException or TimeoutException)
+        {
+            SessionInteractivityGuard.RecheckAfterFailure("WinFormsTestSession bootstrap");
+            throw;
+        }
     }
 
     public static void Cleanup()
@@ -87,13 +82,8 @@ public class WinFormsTestSession
     public static void ForceCleanup()
     {
         _refCount = 0;
-
-        if (_session != null)
-        {
-            try { _session.Quit(); }
-            catch (Exception ex) { Console.WriteLine($"Warning: session close failed: {ex.Message}"); }
-            finally { _session = null; }
-        }
+        _app = null;
+        _uia = null;
 
         if (_appProcess != null)
         {
@@ -112,8 +102,6 @@ public class WinFormsTestSession
                 _appProcess = null;
             }
         }
-
-        WinAppDriverHelper.Stop();
     }
 
     private static void KillOrphanedProcesses()
@@ -129,28 +117,6 @@ public class WinFormsTestSession
             catch { }
             finally { proc.Dispose(); }
         }
-    }
-
-    private static void WaitForWindow()
-    {
-        for (int i = 0; i < 25; i++)
-        {
-            Thread.Sleep(200);
-            try
-            {
-                var opts = new AppiumOptions();
-                opts.AddAdditionalCapability("app", "Root");
-                opts.AddAdditionalCapability("deviceName", "WindowsPC");
-                using var desktop = new WindowsDriver<WindowsElement>(
-                    new Uri(WinAppDriverUrl), opts);
-                desktop.FindElementByName(WindowTitle);
-                Console.WriteLine($"WinForms host window found after {(i + 1) * 200}ms.");
-                return;
-            }
-            catch { }
-        }
-
-        throw new TimeoutException("WinForms host window did not appear within 5 seconds.");
     }
 
     private static string FindHostExe()

@@ -1,109 +1,90 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
-using OpenQA.Selenium.Appium;
-using OpenQA.Selenium.Appium.Windows;
 
 namespace Microsoft.UI.Reactor.AppTests.Infrastructure;
 
 /// <summary>
-/// Manages the Appium WindowsDriver session for the test assembly.
-/// Uses a two-step approach: launches the Host app as a process, then creates
-/// a WinAppDriver Desktop session and attaches to the app window. This avoids
-/// WinAppDriver's app-launch session which can fail with WinUI3 apps.
+/// Manages the Host app process + winapp UI-automation context for the test assembly.
+/// Launches <c>Reactor.AppTests.Host.exe</c> as a regular process, captures its PID and
+/// primary window HWND, and exposes a <see cref="WinAppUi"/> driver bound to that window.
 ///
-/// The session is shared across all test classes — the first ClassInitialize
-/// call starts it, and the last ClassCleanup call tears it down.
+/// Replaces the former Appium/WinAppDriver two-step bootstrap — there is no persistent
+/// automation session; <see cref="WinAppUi"/> drives the app via per-call <c>winapp ui</c>
+/// invocations.
+///
+/// The context is shared across all test classes — the first ClassInitialize starts it,
+/// the last ClassCleanup tears it down.
 /// </summary>
 public class TestSession
 {
-    private const string WinAppDriverUrl = "http://127.0.0.1:4723";
+    private const string WindowTitle = "Reactor Test Host";
 
-    private static WindowsDriver<WindowsElement>? _session;
     private static Process? _appProcess;
+    private static WinAppUi? _app;
+    private static UiaPropertyReader? _uia;
     private static int _refCount;
 
-    public static WindowsDriver<WindowsElement> Session =>
-        _session ?? throw new InvalidOperationException(
+    /// <summary>The winapp-backed UI automation driver bound to the Host window.</summary>
+    public static WinAppUi App =>
+        _app ?? throw new InvalidOperationException(
             "Test session has not been initialized. Ensure [ClassInitialize] has run.");
 
+    /// <summary>In-process UIA property reader (fallback for properties winapp can't surface).</summary>
+    public static IUiaPropertyReader Uia =>
+        _uia ?? throw new InvalidOperationException(
+            "Test session has not been initialized. Ensure [ClassInitialize] has run.");
+
+    /// <summary>HWND of the primary Host window.</summary>
+    public static long HostHwnd => App.HostHwnd;
+
+    /// <summary>PID of the Host process.</summary>
+    public static int HostPid => _appProcess?.Id ?? 0;
+
     /// <summary>
-    /// Called by each test class's ClassInitialize. Only the first call actually
-    /// starts the session; subsequent calls increment the ref count.
+    /// Called by each test class's ClassInitialize. Only the first call actually starts the
+    /// session; subsequent calls increment the ref count.
     /// </summary>
-    public static void AssemblyInit(TestContext context)
+    public static void AssemblyInit(object? context = null)
     {
         _refCount++;
 
-        if (_session != null)
+        if (_app != null)
         {
             Console.WriteLine($"Session already active (ref {_refCount}), reusing.");
             return;
         }
 
-        // Bail out cleanly if the desktop is already locked / disconnected.
-        // Without this, we'd spend minutes booting WinAppDriver + the host app,
-        // only to fail every test on the first Click() with a generic error.
+        // Bail out cleanly if the desktop is locked / disconnected, so flake reports don't
+        // drown in environmental noise.
         SessionInteractivityGuard.EnsureInteractive("TestSession.AssemblyInit");
 
-        // Kill any orphaned processes from a previous failed run
         KillOrphanedProcesses();
 
-        WinAppDriverHelper.Start();
-
-        // Step 1: Launch the Host app as a regular process
         var exePath = FindHostExe();
         Console.WriteLine($"Host app: {exePath}");
 
-        _appProcess = Process.Start(new ProcessStartInfo(exePath)
-        {
-            UseShellExecute = false,
-        });
+        _appProcess = Process.Start(new ProcessStartInfo(exePath) { UseShellExecute = false });
         Console.WriteLine($"Host app launched (PID {_appProcess?.Id}).");
 
         try
         {
-            // Poll for the app window instead of a fixed sleep. WaitForHostWindow
-            // throws TimeoutException after swallowing per-poll WebDriverExceptions —
-            // a mid-init screen lock surfaces here, not as a WebDriverException.
-            WaitForHostWindow();
-
-            // Step 2: Create a Desktop session and find the app window
-            var desktopOptions = new AppiumOptions();
-            desktopOptions.AddAdditionalCapability("app", "Root");
-            desktopOptions.AddAdditionalCapability("deviceName", "WindowsPC");
-
-            using var desktopSession = new WindowsDriver<WindowsElement>(
-                new Uri(WinAppDriverUrl), desktopOptions);
-
-            // Find the Host app window by title
-            var appWindow = desktopSession.FindElementByName("Reactor Test Host");
-            var appWindowHandle = appWindow.GetAttribute("NativeWindowHandle");
-            var hwnd = int.Parse(appWindowHandle).ToString("x"); // hex for WinAppDriver
-
-            // Step 3: Create a session attached to the app window
-            var appOptions = new AppiumOptions();
-            appOptions.AddAdditionalCapability("appTopLevelWindow", $"0x{hwnd}");
-            appOptions.AddAdditionalCapability("deviceName", "WindowsPC");
-
-            _session = new WindowsDriver<WindowsElement>(new Uri(WinAppDriverUrl), appOptions);
-            _session.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(2);
-
-            Console.WriteLine("WindowsDriver session attached to Host app.");
+            var pid = _appProcess!.Id;
+            var hwnd = WinAppUi.FindWindowHwnd(pid, WindowTitle, timeoutMs: 15000);
+            _app = new WinAppUi(pid, hwnd);
+            _uia = new UiaPropertyReader(hwnd);
+            Console.WriteLine($"winapp UI automation bound to Host window (HWND 0x{hwnd:X}).");
         }
-        catch (Exception ex) when (ex is OpenQA.Selenium.WebDriverException || ex is TimeoutException)
+        catch (Exception ex) when (ex is WinAppException or TimeoutException)
         {
-            // Catches both: WebDriverException from the session steps, and
-            // TimeoutException from WaitForHostWindow. Either could mask a
-            // workstation lock that happened after the AssemblyInit preflight.
-            SessionInteractivityGuard.RecheckAfterWebDriverFailure("TestSession session bootstrap");
+            // A mid-init screen lock surfaces here. Reclassify as Inconclusive when locked.
+            SessionInteractivityGuard.RecheckAfterFailure("TestSession bootstrap");
             throw;
         }
     }
 
     /// <summary>
-    /// Called by each test class's ClassCleanup. Only the last call (ref count
-    /// drops to zero) actually tears down the session and kills processes.
+    /// Called by each test class's ClassCleanup. Only the last call (ref count drops to zero)
+    /// actually tears down the session and kills the process.
     /// </summary>
     public static void AssemblyCleanup()
     {
@@ -118,19 +99,12 @@ public class TestSession
         ForceCleanup();
     }
 
-    /// <summary>
-    /// Unconditionally tears down the session and kills all processes.
-    /// </summary>
+    /// <summary>Unconditionally tears down the session and kills the Host process.</summary>
     public static void ForceCleanup()
     {
         _refCount = 0;
-
-        if (_session != null)
-        {
-            try { _session.Quit(); }
-            catch (Exception ex) { Console.WriteLine($"Warning: session close failed: {ex.Message}"); }
-            finally { _session = null; }
-        }
+        _app = null;
+        _uia = null;
 
         if (_appProcess != null)
         {
@@ -149,8 +123,6 @@ public class TestSession
                 _appProcess = null;
             }
         }
-
-        WinAppDriverHelper.Stop();
     }
 
     private static void KillOrphanedProcesses()
@@ -166,30 +138,6 @@ public class TestSession
             catch { }
             finally { proc.Dispose(); }
         }
-    }
-
-    private static void WaitForHostWindow()
-    {
-        // Poll for the window to appear rather than a fixed 3s sleep.
-        // The app typically renders in ~1s; we poll up to 5s as a safety net.
-        for (int i = 0; i < 25; i++)
-        {
-            Thread.Sleep(200);
-            try
-            {
-                var opts = new AppiumOptions();
-                opts.AddAdditionalCapability("app", "Root");
-                opts.AddAdditionalCapability("deviceName", "WindowsPC");
-                using var desktop = new WindowsDriver<WindowsElement>(
-                    new Uri(WinAppDriverUrl), opts);
-                desktop.FindElementByName("Reactor Test Host");
-                Console.WriteLine($"Host window found after {(i + 1) * 200}ms.");
-                return;
-            }
-            catch { }
-        }
-
-        throw new TimeoutException("Host app window did not appear within 5 seconds.");
     }
 
     private static string FindHostExe()

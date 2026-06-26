@@ -36,7 +36,8 @@ public class ChartScannerRuleTests
         bool isKeyboardDisabled = false,
         bool isTightHitTest = false,
         global::Windows.UI.Color? customFocusColor = null,
-        bool isAnnounceEveryFrame = false)
+        bool isAnnounceEveryFrame = false,
+        D3Color? chartBackground = null)
     {
         var canvas = new CanvasElement([])
         {
@@ -56,6 +57,7 @@ public class ChartScannerRuleTests
                 IsTightHitTest = isTightHitTest,
                 CustomFocusColor = customFocusColor,
                 IsAnnounceEveryFrame = isAnnounceEveryFrame,
+                ChartBackground = chartBackground,
             });
         }
 
@@ -277,7 +279,198 @@ public class ChartScannerRuleTests
         Assert.DoesNotContain(findings, f => f.Id == "A11Y_CHART_011");
     }
 
-    // ── A11Y_CHART_012: RawColors escape hatch ──────────────────────
+    // ── A11Y_CHART_011: active-background scoping (issue #633) ───────
+
+    [Fact]
+    public void A11Y_CHART_011_KnownLightBackground_FailingColor_FiresWarning()
+    {
+        // Near-white yellow fails 3:1 against the light (255,255,255) background. When the
+        // author declares .ChartBackground(light), the scanner knows the palette actually
+        // renders on that background, so the failure is real and is promoted from info to a
+        // WARNING (the false positives that forced the info downgrade are gone — issue #633).
+        var palette = ChartPalette.FromColors(new D3Color(255, 255, 200));
+        var canvas = MakeChartCanvas(
+            chartData: DataWithSeries(name: "Revenue"),
+            customPalette: palette,
+            chartBackground: new D3Color(255, 255, 255));
+        var tree = VStack(canvas);
+
+        var findings = AccessibilityScanner.Scan(tree);
+        var finding = Assert.Single(findings, f => f.Id == "A11Y_CHART_011");
+        Assert.Equal("warning", finding.Severity);
+    }
+
+    [Fact]
+    public void A11Y_CHART_011_KnownDarkBackground_LightColor_DoesNotFire()
+    {
+        // The SAME near-white palette passes 3:1 against the dark (32,32,32) background. With
+        // the background scoped to dark, the color is legible on the background it actually
+        // renders on, so the rule must NOT fire — a palette is only penalized for a background
+        // it will actually render on (issue #633). Under the old both-backgrounds OR behavior
+        // this same palette would have produced an info finding.
+        var palette = ChartPalette.FromColors(new D3Color(255, 255, 200));
+        var canvas = MakeChartCanvas(
+            chartData: DataWithSeries(name: "Revenue"),
+            customPalette: palette,
+            chartBackground: new D3Color(32, 32, 32));
+        var tree = VStack(canvas);
+
+        var findings = AccessibilityScanner.Scan(tree);
+        Assert.DoesNotContain(findings, f => f.Id == "A11Y_CHART_011");
+    }
+
+    [Fact]
+    public void A11Y_CHART_011_NoDeclaredBackground_KeepsInfoBothBackgroundsBehavior()
+    {
+        // Without a declared background the scanner stays theme-agnostic: it flags the
+        // near-white color against EITHER fixed background and keeps the INFO severity so the
+        // alert-fatigue mitigation from #629 is preserved for charts that don't opt in. Pinning
+        // the severity guards the unknown-background path from silently regressing (issue #633).
+        var palette = ChartPalette.FromColors(new D3Color(255, 255, 200));
+        var canvas = MakeChartCanvas(chartData: DataWithSeries(name: "Revenue"), customPalette: palette);
+        var tree = VStack(canvas);
+
+        var findings = AccessibilityScanner.Scan(tree);
+        var finding = Assert.Single(findings, f => f.Id == "A11Y_CHART_011");
+        Assert.Equal("info", finding.Severity);
+    }
+
+    [Fact]
+    public void A11Y_CHART_011_KnownDarkBackground_FailingColor_FiresWarningWithRealFix()
+    {
+        // A near-black series fails 3:1 against the dark #202020 background it actually renders
+        // on, so the scanner fires a WARNING (issue #633 M4). Critically, the suggested fix must
+        // be a REAL remediation — colors that genuinely clear 3:1 against that dark background —
+        // not an echo of the still-failing near-black color. Darkening can never satisfy a
+        // near-black background, so a direction rule that always darkens would echo a failing
+        // color (the #628/#629 bad-fix-suggestion defect class, #633 M2). This assertion fails
+        // against the pre-M2 darken-only Harden, so it is the load-bearing guard.
+        var darkBg = new D3Color(32, 32, 32);
+        var palette = ChartPalette.FromColors(new D3Color(28, 28, 28));
+        var canvas = MakeChartCanvas(
+            chartData: DataWithSeries(name: "Revenue"),
+            customPalette: palette,
+            chartBackground: darkBg);
+        var tree = VStack(canvas);
+
+        var findings = AccessibilityScanner.Scan(tree);
+        var finding = Assert.Single(findings, f => f.Id == "A11Y_CHART_011");
+        Assert.Equal("warning", finding.Severity);
+
+        // The fix's suggested value must parse to a palette whose every color clears 3:1
+        // against the active dark background (M1 + M2 together: a verified, non-echo fix).
+        var fixedColors = finding.Fix!.SuggestedValue!
+            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Select(D3Color.Parse)
+            .ToArray();
+        Assert.NotEmpty(fixedColors);
+        Assert.All(fixedColors, c => Assert.True(
+            ChartPalette.ContrastRatio(c, darkBg) >= 3.0,
+            $"Suggested color {c.ToHex()} still fails 3:1 against dark background {darkBg.ToHex()}"));
+    }
+
+    [Fact]
+    public void A11Y_CHART_011_ChartBackgroundDslModifier_FlowsIntoScan()
+    {
+        // Drives the actual .ChartBackground(...) DSL modifier (string overload) through the
+        // real AttachChartData wiring into ChartA11yData, then scans — pinning the modifier→
+        // attach path itself rather than setting ChartA11yData.ChartBackground directly via
+        // MakeChartCanvas (issue #633 L1; also exercises the L2 string→D3Color overload). We
+        // attach to a bare CanvasElement to stay headless: the real D3Canvas builds a
+        // SolidColorBrush and would need WinUI COM.
+        var chart = Charts.LineChart(Array.Empty<DataPoint>(), d => d.X, d => d.Y)
+            .SeriesColors(new D3Color(255, 255, 200)) // near-white: fails the light background
+            .ChartBackground("#FFFFFF");              // string overload → light (255,255,255)
+        var canvas = chart.AttachChartDataForTest(new CanvasElement([]) { Width = 400, Height = 300 });
+        var tree = VStack(canvas);
+
+        var findings = AccessibilityScanner.Scan(tree);
+        var finding = Assert.Single(findings, f => f.Id == "A11Y_CHART_011");
+        Assert.Equal("warning", finding.Severity);
+    }
+
+    [Fact]
+    public void ChartBackground_NormalizesToOpaqueRgb()
+    {
+        // Contrast math (ChartPalette.ContrastRatio/RelativeLuminance) ignores opacity — a
+        // semi-transparent background can't be evaluated without knowing what's behind it. So
+        // .ChartBackground(...) must drop alpha and store opaque RGB regardless of overload,
+        // rather than persisting a misleading alpha (PR #638 review). Drive a translucent
+        // Windows.UI.Color through the real modifier and assert the attached value is opaque.
+        var translucent = global::Windows.UI.Color.FromArgb(0x80, 0x20, 0x20, 0x20);
+        var chart = Charts.LineChart(Array.Empty<DataPoint>(), d => d.X, d => d.Y)
+            .ChartBackground(translucent);
+        var canvas = chart.AttachChartDataForTest(new CanvasElement([]) { Width = 400, Height = 300 });
+
+        // Assert.IsType narrows the nullable ChartBackground to a non-null D3Color in one step,
+        // so the subsequent reads don't dereference a nullable value type (CodeQL r3461264777).
+        var bg = Assert.IsType<D3Color>(canvas.GetAttached<ChartA11yData>()!.ChartBackground);
+        Assert.Equal(1.0, bg.Opacity);
+        Assert.Equal(0x20, bg.R);
+        Assert.Equal(0x20, bg.G);
+        Assert.Equal(0x20, bg.B);
+    }
+
+    [Fact]
+    public void A11Y_CHART_011_PieChart_ChartBackgroundDslModifier_FlowsIntoScan()
+    {
+        // H1: PieChartElement<T> has its OWN .ChartBackground(...) overloads, _chartBackground
+        // field, and AttachChartData path — separate from ChartElement<T>. Pin that the Pie
+        // modifier wiring also scopes A11Y_CHART_011 to the declared background and promotes it
+        // to a warning (issue #633 / PR #638 review). A near-white palette fails the declared
+        // light background. Headless: attach to a bare CanvasElement to skip the D3Canvas/
+        // SolidColorBrush WinUI COM path, exactly as the ChartElement<T> DSL test does.
+        var palette = ChartPalette.FromColors(new D3Color(255, 255, 200));
+        var chart = Charts.PieChart(Array.Empty<DataPoint>(), d => d.Y)
+            .Palette(palette)
+            .ChartBackground("#FFFFFF");
+        var canvas = chart.AttachChartDataForTest(new CanvasElement([]) { Width = 400, Height = 300 });
+        var tree = VStack(canvas);
+
+        var findings = AccessibilityScanner.Scan(tree);
+        var finding = Assert.Single(findings, f => f.Id == "A11Y_CHART_011");
+        Assert.Equal("warning", finding.Severity);
+    }
+
+    [Fact]
+    public void A11Y_CHART_011_KnownBackground_PairwiseGuardBlocksFix_FallsBackToTextualHint()
+    {
+        // M2: when the contrast-improving nudge would collide with another series, the pairwise-
+        // distinguishability guard skips it, so Harden cannot produce a fully-passing palette. The
+        // fix must then fall back to a TEXTUAL instruction rather than echoing the still-failing
+        // palette as a "fix" (the #628/#629 bad-suggestion defect class this whole arc closes).
+        //
+        // Provable construction: on the dark #202020 background, color0 #2b2b2b (near-black) fails
+        // 3:1 and can only clear it by LIGHTENING. color1 #888888 already passes #202020, so the
+        // background pass never moves it. But any color light enough to clear #202020 (relative
+        // luminance ≳ 0.14, gray ≈ 111) sits within 3:1 of color1 (luminance ≈ 0.25); the only
+        // escape — lightening all the way past color1 to ≈ gray 237 — requires crossing a band
+        // (gray ≈ 66..237) where every incremental candidate is pairwise-blocked. color0 is
+        // therefore trapped failing the background, so no real hardened palette exists and the
+        // suggestion must be the textual fallback.
+        var bg = new D3Color(32, 32, 32);
+        var palette = ChartPalette.FromColors(new D3Color(0x2b, 0x2b, 0x2b), new D3Color(0x88, 0x88, 0x88));
+        var canvas = MakeChartCanvas(
+            chartData: DataWithSeries(name: "Revenue"),
+            customPalette: palette,
+            chartBackground: bg);
+        var tree = VStack(canvas);
+
+        var findings = AccessibilityScanner.Scan(tree);
+        var finding = Assert.Single(findings, f => f.Id == "A11Y_CHART_011");
+
+        // Detection/severity stay correct: a real failure against the declared background → warning.
+        Assert.Equal("warning", finding.Severity);
+
+        // The fix is NOT an echo: because Harden could not prove a fully-passing palette under the
+        // pairwise guard, the suggestion is the TEXTUAL fallback arm (starts with the instruction
+        // phrase), never the hex-list arm (string.Join of palette colors). It may name the active
+        // background hex (#202020), but it must not echo the still-failing palette color #2b2b2b.
+        Assert.NotNull(finding.Fix);
+        var suggested = finding.Fix!.SuggestedValue ?? "";
+        Assert.StartsWith("Adjust palette colors", suggested);
+        Assert.DoesNotContain("2b2b2b", suggested.ToLowerInvariant());
+    }
 
     [Fact]
     public void A11Y_CHART_012_RawColors_EmittedAsInfo()

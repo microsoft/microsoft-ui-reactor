@@ -240,6 +240,14 @@ public sealed class ElementPool : IDisposable
         fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.FullDescriptionProperty);
         fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.LandmarkTypeProperty);
         fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.AccessibilityViewProperty);
+        // Issue #162: chart label/tick subtree-hiding (and any other code path) sets
+        // IsHitTestVisible / IsTabStop imperatively on poolable controls. The pool already
+        // resets AccessibilityView above; it must also reset these two so a control hidden
+        // inside a custom label can't return to the pool non-tabbable / non-hit-testable and
+        // silently poison the next unrelated renter that doesn't re-set them.
+        fe.ClearValue(UIElement.IsHitTestVisibleProperty);
+        if (fe is Control tabStopControl)
+            tabStopControl.ClearValue(Control.IsTabStopProperty);
         fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.IsRequiredForFormProperty);
         fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.LiveSettingProperty);
         fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.PositionInSetProperty);

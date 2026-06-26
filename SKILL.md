@@ -510,7 +510,7 @@ dotnet test tests/Reactor.Tests
 # Selfhost tests — real WinUI controls, in-process (~2 min)
 dotnet test tests/Reactor.SelfTests
 
-# Appium / E2E — cross-process UI Automation (~30s, needs WinAppDriver)
+# E2E — cross-process UI Automation via winapp ui (~30s, needs the winapp CLI)
 dotnet test tests/Reactor.AppTests --filter "ClassName=Reactor.AppTests.Tests.InteractiveTests"
 
 # Everything

@@ -336,6 +336,46 @@ measurements — predictable enough for trivial cases, surprising for
 anything dynamic. Pick one per axis. See
 [flex-layout](flex-layout.md) for when each shape is right.
 
+### `HStack`/`VStack` in a `Grid` `Auto` track collapses to nothing
+
+```csharp
+// Don't:
+Grid(
+    columns: [GridSize.Auto, GridSize.Star()],
+    rows: [GridSize.Star()],
+    HStack(SaveButton(), CancelButton()).Grid(column: 0))  // row vanishes — measures 0×0
+```
+
+A `Grid` `Auto` track measures its content with **infinite** available
+space on that axis. A `StackPanel` (`HStack`/`VStack`) measures its
+children sequentially and accumulates their desired size — so any child
+that relies on *stretch* sizing reports `0`, the stack accumulates `0`,
+and the whole column (or row) silently collapses to `0×0`. The action
+row just disappears with no error.
+
+Wrapping the stack in a `Border` does **not** help — the `Border` sizes
+to its `0`-sized child. The real fixes are:
+
+- Use a `Star` track (`GridSize.Star()`) so the cell hands the stack a
+  finite width to stretch into, **or**
+- Set an explicit `.Width(...)` (for `HStack`) / `.Height(...)` (for
+  `VStack`) — or a `.MinWidth(...)` / `.MinHeight(...)` — on the stack, **or**
+- Give the stack's children explicit (or minimum) sizes so they don't
+  depend on stretch.
+
+```csharp
+// Do:
+Grid(
+    columns: [GridSize.Star(), GridSize.Star()],   // Star, not Auto
+    rows: [GridSize.Star()],
+    HStack(SaveButton(), CancelButton()).Grid(column: 0))
+```
+
+Reactor surfaces this footgun at debug time: when
+`ReactorFeatureFlags.WarnLayoutFootguns` is set (always on in `DEBUG`
+builds), the reconciler emits a one-time warning naming the offending
+stack and its `Auto` track so you don't have to bisect the collapse.
+
 ## Tips
 
 **Start with VStack.** Most screens are a vertical stack of sections.
