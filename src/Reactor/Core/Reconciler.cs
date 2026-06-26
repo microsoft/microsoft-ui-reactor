@@ -2683,10 +2683,14 @@ public sealed partial class Reconciler : IDisposable
     public static void UpdateDefaultAutomationName(FrameworkElement fe, string? oldCaption, string? newCaption)
     {
         if (fe is null) return;
-        // A whitespace new caption has nothing to write — skip the GetName read too
-        // (main's first line returns on whitespace newCaption, so this is behavior-
-        // identical, it just avoids the interop read). Otherwise read the live Name
-        // and let the pure helper decide; we only touch the DP when it returns a value.
+        // Two arms: a whitespace new caption has nothing to write, so we return before
+        // even reading the Name (main also returns first on whitespace newCaption, so
+        // this is behavior-identical — it just avoids that one interop read). For any
+        // NON-whitespace caption we still read the live Name and let the pure helper
+        // decide. The actual P3 saving lives inside that helper: it skips the SetName
+        // write when the live Name already equals the caption-derived default (the
+        // redundant same-value write). GetName is NOT skipped for unchanged captions —
+        // only the redundant SetName is. We touch the DP only when the helper returns a value.
         if (string.IsNullOrWhiteSpace(newCaption)) return;
         var current = Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(fe);
         var resolved = ResolveDefaultAutomationNameUpdate(current, oldCaption, newCaption);
