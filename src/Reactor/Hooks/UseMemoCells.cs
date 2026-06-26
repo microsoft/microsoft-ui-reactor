@@ -161,6 +161,9 @@ public static class UseMemoCellsExtensions
         var prev = stateRef.Current;
         var depsChanged = prev is null || !DepsEqual(prev.Deps, dependencies);
         var count = items.Count;
+        // Previous render's row count (snapshot length); bounds the key-buffer tail
+        // clear below and feeds the full-reuse length check.
+        var prevCount = prev?.Items.Length ?? 0;
 
         // #59: compute each item's key exactly once and reuse it in both the reuse
         // scan and the snapshot-map build (keySelector was previously invoked twice
@@ -173,12 +176,15 @@ public static class UseMemoCellsExtensions
             keys = count == 0 ? Array.Empty<TKey>() : new TKey[count];
         for (int i = 0; i < count; i++)
             keys[i] = keySelector(items[i]);
-        // When the buffer is reused from a render that had more rows, null out the
-        // stale [count..] tail so keys for rows that scrolled/shrank away are not held
-        // alive until the slots are next overwritten. Zero-alloc: writes null over the
-        // unused region only, and is skipped in the steady state where Length == count.
-        if (keys.Length > count)
-            Array.Clear(keys, count, keys.Length - count);
+        // Null only the slots vacated since the PREVIOUS render ([count..prevCount]).
+        // Slots beyond prevCount were already nulled by the render that vacated them,
+        // so a buffer that peaked large then stays small is cleared once per shrink
+        // transition instead of paying an O(buffer) Array.Clear on every steady-state
+        // full-reuse render. The post-render invariant is unchanged: [count..Length]
+        // is still all-null afterwards. prevCount <= keys.Length always holds (the
+        // buffer grows to fit every count it has seen); Math.Min is a defensive clamp.
+        if (prevCount > count)
+            Array.Clear(keys, count, Math.Min(prevCount, keys.Length) - count);
 
         // #47: full-reuse fast path — deps unchanged, same length, every item equal
         // in order AND every key still maps to its own position. Returns the prior
@@ -186,9 +192,9 @@ public static class UseMemoCellsExtensions
         // allocations. The key check (via the existing KeyToIndex map, zero-alloc)
         // keeps this provably equivalent to the slow path's key-identity reuse even
         // when keySelector is not a pure function of the item value.
-        if (!depsChanged && prev!.Items.Length == count)
+        if (!depsChanged && prevCount == count)
         {
-            var prevSnapshot = prev.Items;
+            var prevSnapshot = prev!.Items;
             var prevKeyMap = prev.KeyToIndex;
             bool allReused = true;
             for (int i = 0; i < count; i++)
