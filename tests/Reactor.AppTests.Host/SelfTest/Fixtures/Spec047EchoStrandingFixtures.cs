@@ -88,7 +88,7 @@ internal static class Spec047EchoStrandingFixtures
         }
     }
 
-    /// <summary>ToggleSplitButton.IsChecked — generic <c>.Controlled</c> entry.</summary>
+    /// <summary>ToggleSplitButton.IsChecked — issue #637 <c>HandCodedControlled</c> (value-diff) entry.</summary>
     internal class ToggleSplitButtonRealInputEcho(Harness h) : SelfTestFixtureBase(h)
     {
         public override async Task RunAsync()

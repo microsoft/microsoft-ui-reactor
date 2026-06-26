@@ -3033,24 +3033,48 @@ public partial record ToggleSplitButtonElement(string Label, Optional<bool> IsCh
     internal Action<WinUI.ToggleSplitButton>[] Setters { get; init; } = [];
     internal override bool HasCallbacks => OnIsCheckedChanged is not null || global::Microsoft.UI.Reactor.Core.CommandBindings.Invokable(Command) is not null;
 
+    // issue #637 — non-null gate marker for a command-only binding (Command set, no
+    // OnIsCheckedChanged). The HandCodedControlled `callback` selector is only null-checked
+    // (to gate subscription + value-diff arming) and is NEVER invoked, so a shared static
+    // sentinel adds zero per-event and per-reconcile allocation. Actual dispatch — including the
+    // OnIsCheckedChanged-wins-over-Command precedence — lives in __IsCheckedChangedTrampoline.
+    private static readonly Action<bool> __CommandGate = static _ => { };
+
+    // issue #637 — static IsCheckedChanged trampoline (replaces the per-toggle `new Action<bool>`
+    // the prior `.Controlled` callback allocated for command-only bindings). Reads the live element
+    // off the attached ReactorState at fire time; honors the value-diff echo arm so a programmatic
+    // controlled write does not re-enter the callback. Dispatch precedence matches the rest of the
+    // command-capable elements: a user OnIsCheckedChanged wins, else the typed Command is invoked.
+    private static readonly global::Windows.Foundation.TypedEventHandler<
+        WinUI.ToggleSplitButton, WinUI.ToggleSplitButtonIsCheckedChangedEventArgs> __IsCheckedChangedTrampoline = (s, _) =>
+    {
+        var tsb = (WinUI.ToggleSplitButton)s!;
+        var isChecked = tsb.IsChecked;
+        if (!global::Microsoft.UI.Reactor.Core.Reconciler.TryGetReactorState(tsb, out var state)) return;
+        if (global::Microsoft.UI.Reactor.Core.ChangeEchoSuppressor.ShouldSuppressEcho(state, isChecked)) return;
+        if (state.Element is not ToggleSplitButtonElement live) return;
+        if (live.OnIsCheckedChanged is not null) { live.OnIsCheckedChanged(isChecked); return; }
+        var cmd = live.Command;
+        if (global::Microsoft.UI.Reactor.Core.CommandBindings.Invokable(cmd) is not null)
+            global::Microsoft.UI.Reactor.Core.CommandBindings.Invoke(cmd!);
+    };
+
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<ToggleSplitButtonElement, WinUI.ToggleSplitButton> Customize(
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<ToggleSplitButtonElement, WinUI.ToggleSplitButton> d)
-        => d.Controlled<bool, WinUI.ToggleSplitButtonIsCheckedChangedEventArgs>(
+        => d.HandCodedControlled<global::Microsoft.UI.Reactor.Core.V1Protocol.ToggleSplitButtonEventPayload, bool, global::Windows.Foundation.TypedEventHandler<WinUI.ToggleSplitButton, WinUI.ToggleSplitButtonIsCheckedChangedEventArgs>>(
                 get:         static e => e.IsChecked,
                 set:         static (c, v) => c.IsChecked = v,
-                subscribe:   static (fe, h) => ((WinUI.ToggleSplitButton)fe).IsCheckedChanged += (s, e) => h(s, e),
-                unsubscribe: static (fe, h) => { /* trampoline lives for control lifetime — see CWT gate in PropEntry */ },
-                // issue #637 — a button bound only via the typed Command property (no OnIsCheckedChanged)
-                // still dispatches: fall back to invoking the command on toggle. The allocated Action is
-                // off the #153 fast path (only created on mount/non-fast-path update/user toggle, never on
-                // an unchanged-command reconcile, which ShallowEquals short-circuits before the descriptor runs).
-                callback:    static e =>
-                {
-                    if (e.OnIsCheckedChanged is not null) return e.OnIsCheckedChanged;
-                    var cmd = e.Command;
-                    return global::Microsoft.UI.Reactor.Core.CommandBindings.Invokable(cmd) is not null ? new Action<bool>(_ => global::Microsoft.UI.Reactor.Core.CommandBindings.Invoke(cmd!)) : null;
-                },
-                readBack:    static c => c.IsChecked)
+                readBack:    static c => c.IsChecked,
+                subscribe:   static (c, h) => c.IsCheckedChanged += h,
+                // issue #637 — gate subscription on a callback OR an invokable Command (mirrors
+                // HasCallbacks). The returned delegate is only null-checked, never called; dispatch
+                // and the OnIsCheckedChanged-vs-Command precedence live in __IsCheckedChangedTrampoline.
+                callback:    static e => e.OnIsCheckedChanged
+                    ?? (global::Microsoft.UI.Reactor.Core.CommandBindings.Invokable(e.Command) is not null ? __CommandGate : null),
+                trampoline:  __IsCheckedChangedTrampoline,
+                slotIsNull:  static p => p.IsCheckedChangedTrampoline is null,
+                setSlot:     static (p, h) => p.IsCheckedChangedTrampoline = h,
+                valueDiffEcho: true)
             .OneWayBridged<Element?>(
                 get:         static e => e.Flyout,
                 set:         static (c, v, rec, rr) => c.Flyout = rec.CreateFlyoutForDescriptor(v, rr),
