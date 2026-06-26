@@ -144,7 +144,10 @@ public partial record RelativePanelElement
         }
         else
         {
-            nameMap = _nameMapPool ??= new Dictionary<string, UIElement>(global::System.StringComparer.Ordinal);
+            // Seed capacity on first creation to match the non-pool path above and keep
+            // the first reconcile resize-free; Clear() retains capacity, so later passes
+            // reuse it (the high-water mark) without re-seeding.
+            nameMap = _nameMapPool ??= new Dictionary<string, UIElement>(pairs.Count, global::System.StringComparer.Ordinal);
             nameMap.Clear();
             _nameMapInUse = true;
             usingPool = true;
