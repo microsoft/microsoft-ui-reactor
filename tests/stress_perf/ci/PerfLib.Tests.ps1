@@ -516,21 +516,32 @@ try {
     Assert-Equal 'na'     (Get-PerfMicroRowStatus -NsStatus 'better' -AllocStatus 'na')     'alloc na -> row na (ns does not rescue)'
     Assert-Equal 'na'     (Get-PerfMicroRowStatus -NsStatus 'na'     -AllocStatus 'na')     'na when alloc na'
 
-    # Rep-aligned pairing: a dropped/errored repetition on one side must not
-    # position-shift later samples and mis-pair the paired CI. main A1 has reps
-    # 0..3 (rep1 an outlier=2000); pr A1 is MISSING rep1. Correct rep-keyed alignment
-    # pairs only the common reps {0,2,3} -> a clean -10% alloc delta. The old
-    # position-zip would pair main rep1's 2000 against pr rep2 and smear the mean.
+    # Rep-aligned pairing + consistent medians. Two benches, each with rep1 dropped
+    # on the PR side:
+    #   A1 — main rep1 is an alloc outlier (2000). Correct rep-keyed alignment pairs
+    #        only the common reps {0,2,3} -> a clean -10% alloc Δ; the old position-zip
+    #        would pair main rep1's 2000 against pr rep2 and smear the mean.
+    #   A2 — main rep1 (unpaired) sits at the ns median position, so the DISPLAYED
+    #        median must be taken over the aligned set ({0,2,3} -> 20), not all four
+    #        samples ({10,20,30,999} -> 25). Proves the table column and the Δ are
+    #        drawn from the same samples.
     $alignMain = @(
-        (New-MicroRow 'A1' 'RepAlign' 'Reactor' 0 500 1000)
-        (New-MicroRow 'A1' 'RepAlign' 'Reactor' 1 500 2000)
-        (New-MicroRow 'A1' 'RepAlign' 'Reactor' 2 500 1000)
-        (New-MicroRow 'A1' 'RepAlign' 'Reactor' 3 500 1000)
+        (New-MicroRow 'A1' 'RepAlignDelta'  'Reactor' 0 500 1000)
+        (New-MicroRow 'A1' 'RepAlignDelta'  'Reactor' 1 500 2000)
+        (New-MicroRow 'A1' 'RepAlignDelta'  'Reactor' 2 500 1000)
+        (New-MicroRow 'A1' 'RepAlignDelta'  'Reactor' 3 500 1000)
+        (New-MicroRow 'A2' 'RepAlignMedian' 'Reactor' 0 10  500)
+        (New-MicroRow 'A2' 'RepAlignMedian' 'Reactor' 1 999 500)
+        (New-MicroRow 'A2' 'RepAlignMedian' 'Reactor' 2 20  500)
+        (New-MicroRow 'A2' 'RepAlignMedian' 'Reactor' 3 30  500)
     )
     $alignPr = @(
-        (New-MicroRow 'A1' 'RepAlign' 'Reactor' 0 500 900)
-        (New-MicroRow 'A1' 'RepAlign' 'Reactor' 2 500 900)
-        (New-MicroRow 'A1' 'RepAlign' 'Reactor' 3 500 900)
+        (New-MicroRow 'A1' 'RepAlignDelta'  'Reactor' 0 500 900)
+        (New-MicroRow 'A1' 'RepAlignDelta'  'Reactor' 2 500 900)
+        (New-MicroRow 'A1' 'RepAlignDelta'  'Reactor' 3 500 900)
+        (New-MicroRow 'A2' 'RepAlignMedian' 'Reactor' 0 10  500)
+        (New-MicroRow 'A2' 'RepAlignMedian' 'Reactor' 2 20  500)
+        (New-MicroRow 'A2' 'RepAlignMedian' 'Reactor' 3 30  500)
     )
     $alignMainJsonl = Join-Path $microTmp 'align-main.jsonl'
     $alignPrJsonl = Join-Path $microTmp 'align-pr.jsonl'
@@ -540,11 +551,17 @@ try {
     Assert-Equal 4 $alignMainMap['A1'].Repetitions.Count   'parser captures the repetition index per sample'
     Assert-Equal 1 $alignMainMap['A1'].Repetitions[1]      'repetitions carried in sorted order'
     $alignCmp = @(Get-PerfMicroComparison -Main $alignMainMap -Pr (Read-MicroBenchResults $alignPrJsonl))
-    Assert-Equal 1 $alignCmp.Count                         'rep-align: one overlapping bench'
-    $a1 = $alignCmp[0]
+    $alignById = @{}; foreach ($r in $alignCmp) { $alignById[$r.BenchId] = $r }
+    $a1 = $alignById['A1']; $a2 = $alignById['A2']
     Assert-Equal 3 $a1.AllocDelta.N                        'rep-align: only the 3 common reps paired (not min-count position zip)'
     Assert-True (($a1.AllocDelta.DeltaPct -gt -10.5) -and ($a1.AllocDelta.DeltaPct -lt -9.5)) 'rep-align: paired alloc Δ ≈ -10% (rep-keyed), not smeared by the missing rep'
     Assert-Equal 'better' $a1.AllocDelta.Status            'rep-align: clean -10% alloc flagged better'
+    Assert-Equal 1000 $a1.MainAllocBytes                   'rep-align: displayed main alloc median over the aligned set'
+    Assert-Equal 900  $a1.PrAllocBytes                     'rep-align: displayed pr alloc median over the aligned set'
+    # The unpaired main rep (999) must NOT enter the displayed median.
+    Assert-Equal 20 $a2.MainMeanNs                         'consistent medians: main ns median over aligned reps (20), not all-sample (25)'
+    Assert-Equal 20 $a2.PrMeanNs                           'consistent medians: pr ns median over aligned reps'
+    Assert-Equal 3  $a2.NsDelta.N                          'consistent medians: ns paired over the 3 common reps'
 
     # Section rendering.
     Assert-Equal 0 @(Format-PerfMicroSection -Micro $null).Count  'micro section empty when null'

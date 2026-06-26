@@ -542,18 +542,25 @@ function Get-PerfMicroComparison {
             $mNs.Add($m.MeanNsSamples[$i]);       $pNs.Add($p.MeanNsSamples[$j])
             $mAlloc.Add($m.AllocBytesSamples[$i]); $pAlloc.Add($p.AllocBytesSamples[$j])
         }
-        $nsDelta = Get-PerfDelta -Baseline (Get-PerfMedian $m.MeanNsSamples) -Candidate (Get-PerfMedian $p.MeanNsSamples) `
-            -LowerIsBetter $true -BaselineSamples ([object[]]$mNs.ToArray()) -CandidateSamples ([object[]]$pNs.ToArray())
-        $allocDelta = Get-PerfDelta -Baseline (Get-PerfMedian $m.AllocBytesSamples) -Candidate (Get-PerfMedian $p.AllocBytesSamples) `
-            -LowerIsBetter $true -BaselineSamples ([object[]]$mAlloc.ToArray()) -CandidateSamples ([object[]]$pAlloc.ToArray())
+        # Displayed medians AND the paired CI are both computed over the SAME
+        # rep-aligned sample set, so the table's main/PR columns can't be drawn from
+        # a different set of reps than the Δ when a repetition is missing on one side.
+        $mNsArr = [object[]]$mNs.ToArray();    $pNsArr = [object[]]$pNs.ToArray()
+        $mAllocArr = [object[]]$mAlloc.ToArray(); $pAllocArr = [object[]]$pAlloc.ToArray()
+        $mainMeanNs = Get-PerfMedian $mNsArr; $prMeanNs = Get-PerfMedian $pNsArr
+        $mainAlloc = Get-PerfMedian $mAllocArr; $prAlloc = Get-PerfMedian $pAllocArr
+        $nsDelta = Get-PerfDelta -Baseline $mainMeanNs -Candidate $prMeanNs `
+            -LowerIsBetter $true -BaselineSamples $mNsArr -CandidateSamples $pNsArr
+        $allocDelta = Get-PerfDelta -Baseline $mainAlloc -Candidate $prAlloc `
+            -LowerIsBetter $true -BaselineSamples $mAllocArr -CandidateSamples $pAllocArr
         $rows.Add([pscustomobject]@{
             BenchId        = $benchId
             Name           = $m.Name
-            MainMeanNs     = Get-PerfMedian $m.MeanNsSamples
-            PrMeanNs       = Get-PerfMedian $p.MeanNsSamples
+            MainMeanNs     = $mainMeanNs
+            PrMeanNs       = $prMeanNs
             NsDelta        = $nsDelta
-            MainAllocBytes = Get-PerfMedian $m.AllocBytesSamples
-            PrAllocBytes   = Get-PerfMedian $p.AllocBytesSamples
+            MainAllocBytes = $mainAlloc
+            PrAllocBytes   = $prAlloc
             AllocDelta     = $allocDelta
         })
     }

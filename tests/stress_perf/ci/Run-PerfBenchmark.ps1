@@ -648,6 +648,15 @@ function Invoke-MicroRun {
         if (Test-Path $stderr) { Get-Content $stderr -Tail 8 | ForEach-Object { Write-Host "      $_" -ForegroundColor DarkYellow } }
         return $null
     }
+    # A clean run exits 0 (per-bench exceptions are caught and written as a filtered
+    # status:"error" row, so they don't fail the process). A non-zero exit means the
+    # harness crashed — and because the file is written incrementally, whatever is on
+    # disk is a truncated prefix. Discard it rather than compare a silent subset.
+    if ($proc.ExitCode -ne 0) {
+        Write-Log "  micro exited non-zero ($($proc.ExitCode)) for '$Tag' — discarding possibly-truncated output" 'Yellow'
+        if (Test-Path $stderr) { Get-Content $stderr -Tail 8 | ForEach-Object { Write-Host "      $_" -ForegroundColor DarkYellow } }
+        return $null
+    }
     return $outJson
 }
 
