@@ -677,14 +677,14 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
     /// (<see cref="SetColors"/>) when set, otherwise the default Category10; <see cref="Palette"/>
     /// is advisory-only and never changes pie rendering. So that the scanner sees exactly the
     /// rendered slices, the rendered <c>.SetColors(...)</c> palette wins as a Tier-3
-    /// (<see cref="Accessibility.ChartPalette.FromColors"/>) scanner-validated palette; the
+    /// (<see cref="Accessibility.ChartPalette.FromColors(D3Color[])"/>) scanner-validated palette; the
     /// <see cref="Palette"/> palette is the fallback only when <c>.SetColors(...)</c> is unset,
     /// preserving the prior scanner-visible behavior. Null — neither set — means the pre-vetted
     /// Category10 default, which stays unscanned as before.
     /// </summary>
     private Accessibility.ChartPalette? ScannerPalette =>
         _colorPalette is { Count: > 0 } colors
-            ? Accessibility.ChartPalette.FromColors([.. colors])
+            ? Accessibility.ChartPalette.FromColors(colors)
             : _palette;
 
     public Element ToElement()
