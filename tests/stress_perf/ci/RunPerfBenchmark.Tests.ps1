@@ -279,6 +279,23 @@ finally {
 }
 
 # ===========================================================================
+#  Micro-suite budget — iterations + per-side timeout sized to actually finish
+# ===========================================================================
+# The 16-bench suite was silently dropped from every comment because at
+# -MicroIterations 10000 it ran ~3x over the per-side timeout (completed only
+# M1-M4, then Invoke-MicroRun discarded the truncated prefix). Lock the budget
+# fit: a small inner-iteration default plus a timeout with headroom over the
+# suite's real cost. Both are pure capacity knobs — they don't change the per-op
+# ns/alloc math (each bench stays hundreds of thousands of times the timer floor).
+$mip = $ast.ParamBlock.Parameters | Where-Object { $_.Name.VariablePath.UserPath -eq 'MicroIterations' } | Select-Object -First 1
+Assert-True ($null -ne $mip) '[micro] -MicroIterations parameter exists'
+Assert-True ($mip -and $mip.DefaultValue -and $mip.DefaultValue.Extent.Text -eq '1000') '[micro] -MicroIterations defaults to 1000 (suite fits its per-side budget)'
+$mrp = $ast.ParamBlock.Parameters | Where-Object { $_.Name.VariablePath.UserPath -eq 'MicroReps' } | Select-Object -First 1
+Assert-True ($mrp -and $mrp.DefaultValue -and $mrp.DefaultValue.Extent.Text -eq '12') '[micro] -MicroReps defaults to 12 (paired-CI sample count unchanged)'
+$microFn = Get-Func 'Invoke-MicroRun'
+Assert-True ($microFn -match '\$timeoutSec\s*=\s*600') '[micro] Invoke-MicroRun per-side timeout is 600s (headroom over the suite cost at 1000 iterations)'
+
+# ===========================================================================
 #  Invoke-OneRun — --percent threading (-RunPercent defaults to $Percent)
 # ===========================================================================
 # The low-mutation skip-floor leg drives the SAME exe at a different mutation

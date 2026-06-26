@@ -70,8 +70,14 @@
     samples feed the paired 95% CI on allocated bytes/op.
 
 .PARAMETER MicroIterations
-    Inner iterations per micro repetition (default 10000) over which each bench's
-    mean ns/op and allocated bytes/op are averaged.
+    Inner iterations per micro repetition (default 1000) over which each bench's
+    mean ns/op and allocated bytes/op are averaged. The suite runs 16 benches
+    (the spec-047 M1&ndash;M13 set plus 3 supplementary) and the heaviest
+    (M7&ndash;M9 reconcile a 1000-node tree per op) run >=120 us/op,
+    so even 1000 iterations keep each per-rep mean >=120 ms &mdash; hundreds of
+    thousands of times the Stopwatch floor &mdash; while letting the whole suite
+    finish inside its per-side timeout. (At 10000 the suite ran ~3x over budget,
+    completed only M1&ndash;M4, and was silently dropped from every comment.)
 
 .PARAMETER IncludeMicro
     Run the reconciler micro-suite on each side and append its per-bench ns/op +
@@ -170,7 +176,7 @@ param(
     [int]$RefReps = 3,
     [int]$RefWarmup = 1,
     [int]$MicroReps = 12,
-    [int]$MicroIterations = 10000,
+    [int]$MicroIterations = 1000,
     [bool]$IncludeMicro = $true,
     [double]$SkipFloorPercent = 0,
     [bool]$IncludeSkipFloor = $true,
@@ -665,7 +671,12 @@ function Invoke-MicroRun {
     $inv = [System.Globalization.CultureInfo]::InvariantCulture
     $microArgs = @('--variant', 'Reactor', '--reps', $RepCount.ToString($inv),
         '--iterations', $IterCount.ToString($inv), '--out', $outJson, '--headless')
-    $timeoutSec = 420
+    # Per-side budget for the whole 16-bench suite. Sized with headroom over the
+    # ~4-7 min the suite needs at -MicroIterations 1000, so thermal drift on a busy
+    # shared runner can't truncate it, while a genuine hang is still bounded. (At
+    # 420s with 10000 iterations the suite timed out after only M1-M4, so the micro
+    # section was silently absent from every comment.)
+    $timeoutSec = 600
 
     Write-Log ("  micro [{0}] PerfBench.ControlModel --variant Reactor --reps {1} --iterations {2}" -f $Tag, $RepCount, $IterCount)
     $proc = Start-Process -FilePath $Exe -ArgumentList $microArgs -PassThru `

@@ -147,7 +147,7 @@ git worktree remove ../main
 | `-RefWarmup` | `1` | Warm-up runs discarded for the reference-only legs. |
 | `-IncludeMicro` | `$true` | Run the `PerfBench.ControlModel` reconciler micro-suite (compare mode) and append its per-bench ns/op + B/op table. Set `$false` to skip it. |
 | `-MicroReps` | `12` | Repetitions per side for the micro-suite — each feeds the paired 95% CI, mirroring `-Reps`. |
-| `-MicroIterations` | `10000` | Inner iterations per repetition inside each micro-bench (amortises timer resolution). |
+| `-MicroIterations` | `1000` | Inner iterations per repetition inside each micro-bench (amortises timer resolution; sized so the 16-bench suite finishes inside its per-side timeout). |
 | `-IncludeSkipFloor` | `$true` | Run a **second interleaved A/B leg** at `-SkipFloorPercent` and append a low-mutation skip-floor table (compare mode). Set `$false` to skip it (halves the macro runtime). |
 | `-SkipFloorPercent` | `0` | Mutation percent for the skip-floor leg. At `0` the workload still mutates one cell/tick (`StockDataSource.Update` clamps the count to `Math.Max(1, …)`), so reconcile/diff isolate the O(n) per-tick child skip-walk floor the 50% leg dilutes. |
 | `-IncludeKeyedList` | `$true` | Run a **third interleaved A/B leg** on `StressPerf.KeyedList` — a ~500-row stably keyed list reordered/inserted/removed each tick — and append its own table (compare mode). Drives the child reconciler's **keyed arm** (`ReconcileKeyed` → `ReconcileKeyedMiddle`, the LIS minimal-move pass) the positional StocksGrid cells never reach. Build is best-effort; set `$false` to skip the leg. |
