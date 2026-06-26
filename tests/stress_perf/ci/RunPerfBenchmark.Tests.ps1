@@ -436,8 +436,10 @@ try {
     $emptyF = Join-Path $microIntTmp 'empty.jsonl'; Set-Content -LiteralPath $emptyF -Value '' -NoNewline
     Assert-True ($null -eq (ConvertTo-MicroRepLines -RoundFile $emptyF -RepIndex 0)) '[rewrite] empty file -> $null (drop the round)'
 
-    # --- Invoke-MicroInterleaved: the launch stub (FailRounds drives one-sided failures). ---
+    # --- Invoke-MicroInterleaved: the launch stub. FailRounds drives one-sided $null
+    #     failures; ThrowRounds drives one-sided EXCEPTIONS (a transient runner hiccup). ---
     $global:FailRounds = @{}
+    $global:ThrowRounds = @{}
     # Plain scriptblock (NOT .GetNewClosure()): a closure rebinds to a module whose
     # scope-parent is GLOBAL, which can't see the script-scoped New-RoundFile when the
     # test runs in its own script scope (CI invokes the file via the call operator, not
@@ -445,6 +447,7 @@ try {
     # New-RoundFile and the explicit $global:FailRounds resolve.
     $launch = {
         param($side, $round)
+        if ($global:ThrowRounds.ContainsKey("${side}:${round}")) { throw "synthetic transient launch failure ${side}:${round}" }
         if ($global:FailRounds.ContainsKey("${side}:${round}")) { return $null }
         New-RoundFile $side $round @('M1', 'M2')
     }
@@ -482,11 +485,23 @@ try {
     $global:FailRounds = @{}
     $res4 = Invoke-MicroInterleaved -LaunchRep $launch -RepCount 2 -WarmupCount 0 -MainOut $accMain4 -PrOut $accPr4
     Assert-True ($null -ne $res4 -and @(Get-Content $accMain4 | Where-Object { $_ -match 'STALE' }).Count -eq 0) '[interleave] pre-existing accumulator content is cleared before appending'
+
+    # E. a launcher that THROWS (transient runner hiccup) is caught and drops only that
+    #    round like a $null return — surviving reps are kept and the leg still produces a
+    #    result, rather than the exception aborting the whole micro leg.
+    $global:FailRounds = @{}
+    $global:ThrowRounds = @{ 'pr:3' = $true }   # round 3: pr launch throws
+    $accMain5 = Join-Path $microIntTmp 'acc5-main.jsonl'; $accPr5 = Join-Path $microIntTmp 'acc5-pr.jsonl'
+    $res5 = Invoke-MicroInterleaved -LaunchRep $launch -RepCount 3 -WarmupCount 1 -MainOut $accMain5 -PrOut $accPr5
+    Assert-True ($null -ne $res5 -and $res5.Reps -eq 2) '[interleave] a throwing launch drops only that round (not the whole leg) -> 2 kept'
+    Assert-True ((Get-RepSeq @(Get-Content $accMain5) 'M1') -eq '0,1') '[interleave] reps surviving a thrown round stay dense 0,1'
+    $global:ThrowRounds = @{}
 }
 finally {
     Remove-Item function:New-RoundFile -ErrorAction SilentlyContinue
     Remove-Item function:Get-RepSeq -ErrorAction SilentlyContinue
     Remove-Variable -Name FailRounds -Scope Global -ErrorAction SilentlyContinue
+    Remove-Variable -Name ThrowRounds -Scope Global -ErrorAction SilentlyContinue
     if (Test-Path $microIntTmp) { Remove-Item $microIntTmp -Recurse -Force -ErrorAction SilentlyContinue }
 }
 

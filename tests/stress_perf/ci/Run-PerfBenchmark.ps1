@@ -760,7 +760,10 @@ function Invoke-MicroInterleaved {
        same direction. Mirrors the macro legs' warmup-drop + drop-both alignment: warmup
        rounds are discarded, and a round is kept only if BOTH sides produced output — the
        surviving rounds are appended to the per-side accumulators with contiguous dense
-       repetition indices (0,1,2,...) on both sides. Returns @{ MainJson; PrJson; Reps } or
+       repetition indices (0,1,2,...) on both sides. Best-effort per side: a launcher that
+       THROWS (a transient Start-Process / runner hiccup) is caught and treated like a
+       $null return, so only that round is dropped and the surviving reps still produce a
+       micro section instead of the exception aborting the whole leg. Returns @{ MainJson; PrJson; Reps } or
        $null if fewer than 2 paired rounds survive (too few for a paired CI). #>
     param(
         [scriptblock]$LaunchRep,
@@ -774,8 +777,13 @@ function Invoke-MicroInterleaved {
     }
     $kept = 0
     for ($round = 1; $round -le ($WarmupCount + $RepCount); $round++) {
-        $mainRound = & $LaunchRep 'main' $round
-        $prRound = & $LaunchRep 'pr' $round
+        # Best-effort per side: a launcher that THROWS (e.g. a transient Start-Process
+        # failure) is treated like a $null return — only this round is dropped (drop-both
+        # keeps the paired indices aligned) instead of the exception aborting the whole
+        # micro leg and discarding every surviving rep.
+        $mainRound = $null; $prRound = $null
+        try { $mainRound = & $LaunchRep 'main' $round } catch { Write-Log ("  micro round #{0} main launch threw ({1}) — dropping the round" -f $round, $_) 'Yellow' }
+        try { $prRound = & $LaunchRep 'pr' $round } catch { Write-Log ("  micro round #{0} pr launch threw ({1}) — dropping the round" -f $round, $_) 'Yellow' }
         if ($round -le $WarmupCount) {
             Write-Log ("  (micro warmup round #{0} discarded)" -f $round) 'DarkGray'
             continue
