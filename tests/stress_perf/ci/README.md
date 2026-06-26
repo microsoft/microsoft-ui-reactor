@@ -150,7 +150,8 @@ git worktree remove ../main
 | `-MicroIterations` | `10000` | Inner iterations per repetition inside each micro-bench (amortises timer resolution). |
 | `-IncludeSkipFloor` | `$true` | Run a **second interleaved A/B leg** at `-SkipFloorPercent` and append a low-mutation skip-floor table (compare mode). Set `$false` to skip it (halves the macro runtime). |
 | `-SkipFloorPercent` | `0` | Mutation percent for the skip-floor leg. At `0` the workload still mutates one cell/tick (`StockDataSource.Update` clamps the count to `Math.Max(1, …)`), so reconcile/diff isolate the O(n) per-tick child skip-walk floor the 50% leg dilutes. |
-| `-Apps` | `ReactorOptimized,Direct` | Single-tree mode only: which harnesses to run. |
+| `-IncludeKeyedList` | `$true` | Run a **third interleaved A/B leg** on `StressPerf.KeyedList` — a ~500-row stably keyed list reordered/inserted/removed each tick — and append its own table (compare mode). Drives the child reconciler's **keyed arm** (`ReconcileKeyed` → `ReconcileKeyedMiddle`, the LIS minimal-move pass) the positional StocksGrid cells never reach. Build is best-effort; set `$false` to skip the leg. |
+| `-Apps` | `ReactorOptimized,Direct` | Single-tree mode only: which harnesses to run (`ReactorOptimized`, `Direct`, `KeyedList`). |
 | `-Platform` | host arch | Target architecture (`x64` or `ARM64`). Defaults to your machine's native arch so the WinUI harness runs without emulation. |
 | `-SelfContained` | `$true` | Build with the bundled WinApp runtime (no machine-wide install). |
 | `-SkipBuild` | off | Reuse existing binaries (skip `dotnet build`). |
@@ -224,6 +225,16 @@ Several tables plus footnotes:
   `main` vs PR with the same paired-CI band. Rendered only when the harness
   reports the metric (n/a for pre-metric PR heads). This is the table that moves
   for allocation-reduction PRs.
+- **Keyed-list workload (`StressPerf.KeyedList`)** — the four headline metrics
+  from a **third interleaved A/B leg** on a separate ~500-row **stably keyed** list
+  whose rows are reordered / inserted / removed each tick. Because every child
+  carries a key, the child reconciler takes its **keyed arm** (`ReconcileKeyed` →
+  `ReconcileKeyedMiddle`, the LIS-based minimal-move pass) instead of the positional
+  re-walk the StocksGrid tables measure — so this is the sensitive macro signal for
+  **keyed-diff** optimizations (keyed-list diff, keyed structural-skip) that the
+  positional cells can never exercise. Same paired-CI gating as Table 1; omitted
+  when `-IncludeKeyedList $false`, the workload build fails, or a side produces no
+  metrics.
 - **Reconciler micro-benchmarks** — per-bench `ns/op` and `B/op` from the
   `PerfBench.ControlModel` micro-suite (M1–M13), `main` vs PR. ns-resolution and
   WinUI-undiluted, so it resolves Core/Reconciler time and allocation deltas the

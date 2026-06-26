@@ -450,6 +450,56 @@ $floorComment1 = Format-PerfComment -Main $main -Pr $pr -WinUI3 $null -Rust $nul
 Assert-Match $floorComment1 '--percent 1' 'skip-floor heading reflects Context.SkipFloorPercent'
 
 
+# ── Format-PerfKeyedListSection + Format-PerfComment: keyed-list workload ──────
+# 12 paired keyed-list runs. As with the skip-floor fixture, rps/reconcile/diff all
+# move DOWN main->PR (memory held flat) so the verdicts must split BY DIRECTION:
+# rps (higher-better) DOWN = regression while reconcile/diff (lower-better) DOWN =
+# improvement — proving the keyed section reuses Table 1's direction-aware paired-CI
+# machinery, not a hard-coded direction. Small jitter keeps each paired CI off 0.
+$keyedMainRuns = @(); $keyedPrRuns = @()
+1..12 | ForEach-Object {
+    $j = ($_ % 4) * 0.05
+    $keyedMainRuns += [pscustomobject]@{ RendersPerSec = 8.0 + $j; AvgReconcileMs = 9.0 + $j; AvgDiffMs = 7.0 + $j; AvgMemoryMB = 250 + $j; TotalRenders = 80; DurationSeconds = 10 }
+    $keyedPrRuns   += [pscustomobject]@{ RendersPerSec = 7.0 + $j; AvgReconcileMs = 7.0 + $j; AvgDiffMs = 5.0 + $j; AvgMemoryMB = 250 + $j; TotalRenders = 70; DurationSeconds = 10 }
+}
+$keyedMain = Measure-PerfRuns -Runs $keyedMainRuns
+$keyedPr   = Measure-PerfRuns -Runs $keyedPrRuns
+
+# Direct section renderer: empty when either side is null, populated when both present.
+Assert-Equal 0 @(Format-PerfKeyedListSection -MainKeyed $null -PrKeyed $keyedPr -Percent 50).Count 'keyed section empty when main keyed null'
+Assert-Equal 0 @(Format-PerfKeyedListSection -MainKeyed $keyedMain -PrKeyed $null -Percent 50).Count 'keyed section empty when pr keyed null'
+$keyedSection = Format-PerfKeyedListSection -MainKeyed $keyedMain -PrKeyed $keyedPr -Percent 50
+$keyedSectionText = $keyedSection -join "`n"
+Assert-Match $keyedSectionText 'Keyed-list workload'    'keyed section has heading'
+Assert-Match $keyedSectionText 'StressPerf.KeyedList'   'keyed heading names the workload'
+Assert-Match $keyedSectionText 'Avg Reconcile'          'keyed section has reconcile row'
+Assert-Match $keyedSectionText 'keyed arm'              'keyed preamble explains the keyed arm'
+Assert-Match $keyedSectionText 'LIS'                    'keyed preamble cites the LIS minimal-move pass'
+# Direction-awareness: rps and reconcile both DECREASE main->PR, yet rps (higher-is-
+# better) must read regression while reconcile (lower-is-better) reads improvement.
+$keyedRpsRow   = ($keyedSection | Where-Object { $_ -match 'Renders/sec' })   -join ' '
+$keyedReconRow = ($keyedSection | Where-Object { $_ -match 'Avg Reconcile' }) -join ' '
+Assert-Match $keyedRpsRow   'regression'  'keyed: rps DOWN reads regression (higher-is-better honored)'
+Assert-Match $keyedReconRow 'improvement' 'keyed: reconcile DOWN reads improvement (lower-is-better honored)'
+# -Percent threads into the heading independently of the methodology line.
+$keyedSection75 = (Format-PerfKeyedListSection -MainKeyed $keyedMain -PrKeyed $keyedPr -Percent 75) -join "`n"
+Assert-Match $keyedSection75 'Keyed-list workload*--percent 75' 'keyed heading reflects the -Percent argument'
+
+# Threaded through Format-PerfComment: present when keyed aggregates present, sitting
+# after the regression/skip-floor tables and before the cross-framework table.
+$keyedComment = Format-PerfComment -Main $main -Pr $pr -WinUI3 $null -Rust $null -MainFloor $floorMain -PrFloor $floorPr -MainKeyed $keyedMain -PrKeyed $keyedPr -Context $ctx
+Assert-Match $keyedComment 'Keyed-list workload' 'comment renders keyed-list table when keyed aggregates present'
+$idxRegK   = $keyedComment.IndexOf('Regression vs')
+$idxFloorK = $keyedComment.IndexOf('Low-mutation skip-floor')
+$idxKeyed  = $keyedComment.IndexOf('Keyed-list workload')
+$idxXfwK   = $keyedComment.IndexOf('Cross-framework reference')
+Assert-True (($idxRegK -lt $idxKeyed) -and ($idxFloorK -lt $idxKeyed) -and ($idxKeyed -lt $idxXfwK)) 'keyed-list table sits after the regression + skip-floor tables and before cross-framework'
+
+# Omitted entirely when keyed aggregates are absent (keyed-list leg disabled / build omitted).
+$noKeyedComment = Format-PerfComment -Main $main -Pr $pr -WinUI3 $null -Rust $null -MainKeyed $null -PrKeyed $null -Context $ctx
+Assert-True (-not ($noKeyedComment -like '*Keyed-list workload*')) 'keyed-list table omitted when keyed aggregates null'
+
+
 # ── Reconciler micro-suite: Read-MicroBenchResults / comparison / render ──────
 function New-MicroRow {
     param([string]$BenchId, [string]$Name, [string]$Variant, [int]$Rep, [double]$MeanNs, [double]$AllocBytes, [string]$Status = 'ok', [int]$Iterations = 1)

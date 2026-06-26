@@ -321,6 +321,24 @@ finally {
     Remove-Item function:Format-PerfNumber -ErrorAction SilentlyContinue
 }
 
+# ===========================================================================
+#  Keyed-list leg — static wiring contract (param + registry + leg + comment)
+# ===========================================================================
+# The keyed-list leg lives in the orchestrator's main run flow (not a dot-sourceable
+# function), exactly like the headline + skip-floor legs, so — as with those — its
+# Invoke-OneRun threading is covered by the -RunPercent test above (the keyed leg omits
+# -RunPercent, so it inherits $Percent). What is NEW and worth locking here is the
+# static wiring: the opt-out switch defaults on, the registry resolves the right
+# exe/csproj, the interleave runs both sides, and the aggregates reach the renderer.
+$kp = $ast.ParamBlock.Parameters | Where-Object { $_.Name.VariablePath.UserPath -eq 'IncludeKeyedList' } | Select-Object -First 1
+Assert-True ($null -ne $kp) '[keyed] -IncludeKeyedList parameter exists'
+Assert-True ($kp -and $kp.DefaultValue -and $kp.DefaultValue.Extent.Text -eq '$true') '[keyed] -IncludeKeyedList defaults to $true (on unless opted out)'
+Assert-True ($src -match "KeyedList\s*=\s*@\{\s*AppName\s*=\s*'StressPerf\.KeyedList';\s*ProjectRel\s*=\s*'tests\\stress_perf\\StressPerf\.KeyedList") '[keyed] AppRegistry maps KeyedList -> StressPerf.KeyedList exe + csproj'
+Assert-True ($src -match "-Tag 'main-keyed'") '[keyed] leg interleaves the main side (main-keyed)'
+Assert-True ($src -match "-Tag 'pr-keyed'")   '[keyed] leg interleaves the PR side (pr-keyed)'
+Assert-True ($src -match '-MainKeyed \$mainKeyed') '[keyed] Format-PerfComment receives the main keyed aggregate'
+Assert-True ($src -match '-PrKeyed \$prKeyed')     '[keyed] Format-PerfComment receives the PR keyed aggregate'
+
 # cleanup
 foreach ($d in @($baseTree, $prTree, $OutDir, $exeDir)) {
     if (Test-Path $d) { Remove-Item $d -Recurse -Force -ErrorAction SilentlyContinue }

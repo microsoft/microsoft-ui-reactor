@@ -742,6 +742,58 @@ function Format-PerfSkipFloorSection {
     return $lines.ToArray()
 }
 
+function Format-PerfKeyedListSection {
+    <#
+    .SYNOPSIS
+        Render the keyed-list workload table: the four headline metrics measured on
+        StressPerf.KeyedList — a ~500-row stably keyed list whose rows are reordered /
+        inserted / removed each tick. Empty array when there is nothing to show.
+    .DESCRIPTION
+        Unlike the positional StocksGrid headline/skip-floor legs (whose cells mutate
+        in place by index, always taking ChildReconciler.ReconcilePositional), this is
+        a SEPARATE macro workload that drives the child reconciler's KEYED arm
+        (ReconcileKeyed → ReconcileKeyedMiddle, the LIS-based minimal-move pass). It is
+        the sensitive macro measure for keyed-diff optimizations (keyed-list diff,
+        keyed structural-skip) that the StocksGrid workload can never exercise. Reuses
+        the same paired-Δ 95% CI machinery (Get-PerfDelta over the index-aligned
+        per-run samples) as the headline table. Returns an empty array when either
+        aggregate is $null (keyed-list leg disabled, build omitted, or one side
+        produced no metrics), so the caller renders nothing.
+    .PARAMETER MainKeyed  Aggregated baseline keyed-list metrics (Measure-PerfRuns), or $null.
+    .PARAMETER PrKeyed     Aggregated PR-head keyed-list metrics, or $null.
+    .PARAMETER Percent     The mutation percent the keyed-list leg ran at (heading / preamble).
+    #>
+    param(
+        [AllowNull()][pscustomobject]$MainKeyed,
+        [AllowNull()][pscustomobject]$PrKeyed,
+        [double]$Percent = 50
+    )
+    if ($null -eq $MainKeyed -or $null -eq $PrKeyed) { return @() }
+
+    $lines = [System.Collections.Generic.List[string]]::new()
+    $lines.Add("### Keyed-list workload (``StressPerf.KeyedList``, ``--percent $Percent``)")
+    $lines.Add('')
+    $lines.Add("A separate macro workload: a ~500-row **stably keyed** list whose rows are reordered / inserted / removed each tick. Because every child carries a key, the child reconciler takes its **keyed arm** (``ReconcileKeyed`` → ``ReconcileKeyedMiddle``, the LIS-based minimal-move pass) instead of the positional re-walk the StocksGrid tables above measure &mdash; so this is the sensitive macro signal for **keyed-diff** work the positional cells can never reach. Same interleaved paired-Δ 95% CI as the headline table.")
+    $lines.Add('')
+    $lines.Add('| Metric | `main` (baseline) | This PR | Δ (95% CI) | Status |')
+    $lines.Add('|---|--:|--:|--:|:--|')
+    foreach ($m in $script:PerfMetricSpec) {
+        $bVal = $MainKeyed.($m.Key)
+        $pVal = $PrKeyed.($m.Key)
+        $spread = [math]::Max([double]$MainKeyed."$($m.Key)Spread", [double]$PrKeyed."$($m.Key)Spread")
+        $delta = Get-PerfDelta -Baseline $bVal -Candidate $pVal -LowerIsBetter $m.LowerIsBetter -SpreadPct $spread `
+            -BaselineSamples $MainKeyed."$($m.Key)Samples" -CandidateSamples $PrKeyed."$($m.Key)Samples"
+        $lines.Add(('| {0} {1} | {2} | {3} | {4} | {5} |' -f `
+                $m.Label, $m.Arrow, `
+            (Format-PerfNumber $bVal $m.Digits), `
+            (Format-PerfNumber $pVal $m.Digits), `
+            (Format-PerfDeltaCell $delta), `
+            (Get-PerfStatusGlyph $delta.Status)))
+    }
+    $lines.Add('')
+    return $lines.ToArray()
+}
+
 function Format-PerfComment {
     <#
     .SYNOPSIS
@@ -756,6 +808,8 @@ function Format-PerfComment {
                           (Get-PerfMicroComparison output), or $null when not run.
     .PARAMETER MainFloor  Aggregated baseline low-mutation skip-floor metrics, or $null.
     .PARAMETER PrFloor    Aggregated PR-head low-mutation skip-floor metrics, or $null.
+    .PARAMETER MainKeyed  Aggregated baseline keyed-list workload metrics, or $null.
+    .PARAMETER PrKeyed     Aggregated PR-head keyed-list workload metrics, or $null.
     .PARAMETER Context    Hashtable: Percent, Duration, Reps, Warmup, SkipFloorPercent,
                           BaseSha, HeadSha, Runner, Cpu, Cores, MemoryGB, RunUrl,
                           Timestamp, Note.
@@ -768,6 +822,8 @@ function Format-PerfComment {
         [AllowNull()][object[]]$Micro,
         [AllowNull()][pscustomobject]$MainFloor,
         [AllowNull()][pscustomobject]$PrFloor,
+        [AllowNull()][pscustomobject]$MainKeyed,
+        [AllowNull()][pscustomobject]$PrKeyed,
         [Parameter(Mandatory)][hashtable]$Context
     )
 
@@ -841,6 +897,14 @@ function Format-PerfComment {
         }
         & $add ''
     }
+
+    # ── Keyed-list workload table (StressPerf.KeyedList) ─────────────────────
+    # A separate macro workload driving the child reconciler's KEYED arm
+    # (ReconcileKeyed → ReconcileKeyedMiddle, the LIS minimal-move pass) that the
+    # positional StocksGrid cells above never reach. The sensitive macro signal for
+    # keyed-diff optimizations. Rendered only when both keyed aggregates are present.
+    $keyedPct = if ($Context.ContainsKey('Percent')) { [double]$Context.Percent } else { 50 }
+    foreach ($kline in (Format-PerfKeyedListSection -MainKeyed $MainKeyed -PrKeyed $PrKeyed -Percent $keyedPct)) { & $add $kline }
 
     # ── Reconciler micro-benchmarks (ns-resolution, WinUI-undiluted) ──────────
     # Rendered only when the PerfBench.ControlModel micro leg produced results for

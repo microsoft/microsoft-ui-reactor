@@ -16,10 +16,13 @@
 #
 # Each metric shows main, PR, a signed Δ (with a 95% CI), and an improvement/
 # regression/within-noise status. Further tables follow: a low-mutation skip-floor
-# leg, an allocation comparison, the reconciler micro-suite, and a cross-framework
-# reference (vanilla WinUI3 (StressPerf.Direct) + the Rust `windows-reactor` port,
-# test_reactor_perf from microsoft/windows-rs — both measured live on the same
-# runner). See tests/stress_perf/ci/README.md for the authoritative comment layout.
+# leg, an allocation comparison, a keyed-list leg (StressPerf.KeyedList — a ~500-row
+# stably keyed list whose reorder/insert/remove ticks drive the reconciler's keyed
+# LIS diff arm the positional StocksGrid cells never hit), the reconciler micro-suite,
+# and a cross-framework reference (vanilla WinUI3 (StressPerf.Direct) + the Rust
+# `windows-reactor` port, test_reactor_perf from microsoft/windows-rs — both measured
+# live on the same runner). See tests/stress_perf/ci/README.md for the authoritative
+# comment layout.
 #
 # ── Why `issue_comment` (not a label) ────────────────────────────────────────
 # `issue_comment` always runs the workflow from the DEFAULT branch, so the perf
@@ -75,8 +78,10 @@ jobs:
          contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
       }}
     runs-on: windows-latest
-    # 60 (not 40): the Rust cross-framework leg cold-builds the windows-rs port.
-    timeout-minutes: 60
+    # 75 (not 60): the Rust cross-framework leg cold-builds the windows-rs port, and
+    # the macro comparison now runs three interleaved A/B legs (headline + skip-floor
+    # + keyed-list) plus the micro-suite — the keyed leg adds a build + ~Reps runs.
+    timeout-minutes: 75
     env:
       GH_REPO: ${{ github.repository }}
       # Pinned microsoft/windows-rs commit whose `test_reactor_perf` crate backs

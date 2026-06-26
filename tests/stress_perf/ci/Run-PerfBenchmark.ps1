@@ -89,10 +89,21 @@
     so reconcile/diff isolate the O(n) per-tick child skip-walk floor the 50% leg
     dilutes — the fixed cost a structural-skip optimization targets.
 
+.PARAMETER IncludeKeyedList
+    Run a third interleaved A/B leg on StressPerf.KeyedList — a ~500-row stably
+    keyed list whose rows are REORDERED / inserted / removed each tick — and append
+    its own PR-vs-main table to the comment (compare mode). This drives the child
+    reconciler's KEYED arm (ReconcileKeyed → ReconcileKeyedMiddle, the LIS-based
+    minimal-move pass) that the positional StocksGrid cells can never reach, so it
+    is the sensitive macro measure for keyed-diff optimizations. Default $true;
+    build is best-effort (a KeyedList build failure just omits the table). Disable
+    with -IncludeKeyedList:$false to skip the extra leg.
+
 .PARAMETER Apps
-    Which harnesses to run in single-tree mode: ReactorOptimized, Direct.
+    Which harnesses to run in single-tree mode: ReactorOptimized, Direct, KeyedList.
     Ignored in compare mode (which always does ReactorOptimized both sides +
-    Direct once for the WinUI3 column).
+    Direct once for the WinUI3 column, and — unless -IncludeKeyedList:$false —
+    KeyedList both sides).
 
 .PARAMETER OutDir
     Where logs, comment.md and result.json land. Defaults to ci\out next to this
@@ -163,7 +174,8 @@ param(
     [bool]$IncludeMicro = $true,
     [double]$SkipFloorPercent = 0,
     [bool]$IncludeSkipFloor = $true,
-    [ValidateSet('ReactorOptimized', 'Direct')]
+    [bool]$IncludeKeyedList = $true,
+    [ValidateSet('ReactorOptimized', 'Direct', 'KeyedList')]
     [string[]]$Apps = @('ReactorOptimized', 'Direct'),
     [string]$OutDir,
     [switch]$SkipBuild,
@@ -195,6 +207,7 @@ $tfmGuess = 'net10.0-windows10.0.22621.0'
 $AppRegistry = @{
     ReactorOptimized = @{ AppName = 'StressPerf.ReactorOptimized'; ProjectRel = 'tests\stress_perf\StressPerf.ReactorOptimized\StressPerf.ReactorOptimized.csproj' }
     Direct           = @{ AppName = 'StressPerf.Direct';           ProjectRel = 'tests\stress_perf\StressPerf.Direct\StressPerf.Direct.csproj' }
+    KeyedList        = @{ AppName = 'StressPerf.KeyedList';         ProjectRel = 'tests\stress_perf\StressPerf.KeyedList\StressPerf.KeyedList.csproj' }
     MicroControlModel = @{ AppName = 'PerfBench.ControlModel';     ProjectRel = 'tests\perf_bench\PerfBench.ControlModel\PerfBench.ControlModel.csproj' }
 }
 
@@ -716,7 +729,7 @@ if ($DefenderExclude) {
 
 $runner = Get-RunnerInfo
 Write-Log ("runner: {0} | {1} cores | {2} GB | {3}" -f $runner.Cpu, $runner.Cores, $runner.MemoryGB, ($runner.Runner ?? 'local')) 'Cyan'
-Write-Log ("mode: {0} | platform={1} | percent={2} duration={3} reps={4} warmup={5} | skip-floor={6}" -f ($(if ($Compare) { 'COMPARE' } else { 'LOCAL' })), $Platform, $Percent, $Duration, $Reps, $Warmup, $(if ($IncludeSkipFloor) { "on (--percent $SkipFloorPercent)" } else { 'off' })) 'Cyan'
+Write-Log ("mode: {0} | platform={1} | percent={2} duration={3} reps={4} warmup={5} | skip-floor={6} | keyed-list={7}" -f ($(if ($Compare) { 'COMPARE' } else { 'LOCAL' })), $Platform, $Percent, $Duration, $Reps, $Warmup, $(if ($IncludeSkipFloor) { "on (--percent $SkipFloorPercent)" } else { 'off' }), $(if ($IncludeKeyedList) { 'on' } else { 'off' })) 'Cyan'
 
 $exit = 0
 try {
@@ -724,6 +737,7 @@ try {
         # ---- Compare mode: interleaved ReactorOptimized A/B + WinUI3 once -----
         $ro = $AppRegistry.ReactorOptimized
         $direct = $AppRegistry.Direct
+        $keyed = $AppRegistry.KeyedList
         $microMeta = $AppRegistry.MicroControlModel
 
         if (-not $SkipBuild) {
@@ -738,6 +752,15 @@ try {
             } catch {
                 Write-Log "reconciler micro-suite build failed ($_) — omitting micro-benchmarks" 'Yellow'
                 $IncludeMicro = $false
+            }
+        }
+        if ($IncludeKeyedList -and -not $SkipBuild) {
+            try {
+                Build-Harness -TreeRoot $BaselineRoot -AppMeta $keyed
+                Build-Harness -TreeRoot $Root -AppMeta $keyed
+            } catch {
+                Write-Log "keyed-list workload build failed ($_) — omitting the keyed-list table" 'Yellow'
+                $IncludeKeyedList = $false
             }
         }
         $mainExe = Resolve-HarnessExe -TreeRoot $BaselineRoot -AppMeta $ro
@@ -775,6 +798,35 @@ try {
             }
             if ($mainFloorRuns.Count -lt $Reps -or $prFloorRuns.Count -lt $Reps) {
                 Write-Log "  skip-floor leg short (main $($mainFloorRuns.Count)/$Reps, PR $($prFloorRuns.Count)/$Reps) — its paired CI uses fewer samples" 'Yellow'
+            }
+        }
+
+        # Third interleaved A/B leg: the keyed-list workload. StressPerf.KeyedList
+        # renders a ~500-row stably KEYED list and reorders/inserts/removes rows each
+        # tick, driving the child reconciler's keyed arm (ReconcileKeyed →
+        # ReconcileKeyedMiddle, the LIS minimal-move pass) that StocksGrid's positional
+        # cells never reach. Same paired interleaving + drop-both alignment as above.
+        # Best-effort: if either exe is missing (build omitted/failed) the leg is
+        # skipped and the keyed-list table is omitted — the StocksGrid comparison is
+        # unaffected.
+        $mainKeyedRuns = @(); $prKeyedRuns = @()
+        if ($IncludeKeyedList) {
+            $mainKeyedExe = Resolve-HarnessExe -TreeRoot $BaselineRoot -AppMeta $keyed
+            $prKeyedExe   = Resolve-HarnessExe -TreeRoot $Root -AppMeta $keyed
+            if (-not $mainKeyedExe -or -not $prKeyedExe) {
+                Write-Log "keyed-list exe not found (main=$([bool]$mainKeyedExe) pr=$([bool]$prKeyedExe)) — omitting the keyed-list table" 'Yellow'
+            } else {
+                Write-Log "interleaving main/PR keyed-list (--percent $Percent; $($Warmup) warmup + $($Reps) measured each)" 'Green'
+                for ($i = 1; $i -le ($Warmup + $Reps); $i++) {
+                    $mm = Invoke-OneRun -Exe $mainKeyedExe -AppMeta $keyed -Index $i -Tag 'main-keyed'
+                    $pm = Invoke-OneRun -Exe $prKeyedExe -AppMeta $keyed -Index $i -Tag 'pr-keyed'
+                    if ($i -le $Warmup) { Write-Log "  (keyed warmup pair #$i discarded)" 'DarkGray'; continue }
+                    if ($mm -and $pm) { $mainKeyedRuns += $mm; $prKeyedRuns += $pm }
+                    elseif ($mm -or $pm) { Write-Log "  keyed pair #$i incomplete (main=$([bool]$mm) pr=$([bool]$pm)) — dropped to keep the paired CI aligned" 'Yellow' }
+                }
+                if ($mainKeyedRuns.Count -lt $Reps -or $prKeyedRuns.Count -lt $Reps) {
+                    Write-Log "  keyed-list leg short (main $($mainKeyedRuns.Count)/$Reps, PR $($prKeyedRuns.Count)/$Reps) — its paired CI uses fewer samples" 'Yellow'
+                }
             }
         }
 
@@ -819,6 +871,8 @@ try {
         $winui3 = if ($winRuns.Count) { Measure-PerfRuns -Runs $winRuns } else { $null }
         $mainFloor = if ($mainFloorRuns.Count) { Measure-PerfRuns -Runs $mainFloorRuns } else { $null }
         $prFloor = if ($prFloorRuns.Count) { Measure-PerfRuns -Runs $prFloorRuns } else { $null }
+        $mainKeyed = if ($mainKeyedRuns.Count) { Measure-PerfRuns -Runs $mainKeyedRuns } else { $null }
+        $prKeyed = if ($prKeyedRuns.Count) { Measure-PerfRuns -Runs $prKeyedRuns } else { $null }
 
         $note = $null
         if ($prRuns.Count -eq 0 -or $mainRuns.Count -eq 0) {
@@ -841,17 +895,18 @@ try {
             Platform = $Platform
             MainSamples = $mainRuns.Count; PrSamples = $prRuns.Count
             MainFloorSamples = $mainFloorRuns.Count; PrFloorSamples = $prFloorRuns.Count
+            MainKeyedSamples = $mainKeyedRuns.Count; PrKeyedSamples = $prKeyedRuns.Count
             BaseSha = $(if ($BaseSha) { $BaseSha.Substring(0, [Math]::Min(7, $BaseSha.Length)) } else { '' })
             HeadSha = $(if ($HeadSha) { $HeadSha.Substring(0, [Math]::Min(7, $HeadSha.Length)) } else { '' })
             Runner = $runner.Runner; Cpu = $runner.Cpu; Cores = $runner.Cores; MemoryGB = $runner.MemoryGB
             RunUrl = $RunUrl; Timestamp = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'); Note = $note
         }
-        $comment = Format-PerfComment -Main $main -Pr $pr -WinUI3 $winui3 -Rust $rust -Micro $micro -MainFloor $mainFloor -PrFloor $prFloor -Context $ctx
+        $comment = Format-PerfComment -Main $main -Pr $pr -WinUI3 $winui3 -Rust $rust -Micro $micro -MainFloor $mainFloor -PrFloor $prFloor -MainKeyed $mainKeyed -PrKeyed $prKeyed -Context $ctx
         $commentPath = Join-Path $OutDir 'comment.md'
         Set-Content -LiteralPath $commentPath -Value $comment -Encoding UTF8
         Write-Log "comment.md written -> $commentPath" 'Green'
 
-        $result = [pscustomobject]@{ main = $main; pr = $pr; winui3 = $winui3; mainFloor = $mainFloor; prFloor = $prFloor; rust = $rust; micro = $micro; runner = $runner; context = $ctx }
+        $result = [pscustomobject]@{ main = $main; pr = $pr; winui3 = $winui3; mainFloor = $mainFloor; prFloor = $prFloor; mainKeyed = $mainKeyed; prKeyed = $prKeyed; rust = $rust; micro = $micro; runner = $runner; context = $ctx }
         $result | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $OutDir 'result.json') -Encoding UTF8
 
         Write-Host "`n----- comment.md -----" -ForegroundColor DarkGray
