@@ -56,6 +56,26 @@ $script:PerfAllocMetricSpec = @(
 # "CI excludes 0" rule.
 $script:MicroAllocMinEffectPct = 1.0
 
+# Minimum-effect band (percent) for the micro-suite ns/op flag, applied ONLY when the
+# ns flag is armed (see $MicroNsAutoFlag). ns is noisier than the deterministic alloc
+# metric even once rep-interleaved — a fresh process per rep randomizes the
+# process-to-process timing offset into the paired variance rather than leaving it a
+# constant bias, but residual cold-JIT / scheduling jitter remains — so the ns band is
+# wider than alloc's. This value is PROVISIONAL: per the arming gate it must be
+# recalibrated from a real-CI identical-binary interleaved A/B (which can only run after
+# the interleave is on main, since /perf builds the harness from the default branch)
+# so the ns CI stays within +-band for an unchanged diff before the flag goes live.
+$script:MicroNsMinEffectPct = 3.0
+
+# Master switch promoting the micro ns/op delta from informational to a flagged signal.
+# DORMANT ($false) by default: the row Status tracks allocated bytes/op only (v1
+# behaviour), and the ns column is shown for context but never drives a verdict. The
+# rep-level interleave that makes the ns paired CI unbiased ships with this OFF; arming
+# it ($true) is a deliberate, separately-ratified one-line follow-up gated on the
+# real-CI identical-binary band calibration above. Arming is MEASUREMENT-ONLY — it
+# changes /perf verdict labels, never what merges.
+$script:MicroNsAutoFlag = $false
+
 function ConvertTo-PerfDouble {
     <#
     .SYNOPSIS Culture-tolerant parse of a captured numeric string, or $null.
@@ -482,6 +502,7 @@ function Get-PerfStatusGlyph {
         'better' { return [char]0x2705 + ' improvement' }                       # checkmark
         'worse'  { return [char]0x26A0 + [char]0xFE0F + ' regression' }          # warning
         'noise'  { return [char]0x2248 + ' within noise' }                       # almost-equal
+        'mixed'  { return [char]0x2195 + [char]0xFE0F + ' mixed' }               # up-down arrow
         default  { return '—' }
     }
 }
@@ -611,12 +632,14 @@ function Get-PerfMicroComparison {
         $mainMeanNs = Get-PerfMedian $mNsArr; $prMeanNs = Get-PerfMedian $pNsArr
         $mainAlloc = Get-PerfMedian $mAllocArr; $prAlloc = Get-PerfMedian $pAllocArr
         $nsDelta = Get-PerfDelta -Baseline $mainMeanNs -Candidate $prMeanNs `
-            -LowerIsBetter $true -BaselineSamples $mNsArr -CandidateSamples $pNsArr -RequirePairedCI
-        # Alloc DRIVES the row flag, and not every bench is alloc-deterministic:
-        # dispatcher / background-thread benches (e.g. M5) carry a sub-1% systematic
-        # process-to-process offset that the within-process CI can't cancel, so flag
-        # only when the CI clears the +-MinEffectPct band. ns is informational-only
-        # (never drives the flag) so it keeps the pure CI-excludes-0 rule.
+            -LowerIsBetter $true -BaselineSamples $mNsArr -CandidateSamples $pNsArr `
+            -RequirePairedCI -MinEffectPct $script:MicroNsMinEffectPct
+        # Both deltas clear a +-MinEffectPct band before flagging. Alloc's band is tight
+        # (~1%) because alloc bytes/op are deterministic for identical code; ns's is
+        # wider because even rep-interleaved timing carries residual cold-JIT / scheduling
+        # jitter. Whether ns actually DRIVES the row flag is gated separately on
+        # $MicroNsAutoFlag (see Get-PerfMicroRowStatus): dormant => alloc-only (v1), so a
+        # bench's ns band only matters once the flag is armed.
         $allocDelta = Get-PerfDelta -Baseline $mainAlloc -Candidate $prAlloc `
             -LowerIsBetter $true -BaselineSamples $mAllocArr -CandidateSamples $pAllocArr `
             -RequirePairedCI -MinEffectPct $script:MicroAllocMinEffectPct
@@ -639,23 +662,47 @@ function Get-PerfMicroComparison {
 function Get-PerfMicroRowStatus {
     <#
     .SYNOPSIS
-        Row flag for a micro-bench. v1 tracks the DETERMINISTIC allocation signal
-        only; the ns/op delta is informational and does NOT drive the flag.
+        Row flag for a micro-bench, combining the ns/op and allocated-bytes/op paired
+        deltas. Whether ns participates is gated on $script:MicroNsAutoFlag.
     .DESCRIPTION
         Allocated bytes/op is deterministic for identical code (an unchanged diff
-        reproduces the same byte count exactly), so its paired CI is a trustworthy
-        flag. ns/op is NOT: the per-side micro runs are not yet rep-interleaved, so a
-        systematic process-to-process timing offset (thermal / scheduling drift
-        between the two back-to-back invocations) shifts every paired ns difference
-        the same way and makes the paired CI exclude 0 even for an identical binary
-        — empirically a no-op diff flagged -14.8% ns on one bench. Flagging ns would
-        therefore emit false improvements/regressions. So the row tracks alloc; ns is
-        shown for context. (Rep-level interleaving is the documented fast-follow that
-        would let ns be promoted to a flagged signal.)
+        reproduces the same byte count exactly), so its paired CI is always a trustworthy
+        flag. ns/op is trustworthy only once the per-side runs are rep-interleaved: a
+        fresh alternated process per rep randomizes the process-to-process timing offset
+        into the paired variance instead of leaving it a constant bias between one
+        all-main and one all-pr process (which empirically flagged a no-op diff -14.8% ns
+        on one bench, and on a near-neutral PR pushed ~9/16 benches' ns CI to exclude 0
+        with a uniform negative sign — the offset signature).
+
+        DORMANT ($MicroNsAutoFlag = $false, the default): the row tracks ALLOC ONLY (v1
+        behaviour); ns is shown for context but never drives the verdict.
+
+        ARMED ($MicroNsAutoFlag = $true): ns and alloc are combined. Each is one of
+        better | worse | noise | na (already band-gated by Get-PerfDelta -MinEffectPct).
+        They measure different axes (time vs bytes), so a bench can move on one and not
+        the other; the row summarises both:
+          - any 'worse' and any 'better'  -> 'mixed'   (axes disagree; see the cells)
+          - any 'worse'  (none better)    -> 'worse'
+          - any 'better' (none worse)     -> 'better'
+          - else any 'noise'              -> 'noise'
+          - else (both na/empty)          -> 'na'
     #>
     param([AllowNull()][string]$NsStatus, [AllowNull()][string]$AllocStatus)
-    if ([string]::IsNullOrEmpty($AllocStatus)) { return 'na' }
-    return $AllocStatus
+    if (-not $script:MicroNsAutoFlag) {
+        # Dormant: alloc-only v1 behaviour. ns is ignored (shown for context only).
+        if ([string]::IsNullOrEmpty($AllocStatus)) { return 'na' }
+        return $AllocStatus
+    }
+    # Armed: combine the two axes. Treat empty as 'na'.
+    $ns = if ([string]::IsNullOrEmpty($NsStatus)) { 'na' } else { $NsStatus }
+    $al = if ([string]::IsNullOrEmpty($AllocStatus)) { 'na' } else { $AllocStatus }
+    $hasBetter = ($ns -eq 'better') -or ($al -eq 'better')
+    $hasWorse = ($ns -eq 'worse') -or ($al -eq 'worse')
+    if ($hasBetter -and $hasWorse) { return 'mixed' }
+    if ($hasWorse) { return 'worse' }
+    if ($hasBetter) { return 'better' }
+    if (($ns -eq 'noise') -or ($al -eq 'noise')) { return 'noise' }
+    return 'na'
 }
 
 function Format-PerfMicroSection {
@@ -670,7 +717,11 @@ function Format-PerfMicroSection {
     $lines = [System.Collections.Generic.List[string]]::new()
     $lines.Add("### Reconciler micro-benchmarks (``PerfBench.ControlModel``)")
     $lines.Add('')
-    $lines.Add("Production ``--variant Reactor`` control-model path, ns-resolution and WinUI-undiluted (spec-047 M1&ndash;M13) &mdash; $down lower is better. **Status tracks allocated bytes/op**, the authoritative signal here; it is deterministic for structurally-fixed benches, while dispatcher / background-thread benches carry a small process-to-process offset, so a bench is flagged only when its 95% CI clears a &plusmn;$($script:MicroAllocMinEffectPct)% minimum-effect band (real structural alloc changes are several percent to many-x). **ns/op is shown for context** but is not auto-flagged in v1 (the per-side runs are not yet rep-interleaved, so a process-to-process timing offset can otherwise read as significant). Δ is the mean paired change with a 95% CI.")
+    if ($script:MicroNsAutoFlag) {
+        $lines.Add("Production ``--variant Reactor`` control-model path, ns-resolution and WinUI-undiluted (spec-047 M1&ndash;M13) &mdash; $down lower is better. **Status combines ns/op and allocated bytes/op**: the per-side runs are rep-interleaved (a fresh alternated process per rep), so the ns paired CI is unbiased and a bench is flagged when EITHER axis' 95% CI clears its minimum-effect band &mdash; &plusmn;$($script:MicroNsMinEffectPct)% for ns (residual cold-JIT / scheduling jitter), &plusmn;$($script:MicroAllocMinEffectPct)% for the deterministic alloc metric. When the two axes disagree the row reads $([char]0x2195)$([char]0xFE0F) mixed &mdash; consult the individual Δ cells. Δ is the mean paired change with a 95% CI.")
+    } else {
+        $lines.Add("Production ``--variant Reactor`` control-model path, ns-resolution and WinUI-undiluted (spec-047 M1&ndash;M13) &mdash; $down lower is better. **Status tracks allocated bytes/op**, the authoritative signal here; it is deterministic for structurally-fixed benches, while dispatcher / background-thread benches carry a small process-to-process offset, so a bench is flagged only when its 95% CI clears a &plusmn;$($script:MicroAllocMinEffectPct)% minimum-effect band (real structural alloc changes are several percent to many-x). **ns/op is shown for context** but is not auto-flagged (its paired CI is rep-interleaved but the flag remains dormant pending a real-CI identical-binary band calibration). Δ is the mean paired change with a 95% CI.")
+    }
     $lines.Add('')
     $lines.Add('| Bench | `main` ns/op | Δ ns (95% CI) | `main` B/op | Δ alloc (95% CI) | Status |')
     $lines.Add('|---|--:|--:|--:|--:|:--|')
@@ -976,7 +1027,11 @@ function Format-PerfComment {
     & $add "<sub>$up higher is better &middot; $down lower is better. **Within noise** = the 95% confidence interval of the paired Δ includes 0 (no change resolvable at this sample size); $([char]0x2705) improvement / $([char]0x26A0)$([char]0xFE0F) regression require the CI to **exclude** 0.</sub>"
     & $add "<sub>Allocation metrics (alloc bytes/render, Gen0 GC) are the sensitive signal for allocation-reduction work, where the mean-ms / memory figures are largely flat. They read *n/a* for a harness built from a revision that predates them (rebase the PR onto ``main`` to populate them).</sub>"
     if ($null -ne $Micro -and @($Micro).Count -gt 0) {
-        & $add "<sub>Reconciler micro-benchmarks run ``PerfBench.ControlModel --variant Reactor`` (M1&ndash;M13) as a headless loop bracketed by per-thread alloc + GC counters &mdash; ns-resolution and free of WinUI render / working-set dilution, so they resolve Core/Reconciler allocation deltas the macro StocksGrid workload cannot. ``main`` and PR each link their own ``src/Reactor`` build; Δ is the paired 95% CI over per-rep means. The **Status** column tracks allocated bytes/op (deterministic for identical code); ns/op is informational &mdash; it is not auto-flagged until the per-side runs are rep-interleaved (a documented fast-follow), because a process-to-process timing offset can otherwise make the paired ns CI exclude 0 for an unchanged diff.</sub>"
+        if ($script:MicroNsAutoFlag) {
+            & $add "<sub>Reconciler micro-benchmarks run ``PerfBench.ControlModel --variant Reactor`` (M1&ndash;M13) as a headless loop bracketed by per-thread alloc + GC counters &mdash; ns-resolution and free of WinUI render / working-set dilution, so they resolve Core/Reconciler time and allocation deltas the macro StocksGrid workload cannot. ``main`` and PR each link their own ``src/Reactor`` build and are **rep-interleaved** (a fresh alternated process per rep), so the paired ns CI is unbiased. The **Status** column combines ns/op and allocated bytes/op &mdash; a bench flags when either axis' 95% CI clears its minimum-effect band, and $([char]0x2195)$([char]0xFE0F) mixed when the axes disagree.</sub>"
+        } else {
+            & $add "<sub>Reconciler micro-benchmarks run ``PerfBench.ControlModel --variant Reactor`` (M1&ndash;M13) as a headless loop bracketed by per-thread alloc + GC counters &mdash; ns-resolution and free of WinUI render / working-set dilution, so they resolve Core/Reconciler allocation deltas the macro StocksGrid workload cannot. ``main`` and PR each link their own ``src/Reactor`` build and are rep-interleaved (a fresh alternated process per rep); Δ is the paired 95% CI over per-rep means. The **Status** column tracks allocated bytes/op (deterministic for identical code); ns/op is informational &mdash; its paired CI is now unbiased but the flag stays dormant pending a real-CI identical-binary band calibration.</sub>"
+        }
     }
     & $add "<sub>$([char]0x00B9) vanilla WinUI3 = ``StressPerf.Direct`` (imperative; no virtual-DOM, so it has no reconcile/diff phase — those cells read *n/a*). Measured live on this runner.</sub>"
     & $add "<sub>$([char]0x00B2) Rust = ``test_reactor_perf`` from [microsoft/windows-rs](https://github.com/microsoft/windows-rs/tree/master/crates/tests/libs/reactor_perf) — a port of this harness (same StocksGrid, same ``--percent``/``--duration`` CLI). $rustNote</sub>"

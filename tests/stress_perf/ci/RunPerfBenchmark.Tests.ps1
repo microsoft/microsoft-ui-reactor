@@ -292,8 +292,16 @@ Assert-True ($null -ne $mip) '[micro] -MicroIterations parameter exists'
 Assert-True ($mip -and $mip.DefaultValue -and $mip.DefaultValue.Extent.Text -eq '1000') '[micro] -MicroIterations defaults to 1000 (suite fits its per-side budget)'
 $mrp = $ast.ParamBlock.Parameters | Where-Object { $_.Name.VariablePath.UserPath -eq 'MicroReps' } | Select-Object -First 1
 Assert-True ($mrp -and $mrp.DefaultValue -and $mrp.DefaultValue.Extent.Text -eq '12') '[micro] -MicroReps defaults to 12 (paired-CI sample count unchanged)'
+$mwp = $ast.ParamBlock.Parameters | Where-Object { $_.Name.VariablePath.UserPath -eq 'MicroWarmup' } | Select-Object -First 1
+Assert-True ($mwp -and $mwp.DefaultValue -and $mwp.DefaultValue.Extent.Text -eq '1') '[micro] -MicroWarmup defaults to 1 (one interleaved warmup round dropped per side)'
+$mtp = $ast.ParamBlock.Parameters | Where-Object { $_.Name.VariablePath.UserPath -eq 'MicroRepTimeoutSec' } | Select-Object -First 1
+Assert-True ($mtp -and $mtp.DefaultValue -and $mtp.DefaultValue.Extent.Text -eq '180') '[micro] -MicroRepTimeoutSec defaults to 180 (per-round launch budget, not the whole suite)'
 $microFn = Get-Func 'Invoke-MicroRun'
-Assert-True ($microFn -match '\$timeoutSec\s*=\s*600') '[micro] Invoke-MicroRun per-side timeout is 600s (headroom over the suite cost at 1000 iterations)'
+# Invoke-MicroRun is now the single-launch primitive; its timeout is a param (default
+# 600) that the interleaver overrides per round via -MicroRepTimeoutSec, rather than a
+# hardcoded whole-suite constant.
+Assert-True ($microFn -match '\[int\]\$TimeoutSec\s*=\s*600') '[micro] Invoke-MicroRun -TimeoutSec defaults to 600s'
+Assert-True ($microFn -match '\$timeoutSec\s*=\s*\$TimeoutSec') '[micro] Invoke-MicroRun honors the -TimeoutSec param (no hardcoded constant)'
 
 # ===========================================================================
 #  Invoke-OneRun — --percent threading (-RunPercent defaults to $Percent)
@@ -366,6 +374,98 @@ Assert-True ($src -match '\$mainKeyedRuns = @\(\); \$prKeyedRuns = @\(\)\s*\r?\n
 # failure drops BOTH halves so the paired CI's main[i]/pr[i] zip stays index-aligned.
 Assert-True ($src -match 'if \(\$mm -and \$pm\) \{ \$mainKeyedRuns \+= \$mm; \$prKeyedRuns \+= \$pm \}') '[keyed] a complete pair appends both main + pr samples'
 Assert-True ($src -match 'elseif \(\$mm -or \$pm\) \{ Write-Log "  keyed pair #\$i incomplete') '[keyed] a one-sided keyed run drops both halves (paired CI stays aligned)'
+
+# ===========================================================================
+#  Micro rep-interleave — ConvertTo-MicroRepLines + Invoke-MicroInterleaved
+# ===========================================================================
+# Per-rep interleaving runs a FRESH process per round per side (so the
+# process-to-process timing offset is randomized into the paired variance rather
+# than biasing every rep one way). Each --reps 1 launch emits "repetition":0 on
+# every bench line; the accumulator must look byte-compatible with a single
+# multi-rep launch (Get-PerfMicroComparison pairs main<->pr BY repetition value),
+# so surviving rounds are renumbered to dense indices 0,1,2,... on BOTH sides, and
+# a one-sided failure drops the whole round to keep the indices aligned. Stub the
+# launch with a scriptblock so the loop is exercised without the exe.
+Invoke-Expression (Get-Func 'ConvertTo-MicroRepLines')
+Invoke-Expression (Get-Func 'Invoke-MicroInterleaved')
+
+$microIntTmp = Join-Path ([IO.Path]::GetTempPath()) ("perfci-microint-" + [guid]::NewGuid().ToString('N'))
+$null = New-Item -ItemType Directory -Force $microIntTmp | Out-Null
+
+# A per-round launch writes one line per bench, every line carrying "repetition":0
+# (exactly what a single --reps 1 PerfBench.ControlModel launch produces).
+function New-RoundFile([string]$side, [int]$round, [string[]]$benchIds) {
+    $p = Join-Path $microIntTmp ("round-{0}-{1}.jsonl" -f $side, $round)
+    $lines = $benchIds | ForEach-Object { '{"benchId":"' + $_ + '","variant":"Reactor","repetition":0,"meanNs":100,"allocBytes":200}' }
+    Set-Content -LiteralPath $p -Value $lines -Encoding UTF8
+    $p
+}
+function Get-RepSeq([string[]]$lines, [string]$benchId) {
+    # The repetition indices (in file order) for one bench across the accumulator.
+    ($lines | Where-Object { $_ -match ('"benchId":"' + $benchId + '"') } |
+        ForEach-Object { ([regex]'"repetition":(\d+)').Match($_).Groups[1].Value }) -join ','
+}
+
+try {
+    # --- ConvertTo-MicroRepLines: surgical repetition renumber. ---
+    $roundD = New-RoundFile 'main' 9 @('M1', 'M2', 'M3')
+    $rw = ConvertTo-MicroRepLines -RoundFile $roundD -RepIndex 7
+    Assert-True (@($rw).Count -eq 3) '[rewrite] returns one line per bench'
+    Assert-True (@($rw | Where-Object { $_ -match '"repetition":7' }).Count -eq 3) '[rewrite] every line renumbered to the target rep index'
+    Assert-True (@($rw | Where-Object { $_ -match '"repetition":0' }).Count -eq 0) '[rewrite] no line keeps the original repetition:0'
+    Assert-True (@($rw | Where-Object { $_ -match '"benchId":"M2"' -and $_ -match '"meanNs":100' -and $_ -match '"allocBytes":200' }).Count -eq 1) '[rewrite] payload (benchId/meanNs/allocBytes) preserved — only repetition changes'
+    Assert-True ($null -eq (ConvertTo-MicroRepLines -RoundFile (Join-Path $microIntTmp 'nope.jsonl') -RepIndex 0)) '[rewrite] missing file -> $null (drop the round)'
+    $emptyF = Join-Path $microIntTmp 'empty.jsonl'; Set-Content -LiteralPath $emptyF -Value '' -NoNewline
+    Assert-True ($null -eq (ConvertTo-MicroRepLines -RoundFile $emptyF -RepIndex 0)) '[rewrite] empty file -> $null (drop the round)'
+
+    # --- Invoke-MicroInterleaved: the launch stub (FailRounds drives one-sided failures). ---
+    $global:FailRounds = @{}
+    $launch = {
+        param($side, $round)
+        if ($global:FailRounds.ContainsKey("${side}:${round}")) { return $null }
+        New-RoundFile $side $round @('M1', 'M2')
+    }.GetNewClosure()
+
+    # A. happy path: 1 warmup + 3 measured rounds -> 3 dense reps on both sides.
+    $global:FailRounds = @{}
+    $accMain = Join-Path $microIntTmp 'acc-main.jsonl'; $accPr = Join-Path $microIntTmp 'acc-pr.jsonl'
+    $res = Invoke-MicroInterleaved -LaunchRep $launch -RepCount 3 -WarmupCount 1 -MainOut $accMain -PrOut $accPr
+    Assert-True ($null -ne $res -and $res.Reps -eq 3) '[interleave] 1 warmup + 3 measured rounds -> 3 kept reps'
+    $mL = @(Get-Content $accMain); $pL = @(Get-Content $accPr)
+    Assert-True ($mL.Count -eq 6 -and $pL.Count -eq 6) '[interleave] each accumulator has 3 reps x 2 benches = 6 lines'
+    Assert-True ((Get-RepSeq $mL 'M1') -eq '0,1,2') '[interleave] M1 renumbered to dense 0,1,2 (warmup round not numbered)'
+    Assert-True ((Get-RepSeq $pL 'M2') -eq '0,1,2') '[interleave] pr side carries the SAME dense indices (paired by repetition value)'
+
+    # B. one-sided failure drops the WHOLE round; surviving reps stay dense (no gap).
+    $global:FailRounds = @{ 'pr:3' = $true }   # round 3: pr launch fails
+    $accMain2 = Join-Path $microIntTmp 'acc2-main.jsonl'; $accPr2 = Join-Path $microIntTmp 'acc2-pr.jsonl'
+    $res2 = Invoke-MicroInterleaved -LaunchRep $launch -RepCount 3 -WarmupCount 1 -MainOut $accMain2 -PrOut $accPr2
+    Assert-True ($null -ne $res2 -and $res2.Reps -eq 2) '[interleave] one-sided round failure drops both -> 2 kept (not 3)'
+    $mL2 = @(Get-Content $accMain2); $pL2 = @(Get-Content $accPr2)
+    Assert-True ($mL2.Count -eq 4 -and $pL2.Count -eq 4) '[interleave] drop-both keeps main/pr line counts equal'
+    Assert-True ((Get-RepSeq $mL2 'M1') -eq '0,1') '[interleave] after a dropped round, surviving reps stay dense 0,1 (no gap)'
+    Assert-True (@($mL2 | Where-Object { $_ -match '"benchId":"M1"' }).Count -eq 2) '[interleave] the failed round''s main file was NOT appended (no orphan rep)'
+
+    # C. fewer than 2 paired rounds survive -> $null (too few for a paired CI).
+    $global:FailRounds = @{ 'pr:3' = $true; 'pr:4' = $true }   # only round 2 survives
+    $accMain3 = Join-Path $microIntTmp 'acc3-main.jsonl'; $accPr3 = Join-Path $microIntTmp 'acc3-pr.jsonl'
+    $res3 = Invoke-MicroInterleaved -LaunchRep $launch -RepCount 3 -WarmupCount 1 -MainOut $accMain3 -PrOut $accPr3
+    Assert-True ($null -eq $res3) '[interleave] <2 paired rounds survive -> $null (omit micro section)'
+
+    # D. stale accumulators are cleared before the run (no cross-run bleed).
+    $accMain4 = Join-Path $microIntTmp 'acc4-main.jsonl'; $accPr4 = Join-Path $microIntTmp 'acc4-pr.jsonl'
+    Set-Content -LiteralPath $accMain4 -Value 'STALE' -Encoding UTF8
+    Set-Content -LiteralPath $accPr4 -Value 'STALE' -Encoding UTF8
+    $global:FailRounds = @{}
+    $res4 = Invoke-MicroInterleaved -LaunchRep $launch -RepCount 2 -WarmupCount 0 -MainOut $accMain4 -PrOut $accPr4
+    Assert-True ($null -ne $res4 -and @(Get-Content $accMain4 | Where-Object { $_ -match 'STALE' }).Count -eq 0) '[interleave] pre-existing accumulator content is cleared before appending'
+}
+finally {
+    Remove-Item function:New-RoundFile -ErrorAction SilentlyContinue
+    Remove-Item function:Get-RepSeq -ErrorAction SilentlyContinue
+    Remove-Variable -Name FailRounds -Scope Global -ErrorAction SilentlyContinue
+    if (Test-Path $microIntTmp) { Remove-Item $microIntTmp -Recurse -Force -ErrorAction SilentlyContinue }
+}
 
 # cleanup
 foreach ($d in @($baseTree, $prTree, $OutDir, $exeDir)) {

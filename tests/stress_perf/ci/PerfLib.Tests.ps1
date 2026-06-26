@@ -692,6 +692,88 @@ try {
     Assert-Equal 'na'     (Get-PerfMicroRowStatus -NsStatus 'better' -AllocStatus 'na')     'alloc na -> row na (ns does not rescue)'
     Assert-Equal 'na'     (Get-PerfMicroRowStatus -NsStatus 'na'     -AllocStatus 'na')     'na when alloc na'
 
+    # ── ARMED ns-flag mechanism (dormant by default; exercised here with the flag on) ──
+    # Promoting ns informational -> flagged is gated on $script:MicroNsAutoFlag. When
+    # armed, the row COMBINES the (rep-interleaved, band-gated) ns delta with the alloc
+    # delta: either axis can flag, and a disagreement reads 'mixed'. The flag is reset to
+    # dormant after this block so the remaining tests see v1 behaviour.
+    $prevNsFlag = $script:MicroNsAutoFlag
+    $script:MicroNsAutoFlag = $true
+    try {
+        # Combination matrix: ns now participates.
+        Assert-Equal 'better' (Get-PerfMicroRowStatus -NsStatus 'better' -AllocStatus 'noise')  'armed: ns better + alloc noise -> better (ns now drives)'
+        Assert-Equal 'worse'  (Get-PerfMicroRowStatus -NsStatus 'worse'  -AllocStatus 'noise')  'armed: ns worse + alloc noise -> worse'
+        Assert-Equal 'better' (Get-PerfMicroRowStatus -NsStatus 'better' -AllocStatus 'better') 'armed: both better -> better'
+        Assert-Equal 'worse'  (Get-PerfMicroRowStatus -NsStatus 'worse'  -AllocStatus 'worse')  'armed: both worse -> worse'
+        Assert-Equal 'mixed'  (Get-PerfMicroRowStatus -NsStatus 'better' -AllocStatus 'worse')  'armed: ns better + alloc worse -> mixed'
+        Assert-Equal 'mixed'  (Get-PerfMicroRowStatus -NsStatus 'worse'  -AllocStatus 'better') 'armed: ns worse + alloc better -> mixed'
+        Assert-Equal 'noise'  (Get-PerfMicroRowStatus -NsStatus 'noise'  -AllocStatus 'noise')  'armed: both noise -> noise'
+        Assert-Equal 'better' (Get-PerfMicroRowStatus -NsStatus 'na'     -AllocStatus 'better') 'armed: ns na -> alloc drives'
+        Assert-Equal 'better' (Get-PerfMicroRowStatus -NsStatus 'better' -AllocStatus 'na')     'armed: alloc na -> ns drives (differs from dormant na)'
+        Assert-Equal 'na'     (Get-PerfMicroRowStatus -NsStatus 'na'     -AllocStatus 'na')     'armed: both na -> na'
+        Assert-Equal 'noise'  (Get-PerfMicroRowStatus -NsStatus 'noise'  -AllocStatus 'na')     'armed: ns noise + alloc na -> noise'
+
+        # 'mixed' glyph renders.
+        Assert-Equal "$([char]0x2195)$([char]0xFE0F) mixed" (Get-PerfStatusGlyph 'mixed') 'mixed -> up-down arrow glyph'
+
+        # SYNTHETIC IDENTICAL-BINARY CALIBRATION (the no-false-flag proof, armed):
+        # an unchanged binary produces ns samples drawn from the SAME distribution on both
+        # sides — once rep-interleaved the paired ns differences center on 0 with only
+        # sub-band jitter, so the ns CI must clear neither +band nor -band => 'noise'.
+        # Here main = pr distribution with +-~1% per-rep jitter (well inside the 3% band).
+        $idMain = @(
+            (New-MicroRow 'NS1' 'IdenticalBin' 'Reactor' 0 1000 800)
+            (New-MicroRow 'NS1' 'IdenticalBin' 'Reactor' 1 1000 800)
+            (New-MicroRow 'NS1' 'IdenticalBin' 'Reactor' 2 1000 800)
+            (New-MicroRow 'NS1' 'IdenticalBin' 'Reactor' 3 1000 800)
+            (New-MicroRow 'NS1' 'IdenticalBin' 'Reactor' 4 1000 800)
+        )
+        $idPr = @(
+            (New-MicroRow 'NS1' 'IdenticalBin' 'Reactor' 0 1010 800)
+            (New-MicroRow 'NS1' 'IdenticalBin' 'Reactor' 1  990 800)
+            (New-MicroRow 'NS1' 'IdenticalBin' 'Reactor' 2 1005 800)
+            (New-MicroRow 'NS1' 'IdenticalBin' 'Reactor' 3  995 800)
+            (New-MicroRow 'NS1' 'IdenticalBin' 'Reactor' 4 1002 800)
+        )
+        $idMainJsonl = Join-Path $microTmp 'nsband-id-main.jsonl'
+        $idPrJsonl   = Join-Path $microTmp 'nsband-id-pr.jsonl'
+        Set-Content -LiteralPath $idMainJsonl -Value $idMain -Encoding UTF8
+        Set-Content -LiteralPath $idPrJsonl   -Value $idPr   -Encoding UTF8
+        $idCmp = @(Get-PerfMicroComparison -Main (Read-MicroBenchResults $idMainJsonl) -Pr (Read-MicroBenchResults $idPrJsonl))[0]
+        Assert-Equal 'noise' $idCmp.NsDelta.Status 'armed ns calibration: identical-binary sub-band ns jitter reads noise (no false flag)'
+        Assert-Equal 'noise' (Get-PerfMicroRowStatus -NsStatus $idCmp.NsDelta.Status -AllocStatus $idCmp.AllocDelta.Status) 'armed ns calibration: identical-binary row = noise'
+
+        # SYNTHETIC REAL-EFFECT: a consistent ns improvement well beyond the band must
+        # flag 'better' once armed (the capability the flag delivers).
+        $effMain = @(
+            (New-MicroRow 'NS2' 'RealWin' 'Reactor' 0 1000 800)
+            (New-MicroRow 'NS2' 'RealWin' 'Reactor' 1 1000 800)
+            (New-MicroRow 'NS2' 'RealWin' 'Reactor' 2 1000 800)
+            (New-MicroRow 'NS2' 'RealWin' 'Reactor' 3 1000 800)
+        )
+        $effPr = @(
+            (New-MicroRow 'NS2' 'RealWin' 'Reactor' 0 900 800)
+            (New-MicroRow 'NS2' 'RealWin' 'Reactor' 1 905 800)
+            (New-MicroRow 'NS2' 'RealWin' 'Reactor' 2 898 800)
+            (New-MicroRow 'NS2' 'RealWin' 'Reactor' 3 902 800)
+        )
+        $effMainJsonl = Join-Path $microTmp 'nsband-eff-main.jsonl'
+        $effPrJsonl   = Join-Path $microTmp 'nsband-eff-pr.jsonl'
+        Set-Content -LiteralPath $effMainJsonl -Value $effMain -Encoding UTF8
+        Set-Content -LiteralPath $effPrJsonl   -Value $effPr   -Encoding UTF8
+        $effCmp = @(Get-PerfMicroComparison -Main (Read-MicroBenchResults $effMainJsonl) -Pr (Read-MicroBenchResults $effPrJsonl))[0]
+        Assert-Equal 'better' $effCmp.NsDelta.Status 'armed ns calibration: consistent -10% ns (beyond 3% band) flags better'
+        Assert-Equal 'better' (Get-PerfMicroRowStatus -NsStatus $effCmp.NsDelta.Status -AllocStatus $effCmp.AllocDelta.Status) 'armed ns calibration: real ns win drives row better'
+
+        # The SAME real-effect data must read 'noise' when DORMANT (alloc unchanged), proving
+        # the flag is the only thing that changes the verdict — arming is measurement-only.
+        $script:MicroNsAutoFlag = $false
+        Assert-Equal 'noise' (Get-PerfMicroRowStatus -NsStatus $effCmp.NsDelta.Status -AllocStatus $effCmp.AllocDelta.Status) 'dormant: same real ns win reads noise (alloc-only), so arming only relabels'
+        $script:MicroNsAutoFlag = $true
+    } finally {
+        $script:MicroNsAutoFlag = $prevNsFlag
+    }
+
     # Rep-aligned pairing + consistent medians. Two benches, each with rep1 dropped
     # on the PR side:
     #   A1 — main rep1 is an alloc outlier (2000). Correct rep-keyed alignment pairs
