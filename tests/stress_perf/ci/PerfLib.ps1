@@ -86,7 +86,8 @@ $script:MicroNsMinEffectPct = 3.0
 $script:MicroNsAutoFlag = $false
 
 # Canonical reconciler micro-suite size: the FULL emitted comparison set. That is the
-# spec-047 M1-M13 set PLUS 3 supplementary benches (ids OAlloc / OUpdate / C207) that
+# spec-047 M1-M13 set, the M14 DSL-cascade alloc instrument (PR #665), PLUS 3 supplementary
+# benches (ids OAlloc / OUpdate / C207) that
 # BenchCatalog.All also runs for `--variant Reactor`. The source of truth is
 # tests/perf_bench/PerfBench.ControlModel/Benches/AllBenches.cs (BenchCatalog.All); there is
 # NO bench-id allowlist in Read-MicroBenchResults, so every Reactor 'ok' row is compared and a
@@ -96,7 +97,7 @@ $script:MicroNsAutoFlag = $false
 # is indistinguishable from a clean full run. A drift-guard test (RunPerfBenchmark.Tests)
 # asserts this equals the BenchCatalog.All count so the two can't silently diverge -- keep them
 # in sync when the suite changes.
-$script:MicroExpectedBenchCount = 16
+$script:MicroExpectedBenchCount = 17
 
 function ConvertTo-PerfDouble {
     <#
