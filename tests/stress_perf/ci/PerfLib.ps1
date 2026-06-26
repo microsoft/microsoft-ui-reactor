@@ -46,22 +46,31 @@ $script:PerfAllocMetricSpec = @(
     [pscustomobject]@{ Key = 'Gen0PerKRenders';     Label = 'Gen0 GC / 1k renders'; LowerIsBetter = $true; Digits = 2; Arrow = [char]0x2193 }
 )
 
-# Minimum-effect band (percent) for the micro-suite ALLOC flag. The per-side micro
-# runs are not rep-interleaved, so a sub-1% systematic process-to-process alloc
-# offset on non-deterministic benches (dispatcher / background-thread allocations,
-# e.g. M5 "Dispatch_Switch_Warm" measured 6/6 distinct alloc values per rep) can
-# make the tight within-process 95% CI exclude 0 on identical code. Requiring the CI
-# to clear +-this band absorbs that offset while still catching real structural
-# alloc changes, which are several percent to many-x. Set to 0 to restore the pure
-# "CI excludes 0" rule.
-$script:MicroAllocMinEffectPct = 1.0
+# Minimum-effect band (percent) for the micro-suite ALLOC flag. Even though the micro
+# runs are now rep-interleaved (PR5b: a fresh process per rep randomizes the
+# process-to-process alloc offset on non-deterministic benches -- dispatcher /
+# background-thread allocations, e.g. M5 "Dispatch_Switch_Warm" measured 6/6 distinct
+# alloc values per rep -- into the paired variance instead of a constant bias), a
+# residual PER-OP offset survives and scales as offset/iterations: the band that held
+# at 10000 inner iterations is correspondingly tighter now that PR5a/PR5c run the suite
+# at 2000 iters to fit the CI budget. Requiring the paired CI to clear +-this band
+# absorbs that residual offset while still catching real structural alloc changes
+# (several percent to many-x). Set to 0 to restore the pure "CI excludes 0" rule.
+#
+# PROVISIONAL VALUE: 3.0 is a deliberately conservative interim hedge (<= the ns band)
+# chosen to avoid a latent false-flag at 2000 iters. Like the ns band it MUST be reset
+# from a real-CI identical-binary interleaved A/B at the live iteration count (which can
+# only run once this harness is on the default branch, since /perf builds it from main);
+# that post-merge calibration is expected to TIGHTEN it back toward the true offset.
+$script:MicroAllocMinEffectPct = 3.0
 
 # Minimum-effect band (percent) for the micro-suite ns/op flag, applied ONLY when the
 # ns flag is armed (see $MicroNsAutoFlag). ns is noisier than the deterministic alloc
 # metric even once rep-interleaved — a fresh process per rep randomizes the
 # process-to-process timing offset into the paired variance rather than leaving it a
-# constant bias, but residual cold-JIT / scheduling jitter remains — so the ns band is
-# wider than alloc's. This value is PROVISIONAL: per the arming gate it must be
+# constant bias, but residual cold-JIT / scheduling jitter remains. Both bands are now
+# PROVISIONALLY set to the same conservative interim value; ns is expected to stay >=
+# alloc once calibrated (alloc is the more deterministic axis). Per the arming gate it must be
 # recalibrated from a real-CI identical-binary interleaved A/B (which can only run after
 # the interleave is on main, since /perf builds the harness from the default branch)
 # so the ns CI stays within +-band for an unchanged diff before the flag goes live.

@@ -281,15 +281,16 @@ finally {
 # ===========================================================================
 #  Micro-suite budget — iterations + per-side timeout sized to actually finish
 # ===========================================================================
-# The 16-bench suite was silently dropped from every comment because at
+# The 13-bench suite was silently dropped from every comment because at
 # -MicroIterations 10000 it ran ~3x over the per-side timeout (completed only
-# M1-M4, then Invoke-MicroRun discarded the truncated prefix). Lock the budget
-# fit: a small inner-iteration default plus a timeout with headroom over the
-# suite's real cost. Both are pure capacity knobs — they don't change the per-op
-# ns/alloc math (each bench stays hundreds of thousands of times the timer floor).
+# M1-M4, then Invoke-MicroRun discarded the truncated prefix). PR5a cut the inner
+# iteration count to fit the per-side budget; PR5c raised it to 2000 (still 5x under
+# the 10000 that overran) to steady the per-op alloc variance for the min-effect band.
+# It stays a pure capacity knob — each bench remains hundreds of thousands of times the
+# timer floor, so the per-op ns/alloc math is unchanged.
 $mip = $ast.ParamBlock.Parameters | Where-Object { $_.Name.VariablePath.UserPath -eq 'MicroIterations' } | Select-Object -First 1
 Assert-True ($null -ne $mip) '[micro] -MicroIterations parameter exists'
-Assert-True ($mip -and $mip.DefaultValue -and $mip.DefaultValue.Extent.Text -eq '1000') '[micro] -MicroIterations defaults to 1000 (suite fits its per-side budget)'
+Assert-True ($mip -and $mip.DefaultValue -and $mip.DefaultValue.Extent.Text -eq '2000') '[micro] -MicroIterations defaults to 2000 (fits the per-side budget; steadies per-op alloc variance for the band)'
 $mrp = $ast.ParamBlock.Parameters | Where-Object { $_.Name.VariablePath.UserPath -eq 'MicroReps' } | Select-Object -First 1
 Assert-True ($mrp -and $mrp.DefaultValue -and $mrp.DefaultValue.Extent.Text -eq '12') '[micro] -MicroReps defaults to 12 (paired-CI sample count unchanged)'
 $mwp = $ast.ParamBlock.Parameters | Where-Object { $_.Name.VariablePath.UserPath -eq 'MicroWarmup' } | Select-Object -First 1
