@@ -94,9 +94,10 @@ internal static class Issue487ScrollAnchorFixtures
         if (rtb is null) return result;
         foreach (var p in rtb.Blocks.OfType<Microsoft.UI.Xaml.Documents.Paragraph>())
         {
-            foreach (var c in p.Inlines.OfType<Microsoft.UI.Xaml.Documents.InlineUIContainer>())
-                if (c.Child is FrameworkElement fe)
-                    result.Add(fe);
+            foreach (var fe in p.Inlines.OfType<Microsoft.UI.Xaml.Documents.InlineUIContainer>()
+                         .Select(c => c.Child)
+                         .OfType<FrameworkElement>())
+                result.Add(fe);
         }
         return result;
     }
