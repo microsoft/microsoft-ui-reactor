@@ -123,10 +123,13 @@ internal sealed record ChartA11yData(IChartAccessibilityData Data)
 
     /// <summary>
     /// DSL modifier the scanner names in its palette-fix suggestions (A11Y_CHART_009/010/011) for
-    /// this chart — e.g. <c>"SeriesColors"</c> for series charts, <c>"SetColors"</c> for pie charts
+    /// this chart — <c>"SeriesColors"</c> for series charts; for pie charts it tracks which field
+    /// fed the scanned palette: <c>"SetColors"</c> when <c>.SetColors(...)</c> is the rendered
+    /// source, or <c>"Palette"</c> when only the advisory <c>.Palette(...)</c> fallback is set
     /// (issue #645). The fix-suggestion modifier is machine-consumable (an agent applies the named
-    /// method), so it must name a modifier the chart actually exposes: a pie has <c>.SetColors(...)</c>,
-    /// not <c>.SeriesColors(...)</c>. Defaults to <c>"SeriesColors"</c>; pie charts override it.
+    /// method), so it must name a modifier the chart actually exposes <b>and the author actually
+    /// used</b>: a pie has <c>.SetColors(...)</c> and <c>.Palette(...)</c>, not
+    /// <c>.SeriesColors(...)</c>. Defaults to <c>"SeriesColors"</c>; pie charts override it.
     /// </summary>
     public string CustomPaletteModifier { get; init; } = "SeriesColors";
 

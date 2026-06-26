@@ -203,6 +203,9 @@ public class ChartScannerRuleTests
         // Series charts render their .Palette(...), so the OkabeIto shortcut stays a valid fix here —
         // the chart-type-aware snippet only drops it on the advisory pie path (issue #645).
         Assert.Contains(".Palette(ChartPalette.OkabeIto)", finding.Fix.CodeSnippet);
+        // L2 (PR #708 review): series charts must keep naming the SERIES modifier after the pie
+        // chart-type-aware change — explicit guard for the "series guidance unaffected" invariant.
+        Assert.Equal("SeriesColors", finding.Fix.Modifier);
     }
 
     [Fact]
@@ -234,6 +237,13 @@ public class ChartScannerRuleTests
 
         var findings = AccessibilityScanner.Scan(tree);
         Assert.Contains(findings, f => f.Id == "A11Y_CHART_010");
+
+        // L2 (PR #708 review): pin the series modifier + snippet so a future DTO-default change can't
+        // silently flip series remediation. Series charts render their .Palette(...), so the OkabeIto
+        // shortcut stays a valid fix on the series path.
+        var finding = findings.First(f => f.Id == "A11Y_CHART_010");
+        Assert.Equal("SeriesColors", finding.Fix.Modifier);
+        Assert.Contains(".Palette(ChartPalette.OkabeIto)", finding.Fix.CodeSnippet);
     }
 
     // ── A11Y_CHART_011: Background contrast ─────────────────────────
@@ -254,6 +264,9 @@ public class ChartScannerRuleTests
         var findings = AccessibilityScanner.Scan(tree);
         var finding = Assert.Single(findings, f => f.Id == "A11Y_CHART_011");
         Assert.Equal("info", finding.Severity);
+        // L2 (PR #708 review): series 011 also carries the series modifier (the 011 snippet text
+        // itself is the textual lightness hint, so only the modifier needs pinning here).
+        Assert.Equal("SeriesColors", finding.Fix.Modifier);
     }
 
     [Fact]
@@ -584,6 +597,29 @@ public class ChartScannerRuleTests
         // .Palette(...) which wouldn't change a pie's rendered slices (issue #645 / PR #708 review).
         Assert.Contains(".SetColors(...)", finding.Fix.CodeSnippet);
         Assert.DoesNotContain(".Palette(", finding.Fix.CodeSnippet);
+    }
+
+    [Fact]
+    public void A11Y_CHART_009_PieChart_PaletteOnly_FixNamesPaletteNotSetColors()
+    {
+        // M1 (PR #708 review): a pie that set ONLY .Palette(...) (no .SetColors()) makes ScannerPalette
+        // fall back to that advisory palette — the scanner correctly validates it — but the remediation
+        // must name the call the author ACTUALLY made: .Palette(...), never a .SetColors(...) call they
+        // never wrote. Telling an author to fix/remove a non-existent call is the wrong-guidance footgun
+        // #645 exists to kill (the mirror of the chart-type-aware fix that stopped pies emitting the
+        // non-existent .SeriesColors()). The modifier tracks which field fed ScannerPalette.
+        var chart = Charts.PieChart(Array.Empty<DataPoint>(), d => d.Y)
+            .Palette(ChartPalette.FromColors(new D3Color(128, 128, 128), new D3Color(135, 135, 135))); // similar grays: <3:1 pairwise
+        var canvas = chart.AttachChartDataForTest(new CanvasElement([]) { Width = 400, Height = 300 });
+        var tree = VStack(canvas);
+
+        var findings = AccessibilityScanner.Scan(tree);
+        var finding = Assert.Single(findings, f => f.Id == "A11Y_CHART_009");
+        // Source-tracked modifier: .Palette() fed the scanned palette here, so the fix names .Palette(),
+        // not .SetColors() — and the advisory pie path still never offers .Palette(ChartPalette.OkabeIto).
+        Assert.Equal("Palette", finding.Fix.Modifier);
+        Assert.Contains(".Palette(...)", finding.Fix.CodeSnippet);
+        Assert.DoesNotContain(".SetColors(", finding.Fix.CodeSnippet);
     }
 
     [Fact]

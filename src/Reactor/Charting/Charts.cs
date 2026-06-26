@@ -624,7 +624,14 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
         return this;
     }
 
-    /// <summary>Sets a curated accessible palette (Tier 1).</summary>
+    /// <summary>
+    /// Declares a scanner-visible accessible palette for the pie (Tier 1). For a pie this is
+    /// <b>advisory-only</b>: it does <b>not</b> change the rendered slice colors (a pie renders the
+    /// <c>.SetColors(...)</c> colors when set, otherwise the built-in Category10 default) and is
+    /// consulted by the accessibility scanner only as a contrast-check fallback when
+    /// <c>.SetColors(...)</c> is unset (issue #645). Use <see cref="SetColors"/> to control the
+    /// colors a pie actually draws.
+    /// </summary>
     public PieChartElement<T> Palette(Accessibility.ChartPalette palette) { _palette = palette; return this; }
 
     /// <summary>
@@ -686,6 +693,17 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
         _colorPalette is { Count: > 0 } colors
             ? Accessibility.ChartPalette.FromColors(colors)
             : _palette;
+
+    /// <summary>
+    /// The DSL modifier the scanner names in its palette-fix suggestions (A11Y_CHART_009/010/011),
+    /// tracking <b>which field actually fed</b> <see cref="ScannerPalette"/>: <c>"SetColors"</c> when
+    /// the rendered <c>_colorPalette</c> (<see cref="SetColors"/>) is the source, otherwise
+    /// <c>"Palette"</c> for the advisory <c>_palette</c> (<see cref="Palette"/>) fallback. Naming a
+    /// call the author never made — e.g. telling a pie that only set <c>.Palette(...)</c> to fix or
+    /// remove a non-existent <c>.SetColors(...)</c> call — is the wrong-guidance footgun issue #645
+    /// exists to kill, so the remediation must reference the call that produced the scanned palette.
+    /// </summary>
+    private string ScannerPaletteModifier => _colorPalette is { Count: > 0 } ? "SetColors" : "Palette";
 
     public Element ToElement()
     {
@@ -759,7 +777,7 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
         {
             IsColorOnly = _colorOnly,
             CustomPalette = ScannerPalette,
-            CustomPaletteModifier = "SetColors",
+            CustomPaletteModifier = ScannerPaletteModifier,
             IsPaletteAdvisoryOnly = true,
             ChartBackground = _chartBackground,
         });
