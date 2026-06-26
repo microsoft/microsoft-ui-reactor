@@ -232,7 +232,11 @@ Several tables plus footnotes:
   `ReconcileKeyedMiddle`, the LIS-based minimal-move pass) instead of the positional
   re-walk the StocksGrid tables measure — so this is the sensitive macro signal for
   **keyed-diff** optimizations (keyed-list diff, keyed structural-skip) that the
-  positional cells can never exercise. Same paired-CI gating as Table 1; omitted
+  positional cells can never exercise. It also carries its own **allocation**
+  sub-table (`Alloc bytes/render` + `Gen0 GC / 1k renders` over the keyed aggregates,
+  same spec as the StocksGrid allocation table) — the sensitive macro signal for
+  keyed-diff *allocation* reductions the positional alloc table can't isolate, rendered
+  only when the keyed leg reports the metric. Same paired-CI gating as Table 1; omitted
   when `-IncludeKeyedList $false`, the workload build fails, or a side produces no
   metrics.
 - **Reconciler micro-benchmarks** — per-bench `ns/op` and `B/op` from the

@@ -745,9 +745,10 @@ function Format-PerfSkipFloorSection {
 function Format-PerfKeyedListSection {
     <#
     .SYNOPSIS
-        Render the keyed-list workload table: the four headline metrics measured on
-        StressPerf.KeyedList — a ~500-row stably keyed list whose rows are reordered /
-        inserted / removed each tick. Empty array when there is nothing to show.
+        Render the keyed-list workload section: the four headline metrics plus an
+        allocation sub-table measured on StressPerf.KeyedList — a ~500-row stably keyed
+        list whose rows are reordered / inserted / removed each tick. Empty array when
+        there is nothing to show.
     .DESCRIPTION
         Unlike the positional StocksGrid headline/skip-floor legs (whose cells mutate
         in place by index, always taking ChildReconciler.ReconcilePositional), this is
@@ -756,9 +757,13 @@ function Format-PerfKeyedListSection {
         the sensitive macro measure for keyed-diff optimizations (keyed-list diff,
         keyed structural-skip) that the StocksGrid workload can never exercise. Reuses
         the same paired-Δ 95% CI machinery (Get-PerfDelta over the index-aligned
-        per-run samples) as the headline table. Returns an empty array when either
-        aggregate is $null (keyed-list leg disabled, build omitted, or one side
-        produced no metrics), so the caller renders nothing.
+        per-run samples) as the headline table. Also appends an **allocation** sub-table
+        — the shared PerfAllocMetricSpec (alloc bytes/render + Gen0 GC / 1k renders) over
+        the keyed aggregates — the sensitive macro signal for keyed-DIFF allocation
+        reductions that the positional StocksGrid allocation table can never isolate;
+        rendered only when the keyed leg reported allocation metrics. Returns an empty
+        array when either aggregate is $null (keyed-list leg disabled, build omitted, or
+        one side produced no metrics), so the caller renders nothing.
     .PARAMETER MainKeyed  Aggregated baseline keyed-list metrics (Measure-PerfRuns), or $null.
     .PARAMETER PrKeyed     Aggregated PR-head keyed-list metrics, or $null.
     .PARAMETER Percent     The mutation percent the keyed-list leg ran at (heading / preamble).
@@ -791,6 +796,38 @@ function Format-PerfKeyedListSection {
             (Get-PerfStatusGlyph $delta.Status)))
     }
     $lines.Add('')
+
+    # Allocation sub-table for the keyed workload: the shared PerfAllocMetricSpec
+    # (Alloc bytes/render, Gen0 GC / 1k renders) rendered over the keyed aggregates with
+    # the identical paired-Δ 95% CI machinery used above. This is the sensitive MACRO
+    # signal for keyed-DIFF allocation reductions — allocBytesPerRender tracks reorder
+    # volume on the keyed (ReconcileKeyed → ReconcileKeyedMiddle / LIS) path, an alloc
+    # signal the positional StocksGrid allocation table can never isolate. Rendered only
+    # when the keyed leg reported allocation metrics (every StressPerf.KeyedList build
+    # does; n/a only for a legacy head opened before the metric landed).
+    $hasKeyedAlloc = ($null -ne $MainKeyed.AllocBytesPerRender) -or ($null -ne $PrKeyed.AllocBytesPerRender) -or
+                     ($null -ne $MainKeyed.Gen0PerKRenders) -or ($null -ne $PrKeyed.Gen0PerKRenders)
+    if ($hasKeyedAlloc) {
+        $lines.Add('**Allocation (keyed-list)** &mdash; lower is better')
+        $lines.Add('')
+        $lines.Add('| Metric | `main` (baseline) | This PR | Δ (95% CI) | Status |')
+        $lines.Add('|---|--:|--:|--:|:--|')
+        foreach ($m in $script:PerfAllocMetricSpec) {
+            $bVal = $MainKeyed.($m.Key)
+            $pVal = $PrKeyed.($m.Key)
+            $spread = [math]::Max([double]$MainKeyed."$($m.Key)Spread", [double]$PrKeyed."$($m.Key)Spread")
+            $delta = Get-PerfDelta -Baseline $bVal -Candidate $pVal -LowerIsBetter $m.LowerIsBetter -SpreadPct $spread `
+                -BaselineSamples $MainKeyed."$($m.Key)Samples" -CandidateSamples $PrKeyed."$($m.Key)Samples"
+            $lines.Add(('| {0} {1} | {2} | {3} | {4} | {5} |' -f `
+                    $m.Label, $m.Arrow, `
+                (Format-PerfNumber $bVal $m.Digits), `
+                (Format-PerfNumber $pVal $m.Digits), `
+                (Format-PerfDeltaCell $delta), `
+                (Get-PerfStatusGlyph $delta.Status)))
+        }
+        $lines.Add('')
+    }
+
     return $lines.ToArray()
 }
 

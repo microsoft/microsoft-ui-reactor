@@ -507,6 +507,45 @@ $noKeyedComment = Format-PerfComment -Main $main -Pr $pr -WinUI3 $null -Rust $nu
 Assert-True (-not ($noKeyedComment -like '*Keyed-list workload*')) 'keyed-list table omitted when keyed aggregates null'
 
 
+# ── Keyed-list allocation sub-table: shared PerfAllocMetricSpec over keyed aggregates ──
+# The keyed leg also renders an allocation sub-table (alloc bytes/render + Gen0 GC / 1k
+# renders) — the macro signal for keyed-DIFF allocation reductions. Alloc moves DOWN
+# main->PR (~20%, an improvement on a lower-is-better metric); tiny jitter keeps each
+# paired CI off 0. Magnitudes mirror a real StressPerf.KeyedList @50% run (~328K
+# bytes/render, ~63 Gen0/1k).
+$keyedAllocMain = Measure-PerfRuns -Runs @(
+    [pscustomobject]@{ RendersPerSec = 18.5; AvgReconcileMs = 6.98; AvgDiffMs = 6.86; AvgMemoryMB = 186; AllocBytesPerRender = 328000; Gen0PerKRenders = 63.2; Gen0 = 6; Gen1 = 2; Gen2 = 1; TotalRenders = 96; DurationSeconds = 5 }
+    [pscustomobject]@{ RendersPerSec = 18.6; AvgReconcileMs = 6.98; AvgDiffMs = 6.86; AvgMemoryMB = 186; AllocBytesPerRender = 328200; Gen0PerKRenders = 63.4; Gen0 = 6; Gen1 = 2; Gen2 = 1; TotalRenders = 96; DurationSeconds = 5 }
+    [pscustomobject]@{ RendersPerSec = 18.4; AvgReconcileMs = 6.98; AvgDiffMs = 6.86; AvgMemoryMB = 186; AllocBytesPerRender = 327800; Gen0PerKRenders = 63.0; Gen0 = 6; Gen1 = 2; Gen2 = 1; TotalRenders = 96; DurationSeconds = 5 }
+)
+$keyedAllocPr = Measure-PerfRuns -Runs @(
+    [pscustomobject]@{ RendersPerSec = 18.5; AvgReconcileMs = 6.98; AvgDiffMs = 6.86; AvgMemoryMB = 186; AllocBytesPerRender = 262000; Gen0PerKRenders = 50.2; Gen0 = 5; Gen1 = 2; Gen2 = 1; TotalRenders = 96; DurationSeconds = 5 }
+    [pscustomobject]@{ RendersPerSec = 18.6; AvgReconcileMs = 6.98; AvgDiffMs = 6.86; AvgMemoryMB = 186; AllocBytesPerRender = 262200; Gen0PerKRenders = 50.4; Gen0 = 5; Gen1 = 2; Gen2 = 1; TotalRenders = 96; DurationSeconds = 5 }
+    [pscustomobject]@{ RendersPerSec = 18.4; AvgReconcileMs = 6.98; AvgDiffMs = 6.86; AvgMemoryMB = 186; AllocBytesPerRender = 261800; Gen0PerKRenders = 50.0; Gen0 = 5; Gen1 = 2; Gen2 = 1; TotalRenders = 96; DurationSeconds = 5 }
+)
+$keyedAllocSection = Format-PerfKeyedListSection -MainKeyed $keyedAllocMain -PrKeyed $keyedAllocPr -Percent 50
+$keyedAllocText = $keyedAllocSection -join "`n"
+Assert-Match $keyedAllocText 'Allocation (keyed-list)' 'keyed section renders the allocation sub-table when alloc present'
+Assert-Match $keyedAllocText 'Alloc bytes/render'      'keyed alloc sub-table has bytes/render row'
+Assert-Match $keyedAllocText 'Gen0 GC / 1k renders'    'keyed alloc sub-table has Gen0 row'
+$keyedAllocRow = ($keyedAllocSection | Where-Object { $_ -match 'Alloc bytes/render' }) -join ' '
+Assert-Match $keyedAllocRow 'improvement' 'keyed alloc DOWN main->PR reads improvement (lower-is-better honored)'
+# The allocation sub-table sits AFTER the keyed headline metrics table within the section.
+$idxKeyedHead  = $keyedAllocText.IndexOf('Avg Reconcile')
+$idxKeyedAlloc = $keyedAllocText.IndexOf('Allocation (keyed-list)')
+Assert-True (($idxKeyedHead -ge 0) -and ($idxKeyedHead -lt $idxKeyedAlloc)) 'keyed alloc sub-table follows the keyed headline metrics table'
+
+# Omitted when the keyed aggregates carry no alloc metrics (legacy keyed head). The
+# $keyedMain/$keyedPr aggregates above were built without alloc fields.
+Assert-True (-not ($keyedSectionText -like '*Allocation (keyed-list)*')) 'keyed alloc sub-table omitted when keyed aggregates lack alloc'
+
+# In a full comment the positional StocksGrid allocation table and the keyed allocation
+# sub-table are DISTINCT, separately-labelled tables (positional vs keyed workload allocs).
+$bothAllocComment = Format-PerfComment -Main $allocMain -Pr $allocPr -WinUI3 $null -Rust $null -MainKeyed $keyedAllocMain -PrKeyed $keyedAllocPr -Context $ctx
+Assert-Match $bothAllocComment 'Allocation (Reactor)'    'full comment keeps the StocksGrid allocation table'
+Assert-Match $bothAllocComment 'Allocation (keyed-list)' 'full comment adds the distinct keyed allocation sub-table'
+
+
 # ── Reconciler micro-suite: Read-MicroBenchResults / comparison / render ──────
 function New-MicroRow {
     param([string]$BenchId, [string]$Name, [string]$Variant, [int]$Rep, [double]$MeanNs, [double]$AllocBytes, [string]$Status = 'ok', [int]$Iterations = 1)

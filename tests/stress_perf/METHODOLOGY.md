@@ -257,8 +257,11 @@ a real keyed diff every tick. The workload is deterministic (fixed RNG seed, con
 row count — insertions paired with removals) so `main` and PR compare identical edit
 sequences, and its rows' labels are content-stable so a moved row's text never changes
 — isolating the **structural** (keyed-diff) signal from per-cell property updates. It
-reports the four headline metrics in its own table under the same interleaving, reps,
-warm-up, and 95%-CI gating as the headline leg, and is opt-out via
+reports the four headline metrics in its own table, plus an **allocation** sub-table
+(`Alloc bytes/render`, `Gen0 GC / 1k renders`) — the sensitive macro signal for
+keyed-diff *allocation* reductions the positional StocksGrid alloc table can't isolate,
+rendered only when the keyed leg reports the metric — all under the same interleaving,
+reps, warm-up, and 95%-CI gating as the headline leg, and is opt-out via
 `-IncludeKeyedList $false`. See
 [`ci/README.md`](ci/README.md#the-comment).
 
