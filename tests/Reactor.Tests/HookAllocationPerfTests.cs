@@ -585,6 +585,69 @@ public class HookAllocationPerfTests
     }
 
     [Fact]
+    public void UseMemoCells_FullReuse_ValueTypeItems_Does_Not_Allocate_Per_Render()
+    {
+        // Round 10 regression: the full-reuse fast-path equality scan previously called
+        // the static object.Equals(items[i], prev[i]), which BOXES both operands when T
+        // is a value type (2 boxes per item per render) -- defeating the zero-alloc goal.
+        // The scan now uses EqualityComparer<T>.Default.Equals (no boxing, AOT-safe). int
+        // items exercise the boxing path the earlier string-keyed test could not catch.
+        // Only the hook call is bracketed (Rerender is excluded).
+        var ctx = NewCtx();
+        var items = new[] { 1, 2, 3, 4, 5 }; // value-type T -> would box under object.Equals
+        var deps = Array.Empty<object>();
+        Func<int, int, Element> build = (item, i) => new DivElement($"v={item}");
+
+        for (int w = 0; w < 200; w++) { ctx.UseMemoCells(items, build, deps); Rerender(ctx); }
+
+        const int iterations = 2000;
+        long total = 0;
+        for (int i = 0; i < iterations; i++)
+        {
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            var children = ctx.UseMemoCells(items, build, deps);
+            long after = GC.GetAllocatedBytesForCurrentThread();
+            total += after - before;
+            Assert.Equal(5, children.Length); // full-reuse path actually taken
+            Rerender(ctx);
+        }
+
+        Assert.True(total <= iterations,
+            $"UseMemoCells value-type full-reuse allocated {total}B over {iterations} steady-state calls (cap {iterations}B = 1 B/call); boxing 5 int pairs via object.Equals would add ~240 B/call and blow the cap.");
+    }
+
+    [Fact]
+    public void UseMemoCellsByKey_FullReuse_ValueTypeItems_Does_Not_Allocate_Per_Render()
+    {
+        // Round 10 regression (ByKey arm): same value-type boxing in the full-reuse scan
+        // (object.Equals(items[i], prev[i])), now EqualityComparer<T>.Default.Equals. int
+        // items + int keys: the key buffer (int[]) and Dictionary<int,int> lookup are
+        // already non-boxing, so the item-equality scan was the only boxing source.
+        var ctx = NewCtx();
+        var items = new[] { 1, 2, 3, 4, 5 };
+        var deps = Array.Empty<object>();
+        Func<int, int> keySel = x => x;
+        Func<int, int, Element> build = (item, i) => new DivElement($"v={item}");
+
+        for (int w = 0; w < 200; w++) { ctx.UseMemoCellsByKey(items, keySel, build, deps); Rerender(ctx); }
+
+        const int iterations = 2000;
+        long total = 0;
+        for (int i = 0; i < iterations; i++)
+        {
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            var children = ctx.UseMemoCellsByKey(items, keySel, build, deps);
+            long after = GC.GetAllocatedBytesForCurrentThread();
+            total += after - before;
+            Assert.Equal(5, children.Length);
+            Rerender(ctx);
+        }
+
+        Assert.True(total <= iterations,
+            $"UseMemoCellsByKey value-type full-reuse allocated {total}B over {iterations} steady-state calls (cap {iterations}B = 1 B/call); object.Equals boxing would blow the cap.");
+    }
+
+    [Fact]
     public void UseMemoCellsByKey_FullReuse_After_Buffer_Peak_Then_Shrink()
     {
         // Round 9: the key-buffer tail is now cleared only over the slots vacated since

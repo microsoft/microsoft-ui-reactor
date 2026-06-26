@@ -94,7 +94,7 @@ public static class UseMemoCellsExtensions
             bool allReused = true;
             for (int i = 0; i < count; i++)
             {
-                if (!Equals(items[i], prevSnapshot[i])) { allReused = false; break; }
+                if (!EqualityComparer<T>.Default.Equals(items[i], prevSnapshot[i])) { allReused = false; break; }
             }
             if (allReused)
                 return prev.Children;
@@ -115,7 +115,7 @@ public static class UseMemoCellsExtensions
             for (int i = 0; i < count; i++)
             {
                 var item = items[i];
-                if (i < prevLen && Equals(item, prevItems[i]))
+                if (i < prevLen && EqualityComparer<T>.Default.Equals(item, prevItems[i]))
                     children[i] = prevChildren[i];
                 else
                     children[i] = builder(item, i);
@@ -199,7 +199,7 @@ public static class UseMemoCellsExtensions
             bool allReused = true;
             for (int i = 0; i < count; i++)
             {
-                if (!Equals(items[i], prevSnapshot[i])
+                if (!EqualityComparer<T>.Default.Equals(items[i], prevSnapshot[i])
                     || !prevKeyMap.TryGetValue(keys[i], out var prevPos)
                     || prevPos != i)
                 {
@@ -219,7 +219,7 @@ public static class UseMemoCellsExtensions
             var item = items[i];
             if (keyToIndex is not null
                 && keyToIndex.TryGetValue(keys[i], out var prevIdx)
-                && Equals(item, prev!.Items[prevIdx]))
+                && EqualityComparer<T>.Default.Equals(item, prev!.Items[prevIdx]))
             {
                 children[i] = prev!.Children[prevIdx];
             }
