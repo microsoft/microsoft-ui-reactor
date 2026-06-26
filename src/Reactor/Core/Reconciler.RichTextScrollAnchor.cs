@@ -341,11 +341,35 @@ public sealed partial class Reconciler
         st.Armed = true;
     }
 
-    // corr-c: invoked from ElementPool.CleanElement when a pooled ScrollViewer/
-    // ScrollView is returned, so a recycled host can't inherit a prior renter's
-    // anchor intent (the attached-DP state survives Content = null otherwise).
-    // Same pool-contamination class as issue #162 — clear the attached state on
-    // return alongside the other ClearValue resets.
+    // corr-c / #487-H1: invoked from ElementPool.CleanElement when a pooled scroll
+    // host (currently ScrollViewer) is returned, so a recycled host can't inherit a
+    // prior renter's anchor intent (the attached-DP state survives Content = null
+    // otherwise). Same pool-contamination class as issue #162.
+    //
+    // Reset only the transient anchor fields and deliberately PRESERVE the state
+    // object and its Wired guard rather than ClearValue-ing the attached DP.
+    // Clearing it outright dropped the one-time wiring guard while leaving the
+    // ViewChanged/LayoutUpdated handlers subscribed, so every subsequent rent
+    // re-wired the host and handler pairs accumulated without bound across pool
+    // cycles. It also stranded any in-flight dispatcher-deferred restore — which
+    // closes over this very state object and re-reads st.Armed at apply time —
+    // still armed, letting it ChangeView the recycled host into a different
+    // renter's offset (cross-renter scroll replay). Disarming here neutralizes that
+    // pending restore; keeping Wired == true keeps exactly one handler pair alive
+    // for the recycled host.
     internal static void ClearRichTextScrollAnchor(FrameworkElement host)
-        => host.ClearValue(s_richTextScrollAnchorProperty);
+    {
+        if (host.GetValue(s_richTextScrollAnchorProperty) is not RichTextScrollAnchorState st)
+            return;
+
+        st.Armed = false;
+        st.RestorePending = false;
+        st.SawClamp = false;
+        st.RestoreAttempts = 0;
+        st.PreClampWaits = 0;
+        st.Intended = double.NaN;
+        st.LastScrollableHeight = double.NaN;
+        // st.Wired stays true: the existing handler trampolines remain valid for the
+        // recycled host and must not be re-subscribed on the next arm.
+    }
 }
