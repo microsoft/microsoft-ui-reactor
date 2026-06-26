@@ -633,9 +633,14 @@ function Invoke-MicroRun {
     try { $proc.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High } catch {}
 
     if (-not $proc.WaitForExit($timeoutSec * 1000)) {
-        Write-Log "  micro TIMEOUT after ${timeoutSec}s — killing PerfBench.ControlModel ($Tag)" 'Yellow'
+        # The bench writes results.jsonl incrementally (one line per rep, flushed
+        # between benches), so a killed run leaves a TRUNCATED file — a prefix subset
+        # of benches/reps. Treat a timeout as "no results" rather than comparing a
+        # silent subset: omit the micro section instead of reporting misleading data.
+        Write-Log "  micro TIMEOUT after ${timeoutSec}s — killing PerfBench.ControlModel ($Tag); discarding any partial output" 'Yellow'
         try { $proc.Kill($true) } catch { try { $proc.Kill() } catch {} }
         Start-Sleep -Seconds 2
+        return $null
     }
 
     if (-not (Test-Path $outJson) -or (Get-Item $outJson).Length -eq 0) {

@@ -463,11 +463,14 @@ function Read-MicroBenchResults {
         Each line is one MeasurementResult (camelCase JSON). Only variant == 'Reactor'
         rows with status 'ok' are kept — the legacy Direct / ReactorToday variants are
         an intra-build A/B (Reactor-vs-today / Reactor-vs-raw-WinUI), NOT the PR-vs-main
-        delta /perf reports. Rows are ordered by repetition so a paired analysis can zip
-        baseline rep i against candidate rep i. Malformed lines are skipped.
+        delta /perf reports. Rows are ordered by repetition and tagged with their
+        repetition index so the paired analysis can align baseline rep i against
+        candidate rep i BY REPETITION (not array position) — a dropped/errored rep on
+        one side must not shift every later sample. Malformed lines are skipped.
     .OUTPUTS
         OrderedDictionary benchId -> [pscustomobject]@{ BenchId; Name;
-        MeanNsSamples [double[]]; AllocBytesSamples [double[]] }. Empty when the file is
+        Repetitions [int[]]; MeanNsSamples [double[]]; AllocBytesSamples [double[]] }
+        (the three arrays are parallel / index-aligned). Empty when the file is
         missing / empty / has no usable Reactor rows.
     #>
     param([AllowNull()][string]$Path)
@@ -496,6 +499,7 @@ function Read-MicroBenchResults {
         $map[[string]$g.Name] = [pscustomobject]@{
             BenchId           = [string]$g.Name
             Name              = $name
+            Repetitions       = [int[]]@($ordered | ForEach-Object { [int]$_.repetition })
             MeanNsSamples     = [double[]]@($ordered | ForEach-Object { [double]$_.meanNs })
             AllocBytesSamples = [double[]]@($ordered | ForEach-Object { [double]$_.allocBytes })
         }
@@ -521,10 +525,27 @@ function Get-PerfMicroComparison {
         if (-not $Pr.Contains($benchId)) { continue }
         $m = $Main[$benchId]
         $p = $Pr[$benchId]
+        # Align samples BY REPETITION, not by array position: if a repetition was
+        # dropped/errored (and filtered) on one side, position-zipping would compare
+        # main rep i against pr rep i+1 for every later sample and silently mis-pair
+        # the paired CI. Pair only repetitions present on BOTH sides.
+        $prIdxByRep = @{}
+        for ($j = 0; $j -lt $p.Repetitions.Count; $j++) { $prIdxByRep[[int]$p.Repetitions[$j]] = $j }
+        $mNs = [System.Collections.Generic.List[object]]::new()
+        $pNs = [System.Collections.Generic.List[object]]::new()
+        $mAlloc = [System.Collections.Generic.List[object]]::new()
+        $pAlloc = [System.Collections.Generic.List[object]]::new()
+        for ($i = 0; $i -lt $m.Repetitions.Count; $i++) {
+            $rep = [int]$m.Repetitions[$i]
+            if (-not $prIdxByRep.ContainsKey($rep)) { continue }
+            $j = $prIdxByRep[$rep]
+            $mNs.Add($m.MeanNsSamples[$i]);       $pNs.Add($p.MeanNsSamples[$j])
+            $mAlloc.Add($m.AllocBytesSamples[$i]); $pAlloc.Add($p.AllocBytesSamples[$j])
+        }
         $nsDelta = Get-PerfDelta -Baseline (Get-PerfMedian $m.MeanNsSamples) -Candidate (Get-PerfMedian $p.MeanNsSamples) `
-            -LowerIsBetter $true -BaselineSamples ([object[]]$m.MeanNsSamples) -CandidateSamples ([object[]]$p.MeanNsSamples)
+            -LowerIsBetter $true -BaselineSamples ([object[]]$mNs.ToArray()) -CandidateSamples ([object[]]$pNs.ToArray())
         $allocDelta = Get-PerfDelta -Baseline (Get-PerfMedian $m.AllocBytesSamples) -Candidate (Get-PerfMedian $p.AllocBytesSamples) `
-            -LowerIsBetter $true -BaselineSamples ([object[]]$m.AllocBytesSamples) -CandidateSamples ([object[]]$p.AllocBytesSamples)
+            -LowerIsBetter $true -BaselineSamples ([object[]]$mAlloc.ToArray()) -CandidateSamples ([object[]]$pAlloc.ToArray())
         $rows.Add([pscustomobject]@{
             BenchId        = $benchId
             Name           = $m.Name

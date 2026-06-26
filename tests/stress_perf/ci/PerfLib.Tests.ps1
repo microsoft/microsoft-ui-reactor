@@ -516,6 +516,36 @@ try {
     Assert-Equal 'na'     (Get-PerfMicroRowStatus -NsStatus 'better' -AllocStatus 'na')     'alloc na -> row na (ns does not rescue)'
     Assert-Equal 'na'     (Get-PerfMicroRowStatus -NsStatus 'na'     -AllocStatus 'na')     'na when alloc na'
 
+    # Rep-aligned pairing: a dropped/errored repetition on one side must not
+    # position-shift later samples and mis-pair the paired CI. main A1 has reps
+    # 0..3 (rep1 an outlier=2000); pr A1 is MISSING rep1. Correct rep-keyed alignment
+    # pairs only the common reps {0,2,3} -> a clean -10% alloc delta. The old
+    # position-zip would pair main rep1's 2000 against pr rep2 and smear the mean.
+    $alignMain = @(
+        (New-MicroRow 'A1' 'RepAlign' 'Reactor' 0 500 1000)
+        (New-MicroRow 'A1' 'RepAlign' 'Reactor' 1 500 2000)
+        (New-MicroRow 'A1' 'RepAlign' 'Reactor' 2 500 1000)
+        (New-MicroRow 'A1' 'RepAlign' 'Reactor' 3 500 1000)
+    )
+    $alignPr = @(
+        (New-MicroRow 'A1' 'RepAlign' 'Reactor' 0 500 900)
+        (New-MicroRow 'A1' 'RepAlign' 'Reactor' 2 500 900)
+        (New-MicroRow 'A1' 'RepAlign' 'Reactor' 3 500 900)
+    )
+    $alignMainJsonl = Join-Path $microTmp 'align-main.jsonl'
+    $alignPrJsonl = Join-Path $microTmp 'align-pr.jsonl'
+    Set-Content -LiteralPath $alignMainJsonl -Value $alignMain -Encoding UTF8
+    Set-Content -LiteralPath $alignPrJsonl -Value $alignPr -Encoding UTF8
+    $alignMainMap = Read-MicroBenchResults $alignMainJsonl
+    Assert-Equal 4 $alignMainMap['A1'].Repetitions.Count   'parser captures the repetition index per sample'
+    Assert-Equal 1 $alignMainMap['A1'].Repetitions[1]      'repetitions carried in sorted order'
+    $alignCmp = @(Get-PerfMicroComparison -Main $alignMainMap -Pr (Read-MicroBenchResults $alignPrJsonl))
+    Assert-Equal 1 $alignCmp.Count                         'rep-align: one overlapping bench'
+    $a1 = $alignCmp[0]
+    Assert-Equal 3 $a1.AllocDelta.N                        'rep-align: only the 3 common reps paired (not min-count position zip)'
+    Assert-True (($a1.AllocDelta.DeltaPct -gt -10.5) -and ($a1.AllocDelta.DeltaPct -lt -9.5)) 'rep-align: paired alloc Δ ≈ -10% (rep-keyed), not smeared by the missing rep'
+    Assert-Equal 'better' $a1.AllocDelta.Status            'rep-align: clean -10% alloc flagged better'
+
     # Section rendering.
     Assert-Equal 0 @(Format-PerfMicroSection -Micro $null).Count  'micro section empty when null'
     Assert-Equal 0 @(Format-PerfMicroSection -Micro @()).Count    'micro section empty when no rows'
