@@ -239,6 +239,6 @@ internal static class CommandBindings
         internal static readonly CommandModuloDelegatesComparer Instance = new();
         public bool Equals(Command? a, Command? b) => CommandsEqual(a, b);
         public int GetHashCode(Command? c) =>
-            c is null ? 0 : global::System.HashCode.Combine(c.Label, c.IsEnabled, c.Description, c.AccessKey);
+            c is null ? 0 : global::System.HashCode.Combine(c.Label, c.IsEnabled, c.Description, c.AccessKey, c.Icon, c.Accelerator);
     }
 }

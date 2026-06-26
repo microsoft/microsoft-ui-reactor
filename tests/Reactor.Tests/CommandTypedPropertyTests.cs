@@ -477,6 +477,24 @@ public class CommandTypedPropertyTests
         Assert.True(Element.ShallowEquals(Button(a), Button(b)));
     }
 
+    // The comparer hash must stay consistent with CommandsEqual (issue #710 review): equal
+    // commands hash equal (the IEqualityComparer contract), and the hash now folds Icon +
+    // Accelerator so commands differing only in those fields no longer collide. The pre-fix
+    // hash omitted both, so the NotEqual asserts below are the regression guard.
+    [Fact]
+    public void Comparer_GetHashCode_Consistent_With_Equality_Incl_Icon_Accelerator()
+    {
+        var cmp = CommandBindings.CommandModuloDelegatesComparer.Instance;
+
+        // Equal (modulo delegates) ⇒ equal hash.
+        Assert.Equal(cmp.GetHashCode(MakeCmd()), cmp.GetHashCode(MakeCmd(execute: () => { })));
+
+        // Icon / Accelerator are part of equality, so they must move the hash.
+        var baseline = MakeCmd();
+        Assert.NotEqual(cmp.GetHashCode(baseline), cmp.GetHashCode(baseline with { Icon = new SymbolIconData("Cancel") }));
+        Assert.NotEqual(cmp.GetHashCode(baseline), cmp.GetHashCode(baseline with { Accelerator = new KeyboardAcceleratorData(VirtualKey.X, VirtualKeyModifiers.Control) }));
+    }
+
     [Fact]
     public void ShallowEquals_False_When_Command_IsDebouncing_Differs_AllSix()
     {
