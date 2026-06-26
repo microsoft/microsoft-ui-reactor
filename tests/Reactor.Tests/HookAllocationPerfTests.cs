@@ -585,6 +585,37 @@ public class HookAllocationPerfTests
     }
 
     [Fact]
+    public void UseMemoCellsByKey_FullReuse_After_Buffer_Peak_Then_Shrink()
+    {
+        // Round 9: the key-buffer tail is now cleared only over the slots vacated since
+        // the previous render ([count..prevCount]) rather than the whole [count..Length]
+        // tail on every render. Drive grow -> shrink -> steady so the buffer keeps a
+        // larger capacity than the current row count, and confirm the full-reuse fast
+        // path still returns the prior children (the narrowed tail clear must not corrupt
+        // the [0..count] key region the fast-path scan reads).
+        var ctx = NewCtx();
+        Func<int, int> keySel = x => x;
+        Func<int, int, Element> build = (item, i) => MakeCell(item);
+
+        var big = new[] { 1, 2, 3, 4, 5 };
+        var small = new[] { 1, 2, 3 };
+
+        ctx.UseMemoCellsByKey(big, keySel, build, "d");   // grow key buffer to length 5
+        Rerender(ctx);
+        var afterShrink = ctx.UseMemoCellsByKey(small, keySel, build, "d"); // shrink to 3
+        Assert.Equal(3, afterShrink.Length);
+        Rerender(ctx);
+        var steady1 = ctx.UseMemoCellsByKey(small, keySel, build, "d"); // steady -> full reuse
+        Rerender(ctx);
+        var steady2 = ctx.UseMemoCellsByKey(small, keySel, build, "d");
+
+        // Full-reuse returns the prior children array across the steady renders even
+        // though the underlying key buffer still has capacity 5.
+        Assert.Same(afterShrink, steady1);
+        Assert.Same(steady1, steady2);
+    }
+
+    [Fact]
     public void UseMemoCellsByKey_Invokes_KeySelector_Once_Per_Item_Per_Render()
     {
         var ctx = NewCtx();
