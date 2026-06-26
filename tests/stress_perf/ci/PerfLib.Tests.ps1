@@ -1030,6 +1030,144 @@ finally {
 }
 
 
+# ── Startup / first-frame metric (PR6): parse + aggregate + render ────────────
+# The 4 startup fields piggyback the headline ReactorOptimized metrics.json (one sample
+# per process). They are optional (a head built before the metric omits them -> n/a),
+# windowOpen may be JSON null within an otherwise-present run (Activated trailed the
+# mount), and the section is informational-first (the $StartupAutoFlag dormant flag)
+# until a real-CI identical-binary band calibration — exactly like the micro ns flag.
+
+# (1) Read-HarnessMetrics parses the 4 startup fields; a JSON-null windowOpen -> n/a, and
+#     a head that predates them parses fine with all 4 -> null (not rejected).
+$tmpSU = Join-Path ([IO.Path]::GetTempPath()) ("perflib-startup-" + [Guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $tmpSU -Force | Out-Null
+try {
+    $suJson = '{"app":"StressPerf.ReactorOptimized","percent":50,"durationSeconds":10,"rendersPerSec":3.5,"totalRenders":35,"avgReconcileMs":76,"avgDiffMs":66,"avgMemoryMB":303,"allocBytesPerRender":52000,"gen0":10,"gen1":2,"gen2":0,"gen0PerKRenders":4.1,"firstReconcileDurationMs":420.5,"entryToFirstReconcileMs":830.2,"windowOpenToFirstReconcileMs":120.7,"entryToFirstFrameMs":910.4,"avgFps":60,"sampleCount":5}'
+    Set-Content -LiteralPath (Join-Path $tmpSU 'StressPerf.ReactorOptimized.metrics.json') -Value $suJson -Encoding UTF8
+    $suM = Read-HarnessMetrics -Directory $tmpSU -AppName 'StressPerf.ReactorOptimized'
+    Assert-Equal 420.5 $suM.FirstReconcileDurationMs      'json firstReconcileDurationMs parsed'
+    Assert-Equal 830.2 $suM.EntryToFirstReconcileMs       'json entryToFirstReconcileMs parsed'
+    Assert-Equal 120.7 $suM.WindowOpenToFirstReconcileMs  'json windowOpenToFirstReconcileMs parsed'
+    Assert-Equal 910.4 $suM.EntryToFirstFrameMs           'json entryToFirstFrameMs parsed'
+
+    # windowOpen as JSON null within an otherwise-present run -> n/a (Activated-vs-mount
+    # ordering was non-monotonic on this launch); the other three still parse.
+    $suNullWin = '{"app":"StressPerf.ReactorOptimized","percent":50,"durationSeconds":10,"rendersPerSec":3.5,"totalRenders":35,"avgReconcileMs":76,"avgDiffMs":66,"avgMemoryMB":303,"firstReconcileDurationMs":400,"entryToFirstReconcileMs":800,"windowOpenToFirstReconcileMs":null,"entryToFirstFrameMs":900,"avgFps":60,"sampleCount":5}'
+    Set-Content -LiteralPath (Join-Path $tmpSU 'StressPerf.NullWin.metrics.json') -Value $suNullWin -Encoding UTF8
+    $suNW = Read-HarnessMetrics -Directory $tmpSU -AppName 'StressPerf.NullWin'
+    Assert-Equal 400 $suNW.FirstReconcileDurationMs       'null-window json: firstReconcile still parsed'
+    Assert-Null      $suNW.WindowOpenToFirstReconcileMs   'null-window json: windowOpen -> n/a (null)'
+    Assert-Equal 900 $suNW.EntryToFirstFrameMs            'null-window json: entryToFirstFrame still parsed'
+
+    # A head that predates the metric (no startup fields) parses fine, all 4 -> null.
+    $suOld = '{"app":"StressPerf.Pre","percent":50,"durationSeconds":10,"rendersPerSec":3.5,"totalRenders":35,"avgReconcileMs":76,"avgDiffMs":66,"avgMemoryMB":303,"avgFps":60,"sampleCount":5}'
+    Set-Content -LiteralPath (Join-Path $tmpSU 'StressPerf.Pre.metrics.json') -Value $suOld -Encoding UTF8
+    $suP = Read-HarnessMetrics -Directory $tmpSU -AppName 'StressPerf.Pre'
+    Assert-Equal 'json' $suP.Source                  'pre-metric json still parses'
+    Assert-Null  $suP.FirstReconcileDurationMs       'pre-metric json: firstReconcile -> n/a'
+    Assert-Null  $suP.EntryToFirstFrameMs            'pre-metric json: entryToFirstFrame -> n/a'
+}
+finally {
+    Remove-Item -LiteralPath $tmpSU -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+# (2) Measure-PerfRuns aggregates the startup keys, and the cold FIRST launch (an outlier
+#     warmup rep) is dropped by the CALLER (the interleave loop accumulates only kept rep
+#     files) BEFORE aggregation -- so the median over the kept reps must exclude rep-0's
+#     cold-start outlier. This is the startup-specific warmup-drop assertion: startup
+#     piggybacks the rep launches, so dropping a warmup rep drops its startup sample too.
+$suWarmRep = [pscustomobject]@{ RendersPerSec=3.5; AvgReconcileMs=76; AvgDiffMs=66; AvgMemoryMB=303; TotalRenders=35; DurationSeconds=10; FirstReconcileDurationMs=9000; EntryToFirstReconcileMs=9000; WindowOpenToFirstReconcileMs=$null; EntryToFirstFrameMs=9000 }
+$suKept = @(1..4 | ForEach-Object {
+    [pscustomobject]@{ RendersPerSec=3.5; AvgReconcileMs=76; AvgDiffMs=66; AvgMemoryMB=303; TotalRenders=35; DurationSeconds=10; FirstReconcileDurationMs=(400 + $_); EntryToFirstReconcileMs=(800 + $_); WindowOpenToFirstReconcileMs=(120 + $_); EntryToFirstFrameMs=(900 + $_) }
+})
+$suAggKept = Measure-PerfRuns -Runs $suKept
+Assert-Equal 402.5 $suAggKept.FirstReconcileDurationMs           'startup median over kept reps (401..404 -> 402.5)'
+Assert-True  ($suAggKept.FirstReconcileDurationMs -lt 9000)      'cold first-launch outlier excluded from the startup median'
+Assert-Equal 4 @($suAggKept.FirstReconcileDurationMsSamples).Count 'startup samples carry one entry per kept rep'
+# Contrast: keeping the cold rep-0 skews the median upward -> why warmup-drop matters here.
+$suAggWithCold = Measure-PerfRuns -Runs (@($suWarmRep) + $suKept)
+Assert-True ($suAggWithCold.FirstReconcileDurationMs -gt $suAggKept.FirstReconcileDurationMs) 'including the cold rep-0 skews the startup median upward (warmup-drop is load-bearing)'
+
+# (3) Format-PerfStartupSection: both sides present -> 4-row table, informational status
+#     (flag dormant), Δ + 95% CI cells. Empty only when a side aggregate is null or
+#     NEITHER side reported startup fields.
+$suMainRuns = @(); $suPrRuns = @()
+1..6 | ForEach-Object {
+    $j = ($_ % 3) * 0.5
+    $suMainRuns += [pscustomobject]@{ RendersPerSec=3.5; AvgReconcileMs=76; AvgDiffMs=66; AvgMemoryMB=303; TotalRenders=35; DurationSeconds=10; FirstReconcileDurationMs=(420 + $j); EntryToFirstReconcileMs=(830 + $j); WindowOpenToFirstReconcileMs=(120 + $j); EntryToFirstFrameMs=(910 + $j) }
+    $suPrRuns   += [pscustomobject]@{ RendersPerSec=3.5; AvgReconcileMs=76; AvgDiffMs=66; AvgMemoryMB=303; TotalRenders=35; DurationSeconds=10; FirstReconcileDurationMs=(410 + $j); EntryToFirstReconcileMs=(820 + $j); WindowOpenToFirstReconcileMs=(118 + $j); EntryToFirstFrameMs=(905 + $j) }
+}
+$suMain = Measure-PerfRuns -Runs $suMainRuns
+$suPr   = Measure-PerfRuns -Runs $suPrRuns
+$suNoData = Measure-PerfRuns -Runs @([pscustomobject]@{ RendersPerSec=3.5; AvgReconcileMs=76; AvgDiffMs=66; AvgMemoryMB=303; TotalRenders=35; DurationSeconds=10 })
+
+Assert-Equal 0 @(Format-PerfStartupSection -Main $null -Pr $suPr).Count   'startup section empty when Main aggregate null'
+Assert-Equal 0 @(Format-PerfStartupSection -Main $suMain -Pr $null).Count 'startup section empty when Pr aggregate null'
+Assert-Equal 0 @(Format-PerfStartupSection -Main $suNoData -Pr $suNoData).Count 'startup section empty when neither side reports startup fields'
+
+$suSection = Format-PerfStartupSection -Main $suMain -Pr $suPr
+$suText = $suSection -join "`n"
+Assert-Match $suText 'Startup / first frame'              'startup section has heading'
+Assert-Match $suText 'First reconcile (ms)'               'startup section has the Reactor-isolated first-reconcile row'
+Assert-Match $suText 'Entry &rarr; first frame'           'startup section has the human first-frame row'
+Assert-Match $suText 'Window open &rarr; first reconcile' 'startup section has the n/a-guarded window-open row'
+Assert-Match $suText 'Reactor-isolated'                   'startup preamble flags the Reactor-isolated first-reconcile signal'
+Assert-Match $suText 'Informational only'                 'startup section is informational-first while the flag is dormant'
+Assert-Match $suText 'informational'                      'dormant rows show the informational status glyph'
+Assert-Match $suText '95% CI'                             'startup Δ cells carry a 95% CI'
+# Dormant: no better/worse verdict leaks into the status column.
+Assert-True (-not ($suText -like '*improvement*')) 'dormant startup: no improvement verdict'
+Assert-True (-not ($suText -like '*regression*'))  'dormant startup: no regression verdict'
+# Monotonic shape: the human entry->first-frame value is >= the entry->first-reconcile
+# value (first frame composes after the mount completes) in the rendered medians.
+Assert-True ($suMain.EntryToFirstFrameMs -ge $suMain.EntryToFirstReconcileMs) 'startup shape: entry->first-frame >= entry->first-reconcile (monotonic)'
+
+# (4) Armed: flipping $script:StartupAutoFlag promotes the rows from informational to the
+#     band-gated verdict (the one-line flip reserved for after a real-CI calibration). Reset
+#     to dormant afterwards so later assertions (none below, but for safety) see the default.
+$prevStartupFlag = $script:StartupAutoFlag
+$script:StartupAutoFlag = $true
+try {
+    $suFastMainRuns = @(); $suFastPrRuns = @()
+    1..6 | ForEach-Object {
+        $j = ($_ % 3) * 0.5
+        $suFastMainRuns += [pscustomobject]@{ RendersPerSec=3.5; AvgReconcileMs=76; AvgDiffMs=66; AvgMemoryMB=303; TotalRenders=35; DurationSeconds=10; FirstReconcileDurationMs=(800 + $j); EntryToFirstReconcileMs=(1600 + $j); WindowOpenToFirstReconcileMs=(120 + $j); EntryToFirstFrameMs=(1700 + $j) }
+        $suFastPrRuns   += [pscustomobject]@{ RendersPerSec=3.5; AvgReconcileMs=76; AvgDiffMs=66; AvgMemoryMB=303; TotalRenders=35; DurationSeconds=10; FirstReconcileDurationMs=(400 + $j); EntryToFirstReconcileMs=(800 + $j); WindowOpenToFirstReconcileMs=(118 + $j); EntryToFirstFrameMs=(850 + $j) }
+    }
+    $suFastText = (Format-PerfStartupSection -Main (Measure-PerfRuns -Runs $suFastMainRuns) -Pr (Measure-PerfRuns -Runs $suFastPrRuns)) -join "`n"
+    Assert-Match $suFastText 'improvement' 'armed startup: a large faster delta reads improvement (CI excludes 0, clears the band)'
+    Assert-True (-not ($suFastText -like '*informational*'))   'armed startup: rows drop the informational status'
+    Assert-True (-not ($suFastText -like '*Informational only*')) 'armed startup: preamble drops the informational-only note'
+}
+finally {
+    $script:StartupAutoFlag = $prevStartupFlag
+}
+
+# (5) Lineage (the per-tree build mechanic): on THIS metric's introducing run the main
+#     baseline predates the fields -> n/a cells, no paired Δ, and a visible NOTE saying
+#     the Δ populates on the next run. The reverse (PR predates) prints a rebase note.
+$suIntroText = (Format-PerfStartupSection -Main $suNoData -Pr $suMain) -join "`n"  # main predates, PR has data
+Assert-Match $suIntroText 'populates on the next' 'introducing run: note says Δ populates on the next /perf after merge'
+Assert-Match $suIntroText 'n/a'                   'introducing run: main baseline cells read n/a'
+$suRebaseText = (Format-PerfStartupSection -Main $suMain -Pr $suNoData) -join "`n"  # pr predates, main has data
+Assert-Match $suRebaseText 'Rebase onto' 'pr-predates run: note says rebase to populate'
+
+# (6) Threaded through Format-PerfComment, between the regression and cross-framework tables.
+$suComment = Format-PerfComment -Main $suMain -Pr $suPr -WinUI3 $null -Rust $null -Context $ctx
+Assert-Match $suComment 'Startup / first frame' 'comment renders the startup section when startup data present'
+Assert-Match $suComment 'Reactor-isolated'      'comment carries the startup footnote'
+$idxRegSU   = $suComment.IndexOf('Regression vs')
+$idxStartup = $suComment.IndexOf('Startup / first frame')
+$idxXfwSU   = $suComment.IndexOf('Cross-framework reference')
+Assert-True (($idxRegSU -lt $idxStartup) -and ($idxStartup -lt $idxXfwSU)) 'startup section sits between the regression and cross-framework tables'
+# Omitted entirely when neither side reports startup fields (back-compat with existing callers).
+$suNoStartupComment = Format-PerfComment -Main $main -Pr $pr -WinUI3 $null -Rust $null -Context $ctx
+Assert-True (-not ($suNoStartupComment -like '*Startup / first frame*')) 'startup section omitted when neither side reports startup fields'
+
+# Get-PerfStatusGlyph: the informational glyph the dormant rows use.
+Assert-Equal "$([char]0x2139)$([char]0xFE0F) informational" (Get-PerfStatusGlyph 'info') 'info -> information-source glyph'
+
+
 if ($script:Fail -gt 0) {
     Write-Host "FAILED: $($script:Fail) / $($script:Pass + $script:Fail) assertions" -ForegroundColor Red
     foreach ($f in $script:Failures) { Write-Host "  ✗ $f" -ForegroundColor Red }

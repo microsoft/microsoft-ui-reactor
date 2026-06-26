@@ -220,6 +220,19 @@ Several tables plus footnotes:
   at this sample size. This data-driven band replaces the old fixed 4% floor,
   which both buried real sub-4% wins and rubber-stamped any sub-4% number as
   "noise" regardless of how tight the runs were.
+- **Startup / first frame** — the from-scratch **mount** the steady-state tables
+  exclude by construction, captured once per process: `First reconcile (ms)` (the
+  **Reactor-isolated** first-render reconcile-phase duration — the same phase the
+  steady-state Avg Diff column averages — undiluted by AOT / window / XAML bootstrap,
+  so a mount regression shows here at full size), `Entry → first frame (ms)` (the
+  human-facing "first frame rendered"), `Entry → first reconcile (ms)`, and the
+  n/a-guarded `Window open → first reconcile (ms)`. Piggybacks the headline per-rep
+  launches (one sample/process, so the cold first launch is warmup-dropped) for a
+  paired 95% CI at zero extra CI time. **Informational-first**: the flag
+  (`$StartupAutoFlag`) ships dormant — Δ + CI are shown but no row is auto-flagged
+  better-or-worse until a real-CI identical-binary band calibration (same discipline
+  as the micro ns flag; measurement-only). Reads n/a for a pre-metric head, so on the
+  introducing run the `main` baseline shows n/a and the Δ populates on the next run.
 - **Low-mutation skip-floor (`--percent 0`)** — the same four headline metrics
   from a **second interleaved A/B leg** at near-zero mutation. With ~1 cell
   changing per tick, reconcile/diff are dominated by the **O(n) positional child

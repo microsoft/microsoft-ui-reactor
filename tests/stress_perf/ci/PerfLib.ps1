@@ -46,6 +46,25 @@ $script:PerfAllocMetricSpec = @(
     [pscustomobject]@{ Key = 'Gen0PerKRenders';     Label = 'Gen0 GC / 1k renders'; LowerIsBetter = $true; Digits = 2; Arrow = [char]0x2193 }
 )
 
+# Startup / first-frame metric table spec (Reactor main-vs-PR). All lower-is-better
+# (faster startup). Piggybacks the headline ReactorOptimized per-rep launches — one
+# sample per process, Reps samples per side — so it reuses the same paired-Δ 95% CI
+# machinery with no extra CI time. The from-scratch mount cost is excluded from the
+# steady-state alloc/timing windows by construction, so this is the only place the
+# #696-class first-render cost surfaces. firstReconcileDurationMs is the Reactor-ISOLATED
+# signal (the first OnRenderComplete reconcile-phase arg, undiluted by AOT/bootstrap);
+# entryToFirstFrameMs is the human-recognisable "first frame rendered" number;
+# windowOpenToFirstReconcileMs is n/a-guarded (Activated-vs-mount ordering is
+# non-deterministic across launches). Emitted by PerfTracker as the matching camelCase
+# fields; absent (n/a) for a harness built from a revision that predates the metric (e.g.
+# the main baseline on this metric's INTRODUCING run — see Format-PerfStartupSection).
+$script:PerfStartupMetricSpec = @(
+    [pscustomobject]@{ Key = 'EntryToFirstFrameMs';          Label = 'Entry &rarr; first frame (ms)';           LowerIsBetter = $true; Digits = 1; Arrow = [char]0x2193 }
+    [pscustomobject]@{ Key = 'FirstReconcileDurationMs';     Label = 'First reconcile (ms)';                    LowerIsBetter = $true; Digits = 1; Arrow = [char]0x2193 }
+    [pscustomobject]@{ Key = 'EntryToFirstReconcileMs';      Label = 'Entry &rarr; first reconcile (ms)';       LowerIsBetter = $true; Digits = 1; Arrow = [char]0x2193 }
+    [pscustomobject]@{ Key = 'WindowOpenToFirstReconcileMs'; Label = 'Window open &rarr; first reconcile (ms)'; LowerIsBetter = $true; Digits = 1; Arrow = [char]0x2193 }
+)
+
 # Minimum-effect band (percent) for the micro-suite ALLOC flag. Even though the micro
 # runs are now rep-interleaved (PR5b: a fresh process per rep randomizes the
 # process-to-process alloc offset on non-deterministic benches -- dispatcher /
@@ -84,6 +103,24 @@ $script:MicroNsMinEffectPct = 3.0
 # real-CI identical-binary band calibration above. Arming is MEASUREMENT-ONLY — it
 # changes /perf verdict labels, never what merges.
 $script:MicroNsAutoFlag = $false
+
+# Startup / first-frame flagging. DORMANT ($false) for release 1 (informational-only),
+# exactly like the micro ns flag above: the Δ + 95% CI are shown for every startup row
+# but the Status reads "informational" and never drives a verdict. ONE sample per launch
+# (vs a 300-tick steady-state average) plus bootstrap process-to-process variance (AOT
+# init, OS file cache, thermal) make this plausibly the noisiest axis, so arming it
+# ($true) is a deliberate, separately-ratified one-line follow-up gated on the SAME
+# real-CI identical-binary ~0-false-flag band calibration required for the ns flip.
+# Arming is MEASUREMENT-ONLY — it changes /perf verdict labels, never what merges.
+$script:StartupAutoFlag = $false
+
+# Minimum-effect band (percent) for the startup flag, applied ONLY once armed. PROVISIONAL:
+# startup is single-sample-per-launch and bootstrap-variance-dominated, so this is a
+# conservative interim hedge (>= the micro bands) and MUST be reset from a real-CI
+# identical-binary interleaved A/B at the live launch count before the flag goes live
+# (same calibration discipline as the micro ns/alloc bands; /perf builds the harness from
+# the default branch, so it can only run post-merge). Inert while the flag is dormant.
+$script:StartupMinEffectPct = 5.0
 
 # Canonical reconciler micro-suite size: the FULL emitted comparison set. That is the
 # spec-047 M1-M13 set PLUS 3 supplementary benches (ids OAlloc / OUpdate / C207) that
@@ -155,6 +192,10 @@ function Read-HarnessMetrics {
         Gen0                = $null
         Gen1                = $null
         Gen2                = $null
+        FirstReconcileDurationMs     = $null
+        EntryToFirstReconcileMs      = $null
+        WindowOpenToFirstReconcileMs = $null
+        EntryToFirstFrameMs          = $null
         TotalRenders        = $null
         DurationSeconds     = $null
         Source              = 'none'
@@ -194,6 +235,15 @@ function Read-HarnessMetrics {
                 if ($j.PSObject.Properties['gen0'] -and $null -ne $j.gen0) { $result.Gen0 = [int]$j.gen0 }
                 if ($j.PSObject.Properties['gen1'] -and $null -ne $j.gen1) { $result.Gen1 = [int]$j.gen1 }
                 if ($j.PSObject.Properties['gen2'] -and $null -ne $j.gen2) { $result.Gen2 = [int]$j.gen2 }
+                # Optional startup / first-frame fields (added after the alloc set). Same
+                # predates-them-reads-n/a contract: a harness built before this metric omits
+                # them entirely (-> $null), and windowOpenToFirstReconcileMs is emitted as
+                # JSON null when the Activated-vs-mount ordering made it unmeasurable on a
+                # given launch — both land as $null here, which Get-PerfDelta renders as n/a.
+                if ($j.PSObject.Properties['firstReconcileDurationMs'] -and $null -ne $j.firstReconcileDurationMs) { $result.FirstReconcileDurationMs = [double]$j.firstReconcileDurationMs }
+                if ($j.PSObject.Properties['entryToFirstReconcileMs'] -and $null -ne $j.entryToFirstReconcileMs) { $result.EntryToFirstReconcileMs = [double]$j.entryToFirstReconcileMs }
+                if ($j.PSObject.Properties['windowOpenToFirstReconcileMs'] -and $null -ne $j.windowOpenToFirstReconcileMs) { $result.WindowOpenToFirstReconcileMs = [double]$j.windowOpenToFirstReconcileMs }
+                if ($j.PSObject.Properties['entryToFirstFrameMs'] -and $null -ne $j.entryToFirstFrameMs) { $result.EntryToFirstFrameMs = [double]$j.entryToFirstFrameMs }
                 $result.Source          = 'json'
                 return $result
             }
@@ -371,6 +421,8 @@ function Measure-PerfRuns {
 
     $keys = 'RendersPerSec', 'AvgReconcileMs', 'AvgDiffMs', 'AvgMemoryMB',
             'AllocBytesPerRender', 'Gen0PerKRenders', 'Gen0', 'Gen1', 'Gen2',
+            'FirstReconcileDurationMs', 'EntryToFirstReconcileMs',
+            'WindowOpenToFirstReconcileMs', 'EntryToFirstFrameMs',
             'TotalRenders', 'DurationSeconds'
     $agg = [ordered]@{ RunCount = @($Runs).Count }
     foreach ($k in $keys) {
@@ -525,6 +577,7 @@ function Get-PerfStatusGlyph {
         'worse'  { return [char]0x26A0 + [char]0xFE0F + ' regression' }          # warning
         'noise'  { return [char]0x2248 + ' within noise' }                       # almost-equal
         'mixed'  { return [char]0x2195 + [char]0xFE0F + ' mixed' }               # up-down arrow
+        'info'   { return [char]0x2139 + [char]0xFE0F + ' informational' }       # information source
         default  { return '—' }
     }
 }
@@ -952,6 +1005,93 @@ function Format-PerfKeyedListSection {
     return $lines.ToArray()
 }
 
+function Format-PerfStartupSection {
+    <#
+    .SYNOPSIS
+        Render the startup / first-frame table: entry&rarr;first-frame, the Reactor-isolated
+        first-reconcile duration, entry&rarr;first-reconcile, and the n/a-guarded window-open&rarr;
+        first-reconcile, PR vs main with the paired 95% CI. Returns an empty array when
+        neither side reported any startup field (the leg was not requested -> stay silent).
+    .DESCRIPTION
+        These piggyback the headline ReactorOptimized per-rep launches (one sample per
+        process, Reps samples per side), so they reuse the same paired-Δ 95% CI machinery
+        ($Main/$Pr aggregates) with zero extra CI time. The from-scratch mount cost is
+        excluded from the steady-state alloc/timing windows by construction, so this section
+        is the only place the #696-class first-render cost surfaces.
+
+        INFORMATIONAL-FIRST: while $script:StartupAutoFlag is dormant ($false, the default)
+        every row's Status reads "informational" — the Δ + 95% CI are shown but never drive a
+        verdict — pending a real-CI identical-binary band calibration, exactly like the micro
+        ns flag. Arming flips the Status to the band-gated better/worse/noise verdict.
+
+        LINEAGE (mirrors the alloc-fields n/a contract): /perf builds the baseline exe from a
+        separate main worktree and overlays only the PR's project references, so on THIS
+        metric's introducing run the main baseline predates the fields -> its cells read n/a
+        and no paired Δ resolves; a visible note says the Δ populates on the next run once the
+        metric is on main. The reverse (PR head predates the metric) prints a rebase note.
+    .PARAMETER Main  Aggregated baseline metrics (Measure-PerfRuns), carrying the startup keys, or $null.
+    .PARAMETER Pr    Aggregated PR-head metrics, or $null.
+    #>
+    param(
+        [AllowNull()][pscustomobject]$Main,
+        [AllowNull()][pscustomobject]$Pr
+    )
+    if ($null -eq $Main -or $null -eq $Pr) { return @() }
+
+    $spec = $script:PerfStartupMetricSpec
+    $mainHasData = @($spec | Where-Object { $null -ne $Main.($_.Key) }).Count -gt 0
+    $prHasData = @($spec | Where-Object { $null -ne $Pr.($_.Key) }).Count -gt 0
+    if (-not $mainHasData -and -not $prHasData) { return @() }
+
+    $down = [char]0x2193
+    $lines = [System.Collections.Generic.List[string]]::new()
+    $lines.Add('### Startup / first frame')
+    $lines.Add('')
+    $preamble = "Per-launch **first-frame / first-reconcile** cost the steady-state tables above exclude by construction (their windows baseline on the first benchmark tick, after the mount). Captured once per process and aggregated over the same interleaved per-rep launches &mdash; $down lower is better. ``First reconcile (ms)`` is the **Reactor-isolated** first-render reconcile-phase duration (the #696 signal, undiluted by AOT / window / XAML bootstrap and directly comparable to the steady-state Diff column); ``Entry &rarr; first frame`` is the human-facing first-composed-frame number. Δ is the mean paired change with a 95% CI."
+    if (-not $script:StartupAutoFlag) {
+        $preamble += " **Informational only** &mdash; the Δ / CI are reported but no row is auto-flagged better-or-worse yet (one sample per launch + bootstrap process-to-process variance is the noisiest axis; the flag stays dormant pending a real-CI identical-binary band calibration, like the micro ns metric)."
+    }
+    $lines.Add($preamble)
+    $lines.Add('')
+    $lines.Add('| Metric | `main` (baseline) | This PR | Δ (95% CI) | Status |')
+    $lines.Add('|---|--:|--:|--:|:--|')
+    foreach ($m in $spec) {
+        $bVal = $Main.($m.Key)
+        $pVal = $Pr.($m.Key)
+        $spread = [math]::Max([double]$Main."$($m.Key)Spread", [double]$Pr."$($m.Key)Spread")
+        # Paired CI is the ONLY admissible flag (RequirePairedCI): the single-sample point
+        # delta vs a spread band is exactly the thin "2-run median" signal this whole effort
+        # is removing. With <2 aligned pairs (e.g. the lineage one-sided run) the Status is
+        # 'na' and the Δ cell renders '—'.
+        $delta = Get-PerfDelta -Baseline $bVal -Candidate $pVal -LowerIsBetter $m.LowerIsBetter -SpreadPct $spread `
+            -BaselineSamples $Main."$($m.Key)Samples" -CandidateSamples $Pr."$($m.Key)Samples" `
+            -MinEffectPct $script:StartupMinEffectPct -RequirePairedCI
+        # Informational-first: a missing-side delta stays 'na' (—); otherwise the row reads
+        # 'informational' until the flag is armed, then it shows the band-gated verdict.
+        $statusKey = if ($delta.Status -eq 'na') { 'na' } elseif ($script:StartupAutoFlag) { $delta.Status } else { 'info' }
+        $lines.Add(('| {0} {1} | {2} | {3} | {4} | {5} |' -f `
+                $m.Label, $m.Arrow, `
+            (Format-PerfNumber $bVal $m.Digits), `
+            (Format-PerfNumber $pVal $m.Digits), `
+            (Format-PerfDeltaCell $delta), `
+            (Get-PerfStatusGlyph $statusKey)))
+    }
+    $lines.Add('')
+    # Lineage note: a side built before the metric landed reads n/a; surface it loudly
+    # (a visible note, never a silent gap) per the per-tree build mechanic.
+    if ($prHasData -and -not $mainHasData) {
+        $lines.Add('> [!NOTE]')
+        $lines.Add('> The `main` baseline was built from a revision that predates this metric, so its cells read *n/a* and no paired Δ is resolvable on this run. The Δ vs `main` populates on the next `/perf` after this lands (the baseline exe then emits the fields too).')
+        $lines.Add('')
+    }
+    elseif ($mainHasData -and -not $prHasData) {
+        $lines.Add('> [!NOTE]')
+        $lines.Add('> This PR head was built from a revision that predates the startup metric, so its cells read *n/a*. Rebase onto `main` to populate them.')
+        $lines.Add('')
+    }
+    return $lines.ToArray()
+}
+
 function Format-PerfComment {
     <#
     .SYNOPSIS
@@ -1025,6 +1165,13 @@ function Format-PerfComment {
         & $add $row
     }
     & $add ''
+
+    # ── Startup / first-frame table ──────────────────────────────────────────
+    # Per-launch first-frame / first-reconcile cost (the #696 signal) the steady-state
+    # tables exclude by construction. Piggybacks the headline per-rep launches (one
+    # sample per process), so it reuses $Main/$Pr with zero extra CI. Informational-
+    # first while $StartupAutoFlag is dormant. Rendered only when a side reported it.
+    foreach ($sline in (Format-PerfStartupSection -Main $Main -Pr $Pr)) { & $add $sline }
 
     # ── Low-mutation skip-floor table (--percent ~0) ─────────────────────────
     # A second interleaved A/B leg at near-zero mutation. With ~1 cell changing per
@@ -1101,6 +1248,10 @@ function Format-PerfComment {
     }
     & $add "<sub>$up higher is better &middot; $down lower is better. **Within noise** = the 95% confidence interval of the paired Δ includes 0 (no change resolvable at this sample size); $([char]0x2705) improvement / $([char]0x26A0)$([char]0xFE0F) regression require the CI to **exclude** 0.</sub>"
     & $add "<sub>Allocation metrics (alloc bytes/render, Gen0 GC) are the sensitive signal for allocation-reduction work, where the mean-ms / memory figures are largely flat. They read *n/a* for a harness built from a revision that predates them (rebase the PR onto ``main`` to populate them).</sub>"
+    $hasStartup = (@($script:PerfStartupMetricSpec | Where-Object { ($null -ne $Main.($_.Key)) -or ($null -ne $Pr.($_.Key)) }).Count -gt 0)
+    if ($hasStartup) {
+        & $add "<sub>Startup / first-frame metrics piggyback the same interleaved per-rep launches (one sample per process). ``First reconcile (ms)`` is the **Reactor-isolated** first-render reconcile-phase duration (the #696 mount-cost signal, undiluted by AOT / window / XAML bootstrap and directly comparable to the steady-state Diff column); ``Entry &rarr; first frame`` is the human-facing first composed frame. They read *n/a* for a harness built from a revision that predates them &mdash; the paired Δ populates on the next run once the metric is on ``main``. **Informational only** until the band is calibrated: the Δ / CI are shown but no startup row is auto-flagged yet (single-sample-per-launch + bootstrap variance, the noisiest axis).</sub>"
+    }
     if ($null -ne $Micro -and @($Micro).Count -gt 0) {
         if ($script:MicroNsAutoFlag) {
             & $add "<sub>Reconciler micro-benchmarks run ``PerfBench.ControlModel --variant Reactor`` (M1&ndash;M13) as a headless loop bracketed by per-thread alloc + GC counters &mdash; ns-resolution and free of WinUI render / working-set dilution, so they resolve Core/Reconciler time and allocation deltas the macro StocksGrid workload cannot. ``main`` and PR each link their own ``src/Reactor`` build and are **rep-interleaved** (a fresh alternated process per rep), so the paired ns CI is unbiased. The **Status** column combines ns/op and allocated bytes/op &mdash; a bench flags when either axis' 95% CI clears its minimum-effect band, and $([char]0x2195)$([char]0xFE0F) mixed when the axes disagree.</sub>"

@@ -53,6 +53,20 @@ public sealed class PerfTracker
     private int _endGen2;
     private int _endRenderCount;
 
+    // ── Startup / first-frame anchors (one-shot per process) ─────────────────
+    // The from-scratch mount (build the whole element tree + create every WinUI
+    // control + first layout) is EXCLUDED from the steady-state alloc/timing windows
+    // by construction (RecordRender baselines on the first benchmark tick), so these
+    // fields are the only place the #696-class first-render cost is captured. All ms
+    // are measured from managed entry (StartupTiming.MarkEntry, called at the top of
+    // Main); see StartupTiming + RecordFirstRenderIfUnset.
+    private bool _firstRenderCaptured;
+    private double _firstReconcileDurationMs;
+    private double _entryToFirstReconcileMs;
+    private double? _windowOpenToFirstReconcileMs;
+    private bool _firstFrameCaptured;
+    private double _entryToFirstFrameMs;
+
     public double CurrentFps => _currentFps;
     public double LastUpdateMs => _lastUpdateMs;
     public long CurrentMemoryMB => Process.GetCurrentProcess().WorkingSet64 / (1024 * 1024);
@@ -62,6 +76,15 @@ public sealed class PerfTracker
     /// </summary>
     public void FrameRendered()
     {
+        // First composed frame AFTER the from-scratch mount = the user-facing "first
+        // frame rendered". Gated on the first render being captured so an empty
+        // pre-content composition tick can't claim it; this guarantees
+        // T_firstFrame >= T_firstReconcile (monotonic) for the paired CI.
+        if (_firstRenderCaptured && !_firstFrameCaptured)
+        {
+            _firstFrameCaptured = true;
+            _entryToFirstFrameMs = StartupTiming.MsSinceEntry();
+        }
         _frameCount++;
         double now = _wallClock.Elapsed.TotalSeconds;
         double elapsed = now - _lastSampleTime;
@@ -153,6 +176,53 @@ public sealed class PerfTracker
         _reconcileTimeSamples.Add(treeBuildMs + diffPatchMs + effectsMs);
         RecordRender();
     }
+
+    // ── Startup / first-frame metric ─────────────────────────────────────────
+    // Captured once per process on the first from-scratch mount + first composed
+    // frame, piggybacking the existing per-rep process launches. Tier 1: always-on,
+    // zero extra CI. See the first-frame design note + StartupTiming.
+
+    /// <summary>
+    /// One-shot capture of the from-scratch mount on the FIRST OnRenderComplete. Call
+    /// from the host's OnRenderComplete callback BEFORE any benchmark gate so the very
+    /// first render — the full mount the steady-state windows exclude — is recorded.
+    /// <paramref name="reconcileMs"/> is the host's reconcile/diff-patch phase
+    /// duration (the 2nd OnRenderComplete arg): the Reactor-isolated first-render
+    /// signal, undiluted by bootstrap (entry→first-frame is bootstrap-dominated).
+    /// Idempotent — only the first call records.
+    /// </summary>
+    public void RecordFirstRenderIfUnset(double treeBuildMs, double reconcileMs, double effectsMs)
+    {
+        if (_firstRenderCaptured) return;
+        _firstRenderCaptured = true;
+        _firstReconcileDurationMs = reconcileMs;
+        _entryToFirstReconcileMs = StartupTiming.MsSinceEntry();
+        // Window-open → first reconcile only when Activated demonstrably preceded the
+        // mount (monotonic). Activated-vs-mount ordering is non-deterministic across
+        // launches; emit n/a (null) rather than a negative number that would poison a
+        // paired CI on the consuming side.
+        double? winOpen = StartupTiming.WindowOpenMsSinceEntry();
+        _windowOpenToFirstReconcileMs = (winOpen.HasValue && winOpen.Value <= _entryToFirstReconcileMs)
+            ? _entryToFirstReconcileMs - winOpen.Value
+            : null;
+    }
+
+    /// <summary>
+    /// First-render reconcile/diff-patch duration (ms) — the 2nd OnRenderComplete arg
+    /// of the from-scratch mount — or null when no render has completed. Directly
+    /// comparable to the steady-state <see cref="AvgDiffMs"/> (same phase); the mount
+    /// value is much larger because it creates every control rather than patching a few.
+    /// </summary>
+    public double? FirstReconcileDurationMs => _firstRenderCaptured ? _firstReconcileDurationMs : null;
+
+    /// <summary>Managed entry → first reconcile complete (ms), or null. Always defined once a render completes (entry precedes mount).</summary>
+    public double? EntryToFirstReconcileMs => _firstRenderCaptured ? _entryToFirstReconcileMs : null;
+
+    /// <summary>Window Activated → first reconcile (ms), or null (n/a) when the ordering was non-monotonic or the window never reported Activated.</summary>
+    public double? WindowOpenToFirstReconcileMs => _firstRenderCaptured ? _windowOpenToFirstReconcileMs : null;
+
+    /// <summary>Managed entry → first composed frame after mount (ms) — the user-facing "first frame rendered" — or null when no frame composed after the mount.</summary>
+    public double? EntryToFirstFrameMs => _firstFrameCaptured ? _entryToFirstFrameMs : null;
 
     public double ElapsedSeconds => _wallClock.Elapsed.TotalSeconds;
 
@@ -303,6 +373,11 @@ public sealed class PerfTracker
     public string GetMetricsJson(string appName, double percent)
     {
         static string F(double v) => v.ToString("0.####", CultureInfo.InvariantCulture);
+        // Nullable variant for the optional startup fields: emit JSON null for an
+        // un-captured anchor (e.g. window-open when Activated trailed the mount) so a
+        // within-run n/a is distinguishable from a hard 0 and the PS parser reads it
+        // as n/a via its existing null guard.
+        static string FN(double? v) => v.HasValue ? v.Value.ToString("0.####", CultureInfo.InvariantCulture) : "null";
         // Minimal JSON string escaping for the one string field (appName) so the
         // hand-built JSON stays valid even if a name ever carries a quote /
         // backslash / control char. The numbers are culture-invariant already.
@@ -345,6 +420,13 @@ public sealed class PerfTracker
         sb.Append("\"gen1\":").Append(Gen1Collections.ToString(CultureInfo.InvariantCulture)).Append(',');
         sb.Append("\"gen2\":").Append(Gen2Collections.ToString(CultureInfo.InvariantCulture)).Append(',');
         sb.Append("\"gen0PerKRenders\":").Append(F(Gen0PerKRenders)).Append(',');
+        // Startup / first-frame metric (optional fields; a PR head built before this
+        // metric landed simply omits them and the PS side reads n/a, exactly like the
+        // alloc fields above). firstReconcileDurationMs is the Reactor-isolated #696 signal.
+        sb.Append("\"firstReconcileDurationMs\":").Append(FN(FirstReconcileDurationMs)).Append(',');
+        sb.Append("\"entryToFirstReconcileMs\":").Append(FN(EntryToFirstReconcileMs)).Append(',');
+        sb.Append("\"windowOpenToFirstReconcileMs\":").Append(FN(WindowOpenToFirstReconcileMs)).Append(',');
+        sb.Append("\"entryToFirstFrameMs\":").Append(FN(EntryToFirstFrameMs)).Append(',');
         sb.Append("\"avgFps\":").Append(F(_fpsSamples.Count > 0 ? _fpsSamples.Average() : 0.0)).Append(',');
         sb.Append("\"sampleCount\":").Append(_fpsSamples.Count.ToString(CultureInfo.InvariantCulture));
         sb.Append('}');

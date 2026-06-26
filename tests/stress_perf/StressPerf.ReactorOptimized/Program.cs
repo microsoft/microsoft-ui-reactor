@@ -19,6 +19,11 @@ using Microsoft.UI.Xaml.Media;
 using StressPerf.Shared;
 using static Microsoft.UI.Reactor.Factories;
 
+// Mark managed entry FIRST so the startup / first-frame metric measures the whole
+// managed-startup cost (entry → first reconcile / first frame). Must precede any
+// WinUI bootstrap. See StartupTiming + PerfTracker.RecordFirstRenderIfUnset.
+StartupTiming.MarkEntry();
+
 // Parse CLI args before WinUI starts
 var cliOptions = CliOptions.Parse(args);
 if (cliOptions.Headless)
@@ -88,8 +93,14 @@ class StockGridApp : Component
             perfRef.Current = new PerfTracker();
             var perf = perfRef.Current;
             var pending = benchmarkUpdatePending;
+            // Startup / first-frame metric: record the window-open anchor and the
+            // from-scratch mount cost the steady-state windows exclude (#696). The
+            // first OnRenderComplete carries the full mount; RecordFirstRenderIfUnset
+            // is one-shot and runs BEFORE the benchmark gate so it sees that mount.
+            ReactorApp.PrimaryWindow!.Activated += (_, _) => StartupTiming.MarkWindowOpen();
             ReactorApp.PrimaryWindow!.Host.OnRenderComplete = (treeMs, reconcileMs, effectsMs) =>
             {
+                perf.RecordFirstRenderIfUnset(treeMs, reconcileMs, effectsMs);
                 if (pending.Current)
                 {
                     pending.Current = false;

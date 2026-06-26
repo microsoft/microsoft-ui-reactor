@@ -311,6 +311,50 @@ It is the **authoritative instrument** for per-reconcile allocation deltas (and,
 once the ns flag is armed, reconcile-time deltas); the macro tables remain the
 user-facing throughput sanity check.
 
+## Startup / first frame: the from-scratch mount the steady-state windows exclude
+
+Every table above measures the **steady state** — its alloc/timing windows baseline
+on the *first* benchmark tick, so the cost of building the whole element tree, creating
+every WinUI control, and the first layout (the from-scratch **mount**) is excluded by
+construction. That mount is exactly where a `#696`-class regression lives, and nothing
+else in the harness sees it. `StressPerf.ReactorOptimized` therefore captures four
+**startup** anchors once per process (`StressPerf.Shared/StartupTiming.cs` marks managed
+entry at the top of `Main`; `PerfTracker.RecordFirstRenderIfUnset` records the first
+`OnRenderComplete`; `FrameRendered` records the first composed frame after it):
+
+```
+firstReconcileDurationMs       <- first OnRenderComplete's reconcile/diff-patch arg
+entryToFirstReconcileMs        <- managed entry -> first reconcile complete
+windowOpenToFirstReconcileMs   <- window Activated -> first reconcile (n/a-guarded)
+entryToFirstFrameMs            <- managed entry -> first composed frame ("first frame rendered")
+```
+
+`firstReconcileDurationMs` is the **Reactor-isolated** signal: it is the first render's
+reconcile-phase *duration* (the same phase the steady-state **Avg Diff** column averages),
+undiluted by AOT runtime init, window creation, or XAML resource load — so a 2× mount
+regression shows up as a 2× number here, where it would be a single-digit-% blip diluted
+into the bootstrap-dominated `entryToFirstFrameMs`. The mount value is much larger than
+steady-state Avg Diff because it creates every control rather than patching a few.
+`entryToFirstFrameMs` is the human-recognisable "first frame rendered" number.
+`windowOpenToFirstReconcileMs` is **n/a-guarded**: the window's `Activated` event and the
+first mount race across launches, so it is emitted only when `Activated` demonstrably
+preceded the mount (else JSON `null` -> n/a, never a negative number that would poison a
+paired CI).
+
+These piggyback the headline per-rep ReactorOptimized launches — **one sample per process,
+so the cold first launch is dropped with the warmup rep** (startup rides the same per-rep
+metrics object the interleave loop already warmup-drops) — and reuse the same paired 95% CI
+machinery with **zero extra CI time**. The `/perf` comment renders a *Startup / first frame*
+table directly under the regression table. Like the micro ns flag the startup flag
+(`$StartupAutoFlag`) ships **dormant** / informational-only: one sample per launch plus
+bootstrap process-to-process variance (AOT init, OS file cache, thermal) make this the
+noisiest axis, so the Δ + CI are reported but no row is auto-flagged better-or-worse until
+the band is calibrated from a real-CI identical-binary A/B (the same discipline as the ns
+flip; measurement-only, never changes what merges). Lineage matches the alloc fields: a
+harness built from a revision that predates the metric reads *n/a* (so on the metric's own
+introducing run the `main` baseline shows n/a and the paired Δ populates on the next run),
+surfaced with a visible note rather than a silent gap.
+
 ## Don'ts (so we don't redo this analysis)
 
 1. **Don't trust `CompositionTarget.Rendering` for "FPS."** It's UI-thread-
