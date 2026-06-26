@@ -563,9 +563,13 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
     /// the override and restores the default palette — we deliberately don't store an
     /// empty palette because every downstream consumer would have to mod-by-zero
     /// guard, and "no colors" isn't a meaningful render state.
-    /// <para><b>Accessibility note:</b> colors set via <c>.SetColors(...)</c> are NOT seen by
-    /// the a11y scanner, so A11Y_CHART_011 contrast checks do not run on them. Use
-    /// <see cref="Palette(Accessibility.ChartPalette)"/> for a scanner-visible palette.</para>
+    /// <para><b>Accessibility:</b> these are the colors the slices are actually drawn with, so the
+    /// a11y scanner validates them as a Tier-3 custom palette (A11Y_CHART_009/010/011) — exactly
+    /// like <see cref="Palette(Accessibility.ChartPalette)"/> colors (issue #645). They are the
+    /// single source of truth for both rendering and the scanner: when both <c>.SetColors(...)</c>
+    /// and <c>.Palette(...)</c> are set, the rendered <c>.SetColors(...)</c> colors are the ones
+    /// scanned. Declare <see cref="ChartBackground(D3Color)"/> to scope the contrast check to the
+    /// background the chart renders on.</para>
     /// </summary>
     public PieChartElement<T> SetColors(params D3Color[] colors)
     {
@@ -629,9 +633,9 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
     /// contrast check to this single active background (a <c>warning</c>) instead of flagging
     /// failure against either fixed light/dark background (an <c>info</c>). Omit for charts
     /// that may render on any background.
-    /// <para><b>Note:</b> only a scanner-visible palette (set via <see cref="Palette(Accessibility.ChartPalette)"/>)
-    /// is contrast-checked against this background. Colors set via <c>.SetColors(...)</c> are
-    /// not seen by the scanner.</para>
+    /// <para><b>Note:</b> the custom palette contrast-checked against this background is the one
+    /// the chart actually renders — the <c>.SetColors(...)</c> colors when set, otherwise a
+    /// <see cref="Palette(Accessibility.ChartPalette)"/> palette (issue #645).</para>
     /// <para>The stored value is normalized to opaque RGB: contrast math
     /// (<see cref="Accessibility.ChartPalette.ContrastRatio"/>) cannot evaluate a semi-transparent
     /// background without knowing what is behind it, so any alpha is dropped.</para>
@@ -662,7 +666,23 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
 
     // Internal accessors for scanner
     internal bool IsColorOnly => _colorOnly;
-    internal Accessibility.ChartPalette? CustomPalette => _palette;
+    internal Accessibility.ChartPalette? CustomPalette => ScannerPalette;
+
+    /// <summary>
+    /// The single custom palette the accessibility scanner validates, kept in lockstep with what
+    /// the pie actually renders (issue #645). The pie draws <c>_colorPalette</c>
+    /// (<see cref="SetColors"/>) when set, otherwise the default Category10; <see cref="Palette"/>
+    /// is advisory-only and never changes pie rendering. So that the scanner sees exactly the
+    /// rendered slices, the rendered <c>.SetColors(...)</c> palette wins as a Tier-3
+    /// (<see cref="Accessibility.ChartPalette.FromColors"/>) scanner-validated palette; the
+    /// <see cref="Palette"/> palette is the fallback only when <c>.SetColors(...)</c> is unset,
+    /// preserving the prior scanner-visible behavior. Null — neither set — means the pre-vetted
+    /// Category10 default, which stays unscanned as before.
+    /// </summary>
+    private Accessibility.ChartPalette? ScannerPalette =>
+        _colorPalette is { Count: > 0 } colors
+            ? Accessibility.ChartPalette.FromColors([.. colors])
+            : _palette;
 
     public Element ToElement()
     {
@@ -735,7 +755,7 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
         (Core.CanvasElement)canvas.SetAttached(new Accessibility.ChartA11yData(this)
         {
             IsColorOnly = _colorOnly,
-            CustomPalette = _palette,
+            CustomPalette = ScannerPalette,
             ChartBackground = _chartBackground,
         });
 

@@ -432,6 +432,106 @@ public class ChartScannerRuleTests
         Assert.Equal("warning", finding.Severity);
     }
 
+    // ── A11Y_CHART_011: PieChart .SetColors() is scanner-visible (issue #645) ───────
+
+    [Fact]
+    public void A11Y_CHART_011_PieChart_SetColors_DeclaredBackground_FiresWarning()
+    {
+        // Issue #645 (red→green): PieChartElement<T>.SetColors(...) feeds _colorPalette, the
+        // colors the slices are ACTUALLY drawn with. Before the fix those colors never reached
+        // ChartA11yData.CustomPalette, so A11Y_CHART_011 silently never ran on them — a
+        // .SetColors(low).ChartBackground(low) chart looked contrast-checked but wasn't. Now the
+        // rendered .SetColors palette is the scanner's source of truth, so a near-white slice
+        // color that fails the declared light background fires the same WARNING that the
+        // .Palette(...) path does. This assertion FAILS against the pre-#645 code (zero findings),
+        // so it is the load-bearing guard for the fix.
+        var chart = Charts.PieChart(Array.Empty<DataPoint>(), d => d.Y)
+            .SetColors(new D3Color(255, 255, 200)) // near-white: fails the light background
+            .ChartBackground("#FFFFFF");
+        var canvas = chart.AttachChartDataForTest(new CanvasElement([]) { Width = 400, Height = 300 });
+        var tree = VStack(canvas);
+
+        var findings = AccessibilityScanner.Scan(tree);
+        var finding = Assert.Single(findings, f => f.Id == "A11Y_CHART_011");
+        Assert.Equal("warning", finding.Severity);
+    }
+
+    [Fact]
+    public void A11Y_CHART_011_PieChart_SetColors_NoBackground_FiresInfo()
+    {
+        // .SetColors colors also flow through the theme-agnostic (no declared background) path
+        // exactly like a .Palette(...) palette: the same near-white color fails against EITHER
+        // fixed light/dark background and is reported as INFO. Pins that the unification covers
+        // the unknown-background arm too, not just the scoped-background warning (issue #645).
+        var chart = Charts.PieChart(Array.Empty<DataPoint>(), d => d.Y)
+            .SetColors(new D3Color(255, 255, 200));
+        var canvas = chart.AttachChartDataForTest(new CanvasElement([]) { Width = 400, Height = 300 });
+        var tree = VStack(canvas);
+
+        var findings = AccessibilityScanner.Scan(tree);
+        var finding = Assert.Single(findings, f => f.Id == "A11Y_CHART_011");
+        Assert.Equal("info", finding.Severity);
+    }
+
+    [Fact]
+    public void A11Y_CHART_011_PieChart_SetColors_PassesDeclaredBackground_DoesNotFire()
+    {
+        // The same near-white .SetColors color PASSES 3:1 against the declared dark (#202020)
+        // background it actually renders on, so the rule must NOT fire — a palette is only
+        // penalized for the background it renders on. Mirrors the .Palette(...) dark-background
+        // no-fire case, proving .SetColors gets identical treatment (issue #645).
+        var chart = Charts.PieChart(Array.Empty<DataPoint>(), d => d.Y)
+            .SetColors(new D3Color(255, 255, 200))
+            .ChartBackground("#202020");
+        var canvas = chart.AttachChartDataForTest(new CanvasElement([]) { Width = 400, Height = 300 });
+        var tree = VStack(canvas);
+
+        var findings = AccessibilityScanner.Scan(tree);
+        Assert.DoesNotContain(findings, f => f.Id == "A11Y_CHART_011");
+    }
+
+    [Fact]
+    public void A11Y_CHART_011_PieChart_BothSet_RenderedSetColorsWins_FiresOnSetColors()
+    {
+        // Both-set semantics (issue #645): when .SetColors(...) AND .Palette(...) are both set, the
+        // pie still RENDERS the .SetColors colors (_colorPalette), so the scanner validates THOSE —
+        // keeping the scanner and the rendered output in lockstep. Here the rendered .SetColors
+        // color is near-white (fails the declared white background) while the .Palette() color is a
+        // mid-tone gray that PASSES white. The rule fires on the rendered near-white color. If
+        // _palette wrongly won, the scanner would see the passing gray and emit nothing — so this
+        // single-finding assertion pins that the rendered .SetColors palette is the source of truth.
+        var chart = Charts.PieChart(Array.Empty<DataPoint>(), d => d.Y)
+            .SetColors(new D3Color(255, 255, 200))                 // rendered: fails white
+            .Palette(ChartPalette.FromColors(new D3Color(128, 128, 128))) // advisory: passes white
+            .ChartBackground("#FFFFFF");
+        var canvas = chart.AttachChartDataForTest(new CanvasElement([]) { Width = 400, Height = 300 });
+        var tree = VStack(canvas);
+
+        var findings = AccessibilityScanner.Scan(tree);
+        var finding = Assert.Single(findings, f => f.Id == "A11Y_CHART_011");
+        Assert.Equal("warning", finding.Severity);
+    }
+
+    [Fact]
+    public void A11Y_CHART_011_PieChart_BothSet_PaletteIgnoredWhenSetColorsPasses_DoesNotFire()
+    {
+        // Inverse of the both-set test: the rendered .SetColors color is a mid-tone gray that
+        // PASSES the declared white background, while the advisory .Palette() color is near-white
+        // and would FAIL white. Because only the rendered .SetColors palette is scanned, the rule
+        // must NOT fire. If _palette wrongly won, the near-white .Palette color would trip a
+        // warning — so this no-finding assertion pins that .Palette() is ignored for the scanner
+        // whenever .SetColors() is set (issue #645).
+        var chart = Charts.PieChart(Array.Empty<DataPoint>(), d => d.Y)
+            .SetColors(new D3Color(128, 128, 128))                 // rendered: passes white
+            .Palette(ChartPalette.FromColors(new D3Color(255, 255, 200))) // advisory: fails white
+            .ChartBackground("#FFFFFF");
+        var canvas = chart.AttachChartDataForTest(new CanvasElement([]) { Width = 400, Height = 300 });
+        var tree = VStack(canvas);
+
+        var findings = AccessibilityScanner.Scan(tree);
+        Assert.DoesNotContain(findings, f => f.Id == "A11Y_CHART_011");
+    }
+
     [Fact]
     public void A11Y_CHART_011_KnownBackground_PairwiseGuardBlocksFix_FallsBackToTextualHint()
     {

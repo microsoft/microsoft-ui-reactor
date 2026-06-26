@@ -226,9 +226,11 @@ Beyond that, your responsibilities:
   `.Palette(ChartPalette.Categorical)` (Tier 1, curated) and `.SeriesColors(…)`
   (Tier 3, your own colors) are both contrast-checked by the a11y scanner
   (`A11Y_CHART_011`). `.RawColors(…)` (Tier 4) is an escape hatch that bypasses
-  the check and itself trips the `A11Y_CHART_012` info. Colors set via the
-  low-level `.SetColors(…)` are **not** seen by the scanner — use
-  `.Palette` / `.SeriesColors` for scanner-visible palettes.
+  the check and itself trips the `A11Y_CHART_012` info. A pie chart's low-level
+  `.SetColors(…)` colors are the slices it actually draws, so they are
+  scanner-visible too — validated as a Tier-3 custom palette. When a pie sets
+  both `.SetColors(…)` and `.Palette(…)`, the rendered `.SetColors(…)` colors are
+  the ones scanned.
 - **Declare the background you render on.** `A11Y_CHART_011` is theme-agnostic
   by default, so it can only flag a custom color against *either* fixed
   light/dark background as an `info`. Call `.ChartBackground("#1E1E1E")` (also
