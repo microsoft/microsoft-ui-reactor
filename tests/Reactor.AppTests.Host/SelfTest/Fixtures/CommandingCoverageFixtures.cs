@@ -749,4 +749,39 @@ internal static class CommandingCoverageFixtures
             H.Check("BareInitAll_ToggleSplitDisabled", ts is not null && !ts.IsEnabled);
         }
     }
+
+    /// <summary>
+    /// Issue #637 acceptance (d) for ToggleSplitButton at the LIVE tier: a bare record-init
+    /// <c>new ToggleSplitButtonElement("…") { Command = cmd }</c> with no <c>OnIsCheckedChanged</c>
+    /// dispatches the command on each real toggle. The <c>.Controlled</c> callback falls back to
+    /// invoking the typed Command when the user callback is null, so a direct <c>IsChecked</c> flip
+    /// (treated as real input — no armed echo on an uncontrolled mount) runs Execute. Closes the
+    /// previously unproven live-toggle gap for this element.
+    /// </summary>
+    internal class BareInitToggleSplitButtonCommandFiresOnToggle(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            int count = 0;
+            var cmd = new Command { Label = "TSgo", Execute = () => count++ };
+
+            var host = H.CreateHost();
+            host.Mount(ctx => new ToggleSplitButtonElement("TSgo") { Command = cmd }.Set(b => b.Name = "bareTsBtn"));
+            await Harness.Render();
+
+            var tsb = H.FindControl<ToggleSplitButton>(b => b.Name == "bareTsBtn");
+            H.Check("BareInitTs_Mounted", tsb is not null);
+            H.Check("BareInitTs_Enabled", tsb is not null && tsb.IsEnabled);
+            if (tsb is not null)
+            {
+                // A direct IsChecked flip is real user input (no armed echo on an uncontrolled
+                // mount), so IsCheckedChanged fires and the command dispatches — check + uncheck.
+                tsb.IsChecked = !tsb.IsChecked;
+                await Harness.Render();
+                tsb.IsChecked = !tsb.IsChecked;
+                await Harness.Render();
+            }
+            H.Check("BareInitTs_CommandInvokedOnEachToggle", count == 2);
+        }
+    }
 }

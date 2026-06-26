@@ -61,6 +61,24 @@ Conventions for contributors:
   `UseCommand`) is inert. `UseCommand` now consumes a stable hook shape regardless
   of the command's sync/async/debounce shape.
 
+- **Uniform `Command` binding across the six command buttons (issues #153, #637).**
+  The typed `Command` property on `ButtonElement`, `HyperlinkButtonElement`,
+  `RepeatButtonElement`, `ToggleButtonElement`, `SplitButtonElement`, and
+  `ToggleSplitButtonElement` is now `public { get; init; }` on every element and
+  binds uniformly: a bare `new ButtonElement(cmd.Label) { Command = cmd }` (or
+  `with { Command = cmd }`) invokes `Execute`/`ExecuteAsync` on click/toggle and
+  applies the command's `IsEnabled` + Description / Accelerator / AccessKey
+  identically to the `Button(Command)` factory and the `.Command(cmd)` modifier —
+  closing the #153 footgun where a record-init command carried metadata but never
+  dispatched. Dispatch flows from the typed property through a click trampoline
+  instead of a pre-baked `OnClick` closure, so each command-bound construct
+  allocates less (Button ~176 → ~88 B per construct) while the #153 reconcile
+  fast-path still skips re-applying an unchanged command. The `.Command(cmd)`
+  modifier makes the command fully take over (clearing any conflicting click /
+  toggle callback), and `ButtonElement`'s `IsDisabledFocusable` coercion is
+  preserved exactly. A `DebounceMs` command now re-disables across the debounce
+  window on every command button, not just via the factory path.
+
 - **`ReactorApp.RegisterAllBuiltIns()` — opt-in bulk registration of the built-in
   control catalog (spec 048 §3.4, issue #486).** Built-in handler registration is
   now lazy — each factory registers its own control on first use — so the trimmer

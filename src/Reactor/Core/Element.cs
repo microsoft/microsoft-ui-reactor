@@ -2735,7 +2735,7 @@ public partial record ButtonElement(string Label, Action? OnClick = null) : Elem
     public Element? ContentElement { get; init; }
     /// <summary>
     /// The <see cref="Command"/> bound to this button via the <c>Button(Command)</c> factory,
-    /// the <c>.Command()</c> modifier, or a direct <c>new ButtonElement { Command = cmd }</c> /
+    /// the <c>.Command()</c> modifier, or a direct <c>new ButtonElement(cmd.Label) { Command = cmd }</c> /
     /// <c>with { Command = cmd }</c> record-init (issue #153, made fully uniform in issue #637).
     /// Carries the command so the reconciler can compare it field-aware in
     /// <see cref="Element.ShallowEquals"/> and apply its metadata + enabled state through a
@@ -2748,14 +2748,14 @@ public partial record ButtonElement(string Label, Action? OnClick = null) : Elem
     /// </summary>
     public Command? Command { get; init; }
     internal Action<WinUI.Button>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnClick is not null || Command is not null;
+    internal override bool HasCallbacks => global::Microsoft.UI.Reactor.Core.CommandBindings.EffectiveCallback(OnClick, Command) is not null;
 
     /// <summary>
     /// The IsEnabled value written to the live control (gated on <c>!IsDisabledFocusable</c>):
     /// the record <see cref="IsEnabled"/> AND the bound command's <see cref="Command.IsEnabled"/>.
     /// Folding the command's enabled state in <em>here</em> — rather than baking it into the
     /// record <see cref="IsEnabled"/> field in the factory/modifier — makes every binding path
-    /// (factory, <c>.Command()</c> modifier, and a bare <c>new ButtonElement { Command = cmd }</c>)
+    /// (factory, <c>.Command()</c> modifier, and a bare <c>new ButtonElement(cmd.Label) { Command = cmd }</c>)
     /// drive IsEnabled identically, while the <c>!IsDisabledFocusable</c> coercion (a
     /// disabled-focusable button stays <c>IsEnabled=true</c>, reachable via Tab) is preserved
     /// exactly by the unchanged <c>shouldWrite</c> gate and IsDisabledFocusable handler (issue #637).
@@ -2808,7 +2808,7 @@ public partial record ButtonElement(string Label, Action? OnClick = null) : Elem
                 })
             .HandCodedEvent<global::Microsoft.UI.Reactor.Core.V1Protocol.ButtonEventPayload, global::Microsoft.UI.Xaml.RoutedEventHandler>(
                 subscribe:        static (c, h) => c.Click += h,
-                callbackPresent:  static e => (Delegate?)e.OnClick ?? global::Microsoft.UI.Reactor.Core.CommandBindings.Invokable(e.Command),
+                callbackPresent:  static e => global::Microsoft.UI.Reactor.Core.CommandBindings.EffectiveCallback(e.OnClick, e.Command),
                 trampoline:       __ClickTrampoline,
                 slotIsNull:       static p => p.ClickTrampoline is null,
                 setSlot:          static (p, h) => p.ClickTrampoline = h)
@@ -2830,11 +2830,11 @@ public partial record ButtonElement(string Label, Action? OnClick = null) : Elem
 public partial record HyperlinkButtonElement(string Content, Uri? NavigateUri = null, Action? OnClick = null) : Element
 {
     /// <summary>The command bound via <c>HyperlinkButton(Command)</c> / <c>.Command()</c> / a direct
-    /// <c>new HyperlinkButtonElement { Command = cmd }</c> record-init (issue #153; made uniform in
+    /// <c>new HyperlinkButtonElement(cmd.Label) { Command = cmd }</c> record-init (issue #153; made uniform in
     /// issue #637). All paths dispatch + apply IsEnabled identically. See <see cref="ButtonElement.Command"/>.</summary>
     public Command? Command { get; init; }
     internal Action<WinUI.HyperlinkButton>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnClick is not null || Command is not null;
+    internal override bool HasCallbacks => global::Microsoft.UI.Reactor.Core.CommandBindings.EffectiveCallback(OnClick, Command) is not null;
 
     private static readonly global::Microsoft.UI.Xaml.RoutedEventHandler __ClickTrampoline = (s, _) =>
     {
@@ -2849,7 +2849,7 @@ public partial record HyperlinkButtonElement(string Content, Uri? NavigateUri = 
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<HyperlinkButtonElement, WinUI.HyperlinkButton> d)
         => d.HandCodedEvent<global::Microsoft.UI.Reactor.Core.V1Protocol.HyperlinkButtonEventPayload, global::Microsoft.UI.Xaml.RoutedEventHandler>(
                 subscribe:        static (c, h) => c.Click += h,
-                callbackPresent:  static e => (Delegate?)e.OnClick ?? global::Microsoft.UI.Reactor.Core.CommandBindings.Invokable(e.Command),
+                callbackPresent:  static e => global::Microsoft.UI.Reactor.Core.CommandBindings.EffectiveCallback(e.OnClick, e.Command),
                 trampoline:       __ClickTrampoline,
                 slotIsNull:       static p => p.ClickTrampoline is null,
                 setSlot:          static (p, h) => p.ClickTrampoline = h)
@@ -2865,11 +2865,11 @@ public partial record RepeatButtonElement(string Label, Action? OnClick = null) 
     public int Delay { get; init; } = 250;
     public int Interval { get; init; } = 50;
     /// <summary>The command bound via <c>RepeatButton(Command)</c> / <c>.Command()</c> / a direct
-    /// <c>new RepeatButtonElement { Command = cmd }</c> record-init (issue #153; made uniform in
+    /// <c>new RepeatButtonElement(cmd.Label) { Command = cmd }</c> record-init (issue #153; made uniform in
     /// issue #637). All paths dispatch + apply IsEnabled identically. See <see cref="ButtonElement.Command"/>.</summary>
     public Command? Command { get; init; }
     internal Action<WinPrim.RepeatButton>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnClick is not null || Command is not null;
+    internal override bool HasCallbacks => global::Microsoft.UI.Reactor.Core.CommandBindings.EffectiveCallback(OnClick, Command) is not null;
 
     private static readonly global::Microsoft.UI.Xaml.RoutedEventHandler __ClickTrampoline = (s, _) =>
     {
@@ -2884,7 +2884,7 @@ public partial record RepeatButtonElement(string Label, Action? OnClick = null) 
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<RepeatButtonElement, WinPrim.RepeatButton> d)
         => d.HandCodedEvent<global::Microsoft.UI.Reactor.Core.V1Protocol.RepeatButtonEventPayload, global::Microsoft.UI.Xaml.RoutedEventHandler>(
                 subscribe:        static (c, h) => c.Click += h,
-                callbackPresent:  static e => (Delegate?)e.OnClick ?? global::Microsoft.UI.Reactor.Core.CommandBindings.Invokable(e.Command),
+                callbackPresent:  static e => global::Microsoft.UI.Reactor.Core.CommandBindings.EffectiveCallback(e.OnClick, e.Command),
                 trampoline:       __ClickTrampoline,
                 slotIsNull:       static p => p.ClickTrampoline is null,
                 setSlot:          static (p, h) => p.ClickTrampoline = h)
@@ -2915,12 +2915,12 @@ public partial record ToggleButtonElement(string Label, bool IsChecked = false, 
     /// <summary>Three-state change handler. Receives <c>null</c> for indeterminate.</summary>
     public Action<bool?>? OnCheckedStateChanged { get; init; }
     /// <summary>The command bound via <c>ToggleButton(Command)</c> / <c>.Command()</c> / a direct
-    /// <c>new ToggleButtonElement { Command = cmd }</c> record-init (issue #153; made uniform in
+    /// <c>new ToggleButtonElement(cmd.Label) { Command = cmd }</c> record-init (issue #153; made uniform in
     /// issue #637). All paths fire the command on each toggle + apply IsEnabled identically.
     /// See <see cref="ButtonElement.Command"/>.</summary>
     public Command? Command { get; init; }
     internal Action<WinPrim.ToggleButton>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnIsCheckedChanged is not null || OnCheckedStateChanged is not null || Command is not null;
+    internal override bool HasCallbacks => OnIsCheckedChanged is not null || global::Microsoft.UI.Reactor.Core.CommandBindings.EffectiveCallback(OnCheckedStateChanged, Command) is not null;
 
     private static readonly global::Microsoft.UI.Xaml.RoutedEventHandler __ClickTrampoline = (s, _) =>
     {
@@ -2947,7 +2947,7 @@ public partial record ToggleButtonElement(string Label, bool IsChecked = false, 
                 set: static (c, v) => c.IsChecked = v)
             .HandCodedEvent<global::Microsoft.UI.Reactor.Core.V1Protocol.ToggleButtonEventPayload, global::Microsoft.UI.Xaml.RoutedEventHandler>(
                 subscribe:        static (c, h) => c.Click += h,
-                callbackPresent:  static e => (Delegate?)e.OnIsCheckedChanged ?? e.OnCheckedStateChanged ?? global::Microsoft.UI.Reactor.Core.CommandBindings.Invokable(e.Command),
+                callbackPresent:  static e => (Delegate?)e.OnIsCheckedChanged ?? global::Microsoft.UI.Reactor.Core.CommandBindings.EffectiveCallback(e.OnCheckedStateChanged, e.Command),
                 trampoline:       __ClickTrampoline,
                 slotIsNull:       static p => p.ClickTrampoline is null,
                 setSlot:          static (p, h) => p.ClickTrampoline = h)
@@ -2983,12 +2983,12 @@ public partial record DropDownButtonElement(string Label, Element? Flyout = null
 public partial record SplitButtonElement(string Label, Action? OnClick = null, Element? Flyout = null) : Element
 {
     /// <summary>The command bound via <c>SplitButton(Command)</c> / a direct
-    /// <c>new SplitButtonElement { Command = cmd }</c> record-init (issue #153; made uniform in
+    /// <c>new SplitButtonElement(cmd.Label) { Command = cmd }</c> record-init (issue #153; made uniform in
     /// issue #637). All paths dispatch the primary action + apply IsEnabled identically.
     /// See <see cref="ButtonElement.Command"/>.</summary>
     public Command? Command { get; init; }
     internal Action<WinUI.SplitButton>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnClick is not null || Command is not null;
+    internal override bool HasCallbacks => global::Microsoft.UI.Reactor.Core.CommandBindings.EffectiveCallback(OnClick, Command) is not null;
 
     private static readonly global::Windows.Foundation.TypedEventHandler<WinUI.SplitButton, WinUI.SplitButtonClickEventArgs> __ClickTrampoline = (s, _) =>
     {
@@ -3003,7 +3003,7 @@ public partial record SplitButtonElement(string Label, Action? OnClick = null, E
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<SplitButtonElement, WinUI.SplitButton> d)
         => d.HandCodedEvent<global::Microsoft.UI.Reactor.Core.V1Protocol.SplitButtonEventPayload, global::Windows.Foundation.TypedEventHandler<WinUI.SplitButton, WinUI.SplitButtonClickEventArgs>>(
                 subscribe:        static (c, h) => c.Click += h,
-                callbackPresent:  static e => (Delegate?)e.OnClick ?? global::Microsoft.UI.Reactor.Core.CommandBindings.Invokable(e.Command),
+                callbackPresent:  static e => global::Microsoft.UI.Reactor.Core.CommandBindings.EffectiveCallback(e.OnClick, e.Command),
                 trampoline:       __ClickTrampoline,
                 slotIsNull:       static p => p.ClickTrampoline is null,
                 setSlot:          static (p, h) => p.ClickTrampoline = h)
@@ -3026,12 +3026,12 @@ public partial record SplitButtonElement(string Label, Action? OnClick = null, E
 public partial record ToggleSplitButtonElement(string Label, Optional<bool> IsChecked = default, Action<bool>? OnIsCheckedChanged = null, Element? Flyout = null) : Element
 {
     /// <summary>The command bound via <c>ToggleSplitButton(Command)</c> / a direct
-    /// <c>new ToggleSplitButtonElement { Command = cmd }</c> record-init (issue #153; made uniform in
+    /// <c>new ToggleSplitButtonElement(cmd.Label) { Command = cmd }</c> record-init (issue #153; made uniform in
     /// issue #637). All paths fire the command on each toggle + apply IsEnabled identically.
     /// See <see cref="ButtonElement.Command"/>.</summary>
     public Command? Command { get; init; }
     internal Action<WinUI.ToggleSplitButton>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnIsCheckedChanged is not null || Command is not null;
+    internal override bool HasCallbacks => OnIsCheckedChanged is not null || global::Microsoft.UI.Reactor.Core.CommandBindings.Invokable(Command) is not null;
 
     private static partial global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<ToggleSplitButtonElement, WinUI.ToggleSplitButton> Customize(
         global::Microsoft.UI.Reactor.Core.V1Protocol.Descriptor.ControlDescriptor<ToggleSplitButtonElement, WinUI.ToggleSplitButton> d)
@@ -3048,7 +3048,7 @@ public partial record ToggleSplitButtonElement(string Label, Optional<bool> IsCh
                 {
                     if (e.OnIsCheckedChanged is not null) return e.OnIsCheckedChanged;
                     var cmd = e.Command;
-                    return cmd is not null ? new Action<bool>(_ => global::Microsoft.UI.Reactor.Core.CommandBindings.Invoke(cmd)) : null;
+                    return global::Microsoft.UI.Reactor.Core.CommandBindings.Invokable(cmd) is not null ? new Action<bool>(_ => global::Microsoft.UI.Reactor.Core.CommandBindings.Invoke(cmd!)) : null;
                 },
                 readBack:    static c => c.IsChecked)
             .OneWayBridged<Element?>(

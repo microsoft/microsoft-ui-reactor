@@ -171,7 +171,7 @@ public static partial class Factories
     /// Execute/ExecuteAsync is invoked on click and its IsEnabled / Description / Accelerator /
     /// AccessKey are applied by the reconciler from the typed <see cref="ButtonElement.Command"/>
     /// property (issues #153, #637) — no per-render Setters array or lambda is allocated, and a
-    /// bare <c>new ButtonElement { Command = cmd }</c> record-init behaves identically.
+    /// bare <c>new ButtonElement(cmd.Label) { Command = cmd }</c> record-init behaves identically.
     /// </summary>
     public static ButtonElement Button(Core.Command command)
     {

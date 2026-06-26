@@ -436,4 +436,152 @@ public class CommandTypedPropertyTests
         Assert.True(perConstruct < 140,
             $"Button(command) per-construct allocation regressed: {perConstruct:F1} B (expected < 140 B).");
     }
+
+    // ════════════════════════════════════════════════════════════════
+    //  (g) issue #637 review — debounce re-disable (M1), the shared
+    //      Invokable predicate (M2), dispatch precedence (M3), and the
+    //      none→command subscribe-on-update transition (M4).
+    // ════════════════════════════════════════════════════════════════
+
+    // M1 — CommandsEqual compares the DERIVED IsEnabled (CanExecute && !IsExecuting &&
+    //      !IsDebouncing). A debounce-window flip therefore registers as a change so the
+    //      descriptor re-applies and the button re-disables. The pre-#637 comparer omitted
+    //      IsDebouncing, so a UseCommand(DebounceMs:) Button stayed visibly enabled.
+    [Fact]
+    public void CommandsEqual_False_When_Only_IsDebouncing_Differs()
+    {
+        var steady = MakeCmd();
+        var debouncing = steady with { IsDebouncing = true };
+        Assert.NotEqual(steady.IsEnabled, debouncing.IsEnabled); // derived enabled flips true→false
+        Assert.False(CommandBindings.CommandsEqual(steady, debouncing));
+    }
+
+    [Fact]
+    public void CommandsEqual_False_When_Only_IsExecuting_Differs()
+    {
+        // IsExecuting also flows through the derived IsEnabled, so an async command
+        // entering / leaving its in-flight window is still seen as a change.
+        var idle = MakeCmd();
+        var running = idle with { IsExecuting = true };
+        Assert.False(CommandBindings.CommandsEqual(idle, running));
+    }
+
+    // M1 steady-state guard — the fast-path skip the issue protects is INTACT: two
+    // non-debouncing renders with identical rendered fields are still equal (no re-apply).
+    [Fact]
+    public void CommandsEqual_True_When_Steady_NonDebouncing_Unchanged()
+    {
+        var a = MakeCmd();
+        var b = MakeCmd(); // distinct instance, identical rendered fields, both enabled
+        Assert.True(CommandBindings.CommandsEqual(a, b));
+        Assert.True(Element.ShallowEquals(Button(a), Button(b)));
+    }
+
+    [Fact]
+    public void ShallowEquals_False_When_Command_IsDebouncing_Differs_AllSix()
+    {
+        var steady = MakeCmd();
+        var debouncing = steady with { IsDebouncing = true };
+        Assert.False(Element.ShallowEquals(Button(steady), Button(debouncing)));
+        Assert.False(Element.ShallowEquals(HyperlinkButton(steady), HyperlinkButton(debouncing)));
+        Assert.False(Element.ShallowEquals(RepeatButton(steady), RepeatButton(debouncing)));
+        Assert.False(Element.ShallowEquals(ToggleButton(steady), ToggleButton(debouncing)));
+        Assert.False(Element.ShallowEquals(SplitButton(steady), SplitButton(debouncing)));
+        Assert.False(Element.ShallowEquals(ToggleSplitButton(steady), ToggleSplitButton(debouncing)));
+    }
+
+    [Fact]
+    public void Button_ReDisables_Across_Debounce_Window_Flip()
+    {
+        // The regression guard (issue #637 review M1): a Button whose command enters its
+        // debounce window must re-disable. EffectiveIsEnabled folds the command's derived
+        // IsEnabled, and the flipped command is not ShallowEqual, so the reconciler
+        // re-applies IsEnabled=false on the transition (and re-enables when it elapses).
+        var enabled = MakeCmd();                                // IsEnabled = true
+        var debouncing = enabled with { IsDebouncing = true };  // IsEnabled = false
+
+        var before = new ButtonElement("Save") { Command = enabled };
+        var after = new ButtonElement("Save") { Command = debouncing };
+
+        Assert.True(before.EffectiveIsEnabled);
+        Assert.False(after.EffectiveIsEnabled);
+        Assert.False(Element.ShallowEquals(before, after)); // forces re-apply on reconcile
+    }
+
+    // M2 — HasCallbacks and the subscription gate now share one Invokable-based predicate
+    //      (EffectiveCallback), so a metadata-only command (no Execute/ExecuteAsync) is NOT
+    //      a callback source: the click event stays unsubscribed and the button is untagged.
+    [Fact]
+    public void HasCallbacks_False_For_MetadataOnly_Command()
+    {
+        var metadataOnly = new Command { Label = "Save", Description = "no delegate" };
+        Assert.Null(CommandBindings.Invokable(metadataOnly));
+        Assert.False(new ButtonElement("Save") { Command = metadataOnly }.HasCallbacks);
+        Assert.False(new HyperlinkButtonElement("Save") { Command = metadataOnly }.HasCallbacks);
+        Assert.False(new RepeatButtonElement("Save") { Command = metadataOnly }.HasCallbacks);
+        Assert.False(new ToggleButtonElement("Save") { Command = metadataOnly }.HasCallbacks);
+        Assert.False(new SplitButtonElement("Save") { Command = metadataOnly }.HasCallbacks);
+        Assert.False(new ToggleSplitButtonElement("Save") { Command = metadataOnly }.HasCallbacks);
+    }
+
+    [Fact]
+    public void EffectiveCallback_Prefers_UserCallback_Then_Invokable_Else_Null()
+    {
+        Action onClick = () => { };
+        var cmd = MakeCmd();
+        Assert.Same(onClick, CommandBindings.EffectiveCallback(onClick, cmd));         // user callback wins
+        Assert.Same(cmd.Execute, CommandBindings.EffectiveCallback(null, cmd));        // falls back to the command
+        Assert.Null(CommandBindings.EffectiveCallback(null, new Command { Label = "x" })); // metadata-only ⇒ null
+        Assert.Null(CommandBindings.EffectiveCallback(null, null));
+    }
+
+    // M3 — dispatch precedence for the BARE record-init path. Both present ⇒ the explicit
+    //      callback wins (the trampoline rule: `if (OnClick is not null) OnClick();`).
+    //      Command only ⇒ the command dispatches.
+    [Fact]
+    public void BareInit_BothPresent_CallbackWins()
+    {
+        int onClickCount = 0, cmdCount = 0;
+        var cmd = MakeCmd(() => cmdCount++);
+        var el = new ButtonElement("Save", () => onClickCount++) { Command = cmd };
+
+        Assert.NotNull(el.OnClick);
+        Assert.Same(cmd, el.Command);
+        // The click trampoline prefers OnClick when present, so the command does NOT fire.
+        el.OnClick!();
+        Assert.Equal(1, onClickCount);
+        Assert.Equal(0, cmdCount);
+    }
+
+    [Fact]
+    public void BareInit_CommandOnly_Dispatches_Command()
+    {
+        int cmdCount = 0;
+        var cmd = MakeCmd(() => cmdCount++);
+        var el = new ButtonElement("Save") { Command = cmd };
+
+        Assert.Null(el.OnClick);
+        CommandBindings.Invoke(el.Command!); // OnClick null ⇒ the trampoline invokes the command
+        Assert.Equal(1, cmdCount);
+    }
+
+    // M4 — none → command transition. A plain button (no command, untagged) re-rendered WITH
+    //      a command flips HasCallbacks false→true, so the reconciler's HasCallbacks gate forces
+    //      a full Update that subscribes the click event; the now-bound command dispatches.
+    [Fact]
+    public void Transition_None_To_Command_Subscribes_And_Dispatches()
+    {
+        int count = 0;
+        var cmd = MakeCmd(() => count++);
+
+        var none = Button("Save");
+        Assert.False(none.HasCallbacks);                  // not tagged, click event unsubscribed
+
+        var bound = new ButtonElement("Save") { Command = cmd };
+        Assert.True(bound.HasCallbacks);                  // update subscribes the click handler
+        Assert.False(Element.ShallowEquals(none, bound)); // not ShallowEqual ⇒ full Update runs
+
+        CommandBindings.Invoke(bound.Command!);
+        Assert.Equal(1, count);
+    }
 }

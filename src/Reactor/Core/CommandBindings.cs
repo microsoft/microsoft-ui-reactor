@@ -149,7 +149,7 @@ internal static class CommandBindings
     /// otherwise <c>null</c>. Used by the command-capable button trampolines as the
     /// click-dispatch <em>fallback</em> and as the HandCodedEvent / Controlled
     /// subscription gate when a button is bound <b>only</b> through the typed
-    /// <see cref="Command"/> property — i.e. a bare <c>new XxxElement { Command = cmd }</c>
+    /// <see cref="Command"/> property — i.e. a bare <c>new XxxElement(cmd.Label) { Command = cmd }</c>
     /// record-init with no <c>OnClick</c>/<c>OnIsCheckedChanged</c> handler (issue #637).
     /// A command with neither delegate has nothing to dispatch, so the event stays
     /// unsubscribed (zero cost), while its metadata still flows through
@@ -157,6 +157,17 @@ internal static class CommandBindings
     /// </summary>
     internal static Delegate? Invokable(Command? cmd) =>
         cmd is null ? null : (Delegate?)cmd.Execute ?? cmd.ExecuteAsync;
+
+    /// <summary>
+    /// The effective click/dispatch callback for a command-capable button element: the explicit
+    /// user callback (<c>OnClick</c> / a toggle handler) when present, otherwise the typed command's
+    /// invokable delegate (<see cref="Invokable"/>). A single shared primitive so an element's
+    /// <c>HasCallbacks</c> and its HandCodedEvent / Controlled subscription gate can never drift —
+    /// both treat a delegate-less command (metadata only, no Execute/ExecuteAsync) as "no callback"
+    /// (issue #637 review M2).
+    /// </summary>
+    internal static Delegate? EffectiveCallback(Delegate? userCallback, Command? cmd) =>
+        userCallback ?? Invokable(cmd);
 
     /// <summary>
     /// Registers the typed <see cref="Command"/> descriptor entry shared by every
@@ -196,14 +207,21 @@ internal static class CommandBindings
     /// (label, enabled state, tooltip, accelerator, access key) determines whether the
     /// command-applied control state must be re-written. Two commands that differ only in
     /// their delegates therefore produce identical visuals and can skip reconcile entirely.
+    /// <para>
+    /// Enabled state is compared via the <em>derived</em> <see cref="Command.IsEnabled"/>
+    /// (<c>CanExecute &amp;&amp; !IsExecuting &amp;&amp; !IsDebouncing</c>) rather than its raw inputs, so a
+    /// debounce-window flip (a <c>UseCommand(DebounceMs:)</c> command toggling
+    /// <see cref="Command.IsDebouncing"/>) registers as a change and forces the button to
+    /// re-disable / re-enable on the transition. Steady-state, non-debouncing renders still
+    /// compare equal, so the #153 fast-path skip stays intact (issue #637 review M1).
+    /// </para>
     /// </summary>
     internal static bool CommandsEqual(Command? a, Command? b)
     {
         if (ReferenceEquals(a, b)) return true;
         if (a is null || b is null) return false;
         return a.Label == b.Label
-            && a.CanExecute == b.CanExecute
-            && a.IsExecuting == b.IsExecuting
+            && a.IsEnabled == b.IsEnabled
             && a.Description == b.Description
             && a.AccessKey == b.AccessKey
             && Equals(a.Icon, b.Icon)
@@ -221,6 +239,6 @@ internal static class CommandBindings
         internal static readonly CommandModuloDelegatesComparer Instance = new();
         public bool Equals(Command? a, Command? b) => CommandsEqual(a, b);
         public int GetHashCode(Command? c) =>
-            c is null ? 0 : global::System.HashCode.Combine(c.Label, c.CanExecute, c.IsExecuting, c.Description, c.AccessKey);
+            c is null ? 0 : global::System.HashCode.Combine(c.Label, c.IsEnabled, c.Description, c.AccessKey);
     }
 }

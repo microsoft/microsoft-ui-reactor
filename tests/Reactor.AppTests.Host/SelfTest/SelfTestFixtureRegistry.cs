@@ -887,6 +887,7 @@ internal static class SelfTestFixtureRegistry
         // Issue #637 — bare record-init / `with` Command binding equivalence
         "Commanding_BareInitButtonCommandInvokesExecute",
         "Commanding_BareInitToggleButtonCommandFiresOnToggle",
+        "Commanding_BareInitToggleSplitButtonCommandFiresOnToggle",
         "Commanding_WithCommandButtonInvokesExecute",
         "Commanding_BareInitButtonDisabledCommandDisablesControl",
         "Commanding_BareInitButtonDisabledFocusableCoercionPreserved",
@@ -2326,6 +2327,7 @@ internal static class SelfTestFixtureRegistry
         // Issue #637 — bare record-init / `with` Command binding equivalence
         "Commanding_BareInitButtonCommandInvokesExecute" => new CommandingCoverageFixtures.BareInitButtonCommandInvokesExecute(harness),
         "Commanding_BareInitToggleButtonCommandFiresOnToggle" => new CommandingCoverageFixtures.BareInitToggleButtonCommandFiresOnToggle(harness),
+        "Commanding_BareInitToggleSplitButtonCommandFiresOnToggle" => new CommandingCoverageFixtures.BareInitToggleSplitButtonCommandFiresOnToggle(harness),
         "Commanding_WithCommandButtonInvokesExecute" => new CommandingCoverageFixtures.WithCommandButtonInvokesExecute(harness),
         "Commanding_BareInitButtonDisabledCommandDisablesControl" => new CommandingCoverageFixtures.BareInitButtonDisabledCommandDisablesControl(harness),
         "Commanding_BareInitButtonDisabledFocusableCoercionPreserved" => new CommandingCoverageFixtures.BareInitButtonDisabledFocusableCoercionPreserved(harness),
