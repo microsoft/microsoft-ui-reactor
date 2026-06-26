@@ -7,34 +7,40 @@ namespace Microsoft.UI.Reactor.Tests;
 /// <summary>
 /// Pins the decision policy of <see cref="Reconciler.UpdateDefaultAutomationName"/> via its
 /// pure, DP-free helper <see cref="Reconciler.ResolveDefaultAutomationNameUpdate"/> (P3 — trim
-/// the per-cell automation round-trip).
+/// the redundant per-cell automation write).
 ///
-/// The optimization: when the caption is unchanged (or empty/whitespace) the live method skips
-/// the UIA <c>GetName</c> read + <c>SetName</c> write entirely. These tests assert that policy
-/// AND that the two correctness-critical guarantees survive: an author-set automation Name is
-/// never clobbered, and a genuine caption change still flows through to the Name.
+/// The optimization is an idempotent-write guard: the live method still reads the UIA Name, but
+/// skips the <c>SetName</c> write when the Name already equals the caption-derived default (the
+/// steady-state hot path). These tests pin that saving AND the three correctness guarantees that
+/// must survive it: an author-set Name is never clobbered, a genuine caption change still flows
+/// through, and a Name cleared this render (e.g. a removed <c>.AutomationName()</c> override) is
+/// restored to the caption default even when the caption itself is unchanged.
 /// </summary>
 public class ReconcilerAutomationNameTests
 {
     // ────────────────────────────────────────────────────────────────
-    //  The P3 skip (teeth: revert the unchanged-caption fast-path → these flip)
+    //  The P3 idempotent-write guard (teeth: revert it → these flip)
     // ────────────────────────────────────────────────────────────────
 
     [Fact]
-    public void Unchanged_Caption_Returns_Null_When_Name_Already_Matches()
+    public void Unchanged_Caption_Skips_Write_When_Name_Already_Matches()
     {
-        // Name already reflects the caption → nothing to write.
+        // Steady-state hot path: the live Name already equals the caption-derived default, so the
+        // SetName main would issue is a value no-op → return null (skip).
+        // TEETH: remove the `current == trimmed` guard and the helper falls through to
+        // `return trimmed` ("X", a redundant write) → this assertion fails.
         Assert.Null(Reconciler.ResolveDefaultAutomationNameUpdate(current: "X", oldCaption: "X", newCaption: "X"));
     }
 
     [Fact]
-    public void Unchanged_Caption_Returns_Null_Even_When_Live_Name_Is_Empty()
+    public void Cleared_Name_Restores_Caption_Default_When_Caption_Unchanged()
     {
-        // TEETH for P3: with the `oldCaption == newCaption` fast-path the unchanged caption is a
-        // skip regardless of the live Name. Remove that line and the helper falls through to the
-        // author-override logic: current "" is not an override, so it returns "X" (a write) and
-        // this assertion fails — i.e. reverting the optimization breaks this test.
-        Assert.Null(Reconciler.ResolveDefaultAutomationNameUpdate(current: "", oldCaption: "X", newCaption: "X"));
+        // Regression guard (the bug a blanket unchanged-caption skip would introduce): a removed
+        // `.AutomationName()` override makes ApplyModifiers clear the live Name to empty *before*
+        // this runs, even though the caption is unchanged. The default must be re-applied — so an
+        // empty current with an unchanged caption "X" resolves to a WRITE of "X", matching main.
+        // TEETH the other way: re-add `if (oldCaption == newCaption) return null;` → this fails.
+        Assert.Equal("X", Reconciler.ResolveDefaultAutomationNameUpdate(current: "", oldCaption: "X", newCaption: "X"));
     }
 
     [Theory]
@@ -64,6 +70,14 @@ public class ReconcilerAutomationNameTests
     {
         // oldCaption null but a non-empty live Name is present → treat as author-owned, leave it.
         Assert.Null(Reconciler.ResolveDefaultAutomationNameUpdate(current: "custom", oldCaption: null, newCaption: "B"));
+    }
+
+    [Fact]
+    public void Author_Override_Survives_Unchanged_Caption()
+    {
+        // Unchanged caption "X" but the live Name is an author override ("custom" ≠ oldCaption) →
+        // the idempotent guard must NOT fire (custom ≠ trimmed "X"); author-override wins → null.
+        Assert.Null(Reconciler.ResolveDefaultAutomationNameUpdate(current: "custom", oldCaption: "X", newCaption: "X"));
     }
 
     // ────────────────────────────────────────────────────────────────

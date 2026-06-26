@@ -2683,16 +2683,11 @@ public sealed partial class Reconciler : IDisposable
     public static void UpdateDefaultAutomationName(FrameworkElement fe, string? oldCaption, string? newCaption)
     {
         if (fe is null) return;
-        // P3 fast-path — skip the UIA GetName read + SetName write whenever the
-        // outcome is independent of the live Name: an empty/whitespace new caption
-        // (nothing to write), or an unchanged caption (the Name already reflects it
-        // from mount or a prior update, or the author overrode it — either way
-        // nothing to do). These two arms mirror the caption-only arms of
-        // ResolveDefaultAutomationNameUpdate, so the live path and the pure
-        // decision helper stay in lockstep. On a changed caption we fall through to
-        // the original GetName + author-override + SetName behavior, unchanged.
+        // A whitespace new caption has nothing to write — skip the GetName read too
+        // (main's first line returns on whitespace newCaption, so this is behavior-
+        // identical, it just avoids the interop read). Otherwise read the live Name
+        // and let the pure helper decide; we only touch the DP when it returns a value.
         if (string.IsNullOrWhiteSpace(newCaption)) return;
-        if (string.Equals(oldCaption, newCaption, StringComparison.Ordinal)) return;
         var current = Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(fe);
         var resolved = ResolveDefaultAutomationNameUpdate(current, oldCaption, newCaption);
         if (resolved is not null)
@@ -2701,19 +2696,27 @@ public sealed partial class Reconciler : IDisposable
 
     // Pure decision for UpdateDefaultAutomationName — no DP/UIA interop, so the
     // caption/override policy is unit-testable headlessly (Reactor.Tests). Returns
-    // the Name to write, or null to leave the live automation Name untouched. Kept
-    // in sync with the UpdateDefaultAutomationName fast-path above: the whitespace-
-    // new-caption and unchanged-caption arms here are the same skips the live path
-    // takes before it ever reads the current Name.
+    // the Name to write, or null to leave the live automation Name untouched. Models
+    // main's GetName + author-override + SetName logic exactly, plus one safe saving:
+    // the idempotent-write guard below.
     internal static string? ResolveDefaultAutomationNameUpdate(string? current, string? oldCaption, string? newCaption)
     {
         if (string.IsNullOrWhiteSpace(newCaption)) return null;
-        if (string.Equals(oldCaption, newCaption, StringComparison.Ordinal)) return null;
         bool authorOverride =
             !string.IsNullOrEmpty(current) &&
             (oldCaption is null || !string.Equals(current, oldCaption, StringComparison.Ordinal));
         if (authorOverride) return null;
-        return newCaption.Length > 100 ? newCaption.Substring(0, 100) : newCaption;
+        var trimmed = newCaption.Length > 100 ? newCaption.Substring(0, 100) : newCaption;
+        // Idempotent-write guard — the P3 saving. When the live Name already equals the
+        // caption-derived default, the SetName main would issue is a value no-op, so skip
+        // it (this is the steady-state hot path: an unchanged caption means current ==
+        // trimmed). Crucially we still WRITE when the default must be (re)applied — e.g.
+        // a modifier removal this render cleared the Name (current empty) even though the
+        // caption itself is unchanged — so a removed .AutomationName() override correctly
+        // falls back to the caption default, matching main. Behaviorally identical to main
+        // minus the redundant same-value write.
+        if (string.Equals(current, trimmed, StringComparison.Ordinal)) return null;
+        return trimmed;
     }
 
     internal static string? ExtractElementCaption(Element? element) => element switch
