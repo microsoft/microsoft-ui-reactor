@@ -1148,8 +1148,10 @@ public abstract record Element
             // the skip path; per-render capturing closures still force Update so
             // their fresh captures are wired. This replaces the old blanket
             // "any-handler-present ⇒ never skip" rule and also closes the latent
-            // hole where non-listed handlers (PointerEntered, gestures, …) were
-            // ignored entirely.
+            // hole where non-listed routed handlers (PointerEntered, GotFocus, …)
+            // were ignored entirely. Gesture / drag-drop slots are deliberately
+            // NOT compared here (see ModifierCallbacksEqual) so behavior matches
+            // the historical diff exactly.
             && ModifierCallbacksEqual(a, b)
             // Skip RichToolTip, AttachedFlyout, ContextFlyout — rare, conservative false
             && a.RichToolTip is null && b.RichToolTip is null
@@ -1220,14 +1222,25 @@ public abstract record Element
     }
 
     /// <summary>
-    /// FLAGSHIP-1 — true when every modifier event-handler / gesture / drag-drop
-    /// slot is reference-equal between <paramref name="a"/> and <paramref name="b"/>.
-    /// These callbacks dispatch through the reconciler's
+    /// FLAGSHIP-1 — true when every <b>routed-input</b> event-handler slot is
+    /// reference-equal between <paramref name="a"/> and <paramref name="b"/>.
+    /// These 21 handlers dispatch through the reconciler's
     /// <c>ModifierEventHandlerState.Current*</c> fields, refreshed only on the
     /// non-skip Update path, so the skip path is sound iff the delegate identity
     /// is unchanged. Reference equality (not presence) is the safe predicate:
     /// a stale Current* that equals the new delegate dispatches identically,
     /// while a freshly captured closure forces Update so its captures are wired.
+    ///
+    /// The gesture (Pan/Pinch/Rotate/LongPress) and drag-drop (DragSource/
+    /// DropTarget) slots are deliberately NOT compared here. They dispatch through
+    /// separate per-element gesture/drag state, and the historical diff never
+    /// compared them — so a per-render gesture closure stays skip-eligible exactly
+    /// as before. Comparing them would force Update where the framework previously
+    /// skipped, re-arming an in-flight gesture mid-interaction (e.g. re-registering
+    /// a long-press handler between its Began and Ended phases, so the released
+    /// callback fires against a refreshed closure and double-dispatches). Excluding
+    /// them preserves observable behavior exactly; grid cells use only routed
+    /// handlers, so the skip-path perf lever is unaffected.
     /// </summary>
     private static bool ModifierCallbacksEqual(ElementModifiers a, ElementModifiers b)
     {
@@ -1251,13 +1264,7 @@ public abstract record Element
             && ReferenceEquals(a.OnCharacterReceived, b.OnCharacterReceived)
             && ReferenceEquals(a.OnGotFocus, b.OnGotFocus)
             && ReferenceEquals(a.OnLostFocus, b.OnLostFocus)
-            && ReferenceEquals(a.OnAccessKeyDisplayRequested, b.OnAccessKeyDisplayRequested)
-            && ReferenceEquals(a.Pan, b.Pan)
-            && ReferenceEquals(a.Pinch, b.Pinch)
-            && ReferenceEquals(a.Rotate, b.Rotate)
-            && ReferenceEquals(a.LongPress, b.LongPress)
-            && ReferenceEquals(a.DragSource, b.DragSource)
-            && ReferenceEquals(a.DropTarget, b.DropTarget);
+            && ReferenceEquals(a.OnAccessKeyDisplayRequested, b.OnAccessKeyDisplayRequested);
     }
 
     private static bool AccessibilityEqual(AccessibilityModifiers? a, AccessibilityModifiers? b)
