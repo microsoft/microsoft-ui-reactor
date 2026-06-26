@@ -304,6 +304,24 @@ Assert-True ($microFn -match '\[int\]\$TimeoutSec\s*=\s*600') '[micro] Invoke-Mi
 Assert-True ($microFn -match '\$timeoutSec\s*=\s*\$TimeoutSec') '[micro] Invoke-MicroRun honors the -TimeoutSec param (no hardcoded constant)'
 
 # ===========================================================================
+#  Compare-mode micro call-site wiring — the glue that feeds the helpers
+# ===========================================================================
+# ConvertTo-MicroRepLines / Invoke-MicroInterleaved are unit-tested in isolation
+# below with a synthetic launch stub, but the MAIN-FLOW wiring that drives them in a
+# real /perf compare run is only as good as the call site. Lock it so a refactor
+# can't silently break rep interleaving (drop -TimeoutSec, mis-pass the rep/warmup
+# counts, pick the wrong side exe, or read the wrong accumulator). The call site
+# lives in the script body (after the last function), so assert against the raw
+# source scoped to the $IncludeMicro block.
+$microWire = [regex]::Match($src, '(?s)if \(\$IncludeMicro\).*?\$main = Measure-PerfRuns').Value
+Assert-True ($microWire.Length -gt 0) '[micro-wiring] $IncludeMicro call-site block located in the orchestrator body'
+Assert-True ($microWire -match '\$exe\s*=\s*if.*\$microMainExe.*\$microPrExe') '[micro-wiring] launchRep selects the side exe (main vs pr)'
+Assert-True ($microWire -match 'Invoke-MicroRun\s+-Exe\s+\$exe\s+-Tag\s+.+-RepCount\s+1\s+-IterCount\s+\$MicroIterations\s+-TimeoutSec\s+\$MicroRepTimeoutSec') '[micro-wiring] launchRep runs ONE rep/round at the micro iter + per-round timeout budget'
+Assert-True ($microWire -match 'Invoke-MicroInterleaved\s+-LaunchRep\s+\$launchRep\s+-RepCount\s+\$MicroReps\s+-WarmupCount\s+\$MicroWarmup') '[micro-wiring] interleaver gets MicroReps measured + MicroWarmup warmup rounds'
+Assert-True (($microWire -match '\$microInter\.MainJson') -and ($microWire -match '\$microInter\.PrJson')) '[micro-wiring] comparison reads the interleaved accumulators (.MainJson/.PrJson)'
+Assert-True ($microWire -match 'Get-PerfMicroComparison') '[micro-wiring] interleaved accumulators feed Get-PerfMicroComparison'
+
+# ===========================================================================
 #  Invoke-OneRun — --percent threading (-RunPercent defaults to $Percent)
 # ===========================================================================
 # The low-mutation skip-floor leg drives the SAME exe at a different mutation
@@ -420,11 +438,16 @@ try {
 
     # --- Invoke-MicroInterleaved: the launch stub (FailRounds drives one-sided failures). ---
     $global:FailRounds = @{}
+    # Plain scriptblock (NOT .GetNewClosure()): a closure rebinds to a module whose
+    # scope-parent is GLOBAL, which can't see the script-scoped New-RoundFile when the
+    # test runs in its own script scope (CI invokes the file via the call operator, not
+    # dot-source). A plain scriptblock stays bound to THIS session state where both
+    # New-RoundFile and the explicit $global:FailRounds resolve.
     $launch = {
         param($side, $round)
         if ($global:FailRounds.ContainsKey("${side}:${round}")) { return $null }
         New-RoundFile $side $round @('M1', 'M2')
-    }.GetNewClosure()
+    }
 
     # A. happy path: 1 warmup + 3 measured rounds -> 3 dense reps on both sides.
     $global:FailRounds = @{}

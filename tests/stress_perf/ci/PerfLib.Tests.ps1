@@ -712,6 +712,11 @@ try {
         Assert-Equal 'better' (Get-PerfMicroRowStatus -NsStatus 'better' -AllocStatus 'na')     'armed: alloc na -> ns drives (differs from dormant na)'
         Assert-Equal 'na'     (Get-PerfMicroRowStatus -NsStatus 'na'     -AllocStatus 'na')     'armed: both na -> na'
         Assert-Equal 'noise'  (Get-PerfMicroRowStatus -NsStatus 'noise'  -AllocStatus 'na')     'armed: ns noise + alloc na -> noise'
+        Assert-Equal 'worse'  (Get-PerfMicroRowStatus -NsStatus 'worse'  -AllocStatus 'na')     'armed: ns worse + alloc na -> worse (ns drives)'
+        Assert-Equal 'better' (Get-PerfMicroRowStatus -NsStatus 'noise'  -AllocStatus 'better') 'armed: ns noise + alloc better -> better'
+        Assert-Equal 'worse'  (Get-PerfMicroRowStatus -NsStatus 'noise'  -AllocStatus 'worse')  'armed: ns noise + alloc worse -> worse'
+        Assert-Equal 'noise'  (Get-PerfMicroRowStatus -NsStatus 'na'     -AllocStatus 'noise')  'armed: ns na + alloc noise -> noise'
+        Assert-Equal 'worse'  (Get-PerfMicroRowStatus -NsStatus 'na'     -AllocStatus 'worse')  'armed: ns na + alloc worse -> worse'
 
         # 'mixed' glyph renders.
         Assert-Equal "$([char]0x2195)$([char]0xFE0F) mixed" (Get-PerfStatusGlyph 'mixed') 'mixed -> up-down arrow glyph'
@@ -773,6 +778,9 @@ try {
     } finally {
         $script:MicroNsAutoFlag = $prevNsFlag
     }
+    # The armed block restored the flag to its dormant default, so the remaining tests
+    # (and production) see v1 alloc-only behaviour — no flag leak across tests.
+    Assert-True (-not $script:MicroNsAutoFlag) 'armed block reset MicroNsAutoFlag to dormant (no leak into later tests)'
 
     # Rep-aligned pairing + consistent medians. Two benches, each with rep1 dropped
     # on the PR side:
@@ -914,11 +922,32 @@ try {
     Assert-Match $sectionText '95% CI'                           'section delta cells carry a CI'
     # numeric sort survives into the rendered table (M2 row appears before M10 row).
     Assert-True (($sectionText.IndexOf('`M2`')) -lt ($sectionText.IndexOf('`M10`'))) 'rendered rows keep numeric order'
+    # Dormant (default) section prose: alloc drives the verdict, ns is context-only.
+    Assert-Match $sectionText 'Status tracks allocated bytes/op' 'dormant section: status tracks alloc bytes/op'
+    Assert-Match $sectionText 'not auto-flagged'                 'dormant section: ns is shown for context, not flagged'
+    Assert-True (-not $sectionText.Contains('Status combines ns/op')) 'dormant section: does NOT claim ns is combined'
 
     # Format-PerfComment threads -Micro through into the comment.
     $microComment = Format-PerfComment -Main $allocMain -Pr $allocPr -WinUI3 $null -Rust $null -Micro $cmp -Context $ctx
     Assert-Match $microComment 'Reconciler micro-benchmarks'     'comment includes micro section when -Micro supplied'
     Assert-Match $microComment 'WinUI-undiluted'                 'comment carries the micro footnote'
+    Assert-Match $microComment 'flag stays dormant pending a real-CI identical-binary band calibration' 'dormant footnote: ns flag dormant pending calibration'
+
+    # Armed render: flip the master switch and confirm the section prose + footnote switch
+    # to the combined-axis wording (and back). Arming is measurement-only, so this just
+    # proves the render contract for when the flag is eventually armed post-calibration.
+    $prevFlagRender = $script:MicroNsAutoFlag
+    $script:MicroNsAutoFlag = $true
+    try {
+        $armedSection = (Format-PerfMicroSection -Micro $cmp) -join "`n"
+        Assert-Match $armedSection 'Status combines ns/op and allocated bytes/op' 'armed section: status combines ns + alloc'
+        Assert-Match $armedSection 'mixed'                                         'armed section: documents the mixed verdict'
+        Assert-True (-not $armedSection.Contains('Status tracks allocated bytes/op')) 'armed section: drops the alloc-only wording'
+        $armedMicroComment = Format-PerfComment -Main $allocMain -Pr $allocPr -WinUI3 $null -Rust $null -Micro $cmp -Context $ctx
+        Assert-Match $armedMicroComment 'combines ns/op and allocated bytes/op'    'armed footnote: combined-axis wording'
+    } finally {
+        $script:MicroNsAutoFlag = $prevFlagRender
+    }
     # Omitted / null -Micro -> no micro section (back-compat with existing callers).
     Assert-True (-not ($allocComment -like '*Reconciler micro-benchmarks*')) 'micro section omitted when -Micro not supplied'
 }

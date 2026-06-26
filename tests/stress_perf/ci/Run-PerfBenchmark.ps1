@@ -65,9 +65,17 @@
     Warm-up runs discarded for the reference-only legs (default 1).
 
 .PARAMETER MicroReps
-    Measured repetitions per side for the reconciler micro-suite
-    (PerfBench.ControlModel, spec-047 M1&ndash;M13). Default 12; the per-rep
-    samples feed the paired 95% CI on allocated bytes/op.
+    Measured interleaved rep rounds for the reconciler micro-suite
+    (PerfBench.ControlModel, spec-047 M1&ndash;M13). Default 12. Each round runs a
+    FRESH main process then a fresh PR process (one inner --reps each), alternating
+    per round so the process-to-process timing offset randomizes into the paired
+    variance rather than biasing every rep one way; the per-round samples feed the
+    paired 95% CI on ns/op and allocated bytes/op.
+
+.PARAMETER MicroWarmup
+    Interleaved warm-up rounds discarded before the measured MicroReps rounds
+    (default 1). Like the macro -Warmup, the first round per side pays cold-start /
+    JIT costs, so it is dropped from the accumulator on both sides.
 
 .PARAMETER MicroIterations
     Inner iterations per micro repetition (default 1000) over which each bench's
@@ -75,9 +83,16 @@
     (the spec-047 M1&ndash;M13 set plus 3 supplementary) and the heaviest
     (M7&ndash;M9 reconcile a 1000-node tree per op) run >=120 us/op,
     so even 1000 iterations keep each per-rep mean >=120 ms &mdash; hundreds of
-    thousands of times the Stopwatch floor &mdash; while letting the whole suite
-    finish inside its per-side timeout. (At 10000 the suite ran ~3x over budget,
-    completed only M1&ndash;M4, and was silently dropped from every comment.)
+    thousands of times the Stopwatch floor &mdash; while letting each per-round
+    launch finish inside -MicroRepTimeoutSec. (At 10000 the suite ran ~3x over its
+    budget, completed only M1&ndash;M4, and was silently dropped from every comment.)
+
+.PARAMETER MicroRepTimeoutSec
+    Per-round launch timeout in seconds for one micro side (default 180). Each
+    interleaved round runs the 16-bench suite once (one inner --reps) per side; a
+    round that exceeds this is dropped on BOTH sides to keep the rep indices
+    aligned. Replaces the old whole-suite timeout that silently truncated the
+    suite to M1&ndash;M4.
 
 .PARAMETER IncludeMicro
     Run the reconciler micro-suite on each side and append its per-bench ns/op +
