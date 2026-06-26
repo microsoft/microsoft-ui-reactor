@@ -160,6 +160,15 @@ public sealed partial class Reconciler : IDisposable
     internal volatile bool ForceFullRenderPending;
     private bool _forceFullRenderActive;
 
+    // True for the duration of a hot-reload force pass. Read by ChildReconciler's
+    // positional fast path: while a force pass is active, untouched wrapper cells
+    // (Component/Memo/Func) in a memoized range must still re-render through the
+    // wrapper, so the structural skip must defer to the full walk (which honours
+    // ForceRenderThroughWrapper per cell). A pure hot-reload force does NOT mark
+    // any node SelfTriggered before the dirty-ancestor path is built, so the
+    // IsOnDirtyAncestorPath gate alone does not cover this case.
+    internal bool ForceFullRenderActive => _forceFullRenderActive;
+
     // True only during a force pass and only for the wrapper elements whose
     // skip would prevent ReconcileComponent from running. Used by Update()
     // and ChildReconciler to bypass their structural-equality short-circuits.

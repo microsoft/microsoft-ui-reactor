@@ -460,5 +460,71 @@ public class UseMemoCellsTests
         Assert.Equal(1, h3!.ThemeSensitiveCount);
         Assert.True(h3.AnyThemeSensitive);
     }
+
+    [Fact]
+    public void ByIndex_Incremental_ThemeCount_Carries_Across_Chained_Reuse()
+    {
+        var ctx = NewCtx();
+        Func<int, int, Element> themed = (item, i) => MakeThemedCell(item);
+        // R1/R2: [themed, themed, themed] -> count 3.
+        ctx.UseMemoCellsByIndex<int>(new[] { 1, 2, 3 }, Array.Empty<int>(), themed);
+        ctx.BeginRender(() => { });
+        var r2 = ctx.UseMemoCellsByIndex<int>(new[] { 1, 2, 3 }, Array.Empty<int>(), themed);
+        Assert.True(ChildDiffHints.TryGet(r2, out var h2));
+        Assert.Equal(3, h2!.ThemeSensitiveCount);
+        // R3 consumes h2: idx 0 themed -> plain. 3 -> 2.
+        ctx.BeginRender(() => { });
+        var r3 = ctx.UseMemoCellsByIndex<int>(new[] { 1, 2, 3 }, new[] { 0 }, (item, i) => MakeCell(item));
+        Assert.True(ChildDiffHints.TryGet(r3, out var h3));
+        Assert.Equal(2, h3!.ThemeSensitiveCount);
+        // R4 consumes h3: idx 1 themed -> plain. 2 -> 1.
+        ctx.BeginRender(() => { });
+        var r4 = ctx.UseMemoCellsByIndex<int>(new[] { 1, 2, 3 }, new[] { 1 }, (item, i) => MakeCell(item));
+        Assert.True(ChildDiffHints.TryGet(r4, out var h4));
+        Assert.Equal(1, h4!.ThemeSensitiveCount);
+        // R5 consumes h4: idx 1 plain -> themed again. 1 -> 2.
+        ctx.BeginRender(() => { });
+        var r5 = ctx.UseMemoCellsByIndex<int>(new[] { 1, 2, 3 }, new[] { 1 },
+            (item, i) => i == 1 ? MakeThemedCell(item) : MakeCell(item));
+        Assert.True(ChildDiffHints.TryGet(r5, out var h5));
+        Assert.Equal(2, h5!.ThemeSensitiveCount);
+    }
+
+    [Fact]
+    public void ByIndex_Duplicate_Changed_Index_Does_Not_Falsely_Clear_ThemeSensitive()
+    {
+        var ctx = NewCtx();
+        // R1/R2: [themed, themed] -> reused count 2.
+        Func<int, int, Element> themed = (item, i) => MakeThemedCell(item);
+        ctx.UseMemoCellsByIndex<int>(new[] { 1, 2 }, Array.Empty<int>(), themed);
+        ctx.BeginRender(() => { });
+        var r2 = ctx.UseMemoCellsByIndex<int>(new[] { 1, 2 }, Array.Empty<int>(), themed);
+        Assert.True(ChildDiffHints.TryGet(r2, out var h2));
+        Assert.Equal(2, h2!.ThemeSensitiveCount);
+
+        // R3: change index 0 themed -> plain, listed TWICE (caller-contract
+        // violation). Without dedup the incremental tally goes 2 -> 1 -> 0 and
+        // publishes AnyThemeSensitive=false while cell 1 is still themed — the
+        // reconciler would then unsafely structural-skip a theme-sensitive cell on
+        // a theme flip. Dedup keeps the count exact and the safety flag honest.
+        ctx.BeginRender(() => { });
+        var r3 = ctx.UseMemoCellsByIndex<int>(new[] { 1, 2 }, new[] { 0, 0 }, (item, i) => MakeCell(item));
+        Assert.True(ChildDiffHints.TryGet(r3, out var h3));
+        Assert.Equal(1, h3!.ThemeSensitiveCount);   // cell 1 still themed
+        Assert.True(h3.AnyThemeSensitive);          // MUST stay true — the safety bit
+        Assert.Equal(new[] { 0 }, h3.ChangedIndices); // published indices are deduped
+    }
+
+    [Fact]
+    public void ByIndex_Duplicate_Changed_Index_Builds_Cell_Once()
+    {
+        var ctx = NewCtx();
+        ctx.UseMemoCellsByIndex<int>(new[] { 1, 2, 3 }, Array.Empty<int>(), (item, i) => MakeCell(item));
+        ctx.BeginRender(() => { });
+        int builds = 0;
+        ctx.UseMemoCellsByIndex<int>(new[] { 1, 2, 3 }, new[] { 1, 1, 1 },
+            (item, i) => { builds++; return MakeCell(item); });
+        Assert.Equal(1, builds); // deduped: index 1 rebuilt once, not three times
+    }
 }
 

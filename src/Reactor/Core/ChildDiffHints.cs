@@ -1,3 +1,4 @@
+using System;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
@@ -18,10 +19,11 @@ namespace Microsoft.UI.Reactor.Core;
 /// </summary>
 internal sealed class ChildDiffHint
 {
-    internal ChildDiffHint(int[] changedIndices, int themeSensitiveCount)
+    internal ChildDiffHint(int[] changedIndices, int themeSensitiveCount, Element[] previousChildren)
     {
         ChangedIndices = changedIndices;
         ThemeSensitiveCount = themeSensitiveCount;
+        PreviousChildren = new WeakReference<Element[]>(previousChildren);
     }
 
     /// <summary>
@@ -31,6 +33,22 @@ internal sealed class ChildDiffHint
     /// for unchanged indices and only rebuilds these).
     /// </summary>
     internal int[] ChangedIndices { get; }
+
+    /// <summary>
+    /// Weak handle to the EXACT previous-render array the <see cref="ChangedIndices"/>
+    /// were diffed against. The positional fast path engages only when the
+    /// reconciler's old-children array IS this array — a cheap, self-documenting
+    /// sufficient condition for the real invariant (every unchanged index is
+    /// reference-equal between old and new). Holds in steady state by construction
+    /// (the reconciler reconciles consecutive committed trees, and the V1 panel
+    /// descriptor surfaces the producer's <c>Element[]</c> by reference for both
+    /// sides); a mismatch (any defensive copy) safely falls back to the full walk.
+    /// Weak on purpose: a strong reference here would chain
+    /// <c>children_N → hint_N → children_(N-1) → hint_(N-1) → …</c> through the
+    /// reference-keyed <see cref="ChildDiffHints"/> table and pin every past
+    /// render's array for the lifetime of the live one.
+    /// </summary>
+    internal WeakReference<Element[]> PreviousChildren { get; }
 
     /// <summary>
     /// Number of cells carrying <c>ThemeBindings</c> or a ThemeRef-backed
