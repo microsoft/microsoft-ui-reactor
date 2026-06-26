@@ -1122,6 +1122,23 @@ Assert-True (-not ($suText -like '*regression*'))  'dormant startup: no regressi
 # value (first frame composes after the mount completes) in the rendered medians.
 Assert-True ($suMain.EntryToFirstFrameMs -ge $suMain.EntryToFirstReconcileMs) 'startup shape: entry->first-frame >= entry->first-reconcile (monotonic)'
 
+# (3b) Per-row omission: windowOpen is structurally n/a in the ReactorWindow Mount-before-
+#      Activate lifecycle (Activated fires AFTER the first reconcile, so the monotonic guard
+#      always rejects it) -> it is null on BOTH sides in practice. The renderer must DROP that
+#      always-empty row while keeping the three populated rows, so the comment carries no
+#      perpetual n/a noise. The field is still emitted in JSON for forward-compat.
+$suNoWinMainRuns = @(); $suNoWinPrRuns = @()
+1..6 | ForEach-Object {
+    $j = ($_ % 3) * 0.5
+    $suNoWinMainRuns += [pscustomobject]@{ RendersPerSec=3.5; AvgReconcileMs=76; AvgDiffMs=66; AvgMemoryMB=303; TotalRenders=35; DurationSeconds=10; FirstReconcileDurationMs=(420 + $j); EntryToFirstReconcileMs=(830 + $j); WindowOpenToFirstReconcileMs=$null; EntryToFirstFrameMs=(910 + $j) }
+    $suNoWinPrRuns   += [pscustomobject]@{ RendersPerSec=3.5; AvgReconcileMs=76; AvgDiffMs=66; AvgMemoryMB=303; TotalRenders=35; DurationSeconds=10; FirstReconcileDurationMs=(410 + $j); EntryToFirstReconcileMs=(820 + $j); WindowOpenToFirstReconcileMs=$null; EntryToFirstFrameMs=(905 + $j) }
+}
+$suNoWinText = (Format-PerfStartupSection -Main (Measure-PerfRuns -Runs $suNoWinMainRuns) -Pr (Measure-PerfRuns -Runs $suNoWinPrRuns)) -join "`n"
+Assert-True (-not ($suNoWinText -like '*Window open &rarr; first reconcile*')) 'startup: all-n/a windowOpen row is omitted (no perpetual n/a row)'
+Assert-Match $suNoWinText 'First reconcile (ms)'         'startup: first-reconcile row still renders when windowOpen omitted'
+Assert-Match $suNoWinText 'Entry &rarr; first frame'     'startup: first-frame row still renders when windowOpen omitted'
+Assert-Match $suNoWinText 'Entry &rarr; first reconcile' 'startup: entry->first-reconcile row still renders when windowOpen omitted'
+
 # (4) Armed: flipping $script:StartupAutoFlag promotes the rows from informational to the
 #     band-gated verdict (the one-line flip reserved for after a real-CI calibration). Reset
 #     to dormant afterwards so later assertions (none below, but for safety) see the default.
@@ -1156,6 +1173,7 @@ Assert-Match $suRebaseText 'Rebase onto' 'pr-predates run: note says rebase to p
 $suComment = Format-PerfComment -Main $suMain -Pr $suPr -WinUI3 $null -Rust $null -Context $ctx
 Assert-Match $suComment 'Startup / first frame' 'comment renders the startup section when startup data present'
 Assert-Match $suComment 'Reactor-isolated'      'comment carries the startup footnote'
+Assert-True (-not ($suComment -like '*minimum-effect band*')) 'dormant startup: comment footnote omits the band-gated wording (C-2 gate)'
 $idxRegSU   = $suComment.IndexOf('Regression vs')
 $idxStartup = $suComment.IndexOf('Startup / first frame')
 $idxXfwSU   = $suComment.IndexOf('Cross-framework reference')
@@ -1163,6 +1181,20 @@ Assert-True (($idxRegSU -lt $idxStartup) -and ($idxStartup -lt $idxXfwSU)) 'star
 # Omitted entirely when neither side reports startup fields (back-compat with existing callers).
 $suNoStartupComment = Format-PerfComment -Main $main -Pr $pr -WinUI3 $null -Rust $null -Context $ctx
 Assert-True (-not ($suNoStartupComment -like '*Startup / first frame*')) 'startup section omitted when neither side reports startup fields'
+
+# (6b) C-2: the startup FOOTNOTE in Format-PerfComment is flag-gated like the section preamble.
+#      Dormant -> "Informational only"; armed -> the band-gated wording, and no "Informational
+#      only" anywhere in the comment (section dormant-note + footnote both flip).
+$prevStartupFlag2 = $script:StartupAutoFlag
+$script:StartupAutoFlag = $true
+try {
+    $suArmedComment = Format-PerfComment -Main $suMain -Pr $suPr -WinUI3 $null -Rust $null -Context $ctx
+    Assert-Match $suArmedComment 'minimum-effect band' 'armed startup: comment footnote describes the band-gated flagging'
+    Assert-True (-not ($suArmedComment -like '*Informational only*')) 'armed startup: comment drops Informational only (section note + footnote)'
+}
+finally {
+    $script:StartupAutoFlag = $prevStartupFlag2
+}
 
 # Get-PerfStatusGlyph: the informational glyph the dormant rows use.
 Assert-Equal "$([char]0x2139)$([char]0xFE0F) informational" (Get-PerfStatusGlyph 'info') 'info -> information-source glyph'

@@ -221,12 +221,16 @@ Several tables plus footnotes:
   which both buried real sub-4% wins and rubber-stamped any sub-4% number as
   "noise" regardless of how tight the runs were.
 - **Startup / first frame** — the from-scratch **mount** the steady-state tables
-  exclude by construction, captured once per process: `First reconcile (ms)` (the
-  **Reactor-isolated** first-render reconcile-phase duration — the same phase the
-  steady-state Avg Diff column averages — undiluted by AOT / window / XAML bootstrap,
-  so a mount regression shows here at full size), `Entry → first frame (ms)` (the
-  human-facing "first frame rendered"), `Entry → first reconcile (ms)`, and the
-  n/a-guarded `Window open → first reconcile (ms)`. Piggybacks the headline per-rep
+  exclude by construction, captured once per process and listed in render order:
+  `Entry → first frame (ms)` (the human-facing "first frame rendered"), `First
+  reconcile (ms)` (the **Reactor-isolated** first-render reconcile-phase duration —
+  the same phase the steady-state **Avg Diff** column averages, **not** the **Avg
+  Reconcile** total, which also includes tree-build + effects — undiluted by AOT /
+  window / XAML bootstrap, so a mount regression shows here at full size), `Entry →
+  first reconcile (ms)`, and the n/a-guarded `Window open → first reconcile (ms)`
+  (emitted only when the window's `Activated` demonstrably preceded the first mount;
+  structurally n/a in the current Mount-before-Activate host lifecycle, so its row is
+  omitted whenever it is n/a on both sides). Piggybacks the headline per-rep
   launches (one sample/process, so the cold first launch is warmup-dropped) for a
   paired 95% CI at zero extra CI time. **Informational-first**: the flag
   (`$StartupAutoFlag`) ships dormant — Δ + CI are shown but no row is auto-flagged

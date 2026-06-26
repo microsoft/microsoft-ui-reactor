@@ -336,10 +336,15 @@ regression shows up as a 2× number here, where it would be a single-digit-% bli
 into the bootstrap-dominated `entryToFirstFrameMs`. The mount value is much larger than
 steady-state Avg Diff because it creates every control rather than patching a few.
 `entryToFirstFrameMs` is the human-recognisable "first frame rendered" number.
-`windowOpenToFirstReconcileMs` is **n/a-guarded**: the window's `Activated` event and the
-first mount race across launches, so it is emitted only when `Activated` demonstrably
-preceded the mount (else JSON `null` -> n/a, never a negative number that would poison a
-paired CI).
+`windowOpenToFirstReconcileMs` is **n/a-guarded**: it is emitted only when the window's
+`Activated` event demonstrably preceded the first mount (else JSON `null` -> n/a, never a
+negative number that would poison a paired CI). In the current `ReactorWindow` lifecycle the
+host calls `Mount(...)` (which completes the first reconcile synchronously) *before*
+`Activate()`, so `Activated` always fires after the mount and the guard structurally rejects
+this anchor — it is effectively always n/a here, and the `/perf` renderer omits its row
+whenever it is n/a on both sides. It is retained in the JSON contract for any future host or
+launch ordering where `Activated` can win the race; the entry-based anchors are the robust
+signals that always have a value.
 
 These piggyback the headline per-rep ReactorOptimized launches — **one sample per process,
 so the cold first launch is dropped with the warmup rep** (startup rides the same per-rep

@@ -1047,7 +1047,7 @@ function Format-PerfStartupSection {
     $lines = [System.Collections.Generic.List[string]]::new()
     $lines.Add('### Startup / first frame')
     $lines.Add('')
-    $preamble = "Per-launch **first-frame / first-reconcile** cost the steady-state tables above exclude by construction (their windows baseline on the first benchmark tick, after the mount). Captured once per process and aggregated over the same interleaved per-rep launches &mdash; $down lower is better. ``First reconcile (ms)`` is the **Reactor-isolated** first-render reconcile-phase duration (the #696 signal, undiluted by AOT / window / XAML bootstrap and directly comparable to the steady-state Diff column); ``Entry &rarr; first frame`` is the human-facing first-composed-frame number. Δ is the mean paired change with a 95% CI."
+    $preamble = "Per-launch **first-frame / first-reconcile** cost the steady-state tables above exclude by construction (their windows baseline on the first benchmark tick, after the mount). Captured once per process and aggregated over the same interleaved per-rep launches &mdash; $down lower is better. ``First reconcile (ms)`` is the **Reactor-isolated** first-render reconcile-phase duration (the #696 signal, undiluted by AOT / window / XAML bootstrap and directly comparable to the steady-state **Diff** column &mdash; **not** the **Reconcile** column, which is the full tree+diff+effects total); ``Entry &rarr; first frame`` is the human-facing first-composed-frame number. Δ is the mean paired change with a 95% CI."
     if (-not $script:StartupAutoFlag) {
         $preamble += " **Informational only** &mdash; the Δ / CI are reported but no row is auto-flagged better-or-worse yet (one sample per launch + bootstrap process-to-process variance is the noisiest axis; the flag stays dormant pending a real-CI identical-binary band calibration, like the micro ns metric)."
     }
@@ -1058,6 +1058,13 @@ function Format-PerfStartupSection {
     foreach ($m in $spec) {
         $bVal = $Main.($m.Key)
         $pVal = $Pr.($m.Key)
+        # Omit a metric that has NO data on EITHER side. The section-level guard above
+        # already handled "no startup data at all"; this drops an individual always-empty
+        # row so it isn't perpetual noise — notably windowOpen, which is structurally n/a
+        # in the ReactorWindow Mount-before-Activate lifecycle (Activated fires after the
+        # first reconcile, so the monotonic guard always rejects it). The field is still
+        # emitted in JSON, so a future launch/host where it IS reachable renders it again.
+        if ($null -eq $bVal -and $null -eq $pVal) { continue }
         $spread = [math]::Max([double]$Main."$($m.Key)Spread", [double]$Pr."$($m.Key)Spread")
         # Paired CI is the ONLY admissible flag (RequirePairedCI): the single-sample point
         # delta vs a spread band is exactly the thin "2-run median" signal this whole effort
@@ -1250,7 +1257,13 @@ function Format-PerfComment {
     & $add "<sub>Allocation metrics (alloc bytes/render, Gen0 GC) are the sensitive signal for allocation-reduction work, where the mean-ms / memory figures are largely flat. They read *n/a* for a harness built from a revision that predates them (rebase the PR onto ``main`` to populate them).</sub>"
     $hasStartup = (@($script:PerfStartupMetricSpec | Where-Object { ($null -ne $Main.($_.Key)) -or ($null -ne $Pr.($_.Key)) }).Count -gt 0)
     if ($hasStartup) {
-        & $add "<sub>Startup / first-frame metrics piggyback the same interleaved per-rep launches (one sample per process). ``First reconcile (ms)`` is the **Reactor-isolated** first-render reconcile-phase duration (the #696 mount-cost signal, undiluted by AOT / window / XAML bootstrap and directly comparable to the steady-state Diff column); ``Entry &rarr; first frame`` is the human-facing first composed frame. They read *n/a* for a harness built from a revision that predates them &mdash; the paired Δ populates on the next run once the metric is on ``main``. **Informational only** until the band is calibrated: the Δ / CI are shown but no startup row is auto-flagged yet (single-sample-per-launch + bootstrap variance, the noisiest axis).</sub>"
+        $startupFoot = "<sub>Startup / first-frame metrics piggyback the same interleaved per-rep launches (one sample per process). ``First reconcile (ms)`` is the **Reactor-isolated** first-render reconcile-phase duration (the #696 mount-cost signal, undiluted by AOT / window / XAML bootstrap and directly comparable to the steady-state **Diff** column &mdash; **not** the **Reconcile** column, which is the full tree+diff+effects total); ``Entry &rarr; first frame`` is the human-facing first composed frame. They read *n/a* for a harness built from a revision that predates them &mdash; the paired Δ populates on the next run once the metric is on ``main``."
+        if (-not $script:StartupAutoFlag) {
+            $startupFoot += " **Informational only** until the band is calibrated: the Δ / CI are shown but no startup row is auto-flagged yet (single-sample-per-launch + bootstrap variance, the noisiest axis)."
+        } else {
+            $startupFoot += " A startup row is flagged only when its paired 95% CI clears the &plusmn;$([math]::Round($script:StartupMinEffectPct, 1))% minimum-effect band (single-sample-per-launch + bootstrap variance make this the noisiest axis)."
+        }
+        & $add ($startupFoot + '</sub>')
     }
     if ($null -ne $Micro -and @($Micro).Count -gt 0) {
         if ($script:MicroNsAutoFlag) {

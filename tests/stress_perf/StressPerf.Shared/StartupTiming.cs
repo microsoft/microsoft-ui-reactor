@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Threading;
 
 namespace StressPerf.Shared;
 
@@ -11,6 +12,17 @@ namespace StressPerf.Shared;
 /// timestamp reads that all happen once at startup, so the steady-state render loop
 /// is never perturbed. AOT/trim-safe (no reflection, no allocation).
 /// </summary>
+/// <remarks>
+/// The anchors are written on one thread (entry on the managed-entry thread, window-open
+/// on the UI thread) and may be read on another (metrics emit). Each anchor uses a
+/// release/acquire <see cref="Volatile"/> pair on its "marked" flag: the writer publishes
+/// the timestamp first and then <see cref="Volatile.Write(ref bool, bool)"/>s the flag, and
+/// every reader <see cref="Volatile.Read(ref bool)"/>s the flag before touching the
+/// timestamp. So a reader that observes the flag set is guaranteed to also see the published
+/// timestamp (never a marked flag paired with a default-0 timestamp), and an unmarked anchor
+/// reads as 0 / null rather than a torn value. 64-bit timestamp reads are atomic on the x64 /
+/// arm64 runners the harness targets.
+/// </remarks>
 public static class StartupTiming
 {
     private static long _entryTimestamp;
@@ -26,37 +38,39 @@ public static class StartupTiming
     /// </summary>
     public static void MarkEntry()
     {
-        if (_entryMarked) return;
+        if (Volatile.Read(ref _entryMarked)) return;
         _entryTimestamp = Stopwatch.GetTimestamp();
-        _entryMarked = true;
+        Volatile.Write(ref _entryMarked, true); // release: publish the timestamp before the flag
     }
 
     /// <summary>
     /// Record the first window <c>Activated</c>. Call from
-    /// <c>ReactorApp.PrimaryWindow.Activated</c>. Idempotent (first wins). May never
-    /// fire before the first reconcile — Activated-vs-mount ordering is
-    /// non-deterministic across launches — which is why the window-open segment is
-    /// n/a-guarded by the consumer rather than assumed monotonic.
+    /// <c>ReactorApp.PrimaryWindow.Activated</c>. Idempotent (first wins). In the current
+    /// <c>ReactorWindow</c> lifecycle the host mounts (completing the first reconcile) BEFORE
+    /// it activates the window, so <c>Activated</c> fires after the first reconcile and the
+    /// consumer's monotonic n/a-guard rejects this anchor — it is retained for any future host
+    /// or launch ordering where <c>Activated</c> can precede the mount, and is n/a-guarded by
+    /// the consumer rather than assumed monotonic.
     /// </summary>
     public static void MarkWindowOpen()
     {
-        if (_windowOpenMarked) return;
+        if (Volatile.Read(ref _windowOpenMarked)) return;
         _windowOpenTimestamp = Stopwatch.GetTimestamp();
-        _windowOpenMarked = true;
+        Volatile.Write(ref _windowOpenMarked, true); // release: publish the timestamp before the flag
     }
 
     /// <summary>True once <see cref="MarkEntry"/> has run.</summary>
-    public static bool EntryMarked => _entryMarked;
+    public static bool EntryMarked => Volatile.Read(ref _entryMarked);
 
     /// <summary>True once <see cref="MarkWindowOpen"/> has run.</summary>
-    public static bool WindowOpenMarked => _windowOpenMarked;
+    public static bool WindowOpenMarked => Volatile.Read(ref _windowOpenMarked);
 
     /// <summary>
     /// Milliseconds from managed entry to now, or 0 when entry was never marked.
     /// </summary>
     public static double MsSinceEntry()
     {
-        if (!_entryMarked) return 0.0;
+        if (!Volatile.Read(ref _entryMarked)) return 0.0; // acquire: pairs with MarkEntry's release
         return (Stopwatch.GetTimestamp() - _entryTimestamp) * 1000.0 / Stopwatch.Frequency;
     }
 
@@ -66,7 +80,8 @@ public static class StartupTiming
     /// </summary>
     public static double? WindowOpenMsSinceEntry()
     {
-        if (!_entryMarked || !_windowOpenMarked) return null;
+        // acquire both flags before reading either timestamp
+        if (!Volatile.Read(ref _entryMarked) || !Volatile.Read(ref _windowOpenMarked)) return null;
         return (_windowOpenTimestamp - _entryTimestamp) * 1000.0 / Stopwatch.Frequency;
     }
 }
