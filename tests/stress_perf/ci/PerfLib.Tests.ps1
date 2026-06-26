@@ -885,6 +885,26 @@ try {
         -BaselineSamples $bigB -CandidateSamples $bigC -RequirePairedCI -MinEffectPct 1.0
     Assert-Equal 'worse' $bandBig.Status                   'band: a real >1% delta still flags through the band'
 
+    # PR5c widened the micro ALLOC min-effect band 1.0% -> 3.0% (a provisional hedge, pending the
+    # post-merge real-CI identical-binary calibration that the 1000-iter cut invalidated). Pin the
+    # NEW band so a regression of the constant or a future mis-calibration is caught: a ~2% alloc
+    # delta must read 'noise' at 3.0% (it WOULD have flagged at the old 1.0%), while a real ~4%
+    # delta still flags 'worse'. Direct Get-PerfDelta keeps this deterministic.
+    Assert-Equal 3.0 $script:MicroAllocMinEffectPct        'micro alloc min-effect band is the 3.0% provisional hedge'
+    $b2B = @(1000, 1000, 1000, 1000)
+    $b2C = @(1020, 1021, 1019, 1020)              # ~+2%: inside the new 3% band, outside the old 1%
+    $band2 = Get-PerfDelta -Baseline 1000 -Candidate 1020 -LowerIsBetter $true `
+        -BaselineSamples $b2B -CandidateSamples $b2C -RequirePairedCI -MinEffectPct $script:MicroAllocMinEffectPct
+    Assert-Equal 'noise' $band2.Status                     'band@3.0%: a ~2% alloc delta reads noise (within the widened band)'
+    $band2Old = Get-PerfDelta -Baseline 1000 -Candidate 1020 -LowerIsBetter $true `
+        -BaselineSamples $b2B -CandidateSamples $b2C -RequirePairedCI -MinEffectPct 1.0
+    Assert-Equal 'worse' $band2Old.Status                  'band@1.0%: the SAME ~2% delta would have flagged — proves the widen changed behavior'
+    $b4B = @(1000, 1000, 1000, 1000)
+    $b4C = @(1040, 1041, 1039, 1040)              # ~+4%: past the new 3% band
+    $band4 = Get-PerfDelta -Baseline 1000 -Candidate 1040 -LowerIsBetter $true `
+        -BaselineSamples $b4B -CandidateSamples $b4C -RequirePairedCI -MinEffectPct $script:MicroAllocMinEffectPct
+    Assert-Equal 'worse' $band4.Status                     'band@3.0%: a real ~4% alloc delta still flags worse through the widened band'
+
     # Integration: the micro comparison passes the alloc band, so a bench with a tight
     # sub-1% alloc rise reads 'noise' at the row level (no false regression), while its
     # ns context is unaffected.
@@ -932,16 +952,23 @@ try {
     # absent (the #693 regression: a per-round timeout dropped the whole section and it went
     # unnoticed for the PR's entire life). Three render contracts:
     #   (1) rows present & complete (4/4)   -> no note (the happy path above);
-    #   (2) rows present but < canonical 13 -> a "N/13 Incomplete" warning above the table;
+    #   (2) rows present but < canonical 16 -> a "N/16 Incomplete" warning above the table;
     #   (3) null rows + an omit reason      -> a visible "omitted this run -- <reason>" callout;
     #   (4) null rows + no reason           -> still silent (the leg was simply not requested).
     Assert-True (-not $sectionText.Contains('Incomplete'))       'complete render (4/4 benches): no incompleteness note'
-    $shortText = (Format-PerfMicroSection -Micro $cmp -ExpectedCount 13) -join "`n"
+    $shortText = (Format-PerfMicroSection -Micro $cmp -ExpectedCount 16) -join "`n"
     Assert-Match $shortText 'Incomplete'                         'short render: labels the section incomplete'
-    Assert-Match $shortText '4/13'                               'short render: shows the N/13 bench count'
+    Assert-Match $shortText '4/16'                               'short render: shows the N/16 bench count'
     Assert-Match $shortText 'WARNING'                            'short render: uses a visible GitHub warning callout'
     Assert-Match $shortText 'Reconciler micro-benchmarks'        'short render: still renders the heading + table'
     Assert-True ($shortText.Contains('`M1` PropertyDiff'))       'short render: the benches that DID pair still render'
+    # Default-count resolution (the production call shape): Format-PerfComment never passes
+    # -ExpectedCount, so the default MUST resolve to $script:MicroExpectedBenchCount. A wrong
+    # default (the 13 this PR fixed) would silently mis-label a real 13-of-16 run as complete.
+    Assert-Equal 16 $script:MicroExpectedBenchCount             'canonical micro bench count is the full 16-bench emitted set (M1-M13 + 3 supplementary)'
+    $defaultText = (Format-PerfMicroSection -Micro $cmp) -join "`n"
+    Assert-Match $defaultText 'Incomplete'                       'default-count render: a 4-row run is incomplete vs the canonical full suite'
+    Assert-Match $defaultText "4/$($script:MicroExpectedBenchCount)" 'default-count render: denominator is the script-scoped canonical count, not a literal'
 
     $omitText = (Format-PerfMicroSection -Micro $null -OmitReason 'the rep-interleave kept fewer than 2 paired rounds (a per-round timeout)') -join "`n"
     Assert-Match $omitText 'omitted this run'                    'omit render: visible omission block when a reason is supplied'
@@ -950,6 +977,22 @@ try {
     Assert-Match $omitText 'WARNING'                             'omit render: uses a visible GitHub warning callout'
     Assert-Equal 0 @(Format-PerfMicroSection -Micro $null -OmitReason $null).Count 'omit render: silent when null rows AND no reason (leg not requested)'
     Assert-Equal 0 @(Format-PerfMicroSection -Micro @() -OmitReason '   ').Count   'omit render: whitespace-only reason treated as no reason'
+
+    # ── Drift guard: canonical count tracks the C# source of truth (PR5c) ────────
+    # $script:MicroExpectedBenchCount is a hand-maintained mirror of BenchCatalog.All in
+    # tests/perf_bench/PerfBench.ControlModel/Benches/AllBenches.cs. If a bench is added/removed
+    # there but the constant is not updated, the completeness check silently mis-labels every run
+    # (a 13-of-16 run reads "complete", or a full run reads "incomplete") — exactly the 13-vs-16
+    # undercount this PR fixed. Parse the catalog initializer and assert the two agree so they
+    # cannot diverge again without a red test. (Source is read, never built — works on any host.)
+    $catalogPath = Join-Path $PSScriptRoot '..\..\perf_bench\PerfBench.ControlModel\Benches\AllBenches.cs'
+    Assert-True (Test-Path -LiteralPath $catalogPath) "drift guard: BenchCatalog source exists ($catalogPath)"
+    $catalogSrc  = Get-Content -LiteralPath $catalogPath -Raw
+    $catalogInit = [regex]::Match($catalogSrc, '(?s)All\s*\{\s*get;\s*\}\s*=\s*new\s+IBench\[\]\s*\{(.*?)\};')
+    Assert-True $catalogInit.Success 'drift guard: located the BenchCatalog.All initializer block'
+    $catalogCount = ([regex]::Matches($catalogInit.Groups[1].Value, 'new\s+\w+\s*\(')).Count
+    Assert-Equal 16 $catalogCount                               'drift guard: BenchCatalog.All declares 16 benches (M1-M13 + OAlloc/OUpdate/C207)'
+    Assert-Equal $script:MicroExpectedBenchCount $catalogCount  'drift guard: $script:MicroExpectedBenchCount matches the C# catalog count (no silent drift)'
 
     # Format-PerfComment threads -Micro through into the comment.
     $microComment = Format-PerfComment -Main $allocMain -Pr $allocPr -WinUI3 $null -Rust $null -Micro $cmp -Context $ctx

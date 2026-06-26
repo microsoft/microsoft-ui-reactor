@@ -85,13 +85,18 @@ $script:MicroNsMinEffectPct = 3.0
 # changes /perf verdict labels, never what merges.
 $script:MicroNsAutoFlag = $false
 
-# Canonical reconciler micro-suite size (spec-047 M1-M13; the source of truth is
-# tests/perf_bench/PerfBench.ControlModel/Benches/AllBenches.cs). A complete run compares
-# exactly this many benches across both sides; FEWER means one or more benches errored or
-# were filtered on a side and dropped from the paired comparison. Format-PerfMicroSection
-# surfaces that as a visible "N/<this>" incompleteness note rather than silently rendering a
-# short table that is indistinguishable from a clean full run. Keep in sync if the suite grows.
-$script:MicroExpectedBenchCount = 13
+# Canonical reconciler micro-suite size: the FULL emitted comparison set. That is the
+# spec-047 M1-M13 set PLUS 3 supplementary benches (ids OAlloc / OUpdate / C207) that
+# BenchCatalog.All also runs for `--variant Reactor`. The source of truth is
+# tests/perf_bench/PerfBench.ControlModel/Benches/AllBenches.cs (BenchCatalog.All); there is
+# NO bench-id allowlist in Read-MicroBenchResults, so every Reactor 'ok' row is compared and a
+# healthy run produces exactly this many paired rows. FEWER means one or more benches errored
+# or were filtered on a side and dropped from the paired comparison; Format-PerfMicroSection
+# surfaces that as a visible "N/<this>" note rather than silently rendering a short table that
+# is indistinguishable from a clean full run. A drift-guard test (RunPerfBenchmark.Tests)
+# asserts this equals the BenchCatalog.All count so the two can't silently diverge -- keep them
+# in sync when the suite changes.
+$script:MicroExpectedBenchCount = 16
 
 function ConvertTo-PerfDouble {
     <#
@@ -651,10 +656,11 @@ function Get-PerfMicroComparison {
         $nsDelta = Get-PerfDelta -Baseline $mainMeanNs -Candidate $prMeanNs `
             -LowerIsBetter $true -BaselineSamples $mNsArr -CandidateSamples $pNsArr `
             -RequirePairedCI -MinEffectPct $script:MicroNsMinEffectPct
-        # Both deltas clear a +-MinEffectPct band before flagging. Alloc's band is tight
-        # (~1%) because alloc bytes/op are deterministic for identical code; ns's is
-        # wider because even rep-interleaved timing carries residual cold-JIT / scheduling
-        # jitter. Whether ns actually DRIVES the row flag is gated separately on
+        # Both deltas clear a +-MinEffectPct band before flagging. The two bands are
+        # provisionally EQUAL (a conservative interim hedge pending the real-CI identical-binary
+        # calibration); alloc bytes/op are deterministic for identical code, so alloc is the more
+        # trustworthy axis and should tighten below ns once calibrated, while ns carries residual
+        # cold-JIT / scheduling jitter. Whether ns actually DRIVES the row flag is gated separately on
         # $MicroNsAutoFlag (see Get-PerfMicroRowStatus): dormant => alloc-only (v1), so a
         # bench's ns band only matters once the flag is armed.
         $allocDelta = Get-PerfDelta -Baseline $mainAlloc -Candidate $prAlloc `
@@ -744,7 +750,8 @@ function Format-PerfMicroSection {
                              of nothing, so a timeout / missing-exe / thrown leg is never
                              mistaken for a clean absence.
     .PARAMETER ExpectedCount Canonical bench count for the N/<expected> completeness check
-                             (defaults to the spec-047 M1-M13 count); 0 disables the check.
+                             (defaults to $script:MicroExpectedBenchCount = the full emitted
+                             set: spec-047 M1-M13 + 3 supplementary); 0 disables the check.
     #>
     param(
         [AllowNull()][object[]]$Micro,
@@ -754,12 +761,18 @@ function Format-PerfMicroSection {
     $heading = "### Reconciler micro-benchmarks (``PerfBench.ControlModel``)"
     if ($null -eq $Micro -or @($Micro).Count -eq 0) {
         if ([string]::IsNullOrWhiteSpace($OmitReason)) { return @() }
+        # The reason is interpolated into a single-line GitHub blockquote and may carry raw
+        # exception text: collapse any whitespace runs / CR-LF (a newline would break out of the
+        # `>` quote after the first line) to single spaces and cap the length so a stack-trace-
+        # laden message can't bloat or corrupt the posted comment. Full detail stays in the run log.
+        $reason = ($OmitReason -replace '\s+', ' ').Trim()
+        if ($reason.Length -gt 300) { $reason = $reason.Substring(0, 297) + '...' }
         return @(
             $heading
             ''
             '> [!WARNING]'
-            "> **Micro-suite omitted this run** &mdash; $OmitReason."
-            "> The ns/op + allocated-bytes/op reconciler deltas (spec-047 M1&ndash;M13) are unavailable for this comparison &mdash; a harness/runner condition, **not** a clean result. See the workflow run log for the per-side detail."
+            "> **Micro-suite omitted this run** &mdash; $reason."
+            "> The ns/op + allocated-bytes/op reconciler deltas (spec-047 M1&ndash;M13 + 3 supplementary) are unavailable for this comparison &mdash; a harness/runner condition, **not** a clean result. See the workflow run log for the per-side detail."
             ''
         )
     }

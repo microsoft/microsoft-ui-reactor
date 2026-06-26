@@ -153,7 +153,7 @@ git worktree remove ../main
 | `-IncludeMicro` | `$true` | Run the `PerfBench.ControlModel` reconciler micro-suite (compare mode) and append its per-bench ns/op + B/op table. Set `$false` to skip it. |
 | `-MicroReps` | `12` | Measured **rep rounds** per side for the micro-suite; each round alternates a fresh `main` then PR `--reps 1` process (rep-level interleaving) and feeds the paired 95% CI, mirroring `-Reps`. |
 | `-MicroWarmup` | `1` | Leading interleaved rep rounds discarded before the measured `-MicroReps` (absorbs per-process cold-JIT before the timed rounds are paired). |
-| `-MicroIterations` | `1000` | Inner iterations per repetition inside each micro-bench (amortises timer resolution; sized so each `--reps 1` round finishes well inside its per-round timeout). |
+| `-MicroIterations` | `2000` | Inner iterations per repetition inside each micro-bench (amortises timer resolution; sized so each `--reps 1` round finishes well inside its per-round timeout). |
 | `-MicroRepTimeoutSec` | `180` | Per-round launch budget (one `--reps 1` run of the 16-bench suite). A round that overruns is killed and dropped; the previous whole-suite single launch used a 600 s cap. |
 | `-IncludeSkipFloor` | `$true` | Run a **second interleaved A/B leg** at `-SkipFloorPercent` and append a low-mutation skip-floor table (compare mode). Set `$false` to skip it (halves the macro runtime). |
 | `-SkipFloorPercent` | `0` | Mutation percent for the skip-floor leg. At `0` the workload still mutates one cell/tick (`StockDataSource.Update` clamps the count to `Math.Max(1, …)`), so reconcile/diff isolate the O(n) per-tick child skip-walk floor the 50% leg dilutes. |

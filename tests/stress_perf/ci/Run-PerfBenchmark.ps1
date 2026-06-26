@@ -690,7 +690,7 @@ function Invoke-MicroRun {
     $microArgs = @('--variant', 'Reactor', '--reps', $RepCount.ToString($inv),
         '--iterations', $IterCount.ToString($inv), '--out', $outJson, '--headless')
     # Per-launch budget. When the interleaver calls this with -RepCount 1 the launch runs
-    # the 13-bench suite once (each bench still does its own internal warmup + one timed
+    # the 16-bench suite once (each bench still does its own internal warmup + one timed
     # rep), so the default 180s the caller passes is sized with wide headroom over the
     # tens of seconds a single round needs at 2000 iters, while a genuine hang is still
     # bounded. (At 420s with 10000 iterations the whole-suite single launch timed out
@@ -990,6 +990,14 @@ try {
                             -Main (Read-MicroBenchResults $microInter.MainJson) `
                             -Pr (Read-MicroBenchResults $microInter.PrJson)
                         Write-Log ("  micro: {0} bench(es) compared across {1} interleaved rep(s)" -f @($micro).Count, $microInter.Reps) 'DarkGray'
+                        if (@($micro).Count -eq 0) {
+                            # >=2 paired rounds survived, but NO bench produced a comparable ok
+                            # row on both sides (every bench filtered/errored, or no benchId
+                            # overlapped) -> $micro is empty and Format-PerfMicroSection would
+                            # otherwise omit the section SILENTLY. Capture a reason so it renders
+                            # the loud callout instead, closing the last silent-omit path.
+                            $microOmitReason = 'the rep-interleave completed but no bench produced a comparable ok Reactor row on both sides'
+                        }
                     } else {
                         # Invoke-MicroInterleaved returned $null: fewer than 2 paired rounds
                         # survived (a per-round timeout, or truncated/empty output on a side).

@@ -281,7 +281,7 @@ finally {
 # ===========================================================================
 #  Micro-suite budget — iterations + per-side timeout sized to actually finish
 # ===========================================================================
-# The 13-bench suite was silently dropped from every comment because at
+# The 16-bench suite was silently dropped from every comment because at
 # -MicroIterations 10000 it ran ~3x over the per-side timeout (completed only
 # M1-M4, then Invoke-MicroRun discarded the truncated prefix). PR5a cut the inner
 # iteration count to fit the per-side budget; PR5c raised it to 2000 (still 5x under
@@ -327,6 +327,13 @@ Assert-True ($microWire -match 'Get-PerfMicroComparison') '[micro-wiring] interl
 # instead of silently vanishing (the #693 regression).
 Assert-True ($microWire -match '\$microOmitReason\s*=\s*"') '[micro-wiring] an omit reason is captured when the micro leg yields no comparison'
 Assert-True ($src -match 'Format-PerfComment .*-MicroOmitReason \$microOmitReason') '[micro-wiring] the captured omit reason threads into Format-PerfComment'
+# Every silent-omit PATH must capture a reason — one per failure mode — so none of them can
+# regress back to a vanished section. Four sites: too-few-rounds, zero comparable rows after a
+# successful interleave (the residual path PR5c added), exe-not-built, and the catch-all throw.
+Assert-True ($microWire -match 'fewer than 2 paired rounds')        '[micro-wiring] omit reason set on the interleave-null (too-few-rounds) path'
+Assert-True ($microWire -match 'no bench produced a comparable ok') '[micro-wiring] omit reason set when the interleave succeeds but yields zero comparable rows'
+Assert-True ($microWire -match 'micro exe was not built')           '[micro-wiring] omit reason set on the exe-not-found path'
+Assert-True ($microWire -match 'the micro leg threw')               '[micro-wiring] omit reason set on the thrown-leg (catch) path'
 
 # ===========================================================================
 #  Invoke-OneRun — --percent threading (-RunPercent defaults to $Percent)
