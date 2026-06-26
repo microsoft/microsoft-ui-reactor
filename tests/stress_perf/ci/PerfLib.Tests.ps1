@@ -402,8 +402,9 @@ Assert-True (-not ($noAllocComment -like '*Allocation (Reactor)*')) 'alloc table
 
 
 # ── Format-PerfSkipFloorSection + Format-PerfComment: low-mutation skip-floor ──
-# 12 paired floor runs. EVERY metric moves DOWN main->PR, but the verdicts must
-# differ BY DIRECTION: rps (higher-better) going down is a regression, while
+# 12 paired floor runs. rps, reconcile, and diff all move DOWN main->PR (memory is
+# held flat as a within-noise control), but the verdicts must differ BY DIRECTION:
+# rps (higher-better) going down is a regression, while
 # reconcile/diff (lower-better) going down are improvements — locking that the
 # section is direction-aware per metric (reusing Table 1's paired-CI machinery),
 # not hard-coded to one direction. Small jitter keeps each paired CI off 0.

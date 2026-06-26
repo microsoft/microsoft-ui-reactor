@@ -721,7 +721,7 @@ function Format-PerfSkipFloorSection {
     $lines = [System.Collections.Generic.List[string]]::new()
     $lines.Add("### Low-mutation skip-floor (``--percent $Percent``)")
     $lines.Add('')
-    $lines.Add("At ``--percent $Percent`` virtually no cell changes (the workload still mutates one cell/tick), so **reconcile/diff isolate the O(n) per-tick child skip-walk floor** &mdash; ``ChildReconciler`` re-walks every child each tick even when nothing moved. The headline table above dilutes this fixed cost; here it _is_ the signal, so a structural-skip optimization shows up cleanly. Δ is the mean paired change with a 95% CI.")
+    $lines.Add("At ``--percent $Percent`` the workload mutates few cells per tick (always at least one), so **reconcile/diff isolate the O(n) per-tick child skip-walk floor** that higher mutation rates dilute &mdash; ``ChildReconciler`` re-walks every child each tick even when nothing moved. The closer ``--percent`` is to 0, the more this floor _is_ the signal, so a structural-skip optimization shows up cleanly where the headline table above buries it. Δ is the mean paired change with a 95% CI.")
     $lines.Add('')
     $lines.Add('| Metric | `main` (baseline) | This PR | Δ (95% CI) | Status |')
     $lines.Add('|---|--:|--:|--:|:--|')
