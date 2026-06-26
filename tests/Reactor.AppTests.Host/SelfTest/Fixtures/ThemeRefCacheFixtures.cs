@@ -205,4 +205,46 @@ internal static class ThemeRefCacheFixtures
             }
         }
     }
+
+    // #86 (Copilot round-6): the PUBLIC Resolve(key, isDark) overload is UNCACHED.
+    // It has no element/theme listener and there is no public InvalidateCache, so
+    // caching it would strand a stale brush for a caller that swaps
+    // Application.Current.Resources at runtime. This guards that a runtime brush
+    // swap is observed immediately by the very next public-overload resolve, while
+    // the internal FrameworkElement Resolve stays cached (covered above).
+    internal class ThemeRefCache_PublicIsDarkOverloadUncached(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var light = NewBrush(10, 20, 30);
+            var dark = NewBrush(200, 210, 220);
+            var (merged, lightDict) = InstallThemeDictionaries(light, dark);
+            ThemeRef.InvalidateCache();
+            await Harness.Render();
+
+            try
+            {
+                // The public isDark overload resolves the right theme brush…
+                H.Check("ThemeRefPublic_ResolvesLight",
+                    ReferenceEquals(ThemeRef.Resolve(Key, isDark: false), light));
+                H.Check("ThemeRefPublic_ResolvesDark",
+                    ReferenceEquals(ThemeRef.Resolve(Key, isDark: true), dark));
+
+                // …and a runtime dictionary swap is observed IMMEDIATELY (uncached),
+                // unlike the FrameworkElement hot path which holds the old brush
+                // until InvalidateCache. No public invalidation API exists, so this
+                // overload must never cache.
+                var lightV2 = NewBrush(11, 22, 33);
+                lightDict[Key] = lightV2;
+                H.Check("ThemeRefPublic_RuntimeSwapObservedImmediately",
+                    ReferenceEquals(ThemeRef.Resolve(Key, isDark: false), lightV2));
+            }
+            finally
+            {
+                Application.Current.Resources.MergedDictionaries.Remove(merged);
+                ThemeRef.InvalidateCache();
+                H.SetContent(null);
+            }
+        }
+    }
 }
