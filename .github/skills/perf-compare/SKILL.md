@@ -58,8 +58,8 @@ reconcile/diff phase — those read *n/a*.
    (committed) and `git status --porcelain` (uncommitted). If both are empty,
    tell the user there is nothing to compare and stop.
 3. **Capability check.** The harness opens a real WinUI window. If you are
-   running on a headless box, runs will crash with `0xC000027B` right after
-   `MountAndActivate ok`. If a first run fails that way, do **not** keep
+   running on a headless box, runs will crash with `0xC000027B` during
+   first-frame window activation. If a first run fails that way, do **not** keep
    retrying — report it (see [Failure handling](#failure-handling)).
 
 ### 2. Set up the `main` baseline worktree
