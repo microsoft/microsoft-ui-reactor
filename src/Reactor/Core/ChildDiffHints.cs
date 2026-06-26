@@ -88,8 +88,13 @@ internal static class ChildDiffHints
     /// either <c>ThemeBindings</c> brushes or a ThemeRef-backed resource override.
     /// Mirrors the theme arms in <c>Reconciler.Update</c> (the only work the full
     /// walk performs for an untouched cell that a structural skip would drop).
+    /// A <c>null</c> cell is treated as non-theme-sensitive: child arrays may
+    /// legitimately contain nulls (a builder may return null; <c>ChildReconciler.Filter</c>
+    /// drops them downstream), and a null has no bindings to re-resolve — so the
+    /// theme tally must tolerate it rather than throw.
     /// </summary>
-    internal static bool IsThemeSensitive(Element element)
-        => element.ThemeBindings is not null
-           || element.ResourceOverrides is { ThemeRefs.Count: > 0 };
+    internal static bool IsThemeSensitive(Element? element)
+        => element is not null
+           && (element.ThemeBindings is not null
+               || element.ResourceOverrides is { ThemeRefs.Count: > 0 });
 }

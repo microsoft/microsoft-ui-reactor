@@ -178,6 +178,13 @@ public class ChildReconcilerStructuralSkipTests
         Assert.Null(ex);
         Assert.Equal(new[] { 2 }, coll.GetCalls); // 99 ignored, 2 visited
         Assert.Empty(coll.Structural);
+        // All 4 in-range elements end up skipped (nothing mutated): indices 0,1,3
+        // via the structural skip + index 2 via CanSkipUpdate (its fresh copy is
+        // value-equal). The fix bases the structural part on indices ACTUALLY
+        // visited — common(4) - visited(1) = 3 — so the total (3 + 1) matches the
+        // full walk. The old `common - changed.Length` = 2 undercounted the
+        // untouched range (and with more out-of-range indices could go negative).
+        Assert.Equal(4, reconciler.DebugElementsSkipped);
     }
 
     [Fact]

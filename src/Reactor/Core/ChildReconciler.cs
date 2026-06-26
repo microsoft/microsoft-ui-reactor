@@ -117,15 +117,21 @@ internal static class ChildReconciler
             && !reconciler.IsOnDirtyAncestorPath(parentControl))
         {
             var changed = hint.ChangedIndices;
+            int visited = 0;
             for (int k = 0; k < changed.Length; k++)
             {
                 int idx = changed[k];
                 if ((uint)idx >= (uint)common) continue; // defensive against a bad hint
                 UpdateCommonChild(idx, oldChildren, newChildren, children, reconciler, requestRerender);
+                visited++;
             }
-            // Untouched indices are reference-equal and skipped wholesale; keep the
-            // skipped-element diagnostic consistent with the full-walk path.
-            reconciler.DebugElementsSkipped += common - changed.Length;
+            // Untouched indices are reference-equal and skipped wholesale. Base the
+            // skipped-element diagnostic on indices ACTUALLY visited (not the raw
+            // hint length) so a defensively-ignored out-of-range index can't skew it
+            // or drive it negative. The producer publishes deduped, in-range indices,
+            // so visited == the real changed count in steady state; this only hardens
+            // the directly-supplied-hint path.
+            reconciler.DebugElementsSkipped += common - visited;
             return;
         }
 

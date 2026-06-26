@@ -526,5 +526,31 @@ public class UseMemoCellsTests
             (item, i) => { builds++; return MakeCell(item); });
         Assert.Equal(1, builds); // deduped: index 1 rebuilt once, not three times
     }
+
+    [Fact]
+    public void ByIndex_Null_Cell_Does_Not_Throw_Theme_Scan()
+    {
+        var ctx = NewCtx();
+        // A builder may legitimately return null (ChildReconciler.Filter drops nulls
+        // downstream). PR-C's theme tally inspects prev/built cells, so it MUST treat
+        // a null as non-theme-sensitive rather than NRE on element.ThemeBindings.
+        Func<int, int, Element> withNull = (item, i) => i == 1 ? null! : MakeCell(item);
+        ctx.UseMemoCellsByIndex<int>(new[] { 1, 2, 3 }, Array.Empty<int>(), withNull);
+
+        // First reuse: TryGet(prev) misses (first render publishes no hint), so the
+        // O(count) CountThemeSensitive scans the prior array — which holds a null.
+        ctx.BeginRender(() => { });
+        var r2 = ctx.UseMemoCellsByIndex<int>(new[] { 1, 2, 3 }, Array.Empty<int>(), withNull);
+        Assert.True(ChildDiffHints.TryGet(r2, out var h2));
+        Assert.Equal(0, h2!.ThemeSensitiveCount);
+        Assert.Null(r2[1]); // null cell preserved through reuse
+
+        // Change the null cell -> themed: the incremental tally reads prev[1] (null,
+        // not sensitive -> no decrement) and built (themed -> increment).
+        ctx.BeginRender(() => { });
+        var r3 = ctx.UseMemoCellsByIndex<int>(new[] { 1, 2, 3 }, new[] { 1 }, (item, i) => MakeThemedCell(item));
+        Assert.True(ChildDiffHints.TryGet(r3, out var h3));
+        Assert.Equal(1, h3!.ThemeSensitiveCount);
+    }
 }
 
