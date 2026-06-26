@@ -115,6 +115,27 @@ public class HookAllocationPerfTests
     }
 
     [Fact]
+    public void UseReducer_Redux_ThreadSafe_Cached_Dispatch_Runs_Latest_Reducer()
+    {
+        // Same "runs latest reducer" contract as above, but on the threadSafe arm:
+        // the render thread publishes the reducer with Volatile.Write (release) and
+        // the cached dispatch consumes it with Volatile.Read (acquire). A re-render
+        // that swaps the reducer must still take effect through the cached dispatch.
+        var ctx = NewCtx();
+        var (_, dispatch) = ctx.UseReducer<int, string>((s, a) => s + 1, 0, threadSafe: true);
+
+        Rerender(ctx);
+        var (_, dispatch2) = ctx.UseReducer<int, string>((s, a) => s + 10, 0, threadSafe: true);
+        Assert.Same(dispatch, dispatch2);
+
+        dispatch("go"); // held from render 1, but must run render 2's reducer (+10)
+
+        Rerender(ctx);
+        var (value, _) = ctx.UseReducer<int, string>((s, a) => s, 0, threadSafe: true);
+        Assert.Equal(10, value);
+    }
+
+    [Fact]
     public void UsePersisted_Setter_Is_Same_Instance_Across_Renders()
     {
         var ctx = NewCtx();

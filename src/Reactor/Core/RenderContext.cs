@@ -296,13 +296,26 @@ public sealed class RenderContext
         // back, so the returned dispatch is stable across renders yet always runs
         // the current reducer (the prior code returned a fresh dispatch bound to
         // that render's reducer — observably the same for the latest dispatch).
-        hook.Reducer = reducer;
+        // threadSafe correctness: a threadSafe dispatch may run on a background
+        // thread, so publish the reducer with a release write (paired with the
+        // acquire read in Dispatch) to guarantee the latest reducer is visible
+        // cross-thread on weak memory models (e.g. ARM64). The non-threadSafe path
+        // marshals dispatch onto the UI render thread, so a plain store is already
+        // correctly ordered there and pays no barrier on the common path.
+        if (hook.ThreadSafe)
+            global::System.Threading.Volatile.Write(ref hook.Reducer, (object?)reducer);
+        else
+            hook.Reducer = reducer;
         if (hook.CachedDelegate is not Action<TAction> dispatch)
         {
             void Dispatch(TAction action)
             {
                 var h = (ValueHookState<TState>)_hooks[currentIndex];
-                var currentReducer = (Func<TState, TAction, TState>)h.Reducer!;
+                // acquire-read pairs with the render-thread release write above so a
+                // cross-thread (threadSafe) dispatch observes the latest reducer;
+                // non-threadSafe dispatch already runs on the UI render thread.
+                var currentReducer = (Func<TState, TAction, TState>)(
+                    h.ThreadSafe ? global::System.Threading.Volatile.Read(ref h.Reducer) : h.Reducer)!;
                 if (h.ThreadSafe)
                 {
                     bool changed;
@@ -2447,6 +2460,9 @@ public sealed class RenderContext
         // #44: latest reducer for the UseReducer<TState,TAction> dispatch path,
         // refreshed each render so the cached dispatch always runs the current
         // reducer (matches the prior per-render-dispatch behaviour and React).
+        // For threadSafe reducers this is published/consumed with Volatile
+        // release/acquire (see UseReducer) so a cross-thread dispatch sees the
+        // latest reducer on weak memory models.
         public object? Reducer;
         public ValueHookState(T value, bool threadSafe = false)
         {
