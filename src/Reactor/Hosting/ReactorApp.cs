@@ -480,15 +480,24 @@ public static partial class ReactorApp
         Action<ReactorHost>? configure)
     {
         var window = new ReactorWindow(spec);
-        configure?.Invoke(window.Host);
-        RegisterWindow(window);
+        var registered = false;
         try
         {
+            configure?.Invoke(window.Host);
+            RegisterWindow(window);
+            registered = true;
             window.MountAndActivate(rootFactory, renderFunc);
         }
         catch
         {
-            UnregisterWindow(window);
+            // configure / register / mount failed: unwind so a throwing
+            // configure (or mount) can't leak the window — it is never
+            // returned to the caller. Unregister only if RegisterWindow
+            // actually completed (matches the OpenTrayIcon cleanup pattern).
+            if (registered)
+            {
+                UnregisterWindow(window);
+            }
             try { window.Dispose(); } catch { /* best effort */ }
             throw;
         }
