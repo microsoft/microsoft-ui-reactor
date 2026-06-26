@@ -844,4 +844,134 @@ namespace TestApp
             CodeActionEquivalenceKey = CommandDebounceAnalyzer.Id,
         }.RunAsync(TestContext.Current.CancellationToken);
     }
+
+    // ── Non-constant DebounceMs: the common runtime-value path must still fire (L3) ──
+
+    [Fact]
+    public async Task Fires_On_NonConstant_DebounceMs()
+    {
+        // The everyday shape: the debounce value comes from a method/field, not a literal, so
+        // GetConstantValue has no value and the `<= 0` guard falls through. A direct bind of such a
+        // command must still warn — a runtime value that turns out > 0 is exactly the inert case.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using Microsoft.UI.Reactor.Core;
+
+    public sealed class Comp : Component
+    {
+        void Save() { }
+        int GetDelay() => 1500;
+
+        public Element Render()
+            => Button({|REACTOR_HOOKS_009:new Command { Label = ""Save"", Execute = Save, DebounceMs = GetDelay() }|});
+    }
+}";
+
+        await new CSharpAnalyzerTest<CommandDebounceAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    // ── Deliberate M1 conservatism: a Reactor UseCommand anywhere suppresses, even if also bound raw (L4) ──
+
+    [Fact]
+    public async Task No_Diagnostic_When_Reactor_UseCommand_Discarded_But_Also_Bound_Raw()
+    {
+        // Locks the documented false negative: the command flows through Reactor's UseCommand (return
+        // discarded) AND is bound raw to Button. Suppressing on any UseCommand usage is what prevents
+        // a false positive on the idiomatic `save = UseCommand(save)` reassignment, so this narrow FN
+        // is accepted by design. A future change must not silently flip it without updating this test.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using Microsoft.UI.Reactor.Core;
+
+    public sealed class Comp : Component
+    {
+        void Save() { }
+
+        public Element Render()
+        {
+            var save = new Command { Label = ""Save"", Execute = Save, DebounceMs = 1500 };
+            UseCommand(save);
+            return Button(save);
+        }
+    }
+}";
+
+        await new CSharpAnalyzerTest<CommandDebounceAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    // ── Code fix: implicit generic new with a conflicting Command<T> imported (H1 regression) ──
+
+    [Fact]
+    public async Task CodeFix_Qualifies_Type_When_Conflicting_Command_In_Scope()
+    {
+        // H1 regression: rewriting a target-typed `new()` to an explicit type with a purely syntactic
+        // minimal name would emit a bare `Command<int>` — CS0104-ambiguous when a second `Command<T>`
+        // is imported, breaking code that compiled before the fix. The position-aware
+        // ToMinimalDisplayString qualifies just enough to stay unambiguous. The CodeFixTest harness
+        // compiles FixedCode, so a CS0104 here would fail the test — this locks the fix.
+        var before = Stubs + @"
+namespace Conflict
+{
+    public sealed record Command<T>
+    {
+        public string Label { get; init; }
+        public System.Action<T> Execute { get; init; }
+        public int DebounceMs { get; init; }
+    }
+}
+
+namespace TestApp
+{
+    using Microsoft.UI.Reactor.Core;
+    using Conflict;
+
+    public sealed class Comp : Component
+    {
+        void Delete(int id) { }
+
+        public Element Render()
+            => MenuItem({|REACTOR_HOOKS_009:new() { Label = ""Delete"", Execute = Delete, DebounceMs = 1 }|}, 5);
+    }
+}";
+
+        var after = Stubs + @"
+namespace Conflict
+{
+    public sealed record Command<T>
+    {
+        public string Label { get; init; }
+        public System.Action<T> Execute { get; init; }
+        public int DebounceMs { get; init; }
+    }
+}
+
+namespace TestApp
+{
+    using Microsoft.UI.Reactor.Core;
+    using Conflict;
+
+    public sealed class Comp : Component
+    {
+        void Delete(int id) { }
+
+        public Element Render()
+            => MenuItem(UseCommand(new Microsoft.UI.Reactor.Core.Command<int> { Label = ""Delete"", Execute = Delete, DebounceMs = 1 }), 5);
+    }
+}";
+
+        await new CSharpCodeFixTest<CommandDebounceAnalyzer, CommandDebounceCodeFix, DefaultVerifier>
+        {
+            TestCode = before,
+            FixedCode = after,
+            CodeActionEquivalenceKey = CommandDebounceAnalyzer.Id,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
 }

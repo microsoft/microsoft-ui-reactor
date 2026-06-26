@@ -98,7 +98,20 @@ public sealed class CommandDebounceAnalyzer : DiagnosticAnalyzer
         // itself when used inline, or every reference to the local it initializes.
         var usages = CollectUsages(node, ctx);
 
-        // Routed through UseCommand anywhere → correct usage, suppress.
+        // Routed through UseCommand anywhere → treat as correct usage and suppress.
+        //
+        // This deliberately suppresses even when the command is ALSO bound raw elsewhere with the
+        // UseCommand return value discarded (e.g. `UseCommand(save); Button(save);`). That is an
+        // accepted, intentional false negative — not an oversight. RenderContext.UseCommand returns
+        // a NEW `command with { …, DebounceHandled = true }` and does not mutate its argument, so the
+        // idiomatic correct usage rebinds the SAME local: `save = UseCommand(save); Button(save);`.
+        // Suppressing on any UseCommand usage is what keeps that reassignment pattern from drawing a
+        // false POSITIVE — and a false positive erodes trust far more than this narrow false negative.
+        // #636 explicitly accepts conservatism, and the real footgun (no UseCommand at all) is caught.
+        //
+        // Future enhancement (intentionally NOT implemented here — scope creep for this rule): a
+        // strictly FP-safe narrowing could warn only when the SOLE UseCommand usage discards its
+        // return value (a bare `UseCommand(x);` expression statement is always a misuse).
         if (AnyArgumentTo(usages, isUseCommand: true, ctx)) return;
 
         // Bound to a Reactor control binding without UseCommand → report at the initializer.
@@ -174,6 +187,12 @@ public sealed class CommandDebounceAnalyzer : DiagnosticAnalyzer
         // larger expression (`f(usage.Label)` reads a member and is not a command bind). Project
         // each usage to its enclosing invocation and filter out the ones that aren't direct args.
         // ClimbParentheses keeps `f((usage))` recognized as a direct bind.
+        //
+        // Known limitation (accepted): a command passed inside a collection/array rather than as a
+        // direct scalar argument — e.g. `CommandHost(new[] { cmd }, child)` (Dsl.cs) — is not
+        // tracked, so a debounced command bound only that way is a false negative. Such commands are
+        // keyboard accelerators and rarely debounced; widening to array elements would enlarge the
+        // heuristic's false-positive surface for little gain, so it is intentionally left out.
         return usages
             .Select(static usage => ClimbParentheses(usage).Parent is ArgumentSyntax { Parent: ArgumentListSyntax { Parent: InvocationExpressionSyntax invocation } }
                 ? invocation
@@ -222,6 +241,13 @@ public sealed class CommandDebounceAnalyzer : DiagnosticAnalyzer
         // in a Reactor namespace (a Dsl factory or the `.Command(...)` modifier). A resolved callee
         // in any other namespace is an unrelated API that merely shares a name (someone else's
         // `Button`/`MenuItem`/`.Command(...)`) — not a Reactor bind — so we must not warn on it.
+        //
+        // Assumption (verified for the current API surface): every public method in the Reactor
+        // namespaces that takes a single Command argument IS a binding sink (the Dsl factories +
+        // the `.Command(...)` modifier); the lone non-bind is `internal CommandBindings.Invoke`,
+        // which is unreachable from user code, and `UseCommand` is excluded by the caller. So a
+        // namespace match here is a safe proxy for "is a bind." Revisit (whitelist actual binding
+        // APIs) if a *public* non-bind Command-taking API is ever added to a Reactor namespace.
         if (ctx.SemanticModel.GetSymbolInfo(invocation, ctx.CancellationToken).Symbol is IMethodSymbol method)
             return IsReactorNamespace(method.ContainingNamespace?.ToDisplayString());
 

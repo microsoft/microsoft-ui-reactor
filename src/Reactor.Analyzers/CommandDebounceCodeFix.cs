@@ -77,7 +77,7 @@ public sealed class CommandDebounceCodeFix : CodeFixProvider
                 var type = semanticModel.GetTypeInfo(implicitNew, context.CancellationToken).Type;
                 if (type is null || type.TypeKind == TypeKind.Error) continue;
 
-                var explicitNew = MakeExplicit(implicitNew, type);
+                var explicitNew = MakeExplicit(implicitNew, type, semanticModel);
                 if (explicitNew is null) continue;
                 replacement = explicitNew;
             }
@@ -107,11 +107,21 @@ public sealed class CommandDebounceCodeFix : CodeFixProvider
     /// using the resolved <paramref name="type"/>, preserving the original initializer (and any
     /// constructor arguments) verbatim so the wrapped result still compiles.
     /// </summary>
+    /// <remarks>
+    /// The type name is rendered with <see cref="SymbolDisplayExtensions.ToMinimalDisplayString"/>,
+    /// which asks Roslyn's reducer for the shortest name that is unambiguous <i>at this position</i>.
+    /// In the common case it stays <c>Command&lt;int&gt;</c>; if a second <c>Command</c>/<c>Command&lt;T&gt;</c>
+    /// is imported it adds exactly enough qualification (up to the fully-qualified
+    /// <c>Microsoft.UI.Reactor.Core.Command&lt;int&gt;</c>) to avoid a <c>CS0104</c> ambiguity, so the
+    /// emitted fix always compiles. A purely syntactic <c>MinimallyQualifiedFormat</c> would emit a
+    /// bare <c>Command&lt;int&gt;</c> that could bind the wrong type or be ambiguous — i.e. break code
+    /// that previously compiled.
+    /// </remarks>
     private static ObjectCreationExpressionSyntax MakeExplicit(
-        ImplicitObjectCreationExpressionSyntax implicitNew, ITypeSymbol type)
+        ImplicitObjectCreationExpressionSyntax implicitNew, ITypeSymbol type, SemanticModel semanticModel)
     {
         var typeSyntax = SyntaxFactory.ParseTypeName(
-            type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat));
+            type.ToMinimalDisplayString(semanticModel, implicitNew.SpanStart));
 
         ArgumentListSyntax? argumentList = implicitNew.ArgumentList;
         if (argumentList is null || argumentList.Arguments.Count == 0)
