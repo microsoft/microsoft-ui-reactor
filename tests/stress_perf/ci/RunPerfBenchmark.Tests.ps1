@@ -249,28 +249,34 @@ function Start-Process {
 }
 function Start-Sleep { param([int]$Seconds, [int]$Milliseconds) }   # no-op: skip the post-kill settle wait
 
-# A. clean exit 0 + non-empty output -> returns the jsonl path.
-$global:MicroWaitResult = $true; $global:MicroExit = 0; $global:MicroWriteContent = '{"benchId":"M1"}'
-$resA = Invoke-MicroRun -Exe 'x.exe' -Tag 'okrun' -RepCount 2 -IterCount 10
-Assert-True ($resA -eq (Join-Path $OutDir 'micro-okrun.jsonl')) '[micro] clean exit 0 + output -> returns jsonl path'
+# Wrap the scenarios in try/finally so the stub functions are removed deterministically:
+# if any assertion throws, an un-finally'd Remove-Item would be skipped and the
+# Start-Process / Start-Sleep stubs would leak into the rest of the script.
+try {
+    # A. clean exit 0 + non-empty output -> returns the jsonl path.
+    $global:MicroWaitResult = $true; $global:MicroExit = 0; $global:MicroWriteContent = '{"benchId":"M1"}'
+    $resA = Invoke-MicroRun -Exe 'x.exe' -Tag 'okrun' -RepCount 2 -IterCount 10
+    Assert-True ($resA -eq (Join-Path $OutDir 'micro-okrun.jsonl')) '[micro] clean exit 0 + output -> returns jsonl path'
 
-# B. timeout (WaitForExit=$false) + partial output present -> $null (truncated prefix discarded).
-$global:MicroWaitResult = $false; $global:MicroExit = 0; $global:MicroWriteContent = '{"benchId":"M1"}'
-$resB = Invoke-MicroRun -Exe 'x.exe' -Tag 'timeoutrun' -RepCount 2 -IterCount 10
-Assert-True ($null -eq $resB) '[micro] timeout + partial output -> $null (truncated prefix discarded)'
+    # B. timeout (WaitForExit=$false) + partial output present -> $null (truncated prefix discarded).
+    $global:MicroWaitResult = $false; $global:MicroExit = 0; $global:MicroWriteContent = '{"benchId":"M1"}'
+    $resB = Invoke-MicroRun -Exe 'x.exe' -Tag 'timeoutrun' -RepCount 2 -IterCount 10
+    Assert-True ($null -eq $resB) '[micro] timeout + partial output -> $null (truncated prefix discarded)'
 
-# C. non-zero exit + non-empty output -> $null (a crash leaves a silent subset).
-$global:MicroWaitResult = $true; $global:MicroExit = 3; $global:MicroWriteContent = '{"benchId":"M1"}'
-$resC = Invoke-MicroRun -Exe 'x.exe' -Tag 'crashrun' -RepCount 2 -IterCount 10
-Assert-True ($null -eq $resC) '[micro] non-zero exit + output -> $null (truncated prefix discarded)'
+    # C. non-zero exit + non-empty output -> $null (a crash leaves a silent subset).
+    $global:MicroWaitResult = $true; $global:MicroExit = 3; $global:MicroWriteContent = '{"benchId":"M1"}'
+    $resC = Invoke-MicroRun -Exe 'x.exe' -Tag 'crashrun' -RepCount 2 -IterCount 10
+    Assert-True ($null -eq $resC) '[micro] non-zero exit + output -> $null (truncated prefix discarded)'
 
-# D. clean exit 0 but NO output file written -> $null (nothing produced).
-$global:MicroWaitResult = $true; $global:MicroExit = 0; $global:MicroWriteContent = $null
-$resD = Invoke-MicroRun -Exe 'x.exe' -Tag 'emptyrun' -RepCount 2 -IterCount 10
-Assert-True ($null -eq $resD) '[micro] clean exit but empty/no output -> $null'
-
-Remove-Item function:Start-Process -ErrorAction SilentlyContinue
-Remove-Item function:Start-Sleep -ErrorAction SilentlyContinue
+    # D. clean exit 0 but NO output file written -> $null (nothing produced).
+    $global:MicroWaitResult = $true; $global:MicroExit = 0; $global:MicroWriteContent = $null
+    $resD = Invoke-MicroRun -Exe 'x.exe' -Tag 'emptyrun' -RepCount 2 -IterCount 10
+    Assert-True ($null -eq $resD) '[micro] clean exit but empty/no output -> $null'
+}
+finally {
+    Remove-Item function:Start-Process -ErrorAction SilentlyContinue
+    Remove-Item function:Start-Sleep -ErrorAction SilentlyContinue
+}
 
 # cleanup
 foreach ($d in @($baseTree, $prTree, $OutDir, $exeDir)) {
