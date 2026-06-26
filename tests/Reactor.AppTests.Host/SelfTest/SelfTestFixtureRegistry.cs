@@ -893,6 +893,8 @@ internal static class SelfTestFixtureRegistry
         "Commanding_BareInitButtonDisabledFocusableCoercionPreserved",
         "Commanding_BareInitHyperlinkRepeatSplitInvokeExecute",
         "Commanding_BareInitAllElementsApplyDisabledFromCommand",
+        "Commanding_BareInitNoneToCommandDispatchesOnClickAfterUpdate",
+        "Commanding_IsDisabledFocusableReappliesOnIsolatedFlip",
 
         // Drag-and-drop — spec 027 Tier 6 (Phase 6a)
         "DragDrop_OnDragStartAutoSetsCanDrag",
@@ -2333,6 +2335,8 @@ internal static class SelfTestFixtureRegistry
         "Commanding_BareInitButtonDisabledFocusableCoercionPreserved" => new CommandingCoverageFixtures.BareInitButtonDisabledFocusableCoercionPreserved(harness),
         "Commanding_BareInitHyperlinkRepeatSplitInvokeExecute" => new CommandingCoverageFixtures.BareInitHyperlinkRepeatSplitInvokeExecute(harness),
         "Commanding_BareInitAllElementsApplyDisabledFromCommand" => new CommandingCoverageFixtures.BareInitAllElementsApplyDisabledFromCommand(harness),
+        "Commanding_BareInitNoneToCommandDispatchesOnClickAfterUpdate" => new CommandingCoverageFixtures.BareInitNoneToCommandDispatchesOnClickAfterUpdate(harness),
+        "Commanding_IsDisabledFocusableReappliesOnIsolatedFlip" => new CommandingCoverageFixtures.IsDisabledFocusableReappliesOnIsolatedFlip(harness),
 
         // Drag-and-drop — spec 027 Tier 6 (Phase 6a)
         "DragDrop_OnDragStartAutoSetsCanDrag" => new DragDropFixtures.OnDragStartAutoSetsCanDrag(harness),

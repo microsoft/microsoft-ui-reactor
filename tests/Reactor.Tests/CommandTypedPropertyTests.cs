@@ -526,6 +526,21 @@ public class CommandTypedPropertyTests
         Assert.False(Element.ShallowEquals(before, after)); // forces re-apply on reconcile
     }
 
+    // issue #710 review (M2) — IsDisabledFocusable is a SECOND Button enabled-state input: it
+    // coerces the live control to IsEnabled=true + Opacity=0.4 (focusable-dim) instead of
+    // hard-disabled. Like the command-derived IsEnabled folded into CommandsEqual (M1 above),
+    // an isolated flip must break ShallowEquals so the fast-path doesn't skip the descriptor and
+    // leave the control stale. Steady state (same IsDisabledFocusable) still fast-paths. The live
+    // re-apply is CommandingCoverageFixtures.IsDisabledFocusableReappliesOnIsolatedFlip.
+    [Fact]
+    public void ShallowEquals_False_When_Only_IsDisabledFocusable_Differs()
+    {
+        var hardDisabled = new ButtonElement("Submit") { IsEnabled = false };
+        var focusable = hardDisabled with { IsDisabledFocusable = true };
+        Assert.False(Element.ShallowEquals(hardDisabled, focusable));       // forces descriptor re-apply
+        Assert.True(Element.ShallowEquals(hardDisabled, hardDisabled with { })); // steady state still skips
+    }
+
     // M2 — HasCallbacks and the subscription gate now share one Invokable-based predicate
     //      (EffectiveCallback), so a metadata-only command (no Execute/ExecuteAsync) is NOT
     //      a callback source: the click event stays unsubscribed and the button is untagged.
@@ -583,23 +598,21 @@ public class CommandTypedPropertyTests
         Assert.Equal(1, cmdCount);
     }
 
-    // M4 — none → command transition. A plain button (no command, untagged) re-rendered WITH
-    //      a command flips HasCallbacks false→true, so the reconciler's HasCallbacks gate forces
-    //      a full Update that subscribes the click event; the now-bound command dispatches.
+    // M4 — none → command transition (headless gate-signal guard; the live reconcile + real click
+    //      is CommandingCoverageFixtures.BareInitNoneToCommandDispatchesOnClickAfterUpdate). A plain
+    //      button (no command, untagged, click unsubscribed) re-rendered WITH a command flips
+    //      HasCallbacks false→true and is not ShallowEqual, so the reconciler's HasCallbacks gate
+    //      forces a full Update that subscribes the click event on the reused control.
     [Fact]
-    public void Transition_None_To_Command_Subscribes_And_Dispatches()
+    public void Transition_None_To_Command_Flips_HasCallbacks_And_Breaks_ShallowEquals()
     {
-        int count = 0;
-        var cmd = MakeCmd(() => count++);
+        var cmd = MakeCmd();
 
         var none = Button("Save");
-        Assert.False(none.HasCallbacks);                  // not tagged, click event unsubscribed
+        Assert.False(none.HasCallbacks);                  // untagged, click event unsubscribed
 
         var bound = new ButtonElement("Save") { Command = cmd };
-        Assert.True(bound.HasCallbacks);                  // update subscribes the click handler
-        Assert.False(Element.ShallowEquals(none, bound)); // not ShallowEqual ⇒ full Update runs
-
-        CommandBindings.Invoke(bound.Command!);
-        Assert.Equal(1, count);
+        Assert.True(bound.HasCallbacks);                  // update will subscribe the click handler
+        Assert.False(Element.ShallowEquals(none, bound)); // not ShallowEqual ⇒ full Update runs (subscribe-on-update)
     }
 }

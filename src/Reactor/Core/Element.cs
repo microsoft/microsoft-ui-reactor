@@ -436,6 +436,12 @@ public abstract record Element
             (ButtonElement ba, ButtonElement bb) =>
                 ba.Label == bb.Label
                 && ba.IsEnabled == bb.IsEnabled
+                // IsDisabledFocusable is a second Button enabled-state input (it coerces
+                // IsEnabled=true + Opacity=0.4 in the descriptor). Like the command-derived
+                // IsEnabled folded into CommandsEqual (issue #637 M1), an isolated flip must
+                // break equality so the descriptor re-applies the focusable-dim vs hard-disabled
+                // state — otherwise the live control goes stale on the fast-path skip.
+                && ba.IsDisabledFocusable == bb.IsDisabledFocusable
                 && ba.ContentElement is null && bb.ContentElement is null
                 && CommandBindings.CommandsEqual(ba.Command, bb.Command)
                 && SettersEqual(ba.Setters, bb.Setters),

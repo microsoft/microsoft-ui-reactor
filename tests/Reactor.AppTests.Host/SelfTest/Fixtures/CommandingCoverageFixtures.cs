@@ -784,4 +784,94 @@ internal static class CommandingCoverageFixtures
             H.Check("BareInitTs_CommandInvokedOnEachToggle", count == 2);
         }
     }
+
+    /// <summary>
+    /// Issue #710 review (M4) — the none → command transition at the LIVE tier. A plain
+    /// <c>Button("Run")</c> (no command, untagged, Click unsubscribed) is re-rendered as a
+    /// command-bound button across a state-driven update. The reconciler reuses the control and
+    /// subscribes the Click handler ON UPDATE (HasCallbacks false→true), so a real click then
+    /// dispatches the command — proving subscribe-on-update + dispatch, not a manual Invoke.
+    /// </summary>
+    internal class BareInitNoneToCommandDispatchesOnClickAfterUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            int count = 0;
+            var cmd = new Command { Label = "Run", Execute = () => count++ };
+
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (bound, setBound) = ctx.UseState(false);
+                return VStack(
+                    Button("toggleM4Bind", () => setBound(true)),
+                    bound
+                        ? new ButtonElement("Run") { Command = cmd }
+                        : Button("Run"));
+            });
+            await Harness.Render();
+
+            var before = H.FindControl<Button>(b => (b.Content as string) == "Run");
+            H.Check("M4None_Mounted", before is not null);
+
+            // No command yet: the plain button is untagged / Click unsubscribed, so clicking is inert.
+            H.ClickButton("Run");
+            await Harness.Render();
+            H.Check("M4None_InertBeforeBind", count == 0);
+
+            // Re-render WITH the command bound — the reconciler subscribes Click on update.
+            H.ClickButton("toggleM4Bind");
+            await Harness.Render();
+
+            var after = H.FindControl<Button>(b => (b.Content as string) == "Run");
+            H.Check("M4None_Reused", before is not null && ReferenceEquals(before, after));
+
+            // The now-bound command dispatches on a real click (subscribe-on-update worked).
+            H.ClickButton("Run");
+            await Harness.Render();
+            H.Check("M4None_DispatchesAfterBind", count == 1);
+        }
+    }
+
+    /// <summary>
+    /// Issue #710 review (M2) — an isolated <c>IsDisabledFocusable</c> flip must re-apply at the
+    /// LIVE tier. A bare <c>new ButtonElement("Submit") { IsEnabled = false }</c> (hard-disabled:
+    /// IsEnabled=false, full opacity) flips ONLY IsDisabledFocusable across a state-driven update.
+    /// No <c>.Set</c> is used, so the empty Setters array stays reference-stable and
+    /// IsDisabledFocusable is the single differing field — without the ShallowEquals fix the
+    /// fast-path skipped this and left the control hard-disabled; now the descriptor re-applies the
+    /// focusable-dim coercion (IsEnabled=true + Opacity=0.4). The control is reused, so this is a
+    /// true re-apply, not a remount. Twin of the debounce M1 re-disable guard.
+    /// </summary>
+    internal class IsDisabledFocusableReappliesOnIsolatedFlip(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (focusable, setFocusable) = ctx.UseState(false);
+                return VStack(
+                    Button("toggleIdf", () => setFocusable(true)),
+                    // No .Set — keep Setters reference-stable so ONLY IsDisabledFocusable differs
+                    // across the update (a .Set would allocate a fresh Setters array each render and
+                    // defeat the isolation, masking the fast-path fix).
+                    new ButtonElement("Submit") { IsEnabled = false, IsDisabledFocusable = focusable });
+            });
+            await Harness.Render();
+
+            var before = H.FindControl<Button>(b => (b.Content as string) == "Submit");
+            H.Check("IdfReapply_Mounted", before is not null);
+            H.Check("IdfReapply_InitiallyHardDisabled", before is not null && !before.IsEnabled);
+
+            H.ClickButton("toggleIdf");
+            await Harness.Render();
+
+            var after = H.FindControl<Button>(b => (b.Content as string) == "Submit");
+            H.Check("IdfReapply_Reused", before is not null && ReferenceEquals(before, after));
+            // The isolated flip re-applied: focusable-dim coercion (IsEnabled stays true, dimmed).
+            H.Check("IdfReapply_FocusableAfterUpdate", after is not null && after.IsEnabled);
+            H.Check("IdfReapply_DimmedAfterUpdate", after is not null && global::System.Math.Abs(after.Opacity - 0.4) < 0.001);
+        }
+    }
 }

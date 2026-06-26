@@ -297,25 +297,34 @@ public class CommandModifierTests
     }
 
     [Fact]
-    public void Command_Modifier_Clears_Conflicting_HyperlinkButton_OnClick()
+    public void Command_Modifier_Clears_Conflicting_HyperlinkButton_OnClick_Command_Wins()
     {
-        var cmd = new Command { Label = "Go", Execute = () => { } };
+        int onClickCount = 0, cmdCount = 0;
+        var cmd = new Command { Label = "Go", Execute = () => cmdCount++ };
 
-        var el = HyperlinkButton("Go", onClick: () => { }).Command(cmd);
+        var el = HyperlinkButton("Go", onClick: () => onClickCount++).Command(cmd);
 
-        Assert.Null(el.OnClick);
+        Assert.Null(el.OnClick);              // the modifier cleared the conflicting click handler
         Assert.Same(cmd, el.Command);
+        // OnClick null ⇒ the click trampoline invokes the command, not the original onClick.
+        CommandBindings.Invoke(el.Command!);
+        Assert.Equal(1, cmdCount);
+        Assert.Equal(0, onClickCount);
     }
 
     [Fact]
-    public void Command_Modifier_Clears_Conflicting_RepeatButton_OnClick()
+    public void Command_Modifier_Clears_Conflicting_RepeatButton_OnClick_Command_Wins()
     {
-        var cmd = new Command { Label = "Tick", Execute = () => { } };
+        int onClickCount = 0, cmdCount = 0;
+        var cmd = new Command { Label = "Tick", Execute = () => cmdCount++ };
 
-        var el = RepeatButton("Tick", () => { }).Command(cmd);
+        var el = RepeatButton("Tick", () => onClickCount++).Command(cmd);
 
         Assert.Null(el.OnClick);
         Assert.Same(cmd, el.Command);
+        CommandBindings.Invoke(el.Command!);
+        Assert.Equal(1, cmdCount);
+        Assert.Equal(0, onClickCount);
     }
 
     [Fact]
