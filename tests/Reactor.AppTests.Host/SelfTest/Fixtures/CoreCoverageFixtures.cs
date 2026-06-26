@@ -751,7 +751,7 @@ internal static class CoreCoverageFixtures
                             .Landmark(Microsoft.UI.Xaml.Automation.Peers.AutomationLandmarkType.Main)
                     );
                 }
-                else
+                else if (phase == 1)
                 {
                     return VStack(
                         Button("UpdateA11y", () => set(2)),
@@ -768,6 +768,19 @@ internal static class CoreCoverageFixtures
                             .TabNavigation(Microsoft.UI.Xaml.Input.KeyboardNavigationMode.Cycle)
                     );
                 }
+                else
+                {
+                    // phase 2: the .AutomationName() override is removed while the caption
+                    // ("Accessible") is unchanged. ApplyModifiers clears the live UIA Name;
+                    // the P3 idempotent-write guard must still restore the caption-derived
+                    // default (current "" != caption => a real write) rather than leave the
+                    // Name empty. Exercises the live seam's restore-default branch end-to-end.
+                    return VStack(
+                        Button("UpdateA11y", () => set(3)),
+                        TextBlock("Accessible")
+                            .HelpText("Updated help text")
+                    );
+                }
             });
 
             await Harness.Render();
@@ -776,6 +789,9 @@ internal static class CoreCoverageFixtures
             H.Check("A11y_Mounted", tb is not null);
             H.Check("A11y_HelpText",
                 Microsoft.UI.Xaml.Automation.AutomationProperties.GetHelpText(tb!) == "This is help text");
+            // The author-set .AutomationName() override wins over the caption default at mount.
+            H.Check("A11y_Name_Override",
+                Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(tb!) == "test-text");
 
             // Update accessibility modifiers
             H.ClickButton("UpdateA11y");
@@ -786,6 +802,19 @@ internal static class CoreCoverageFixtures
             H.Check("A11y_LiveSetting",
                 Microsoft.UI.Xaml.Automation.AutomationProperties.GetLiveSetting(tb!) ==
                 Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
+            // A changed override still flows through (the author name updates, not the caption).
+            H.Check("A11y_Name_OverrideUpdated",
+                Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(tb!) == "test-text-updated");
+
+            // Remove the .AutomationName() override with the caption unchanged. ApplyModifiers
+            // clears the Name; the P3 guard (live seam) must restore the caption-derived default
+            // "Accessible" rather than leave it empty. TEETH: a blanket unchanged-caption skip
+            // (or dropping the live SetName) leaves the Name cleared here and this flips.
+            H.ClickButton("UpdateA11y");
+            await Harness.Render();
+            tb = H.FindText("Accessible");
+            H.Check("A11y_Name_RestoredToCaptionDefault",
+                Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(tb!) == "Accessible");
         }
     }
 
