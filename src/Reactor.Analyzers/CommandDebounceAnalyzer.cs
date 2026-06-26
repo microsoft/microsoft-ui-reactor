@@ -115,18 +115,10 @@ public sealed class CommandDebounceAnalyzer : DiagnosticAnalyzer
         _ => null,
     };
 
-    private static AssignmentExpressionSyntax? FindDebounceAssignment(InitializerExpressionSyntax initializer)
-    {
-        foreach (var expr in initializer.Expressions)
-        {
-            if (expr is AssignmentExpressionSyntax a
-                && a.Left is IdentifierNameSyntax { Identifier.ValueText: "DebounceMs" })
-            {
-                return a;
-            }
-        }
-        return null;
-    }
+    private static AssignmentExpressionSyntax? FindDebounceAssignment(InitializerExpressionSyntax initializer) =>
+        initializer.Expressions
+            .OfType<AssignmentExpressionSyntax>()
+            .FirstOrDefault(static a => a.Left is IdentifierNameSyntax { Identifier.ValueText: "DebounceMs" });
 
     private static bool IsReactorCommandType(ITypeSymbol? type)
     {
@@ -153,14 +145,15 @@ public sealed class CommandDebounceAnalyzer : DiagnosticAnalyzer
             var scope = node.FirstAncestorOrSelf<BlockSyntax>();
             if (scope is not null)
             {
-                var refs = new List<ExpressionSyntax>();
-                foreach (var id in scope.DescendantNodes().OfType<IdentifierNameSyntax>())
-                {
-                    if (id.Identifier.ValueText != local.Name) continue;
-                    var symbol = ctx.SemanticModel.GetSymbolInfo(id, ctx.CancellationToken).Symbol;
-                    if (SymbolEqualityComparer.Default.Equals(symbol, local))
-                        refs.Add(id);
-                }
+                // Cheap syntactic name match first, then the semantic symbol check — the .Where
+                // order preserves that short-circuit so GetSymbolInfo only runs on name matches.
+                var refs = scope.DescendantNodes()
+                    .OfType<IdentifierNameSyntax>()
+                    .Where(id => id.Identifier.ValueText == local.Name)
+                    .Where(id => SymbolEqualityComparer.Default.Equals(
+                        ctx.SemanticModel.GetSymbolInfo(id, ctx.CancellationToken).Symbol, local))
+                    .Cast<ExpressionSyntax>()
+                    .ToList();
                 if (refs.Count > 0) return refs;
             }
         }
@@ -175,27 +168,23 @@ public sealed class CommandDebounceAnalyzer : DiagnosticAnalyzer
     /// </summary>
     private static bool AnyArgumentTo(List<ExpressionSyntax> usages, bool isUseCommand, SyntaxNodeAnalysisContext ctx)
     {
-        foreach (var usage in usages)
-        {
-            // The usage must be passed *directly* as an argument (`f(usage)`), not as part of a
-            // larger expression (`f(usage.Label)` reads a member and is not a command bind).
-            if (usage.Parent is not ArgumentSyntax arg) continue;
-            if (arg.Parent is not ArgumentListSyntax argList) continue;
-            if (argList.Parent is not InvocationExpressionSyntax invocation) continue;
-
-            var calleeName = GetInvokedName(invocation);
-            var calleeIsUseCommand = calleeName == UseCommandName;
-
-            if (isUseCommand)
+        // The usage must be passed *directly* as an argument (`f(usage)`), not as part of a
+        // larger expression (`f(usage.Label)` reads a member and is not a command bind). Project
+        // each usage to its enclosing invocation and filter out the ones that aren't direct args.
+        return usages
+            .Select(static usage => usage.Parent is ArgumentSyntax { Parent: ArgumentListSyntax { Parent: InvocationExpressionSyntax invocation } }
+                ? invocation
+                : null)
+            .Where(static invocation => invocation is not null)
+            .Any(invocation =>
             {
-                if (calleeIsUseCommand) return true;
-            }
-            else if (!calleeIsUseCommand && IsReactorBinding(invocation, calleeName, ctx))
-            {
-                return true;
-            }
-        }
-        return false;
+                var calleeName = GetInvokedName(invocation!);
+                var calleeIsUseCommand = calleeName == UseCommandName;
+
+                return isUseCommand
+                    ? calleeIsUseCommand
+                    : !calleeIsUseCommand && IsReactorBinding(invocation!, calleeName, ctx);
+            });
     }
 
     private static bool IsReactorBinding(InvocationExpressionSyntax invocation, string? calleeName, SyntaxNodeAnalysisContext ctx)
