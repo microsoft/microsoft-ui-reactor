@@ -40,9 +40,10 @@ public static class UseElementFocusExtensions
         //   • the dispatcher is resolved a single time (it never changes for the
         //     component's UI thread), and
         //   • the closure is allocated once and reused; the latest `state` is
-        //     written into the cache each render (a cheap field store, no
-        //     allocation) and read at invoke time, so focus still uses the
-        //     current render's focus state.
+        //     written into the cache each render (a cheap volatile field store,
+        //     no allocation) and read at invoke time, so focus still uses the
+        //     current render's focus state. The cache fields are `volatile` so a
+        //     background-thread invoke sees the latest values (see FocusHookCache).
         var cacheRef = ctx.UseRef<FocusHookCache?>(null);
         var cache = cacheRef.Current;
         if (cache is null)
@@ -77,8 +78,15 @@ public static class UseElementFocusExtensions
 
     private sealed class FocusHookCache
     {
-        public Microsoft.UI.Dispatching.DispatcherQueue? UiQueue;
-        public FocusState State;
+        // RequestFocus may be invoked from a background thread (task continuations),
+        // while UiQueue (write-once at construction) and State (refreshed each render)
+        // are written on the UI render thread. `volatile` gives those cross-thread
+        // reads/writes release/acquire semantics so a background invoke never observes
+        // a stale UiQueue (e.g. a spurious null -> a wrong synchronous off-thread
+        // focus) or an outdated FocusState on a weak memory model (e.g. ARM64).
+        // RequestFocus itself is write-once and only read on the render thread.
+        public volatile Microsoft.UI.Dispatching.DispatcherQueue? UiQueue;
+        public volatile FocusState State;
         public Action RequestFocus = default!;
     }
 
