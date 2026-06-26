@@ -120,6 +120,7 @@ Reactor equivalents.
 - `RequestedThemeSetAnalyzer.cs` — REACTOR_THEME_003
 - `MissingWithKeyAnalyzer.cs` — REACTOR_DSL_001
 - `UseMemoCellsAnalyzer.cs` — REACTOR_HOOKS_007
+- `CommandDebounceAnalyzer.cs` — REACTOR_HOOKS_009
 - (After Phase 1.8: `XmlDocSummaryAnalyzer.cs`, `XmlDocCrefAnalyzer.cs`
   for REACTOR_DOC_001 / 002)
 

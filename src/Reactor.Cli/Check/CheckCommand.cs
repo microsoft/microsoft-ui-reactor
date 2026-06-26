@@ -406,6 +406,7 @@ public static class CheckCommand
             "REACTOR_HOOKS_004" => "SKILL.md §Hooks (memoize deps; never freshly allocated)",
             "REACTOR_HOOKS_005" => "SKILL.md §Hooks (only from Render or a Use* method)",
             "REACTOR_HOOKS_006" => "skills/async.md §1 (UseResource is reads-only — use UseMutation)",
+            "REACTOR_HOOKS_009" => "docs/guide/commanding.md (route a DebounceMs command through UseCommand)",
             "REACTOR_THEME_001" => "skills/design.md §1 (use Theme tokens, not hex)",
             "REACTOR_THEME_002" => "skills/design.md §1 (use Theme tokens, not hex)",
             "REACTOR_A11Y_001"  => "skills/design.md §a11y (set AutomationName on icon-only controls)",
