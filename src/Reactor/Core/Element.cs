@@ -312,6 +312,8 @@ public abstract record Element
             _value = value;
         }
         public object this[Type key] => key == _key ? _value : throw new KeyNotFoundException();
+        internal Type SingleKey => _key;
+        internal object SingleValue => _value;
         public IEnumerable<Type> Keys { get { yield return _key; } }
         public IEnumerable<object> Values { get { yield return _value; } }
         public int Count => 1;
@@ -1284,6 +1286,18 @@ public abstract record Element
         if (a is null && b is null) return true;
         if (a is null || b is null) return false;
         if (a.Count != b.Count) return false;
+
+        // #155 hot path — one attached value per element (a single .Grid per cell,
+        // re-applied each render ⇒ SingleAttachedDictionary on both sides). Compare
+        // the lone slot directly: `foreach` over the IReadOnlyDictionary would
+        // allocate an IEnumerator<KeyValuePair> every diff (SingleAttachedDictionary
+        // enumerates via `yield`), reintroducing the per-cell allocation #155 exists
+        // to remove. Count is already known equal, so a single TryGetValue on the
+        // other side is a complete comparison.
+        if (a is SingleAttachedDictionary sa)
+            return b.TryGetValue(sa.SingleKey, out var sav) && Equals(sa.SingleValue, sav);
+        if (b is SingleAttachedDictionary sb)
+            return a.TryGetValue(sb.SingleKey, out var sbv) && Equals(sb.SingleValue, sbv);
 
         foreach (var (key, valA) in a)
         {

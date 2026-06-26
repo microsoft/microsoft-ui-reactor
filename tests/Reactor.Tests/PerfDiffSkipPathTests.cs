@@ -409,6 +409,49 @@ public class PerfDiffSkipPathTests
         Assert.Equal(2, el.GetAttached<WrapGridAttached>()!.RowSpan);
     }
 
+    [Fact]
+    public void AttachedEqual_SingleEntry_FastPath_Matches_Semantics()
+    {
+        // The #155 single-slot fast path in AttachedEqual must return exactly what the
+        // foreach it replaces would, including the asymmetric branches.
+        var grid23 = TextBlock("c").Grid(2, 3);
+        var grid23b = TextBlock("c").Grid(2, 3);
+        var grid45 = TextBlock("c").Grid(4, 5);
+        var wrap = TextBlock("c").WrapGridRowSpan(2); // Single, different key
+
+        Assert.True(Element.AttachedEqual(grid23.Attached, grid23b.Attached));   // same key+value
+        Assert.False(Element.AttachedEqual(grid23.Attached, grid45.Attached));   // same key, diff value
+        Assert.False(Element.AttachedEqual(grid23.Attached, wrap.Attached));     // diff key (a is Single)
+        Assert.False(Element.AttachedEqual(wrap.Attached, grid23.Attached));     // diff key (other order)
+
+        // Non-Single (raw Dictionary, Count 1) vs Single exercises the `b is Single` branch.
+        var ga = grid23.GetAttached<GridAttached>()!;
+        var rawSameKey = new Dictionary<Type, object> { [typeof(GridAttached)] = ga };
+        Assert.True(Element.AttachedEqual(rawSameKey, grid23b.Attached));
+        var rawDiffVal = new Dictionary<Type, object> { [typeof(GridAttached)] = grid45.GetAttached<GridAttached>()! };
+        Assert.False(Element.AttachedEqual(rawDiffVal, grid23.Attached));
+    }
+
+    [Fact]
+    public void AttachedEqual_SingleEntry_DoesNotAllocate()
+    {
+        // Copilot review (a6adfdd8): `foreach` over the IReadOnlyDictionary interface
+        // made SingleAttachedDictionary's yield-based enumerator allocate an iterator
+        // per diff, partially defeating #155's per-cell allocation cut. The single-slot
+        // fast path must be allocation-free. (Old foreach path: ~10k iterator objects.)
+        var a = TextBlock("cell").Grid(2, 3);
+        var b = TextBlock("cell").Grid(2, 3);
+        Element.AttachedEqual(a.Attached, b.Attached); // JIT + warm up
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var acc = true;
+        for (int i = 0; i < 10_000; i++) acc &= Element.AttachedEqual(a.Attached, b.Attached);
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.True(acc);
+        Assert.True(allocated < 2_000, $"single-entry AttachedEqual allocated {allocated} bytes over 10k calls (expected ~0)");
+    }
+
     // ════════════════════════════════════════════════════════════════
     //  Dsl micro-opts — behaviour preserved (#170 / #171 / #172 / #173)
     // ════════════════════════════════════════════════════════════════
