@@ -568,6 +568,107 @@ internal static class HostingCoverageFixtures
         }
     }
 
+    // ════════════════════════════════════════════════════════════════════════
+    //  11. ReactorHostControl — theme listener survives a root-element-type swap
+    //     Regression guard for the #86 ThemeRef-cache invalidation wiring.
+    //     AttachThemeListener anchors ActualThemeChanged to the host ContentControl
+    //     (this), NOT the swappable rendered root. Before the fix the listener
+    //     latched onto the FIRST rendered root, so after a root-element-TYPE swap
+    //     (newControl != _currentControl) it stranded on the detached old root and
+    //     host theme flips stopped firing InvalidateCache()+RequestRender(),
+    //     leaving ThemeRef brushes stale. This renders root type A, swaps to a
+    //     DIFFERENT root type B, then flips the host RequestedTheme and asserts the
+    //     surviving listener both re-renders the tree AND drops the ThemeRef brush
+    //     cache (a swapped dictionary brush is returned fresh only post-invalidate).
+    // ════════════════════════════════════════════════════════════════════════
+
+    internal class HostControlThemeListenerSurvivesRootSwap(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            const string Key = "ReactorHostThemeListenerSwapTestBrush";
+            static Microsoft.UI.Xaml.Media.SolidColorBrush NewBrush(byte r, byte g, byte b) =>
+                new(global::Windows.UI.Color.FromArgb(255, r, g, b));
+
+            var lightV1 = NewBrush(10, 20, 30);
+            var dark = NewBrush(200, 210, 220);
+            var lightDict = new ResourceDictionary { [Key] = lightV1 };
+            var darkDict = new ResourceDictionary { [Key] = dark };
+            var merged = new ResourceDictionary();
+            merged.ThemeDictionaries["Light"] = lightDict;
+            merged.ThemeDictionaries["Dark"] = darkDict;
+            Application.Current.Resources.MergedDictionaries.Add(merged);
+            ThemeRef.InvalidateCache();
+
+            // Pin an explicit start theme so the later flip is a guaranteed
+            // Light->Dark ActualTheme transition regardless of ambient.
+            var hostControl = new ReactorHostControl { RequestedTheme = ElementTheme.Light };
+            int renders = 0;
+            hostControl.OnRenderComplete = (_, _, _) => renders++;
+
+            // A Light-pinned probe (independent of the host theme) isolates the
+            // (key,"Light") brush-cache entry across the host's Light->Dark flip.
+            var probe = new Border { RequestedTheme = ElementTheme.Light };
+
+            try
+            {
+                // Root type A: a TextBlock-rooted tree.
+                hostControl.Mount(ctx => TextBlock("ThemeSwap:A"));
+                var container = new StackPanel();
+                container.Children.Add(hostControl);
+                container.Children.Add(probe);
+                H.SetContent(container);
+                await Harness.Render(200);
+                H.Check("HostCtrlThemeSwap_MountedTypeA",
+                    FindInContainer<TextBlock>(hostControl, tb => tb.Text == "ThemeSwap:A") is not null);
+
+                // Root type B: a VStack(StackPanel)-rooted tree — a DIFFERENT
+                // top-level element type, so the reconciler replaces the root
+                // control (newControl != _currentControl) and re-invokes
+                // AttachThemeListener. The host-anchored listener must persist.
+                hostControl.Mount(ctx => VStack(TextBlock("ThemeSwap:B")));
+                await Harness.Render(200);
+                H.Check("HostCtrlThemeSwap_SwappedToTypeB",
+                    FindInContainer<TextBlock>(hostControl, tb => tb.Text == "ThemeSwap:B") is not null);
+                // The old TextBlock root is gone — the root genuinely swapped type.
+                H.Check("HostCtrlThemeSwap_OldRootGone",
+                    FindInContainer<TextBlock>(hostControl, tb => tb.Text == "ThemeSwap:A") is null);
+
+                // Populate the (key,"Light") brush cache via the probe, then swap
+                // the underlying Light brush instance. The (key,theme) cache is NOT
+                // bumped by mutating the dictionary, so the stale instance is
+                // returned until something calls InvalidateCache.
+                var beforeSwapBrush = ThemeRef.Resolve(Key, probe);
+                H.Check("HostCtrlThemeSwap_ProbeResolvesLight", ReferenceEquals(beforeSwapBrush, lightV1));
+                var lightV2 = NewBrush(11, 22, 33);
+                lightDict[Key] = lightV2;
+                var stillStale = ThemeRef.Resolve(Key, probe);
+                H.Check("HostCtrlThemeSwap_ProbeStaleUntilInvalidate", ReferenceEquals(stillStale, lightV1));
+
+                // Flip the host theme AFTER the root swap. Setting RequestedTheme
+                // raises ActualThemeChanged on the host ContentControl; the
+                // surviving listener calls InvalidateCache()+RequestRender(). The
+                // brush-cache drop is the direct proof the #86 invalidation still
+                // reaches ThemeRef across a root swap; the extra render is the
+                // RequestRender half of the same handler.
+                int before = renders;
+                hostControl.RequestedTheme = ElementTheme.Dark;
+                await Harness.Render(200);
+
+                var afterFlip = ThemeRef.Resolve(Key, probe);
+                H.Check("HostCtrlThemeSwap_BrushCacheDroppedAfterFlip", ReferenceEquals(afterFlip, lightV2));
+                H.Check("HostCtrlThemeSwap_ThemeFlipAfterSwapRerenders", renders > before);
+            }
+            finally
+            {
+                hostControl.Dispose();
+                Application.Current.Resources.MergedDictionaries.Remove(merged);
+                ThemeRef.InvalidateCache();
+                H.SetContent(null);
+            }
+        }
+    }
+
     // ── Helper: find controls within a specific ReactorHostControl ──────────
 
     private static T? FindInContainer<T>(DependencyObject root, Func<T, bool> predicate)
