@@ -244,62 +244,173 @@ public class CommandTypedPropertyTests
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  (d) Clicking still invokes the command (sync + async)
+    //  (d) Dispatch is uniform via the typed Command (issue #637).
+    //      The factory/modifier no longer bake OnClick — the click
+    //      trampoline invokes the command when OnClick is null. These
+    //      assert the record-level wiring + dispatch helpers; the live
+    //      click→Execute path is covered by the Commanding selftest
+    //      fixtures (CommandingCoverageFixtures.cs).
     // ════════════════════════════════════════════════════════════════
 
     [Fact]
-    public void Button_Command_OnClick_Invokes_Sync_Execute()
+    public void Button_Command_Factory_DoesNotBake_OnClick()
+    {
+        // The per-construct OnClick closure is gone (issue #637) — dispatch flows
+        // from the typed Command via the click trampoline instead.
+        var cmd = new Command { Label = "Go", Execute = () => { } };
+        var el = Button(cmd);
+        Assert.Null(el.OnClick);
+        Assert.Same(cmd, el.Command);
+        Assert.True(el.HasCallbacks);
+    }
+
+    [Fact]
+    public void ToggleButton_Command_Factory_DoesNotBake_OnIsCheckedChanged()
+    {
+        var cmd = new Command { Label = "T", Execute = () => { } };
+        var el = ToggleButton(cmd);
+        Assert.Null(el.OnIsCheckedChanged);
+        Assert.Same(cmd, el.Command);
+        Assert.True(el.HasCallbacks);
+    }
+
+    [Fact]
+    public void Invokable_Returns_Execute_Then_ExecuteAsync_Else_Null()
+    {
+        Action exec = () => { };
+        Func<Task> execAsync = () => Task.CompletedTask;
+        // Execute is preferred; ExecuteAsync is the fallback; Execute wins when both present.
+        Assert.Same(exec, CommandBindings.Invokable(new Command { Label = "a", Execute = exec }));
+        Assert.Same(execAsync, CommandBindings.Invokable(new Command { Label = "a", ExecuteAsync = execAsync }));
+        Assert.Same(exec, CommandBindings.Invokable(new Command { Label = "a", Execute = exec, ExecuteAsync = execAsync }));
+        // No delegate ⇒ nothing to dispatch ⇒ null (the event stays unsubscribed, zero cost).
+        Assert.Null(CommandBindings.Invokable(new Command { Label = "a" }));
+        Assert.Null(CommandBindings.Invokable(null));
+    }
+
+    [Fact]
+    public void Invoke_Runs_Sync_Execute()
     {
         int count = 0;
-        var cmd = new Command { Label = "Go", Execute = () => count++ };
-        var el = Button(cmd);
-        Assert.NotNull(el.OnClick);
-        el.OnClick!();
+        CommandBindings.Invoke(new Command { Label = "Go", Execute = () => count++ });
         Assert.Equal(1, count);
     }
 
     [Fact]
-    public async Task Button_Command_OnClick_Invokes_Async_Execute()
+    public async Task Invoke_Runs_Async_Execute_When_No_Sync()
     {
         var tcs = new TaskCompletionSource();
-        var cmd = new Command
-        {
-            Label = "Go",
-            ExecuteAsync = () => { tcs.SetResult(); return Task.CompletedTask; },
-        };
-        var el = Button(cmd);
-        Assert.NotNull(el.OnClick);
-        el.OnClick!();
+        CommandBindings.Invoke(new Command { Label = "Go", ExecuteAsync = () => { tcs.SetResult(); return Task.CompletedTask; } });
         await tcs.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
         Assert.True(tcs.Task.IsCompletedSuccessfully);
     }
 
+    // ════════════════════════════════════════════════════════════════
+    //  (e) issue #637 — uniform binding: factory, .Command() modifier,
+    //      and a bare `new XxxElement { Command = cmd }` record-init are
+    //      equivalent (same Command, same HasCallbacks, ShallowEquals-match).
+    //      The public `init` accessor is what makes the bare-init path legal.
+    // ════════════════════════════════════════════════════════════════
+
     [Fact]
-    public void ToggleButton_Command_Toggle_Invokes_Execute()
+    public void BareInit_And_With_Compile_Via_Public_Init()
     {
-        int count = 0;
-        var cmd = new Command { Label = "T", Execute = () => count++ };
-        var el = ToggleButton(cmd);
-        Assert.NotNull(el.OnIsCheckedChanged);
-        el.OnIsCheckedChanged!(true);
-        el.OnIsCheckedChanged!(false);
-        Assert.Equal(2, count); // fires on every toggle (Option A)
+        // Acceptance: the Command init accessor is public again, so these compile.
+        var cmd = MakeCmd();
+        var bare = new ButtonElement("Save") { Command = cmd };
+        var withed = new ButtonElement("Save") with { Command = cmd };
+        Assert.Same(cmd, bare.Command);
+        Assert.Same(cmd, withed.Command);
     }
 
     [Fact]
-    public void SplitButton_Command_OnClick_Invokes_Execute()
+    public void BareInit_Equivalent_To_Factory_AllSix()
     {
-        int count = 0;
-        var cmd = new Command { Label = "S", Execute = () => count++ };
-        var el = SplitButton(cmd);
-        Assert.NotNull(el.OnClick);
-        el.OnClick!();
-        Assert.Equal(1, count);
+        var cmd = MakeCmd();
+        Assert.True(Element.ShallowEquals(Button(cmd), new ButtonElement("Save") { Command = cmd }));
+        Assert.True(Element.ShallowEquals(HyperlinkButton(cmd), new HyperlinkButtonElement("Save") { Command = cmd }));
+        Assert.True(Element.ShallowEquals(RepeatButton(cmd), new RepeatButtonElement("Save") { Command = cmd }));
+        Assert.True(Element.ShallowEquals(ToggleButton(cmd), new ToggleButtonElement("Save") { Command = cmd }));
+        Assert.True(Element.ShallowEquals(SplitButton(cmd), new SplitButtonElement("Save") { Command = cmd }));
+        Assert.True(Element.ShallowEquals(ToggleSplitButton(cmd), new ToggleSplitButtonElement("Save") { Command = cmd }));
+    }
+
+    [Fact]
+    public void Modifier_Equivalent_To_Factory_ForBareLabelButtons()
+    {
+        var cmd = MakeCmd();
+        // .Command() on a plain label button matches the Xxx(cmd) factory exactly.
+        Assert.True(Element.ShallowEquals(Button(cmd), Button("Save").Command(cmd)));
+        Assert.True(Element.ShallowEquals(HyperlinkButton(cmd), HyperlinkButton("Save").Command(cmd)));
+        Assert.True(Element.ShallowEquals(RepeatButton(cmd), RepeatButton("Save").Command(cmd)));
+        Assert.True(Element.ShallowEquals(ToggleButton(cmd), ToggleButton("Save").Command(cmd)));
+    }
+
+    [Fact]
+    public void HasCallbacks_True_For_BareInit_Command_AllSix()
+    {
+        var cmd = MakeCmd();
+        Assert.True(new ButtonElement("Save") { Command = cmd }.HasCallbacks);
+        Assert.True(new HyperlinkButtonElement("Save") { Command = cmd }.HasCallbacks);
+        Assert.True(new RepeatButtonElement("Save") { Command = cmd }.HasCallbacks);
+        Assert.True(new ToggleButtonElement("Save") { Command = cmd }.HasCallbacks);
+        Assert.True(new SplitButtonElement("Save") { Command = cmd }.HasCallbacks);
+        Assert.True(new ToggleSplitButtonElement("Save") { Command = cmd }.HasCallbacks);
+    }
+
+    [Fact]
+    public void HasCallbacks_False_For_Plain_Buttons_With_No_Command_Or_Handler()
+    {
+        // The #153 fast-path Tag refresh is gated on HasCallbacks: a handler-less,
+        // command-less button must NOT be tagged (the win the issue protects).
+        Assert.False(Button("Save").HasCallbacks);
+        Assert.False(HyperlinkButton("Save").HasCallbacks);
+        Assert.False(RepeatButton("Save").HasCallbacks);
+        Assert.False(ToggleButton("Save").HasCallbacks);
+        Assert.False(SplitButton("Save").HasCallbacks);
+        Assert.False(ToggleSplitButton("Save").HasCallbacks);
+    }
+
+    [Fact]
+    public void HasCallbacks_Transition_Command_To_None_Breaks_FastPath_Gate()
+    {
+        // Button(cmd) → Button("x") flips HasCallbacks true→false, so the reconciler's
+        // `oldEl.HasCallbacks == newEl.HasCallbacks` gate fails and a full Update runs
+        // (which clears the stale command metadata) — same as the pre-#637 OnClick path.
+        var cmd = MakeCmd();
+        Assert.True(Button(cmd).HasCallbacks);
+        Assert.False(Button("Save").HasCallbacks);
+    }
+
+    [Fact]
+    public void Button_EffectiveIsEnabled_Folds_Command_Across_All_Paths()
+    {
+        var disabled = new Command { Label = "Save", Execute = () => { }, CanExecute = false };
+        var enabled = new Command { Label = "Save", Execute = () => { }, CanExecute = true };
+
+        // Factory, modifier, and bare-init all disable identically when the command is disabled.
+        Assert.False(Button(disabled).EffectiveIsEnabled);
+        Assert.False(Button("Save").Command(disabled).EffectiveIsEnabled);
+        Assert.False(new ButtonElement("Save") { Command = disabled }.EffectiveIsEnabled);
+
+        // Enabled command ⇒ enabled.
+        Assert.True(Button(enabled).EffectiveIsEnabled);
+        Assert.True(new ButtonElement("Save") { Command = enabled }.EffectiveIsEnabled);
+
+        // Explicit record IsEnabled=false wins regardless of the command.
+        Assert.False(new ButtonElement("Save") { IsEnabled = false, Command = enabled }.EffectiveIsEnabled);
+
+        // No command ⇒ just the record field.
+        Assert.True(new ButtonElement("Save").EffectiveIsEnabled);
+        Assert.False(new ButtonElement("Save") { IsEnabled = false }.EffectiveIsEnabled);
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  Allocation budget — per-construct bytes stay well under the
-    //  pre-#153 baseline (≈264 B; the Setters array + closure was ≈88 B).
+    //  (f) Allocation budget — the #153 win, re-pinned for #637.
+    //      Dropping the factory-baked OnClick closure (issue #637) HALVED
+    //      the per-construct allocation (≈176 B → ≈88 B on ARM64). The
+    //      tightened ceiling FAILS if a per-render closure/array is
+    //      reintroduced (which would push it back to ≈176 B).
     // ════════════════════════════════════════════════════════════════
 
     [Fact]
@@ -319,11 +430,10 @@ public class CommandTypedPropertyTests
 
         double perConstruct = (after - before) / (double)N;
 
-        // The pre-#153 factory allocated ≈264 B/construct (record + Setters array +
-        // lambda closure). After lifting Command to a typed property the Setters
-        // array/closure (≈88 B) is gone. Use a generous CI-jitter ceiling that still
-        // catches a regression that reintroduces a per-render array/closure.
-        Assert.True(perConstruct < 220,
-            $"Button(command) per-construct allocation regressed: {perConstruct:F1} B (expected < 220 B).");
+        // ≈88 B after #637 (just the record). A reintroduced OnClick closure (≈88 B)
+        // would push this to ≈176 B, so a 140 B ceiling catches the regression while
+        // leaving CI-jitter headroom.
+        Assert.True(perConstruct < 140,
+            $"Button(command) per-construct allocation regressed: {perConstruct:F1} B (expected < 140 B).");
     }
 }

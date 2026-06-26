@@ -167,19 +167,15 @@ public static partial class Factories
     }
 
     /// <summary>
-    /// Creates a Button driven by a Command. Maps Label → Content, Execute → Click,
-    /// IsEnabled → IsEnabled. Description / Accelerator / AccessKey are applied by the
-    /// reconciler from the typed <see cref="ButtonElement.Command"/> property (issue #153),
-    /// so no per-render Setters array or lambda is allocated and the reconciler can
-    /// fast-path command-bound buttons whose Command is unchanged across renders.
+    /// Creates a Button driven by a Command. Maps Label → Content; the command's
+    /// Execute/ExecuteAsync is invoked on click and its IsEnabled / Description / Accelerator /
+    /// AccessKey are applied by the reconciler from the typed <see cref="ButtonElement.Command"/>
+    /// property (issues #153, #637) — no per-render Setters array or lambda is allocated, and a
+    /// bare <c>new ButtonElement { Command = cmd }</c> record-init behaves identically.
     /// </summary>
     public static ButtonElement Button(Core.Command command)
     {
-        return new ButtonElement(command.Label, () => Core.CommandBindings.Invoke(command))
-        {
-            IsEnabled = command.IsEnabled,
-            Command = command,
-        };
+        return new ButtonElement(command.Label) { Command = command };
     }
 
     public static HyperlinkButtonElement HyperlinkButton(string content, Uri? navigateUri = null, Action? onClick = null)
@@ -197,10 +193,7 @@ public static partial class Factories
     /// </summary>
     public static HyperlinkButtonElement HyperlinkButton(Core.Command command)
     {
-        return new HyperlinkButtonElement(command.Label, null, () => Core.CommandBindings.Invoke(command))
-        {
-            Command = command,
-        };
+        return new HyperlinkButtonElement(command.Label) { Command = command };
     }
 
     public static RepeatButtonElement RepeatButton(string label, Action? onClick = null)
@@ -211,10 +204,7 @@ public static partial class Factories
     /// <summary>Creates a RepeatButton driven by a Command. Click auto-repeats while held.</summary>
     public static RepeatButtonElement RepeatButton(Core.Command command)
     {
-        return new RepeatButtonElement(command.Label, () => Core.CommandBindings.Invoke(command))
-        {
-            Command = command,
-        };
+        return new RepeatButtonElement(command.Label) { Command = command };
     }
 
     public static ToggleButtonElement ToggleButton(string label, bool isChecked = false, Action<bool>? onIsCheckedChanged = null)
@@ -229,10 +219,7 @@ public static partial class Factories
     /// </summary>
     public static ToggleButtonElement ToggleButton(Core.Command command, bool isChecked = false)
     {
-        return new ToggleButtonElement(command.Label, isChecked, _ => Core.CommandBindings.Invoke(command))
-        {
-            Command = command,
-        };
+        return new ToggleButtonElement(command.Label, isChecked) { Command = command };
     }
 
     /// <summary>
@@ -260,10 +247,7 @@ public static partial class Factories
     /// </summary>
     public static SplitButtonElement SplitButton(Core.Command command, Element? flyout = null)
     {
-        return new SplitButtonElement(command.Label, () => Core.CommandBindings.Invoke(command), flyout)
-        {
-            Command = command,
-        };
+        return new SplitButtonElement(command.Label, null, flyout) { Command = command };
     }
 
     /// <summary>
@@ -280,10 +264,7 @@ public static partial class Factories
     /// <summary>Creates a ToggleSplitButton driven by a Command (fires on each toggle).</summary>
     public static ToggleSplitButtonElement ToggleSplitButton(Core.Command command, Optional<bool> isChecked = default, Element? flyout = null)
     {
-        return new ToggleSplitButtonElement(command.Label, isChecked, _ => Core.CommandBindings.Invoke(command), flyout)
-        {
-            Command = command,
-        };
+        return new ToggleSplitButtonElement(command.Label, isChecked, null, flyout) { Command = command };
     }
 
     // ── Input controls ──────────────────────────────────────────────

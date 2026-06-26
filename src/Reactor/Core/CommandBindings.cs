@@ -144,6 +144,21 @@ internal static class CommandBindings
     }
 
     /// <summary>
+    /// Returns a non-null delegate when <paramref name="cmd"/> can actually be invoked
+    /// (it carries an <see cref="Command.Execute"/> or <see cref="Command.ExecuteAsync"/>),
+    /// otherwise <c>null</c>. Used by the command-capable button trampolines as the
+    /// click-dispatch <em>fallback</em> and as the HandCodedEvent / Controlled
+    /// subscription gate when a button is bound <b>only</b> through the typed
+    /// <see cref="Command"/> property — i.e. a bare <c>new XxxElement { Command = cmd }</c>
+    /// record-init with no <c>OnClick</c>/<c>OnIsCheckedChanged</c> handler (issue #637).
+    /// A command with neither delegate has nothing to dispatch, so the event stays
+    /// unsubscribed (zero cost), while its metadata still flows through
+    /// <see cref="OneWayCommand{TElement,TControl}"/>.
+    /// </summary>
+    internal static Delegate? Invokable(Command? cmd) =>
+        cmd is null ? null : (Delegate?)cmd.Execute ?? cmd.ExecuteAsync;
+
+    /// <summary>
     /// Registers the typed <see cref="Command"/> descriptor entry shared by every
     /// command-capable button element (issue #153). On mount it applies
     /// <see cref="ApplyButtonBaseCommon"/>; on update it re-applies only when a rendered

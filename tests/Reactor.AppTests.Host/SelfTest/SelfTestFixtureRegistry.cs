@@ -884,6 +884,15 @@ internal static class SelfTestFixtureRegistry
         "Commanding_BoundToggleSplitButtonCommandChangeUpdatesMetadata",
         "Commanding_BoundButtonCommandClearedWhenRemoved",
 
+        // Issue #637 — bare record-init / `with` Command binding equivalence
+        "Commanding_BareInitButtonCommandInvokesExecute",
+        "Commanding_BareInitToggleButtonCommandFiresOnToggle",
+        "Commanding_WithCommandButtonInvokesExecute",
+        "Commanding_BareInitButtonDisabledCommandDisablesControl",
+        "Commanding_BareInitButtonDisabledFocusableCoercionPreserved",
+        "Commanding_BareInitHyperlinkRepeatSplitInvokeExecute",
+        "Commanding_BareInitAllElementsApplyDisabledFromCommand",
+
         // Drag-and-drop — spec 027 Tier 6 (Phase 6a)
         "DragDrop_OnDragStartAutoSetsCanDrag",
         "DragDrop_OnDropAutoSetsAllowDrop",
@@ -2313,6 +2322,15 @@ internal static class SelfTestFixtureRegistry
         "Commanding_BoundSplitButtonCommandChangeUpdatesMetadata" => new CommandingCoverageFixtures.BoundSplitButtonCommandChangeUpdatesMetadata(harness),
         "Commanding_BoundToggleSplitButtonCommandChangeUpdatesMetadata" => new CommandingCoverageFixtures.BoundToggleSplitButtonCommandChangeUpdatesMetadata(harness),
         "Commanding_BoundButtonCommandClearedWhenRemoved" => new CommandingCoverageFixtures.BoundButtonCommandClearedWhenRemoved(harness),
+
+        // Issue #637 — bare record-init / `with` Command binding equivalence
+        "Commanding_BareInitButtonCommandInvokesExecute" => new CommandingCoverageFixtures.BareInitButtonCommandInvokesExecute(harness),
+        "Commanding_BareInitToggleButtonCommandFiresOnToggle" => new CommandingCoverageFixtures.BareInitToggleButtonCommandFiresOnToggle(harness),
+        "Commanding_WithCommandButtonInvokesExecute" => new CommandingCoverageFixtures.WithCommandButtonInvokesExecute(harness),
+        "Commanding_BareInitButtonDisabledCommandDisablesControl" => new CommandingCoverageFixtures.BareInitButtonDisabledCommandDisablesControl(harness),
+        "Commanding_BareInitButtonDisabledFocusableCoercionPreserved" => new CommandingCoverageFixtures.BareInitButtonDisabledFocusableCoercionPreserved(harness),
+        "Commanding_BareInitHyperlinkRepeatSplitInvokeExecute" => new CommandingCoverageFixtures.BareInitHyperlinkRepeatSplitInvokeExecute(harness),
+        "Commanding_BareInitAllElementsApplyDisabledFromCommand" => new CommandingCoverageFixtures.BareInitAllElementsApplyDisabledFromCommand(harness),
 
         // Drag-and-drop — spec 027 Tier 6 (Phase 6a)
         "DragDrop_OnDragStartAutoSetsCanDrag" => new DragDropFixtures.OnDragStartAutoSetsCanDrag(harness),

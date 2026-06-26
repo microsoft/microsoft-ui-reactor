@@ -30,7 +30,7 @@ public class CommandingCoverageTests
         var el = Button(cmd);
 
         Assert.Equal("Save", el.Label);
-        Assert.True(el.IsEnabled);
+        Assert.True(el.EffectiveIsEnabled);
     }
 
     [Fact]
@@ -38,16 +38,17 @@ public class CommandingCoverageTests
     {
         var cmd = MakeCmd(canExecute: false);
         var el = Button(cmd);
-        Assert.False(el.IsEnabled);
+        Assert.False(el.EffectiveIsEnabled);
     }
 
     [Fact]
-    public void Button_Command_OnClickInvokesExecute()
+    public void Button_Command_DispatchInvokesExecute()
     {
         int count = 0;
         var cmd = MakeCmd(() => count++);
         var el = Button(cmd);
-        el.OnClick!();
+        Assert.Null(el.OnClick);              // issue #637 — dispatch via the typed Command
+        CommandBindings.Invoke(el.Command!);  // what the click trampoline does when OnClick is null
         Assert.Equal(1, count);
     }
 
@@ -61,7 +62,8 @@ public class CommandingCoverageTests
         var el = HyperlinkButton(cmd);
 
         Assert.Equal("Save", el.Content);
-        el.OnClick!();
+        Assert.Null(el.OnClick);
+        CommandBindings.Invoke(el.Command!);
         Assert.Equal(1, count);
     }
 
@@ -75,7 +77,8 @@ public class CommandingCoverageTests
         var el = RepeatButton(cmd);
 
         Assert.Equal("Save", el.Label);
-        el.OnClick!();
+        Assert.Null(el.OnClick);
+        CommandBindings.Invoke(el.Command!);
         Assert.Equal(1, count);
     }
 
@@ -88,8 +91,10 @@ public class CommandingCoverageTests
         var cmd = MakeCmd(() => count++);
         var el = ToggleButton(cmd);
 
-        el.OnIsCheckedChanged!(true);
-        el.OnIsCheckedChanged!(false);
+        Assert.Null(el.OnIsCheckedChanged);   // issue #637 — the toggle trampoline invokes the command
+        // The live trampoline fires the command on each toggle (check + uncheck) — see selftests.
+        CommandBindings.Invoke(el.Command!);
+        CommandBindings.Invoke(el.Command!);
         Assert.Equal(2, count);
     }
 
@@ -110,7 +115,8 @@ public class CommandingCoverageTests
         var el = SplitButton(cmd);
 
         Assert.Equal("Save", el.Label);
-        el.OnClick!();
+        Assert.Null(el.OnClick);
+        CommandBindings.Invoke(el.Command!);
         Assert.Equal(1, count);
     }
 
@@ -131,8 +137,9 @@ public class CommandingCoverageTests
         var cmd = MakeCmd(() => count++);
         var el = ToggleSplitButton(cmd);
 
-        el.OnIsCheckedChanged!(true);
-        el.OnIsCheckedChanged!(false);
+        Assert.Null(el.OnIsCheckedChanged);
+        CommandBindings.Invoke(el.Command!);
+        CommandBindings.Invoke(el.Command!);
         Assert.Equal(2, count);
     }
 
@@ -148,7 +155,8 @@ public class CommandingCoverageTests
             ExecuteAsync = () => { called = true; return global::System.Threading.Tasks.Task.CompletedTask; },
         };
         var el = Button(cmd);
-        el.OnClick!();
+        Assert.Null(el.OnClick);
+        CommandBindings.Invoke(el.Command!);
         Assert.True(called);
     }
 }

@@ -56,8 +56,9 @@ public class DslFactoryLogicTests
         var cmd = new Command { Label = "Save", Execute = () => executed = true };
         var el = Button(cmd);
         Assert.Equal("Save", el.Label);
-        Assert.True(el.IsEnabled);
-        el.OnClick!.Invoke();
+        Assert.True(el.EffectiveIsEnabled);
+        Assert.Null(el.OnClick);              // issue #637 — dispatch via the typed Command
+        CommandBindings.Invoke(el.Command!);  // what the click trampoline does when OnClick is null
         Assert.True(executed);
     }
 
@@ -66,7 +67,7 @@ public class DslFactoryLogicTests
     {
         var cmd = new Command { Label = "Delete", Execute = () => { }, CanExecute = false };
         var el = Button(cmd);
-        Assert.False(el.IsEnabled);
+        Assert.False(el.EffectiveIsEnabled);
     }
 
     [Fact]

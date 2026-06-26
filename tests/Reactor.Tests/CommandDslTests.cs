@@ -30,8 +30,10 @@ public class CommandDslTests
     {
         var el = Button(_testCmd);
         Assert.Equal("Save", el.Label);
-        Assert.True(el.IsEnabled);
-        Assert.NotNull(el.OnClick);
+        Assert.True(el.EffectiveIsEnabled);
+        // issue #637 — dispatch flows from the typed Command, not a pre-baked OnClick closure.
+        Assert.Null(el.OnClick);
+        Assert.Same(_testCmd, el.Command);
     }
 
     [Fact]
@@ -39,7 +41,7 @@ public class CommandDslTests
     {
         var cmd = _testCmd with { CanExecute = false };
         var el = Button(cmd);
-        Assert.False(el.IsEnabled);
+        Assert.False(el.EffectiveIsEnabled);
     }
 
     // ════════════════════════════════════════════════════════════════
