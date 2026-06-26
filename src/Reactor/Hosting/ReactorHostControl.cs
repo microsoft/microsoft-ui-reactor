@@ -55,8 +55,13 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     private Element? _currentTree;
     private UIElement? _currentControl;
     private int _renderPending;      // 0 or 1 — Interlocked for thread-safe access
-    private volatile bool _isRendering;       // only touched on UI thread
-    private volatile bool _needsRerender;     // only touched on UI thread
+    // volatile: written on the UI render loop (Render start/finally), read by
+    // RequestRender from any thread (the _isRendering fast-path).
+    private volatile bool _isRendering;
+    // volatile: set true by RequestRender from any thread; cleared and read on the
+    // UI render loop (RenderLoop). The cross-thread coalescing handshake relies on
+    // these acquire/release semantics — see RequestRender / RenderLoop.
+    private volatile bool _needsRerender;
     private bool _themeListenerAttached;
     // Always-on UISettings used purely to drop the ThemeRef resolution caches on
     // accent/palette changes that don't flip the Light/Dark theme and so don't

@@ -34,7 +34,16 @@ public readonly record struct ThemeRef(string ResourceKey)
     /// </summary>
     public static Brush? Resolve(string resourceKey, bool isDark)
     {
-        return ResolveForTheme(resourceKey, isDark ? "Dark" : "Light");
+        // Public overload — intentionally UNCACHED. The (key, theme) brush cache
+        // (#86) is dropped only by the internal InvalidateCache the host wires to
+        // ActualThemeChanged / UISettings.ColorValuesChanged; this overload has no
+        // associated element or theme listener, and there is no public invalidation
+        // API, so a cached entry could never be dropped for a caller that swaps
+        // Application.Current.Resources / ThemeDictionaries at runtime. Scanning on
+        // every call preserves the pre-#86 semantics (runtime dictionary swaps
+        // observed immediately); the cache stays on the internal FrameworkElement
+        // Resolve hot path that the data-grid stress workload actually exercises.
+        return ResolveForThemeUncached(resourceKey, isDark ? "Dark" : "Light");
     }
 
     // ── Resolution caches (perf #85/#86) ─────────────────────────────
