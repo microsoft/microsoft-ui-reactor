@@ -105,13 +105,15 @@ public class PerfDiffSkipPathTests
     [Fact]
     public void ModifierCallbacksEqual_Every_Slot_Participates_By_Reference()
     {
-        // FLAGSHIP-1 compares 27 event/gesture/drag-drop handler slots by per-slot
+        // FLAGSHIP-1 compares 21 routed-input handler slots by per-slot
         // ReferenceEquals. This sweeps EACH slot to prove it participates: setting a
         // slot to the same instance on both sides stays skip-eligible, while changing
         // that one slot's instance (or adding/removing it) declines the skip. Guards
         // against a forgotten slot or a mis-paired comparison (e.g. a.X vs a.X). One
-        // distinct instance pair per delegate/config type; only one slot is set per
-        // case, so a sibling mis-pair (a.OnKeyDown vs b.OnKeyUp) is caught too.
+        // distinct instance pair per delegate type; only one slot is set per case, so
+        // a sibling mis-pair (a.OnKeyDown vs b.OnKeyUp) is caught too. Gesture and
+        // drag-drop slots are intentionally NOT in this set — see the companion
+        // ModifierCallbacksEqual_Ignores_Gesture_And_DragDrop_Slots_To_Match_Main.
         Action<object, SizeChangedEventArgs> sc1 = (s, e) => { }, sc2 = (s, e) => { };
         Action<object, PointerRoutedEventArgs> p1 = (s, e) => { }, p2 = (s, e) => { };
         Action<object, TappedRoutedEventArgs> tap1 = (s, e) => { }, tap2 = (s, e) => { };
@@ -122,12 +124,6 @@ public class PerfDiffSkipPathTests
         Action<UIElement, CharacterReceivedRoutedEventArgs> cr1 = (s, e) => { }, cr2 = (s, e) => { };
         Action<object, RoutedEventArgs> f1 = (s, e) => { }, f2 = (s, e) => { };
         Action<UIElement, AccessKeyDisplayRequestedEventArgs> ak1 = (s, e) => { }, ak2 = (s, e) => { };
-        PanGestureConfig pan1 = new(_ => { }), pan2 = new(_ => { });
-        PinchGestureConfig pin1 = new(_ => { }), pin2 = new(_ => { });
-        RotateGestureConfig rot1 = new(_ => { }), rot2 = new(_ => { });
-        LongPressGestureConfig lp1 = new(_ => { }), lp2 = new(_ => { });
-        DragSourceConfig ds1 = new(() => default!), ds2 = new(() => default!);
-        DropTargetConfig dp1 = new(), dp2 = new();
 
         // (name, equalA, equalB [same instance as A], diff [different instance])
         var cases = new (string Name, ElementModifiers A, ElementModifiers B, ElementModifiers Diff)[]
@@ -153,12 +149,6 @@ public class PerfDiffSkipPathTests
             ("OnGotFocus",           new() { OnGotFocus = f1 },            new() { OnGotFocus = f1 },            new() { OnGotFocus = f2 }),
             ("OnLostFocus",          new() { OnLostFocus = f1 },           new() { OnLostFocus = f1 },           new() { OnLostFocus = f2 }),
             ("OnAccessKeyDisplayRequested", new() { OnAccessKeyDisplayRequested = ak1 }, new() { OnAccessKeyDisplayRequested = ak1 }, new() { OnAccessKeyDisplayRequested = ak2 }),
-            ("Pan",                  new() { Pan = pan1 },                 new() { Pan = pan1 },                 new() { Pan = pan2 }),
-            ("Pinch",                new() { Pinch = pin1 },               new() { Pinch = pin1 },               new() { Pinch = pin2 }),
-            ("Rotate",               new() { Rotate = rot1 },              new() { Rotate = rot1 },              new() { Rotate = rot2 }),
-            ("LongPress",            new() { LongPress = lp1 },            new() { LongPress = lp1 },            new() { LongPress = lp2 }),
-            ("DragSource",           new() { DragSource = ds1 },           new() { DragSource = ds1 },           new() { DragSource = ds2 }),
-            ("DropTarget",           new() { DropTarget = dp1 },           new() { DropTarget = dp1 },           new() { DropTarget = dp2 }),
         };
 
         var empty = new ElementModifiers();
@@ -170,8 +160,49 @@ public class PerfDiffSkipPathTests
             Assert.False(Element.ModifiersEqual(empty, a), $"{name}: removing handler ⇒ must Update");
         }
 
-        // Tracks the slot count in Element.ModifierCallbacksEqual; bump both together.
-        Assert.Equal(27, cases.Length);
+        // Tracks the routed-handler slot count in Element.ModifierCallbacksEqual;
+        // bump both together. Gesture / drag-drop slots are intentionally excluded —
+        // see ModifierCallbacksEqual_Ignores_Gesture_And_DragDrop_Slots_To_Match_Main.
+        Assert.Equal(21, cases.Length);
+    }
+
+    [Fact]
+    public void ModifierCallbacksEqual_Ignores_Gesture_And_DragDrop_Slots_To_Match_Main()
+    {
+        // BEHAVIOR-PRESERVATION GUARD (companion to the routed-slot sweep above).
+        // The historical diff never compared the gesture (Pan/Pinch/Rotate/LongPress)
+        // or drag-drop (DragSource/DropTarget) slots: they dispatch through separate
+        // per-element gesture/drag state, NOT ModifierEventHandlerState.Current*.
+        // Adding them to ModifierCallbacksEqual would force Update where the framework
+        // previously skipped, re-arming an in-flight gesture mid-interaction — the
+        // long-press Began+Ended double-dispatch regression (GestureTests
+        // .Interactive_OnLongPress_FiresAfterHold). So a gesture/drag closure that
+        // changes identity every render MUST stay skip-eligible, exactly as before.
+        // Do NOT "complete" the sweep by adding these slots — that reintroduces the bug.
+        PanGestureConfig pan1 = new(_ => { }), pan2 = new(_ => { });
+        PinchGestureConfig pin1 = new(_ => { }), pin2 = new(_ => { });
+        RotateGestureConfig rot1 = new(_ => { }), rot2 = new(_ => { });
+        LongPressGestureConfig lp1 = new(_ => { }), lp2 = new(_ => { });
+        DragSourceConfig ds1 = new(() => default!), ds2 = new(() => default!);
+        DropTargetConfig dp1 = new(), dp2 = new();
+
+        var empty = new ElementModifiers();
+        var pairs = new (string Name, ElementModifiers One, ElementModifiers Changed)[]
+        {
+            ("Pan",        new() { Pan = pan1 },       new() { Pan = pan2 }),
+            ("Pinch",      new() { Pinch = pin1 },     new() { Pinch = pin2 }),
+            ("Rotate",     new() { Rotate = rot1 },    new() { Rotate = rot2 }),
+            ("LongPress",  new() { LongPress = lp1 },  new() { LongPress = lp2 }),
+            ("DragSource", new() { DragSource = ds1 }, new() { DragSource = ds2 }),
+            ("DropTarget", new() { DropTarget = dp1 }, new() { DropTarget = dp2 }),
+        };
+
+        foreach (var (name, one, changed) in pairs)
+        {
+            Assert.True(Element.ModifiersEqual(one, changed), $"{name}: changed closure must stay skip-eligible (matches main)");
+            Assert.True(Element.ModifiersEqual(one, empty), $"{name}: present-vs-absent must stay skip-eligible (matches main)");
+            Assert.True(Element.ModifiersEqual(empty, one), $"{name}: absent-vs-present must stay skip-eligible (matches main)");
+        }
     }
 
     [Fact]
