@@ -2683,14 +2683,37 @@ public sealed partial class Reconciler : IDisposable
     public static void UpdateDefaultAutomationName(FrameworkElement fe, string? oldCaption, string? newCaption)
     {
         if (fe is null) return;
+        // P3 fast-path — skip the UIA GetName read + SetName write whenever the
+        // outcome is independent of the live Name: an empty/whitespace new caption
+        // (nothing to write), or an unchanged caption (the Name already reflects it
+        // from mount or a prior update, or the author overrode it — either way
+        // nothing to do). These two arms mirror the caption-only arms of
+        // ResolveDefaultAutomationNameUpdate, so the live path and the pure
+        // decision helper stay in lockstep. On a changed caption we fall through to
+        // the original GetName + author-override + SetName behavior, unchanged.
         if (string.IsNullOrWhiteSpace(newCaption)) return;
+        if (string.Equals(oldCaption, newCaption, StringComparison.Ordinal)) return;
         var current = Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(fe);
+        var resolved = ResolveDefaultAutomationNameUpdate(current, oldCaption, newCaption);
+        if (resolved is not null)
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(fe, resolved);
+    }
+
+    // Pure decision for UpdateDefaultAutomationName — no DP/UIA interop, so the
+    // caption/override policy is unit-testable headlessly (Reactor.Tests). Returns
+    // the Name to write, or null to leave the live automation Name untouched. Kept
+    // in sync with the UpdateDefaultAutomationName fast-path above: the whitespace-
+    // new-caption and unchanged-caption arms here are the same skips the live path
+    // takes before it ever reads the current Name.
+    internal static string? ResolveDefaultAutomationNameUpdate(string? current, string? oldCaption, string? newCaption)
+    {
+        if (string.IsNullOrWhiteSpace(newCaption)) return null;
+        if (string.Equals(oldCaption, newCaption, StringComparison.Ordinal)) return null;
         bool authorOverride =
             !string.IsNullOrEmpty(current) &&
             (oldCaption is null || !string.Equals(current, oldCaption, StringComparison.Ordinal));
-        if (authorOverride) return;
-        var trimmed = newCaption.Length > 100 ? newCaption.Substring(0, 100) : newCaption;
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(fe, trimmed);
+        if (authorOverride) return null;
+        return newCaption.Length > 100 ? newCaption.Substring(0, 100) : newCaption;
     }
 
     internal static string? ExtractElementCaption(Element? element) => element switch
