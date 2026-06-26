@@ -226,4 +226,63 @@ public class ChildReconcilerStructuralSkipTests
         Assert.Equal(new[] { 0, 1, 2, 3, 4 }, coll.GetCalls);
         Assert.Empty(coll.Structural);
     }
+
+    [Fact]
+    public void Fast_Path_Output_Matches_Full_Walk_With_Reference_Equal_Reuse()
+    {
+        // Differential A/B mirroring the REAL producer: untouched indices REUSE the
+        // previous render's element instances (reference-equal, as
+        // UseMemoCellsByIndex does via children[i] = prevChildren[i]); only the
+        // changed index is a fresh instance. The fast path (hint present) and the
+        // full walk (no hint) must produce identical observable output. This is the
+        // invariant the structural skip relies on — that an untouched cell is
+        // reference-equal old<->new, so skipping its update is provably a no-op.
+        const int n = 5;
+        const int changedIdx = 2;
+
+        static Element[] BuildNewReusing(Element[] prev)
+        {
+            // Reuse prev references everywhere except the one changed index, which is
+            // rebuilt as a fresh (value-equal) instance — exactly the producer's shape.
+            var arr = new Element[prev.Length];
+            for (int i = 0; i < prev.Length; i++)
+                arr[i] = i == changedIdx ? Button($"cell-{i}", NoOp) : prev[i];
+            return arr;
+        }
+
+        // Full walk (no hint).
+        var oldFull = ButtonCells(n);
+        var newFull = BuildNewReusing(oldFull);
+        var collFull = new TrackingChildCollection(n);
+        var rFull = new Reconciler();
+        ChildReconciler.Reconcile(oldFull, newFull, collFull, rFull, NoOp);
+
+        // Fast path (hint present), identical inputs.
+        var oldFast = ButtonCells(n);
+        var newFast = BuildNewReusing(oldFast);
+        var collFast = new TrackingChildCollection(n);
+        var rFast = new Reconciler();
+        ChildDiffHints.Publish(newFast,
+            new ChildDiffHint(new[] { changedIdx }, themeSensitiveCount: 0, previousChildren: oldFast));
+        ChildReconciler.Reconcile(oldFast, newFast, collFast, rFast, NoOp);
+
+        // The reference-equality invariant the fast path trusts actually holds here.
+        for (int i = 0; i < n; i++)
+            if (i != changedIdx)
+                Assert.Same(oldFast[i], newFast[i]);
+
+        // Identical observable output: same total skip accounting, no structural
+        // mutation on either path.
+        Assert.Equal(rFull.DebugElementsSkipped, rFast.DebugElementsSkipped);
+        Assert.Equal(n, rFull.DebugElementsSkipped);
+        Assert.Empty(collFull.Structural);
+        Assert.Empty(collFast.Structural);
+
+        // The full walk visits every common index; the fast path visits only the
+        // changed one and skips the reference-equal remainder wholesale. Because the
+        // skipped cells are reference-equal, the full walk's per-cell work on them
+        // (the callback Tag refresh) is a provable no-op, so the two paths converge.
+        Assert.Equal(new[] { 0, 1, 2, 3, 4 }, collFull.GetCalls);
+        Assert.Equal(new[] { changedIdx }, collFast.GetCalls);
+    }
 }

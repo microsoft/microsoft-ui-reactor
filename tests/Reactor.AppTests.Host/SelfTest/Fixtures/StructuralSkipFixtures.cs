@@ -1,6 +1,8 @@
+using System.Threading;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hooks;
+using Microsoft.UI.Reactor.Hosting;
 using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -198,6 +200,85 @@ internal static class StructuralSkipFixtures
         {
             var tb = H.FindControl<TextBlock>(t => t.Text == text);
             return tb?.Foreground as SolidColorBrush;
+        }
+    }
+
+    /// <summary>
+    /// HOT-RELOAD GATE TEETH (C1, Spec 034 §C): a memoized range built by
+    /// <c>UseMemoCellsByIndex</c> contains a WRAPPER cell (a <c>Component</c>) whose
+    /// rendered body is changed by a simulated hot-reload "edit" (a flipped static
+    /// shape flag, exactly as <see cref="HotReloadRecoveryFixtures"/> does). Across a
+    /// normal render the wrapper is reused reference-equal and correctly skipped; but
+    /// during a hot-reload FORCE pass the structural fast path MUST defer to the full
+    /// walk so the wrapper re-renders its edited body (the full walk honours
+    /// <c>ForceRenderThroughWrapper</c> per cell, which a wholesale structural skip
+    /// would bypass).
+    ///
+    /// <para>This is the teeth for the fast path's <c>!reconciler.ForceFullRenderActive</c>
+    /// gate (<c>ChildReconciler.ReconcilePositional</c>): the memoized cells are reused
+    /// reference-equal with EMPTY <c>changedIndices</c>, so every other gate is satisfied
+    /// during the force pass and only this gate keeps the fast path from engaging. Revert
+    /// the gate → the force pass structurally skips the untouched wrapper, the edited body
+    /// is swallowed, and <c>HotReloadStructuralSkip_WrapperReRenders</c> FAILS. A pure
+    /// hot-reload force does not mark any node self-triggered, so the dirty-ancestor-path
+    /// gate alone does NOT cover this case — hence the dedicated gate + this teeth.</para>
+    /// </summary>
+    internal sealed class HotReloadWrapperReRender(Harness h) : SelfTestFixtureBase(h)
+    {
+        // Drives the memoized wrapper cell's body. 0 = pre-edit, 1 = post-edit.
+        private static int _cellShape;
+
+        // A WRAPPER cell (Component) whose body a hot-reload edit changes. Only a
+        // wrapper re-render is at risk from a structural skip during a force pass;
+        // plain elements are safe to skip because their fields are unchanged.
+        private sealed class MemoizedCellComponent : Component
+        {
+            public override Element Render() =>
+                TextBlock(Volatile.Read(ref _cellShape) == 0 ? "wrapCell: v1" : "wrapCell: v2");
+        }
+
+        public override async Task RunAsync()
+        {
+            Volatile.Write(ref _cellShape, 0);
+
+            var items = new[] { 0, 1, 2 };
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                // changedIndices is ALWAYS empty: every cell is reused reference-equal
+                // across renders, so the producer publishes a hint with no changed
+                // indices and the structural fast path is otherwise eligible — it must
+                // be gated off during the hot-reload force pass so the wrapper at index
+                // 1 re-renders its edited body.
+                var cells = ctx.UseMemoCellsByIndex(
+                    items,
+                    new int[0],
+                    (item, i) => i == 1
+                        ? Component<MemoizedCellComponent>()   // wrapper cell
+                        : TextBlock($"plainCell-{i}"));        // plain cells around it
+                return VStack(cells);
+            });
+
+            await Harness.Render();
+            H.Check("HotReloadStructuralSkip_MountV1", H.FindText("wrapCell: v1") is not null);
+
+            // Simulate the developer's edit to the wrapper cell's body.
+            Volatile.Write(ref _cellShape, 1);
+
+            // Drive a real hot-reload force pass. The memoized cells are still reused
+            // reference-equal (changedIndices empty), so WITHOUT the gate the fast path
+            // would skip the untouched wrapper and swallow the edit.
+            HotReloadService.UpdateApplication(null);
+            host.RequestRender(force: true);
+            await Harness.Render();
+
+            // The wrapper re-rendered its edited body. Revert the
+            // !ForceFullRenderActive gate and this stays "wrapCell: v1" (the structural
+            // skip swallowed the edit) → the teeth fails.
+            H.Check("HotReloadStructuralSkip_WrapperReRenders", H.FindText("wrapCell: v2") is not null);
+            H.Check("HotReloadStructuralSkip_OldBodyGone", H.FindText("wrapCell: v1") is null);
+
+            Volatile.Write(ref _cellShape, 0);
         }
     }
 }

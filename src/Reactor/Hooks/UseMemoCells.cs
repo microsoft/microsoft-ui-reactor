@@ -184,16 +184,38 @@ public static class UseMemoCellsExtensions
     /// or <see cref="UseMemoCellsByKey{T,TKey}"/>, both of which can
     /// short-circuit per-cell on value or key equality across length
     /// changes.
+    /// <para>
+    /// On the steady-state path (unchanged count) the returned array reuses
+    /// the previous render's element instance for every index NOT named in
+    /// <paramref name="changedIndices"/>, and publishes a positional
+    /// structural-skip hint (Spec 034 §C) keyed by reference on that array so
+    /// the reconciler can update only the changed cells and skip the
+    /// reference-equal remainder. The returned array is therefore the hook's
+    /// retained memoized state AND the key of that hint: treat it as immutable
+    /// and declare every change through a subsequent render's
+    /// <paramref name="changedIndices"/> (React-style immutability — see
+    /// AGENTS.md "Never mutate"). Mutating an unchanged slot in place both
+    /// corrupts the memo's view of the previous render and can cause the
+    /// reconciler to skip the mutated cell.
+    /// </para>
     /// </summary>
     /// <param name="ctx">The render context.</param>
     /// <param name="items">Source items.</param>
     /// <param name="changedIndices">Indices whose item differs from the
     /// previous render. Negative indices and indices >= <c>items.Count</c>
-    /// throw <see cref="ArgumentOutOfRangeException"/>.</param>
+    /// throw <see cref="ArgumentOutOfRangeException"/>. Duplicate indices are a
+    /// caller-contract violation but are tolerated: they are de-duplicated
+    /// before the named cells are rebuilt, so each cell is rebuilt exactly once
+    /// and the structural-skip hint's theme tally stays exact.</param>
     /// <param name="builder">Cell builder; same contract as
     /// <see cref="UseMemoCells{T}"/>.</param>
     /// <param name="dependencies">Trailing-<c>params</c> deps.</param>
-    /// <remarks>Spec 034 §C.</remarks>
+    /// <remarks>Spec 034 §C. A cell is "theme-sensitive" when it carries
+    /// ThemeBindings or a ThemeRef-backed ResourceOverride; the hook tracks how
+    /// many cells are theme-sensitive (carried forward incrementally) so the
+    /// reconciler falls back to the full walk — which re-resolves themed brushes
+    /// against the current effective theme — instead of structurally skipping
+    /// such a range.</remarks>
     public static Element[] UseMemoCellsByIndex<T>(
         this RenderContext ctx,
         IReadOnlyList<T> items,
