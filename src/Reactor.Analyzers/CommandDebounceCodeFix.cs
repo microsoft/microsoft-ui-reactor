@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Composition;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeActions;
@@ -45,6 +46,19 @@ public sealed class CommandDebounceCodeFix : CodeFixProvider
                   or WithExpressionSyntax);
             if (commandExpr is null) continue;
 
+            semanticModel ??= await context.Document
+                .GetSemanticModelAsync(context.CancellationToken).ConfigureAwait(false);
+            if (semanticModel is null) continue;
+
+            // Never offer a fix that wouldn't compile: UseCommand is a Component hook method, so if
+            // it isn't resolvable at this location (e.g. a static helper, or a type that does not
+            // derive from Component — both of which can still trip the diagnostic via a static Dsl
+            // factory bind), wrapping in UseCommand(...) would produce CS0103. In that case we skip
+            // the fix — the warning still fires and the author lifts the command by hand. Mirrors
+            // the implicit-new guard below: never emit broken code.
+            if (!semanticModel.LookupSymbols(commandExpr.SpanStart, name: "UseCommand").Any(static s => s is IMethodSymbol))
+                continue;
+
             // A target-typed `new() { … }` is typed by *its surrounding context*. Wrapping it
             // verbatim in `UseCommand(...)` re-targets it to UseCommand's parameter, which for a
             // generic Command<T> silently binds the non-generic UseCommand(Command) overload and
@@ -57,9 +71,7 @@ public sealed class CommandDebounceCodeFix : CodeFixProvider
             {
                 if (implicitNew.Initializer is null) continue;
 
-                semanticModel ??= await context.Document
-                    .GetSemanticModelAsync(context.CancellationToken).ConfigureAwait(false);
-                var type = semanticModel?.GetTypeInfo(implicitNew, context.CancellationToken).Type;
+                var type = semanticModel.GetTypeInfo(implicitNew, context.CancellationToken).Type;
                 if (type is null || type.TypeKind == TypeKind.Error) continue;
 
                 var explicitNew = MakeExplicit(implicitNew, type);

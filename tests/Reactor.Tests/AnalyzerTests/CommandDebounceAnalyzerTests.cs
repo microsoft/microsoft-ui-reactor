@@ -60,6 +60,19 @@ namespace Microsoft.UI.Reactor.Core
         public static ButtonElement Command(this ButtonElement element, Command command) => element;
     }
 }
+
+namespace Microsoft.UI.Reactor
+{
+    using Microsoft.UI.Reactor.Core;
+
+    // Mirrors the static Dsl factories (Dsl.cs). Being static, they bind anywhere — including a
+    // helper outside a Component, where the UseCommand hook is NOT in scope. Used to exercise the
+    // code fix's out-of-scope guard.
+    public static class Factories
+    {
+        public static ButtonElement Button(Command command) => new ButtonElement();
+    }
+}
 ";
 
     // ── Positive: bound directly without UseCommand ─────────────────────
@@ -402,10 +415,11 @@ namespace TestApp
     }
 
     [Fact]
-    public async Task Fires_Via_Syntactic_Factory_Fallback()
+    public async Task No_Diagnostic_When_Resolved_NonReactor_Factory()
     {
-        // A non-Reactor factory named ""Button"" (so the semantic Reactor-namespace arm is false)
-        // still trips the conservative syntactic fallback on the known-binding-factory name list.
+        // A method named ""Button"" that Roslyn resolves to a non-Reactor namespace is an unrelated
+        // API, not a Reactor bind — it must NOT warn (the syntactic factory-name list is only a
+        // fallback for when symbol resolution fails, not an override of a successful resolution).
         var source = Stubs + @"
 namespace TestApp
 {
@@ -421,7 +435,59 @@ namespace TestApp
         void Save() { }
 
         public object Render()
-            => CustomUi.Button({|REACTOR_HOOKS_009:new Command { Label = ""Save"", Execute = Save, DebounceMs = 1500 }|});
+            => CustomUi.Button(new Command { Label = ""Save"", Execute = Save, DebounceMs = 1500 });
+    }
+}";
+
+        await new CSharpAnalyzerTest<CommandDebounceAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Fires_Via_Syntactic_Fallback_When_Unresolved()
+    {
+        // When the binding callee can't be resolved (incomplete code mid-edit — here `Button` is
+        // undefined), the conservative syntactic fallback on the known-factory name list still
+        // surfaces the footgun. The CS0103 is expected and declared via markup.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using Microsoft.UI.Reactor.Core;
+
+    public sealed class Comp
+    {
+        void Save() { }
+
+        public void Render()
+        {
+            _ = {|CS0103:Button|}({|REACTOR_HOOKS_009:new Command { Label = ""Save"", Execute = Save, DebounceMs = 1500 }|});
+        }
+    }
+}";
+
+        await new CSharpAnalyzerTest<CommandDebounceAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Fires_On_Parenthesized_Direct_Bind()
+    {
+        // Parentheses around the argument (`Button((cmd))`) must not hide the direct bind.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using Microsoft.UI.Reactor.Core;
+
+    public sealed class Comp : Component
+    {
+        void Save() { }
+
+        public Element Render()
+            => Button(({|REACTOR_HOOKS_009:new Command { Label = ""Save"", Execute = Save, DebounceMs = 1500 }|}));
     }
 }";
 
@@ -632,6 +698,35 @@ namespace TestApp
             TestCode = before,
             FixedCode = after,
             CodeActionEquivalenceKey = CommandDebounceAnalyzer.Id,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task CodeFix_Not_Offered_When_UseCommand_Out_Of_Scope()
+    {
+        // The bind resolves to the static Dsl factory (Reactor namespace), so the diagnostic fires
+        // — but this is a static helper with no Component instance, so UseCommand is not in scope.
+        // Wrapping in UseCommand(...) would not compile, so the fix must NOT be offered (FixedCode
+        // is identical to the input — the warning stands, the author fixes it by hand).
+        var source = Stubs + @"
+namespace TestApp
+{
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Factories;
+
+    public static class Helpers
+    {
+        static void Save() { }
+
+        public static Element Build()
+            => Button({|REACTOR_HOOKS_009:new Command { Label = ""Save"", Execute = Save, DebounceMs = 1500 }|});
+    }
+}";
+
+        await new CSharpCodeFixTest<CommandDebounceAnalyzer, CommandDebounceCodeFix, DefaultVerifier>
+        {
+            TestCode = source,
+            FixedCode = source,
         }.RunAsync(TestContext.Current.CancellationToken);
     }
 }

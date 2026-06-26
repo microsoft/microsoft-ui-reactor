@@ -83,8 +83,10 @@ public sealed class CommandDebounceAnalyzer : DiagnosticAnalyzer
 
         // DebounceMs <= 0 is a no-op at runtime (only > 0 debounces — see RenderContext.UseCommand),
         // so a constant that folds to zero or negative is never a footgun and must never warn. A
-        // non-constant expression falls through and is judged by the binding (conservative: we
-        // can't prove it's <= 0, and under-warning a dynamic value is safer than a false positive).
+        // non-constant expression can't be proven <= 0 at compile time, so it falls through and is
+        // judged by the binding: a dynamic value bound directly still warns. We favor surfacing the
+        // footgun (a runtime value that turns out > 0 is exactly the inert case this rule targets)
+        // over staying silent on the chance it happens to be 0.
         var constant = ctx.SemanticModel.GetConstantValue(debounce.Right, ctx.CancellationToken);
         if (constant.HasValue && constant.Value is int ms && ms <= 0) return;
 
@@ -171,8 +173,9 @@ public sealed class CommandDebounceAnalyzer : DiagnosticAnalyzer
         // The usage must be passed *directly* as an argument (`f(usage)`), not as part of a
         // larger expression (`f(usage.Label)` reads a member and is not a command bind). Project
         // each usage to its enclosing invocation and filter out the ones that aren't direct args.
+        // ClimbParentheses keeps `f((usage))` recognized as a direct bind.
         return usages
-            .Select(static usage => usage.Parent is ArgumentSyntax { Parent: ArgumentListSyntax { Parent: InvocationExpressionSyntax invocation } }
+            .Select(static usage => ClimbParentheses(usage).Parent is ArgumentSyntax { Parent: ArgumentListSyntax { Parent: InvocationExpressionSyntax invocation } }
                 ? invocation
                 : null)
             .Where(static invocation => invocation is not null)
@@ -187,18 +190,33 @@ public sealed class CommandDebounceAnalyzer : DiagnosticAnalyzer
             });
     }
 
+    // Walks up out of any enclosing parentheses so `Button((cmd))` is still seen as a direct
+    // argument bind (the inner expression's immediate parent would otherwise be a
+    // ParenthesizedExpression, not the ArgumentSyntax). Mirrors the repo's StripParentheses
+    // convention (e.g. ReferenceCurrentReadAnalyzer), but climbs upward rather than downward.
+    private static ExpressionSyntax ClimbParentheses(ExpressionSyntax expression)
+    {
+        while (expression.Parent is ParenthesizedExpressionSyntax parens)
+            expression = parens;
+        return expression;
+    }
+
     private static bool IsReactorBinding(InvocationExpressionSyntax invocation, string? calleeName, SyntaxNodeAnalysisContext ctx)
     {
-        // Preferred: the resolved callee is a Reactor API (factory or `.Command(...)` modifier).
+        // When Roslyn can resolve the callee, trust it: a binding only counts if the method lives
+        // in a Reactor namespace (a Dsl factory or the `.Command(...)` modifier). A resolved callee
+        // in any other namespace is an unrelated API that merely shares a name (someone else's
+        // `Button`/`MenuItem`/`.Command(...)`) — not a Reactor bind — so we must not warn on it.
         if (ctx.SemanticModel.GetSymbolInfo(invocation, ctx.CancellationToken).Symbol is IMethodSymbol method)
         {
             var ns = method.ContainingNamespace?.ToDisplayString();
-            if (ns is not null && (ns == ReactorNamespacePrefix || ns.StartsWith(ReactorNamespacePrefix + ".", System.StringComparison.Ordinal)))
-                return true;
+            return ns is not null
+                && (ns == ReactorNamespacePrefix || ns.StartsWith(ReactorNamespacePrefix + ".", System.StringComparison.Ordinal));
         }
 
-        // Syntactic fallback when symbol info is unavailable: a known binding factory, or the
-        // `.Command(...)` fluent modifier (member-access invocation named Command).
+        // Symbol info unavailable (unresolved / incomplete code mid-edit) — fall back to a
+        // conservative syntactic match so the footgun is still surfaced: a known binding factory,
+        // or the `.Command(...)` fluent modifier (member-access invocation named Command).
         if (calleeName is not null && KnownBindingFactories.Contains(calleeName)) return true;
         if (invocation.Expression is MemberAccessExpressionSyntax { Name.Identifier.ValueText: "Command" }) return true;
 
