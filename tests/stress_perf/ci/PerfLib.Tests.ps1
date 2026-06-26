@@ -913,7 +913,7 @@ try {
     # Section rendering.
     Assert-Equal 0 @(Format-PerfMicroSection -Micro $null).Count  'micro section empty when null'
     Assert-Equal 0 @(Format-PerfMicroSection -Micro @()).Count    'micro section empty when no rows'
-    $section = Format-PerfMicroSection -Micro $cmp
+    $section = Format-PerfMicroSection -Micro $cmp -ExpectedCount 4
     $sectionText = $section -join "`n"
     Assert-Match $sectionText 'Reconciler micro-benchmarks'      'section has heading'
     Assert-Match $sectionText 'ns/op'                            'section header names ns/op'
@@ -927,11 +927,42 @@ try {
     Assert-Match $sectionText 'not auto-flagged'                 'dormant section: ns is shown for context, not flagged'
     Assert-True (-not $sectionText.Contains('Status combines ns/op')) 'dormant section: does NOT claim ns is combined'
 
+    # ── Loud incompleteness (PR5c) ──────────────────────────────────────────────
+    # A short table or a fully-omitted leg must be VISIBLE in the comment, never silently
+    # absent (the #693 regression: a per-round timeout dropped the whole section and it went
+    # unnoticed for the PR's entire life). Three render contracts:
+    #   (1) rows present & complete (4/4)   -> no note (the happy path above);
+    #   (2) rows present but < canonical 13 -> a "N/13 Incomplete" warning above the table;
+    #   (3) null rows + an omit reason      -> a visible "omitted this run -- <reason>" callout;
+    #   (4) null rows + no reason           -> still silent (the leg was simply not requested).
+    Assert-True (-not $sectionText.Contains('Incomplete'))       'complete render (4/4 benches): no incompleteness note'
+    $shortText = (Format-PerfMicroSection -Micro $cmp -ExpectedCount 13) -join "`n"
+    Assert-Match $shortText 'Incomplete'                         'short render: labels the section incomplete'
+    Assert-Match $shortText '4/13'                               'short render: shows the N/13 bench count'
+    Assert-Match $shortText 'WARNING'                            'short render: uses a visible GitHub warning callout'
+    Assert-Match $shortText 'Reconciler micro-benchmarks'        'short render: still renders the heading + table'
+    Assert-True ($shortText.Contains('`M1` PropertyDiff'))       'short render: the benches that DID pair still render'
+
+    $omitText = (Format-PerfMicroSection -Micro $null -OmitReason 'the rep-interleave kept fewer than 2 paired rounds (a per-round timeout)') -join "`n"
+    Assert-Match $omitText 'omitted this run'                    'omit render: visible omission block when a reason is supplied'
+    Assert-Match $omitText 'timeout'                             'omit render: surfaces the omit reason text'
+    Assert-Match $omitText 'Reconciler micro-benchmarks'        'omit render: keeps the heading so the leg is not silent'
+    Assert-Match $omitText 'WARNING'                             'omit render: uses a visible GitHub warning callout'
+    Assert-Equal 0 @(Format-PerfMicroSection -Micro $null -OmitReason $null).Count 'omit render: silent when null rows AND no reason (leg not requested)'
+    Assert-Equal 0 @(Format-PerfMicroSection -Micro @() -OmitReason '   ').Count   'omit render: whitespace-only reason treated as no reason'
+
     # Format-PerfComment threads -Micro through into the comment.
     $microComment = Format-PerfComment -Main $allocMain -Pr $allocPr -WinUI3 $null -Rust $null -Micro $cmp -Context $ctx
     Assert-Match $microComment 'Reconciler micro-benchmarks'     'comment includes micro section when -Micro supplied'
     Assert-Match $microComment 'WinUI-undiluted'                 'comment carries the micro footnote'
     Assert-Match $microComment 'flag stays dormant pending a real-CI identical-binary band calibration' 'dormant footnote: ns flag dormant pending calibration'
+
+    # End-to-end: Format-PerfComment threads -MicroOmitReason so the omission is visible in the
+    # ASSEMBLED comment (not just the section helper) — and renders no bench table when omitted.
+    $omitComment = Format-PerfComment -Main $allocMain -Pr $allocPr -WinUI3 $null -Rust $null -Micro $null -MicroOmitReason 'the micro exe was not built for the PR side' -Context $ctx
+    Assert-Match $omitComment 'omitted this run'                 'comment surfaces micro omission end-to-end'
+    Assert-Match $omitComment 'micro exe was not built'          'comment carries the omit reason text'
+    Assert-True (-not ($omitComment -like '*| Bench |*'))        'comment omission renders no bench table (rows absent)'
 
     # Armed render: flip the master switch and confirm the section prose + footnote switch
     # to the combined-axis wording (and back). Arming is measurement-only, so this just
@@ -939,7 +970,7 @@ try {
     $prevFlagRender = $script:MicroNsAutoFlag
     $script:MicroNsAutoFlag = $true
     try {
-        $armedSection = (Format-PerfMicroSection -Micro $cmp) -join "`n"
+        $armedSection = (Format-PerfMicroSection -Micro $cmp -ExpectedCount 4) -join "`n"
         Assert-Match $armedSection 'Status combines ns/op and allocated bytes/op' 'armed section: status combines ns + alloc'
         Assert-Match $armedSection 'mixed'                                         'armed section: documents the mixed verdict'
         Assert-True (-not $armedSection.Contains('Status tracks allocated bytes/op')) 'armed section: drops the alloc-only wording'

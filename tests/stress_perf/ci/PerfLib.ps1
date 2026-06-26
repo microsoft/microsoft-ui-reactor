@@ -76,6 +76,14 @@ $script:MicroNsMinEffectPct = 3.0
 # changes /perf verdict labels, never what merges.
 $script:MicroNsAutoFlag = $false
 
+# Canonical reconciler micro-suite size (spec-047 M1-M13; the source of truth is
+# tests/perf_bench/PerfBench.ControlModel/Benches/AllBenches.cs). A complete run compares
+# exactly this many benches across both sides; FEWER means one or more benches errored or
+# were filtered on a side and dropped from the paired comparison. Format-PerfMicroSection
+# surfaces that as a visible "N/<this>" incompleteness note rather than silently rendering a
+# short table that is indistinguishable from a clean full run. Keep in sync if the suite grows.
+$script:MicroExpectedBenchCount = 13
+
 function ConvertTo-PerfDouble {
     <#
     .SYNOPSIS Culture-tolerant parse of a captured numeric string, or $null.
@@ -709,14 +717,54 @@ function Format-PerfMicroSection {
     <#
     .SYNOPSIS
         Render the reconciler micro-benchmark table (mean ns/op + alloc bytes/op,
-        PR vs main) as markdown lines. Empty array when there is nothing to show.
+        PR vs main) as markdown lines.
+    .DESCRIPTION
+        Visibility contract -- the section must never SILENTLY vanish when the leg was
+        attempted (the #693-class regression where a per-round timeout dropped the whole
+        section and it went unnoticed for the PR's entire life):
+          * rows present            -> the comparison table, preceded by a visible
+                                       "N/<expected> benches" warning when a side dropped
+                                       benches (a short table is otherwise indistinguishable
+                                       from a clean full run);
+          * no rows but -OmitReason -> a visible "omitted this run -- <reason>" warning
+                                       callout (the leg was attempted and failed);
+          * no rows and no reason   -> empty array (the leg was not requested -> stay silent).
+    .PARAMETER Micro         Per-bench comparison rows (Get-PerfMicroComparison), or $null.
+    .PARAMETER OmitReason    Why the section produced no rows despite being attempted; when set
+                             (and Micro is empty) a visible omission callout is rendered instead
+                             of nothing, so a timeout / missing-exe / thrown leg is never
+                             mistaken for a clean absence.
+    .PARAMETER ExpectedCount Canonical bench count for the N/<expected> completeness check
+                             (defaults to the spec-047 M1-M13 count); 0 disables the check.
     #>
-    param([AllowNull()][object[]]$Micro)
-    if ($null -eq $Micro -or @($Micro).Count -eq 0) { return @() }
+    param(
+        [AllowNull()][object[]]$Micro,
+        [AllowNull()][string]$OmitReason,
+        [int]$ExpectedCount = $script:MicroExpectedBenchCount
+    )
+    $heading = "### Reconciler micro-benchmarks (``PerfBench.ControlModel``)"
+    if ($null -eq $Micro -or @($Micro).Count -eq 0) {
+        if ([string]::IsNullOrWhiteSpace($OmitReason)) { return @() }
+        return @(
+            $heading
+            ''
+            '> [!WARNING]'
+            "> **Micro-suite omitted this run** &mdash; $OmitReason."
+            "> The ns/op + allocated-bytes/op reconciler deltas (spec-047 M1&ndash;M13) are unavailable for this comparison &mdash; a harness/runner condition, **not** a clean result. See the workflow run log for the per-side detail."
+            ''
+        )
+    }
     $down = [char]0x2193
     $lines = [System.Collections.Generic.List[string]]::new()
-    $lines.Add("### Reconciler micro-benchmarks (``PerfBench.ControlModel``)")
+    $lines.Add($heading)
     $lines.Add('')
+    $renderedCount = @($Micro).Count
+    if ($ExpectedCount -gt 0 -and $renderedCount -lt $ExpectedCount) {
+        $missingCount = $ExpectedCount - $renderedCount
+        $lines.Add('> [!WARNING]')
+        $lines.Add("> **Incomplete &mdash; $renderedCount/$ExpectedCount benches.** $missingCount bench(es) errored or were filtered on a side this run and dropped from the paired comparison; the rows below are only the benches that reported on **both** sides. See the workflow run log.")
+        $lines.Add('')
+    }
     if ($script:MicroNsAutoFlag) {
         $lines.Add("Production ``--variant Reactor`` control-model path, ns-resolution and WinUI-undiluted (spec-047 M1&ndash;M13) &mdash; $down lower is better. **Status combines ns/op and allocated bytes/op**: the per-side runs are rep-interleaved (a fresh alternated process per rep), so the ns paired CI is unbiased and a bench is flagged when EITHER axis' 95% CI clears its minimum-effect band &mdash; &plusmn;$($script:MicroNsMinEffectPct)% for ns (residual cold-JIT / scheduling jitter), &plusmn;$($script:MicroAllocMinEffectPct)% for the deterministic alloc metric. When the two axes disagree the row reads $([char]0x2195)$([char]0xFE0F) mixed &mdash; consult the individual Δ cells. Δ is the mean paired change with a 95% CI.")
     } else {
@@ -894,6 +942,10 @@ function Format-PerfComment {
                           measured live on this runner, or $null when not run.
     .PARAMETER Micro      Per-bench reconciler micro-suite comparison rows
                           (Get-PerfMicroComparison output), or $null when not run.
+    .PARAMETER MicroOmitReason  Why the micro section has no rows despite the leg being
+                          attempted (timeout / missing exe / thrown leg). When set and Micro is
+                          empty, a visible omission callout is rendered instead of a silent
+                          absence. $null when the leg ran or was not requested.
     .PARAMETER MainFloor  Aggregated baseline low-mutation skip-floor metrics, or $null.
     .PARAMETER PrFloor    Aggregated PR-head low-mutation skip-floor metrics, or $null.
     .PARAMETER MainKeyed  Aggregated baseline keyed-list workload metrics, or $null.
@@ -908,6 +960,7 @@ function Format-PerfComment {
         [AllowNull()][pscustomobject]$WinUI3,
         [AllowNull()][pscustomobject]$Rust,
         [AllowNull()][object[]]$Micro,
+        [AllowNull()][string]$MicroOmitReason,
         [AllowNull()][pscustomobject]$MainFloor,
         [AllowNull()][pscustomobject]$PrFloor,
         [AllowNull()][pscustomobject]$MainKeyed,
@@ -998,7 +1051,7 @@ function Format-PerfComment {
     # Rendered only when the PerfBench.ControlModel micro leg produced results for
     # both sides. Resolves Core/Reconciler time + allocation deltas the macro
     # StocksGrid workload above cannot (it is render-bound and working-set diluted).
-    foreach ($mline in (Format-PerfMicroSection -Micro $Micro)) { & $add $mline }
+    foreach ($mline in (Format-PerfMicroSection -Micro $Micro -OmitReason $MicroOmitReason)) { & $add $mline }
 
     # ── Table 2: cross-framework reference ───────────────────────────────────
     & $add "### Cross-framework reference (same StocksGrid workload)"

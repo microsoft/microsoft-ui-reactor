@@ -320,6 +320,12 @@ Assert-True ($microWire -match 'Invoke-MicroRun\s+-Exe\s+\$exe\s+-Tag\s+.+-RepCo
 Assert-True ($microWire -match 'Invoke-MicroInterleaved\s+-LaunchRep\s+\$launchRep\s+-RepCount\s+\$MicroReps\s+-WarmupCount\s+\$MicroWarmup') '[micro-wiring] interleaver gets MicroReps measured + MicroWarmup warmup rounds'
 Assert-True (($microWire -match '\$microInter\.MainJson') -and ($microWire -match '\$microInter\.PrJson')) '[micro-wiring] comparison reads the interleaved accumulators (.MainJson/.PrJson)'
 Assert-True ($microWire -match 'Get-PerfMicroComparison') '[micro-wiring] interleaved accumulators feed Get-PerfMicroComparison'
+# PR5c: incompleteness must reach the COMMENT, not just the run log. Lock that the omit
+# reason is captured when the leg produces no comparison (timeout / missing-exe / thrown) and
+# that it threads into Format-PerfComment so the section renders a visible "incomplete" callout
+# instead of silently vanishing (the #693 regression).
+Assert-True ($microWire -match '\$microOmitReason\s*=\s*"') '[micro-wiring] an omit reason is captured when the micro leg yields no comparison'
+Assert-True ($src -match 'Format-PerfComment .*-MicroOmitReason \$microOmitReason') '[micro-wiring] the captured omit reason threads into Format-PerfComment'
 
 # ===========================================================================
 #  Invoke-OneRun — --percent threading (-RunPercent defaults to $Percent)
