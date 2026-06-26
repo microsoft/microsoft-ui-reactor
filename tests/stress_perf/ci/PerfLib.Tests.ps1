@@ -451,16 +451,19 @@ Assert-Match $floorComment1 '--percent 1' 'skip-floor heading reflects Context.S
 
 
 # ── Format-PerfKeyedListSection + Format-PerfComment: keyed-list workload ──────
-# 12 paired keyed-list runs. As with the skip-floor fixture, rps/reconcile/diff all
-# move DOWN main->PR (memory held flat) so the verdicts must split BY DIRECTION:
-# rps (higher-better) DOWN = regression while reconcile/diff (lower-better) DOWN =
-# improvement — proving the keyed section reuses Table 1's direction-aware paired-CI
-# machinery, not a hard-coded direction. Small jitter keeps each paired CI off 0.
+# 12 paired keyed-list runs exercising ALL FOUR headline metrics by direction AND by
+# significance: rps/reconcile/diff move DOWN main->PR, while memory carries a small
+# SYMMETRIC per-pair jitter (mean Δ ~0). So the verdicts must split: rps (higher-
+# better) DOWN = regression; reconcile/diff (lower-better) DOWN = improvement; memory's
+# paired CI straddles 0 = within noise — proving the keyed section reuses Table 1's
+# direction-aware paired-CI machinery, not a hard-coded verdict. The small jitter on
+# the directional metrics keeps each of their paired CIs off 0.
 $keyedMainRuns = @(); $keyedPrRuns = @()
 1..12 | ForEach-Object {
     $j = ($_ % 4) * 0.05
-    $keyedMainRuns += [pscustomobject]@{ RendersPerSec = 8.0 + $j; AvgReconcileMs = 9.0 + $j; AvgDiffMs = 7.0 + $j; AvgMemoryMB = 250 + $j; TotalRenders = 80; DurationSeconds = 10 }
-    $keyedPrRuns   += [pscustomobject]@{ RendersPerSec = 7.0 + $j; AvgReconcileMs = 7.0 + $j; AvgDiffMs = 5.0 + $j; AvgMemoryMB = 250 + $j; TotalRenders = 70; DurationSeconds = 10 }
+    $mj = ((($_ % 2) * 2) - 1) * 0.2  # alternating +0.2 / -0.2 so the paired memory Δ straddles 0
+    $keyedMainRuns += [pscustomobject]@{ RendersPerSec = 8.0 + $j; AvgReconcileMs = 9.0 + $j; AvgDiffMs = 7.0 + $j; AvgMemoryMB = 250 + $mj; TotalRenders = 80; DurationSeconds = 10 }
+    $keyedPrRuns   += [pscustomobject]@{ RendersPerSec = 7.0 + $j; AvgReconcileMs = 7.0 + $j; AvgDiffMs = 5.0 + $j; AvgMemoryMB = 250 - $mj; TotalRenders = 70; DurationSeconds = 10 }
 }
 $keyedMain = Measure-PerfRuns -Runs $keyedMainRuns
 $keyedPr   = Measure-PerfRuns -Runs $keyedPrRuns
@@ -479,8 +482,12 @@ Assert-Match $keyedSectionText 'LIS'                    'keyed preamble cites th
 # better) must read regression while reconcile (lower-is-better) reads improvement.
 $keyedRpsRow   = ($keyedSection | Where-Object { $_ -match 'Renders/sec' })   -join ' '
 $keyedReconRow = ($keyedSection | Where-Object { $_ -match 'Avg Reconcile' }) -join ' '
+$keyedDiffRow  = ($keyedSection | Where-Object { $_ -match 'Avg Diff' })      -join ' '
+$keyedMemRow   = ($keyedSection | Where-Object { $_ -match 'Avg Memory' })    -join ' '
 Assert-Match $keyedRpsRow   'regression'  'keyed: rps DOWN reads regression (higher-is-better honored)'
 Assert-Match $keyedReconRow 'improvement' 'keyed: reconcile DOWN reads improvement (lower-is-better honored)'
+Assert-Match $keyedDiffRow  'improvement' 'keyed: diff DOWN reads improvement (lower-is-better honored)'
+Assert-Match $keyedMemRow   'within noise' 'keyed: symmetric memory Δ reads within noise (paired CI straddles 0)'
 # -Percent threads into the heading independently of the methodology line.
 $keyedSection75 = (Format-PerfKeyedListSection -MainKeyed $keyedMain -PrKeyed $keyedPr -Percent 75) -join "`n"
 Assert-Match $keyedSection75 'Keyed-list workload*--percent 75' 'keyed heading reflects the -Percent argument'

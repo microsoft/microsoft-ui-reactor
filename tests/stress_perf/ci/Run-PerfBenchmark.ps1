@@ -729,7 +729,18 @@ if ($DefenderExclude) {
 
 $runner = Get-RunnerInfo
 Write-Log ("runner: {0} | {1} cores | {2} GB | {3}" -f $runner.Cpu, $runner.Cores, $runner.MemoryGB, ($runner.Runner ?? 'local')) 'Cyan'
-Write-Log ("mode: {0} | platform={1} | percent={2} duration={3} reps={4} warmup={5} | skip-floor={6} | keyed-list={7}" -f ($(if ($Compare) { 'COMPARE' } else { 'LOCAL' })), $Platform, $Percent, $Duration, $Reps, $Warmup, $(if ($IncludeSkipFloor) { "on (--percent $SkipFloorPercent)" } else { 'off' }), $(if ($IncludeKeyedList) { 'on' } else { 'off' })) 'Cyan'
+$modeSuffix = if ($Compare) {
+    # COMPARE mode runs the interleaved A/B legs, so the skip-floor / keyed-list
+    # opt-out switches are what actually decide which legs run.
+    "skip-floor={0} | keyed-list={1}" -f `
+        $(if ($IncludeSkipFloor) { "on (--percent $SkipFloorPercent)" } else { 'off' }), `
+        $(if ($IncludeKeyedList) { 'on' } else { 'off' })
+} else {
+    # LOCAL mode ignores the interleaved-leg switches entirely; the workload set is
+    # whatever -Apps selects, so report that instead of a misleading on/off.
+    "apps={0}" -f ($Apps -join ',')
+}
+Write-Log ("mode: {0} | platform={1} | percent={2} duration={3} reps={4} warmup={5} | {6}" -f ($(if ($Compare) { 'COMPARE' } else { 'LOCAL' })), $Platform, $Percent, $Duration, $Reps, $Warmup, $modeSuffix) 'Cyan'
 
 $exit = 0
 try {

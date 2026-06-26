@@ -339,6 +339,17 @@ Assert-True ($src -match "-Tag 'pr-keyed'")   '[keyed] leg interleaves the PR si
 Assert-True ($src -match '-MainKeyed \$mainKeyed') '[keyed] Format-PerfComment receives the main keyed aggregate'
 Assert-True ($src -match '-PrKeyed \$prKeyed')     '[keyed] Format-PerfComment receives the PR keyed aggregate'
 
+# Opt-out + best-effort build fallback: the keyed build is guarded by the switch, and a
+# build failure flips the switch off (omit the table, never throw) so the leg is skipped.
+Assert-True ($src -match 'if \(\$IncludeKeyedList -and -not \$SkipBuild\)') '[keyed] build is guarded by -IncludeKeyedList (and -SkipBuild)'
+Assert-True ($src -match '(?s)keyed-list workload build failed.*?\$IncludeKeyedList = \$false') '[keyed] a build failure flips -IncludeKeyedList off (best-effort: omit table, never throw)'
+Assert-True ($src -match '\$mainKeyedRuns = @\(\); \$prKeyedRuns = @\(\)\s*\r?\n\s*if \(\$IncludeKeyedList\)') '[keyed] the run leg is skipped unless -IncludeKeyedList is on'
+
+# Paired drop-both alignment: a complete keyed pair appends BOTH sides; a one-sided
+# failure drops BOTH halves so the paired CI's main[i]/pr[i] zip stays index-aligned.
+Assert-True ($src -match 'if \(\$mm -and \$pm\) \{ \$mainKeyedRuns \+= \$mm; \$prKeyedRuns \+= \$pm \}') '[keyed] a complete pair appends both main + pr samples'
+Assert-True ($src -match 'elseif \(\$mm -or \$pm\) \{ Write-Log "  keyed pair #\$i incomplete') '[keyed] a one-sided keyed run drops both halves (paired CI stays aligned)'
+
 # cleanup
 foreach ($d in @($baseTree, $prTree, $OutDir, $exeDir)) {
     if (Test-Path $d) { Remove-Item $d -Recurse -Force -ErrorAction SilentlyContinue }
