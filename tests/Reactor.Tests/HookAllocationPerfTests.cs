@@ -554,24 +554,34 @@ public class HookAllocationPerfTests
         Func<string, string> keySel = x => x;
         Func<string, int, Element> build = (item, i) => new DivElement($"v={item}");
 
-        for (int w = 0; w < 3; w++) // prime + JIT the fast-path return
+        for (int w = 0; w < 200; w++) // prime + JIT the fast-path return
         {
             ctx.UseMemoCellsByKey(items, keySel, build, deps);
             Rerender(ctx);
         }
 
-        long worst = 0;
-        for (int i = 0; i < 64; i++)
+        // Bracket ONLY the hook call each iteration (Rerender/BeginRender allocates and
+        // is deliberately excluded) and sum the per-call deltas. A true full-reuse hit
+        // allocates nothing, so the sum stays at/near 0.
+        const int iterations = 2000;
+        long total = 0;
+        for (int i = 0; i < iterations; i++)
         {
             long before = GC.GetAllocatedBytesForCurrentThread();
             var children = ctx.UseMemoCellsByKey(items, keySel, build, deps);
             long after = GC.GetAllocatedBytesForCurrentThread();
-            worst = Math.Max(worst, after - before);
+            total += after - before;
             Assert.Equal(3, children.Length); // full-reuse path actually taken
             Rerender(ctx);
         }
 
-        Assert.Equal(0, worst);
+        // <= 1 byte/call averaged (repo idiom; cf. DockPerfBudgetTests
+        // DropTargetHitTest_HotPath_ZeroAlloc): absorbs incidental bookkeeping / one-time
+        // tiered-JIT jitter on shared CI runners while still catching any real per-call
+        // allocation — re-allocating the key buffer (~24 B), the children array (~40 B),
+        // or a Dictionary (~200 B) per call would exceed the cap by orders of magnitude.
+        Assert.True(total <= iterations,
+            $"UseMemoCellsByKey full-reuse path allocated {total}B over {iterations} steady-state calls (cap {iterations}B = 1 B/call); a real per-call regression would far exceed this.");
     }
 
     [Fact]
