@@ -81,9 +81,12 @@ public sealed class CommandDebounceAnalyzer : DiagnosticAnalyzer
         var debounce = FindDebounceAssignment(initializer);
         if (debounce is null) return;
 
-        // DebounceMs = 0 (or a constant that folds to 0) is the documented "off" value — never warn.
+        // DebounceMs <= 0 is a no-op at runtime (only > 0 debounces — see RenderContext.UseCommand),
+        // so a constant that folds to zero or negative is never a footgun and must never warn. A
+        // non-constant expression falls through and is judged by the binding (conservative: we
+        // can't prove it's <= 0, and under-warning a dynamic value is safer than a false positive).
         var constant = ctx.SemanticModel.GetConstantValue(debounce.Right, ctx.CancellationToken);
-        if (constant.HasValue && constant.Value is int zero && zero == 0) return;
+        if (constant.HasValue && constant.Value is int ms && ms <= 0) return;
 
         // Confirm this is actually the Reactor Command type (avoid matching unrelated `Command`s).
         var type = ctx.SemanticModel.GetTypeInfo(node, ctx.CancellationToken).Type;

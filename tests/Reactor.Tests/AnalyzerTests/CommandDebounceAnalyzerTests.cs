@@ -49,7 +49,15 @@ namespace Microsoft.UI.Reactor.Core
         protected Command UseCommand(Command command) => command;
         protected Command<T> UseCommand<T>(Command<T> command) => command;
         protected ButtonElement Button(Command command) => new ButtonElement();
+        protected ButtonElement Button(string label) => new ButtonElement();
         protected ButtonElement MenuItem<T>(Command<T> command, T parameter) => new ButtonElement();
+    }
+
+    // Mirrors the `.Command(...)` fluent modifier (ElementExtensions.cs). Living in a
+    // Microsoft.UI.Reactor.* namespace is what makes the analyzer treat it as a binding sink.
+    public static class ButtonModifiers
+    {
+        public static ButtonElement Command(this ButtonElement element, Command command) => element;
     }
 }
 ";
@@ -355,6 +363,267 @@ namespace TestApp
             var save = UseCommand(new Command { Label = ""Save"", Execute = Save, DebounceMs = 1500 });
             return Button(save);
         }
+    }
+}";
+
+        await new CSharpCodeFixTest<CommandDebounceAnalyzer, CommandDebounceCodeFix, DefaultVerifier>
+        {
+            TestCode = before,
+            FixedCode = after,
+            CodeActionEquivalenceKey = CommandDebounceAnalyzer.Id,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    // ── Binding sinks: `.Command(...)` modifier + syntactic factory fallback ──
+
+    [Fact]
+    public async Task Fires_On_Command_Modifier_Bind()
+    {
+        // The `.Command(...)` fluent sink resolves (semantically) to a Reactor-namespace
+        // extension method, so the member-access binding arm should fire.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using Microsoft.UI.Reactor.Core;
+
+    public sealed class Comp : Component
+    {
+        void Save() { }
+
+        public Element Render()
+            => Button(""Save"").Command({|REACTOR_HOOKS_009:new Command { Label = ""Save"", Execute = Save, DebounceMs = 1500 }|});
+    }
+}";
+
+        await new CSharpAnalyzerTest<CommandDebounceAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Fires_Via_Syntactic_Factory_Fallback()
+    {
+        // A non-Reactor factory named ""Button"" (so the semantic Reactor-namespace arm is false)
+        // still trips the conservative syntactic fallback on the known-binding-factory name list.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using Microsoft.UI.Reactor.Core;
+
+    public static class CustomUi
+    {
+        public static object Button(Command command) => command;
+    }
+
+    public sealed class Comp : Component
+    {
+        void Save() { }
+
+        public object Render()
+            => CustomUi.Button({|REACTOR_HOOKS_009:new Command { Label = ""Save"", Execute = Save, DebounceMs = 1500 }|});
+    }
+}";
+
+        await new CSharpAnalyzerTest<CommandDebounceAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    // ── Negative: a foreign, same-named Command type must never fire (FP guard) ──
+
+    [Fact]
+    public async Task No_Diagnostic_When_Foreign_Command_Type()
+    {
+        // A different library's `Command` (with its own DebounceMs) bound to its own factory must
+        // NOT warn — the type is not Microsoft.UI.Reactor.Core.Command.
+        var source = Stubs + @"
+namespace Other
+{
+    public sealed record Command
+    {
+        public string Label { get; init; }
+        public int DebounceMs { get; init; }
+    }
+
+    public static class Ui
+    {
+        public static object Button(Command command) => command;
+    }
+}
+
+namespace TestApp
+{
+    public sealed class Comp : Microsoft.UI.Reactor.Core.Component
+    {
+        public object Render()
+            => Other.Ui.Button(new Other.Command { Label = ""x"", DebounceMs = 1500 });
+    }
+}";
+
+        await new CSharpAnalyzerTest<CommandDebounceAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    // ── Constant folding: const positive fires; const/literal <= 0 never does ──
+
+    [Fact]
+    public async Task Fires_On_Const_DebounceMs()
+    {
+        // A non-literal constant must still fold through GetConstantValue and fire when > 0.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using Microsoft.UI.Reactor.Core;
+
+    public sealed class Comp : Component
+    {
+        void Save() { }
+
+        const int Delay = 1500;
+
+        public Element Render()
+            => Button({|REACTOR_HOOKS_009:new Command { Label = ""Save"", Execute = Save, DebounceMs = Delay }|});
+    }
+}";
+
+        await new CSharpAnalyzerTest<CommandDebounceAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task No_Diagnostic_When_DebounceMs_Negative()
+    {
+        // Runtime only debounces > 0; a negative literal is a no-op and must never warn.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using Microsoft.UI.Reactor.Core;
+
+    public sealed class Comp : Component
+    {
+        void Save() { }
+
+        public Element Render()
+            => Button(new Command { Label = ""Save"", Execute = Save, DebounceMs = -5 });
+    }
+}";
+
+        await new CSharpAnalyzerTest<CommandDebounceAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task No_Diagnostic_When_Const_DebounceMs_Zero()
+    {
+        var source = Stubs + @"
+namespace TestApp
+{
+    using Microsoft.UI.Reactor.Core;
+
+    public sealed class Comp : Component
+    {
+        void Save() { }
+
+        const int Off = 0;
+
+        public Element Render()
+            => Button(new Command { Label = ""Save"", Execute = Save, DebounceMs = Off });
+    }
+}";
+
+        await new CSharpAnalyzerTest<CommandDebounceAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    // ── Code fix: `with` expression + implicit target-typed generic new ──
+
+    [Fact]
+    public async Task CodeFix_Wraps_With_Expression_In_UseCommand()
+    {
+        var before = Stubs + @"
+namespace TestApp
+{
+    using Microsoft.UI.Reactor.Core;
+
+    public sealed class Comp : Component
+    {
+        void Save() { }
+
+        public Element Render()
+        {
+            var baseCmd = new Command { Label = ""Save"", Execute = Save };
+            return Button({|REACTOR_HOOKS_009:baseCmd with { DebounceMs = 1500 }|});
+        }
+    }
+}";
+
+        var after = Stubs + @"
+namespace TestApp
+{
+    using Microsoft.UI.Reactor.Core;
+
+    public sealed class Comp : Component
+    {
+        void Save() { }
+
+        public Element Render()
+        {
+            var baseCmd = new Command { Label = ""Save"", Execute = Save };
+            return Button(UseCommand(baseCmd with { DebounceMs = 1500 }));
+        }
+    }
+}";
+
+        await new CSharpCodeFixTest<CommandDebounceAnalyzer, CommandDebounceCodeFix, DefaultVerifier>
+        {
+            TestCode = before,
+            FixedCode = after,
+            CodeActionEquivalenceKey = CommandDebounceAnalyzer.Id,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task CodeFix_Rewrites_Implicit_Generic_New_To_Explicit()
+    {
+        // Regression guard (H1): wrapping a target-typed `new() { … }` verbatim re-targets it to
+        // UseCommand's parameter and binds the non-generic overload → CS0123. The fix must first
+        // materialize the resolved type as `new Command<int> { … }` so the result compiles. The
+        // CodeFixTest harness compiles FixedCode, so a broken rewrite would fail here.
+        var before = Stubs + @"
+namespace TestApp
+{
+    using Microsoft.UI.Reactor.Core;
+
+    public sealed class Comp : Component
+    {
+        void Delete(int id) { }
+
+        public Element Render()
+            => MenuItem({|REACTOR_HOOKS_009:new() { Label = ""Delete"", Execute = Delete, DebounceMs = 800 }|}, 5);
+    }
+}";
+
+        var after = Stubs + @"
+namespace TestApp
+{
+    using Microsoft.UI.Reactor.Core;
+
+    public sealed class Comp : Component
+    {
+        void Delete(int id) { }
+
+        public Element Render()
+            => MenuItem(UseCommand(new Command<int> { Label = ""Delete"", Execute = Delete, DebounceMs = 800 }), 5);
     }
 }";
 
