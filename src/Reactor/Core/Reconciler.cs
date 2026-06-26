@@ -2690,7 +2690,8 @@ public sealed partial class Reconciler : IDisposable
         // decide. The actual P3 saving lives inside that helper: it skips the SetName
         // write when the live Name already equals the caption-derived default (the
         // redundant same-value write). GetName is NOT skipped for unchanged captions —
-        // only the redundant SetName is. We touch the DP only when the helper returns a value.
+        // only the redundant SetName is. We perform the SetName write only when the helper
+        // returns a value (the GetName read above always runs for a non-whitespace caption).
         if (string.IsNullOrWhiteSpace(newCaption)) return;
         var current = Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(fe);
         var resolved = ResolveDefaultAutomationNameUpdate(current, oldCaption, newCaption);
