@@ -553,6 +553,10 @@ public class ChartScannerRuleTests
         var findings = AccessibilityScanner.Scan(tree);
         var finding = Assert.Single(findings, f => f.Id == "A11Y_CHART_009");
         Assert.Equal("SetColors", finding.Fix.Modifier);
+        // The remediation snippet must imply the modifier takes color args — `.SetColors(...)`,
+        // not an empty-args `.SetColors()` that would read as a non-compiling zero-arg call (PR #708 review).
+        Assert.Contains(".SetColors(...)", finding.Fix.CodeSnippet);
+        Assert.DoesNotContain(".SetColors()", finding.Fix.CodeSnippet);
     }
 
     [Fact]

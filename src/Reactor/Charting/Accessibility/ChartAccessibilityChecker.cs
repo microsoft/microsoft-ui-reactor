@@ -178,7 +178,7 @@ internal sealed class ChartAccessibilityChecker : IScanExtension
                         {
                             Modifier = cd.CustomPaletteModifier,
                             SuggestedValue = string.Join(", ", hardenResult.Palette.Colors.Select(c => c.ToHex())),
-                            CodeSnippet = $".Palette(ChartPalette.OkabeIto) or use .{cd.CustomPaletteModifier}() with the suggested values",
+                            CodeSnippet = $".Palette(ChartPalette.OkabeIto) or use .{cd.CustomPaletteModifier}(...) with the suggested values",
                         },
                         Context = ctx.BuildContext(canvas),
                     });
