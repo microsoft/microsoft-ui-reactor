@@ -220,6 +220,26 @@ equivalent is collected) and absent in a harness built before the metric landed.
 > target; its run-to-run swing is larger than the effect. Full rationale in
 > [`ci/README.md`](ci/README.md#variance-trust-the-delta-not-the-absolutes).
 
+## Low-mutation skip-floor: isolating the O(n) child skip-walk
+
+The headline macro leg runs at `--percent 50` (half the cells mutate each tick).
+At that mutation rate the per-tick cost is dominated by the *changed* cells, and a
+large fixed cost is **diluted**: `ChildReconciler` re-walks **all** children every
+tick to find what moved, an O(n) pass that runs whether 1 cell changed or 500 did.
+At 50% that skip-walk is a fraction of the work; a structural-skip optimization
+(skip untouched child ranges) barely moves the headline number.
+
+So `/perf` runs a **second interleaved A/B leg at `--percent 0`** and reports it as
+its own *low-mutation skip-floor* table. At 0% the workload still mutates exactly
+one cell per tick — `StockDataSource.Update` clamps the change count to
+`Math.Max(1, …)` — so virtually every child is unchanged and reconcile/diff time
+*is* the skip-walk floor. That makes the floor the whole signal instead of a diluted
+fraction, which is what lets a structural-skip PR's win clear a paired-Δ CI. It uses
+the same interleaving, reps, warm-up, and 95%-CI gating as the headline table (so
+each leg's delta independently cancels time-correlated drift); it is opt-out via
+`-IncludeSkipFloor $false`. See
+[`ci/README.md`](ci/README.md#the-comment).
+
 ## Reconciler micro-benchmarks: ns-resolution Core path
 
 Every metric above is measured **across a live WinUI render pipeline**, which is

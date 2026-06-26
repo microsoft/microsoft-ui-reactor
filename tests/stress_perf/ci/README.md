@@ -148,6 +148,8 @@ git worktree remove ../main
 | `-IncludeMicro` | `$true` | Run the `PerfBench.ControlModel` reconciler micro-suite (compare mode) and append its per-bench ns/op + B/op table. Set `$false` to skip it. |
 | `-MicroReps` | `12` | Repetitions per side for the micro-suite — each feeds the paired 95% CI, mirroring `-Reps`. |
 | `-MicroIterations` | `10000` | Inner iterations per repetition inside each micro-bench (amortises timer resolution). |
+| `-IncludeSkipFloor` | `$true` | Run a **second interleaved A/B leg** at `-SkipFloorPercent` and append a low-mutation skip-floor table (compare mode). Set `$false` to skip it (halves the macro runtime). |
+| `-SkipFloorPercent` | `0` | Mutation percent for the skip-floor leg. At `0` the workload still mutates one cell/tick (`StockDataSource.Update` clamps the count to `Math.Max(1, …)`), so reconcile/diff isolate the O(n) per-tick child skip-walk floor the 50% leg dilutes. |
 | `-Apps` | `ReactorOptimized,Direct` | Single-tree mode only: which harnesses to run. |
 | `-Platform` | host arch | Target architecture (`x64` or `ARM64`). Defaults to your machine's native arch so the WinUI harness runs without emulation. |
 | `-SelfContained` | `$true` | Build with the bundled WinApp runtime (no machine-wide install). |
@@ -210,6 +212,14 @@ Two tables plus footnotes:
   at this sample size. This data-driven band replaces the old fixed 4% floor,
   which both buried real sub-4% wins and rubber-stamped any sub-4% number as
   "noise" regardless of how tight the runs were.
+- **Low-mutation skip-floor (`--percent 0`)** — the same four headline metrics
+  from a **second interleaved A/B leg** at near-zero mutation. With ~1 cell
+  changing per tick, reconcile/diff are dominated by the **O(n) positional child
+  skip-walk** (`ChildReconciler` re-walks every child each tick even when nothing
+  moved) — the fixed per-tick cost the 50%-mutation headline table dilutes. This
+  is the column a structural-skip optimization moves cleanly: at 50% the floor is
+  a fraction of the work, at 0% it *is* the work. Same paired-CI gating as Table 1;
+  omitted when `-IncludeSkipFloor $false` or a side produces no metrics.
 - **Allocation (Reactor)** — `Alloc bytes/render` and `Gen0 GC / 1k renders`,
   `main` vs PR with the same paired-CI band. Rendered only when the harness
   reports the metric (n/a for pre-metric PR heads). This is the table that moves

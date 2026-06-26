@@ -278,6 +278,49 @@ finally {
     Remove-Item function:Start-Sleep -ErrorAction SilentlyContinue
 }
 
+# ===========================================================================
+#  Invoke-OneRun — --percent threading (-RunPercent defaults to $Percent)
+# ===========================================================================
+# The low-mutation skip-floor leg drives the SAME exe at a different mutation
+# percent via -RunPercent. Lock the contract that the harness CLI actually
+# receives that percent (and that omitting -RunPercent falls back to $Percent),
+# so a floor run can't silently re-measure the 50% workload. Stub Start-Process
+# to capture the ArgumentList, plus the two PerfLib helpers Invoke-OneRun calls
+# (Read-HarnessMetrics / Format-PerfNumber) that aren't loaded in this file.
+Invoke-Expression (Get-Func 'Invoke-OneRun')
+$Percent = 50; $Duration = 10; $PinAffinity = $false
+$roMeta = @{ AppName = 'RO' }
+$oneRunExe = Join-Path ([IO.Path]::GetTempPath()) 'RO.exe'
+function Read-HarnessMetrics { param($Directory, $AppName) [pscustomobject]@{ Source = 'json'; RendersPerSec = 1; AvgReconcileMs = 1; AvgDiffMs = 1; AvgMemoryMB = 1 } }
+function Format-PerfNumber { param($Value, $Digits) [string]$Value }
+$global:SAWARGS = $null
+function Start-Process {
+    param([string]$FilePath, [string[]]$ArgumentList, [switch]$PassThru,
+        [string]$RedirectStandardOutput, [string]$RedirectStandardError, $WindowStyle)
+    $global:SAWARGS = $ArgumentList
+    [pscustomobject]@{ PriorityClass = $null; ExitCode = 0 } |
+        Add-Member -MemberType ScriptMethod -Name WaitForExit -Value { param($ms) $true } -PassThru |
+        Add-Member -MemberType ScriptMethod -Name Kill -Value { param($t) } -PassThru
+}
+function Start-Sleep { param([int]$Seconds, [int]$Milliseconds) }
+try {
+    # default: -RunPercent omitted -> harness gets the script-level $Percent (50).
+    $null = Invoke-OneRun -Exe $oneRunExe -AppMeta $roMeta -Index 1 -Tag 'main'
+    $pIdx = [Array]::IndexOf($global:SAWARGS, '--percent')
+    Assert-True (($pIdx -ge 0) -and ($global:SAWARGS[$pIdx + 1] -eq '50')) '[onerun] -RunPercent omitted -> harness gets --percent 50 ($Percent)'
+
+    # explicit -RunPercent 0 -> the skip-floor leg drives the harness at --percent 0.
+    $null = Invoke-OneRun -Exe $oneRunExe -AppMeta $roMeta -Index 1 -Tag 'main-floor' -RunPercent 0
+    $fIdx = [Array]::IndexOf($global:SAWARGS, '--percent')
+    Assert-True (($fIdx -ge 0) -and ($global:SAWARGS[$fIdx + 1] -eq '0')) '[onerun] -RunPercent 0 -> harness gets --percent 0 (skip-floor leg)'
+}
+finally {
+    Remove-Item function:Start-Process -ErrorAction SilentlyContinue
+    Remove-Item function:Start-Sleep -ErrorAction SilentlyContinue
+    Remove-Item function:Read-HarnessMetrics -ErrorAction SilentlyContinue
+    Remove-Item function:Format-PerfNumber -ErrorAction SilentlyContinue
+}
+
 # cleanup
 foreach ($d in @($baseTree, $prTree, $OutDir, $exeDir)) {
     if (Test-Path $d) { Remove-Item $d -Recurse -Force -ErrorAction SilentlyContinue }

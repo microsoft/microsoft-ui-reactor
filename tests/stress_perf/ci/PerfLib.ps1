@@ -689,6 +689,60 @@ function Format-PerfMicroSection {
     return $lines.ToArray()
 }
 
+function Format-PerfSkipFloorSection {
+    <#
+    .SYNOPSIS
+        Render the low-mutation skip-floor table: the four headline metrics measured
+        at a near-zero mutation percent, isolating the per-tick O(n) child skip-walk
+        floor that the 50%-mutation headline workload dilutes. Empty array when there
+        is nothing to show.
+    .DESCRIPTION
+        At ``--percent 0`` the StocksGrid source still mutates exactly one cell per
+        tick (StockDataSource.Update clamps the change count to Math.Max(1, ...)), so
+        virtually every child is unchanged and reconcile/diff time is dominated by
+        ChildReconciler's positional re-walk over all children — the fixed per-tick
+        cost a structural-skip optimization targets. The 50%-mutation headline table
+        dilutes this floor; here it is the whole signal. Reuses the same paired-Δ 95%
+        CI machinery (Get-PerfDelta over the index-aligned per-run samples) as the
+        headline table. Returns an empty array when either floor aggregate is $null
+        (skip-floor leg disabled, or one side produced no metrics), so the caller
+        renders nothing.
+    .PARAMETER MainFloor  Aggregated baseline low-mutation metrics (Measure-PerfRuns), or $null.
+    .PARAMETER PrFloor    Aggregated PR-head low-mutation metrics, or $null.
+    .PARAMETER Percent    The mutation percent the floor leg ran at (heading / preamble).
+    #>
+    param(
+        [AllowNull()][pscustomobject]$MainFloor,
+        [AllowNull()][pscustomobject]$PrFloor,
+        [double]$Percent = 0
+    )
+    if ($null -eq $MainFloor -or $null -eq $PrFloor) { return @() }
+
+    $down = [char]0x2193
+    $lines = [System.Collections.Generic.List[string]]::new()
+    $lines.Add("### Low-mutation skip-floor (``--percent $Percent``)")
+    $lines.Add('')
+    $lines.Add("At ``--percent $Percent`` virtually no cell changes (the workload still mutates one cell/tick), so **reconcile/diff isolate the O(n) per-tick child skip-walk floor** &mdash; ``ChildReconciler`` re-walks every child each tick even when nothing moved. The 50%-mutation table above dilutes this fixed cost; here it _is_ the signal, so a structural-skip optimization shows up cleanly. $down lower is better; Δ is the mean paired change with a 95% CI.")
+    $lines.Add('')
+    $lines.Add('| Metric | `main` (baseline) | This PR | Δ (95% CI) | Status |')
+    $lines.Add('|---|--:|--:|--:|:--|')
+    foreach ($m in $script:PerfMetricSpec) {
+        $bVal = $MainFloor.($m.Key)
+        $pVal = $PrFloor.($m.Key)
+        $spread = [math]::Max([double]$MainFloor."$($m.Key)Spread", [double]$PrFloor."$($m.Key)Spread")
+        $delta = Get-PerfDelta -Baseline $bVal -Candidate $pVal -LowerIsBetter $m.LowerIsBetter -SpreadPct $spread `
+            -BaselineSamples $MainFloor."$($m.Key)Samples" -CandidateSamples $PrFloor."$($m.Key)Samples"
+        $lines.Add(('| {0} {1} | {2} | {3} | {4} | {5} |' -f `
+                $m.Label, $m.Arrow, `
+            (Format-PerfNumber $bVal $m.Digits), `
+            (Format-PerfNumber $pVal $m.Digits), `
+            (Format-PerfDeltaCell $delta), `
+            (Get-PerfStatusGlyph $delta.Status)))
+    }
+    $lines.Add('')
+    return $lines.ToArray()
+}
+
 function Format-PerfComment {
     <#
     .SYNOPSIS
@@ -701,8 +755,11 @@ function Format-PerfComment {
                           measured live on this runner, or $null when not run.
     .PARAMETER Micro      Per-bench reconciler micro-suite comparison rows
                           (Get-PerfMicroComparison output), or $null when not run.
-    .PARAMETER Context    Hashtable: Percent, Duration, Reps, Warmup, BaseSha, HeadSha,
-                          Runner, Cpu, Cores, MemoryGB, RunUrl, Timestamp, Note.
+    .PARAMETER MainFloor  Aggregated baseline low-mutation skip-floor metrics, or $null.
+    .PARAMETER PrFloor    Aggregated PR-head low-mutation skip-floor metrics, or $null.
+    .PARAMETER Context    Hashtable: Percent, Duration, Reps, Warmup, SkipFloorPercent,
+                          BaseSha, HeadSha, Runner, Cpu, Cores, MemoryGB, RunUrl,
+                          Timestamp, Note.
     #>
     param(
         [Parameter(Mandatory)][pscustomobject]$Main,
@@ -710,6 +767,8 @@ function Format-PerfComment {
         [AllowNull()][pscustomobject]$WinUI3,
         [AllowNull()][pscustomobject]$Rust,
         [AllowNull()][object[]]$Micro,
+        [AllowNull()][pscustomobject]$MainFloor,
+        [AllowNull()][pscustomobject]$PrFloor,
         [Parameter(Mandatory)][hashtable]$Context
     )
 
@@ -748,6 +807,14 @@ function Format-PerfComment {
         & $add $row
     }
     & $add ''
+
+    # ── Low-mutation skip-floor table (--percent ~0) ─────────────────────────
+    # A second interleaved A/B leg at near-zero mutation. With ~1 cell changing per
+    # tick, reconcile/diff isolate the O(n) positional child skip-walk floor that the
+    # 50%-mutation headline table above dilutes — the signal a structural-skip
+    # optimization moves. Rendered only when both floor aggregates are present.
+    $floorPct = if ($Context.ContainsKey('SkipFloorPercent')) { [double]$Context.SkipFloorPercent } else { 0 }
+    foreach ($fline in (Format-PerfSkipFloorSection -MainFloor $MainFloor -PrFloor $PrFloor -Percent $floorPct)) { & $add $fline }
 
     # ── Allocation table (Reactor main vs PR; lower is better) ────────────────
     # Rendered only when at least one side reports an allocation metric. A PR head

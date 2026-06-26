@@ -401,6 +401,47 @@ $noAllocComment = Format-PerfComment -Main $main -Pr $pr -WinUI3 $null -Rust $nu
 Assert-True (-not ($noAllocComment -like '*Allocation (Reactor)*')) 'alloc table omitted when no alloc metric present'
 
 
+# ── Format-PerfSkipFloorSection + Format-PerfComment: low-mutation skip-floor ──
+# 12 paired floor runs with a clear, consistent improvement (reconcile 14->11,
+# diff 12->10) and small jitter, so the paired CI excludes 0 and resolves "better"
+# — proving the skip-floor table reuses the same data-driven CI machinery as Table 1.
+$floorMainRuns = @(); $floorPrRuns = @()
+1..12 | ForEach-Object {
+    $j = ($_ % 4) * 0.04
+    $floorMainRuns += [pscustomobject]@{ RendersPerSec = 5.0 + $j; AvgReconcileMs = 14.0 + $j; AvgDiffMs = 12.0 + $j; AvgMemoryMB = 300 + $j; TotalRenders = 50; DurationSeconds = 10 }
+    $floorPrRuns   += [pscustomobject]@{ RendersPerSec = 6.0 + $j; AvgReconcileMs = 11.0 + $j; AvgDiffMs = 10.0 + $j; AvgMemoryMB = 300 + $j; TotalRenders = 60; DurationSeconds = 10 }
+}
+$floorMain = Measure-PerfRuns -Runs $floorMainRuns
+$floorPr   = Measure-PerfRuns -Runs $floorPrRuns
+
+# Direct section renderer: empty when either side is null, populated when both present.
+Assert-Equal 0 @(Format-PerfSkipFloorSection -MainFloor $null -PrFloor $floorPr -Percent 0).Count 'skip-floor section empty when main floor null'
+Assert-Equal 0 @(Format-PerfSkipFloorSection -MainFloor $floorMain -PrFloor $null -Percent 0).Count 'skip-floor section empty when pr floor null'
+$floorSection = Format-PerfSkipFloorSection -MainFloor $floorMain -PrFloor $floorPr -Percent 0
+$floorSectionText = $floorSection -join "`n"
+Assert-Match $floorSectionText 'Low-mutation skip-floor' 'skip-floor section has heading'
+Assert-Match $floorSectionText 'Avg Reconcile'           'skip-floor section has reconcile row'
+Assert-Match $floorSectionText 'skip-walk floor'         'skip-floor preamble explains the O(n) skip-walk floor'
+Assert-Match $floorSectionText 'improvement'             'skip-floor reconcile/diff resolve as improvements (paired CI excludes 0)'
+
+# Threaded through Format-PerfComment, between the regression and cross-framework tables.
+$floorComment = Format-PerfComment -Main $main -Pr $pr -WinUI3 $null -Rust $null -MainFloor $floorMain -PrFloor $floorPr -Context $ctx
+Assert-Match $floorComment 'Low-mutation skip-floor' 'comment renders skip-floor table when floor aggregates present'
+$idxReg = $floorComment.IndexOf('Regression vs')
+$idxFloor = $floorComment.IndexOf('Low-mutation skip-floor')
+$idxXfw = $floorComment.IndexOf('Cross-framework reference')
+Assert-True (($idxReg -lt $idxFloor) -and ($idxFloor -lt $idxXfw)) 'skip-floor table sits between the regression and cross-framework tables'
+
+# Omitted entirely when floor aggregates are absent (skip-floor leg disabled).
+$noFloorComment = Format-PerfComment -Main $main -Pr $pr -WinUI3 $null -Rust $null -MainFloor $null -PrFloor $null -Context $ctx
+Assert-True (-not ($noFloorComment -like '*Low-mutation skip-floor*')) 'skip-floor table omitted when floor aggregates null'
+
+# Context.SkipFloorPercent threads into the heading (default 0 when absent).
+$ctxFloor1 = $ctx.Clone(); $ctxFloor1['SkipFloorPercent'] = 1
+$floorComment1 = Format-PerfComment -Main $main -Pr $pr -WinUI3 $null -Rust $null -MainFloor $floorMain -PrFloor $floorPr -Context $ctxFloor1
+Assert-Match $floorComment1 '--percent 1' 'skip-floor heading reflects Context.SkipFloorPercent'
+
+
 # ── Reconciler micro-suite: Read-MicroBenchResults / comparison / render ──────
 function New-MicroRow {
     param([string]$BenchId, [string]$Name, [string]$Variant, [int]$Rep, [double]$MeanNs, [double]$AllocBytes, [string]$Status = 'ok', [int]$Iterations = 1)

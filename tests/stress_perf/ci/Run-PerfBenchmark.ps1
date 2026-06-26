@@ -150,6 +150,8 @@ param(
     [int]$MicroReps = 12,
     [int]$MicroIterations = 10000,
     [bool]$IncludeMicro = $true,
+    [double]$SkipFloorPercent = 0,
+    [bool]$IncludeSkipFloor = $true,
     [ValidateSet('ReactorOptimized', 'Direct')]
     [string[]]$Apps = @('ReactorOptimized', 'Direct'),
     [string]$OutDir,
@@ -558,7 +560,7 @@ function Invoke-RustLeg {
 
 function Invoke-OneRun {
     <# Run the harness once; return a metric object (Read-HarnessMetrics) or $null. #>
-    param([string]$Exe, [hashtable]$AppMeta, [int]$Index, [string]$Tag, [switch]$NoJson)
+    param([string]$Exe, [hashtable]$AppMeta, [int]$Index, [string]$Tag, [switch]$NoJson, [double]$RunPercent = $Percent)
 
     $exeDir = Split-Path $Exe
     foreach ($ext in 'metrics.json', 'report.txt', 'samples.csv') {
@@ -570,11 +572,11 @@ function Invoke-OneRun {
     $stderr = Join-Path $OutDir ("run-{0}-{1}-{2}.err.log" -f $AppMeta.AppName, $Tag, $Index)
     $inv = [System.Globalization.CultureInfo]::InvariantCulture
     # The Rust port has no --json mode; it always writes report.txt. C# harnesses get --json.
-    $harnessArgs = @('--headless', '--percent', $Percent.ToString($inv), '--duration', $Duration.ToString($inv))
+    $harnessArgs = @('--headless', '--percent', $RunPercent.ToString($inv), '--duration', $Duration.ToString($inv))
     if (-not $NoJson) { $harnessArgs += '--json' }
     $timeoutSec = $Duration + 90
 
-    Write-Log ("  run [{0} #{1}] {2} --percent {3} --duration {4}" -f $Tag, $Index, $AppMeta.AppName, $Percent, $Duration)
+    Write-Log ("  run [{0} #{1}] {2} --percent {3} --duration {4}" -f $Tag, $Index, $AppMeta.AppName, $RunPercent, $Duration)
     $proc = Start-Process -FilePath $Exe -ArgumentList $harnessArgs -PassThru `
         -RedirectStandardOutput $stdout -RedirectStandardError $stderr -WindowStyle Hidden
     try {
@@ -703,7 +705,7 @@ if ($DefenderExclude) {
 
 $runner = Get-RunnerInfo
 Write-Log ("runner: {0} | {1} cores | {2} GB | {3}" -f $runner.Cpu, $runner.Cores, $runner.MemoryGB, ($runner.Runner ?? 'local')) 'Cyan'
-Write-Log ("mode: {0} | platform={1} | percent={2} duration={3} reps={4} warmup={5}" -f ($(if ($Compare) { 'COMPARE' } else { 'LOCAL' })), $Platform, $Percent, $Duration, $Reps, $Warmup) 'Cyan'
+Write-Log ("mode: {0} | platform={1} | percent={2} duration={3} reps={4} warmup={5} | skip-floor={6}" -f ($(if ($Compare) { 'COMPARE' } else { 'LOCAL' })), $Platform, $Percent, $Duration, $Reps, $Warmup, $(if ($IncludeSkipFloor) { "on (--percent $SkipFloorPercent)" } else { 'off' })) 'Cyan'
 
 $exit = 0
 try {
@@ -741,6 +743,26 @@ try {
             if ($i -le $Warmup) { Write-Log "  (warmup pair #$i discarded)" 'DarkGray'; continue }
             if ($mm) { $mainRuns += $mm }
             if ($pm) { $prRuns += $pm }
+        }
+
+        # Second interleaved A/B leg at near-zero mutation. Same two exes, same paired
+        # interleaving, but at $SkipFloorPercent so reconcile/diff isolate the O(n)
+        # positional child skip-walk floor the 50% leg dilutes. Each side's delta is
+        # internally interleaved (main-floor vs pr-floor pair-by-pair), so it controls
+        # for drift the same way the headline leg does.
+        $mainFloorRuns = @(); $prFloorRuns = @()
+        if ($IncludeSkipFloor) {
+            Write-Log "interleaving main/PR skip-floor (--percent $SkipFloorPercent; $($Warmup) warmup + $($Reps) measured each)" 'Green'
+            for ($i = 1; $i -le ($Warmup + $Reps); $i++) {
+                $mm = Invoke-OneRun -Exe $mainExe -AppMeta $ro -Index $i -Tag 'main-floor' -RunPercent $SkipFloorPercent
+                $pm = Invoke-OneRun -Exe $prExe -AppMeta $ro -Index $i -Tag 'pr-floor' -RunPercent $SkipFloorPercent
+                if ($i -le $Warmup) { Write-Log "  (floor warmup pair #$i discarded)" 'DarkGray'; continue }
+                if ($mm) { $mainFloorRuns += $mm }
+                if ($pm) { $prFloorRuns += $pm }
+            }
+            if ($mainFloorRuns.Count -lt $Reps -or $prFloorRuns.Count -lt $Reps) {
+                Write-Log "  skip-floor leg short (main $($mainFloorRuns.Count)/$Reps, PR $($prFloorRuns.Count)/$Reps) — its paired CI uses fewer samples" 'Yellow'
+            }
         }
 
         $winRuns = @()
@@ -782,6 +804,8 @@ try {
         $main = Measure-PerfRuns -Runs $mainRuns
         $pr = Measure-PerfRuns -Runs $prRuns
         $winui3 = if ($winRuns.Count) { Measure-PerfRuns -Runs $winRuns } else { $null }
+        $mainFloor = if ($mainFloorRuns.Count) { Measure-PerfRuns -Runs $mainFloorRuns } else { $null }
+        $prFloor = if ($prFloorRuns.Count) { Measure-PerfRuns -Runs $prFloorRuns } else { $null }
 
         $note = $null
         if ($prRuns.Count -eq 0 -or $mainRuns.Count -eq 0) {
@@ -800,19 +824,21 @@ try {
 
         $ctx = @{
             Percent = $Percent; Duration = $Duration; Reps = $Reps; Warmup = $Warmup
+            SkipFloorPercent = $SkipFloorPercent
             Platform = $Platform
             MainSamples = $mainRuns.Count; PrSamples = $prRuns.Count
+            MainFloorSamples = $mainFloorRuns.Count; PrFloorSamples = $prFloorRuns.Count
             BaseSha = $(if ($BaseSha) { $BaseSha.Substring(0, [Math]::Min(7, $BaseSha.Length)) } else { '' })
             HeadSha = $(if ($HeadSha) { $HeadSha.Substring(0, [Math]::Min(7, $HeadSha.Length)) } else { '' })
             Runner = $runner.Runner; Cpu = $runner.Cpu; Cores = $runner.Cores; MemoryGB = $runner.MemoryGB
             RunUrl = $RunUrl; Timestamp = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'); Note = $note
         }
-        $comment = Format-PerfComment -Main $main -Pr $pr -WinUI3 $winui3 -Rust $rust -Micro $micro -Context $ctx
+        $comment = Format-PerfComment -Main $main -Pr $pr -WinUI3 $winui3 -Rust $rust -Micro $micro -MainFloor $mainFloor -PrFloor $prFloor -Context $ctx
         $commentPath = Join-Path $OutDir 'comment.md'
         Set-Content -LiteralPath $commentPath -Value $comment -Encoding UTF8
         Write-Log "comment.md written -> $commentPath" 'Green'
 
-        $result = [pscustomobject]@{ main = $main; pr = $pr; winui3 = $winui3; rust = $rust; micro = $micro; runner = $runner; context = $ctx }
+        $result = [pscustomobject]@{ main = $main; pr = $pr; winui3 = $winui3; mainFloor = $mainFloor; prFloor = $prFloor; rust = $rust; micro = $micro; runner = $runner; context = $ctx }
         $result | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $OutDir 'result.json') -Encoding UTF8
 
         Write-Host "`n----- comment.md -----" -ForegroundColor DarkGray
