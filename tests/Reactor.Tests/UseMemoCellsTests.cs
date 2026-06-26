@@ -335,4 +335,130 @@ public class UseMemoCellsTests
         Assert.Throws<ArgumentNullException>(() =>
             ctx.UseMemoCellsByIndex<int>(new[] { 1 }, null!, (item, i) => MakeCell(item)));
     }
+
+    // ════════════════════════════════════════════════════════════════
+    //  UseMemoCellsByIndex — PR-C ChildDiffHint publication (spec 034 §C)
+    // ════════════════════════════════════════════════════════════════
+
+    private static Element MakeThemedCell(int v)
+        => new DivElement(Array.Empty<Element>(), $"v={v}")
+        {
+            ThemeBindings = new Dictionary<string, ThemeRef> { ["Foreground"] = new ThemeRef("SystemAccentColor") },
+        };
+
+    [Fact]
+    public void ByIndex_First_Render_Publishes_No_Hint()
+    {
+        // The rebuild-all branch does NOT publish: the fresh array is unrelated by
+        // reference to any prior render, so a structural-skip hint would be unsound.
+        var ctx = NewCtx();
+        var first = ctx.UseMemoCellsByIndex<int>(new[] { 1, 2, 3 }, Array.Empty<int>(), (item, i) => MakeCell(item));
+        Assert.False(ChildDiffHints.TryGet(first, out _));
+    }
+
+    [Fact]
+    public void ByIndex_Count_Change_Publishes_No_Hint()
+    {
+        var ctx = NewCtx();
+        ctx.UseMemoCellsByIndex<int>(new[] { 1, 2 }, Array.Empty<int>(), (item, i) => MakeCell(item));
+        ctx.BeginRender(() => { });
+        var grown = ctx.UseMemoCellsByIndex<int>(new[] { 1, 2, 3 }, Array.Empty<int>(), (item, i) => MakeCell(item));
+        Assert.False(ChildDiffHints.TryGet(grown, out _));
+    }
+
+    [Fact]
+    public void ByIndex_Reuse_Publishes_Hint_With_ChangedIndices()
+    {
+        var ctx = NewCtx();
+        ctx.UseMemoCellsByIndex<int>(new[] { 10, 20, 30 }, Array.Empty<int>(), (item, i) => MakeCell(item));
+        ctx.BeginRender(() => { });
+        var second = ctx.UseMemoCellsByIndex<int>(new[] { 10, 99, 30 }, new[] { 1 }, (item, i) => MakeCell(item));
+
+        Assert.True(ChildDiffHints.TryGet(second, out var hint));
+        Assert.Equal(new[] { 1 }, hint!.ChangedIndices);
+        Assert.False(hint.AnyThemeSensitive);
+    }
+
+    [Fact]
+    public void ByIndex_Reuse_Empty_Changes_Publishes_Empty_Hint()
+    {
+        var ctx = NewCtx();
+        var items = new[] { 10, 20, 30 };
+        ctx.UseMemoCellsByIndex<int>(items, Array.Empty<int>(), (item, i) => MakeCell(item));
+        ctx.BeginRender(() => { });
+        var second = ctx.UseMemoCellsByIndex<int>(items, Array.Empty<int>(), (item, i) => MakeCell(item));
+
+        Assert.True(ChildDiffHints.TryGet(second, out var hint));
+        Assert.Empty(hint!.ChangedIndices);
+    }
+
+    [Fact]
+    public void ByIndex_ChangedIndices_Are_Snapshotted_Against_Caller_Mutation()
+    {
+        var ctx = NewCtx();
+        ctx.UseMemoCellsByIndex<int>(new[] { 10, 20, 30 }, Array.Empty<int>(), (item, i) => MakeCell(item));
+        ctx.BeginRender(() => { });
+        var changed = new[] { 1 };
+        var second = ctx.UseMemoCellsByIndex<int>(new[] { 10, 99, 30 }, changed, (item, i) => MakeCell(item));
+
+        changed[0] = 2; // caller mutates after the call — hint must be unaffected
+
+        Assert.True(ChildDiffHints.TryGet(second, out var hint));
+        Assert.Equal(new[] { 1 }, hint!.ChangedIndices);
+    }
+
+    [Fact]
+    public void ByIndex_Reuse_Hint_Counts_ThemeSensitive_Cells()
+    {
+        var ctx = NewCtx();
+        // Cells 0 and 2 themed, cell 1 plain.
+        Func<int, int, Element> build = (item, i) => i == 1 ? MakeCell(item) : MakeThemedCell(item);
+        var items = new[] { 10, 20, 30 };
+        ctx.UseMemoCellsByIndex<int>(items, Array.Empty<int>(), build);
+        ctx.BeginRender(() => { });
+        var second = ctx.UseMemoCellsByIndex<int>(items, Array.Empty<int>(), build);
+
+        Assert.True(ChildDiffHints.TryGet(second, out var hint));
+        Assert.True(hint!.AnyThemeSensitive);
+        Assert.Equal(2, hint.ThemeSensitiveCount);
+    }
+
+    [Fact]
+    public void ByIndex_Incremental_ThemeCount_Decrements_When_Cell_Becomes_Plain()
+    {
+        var ctx = NewCtx();
+        // R1 (rebuild-all): [themed, themed, plain] — no hint yet.
+        Func<int, int, Element> r1 = (item, i) => i == 2 ? MakeCell(item) : MakeThemedCell(item);
+        ctx.UseMemoCellsByIndex<int>(new[] { 1, 2, 3 }, Array.Empty<int>(), r1);
+        // R2 (reuse, no change): counts prev = 2, publishes hint count 2.
+        ctx.BeginRender(() => { });
+        var r2 = ctx.UseMemoCellsByIndex<int>(new[] { 1, 2, 3 }, Array.Empty<int>(), r1);
+        Assert.True(ChildDiffHints.TryGet(r2, out var h2));
+        Assert.Equal(2, h2!.ThemeSensitiveCount);
+        // R3 (reuse, change idx 0 -> plain): incremental from prior hint, 2 -> 1.
+        ctx.BeginRender(() => { });
+        var r3 = ctx.UseMemoCellsByIndex<int>(new[] { 1, 2, 3 }, new[] { 0 }, (item, i) => MakeCell(item));
+        Assert.True(ChildDiffHints.TryGet(r3, out var h3));
+        Assert.Equal(1, h3!.ThemeSensitiveCount);
+    }
+
+    [Fact]
+    public void ByIndex_Incremental_ThemeCount_Increments_When_Cell_Becomes_Themed()
+    {
+        var ctx = NewCtx();
+        // R1: all plain.
+        ctx.UseMemoCellsByIndex<int>(new[] { 1, 2, 3 }, Array.Empty<int>(), (item, i) => MakeCell(item));
+        // R2 (reuse, no change): count 0.
+        ctx.BeginRender(() => { });
+        var r2 = ctx.UseMemoCellsByIndex<int>(new[] { 1, 2, 3 }, Array.Empty<int>(), (item, i) => MakeCell(item));
+        Assert.True(ChildDiffHints.TryGet(r2, out var h2));
+        Assert.Equal(0, h2!.ThemeSensitiveCount);
+        // R3 (reuse, change idx 1 -> themed): 0 -> 1.
+        ctx.BeginRender(() => { });
+        var r3 = ctx.UseMemoCellsByIndex<int>(new[] { 1, 2, 3 }, new[] { 1 }, (item, i) => MakeThemedCell(item));
+        Assert.True(ChildDiffHints.TryGet(r3, out var h3));
+        Assert.Equal(1, h3!.ThemeSensitiveCount);
+        Assert.True(h3.AnyThemeSensitive);
+    }
 }
+
