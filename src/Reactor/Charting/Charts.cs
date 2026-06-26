@@ -633,9 +633,12 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
     /// contrast check to this single active background (a <c>warning</c>) instead of flagging
     /// failure against either fixed light/dark background (an <c>info</c>). Omit for charts
     /// that may render on any background.
-    /// <para><b>Note:</b> the custom palette contrast-checked against this background is the one
-    /// the chart actually renders — the <c>.SetColors(...)</c> colors when set, otherwise a
-    /// <see cref="Palette(Accessibility.ChartPalette)"/> palette (issue #645).</para>
+    /// <para><b>Note:</b> the palette contrast-checked against this background is the one the pie
+    /// actually renders — the <c>.SetColors(...)</c> colors — when set. A
+    /// <see cref="Palette(Accessibility.ChartPalette)"/> palette does <b>not</b> change what a pie
+    /// draws (a pie renders the built-in Category10 default unless <c>.SetColors(...)</c> overrides
+    /// it); it is consulted by the scanner only as an advisory fallback when <c>.SetColors(...)</c>
+    /// is unset (issue #645).</para>
     /// <para>The stored value is normalized to opaque RGB: contrast math
     /// (<see cref="Accessibility.ChartPalette.ContrastRatio"/>) cannot evaluate a semi-transparent
     /// background without knowing what is behind it, so any alpha is dropped.</para>
@@ -756,6 +759,7 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
         {
             IsColorOnly = _colorOnly,
             CustomPalette = ScannerPalette,
+            CustomPaletteModifier = "SetColors",
             ChartBackground = _chartBackground,
         });
 

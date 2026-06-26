@@ -176,9 +176,9 @@ internal sealed class ChartAccessibilityChecker : IScanExtension
                         ComponentType = ctx.CurrentComponent,
                         Fix = new A11yFixSuggestion
                         {
-                            Modifier = "SeriesColors",
+                            Modifier = cd.CustomPaletteModifier,
                             SuggestedValue = string.Join(", ", hardenResult.Palette.Colors.Select(c => c.ToHex())),
-                            CodeSnippet = ".Palette(ChartPalette.OkabeIto) or use .SeriesColors() with the suggested values",
+                            CodeSnippet = $".Palette(ChartPalette.OkabeIto) or use .{cd.CustomPaletteModifier}() with the suggested values",
                         },
                         Context = ctx.BuildContext(canvas),
                     });
@@ -215,7 +215,7 @@ internal sealed class ChartAccessibilityChecker : IScanExtension
                         ComponentType = ctx.CurrentComponent,
                         Fix = new A11yFixSuggestion
                         {
-                            Modifier = "SeriesColors",
+                            Modifier = cd.CustomPaletteModifier,
                             SuggestedValue = string.Join(", ", hardenResult.Palette.Colors.Select(c => c.ToHex())),
                             CodeSnippet = ".Palette(ChartPalette.OkabeIto) or use hardened alternative",
                         },
@@ -292,7 +292,7 @@ internal sealed class ChartAccessibilityChecker : IScanExtension
                     ComponentType = ctx.CurrentComponent,
                     Fix = new A11yFixSuggestion
                     {
-                        Modifier = "SeriesColors",
+                        Modifier = cd.CustomPaletteModifier,
                         SuggestedValue = string.Join(", ", hardenResult.Palette.Colors.Select(c => c.ToHex())),
                         CodeSnippet = "Adjust color lightness to ensure ≥3:1 contrast against chart backgrounds",
                     },
@@ -346,7 +346,7 @@ internal sealed class ChartAccessibilityChecker : IScanExtension
                 ComponentType = ctx.CurrentComponent,
                 Fix = new A11yFixSuggestion
                 {
-                    Modifier = "SeriesColors",
+                    Modifier = cd.CustomPaletteModifier,
                     SuggestedValue = suggestedValue,
                     CodeSnippet = "Adjust color lightness to ensure ≥3:1 contrast against the chart background",
                 },

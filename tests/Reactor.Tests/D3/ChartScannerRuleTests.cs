@@ -454,6 +454,9 @@ public class ChartScannerRuleTests
         var findings = AccessibilityScanner.Scan(tree);
         var finding = Assert.Single(findings, f => f.Id == "A11Y_CHART_011");
         Assert.Equal("warning", finding.Severity);
+        // H1 (issue #645): the machine-consumable fix names the modifier a PIE exposes — .SetColors(),
+        // not .SeriesColors() — via ChartA11yData.CustomPaletteModifier (the checker is chart-type-aware).
+        Assert.Equal("SetColors", finding.Fix.Modifier);
     }
 
     [Fact]
@@ -530,6 +533,63 @@ public class ChartScannerRuleTests
 
         var findings = AccessibilityScanner.Scan(tree);
         Assert.DoesNotContain(findings, f => f.Id == "A11Y_CHART_011");
+    }
+
+    // ── .SetColors() is checked across A11Y_CHART_009/010/011 like .Palette() (issue #645) ──
+
+    [Fact]
+    public void A11Y_CHART_009_PieChart_SetColors_MultiColor_FiresPairwise_WithSetColorsFix()
+    {
+        // Issue #645 acceptance: .SetColors() is contrast-checked across 009/010/011 "exactly like"
+        // .Palette() — not just the 011 background rule. Two near-identical grays fail the pairwise
+        // ≥3:1 rule (A11Y_CHART_009). Pins that a MULTI-color .SetColors palette (Count≥2) reaches the
+        // pairwise rule via the pie path, and that the machine-consumable fix names the modifier a PIE
+        // exposes — .SetColors(), not .SeriesColors() (the checker is now chart-type-aware).
+        var chart = Charts.PieChart(Array.Empty<DataPoint>(), d => d.Y)
+            .SetColors(new D3Color(128, 128, 128), new D3Color(135, 135, 135)); // similar grays: <3:1 pairwise
+        var canvas = chart.AttachChartDataForTest(new CanvasElement([]) { Width = 400, Height = 300 });
+        var tree = VStack(canvas);
+
+        var findings = AccessibilityScanner.Scan(tree);
+        var finding = Assert.Single(findings, f => f.Id == "A11Y_CHART_009");
+        Assert.Equal("SetColors", finding.Fix.Modifier);
+    }
+
+    [Fact]
+    public void A11Y_CHART_010_PieChart_SetColors_MultiColor_FiresColorblind_WithSetColorsFix()
+    {
+        // Companion to the 009 test: two colors whose colorblind ΔE is under the 10.0 minimum trip
+        // A11Y_CHART_010 via the pie .SetColors() path. Reuses the proven colorblind-unsafe pair from
+        // the series-chart 010 test. Again the fix names .SetColors() — the pie's real modifier —
+        // confirming chart-type-aware remediation across the colorblind rule too (issue #645).
+        var chart = Charts.PieChart(Array.Empty<DataPoint>(), d => d.Y)
+            .SetColors(new D3Color(100, 100, 100), new D3Color(101, 100, 100)); // ΔE < 10 under CVD sim
+        var canvas = chart.AttachChartDataForTest(new CanvasElement([]) { Width = 400, Height = 300 });
+        var tree = VStack(canvas);
+
+        var findings = AccessibilityScanner.Scan(tree);
+        var finding = Assert.Single(findings, f => f.Id == "A11Y_CHART_010");
+        Assert.Equal("SetColors", finding.Fix.Modifier);
+    }
+
+    [Fact]
+    public void A11Y_CHART_011_PieChart_EmptySetColors_FallsBackToPaletteForScanner()
+    {
+        // M4: ScannerPalette's `{ Count: > 0 }` guard. Calling .SetColors() with NO args clears
+        // _colorPalette (the pie reverts to its default render palette), so the scanner falls back to
+        // the .Palette() palette — preserving the pre-#645 scanner-visible behavior. Pins that an empty
+        // .SetColors() does NOT suppress the .Palette() contrast finding: the near-white .Palette color
+        // still fails the declared white background and fires the warning (issue #645).
+        var chart = Charts.PieChart(Array.Empty<DataPoint>(), d => d.Y)
+            .Palette(ChartPalette.FromColors(new D3Color(255, 255, 200))) // near-white: fails white
+            .SetColors()                                                  // cleared → ScannerPalette falls back to _palette
+            .ChartBackground("#FFFFFF");
+        var canvas = chart.AttachChartDataForTest(new CanvasElement([]) { Width = 400, Height = 300 });
+        var tree = VStack(canvas);
+
+        var findings = AccessibilityScanner.Scan(tree);
+        var finding = Assert.Single(findings, f => f.Id == "A11Y_CHART_011");
+        Assert.Equal("warning", finding.Severity);
     }
 
     [Fact]

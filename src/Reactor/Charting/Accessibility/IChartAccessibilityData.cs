@@ -121,6 +121,15 @@ internal sealed record ChartA11yData(IChartAccessibilityData Data)
     /// <summary>Custom palette set on the chart, if any — scanner validates for contrast.</summary>
     public ChartPalette? CustomPalette { get; init; }
 
+    /// <summary>
+    /// DSL modifier the scanner names in its palette-fix suggestions (A11Y_CHART_009/010/011) for
+    /// this chart — e.g. <c>"SeriesColors"</c> for series charts, <c>"SetColors"</c> for pie charts
+    /// (issue #645). The fix-suggestion modifier is machine-consumable (an agent applies the named
+    /// method), so it must name a modifier the chart actually exposes: a pie has <c>.SetColors(...)</c>,
+    /// not <c>.SeriesColors(...)</c>. Defaults to <c>"SeriesColors"</c>; pie charts override it.
+    /// </summary>
+    public string CustomPaletteModifier { get; init; } = "SeriesColors";
+
     /// <summary>Custom focus indicator color, if any — scanner validates 3:1 contrast (A11Y_CHART_006).</summary>
     public global::Windows.UI.Color? CustomFocusColor { get; init; }
 

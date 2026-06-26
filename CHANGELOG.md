@@ -337,6 +337,18 @@ Conventions for contributors:
 
 ### Fixed
 
+- **The accessibility scanner now sees a pie chart's `.SetColors(...)` palette
+  (issue #645, spec 026).** `PieChartElement<T>.SetColors(...)` sets the colors a
+  pie actually renders, but the scanner previously only saw the separate
+  `.Palette(...)` palette — so a `.SetColors(<low-contrast>).ChartBackground(...)`
+  pie looked contrast-checked yet A11Y_CHART_011 never ran on its rendered colors.
+  The rendered `.SetColors` palette is now the single source of truth the scanner
+  validates (`.Palette(...)` is consulted only as a fallback when `.SetColors` is
+  unset), so A11Y_CHART_009/010/011 run on it exactly as they do for `.Palette(...)`.
+  **Behavior change:** existing `.SetColors(...)` users with low-contrast or
+  colorblind-unsafe palettes may now start seeing A11Y_CHART_009/010/011 findings
+  they did not before. Pie palette-fix suggestions also now name `.SetColors(...)`
+  (the modifier a pie exposes) instead of `.SeriesColors(...)`.
 - **Multi-window teardown no longer faults with an `ACCESS_VIOLATION`
   (issue #647).** Closing a docking tear-off floating preview window could
   terminate the process with `0xC0000005` deep in the WinUI backdrop interop —
