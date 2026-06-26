@@ -17,6 +17,16 @@ internal class ObservableTreeTracker : IDisposable
 {
     private readonly Action _requestRerender;
     private readonly Dictionary<INotifyPropertyChanged, PropertyChangedEventHandler> _subscriptions = new();
+    // Serializes the reconcile/mutate phase over the non-thread-safe
+    // _subscriptions Dictionary (SyncCore + Dispose). The _syncing CAS below
+    // isolates the per-sync scratch fields, but _subscriptions is shared across
+    // every sync, so a no-DispatcherQueue host that runs two SyncCore calls
+    // concurrently (OnNestedPropertyChanged firing inline on separate threads)
+    // would otherwise corrupt the Dictionary / its mid-enumeration. Walk only
+    // touches scratch, so it stays outside this lock; re-entrant same-stack
+    // syncs fire during Walk (above the lock) and so never interleave with — or
+    // deadlock against — an enclosing reconcile.
+    private readonly object _subscriptionsLock = new();
     // #6: the per-node PropertyChanged handler is the same method for every
     // subscription, so bind the delegate once instead of allocating a fresh one
     // for each newly-subscribed INPC node.
@@ -123,34 +133,43 @@ internal class ObservableTreeTracker : IDisposable
     {
         Walk(root, desiredSet, visiting);
 
-        // Unsubscribe from objects no longer in the graph
-        foreach (var kvp in _subscriptions)
+        // Walk only touched the per-call scratch; the _subscriptions reconcile
+        // below is the only shared-state mutation, so serialize just this phase
+        // against a concurrent (no-DispatcherQueue, inline-firing) SyncCore.
+        lock (_subscriptionsLock)
         {
-            if (!desiredSet.Contains(kvp.Key))
+            // Unsubscribe from objects no longer in the graph
+            foreach (var kvp in _subscriptions)
             {
-                kvp.Key.PropertyChanged -= kvp.Value;
-                toRemove.Add(kvp.Key);
+                if (!desiredSet.Contains(kvp.Key))
+                {
+                    kvp.Key.PropertyChanged -= kvp.Value;
+                    toRemove.Add(kvp.Key);
+                }
             }
-        }
-        foreach (var obj in toRemove)
-            _subscriptions.Remove(obj);
+            foreach (var obj in toRemove)
+                _subscriptions.Remove(obj);
 
-        // Subscribe to new objects in the graph (#6: shared cached delegate)
-        foreach (var obj in desiredSet)
-        {
-            if (!_subscriptions.ContainsKey(obj))
+            // Subscribe to new objects in the graph (#6: shared cached delegate)
+            foreach (var obj in desiredSet)
             {
-                obj.PropertyChanged += _onNestedPropertyChanged;
-                _subscriptions[obj] = _onNestedPropertyChanged;
+                if (!_subscriptions.ContainsKey(obj))
+                {
+                    obj.PropertyChanged += _onNestedPropertyChanged;
+                    _subscriptions[obj] = _onNestedPropertyChanged;
+                }
             }
         }
     }
 
     public void Dispose()
     {
-        foreach (var kvp in _subscriptions)
-            kvp.Key.PropertyChanged -= kvp.Value;
-        _subscriptions.Clear();
+        lock (_subscriptionsLock)
+        {
+            foreach (var kvp in _subscriptions)
+                kvp.Key.PropertyChanged -= kvp.Value;
+            _subscriptions.Clear();
+        }
     }
 
     /// <summary>
