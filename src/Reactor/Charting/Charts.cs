@@ -760,6 +760,7 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
             IsColorOnly = _colorOnly,
             CustomPalette = ScannerPalette,
             CustomPaletteModifier = "SetColors",
+            IsPaletteAdvisoryOnly = true,
             ChartBackground = _chartBackground,
         });
 

@@ -130,6 +130,18 @@ internal sealed record ChartA11yData(IChartAccessibilityData Data)
     /// </summary>
     public string CustomPaletteModifier { get; init; } = "SeriesColors";
 
+    /// <summary>
+    /// Whether this chart's <c>.Palette(...)</c> is advisory-only and does NOT drive the rendered
+    /// colors — <c>true</c> for pie charts, where <c>.SetColors(...)</c> (or the Category10 default)
+    /// is what renders and <c>.Palette(...)</c> is merely a scanner fallback (issue #645). When
+    /// <c>true</c>, the palette-contrast fix suggestions (A11Y_CHART_009/010) must NOT offer
+    /// <c>.Palette(ChartPalette.OkabeIto)</c> as a remediation — applying it would not change what
+    /// the chart actually draws — and instead point only at <see cref="CustomPaletteModifier"/>
+    /// (or removing it to fall back to the vetted default palette). Defaults to <c>false</c> (series
+    /// charts, whose <c>.Palette(...)</c> drives rendering); pie charts override it.
+    /// </summary>
+    public bool IsPaletteAdvisoryOnly { get; init; }
+
     /// <summary>Custom focus indicator color, if any — scanner validates 3:1 contrast (A11Y_CHART_006).</summary>
     public global::Windows.UI.Color? CustomFocusColor { get; init; }
 

@@ -200,6 +200,9 @@ public class ChartScannerRuleTests
 
         var finding = findings.First(f => f.Id == "A11Y_CHART_009");
         Assert.NotNull(finding.Fix.SuggestedValue);
+        // Series charts render their .Palette(...), so the OkabeIto shortcut stays a valid fix here —
+        // the chart-type-aware snippet only drops it on the advisory pie path (issue #645).
+        Assert.Contains(".Palette(ChartPalette.OkabeIto)", finding.Fix.CodeSnippet);
     }
 
     [Fact]
@@ -557,6 +560,9 @@ public class ChartScannerRuleTests
         // not an empty-args `.SetColors()` that would read as a non-compiling zero-arg call (PR #708 review).
         Assert.Contains(".SetColors(...)", finding.Fix.CodeSnippet);
         Assert.DoesNotContain(".SetColors()", finding.Fix.CodeSnippet);
+        // A pie's .Palette(...) is advisory-only and does NOT change rendered slices, so the snippet
+        // must NOT offer .Palette(ChartPalette.OkabeIto) as a fix on the pie path (PR #708 review).
+        Assert.DoesNotContain(".Palette(", finding.Fix.CodeSnippet);
     }
 
     [Fact]
@@ -574,6 +580,10 @@ public class ChartScannerRuleTests
         var findings = AccessibilityScanner.Scan(tree);
         var finding = Assert.Single(findings, f => f.Id == "A11Y_CHART_010");
         Assert.Equal("SetColors", finding.Fix.Modifier);
+        // Same chart-type-aware remediation as 009: name .SetColors(...), and never the advisory-only
+        // .Palette(...) which wouldn't change a pie's rendered slices (issue #645 / PR #708 review).
+        Assert.Contains(".SetColors(...)", finding.Fix.CodeSnippet);
+        Assert.DoesNotContain(".Palette(", finding.Fix.CodeSnippet);
     }
 
     [Fact]
