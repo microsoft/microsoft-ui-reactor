@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
+using System.Threading;
 
 namespace Microsoft.UI.Reactor.Core;
 
@@ -21,18 +22,24 @@ internal class ObservableTreeTracker : IDisposable
     // for each newly-subscribed INPC node.
     private readonly PropertyChangedEventHandler _onNestedPropertyChanged;
 
-    // #5: scratch containers reused across the common (non-re-entrant)
+    // #5: scratch containers reused across the common (uncontended)
     // SyncSubscriptions path so a steady stream of PropertyChanged fires doesn't
     // allocate two HashSets + a List every time. Cleared before and after each
     // top-level sync. _visiting was historically a stack-local (TASK-062) so
     // re-entrant Walks couldn't share state — the _syncing guard below preserves
-    // exactly that: a synchronous re-entrant sync (a side-effecting getter
-    // firing PropertyChanged mid-Walk) falls back to fresh allocations and never
-    // touches these fields.
+    // exactly that, and also guards concurrent entry: only the caller that
+    // atomically wins the 0->1 transition uses these fields; a re-entrant
+    // (same-stack) or concurrent (a no-DispatcherQueue host syncing inline on the
+    // PropertyChanged thread) caller falls back to fresh allocations and never
+    // touches them.
     private readonly HashSet<INotifyPropertyChanged> _desiredSetScratch = new(ReferenceEqualityComparer.Instance);
     private readonly HashSet<INotifyPropertyChanged> _visitingScratch = new(ReferenceEqualityComparer.Instance);
     private readonly List<INotifyPropertyChanged> _toRemoveScratch = new();
-    private bool _syncing;
+    // 0 = idle, 1 = a top-level sync owns the scratch fields. Interlocked so the
+    // ownership flip is atomic even when SyncSubscriptions is entered concurrently
+    // (re-entrancy alone would be single-threaded, but a no-DispatcherQueue host
+    // runs OnNestedPropertyChanged inline on each firing thread — see below).
+    private int _syncing;
 
     private INotifyPropertyChanged? _root;
     private readonly Microsoft.UI.Dispatching.DispatcherQueue? _dispatcherQueue;
@@ -71,11 +78,14 @@ internal class ObservableTreeTracker : IDisposable
     {
         _root = root;
 
-        // #5: re-entrant (synchronous) sync — a side-effecting property getter
-        // fired PropertyChanged during the outer Walk and re-entered here on the
-        // same stack. Don't touch the scratch fields the outer call is using;
-        // allocate fresh, exactly like the original always-allocate path.
-        if (_syncing)
+        // #5: only the caller that atomically flips _syncing 0->1 owns the shared
+        // scratch fields. A re-entrant (synchronous, same-stack) sync — a
+        // side-effecting getter firing PropertyChanged mid-Walk and re-entering
+        // here — or a concurrent sync (a no-DispatcherQueue host where
+        // OnNestedPropertyChanged runs inline on the firing thread, so two threads
+        // can enter at once) loses the CAS and allocates fresh, exactly like the
+        // original always-allocate path, never touching the scratch fields.
+        if (Interlocked.CompareExchange(ref _syncing, 1, 0) != 0)
         {
             SyncCore(
                 root,
@@ -85,7 +95,6 @@ internal class ObservableTreeTracker : IDisposable
             return;
         }
 
-        _syncing = true;
         try
         {
             _desiredSetScratch.Clear();
@@ -100,7 +109,9 @@ internal class ObservableTreeTracker : IDisposable
             _desiredSetScratch.Clear();
             _visitingScratch.Clear();
             _toRemoveScratch.Clear();
-            _syncing = false;
+            // Release ownership with a release-store; pairs with the acquire CAS
+            // on the next entry so that entry observes the cleared scratch fields.
+            Volatile.Write(ref _syncing, 0);
         }
     }
 
