@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Microsoft.UI.Reactor.Core.V1Protocol.Handlers;
 using Xunit;
 
