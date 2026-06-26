@@ -322,7 +322,7 @@ default `-Reps 12` (drop to e.g. `-Reps 3` only for a quick smoke run).
 
 ## Troubleshooting
 
-- **Run crashes with `0xC000027B` right after "MountAndActivate ok".** That is a
+- **Run crashes with `0xC000027B` during first-frame window activation.** That is a
   stowed XAML/compositor exception. Most often the box cannot composite a real
   WinUI window (headless server, no GPU/desktop session, or an RDP session
   without composition) — run from an interactive desktop session. **On an ARM64
