@@ -52,7 +52,8 @@ public sealed class KeyedListSource
     /// Reorder / insert / remove a percentage of the keyed rows for one tick.
     ///
     /// <paramref name="percent"/> sets the structural-edit budget
-    /// <c>k = round(N * percent / 100)</c> (clamped to <c>[1, N]</c>). Of that
+    /// <c>k = round(N * percent / 100)</c> (clamped to <c>[0, N]</c>; <c>percent == 0</c>
+    /// leaves the order untouched — the keyed ALL-MATCH FLOOR). Of that
     /// budget a quarter is spent on insert+remove CHURN — each removal paired with
     /// a fresh-key insertion so the row SET changes over time (not just a fixed
     /// permutation) while N stays constant — and the remainder on MOVES (pull a row
@@ -66,8 +67,15 @@ public sealed class KeyedListSource
         var rng = _rng;
         int n = _items.Count;
         int k = (int)Math.Round(n * percent / 100.0, MidpointRounding.AwayFromZero);
-        if (k < 1) k = 1;
+        if (k < 0) k = 0;
         if (k > n) k = n;
+
+        // percent == 0 → k == 0: leave the order untouched so every key matches in
+        // place. That is the keyed ALL-MATCH FLOOR (LIS == whole list, zero moves) —
+        // the case the keyed structural-skip optimization targets. Snapshot() still
+        // allocates a fresh array each tick, so a render (and a keyed diff) still runs.
+        if (k == 0)
+            return 0;
 
         // Insert/remove churn — net-zero so the list size is invariant. Removing
         // before inserting keeps every index access in range.

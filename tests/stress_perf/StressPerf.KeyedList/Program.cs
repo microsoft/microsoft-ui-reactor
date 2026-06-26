@@ -75,6 +75,7 @@ class KeyedListApp : Component
         var timerRef = UseRef<DispatcherTimer?>(null);
         var shutdownRef = UseRef<DispatcherTimer?>(null);
         var benchmarkUpdatePending = UseRef(false);
+        var keysVerifiedRef = UseRef(false);
 
         if (perfRef.Current == null)
         {
@@ -177,6 +178,27 @@ class KeyedListApp : Component
                 Key = row.Key,
                 FontSize = 12,
             };
+        }
+
+        // Structural self-check (runs once): EVERY emitted child must carry a non-null
+        // Key. If any key were missing, ChildReconciler.HasAnyKeys would be false and the
+        // entire scene would silently fall onto ReconcilePositional — measuring the WRONG
+        // reconcile path and invalidating the whole workload. Fail loudly (no metrics.json
+        // is written) rather than report misleading keyed numbers.
+        if (!keysVerifiedRef.Current)
+        {
+            keysVerifiedRef.Current = true;
+            for (int i = 0; i < children.Length; i++)
+            {
+                if (children[i].Key is null)
+                {
+                    Console.Error.WriteLine(
+                        $"FATAL: {AppName} child {i} has no Key — the keyed reconcile path " +
+                        "(ReconcileKeyed/ReconcileKeyedMiddle) would not run; results are invalid.");
+                    Environment.FailFast(
+                        $"{AppName}: keyed-path invariant violated (child {i} missing Key).");
+                }
+            }
         }
 
         return VStack(
