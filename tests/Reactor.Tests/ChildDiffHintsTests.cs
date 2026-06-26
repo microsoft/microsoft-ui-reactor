@@ -98,6 +98,15 @@ public class ChildDiffHintsTests
     }
 
     [Fact]
+    public void IsThemeSensitive_False_For_Null_Cell()
+    {
+        // Child arrays may legitimately contain nulls (a builder can return null;
+        // ChildReconciler.Filter drops them downstream). The theme tally must treat
+        // a null as non-theme-sensitive rather than NRE on element.ThemeBindings.
+        Assert.False(ChildDiffHints.IsThemeSensitive(null));
+    }
+
+    [Fact]
     public void IsThemeSensitive_True_For_ThemeBindings()
     {
         var el = new TextBlockElement("themed")
