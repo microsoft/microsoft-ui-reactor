@@ -185,7 +185,7 @@ public sealed class CommandDebounceAnalyzer : DiagnosticAnalyzer
                 var calleeIsUseCommand = calleeName == UseCommandName;
 
                 return isUseCommand
-                    ? calleeIsUseCommand
+                    ? calleeIsUseCommand && IsReactorUseCommand(invocation!, ctx)
                     : !calleeIsUseCommand && IsReactorBinding(invocation!, calleeName, ctx);
             });
     }
@@ -201,6 +201,21 @@ public sealed class CommandDebounceAnalyzer : DiagnosticAnalyzer
         return expression;
     }
 
+    // Mirror of IsReactorBinding for the suppression arm. A UseCommand call only counts as routing
+    // through the hook when Roslyn resolves the callee to a method under the Microsoft.UI.Reactor
+    // namespace (the Component / RenderContext hook). An unrelated helper or local function that
+    // merely shares the name must NOT suppress the diagnostic — that would be a false negative
+    // (the command is still bound raw and still does not debounce). When symbol resolution fails
+    // (incomplete code mid-edit) we fall back to trusting the name match the caller already made,
+    // so a genuinely-routed command still suppresses.
+    private static bool IsReactorUseCommand(InvocationExpressionSyntax invocation, SyntaxNodeAnalysisContext ctx)
+    {
+        if (ctx.SemanticModel.GetSymbolInfo(invocation, ctx.CancellationToken).Symbol is IMethodSymbol method)
+            return IsReactorNamespace(method.ContainingNamespace?.ToDisplayString());
+
+        return true;
+    }
+
     private static bool IsReactorBinding(InvocationExpressionSyntax invocation, string? calleeName, SyntaxNodeAnalysisContext ctx)
     {
         // When Roslyn can resolve the callee, trust it: a binding only counts if the method lives
@@ -208,11 +223,7 @@ public sealed class CommandDebounceAnalyzer : DiagnosticAnalyzer
         // in any other namespace is an unrelated API that merely shares a name (someone else's
         // `Button`/`MenuItem`/`.Command(...)`) — not a Reactor bind — so we must not warn on it.
         if (ctx.SemanticModel.GetSymbolInfo(invocation, ctx.CancellationToken).Symbol is IMethodSymbol method)
-        {
-            var ns = method.ContainingNamespace?.ToDisplayString();
-            return ns is not null
-                && (ns == ReactorNamespacePrefix || ns.StartsWith(ReactorNamespacePrefix + ".", System.StringComparison.Ordinal));
-        }
+            return IsReactorNamespace(method.ContainingNamespace?.ToDisplayString());
 
         // Symbol info unavailable (unresolved / incomplete code mid-edit) — fall back to a
         // conservative syntactic match so the footgun is still surfaced: a known binding factory,
@@ -222,6 +233,14 @@ public sealed class CommandDebounceAnalyzer : DiagnosticAnalyzer
 
         return false;
     }
+
+    // True when ns is the Reactor root namespace or a descendant of it. Shared by the binding-sink
+    // check, the UseCommand routing check, and the code fix's UseCommand-in-scope gate so all three
+    // judge "is this Reactor's API" identically.
+    internal static bool IsReactorNamespace(string? ns) =>
+        ns is not null
+            && (ns == ReactorNamespacePrefix
+                || ns.StartsWith(ReactorNamespacePrefix + ".", System.StringComparison.Ordinal));
 
     private static string? GetInvokedName(InvocationExpressionSyntax invocation) => invocation.Expression switch
     {

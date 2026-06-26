@@ -50,13 +50,16 @@ public sealed class CommandDebounceCodeFix : CodeFixProvider
                 .GetSemanticModelAsync(context.CancellationToken).ConfigureAwait(false);
             if (semanticModel is null) continue;
 
-            // Never offer a fix that wouldn't compile: UseCommand is a Component hook method, so if
-            // it isn't resolvable at this location (e.g. a static helper, or a type that does not
-            // derive from Component — both of which can still trip the diagnostic via a static Dsl
-            // factory bind), wrapping in UseCommand(...) would produce CS0103. In that case we skip
-            // the fix — the warning still fires and the author lifts the command by hand. Mirrors
-            // the implicit-new guard below: never emit broken code.
-            if (!semanticModel.LookupSymbols(commandExpr.SpanStart, name: "UseCommand").Any(static s => s is IMethodSymbol))
+            // Never offer a fix that wouldn't compile or wouldn't actually route through the hook:
+            // UseCommand is a Reactor Component hook, so we require a *Reactor* UseCommand to be in
+            // scope here. If none is (e.g. a static helper, or a type that does not derive from
+            // Component — both of which can still trip the diagnostic via a static Dsl factory bind),
+            // wrapping would either not compile (CS0103) or bind to an unrelated same-named helper
+            // that doesn't debounce (and would keep warning). In that case we skip the fix — the
+            // warning still fires and the author lifts the command by hand. Mirrors the implicit-new
+            // guard below: never emit broken or no-op code.
+            if (!semanticModel.LookupSymbols(commandExpr.SpanStart, name: "UseCommand").Any(static s =>
+                    s is IMethodSymbol m && CommandDebounceAnalyzer.IsReactorNamespace(m.ContainingNamespace?.ToDisplayString())))
                 continue;
 
             // A target-typed `new() { … }` is typed by *its surrounding context*. Wrapping it

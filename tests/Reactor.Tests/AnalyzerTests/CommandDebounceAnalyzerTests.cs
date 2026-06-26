@@ -729,4 +729,119 @@ namespace TestApp
             FixedCode = source,
         }.RunAsync(TestContext.Current.CancellationToken);
     }
+
+    // ── UseCommand routing must be Reactor's hook, not just any same-named call ──
+
+    [Fact]
+    public async Task Fires_When_Routed_Through_NonReactor_UseCommand()
+    {
+        // FP/FN guard: a same-named UseCommand from another namespace is not Reactor's hook, so it
+        // must NOT suppress the warning. Here the command is passed to Foreign.Hooks.UseCommand AND
+        // bound raw to Button — the raw bind still doesn't debounce, so the diagnostic must fire.
+        var source = Stubs + @"
+namespace Foreign
+{
+    using Microsoft.UI.Reactor.Core;
+
+    public static class Hooks
+    {
+        public static Command UseCommand(Command command) => command;
+    }
+}
+
+namespace TestApp
+{
+    using Microsoft.UI.Reactor.Core;
+    using Foreign;
+
+    public sealed class Comp : Component
+    {
+        void Save() { }
+
+        public Element Render()
+        {
+            var save = {|REACTOR_HOOKS_009:new Command { Label = ""Save"", Execute = Save, DebounceMs = 1500 }|};
+            Hooks.UseCommand(save);
+            return Button(save);
+        }
+    }
+}";
+
+        await new CSharpAnalyzerTest<CommandDebounceAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task CodeFix_Not_Offered_When_Only_NonReactor_UseCommand_In_Scope()
+    {
+        // The bind resolves to the static Dsl factory (Reactor) so the diagnostic fires, but the
+        // only UseCommand in scope is a same-named non-Reactor helper. Wrapping in it would compile
+        // yet route through a no-op (and keep warning), so the fix must NOT be offered — FixedCode
+        // is identical to the input.
+        var source = Stubs + @"
+namespace TestApp
+{
+    using Microsoft.UI.Reactor.Core;
+    using static Microsoft.UI.Reactor.Factories;
+
+    public static class Helpers
+    {
+        static void Save() { }
+
+        static Command UseCommand(Command command) => command;
+
+        public static Element Build()
+            => Button({|REACTOR_HOOKS_009:new Command { Label = ""Save"", Execute = Save, DebounceMs = 1500 }|});
+    }
+}";
+
+        await new CSharpCodeFixTest<CommandDebounceAnalyzer, CommandDebounceCodeFix, DefaultVerifier>
+        {
+            TestCode = source,
+            FixedCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task CodeFix_Preserves_Comment_Inside_Initializer()
+    {
+        // The wrap must not drop a comment that lives inside the initializer (interior trivia of the
+        // command expression), only normalize the outer trivia it copies onto the UseCommand call.
+        var before = Stubs + @"
+namespace TestApp
+{
+    using Microsoft.UI.Reactor.Core;
+
+    public sealed class Comp : Component
+    {
+        void Save() { }
+
+        public Element Render()
+            => Button({|REACTOR_HOOKS_009:new Command { Label = ""Save"", Execute = Save, DebounceMs = 1500 /* keep me */ }|});
+    }
+}";
+
+        var after = Stubs + @"
+namespace TestApp
+{
+    using Microsoft.UI.Reactor.Core;
+
+    public sealed class Comp : Component
+    {
+        void Save() { }
+
+        public Element Render()
+            => Button(UseCommand(new Command { Label = ""Save"", Execute = Save, DebounceMs = 1500 /* keep me */ }));
+    }
+}";
+
+        await new CSharpCodeFixTest<CommandDebounceAnalyzer, CommandDebounceCodeFix, DefaultVerifier>
+        {
+            TestCode = before,
+            FixedCode = after,
+            CodeActionEquivalenceKey = CommandDebounceAnalyzer.Id,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
 }
