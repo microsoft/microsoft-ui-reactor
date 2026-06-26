@@ -4,7 +4,7 @@
     <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
     <!-- x64-only: the native satellite control (Microsoft.UI.Xaml.Controls.Tabular.dll) is shipped solely
          as a win-x64 native asset, so restore/build on ARM64 would succeed but fail WinRT activation at
-         runtime. Restrict to x64 for this POC (add a win-arm64 native asset to support ARM64). -->
+         runtime. Restrict to x64 for this Preview (add a win-arm64 native asset to support ARM64). -->
     <Platforms>x64</Platforms>
     <RootNamespace>Reactor.Controls</RootNamespace>
     <AssemblyName>Reactor.Controls.TableView</AssemblyName>
@@ -22,10 +22,10 @@
   <PropertyGroup>
     <IsPackable>true</IsPackable>
     <PackageId>Microsoft.UI.Reactor.TableView</PackageId>
-    <Version Condition="'$(Version)' == ''">0.0.0-poc</Version>
+    <Version Condition="'$(Version)' == ''">0.0.0-preview</Version>
     <Authors>Microsoft</Authors>
     <Company>Microsoft</Company>
-    <Description>POC — the native C++/WinRT TableView (separate-binary Microsoft.UI.Xaml.Controls.Tabular.dll, projected vs public WinAppSDK 2.0.1) as a first-class Reactor control.</Description>
+    <Description>Preview — the native C++/WinRT TableView (separate-binary Microsoft.UI.Xaml.Controls.Tabular.dll, projected vs public WinAppSDK 2.0.1) as a first-class Reactor control.</Description>
     <PackageTags>WinUI;WinUI3;WinAppSDK;Reactor;TableView;control</PackageTags>
     <PackageProjectUrl>https://github.com/microsoft/microsoft-ui-reactor</PackageProjectUrl>
     <RepositoryUrl>https://github.com/microsoft/microsoft-ui-reactor</RepositoryUrl>
