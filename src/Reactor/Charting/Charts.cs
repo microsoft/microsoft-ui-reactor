@@ -625,12 +625,14 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
     }
 
     /// <summary>
-    /// Declares a scanner-visible accessible palette for the pie (Tier 1). For a pie this is
+    /// Declares a scanner-visible accessible palette for the pie. For a pie this is
     /// <b>advisory-only</b>: it does <b>not</b> change the rendered slice colors (a pie renders the
     /// <c>.SetColors(...)</c> colors when set, otherwise the built-in Category10 default) and is
     /// consulted by the accessibility scanner only as a contrast-check fallback when
-    /// <c>.SetColors(...)</c> is unset (issue #645). Use <see cref="SetColors"/> to control the
-    /// colors a pie actually draws.
+    /// <c>.SetColors(...)</c> is unset (issue #645). Accepts any <see cref="Accessibility.ChartPalette"/>:
+    /// a curated palette such as <c>ChartPalette.OkabeIto</c> (Tier 1) is recommended for guaranteed
+    /// contrast, but <c>ChartPalette.FromColors(...)</c> (Tier 3) and <c>ChartPalette.FromRaw(...)</c>
+    /// (Tier 4) are accepted too. Use <see cref="SetColors"/> to control the colors a pie actually draws.
     /// </summary>
     public PieChartElement<T> Palette(Accessibility.ChartPalette palette) { _palette = palette; return this; }
 
