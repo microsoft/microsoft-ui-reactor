@@ -234,10 +234,14 @@ Replace `$(RuntimeIdentifier)` with `ARM64` or `x64`, or omit the platform segme
 ### Running coverage in CI
 
 You don't have to run the merge locally — the **Coverage** workflow
-(`.github/workflows/coverage.yml`) runs this same unit + selftest recipe against a
-PR and posts the merged line/branch numbers back as a PR comment. Trigger it either
-way:
+(`.github/workflows/coverage.yml`) runs this same unit + selftest recipe and
+reports the merged line/branch numbers. Trigger it any of these ways:
 
-- **Comment trigger:** a maintainer comments `@codecoverage` on the PR.
-- **Manual trigger:** use **Actions → Coverage → Run workflow** and enter the PR
-  number, or from the CLI run `gh workflow run coverage.yml -f pr_number=<PR>`.
+- **Comment trigger:** a maintainer comments `@codecoverage` on a PR. The result
+  is posted back as a PR comment.
+- **Manual trigger (PR):** use **Actions → Coverage → Run workflow** and enter the
+  PR number, or run `gh workflow run coverage.yml -f pr_number=<PR>`. Same PR
+  comment output; works for forks too.
+- **Manual trigger (branch):** run it with the PR number left **blank** to measure
+  the selected branch — e.g. `gh workflow run coverage.yml --ref main`. With no PR
+  to comment on, the numbers are written to the run's **job summary** instead.
