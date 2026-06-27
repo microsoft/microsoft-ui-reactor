@@ -79,8 +79,8 @@
 
 .PARAMETER MicroIterations
     Inner iterations per micro repetition (default 1000) over which each bench's
-    mean ns/op and allocated bytes/op are averaged. The suite runs 16 benches
-    (the spec-047 M1&ndash;M13 set plus 3 supplementary) and the heaviest
+    mean ns/op and allocated bytes/op are averaged. The suite runs 17 benches
+    (the spec-047 M1&ndash;M14 set plus 3 supplementary) and the heaviest
     (M7&ndash;M9 reconcile a 1000-node tree per op) run >=120 us/op,
     so even 1000 iterations keep each per-rep mean >=120 ms &mdash; hundreds of
     thousands of times the Stopwatch floor &mdash; while letting each per-round
@@ -89,7 +89,7 @@
 
 .PARAMETER MicroRepTimeoutSec
     Per-round launch timeout in seconds for one micro side (default 180). Each
-    interleaved round runs the 16-bench suite once (one inner --reps) per side; a
+    interleaved round runs the 17-bench suite once (one inner --reps) per side; a
     round that exceeds this is dropped on BOTH sides to keep the rep indices
     aligned. Replaces the old whole-suite timeout that silently truncated the
     suite to M1&ndash;M4.
@@ -690,7 +690,7 @@ function Invoke-MicroRun {
     $microArgs = @('--variant', 'Reactor', '--reps', $RepCount.ToString($inv),
         '--iterations', $IterCount.ToString($inv), '--out', $outJson, '--headless')
     # Per-launch budget. When the interleaver calls this with -RepCount 1 the launch runs
-    # the 16-bench suite once (each bench still does its own internal warmup + one timed
+    # the 17-bench suite once (each bench still does its own internal warmup + one timed
     # rep), so the default 180s the caller passes is sized with wide headroom over the
     # tens of seconds a single round needs at 2000 iters, while a genuine hang is still
     # bounded. (At 420s with 10000 iterations the whole-suite single launch timed out

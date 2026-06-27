@@ -952,7 +952,7 @@ try {
     # absent (the #693 regression: a per-round timeout dropped the whole section and it went
     # unnoticed for the PR's entire life). Three render contracts:
     #   (1) rows present & complete (4/4)   -> no note (the happy path above);
-    #   (2) rows present but < canonical 16 -> a "N/16 Incomplete" warning above the table;
+    #   (2) rows present but < the expected count -> a "N/<expected> Incomplete" warning above the table;
     #   (3) null rows + an omit reason      -> a visible "omitted this run -- <reason>" callout;
     #   (4) null rows + no reason           -> still silent (the leg was simply not requested).
     Assert-True (-not $sectionText.Contains('Incomplete'))       'complete render (4/4 benches): no incompleteness note'
@@ -965,7 +965,7 @@ try {
     # Default-count resolution (the production call shape): Format-PerfComment never passes
     # -ExpectedCount, so the default MUST resolve to $script:MicroExpectedBenchCount. A wrong
     # default (the 13 this PR fixed) would silently mis-label a real 13-of-16 run as complete.
-    Assert-Equal 16 $script:MicroExpectedBenchCount             'canonical micro bench count is the full 16-bench emitted set (M1-M13 + 3 supplementary)'
+    Assert-Equal 17 $script:MicroExpectedBenchCount             'canonical micro bench count is the full 17-bench emitted set (M1-M14 + 3 supplementary)'
     $defaultText = (Format-PerfMicroSection -Micro $cmp) -join "`n"
     Assert-Match $defaultText 'Incomplete'                       'default-count render: a 4-row run is incomplete vs the canonical full suite'
     Assert-Match $defaultText "4/$($script:MicroExpectedBenchCount)" 'default-count render: denominator is the script-scoped canonical count, not a literal'
@@ -991,7 +991,7 @@ try {
     $catalogInit = [regex]::Match($catalogSrc, '(?s)All\s*\{\s*get;\s*\}\s*=\s*new\s+IBench\[\]\s*\{(.*?)\};')
     Assert-True $catalogInit.Success 'drift guard: located the BenchCatalog.All initializer block'
     $catalogCount = ([regex]::Matches($catalogInit.Groups[1].Value, 'new\s+\w+\s*\(')).Count
-    Assert-Equal 16 $catalogCount                               'drift guard: BenchCatalog.All declares 16 benches (M1-M13 + OAlloc/OUpdate/C207)'
+    Assert-Equal 17 $catalogCount                               'drift guard: BenchCatalog.All declares 17 benches (M1-M13 + OAlloc/OUpdate/C207 + M14)'
     Assert-Equal $script:MicroExpectedBenchCount $catalogCount  'drift guard: $script:MicroExpectedBenchCount matches the C# catalog count (no silent drift)'
 
     # Format-PerfComment threads -Micro through into the comment.
