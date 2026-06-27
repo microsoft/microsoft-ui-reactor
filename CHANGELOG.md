@@ -365,6 +365,24 @@ Conventions for contributors:
 
 ### Fixed
 
+- **RichTextBlock inline-UI scroll drift now fixed at the root, not just mitigated
+  (issue #717).** The #487 scroll-anchor (below) restored the offset reactively
+  *after* the ancestor scroll host clamped it. The underlying cause is that the live
+  app applies the document mutation inside the reconcile and then returns to the
+  dispatcher, letting the compositor commit a frame carrying WinUI's transient
+  collapsed extent (`RemoveEmbeddedElements` → `desiredSize=0`) *before* the inline UI
+  re-attaches — the very frame the scroll host clamps against. The collapse is
+  scheduled on a *separate* dispatcher callback (not a layout-dirty flag), so a
+  synchronous `UpdateLayout` inside the reconcile measures the still-intact tree and
+  cannot coalesce it. `UpdateRichTextBlocks` now prevents the collapse at its source:
+  after mutating an inline-UI-bearing block it pins the block's `MinHeight` to its
+  full pre-collapse `ActualHeight` (raising the floor only, never lowering an author
+  value) and releases the pin a couple of rendered frames later once the inline UI has
+  re-attached. With the floor pinned the transient `desiredSize=0` can no longer shrink
+  the block's measured height, so `ScrollableHeight` never drops, the scroll host never
+  clamps, and there is no lost offset to restore. With this in place the #487 anchor
+  becomes a belt-and-suspenders safety net. No new API surface; the pin only engages for
+  blocks that actually host inline UI and actually mutated.
 - **RichTextBlock inline-UI mutations no longer scroll the ancestor scroll host to
   the top (issue #487).** Mutating any `Run.Text` inside a paragraph that hosts an
   `InlineUIContainer` (charts/sliders/buttons embedded via `InlineUI(...)`) made the

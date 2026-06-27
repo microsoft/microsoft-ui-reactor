@@ -461,17 +461,30 @@ public sealed partial class Reconciler
         // anchor restores the user's real offset once layout settles.
         PreserveScrollAroundInlineUiMutation(rtb, next);
 
-        if (TryIncrementalUpdateRichTextBlocks(rtb, prev, next, requestRerender))
+        if (TryIncrementalUpdateRichTextBlocks(rtb, prev, next, requestRerender, out bool mutated))
+        {
+            // Issue #717 — only an actual document mutation triggers WinUI's
+            // inline-UI re-measure, so skip the (extent-pinning) fix otherwise.
+            if (mutated)
+                PinExtentAcrossInlineUiMutation(rtb, next);
             return;
+        }
         RebuildRichTextBlocks(next, rtb, requestRerender);
+        // A rebuild always re-creates the document (and therefore re-measures any
+        // inline UI from scratch), so pin the extent unconditionally when inline UI is
+        // present.
+        PinExtentAcrossInlineUiMutation(rtb, next);
     }
 
     private bool TryIncrementalUpdateRichTextBlocks(
         WinUI.RichTextBlock rtb,
         RichTextBlockElement prev,
         RichTextBlockElement next,
-        Action requestRerender)
+        Action requestRerender,
+        out bool mutated)
     {
+        mutated = false;
+
         // Case A — both .Paragraphs null: text-only fallback path.
         if (prev.Paragraphs is null && next.Paragraphs is null)
         {
@@ -482,6 +495,7 @@ public sealed partial class Reconciler
             if (string.Equals(prev.Text, next.Text, global::System.StringComparison.Ordinal))
                 return true;
             r1.Text = next.Text ?? string.Empty;
+            mutated = true;
             MarkRichTextBlockModified(rtb);
             return true;
         }
@@ -558,6 +572,7 @@ public sealed partial class Reconciler
 
         if (anyMutation)
             MarkRichTextBlockModified(rtb);
+        mutated = anyMutation;
         return true;
     }
 

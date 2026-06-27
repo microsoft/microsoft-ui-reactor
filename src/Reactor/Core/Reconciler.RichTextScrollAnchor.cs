@@ -25,11 +25,18 @@ namespace Microsoft.UI.Reactor.Core;
 // the content recovered. Five mechanisms — learned from the hand-rolled prototype —
 // are ALL load-bearing (see the numbered notes inline below).
 //
-// This is a client-side guard for a WinUI text-engine bug (the transient
-// RemoveEmbeddedElements re-measure permanently clamps the scroll host's
-// VerticalOffset). An upstream WinUI issue tracks the root cause; once the text
-// engine preserves the offset across that re-measure this whole anchor can be
-// retired. See microsoft/microsoft-ui-reactor#487 for the full diagnosis.
+// This anchor is the reactive mitigation. The ROOT cause (issue #717) is not a
+// standalone WinUI defect: the transient RemoveEmbeddedElements re-measure coalesces
+// invisibly in pure WinUI, but Reactor's reconcile applies the document mutation and
+// returns to the dispatcher, letting the compositor commit the collapsed frame before
+// the inline UI re-attaches — and the (correct) scroll host clamps against it. The
+// primary fix lives alongside this file in PinExtentAcrossInlineUiMutation (below):
+// after an inline-UI-bearing block is mutated, UpdateRichTextBlocks pins the block's
+// MinHeight to its full pre-collapse height (releasing it a few frames later) so the
+// transient collapse can never shrink the scroll host's extent and there is no clamp.
+// With that in place this anchor degrades to a belt-and-suspenders safety net. See
+// microsoft/microsoft-ui-reactor#487 (mitigation) and #717 (root-cause fix) for the
+// full diagnosis.
 public sealed partial class Reconciler
 {
     // Mechanism #1 — per-scroll-host state keyed off the host instance via an
@@ -116,6 +123,100 @@ public sealed partial class Reconciler
                 if (inline is RichTextInlineUIContainer) return true;
         }
         return false;
+    }
+
+    // Issue #717 — root-cause fix for the RichTextBlock inline-UI scroll drift that
+    // #487's anchor (above) mitigates reactively.
+    //
+    // Mutating a Run.Text inside an inline-UI-bearing paragraph makes WinUI's text
+    // engine re-measure that paragraph from scratch: ParagraphNode::Measure calls
+    // RemoveEmbeddedElements and reports desiredSize=0 for ONE pass, then re-attaches
+    // the embedded UIElements roughly a frame later. In pure WinUI (and in the selftest
+    // harness, which renders via a synchronous UpdateLayout) the detach + re-attach
+    // coalesce into one cycle, so the collapsed extent is never committed. The live
+    // Reactor app, by contrast, mutates the document inside the reconcile and then
+    // yields to the dispatcher; the compositor commits a frame carrying the transient
+    // collapsed extent BEFORE the re-attach pass, and the (correct) scroll host clamps
+    // VerticalOffset down to the smaller ScrollableHeight. That clamp is silent and
+    // LOSSY — re-growing the extent afterwards does not restore the offset (see issue
+    // #717: "ViewChanged ext 796→666 IsIntermediate=False" committed, children reattach
+    // ~3ms later).
+    //
+    // The collapse is asynchronous and unreachable from the reconcile: WinUI schedules
+    // the embedded-element re-measure on a separate dispatcher callback, so a synchronous
+    // rtb.UpdateLayout() — or a same-pass offset restore — cannot pre-empt it (both
+    // measure the still-intact tree and are no-ops for offset preservation). Instead we
+    // PREVENT the extent from ever shrinking: pin the RichTextBlock's MinHeight to its
+    // current (full, pre-collapse) height before yielding, so the transient desiredSize=0
+    // cannot lower the block's measured height and the scroll host never observes a
+    // smaller extent — there is no clamp and nothing to restore. The pin must straddle
+    // the async collapse window, so it is released only after the content has re-grown,
+    // on a later rendered frame (a synchronous release would remove the pin before the
+    // collapse fires).
+    //
+    // Gated on HasInlineUi (pure text/hyperlink/linebreak blocks never re-measure an
+    // InlineUIContainer) and on the caller having actually mutated the document, so
+    // unchanged renders pay nothing. The #487 anchor is retained as a belt-and-suspenders
+    // backstop for any path the pin cannot cover (e.g. the block is not yet in a live,
+    // measured visual tree when the mutation lands).
+    private sealed class InlineUiExtentPin
+    {
+        public double OriginalMinHeight;
+        public bool HasOriginal;
+        public int Generation;
+    }
+
+    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<WinUI.RichTextBlock, InlineUiExtentPin> s_inlineUiExtentPins = new();
+
+    // Test-only seam (InternalsVisibleTo Reactor.AppTests.Host): counts how many times
+    // the inline-UI extent pin actually engaged (raised, or held, a block's MinHeight
+    // floor) on an inline-UI-bearing mutation. A selftest asserts this increments so it
+    // can prove the production reconcile engages the pin without racing the
+    // compositor-frame-timed release.
+    internal static int InlineUiPinEngagementCount;
+
+    private static void PinExtentAcrossInlineUiMutation(WinUI.RichTextBlock rtb, RichTextBlockElement next)
+    {
+        if (!HasInlineUi(next)) return;
+
+        double pinHeight = rtb.ActualHeight;
+        if (!(pinHeight > 0)) return; // Not in a live/measured tree yet — the anchor covers this.
+
+        InlineUiExtentPin pin = s_inlineUiExtentPins.GetValue(rtb, static _ => new InlineUiExtentPin());
+        if (!pin.HasOriginal)
+        {
+            pin.OriginalMinHeight = rtb.MinHeight;
+            pin.HasOriginal = true;
+        }
+
+        // Raise the floor only — never lower an author-specified MinHeight.
+        if (pinHeight > rtb.MinHeight)
+            rtb.MinHeight = pinHeight;
+
+        InlineUiPinEngagementCount++;
+
+        // Release on a later rendered frame, once WinUI's deferred re-measure + reattach
+        // has re-grown the content. A generation token ensures only the latest pin
+        // releases, so rapid successive mutations supersede earlier (still-pending) pins
+        // rather than releasing the floor mid-collapse.
+        int generation = ++pin.Generation;
+        int framesRemaining = 2;
+        EventHandler<object>? onRendering = null;
+        onRendering = (_, _) =>
+        {
+            if (pin.Generation != generation)
+            {
+                CompositionTarget.Rendering -= onRendering;
+                return;
+            }
+            if (--framesRemaining > 0) return;
+
+            CompositionTarget.Rendering -= onRendering;
+            // Content is full again; restoring the author's MinHeight cannot lose offset.
+            rtb.MinHeight = pin.OriginalMinHeight;
+            pin.HasOriginal = false;
+        };
+        CompositionTarget.Rendering += onRendering;
     }
 
     private static FrameworkElement? FindAncestorScrollHost(DependencyObject start)
