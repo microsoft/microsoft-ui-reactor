@@ -435,6 +435,10 @@ Assert-True ($src -match '\$mainFlexRuns = @\(\); \$prFlexRuns = @\(\)\s*\r?\n\s
 Assert-True ($src -match 'if \(\$mm -and \$pm\) \{ \$mainFlexRuns \+= \$mm; \$prFlexRuns \+= \$pm \}') '[flex] a complete pair appends both main + pr samples'
 Assert-True ($src -match 'elseif \(\$mm -or \$pm\) \{ Write-Log "  flex pair #\$i incomplete') '[flex] a one-sided flex run drops both halves (paired CI stays aligned)'
 
+# result.json carries the flex aggregates so downstream tooling can read the leg.
+Assert-True ($src -match 'mainFlex = \$mainFlex')   '[flex] result.json object includes the main flex aggregate'
+Assert-True ($src -match 'prFlex = \$prFlex')       '[flex] result.json object includes the PR flex aggregate'
+
 # ===========================================================================
 #  Micro rep-interleave — ConvertTo-MicroRepLines + Invoke-MicroInterleaved
 # ===========================================================================

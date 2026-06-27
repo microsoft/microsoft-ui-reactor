@@ -624,6 +624,12 @@ Assert-True (($idxFlexHead -ge 0) -and ($idxFlexHead -lt $idxFlexAlloc)) 'flex a
 # Omitted when the flex aggregates carry no alloc metrics (legacy flex head).
 Assert-True (-not ($flexSectionText -like '*Allocation (flex)*')) 'flex alloc sub-table omitted when flex aggregates lack alloc'
 
+# In a full comment the positional StocksGrid allocation table and the flex allocation
+# sub-table are DISTINCT, separately-labelled tables (positional vs flex-layout allocs).
+$bothFlexAllocComment = Format-PerfComment -Main $allocMain -Pr $allocPr -WinUI3 $null -Rust $null -MainFlex $flexAllocMain -PrFlex $flexAllocPr -Context $ctx
+Assert-Match $bothFlexAllocComment 'Allocation (Reactor)' 'full comment keeps the StocksGrid allocation table'
+Assert-Match $bothFlexAllocComment 'Allocation (flex)'    'full comment adds the distinct flex allocation sub-table'
+
 
 # ── Reconciler micro-suite: Read-MicroBenchResults / comparison / render ──────
 function New-MicroRow {

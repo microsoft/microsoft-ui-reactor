@@ -18,6 +18,20 @@
 // The win shows up as lower per-frame ALLOCATION + Gen0 on the deep tree and lower
 // inline-per-node MEMORY — captured by the shared PerfTracker.
 //
+// MEASUREMENT CAVEAT (for maintainers + whoever measures #670 against this leg): the
+// PerfTracker phase hook (OnRenderComplete, wired below) fires at the END of Reactor's
+// render/reconcile, which is BEFORE WinUI runs layout. The real Yoga Measure/Arrange
+// work (#138 cache guards, #141/#144 list/line pooling, the layout-side of #147) runs
+// LATER, in FlexPanel.MeasureOverride/ArrangeOverride — so it is NOT reflected in the
+// `avgReconcileMs` / `avgDiffMs` numbers. It IS captured by `allocBytesPerRender` /
+// `gen0` (PerfTracker reads process-wide GC counters across the whole run, layout pass
+// included) and largely by `rendersPerSec`. So judge layout-engine wins on the
+// allocation table + Renders/sec, NOT the reconcile/diff ms rows; `avgMemoryMB` is too
+// coarse to resolve the inline-per-node-array gain at this node count. A post-layout
+// timing hook is deliberately NOT added here — that would touch the shared PerfTracker
+// (used by the other legs); add it as a follow-up only if #670's /perf actually needs a
+// layout-time signal (measure-then-escalate).
+//
 // The harness contract is mirrored byte-for-byte from StressPerf.KeyedList: the same
 // CLI flags (--headless / --percent / --duration / --json via the shared CliOptions),
 // the same shutdown emission (report.txt + metrics.json + the REACTOR_PERF_JSON stdout

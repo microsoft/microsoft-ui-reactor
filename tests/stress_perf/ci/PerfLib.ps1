@@ -996,6 +996,8 @@ function Format-PerfFlexSection {
     $lines.Add('')
     $lines.Add("A separate macro workload: a **deep nested, fully-realized** (non-virtualized) flex tree (~2000 leaf cells) whose per-child flex inputs (grow / basis / width) are re-rolled on a ``--percent`` fraction of the leaves each tick, forcing a real **Yoga measure/layout pass** every frame while the unchanged leaves re-push identical inputs (the YogaNode setter-equality-guard / layout-cache-hit path). This drives the **FlexPanel / Yoga LAYOUT engine** &mdash; the sensitive macro signal for Yoga/Flex layout-engine **allocation + memory** work the positional StocksGrid and keyed-list legs can never reach. Same interleaved paired-Δ 95% CI as the headline table.")
     $lines.Add('')
+    $lines.Add("> **Reading this table:** the **reconcile / diff timing** rows do **not** capture the deferred Yoga Measure/Arrange pass &mdash; it runs *after* the harness' ``OnRenderComplete`` phase hook, in ``FlexPanel.MeasureOverride``/``ArrangeOverride``. Judge layout-engine wins primarily on the **flex allocation table** below (process-wide GC counters capture the whole run, layout pass included) and the **renders-per-second** figure. The working-set memory figure is informational only &mdash; too coarse to resolve inline-per-node-array gains at this node count.")
+    $lines.Add('')
     $lines.Add('| Metric | `main` (baseline) | This PR | Δ (95% CI) | Status |')
     $lines.Add('|---|--:|--:|--:|:--|')
     foreach ($m in $script:PerfMetricSpec) {
