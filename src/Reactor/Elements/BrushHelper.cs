@@ -6,22 +6,36 @@ namespace Microsoft.UI.Reactor;
 /// <summary>
 /// Color and brush parsing utilities.
 /// Supports named colors, hex (#RRGGBB, #AARRGGBB), and direct Color values.
-/// Colors are cached by string; a fresh SolidColorBrush is created per call
-/// because DependencyObjects have thread affinity and cannot be safely shared.
+/// Parsed colors are cached by string (an immutable value type, safe to share),
+/// but a fresh <see cref="SolidColorBrush"/> is created per call: a brush is a
+/// DependencyObject with thread affinity and mutable Color/Opacity, so a single
+/// instance cannot be safely shared across controls.
 /// </summary>
 public static class BrushHelper
 {
-    private static readonly ConcurrentDictionary<string, global::Windows.UI.Color> _colorCache = new();
+    // OrdinalIgnoreCase so equivalent colors that differ only in casing
+    // ("Red"/"red", "#FF0000"/"#ff0000") share one cache entry instead of
+    // creating duplicates. Safe because ParseColor lowercases named colors
+    // before matching and ParseHex is case-insensitive, so case-folded keying
+    // yields identical results to the prior case-sensitive keying.
+    private static readonly ConcurrentDictionary<string, global::Windows.UI.Color> _colorCache =
+        new(global::System.StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Parses a color string into a SolidColorBrush.
-    /// Supports named colors (red, green, blue, white, black, gray, lightgray, transparent)
-    /// and hex codes (#RRGGBB or #AARRGGBB).
-    /// Color parsing is cached; a new brush is created each call (thread-safe).
+    /// Parses a color string into a fresh <see cref="SolidColorBrush"/> owned by the
+    /// caller. Supports named colors (red, green, blue, white, black, gray, lightgray,
+    /// transparent) and hex codes (#RRGGBB or #AARRGGBB). The parsed color is cached,
+    /// but a new brush instance is returned on every call, so callers may safely mutate
+    /// it and a brush is never shared between controls.
     /// </summary>
-    public static SolidColorBrush Parse(string color)
-    {
-        var parsed = _colorCache.GetOrAdd(color, static c =>
+    public static SolidColorBrush Parse(string color) => new(ParseColor(color));
+
+    /// <summary>
+    /// Parses a color string into a <see cref="global::Windows.UI.Color"/>.
+    /// The result is cached by string so repeated parses are allocation-free.
+    /// </summary>
+    internal static global::Windows.UI.Color ParseColor(string color) =>
+        _colorCache.GetOrAdd(color, static c =>
             c.ToLowerInvariant() switch
             {
                 "red" => global::Windows.UI.Color.FromArgb(255, 255, 0, 0),
@@ -35,8 +49,6 @@ public static class BrushHelper
                 _ when c.StartsWith('#') => ParseHex(c),
                 _ => global::Windows.UI.Color.FromArgb(255, 128, 128, 128),
             });
-        return new SolidColorBrush(parsed);
-    }
 
     internal static global::Windows.UI.Color ParseHex(string hex)
     {
