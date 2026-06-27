@@ -220,6 +220,97 @@ equivalent is collected) and absent in a harness built before the metric landed.
 > target; its run-to-run swing is larger than the effect. Full rationale in
 > [`ci/README.md`](ci/README.md#variance-trust-the-delta-not-the-absolutes).
 
+## Low-mutation skip-floor: isolating the O(n) child skip-walk
+
+The headline macro leg runs at `--percent 50` (half the cells mutate each tick).
+At that mutation rate the per-tick cost is dominated by the *changed* cells, and a
+large fixed cost is **diluted**: `ChildReconciler` re-walks **all** children every
+tick to find what moved, an O(n) pass that runs whether 1 cell changed or 500 did.
+At 50% that skip-walk is a fraction of the work; a structural-skip optimization
+(skip untouched child ranges) barely moves the headline number.
+
+So `/perf` runs a **second interleaved A/B leg at `--percent 0`** and reports it as
+its own *low-mutation skip-floor* table. At 0% the workload still mutates exactly
+one cell per tick — `StockDataSource.Update` clamps the change count to
+`Math.Max(1, …)` — so virtually every child is unchanged and reconcile/diff time
+*is* the skip-walk floor. That makes the floor the whole signal instead of a diluted
+fraction, which is what lets a structural-skip PR's win clear a paired-Δ CI. It uses
+the same interleaving, reps, warm-up, and 95%-CI gating as the headline table (so
+each leg's delta independently cancels time-correlated drift); it is opt-out via
+`-IncludeSkipFloor $false`. See
+[`ci/README.md`](ci/README.md#the-comment).
+
+## Keyed-list workload: the keyed child-diff path StocksGrid never hits
+
+The StocksGrid macro workload (`StressPerf.ReactorOptimized`) renders a fixed grid
+of cells mutated **in place by index**. Its child diff therefore always takes
+`ChildReconciler.ReconcilePositional` — the positional re-walk. It never exercises
+the reconciler's **keyed** arm, so keyed-diff optimizations (the keyed-list LIS
+diff, keyed structural-skip) are invisible to it *by construction* — the same blind
+spot that made the original headline-only comparison unable to resolve them.
+
+So `/perf` runs a **third interleaved A/B leg** on `StressPerf.KeyedList`: a ~500-row
+list of **stably keyed** children that are reordered / inserted / removed each tick.
+Because every child carries a key, the child reconciler takes its keyed arm
+(`ReconcileKeyed` → `ReconcileKeyedMiddle`, the LIS-based minimal-move pass) and runs
+a real keyed diff every tick. The workload is deterministic (fixed RNG seed, constant
+row count — insertions paired with removals) so `main` and PR compare identical edit
+sequences, and its rows' labels are content-stable so a moved row's text never changes
+— isolating the **structural** (keyed-diff) signal from per-cell property updates. It
+reports the four headline metrics in its own table, plus an **allocation** sub-table
+(`Alloc bytes/render`, `Gen0 GC / 1k renders`) — the sensitive macro signal for
+keyed-diff *allocation* reductions the positional StocksGrid alloc table can't isolate,
+rendered only when the keyed leg reports the metric — all under the same interleaving,
+reps, warm-up, and 95%-CI gating as the headline leg, and is opt-out via
+`-IncludeKeyedList $false`. See
+[`ci/README.md`](ci/README.md#the-comment).
+
+## Reconciler micro-benchmarks: ns-resolution Core path
+
+Every metric above is measured **across a live WinUI render pipeline**, which is
+the right scope for "what does the app feel like" but the wrong scope for the
+**Core/Reconciler** layer most perf work targets. The StocksGrid macro workload is
+render-bound (renders/sec is ~76% gated by the render thread) and its reconcile/ms
+and alloc figures are diluted by render + working-set noise — small per-reconcile
+deltas are unresolvable there. (The StocksGrid cells also render through a native
+`Grid` with fixed tracks, structurally separate from FlexPanel/Yoga, so layout-engine
+optimizations don't surface in this workload at all.)
+
+For that layer the repo ships a dedicated micro-suite,
+[`tests/perf_bench/PerfBench.ControlModel`](../perf_bench/PerfBench.ControlModel)
+(spec-047 M1–M13). It runs the production reconciler as a **headless loop whose
+measured region brackets only the reconcile body** — no render pipeline — with
+`Stopwatch` for **ns/op** and the **per-thread** `GC.GetAllocatedBytesForCurrentThread()`
+for **bytes/op** (per-thread, so WinUI and background-thread allocations are
+excluded). That makes it ns-resolution and free of the dilution above.
+
+`/perf` builds and runs this suite once per side — `main` and the PR each link
+their own `src/Reactor` — and reports a per-bench `main`-vs-PR table; see
+[`ci/README.md`](ci/README.md#reconciler-micro-benchmarks-ns-resolution-winui-undiluted).
+The two metrics are read differently. **Allocated bytes/op is deterministic** for
+identical code — an unchanged diff reproduces the byte count exactly — so its paired
+95% CI is trustworthy and **drives each row's flag**. **ns/op is rep-interleaved but
+not auto-flagged by default.** The two per-side runs are interleaved at the **rep
+level** — each rep alternates a fresh `main` then PR process — so the
+process-to-process timing offset (thermal/scheduling drift) that a single back-to-back
+pair of invocations leaves as a *constant* bias is instead randomized round-to-round
+into the paired variance, making the ns paired CI unbiased. This matters because
+before interleaving that offset shifted every paired ns difference the same way and
+made the paired CI exclude 0 even for an identical binary: running the **same**
+ControlModel binary as both sides, alloc was deterministic (14/16 benches exactly
+0.0% Δ) while ns spuriously flagged up to −14.8% on a no-op. Even interleaved, ns
+carries residual cold-JIT / scheduling jitter, so promoting it to a flag is gated
+behind a minimum-effect band **and** a master switch (`$MicroNsAutoFlag`) that stays
+**dormant** pending a real-CI identical-binary calibration of that band — which can
+only run once the interleave is on `main`, since `/perf` builds the harness from the
+default branch. Arming the switch is a measurement-only follow-up — it changes verdict
+labels, never what merges. While dormant the row flag tracks allocated bytes/op (v1
+behaviour).
+
+It is the **authoritative instrument** for per-reconcile allocation deltas (and,
+once the ns flag is armed, reconcile-time deltas); the macro tables remain the
+user-facing throughput sanity check.
+
 ## Don'ts (so we don't redo this analysis)
 
 1. **Don't trust `CompositionTarget.Rendering` for "FPS."** It's UI-thread-

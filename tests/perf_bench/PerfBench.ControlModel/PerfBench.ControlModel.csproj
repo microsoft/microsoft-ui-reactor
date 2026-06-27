@@ -29,6 +29,25 @@
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
   </PropertyGroup>
+
+  <!--
+    On-demand perf-comparison CI (.github/workflows/perf-compare.yml) builds this
+    micro-suite with -p:PerfCiSelfContained=true so it carries its own Windows App
+    SDK runtime and launches with NO machine-wide runtime install on the
+    GitHub-hosted runner — the same hermetic trick StressPerf.ReactorOptimized and
+    the WinUI selftest hosts use to open real windows in CI. Scoped to THIS
+    executable (rather than a global -p:WindowsAppSDKSelfContained) so the flag
+    never flows into the referenced class libraries (Reactor.csproj /
+    PerfBench.Shared), which reject self-contained packaging. Run-PerfBenchmark.ps1
+    passes it by default for the reconcile micro-suite leg; pass -SelfContained:$false
+    to build framework-dependent.
+  -->
+  <PropertyGroup Condition="'$(PerfCiSelfContained)' == 'true'">
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(Platform)' == 'ARM64'">win-arm64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(Platform)' != 'ARM64'">win-x64</RuntimeIdentifier>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" />
   </ItemGroup>

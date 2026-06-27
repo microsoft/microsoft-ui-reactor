@@ -176,14 +176,12 @@ class RichTextDemo : Component
         {
             sv.HorizontalScrollBarVisibility = Microsoft.UI.Xaml.Controls.ScrollBarVisibility.Disabled;
             sv.HorizontalContentAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Stretch;
-            // NOTE: clicking any inline UI inside a chart-bearing paragraph
-            // causes the SV to scroll up by the combined inline-element
-            // height. This is the default WinUI behavior, not a Reactor
-            // bug — see https://github.com/microsoft/microsoft-ui-reactor
-            // (RichTextBlock + inline UI + ScrollViewer issue) for the
-            // root cause (ParagraphNode::RemoveEmbeddedElements during
-            // re-measure transiently shrinks the RTB and the SV silently
-            // clamps VerticalOffset to the new ScrollableHeight).
+            // Scroll position is preserved automatically across inline-UI
+            // mutations: the RichTextBlock descriptor anchors the ancestor
+            // ScrollViewer's offset around WinUI's transient inline re-measure
+            // (ParagraphNode::RemoveEmbeddedElements briefly shrinks the block and
+            // the SV would otherwise silently clamp VerticalOffset). See issue #487
+            // and Reconciler.RichTextScrollAnchor.cs — no per-app workaround needed.
         });
     }
 

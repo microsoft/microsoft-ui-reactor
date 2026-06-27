@@ -298,6 +298,7 @@ public sealed class ElementPool : IDisposable
                 break;
             case WinUI.ScrollViewer sv:
                 sv.Content = null;
+                Reconciler.ClearRichTextScrollAnchor(sv);
                 break;
             case WinUI.Viewbox vb:
                 vb.Child = null;
