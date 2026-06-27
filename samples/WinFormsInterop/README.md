@@ -40,7 +40,7 @@ static class Program
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
 
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.0.1" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.1.3" />
     <ProjectReference Include="path\to\Reactor.Interop.WinForms.csproj" />
     <ProjectReference Include="path\to\Reactor.csproj" />
 ```
