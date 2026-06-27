@@ -89,6 +89,20 @@ public class ChildDiffHintsTests
         Assert.True(new ChildDiffHint(Array.Empty<int>(), 5, Array.Empty<Element>()).AnyThemeSensitive);
     }
 
+    [Fact]
+    public void AnyThemeSensitive_Is_FailSafe_For_Anomalous_Negative_Count()
+    {
+        // The producer (UseMemoCellsByIndex) clamps its incremental tally to a
+        // >= 0 floor before publishing, so a negative count is unreachable in
+        // production. This pins the type's FAIL-SAFE posture regardless: were a
+        // negative ever published, AnyThemeSensitive must stay TRUE so the
+        // structural-skip fast path falls back to the (always-correct) full walk
+        // and re-resolves themes — never silently allow a skip that drops a theme
+        // re-resolve. Reverting the guard from `!= 0` to `> 0` makes this go red.
+        Assert.True(new ChildDiffHint(Array.Empty<int>(), -1, Array.Empty<Element>()).AnyThemeSensitive);
+        Assert.True(new ChildDiffHint(Array.Empty<int>(), -5, Array.Empty<Element>()).AnyThemeSensitive);
+    }
+
     // ── IsThemeSensitive predicate ───────────────────────────────────
 
     [Fact]

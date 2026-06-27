@@ -65,7 +65,18 @@ internal sealed class ChildDiffHint
     /// <c>RequestedTheme</c> toggle changes the effective theme WITHOUT touching
     /// the element tree, so a structural skip would otherwise leave brushes stale.
     /// </summary>
-    internal bool AnyThemeSensitive => ThemeSensitiveCount > 0;
+    /// <remarks>
+    /// Tested with <c>!= 0</c> rather than <c>&gt; 0</c> as a fail-safe. The only
+    /// producer (<c>UseMemoCellsByIndex</c>) already clamps its incremental tally
+    /// to a non-negative floor before publishing (see <c>UseMemoCells</c>), so a
+    /// negative count is unreachable — and <c>!= 0</c> is therefore behaviorally
+    /// identical to <c>&gt; 0</c> for every value the producer can actually emit
+    /// (all <c>&gt;= 0</c>). The difference is purely defensive: were an anomalous
+    /// negative ever published, this still reports theme-sensitive and BLOCKS the
+    /// skip, forcing the always-correct full walk. For a correctness gate the safe
+    /// fail direction is to re-resolve (do more), never to silently skip (do less).
+    /// </remarks>
+    internal bool AnyThemeSensitive => ThemeSensitiveCount != 0;
 }
 
 /// <summary>
