@@ -128,12 +128,12 @@ the drag region automatically (WinApp SDK ≥ 2.1.3). Override per element with
 and add `.AutoRefreshDragRegions()` when the content changes across renders:
 
 ```csharp
-TitleBar("Gallery") with
+(TitleBar("Gallery") with
 {
     Content = HStack(8,
         AutoSuggestBox("", _ => {}).Width(200),
         Button("\uE713", OnSettings).IsDragRegion(false)),
-}.AutoRefreshDragRegions();
+}).AutoRefreshDragRegions();
 ```
 
 ```csharp

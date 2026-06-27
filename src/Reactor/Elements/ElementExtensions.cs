@@ -2488,12 +2488,13 @@ public static partial class ElementExtensions
     /// <summary>
     /// Marks how this element participates in a window title bar's drag region
     /// (<c>Microsoft.UI.Xaml.Controls.TitleBar.IsDragRegion</c>, WinApp SDK ≥ 2.1.3):
-    /// <c>true</c> = draggable, <c>false</c> = clickable. Only meaningful for an element
-    /// inside a <c>TitleBar</c>'s content; inert elsewhere. Unset lets the title bar
-    /// decide (interactive controls are auto-excluded from the drag region).
+    /// <c>true</c> = draggable, <c>false</c> = clickable, <c>null</c> = defer to the
+    /// title bar (interactive controls are auto-excluded from the drag region). Only
+    /// meaningful for an element inside a <c>TitleBar</c>'s content; inert elsewhere.
+    /// The nullable parameter lets callers forward a <c>bool?</c> state without branching.
     /// </summary>
     /// <example>Button("\uE713", OnSettings).IsDragRegion(false)</example>
-    public static T IsDragRegion<T>(this T el, bool isDragRegion = true) where T : Element =>
+    public static T IsDragRegion<T>(this T el, bool? isDragRegion = true) where T : Element =>
         Modify(el, new ElementModifiers { IsDragRegion = isDragRegion });
 
     /// <summary>

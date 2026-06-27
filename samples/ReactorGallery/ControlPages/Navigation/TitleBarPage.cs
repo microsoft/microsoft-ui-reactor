@@ -47,11 +47,11 @@ class TitleBarPage : Component
                             ),
                         }).AutoRefreshDragRegions()
                     ).Background(Theme.LayerFill).CornerRadius(4).Height(48),
-                    @"TitleBar(""Gallery"") with {
+                    @"(TitleBar(""Gallery"") with {
     Content = HStack(8,
         AutoSuggestBox("""", _ => {}).Width(200),
         Button(""⚙"", () => {}).IsDragRegion(false))
-}.AutoRefreshDragRegions()")
+}).AutoRefreshDragRegions()")
             ).Margin(36, 24, 36, 36)
         );
     }

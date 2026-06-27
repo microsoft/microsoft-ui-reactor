@@ -215,12 +215,12 @@ visual clickable or `.IsDragRegion(true)` to force it draggable, and set
 `.AutoRefreshDragRegions()` on the title bar when the content changes across renders:
 
 ```csharp
-TitleBar("Gallery") with
+(TitleBar("Gallery") with
 {
     Content = HStack(8,
         AutoSuggestBox("", _ => {}).Width(200),
         Button("\uE713", OnSettings).IsDragRegion(false)),
-}.AutoRefreshDragRegions();
+}).AutoRefreshDragRegions();
 ```
 
 Caveats:

@@ -145,12 +145,12 @@ intentionally falls through to the new 2.1.3 default (auto-exclusion), so author
 gap draggable.
 
 ```csharp
-TitleBar("Gallery") with
+(TitleBar("Gallery") with
 {
     Content = HStack(8,
         AutoSuggestBox("", _ => {}).Width(200),          // interactive → excluded by default
         Button("\uE713", () => {}).IsDragRegion(false))   // explicit: keep clickable
-}.AutoRefreshDragRegions();
+}).AutoRefreshDragRegions();
 ```
 
 ### §4.3 `RecomputeDragRegions()` — intentionally not surfaced

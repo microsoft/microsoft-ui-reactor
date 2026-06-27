@@ -605,7 +605,7 @@ T.HierarchyLevel<T>(int level) → T
 T.HorizontalAlignment<T>(HorizontalAlignment alignment) → T
 T.Immediate<T>() → T
 T.InteractionStates<T>(Func<InteractionStatesBuilder, InteractionStatesBuilder> configure, Curve curve = null) → T
-T.IsDragRegion<T>(bool isDragRegion = true) → T
+T.IsDragRegion<T>(bool? isDragRegion = true) → T
 T.IsEnabled<T>(bool enabled = true) → T
 T.IsTabStop<T>(bool isTabStop = true) → T
 T.IsVisible<T>(bool isVisible) → T
