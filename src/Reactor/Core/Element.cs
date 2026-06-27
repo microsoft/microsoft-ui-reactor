@@ -1072,6 +1072,7 @@ public abstract record Element
             && a.ContextFlyout is null && b.ContextFlyout is null
             // Accessibility Tier 1
             && a.HeadingLevel == b.HeadingLevel
+            && a.IsDragRegion == b.IsDragRegion
             && a.IsTabStop == b.IsTabStop
             && a.TabIndex == b.TabIndex
             && a.AccessKey == b.AccessKey
@@ -1776,6 +1777,7 @@ public record ElementModifiers
             DragSource = other.DragSource ?? DragSource,
             DropTarget = other.DropTarget ?? DropTarget,
             HeadingLevel = other.HeadingLevel ?? HeadingLevel,
+            IsDragRegion = other.IsDragRegion ?? IsDragRegion,
             IsTabStop = other.IsTabStop ?? IsTabStop,
             TabIndex = other.TabIndex ?? TabIndex,
             AccessKey = other.AccessKey ?? AccessKey,

@@ -237,6 +237,8 @@
           Pack="true" PackagePath="agentkit/plugins/reactor/skills/reactor-recipes/references/" Visible="false" />
     <None Include="..\..\plugins\reactor\skills\reactor-wrapping\*.md"
           Pack="true" PackagePath="agentkit/plugins/reactor/skills/reactor-wrapping/" Visible="false" />
+    <None Include="..\..\plugins\reactor\skills\reactor-windowing\*.md"
+          Pack="true" PackagePath="agentkit/plugins/reactor/skills/reactor-windowing/" Visible="false" />
   </ItemGroup>
 
   <!-- ═══════════════════════════════════════════════════════════════════

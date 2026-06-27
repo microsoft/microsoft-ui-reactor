@@ -36,6 +36,7 @@ internal static class Phase7WindowingFixtures
                 (TitleBar("Drag") with
                 {
                     Content = Button("X", () => { })
+                        .Width(36)
                         .IsDragRegion(false)
                         .OnMount(fe => Clickable = fe),
                 })

@@ -28,6 +28,12 @@ Conventions for contributors:
 
 ### Added
 
+- **TitleBar drag regions — `.AutoRefreshDragRegions()` and `.IsDragRegion()`
+  (spec 059).** Windows App SDK bumped 2.0.1 → 2.1.3; custom `TitleBar` content
+  now auto-excludes interactive controls from the window drag region by default.
+  Override per element with `.IsDragRegion(false)` (force clickable) /
+  `.IsDragRegion(true)` (force draggable), and set `.AutoRefreshDragRegions()` to
+  re-derive regions when content changes across renders.
 - **`DockFloatingWindowClosedEventArgs.Reason` — close-reason discriminator
   for floating-window closes (spec 045 §5.3.5, issue #417).** A new
   `required DockFloatingCloseReason Reason { get; init; }` on
