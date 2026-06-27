@@ -156,11 +156,22 @@ because you build the `Paragraph[]` from data per render.
 | `Run(string text)` | A plain text fragment. |
 | `Hyperlink(string text, Uri target)` | Inline link with a navigate target. |
 | `Hyperlink(string text, Action onClick)` | Clickable inline fragment — fires the delegate and suppresses platform navigation. Use to make a single rich-text run interactive (open an editor, dispatch a command) without escaping to a hosted native subtree. |
+| `InlineUI(Element child)` | Embeds a live control (chart, slider, button) mid-paragraph via `InlineUIContainer`. |
 
 Modifiers — `.MaxLines`, `.LineHeight`, `.TextAlignment`,
 `.TextTrimming`, `.CharacterSpacing` — match `TextBlock`. Inline runs do
 not get the fast-path renderer, so prefer plain `TextBlock` for static
 text.
+
+> **Caveat:** Embedding live controls with `InlineUI(...)` and then mutating a `Run` in
+> the same paragraph used to scroll the surrounding `ScrollViewer`/`ScrollView`
+> to the top: WinUI's text engine re-measures the paragraph from scratch and
+> the embedded elements contribute zero height for one layout pass, so the
+> scroll host silently clamps its offset down and never restores it (issue
+> #487). Reactor now handles this for you — `ScrollViewer(RichTextBlock(...))`
+> preserves the user's scroll offset across inline-UI mutations automatically,
+> with no extra API or per-app workaround. Just wrap the `RichTextBlock` in a
+> scroll host as usual.
 
 WinUI design page: [Rich text block](https://learn.microsoft.com/en-us/windows/apps/design/controls/rich-text-block).
 

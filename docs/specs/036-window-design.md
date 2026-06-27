@@ -499,6 +499,33 @@ only that the selected `ShutdownPolicy` permits the resulting state.
 - `Closing` (new) fires *before* `Window.Close()` is honored, so
   `UseClosingGuard` can cancel.
 
+### 6.4 Multi-window teardown safety (issue #647)
+
+Three invariants make sequential and overlapping window teardown safe in a
+single process — they prevent a torn-down window from re-entering native
+teardown and faulting later windows with an `ACCESS_VIOLATION` (0xC0000005)
+in the shared WinUI backdrop interop:
+
+- **Primary election excludes auxiliary windows.** Windows that opt out of the
+  shutdown policy (`ExcludeFromShutdownPolicy` — docking tear-off floating
+  windows set this) are never elected `PrimaryWindow`. Both election sites
+  (initial registration and unregister re-election) run through one shared
+  helper, so an excluded window can neither *become* primary nor be *promoted*
+  to primary when the real primary closes; `PrimaryWindow` becomes `null`
+  rather than an excluded window when no eligible window remains. This stops a
+  transient floating window from triggering `OnPrimaryWindowClosed` →
+  `Application.Exit()` and tearing down every open window mid-process.
+- **`Close()` is idempotent.** The native window close fires exactly once; a
+  redundant `Close()` or an owner-close cascade that reaches an
+  already-closing window is a guarded no-op rather than a second native
+  teardown.
+- **Backdrop writes are gated on a closed-window registry.** `BackdropApplier`
+  records every window whose `Closed` has fired in a process-wide
+  (weak-keyed) registry and skips all `SystemBackdrop` writes on those windows
+  — on both the render-pass `Apply` and on `Reset` — including from a freshly
+  constructed applier on a reused window. Writing `SystemBackdrop` on a
+  torn-down surface is the operation that faults.
+
 ## §7 Hooks
 
 ```csharp

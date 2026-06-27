@@ -138,6 +138,15 @@ internal static class SelfTestFixtureRegistry
         "ChartA11y_OnDemandAnnounce",
         "ChartA11y_FullIntegration",
         "ChartA11y_AutomationPeerProviderExercise",
+        "ChartA11y_LabelViewSubtreeA11y",
+        "ChartA11y_TickLabelViewSubtreeA11y",
+        "ChartA11y_LabelViewNameProjection",
+        "ChartA11y_LabelViewPoolReset",
+        "ChartA11y_LabelViewInteractiveToggle",
+        "ChartA11y_TickLabelViewNameProjection",
+        "ChartA11y_LabelViewDeferredHideStaleGuard",
+        "ChartA11y_LabelViewUpdateRehide",
+        "ChartA11y_TickLabelViewInteractiveToggle",
 
         "MdHtml_HtmlGeneration",
         "MdHtml_HtmlInWebView2",
@@ -222,6 +231,11 @@ internal static class SelfTestFixtureRegistry
         // Issue #480 follow-up — incremental RTB update preserves child identity
         "InlineUI_IncrementalUpdate_PreservesChildIdentity",
         "InlineUI_IncrementalUpdate_RunMutatedInPlace",
+        // Issue #487 — RichTextBlock + inline UI inside ScrollViewer scroll anchor
+        "Issue487_ScrollOffsetRestoredAfterRunMutation",
+        "Issue487_RepeatedMutationDoesNotDrift",
+        "Issue487_ScrollViewOffsetRestoredAfterRunMutation",
+        "Issue487_GenuineUserScrollAfterArmingNotFought",
         "RichTextProps_Block_MountUpdateClear",
         "RichTextProps_Paragraph_MountUpdateClear",
         "RichTextProps_Run_MountUpdateClear",
@@ -1075,6 +1089,10 @@ internal static class SelfTestFixtureRegistry
         // Spec 054 Phase 7 — title-bar inference, transparent backdrop, picker hooks.
         "TitleBar_ImplicitExtends",
         "TitleBar_ExplicitFalseOverrides",
+        "TitleBar_OwnedChild",
+        "TitleBar_DisposeNoClose",
+        "TitleBar_OwnedTree",
+        "TitleBar_ExitPrep",
         "TitleBar_NoElement_NullStaysFalse",
         "BackdropTransparent_Apply",
         "FilePicker_InitializesWithWindow",
@@ -1084,6 +1102,10 @@ internal static class SelfTestFixtureRegistry
         "WindowStyle_ToolWindowExStyleRemoved",
         "SizeToContent_MinMaxInfoSuite",
         "UseSpec054Hooks_Suite",
+        // Spec 036/045 — issue #647 multi-window teardown hardening regression.
+        "Window647_PrimaryElectionExcludesAuxiliary",
+        "Window647_BackdropSkipsClosedWindow",
+        "Window647_NativeCloseIsIdempotent",
         // Spec 045 §2.19 — Phase-1 wrapper-based Docking_* smoke fixtures
         // were retired with the XAML wrapper at the §2.29 review gate.
         // NativeDocking_* below covers the same surface against the P2
@@ -1148,10 +1170,13 @@ internal static class SelfTestFixtureRegistry
         "NativeDockingTearOff_T06_CanFloatFalse_RefusedAtBeginTearOff",
         "NativeDockingTearOff_T07_StaleTrackerForceCleaned_NextDragSucceeds",
         "NativeDockingTearOff_T08_DropOutside_RetainsFloating_EndsSession",
+        "NativeDockingTearOff_T08b_ImmediateTearOff_DropOnHostTarget_ReportsMigratedToHost",
         "NativeDockingTearOff_T09_EscCancel_BehavesLikeDropOutside",
         "NativeDockingTearOff_T10_HostUnmount_StopsTracker",
         "NativeDockingTearOff_T11_FloatingTabPress_HidesSource_AndStartsTracker",
         "NativeDockingTearOff_T12_FloatingTearOff_DropOnHostTarget_DocksToHost",
+        "NativeDockingTearOff_T12b_FloatingTearOff_DropOnHostTarget_ReportsMigratedToHost",
+        "NativeDockingTearOff_T12c_FloatingMultiPane_CloseLastTab_AfterSiblingLeft_ReportsClosingPane",
         "NativeDockingTearOff_T13_FloatingTearOff_DropOutside_RetainsPreview",
         "NativeDockingTearOff_T14_FloatingTearOff_StaleTrackerForceCleaned",
         "NativeDockingMatrix_DragToCenterSameGroup_NoOp",
@@ -1187,6 +1212,7 @@ internal static class SelfTestFixtureRegistry
         "FloatCov_OpenWithoutManager_SkipsPerManagerWiring",
         "FloatCov_Router_RegisterUnregister_AndEmptyHitTest",
         "FloatCov_BuildFloatingRoot_ProducesTabbedChrome",
+        "FloatCov_Close_ThreadsCloseReason",
 
         "OverlayCov_HostMode_EdgesVisible_InnerHidden",
         "OverlayCov_GroupInnerMode_ModeSwitch_AppliesVisibility",
@@ -1550,6 +1576,15 @@ internal static class SelfTestFixtureRegistry
         "ChartA11y_OnDemandAnnounce" => new ChartAccessibilityFixtures.OnDemandAnnounce(harness),
         "ChartA11y_FullIntegration" => new ChartAccessibilityFixtures.FullIntegration(harness),
         "ChartA11y_AutomationPeerProviderExercise" => new ChartAccessibilityFixtures.AutomationPeerProviderExercise(harness),
+        "ChartA11y_LabelViewSubtreeA11y" => new ChartAccessibilityFixtures.LabelViewSubtreeA11y(harness),
+        "ChartA11y_TickLabelViewSubtreeA11y" => new ChartAccessibilityFixtures.TickLabelViewSubtreeA11y(harness),
+        "ChartA11y_LabelViewNameProjection" => new ChartAccessibilityFixtures.LabelViewNameProjection(harness),
+        "ChartA11y_LabelViewPoolReset" => new ChartAccessibilityFixtures.LabelViewPoolReset(harness),
+        "ChartA11y_LabelViewInteractiveToggle" => new ChartAccessibilityFixtures.LabelViewInteractiveToggle(harness),
+        "ChartA11y_TickLabelViewNameProjection" => new ChartAccessibilityFixtures.TickLabelViewNameProjection(harness),
+        "ChartA11y_LabelViewDeferredHideStaleGuard" => new ChartAccessibilityFixtures.LabelViewDeferredHideStaleGuard(harness),
+        "ChartA11y_LabelViewUpdateRehide" => new ChartAccessibilityFixtures.LabelViewUpdateRehide(harness),
+        "ChartA11y_TickLabelViewInteractiveToggle" => new ChartAccessibilityFixtures.TickLabelViewInteractiveToggle(harness),
 
         "Win2D_Canvas_Mount" => new Win2DCanvasFixtures.CanvasMount(harness),
         "Win2D_AnimatedCanvas_Mount" => new Win2DCanvasFixtures.AnimatedCanvasMount(harness),
@@ -1632,6 +1667,10 @@ internal static class SelfTestFixtureRegistry
         // Issue #480 follow-up — incremental RTB update preserves child identity.
         "InlineUI_IncrementalUpdate_PreservesChildIdentity" => new InlineUIContainerFixtures.InlineUI_IncrementalUpdate_PreservesChildIdentity(harness),
         "InlineUI_IncrementalUpdate_RunMutatedInPlace" => new InlineUIContainerFixtures.InlineUI_IncrementalUpdate_RunMutatedInPlace(harness),
+        "Issue487_ScrollOffsetRestoredAfterRunMutation" => new Issue487ScrollAnchorFixtures.Issue487_ScrollOffsetRestoredAfterRunMutation(harness),
+        "Issue487_RepeatedMutationDoesNotDrift" => new Issue487ScrollAnchorFixtures.Issue487_RepeatedMutationDoesNotDrift(harness),
+        "Issue487_ScrollViewOffsetRestoredAfterRunMutation" => new Issue487ScrollAnchorFixtures.Issue487_ScrollViewOffsetRestoredAfterRunMutation(harness),
+        "Issue487_GenuineUserScrollAfterArmingNotFought" => new Issue487ScrollAnchorFixtures.Issue487_GenuineUserScrollAfterArmingNotFought(harness),
         "RichTextProps_Block_MountUpdateClear" => new RichTextPropertyFixtures.RichTextProps_Block_MountUpdateClear(harness),
         "RichTextProps_Paragraph_MountUpdateClear" => new RichTextPropertyFixtures.RichTextProps_Paragraph_MountUpdateClear(harness),
         "RichTextProps_Run_MountUpdateClear" => new RichTextPropertyFixtures.RichTextProps_Run_MountUpdateClear(harness),
@@ -2481,11 +2520,19 @@ internal static class SelfTestFixtureRegistry
         // Spec 054 Phase 7 — title-bar inference, transparent backdrop, picker hooks.
         "TitleBar_ImplicitExtends" => new Phase7WindowingFixtures.TitleBarImplicitExtends(harness),
         "TitleBar_ExplicitFalseOverrides" => new Phase7WindowingFixtures.TitleBarExplicitFalseOverrides(harness),
+        "TitleBar_OwnedChild" => new Phase7WindowingFixtures.TitleBarOwnedChildClosesClean(harness),
+        "TitleBar_DisposeNoClose" => new Phase7WindowingFixtures.TitleBarDisposeWithoutClose(harness),
+        "TitleBar_OwnedTree" => new Phase7WindowingFixtures.TitleBarOwnedTreeFlipsRecursively(harness),
+        "TitleBar_ExitPrep" => new Phase7WindowingFixtures.TitleBarExitPrepFlipsOpenWindows(harness),
         "TitleBar_NoElement_NullStaysFalse" => new Phase7WindowingFixtures.TitleBarNoElementNullStaysFalse(harness),
         "BackdropTransparent_Apply" => new Phase7WindowingFixtures.BackdropTransparentApply(harness),
         "FilePicker_InitializesWithWindow" => new Phase7WindowingFixtures.FilePickerInitializesWithWindow(harness),
         "FilePicker_ThrowsOffUiThread" => new Phase7WindowingFixtures.FilePickerThrowsOffUiThread(harness),
         "UseSpec054Hooks_Suite" => new Phase7WindowingFixtures.UseSpec054HooksSuite(harness),
+        // Spec 036/045 — issue #647 multi-window teardown hardening regression.
+        "Window647_PrimaryElectionExcludesAuxiliary" => new WindowLifecycleHardeningFixtures.PrimaryElectionExcludesAuxiliary(harness),
+        "Window647_BackdropSkipsClosedWindow" => new WindowLifecycleHardeningFixtures.BackdropSkipsClosedWindow(harness),
+        "Window647_NativeCloseIsIdempotent" => new WindowLifecycleHardeningFixtures.NativeCloseIsIdempotent(harness),
         // Spec 045 §2.19 — Phase-1 DockingSmokeFixtures retired alongside
         // the XAML wrapper unhooking. NativeDockingSmokeFixtures (below)
         // covers the same mount/update/unmount surface against the P2
@@ -2545,10 +2592,13 @@ internal static class SelfTestFixtureRegistry
         "NativeDockingTearOff_T06_CanFloatFalse_RefusedAtBeginTearOff" => new NativeDockingTearOffFixtures.T06_CanFloatFalse_RefusedAtBeginTearOff(harness),
         "NativeDockingTearOff_T07_StaleTrackerForceCleaned_NextDragSucceeds" => new NativeDockingTearOffFixtures.T07_StaleTrackerForceCleaned_NextDragSucceeds(harness),
         "NativeDockingTearOff_T08_DropOutside_RetainsFloating_EndsSession" => new NativeDockingTearOffFixtures.T08_DropOutside_RetainsFloating_EndsSession(harness),
+        "NativeDockingTearOff_T08b_ImmediateTearOff_DropOnHostTarget_ReportsMigratedToHost" => new NativeDockingTearOffFixtures.T08b_ImmediateTearOff_DropOnHostTarget_ReportsMigratedToHost(harness),
         "NativeDockingTearOff_T09_EscCancel_BehavesLikeDropOutside" => new NativeDockingTearOffFixtures.T09_EscCancel_BehavesLikeDropOutside(harness),
         "NativeDockingTearOff_T10_HostUnmount_StopsTracker" => new NativeDockingTearOffFixtures.T10_HostUnmount_StopsTracker(harness),
         "NativeDockingTearOff_T11_FloatingTabPress_HidesSource_AndStartsTracker" => new NativeDockingTearOffFixtures.T11_FloatingTabPress_HidesSource_AndStartsTracker(harness),
         "NativeDockingTearOff_T12_FloatingTearOff_DropOnHostTarget_DocksToHost" => new NativeDockingTearOffFixtures.T12_FloatingTearOff_DropOnHostTarget_DocksToHost(harness),
+        "NativeDockingTearOff_T12b_FloatingTearOff_DropOnHostTarget_ReportsMigratedToHost" => new NativeDockingTearOffFixtures.T12b_FloatingTearOff_DropOnHostTarget_ReportsMigratedToHost(harness),
+        "NativeDockingTearOff_T12c_FloatingMultiPane_CloseLastTab_AfterSiblingLeft_ReportsClosingPane" => new NativeDockingTearOffFixtures.T12c_FloatingMultiPane_CloseLastTab_AfterSiblingLeft_ReportsClosingPane(harness),
         "NativeDockingTearOff_T13_FloatingTearOff_DropOutside_RetainsPreview" => new NativeDockingTearOffFixtures.T13_FloatingTearOff_DropOutside_RetainsPreview(harness),
         "NativeDockingTearOff_T14_FloatingTearOff_StaleTrackerForceCleaned" => new NativeDockingTearOffFixtures.T14_FloatingTearOff_StaleTrackerForceCleaned(harness),
         // Spec 045 §2.4 drag/drop matrix
@@ -2579,6 +2629,7 @@ internal static class SelfTestFixtureRegistry
         "FloatCov_OpenWithoutManager_SkipsPerManagerWiring" => new NativeDockingCoverageFloatingFixtures.FloatingWindow_OpenWithoutManager_SkipsPerManagerWiring(harness),
         "FloatCov_Router_RegisterUnregister_AndEmptyHitTest" => new NativeDockingCoverageFloatingFixtures.FloatingRouter_RegisterUnregister_AndEmptyHitTest(harness),
         "FloatCov_BuildFloatingRoot_ProducesTabbedChrome" => new NativeDockingCoverageFloatingFixtures.FloatingWindow_BuildFloatingRoot_ProducesTabbedChrome(harness),
+        "FloatCov_Close_ThreadsCloseReason" => new NativeDockingCoverageFloatingFixtures.FloatingWindow_Close_ThreadsCloseReason(harness),
 
         "OverlayCov_HostMode_EdgesVisible_InnerHidden" => new NativeDockingCoverageOverlayFixtures.Overlay_HostMode_EdgesVisible_InnerHidden(harness),
         "OverlayCov_GroupInnerMode_ModeSwitch_AppliesVisibility" => new NativeDockingCoverageOverlayFixtures.Overlay_GroupInnerMode_ModeSwitch_AppliesVisibility(harness),

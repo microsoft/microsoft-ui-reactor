@@ -998,6 +998,7 @@ FilterOperator { Equals, NotEquals, Contains, StartsWith, EndsWith, GreaterThan,
 PinPosition { None, Left, Right }
 SortDirection { Ascending, Descending }
 DockOperationKind { Mount, DragStart, DragHover, DragConfirm, DragCancel, DragTearOut, SplitterResize, SplitterTrace, LayoutChange, Note }
+DockFloatingCloseReason { ContentClosed, MigratedToHost, MigratedToFloat }
 DockGroupRole { General, DocumentArea, ToolWindowStrip }
 DockPaneState { Docked, Floating, AutoHidden, AutoHiddenExpanded, Hidden }
 DockSide { Left, Top, Right, Bottom }
@@ -1581,6 +1582,9 @@ new()
 AlternateView(Element view) → ChartElement<T>
 AnnounceEveryFrame() → ChartElement<T>
 AxisLabel(ChartAxisType axis, string label) → ChartElement<T>
+ChartBackground(Color background) → ChartElement<T>
+ChartBackground(D3Color background) → ChartElement<T>
+ChartBackground(string background) → ChartElement<T>
 ColorOnly() → ChartElement<T>
 DataLabel(Func<T, int, string> labeller) → ChartElement<T>
 Description(string description) → ChartElement<T>
@@ -1610,8 +1614,8 @@ Title(string title) → ChartElement<T>
 ToElement() → Element
 Units(string xUnits = null, string yUnits = null) → ChartElement<T>
 Width(double width) → ChartElement<T>
-XTickLabelView(Func<double, Element> render) → ChartElement<T>
-YTickLabelView(Func<double, Element> render) → ChartElement<T>
+XTickLabelView(Func<double, Element> render, Func<double, string> name = null, bool interactive = false) → ChartElement<T>
+YTickLabelView(Func<double, Element> render, Func<double, string> name = null, bool interactive = false) → ChartElement<T>
 
 ### class ChartHandle<T>
 Canvas Canvas { get; }
@@ -2360,7 +2364,7 @@ GetHashCode() → int
 ToString() → string
 
 ### class DockFloatingWindowClosedEventArgs
-new()
+DockFloatingCloseReason Reason { get; init; }
 DockableContent Content { get; init; }
 
 ### class DockFloatingWindowCreatedEventArgs
@@ -3548,6 +3552,7 @@ ToString() → string
 
 ### class HardenOptions
 new()
+D3Color? Background { get; init; }
 double MinBackgroundContrast { get; init; }
 double MinColorblindDeltaE { get; init; }
 double MinPairwiseContrast { get; init; }
@@ -5056,13 +5061,16 @@ ToString() → string
 ### class PieChartElement<T>
 new()
 AlternateView(Element view) → PieChartElement<T>
+ChartBackground(Color background) → PieChartElement<T>
+ChartBackground(D3Color background) → PieChartElement<T>
+ChartBackground(string background) → PieChartElement<T>
 ColorOnly() → PieChartElement<T>
 DataLabel(Func<T, int, string> labeller) → PieChartElement<T>
 Description(string description) → PieChartElement<T>
 Height(double height) → PieChartElement<T>
 InnerRadius(double radius) → PieChartElement<T>
 LabelRadiusOffset(double offset) → PieChartElement<T>
-LabelView(Func<T, PieSliceLayout, Element> render) → PieChartElement<T>
+LabelView(Func<T, PieSliceLayout, Element> render, Func<T, string> name = null, bool interactive = false) → PieChartElement<T>
 OnReady(Action<PieChartHandle<T>> callback) → PieChartElement<T>
 PadAngle(double angle) → PieChartElement<T>
 Palette(ChartPalette palette) → PieChartElement<T>

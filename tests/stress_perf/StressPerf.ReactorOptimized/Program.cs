@@ -155,7 +155,15 @@ class StockGridApp : Component
             {
                 setRunning(false);
                 shutdownTimer.Stop();
-                perfRef.Current!.WriteReportFile(AppName, CliOpts.Percent);
+                var perf = perfRef.Current!;
+                perf.WriteReportFile(AppName, CliOpts.Percent);
+                if (CliOpts.Json)
+                {
+                    perf.WriteMetricsJsonFile(AppName, CliOpts.Percent);
+                    // Echo a single marked line so log scrapers have a fallback
+                    // to the {AppName}.metrics.json file written next to the exe.
+                    Console.WriteLine("REACTOR_PERF_JSON " + perf.GetMetricsJson(AppName, CliOpts.Percent));
+                }
                 Application.Current.Exit();
             };
             shutdownTimer.Start();

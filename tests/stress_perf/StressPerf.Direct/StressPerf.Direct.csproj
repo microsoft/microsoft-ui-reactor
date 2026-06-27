@@ -12,6 +12,19 @@
     <DefineConstants>DISABLE_XAML_GENERATED_MAIN</DefineConstants>
   </PropertyGroup>
 
+  <!--
+    Built self-contained (-p:PerfCiSelfContained=true) by the perf-comparison CI so
+    the vanilla-WinUI3 baseline carries its own Windows App SDK runtime and needs no
+    machine-wide install on the runner. Scoped here so it never flows into the
+    referenced StressPerf.Shared class library. See the matching note in
+    StressPerf.ReactorOptimized.csproj and .github/workflows/perf-compare.yml.
+  -->
+  <PropertyGroup Condition="'$(PerfCiSelfContained)' == 'true'">
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(Platform)' == 'ARM64'">win-arm64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(Platform)' != 'ARM64'">win-x64</RuntimeIdentifier>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" />
   </ItemGroup>

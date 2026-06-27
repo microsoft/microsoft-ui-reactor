@@ -129,6 +129,31 @@ internal static class DockFloatingPaneRouter
         get { lock (_gate) return _appenders.Count > 0; }
     }
 
+    /// <summary>
+    /// Test-only: invokes the registered append-as-tab callback for
+    /// <paramref name="window"/> directly, bypassing the OS cursor hit-test
+    /// in <see cref="TryAppendUnderCursor"/>. Lets a headless selftest build
+    /// a real multi-pane floating window deterministically (without moving
+    /// the cursor into the window's HWND rect). Returns <c>true</c> when an
+    /// appender was registered for the window and was invoked. (Issue #417 —
+    /// producer coverage for the multi-pane last-tab close path.)
+    /// </summary>
+    internal static bool AppendToWindowForTest(ReactorWindow window, DockableContent pane)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        ArgumentNullException.ThrowIfNull(pane);
+        Action<DockableContent>? appender;
+        // Snapshot under the lock, invoke outside it — the appender mutates
+        // component state and may re-enter, mirroring TryAppendUnderCursor.
+        lock (_gate)
+        {
+            if (!_appenders.TryGetValue(window, out appender))
+                return false;
+        }
+        appender(pane);
+        return true;
+    }
+
     // ── Win32 hit-test interop ────────────────────────────────────────
     private static class NativeInterop
     {

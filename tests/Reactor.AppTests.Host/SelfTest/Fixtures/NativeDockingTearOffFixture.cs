@@ -446,6 +446,90 @@ internal static class NativeDockingTearOffFixtures
         }
     }
 
+    // ─── #8b ImmediateTearOff_DropOnHostTarget_ReportsMigratedToHost ───────
+
+    /// <summary>Producer-path coverage for issue #417 (review H1), the
+    /// DOCKED-source immediate tear-off variant. A docked tab is torn into a
+    /// preview window then dropped back on a host target — the seam is
+    /// <see cref="DockHostNativeComponent"/>'s <c>FinalizeImmediateDrop</c>
+    /// confirmedTarget branch, which used to bare-<c>Close()</c> the preview
+    /// with no stash. After the fix the auto-close must report
+    /// <see cref="DockFloatingCloseReason.MigratedToHost"/> + the pane,
+    /// because the pane is alive again in the docked tree. Symmetric with
+    /// T08 (drop-outside) but latching a host hover so the release confirms a
+    /// target instead of falling through to drop-outside.</summary>
+    internal class T08b_ImmediateTearOff_DropOnHostTarget_ReportsMigratedToHost(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            ResetAll(); PrepDeterministic();
+            var savedPolicy = ReactorApp.ShutdownPolicy;
+            ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
+            ReactorWindow? floatingWindow = null;
+            // The migration path (StashReasonAndClose) auto-closes the preview
+            // window. Guard the finally so we don't Close() it a second time —
+            // double-closing a WinUI window risks the multi-window teardown AV.
+            var floatingWindowClosed = false;
+            var closed = new List<(DockFloatingCloseReason Reason, DockableContent? Content)>();
+            try
+            {
+                var host = H.CreateHost();
+                DockingNativeInterop.Register(host.Reconciler);
+                var a = MakePane("a", "body-a");
+                var b = MakePane("b", "body-b");
+                host.Mount(_ => new DockManager
+                {
+                    Layout = new DockTabGroup(new[] { a, b }),
+                    OnFloatingWindowClosed = args => closed.Add((args.Reason, args.Content)),
+                });
+                await Harness.Render();
+                var tv = FirstTabView(H);
+                if (tv is null) { H.Check("T08b_TabViewFound", false); return; }
+
+                var item0 = (TabViewItem)tv.TabItems[0];
+                DockTabTearOff.SimulatePressForTest(tv, item0, a, 0);
+                DockTabTearOff.SimulateMoveForTest(tv, 5.0, 5.0);
+                await Harness.Render();
+                floatingWindow = DockTabTearOffTracker.ActiveForTest?.FloatingWindow;
+                if (floatingWindow is not null)
+                    floatingWindow.Closed += (_, _) => floatingWindowClosed = true;
+                H.Check("T08b_TrackerHasActive", DockTabTearOffTracker.IsActive);
+
+                // Latch a host target as hovered, then release: the single
+                // FinalizeImmediateDrop closure docks the pane back AND
+                // stash-then-closes the preview (the H1 seam).
+                var hostOverlay = H.FindAllControls<DockDropTargetOverlayControl>(
+                    o => o.Visibility == Microsoft.UI.Xaml.Visibility.Visible).FirstOrDefault()
+                    ?? H.FindAllControls<DockDropTargetOverlayControl>(_ => true).FirstOrDefault();
+                H.Check("T08b_HostOverlayFound", hostOverlay is not null);
+                hostOverlay?.SetHoveredForTest(DockTarget.SplitRight);
+
+                DockTabTearOffTracker.SimulateReleaseForTest(commit: true);
+                await Harness.Render();
+                await Harness.Render();
+
+                H.Check("T08b_AtLeastOneCloseFired", closed.Count >= 1);
+                H.Check("T08b_ReportsMigratedToHost",
+                    closed.Any(c => c.Reason == DockFloatingCloseReason.MigratedToHost));
+                H.Check("T08b_NoCloseReportsContentClosed",
+                    closed.All(c => c.Reason != DockFloatingCloseReason.ContentClosed));
+                H.Check("T08b_MigratedCloseCarriesPaneA",
+                    closed.Any(c => c.Reason == DockFloatingCloseReason.MigratedToHost
+                                    && ReferenceEquals(c.Content, a)));
+
+                host.Mount(_ => TextBlock("done"));
+                await Harness.Render();
+            }
+            finally
+            {
+                if (floatingWindow is not null) DockFloatingPaneRouter.Unregister(floatingWindow);
+                if (floatingWindow is not null && !floatingWindowClosed) floatingWindow.Close();
+                ReactorApp.ShutdownPolicy = savedPolicy;
+                ResetAll();
+            }
+        }
+    }
+
     // ─── #9 EscCancel_BehavesLikeDropOutside ───────────────────────────────
 
     /// <summary>Esc cancellation (commit=false to SimulateReleaseForTest)
@@ -763,6 +847,259 @@ internal static class NativeDockingTearOffFixtures
                 ReactorApp.ShutdownPolicy = savedPolicy;
                 ResetAll();
             }
+        }
+    }
+
+    // ─── #12b FloatingTearOff_DropOnHostTarget_ReportsMigratedToHost ───────
+
+    /// <summary>Producer-path coverage for issue #417 (review H1): the
+    /// SAME float→host dock-back T12 drives, but asserting the
+    /// <see cref="DockManager.OnFloatingWindowClosed"/> REASON. When the
+    /// torn-off preview window auto-closes after its pane was reinserted
+    /// into the host, the event must report
+    /// <see cref="DockFloatingCloseReason.MigratedToHost"/> — NOT the
+    /// default <see cref="DockFloatingCloseReason.ContentClosed"/>, which
+    /// would tell a consumer to release resources for a pane that is still
+    /// alive in the docked tree. The genuine bug this guards: the immediate
+    /// tear-off finalize used to call a bare <c>Close()</c> with no stash.
+    /// Every close that fires in this sequence is a migration (source
+    /// emptied into the preview = MigratedToFloat; preview docked back =
+    /// MigratedToHost), so NONE may report ContentClosed.</summary>
+    internal class T12b_FloatingTearOff_DropOnHostTarget_ReportsMigratedToHost(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            ResetAll(); PrepDeterministic();
+            var savedPolicy = ReactorApp.ShutdownPolicy;
+            ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
+            ReactorWindow? floating = null;
+            ReactorWindow? previewWindow = null;
+            // Both the source float (emptied by the migration) and the preview
+            // window auto-close via the migration path. Guard the finally so we
+            // don't Close() either a second time — double-closing a WinUI window
+            // risks the multi-window teardown AV.
+            var floatingClosed = false;
+            var previewClosed = false;
+            var closed = new List<(DockFloatingCloseReason Reason, DockableContent? Content)>();
+            try
+            {
+                var host = H.CreateHost();
+                DockingNativeInterop.Register(host.Reconciler);
+                var a = MakePane("a", "body-a");
+                var b = MakePane("b", "body-b");
+                var managerEl = new DockManager
+                {
+                    Layout = new DockTabGroup(new[] { b }),
+                    OnFloatingWindowClosed = args => closed.Add((args.Reason, args.Content)),
+                };
+                host.Mount(_ => managerEl);
+                await Harness.Render();
+
+                floating = DockFloatingWindow.Open(a, manager: managerEl);
+                floating.Closed += (_, _) => floatingClosed = true;
+                await Harness.Render();
+                await Harness.Render();
+
+                var floatingTabView = FindTabViewInWindow(floating);
+                if (floatingTabView is null) { H.Check("T12b_FloatingTabViewFound", false); return; }
+                var item = floatingTabView.TabItems.OfType<TabViewItem>().FirstOrDefault();
+                if (item is null) { H.Check("T12b_TabItemFound", false); return; }
+
+                DockTabTearOff.SimulatePressForTest(floatingTabView, item, a, 0);
+                DockTabTearOff.SimulateMoveForTest(floatingTabView, 5.0, 5.0);
+                await Harness.Render();
+
+                previewWindow = DockTabTearOffTracker.ActiveForTest?.FloatingWindow;
+                if (previewWindow is not null)
+                    previewWindow.Closed += (_, _) => previewClosed = true;
+                H.Check("T12b_TrackerActive", DockTabTearOffTracker.IsActive);
+
+                // Latch a host target as hovered (the production cursor would
+                // be over its button), then drive the release. Unlike T12,
+                // we do NOT pre-confirm via ConfirmTargetForTest — we want the
+                // SINGLE finalize/confirm closure (the seam H1 patched) to do
+                // BOTH the host re-insert AND the stash-then-close, exactly as
+                // production does on mouse-up.
+                var hostOverlay = H.FindAllControls<DockDropTargetOverlayControl>(
+                    o => o.Visibility == Microsoft.UI.Xaml.Visibility.Visible).FirstOrDefault()
+                    ?? H.FindAllControls<DockDropTargetOverlayControl>(_ => true).FirstOrDefault();
+                H.Check("T12b_HostOverlayFound", hostOverlay is not null);
+                hostOverlay?.SetHoveredForTest(DockTarget.SplitRight);
+
+                // Drive the finalize path → confirm closure docks the pane
+                // back into the host AND auto-closes the preview window. This
+                // is the seam that must stash MigratedToHost.
+                DockTabTearOffTracker.SimulateReleaseForTest(commit: true);
+                await Harness.Render();
+                await Harness.Render();
+
+                // The pane is back in the host (sanity).
+                var allHeaders = H.FindAllControls<TabView>(_ => true)
+                    .SelectMany(t => t.TabItems.OfType<TabViewItem>().Select(ti => ti.Header as string))
+                    .ToList();
+                H.Check("T12b_HostNowContainsA", allHeaders.Contains("a"));
+
+                // The key #417 assertions: a MigratedToHost close fired, and
+                // NOTHING in this all-migration sequence reported ContentClosed.
+                H.Check("T12b_AtLeastOneCloseFired", closed.Count >= 1);
+                H.Check("T12b_ReportsMigratedToHost",
+                    closed.Any(c => c.Reason == DockFloatingCloseReason.MigratedToHost));
+                H.Check("T12b_NoCloseReportsContentClosed",
+                    closed.All(c => c.Reason != DockFloatingCloseReason.ContentClosed));
+                H.Check("T12b_MigratedCloseCarriesPaneA",
+                    closed.Any(c => c.Reason == DockFloatingCloseReason.MigratedToHost
+                                    && ReferenceEquals(c.Content, a)));
+
+                // M2 — the source float (its only tab 'a' torn into the
+                // preview) empties via RemoveLocal(MigratedToFloat). Assert
+                // that leg explicitly so BOTH migration reasons are pinned,
+                // not just the preview→host one.
+                H.Check("T12b_ReportsMigratedToFloat",
+                    closed.Any(c => c.Reason == DockFloatingCloseReason.MigratedToFloat));
+                H.Check("T12b_MigratedToFloatCloseCarriesPaneA",
+                    closed.Any(c => c.Reason == DockFloatingCloseReason.MigratedToFloat
+                                    && ReferenceEquals(c.Content, a)));
+                // Exactly the two migration closes (source emptied into the
+                // preview, then preview docked back) — nothing spurious, and
+                // in particular no ContentClosed.
+                H.Check("T12b_ExactlyTwoMigrationCloses", closed.Count == 2);
+
+                host.Mount(_ => TextBlock("done"));
+                await Harness.Render();
+            }
+            finally
+            {
+                if (previewWindow is not null) DockFloatingPaneRouter.Unregister(previewWindow);
+                if (floating is not null) DockFloatingPaneRouter.Unregister(floating);
+                if (previewWindow is not null && !previewClosed) previewWindow.Close();
+                if (floating is not null && !floatingClosed) floating.Close();
+                ReactorApp.ShutdownPolicy = savedPolicy;
+                ResetAll();
+            }
+        }
+    }
+
+    // ─── #12c FloatingMultiPane_CloseLastTab_AfterSiblingLeft_ReportsClosingPane ──
+
+    /// <summary>Producer-path coverage for issue #417 (review H1): the
+    /// multi-pane "stale Content" hazard. A float is opened with pane A — so
+    /// A becomes the Open()-time fallback baked into the <c>window.Closed</c>
+    /// closure. A second pane B is docked in (→ <c>[A,B]</c>); then A leaves
+    /// the float (a sibling close), leaving <c>[B]</c>; finally B — the
+    /// genuine last tab — is closed. <see cref="DockManager.OnFloatingWindowClosed"/>
+    /// MUST report <c>Content = B</c> (the real closing pane) with
+    /// <see cref="DockFloatingCloseReason.ContentClosed"/> — NOT the stale
+    /// Open()-time pane A. Before the H1 fix the willEmpty branch skipped the
+    /// stash for ContentClosed, so the handler fell back to A (still alive
+    /// elsewhere) and a consumer doing
+    /// <c>if (Reason == ContentClosed) Release(Content)</c> would release the
+    /// wrong, still-live pane.
+    ///
+    /// Single real window, no tear-off (so no preview-window teardown): B is
+    /// appended via the router's test seam (deterministic, no OS-cursor
+    /// dependency) and the tab closes are driven through the realized
+    /// TabView's wired <c>OnTabCloseRequested</c> — the SAME element action
+    /// the production close-button trampoline invokes — so this exercises the
+    /// real onTabClosing → RemoveLocal → willEmpty path end-to-end.</summary>
+    internal class T12c_FloatingMultiPane_CloseLastTab_AfterSiblingLeft_ReportsClosingPane(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            ResetAll(); PrepDeterministic();
+            var savedPolicy = ReactorApp.ShutdownPolicy;
+            ReactorApp.ShutdownPolicy = ShutdownPolicy.Explicit;
+            ReactorWindow? floating = null;
+            // The genuine last-tab close auto-closes the float. Guard the
+            // finally so we don't Close() it a second time — double-closing a
+            // WinUI window risks the multi-window teardown AV.
+            var floatingClosed = false;
+            var closed = new List<(DockFloatingCloseReason Reason, DockableContent? Content)>();
+            try
+            {
+                var host = H.CreateHost();
+                DockingNativeInterop.Register(host.Reconciler);
+                var a = MakePane("a", "body-a");
+                var b = MakePane("b", "body-b");
+                var managerEl = new DockManager
+                {
+                    Layout = new DockTabGroup(new[] { MakePane("host", "body-host") }),
+                    OnFloatingWindowClosed = args => closed.Add((args.Reason, args.Content)),
+                };
+                host.Mount(_ => managerEl);
+                await Harness.Render();
+
+                // Open a float with A — A is the Open()-time fallback captured
+                // by the window.Closed closure.
+                floating = DockFloatingWindow.Open(a, manager: managerEl);
+                floating.Closed += (_, _) => floatingClosed = true;
+                // Two renders so the component mounts and registers its
+                // append-as-tab callback with the router.
+                await Harness.Render();
+                await Harness.Render();
+
+                // Dock B in via the router seam → a REAL [A,B] multi-pane float.
+                var appended = DockFloatingPaneRouter.AppendToWindowForTest(floating, b);
+                H.Check("T12c_AppendedB", appended);
+                await Harness.Render();
+
+                var tabView = FindTabViewInWindow(floating);
+                if (tabView is null) { H.Check("T12c_TabViewFound", false); return; }
+                H.Check("T12c_FloatHasTwoTabs", tabView.TabItems.Count == 2);
+
+                // Close A (the Open()-time pane) — a non-last close, so the
+                // window stays open with [B]. Drives the real onTabClosing via
+                // the element's wired close action.
+                var elBeforeRemove = Reconciler.GetElementTag(tabView) as TabViewElement;
+                int idxA = IndexOfHeader(tabView, "a");
+                H.Check("T12c_FoundAIndex", idxA >= 0);
+                elBeforeRemove?.OnTabCloseRequested?.Invoke(idxA);
+                await Harness.Render();
+                await Harness.Render();
+
+                var tabViewAfter = FindTabViewInWindow(floating);
+                H.Check("T12c_FloatStillOpenWithOneTab",
+                    tabViewAfter is not null && tabViewAfter.TabItems.Count == 1);
+                H.Check("T12c_NoCloseFiredYet", closed.Count == 0);
+
+                // Close B — now the genuine last tab → willEmpty → ContentClosed.
+                // The event must carry B (the real closing pane), not stale A.
+                var elNow = Reconciler.GetElementTag(tabViewAfter!) as TabViewElement;
+                int idxB = IndexOfHeader(tabViewAfter!, "b");
+                H.Check("T12c_FoundBIndex", idxB >= 0);
+                elNow?.OnTabCloseRequested?.Invoke(idxB);
+                await Harness.Render();
+                await Harness.Render();
+
+                H.Check("T12c_ExactlyOneCloseFired", closed.Count == 1);
+                H.Check("T12c_ReasonIsContentClosed",
+                    closed.Count == 1 && closed[0].Reason == DockFloatingCloseReason.ContentClosed);
+                H.Check("T12c_ContentIsClosingPaneB",
+                    closed.Count == 1 && ReferenceEquals(closed[0].Content, b));
+                H.Check("T12c_ContentIsNotStaleOpenTimePaneA",
+                    closed.Count == 1 && !ReferenceEquals(closed[0].Content, a));
+
+                host.Mount(_ => TextBlock("done"));
+                await Harness.Render();
+            }
+            finally
+            {
+                if (floating is not null) DockFloatingPaneRouter.Unregister(floating);
+                if (floating is not null && !floatingClosed) floating.Close();
+                ReactorApp.ShutdownPolicy = savedPolicy;
+                ResetAll();
+            }
+        }
+
+        // Headers are the pane Titles (DockTabGroupRenderer maps doc.Title →
+        // tab Header, and tab order tracks the pane/documents order one-to-one,
+        // so the returned index is the documents[] index OnTabCloseRequested
+        // expects).
+        private static int IndexOfHeader(TabView tv, string header)
+        {
+            for (int i = 0; i < tv.TabItems.Count; i++)
+                if (tv.TabItems[i] is TabViewItem it && (it.Header as string) == header)
+                    return i;
+            return -1;
         }
     }
 

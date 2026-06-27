@@ -350,16 +350,34 @@ LineChart(data, d => d.Month, d => d.Revenue)
 
 | Method | Purpose |
 |--------|---------|
-| `PieChartElement<T>.LabelView(Func<T, PieSliceLayout, Element>)` | Replace the built-in slice text with any Element, anchored on the slice centroid |
-| `ChartElement<T>.XTickLabelView(Func<double, Element>)` | Replace the X-axis tick label, horizontally centered on the tick |
-| `ChartElement<T>.YTickLabelView(Func<double, Element>)` | Replace the Y-axis tick label, right-anchored to the axis edge |
+| `PieChartElement<T>.LabelView(Func<T, PieSliceLayout, Element>, Func<T, string>? name = null, bool interactive = false)` | Replace the built-in slice text with any Element, anchored on the slice centroid |
+| `ChartElement<T>.XTickLabelView(Func<double, Element>, Func<double, string>? name = null, bool interactive = false)` | Replace the X-axis tick label, horizontally centered on the tick |
+| `ChartElement<T>.YTickLabelView(Func<double, Element>, Func<double, string>? name = null, bool interactive = false)` | Replace the Y-axis tick label, right-anchored to the axis edge |
 
-The element you return is auto-anchored — you don't need a known size at
-construction time, and the chart re-positions on layout. It is also rendered
-non-interactive and hidden from the UIA tree, so the chart's structured
-accessibility description (see below) stays canonical. Always keep the
-string `LabelAccessor` (pie) or `DataLabel` (line/bar/area) set when you use
-a `*View` override; that's what screen readers read.
+By default the element you return is rendered non-interactive: the chart
+force-applies `AccessibilityView.Raw` to the **entire realized subtree** (not
+just the outer wrapper) and clears `IsTabStop` on every inner control, so no
+inner peer surfaces to assistive tech and nothing inside the label joins the
+keyboard tab order. The chart's structured accessibility description (see
+below) therefore stays the single source of truth. The element is also
+auto-anchored — you don't need a known size at construction time, and the
+chart re-positions on layout.
+
+Two optional parameters refine this:
+
+- `name` supplies an accessible-name projection for cases where you use a
+  `*View` override **without** a string `LabelAccessor` (pie) / `DataLabel`
+  (line/bar/area). For pie slices the projection feeds the chart's own slice
+  descriptor, so the announced name matches the visible label instead of
+  falling back to `Slice {n}`. For axis ticks it sets `AutomationName` on the
+  realized tick element (ticks have no per-tick descriptor). Prefer the string
+  `LabelAccessor`/`DataLabel` when you have one; reach for `name` only when the
+  visual lives entirely in the `*View`.
+- `interactive: true` is an opt-in escape hatch: it leaves the subtree's peers
+  and tab stops intact so focusable children inside your label remain reachable.
+  When you set it, **you** own the label's accessibility — the chart no longer
+  hides it. Toggling `interactive` at runtime remounts the label so the
+  hide/un-hide takes effect immediately.
 
 ## Chart Accessibility
 
@@ -427,6 +445,9 @@ class AccessibleChartDemo : Component
 | `.OnPointInvoke(handler)` | Callback when Enter/Space pressed on a point |
 | `.AlternateView(element)` | Toggle between chart and data table (T key) |
 | `.Palette(palette)` | Curated colorblind-safe palette |
+| `.SeriesColors(colors)` | Custom series colors (scanner-validated) |
+| `.RawColors(colors)` | Raw series colors — escape hatch, no validation (Tier 4) |
+| `.ChartBackground(color)` | Declare the rendered background so palette-contrast (A11Y_CHART_011) is checked against that single active background (warning) instead of either fixed light/dark background (info) |
 | `.SeriesShapes(shapes)` | Marker shapes for double-encoding |
 | `.SeriesDashes(dashes)` | Dash patterns for double-encoding |
 

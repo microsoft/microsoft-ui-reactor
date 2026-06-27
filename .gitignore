@@ -234,6 +234,8 @@ tests/stress_perf/dwm-attribution.log
 tests/stress_perf/attr-*.csv
 tests/stress_perf/sweep-results/
 tests/stress_perf/sweep_results.csv
+# perf-compare (/perf) runner output: logs, result.json, comment.md.
+tests/stress_perf/ci/out/
 # Per-frame CSV captures under baselines/ — only summary.md / summary.csv are tracked.
 tests/stress_perf/baselines/**/*.frames.csv
 tests/stress_perf/baselines/**/per-rep.csv

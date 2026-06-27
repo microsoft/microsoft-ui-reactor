@@ -113,6 +113,13 @@ VStack(
 A `TitleBar(...)` element infers `ExtendsContentIntoTitleBar = true` when the
 spec value is `null`. Explicit `true` or `false` wins.
 
+> **Close-safety caveat (#537):** `ExtendsContentIntoTitleBar = false` with a
+> mounted `TitleBar(...)` is allowed and previously crashed on close
+> (`STATUS_HEAP_CORRUPTION`); Reactor now flips the window back into
+> content-extended mode just before the native close (every close/exit/dispose
+> path) so it is safe. Prefer omitting `TitleBar(...)` when you want the system
+> title bar.
+
 ```csharp
 VStack(...).Backdrop(BackdropKind.Mica);
 new WindowSpec { Backdrop = BackdropChoice.Of(BackdropKind.DesktopAcrylic) };

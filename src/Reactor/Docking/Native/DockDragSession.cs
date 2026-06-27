@@ -40,7 +40,7 @@ internal sealed class DockDragSession
 
     /// <summary>
     /// True when the most recently ended session was consumed by a dock
-    /// surface (a host's drop-target overlay called <see cref="MarkConsumed"/>
+    /// surface (a host's drop-target overlay called <see cref="MarkConsumed()"/>
     /// before <see cref="End"/>). Cleared on the next <see cref="Begin"/>.
     /// Distinguishes "drop succeeded somewhere else" (Consumed=true) from
     /// "drop was cancelled / went nowhere" (Consumed=false) — used by the
@@ -56,7 +56,52 @@ internal sealed class DockDragSession
     /// windows participating in this drag (e.g. the source floating
     /// window) can distinguish "consumed" from "cancelled".
     /// </summary>
-    public static void MarkConsumed() => Consumed = true;
+    public static void MarkConsumed() => MarkConsumed(Current?.Source, toFloat: false);
+
+    /// <summary>
+    /// Pane-scoped overload of <see cref="MarkConsumed()"/>. Records WHICH
+    /// pane was consumed (<see cref="LastConsumedPane"/>) and whether it
+    /// landed in another floating window (<paramref name="toFloat"/>) versus
+    /// a docked host. The floating-window close path reads these to scope
+    /// the <see cref="DockFloatingCloseReason"/> to the specific migrated
+    /// pane — a multi-pane float that loses ONE tab to a dock-back keeps
+    /// <see cref="Consumed"/> true, but only that pane's later close counts
+    /// as a migration; a genuine user close of the remaining tabs must not
+    /// inherit the migrated reason (issue #417).
+    /// </summary>
+    public static void MarkConsumed(DockableContent? pane, bool toFloat = false)
+    {
+        // Resolve the concrete consumed pane. If there is no active session
+        // and no explicit pane — e.g. a host drop-confirm path firing after
+        // the session was already ended/cancelled (the call sites guard
+        // session?.End() as nullable, so Current can be null here) — there is
+        // nothing to consume. Never persist a half-state (Consumed=true with a
+        // null LastConsumedPane): that would make MigratedReasonFor treat
+        // EVERY subsequent floating-window close as a migration until the next
+        // Begin. (#417 review)
+        var resolved = pane ?? Current?.Source;
+        if (resolved is null)
+            return;
+        Consumed = true;
+        LastConsumedPane = resolved;
+        LastConsumedToFloat = toFloat;
+    }
+
+    /// <summary>
+    /// The pane consumed by the most recent <see cref="MarkConsumed(DockableContent?, bool)"/>
+    /// call, or null when no drop has been consumed since the last
+    /// <see cref="Begin"/>. Reset on the next <see cref="Begin"/>.
+    /// </summary>
+    public static DockableContent? LastConsumedPane { get; private set; }
+
+    /// <summary>
+    /// True when the most recently consumed pane (see <see cref="LastConsumedPane"/>)
+    /// landed in another floating window rather than a docked host. Drives
+    /// <see cref="DockFloatingCloseReason.MigratedToFloat"/> vs
+    /// <see cref="DockFloatingCloseReason.MigratedToHost"/>. Reset on the
+    /// next <see cref="Begin"/>.
+    /// </summary>
+    public static bool LastConsumedToFloat { get; private set; }
 
     /// <summary>
     /// Fired on any session state transition (Begin / End / Cancel). Lets
@@ -140,6 +185,8 @@ internal sealed class DockDragSession
         };
         Current = session;
         Consumed = false; // reset Consumed for the new session
+        LastConsumedPane = null;
+        LastConsumedToFloat = false;
         RaiseSessionChanged();
         return session;
     }
@@ -170,5 +217,8 @@ internal sealed class DockDragSession
     {
         if (Current is { IsActive: true }) Current.Cancel();
         Current = null;
+        Consumed = false;
+        LastConsumedPane = null;
+        LastConsumedToFloat = false;
     }
 }

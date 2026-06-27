@@ -112,9 +112,55 @@ public sealed class DockFloatingWindowCreatedEventArgs
     public DockableContent? DraggedSource { get; init; }
 }
 
+/// <summary>
+/// Why a docking floating window closed. Lets <see cref="DockManager.OnFloatingWindowClosed"/>
+/// handlers tell a genuine user close (release per-document resources)
+/// apart from a synthetic close that follows a tab migrating to another
+/// surface (the content is still alive — do NOT release anything).
+/// </summary>
+/// <remarks>Spec 045 §5.3.5.</remarks>
+public enum DockFloatingCloseReason
+{
+    /// <summary>
+    /// The window closed and its content is gone — the OS close button,
+    /// Alt+F4, an app-driven <c>Close()</c>, the last tab being closed, or
+    /// the owning host unmounting. It is safe to release per-document state
+    /// tied to the content. This is the zero value, so a handler that ignores
+    /// <see cref="DockFloatingWindowClosedEventArgs.Reason"/> sees the
+    /// pre-#417 behaviour. Named for the outcome (content gone), not the
+    /// initiator — it deliberately covers app-driven and host-unmount closes
+    /// too, and so is distinct from <c>WindowCloseReason.UserClosed</c>.
+    /// </summary>
+    ContentClosed = 0,
+
+    /// <summary>
+    /// The window closed synthetically because its last pane was
+    /// dock-backed into another host (cross-window dock-back). The content
+    /// is alive and visible in its new dock position — handlers must NOT
+    /// release resources tied to it.
+    /// </summary>
+    MigratedToHost,
+
+    /// <summary>
+    /// The window closed synthetically because its last pane was re-torn-out
+    /// or dropped into a different floating window. The content is alive in
+    /// the destination float — handlers must NOT release resources tied to it.
+    /// </summary>
+    MigratedToFloat,
+}
+
 /// <summary>Args for <see cref="DockManager.OnFloatingWindowClosed"/>.</summary>
 public sealed class DockFloatingWindowClosedEventArgs
 {
     /// <summary>The pane that was inside the floating window when it closed (best-effort).</summary>
     public DockableContent? Content { get; init; }
+
+    /// <summary>
+    /// Why the window closed. <see cref="DockFloatingCloseReason.ContentClosed"/>
+    /// uniquely identifies a true close; the <c>Migrated*</c> values mark the
+    /// synthetic close that pairs a cross-window dock-back / re-tear-out, where
+    /// <see cref="Content"/> is still alive elsewhere and must not be released.
+    /// </summary>
+    /// <remarks>Spec 045 §5.3.5. See issue #417.</remarks>
+    public required DockFloatingCloseReason Reason { get; init; }
 }

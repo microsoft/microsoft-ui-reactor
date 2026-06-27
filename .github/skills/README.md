@@ -17,14 +17,18 @@ before push.
 | Skill | Purpose |
 |-------|---------|
 | [`pr-review/`](pr-review/SKILL.md) | Multi-dimensional review of a PR / feature branch diff (security, correctness, API & DSL ergonomics, alternative solutions, test coverage, docs & samples sync, packaging/agent-kit impact, multi-model cross-check). Reports findings to stdout; does not apply fixes. |
+| [`perf-compare/`](perf-compare/SKILL.md) | Benchmark the `StressPerf.ReactorOptimized` data-grid harness on the current branch vs a clean `main` worktree (interleaved, same machine) and report a direction-aware delta for the four headline metrics. The local equivalent of commenting `/perf` on a PR. Reports to stdout; does not apply fixes. |
 
 ## Conventions
 
 - Each skill is a directory containing a `SKILL.md` (the entry point the
   orchestrating agent reads) and any supporting prompt fragments.
-- Skills do not run scripts. The orchestrating agent uses its own tools
-  (`task`, `grep`, `view`, `powershell` for git, etc.) following the
-  instructions in `SKILL.md`.
+- A skill is instructions, not an executable. The orchestrating agent uses its
+  own tools (`task`, `grep`, `view`, `powershell`, etc.) following the
+  `SKILL.md`. A skill may direct the agent to invoke a **committed** repo script
+  via its `powershell` tool (e.g. `perf-compare` drives
+  `tests/stress_perf/ci/Run-PerfBenchmark.ps1`), but the skill itself ships no
+  runnable code.
 - Prompt fragments meant to be passed verbatim to sub-agents live under a
   `dimensions/` (or similarly named) subfolder.
 - Output goes to stdout unless the user explicitly asks for a file.

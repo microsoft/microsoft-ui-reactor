@@ -477,13 +477,15 @@ public static partial class ReactorApp
         WindowSpec spec,
         Func<Component>? rootFactory,
         Func<RenderContext, Element>? renderFunc,
-        Action<ReactorHost>? configure)
+        Action<ReactorHost>? configure,
+        bool excludeFromShutdownPolicy = false)
     {
         Console.Error.WriteLine("[embed:trace] OpenWindowCore enter (embed=" + (spec.Embed is not null) + ")");
         ReactorWindow window;
         try
         {
             window = new ReactorWindow(spec);
+            window.ExcludeFromShutdownPolicy = excludeFromShutdownPolicy;
             Console.Error.WriteLine("[embed:trace] OpenWindowCore: ReactorWindow ctor ok");
         }
         catch (Exception ex)
@@ -571,6 +573,7 @@ public static partial class ReactorApp
     public static void Exit(int exitCode = 0)
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(Exit));
+        PrepareOpenWindowsForExit();
         try { Application.Current?.Exit(); }
         catch { /* best effort */ }
         if (exitCode != 0)
@@ -586,14 +589,26 @@ public static partial class ReactorApp
         next[^1] = window;
         Volatile.Write(ref _windows, next);
 
+        // An auxiliary window (e.g. a docking tear-off floating window) must
+        // never become the fallback primary: closing it would otherwise fire
+        // ShutdownPolicy.OnPrimaryWindowClosed and tear the whole app down, even
+        // though it is just a transient docking surface. (issue #647)
         if (PrimaryWindow is null)
-            PrimaryWindow = window;
+            PrimaryWindow = ElectPrimaryWindow(next);
 
         ReactorDisplay.RegisterWindowMonitor(window, window.MessageMonitor);
 
         try { WindowOpened?.Invoke(null, window); }
         catch (Exception ex) { global::System.Diagnostics.Debug.WriteLine($"[Reactor] WindowOpened threw: {ex.Message}"); }
     }
+
+    // Pick the first window eligible to be the application's PrimaryWindow,
+    // skipping auxiliary windows (e.g. docking tear-off floating windows) that
+    // opted out via ExcludeFromShutdownPolicy. Returns null when only auxiliary
+    // windows remain. Shared by initial registration and unregister re-election
+    // so the two election sites cannot drift apart. (issue #647)
+    private static ReactorWindow? ElectPrimaryWindow(ReactorWindow[] candidates) =>
+        Array.Find(candidates, static c => !c.ExcludeFromShutdownPolicy);
 
     // Copy-on-write remove. Idempotent — removing an already-removed window
     // (Phase 1 path runs Dispose → close cascade twice in some failure modes)
@@ -611,10 +626,15 @@ public static partial class ReactorApp
 
         // Capture whether this window was the primary BEFORE we re-elect, so
         // ShutdownPolicy.OnPrimaryWindowClosed can distinguish "primary just
-        // died" from "secondary closed while primary still alive."
+        // died" from "secondary closed while primary still alive." Re-election
+        // goes through the same ElectPrimaryWindow helper as initial
+        // registration so an excluded auxiliary window (e.g. a docking tear-off)
+        // can never be promoted to primary on the unregister path either, which
+        // would re-introduce the exact OnPrimaryWindowClosed teardown #647
+        // closes. (issue #647)
         bool wasPrimary = ReferenceEquals(PrimaryWindow, window);
         if (wasPrimary)
-            PrimaryWindow = next.Length > 0 ? next[0] : null;
+            PrimaryWindow = ElectPrimaryWindow(next);
 
         ReactorDisplay.UnregisterWindowMonitor(window);
 
@@ -690,8 +710,44 @@ public static partial class ReactorApp
 
     private static void SafeExit()
     {
+        PrepareOpenWindowsForExit();
         try { Application.Current?.Exit(); }
         catch (Exception ex) { global::System.Diagnostics.Debug.WriteLine($"[Reactor] Application.Exit threw: {ex.Message}"); }
+    }
+
+    // Issue #537 — Application.Exit() tears down every open window's native
+    // surface without routing through ReactorWindow.Close()/OnAppWindowClosing,
+    // so a still-open window with a mounted WinUI TitleBar in an
+    // ExtendsContentIntoTitleBar=false mode would reach the unsafe teardown and
+    // corrupt the heap. (This is reachable under the default
+    // OnPrimaryWindowClosed policy: closing the primary fires SafeExit() while
+    // secondary ECITB=false TitleBar windows are still open.) Flip each live
+    // window — and its owned descendants — back into content-extended mode
+    // first, while their AppWindows are still alive. Idempotent per window, so
+    // windows already prepared by a close path are no-ops.
+    //
+    // This is the terminal exit boundary: Exit()/SafeExit() call this OUTSIDE
+    // any surrounding try, and there is no later path that could retry, so the
+    // per-window prep is wrapped best-effort and isolated — one window's
+    // unexpected teardown-race throw is logged and the loop continues so the
+    // remaining windows are still prepared (narrowing the catch here would let
+    // a single window abort the prep of every other open window). `internal`
+    // for selftest visibility — Application.Exit() cannot run in-process, so the
+    // TitleBar exit-prep fixture drives this loop directly.
+    internal static void PrepareOpenWindowsForExit()
+    {
+        var snapshot = Windows;
+        for (int i = 0; i < snapshot.Count; i++)
+        {
+            // Best-effort: a window mid-teardown can throw while we flip its
+            // title-bar mode. Catch only the exceptions a teardown-racing
+            // AppWindow/title-bar interop call can realistically surface so a
+            // genuine bug elsewhere still propagates.
+            try { snapshot[i].PrepareTitleBarTreeForClose(); }
+            catch (ObjectDisposedException ex) { global::System.Diagnostics.Debug.WriteLine($"[Reactor] PrepareOpenWindowsForExit threw: {ex.Message}"); }
+            catch (InvalidOperationException ex) { global::System.Diagnostics.Debug.WriteLine($"[Reactor] PrepareOpenWindowsForExit threw: {ex.Message}"); }
+            catch (COMException ex) { global::System.Diagnostics.Debug.WriteLine($"[Reactor] PrepareOpenWindowsForExit threw: {ex.Message}"); }
+        }
     }
 
     // Internal accessor for ReactorApplication.OnLaunched and tests.
