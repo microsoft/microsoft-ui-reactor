@@ -605,6 +605,7 @@ T.HierarchyLevel<T>(int level) → T
 T.HorizontalAlignment<T>(HorizontalAlignment alignment) → T
 T.Immediate<T>() → T
 T.InteractionStates<T>(Func<InteractionStatesBuilder, InteractionStatesBuilder> configure, Curve curve = null) → T
+T.IsDragRegion<T>(bool isDragRegion = true) → T
 T.IsEnabled<T>(bool enabled = true) → T
 T.IsTabStop<T>(bool isTabStop = true) → T
 T.IsVisible<T>(bool isVisible) → T
@@ -797,6 +798,7 @@ TextBoxElement.TextWrapping(TextWrapping wrapping = TextWrapping.Wrap) → TextB
 TextBoxElement.UrlInput() → TextBoxElement
 TimePickerElement.Set(Action<TimePicker> configure) → TimePickerElement
 TimePickerElement.TimeChanged(Action<TimeSpan> handler) → TimePickerElement
+TitleBarElement.AutoRefreshDragRegions(bool value = true) → TitleBarElement
 TitleBarElement.BackButtonEnabled(bool enabled) → TitleBarElement
 TitleBarElement.BackButtonVisible(bool visible) → TitleBarElement
 TitleBarElement.BackRequested(Action handler) → TitleBarElement
@@ -2963,6 +2965,7 @@ Vector3? Translation { get; init; }
 VerticalAlignment? VerticalAlignment { get; init; }
 VisualModifiers Visual { get; init; }
 XYFocusKeyboardNavigationMode? XYFocusKeyboardNavigation { get; init; }
+bool? IsDragRegion { get; init; }
 bool? IsEnabled { get; init; }
 bool? IsTabStop { get; init; }
 bool? IsVisible { get; init; }
@@ -6832,6 +6835,7 @@ Action OnPaneToggleRequested { get; init; }
 Element Content { get; init; }
 Element RightHeader { get; init; }
 IconData Icon { get; init; }
+bool AutoRefreshDragRegions { get; init; }
 bool IsBackButtonEnabled { get; init; }
 bool IsBackButtonVisible { get; init; }
 bool IsPaneToggleButtonVisible { get; init; }

@@ -40,6 +40,31 @@ public class ElementModifiersCoverageTests
     }
 
     // ════════════════════════════════════════════════════════════════
+    //  TitleBar.IsDragRegion — cross-cutting attached prop (spec 059)
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void IsDragRegion_DefaultsTrue_SetsModifier()
+    {
+        var el = TextBlock("x").IsDragRegion();
+        Assert.True(el.Modifiers!.IsDragRegion);
+    }
+
+    [Fact]
+    public void IsDragRegion_False_SetsModifier()
+    {
+        var el = Button("click", () => { }).IsDragRegion(false);
+        Assert.False(el.Modifiers!.IsDragRegion);
+    }
+
+    [Fact]
+    public void IsDragRegion_Unset_IsNull()
+    {
+        var el = TextBlock("x");
+        Assert.Null(el.Modifiers?.IsDragRegion);
+    }
+
+    // ════════════════════════════════════════════════════════════════
     //  Accessibility Tier 2 — on AccessibilityModifiers
     // ════════════════════════════════════════════════════════════════
 

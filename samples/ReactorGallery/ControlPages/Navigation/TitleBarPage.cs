@@ -39,19 +39,19 @@ class TitleBarPage : Component
 
                 SampleCard("TitleBar with Content",
                     Border(
-                        TitleBar("Gallery") with
+                        (TitleBar("Gallery") with
                         {
                             Content = HStack(8,
                                 AutoSuggestBox("", _ => { }).Width(200),
-                                Button("\uE713", () => { }).Width(36).Height(36)
+                                Button("\uE713", () => { }).Width(36).Height(36).IsDragRegion(false)
                             ),
-                        }
+                        }).AutoRefreshDragRegions()
                     ).Background(Theme.LayerFill).CornerRadius(4).Height(48),
                     @"TitleBar(""Gallery"") with {
     Content = HStack(8,
         AutoSuggestBox("""", _ => {}).Width(200),
-        Button(""⚙"", () => {}))
-}")
+        Button(""⚙"", () => {}).IsDragRegion(false))
+}.AutoRefreshDragRegions()")
             ).Margin(36, 24, 36, 36)
         );
     }

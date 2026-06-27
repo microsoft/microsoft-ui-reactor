@@ -389,6 +389,14 @@ public class ElementExtensionsCoverageTests
     }
 
     [Fact]
+    public void TitleBar_AutoRefreshDragRegions_Sugar()
+    {
+        Assert.False(TitleBar("Title").AutoRefreshDragRegions);
+        Assert.True(TitleBar("Title").AutoRefreshDragRegions().AutoRefreshDragRegions);
+        Assert.False(TitleBar("Title").AutoRefreshDragRegions(false).AutoRefreshDragRegions);
+    }
+
+    [Fact]
     public void Expander_Direction_Sugar()
     {
         var el = Expander("Hd", TextBlock("x")).Direction(ExpandDirection.Up);

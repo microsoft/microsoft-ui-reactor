@@ -1088,6 +1088,8 @@ internal static class SelfTestFixtureRegistry
         "TaskbarItem_ProgressRegression",
         // Spec 054 Phase 7 — title-bar inference, transparent backdrop, picker hooks.
         "TitleBar_ImplicitExtends",
+        // Spec 059 — TitleBar drag-region APIs (AutoRefreshDragRegions + IsDragRegion).
+        "TitleBar_DragRegions",
         "TitleBar_ExplicitFalseOverrides",
         "TitleBar_OwnedChild",
         "TitleBar_DisposeNoClose",
@@ -2519,6 +2521,8 @@ internal static class SelfTestFixtureRegistry
         "TaskbarItem_ProgressRegression" => new Phase6WindowingFixtures.TaskbarItemProgressRegression(harness),
         // Spec 054 Phase 7 — title-bar inference, transparent backdrop, picker hooks.
         "TitleBar_ImplicitExtends" => new Phase7WindowingFixtures.TitleBarImplicitExtends(harness),
+        // Spec 059 — TitleBar drag-region APIs (AutoRefreshDragRegions + IsDragRegion).
+        "TitleBar_DragRegions" => new Phase7WindowingFixtures.TitleBarDragRegions(harness),
         "TitleBar_ExplicitFalseOverrides" => new Phase7WindowingFixtures.TitleBarExplicitFalseOverrides(harness),
         "TitleBar_OwnedChild" => new Phase7WindowingFixtures.TitleBarOwnedChildClosesClean(harness),
         "TitleBar_DisposeNoClose" => new Phase7WindowingFixtures.TitleBarDisposeWithoutClose(harness),

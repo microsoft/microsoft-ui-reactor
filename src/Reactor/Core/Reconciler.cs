@@ -3787,6 +3787,12 @@ public sealed partial class Reconciler : IDisposable
         else if (m.AutomationId is null && oldM?.AutomationId is not null)
             fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.AutomationIdProperty);
 
+        // TitleBar.IsDragRegion (attached; inert outside a TitleBar). WinApp SDK ≥ 2.1.3.
+        if (m.IsDragRegion.HasValue && m.IsDragRegion != oldM?.IsDragRegion)
+            WinUI.TitleBar.SetIsDragRegion(fe, m.IsDragRegion.Value);
+        else if (!m.IsDragRegion.HasValue && oldM?.IsDragRegion.HasValue == true)
+            fe.ClearValue(WinUI.TitleBar.IsDragRegionProperty);
+
         // ElementSoundMode (on Control, not FrameworkElement)
         if (m.ElementSoundMode.HasValue && m.ElementSoundMode != oldM?.ElementSoundMode && fe is WinUI.Control ctrl)
             ctrl.ElementSoundMode = m.ElementSoundMode.Value;

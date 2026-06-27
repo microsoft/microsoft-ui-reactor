@@ -25,6 +25,25 @@ internal static class Phase7WindowingFixtures
         public override Element Render() => VStack(TitleBar("Phase 7"), TextBlock("body"));
     }
 
+    // Spec 059 — captures the realized TitleBar control + a child marked
+    // .IsDragRegion(false) so the fixture can read back the attached prop.
+    private sealed class TitleBarDragRegionComponent : Component
+    {
+        public Microsoft.UI.Xaml.Controls.TitleBar? Bar;
+        public Microsoft.UI.Xaml.FrameworkElement? Clickable;
+        public override Element Render() =>
+            VStack(
+                (TitleBar("Drag") with
+                {
+                    Content = Button("X", () => { })
+                        .IsDragRegion(false)
+                        .OnMount(fe => Clickable = fe),
+                })
+                .AutoRefreshDragRegions()
+                .Set(b => Bar = b),
+                TextBlock("body"));
+    }
+
     private sealed class PlainComponent : Component
     {
         public override Element Render() => TextBlock("plain");
@@ -163,6 +182,29 @@ internal static class Phase7WindowingFixtures
             EnsureUIDispatcher();
             var win = await OpenAndSettle(new WindowSpec { Title = "Implicit TitleBar", Width = 320, Height = 220 }, () => new TitleBarComponent());
             try { H.Check("TitleBar_ImplicitExtends", win.NativeWindow.ExtendsContentIntoTitleBar); }
+            finally { await CloseAndSettle(win); }
+        }
+    }
+
+    // Spec 059 — TitleBar drag-region APIs (WinApp SDK ≥ 2.1.3): AutoRefreshDragRegions
+    // auto-maps onto the control; .IsDragRegion(false) writes TitleBar.IsDragRegion on a child.
+    internal class TitleBarDragRegions(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+            var comp = new TitleBarDragRegionComponent();
+            var win = await OpenAndSettle(
+                new WindowSpec { Title = "Drag Regions", Width = 360, Height = 220 },
+                () => comp);
+            try
+            {
+                H.Check("TitleBar_AutoRefreshDragRegions_RoundTrip", comp.Bar?.AutoRefreshDragRegions == true);
+                bool? flag = comp.Clickable is null
+                    ? null
+                    : Microsoft.UI.Xaml.Controls.TitleBar.GetIsDragRegion(comp.Clickable);
+                H.Check("TitleBar_IsDragRegion_ChildClickable", flag == false);
+            }
             finally { await CloseAndSettle(win); }
         }
     }
