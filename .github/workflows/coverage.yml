@@ -3,7 +3,7 @@ name: Coverage
 # Maintainer-gated coverage run for any PR (including forks). Trigger it either by
 # commenting `@codecoverage` on a PR, or by running the workflow manually from the
 # Actions tab (or `gh workflow run`) with the target PR number. Either way it runs
-# the merged unit + selftest coverage recipe from CONTRIBUTING.md and posts the
+# the merged unit + selftest coverage recipe from TESTING.md and posts the
 # result back to the PR as a comment.
 #
 # Security: `issue_comment` workflows run in the base repo with full token
@@ -22,12 +22,6 @@ on:
         required: true
         type: string
 
-# One in-flight run per PR; a newer trigger (comment or dispatch) supersedes an
-# older one for the same PR.
-concurrency:
-  group: coverage-${{ github.event.issue.number || github.event.inputs.pr_number }}
-  cancel-in-progress: true
-
 permissions:
   contents: read
   pull-requests: write
@@ -35,9 +29,17 @@ permissions:
 jobs:
   coverage:
     name: Merged coverage
+    # One in-flight run per PR; a newer trigger (comment or dispatch) supersedes an
+    # older one. Job-level (not workflow-level) concurrency so that unrelated
+    # issue_comment events — which start a workflow run but skip this job — don't
+    # cancel a live coverage run for the same PR.
+    concurrency:
+      group: coverage-${{ github.event.issue.number || github.event.inputs.pr_number }}
+      cancel-in-progress: true
     if: |
       github.event_name == 'workflow_dispatch' ||
-      (github.event.issue.pull_request &&
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
        contains(github.event.comment.body, '@codecoverage') &&
        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
     runs-on: windows-latest
