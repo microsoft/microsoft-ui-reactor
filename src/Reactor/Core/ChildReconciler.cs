@@ -303,10 +303,16 @@ internal static class ChildReconciler
         var intPool = ArrayPool<int>.Shared;
         var boolPool = ArrayPool<bool>.Shared;
         var oldKeyMap = RentKeyIndexDict(oldMidLen);
-        var keyToIndex = RentKeyIndexDict(newMidLen);
         int[] newToOld = intPool.Rent(newMidLen);
         bool[] matched = boolPool.Rent(oldMidLen);
         bool[] inLis = boolPool.Rent(newMidLen);
+        // Live panel index of each surviving old item, keyed by old-relative
+        // index (-1 when absent). Replaces the second pooled key→index dict
+        // (#33): positions are tracked here and mutated in lock-step with every
+        // Insert/Move so a survivor's current control is always resolvable
+        // without a COM re-scan — and never patched by a not-yet-reached final
+        // index (bug C1).
+        int[] oldRelToPanel = intPool.Rent(oldMidLen);
         try
         {
             // A rented bool array can carry stale `true` markers; `matched`
@@ -354,7 +360,14 @@ internal static class ChildReconciler
                 }
             }
 
-            // Build key→panel-index lookup for O(1) FindItemByOldIndex (CR-011).
+            // Build the survivor → live-panel-index model by scanning the
+            // realized collection AFTER removals. A live scan (rather than a
+            // computed compaction) is required because
+            // RemoveChildWithExitTransition can DEFER removal under an
+            // exit/ambient transition, leaving the exiting control occupying a
+            // slot for this pass — reading actual positions keeps the model
+            // consistent with the real collection.
+            for (int r = 0; r < oldMidLen; r++) oldRelToPanel[r] = -1;
             int searchEnd = children.Count - suffixLen;
             for (int i = prefixLen; i < searchEnd && i < children.Count; i++)
             {
@@ -362,121 +375,231 @@ internal static class ChildReconciler
                 if (child is FrameworkElement fe && Reconciler.GetElementTag(fe) is Element tagElement)
                 {
                     var key = GetKey(tagElement, i);
-                    keyToIndex.TryAdd(key, i);
+                    if (oldKeyMap.TryGetValue(key, out int oldRel) && matched[oldRel])
+                        oldRelToPanel[oldRel] = i;
                 }
             }
 
-            // Step 2: Process new items - insert new, move existing not in LIS
-            for (int i = 0; i < newMidLen; i++)
-            {
-                int targetPanelIdx = prefixLen + i;
-
-                if (newToOld[i] == -1)
-                {
-                    var ctrl = reconciler.Mount(newChildren[newStart + i], requestRerender);
-                    if (ctrl is not null)
-                    {
-                        children.Insert(targetPanelIdx, ctrl);
-                        ApplyAmbientEnterIfActive(ctrl, newChildren[newStart + i], ambientKind);
-                    }
-                }
-                else if (inLis[i])
-                {
-                    if (targetPanelIdx < children.Count)
-                    {
-                        var replacement = reconciler.UpdateChild(
-                            oldChildren[oldStart + newToOld[i]],
-                            newChildren[newStart + i],
-                            children.Get(targetPanelIdx),
-                            requestRerender);
-                        if (replacement is not null)
-                        {
-                            reconciler.UnmountChild(children.Get(targetPanelIdx));
-                            children.Replace(targetPanelIdx, replacement);
-                        }
-                    }
-                }
-                else
-                {
-                    int oldRelIdx = newToOld[i];
-                    int oldAbsIdx = oldStart + oldRelIdx;
-                    var lookupKey = oldAbsIdx < oldChildren.Length ? GetKey(oldChildren[oldAbsIdx], oldAbsIdx) : null;
-                    int currentPos = lookupKey != null && keyToIndex.TryGetValue(lookupKey, out var pos) ? pos : -1;
-                    if (currentPos >= 0 && currentPos != targetPanelIdx)
-                    {
-                        var movedChild = children.Get(currentPos);
-                        children.Move(currentPos, targetPanelIdx);
-                        // Update lookup: moved element is now at targetPanelIdx.
-                        if (lookupKey != null) keyToIndex[lookupKey] = targetPanelIdx;
-                        // Spec 042 §6 — implicit Offset animation on the moved
-                        // child so the reorder reads visually under an ambient.
-                        // Attach via the existing Composition helper rather
-                        // than the per-element LayoutAnimation modifier (which
-                        // remains the user's per-element opt-in).
-                        if (ambientKind is { } k && movedChild is UIElement movedUi)
-                            ApplyAmbientMove(movedUi, k);
-                    }
-                    if (targetPanelIdx < children.Count)
-                    {
-                        var replacement = reconciler.UpdateChild(
-                            oldChildren[oldStart + oldRelIdx],
-                            newChildren[newStart + i],
-                            children.Get(targetPanelIdx),
-                            requestRerender);
-                        if (replacement is not null)
-                        {
-                            reconciler.UnmountChild(children.Get(targetPanelIdx));
-                            children.Replace(targetPanelIdx, replacement);
-                        }
-                    }
-                }
-            }
+            // Step 2: position + patch via the canonical right-to-left LIS walk.
+            // `initialAnchor` is the start of the suffix (end of the middle);
+            // each item is placed immediately before its already-positioned
+            // right neighbour, and every survivor is patched at its CURRENT live
+            // position resolved from the model — never at a final index the panel
+            // has not yet been rearranged into (bug C1) — with the model kept
+            // exact across every Insert/Move (bug H1).
+            int initialAnchor = children.Count - suffixLen;
+            var sink = new RealKeyedMiddleSink(
+                oldChildren, newChildren, oldStart, newStart,
+                children, reconciler, requestRerender, ambientKind);
+            RunKeyedMiddleCore(ref sink, newToOld, inLis, newMidLen, oldMidLen, initialAnchor, oldRelToPanel);
         }
         finally
         {
             // Return every pooled buffer on all exits (including exceptions).
             // The dict pool clears entries on return (ReturnKeyIndexDict), so
-            // element-key references never leak across frames. The bool buffers
-            // hold no references and have their used range fully (re)initialized
-            // before any read — `matched` via the Array.Clear-on-rent above and
-            // `inLis` via ComputeLISInto's own leading clear — so they return
-            // dirty (clearArray:false) and skip an avoidable O(rented-capacity)
-            // wipe on this hot path. `newToOld` (int) is likewise overwritten in
-            // full for [0,newMidLen) before each read, so it too returns without
-            // clearing. (Reference-typed pooled buffers elsewhere — e.g. the
+            // element-key references never leak across frames. The int/bool
+            // buffers hold no references and have their used range fully
+            // (re)initialized before any read — `matched` via the Array.Clear
+            // above, `inLis` via ComputeLISInto's leading clear, `newToOld`
+            // written in full for [0,newMidLen), and `oldRelToPanel` reset to -1
+            // for [0,oldMidLen) — so they return dirty (clearArray:false) and
+            // skip an avoidable O(rented-capacity) wipe on this hot path.
+            // (Reference-typed pooled buffers elsewhere — e.g. the
             // string[]/ReactorRow[] in KeyedListDiff — DO clear, to avoid pinning
             // objects across frames.)
             ReturnKeyIndexDict(oldKeyMap);
-            ReturnKeyIndexDict(keyToIndex);
             intPool.Return(newToOld);
+            intPool.Return(oldRelToPanel);
             boolPool.Return(matched);
             boolPool.Return(inLis);
         }
     }
 
     /// <summary>
-    /// Find the current position of an item that was originally at a given old index.
-    /// Uses the reconciler's element map to match elements.
+    /// Side-effect surface for <see cref="RunKeyedMiddleCore{TSink}"/>. The
+    /// keyed-middle positioning algorithm is expressed once against this
+    /// interface so the production reconciler (real WinUI Mount/Update/Move) and
+    /// the headless correctness oracle in the test suite drive the identical
+    /// index logic. Implemented as a <c>struct</c> behind a generic constraint
+    /// so the JIT devirtualizes the calls with no boxing on the hot path (and it
+    /// stays AOT/trim-clean — no reflection).
     /// </summary>
-    private static int FindItemByOldIndex(
-        IChildCollection children,
-        Element[] oldElements,
-        int oldIndex,
-        int searchStart,
-        int searchEnd,
-        Reconciler reconciler)
+    internal interface IKeyedMiddleSink
     {
-        for (int i = searchStart; i < searchEnd && i < children.Count; i++)
+        /// <summary>Mount new child <paramref name="newIdx"/> and insert it at
+        /// <paramref name="panelIdx"/>. Returns <c>false</c> when nothing was
+        /// inserted (mount produced no control) so the caller skips the model
+        /// shift.</summary>
+        bool MountInsert(int newIdx, int panelIdx);
+
+        /// <summary>Move the existing control at <paramref name="fromIdx"/> to
+        /// <paramref name="toIdx"/> using final-position semantics (matching
+        /// <see cref="IChildCollection.Move"/>).</summary>
+        void MoveExisting(int fromIdx, int toIdx);
+
+        /// <summary>Patch the surviving control for old-relative index
+        /// <paramref name="oldRelIdx"/> — currently located at
+        /// <paramref name="panelIdx"/> — against new child
+        /// <paramref name="newIdx"/>.</summary>
+        void Patch(int oldRelIdx, int newIdx, int panelIdx);
+    }
+
+    /// <summary>
+    /// Canonical LIS-based keyed reconciliation of the middle section, processed
+    /// right-to-left so each item is positioned immediately before its
+    /// already-placed right neighbour (the live "anchor"). LIS members are left
+    /// in place; only out-of-LIS movers are relocated, giving the minimal move
+    /// count. Every survivor is patched at its CURRENT live position (resolved
+    /// from <paramref name="oldRelToPanel"/>, which is kept exact across every
+    /// structural mutation) rather than a final index the panel has not yet been
+    /// rearranged into — the invariant that fixes the keyed-identity corruption
+    /// (C1) and the stale-index moves (H1).
+    /// </summary>
+    /// <typeparam name="TSink">Concrete sink struct; a generic constraint keeps
+    /// the calls devirtualized and allocation-free.</typeparam>
+    /// <param name="sink">Side-effect surface that applies the mount/move/patch
+    /// operations the walk decides on.</param>
+    /// <param name="newToOld">For each new-middle slot, the old-relative index it
+    /// reuses, or -1 for a freshly-mounted item.</param>
+    /// <param name="inLis">LIS membership mask over <paramref name="newToOld"/>.</param>
+    /// <param name="newMidLen">Number of items in the new middle section.</param>
+    /// <param name="oldMidLen">Number of items in the old middle section.</param>
+    /// <param name="initialAnchor">Live panel index of the start of the suffix
+    /// (end of the middle) — where right-most items are placed.</param>
+    /// <param name="oldRelToPanel">Live panel index of each surviving old item by
+    /// old-relative index (-1 if absent). Mutated in place to stay exact.</param>
+    internal static void RunKeyedMiddleCore<TSink>(
+        ref TSink sink,
+        int[] newToOld, bool[] inLis,
+        int newMidLen, int oldMidLen,
+        int initialAnchor, int[] oldRelToPanel)
+        where TSink : struct, IKeyedMiddleSink
+    {
+        int anchor = initialAnchor;
+        for (int i = newMidLen - 1; i >= 0; i--)
         {
-            var child = children.Get(i);
-            if (child is FrameworkElement fe && Reconciler.GetElementTag(fe) is Element tagElement)
+            int oldRel = newToOld[i];
+            if (oldRel < 0)
             {
-                if (oldIndex < oldElements.Length &&
-                    GetKey(tagElement, -1) == GetKey(oldElements[oldIndex], oldIndex))
-                    return i;
+                // New item: mount + insert immediately before the anchor.
+                if (sink.MountInsert(i, anchor))
+                {
+                    // Insertion at `anchor` shifts every tracked survivor at an
+                    // index >= anchor one slot to the right.
+                    for (int r = 0; r < oldMidLen; r++)
+                        if (oldRelToPanel[r] >= anchor) oldRelToPanel[r]++;
+                    // The new control now occupies `anchor` and is the anchor for
+                    // the next (left) item, so `anchor` itself is unchanged.
+                }
+                continue;
+            }
+
+            int cur = oldRelToPanel[oldRel];
+            if (cur < 0) continue; // Defensive: survivor not realized (skip).
+
+            if (!inLis[i])
+            {
+                // Out-of-LIS mover: relocate immediately before the anchor. With
+                // Move's final-position semantics, the destination is anchor-1
+                // when the control currently sits left of the anchor, else
+                // anchor itself.
+                int to = cur < anchor ? anchor - 1 : anchor;
+                if (cur != to)
+                {
+                    sink.MoveExisting(cur, to);
+                    // Keep the model exact: a Move shifts the half-open range
+                    // between the two endpoints by one slot.
+                    if (cur < to)
+                    {
+                        for (int r = 0; r < oldMidLen; r++)
+                        {
+                            int p = oldRelToPanel[r];
+                            if (p > cur && p <= to) oldRelToPanel[r] = p - 1;
+                        }
+                    }
+                    else
+                    {
+                        for (int r = 0; r < oldMidLen; r++)
+                        {
+                            int p = oldRelToPanel[r];
+                            if (p >= to && p < cur) oldRelToPanel[r] = p + 1;
+                        }
+                    }
+                    oldRelToPanel[oldRel] = to;
+                    cur = to;
+                }
+            }
+
+            sink.Patch(oldRel, i, cur);
+            anchor = cur;
+        }
+    }
+
+    /// <summary>
+    /// Production <see cref="IKeyedMiddleSink"/> — drives real WinUI controls
+    /// through the reconciler. A <c>readonly struct</c> so
+    /// <see cref="RunKeyedMiddleCore{TSink}"/> stays allocation- and
+    /// virtual-dispatch-free.
+    /// </summary>
+    private readonly struct RealKeyedMiddleSink : IKeyedMiddleSink
+    {
+        private readonly Element[] _oldChildren;
+        private readonly Element[] _newChildren;
+        private readonly int _oldStart;
+        private readonly int _newStart;
+        private readonly IChildCollection _children;
+        private readonly Reconciler _reconciler;
+        private readonly Action _requestRerender;
+        private readonly AnimationKind? _ambientKind;
+
+        public RealKeyedMiddleSink(
+            Element[] oldChildren, Element[] newChildren, int oldStart, int newStart,
+            IChildCollection children, Reconciler reconciler, Action requestRerender,
+            AnimationKind? ambientKind)
+        {
+            _oldChildren = oldChildren;
+            _newChildren = newChildren;
+            _oldStart = oldStart;
+            _newStart = newStart;
+            _children = children;
+            _reconciler = reconciler;
+            _requestRerender = requestRerender;
+            _ambientKind = ambientKind;
+        }
+
+        public bool MountInsert(int newIdx, int panelIdx)
+        {
+            var ctrl = _reconciler.Mount(_newChildren[_newStart + newIdx], _requestRerender);
+            if (ctrl is null) return false;
+            _children.Insert(panelIdx, ctrl);
+            ApplyAmbientEnterIfActive(ctrl, _newChildren[_newStart + newIdx], _ambientKind);
+            return true;
+        }
+
+        public void MoveExisting(int fromIdx, int toIdx)
+        {
+            var moved = _children.Get(fromIdx);
+            _children.Move(fromIdx, toIdx);
+            // Spec 042 §6 — implicit Offset animation on the moved child so the
+            // reorder reads visually under an ambient transaction.
+            if (_ambientKind is { } k)
+                ApplyAmbientMove(moved, k);
+        }
+
+        public void Patch(int oldRelIdx, int newIdx, int panelIdx)
+        {
+            if (panelIdx >= _children.Count) return;
+            var replacement = _reconciler.UpdateChild(
+                _oldChildren[_oldStart + oldRelIdx],
+                _newChildren[_newStart + newIdx],
+                _children.Get(panelIdx),
+                _requestRerender);
+            if (replacement is not null)
+            {
+                _reconciler.UnmountChild(_children.Get(panelIdx));
+                _children.Replace(panelIdx, replacement);
             }
         }
-        return -1;
     }
 
     /// <summary>
@@ -629,9 +752,9 @@ internal static class ChildReconciler
     }
 
     // ── Re-entrancy-safe Dictionary&lt;string,int&gt; pool ────────────────────
-    // ReconcileKeyedMiddle needs two transient key→index maps per call, and it
+    // ReconcileKeyedMiddle needs a transient key→index map per call, and it
     // recurses through UpdateChild. A per-thread stack hands each (nested) call
-    // its own instances: rented dicts are not in the pool, so an inner call can
+    // its own instance: rented dicts are not in the pool, so an inner call can
     // never grab a buffer the outer call is still using. Pool size is capped so
     // deep trees don't retain an unbounded number of dictionaries.
     [ThreadStatic] private static Stack<Dictionary<string, int>>? _keyIndexDictPool;

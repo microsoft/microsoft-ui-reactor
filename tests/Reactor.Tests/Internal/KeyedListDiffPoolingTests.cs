@@ -304,4 +304,93 @@ public class KeyedListDiffPoolingTests
         // Final state is internally consistent.
         AssertKeysMatch(s, current.ToArray());
     }
+
+    // ────────────────────────────────────────────────────────────────────
+    //  Allocation budgets (#1/#2/#11 pooling regression guards — M2)
+    //
+    //  Mirrors the GC.GetAllocatedBytesForCurrentThread warm-up + measured
+    //  pattern used by the other perf-budget tests (#665/#692, DockPerfBudget).
+    //  These FAIL if the per-diff pooling is reverted: the no-op path re-grows a
+    //  `new string[newCount]` (#2) and a HasDuplicates HashSet that now runs
+    //  ABOVE the fast path (#1); the general path re-grows the same, scaled by N.
+    // ────────────────────────────────────────────────────────────────────
+
+    private static readonly Func<Item, int, string> KeyFn = Key;
+
+    [Fact]
+    public void NoOp_SteadyState_Diff_Allocates_Nothing()
+    {
+        // The steady-state grid frame: keys never change. With the no-op fast
+        // path ABOVE the duplicate scan (#1) and the rented newKeys buffer (#2),
+        // an unchanged diff allocates ZERO heap bytes. The Item[] and key
+        // delegate are built ONCE so the loop measures only the diff itself.
+        var keys = new[] { "a", "b", "c", "d", "e", "f", "g", "h" };
+        var s = Seed(keys);
+        var items = Items(keys);
+
+        for (int i = 0; i < 200; i++) // warm: JIT + pool fill + Scratch growth
+        {
+            var st = KeyedListDiff.Apply(s, items, KeyFn);
+            Assert.False(st.AnyOps);
+        }
+
+        const int iterations = 10_000;
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < iterations; i++)
+            _ = KeyedListDiff.Apply(s, items, KeyFn);
+        var delta = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        // Pooled no-op is 0 B/iter. Allow a tiny constant for CI/JIT noise; a
+        // single reverted `new string[8]` (~88 B) or HasDuplicates HashSet
+        // (hundreds of B) per call would blow far past this.
+        Assert.True(delta < 8L * iterations,
+            $"steady-state no-op diff allocated {delta} B over {iterations} iters " +
+            $"({(double)delta / iterations:F2} B/iter); expected ~0 — pooling (#1/#2) likely reverted");
+    }
+
+    [Fact]
+    public void General_Keyed_Reorder_Diff_Stays_Within_Pooled_Budget()
+    {
+        // A real general-path diff over a large list (128 keys) reordered by a
+        // single adjacent swap each way. The pooled newKeys[128] (#2) and
+        // Scratch-backed duplicate scan (#11) keep per-diff allocation tiny
+        // (just the inherent ObservableCollection move event + movedRows list).
+        // Reverting pooling re-adds a `new string[128]` + a 128-entry HashSet
+        // per diff (several KB), which this budget catches.
+        const int n = 128;
+        var a = new string[n];
+        for (int i = 0; i < n; i++) a[i] = $"k{i}";
+        var b = (string[])a.Clone();
+        (b[0], b[1]) = (b[1], b[0]); // adjacent swap → one move
+
+        var s = Seed(a);
+        var itemsA = Items(a);
+        var itemsB = Items(b);
+
+        for (int i = 0; i < 100; i++) // warm both directions
+        {
+            KeyedListDiff.Apply(s, itemsB, KeyFn);
+            KeyedListDiff.Apply(s, itemsA, KeyFn);
+        }
+
+        const int pairs = 2_000;
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < pairs; i++)
+        {
+            KeyedListDiff.Apply(s, itemsB, KeyFn);
+            KeyedListDiff.Apply(s, itemsA, KeyFn);
+        }
+        var delta = GC.GetAllocatedBytesForCurrentThread() - before;
+        long perDiff = delta / (2L * pairs);
+
+        // Generous ceiling vs. the multi-KB-per-diff cost of reverted pooling,
+        // but far below it, so an un-pooled regression at N=128 fails loudly.
+        // Measured steady state is ~72 B/diff (a single ObservableCollection
+        // move event). A 256 B ceiling keeps ~3.5x headroom for runtime variance
+        // while a reverted `new string[128]` (~1 KB) + 128-entry HashSet (several
+        // KB) fails by a wide margin.
+        Assert.True(perDiff < 256,
+            $"general keyed reorder allocated {perDiff} B/diff (N={n}); pooled buffers " +
+            $"(#2 newKeys, #11 Scratch dup-scan) keep this small — likely reverted");
+    }
 }
