@@ -82,6 +82,11 @@ public class ChildReconcilerLisIntoTests
         for (int i = 0; i < arr.Length; i++)
         {
             if (!mask[i]) continue;
+            Assert.True(arr[i] != -1,
+                $"LIS selection must never include an unmapped sentinel (arr[i] == -1); " +
+                $"index {i} was selected. ComputeLISInto must skip sentinels entirely — " +
+                $"without this check a buggy impl could swap a real member for a -1 and " +
+                $"still satisfy strictly-increasing + length.");
             Assert.True(arr[i] > prev,
                 $"selected LIS values must be strictly increasing in index order; " +
                 $"index {i} (value {arr[i]}) breaks it");

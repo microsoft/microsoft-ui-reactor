@@ -208,7 +208,19 @@ internal static class KeyedListDiff
         // steady-state grid case (keys never change) never allocates or scans
         // a dup set. Skip the diff entirely and let the caller's
         // RefreshRealizedContainers handle per-row content reconciliation.
-        if (oldCount == newCount && SequenceEqualOrdinal(state.LastKeys, newKeys, newCount))
+        //
+        // The `ByKey.Count == oldCount` guard keeps this fast path strictly for
+        // the duplicate-free steady state. A prior duplicate bailout leaves
+        // Source/LastKeys still holding the dup keys but ByKey collapsed to
+        // first occurrences (ReactorListState.Reset), so ByKey.Count < oldCount
+        // there. Without the guard an *unchanged* duplicate list would match
+        // LastKeys and return Empty, silently skipping the duplicate
+        // bailout/diagnostic the remarks at the top of this file promise. The
+        // check is O(1) and short-circuits before the O(n) SequenceEqualOrdinal,
+        // so the common unique-key path pays nothing extra.
+        if (oldCount == newCount
+            && state.ByKey.Count == oldCount
+            && SequenceEqualOrdinal(state.LastKeys, newKeys, newCount))
             return DiffStats.Empty;
 
         // ── Fast path 2: empty ↔ empty ─────────────────────────────────
