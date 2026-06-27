@@ -958,7 +958,7 @@ function Format-PerfFlexSection {
     .SYNOPSIS
         Render the flex workload section: the four headline metrics plus an
         allocation sub-table measured on StressPerf.Flex — a deep nested, fully-realized
-        (non-virtualized) flex tree (~1500 leaf cells) whose per-child flex inputs
+        (non-virtualized) flex tree (~2000 leaf cells) whose per-child flex inputs
         (grow / basis / width) are re-rolled on a fraction of the leaves each tick. Empty
         array when there is nothing to show.
     .DESCRIPTION
@@ -994,7 +994,7 @@ function Format-PerfFlexSection {
     $lines = [System.Collections.Generic.List[string]]::new()
     $lines.Add("### Flex/Yoga layout workload (``StressPerf.Flex``, ``--percent $Percent``)")
     $lines.Add('')
-    $lines.Add("A separate macro workload: a **deep nested, fully-realized** (non-virtualized) flex tree (~1500 leaf cells) whose per-child flex inputs (grow / basis / width) are re-rolled on a ``--percent`` fraction of the leaves each tick, forcing a real **Yoga measure/layout pass** every frame while the unchanged leaves re-push identical inputs (the YogaNode setter-equality-guard / layout-cache-hit path). This drives the **FlexPanel / Yoga LAYOUT engine** &mdash; the sensitive macro signal for Yoga/Flex layout-engine **allocation + memory** work the positional StocksGrid and keyed-list legs can never reach. Same interleaved paired-Δ 95% CI as the headline table.")
+    $lines.Add("A separate macro workload: a **deep nested, fully-realized** (non-virtualized) flex tree (~2000 leaf cells) whose per-child flex inputs (grow / basis / width) are re-rolled on a ``--percent`` fraction of the leaves each tick, forcing a real **Yoga measure/layout pass** every frame while the unchanged leaves re-push identical inputs (the YogaNode setter-equality-guard / layout-cache-hit path). This drives the **FlexPanel / Yoga LAYOUT engine** &mdash; the sensitive macro signal for Yoga/Flex layout-engine **allocation + memory** work the positional StocksGrid and keyed-list legs can never reach. Same interleaved paired-Δ 95% CI as the headline table.")
     $lines.Add('')
     $lines.Add('| Metric | `main` (baseline) | This PR | Δ (95% CI) | Status |')
     $lines.Add('|---|--:|--:|--:|:--|')

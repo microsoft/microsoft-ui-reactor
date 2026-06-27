@@ -32,14 +32,18 @@ public readonly record struct FlexLeaf(int Id, string Label, double Grow, double
 /// </summary>
 public sealed class FlexSceneSource
 {
-    // Tree shape (fixed for the run). sections × rows × cols leaf cells, nested
-    // root-column → section-column → row → leaf, giving three container levels above
-    // the leaves. ~1500 leaves at meaningful depth so per-node inline-array memory
-    // (#142/#143) and per-frame list/line pooling (#141/#144) are at measurable scale,
-    // mirroring the StocksGrid/keyed-list ~500-cell magnitude but deeper.
-    public const int DefaultSections = 10;
-    public const int DefaultRows = 15;
-    public const int DefaultCols = 10;
+    // Tree shape. The single knob below — DefaultLeafTarget — drives the whole scale;
+    // bump it (and nothing else) if a smoke run shows the alloc-bytes/render or the
+    // memory delta is too small to clear harness noise. The inner shape (rows × cols per
+    // section) is fixed so the tree stays a deep three-level nest (root-column →
+    // section-column → row → leaf); the number of SECTIONS is derived to reach the leaf
+    // target. ~2000 leaves at meaningful depth so per-node inline-array memory
+    // (#142/#143) and per-frame list/line pooling (#141/#144) are at a scale that
+    // survives the noisy Avg-Memory-MB metric — node count is exactly what makes the
+    // inline-per-node-storage win visible.
+    public const int DefaultLeafTarget = 2000;
+    public const int RowsPerSection = 10;
+    public const int ColsPerRow = 10;
 
     public int Sections { get; }
     public int Rows { get; }
@@ -48,16 +52,17 @@ public sealed class FlexSceneSource
     private readonly FlexLeaf[] _leaves;
     private readonly Random _rng = new(42); // deterministic seed (matches StockDataSource / KeyedListSource)
 
-    public FlexSceneSource(int sections = DefaultSections, int rows = DefaultRows, int cols = DefaultCols)
+    public FlexSceneSource(int leafTarget = DefaultLeafTarget)
     {
-        if (sections < 1) sections = 1;
-        if (rows < 1) rows = 1;
-        if (cols < 1) cols = 1;
-        Sections = sections;
-        Rows = rows;
-        Cols = cols;
+        if (leafTarget < 1) leafTarget = 1;
+        Rows = RowsPerSection;
+        Cols = ColsPerRow;
+        int perSection = Rows * Cols;
+        // Round the section count UP so the realized leaf count is >= the requested
+        // target (e.g. target 2000 → 20 sections → exactly 2000 leaves).
+        Sections = Math.Max(1, (leafTarget + perSection - 1) / perSection);
 
-        _leaves = new FlexLeaf[sections * rows * cols];
+        _leaves = new FlexLeaf[Sections * Rows * Cols];
         for (int i = 0; i < _leaves.Length; i++)
             _leaves[i] = MakeLeaf(i);
     }

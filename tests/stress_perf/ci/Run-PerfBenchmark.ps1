@@ -122,7 +122,7 @@
 
 .PARAMETER IncludeFlex
     Run a fourth interleaved A/B leg on StressPerf.Flex — a deep nested, fully-realized
-    (non-virtualized) flex tree (~1500 leaf cells) whose per-child flex inputs
+    (non-virtualized) flex tree (~2000 leaf cells) whose per-child flex inputs
     (grow / basis / width) are re-rolled on a `--percent` fraction of the leaves each
     tick, forcing a real Yoga measure/layout pass every frame — and append its own
     PR-vs-main table to the comment (compare mode). This exercises the FlexPanel / Yoga
@@ -978,7 +978,7 @@ try {
         }
 
         # Fourth interleaved A/B leg: the flex workload. StressPerf.Flex renders a deep
-        # nested, fully-realized (non-virtualized) flex tree (~1500 leaf cells) and
+        # nested, fully-realized (non-virtualized) flex tree (~2000 leaf cells) and
         # re-rolls the per-child flex inputs (grow / basis / width) on a --percent
         # fraction of the leaves each tick, forcing a real Yoga measure/layout pass every
         # frame — the FlexPanel / Yoga LAYOUT engine that StocksGrid's positional cells

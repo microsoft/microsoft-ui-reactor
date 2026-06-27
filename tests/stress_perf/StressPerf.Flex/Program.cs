@@ -11,7 +11,7 @@
 // exactly why it can't surface them either.
 //
 // This harness renders a DEEP NESTED, fully-realized (non-virtualized) flex tree
-// (sections → rows → leaf cells, ~1500 leaves) and, every tick, re-rolls the flex
+// (sections → rows → leaf cells, ~2000 leaves) and, every tick, re-rolls the flex
 // inputs (grow / basis / width) on a `--percent` fraction of the leaves — forcing a
 // real Yoga relayout each frame. The remaining leaves re-push their UNCHANGED inputs,
 // which is precisely the YogaNode setter-equality-guard (cache-hit) path #670 targets.
@@ -180,6 +180,7 @@ class FlexApp : Component
         // layout-engine work, not child diffing.
         int sections = source.Sections, rows = source.Rows, cols = source.Cols;
         var sectionEls = new Element[sections];
+        Element? sampleLeaf = null;
         int li = 0;
         for (int s = 0; s < sections; s++)
         {
@@ -195,6 +196,7 @@ class FlexApp : Component
                         .Width(leaf.Width);
                 }
                 rowEls[r] = FlexRow(cellEls);
+                sampleLeaf ??= cellEls[0];
             }
             sectionEls[s] = FlexColumn(rowEls).Flex(grow: 1);
         }
@@ -203,23 +205,31 @@ class FlexApp : Component
         Element flexRoot = FlexColumn(sectionEls);
 
         // Structural self-check (runs once): the representative containers MUST be
-        // FlexElement-backed. If a refactor silently swapped the scene onto Grid/StackPanel
-        // (which never run the Yoga layout engine), this workload would report numbers
-        // unrelated to Flex/Yoga and quietly mislead the #670 comparison. Fail loudly (no
-        // metrics.json is written) rather than report misleading layout numbers.
+        // FlexElement-backed AND a representative leaf MUST survive the fluent
+        // .Flex(...).Width(...) chain as a concrete TextBlockElement. The FlexElement check
+        // guards against a refactor silently swapping the scene onto Grid/StackPanel (which
+        // never run the Yoga layout engine). The leaf-type check guards against a modifier
+        // regression that degrades the leaf to a bare Element and drops its grow/basis/width
+        // inputs — without those the reconciler pushes nothing onto the Yoga nodes, so a
+        // mutation would be a no-op (no relayout). Either failure means the workload is NOT
+        // exercising the Flex/Yoga layout engine, so fail loudly (no metrics.json is written)
+        // rather than report misleading layout numbers.
         if (!shapeVerifiedRef.Current)
         {
             shapeVerifiedRef.Current = true;
             bool rootIsFlex = flexRoot is FlexElement;
             bool sectionIsFlex = sectionEls.Length > 0 && sectionEls[0] is FlexElement;
-            if (!rootIsFlex || !sectionIsFlex)
+            bool leafIsTextBlock = sampleLeaf is TextBlockElement;
+            if (!rootIsFlex || !sectionIsFlex || !leafIsTextBlock)
             {
                 Console.Error.WriteLine(
                     $"FATAL: {AppName} scene is not Flex/Yoga-backed (root={rootIsFlex} " +
-                    $"section={sectionIsFlex}) — the layout engine under measurement would " +
-                    "not run; results are invalid.");
+                    $"section={sectionIsFlex} leafTextBlock={leafIsTextBlock}) — the layout " +
+                    "engine under measurement would not run (mutations would be no-ops); " +
+                    "results are invalid.");
                 Environment.FailFast(
-                    $"{AppName}: Flex/Yoga-layout invariant violated (scene not FlexElement-backed).");
+                    $"{AppName}: Flex/Yoga-layout invariant violated (scene not FlexElement-backed " +
+                    "or leaf degraded through the flex modifier chain).");
             }
         }
 
