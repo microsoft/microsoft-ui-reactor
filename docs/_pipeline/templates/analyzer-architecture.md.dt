@@ -111,6 +111,7 @@ via `.editorconfig`.
 | `REACTOR_HOOKS_006` | Info | Resource fetcher looks non-idempotent | `HookRulesAnalyzer.cs` |
 | `REACTOR_HOOKS_007` | Warning | UseMemoCells builder captures variable not in deps | `UseMemoCellsAnalyzer.cs` |
 | `REACTOR_HOOKS_008` | Info | State variable read after its setter in the same synchronous handler | `HookRulesAnalyzer.cs` |
+| `REACTOR_HOOKS_009` | Warning | Command.DebounceMs set on a command bound without UseCommand | `CommandDebounceAnalyzer.cs` |
 | `REACTOR_A11Y_001` | Warning | Icon-only button needs an accessible name | `AccessibilityAnalyzers.cs` |
 | `REACTOR_A11Y_002` | Warning | Image needs alt text or AccessibilityHidden | `AccessibilityAnalyzers.cs` |
 | `REACTOR_A11Y_003` | Warning | Form field needs a label | `AccessibilityAnalyzers.cs` |
@@ -158,6 +159,31 @@ map it to a suggested theme token. The descriptor message format has a
 `ColorToThemeToken` after the syntactic match. The diagnostic flows
 through to a paired `CodeFixProvider` that rewrites the literal to the
 matching `Theme.Accent` / `Theme.PrimaryText` member.
+
+## Local-dataflow matching — the DebounceMs case
+
+[`REACTOR_HOOKS_009`](rules-of-reactor.md) sits at the other end of the
+spectrum from the substring-only WithKey check: it needs a little local
+data-flow. `Command.DebounceMs` only takes effect when the command is
+routed through `UseCommand` — the leading-edge debounce window lives in
+the hook store, and a plain `Command` record reconstructed every render
+has nowhere to persist it. So `Button(new Command { … DebounceMs =
+1500 })` is silently inert; nothing fails at compile or run time.
+
+`CommandDebounceAnalyzer` anchors on the `new Command { … }` /
+`… with { DebounceMs = … }` expression that sets a non-zero
+`DebounceMs`, confirms via the semantic model that the type is the
+Reactor `Command` / `Command<T>`, then asks one question: does this
+value reach a control binding without passing through `UseCommand`?
+When the command is assigned to a local, the rule walks every in-scope
+reference to that local — if any reference is an argument to
+`UseCommand`, the command is correctly routed and the rule stays
+silent; if instead it flows into a Reactor binding factory (`Button`,
+`MenuItem`, the `.Command(...)` modifier, …) the rule fires. A command
+that is merely returned or stored is left alone, so a factory method
+like `Command MakeSave() => new Command { … DebounceMs = … }` is not a
+false positive. The paired code fix wraps the offending expression in
+`UseCommand(...)`.
 
 ## Property-bag handoff to the code fix
 

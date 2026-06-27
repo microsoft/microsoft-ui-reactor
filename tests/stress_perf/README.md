@@ -34,6 +34,13 @@ StressPerf.Reactor/                ← Reactor (this repo's framework, naive —
 StressPerf.ReactorOptimized/       ← Reactor with spec-034 perf-tuning idioms
                                      (direct-record-initializer construction +
                                      UseMemoCells; spec 034 reference impl)
+StressPerf.KeyedList/              ← Reactor KEYED child-reconcile scenario: ~500
+                                     stably-keyed children reordered / inserted /
+                                     removed per tick, driving ChildReconciler
+                                     .ReconcileKeyed → ReconcileKeyedMiddle (LIS) —
+                                     the path the positional StocksGrid never hits.
+                                     --percent sets the per-tick reorder budget
+                                     (0 = the keyed all-match floor).
 StressPerf.Shared/                 ← PerfTracker, StockDataSource, ListItemSource
 
 StressPerf.VirtualList.Reactor/    ← virtualizing-list scenario (Reactor LazyVStack)

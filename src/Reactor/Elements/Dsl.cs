@@ -36,6 +36,12 @@ namespace Microsoft.UI.Reactor;
 /// </summary>
 public static partial class Factories
 {
+    // Shared single-Star track array for the cross-axis of UniformGrid /
+    // InterspersedGrid. Safe to share: GridDefinition immediately converts
+    // GridSize[] tracks to string[] (read-only consumption), so the array is
+    // never retained or mutated by callers, and GridSize is a value struct.
+    private static readonly GridSize[] s_oneStar = { GridSize.Star() };
+
     private static Optional<int> ToOptionalSelectedIndex(int? selectedIndex) =>
         selectedIndex.HasValue ? Optional<int>.Of(selectedIndex.Value) : Optional<int>.Unset;
 
@@ -796,33 +802,38 @@ public static partial class Factories
                 throw new ArgumentOutOfRangeException(nameof(proportions), $"proportions[{i}] must be a non-negative number, got {proportions[i]}");
         }
 
-        var sizes = new List<GridSize>();
-        var children = new List<Element>();
+        var oneStar = s_oneStar;
         bool isHorizontal = orientation == Orientation.Horizontal;
+
+        // #172 — exact track/child count is known up front (one track per item
+        // plus a separator between each pair), so fill pre-sized arrays directly
+        // instead of growing two Lists and copying them with ToArray().
+        int trackCount = items.Length * 2 - 1;
+        var sizes = new GridSize[trackCount];
+        var children = new Element[trackCount];
 
         for (int i = 0; i < items.Length; i++)
         {
             var starValue = proportions[i];
-            sizes.Add(GridSize.Star(starValue));
+            sizes[i * 2] = GridSize.Star(starValue);
 
-            children.Add(isHorizontal
+            children[i * 2] = isHorizontal
                 ? items[i].Grid(row: 0, column: i * 2)
-                : items[i].Grid(row: i * 2, column: 0));
+                : items[i].Grid(row: i * 2, column: 0);
 
             if (i < items.Length - 1)
             {
-                sizes.Add(GridSize.Px(separatorSize));
+                sizes[i * 2 + 1] = GridSize.Px(separatorSize);
                 var sep = separatorFactory(i);
-                children.Add(isHorizontal
+                children[i * 2 + 1] = isHorizontal
                     ? sep.Grid(row: 0, column: i * 2 + 1)
-                    : sep.Grid(row: i * 2 + 1, column: 0));
+                    : sep.Grid(row: i * 2 + 1, column: 0);
             }
         }
 
-        var oneStar = new[] { GridSize.Star() };
         return isHorizontal
-            ? Grid(sizes.ToArray(), oneStar, children.ToArray())
-            : Grid(oneStar, sizes.ToArray(), children.ToArray());
+            ? Grid(sizes, oneStar, children)
+            : Grid(oneStar, sizes, children);
     }
 
     /// <summary>
@@ -834,20 +845,34 @@ public static partial class Factories
         var filtered = FilterChildren(items);
         if (filtered.Length == 0) return Grid(global::System.Array.Empty<GridSize>(), global::System.Array.Empty<GridSize>());
 
-        var sizes = Enumerable.Repeat(GridSize.Star(), filtered.Length).ToArray();
-        var oneStar = new[] { GridSize.Star() };
+        // #171 — fill the equal-Star track array with a pre-sized loop instead
+        // of Enumerable.Repeat(...).ToArray() (which allocates a LINQ iterator on
+        // top of the array). GridSize is a value struct, so every slot is the
+        // same Star value.
+        var sizes = new GridSize[filtered.Length];
+        var star = GridSize.Star();
+        for (int i = 0; i < sizes.Length; i++)
+            sizes[i] = star;
+        var oneStar = s_oneStar;
         bool isHorizontal = orientation == Orientation.Horizontal;
 
+        // Position each cell into its OWN array — never write back into
+        // `filtered`. FilterChildren's fast path returns the caller's array
+        // aliased (no copy), so mutating it in place would corrupt a
+        // caller-supplied `items` array with .Grid(...) wrappers. This matches
+        // the historical behavior, where FilterChildren always returned a fresh
+        // owned array that was safe to fill.
+        var positioned = new Element[filtered.Length];
         for (int i = 0; i < filtered.Length; i++)
         {
-            filtered[i] = isHorizontal
+            positioned[i] = isHorizontal
                 ? filtered[i].Grid(row: 0, column: i)
                 : filtered[i].Grid(row: i, column: 0);
         }
 
         return isHorizontal
-            ? Grid(sizes, oneStar, filtered)
-            : Grid(oneStar, sizes, filtered);
+            ? Grid(sizes, oneStar, positioned)
+            : Grid(oneStar, sizes, positioned);
     }
 
     // ── Navigation ──────────────────────────────────────────────────
@@ -1317,15 +1342,36 @@ public static partial class Factories
     /// Map a list to elements (like .map() in React JSX):
     ///   ForEach(items, item =&gt; TextBlock(item.Name))
     /// </summary>
-    public static Element ForEach<T>(IEnumerable<T> items, Func<T, Element> render) =>
-        new GroupElement(items.Select(render).ToArray());
+    public static Element ForEach<T>(IEnumerable<T> items, Func<T, Element> render)
+    {
+        // #170 — IReadOnlyList fast-path: pre-size the Element[] and index
+        // directly, skipping the Select iterator + closure allocations that
+        // dominate when re-rendering large data-bound collections every frame.
+        if (items is IReadOnlyList<T> list)
+        {
+            var arr = new Element[list.Count];
+            for (int i = 0; i < arr.Length; i++)
+                arr[i] = render(list[i]);
+            return new GroupElement(arr);
+        }
+        return new GroupElement(items.Select(render).ToArray());
+    }
 
     /// <summary>
     /// Map with index:
     ///   ForEach(items, (item, i) =&gt; TextBlock($"{i}: {item}"))
     /// </summary>
-    public static Element ForEach<T>(IEnumerable<T> items, Func<T, int, Element> render) =>
-        new GroupElement(items.Select((item, i) => render(item, i)).ToArray());
+    public static Element ForEach<T>(IEnumerable<T> items, Func<T, int, Element> render)
+    {
+        if (items is IReadOnlyList<T> list)
+        {
+            var arr = new Element[list.Count];
+            for (int i = 0; i < arr.Length; i++)
+                arr[i] = render(list[i], i);
+            return new GroupElement(arr);
+        }
+        return new GroupElement(items.Select((item, i) => render(item, i)).ToArray());
+    }
 
     /// <summary>
     /// Groups elements without introducing a layout container (like React's Fragment).
@@ -1900,8 +1946,11 @@ public static partial class Factories
         }
         if (!needsExpansion) return (Element[])(object)children;
 
-        // Flatten GroupElements and remove nulls
-        var result = new List<Element>();
+        // #173 — slow path: two passes (count, then fill an exactly-sized array)
+        // instead of growing a List and copying it with ToArray(). Flattens one
+        // level of GroupElement and drops null / EmptyElement, matching the prior
+        // behavior exactly.
+        int count = 0;
         for (int i = 0; i < children.Length; i++)
         {
             if (children[i] is GroupElement group)
@@ -1909,14 +1958,32 @@ public static partial class Factories
                 foreach (var gc in group.Children)
                 {
                     if (gc is not null and not EmptyElement)
-                        result.Add(gc);
+                        count++;
                 }
             }
             else if (children[i] is not null and not EmptyElement)
             {
-                result.Add(children[i]!);
+                count++;
             }
         }
-        return result.ToArray();
+
+        var result = new Element[count];
+        int idx = 0;
+        for (int i = 0; i < children.Length; i++)
+        {
+            if (children[i] is GroupElement group)
+            {
+                foreach (var gc in group.Children)
+                {
+                    if (gc is not null and not EmptyElement)
+                        result[idx++] = gc;
+                }
+            }
+            else if (children[i] is not null and not EmptyElement)
+            {
+                result[idx++] = children[i]!;
+            }
+        }
+        return result;
     }
 }

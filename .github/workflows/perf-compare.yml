@@ -14,10 +14,15 @@
 #   Avg Diff ms       lower is better
 #   Avg Memory MB     lower is better
 #
-# Each metric shows main, PR, a signed Δ%, and an improvement/regression/within-
-# noise status. A second table cross-references vanilla WinUI3 (StressPerf.Direct)
-# and the Rust `windows-reactor` port (test_reactor_perf from microsoft/windows-rs)
-# — both built and measured live on the same runner.
+# Each metric shows main, PR, a signed Δ (with a 95% CI), and an improvement/
+# regression/within-noise status. Further tables follow: a low-mutation skip-floor
+# leg, an allocation comparison, a keyed-list leg (StressPerf.KeyedList — a ~500-row
+# stably keyed list whose reorder/insert/remove ticks drive the reconciler's keyed
+# LIS diff arm the positional StocksGrid cells never hit), the reconciler micro-suite,
+# and a cross-framework reference (vanilla WinUI3 (StressPerf.Direct) + the Rust
+# `windows-reactor` port, test_reactor_perf from microsoft/windows-rs — both measured
+# live on the same runner). See tests/stress_perf/ci/README.md for the authoritative
+# comment layout.
 #
 # ── Why `issue_comment` (not a label) ────────────────────────────────────────
 # `issue_comment` always runs the workflow from the DEFAULT branch, so the perf
@@ -73,8 +78,10 @@ jobs:
          contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
       }}
     runs-on: windows-latest
-    # 60 (not 40): the Rust cross-framework leg cold-builds the windows-rs port.
-    timeout-minutes: 60
+    # 75 (not 60): the Rust cross-framework leg cold-builds the windows-rs port, and
+    # the macro comparison now runs three interleaved A/B legs (headline + skip-floor
+    # + keyed-list) plus the micro-suite — the keyed leg adds a build + ~Reps runs.
+    timeout-minutes: 75
     env:
       GH_REPO: ${{ github.repository }}
       # Pinned microsoft/windows-rs commit whose `test_reactor_perf` crate backs
@@ -102,7 +109,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@9a946fdbd5fb07b82b2f5a4466058b876ab72bb2 # v5.3.0
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
         with:
           dotnet-version: 10.0.x
 
