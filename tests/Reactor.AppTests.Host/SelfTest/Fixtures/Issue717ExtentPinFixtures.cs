@@ -279,9 +279,19 @@ internal static class Issue717ExtentPinFixtures
             H.Check("Issue717_NoClobber_RtbMounted", rtb is not null);
             if (rtb is null) return;
 
+            double fullHeight = rtb.ActualHeight;
+            H.Check("Issue717_NoClobber_RtbMeasured", fullHeight > 0);
+
             // Engage the pin via a real inline-UI mutation (raises MinHeight to the extent).
+            int baseline = Reconciler.InlineUiPinEngagementCount;
             H.ClickButton("MutatePin717");
             await host.WaitForIdleAsync();
+
+            // Prove the pin actually engaged and raised the floor, so the no-clobber
+            // assertion below cannot pass vacuously (e.g. if the pin never ran).
+            H.Check("Issue717_NoClobber_PinEngaged",
+                Reconciler.InlineUiPinEngagementCount > baseline);
+            H.Check("Issue717_NoClobber_FloorRaised", rtb.MinHeight >= fullHeight - 1.0);
 
             // Simulate the author setting a fresh MinHeight while the pin is still pending,
             // e.g. a `.Set(rtb => rtb.MinHeight = …)` modifier or a subsequent render.

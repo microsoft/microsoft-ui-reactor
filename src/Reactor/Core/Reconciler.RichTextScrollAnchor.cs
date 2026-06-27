@@ -165,11 +165,28 @@ public sealed partial class Reconciler
         public bool HasOriginal;
         public int Generation;
 
+        // Whether MinHeight had a *local* value before the pin raised it. If it came from
+        // a Style/theme setter instead, restoring by assignment would promote it to a
+        // local value and freeze later style/theme updates — so we ClearValue in that
+        // case rather than writing the snapshot back.
+        public bool OriginalWasLocal;
+
         // The floor value the pin last wrote to rtb.MinHeight (NaN when the pin did not
         // raise it, e.g. an author MinHeight already exceeded the extent). The deferred
         // release restores OriginalMinHeight only while MinHeight still equals this — so
         // an author who changes MinHeight during the pin window is never clobbered.
         public double PinnedFloor = double.NaN;
+    }
+
+    // Undo the pinned floor, preserving the original WinUI value precedence: ClearValue
+    // when MinHeight had no local value before the pin (so a Style/theme value re-applies
+    // and keeps tracking), otherwise restore the captured local value.
+    private static void RestorePinnedMinHeight(WinUI.RichTextBlock rtb, InlineUiExtentPin pin)
+    {
+        if (pin.OriginalWasLocal)
+            rtb.MinHeight = pin.OriginalMinHeight;
+        else
+            rtb.ClearValue(FrameworkElement.MinHeightProperty);
     }
 
     private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<WinUI.RichTextBlock, InlineUiExtentPin> s_inlineUiExtentPins = new();
@@ -192,6 +209,8 @@ public sealed partial class Reconciler
         if (!pin.HasOriginal)
         {
             pin.OriginalMinHeight = rtb.MinHeight;
+            pin.OriginalWasLocal =
+                rtb.ReadLocalValue(FrameworkElement.MinHeightProperty) != DependencyProperty.UnsetValue;
             pin.HasOriginal = true;
         }
 
@@ -223,12 +242,12 @@ public sealed partial class Reconciler
             if (--framesRemaining > 0) return;
 
             CompositionTarget.Rendering -= onRendering;
-            // Content is full again. Restore the author's MinHeight only if the floor we
+            // Content is full again. Restore the original MinHeight only if the floor we
             // raised is still in place — if the author changed MinHeight during the pin
             // window (their setter runs after UpdateRichTextBlocks in the same reconcile,
             // or on a later render), leave their value untouched.
             if (rtb.MinHeight == pin.PinnedFloor)
-                rtb.MinHeight = pin.OriginalMinHeight;
+                RestorePinnedMinHeight(rtb, pin);
             pin.HasOriginal = false;
             pin.PinnedFloor = double.NaN;
         };
@@ -249,7 +268,7 @@ public sealed partial class Reconciler
 
         pin.Generation++; // supersede any pending release so it unhooks without writing
         if (pin.HasOriginal && rtb.MinHeight == pin.PinnedFloor)
-            rtb.MinHeight = pin.OriginalMinHeight;
+            RestorePinnedMinHeight(rtb, pin);
         pin.HasOriginal = false;
         pin.PinnedFloor = double.NaN;
         s_inlineUiExtentPins.Remove(rtb);
