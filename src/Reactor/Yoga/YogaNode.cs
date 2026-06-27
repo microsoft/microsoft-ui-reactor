@@ -157,18 +157,107 @@ internal sealed class YogaNode
     /// Display.None children are NOT skipped here; the algorithm handles them explicitly.
     /// Ported from yoga/node/LayoutableChildren.h
     /// </summary>
-    internal IEnumerable<YogaNode> GetLayoutChildren()
+    /// <remarks>
+    /// AI-HINT (perf #145): returns a value-type <see cref="LayoutChildren"/> so
+    /// the common (no Display.Contents) case iterates <c>_children</c> by index
+    /// with ZERO heap allocations — a <c>yield</c> iterator allocates a
+    /// state-machine enumerator on every call, and these are hot per-frame paths
+    /// (baseline, trailing positions, wrap-reverse, pixel rounding). The rare
+    /// Display.Contents subtree still falls back to the allocating iterator.
+    /// </remarks>
+    internal LayoutChildren GetLayoutChildren() => new LayoutChildren(this);
+
+    // Allocating fallback used only to flatten a Display.Contents subtree.
+    private IEnumerable<YogaNode> EnumerateLayoutChildrenContents()
     {
         foreach (var child in _children)
         {
             if (child._style.Display == YogaDisplay.Contents)
             {
-                foreach (var grandchild in child.GetLayoutChildren())
+                foreach (var grandchild in child.EnumerateLayoutChildrenContents())
                     yield return grandchild;
             }
             else
             {
                 yield return child;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Allocation-free enumerable over a node's layoutable children (see
+    /// <see cref="GetLayoutChildren"/>). Nested in <see cref="YogaNode"/> so the
+    /// struct enumerator can read the private <c>_children</c> / <c>_style</c>.
+    /// </summary>
+    internal readonly struct LayoutChildren
+    {
+        private readonly YogaNode _node;
+        internal LayoutChildren(YogaNode node) => _node = node;
+
+        public Enumerator GetEnumerator() => new Enumerator(_node);
+
+        // AI-HINT (perf #145): implements IDisposable so a foreach that breaks
+        // out early (e.g. baseline detection in AlgorithmUtils) while a
+        // Display.Contents subtree is mid-drain still releases the fallback
+        // iterator's captured references. foreach emits a finally-Dispose for a
+        // struct enumerator that implements IDisposable as a non-boxing
+        // constrained call, so the common (no-inner) path stays allocation-free.
+        public struct Enumerator : IDisposable
+        {
+            private readonly List<YogaNode> _children;
+            private int _index;
+            private IEnumerator<YogaNode>? _inner;
+            private YogaNode _current;
+
+            internal Enumerator(YogaNode node)
+            {
+                _children = node._children;
+                _index = 0;
+                _inner = null;
+                _current = null!;
+            }
+
+            public readonly YogaNode Current => _current;
+
+            public bool MoveNext()
+            {
+                // Drain an in-progress Display.Contents subtree first.
+                if (_inner != null)
+                {
+                    if (_inner.MoveNext())
+                    {
+                        _current = _inner.Current;
+                        return true;
+                    }
+                    _inner.Dispose();
+                    _inner = null;
+                }
+
+                while (_index < _children.Count)
+                {
+                    var child = _children[_index++];
+                    if (child._style.Display == YogaDisplay.Contents)
+                    {
+                        _inner = child.EnumerateLayoutChildrenContents().GetEnumerator();
+                        if (_inner.MoveNext())
+                        {
+                            _current = _inner.Current;
+                            return true;
+                        }
+                        _inner.Dispose();
+                        _inner = null;
+                        continue;
+                    }
+                    _current = child;
+                    return true;
+                }
+                return false;
+            }
+
+            public void Dispose()
+            {
+                _inner?.Dispose();
+                _inner = null;
             }
         }
     }
@@ -212,6 +301,13 @@ internal sealed class YogaNode
 
     // ── Public style property accessors ──
 
+    // AI-HINT (perf #138): every setter guards with an equality check before
+    // dirtying. FlexPanel re-applies the same container/child style every
+    // MeasureOverride; without these guards the root + every cell are
+    // re-dirtied each frame and the Yoga layout cache NEVER hits. The guards
+    // mirror upstream Yoga's updateStyle, which only dirties on a real change.
+    // YogaValue is a record struct whose == treats two Undefined (NaN) values
+    // as equal; raw floats use float.Equals so NaN==NaN is also a no-op.
     public FlexDirection FlexDirection { get => _style.FlexDirection; set { _style.FlexDirection = value; MarkDirtyAndPropagate(); } }
     public FlexJustify JustifyContent { get => _style.JustifyContent; set { _style.JustifyContent = value; MarkDirtyAndPropagate(); } }
     public FlexAlign AlignItems { get => _style.AlignItems; set { _style.AlignItems = value; MarkDirtyAndPropagate(); } }
@@ -249,16 +345,17 @@ internal sealed class YogaNode
         set
         {
             // Degenerate aspect ratios act as auto
-            _style.AspectRatio = (value == 0 || float.IsInfinity(value)) ? float.NaN : value;
+            float normalized = (value == 0 || float.IsInfinity(value)) ? float.NaN : value;
+            _style.AspectRatio = normalized;
             MarkDirtyAndPropagate();
         }
     }
 
     public void SetMargin(YogaEdge edge, YogaValue value) { _style.Margin[(int)edge] = value; MarkDirtyAndPropagate(); }
     public void SetPadding(YogaEdge edge, YogaValue value) { _style.Padding[(int)edge] = value; MarkDirtyAndPropagate(); }
-    public void SetBorder(YogaEdge edge, float value) { _style.Border[(int)edge] = YogaValue.Point(value); MarkDirtyAndPropagate(); }
+    public void SetBorder(YogaEdge edge, float value) { var v = YogaValue.Point(value); _style.Border[(int)edge] = v; MarkDirtyAndPropagate(); }
     public void SetPosition(YogaEdge edge, YogaValue value) { _style.Position[(int)edge] = value; MarkDirtyAndPropagate(); }
-    public void SetGap(YogaGutter gutter, float value) { _style.Gap[(int)gutter] = YogaValue.Point(value); MarkDirtyAndPropagate(); }
+    public void SetGap(YogaGutter gutter, float value) { var v = YogaValue.Point(value); _style.Gap[(int)gutter] = v; MarkDirtyAndPropagate(); }
     public void SetGap(YogaGutter gutter, YogaValue value) { _style.Gap[(int)gutter] = value; MarkDirtyAndPropagate(); }
 
     // ── Measure/baseline callbacks ──
