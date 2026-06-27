@@ -233,6 +233,19 @@ public sealed class ChartPalette
     }
 
     /// <summary>
+    /// Single-copy overload of <see cref="FromColors(D3.D3Color[])"/> for internal callers that
+    /// already hold the colors in an <see cref="IReadOnlyList{T}"/> (e.g. the pie
+    /// <c>.SetColors(...)</c> scanner palette, issue #645). Produces an identical Tier-3 palette
+    /// but avoids the extra array allocation the <c>params</c> overload incurs when the source is
+    /// not already a <c>D3Color[]</c> — the list is materialized exactly once.
+    /// </summary>
+    internal static ChartPalette FromColors(IReadOnlyList<D3.D3Color> colors)
+    {
+        if (colors.Count == 0) throw new ArgumentException("At least one color is required.", nameof(colors));
+        return new([.. colors]);
+    }
+
+    /// <summary>
     /// Creates a palette from raw colors — escape hatch with no validation (Tier 4).
     /// Triggers scanner warning A11Y_CHART_012.
     /// </summary>

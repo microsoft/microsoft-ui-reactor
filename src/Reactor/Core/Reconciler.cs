@@ -160,6 +160,15 @@ public sealed partial class Reconciler : IDisposable
     internal volatile bool ForceFullRenderPending;
     private bool _forceFullRenderActive;
 
+    // True for the duration of a hot-reload force pass. Read by ChildReconciler's
+    // positional fast path: while a force pass is active, untouched wrapper cells
+    // (Component/Memo/Func) in a memoized range must still re-render through the
+    // wrapper, so the structural skip must defer to the full walk (which honours
+    // ForceRenderThroughWrapper per cell). A pure hot-reload force does NOT mark
+    // any node SelfTriggered before the dirty-ancestor path is built, so the
+    // IsOnDirtyAncestorPath gate alone does not cover this case.
+    internal bool ForceFullRenderActive => _forceFullRenderActive;
+
     // True only during a force pass and only for the wrapper elements whose
     // skip would prevent ReconcileComponent from running. Used by Update()
     // and ChildReconciler to bypass their structural-equality short-circuits.
@@ -1916,11 +1925,11 @@ public sealed partial class Reconciler : IDisposable
                 global::System.Diagnostics.Tracing.EventLevel.Informational,
                 Diagnostics.ReactorEventSource.Keywords.Reconcile))
         {
-            ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender);
+            ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender, panel);
             return;
         }
         Diagnostics.ReactorEventSource.Log.ChildReconcileStart(oldChildren.Length, newChildren.Length);
-        try { ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender); }
+        try { ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender, panel); }
         finally { Diagnostics.ReactorEventSource.Log.ChildReconcileStop(); }
     }
 
@@ -1932,18 +1941,19 @@ public sealed partial class Reconciler : IDisposable
     // descriptor panels match the legacy hand-coded Update* methods byte-for-byte.
     internal void ReconcilePanelChildrenInto(
         Element[] oldChildren, Element[] newChildren,
-        UIElementCollection collection, Action requestRerender)
+        UIElementCollection collection, Action requestRerender,
+        UIElement? parentControl = null)
     {
         var childCollection = new PanelChildCollection(collection);
         if (!Diagnostics.ReactorEventSource.Log.IsEnabled(
                 global::System.Diagnostics.Tracing.EventLevel.Informational,
                 Diagnostics.ReactorEventSource.Keywords.Reconcile))
         {
-            ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender);
+            ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender, parentControl);
             return;
         }
         Diagnostics.ReactorEventSource.Log.ChildReconcileStart(oldChildren.Length, newChildren.Length);
-        try { ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender); }
+        try { ChildReconciler.Reconcile(oldChildren, newChildren, childCollection, this, requestRerender, parentControl); }
         finally { Diagnostics.ReactorEventSource.Log.ChildReconcileStop(); }
     }
 

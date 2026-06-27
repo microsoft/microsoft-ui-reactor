@@ -568,6 +568,9 @@ in. Example diagnostic:
 > — indistinguishable to ~5% of male users. Nearest safe alternative for Series 2: #2E5F8F
 > (ΔE 18.7). Apply via `.SeriesColors(...)` or call `ChartPalette.Harden(...)`.
 
+Pie charts expose the same Tier-3 scanner-validated custom colors via `.SetColors(...)`; the checks
+above run on the rendered slice palette identically (issue #645).
+
 #### 7.6.3 Tier 4 — `.RawColors()` escape hatch
 
 For prototypes, designer-review builds, and cases where the developer has out-of-band assurance

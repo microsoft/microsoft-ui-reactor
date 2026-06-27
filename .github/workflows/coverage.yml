@@ -1,18 +1,26 @@
 name: Coverage
 
-# Maintainer-gated, comment-triggered coverage run for any PR (including forks).
-# A maintainer comments `@codecoverage` on a PR; this workflow runs the merged
-# unit + selftest coverage recipe from CONTRIBUTING.md and posts the result back
-# as a comment.
+# Maintainer-gated coverage run for any PR (including forks). Trigger it either by
+# commenting `@codecoverage` on a PR, or by running the workflow manually from the
+# Actions tab (or `gh workflow run`) with the target PR number. Either way it runs
+# the merged unit + selftest coverage recipe from TESTING.md and posts the
+# result back to the PR as a comment.
 #
 # Security: `issue_comment` workflows run in the base repo with full token
 # permissions. Untrusted code from the PR (build scripts, tests) executes here.
-# The `author_association` check below limits the trigger to maintainers, who
-# are expected to review the diff before commenting.
+# The `author_association` check below limits the comment trigger to maintainers;
+# `workflow_dispatch` is inherently restricted to users with write access. Either
+# way, the triggerer is expected to review the PR diff before starting a run.
 
 on:
   issue_comment:
     types: [created]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: PR number to run merged coverage against
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -21,13 +29,23 @@ permissions:
 jobs:
   coverage:
     name: Merged coverage
+    # One in-flight run per PR; a newer trigger (comment or dispatch) supersedes an
+    # older one. Job-level (not workflow-level) concurrency so that unrelated
+    # issue_comment events — which start a workflow run but skip this job — don't
+    # cancel a live coverage run for the same PR.
+    concurrency:
+      group: coverage-${{ github.event.issue.number || github.event.inputs.pr_number }}
+      cancel-in-progress: true
     if: |
-      github.event.issue.pull_request &&
-      contains(github.event.comment.body, '@codecoverage') &&
-      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       contains(github.event.comment.body, '@codecoverage') &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
     runs-on: windows-latest
     steps:
       - name: Acknowledge with reaction
+        if: github.event_name == 'issue_comment'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
@@ -41,15 +59,37 @@ jobs:
       - name: Resolve PR head SHA
         id: pr
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          DISPATCH_PR: ${{ github.event.inputs.pr_number }}
         with:
           script: |
+            let prNumber;
+            if (context.eventName === 'workflow_dispatch') {
+              // Validate the raw input without trimming: it must be exactly a
+              // positive integer (no leading zeros or surrounding whitespace) so the
+              // resolved PR stays identical to the raw value the job-level
+              // concurrency group keys on (github.event.inputs.pr_number).
+              const raw = process.env.DISPATCH_PR || '';
+              if (!/^[1-9][0-9]*$/.test(raw)) {
+                throw new Error(`Invalid pr_number input '${process.env.DISPATCH_PR}' (expected a positive integer with no leading zeros or whitespace)`);
+              }
+              prNumber = Number(raw);
+            } else {
+              prNumber = context.issue.number;
+            }
+            if (!Number.isInteger(prNumber) || prNumber <= 0) {
+              throw new Error(`Could not resolve a valid PR number (got '${process.env.DISPATCH_PR ?? context.issue.number}')`);
+            }
+            // Emit the number before the API call so the always()-gated comment
+            // step can still report back to the PR if pulls.get below fails.
+            core.setOutput('number', String(prNumber));
             const pr = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              pull_number: context.issue.number,
+              pull_number: prNumber,
             });
             core.setOutput('sha', pr.data.head.sha);
-            core.setOutput('ref', `refs/pull/${context.issue.number}/head`);
+            core.setOutput('ref', `refs/pull/${prNumber}/head`);
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -145,14 +185,16 @@ jobs:
           BRANCHES_TOTAL: ${{ steps.rates.outputs.branches-total }}
           SHA: ${{ steps.pr.outputs.sha }}
           OUTCOME: ${{ job.status }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
         with:
           script: |
-            const { LINE, BRANCH, BRANCHES_COVERED, BRANCHES_TOTAL, SHA, OUTCOME } = process.env;
+            const { LINE, BRANCH, BRANCHES_COVERED, BRANCHES_TOTAL, SHA, OUTCOME, PR_NUMBER } = process.env;
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const shaLabel = SHA ? SHA.slice(0, 7) : 'unknown';
             let body;
             if (OUTCOME === 'success') {
               body = [
-                `**Merged coverage** for \`${SHA.slice(0, 7)}\` (unit + selftest)`,
+                `**Merged coverage** for \`${shaLabel}\` (unit + selftest)`,
                 ``,
                 `| Metric | Coverage |`,
                 `|---|---|`,
@@ -162,11 +204,16 @@ jobs:
                 `Cobertura reports attached to the [workflow run](${runUrl}) as artifacts.`,
               ].join('\n');
             } else {
-              body = `**Coverage run failed** for \`${SHA.slice(0, 7)}\` — see the [workflow run](${runUrl}) for details.`;
+              body = `**Coverage run failed** for \`${shaLabel}\` — see the [workflow run](${runUrl}) for details.`;
+            }
+            const prNumber = Number(PR_NUMBER);
+            if (!Number.isInteger(prNumber) || prNumber <= 0) {
+              core.warning(`No PR number resolved; skipping result comment. Body was:\n${body}`);
+              return;
             }
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number,
+              issue_number: prNumber,
               body,
             });

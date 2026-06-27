@@ -230,3 +230,14 @@ dotnet-coverage merge unit.cobertura.xml selftest.cobertura.xml \
 ```
 
 Replace `$(RuntimeIdentifier)` with `ARM64` or `x64`, or omit the platform segment if you used the default platform from `Directory.Build.props`. The `coverage.settings.xml` file in the repo root controls which modules are included and excludes generated code (`obj/`, `*.g.cs`) and test-host scaffolding exercised only by the winapp/E2E runner.
+
+### Running coverage in CI
+
+You don't have to run the merge locally — the **Coverage** workflow
+(`.github/workflows/coverage.yml`) runs this same unit + selftest recipe against a
+PR and posts the merged line/branch numbers back as a PR comment. Trigger it either
+way:
+
+- **Comment trigger:** a maintainer comments `@codecoverage` on the PR.
+- **Manual trigger:** use **Actions → Coverage → Run workflow** and enter the PR
+  number, or from the CLI run `gh workflow run coverage.yml -f pr_number=<PR>`.

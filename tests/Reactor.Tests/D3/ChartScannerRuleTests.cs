@@ -200,6 +200,12 @@ public class ChartScannerRuleTests
 
         var finding = findings.First(f => f.Id == "A11Y_CHART_009");
         Assert.NotNull(finding.Fix.SuggestedValue);
+        // Series charts render their .Palette(...), so the OkabeIto shortcut stays a valid fix here —
+        // the chart-type-aware snippet only drops it on the advisory pie path (issue #645).
+        Assert.Contains(".Palette(ChartPalette.OkabeIto)", finding.Fix.CodeSnippet);
+        // L2 (PR #708 review): series charts must keep naming the SERIES modifier after the pie
+        // chart-type-aware change — explicit guard for the "series guidance unaffected" invariant.
+        Assert.Equal("SeriesColors", finding.Fix.Modifier);
     }
 
     [Fact]
@@ -231,6 +237,13 @@ public class ChartScannerRuleTests
 
         var findings = AccessibilityScanner.Scan(tree);
         Assert.Contains(findings, f => f.Id == "A11Y_CHART_010");
+
+        // L2 (PR #708 review): pin the series modifier + snippet so a future DTO-default change can't
+        // silently flip series remediation. Series charts render their .Palette(...), so the OkabeIto
+        // shortcut stays a valid fix on the series path.
+        var finding = findings.First(f => f.Id == "A11Y_CHART_010");
+        Assert.Equal("SeriesColors", finding.Fix.Modifier);
+        Assert.Contains(".Palette(ChartPalette.OkabeIto)", finding.Fix.CodeSnippet);
     }
 
     // ── A11Y_CHART_011: Background contrast ─────────────────────────
@@ -251,6 +264,9 @@ public class ChartScannerRuleTests
         var findings = AccessibilityScanner.Scan(tree);
         var finding = Assert.Single(findings, f => f.Id == "A11Y_CHART_011");
         Assert.Equal("info", finding.Severity);
+        // L2 (PR #708 review): series 011 also carries the series modifier (the 011 snippet text
+        // itself is the textual lightness hint, so only the modifier needs pinning here).
+        Assert.Equal("SeriesColors", finding.Fix.Modifier);
     }
 
     [Fact]
@@ -423,6 +439,223 @@ public class ChartScannerRuleTests
         var palette = ChartPalette.FromColors(new D3Color(255, 255, 200));
         var chart = Charts.PieChart(Array.Empty<DataPoint>(), d => d.Y)
             .Palette(palette)
+            .ChartBackground("#FFFFFF");
+        var canvas = chart.AttachChartDataForTest(new CanvasElement([]) { Width = 400, Height = 300 });
+        var tree = VStack(canvas);
+
+        var findings = AccessibilityScanner.Scan(tree);
+        var finding = Assert.Single(findings, f => f.Id == "A11Y_CHART_011");
+        Assert.Equal("warning", finding.Severity);
+    }
+
+    // ── A11Y_CHART_011: PieChart .SetColors() is scanner-visible (issue #645) ───────
+
+    [Fact]
+    public void A11Y_CHART_011_PieChart_SetColors_DeclaredBackground_FiresWarning()
+    {
+        // Issue #645 (red→green): PieChartElement<T>.SetColors(...) feeds _colorPalette, the
+        // colors the slices are ACTUALLY drawn with. Before the fix those colors never reached
+        // ChartA11yData.CustomPalette, so A11Y_CHART_011 silently never ran on them — a
+        // .SetColors(low).ChartBackground(low) chart looked contrast-checked but wasn't. Now the
+        // rendered .SetColors palette is the scanner's source of truth, so a near-white slice
+        // color that fails the declared light background fires the same WARNING that the
+        // .Palette(...) path does. This assertion FAILS against the pre-#645 code (zero findings),
+        // so it is the load-bearing guard for the fix.
+        var chart = Charts.PieChart(Array.Empty<DataPoint>(), d => d.Y)
+            .SetColors(new D3Color(255, 255, 200)) // near-white: fails the light background
+            .ChartBackground("#FFFFFF");
+        var canvas = chart.AttachChartDataForTest(new CanvasElement([]) { Width = 400, Height = 300 });
+        var tree = VStack(canvas);
+
+        var findings = AccessibilityScanner.Scan(tree);
+        var finding = Assert.Single(findings, f => f.Id == "A11Y_CHART_011");
+        Assert.Equal("warning", finding.Severity);
+        // H1 (issue #645): the machine-consumable fix names the modifier a PIE exposes — .SetColors(),
+        // not .SeriesColors() — via ChartA11yData.CustomPaletteModifier (the checker is chart-type-aware).
+        Assert.Equal("SetColors", finding.Fix.Modifier);
+    }
+
+    [Fact]
+    public void A11Y_CHART_011_PieChart_SetColors_NoBackground_FiresInfo()
+    {
+        // .SetColors colors also flow through the theme-agnostic (no declared background) path
+        // exactly like a .Palette(...) palette: the same near-white color fails against EITHER
+        // fixed light/dark background and is reported as INFO. Pins that the unification covers
+        // the unknown-background arm too, not just the scoped-background warning (issue #645).
+        var chart = Charts.PieChart(Array.Empty<DataPoint>(), d => d.Y)
+            .SetColors(new D3Color(255, 255, 200));
+        var canvas = chart.AttachChartDataForTest(new CanvasElement([]) { Width = 400, Height = 300 });
+        var tree = VStack(canvas);
+
+        var findings = AccessibilityScanner.Scan(tree);
+        var finding = Assert.Single(findings, f => f.Id == "A11Y_CHART_011");
+        Assert.Equal("info", finding.Severity);
+    }
+
+    [Fact]
+    public void A11Y_CHART_011_PieChart_SetColors_PassesDeclaredBackground_DoesNotFire()
+    {
+        // The same near-white .SetColors color PASSES 3:1 against the declared dark (#202020)
+        // background it actually renders on, so the rule must NOT fire — a palette is only
+        // penalized for the background it renders on. Mirrors the .Palette(...) dark-background
+        // no-fire case, proving .SetColors gets identical treatment (issue #645).
+        var chart = Charts.PieChart(Array.Empty<DataPoint>(), d => d.Y)
+            .SetColors(new D3Color(255, 255, 200))
+            .ChartBackground("#202020");
+        var canvas = chart.AttachChartDataForTest(new CanvasElement([]) { Width = 400, Height = 300 });
+        var tree = VStack(canvas);
+
+        var findings = AccessibilityScanner.Scan(tree);
+        Assert.DoesNotContain(findings, f => f.Id == "A11Y_CHART_011");
+    }
+
+    [Fact]
+    public void A11Y_CHART_011_PieChart_BothSet_RenderedSetColorsWins_FiresOnSetColors()
+    {
+        // Both-set semantics (issue #645): when .SetColors(...) AND .Palette(...) are both set, the
+        // pie still RENDERS the .SetColors colors (_colorPalette), so the scanner validates THOSE —
+        // keeping the scanner and the rendered output in lockstep. Here the rendered .SetColors
+        // color is near-white (fails the declared white background) while the .Palette() color is a
+        // mid-tone gray that PASSES white. The rule fires on the rendered near-white color. If
+        // _palette wrongly won, the scanner would see the passing gray and emit nothing — so this
+        // single-finding assertion pins that the rendered .SetColors palette is the source of truth.
+        var chart = Charts.PieChart(Array.Empty<DataPoint>(), d => d.Y)
+            .SetColors(new D3Color(255, 255, 200))                 // rendered: fails white
+            .Palette(ChartPalette.FromColors(new D3Color(128, 128, 128))) // advisory: passes white
+            .ChartBackground("#FFFFFF");
+        var canvas = chart.AttachChartDataForTest(new CanvasElement([]) { Width = 400, Height = 300 });
+        var tree = VStack(canvas);
+
+        var findings = AccessibilityScanner.Scan(tree);
+        var finding = Assert.Single(findings, f => f.Id == "A11Y_CHART_011");
+        Assert.Equal("warning", finding.Severity);
+    }
+
+    [Fact]
+    public void A11Y_CHART_011_PieChart_BothSet_PaletteIgnoredWhenSetColorsPasses_DoesNotFire()
+    {
+        // Inverse of the both-set test: the rendered .SetColors color is a mid-tone gray that
+        // PASSES the declared white background, while the advisory .Palette() color is near-white
+        // and would FAIL white. Because only the rendered .SetColors palette is scanned, the rule
+        // must NOT fire. If _palette wrongly won, the near-white .Palette color would trip a
+        // warning — so this no-finding assertion pins that .Palette() is ignored for the scanner
+        // whenever .SetColors() is set (issue #645).
+        var chart = Charts.PieChart(Array.Empty<DataPoint>(), d => d.Y)
+            .SetColors(new D3Color(128, 128, 128))                 // rendered: passes white
+            .Palette(ChartPalette.FromColors(new D3Color(255, 255, 200))) // advisory: fails white
+            .ChartBackground("#FFFFFF");
+        var canvas = chart.AttachChartDataForTest(new CanvasElement([]) { Width = 400, Height = 300 });
+        var tree = VStack(canvas);
+
+        var findings = AccessibilityScanner.Scan(tree);
+        Assert.DoesNotContain(findings, f => f.Id == "A11Y_CHART_011");
+    }
+
+    // ── .SetColors() is checked across A11Y_CHART_009/010/011 like .Palette() (issue #645) ──
+
+    [Fact]
+    public void A11Y_CHART_009_PieChart_SetColors_MultiColor_FiresPairwise_WithSetColorsFix()
+    {
+        // Issue #645 acceptance: .SetColors() is contrast-checked across 009/010/011 "exactly like"
+        // .Palette() — not just the 011 background rule. Two near-identical grays fail the pairwise
+        // ≥3:1 rule (A11Y_CHART_009). Pins that a MULTI-color .SetColors palette (Count≥2) reaches the
+        // pairwise rule via the pie path, and that the machine-consumable fix names the modifier a PIE
+        // exposes — .SetColors(), not .SeriesColors() (the checker is now chart-type-aware).
+        var chart = Charts.PieChart(Array.Empty<DataPoint>(), d => d.Y)
+            .SetColors(new D3Color(128, 128, 128), new D3Color(135, 135, 135)); // similar grays: <3:1 pairwise
+        var canvas = chart.AttachChartDataForTest(new CanvasElement([]) { Width = 400, Height = 300 });
+        var tree = VStack(canvas);
+
+        var findings = AccessibilityScanner.Scan(tree);
+        var finding = Assert.Single(findings, f => f.Id == "A11Y_CHART_009");
+        Assert.Equal("SetColors", finding.Fix.Modifier);
+        // The remediation snippet must imply the modifier takes color args — `.SetColors(...)`,
+        // not an empty-args `.SetColors()` that would read as a non-compiling zero-arg call (PR #708 review).
+        Assert.Contains(".SetColors(...)", finding.Fix.CodeSnippet);
+        Assert.DoesNotContain(".SetColors()", finding.Fix.CodeSnippet);
+        // A pie's .Palette(...) is advisory-only and does NOT change rendered slices, so the snippet
+        // must NOT offer .Palette(ChartPalette.OkabeIto) as a fix on the pie path (PR #708 review).
+        Assert.DoesNotContain(".Palette(", finding.Fix.CodeSnippet);
+    }
+
+    [Fact]
+    public void A11Y_CHART_010_PieChart_SetColors_MultiColor_FiresColorblind_WithSetColorsFix()
+    {
+        // Companion to the 009 test: two colors whose colorblind ΔE is under the 10.0 minimum trip
+        // A11Y_CHART_010 via the pie .SetColors() path. Reuses the proven colorblind-unsafe pair from
+        // the series-chart 010 test. Again the fix names .SetColors() — the pie's real modifier —
+        // confirming chart-type-aware remediation across the colorblind rule too (issue #645).
+        var chart = Charts.PieChart(Array.Empty<DataPoint>(), d => d.Y)
+            .SetColors(new D3Color(100, 100, 100), new D3Color(101, 100, 100)); // ΔE < 10 under CVD sim
+        var canvas = chart.AttachChartDataForTest(new CanvasElement([]) { Width = 400, Height = 300 });
+        var tree = VStack(canvas);
+
+        var findings = AccessibilityScanner.Scan(tree);
+        var finding = Assert.Single(findings, f => f.Id == "A11Y_CHART_010");
+        Assert.Equal("SetColors", finding.Fix.Modifier);
+        // Same chart-type-aware remediation as 009: name .SetColors(...), and never the advisory-only
+        // .Palette(...) which wouldn't change a pie's rendered slices (issue #645 / PR #708 review).
+        Assert.Contains(".SetColors(...)", finding.Fix.CodeSnippet);
+        Assert.DoesNotContain(".Palette(", finding.Fix.CodeSnippet);
+    }
+
+    [Fact]
+    public void A11Y_CHART_009_PieChart_PaletteOnly_FixNamesPaletteNotSetColors()
+    {
+        // M1 (PR #708 review): a pie that set ONLY .Palette(...) (no .SetColors()) makes ScannerPalette
+        // fall back to that advisory palette — the scanner correctly validates it — but the remediation
+        // must name the call the author ACTUALLY made: .Palette(...), never a .SetColors(...) call they
+        // never wrote. Telling an author to fix/remove a non-existent call is the wrong-guidance footgun
+        // #645 exists to kill (the mirror of the chart-type-aware fix that stopped pies emitting the
+        // non-existent .SeriesColors()). The modifier tracks which field fed ScannerPalette.
+        var chart = Charts.PieChart(Array.Empty<DataPoint>(), d => d.Y)
+            .Palette(ChartPalette.FromColors(new D3Color(128, 128, 128), new D3Color(135, 135, 135))); // similar grays: <3:1 pairwise
+        var canvas = chart.AttachChartDataForTest(new CanvasElement([]) { Width = 400, Height = 300 });
+        var tree = VStack(canvas);
+
+        var findings = AccessibilityScanner.Scan(tree);
+        var finding = Assert.Single(findings, f => f.Id == "A11Y_CHART_009");
+        // Source-tracked modifier: .Palette() fed the scanned palette here, so the fix names .Palette(),
+        // not .SetColors() — and the advisory pie path still never offers .Palette(ChartPalette.OkabeIto).
+        Assert.Equal("Palette", finding.Fix.Modifier);
+        // .Palette(...) takes a ChartPalette, not raw colors, so the apply guidance must wrap the
+        // suggested colors in ChartPalette.FromColors(...); a bare ".Palette(<hex>)" would not compile —
+        // the same wrong-guidance footgun on the advisory path, caught by the PR #708 re-review.
+        Assert.Contains(".Palette(ChartPalette.FromColors(...))", finding.Fix.CodeSnippet);
+        Assert.Contains(".Palette(...)", finding.Fix.CodeSnippet);
+        Assert.DoesNotContain(".SetColors(", finding.Fix.CodeSnippet);
+    }
+
+    [Fact]
+    public void A11Y_CHART_010_PieChart_PaletteOnly_FixNamesCompilablePalette()
+    {
+        // Companion to the 009 PaletteOnly test for the colorblind rule (PR #708 re-review). A pie that
+        // set ONLY .Palette(...) trips A11Y_CHART_010; the advisory remediation must name .Palette() —
+        // the call the author made — AND keep it compilable: .Palette() takes a ChartPalette, so the
+        // apply guidance wraps the colors in ChartPalette.FromColors(...), never a bare .Palette(<hex>).
+        var chart = Charts.PieChart(Array.Empty<DataPoint>(), d => d.Y)
+            .Palette(ChartPalette.FromColors(new D3Color(100, 100, 100), new D3Color(101, 100, 100))); // ΔE < 10 under CVD sim
+        var canvas = chart.AttachChartDataForTest(new CanvasElement([]) { Width = 400, Height = 300 });
+        var tree = VStack(canvas);
+
+        var findings = AccessibilityScanner.Scan(tree);
+        var finding = Assert.Single(findings, f => f.Id == "A11Y_CHART_010");
+        Assert.Equal("Palette", finding.Fix.Modifier);
+        Assert.Contains(".Palette(ChartPalette.FromColors(...))", finding.Fix.CodeSnippet);
+        Assert.DoesNotContain(".SetColors(", finding.Fix.CodeSnippet);
+    }
+
+    [Fact]
+    public void A11Y_CHART_011_PieChart_EmptySetColors_FallsBackToPaletteForScanner()
+    {
+        // M4: ScannerPalette's `{ Count: > 0 }` guard. Calling .SetColors() with NO args clears
+        // _colorPalette (the pie reverts to its default render palette), so the scanner falls back to
+        // the .Palette() palette — preserving the pre-#645 scanner-visible behavior. Pins that an empty
+        // .SetColors() does NOT suppress the .Palette() contrast finding: the near-white .Palette color
+        // still fails the declared white background and fires the warning (issue #645).
+        var chart = Charts.PieChart(Array.Empty<DataPoint>(), d => d.Y)
+            .Palette(ChartPalette.FromColors(new D3Color(255, 255, 200))) // near-white: fails white
+            .SetColors()                                                  // cleared → ScannerPalette falls back to _palette
             .ChartBackground("#FFFFFF");
         var canvas = chart.AttachChartDataForTest(new CanvasElement([]) { Width = 400, Height = 300 });
         var tree = VStack(canvas);

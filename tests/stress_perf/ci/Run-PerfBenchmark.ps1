@@ -120,11 +120,23 @@
     build is best-effort (a KeyedList build failure just omits the table). Disable
     with -IncludeKeyedList:$false to skip the extra leg.
 
+.PARAMETER IncludeFlex
+    Run a fourth interleaved A/B leg on StressPerf.Flex — a deep nested, fully-realized
+    (non-virtualized) flex tree (~2000 leaf cells) whose per-child flex inputs
+    (grow / basis / width) are re-rolled on a `--percent` fraction of the leaves each
+    tick, forcing a real Yoga measure/layout pass every frame — and append its own
+    PR-vs-main table to the comment (compare mode). This exercises the FlexPanel / Yoga
+    LAYOUT engine (the Flex/ + Yoga/ subsystems) that the positional StocksGrid and the
+    keyed-list legs can never reach, so it is the sensitive macro measure for Yoga/Flex
+    layout-engine allocation + memory optimizations. Default $true; build is best-effort
+    (a Flex build failure just omits the table). Disable with -IncludeFlex:$false to skip
+    the extra leg.
+
 .PARAMETER Apps
-    Which harnesses to run in single-tree mode: ReactorOptimized, Direct, KeyedList.
-    Ignored in compare mode (which always does ReactorOptimized both sides +
-    Direct once for the WinUI3 column, and — unless -IncludeKeyedList:$false —
-    KeyedList both sides).
+    Which harnesses to run in single-tree mode: ReactorOptimized, Direct, KeyedList,
+    Flex. Ignored in compare mode (which always does ReactorOptimized both sides +
+    Direct once for the WinUI3 column, and — unless -IncludeKeyedList:$false /
+    -IncludeFlex:$false — KeyedList and Flex both sides).
 
 .PARAMETER OutDir
     Where logs, comment.md and result.json land. Defaults to ci\out next to this
@@ -198,7 +210,8 @@ param(
     [double]$SkipFloorPercent = 0,
     [bool]$IncludeSkipFloor = $true,
     [bool]$IncludeKeyedList = $true,
-    [ValidateSet('ReactorOptimized', 'Direct', 'KeyedList')]
+    [bool]$IncludeFlex = $true,
+    [ValidateSet('ReactorOptimized', 'Direct', 'KeyedList', 'Flex')]
     [string[]]$Apps = @('ReactorOptimized', 'Direct'),
     [string]$OutDir,
     [switch]$SkipBuild,
@@ -231,6 +244,7 @@ $AppRegistry = @{
     ReactorOptimized = @{ AppName = 'StressPerf.ReactorOptimized'; ProjectRel = 'tests\stress_perf\StressPerf.ReactorOptimized\StressPerf.ReactorOptimized.csproj' }
     Direct           = @{ AppName = 'StressPerf.Direct';           ProjectRel = 'tests\stress_perf\StressPerf.Direct\StressPerf.Direct.csproj' }
     KeyedList        = @{ AppName = 'StressPerf.KeyedList';         ProjectRel = 'tests\stress_perf\StressPerf.KeyedList\StressPerf.KeyedList.csproj' }
+    Flex             = @{ AppName = 'StressPerf.Flex';              ProjectRel = 'tests\stress_perf\StressPerf.Flex\StressPerf.Flex.csproj' }
     MicroControlModel = @{ AppName = 'PerfBench.ControlModel';     ProjectRel = 'tests\perf_bench\PerfBench.ControlModel\PerfBench.ControlModel.csproj' }
 }
 
@@ -843,9 +857,10 @@ Write-Log ("runner: {0} | {1} cores | {2} GB | {3}" -f $runner.Cpu, $runner.Core
 $modeSuffix = if ($Compare) {
     # COMPARE mode runs the interleaved A/B legs, so the skip-floor / keyed-list
     # opt-out switches are what actually decide which legs run.
-    "skip-floor={0} | keyed-list={1}" -f `
+    "skip-floor={0} | keyed-list={1} | flex={2}" -f `
         $(if ($IncludeSkipFloor) { "on (--percent $SkipFloorPercent)" } else { 'off' }), `
-        $(if ($IncludeKeyedList) { 'on' } else { 'off' })
+        $(if ($IncludeKeyedList) { 'on' } else { 'off' }), `
+        $(if ($IncludeFlex) { 'on' } else { 'off' })
 } else {
     # LOCAL mode ignores the interleaved-leg switches entirely; the workload set is
     # whatever -Apps selects, so report that instead of a misleading on/off.
@@ -860,6 +875,7 @@ try {
         $ro = $AppRegistry.ReactorOptimized
         $direct = $AppRegistry.Direct
         $keyed = $AppRegistry.KeyedList
+        $flex = $AppRegistry.Flex
         $microMeta = $AppRegistry.MicroControlModel
 
         if (-not $SkipBuild) {
@@ -883,6 +899,15 @@ try {
             } catch {
                 Write-Log "keyed-list workload build failed ($_) — omitting the keyed-list table" 'Yellow'
                 $IncludeKeyedList = $false
+            }
+        }
+        if ($IncludeFlex -and -not $SkipBuild) {
+            try {
+                Build-Harness -TreeRoot $BaselineRoot -AppMeta $flex
+                Build-Harness -TreeRoot $Root -AppMeta $flex
+            } catch {
+                Write-Log "flex workload build failed ($_) — omitting the flex table" 'Yellow'
+                $IncludeFlex = $false
             }
         }
         $mainExe = Resolve-HarnessExe -TreeRoot $BaselineRoot -AppMeta $ro
@@ -948,6 +973,36 @@ try {
                 }
                 if ($mainKeyedRuns.Count -lt $Reps -or $prKeyedRuns.Count -lt $Reps) {
                     Write-Log "  keyed-list leg short (main $($mainKeyedRuns.Count)/$Reps, PR $($prKeyedRuns.Count)/$Reps) — its paired CI uses fewer samples" 'Yellow'
+                }
+            }
+        }
+
+        # Fourth interleaved A/B leg: the flex workload. StressPerf.Flex renders a deep
+        # nested, fully-realized (non-virtualized) flex tree (~2000 leaf cells) and
+        # re-rolls the per-child flex inputs (grow / basis / width) on a --percent
+        # fraction of the leaves each tick, forcing a real Yoga measure/layout pass every
+        # frame — the FlexPanel / Yoga LAYOUT engine that StocksGrid's positional cells
+        # and the keyed-list reorder leg never reach. Same paired interleaving +
+        # drop-both alignment as above. Best-effort: if either exe is missing
+        # (build omitted/failed) the leg is skipped and the flex table is omitted — the
+        # StocksGrid comparison is unaffected.
+        $mainFlexRuns = @(); $prFlexRuns = @()
+        if ($IncludeFlex) {
+            $mainFlexExe = Resolve-HarnessExe -TreeRoot $BaselineRoot -AppMeta $flex
+            $prFlexExe   = Resolve-HarnessExe -TreeRoot $Root -AppMeta $flex
+            if (-not $mainFlexExe -or -not $prFlexExe) {
+                Write-Log "flex exe not found (main=$([bool]$mainFlexExe) pr=$([bool]$prFlexExe)) — omitting the flex table" 'Yellow'
+            } else {
+                Write-Log "interleaving main/PR flex (--percent $Percent; $($Warmup) warmup + $($Reps) measured each)" 'Green'
+                for ($i = 1; $i -le ($Warmup + $Reps); $i++) {
+                    $mm = Invoke-OneRun -Exe $mainFlexExe -AppMeta $flex -Index $i -Tag 'main-flex'
+                    $pm = Invoke-OneRun -Exe $prFlexExe -AppMeta $flex -Index $i -Tag 'pr-flex'
+                    if ($i -le $Warmup) { Write-Log "  (flex warmup pair #$i discarded)" 'DarkGray'; continue }
+                    if ($mm -and $pm) { $mainFlexRuns += $mm; $prFlexRuns += $pm }
+                    elseif ($mm -or $pm) { Write-Log "  flex pair #$i incomplete (main=$([bool]$mm) pr=$([bool]$pm)) — dropped to keep the paired CI aligned" 'Yellow' }
+                }
+                if ($mainFlexRuns.Count -lt $Reps -or $prFlexRuns.Count -lt $Reps) {
+                    Write-Log "  flex leg short (main $($mainFlexRuns.Count)/$Reps, PR $($prFlexRuns.Count)/$Reps) — its paired CI uses fewer samples" 'Yellow'
                 }
             }
         }
@@ -1024,6 +1079,8 @@ try {
         $prFloor = if ($prFloorRuns.Count) { Measure-PerfRuns -Runs $prFloorRuns } else { $null }
         $mainKeyed = if ($mainKeyedRuns.Count) { Measure-PerfRuns -Runs $mainKeyedRuns } else { $null }
         $prKeyed = if ($prKeyedRuns.Count) { Measure-PerfRuns -Runs $prKeyedRuns } else { $null }
+        $mainFlex = if ($mainFlexRuns.Count) { Measure-PerfRuns -Runs $mainFlexRuns } else { $null }
+        $prFlex = if ($prFlexRuns.Count) { Measure-PerfRuns -Runs $prFlexRuns } else { $null }
 
         $note = $null
         if ($prRuns.Count -eq 0 -or $mainRuns.Count -eq 0) {
@@ -1047,17 +1104,18 @@ try {
             MainSamples = $mainRuns.Count; PrSamples = $prRuns.Count
             MainFloorSamples = $mainFloorRuns.Count; PrFloorSamples = $prFloorRuns.Count
             MainKeyedSamples = $mainKeyedRuns.Count; PrKeyedSamples = $prKeyedRuns.Count
+            MainFlexSamples = $mainFlexRuns.Count; PrFlexSamples = $prFlexRuns.Count
             BaseSha = $(if ($BaseSha) { $BaseSha.Substring(0, [Math]::Min(7, $BaseSha.Length)) } else { '' })
             HeadSha = $(if ($HeadSha) { $HeadSha.Substring(0, [Math]::Min(7, $HeadSha.Length)) } else { '' })
             Runner = $runner.Runner; Cpu = $runner.Cpu; Cores = $runner.Cores; MemoryGB = $runner.MemoryGB
             RunUrl = $RunUrl; Timestamp = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'); Note = $note
         }
-        $comment = Format-PerfComment -Main $main -Pr $pr -WinUI3 $winui3 -Rust $rust -Micro $micro -MicroOmitReason $microOmitReason -MainFloor $mainFloor -PrFloor $prFloor -MainKeyed $mainKeyed -PrKeyed $prKeyed -Context $ctx
+        $comment = Format-PerfComment -Main $main -Pr $pr -WinUI3 $winui3 -Rust $rust -Micro $micro -MicroOmitReason $microOmitReason -MainFloor $mainFloor -PrFloor $prFloor -MainKeyed $mainKeyed -PrKeyed $prKeyed -MainFlex $mainFlex -PrFlex $prFlex -Context $ctx
         $commentPath = Join-Path $OutDir 'comment.md'
         Set-Content -LiteralPath $commentPath -Value $comment -Encoding UTF8
         Write-Log "comment.md written -> $commentPath" 'Green'
 
-        $result = [pscustomobject]@{ main = $main; pr = $pr; winui3 = $winui3; mainFloor = $mainFloor; prFloor = $prFloor; mainKeyed = $mainKeyed; prKeyed = $prKeyed; rust = $rust; micro = $micro; runner = $runner; context = $ctx }
+        $result = [pscustomobject]@{ main = $main; pr = $pr; winui3 = $winui3; mainFloor = $mainFloor; prFloor = $prFloor; mainKeyed = $mainKeyed; prKeyed = $prKeyed; mainFlex = $mainFlex; prFlex = $prFlex; rust = $rust; micro = $micro; runner = $runner; context = $ctx }
         $result | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $OutDir 'result.json') -Encoding UTF8
 
         Write-Host "`n----- comment.md -----" -ForegroundColor DarkGray

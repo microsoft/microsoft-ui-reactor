@@ -378,6 +378,9 @@ internal static class SelfTestFixtureRegistry
         "ComponentHook_UseBreakpoint",
         "ComponentHook_MultipleComponents",
         "ComponentMemo_SkipRefreshesLiveDelegate",
+        "StructuralSkip_LifecycleParity",
+        "StructuralSkip_ThemeRangeParity",
+        "StructuralSkip_HotReloadWrapperReRender",
         "HotReload_ChildHookOrderRecovery",
         "HotReload_ComponentMigratesState",
         // DSL and extension tests
@@ -1801,6 +1804,9 @@ internal static class SelfTestFixtureRegistry
         "ComponentHook_UseBreakpoint" => new ComponentHookFixtures.UseBreakpointHook(harness),
         "ComponentHook_MultipleComponents" => new ComponentHookFixtures.MultipleComponents(harness),
         "ComponentMemo_SkipRefreshesLiveDelegate" => new CallbacksMemoSkipFixtures.SkipRefreshesLiveDelegate(harness),
+        "StructuralSkip_LifecycleParity" => new StructuralSkipFixtures.LifecycleParity(harness),
+        "StructuralSkip_ThemeRangeParity" => new StructuralSkipFixtures.ThemeRangeParity(harness),
+        "StructuralSkip_HotReloadWrapperReRender" => new StructuralSkipFixtures.HotReloadWrapperReRender(harness),
         "HotReload_ChildHookOrderRecovery" => new HotReloadRecoveryFixtures.ChildRecoversAndSiblingStateSurvives(harness),
         "HotReload_ComponentMigratesState" => new HotReloadComponentMigrationFixtures.MigratesPreservingState(harness),
         // DSL and extension tests
