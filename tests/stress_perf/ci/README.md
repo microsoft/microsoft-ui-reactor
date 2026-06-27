@@ -46,6 +46,53 @@ These read *n/a* for a PR head whose harness sources predate the metric — reba
 onto `main` to populate them. They are the **sensitive signal** for the
 allocation-focused PRs in the current fleet.
 
+### Reconciler micro-benchmarks (ns-resolution, WinUI-undiluted)
+
+The StocksGrid macro workload above is **render-bound and working-set diluted**:
+renders/sec is ~76% gated by the WinUI render thread, and the reconcile/diff ms
+and alloc figures are measured across a live render pipeline. That makes it a poor
+instrument for the **Core/Reconciler** layer most of the perf fleet actually
+operates on — small reconcile-time and per-reconcile allocation deltas are buried
+under render + GC noise.
+
+So `/perf` also runs the **`PerfBench.ControlModel` micro-suite** (spec-047
+M1–M13: `PropertyDiff` / `Allocation` / `StructuralSharing` / `ControlModel`),
+interleaved at the **rep level** (a fresh alternated `main`/PR process per rep), and
+reports a per-bench PR-vs-`main` table:
+
+| Metric | Meaning | Direction |
+|---|---|:--:|
+| **ns/op** | mean reconcile time per operation, `Stopwatch` over the loop body only | lower is better ↓ |
+| **B/op** | managed bytes allocated per operation (`GC.GetAllocatedBytesForCurrentThread` Δ, **per-thread** so it excludes WinUI/background allocs) | lower is better ↓ |
+
+It runs the production **`--variant Reactor`** path as a headless loop whose
+measured region brackets only the reconciler — no render pipeline, ns-resolution,
+free of working-set dilution. `main` and the PR each link their **own
+`src/Reactor` build** (via the project's relative `ProjectReference`), so the
+delta is a clean read on the code change. Both deltas use the **same paired 95% CI**
+machinery as the macro tables, but they are **read differently**:
+
+- **B/op drives the row flag.** Allocated bytes/op is *deterministic* for identical
+  code — an unchanged diff reproduces the same byte count exactly — so its paired CI
+  is trustworthy. The ✅/⚠️/≈ status of each row tracks the alloc delta.
+- **ns/op is rep-interleaved but not auto-flagged by default.** The two per-side runs
+  are interleaved at the **rep level** (each rep alternates a fresh `main` then PR
+  process), so the systematic process-to-process timing offset (thermal/scheduling
+  drift) that a single back-to-back pair leaves as a *constant* bias is randomized
+  round-to-round into the paired variance, making the ns CI unbiased. Before
+  interleaving that offset made the paired CI exclude 0 even for an identical binary —
+  running the **same** ControlModel binary as both "main" and "PR", alloc was
+  deterministic (14/16 benches exactly 0.0% Δ) but ns spuriously flagged up to −14.8%
+  on a no-op. Even interleaved, ns keeps residual cold-JIT / scheduling jitter, so it
+  is promoted to a flag only behind a minimum-effect band **and** a master switch
+  (`$MicroNsAutoFlag`) that stays **dormant** pending a real-CI identical-binary
+  calibration of that band. While dormant the row status tracks the alloc delta;
+  arming the switch — a measurement-only follow-up that never changes what merges —
+  makes the row combine ns and alloc, reading ↕️ mixed when the two axes disagree.
+
+The whole leg is best-effort: if the micro build or run fails, the macro comment is
+unaffected and the section is simply omitted.
+
 ## Prerequisites
 
 - **Windows** with a real interactive desktop session (the harness opens a real
@@ -103,7 +150,15 @@ git worktree remove ../main
 | `-Warmup` | `2` | Leading runs discarded before the measured `Reps` (absorbs JIT / first-window warm-up). |
 | `-RefReps` | `3` | Measured runs for the **reference-only** legs (vanilla WinUI3, Rust) — a single reference absolute, not a paired CI, so it needs far fewer reps. |
 | `-RefWarmup` | `1` | Warm-up runs discarded for the reference-only legs. |
-| `-Apps` | `ReactorOptimized,Direct` | Single-tree mode only: which harnesses to run. |
+| `-IncludeMicro` | `$true` | Run the `PerfBench.ControlModel` reconciler micro-suite (compare mode) and append its per-bench ns/op + B/op table. Set `$false` to skip it. |
+| `-MicroReps` | `12` | Measured **rep rounds** per side for the micro-suite; each round alternates a fresh `main` then PR `--reps 1` process (rep-level interleaving) and feeds the paired 95% CI, mirroring `-Reps`. |
+| `-MicroWarmup` | `1` | Leading interleaved rep rounds discarded before the measured `-MicroReps` (absorbs per-process cold-JIT before the timed rounds are paired). |
+| `-MicroIterations` | `2000` | Inner iterations per repetition inside each micro-bench (amortises timer resolution; sized so each `--reps 1` round finishes well inside its per-round timeout). |
+| `-MicroRepTimeoutSec` | `180` | Per-round launch budget (one `--reps 1` run of the 16-bench suite). A round that overruns is killed and dropped; the previous whole-suite single launch used a 600 s cap. |
+| `-IncludeSkipFloor` | `$true` | Run a **second interleaved A/B leg** at `-SkipFloorPercent` and append a low-mutation skip-floor table (compare mode). Set `$false` to skip it (halves the macro runtime). |
+| `-SkipFloorPercent` | `0` | Mutation percent for the skip-floor leg. At `0` the workload still mutates one cell/tick (`StockDataSource.Update` clamps the count to `Math.Max(1, …)`), so reconcile/diff isolate the O(n) per-tick child skip-walk floor the 50% leg dilutes. |
+| `-IncludeKeyedList` | `$true` | Run a **third interleaved A/B leg** on `StressPerf.KeyedList` — a ~500-row stably keyed list reordered/inserted/removed each tick — and append its own table (compare mode). Drives the child reconciler's **keyed arm** (`ReconcileKeyed` → `ReconcileKeyedMiddle`, the LIS minimal-move pass) the positional StocksGrid cells never reach. Build is best-effort; set `$false` to skip the leg. |
+| `-Apps` | `ReactorOptimized,Direct` | Single-tree mode only: which harnesses to run (`ReactorOptimized`, `Direct`, `KeyedList`). |
 | `-Platform` | host arch | Target architecture (`x64` or `ARM64`). Defaults to your machine's native arch so the WinUI harness runs without emulation. |
 | `-SelfContained` | `$true` | Build with the bundled WinApp runtime (no machine-wide install). |
 | `-SkipBuild` | off | Reuse existing binaries (skip `dotnet build`). |
@@ -154,7 +209,7 @@ is the security control, because the job has a write token.
 
 ### The comment
 
-Two tables plus footnotes:
+Several tables plus footnotes:
 
 - **Regression vs `main`** — `Metric | main | This PR | Δ (95% CI) | Status`,
   where Status is direction-aware (`✅ improvement` / `⚠️ regression` / `≈ within
@@ -165,10 +220,41 @@ Two tables plus footnotes:
   at this sample size. This data-driven band replaces the old fixed 4% floor,
   which both buried real sub-4% wins and rubber-stamped any sub-4% number as
   "noise" regardless of how tight the runs were.
+- **Low-mutation skip-floor (`--percent 0`)** — the same four headline metrics
+  from a **second interleaved A/B leg** at near-zero mutation. With ~1 cell
+  changing per tick, reconcile/diff are dominated by the **O(n) positional child
+  skip-walk** (`ChildReconciler` re-walks every child each tick even when nothing
+  moved) — the fixed per-tick cost the 50%-mutation headline table dilutes. This
+  is the column a structural-skip optimization moves cleanly: at 50% the floor is
+  a fraction of the work, at 0% it *is* the work. Same paired-CI gating as Table 1;
+  omitted when `-IncludeSkipFloor $false` or a side produces no metrics.
 - **Allocation (Reactor)** — `Alloc bytes/render` and `Gen0 GC / 1k renders`,
   `main` vs PR with the same paired-CI band. Rendered only when the harness
   reports the metric (n/a for pre-metric PR heads). This is the table that moves
   for allocation-reduction PRs.
+- **Keyed-list workload (`StressPerf.KeyedList`)** — the four headline metrics
+  from a **third interleaved A/B leg** on a separate ~500-row **stably keyed** list
+  whose rows are reordered / inserted / removed each tick. Because every child
+  carries a key, the child reconciler takes its **keyed arm** (`ReconcileKeyed` →
+  `ReconcileKeyedMiddle`, the LIS-based minimal-move pass) instead of the positional
+  re-walk the StocksGrid tables measure — so this is the sensitive macro signal for
+  **keyed-diff** optimizations (keyed-list diff, keyed structural-skip) that the
+  positional cells can never exercise. It also carries its own **allocation**
+  sub-table (`Alloc bytes/render` + `Gen0 GC / 1k renders` over the keyed aggregates,
+  same spec as the StocksGrid allocation table) — the sensitive macro signal for
+  keyed-diff *allocation* reductions the positional alloc table can't isolate, rendered
+  only when the keyed leg reports the metric. Same paired-CI gating as Table 1; omitted
+  when `-IncludeKeyedList $false`, the workload build fails, or a side produces no
+  metrics.
+- **Reconciler micro-benchmarks** — per-bench `ns/op` and `B/op` from the
+  `PerfBench.ControlModel` micro-suite (M1–M13), `main` vs PR. ns-resolution and
+  WinUI-undiluted, so it resolves Core/Reconciler time and allocation deltas the
+  render-bound macro table cannot. The row flag tracks the **deterministic B/op**
+  delta; the two sides are now rep-interleaved (a fresh alternated process per rep) so
+  the `ns/op` paired CI is unbiased, but ns stays shown-for-context — not auto-flagged
+  by default — pending the band calibration that arms it (see the section above).
+  Omitted when the micro leg is disabled or
+  fails to produce results for both sides.
 - **Cross-framework reference** — `vanilla WinUI3 | Rust windows-reactor |
   Reactor (this PR)` on the same StocksGrid workload, **all measured live on the
   same runner**. The Rust column builds and runs the
@@ -230,7 +316,9 @@ default `-Reps 12` (drop to e.g. `-Reps 3` only for a quick smoke run).
 | File | Role |
 |---|---|
 | [`Run-PerfBenchmark.ps1`](Run-PerfBenchmark.ps1) | Orchestrator — build, run, interleave, render. Used by both the workflow and humans. |
-| [`PerfLib.ps1`](PerfLib.ps1) | Pure, side-effect-free helpers (parse, median, spread, paired-Δ 95% CI stats, direction-aware delta, comment renderer) + the sticky-comment marker. |
+| [`PerfLib.ps1`](PerfLib.ps1) | Pure, side-effect-free helpers (parse, median, spread, paired-Δ 95% CI stats, direction-aware delta, micro-suite parse/compare, comment renderer) + the sticky-comment marker. |
+| `PerfLib.Tests.ps1` / `RunPerfBenchmark.Tests.ps1` | Dependency-free unit tests for the helpers + orchestrator branching (run on a Linux runner via `perf-lib-tests.yml`). |
+| [`PerfBench.ControlModel`](../../perf_bench/PerfBench.ControlModel) | The reconciler micro-suite (spec-047 M1–M13) the micro leg builds + runs per side. Lives under `tests/perf_bench/`; `/perf` consumes its JSON-Lines output. |
 
 ## Troubleshooting
 

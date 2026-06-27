@@ -40,14 +40,14 @@ public static partial class ElementExtensions
     // ════════════════════════════════════════════════════════════════
 
     public static T Margin<T>(this T el, double uniform) where T : Element =>
-        Modify(el, new ElementModifiers { Margin = new Thickness(uniform) });
+        ModifyLayout(el, new LayoutModifiers { Margin = new Thickness(uniform) });
 
     // Two-argument spacing follows the same order everywhere in Reactor:
     // horizontal FIRST, then vertical. This keeps `.Margin(...)`,
     // `.Padding(...)`, and `.FlexPadding(...)` aligned and matches the mental
     // model of Thickness(left/right, top/bottom).
     public static T Margin<T>(this T el, double horizontal, double vertical) where T : Element =>
-        Modify(el, new ElementModifiers { Margin = new Thickness(horizontal, vertical, horizontal, vertical) });
+        ModifyLayout(el, new LayoutModifiers { Margin = new Thickness(horizontal, vertical, horizontal, vertical) });
 
     // Default values on the per-side overload let callers name only the sides
     // they want (`.Margin(top: 10)`, `.Margin(left: 8, right: 8)`). Existing
@@ -57,68 +57,68 @@ public static partial class ElementExtensions
     // (fewer parameters → preferred match). Mirrors WPF Thickness defaults:
     // unspecified sides are zero.
     public static T Margin<T>(this T el, double left = 0.0, double top = 0.0, double right = 0.0, double bottom = 0.0) where T : Element =>
-        Modify(el, new ElementModifiers { Margin = new Thickness(left, top, right, bottom) });
+        ModifyLayout(el, new LayoutModifiers { Margin = new Thickness(left, top, right, bottom) });
 
     public static T Padding<T>(this T el, double uniform) where T : Element =>
-        Modify(el, new ElementModifiers { Padding = new Thickness(uniform) });
+        ModifyLayout(el, new LayoutModifiers { Padding = new Thickness(uniform) });
 
     // Same ordering as Margin above — horizontal first, then vertical.
     public static T Padding<T>(this T el, double horizontal, double vertical) where T : Element =>
-        Modify(el, new ElementModifiers { Padding = new Thickness(horizontal, vertical, horizontal, vertical) });
+        ModifyLayout(el, new LayoutModifiers { Padding = new Thickness(horizontal, vertical, horizontal, vertical) });
 
     // Same defaulting story as Margin above — `.Padding(top: 8)` etc. are
     // valid; existing 1-arg / 2-arg / 4-arg positional call shapes still bind
     // to the more-specific overloads.
     public static T Padding<T>(this T el, double left = 0.0, double top = 0.0, double right = 0.0, double bottom = 0.0) where T : Element =>
-        Modify(el, new ElementModifiers { Padding = new Thickness(left, top, right, bottom) });
+        ModifyLayout(el, new LayoutModifiers { Padding = new Thickness(left, top, right, bottom) });
 
     // ── Logical (BiDi-aware) layout modifiers ───────────────────────
     // InlineStart = left in LTR, right in RTL. InlineEnd = right in LTR, left in RTL.
     // Resolved at mount/update time based on FlowDirection.
 
     public static T MarginInlineStart<T>(this T el, double value) where T : Element =>
-        Modify(el, new ElementModifiers { MarginInlineStart = value });
+        ModifyLayout(el, new LayoutModifiers { MarginInlineStart = value });
 
     public static T MarginInlineEnd<T>(this T el, double value) where T : Element =>
-        Modify(el, new ElementModifiers { MarginInlineEnd = value });
+        ModifyLayout(el, new LayoutModifiers { MarginInlineEnd = value });
 
     public static T PaddingInlineStart<T>(this T el, double value) where T : Element =>
-        Modify(el, new ElementModifiers { PaddingInlineStart = value });
+        ModifyLayout(el, new LayoutModifiers { PaddingInlineStart = value });
 
     public static T PaddingInlineEnd<T>(this T el, double value) where T : Element =>
-        Modify(el, new ElementModifiers { PaddingInlineEnd = value });
+        ModifyLayout(el, new LayoutModifiers { PaddingInlineEnd = value });
 
     public static T BorderInlineStart<T>(this T el, Thickness thickness) where T : Element =>
-        Modify(el, new ElementModifiers { BorderInlineStart = thickness });
+        ModifyLayout(el, new LayoutModifiers { BorderInlineStart = thickness });
 
     public static T Width<T>(this T el, double width) where T : Element =>
-        Modify(el, new ElementModifiers { Width = width });
+        ModifyLayout(el, new LayoutModifiers { Width = width });
 
     public static T Height<T>(this T el, double height) where T : Element =>
-        Modify(el, new ElementModifiers { Height = height });
+        ModifyLayout(el, new LayoutModifiers { Height = height });
 
     public static T Size<T>(this T el, double width, double height) where T : Element =>
-        Modify(el, new ElementModifiers { Width = width, Height = height });
+        ModifyLayout(el, new LayoutModifiers { Width = width, Height = height });
 
     public static T MinWidth<T>(this T el, double w) where T : Element =>
-        Modify(el, new ElementModifiers { MinWidth = w });
+        ModifyLayout(el, new LayoutModifiers { MinWidth = w });
 
     public static T MinHeight<T>(this T el, double h) where T : Element =>
-        Modify(el, new ElementModifiers { MinHeight = h });
+        ModifyLayout(el, new LayoutModifiers { MinHeight = h });
 
     public static T MaxWidth<T>(this T el, double w) where T : Element =>
-        Modify(el, new ElementModifiers { MaxWidth = w });
+        ModifyLayout(el, new LayoutModifiers { MaxWidth = w });
 
     public static T MaxHeight<T>(this T el, double h) where T : Element =>
-        Modify(el, new ElementModifiers { MaxHeight = h });
+        ModifyLayout(el, new LayoutModifiers { MaxHeight = h });
 
     // ── Alignment ───────────────────────────────────────────────────
 
     public static T HAlign<T>(this T el, HorizontalAlignment alignment) where T : Element =>
-        Modify(el, new ElementModifiers { HorizontalAlignment = alignment });
+        ModifyLayout(el, new LayoutModifiers { HorizontalAlignment = alignment });
 
     public static T VAlign<T>(this T el, VerticalAlignment alignment) where T : Element =>
-        Modify(el, new ElementModifiers { VerticalAlignment = alignment });
+        ModifyLayout(el, new LayoutModifiers { VerticalAlignment = alignment });
 
     // Long-form aliases matching the WinUI/WPF FrameworkElement property names.
     // The agent's first-instinct write is `.HorizontalAlignment(...)`; making
@@ -126,13 +126,13 @@ public static partial class ElementExtensions
     // Parameter types are fully qualified because the method names shadow the
     // enum names in this scope.
     public static T HorizontalAlignment<T>(this T el, Microsoft.UI.Xaml.HorizontalAlignment alignment) where T : Element =>
-        Modify(el, new ElementModifiers { HorizontalAlignment = alignment });
+        ModifyLayout(el, new LayoutModifiers { HorizontalAlignment = alignment });
 
     public static T VerticalAlignment<T>(this T el, Microsoft.UI.Xaml.VerticalAlignment alignment) where T : Element =>
-        Modify(el, new ElementModifiers { VerticalAlignment = alignment });
+        ModifyLayout(el, new LayoutModifiers { VerticalAlignment = alignment });
 
     public static T Center<T>(this T el) where T : Element =>
-        Modify(el, new ElementModifiers
+        ModifyLayout(el, new LayoutModifiers
         {
             HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Center,
             VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Center,
@@ -151,13 +151,13 @@ public static partial class ElementExtensions
     /// </para>
     /// </summary>
     public static T RequestedTheme<T>(this T el, ElementTheme theme) where T : Element =>
-        Modify(el, new ElementModifiers { RequestedTheme = theme });
+        ModifyLayout(el, new LayoutModifiers { RequestedTheme = theme });
 
     // ── Visibility ──────────────────────────────────────────────────
 
     /// <summary>Sets whether the element is visible or collapsed.</summary>
     public static T IsVisible<T>(this T el, bool isVisible) where T : Element =>
-        Modify(el, new ElementModifiers { IsVisible = isVisible });
+        ModifyLayout(el, new LayoutModifiers { IsVisible = isVisible });
 
     /// <inheritdoc cref="IsVisible{T}(T, bool)"/>
     [Obsolete("Use IsVisible() — aligns with WinUI boolean modifier naming (see #268).")]
@@ -165,19 +165,19 @@ public static partial class ElementExtensions
         el.IsVisible(isVisible);
 
     public static T Opacity<T>(this T el, double opacity) where T : Element =>
-        Modify(el, new ElementModifiers { Opacity = opacity });
+        ModifyVisual(el, new VisualModifiers { Opacity = opacity });
 
     public static T Scale<T>(this T el, global::System.Numerics.Vector3 scale) where T : Element =>
-        Modify(el, new ElementModifiers { Scale = scale });
+        ModifyVisual(el, new VisualModifiers { Scale = scale });
 
     public static T Scale<T>(this T el, float uniform) where T : Element =>
-        Modify(el, new ElementModifiers { Scale = new global::System.Numerics.Vector3(uniform, uniform, 1f) });
+        ModifyVisual(el, new VisualModifiers { Scale = new global::System.Numerics.Vector3(uniform, uniform, 1f) });
 
     public static T Rotation<T>(this T el, float degrees) where T : Element =>
-        Modify(el, new ElementModifiers { Rotation = degrees });
+        ModifyVisual(el, new VisualModifiers { Rotation = degrees });
 
     public static T CenterPoint<T>(this T el, global::System.Numerics.Vector3 center) where T : Element =>
-        Modify(el, new ElementModifiers { CenterPoint = center });
+        ModifyVisual(el, new VisualModifiers { CenterPoint = center });
 
     // ── Typography (any Control or TextBlock) ─────────────────────
     // These set font properties via ElementModifiers, so they work on ANY element
@@ -542,7 +542,34 @@ public static partial class ElementExtensions
     /// Usage: Text("Hello").ApplyStyle("BodyTextBlockStyle")
     /// </summary>
     public static T ApplyStyle<T>(this T el, string styleName) where T : Element =>
-        el.OnMount(fe => fe.Style = (Style)Application.Current.Resources[styleName]);
+        el.OnMount(StyleApplier(styleName));
+
+    // #174 — cache the OnMount delegate per style name so an unchanged
+    // `.ApplyStyle("X")` chain reuses one delegate instance instead of
+    // allocating a fresh capturing closure + display class on every render.
+    // (OnMountAction is excluded from the diff equality — it runs at mount
+    // only — so this is a pure allocation cut, not a skip-path change.)
+    // Style names are a small, finite, app-defined set, so the cache is
+    // bounded in practice. As defense-in-depth against a pathological
+    // data-driven caller that passes unbounded distinct style names, the
+    // cache stops growing past StyleApplierCacheCap and falls back to a
+    // per-call delegate (the pre-#174 behavior) — correctness is unchanged,
+    // only the allocation optimization stops applying beyond the cap.
+    private const int StyleApplierCacheCap = 256;
+    private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<string, Action<FrameworkElement>> _styleApplierCache = new();
+
+    private static Action<FrameworkElement> StyleApplier(string styleName)
+    {
+        // Steady-state hit: lock-free read returns the cached delegate with no
+        // allocation (preserves #174). Count is only touched on a miss, which
+        // happens at most once per distinct style name.
+        if (_styleApplierCache.TryGetValue(styleName, out var cached))
+            return cached;
+        if (_styleApplierCache.Count >= StyleApplierCacheCap)
+            return fe => fe.Style = (Style)Application.Current.Resources[styleName];
+        return _styleApplierCache.GetOrAdd(styleName,
+            static name => fe => fe.Style = (Style)Application.Current.Resources[name]);
+    }
 
     // ════════════════════════════════════════════════════════════════
     //  Sugar extensions (typed, return concrete element type)
@@ -1076,14 +1103,17 @@ public static partial class ElementExtensions
     // ── Background (Panel, Control, Border) ────────────────────────
 
     /// <summary>
-    /// Sets the background from a color string. Allocates a new SolidColorBrush per call.
-    /// On hot render paths, prefer the <see cref="Background{T}(T, Brush)"/> overload with a cached brush.
+    /// Sets the background from a color string (named color or #RRGGBB / #AARRGGBB).
+    /// Returns a fresh, caller-independent brush per call (see
+    /// <see cref="BrushHelper.Parse"/> — the parsed color is cached, the brush is
+    /// not); the diff compares brushes structurally (color + opacity). Use the
+    /// <see cref="Background{T}(T, Brush)"/> overload to supply an explicit brush.
     /// </summary>
     public static T Background<T>(this T el, string color) where T : Element =>
-        Modify(el, new ElementModifiers { Background = BrushHelper.Parse(color) });
+        ModifyVisual(el, new VisualModifiers { Background = BrushHelper.Parse(color) });
 
     public static T Background<T>(this T el, Brush brush) where T : Element =>
-        Modify(el, new ElementModifiers { Background = brush });
+        ModifyVisual(el, new VisualModifiers { Background = brush });
 
     /// <summary>
     /// Sets the background from a WinUI theme resource. Resolves at render time
@@ -1096,14 +1126,17 @@ public static partial class ElementExtensions
     // ── Foreground (Control, TextBlock) ──────────────────────────
 
     /// <summary>
-    /// Sets the foreground from a color string. Allocates a new SolidColorBrush per call.
-    /// On hot render paths, prefer the <see cref="Foreground{T}(T, Brush)"/> overload with a cached brush.
+    /// Sets the foreground from a color string (named color or #RRGGBB / #AARRGGBB).
+    /// Returns a fresh, caller-independent brush per call (see
+    /// <see cref="BrushHelper.Parse"/> — the parsed color is cached, the brush is
+    /// not); the diff compares brushes structurally (color + opacity). Use the
+    /// <see cref="Foreground{T}(T, Brush)"/> overload to supply an explicit brush.
     /// </summary>
     public static T Foreground<T>(this T el, string color) where T : Element =>
-        Modify(el, new ElementModifiers { Foreground = BrushHelper.Parse(color) });
+        ModifyVisual(el, new VisualModifiers { Foreground = BrushHelper.Parse(color) });
 
     public static T Foreground<T>(this T el, Brush brush) where T : Element =>
-        Modify(el, new ElementModifiers { Foreground = brush });
+        ModifyVisual(el, new VisualModifiers { Foreground = brush });
 
     /// <summary>
     /// Sets the foreground from a WinUI theme resource. Resolves at render time
@@ -1116,22 +1149,25 @@ public static partial class ElementExtensions
     // ── CornerRadius (on Control and Border) ────────────────────────
 
     public static T CornerRadius<T>(this T el, double radius) where T : Element =>
-        Modify(el, new ElementModifiers { CornerRadius = new Microsoft.UI.Xaml.CornerRadius(radius) });
+        ModifyVisual(el, new VisualModifiers { CornerRadius = new Microsoft.UI.Xaml.CornerRadius(radius) });
 
     public static T CornerRadius<T>(this T el, double topLeft, double topRight, double bottomRight, double bottomLeft) where T : Element =>
-        Modify(el, new ElementModifiers { CornerRadius = new Microsoft.UI.Xaml.CornerRadius(topLeft, topRight, bottomRight, bottomLeft) });
+        ModifyVisual(el, new VisualModifiers { CornerRadius = new Microsoft.UI.Xaml.CornerRadius(topLeft, topRight, bottomRight, bottomLeft) });
 
     // ── Border brush/thickness (on Control and Border) ─────────────
 
     /// <summary>
-    /// Sets the border from a color string. Allocates a new SolidColorBrush per call.
-    /// On hot render paths, prefer the <see cref="WithBorder{T}(T, Brush, double)"/> overload with a cached brush.
+    /// Sets the border from a color string (named color or #RRGGBB / #AARRGGBB).
+    /// Returns a fresh, caller-independent brush per call (see
+    /// <see cref="BrushHelper.Parse"/> — the parsed color is cached, the brush is
+    /// not); the diff compares brushes structurally (color + opacity). Use the
+    /// <see cref="WithBorder{T}(T, Brush, double)"/> overload to supply an explicit brush.
     /// </summary>
     public static T WithBorder<T>(this T el, string color, double thickness = 1) where T : Element =>
-        Modify(el, new ElementModifiers { BorderBrush = BrushHelper.Parse(color), BorderThickness = new Thickness(thickness) });
+        ModifyVisual(el, new VisualModifiers { BorderBrush = BrushHelper.Parse(color), BorderThickness = new Thickness(thickness) });
 
     public static T WithBorder<T>(this T el, Brush brush, double thickness = 1) where T : Element =>
-        Modify(el, new ElementModifiers { BorderBrush = brush, BorderThickness = new Thickness(thickness) });
+        ModifyVisual(el, new VisualModifiers { BorderBrush = brush, BorderThickness = new Thickness(thickness) });
 
     /// <summary>
     /// Sets the border from a WinUI theme resource. Resolves at render time
@@ -2729,7 +2765,7 @@ public static partial class ElementExtensions
     /// Routes through AnimationHelper so WithAnimation scopes animate the change.
     /// </summary>
     public static T Translation<T>(this T el, float x, float y, float z) where T : Element =>
-        Modify(el, new ElementModifiers { Translation = new global::System.Numerics.Vector3(x, y, z) });
+        ModifyVisual(el, new VisualModifiers { Translation = new global::System.Numerics.Vector3(x, y, z) });
 
     // ════════════════════════════════════════════════════════════════
     //  Compositor property animation (.Animate() modifier)
@@ -2834,6 +2870,33 @@ public static partial class ElementExtensions
     // <snippet:modifier-chain>
     private static T Modify<T>(T el, ElementModifiers mods) where T : Element =>
         el with { Modifiers = el.Modifiers is not null ? el.Modifiers.Merge(mods) : mods };
+
+    // #165/#157 — bucket-level merge entry points for pure-layout / pure-visual
+    // fluent modifiers. Routing through these avoids allocating a throwaway parent
+    // ElementModifiers (and the bucket sub-record its init shim builds) on every
+    // chained call: `.Margin().Width().Foreground()` merges the delta straight into
+    // the Layout / Visual slot instead of constructing a temporary ElementModifiers
+    // per step. Semantics are identical to Modify(el, new ElementModifiers { <field> }):
+    // ElementModifiers.Merge copies every non-bucket field as `other.X ?? X` (i.e.
+    // unchanged) when only a bucket is supplied, and merges the bucket with the same
+    // `other ?? this` precedence used here.
+    private static T ModifyLayout<T>(T el, LayoutModifiers delta) where T : Element
+    {
+        var mods = el.Modifiers;
+        if (mods is null)
+            return el with { Modifiers = new ElementModifiers { Layout = delta } };
+        var merged = mods.Layout is not null ? mods.Layout.Merge(delta) : delta;
+        return el with { Modifiers = mods with { Layout = merged } };
+    }
+
+    private static T ModifyVisual<T>(T el, VisualModifiers delta) where T : Element
+    {
+        var mods = el.Modifiers;
+        if (mods is null)
+            return el with { Modifiers = new ElementModifiers { Visual = delta } };
+        var merged = mods.Visual is not null ? mods.Visual.Merge(delta) : delta;
+        return el with { Modifiers = mods with { Visual = merged } };
+    }
 
     private static T ModifyA11y<T>(T el, AccessibilityModifiers a11y) where T : Element
     {

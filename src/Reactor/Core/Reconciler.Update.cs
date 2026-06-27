@@ -45,10 +45,19 @@ public sealed partial class Reconciler
             oldEl = oldMod.Inner;
             newEl = newMod.Inner;
         }
-        // Merge any modifiers from the final inner element
-        if (oldEl.Modifiers is not null)
+        // Merge any modifiers from the final inner element.
+        // When there were no ModifiedElement wrapper layers, oldModifiers/modifiers
+        // are still referentially the element's own Modifiers, so the Merge below
+        // would be a self-merge (x.Merge(x)) that allocates a fresh, value-identical
+        // ElementModifiers (plus its non-null Layout/Visual bucket sub-records) for
+        // nothing. For a large keyed grid that is ~6 needless allocations per changed
+        // cell every render (a Layout+Visual cell: parent + 2 buckets, on each of the
+        // old and new sides). Skip the self-merge when the accumulator is already the
+        // element's own modifiers; only merge when a wrapper layer contributed a
+        // distinct instance that must be combined.
+        if (oldEl.Modifiers is not null && !ReferenceEquals(oldModifiers, oldEl.Modifiers))
             oldModifiers = oldModifiers is not null ? oldModifiers.Merge(oldEl.Modifiers) : oldEl.Modifiers;
-        if (newEl.Modifiers is not null)
+        if (newEl.Modifiers is not null && !ReferenceEquals(modifiers, newEl.Modifiers))
             modifiers = modifiers is not null ? modifiers.Merge(newEl.Modifiers) : newEl.Modifiers;
 
         // Short-circuit: if old and new elements are structurally identical,
@@ -439,6 +448,13 @@ public sealed partial class Reconciler
         RichTextBlockElement next,
         Action requestRerender)
     {
+        // Issue #487 — arm scroll-offset preservation BEFORE mutating the
+        // document. WinUI re-measures any inline-UI-bearing paragraph from
+        // scratch (RemoveEmbeddedElements + desiredSize=0), which silently
+        // clamps an ancestor ScrollViewer/ScrollView's VerticalOffset up. The
+        // anchor restores the user's real offset once layout settles.
+        PreserveScrollAroundInlineUiMutation(rtb, next);
+
         if (TryIncrementalUpdateRichTextBlocks(rtb, prev, next, requestRerender))
             return;
         RebuildRichTextBlocks(next, rtb, requestRerender);

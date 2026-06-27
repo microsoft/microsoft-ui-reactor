@@ -40,6 +40,7 @@ The five core rules:
 | Hook order is stable | `REACTOR_HOOKS_001` | [Hooks](hooks.md) |
 | Hooks called from Render only | `REACTOR_HOOKS_005` | [Hooks](hooks.md) |
 | Deps are stable | `REACTOR_HOOKS_004` | [Hooks](hooks.md) |
+| Debounced commands need UseCommand | `REACTOR_HOOKS_009` | [Commanding](commanding.md) |
 | Render is pure | *(convention)* | [Components](components.md) |
 | Lists need keys | *(convention)* | [Collections](collections.md) |
 | Theme tokens not literals | `REACTOR_THEME_001` | [Theming Tokens](theming-tokens.md) |
@@ -206,6 +207,7 @@ Full coverage on [Theming Tokens](theming-tokens.md).
 | Deps must be stable | `REACTOR_HOOKS_004` | [Hooks](hooks.md) |
 | UseResource fetcher is idempotent | `REACTOR_HOOKS_006` | [Async Resources](async-resources.md) |
 | UseMemoCells builder must close over deps | `REACTOR_HOOKS_007` | [Hooks](hooks.md) |
+| Debounced commands routed through UseCommand | `REACTOR_HOOKS_009` | [Commanding](commanding.md) |
 | Render must be pure | *(convention — no analyzer)* | [Components](components.md), [Effects](effects.md) |
 | Lists need keys | *(convention — no analyzer)* | [Collections](collections.md), [Reconciliation](reconciliation.md) |
 | Theme-aware modifiers want a token | `REACTOR_THEME_001` | [Theming Tokens](theming-tokens.md) |
