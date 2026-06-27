@@ -953,6 +953,101 @@ function Format-PerfKeyedListSection {
     return $lines.ToArray()
 }
 
+function Format-PerfFlexSection {
+    <#
+    .SYNOPSIS
+        Render the flex workload section: the four headline metrics plus an
+        allocation sub-table measured on StressPerf.Flex — a deep nested, fully-realized
+        (non-virtualized) flex tree (~1500 leaf cells) whose per-child flex inputs
+        (grow / basis / width) are re-rolled on a fraction of the leaves each tick. Empty
+        array when there is nothing to show.
+    .DESCRIPTION
+        Unlike the positional StocksGrid headline/skip-floor legs (cells mutated in place
+        by index, child reconcile only) and the keyed-list leg (reordered keyed rows,
+        child reconcile only), this is a SEPARATE macro workload that drives the
+        FlexPanel / Yoga LAYOUT engine: re-rolling grow/basis/width re-dirties the Yoga
+        nodes and forces a real measure/layout pass every frame, while the unchanged
+        leaves re-push identical inputs (the YogaNode setter-equality-guard / layout
+        cache-hit path). It is the sensitive macro measure for Yoga/Flex layout-engine
+        allocation + memory work (layout-cache guards, inline per-node arrays, attached-DP
+        push caching, per-frame list/line pooling) that the positional StocksGrid and the
+        keyed-list legs can never exercise. Reuses the same paired-Δ 95% CI machinery
+        (Get-PerfDelta over the index-aligned per-run samples) as the headline table. Also
+        appends an **allocation** sub-table — the shared PerfAllocMetricSpec (alloc
+        bytes/render + Gen0 GC / 1k renders) over the flex aggregates — the sensitive
+        macro signal for LAYOUT-engine allocation reductions that the positional StocksGrid
+        allocation table can never isolate; rendered only when the flex leg reported
+        allocation metrics. Returns an empty array when either aggregate is $null (flex leg
+        disabled, build omitted, or one side produced no metrics), so the caller renders
+        nothing.
+    .PARAMETER MainFlex  Aggregated baseline flex metrics (Measure-PerfRuns), or $null.
+    .PARAMETER PrFlex    Aggregated PR-head flex metrics, or $null.
+    .PARAMETER Percent   The churn percent the flex leg ran at (heading / preamble).
+    #>
+    param(
+        [AllowNull()][pscustomobject]$MainFlex,
+        [AllowNull()][pscustomobject]$PrFlex,
+        [double]$Percent = 50
+    )
+    if ($null -eq $MainFlex -or $null -eq $PrFlex) { return @() }
+
+    $lines = [System.Collections.Generic.List[string]]::new()
+    $lines.Add("### Flex/Yoga layout workload (``StressPerf.Flex``, ``--percent $Percent``)")
+    $lines.Add('')
+    $lines.Add("A separate macro workload: a **deep nested, fully-realized** (non-virtualized) flex tree (~1500 leaf cells) whose per-child flex inputs (grow / basis / width) are re-rolled on a ``--percent`` fraction of the leaves each tick, forcing a real **Yoga measure/layout pass** every frame while the unchanged leaves re-push identical inputs (the YogaNode setter-equality-guard / layout-cache-hit path). This drives the **FlexPanel / Yoga LAYOUT engine** &mdash; the sensitive macro signal for Yoga/Flex layout-engine **allocation + memory** work the positional StocksGrid and keyed-list legs can never reach. Same interleaved paired-Δ 95% CI as the headline table.")
+    $lines.Add('')
+    $lines.Add('| Metric | `main` (baseline) | This PR | Δ (95% CI) | Status |')
+    $lines.Add('|---|--:|--:|--:|:--|')
+    foreach ($m in $script:PerfMetricSpec) {
+        $bVal = $MainFlex.($m.Key)
+        $pVal = $PrFlex.($m.Key)
+        $spread = [math]::Max([double]$MainFlex."$($m.Key)Spread", [double]$PrFlex."$($m.Key)Spread")
+        $delta = Get-PerfDelta -Baseline $bVal -Candidate $pVal -LowerIsBetter $m.LowerIsBetter -SpreadPct $spread `
+            -BaselineSamples $MainFlex."$($m.Key)Samples" -CandidateSamples $PrFlex."$($m.Key)Samples"
+        $lines.Add(('| {0} {1} | {2} | {3} | {4} | {5} |' -f `
+                $m.Label, $m.Arrow, `
+            (Format-PerfNumber $bVal $m.Digits), `
+            (Format-PerfNumber $pVal $m.Digits), `
+            (Format-PerfDeltaCell $delta), `
+            (Get-PerfStatusGlyph $delta.Status)))
+    }
+    $lines.Add('')
+
+    # Allocation sub-table for the flex workload: the shared PerfAllocMetricSpec
+    # (Alloc bytes/render, Gen0 GC / 1k renders) rendered over the flex aggregates with
+    # the identical paired-Δ 95% CI machinery used above. This is the sensitive MACRO
+    # signal for LAYOUT-engine allocation reductions — allocBytesPerRender tracks the
+    # per-frame layout-pass alloc volume (rented child/line lists, attached-DP pushes) on
+    # the Yoga path, an alloc signal the positional StocksGrid allocation table can never
+    # isolate. Rendered only when the flex leg reported allocation metrics (every
+    # StressPerf.Flex build does; n/a only for a legacy head opened before the metric
+    # landed).
+    $hasFlexAlloc = ($null -ne $MainFlex.AllocBytesPerRender) -or ($null -ne $PrFlex.AllocBytesPerRender) -or
+                    ($null -ne $MainFlex.Gen0PerKRenders) -or ($null -ne $PrFlex.Gen0PerKRenders)
+    if ($hasFlexAlloc) {
+        $lines.Add('**Allocation (flex)** &mdash; lower is better')
+        $lines.Add('')
+        $lines.Add('| Metric | `main` (baseline) | This PR | Δ (95% CI) | Status |')
+        $lines.Add('|---|--:|--:|--:|:--|')
+        foreach ($m in $script:PerfAllocMetricSpec) {
+            $bVal = $MainFlex.($m.Key)
+            $pVal = $PrFlex.($m.Key)
+            $spread = [math]::Max([double]$MainFlex."$($m.Key)Spread", [double]$PrFlex."$($m.Key)Spread")
+            $delta = Get-PerfDelta -Baseline $bVal -Candidate $pVal -LowerIsBetter $m.LowerIsBetter -SpreadPct $spread `
+                -BaselineSamples $MainFlex."$($m.Key)Samples" -CandidateSamples $PrFlex."$($m.Key)Samples"
+            $lines.Add(('| {0} {1} | {2} | {3} | {4} | {5} |' -f `
+                    $m.Label, $m.Arrow, `
+                (Format-PerfNumber $bVal $m.Digits), `
+                (Format-PerfNumber $pVal $m.Digits), `
+                (Format-PerfDeltaCell $delta), `
+                (Get-PerfStatusGlyph $delta.Status)))
+        }
+        $lines.Add('')
+    }
+
+    return $lines.ToArray()
+}
+
 function Format-PerfComment {
     <#
     .SYNOPSIS
@@ -973,6 +1068,8 @@ function Format-PerfComment {
     .PARAMETER PrFloor    Aggregated PR-head low-mutation skip-floor metrics, or $null.
     .PARAMETER MainKeyed  Aggregated baseline keyed-list workload metrics, or $null.
     .PARAMETER PrKeyed     Aggregated PR-head keyed-list workload metrics, or $null.
+    .PARAMETER MainFlex   Aggregated baseline flex workload metrics, or $null.
+    .PARAMETER PrFlex      Aggregated PR-head flex workload metrics, or $null.
     .PARAMETER Context    Hashtable: Percent, Duration, Reps, Warmup, SkipFloorPercent,
                           BaseSha, HeadSha, Runner, Cpu, Cores, MemoryGB, RunUrl,
                           Timestamp, Note.
@@ -988,6 +1085,8 @@ function Format-PerfComment {
         [AllowNull()][pscustomobject]$PrFloor,
         [AllowNull()][pscustomobject]$MainKeyed,
         [AllowNull()][pscustomobject]$PrKeyed,
+        [AllowNull()][pscustomobject]$MainFlex,
+        [AllowNull()][pscustomobject]$PrFlex,
         [Parameter(Mandatory)][hashtable]$Context
     )
 
@@ -1069,6 +1168,15 @@ function Format-PerfComment {
     # keyed-diff optimizations. Rendered only when both keyed aggregates are present.
     $keyedPct = if ($Context.ContainsKey('Percent')) { [double]$Context.Percent } else { 50 }
     foreach ($kline in (Format-PerfKeyedListSection -MainKeyed $MainKeyed -PrKeyed $PrKeyed -Percent $keyedPct)) { & $add $kline }
+
+    # ── Flex/Yoga layout workload table (StressPerf.Flex) ────────────────────
+    # A separate macro workload driving the FlexPanel / Yoga LAYOUT engine — a deep
+    # nested, fully-realized flex tree re-laid-out each tick — that neither the positional
+    # StocksGrid legs nor the keyed-list leg (both child-reconcile only) reach. The
+    # sensitive macro signal for Yoga/Flex layout-engine alloc + memory optimizations.
+    # Rendered only when both flex aggregates are present.
+    $flexPct = if ($Context.ContainsKey('Percent')) { [double]$Context.Percent } else { 50 }
+    foreach ($fline in (Format-PerfFlexSection -MainFlex $MainFlex -PrFlex $PrFlex -Percent $flexPct)) { & $add $fline }
 
     # ── Reconciler micro-benchmarks (ns-resolution, WinUI-undiluted) ──────────
     # Rendered only when the PerfBench.ControlModel micro leg produced results for

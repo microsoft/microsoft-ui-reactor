@@ -546,6 +546,85 @@ Assert-Match $bothAllocComment 'Allocation (Reactor)'    'full comment keeps the
 Assert-Match $bothAllocComment 'Allocation (keyed-list)' 'full comment adds the distinct keyed allocation sub-table'
 
 
+# ── Format-PerfFlexSection + Format-PerfComment: flex/Yoga layout workload ─────
+# Same direction-aware, by-significance shape as the keyed block above: rps/reconcile/
+# diff move DOWN main->PR while memory carries a small SYMMETRIC per-pair jitter (mean
+# Δ ~0). The verdicts must split exactly as for the keyed leg — proving the flex section
+# reuses the shared direction-aware paired-CI machinery rather than a hard-coded verdict.
+$flexMainRuns = @(); $flexPrRuns = @()
+1..12 | ForEach-Object {
+    $j = ($_ % 4) * 0.05
+    $mj = ((($_ % 2) * 2) - 1) * 0.2  # alternating +0.2 / -0.2 so the paired memory Δ straddles 0
+    $flexMainRuns += [pscustomobject]@{ RendersPerSec = 8.0 + $j; AvgReconcileMs = 9.0 + $j; AvgDiffMs = 7.0 + $j; AvgMemoryMB = 250 + $mj; TotalRenders = 80; DurationSeconds = 10 }
+    $flexPrRuns   += [pscustomobject]@{ RendersPerSec = 7.0 + $j; AvgReconcileMs = 7.0 + $j; AvgDiffMs = 5.0 + $j; AvgMemoryMB = 250 - $mj; TotalRenders = 70; DurationSeconds = 10 }
+}
+$flexMain = Measure-PerfRuns -Runs $flexMainRuns
+$flexPr   = Measure-PerfRuns -Runs $flexPrRuns
+
+# Direct section renderer: empty when either side is null, populated when both present.
+Assert-Equal 0 @(Format-PerfFlexSection -MainFlex $null -PrFlex $flexPr -Percent 50).Count 'flex section empty when main flex null'
+Assert-Equal 0 @(Format-PerfFlexSection -MainFlex $flexMain -PrFlex $null -Percent 50).Count 'flex section empty when pr flex null'
+$flexSection = Format-PerfFlexSection -MainFlex $flexMain -PrFlex $flexPr -Percent 50
+$flexSectionText = $flexSection -join "`n"
+Assert-Match $flexSectionText 'Flex/Yoga layout workload' 'flex section has heading'
+Assert-Match $flexSectionText 'StressPerf.Flex'           'flex heading names the workload'
+Assert-Match $flexSectionText 'Avg Reconcile'             'flex section has reconcile row'
+Assert-Match $flexSectionText 'Yoga'                      'flex preamble names the Yoga layout engine'
+Assert-Match $flexSectionText 'layout pass'               'flex preamble cites the per-frame layout pass'
+# Direction-awareness: rps and reconcile both DECREASE main->PR, yet rps (higher-is-
+# better) must read regression while reconcile (lower-is-better) reads improvement.
+$flexRpsRow   = ($flexSection | Where-Object { $_ -match 'Renders/sec' })   -join ' '
+$flexReconRow = ($flexSection | Where-Object { $_ -match 'Avg Reconcile' }) -join ' '
+$flexDiffRow  = ($flexSection | Where-Object { $_ -match 'Avg Diff' })      -join ' '
+$flexMemRow   = ($flexSection | Where-Object { $_ -match 'Avg Memory' })    -join ' '
+Assert-Match $flexRpsRow   'regression'  'flex: rps DOWN reads regression (higher-is-better honored)'
+Assert-Match $flexReconRow 'improvement' 'flex: reconcile DOWN reads improvement (lower-is-better honored)'
+Assert-Match $flexDiffRow  'improvement' 'flex: diff DOWN reads improvement (lower-is-better honored)'
+Assert-Match $flexMemRow   'within noise' 'flex: symmetric memory Δ reads within noise (paired CI straddles 0)'
+# -Percent threads into the heading independently of the methodology line.
+$flexSection75 = (Format-PerfFlexSection -MainFlex $flexMain -PrFlex $flexPr -Percent 75) -join "`n"
+Assert-Match $flexSection75 'Flex/Yoga layout workload*--percent 75' 'flex heading reflects the -Percent argument'
+
+# Threaded through Format-PerfComment: present when flex aggregates present, sitting
+# after the keyed-list table and before the cross-framework table.
+$flexComment = Format-PerfComment -Main $main -Pr $pr -WinUI3 $null -Rust $null -MainFloor $floorMain -PrFloor $floorPr -MainKeyed $keyedMain -PrKeyed $keyedPr -MainFlex $flexMain -PrFlex $flexPr -Context $ctx
+Assert-Match $flexComment 'Flex/Yoga layout workload' 'comment renders flex table when flex aggregates present'
+$idxKeyedF = $flexComment.IndexOf('Keyed-list workload')
+$idxFlexF  = $flexComment.IndexOf('Flex/Yoga layout workload')
+$idxXfwF   = $flexComment.IndexOf('Cross-framework reference')
+Assert-True (($idxKeyedF -lt $idxFlexF) -and ($idxFlexF -lt $idxXfwF)) 'flex table sits after the keyed-list table and before cross-framework'
+
+# Omitted entirely when flex aggregates are absent (flex leg disabled / build omitted).
+$noFlexComment = Format-PerfComment -Main $main -Pr $pr -WinUI3 $null -Rust $null -MainFlex $null -PrFlex $null -Context $ctx
+Assert-True (-not ($noFlexComment -like '*Flex/Yoga layout workload*')) 'flex table omitted when flex aggregates null'
+
+# Allocation sub-table for the flex leg: shared PerfAllocMetricSpec over flex aggregates.
+# Alloc moves DOWN main->PR (an improvement on a lower-is-better metric); tiny jitter
+# keeps each paired CI off 0.
+$flexAllocMain = Measure-PerfRuns -Runs @(
+    [pscustomobject]@{ RendersPerSec = 18.5; AvgReconcileMs = 6.98; AvgDiffMs = 6.86; AvgMemoryMB = 186; AllocBytesPerRender = 512000; Gen0PerKRenders = 98.2; Gen0 = 9; Gen1 = 3; Gen2 = 1; TotalRenders = 96; DurationSeconds = 5 }
+    [pscustomobject]@{ RendersPerSec = 18.6; AvgReconcileMs = 6.98; AvgDiffMs = 6.86; AvgMemoryMB = 186; AllocBytesPerRender = 512200; Gen0PerKRenders = 98.4; Gen0 = 9; Gen1 = 3; Gen2 = 1; TotalRenders = 96; DurationSeconds = 5 }
+    [pscustomobject]@{ RendersPerSec = 18.4; AvgReconcileMs = 6.98; AvgDiffMs = 6.86; AvgMemoryMB = 186; AllocBytesPerRender = 511800; Gen0PerKRenders = 98.0; Gen0 = 9; Gen1 = 3; Gen2 = 1; TotalRenders = 96; DurationSeconds = 5 }
+)
+$flexAllocPr = Measure-PerfRuns -Runs @(
+    [pscustomobject]@{ RendersPerSec = 18.5; AvgReconcileMs = 6.98; AvgDiffMs = 6.86; AvgMemoryMB = 186; AllocBytesPerRender = 384000; Gen0PerKRenders = 74.2; Gen0 = 7; Gen1 = 3; Gen2 = 1; TotalRenders = 96; DurationSeconds = 5 }
+    [pscustomobject]@{ RendersPerSec = 18.6; AvgReconcileMs = 6.98; AvgDiffMs = 6.86; AvgMemoryMB = 186; AllocBytesPerRender = 384200; Gen0PerKRenders = 74.4; Gen0 = 7; Gen1 = 3; Gen2 = 1; TotalRenders = 96; DurationSeconds = 5 }
+    [pscustomobject]@{ RendersPerSec = 18.4; AvgReconcileMs = 6.98; AvgDiffMs = 6.86; AvgMemoryMB = 186; AllocBytesPerRender = 383800; Gen0PerKRenders = 74.0; Gen0 = 7; Gen1 = 3; Gen2 = 1; TotalRenders = 96; DurationSeconds = 5 }
+)
+$flexAllocSection = Format-PerfFlexSection -MainFlex $flexAllocMain -PrFlex $flexAllocPr -Percent 50
+$flexAllocText = $flexAllocSection -join "`n"
+Assert-Match $flexAllocText 'Allocation (flex)'  'flex section renders the allocation sub-table when alloc present'
+Assert-Match $flexAllocText 'Alloc bytes/render' 'flex alloc sub-table has bytes/render row'
+Assert-Match $flexAllocText 'Gen0 GC / 1k renders' 'flex alloc sub-table has Gen0 row'
+$flexAllocRow = ($flexAllocSection | Where-Object { $_ -match 'Alloc bytes/render' }) -join ' '
+Assert-Match $flexAllocRow 'improvement' 'flex alloc DOWN main->PR reads improvement (lower-is-better honored)'
+$idxFlexHead  = $flexAllocText.IndexOf('Avg Reconcile')
+$idxFlexAlloc = $flexAllocText.IndexOf('Allocation (flex)')
+Assert-True (($idxFlexHead -ge 0) -and ($idxFlexHead -lt $idxFlexAlloc)) 'flex alloc sub-table follows the flex headline metrics table'
+# Omitted when the flex aggregates carry no alloc metrics (legacy flex head).
+Assert-True (-not ($flexSectionText -like '*Allocation (flex)*')) 'flex alloc sub-table omitted when flex aggregates lack alloc'
+
+
 # ── Reconciler micro-suite: Read-MicroBenchResults / comparison / render ──────
 function New-MicroRow {
     param([string]$BenchId, [string]$Name, [string]$Variant, [int]$Rep, [double]$MeanNs, [double]$AllocBytes, [string]$Status = 'ok', [int]$Iterations = 1)
