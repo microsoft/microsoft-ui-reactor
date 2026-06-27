@@ -550,12 +550,26 @@ public static partial class ElementExtensions
     // (OnMountAction is excluded from the diff equality — it runs at mount
     // only — so this is a pure allocation cut, not a skip-path change.)
     // Style names are a small, finite, app-defined set, so the cache is
-    // bounded in practice.
+    // bounded in practice. As defense-in-depth against a pathological
+    // data-driven caller that passes unbounded distinct style names, the
+    // cache stops growing past StyleApplierCacheCap and falls back to a
+    // per-call delegate (the pre-#174 behavior) — correctness is unchanged,
+    // only the allocation optimization stops applying beyond the cap.
+    private const int StyleApplierCacheCap = 256;
     private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<string, Action<FrameworkElement>> _styleApplierCache = new();
 
-    private static Action<FrameworkElement> StyleApplier(string styleName) =>
-        _styleApplierCache.GetOrAdd(styleName,
+    private static Action<FrameworkElement> StyleApplier(string styleName)
+    {
+        // Steady-state hit: lock-free read returns the cached delegate with no
+        // allocation (preserves #174). Count is only touched on a miss, which
+        // happens at most once per distinct style name.
+        if (_styleApplierCache.TryGetValue(styleName, out var cached))
+            return cached;
+        if (_styleApplierCache.Count >= StyleApplierCacheCap)
+            return fe => fe.Style = (Style)Application.Current.Resources[styleName];
+        return _styleApplierCache.GetOrAdd(styleName,
             static name => fe => fe.Style = (Style)Application.Current.Resources[name]);
+    }
 
     // ════════════════════════════════════════════════════════════════
     //  Sugar extensions (typed, return concrete element type)

@@ -13,7 +13,13 @@ namespace Microsoft.UI.Reactor;
 /// </summary>
 public static class BrushHelper
 {
-    private static readonly ConcurrentDictionary<string, global::Windows.UI.Color> _colorCache = new();
+    // OrdinalIgnoreCase so equivalent colors that differ only in casing
+    // ("Red"/"red", "#FF0000"/"#ff0000") share one cache entry instead of
+    // creating duplicates. Safe because ParseColor lowercases named colors
+    // before matching and ParseHex is case-insensitive, so case-folded keying
+    // yields identical results to the prior case-sensitive keying.
+    private static readonly ConcurrentDictionary<string, global::Windows.UI.Color> _colorCache =
+        new(global::System.StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Parses a color string into a fresh <see cref="SolidColorBrush"/> owned by the
