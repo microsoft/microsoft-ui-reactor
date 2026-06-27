@@ -285,4 +285,121 @@ public class ChildReconcilerStructuralSkipTests
         Assert.Equal(new[] { 0, 1, 2, 3, 4 }, collFull.GetCalls);
         Assert.Equal(new[] { changedIdx }, collFast.GetCalls);
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Allocation-budget teeth for the structural-skip win (spec 034 §C, #699).
+    //
+    //  The behavioural tests above pin the VISIT COUNT (which indices the fast
+    //  path reads). This pins the SAME elision as a GC-bytes budget — the shape
+    //  the #692 / #665 regression guards use — so the measured StocksGrid
+    //  allocation win cannot be silently reverted with the visit-count tests
+    //  still green.
+    //
+    //  What the win is: for every UNTOUCHED cell the full positional walk issues
+    //  a children.Get(i) read — a COM IVector.GetAt round-trip that marshals /
+    //  projects a wrapper per call on a live control. The structural skip elides
+    //  that read for the reference-equal untouched range. Headless there is no
+    //  XAML core, so the real COM/marshaling cost cannot be incurred (Get returns
+    //  null and allocates nothing). To make the elision measurable as managed
+    //  bytes, the measuring collection below charges a fixed allocation per read,
+    //  modeling the per-cell marshaling the skip avoids. The fast path then
+    //  allocates O(changed); the full walk O(count); a reverted skip makes the
+    //  hinted path walk every cell too, collapsing the two and failing the budget.
+
+    /// <summary>
+    /// An <see cref="IChildCollection"/> that charges a fixed managed allocation
+    /// per <see cref="Get"/>, modeling the per-cell COM read / marshaling the
+    /// structural skip elides for untouched cells (unmeasurable headless, where
+    /// no live control exists). Returns null so no WinUI control is needed — the
+    /// skip arm's <c>is FrameworkElement</c> guard tolerates it.
+    /// </summary>
+    private sealed class MeasuringChildCollection : IChildCollection
+    {
+        private readonly int _count;
+        // Public field so the per-read allocation provably escapes: the JIT may
+        // not elide a heap write to a reachable field, so each read is counted by
+        // GetAllocatedBytesForCurrentThread.
+        public object? LastRead;
+        public int Reads { get; private set; }
+
+        public MeasuringChildCollection(int count) => _count = count;
+
+        public int Count => _count;
+        public UIElement Get(int index)
+        {
+            Reads++;
+            LastRead = new byte[48]; // models the elided per-cell COM read / marshaling
+            return null!;
+        }
+        public void Insert(int index, UIElement element) { }
+        public void RemoveAt(int index) { }
+        public void Move(int oldIndex, int newIndex) { }
+        public void Replace(int index, UIElement element) { }
+    }
+
+    [Fact]
+    public void Structural_Skip_Pins_PerCell_Read_Elision_As_Allocation_Budget()
+    {
+        const int n = 500;            // StocksGrid cell count
+        const int changedCount = 5;   // steady-state moderate churn
+        const int warmup = 200;
+        const int iterations = 1_000;
+
+        // Steady-state producer shape: the new array REUSES the previous render's
+        // element instances at untouched indices (reference-equal) and a fresh
+        // value-equal copy at each changed index — exactly UseMemoCellsByIndex.
+        int[] changedIdx = new int[changedCount];
+        for (int k = 0; k < changedCount; k++)
+            changedIdx[k] = (k + 1) * (n / (changedCount + 1));
+
+        var oldFast = ButtonCells(n);
+        var newFast = (Element[])oldFast.Clone();
+        foreach (int idx in changedIdx)
+            newFast[idx] = Button($"cell-{idx}", NoOp); // fresh, value-equal copy
+        ChildDiffHints.Publish(newFast,
+            new ChildDiffHint(changedIdx, themeSensitiveCount: 0, previousChildren: oldFast));
+
+        // FAST PATH — hint present, so the positional walk visits only changedIdx.
+        var fastColl = new MeasuringChildCollection(n);
+        var rFast = new Reconciler();
+        for (int i = 0; i < warmup; i++)
+            ChildReconciler.Reconcile(oldFast, newFast, fastColl, rFast, NoOp);
+        long fb = global::System.GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < iterations; i++)
+            ChildReconciler.Reconcile(oldFast, newFast, fastColl, rFast, NoOp);
+        long fastAlloc = global::System.GC.GetAllocatedBytesForCurrentThread() - fb;
+        int fastReadsPerIter = fastColl.Reads / (warmup + iterations);
+
+        // FULL WALK — identical inputs but NO published hint, so the fast path
+        // cannot engage and every common index is read.
+        var oldFull = ButtonCells(n);
+        var newFull = (Element[])oldFull.Clone();
+        foreach (int idx in changedIdx)
+            newFull[idx] = Button($"cell-{idx}", NoOp);
+        // (deliberately no ChildDiffHints.Publish for newFull — defeats the skip)
+        var fullColl = new MeasuringChildCollection(n);
+        var rFull = new Reconciler();
+        for (int i = 0; i < warmup; i++)
+            ChildReconciler.Reconcile(oldFull, newFull, fullColl, rFull, NoOp);
+        long ub = global::System.GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < iterations; i++)
+            ChildReconciler.Reconcile(oldFull, newFull, fullColl, rFull, NoOp);
+        long fullAlloc = global::System.GC.GetAllocatedBytesForCurrentThread() - ub;
+        int fullReadsPerIter = fullColl.Reads / (warmup + iterations);
+
+        // Mechanism: the fast path reads ONLY the changed cells; the full walk
+        // reads EVERY cell. This read-elision is exactly what the budget pins.
+        Assert.Equal(changedCount, fastReadsPerIter);
+        Assert.Equal(n, fullReadsPerIter);
+
+        // Budget: the full walk allocates ~n/changedCount× (≈100×) the fast path.
+        // Require a wide ≥8× margin — robust to measurement noise, yet the test
+        // FAILS if the structural skip is disabled/reverted, because the hinted
+        // path then walks every cell too and fastAlloc collapses onto fullAlloc.
+        Assert.True(fullAlloc > fastAlloc * 8,
+            $"Structural skip no longer cuts the per-cell read allocation: " +
+            $"fast={fastAlloc}B ({fastReadsPerIter} reads/iter), " +
+            $"full={fullAlloc}B ({fullReadsPerIter} reads/iter) over {iterations} iters. " +
+            $"Expected full > 8x fast; a reverted skip makes them equal.");
+    }
 }
