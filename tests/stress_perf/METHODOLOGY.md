@@ -240,6 +240,31 @@ each leg's delta independently cancels time-correlated drift); it is opt-out via
 `-IncludeSkipFloor $false`. See
 [`ci/README.md`](ci/README.md#the-comment).
 
+## Keyed-list workload: the keyed child-diff path StocksGrid never hits
+
+The StocksGrid macro workload (`StressPerf.ReactorOptimized`) renders a fixed grid
+of cells mutated **in place by index**. Its child diff therefore always takes
+`ChildReconciler.ReconcilePositional` — the positional re-walk. It never exercises
+the reconciler's **keyed** arm, so keyed-diff optimizations (the keyed-list LIS
+diff, keyed structural-skip) are invisible to it *by construction* — the same blind
+spot that made the original headline-only comparison unable to resolve them.
+
+So `/perf` runs a **third interleaved A/B leg** on `StressPerf.KeyedList`: a ~500-row
+list of **stably keyed** children that are reordered / inserted / removed each tick.
+Because every child carries a key, the child reconciler takes its keyed arm
+(`ReconcileKeyed` → `ReconcileKeyedMiddle`, the LIS-based minimal-move pass) and runs
+a real keyed diff every tick. The workload is deterministic (fixed RNG seed, constant
+row count — insertions paired with removals) so `main` and PR compare identical edit
+sequences, and its rows' labels are content-stable so a moved row's text never changes
+— isolating the **structural** (keyed-diff) signal from per-cell property updates. It
+reports the four headline metrics in its own table, plus an **allocation** sub-table
+(`Alloc bytes/render`, `Gen0 GC / 1k renders`) — the sensitive macro signal for
+keyed-diff *allocation* reductions the positional StocksGrid alloc table can't isolate,
+rendered only when the keyed leg reports the metric — all under the same interleaving,
+reps, warm-up, and 95%-CI gating as the headline leg, and is opt-out via
+`-IncludeKeyedList $false`. See
+[`ci/README.md`](ci/README.md#the-comment).
+
 ## Reconciler micro-benchmarks: ns-resolution Core path
 
 Every metric above is measured **across a live WinUI render pipeline**, which is
@@ -264,19 +289,27 @@ their own `src/Reactor` — and reports a per-bench `main`-vs-PR table; see
 [`ci/README.md`](ci/README.md#reconciler-micro-benchmarks-ns-resolution-winui-undiluted).
 The two metrics are read differently. **Allocated bytes/op is deterministic** for
 identical code — an unchanged diff reproduces the byte count exactly — so its paired
-95% CI is trustworthy and **drives each row's flag**. **ns/op is informational only**
-in v1: the two per-side runs are not yet rep-interleaved, so a systematic
-process-to-process timing offset (thermal/scheduling drift between the back-to-back
-invocations) shifts every paired ns difference the same way and makes the paired CI
-exclude 0 even for an identical binary. Local validation confirmed it — running the
-**same** ControlModel binary as both sides, alloc was deterministic (14/16 benches
-exactly 0.0% Δ) while ns spuriously flagged up to −14.8% on a no-op. So ns is shown
-for context but excluded from the flag, and **rep-level interleaving of the two sides
-is the documented fast-follow** that would promote ns to a flagged signal.
+95% CI is trustworthy and **drives each row's flag**. **ns/op is rep-interleaved but
+not auto-flagged by default.** The two per-side runs are interleaved at the **rep
+level** — each rep alternates a fresh `main` then PR process — so the
+process-to-process timing offset (thermal/scheduling drift) that a single back-to-back
+pair of invocations leaves as a *constant* bias is instead randomized round-to-round
+into the paired variance, making the ns paired CI unbiased. This matters because
+before interleaving that offset shifted every paired ns difference the same way and
+made the paired CI exclude 0 even for an identical binary: running the **same**
+ControlModel binary as both sides, alloc was deterministic (14/16 benches exactly
+0.0% Δ) while ns spuriously flagged up to −14.8% on a no-op. Even interleaved, ns
+carries residual cold-JIT / scheduling jitter, so promoting it to a flag is gated
+behind a minimum-effect band **and** a master switch (`$MicroNsAutoFlag`) that stays
+**dormant** pending a real-CI identical-binary calibration of that band — which can
+only run once the interleave is on `main`, since `/perf` builds the harness from the
+default branch. Arming the switch is a measurement-only follow-up — it changes verdict
+labels, never what merges. While dormant the row flag tracks allocated bytes/op (v1
+behaviour).
 
 It is the **authoritative instrument** for per-reconcile allocation deltas (and,
-once interleaved, reconcile-time deltas); the macro tables remain the user-facing
-throughput sanity check.
+once the ns flag is armed, reconcile-time deltas); the macro tables remain the
+user-facing throughput sanity check.
 
 ## Don'ts (so we don't redo this analysis)
 

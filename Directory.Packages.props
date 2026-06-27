@@ -70,7 +70,7 @@
     <PackageVersion Include="Microsoft.VisualStudio.Utilities" Version="17.14.40264" />
     <PackageVersion Include="Microsoft.VisualStudio.Composition" Version="17.13.41" />
     <PackageVersion Include="Microsoft.VisualStudio.Sdk.TestFramework.Xunit.v3" Version="17.11.66" />
-    <PackageVersion Include="Microsoft.VisualStudio.Threading.Analyzers" Version="17.14.15" />
+    <PackageVersion Include="Microsoft.VisualStudio.Threading.Analyzers" Version="18.7.23" />
     <PackageVersion Include="Microsoft.VisualStudio.SDK.Analyzers" Version="17.7.113" />
     <PackageVersion Include="Microsoft.VSSDK.BuildTools" Version="18.6.38345" />
   </ItemGroup>
