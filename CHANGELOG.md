@@ -337,6 +337,19 @@ Conventions for contributors:
 
 ### Fixed
 
+- **RichTextBlock inline-UI mutations no longer scroll the ancestor scroll host to
+  the top (issue #487).** Mutating any `Run.Text` inside a paragraph that hosts an
+  `InlineUIContainer` (charts/sliders/buttons embedded via `InlineUI(...)`) made the
+  enclosing `ScrollViewer`/`ScrollView` silently scroll up by the combined height of
+  the embedded inline elements. WinUI's text engine re-measures the whole paragraph
+  from scratch (`ParagraphNode::Measure` → `RemoveEmbeddedElements()` + `desiredSize=0`
+  for one layout pass), so the block transiently shrinks, the scroll host clamps
+  `VerticalOffset` down to the smaller `ScrollableHeight`, and never restores it once
+  the inline UI re-attaches. The fix is invisible to authors — `ScrollViewer(RichTextBlock(...))`
+  "Just Works": `UpdateRichTextBlocks` now arms a scroll anchor on the nearest ancestor
+  scroll host before mutating an inline-UI-bearing block and restores the user's real
+  offset once layout settles, while never fighting a genuine user scroll. No new API
+  surface, no per-app boilerplate.
 - **Multi-window teardown no longer faults with an `ACCESS_VIOLATION`
   (issue #647).** Closing a docking tear-off floating preview window could
   terminate the process with `0xC0000005` deep in the WinUI backdrop interop —
