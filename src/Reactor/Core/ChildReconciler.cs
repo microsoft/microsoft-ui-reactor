@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Collections.Concurrent;
+using System.Numerics;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Reactor.Core.Internal;
 using WinUI = Microsoft.UI.Xaml.Controls;
@@ -569,8 +570,7 @@ internal static class ChildReconciler
                 {
                     // Insertion at `anchor` shifts every tracked survivor at an
                     // index >= anchor one slot to the right.
-                    for (int r = 0; r < oldMidLen; r++)
-                        if (oldRelToPanel[r] >= anchor) oldRelToPanel[r]++;
+                    BumpAtOrAfter(oldRelToPanel, oldMidLen, anchor);
                     // The new control now occupies `anchor` and is the anchor for
                     // the next (left) item, so `anchor` itself is unchanged.
                 }
@@ -594,19 +594,13 @@ internal static class ChildReconciler
                     // between the two endpoints by one slot.
                     if (cur < to)
                     {
-                        for (int r = 0; r < oldMidLen; r++)
-                        {
-                            int p = oldRelToPanel[r];
-                            if (p > cur && p <= to) oldRelToPanel[r] = p - 1;
-                        }
+                        // Survivors in (cur, to] shift one left to close the gap.
+                        DecrementWhereGtLe(oldRelToPanel, oldMidLen, cur, to);
                     }
                     else
                     {
-                        for (int r = 0; r < oldMidLen; r++)
-                        {
-                            int p = oldRelToPanel[r];
-                            if (p >= to && p < cur) oldRelToPanel[r] = p + 1;
-                        }
+                        // Survivors in [to, cur) shift one right to open the gap.
+                        IncrementWhereGeLt(oldRelToPanel, oldMidLen, to, cur);
                     }
                     oldRelToPanel[oldRel] = to;
                     cur = to;
@@ -615,6 +609,101 @@ internal static class ChildReconciler
 
             sink.Patch(oldRel, i, cur);
             anchor = cur;
+        }
+    }
+
+    // ---- Vectorized survivor-position shifts (keyed-middle bookkeeping) -------
+    // RunKeyedMiddleCore keeps `oldRelToPanel` exact by shifting a band of
+    // survivor positions on every Insert/Move. At the keyed-grid scale those
+    // shifts are the per-frame hot loop (one full O(oldMidLen) pass per
+    // structural op); each is a branchless compare-and-conditional-±1 over an
+    // int[], so they vectorize cleanly with System.Numerics.Vector (SSE/AVX on
+    // x64, NEON on ARM64 — fully AOT/trim-safe, no reflection). Each helper is
+    // the EXACT scalar predicate applied Vector<int>.Count lanes at a time with
+    // a scalar remainder; the same scalar loop also runs verbatim when SIMD is
+    // unavailable (Vector.IsHardwareAccelerated == false) or the span is shorter
+    // than one vector — so the result is bit-identical to the original scalar
+    // loops on every platform. The masks exploit that the Vector.* comparisons
+    // return all-ones (-1) in matching lanes, so `v - mask` adds 1 and
+    // `v + mask` subtracts 1 exactly where the predicate holds; negative
+    // sentinels (-1, unrealized survivors) never satisfy any predicate and pass
+    // through untouched, matching the scalar code. ChildReconcilerKeyedMiddle
+    // SimdTests differentially asserts the emitted Move/Insert/Patch sequence
+    // equals a scalar reference over thousands of random + steady-state cases.
+
+    /// <summary>Add 1 to every <c>map[0..len)</c> entry that is
+    /// &gt;= <paramref name="threshold"/> — an insertion at
+    /// <paramref name="threshold"/> pushes survivors at or past it one slot
+    /// right. Vectorization of <c>if (p &gt;= threshold) p++</c>.</summary>
+    private static void BumpAtOrAfter(int[] map, int len, int threshold)
+    {
+        int r = 0;
+        if (Vector.IsHardwareAccelerated && len >= Vector<int>.Count)
+        {
+            int w = Vector<int>.Count;
+            var thr = new Vector<int>(threshold);
+            for (; r <= len - w; r += w)
+            {
+                var v = new Vector<int>(map, r);
+                var mask = Vector.GreaterThanOrEqual(v, thr); // -1 where p >= threshold
+                (v - mask).CopyTo(map, r);                    // subtract -1 == +1
+            }
+        }
+        for (; r < len; r++)
+            if (map[r] >= threshold) map[r]++;
+    }
+
+    /// <summary>Subtract 1 from every <c>map[0..len)</c> entry in the half-open
+    /// band <c>(lo, hi]</c> — the survivors a left-to-right Move steps over,
+    /// closing the vacated gap. Vectorization of
+    /// <c>if (p &gt; lo &amp;&amp; p &lt;= hi) p--</c>.</summary>
+    private static void DecrementWhereGtLe(int[] map, int len, int lo, int hi)
+    {
+        int r = 0;
+        if (Vector.IsHardwareAccelerated && len >= Vector<int>.Count)
+        {
+            int w = Vector<int>.Count;
+            var loV = new Vector<int>(lo);
+            var hiV = new Vector<int>(hi);
+            for (; r <= len - w; r += w)
+            {
+                var v = new Vector<int>(map, r);
+                // -1 where (p > lo) AND (p <= hi); add the mask to subtract 1.
+                var mask = Vector.GreaterThan(v, loV) & Vector.LessThanOrEqual(v, hiV);
+                (v + mask).CopyTo(map, r);
+            }
+        }
+        for (; r < len; r++)
+        {
+            int p = map[r];
+            if (p > lo && p <= hi) map[r] = p - 1;
+        }
+    }
+
+    /// <summary>Add 1 to every <c>map[0..len)</c> entry in the half-open band
+    /// <c>[lo, hi)</c> — the survivors a right-to-left Move steps over, opening
+    /// the gap. Vectorization of
+    /// <c>if (p &gt;= lo &amp;&amp; p &lt; hi) p++</c>.</summary>
+    private static void IncrementWhereGeLt(int[] map, int len, int lo, int hi)
+    {
+        int r = 0;
+        if (Vector.IsHardwareAccelerated && len >= Vector<int>.Count)
+        {
+            int w = Vector<int>.Count;
+            var loV = new Vector<int>(lo);
+            var hiV = new Vector<int>(hi);
+            for (; r <= len - w; r += w)
+            {
+                var v = new Vector<int>(map, r);
+                // -1 where (p >= lo) AND (p < hi); subtract the mask to add 1.
+                var mask = Vector.GreaterThanOrEqual(v, loV) & Vector.LessThan(v, hiV);
+                (v - mask).CopyTo(map, r);
+            }
+        }
+        for (; r < len; r++)
+        {
+            int p = map[r];
+            if (p >= lo && p < hi) map[r] = p + 1;
         }
     }
 
