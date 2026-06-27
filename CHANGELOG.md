@@ -28,6 +28,27 @@ Conventions for contributors:
 
 ### Added
 
+- **`DockFloatingWindowClosedEventArgs.Reason` — close-reason discriminator
+  for floating-window closes (spec 045 §5.3.5, issue #417).** A new
+  `required DockFloatingCloseReason Reason { get; init; }` on
+  `DockFloatingWindowClosedEventArgs`, with enum values `ContentClosed`
+  (content is gone — safe to release per-document resources tied to
+  `Content`), `MigratedToHost`, and `MigratedToFloat` (the pane is alive in
+  its new dock/float position — the close is synthetic and resources must
+  **not** be released). Previously every floating `Window.Closed` — including
+  the synthetic close Reactor fires right after a cross-window dock-back —
+  surfaced as one indistinguishable event, so consumers disposed live state
+  (SwapChainPanel, Win2D, file handles) out from under a still-mounted,
+  redocked page. The reason is stashed on the window holder
+  (`DockFloatingTracker.SetPendingClose`) immediately before the synthetic
+  `Close()` and read once by the `Closed` handler; a window with no stash
+  reports `ContentClosed`. The migrated reason is scoped to the **specific**
+  consumed pane (`DockDragSession.LastConsumedPane`), so a multi-pane float
+  that loses one tab to a dock-back still reports `ContentClosed` for a later
+  genuine close of its surviving tabs. `Reason` is intentionally `required`:
+  there is exactly one internal raise site, so it can never silently default a
+  migration to a wrong reason.
+
 - **Command debouncing: `Command.DebounceMs` (issue #136).**
   Commands can declare a leading-edge debounce window via `DebounceMs` (default
   `0` = off) to absorb double-clicks without reaching for `Task.Delay`. When
@@ -316,6 +337,55 @@ Conventions for contributors:
 
 ### Fixed
 
+- **RichTextBlock inline-UI mutations no longer scroll the ancestor scroll host to
+  the top (issue #487).** Mutating any `Run.Text` inside a paragraph that hosts an
+  `InlineUIContainer` (charts/sliders/buttons embedded via `InlineUI(...)`) made the
+  enclosing `ScrollViewer`/`ScrollView` silently scroll up by the combined height of
+  the embedded inline elements. WinUI's text engine re-measures the whole paragraph
+  from scratch (`ParagraphNode::Measure` → `RemoveEmbeddedElements()` + `desiredSize=0`
+  for one layout pass), so the block transiently shrinks, the scroll host clamps
+  `VerticalOffset` down to the smaller `ScrollableHeight`, and never restores it once
+  the inline UI re-attaches. The fix is invisible to authors — `ScrollViewer(RichTextBlock(...))`
+  "Just Works": `UpdateRichTextBlocks` now arms a scroll anchor on the nearest ancestor
+  scroll host before mutating an inline-UI-bearing block and restores the user's real
+  offset once layout settles, while never fighting a genuine user scroll. No new API
+  surface, no per-app boilerplate.
+- **Multi-window teardown no longer faults with an `ACCESS_VIOLATION`
+  (issue #647).** Closing a docking tear-off floating preview window could
+  terminate the process with `0xC0000005` deep in the WinUI backdrop interop —
+  an unmanaged fault no `try`/`catch` can trap — corrupting the lifecycle of
+  windows opened later in the same process. Root cause: a transient auxiliary
+  window (e.g. a docking tear-off) could be elected the fallback `PrimaryWindow`,
+  so closing it fired `ShutdownPolicy.OnPrimaryWindowClosed` →
+  `Application.Exit()`, tearing down every still-open window mid-process; a
+  surviving host then wrote `Window.SystemBackdrop` on one of those torn-down
+  surfaces. Three reinforcing fixes (spec 036, spec 045): docking floating
+  windows opt out of primary election via `ExcludeFromShutdownPolicy`, and the
+  single election helper that runs on both initial registration and
+  unregister re-election never promotes an excluded window — so an auxiliary
+  window can neither become *nor remain* primary, and `PrimaryWindow` goes
+  `null` rather than to an excluded window when no eligible window remains;
+  `BackdropApplier` records torn-down surfaces in a process-wide closed-window
+  registry and skips every `SystemBackdrop` write (both `Apply` and `Reset`) on
+  them; and `ReactorWindow.Close()` is now idempotent — a redundant or
+  owner-cascade close performs the native close exactly once instead of
+  re-entering native teardown.
+- **TitleBar in a non-content-extended window no longer corrupts the heap on
+  close (issue #537).** A window whose `WindowSpec` set
+  `ExtendsContentIntoTitleBar = false` while its content still rendered a
+  `TitleBar(...)` element could terminate the process with
+  `STATUS_HEAP_CORRUPTION` when the window closed: the WinUI
+  `Microsoft.UI.Xaml.Controls.TitleBar` control only releases its caption-button
+  / AppWindow interop cleanly in content-extended mode, but Reactor allows that
+  combination (skipping `SetTitleBar`). Reactor now flips the window back into
+  content-extended mode just before the native close, while the AppWindow is
+  still alive, so the control tears down via its safe path. The flip is
+  idempotent and runs on every teardown path — `Close()`, the owner-close
+  cascade (including nested owned descendants), the chrome/Alt+F4 close, a direct
+  `Dispose()`, and `ReactorApp.Exit()` / shutdown-policy exit — so still-open
+  windows are covered no matter how the process winds down. The
+  `ExtendsContentIntoTitleBar` value observed while the window is alive is
+  unchanged; the flip happens only at close.
 - **Virtualized rows now reset per-item component state on recycle when keyed
   (issue #326).** `LazyVStack` / `LazyHStack` / `ItemsRepeater<T>` / `ItemsView<T>`
   now propagate the `keySelector` projection onto each realized row's top-level

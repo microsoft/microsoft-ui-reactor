@@ -227,10 +227,23 @@ internal sealed class ChartAccessibilityChecker : IScanExtension
         }
     }
 
-    /// <summary>A11Y_CHART_011: Custom palette would fail background contrast (informational — the scanner cannot know the active theme).</summary>
+    /// <summary>
+    /// A11Y_CHART_011: Custom palette fails contrast against the chart background.
+    /// When the author declares a representative background via <c>.ChartBackground(...)</c>,
+    /// the check is scoped to that single active background and emitted as a <c>warning</c>
+    /// (the palette is only penalized for a background it actually renders on). Otherwise the
+    /// scanner is theme-agnostic and cannot know the active theme, so it flags failure against
+    /// <c>either</c> fixed background as an <c>info</c> finding to avoid alert fatigue (issue #633).
+    /// </summary>
     private static void CheckChartPaletteBackground(CanvasElement canvas, ChartA11yData cd, IScanContext ctx, List<A11yDiagnostic> findings)
     {
         if (cd.CustomPalette is not { } palette) return;
+
+        if (cd.ChartBackground is { } activeBg)
+        {
+            CheckChartPaletteAgainstKnownBackground(canvas, cd, palette, activeBg, ctx, findings);
+            return;
+        }
 
         var lightBg = new D3Color(255, 255, 255);
         var darkBg = new D3Color(32, 32, 32);
@@ -254,8 +267,9 @@ internal sealed class ChartAccessibilityChecker : IScanExtension
             // know which theme is actually active. A color flagged here only fails if
             // the chart renders on the matching background — hence this is emitted as
             // an informational finding, not a warning, to avoid alert fatigue on
-            // palettes that are fine for the theme they actually run under. See the
-            // "scope to active background" follow-up tracked for spec 026.
+            // palettes that are fine for the theme they actually run under. Authors can
+            // declare .ChartBackground(...) to scope this to the active background and
+            // promote it to a warning (issue #633).
             if (failsLight || failsDark)
             {
                 var hardenResult = ChartPalette.Harden(
@@ -286,6 +300,59 @@ internal sealed class ChartAccessibilityChecker : IScanExtension
                 });
                 return;
             }
+        }
+    }
+
+    /// <summary>
+    /// A11Y_CHART_011 scoped to a single author-declared background (issue #633): each palette
+    /// color is checked against that one active background, the false positives that forced the
+    /// info downgrade are gone, so a real failure is emitted as a <c>warning</c>. The fix
+    /// suggestion hardens the palette toward that same background so it is a genuine remediation.
+    /// </summary>
+    private static void CheckChartPaletteAgainstKnownBackground(
+        CanvasElement canvas, ChartA11yData cd, ChartPalette palette, D3Color activeBg,
+        IScanContext ctx, List<A11yDiagnostic> findings)
+    {
+        for (int i = 0; i < palette.Count; i++)
+        {
+            double contrast = ChartPalette.ContrastRatio(palette[i], activeBg);
+            if (contrast >= 3.0) continue;
+
+            var original = Enumerable.Range(0, palette.Count).Select(k => palette[k]).ToArray();
+            var hardened = ChartPalette.Harden(original, new HardenOptions { Background = activeBg }).Palette;
+
+            // Only offer the hardened palette as a concrete fix when it ACTUALLY changed
+            // AND every color now clears 3:1 against the active background. The pairwise
+            // distinguishability guard can legitimately leave a color un-nudged; echoing the
+            // unchanged (still-failing) palette back as the "fix" would reintroduce the
+            // bad-fix-suggestion defect of #628/#629 (issue #633 M1). Fall back to a textual
+            // instruction when we cannot prove the suggestion is real.
+            bool changed = Enumerable.Range(0, Math.Min(hardened.Count, original.Length))
+                .Any(k => !string.Equals(hardened[k].ToHex(), original[k].ToHex(), StringComparison.OrdinalIgnoreCase));
+            bool allPass = hardened.Count == original.Length
+                && Enumerable.Range(0, hardened.Count).All(k => ChartPalette.ContrastRatio(hardened[k], activeBg) >= 3.0);
+            string suggestedValue = changed && allPass
+                ? string.Join(", ", hardened.Colors.Select(c => c.ToHex()))
+                : $"Adjust palette colors to ≥3:1 contrast against {activeBg.ToHex()}";
+
+            findings.Add(new A11yDiagnostic
+            {
+                Id = "A11Y_CHART_011",
+                Severity = "warning",
+                Message = $"Custom palette: color {i} fails 3:1 contrast ({contrast:F1}:1) against the chart background {activeBg.ToHex()}",
+                WcagCriterion = "1.4.11",
+                ElementType = "CanvasElement (Chart)",
+                AutomationId = ctx.GetAutomationId(canvas),
+                ComponentType = ctx.CurrentComponent,
+                Fix = new A11yFixSuggestion
+                {
+                    Modifier = "SeriesColors",
+                    SuggestedValue = suggestedValue,
+                    CodeSnippet = "Adjust color lightness to ensure ≥3:1 contrast against the chart background",
+                },
+                Context = ctx.BuildContext(canvas),
+            });
+            return;
         }
     }
 

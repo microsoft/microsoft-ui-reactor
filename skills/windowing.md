@@ -102,6 +102,16 @@ VStack(
 `WindowSpec.ExtendsContentIntoTitleBar` is `null`. Explicit `true` or `false`
 wins over inference.
 
+> **Close-safety caveat (#537):** explicitly setting
+> `ExtendsContentIntoTitleBar = false` while still rendering a `TitleBar(...)`
+> element is allowed, but historically crashed the process with
+> `STATUS_HEAP_CORRUPTION` on window close — the WinUI title-bar control only
+> tears down safely in content-extended mode. Reactor now flips the window back
+> into content-extended mode just before the native close (across every
+> close/exit/dispose path), so the close is safe and the value you observe while
+> the window is alive is unchanged. Prefer simply omitting `TitleBar(...)` when
+> you genuinely want the system title bar. See the Windows guide for details.
+
 ```csharp
 VStack(...).Backdrop(BackdropKind.Mica);
 new WindowSpec { Backdrop = BackdropChoice.Of(BackdropKind.DesktopAcrylic) };

@@ -11,6 +11,7 @@ REACTOR_HOOKS_005 | Reactor.Hooks | Warning | HookRulesAnalyzer - Hook called ou
 REACTOR_HOOKS_006 | Reactor.Hooks | Info | HookRulesAnalyzer - UseResource fetcher looks non-idempotent (use UseMutation for writes)
 REACTOR_HOOKS_007 | Reactor.Hooks | Warning | UseMemoCellsAnalyzer - Builder closure capture missing from dependencies
 REACTOR_HOOKS_008 | Reactor.Hooks | Info | HookRulesAnalyzer - State variable read after its setter was called in the same synchronous handler (stale read)
+REACTOR_HOOKS_009 | Reactor.Hooks | Warning | CommandDebounceAnalyzer - Command.DebounceMs is inert unless the command is routed through UseCommand
 REACTOR_A11Y_001 | Microsoft.UI.Reactor.Accessibility | Warning | AccessibilityAnalyzers - Icon-only button needs an accessible name
 REACTOR_A11Y_002 | Microsoft.UI.Reactor.Accessibility | Warning | AccessibilityAnalyzers - Image needs alt text or AccessibilityHidden
 REACTOR_A11Y_003 | Microsoft.UI.Reactor.Accessibility | Warning | AccessibilityAnalyzers - Form field needs a label

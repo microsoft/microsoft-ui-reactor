@@ -41,6 +41,13 @@ public sealed class ReactorHost : IDisposable
     private FrameworkElement? _themeListenerElement;
     private volatile bool _disposed;
 
+    // Set when the owning window has raised Closed — i.e. the native window is
+    // being torn down. Drives BackdropApplier.Reset so it does NOT write
+    // Window.SystemBackdrop on an already-destroyed window, which AVs
+    // (0xC0000005) and corrupts the WinUI backdrop interop for later windows in
+    // the same process. (issue #647)
+    private bool _windowClosed;
+
     // Spec 033 §6 — declarative SystemBackdrop modifier on the root tree.
     // Owned for the host's lifetime; reset on dispose so a non-Reactor
     // window-reuse path returns to a clean slate.
@@ -231,7 +238,18 @@ public sealed class ReactorHost : IDisposable
 
         // Stop the render loop when the window closes — background threads
         // may still call setState after this, but RequestRender will bail out.
-        _closedHandler = (_, _) => Dispose();
+        // Mark the window's native surface gone BEFORE disposing so neither this
+        // host's Reset nor any host later created on a reused Window writes
+        // SystemBackdrop on it — that AVs (0xC0000005) and corrupts the WinUI
+        // backdrop interop for the rest of the process. This handler is wired in
+        // the host ctor, before ReactorWindow.OnNativeClosed, so the guard is set
+        // ahead of any teardown that reaches a SystemBackdrop write. (issue #647)
+        _closedHandler = (_, _) =>
+        {
+            _windowClosed = true;
+            BackdropApplier.MarkWindowClosed(_window);
+            Dispose();
+        };
         _window.Closed += _closedHandler;
     }
 
@@ -899,8 +917,16 @@ public sealed class ReactorHost : IDisposable
         _funcContext?.RunCleanups();
 
         // Clear the SystemBackdrop so a window-reuse path returns to the WinUI
-        // default. Best effort — disposed hosts may already be torn down.
-        try { _backdropApplier.Reset(); } catch { /* best effort */ }
+        // default. Skip the actual window write when the window has already been
+        // closed/destroyed — touching set_SystemBackdrop on a torn-down window
+        // AVs (0xC0000005) and corrupts the backdrop interop for later windows.
+        // Best effort either way. (issue #647)
+        try { _backdropApplier.Reset(_windowClosed); }
+        catch (global::System.Exception ex)
+            when (ex is not global::System.OutOfMemoryException and not global::System.StackOverflowException)
+        {
+            Debug.WriteLine($"[Reactor] backdrop reset on dispose failed (best effort): {ex.GetType().Name}: {ex.Message}");
+        }
 
         _reconciler.Dispose();
         _rootComponent = null;

@@ -72,7 +72,8 @@ Common fluent knobs (chain-call any subset):
 .Fill("#50C878")                                  // bars / area / pie slice baseline
 .ShowGrid(true).ShowAxes(true)
 .DataLabel((point, idx) => $"{point.Revenue:C}")  // string label per point
-.Palette(ChartPalette.Categorical)                // pie color palette
+.Palette(ChartPalette.Categorical)                // Tier 1 curated palette (a11y-scanned)
+.ChartBackground("#1E1E1E")                        // declare active bg → scopes A11Y_CHART_011
 ```
 
 `AxisLabel` text and `Title` are reserved for *labeling the chart*, not
@@ -212,6 +213,20 @@ Beyond that, your responsibilities:
   for text labels. The default chart palette meets this against the
   framework's surface tokens; if you override with `.Stroke("#…")` /
   `.Fill("#…")`, check contrast against `Theme.SurfaceBackground`.
+- **Custom colors & the scanner.** Three tiers, in order of safety:
+  `.Palette(ChartPalette.Categorical)` (Tier 1, curated) and `.SeriesColors(…)`
+  (Tier 3, your own colors) are both contrast-checked by the a11y scanner
+  (`A11Y_CHART_011`). `.RawColors(…)` (Tier 4) is an escape hatch that bypasses
+  the check and itself trips the `A11Y_CHART_012` info. Colors set via the
+  low-level `.SetColors(…)` are **not** seen by the scanner — use
+  `.Palette` / `.SeriesColors` for scanner-visible palettes.
+- **Declare the background you render on.** `A11Y_CHART_011` is theme-agnostic
+  by default, so it can only flag a custom color against *either* fixed
+  light/dark background as an `info`. Call `.ChartBackground("#1E1E1E")` (also
+  takes a `D3Color` or `Windows.UI.Color`) to scope the check to the single
+  background the chart actually renders on — the finding becomes an actionable
+  `warning` with a real, contrast-hardened fix, and palettes that are fine on
+  their actual background stop being flagged.
 - **Screen-reader fallback.** UIA structured data is good but not enough
   for screen-reader-only users — a hidden, expandable data table next to
   the chart is the pattern Tenon and the W3C WAI accessibility guidance
@@ -220,12 +235,20 @@ Beyond that, your responsibilities:
   focus should announce category + value. The `IChartAccessibilityData`
   surface drives this; if you turn the chart `Interactive(false)` you lose
   it — keep it on unless there's a reason.
-- **`*View` defaults.** Custom labels are auto-stamped with
-  `IsHitTestVisible=false` and `AccessibilityView=Raw` so they don't
-  duplicate the structured UIA description. **Always** keep the string
-  `LabelAccessor` (PieChart) or `DataLabel` (line/bar/area) set — those
-  feed UIA. Custom visuals augment the visual; they don't replace the
-  accessible description.
+- **`*View` defaults.** Custom labels are non-interactive by default: the
+  chart force-applies `AccessibilityView=Raw` to the **entire realized
+  subtree** (not just the outer wrapper) and clears `IsTabStop` on every inner
+  control, so no inner peer surfaces to UIA and nothing inside the label joins
+  the tab order. Prefer keeping the string `LabelAccessor` (PieChart) or
+  `DataLabel` (line/bar/area) set — those feed UIA. When the visual lives
+  entirely in the `*View`, pass `name:` (a `Func<T,string>` for pie /
+  `Func<double,string>` for ticks) so the accessible name matches the visible
+  label instead of falling back to `Slice {n}`. Set `interactive: true` only
+  when the label has focusable children that must stay reachable — then **you**
+  own its accessibility. Signatures:
+  `LabelView(render, name: null, interactive: false)`,
+  `XTickLabelView(render, name: null, interactive: false)`,
+  `YTickLabelView(render, name: null, interactive: false)`.
 
 ## Common pitfalls — refuse to ship these
 

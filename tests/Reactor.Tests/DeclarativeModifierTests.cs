@@ -155,12 +155,51 @@ public class DeclarativeModifierTests
     }
 
     [Fact]
-    public void ModifiersEqual_Returns_False_When_Event_Handlers_Present()
+    public void ModifiersEqual_True_When_Same_Handler_Reference()
     {
+        // FLAGSHIP-1 — a reference-stable handler (memoized / non-capturing /
+        // method group) now takes the skip fast-path: the reconciler's Current*
+        // dispatch field already holds this exact delegate, so skipping Update is
+        // safe. Previously ANY handler present forced a full Update every render.
         Action<object, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs> handler = (s, e) => { };
         var a = new ElementModifiers { OnTapped = handler };
         var b = new ElementModifiers { OnTapped = handler };
-        // Conservative: event handlers always cause update (delegate comparison unreliable)
+        Assert.True(Element.ModifiersEqual(a, b));
+    }
+
+    [Fact]
+    public void ModifiersEqual_False_When_Different_Handler_Reference()
+    {
+        // A freshly-captured closure each render is a different delegate instance,
+        // so the skip path is correctly declined and Update re-wires Current*.
+        Action<object, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs> handler1 = (s, e) => { };
+        Action<object, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs> handler2 = (s, e) => { };
+        var a = new ElementModifiers { OnTapped = handler1 };
+        var b = new ElementModifiers { OnTapped = handler2 };
+        Assert.False(Element.ModifiersEqual(a, b));
+    }
+
+    [Fact]
+    public void ModifiersEqual_False_When_Handler_Presence_Differs()
+    {
+        // null → non-null transition must force Update so the trampoline subscribes.
+        Action<object, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs> handler = (s, e) => { };
+        var a = new ElementModifiers { OnTapped = handler };
+        var b = new ElementModifiers { };
+        Assert.False(Element.ModifiersEqual(a, b));
+        Assert.False(Element.ModifiersEqual(b, a));
+    }
+
+    [Fact]
+    public void ModifiersEqual_False_When_Unlisted_Handler_Identity_Differs()
+    {
+        // Regression guard: handlers outside the historical 6-handler null-check
+        // (e.g. PointerEntered) are now compared too, closing the latent hole
+        // where a stale closure could be stranded on the skip path.
+        Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs> h1 = (s, e) => { };
+        Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs> h2 = (s, e) => { };
+        var a = new ElementModifiers { OnPointerEntered = h1 };
+        var b = new ElementModifiers { OnPointerEntered = h2 };
         Assert.False(Element.ModifiersEqual(a, b));
     }
 

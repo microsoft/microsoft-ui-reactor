@@ -123,4 +123,14 @@ internal sealed record ChartA11yData(IChartAccessibilityData Data)
 
     /// <summary>Custom focus indicator color, if any — scanner validates 3:1 contrast (A11Y_CHART_006).</summary>
     public global::Windows.UI.Color? CustomFocusColor { get; init; }
+
+    /// <summary>
+    /// Author-declared representative background the chart actually renders on, if any
+    /// (set via <c>.ChartBackground(...)</c>). When present, the theme-agnostic scanner
+    /// can scope A11Y_CHART_011's palette contrast check to this single active background
+    /// (promoting it to a <c>warning</c>) instead of flagging failure against <c>either</c>
+    /// fixed background (<c>info</c>). Left null for theme-agnostic charts that may render
+    /// on any background.
+    /// </summary>
+    public D3.D3Color? ChartBackground { get; init; }
 }

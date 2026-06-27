@@ -897,6 +897,212 @@ public sealed class C207_ChangeHandlerDpRead : IBench
     }
 }
 
+/// <summary>
+/// M14 — <c>Dsl_Rebuild_Cascade</c>. Rebuild a moderate leaf tree through a DEEP
+/// fluent-modifier cascade (typed layout + visual modifiers AND a <c>.Set(...)</c>
+/// setter) on EVERY iteration with no memoization, then reconcile it against the
+/// structurally-equal prior tree.
+///
+/// <para>
+/// Instrument for PR #665 ("restore diff skip-path + cut DSL/element per-render
+/// allocations"). The macro (StocksGrid) leg memoizes unchanged cells and writes
+/// <c>new TextBlockElement{…}</c> initializers, BYPASSING the fluent cascade; and
+/// none of the M1–M13 / OAlloc / OUpdate micros rebuild a deep fluent + <c>.Set()</c>
+/// tree and re-diff it against an equal prior tree. So #665's two effects had no
+/// sensitive instrument:
+/// </para>
+/// <list type="number">
+///   <item><b>DSL alloc cut</b> — each chained layout/visual modifier
+///     (<c>.Foreground().Padding().Margin().Width().Height()</c>) merges its delta
+///     into the <c>Layout</c> / <c>Visual</c> bucket instead of allocating a
+///     throwaway parent <see cref="ElementModifiers"/> per step. Rebuilding the whole
+///     tree every op makes that per-step <see cref="ElementModifiers"/> churn the
+///     dominant, robustly-measured allocation, so M14's allocated-bytes/op drops
+///     when #665 is applied.</item>
+///   <item><b>SettersEqual diff-skip</b> — the <c>.Set(…)</c> on each cell drives the
+///     reconciler down the <c>Setters</c>-array comparison arm that #665 reroutes
+///     from a raw <c>ReferenceEquals</c> through <c>SettersEqual</c>, so the skip-path
+///     restore is exercised on every re-diff.</item>
+/// </list>
+///
+/// <para>
+/// Most cells stay structurally unchanged across iterations (a rotating ~1/16 are
+/// mutated) so the equal-tree re-diff is the common case — the same way
+/// <see cref="OptionalReconcilerUpdateBench"/> (OUpdate) isolates a controlled-prop
+/// update the macro buries. This bench changes no framework behavior; it only adds a
+/// measurement surface.
+/// </para>
+/// </summary>
+public sealed class M14_DslRebuildCascade : IBench
+{
+    public string Id => "M14";
+    public string Name => "Dsl_Rebuild_Cascade";
+
+    // Moderate leaf count (spec window 200–500). Big enough that the per-step
+    // ElementModifiers churn dominates the alloc signal, small enough that the
+    // reconcile stays comfortably inside the micro per-round budget.
+    private const int TreeSize = 300;
+
+    // A rotating ~1/16 of cells flip their text each iteration; the rest are
+    // rebuilt structurally identical so SettersEqual / ShallowEquals see an equal
+    // prior tree (the case #665 targets).
+    private const int MutateStride = 16;
+
+    public void RunOne(BenchVariant variant, BenchContext ctx)
+    {
+        var fixture = ctx.Scratch as Fixture;
+        if (fixture is null)
+        {
+            // First iteration of each repetition: build + mount the initial tree.
+            // Negligible (1 of N) against the measured rebuild/reconcile loop.
+            fixture = new Fixture(ctx, variant);
+            ctx.Scratch = fixture;
+            return;
+        }
+
+        if (variant == BenchVariant.Direct)
+            fixture.RebuildDirect(ctx);
+        else
+            fixture.RebuildAndReconcile(ctx);
+    }
+
+    public void DemoMount(BenchVariant variant, BenchContext ctx)
+    {
+        var stack = new StackPanel { Orientation = Orientation.Vertical };
+        stack.Children.Add(new TextBlock
+        {
+            Text = $"M14 {variant}: deep DSL cascade + .Set ×{TreeSize}, rebuilt & reconciled",
+            FontSize = 16,
+        });
+        const int demoCells = 6;
+        for (int i = 0; i < demoCells; i++)
+        {
+            if (variant == BenchVariant.Direct)
+            {
+                var tb = new TextBlock();
+                ApplyDirect(tb, Texts[i]);
+                stack.Children.Add(tb);
+            }
+            else
+            {
+                var ui = ctx.Reconciler.Mount(BuildCell(i, mutated: false), NoOp);
+                if (ui is not null) stack.Children.Add(ui);
+            }
+        }
+        ctx.Parent.Children.Add(stack);
+    }
+
+    // Shared, cached brush so .Foreground(brush) binds the Brush overload (not the
+    // color-string parser) and reuses one instance across cells/iterations — the
+    // cascade's allocation profile stays dominated by the ElementModifiers churn
+    // #665 targets, and ModifiersEqual sees an unchanged Foreground on re-diff.
+    private static readonly Microsoft.UI.Xaml.Media.Brush CellBrush =
+        new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.SteelBlue);
+
+    // Non-capturing setter — the compiler caches it as a static singleton, so .Set
+    // allocates only the fresh Setters array (the path #665's SettersEqual arm
+    // compares), not a per-call delegate.
+    private static readonly Action<TextBlock> WrapSetter =
+        static tb => tb.TextWrapping = TextWrapping.NoWrap;
+
+    private static readonly string[] Texts =
+        Enumerable.Range(0, TreeSize).Select(static i => "row-" + i).ToArray();
+
+    // Build one leaf through the deep fluent cascade. Layout-bucket modifiers
+    // (.Padding/.Margin/.Width/.Height) + a visual-bucket modifier (.Foreground)
+    // are exactly the chained steps #665 reroutes off the throwaway-ElementModifiers
+    // path; FontSize/Bold/Opacity round out the cascade and the .Set hits the
+    // Setters-array arm.
+    private static TextBlockElement BuildCell(int index, bool mutated)
+    {
+        var text = mutated ? "row-*" : Texts[index];
+        return TextBlock(text)
+            .FontSize(14)
+            .Bold()
+            .Foreground(CellBrush)
+            .Padding(4, 2)
+            .Margin(2, 1)
+            .Width(120)
+            .Height(20)
+            .Opacity(0.99)
+            .Set(WrapSetter);
+    }
+
+    private static void ApplyDirect(TextBlock tb, string text)
+    {
+        // Imperative floor: the same property writes a hand-coded (no-Reactor) view
+        // would do, so the Direct variant is a fair lower bound for the cascade.
+        tb.Text = text;
+        tb.FontSize = 14;
+        tb.FontWeight = Microsoft.UI.Text.FontWeights.Bold;
+        tb.Foreground = CellBrush;
+        tb.Padding = new Thickness(4, 2, 4, 2);
+        tb.Margin = new Thickness(2, 1, 2, 1);
+        tb.Width = 120;
+        tb.Height = 20;
+        tb.Opacity = 0.99;
+        tb.TextWrapping = TextWrapping.NoWrap;
+    }
+
+    private sealed class Fixture
+    {
+        // Reactor variants thread the prior element tree so each iteration diffs
+        // fresh-vs-prior; Direct has no element tree (null) and re-applies props.
+        private readonly TextBlockElement[]? _elements;
+        private readonly UIElement[] _controls;
+
+        public Fixture(BenchContext ctx, BenchVariant variant)
+        {
+            _controls = new UIElement[TreeSize];
+            if (variant == BenchVariant.Direct)
+            {
+                for (int i = 0; i < TreeSize; i++)
+                {
+                    var tb = new TextBlock();
+                    ApplyDirect(tb, Texts[i]);
+                    _controls[i] = tb;
+                    ctx.Parent.Children.Add(tb);
+                }
+            }
+            else
+            {
+                _elements = new TextBlockElement[TreeSize];
+                for (int i = 0; i < TreeSize; i++)
+                {
+                    var el = BuildCell(i, mutated: false);
+                    _elements[i] = el;
+                    var ui = ctx.Reconciler.Mount(el, NoOp);
+                    if (ui is not null) { _controls[i] = ui; ctx.Parent.Children.Add(ui); }
+                }
+            }
+        }
+
+        public void RebuildAndReconcile(BenchContext ctx)
+        {
+            var elements = _elements!;
+            for (int i = 0; i < TreeSize; i++)
+            {
+                bool mutated = ((i + ctx.Iteration) % MutateStride) == 0;
+                var fresh = BuildCell(i, mutated);
+                ctx.Reconciler.UpdateChild(elements[i], fresh, _controls[i], NoOp);
+                elements[i] = fresh;
+            }
+        }
+
+        public void RebuildDirect(BenchContext ctx)
+        {
+            for (int i = 0; i < TreeSize; i++)
+            {
+                bool mutated = ((i + ctx.Iteration) % MutateStride) == 0;
+                if (_controls[i] is TextBlock tb)
+                    ApplyDirect(tb, mutated ? "row-*" : Texts[i]);
+            }
+        }
+    }
+
+    private static readonly Action NoOp = static () => { };
+}
+
 public static class BenchCatalog
 {
     public static IReadOnlyList<IBench> All { get; } = new IBench[]
@@ -917,5 +1123,6 @@ public static class BenchCatalog
         new OptionalElementAllocBench(),
         new OptionalReconcilerUpdateBench(),
         new C207_ChangeHandlerDpRead(),
+        new M14_DslRebuildCascade(),
     };
 }

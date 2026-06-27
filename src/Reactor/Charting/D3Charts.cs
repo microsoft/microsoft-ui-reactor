@@ -407,10 +407,25 @@ public static class D3Charts
     /// to the axis edge and vertically centered on the tick. When null, a built-in numeric
     /// <c>TextBlock</c> is rendered.
     /// </param>
+    /// <param name="xTickName">
+    /// Optional accessible-name projection applied as the X tick element's <c>AutomationName</c>.
+    /// Only observable when <paramref name="xTickInteractive"/> is true.
+    /// </param>
+    /// <param name="yTickName">As <paramref name="xTickName"/>, for the Y axis.</param>
+    /// <param name="xTickInteractive">
+    /// When true, the custom X tick element keeps its peers/focus — caller owns a11y (issue #162).
+    /// When false (default), the whole realized subtree is forced to <c>AccessibilityView.Raw</c>
+    /// and removed from the keyboard tab order.
+    /// </param>
+    /// <param name="yTickInteractive">As <paramref name="xTickInteractive"/>, for the Y axis.</param>
     public static Element[] D3Axes(LinearScale xs, LinearScale ys,
         double left, double top, double width, double height, int xTicks = 6, int yTicks = 5,
         Func<double, Element>? xTickLabel = null,
-        Func<double, Element>? yTickLabel = null)
+        Func<double, Element>? yTickLabel = null,
+        Func<double, string>? xTickName = null,
+        Func<double, string>? yTickName = null,
+        bool xTickInteractive = false,
+        bool yTickInteractive = false)
     {
         var ab = ChartAxis;
         double bot = top + height;
@@ -422,6 +437,7 @@ public static class D3Charts
                 .AccessibilityView(Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw),
         };
 
+        int xi = 0;
         foreach (var t in xs.Ticks(xTicks))
         {
             if (xTickLabel is null)
@@ -431,14 +447,27 @@ public static class D3Charts
             }
             else
             {
-                elements.Add(xTickLabel(t)
-                    .Canvas(xs.Map(t), bot + 4, anchorX: 0.5, anchorY: 0)
-                    // OnMountAdd preserves the caller's own mount hook, if any.
-                    .OnMountAdd(static fe => fe.IsHitTestVisible = false)
-                    .AccessibilityView(Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw));
+                var el = xTickLabel(t).Canvas(xs.Map(t), bot + 4, anchorX: 0.5, anchorY: 0);
+                if (xTickName is not null)
+                    el = el.AutomationName(xTickName(t));
+                // Issue #162: key by the interactive flag so toggling it forces a remount
+                // (the hide is a mount-time side effect; in-place update can't undo it).
+                el = el.WithKey($"__xtick{xi}_{(xTickInteractive ? 1 : 0)}");
+                elements.Add(xTickInteractive
+                    ? el
+                    : el
+                        // Default: hide the whole realized subtree from UIA + focus.
+                        // OnUpdateAdd re-asserts on in-place update (M1); OnUnmountAdd
+                        // clears the deferred-hide sentinel to keep pool reuse clean (L1).
+                        .OnMountAdd(Accessibility.ChartLabelA11y.HideSubtreeOnMount)
+                        .OnUpdateAdd(Accessibility.ChartLabelA11y.HideSubtreeOnUpdate)
+                        .OnUnmountAdd(Accessibility.ChartLabelA11y.ClearPendingHide)
+                        .AccessibilityView(Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw));
             }
+            xi++;
         }
 
+        int yi = 0;
         foreach (var t in ys.Ticks(yTicks))
         {
             if (yTickLabel is null)
@@ -448,12 +477,23 @@ public static class D3Charts
             }
             else
             {
-                elements.Add(yTickLabel(t)
-                    .Canvas(left - 6, ys.Map(t), anchorX: 1.0, anchorY: 0.5)
-                    // OnMountAdd preserves the caller's own mount hook, if any.
-                    .OnMountAdd(static fe => fe.IsHitTestVisible = false)
-                    .AccessibilityView(Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw));
+                var el = yTickLabel(t).Canvas(left - 6, ys.Map(t), anchorX: 1.0, anchorY: 0.5);
+                if (yTickName is not null)
+                    el = el.AutomationName(yTickName(t));
+                // Issue #162: key by the interactive flag so toggling it forces a remount.
+                el = el.WithKey($"__ytick{yi}_{(yTickInteractive ? 1 : 0)}");
+                elements.Add(yTickInteractive
+                    ? el
+                    : el
+                        // Default: hide the whole realized subtree from UIA + focus.
+                        // OnUpdateAdd re-asserts on in-place update (M1); OnUnmountAdd
+                        // clears the deferred-hide sentinel to keep pool reuse clean (L1).
+                        .OnMountAdd(Accessibility.ChartLabelA11y.HideSubtreeOnMount)
+                        .OnUpdateAdd(Accessibility.ChartLabelA11y.HideSubtreeOnUpdate)
+                        .OnUnmountAdd(Accessibility.ChartLabelA11y.ClearPendingHide)
+                        .AccessibilityView(Microsoft.UI.Xaml.Automation.Peers.AccessibilityView.Raw));
             }
+            yi++;
         }
 
         return elements.ToArray();

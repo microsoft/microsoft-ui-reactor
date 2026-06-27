@@ -563,22 +563,22 @@ internal sealed class DockHostNativeComponent : Component<DockHostNativeProps>
                 // The overlay's TargetConfirmed event ran the host's
                 // OnConfirm closure, which inserted the pane into the
                 // layout and called session.End(). Close the floating
-                // window — its pane is back in the docked tree.
+                // window — its pane is back in the docked tree, so this is
+                // a migration, NOT a user close: stash MigratedToHost so
+                // OnFloatingWindowClosed reports the truth rather than the
+                // default ContentClosed (issue #417).
                 //
-                // We DEFER the close via TryEnqueue: the synchronous
-                // path from TryConfirmCurrentHover ran setState calls
-                // that may already be processing on the dispatcher.
-                // Closing a window during another render's reentry
-                // breaks WinUI's dispatcher (see the spike doc's
-                // "render-time cleanup" gotcha). One queued tick is
-                // enough to let the host's pending re-render flush.
-                // ReactorWindow.Close is idempotent (no-op after _disposed)
-                // and internally swallows the COMException teardown-reentry
-                // set, so calling it once per branch — enqueued OR sync
-                // fallback, never both — is safe without an outer catch.
-                var dq = global::Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
-                bool enqueued = dq is not null && dq.TryEnqueue(floatingWindow.Close);
-                if (!enqueued) floatingWindow.Close();
+                // StashReasonAndClose DEFERS the close onto the dispatcher:
+                // the synchronous path from TryConfirmCurrentHover ran
+                // setState calls that may already be processing, and closing
+                // a window during another render's reentry breaks WinUI's
+                // dispatcher (see the spike doc's "render-time cleanup"
+                // gotcha). One queued tick lets the host's pending re-render
+                // flush. ReactorWindow.Close is idempotent and narrows the
+                // COMException teardown set, so the once-per-branch call is
+                // safe without an outer catch.
+                DockFloatingWindow.StashReasonAndClose(
+                    floatingWindow, pane, DockFloatingCloseReason.MigratedToHost);
                 return;
             }
 

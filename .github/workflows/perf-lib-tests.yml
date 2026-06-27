@@ -1,0 +1,46 @@
+# Fast, headless unit tests for PerfLib.ps1 — the pure parser / median / delta /
+# comment-renderer that backs the /perf comparison workflow (perf-compare.yml).
+# No WinUI harness and no external test framework, so this runs on a cheap Linux
+# runner in seconds and guards the parsing + formatting logic on every change
+# under tests/stress_perf/ci/**.
+#
+# perf-compare.yml runs these same assertions before it spends ~30 min
+# benchmarking; this standalone job gives PR authors fast feedback without
+# needing a full `/perf` run.
+name: Perf lib tests
+
+on:
+  push:
+    paths:
+      - 'tests/stress_perf/ci/**'
+      - '.github/workflows/perf-lib-tests.yml'
+  pull_request:
+    paths:
+      - 'tests/stress_perf/ci/**'
+      - '.github/workflows/perf-lib-tests.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  perflib:
+    name: PerfLib parser + delta math
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      # pwsh (PowerShell 7) is preinstalled on the GitHub-hosted Ubuntu runner.
+      # PerfLib.Tests.ps1 exits non-zero on any failed assertion.
+      - name: Run PerfLib unit tests
+        shell: pwsh
+        run: ./tests/stress_perf/ci/PerfLib.Tests.ps1
+
+      # Covers the testable branching in the orchestrator script itself: the
+      # compare-mode .csproj overlay/restore guarantees and the Stage-RustRuntime
+      # idempotency gate. Headless, cross-platform, no network.
+      - name: Run Run-PerfBenchmark unit tests
+        shell: pwsh
+        run: ./tests/stress_perf/ci/RunPerfBenchmark.Tests.ps1
