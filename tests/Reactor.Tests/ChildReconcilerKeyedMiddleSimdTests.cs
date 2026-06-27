@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 using Microsoft.UI.Reactor.Core;
 using Xunit;
 
@@ -232,6 +233,15 @@ public class ChildReconcilerKeyedMiddleSimdTests
         var refk = new DiffSink { Cells = new List<Cell>(m.CellsBase), Ops = new List<Op>() };
         RunScalarReference(ref refk, m.NewToOld, m.InLis, m.NewMidLen, m.OldMidLen, m.InitialAnchor, refPanel);
 
+        // Tighter, localized guard: the survivor-position model itself must end
+        // identical, not just the ops/cells it drove. This pinpoints a
+        // bookkeeping divergence (e.g. a SIMD remainder-tail bug) even in a case
+        // where it didn't (yet) change an emitted op.
+        Assert.True(prodPanel.Length == refPanel.Length, $"case {caseId}: panel-length mismatch");
+        for (int r = 0; r < prodPanel.Length; r++)
+            Assert.True(prodPanel[r] == refPanel[r],
+                $"case {caseId}: oldRelToPanel[{r}] {prodPanel[r]} (simd) vs {refPanel[r]} (scalar)");
+
         Assert.True(prod.Ops.Count == refk.Ops.Count,
             $"case {caseId}: op-count {prod.Ops.Count} (simd) vs {refk.Ops.Count} (scalar)");
         for (int o = 0; o < prod.Ops.Count; o++)
@@ -379,6 +389,80 @@ public class ChildReconcilerKeyedMiddleSimdTests
         var model = BuildModel(Parse(oldCsv), Parse(newCsv));
         var (cells, _) = RunBothAndCompare(model, 0);
         AssertInvariants(model, cells);
+    }
+
+    /// <summary>
+    /// Pin the SIMD/scalar seam explicitly at every length around the vector
+    /// width — <c>oldMidLen</c> = 0, 1, w−1, w, w+1, 2w, 2w+1 (w =
+    /// <see cref="Vector{T}.Count"/>, computed at runtime so this is correct on
+    /// both the ARM64 dev box (NEON, w=4) and the x64 CI runner (AVX2, w=8)).
+    /// The sub-w lengths take the pure-scalar <c>len &lt; width</c> fallback; the
+    /// w+1 / 2w+1 lengths run one (or two) full SIMD chunk(s) plus a 1-element
+    /// remainder tail — the exact seam where a vectorized remainder bug hides.
+    /// Each constructed pair has no common prefix/suffix, so <c>oldMidLen</c>
+    /// equals the old length (asserted), and each forces real Insert/Move shifts
+    /// so the helpers actually run at that length.
+    /// </summary>
+    [Fact]
+    public void Simd_Matches_Scalar_At_Vector_Width_Boundaries()
+    {
+        int w = Vector<int>.Count;
+        var lengths = new SortedSet<int> { 0, 1, w - 1, w, w + 1, 2 * w, 2 * w + 1 };
+
+        int caseId = 0;
+        foreach (int L in lengths)
+        {
+            foreach (var (oldKeys, newKeys) in BoundaryPairs(L))
+            {
+                var model = BuildModel(oldKeys, newKeys);
+                Assert.True(model.OldMidLen == L, $"L={L}: built oldMidLen={model.OldMidLen}, expected {L}");
+                var (cells, _) = RunBothAndCompare(model, caseId++);
+                AssertInvariants(model, cells);
+            }
+        }
+    }
+
+    // (old, new) key pairs whose stripped middle length is exactly L, each with
+    // real shift activity. No common prefix/suffix: the ends never match, so
+    // BuildModel's oldMidLen == oldKeys.Length == L.
+    private static IEnumerable<(int[] Old, int[] New)> BoundaryPairs(int L)
+    {
+        if (L == 0)
+        {
+            yield return (Array.Empty<int>(), Array.Empty<int>());          // len-0 no-op path
+            yield return (Array.Empty<int>(), new[] { 100, 200 });          // pure inserts, len-0 shifts
+            yield break;
+        }
+        if (L == 1)
+        {
+            // For oldMidLen to be exactly 1, the lone survivor (0) must be
+            // strictly interior in `new` (else it strips as prefix/suffix).
+            // Inserts on both sides → BumpAtOrAfter runs at len=1.
+            yield return (new[] { 0 }, new[] { 100, 0, 200 });
+            yield return (new[] { 0 }, new[] { 300, 0, 400, 500 });
+            yield break;
+        }
+
+        var old = new int[L];
+        for (int i = 0; i < L; i++) old[i] = i;
+
+        // Full reverse: maximal moves over the whole band (many shift calls).
+        var rev = new int[L];
+        for (int i = 0; i < L; i++) rev[i] = L - 1 - i;
+        yield return (old, rev);
+
+        // Rotation [0,1,..]→[1,2,..,0]: single non-LIS mover across the full band.
+        var rot = new int[L];
+        for (int i = 0; i < L - 1; i++) rot[i] = i + 1;
+        rot[L - 1] = 0;
+        yield return (old, rot);
+
+        // Reverse bracketed by inserts on both ends → mixes Insert + Move shifts.
+        var bracket = new int[L + 2];
+        bracket[0] = 500;
+        for (int i = 0; i < L; i++) bracket[1 + i] = L - 1 - i;
+        bracket[L + 1] = 600;
+        yield return (old, bracket);
     }
 
     [Fact]
