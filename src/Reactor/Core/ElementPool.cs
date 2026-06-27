@@ -317,6 +317,7 @@ public sealed class ElementPool : IDisposable
                 tb.ClearValue(TextBlock.FontFamilyProperty);
                 break;
             case WinUI.RichTextBlock rtb:
+                Reconciler.CancelInlineUiExtentPin(rtb);
                 rtb.Blocks.Clear();
                 break;
             case WinUI.ProgressBar pb:

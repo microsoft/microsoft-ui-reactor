@@ -164,6 +164,12 @@ public sealed partial class Reconciler
         public double OriginalMinHeight;
         public bool HasOriginal;
         public int Generation;
+
+        // The floor value the pin last wrote to rtb.MinHeight (NaN when the pin did not
+        // raise it, e.g. an author MinHeight already exceeded the extent). The deferred
+        // release restores OriginalMinHeight only while MinHeight still equals this — so
+        // an author who changes MinHeight during the pin window is never clobbered.
+        public double PinnedFloor = double.NaN;
     }
 
     private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<WinUI.RichTextBlock, InlineUiExtentPin> s_inlineUiExtentPins = new();
@@ -180,7 +186,7 @@ public sealed partial class Reconciler
         if (!HasInlineUi(next)) return;
 
         double pinHeight = rtb.ActualHeight;
-        if (!(pinHeight > 0)) return; // Not in a live/measured tree yet — the anchor covers this.
+        if (pinHeight <= 0) return; // Not in a live/measured tree yet — the anchor covers this.
 
         InlineUiExtentPin pin = s_inlineUiExtentPins.GetValue(rtb, static _ => new InlineUiExtentPin());
         if (!pin.HasOriginal)
@@ -189,9 +195,14 @@ public sealed partial class Reconciler
             pin.HasOriginal = true;
         }
 
-        // Raise the floor only — never lower an author-specified MinHeight.
+        // Raise the floor only — never lower an author-specified MinHeight. Record the
+        // value we wrote so the release can tell a still-pinned floor from one the author
+        // has since changed.
         if (pinHeight > rtb.MinHeight)
+        {
             rtb.MinHeight = pinHeight;
+            pin.PinnedFloor = pinHeight;
+        }
 
         InlineUiPinEngagementCount++;
 
@@ -212,11 +223,36 @@ public sealed partial class Reconciler
             if (--framesRemaining > 0) return;
 
             CompositionTarget.Rendering -= onRendering;
-            // Content is full again; restoring the author's MinHeight cannot lose offset.
-            rtb.MinHeight = pin.OriginalMinHeight;
+            // Content is full again. Restore the author's MinHeight only if the floor we
+            // raised is still in place — if the author changed MinHeight during the pin
+            // window (their setter runs after UpdateRichTextBlocks in the same reconcile,
+            // or on a later render), leave their value untouched.
+            if (rtb.MinHeight == pin.PinnedFloor)
+                rtb.MinHeight = pin.OriginalMinHeight;
             pin.HasOriginal = false;
+            pin.PinnedFloor = double.NaN;
         };
         CompositionTarget.Rendering += onRendering;
+    }
+
+    // Cancels any in-flight inline-UI extent pin for a RichTextBlock that is being
+    // unmounted / returned to the ElementPool. Without this, the pin's pending
+    // CompositionTarget.Rendering release closes over the control and would fire a frame
+    // or two later — restoring a stale MinHeight onto a control that a different renter
+    // has since rented (cross-renter floor bleed), and keeping the handler subscribed.
+    // Bumping the generation makes the still-subscribed release no-op + unhook on its
+    // next tick; we also undo the floor here so the recycled control starts clean.
+    internal static void CancelInlineUiExtentPin(WinUI.RichTextBlock rtb)
+    {
+        if (!s_inlineUiExtentPins.TryGetValue(rtb, out InlineUiExtentPin? pin))
+            return;
+
+        pin.Generation++; // supersede any pending release so it unhooks without writing
+        if (pin.HasOriginal && rtb.MinHeight == pin.PinnedFloor)
+            rtb.MinHeight = pin.OriginalMinHeight;
+        pin.HasOriginal = false;
+        pin.PinnedFloor = double.NaN;
+        s_inlineUiExtentPins.Remove(rtb);
     }
 
     private static FrameworkElement? FindAncestorScrollHost(DependencyObject start)

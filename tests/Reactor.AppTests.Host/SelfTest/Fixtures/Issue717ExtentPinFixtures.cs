@@ -56,19 +56,14 @@ internal static class Issue717ExtentPinFixtures
         var paras = new RichTextParagraph[8];
         for (int i = 0; i < paras.Length; i++)
         {
-            if (i % 2 == 0)
-            {
-                paras[i] = Paragraph(
+            paras[i] = i % 2 == 0
+                ? Paragraph(
                     Run($"row {i} counter {n} "),
                     InlineUI(Border(null).Width(220).Height(InlineHeight).Background("#4285F4")),
-                    Run(" trailing narration that wraps to keep each paragraph tall."));
-            }
-            else
-            {
-                paras[i] = Paragraph(
+                    Run(" trailing narration that wraps to keep each paragraph tall."))
+                : Paragraph(
                     Run($"row {i} counter {n} narration that wraps to keep the block " +
                         "tall enough to scroll well past the viewport."));
-            }
         }
 
         return VStack(8.0,
@@ -257,6 +252,48 @@ internal static class Issue717ExtentPinFixtures
 
             H.Check("Issue717_PinReleasedAfterRecovery",
                 Math.Abs(rtb.MinHeight - originalMinHeight) <= 0.5);
+        }
+    }
+
+    /// <summary>
+    /// Regression for the release path: if the author changes the block's
+    /// <c>MinHeight</c> while a pin is still pending (their <c>.Set(...)</c> setter runs
+    /// after <c>UpdateRichTextBlocks</c> in the same reconcile, or on a later render), the
+    /// deferred release must NOT overwrite that value with the pre-pin snapshot. The
+    /// release restores only while the floor is still the exact value the pin raised.
+    /// </summary>
+    internal class Issue717_PinReleaseDoesNotClobberAuthorMinHeight(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (n, setN) = ctx.UseState(0);
+                return BuildContent(n, () => setN(n + 1));
+            });
+
+            await Harness.Render();
+
+            var rtb = H.FindControl<RichTextBlock>(_ => true);
+            H.Check("Issue717_NoClobber_RtbMounted", rtb is not null);
+            if (rtb is null) return;
+
+            // Engage the pin via a real inline-UI mutation (raises MinHeight to the extent).
+            H.ClickButton("MutatePin717");
+            await host.WaitForIdleAsync();
+
+            // Simulate the author setting a fresh MinHeight while the pin is still pending,
+            // e.g. a `.Set(rtb => rtb.MinHeight = …)` modifier or a subsequent render.
+            const double authorMinHeight = 1234.0;
+            rtb.MinHeight = authorMinHeight;
+
+            // Spin past the pin's scheduled release frames.
+            await Harness.WaitFor(() => false, maxPasses: 30, perPassMs: 12);
+
+            // The release must leave the author's value intact, not restore the pre-pin floor.
+            H.Check("Issue717_AuthorMinHeightNotClobbered",
+                Math.Abs(rtb.MinHeight - authorMinHeight) <= 0.5);
         }
     }
 }
