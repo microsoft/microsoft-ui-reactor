@@ -65,10 +65,13 @@ jobs:
           script: |
             let prNumber;
             if (context.eventName === 'workflow_dispatch') {
-              const raw = (process.env.DISPATCH_PR || '').trim();
-              // Digits-only, no leading zero — reject '12abc', '0012', '12.9', ''.
+              // Validate the raw input without trimming: it must be exactly a
+              // positive integer (no leading zeros or surrounding whitespace) so the
+              // resolved PR stays identical to the raw value the job-level
+              // concurrency group keys on (github.event.inputs.pr_number).
+              const raw = process.env.DISPATCH_PR || '';
               if (!/^[1-9][0-9]*$/.test(raw)) {
-                throw new Error(`Invalid PR number input (expected digits, got '${process.env.DISPATCH_PR}')`);
+                throw new Error(`Invalid pr_number input '${process.env.DISPATCH_PR}' (expected a positive integer with no leading zeros or whitespace)`);
               }
               prNumber = Number(raw);
             } else {
