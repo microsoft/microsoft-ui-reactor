@@ -189,6 +189,17 @@ public sealed partial class Reconciler
             rtb.ClearValue(FrameworkElement.MinHeightProperty);
     }
 
+    // True only while MinHeight still holds the exact double the pin wrote (PinnedFloor).
+    // Exact equality is intentional here: we compare the live dependency-property value
+    // against the value we ourselves stored, as an identity check for "the author has not
+    // changed MinHeight since the pin raised the floor." A double DP round-trips losslessly
+    // and MinHeight is an input property that layout never coerces, so there is no
+    // floating-point drift to absorb — an epsilon would instead open a window where an
+    // author value within tolerance of the floor is silently clobbered. PinnedFloor is NaN
+    // whenever the pin never raised the floor, so this is correctly false in that case too.
+    private static bool IsFloorStillPinned(WinUI.RichTextBlock rtb, InlineUiExtentPin pin)
+        => rtb.MinHeight == pin.PinnedFloor;
+
     private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<WinUI.RichTextBlock, InlineUiExtentPin> s_inlineUiExtentPins = new();
 
     // Test-only seam (InternalsVisibleTo Reactor.AppTests.Host): counts how many times
@@ -246,7 +257,7 @@ public sealed partial class Reconciler
             // raised is still in place — if the author changed MinHeight during the pin
             // window (their setter runs after UpdateRichTextBlocks in the same reconcile,
             // or on a later render), leave their value untouched.
-            if (rtb.MinHeight == pin.PinnedFloor)
+            if (IsFloorStillPinned(rtb, pin))
                 RestorePinnedMinHeight(rtb, pin);
             pin.HasOriginal = false;
             pin.PinnedFloor = double.NaN;
@@ -267,7 +278,7 @@ public sealed partial class Reconciler
             return;
 
         pin.Generation++; // supersede any pending release so it unhooks without writing
-        if (pin.HasOriginal && rtb.MinHeight == pin.PinnedFloor)
+        if (pin.HasOriginal && IsFloorStillPinned(rtb, pin))
             RestorePinnedMinHeight(rtb, pin);
         pin.HasOriginal = false;
         pin.PinnedFloor = double.NaN;
