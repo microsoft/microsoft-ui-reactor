@@ -1030,13 +1030,14 @@ public static partial class ElementExtensions
     /// Binds a <see cref="Core.Command"/> to a custom-content <see cref="ButtonElement"/> by
     /// lifting it onto the typed <see cref="ButtonElement.Command"/> property (issues #133, #153,
     /// unified in #637). The reconciler invokes Execute/ExecuteAsync on click, folds the command's
-    /// <see cref="Core.Command.IsEnabled"/> into the IsEnabled descriptor entry (re-applied on every
-    /// update, and coexisting with <c>.IsDisabledFocusable()</c>'s coercion), and flows Description /
+    /// <see cref="Core.Command.IsEnabled"/> into the IsEnabled descriptor entry (re-applied when the
+    /// command's derived enabled state changes — field-aware, not on every render — and coexisting
+    /// with <c>.IsDisabledFocusable()</c>'s coercion), and flows Description /
     /// Accelerator / AccessKey — all field-aware, with no per-render <see cref="ButtonElement.Setters"/>
     /// lambda. Pairs with <c>Button(content)</c> so icon-plus-label buttons auto-disable like the
     /// <c>Button(Command)</c> factory. The modifier makes the command fully take over: any
     /// <see cref="ButtonElement.OnClick"/> already on the element is cleared so the command — not a
-    /// stale click handler — dispatches (issue #637 review M6; matches the pre-#637 modifier, and
+    /// stale click handler — dispatches (issue #637; matches the pre-#637 modifier, and
     /// the <c>Button(Command)</c> factory which builds the element with no <c>OnClick</c>). A raw
     /// <c>.Set(...)</c> setter runs after the command metadata and therefore overrides it.
     /// </summary>
