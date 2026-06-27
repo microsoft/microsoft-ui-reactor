@@ -618,7 +618,30 @@ public class ChartScannerRuleTests
         // Source-tracked modifier: .Palette() fed the scanned palette here, so the fix names .Palette(),
         // not .SetColors() — and the advisory pie path still never offers .Palette(ChartPalette.OkabeIto).
         Assert.Equal("Palette", finding.Fix.Modifier);
+        // .Palette(...) takes a ChartPalette, not raw colors, so the apply guidance must wrap the
+        // suggested colors in ChartPalette.FromColors(...); a bare ".Palette(<hex>)" would not compile —
+        // the same wrong-guidance footgun on the advisory path, caught by the PR #708 re-review.
+        Assert.Contains(".Palette(ChartPalette.FromColors(...))", finding.Fix.CodeSnippet);
         Assert.Contains(".Palette(...)", finding.Fix.CodeSnippet);
+        Assert.DoesNotContain(".SetColors(", finding.Fix.CodeSnippet);
+    }
+
+    [Fact]
+    public void A11Y_CHART_010_PieChart_PaletteOnly_FixNamesCompilablePalette()
+    {
+        // Companion to the 009 PaletteOnly test for the colorblind rule (PR #708 re-review). A pie that
+        // set ONLY .Palette(...) trips A11Y_CHART_010; the advisory remediation must name .Palette() —
+        // the call the author made — AND keep it compilable: .Palette() takes a ChartPalette, so the
+        // apply guidance wraps the colors in ChartPalette.FromColors(...), never a bare .Palette(<hex>).
+        var chart = Charts.PieChart(Array.Empty<DataPoint>(), d => d.Y)
+            .Palette(ChartPalette.FromColors(new D3Color(100, 100, 100), new D3Color(101, 100, 100))); // ΔE < 10 under CVD sim
+        var canvas = chart.AttachChartDataForTest(new CanvasElement([]) { Width = 400, Height = 300 });
+        var tree = VStack(canvas);
+
+        var findings = AccessibilityScanner.Scan(tree);
+        var finding = Assert.Single(findings, f => f.Id == "A11Y_CHART_010");
+        Assert.Equal("Palette", finding.Fix.Modifier);
+        Assert.Contains(".Palette(ChartPalette.FromColors(...))", finding.Fix.CodeSnippet);
         Assert.DoesNotContain(".SetColors(", finding.Fix.CodeSnippet);
     }
 

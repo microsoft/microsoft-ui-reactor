@@ -165,6 +165,14 @@ internal sealed class ChartAccessibilityChecker : IScanExtension
                     var hardenResult = ChartPalette.Harden(
                         Enumerable.Range(0, palette.Count).Select(k => palette[k]).ToArray());
 
+                    // .Palette(...) takes a ChartPalette, not raw colors, so the palette-only pie
+                    // fallback wraps the suggested colors in ChartPalette.FromColors(...) to keep the
+                    // remediation snippet compilable; .SetColors(...)/.SeriesColors(...) take colors
+                    // directly (issue #645).
+                    string applyFix = cd.CustomPaletteModifier == "Palette"
+                        ? ".Palette(ChartPalette.FromColors(...))"
+                        : $".{cd.CustomPaletteModifier}(...)";
+
                     findings.Add(new A11yDiagnostic
                     {
                         Id = "A11Y_CHART_009",
@@ -179,7 +187,7 @@ internal sealed class ChartAccessibilityChecker : IScanExtension
                             Modifier = cd.CustomPaletteModifier,
                             SuggestedValue = string.Join(", ", hardenResult.Palette.Colors.Select(c => c.ToHex())),
                             CodeSnippet = cd.IsPaletteAdvisoryOnly
-                                ? $"use .{cd.CustomPaletteModifier}(...) with the suggested values, or remove the .{cd.CustomPaletteModifier}(...) call to fall back to the default palette"
+                                ? $"use {applyFix} with the suggested values, or remove the .{cd.CustomPaletteModifier}(...) call to fall back to the default palette"
                                 : $".Palette(ChartPalette.OkabeIto) or use .{cd.CustomPaletteModifier}(...) with the suggested values",
                         },
                         Context = ctx.BuildContext(canvas),
@@ -206,6 +214,14 @@ internal sealed class ChartAccessibilityChecker : IScanExtension
                     var hardenResult = ChartPalette.Harden(
                         Enumerable.Range(0, palette.Count).Select(k => palette[k]).ToArray());
 
+                    // .Palette(...) takes a ChartPalette, not raw colors, so the palette-only pie
+                    // fallback wraps the suggested colors in ChartPalette.FromColors(...) to keep the
+                    // remediation snippet compilable; .SetColors(...)/.SeriesColors(...) take colors
+                    // directly (issue #645).
+                    string applyFix = cd.CustomPaletteModifier == "Palette"
+                        ? ".Palette(ChartPalette.FromColors(...))"
+                        : $".{cd.CustomPaletteModifier}(...)";
+
                     findings.Add(new A11yDiagnostic
                     {
                         Id = "A11Y_CHART_010",
@@ -220,7 +236,7 @@ internal sealed class ChartAccessibilityChecker : IScanExtension
                             Modifier = cd.CustomPaletteModifier,
                             SuggestedValue = string.Join(", ", hardenResult.Palette.Colors.Select(c => c.ToHex())),
                             CodeSnippet = cd.IsPaletteAdvisoryOnly
-                                ? $"use .{cd.CustomPaletteModifier}(...) with the hardened alternative, or remove the .{cd.CustomPaletteModifier}(...) call to fall back to the default palette"
+                                ? $"use {applyFix} with the hardened alternative, or remove the .{cd.CustomPaletteModifier}(...) call to fall back to the default palette"
                                 : ".Palette(ChartPalette.OkabeIto) or use hardened alternative",
                         },
                         Context = ctx.BuildContext(canvas),
