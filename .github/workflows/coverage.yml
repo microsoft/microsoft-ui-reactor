@@ -17,7 +17,7 @@ on:
     types: [created]
   workflow_dispatch:
     inputs:
-      pr:
+      pr_number:
         description: PR number to run merged coverage against
         required: true
         type: string
@@ -25,7 +25,7 @@ on:
 # One in-flight run per PR; a newer trigger (comment or dispatch) supersedes an
 # older one for the same PR.
 concurrency:
-  group: coverage-${{ github.event.issue.number || github.event.inputs.pr }}
+  group: coverage-${{ github.event.issue.number || github.event.inputs.pr_number }}
   cancel-in-progress: true
 
 permissions:
@@ -58,12 +58,20 @@ jobs:
         id: pr
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
-          DISPATCH_PR: ${{ github.event.inputs.pr }}
+          DISPATCH_PR: ${{ github.event.inputs.pr_number }}
         with:
           script: |
-            const prNumber = context.eventName === 'workflow_dispatch'
-              ? parseInt(process.env.DISPATCH_PR, 10)
-              : context.issue.number;
+            let prNumber;
+            if (context.eventName === 'workflow_dispatch') {
+              const raw = (process.env.DISPATCH_PR || '').trim();
+              // Digits-only, no leading zero — reject '12abc', '0012', '12.9', ''.
+              if (!/^[1-9][0-9]*$/.test(raw)) {
+                throw new Error(`Invalid PR number input (expected digits, got '${process.env.DISPATCH_PR}')`);
+              }
+              prNumber = Number(raw);
+            } else {
+              prNumber = context.issue.number;
+            }
             if (!Number.isInteger(prNumber) || prNumber <= 0) {
               throw new Error(`Could not resolve a valid PR number (got '${process.env.DISPATCH_PR ?? context.issue.number}')`);
             }
