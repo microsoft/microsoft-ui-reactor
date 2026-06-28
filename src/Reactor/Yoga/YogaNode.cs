@@ -310,7 +310,9 @@ internal sealed class YogaNode
     // every frame and ~2x the layout pass (−39.6% Flex renders/sec) — the cached
     // measurements miss as available sizes shift each frame instead of main's
     // dirty-clear-then-measure-once. The guards only help fully STATIC trees.
-    // Reverted to unconditional dirty = main behavior. See PR #740.
+    // Reverted to unconditional dirty = main behavior. See PR #740; the full
+    // #138-harmful-on-dynamic-trees finding (and the static-tree-gating idea) is
+    // tracked in issue #742.
     public FlexDirection FlexDirection { get => _style.FlexDirection; set { _style.FlexDirection = value; MarkDirtyAndPropagate(); } }
     public FlexJustify JustifyContent { get => _style.JustifyContent; set { _style.JustifyContent = value; MarkDirtyAndPropagate(); } }
     public FlexAlign AlignItems { get => _style.AlignItems; set { _style.AlignItems = value; MarkDirtyAndPropagate(); } }
