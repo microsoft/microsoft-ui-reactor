@@ -301,13 +301,6 @@ internal sealed class YogaNode
 
     // ── Public style property accessors ──
 
-    // AI-HINT (perf #138): every setter guards with an equality check before
-    // dirtying. FlexPanel re-applies the same container/child style every
-    // MeasureOverride; without these guards the root + every cell are
-    // re-dirtied each frame and the Yoga layout cache NEVER hits. The guards
-    // mirror upstream Yoga's updateStyle, which only dirties on a real change.
-    // YogaValue is a record struct whose == treats two Undefined (NaN) values
-    // as equal; raw floats use float.Equals so NaN==NaN is also a no-op.
     public FlexDirection FlexDirection { get => _style.FlexDirection; set { _style.FlexDirection = value; MarkDirtyAndPropagate(); } }
     public FlexJustify JustifyContent { get => _style.JustifyContent; set { _style.JustifyContent = value; MarkDirtyAndPropagate(); } }
     public FlexAlign AlignItems { get => _style.AlignItems; set { _style.AlignItems = value; MarkDirtyAndPropagate(); } }
