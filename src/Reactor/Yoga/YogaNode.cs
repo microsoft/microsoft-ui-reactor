@@ -301,6 +301,16 @@ internal sealed class YogaNode
 
     // ── Public style property accessors ──
 
+    // AI-HINT (perf): these setters dirty the node UNCONDITIONALLY — do NOT add
+    // equality-guards (`if (_style.X == value) return;`) here. An earlier
+    // optimization (former #138) guarded each setter to skip re-dirtying
+    // unchanged values, intending to let the Yoga layout cache hit across
+    // frames. But /perf on the Flex/Yoga macro workload (PR #740) proved that on
+    // DYNAMIC flex trees those guards thrash Yoga's CanUseCachedMeasurement path
+    // every frame and ~2x the layout pass (−39.6% Flex renders/sec) — the cached
+    // measurements miss as available sizes shift each frame instead of main's
+    // dirty-clear-then-measure-once. The guards only help fully STATIC trees.
+    // Reverted to unconditional dirty = main behavior. See PR #740.
     public FlexDirection FlexDirection { get => _style.FlexDirection; set { _style.FlexDirection = value; MarkDirtyAndPropagate(); } }
     public FlexJustify JustifyContent { get => _style.JustifyContent; set { _style.JustifyContent = value; MarkDirtyAndPropagate(); } }
     public FlexAlign AlignItems { get => _style.AlignItems; set { _style.AlignItems = value; MarkDirtyAndPropagate(); } }
