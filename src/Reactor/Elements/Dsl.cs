@@ -1913,6 +1913,35 @@ public static partial class Factories
 
     // ── Internals ───────────────────────────────────────────────────
 
+    /// <summary>
+    /// Flattens one level of <see cref="GroupElement"/> and drops
+    /// <see langword="null"/> / <see cref="EmptyElement"/> entries, returning the
+    /// children array stored on a container element.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Array-ownership contract.</b> The no-expansion fast path below returns
+    /// the caller's <see cref="Element"/>[] instance <i>directly</i> (no copy) for
+    /// zero per-render allocation. The returned array becomes the container
+    /// element's <c>Children</c>, and container <c>ShallowEquals</c> gates the
+    /// reconciler skip-path on <c>ReferenceEquals(Children)</c>. Therefore a
+    /// caller <b>must not retain and then mutate</b> an <see cref="Element"/>[]
+    /// it passes to a container factory (<c>VStack</c>,
+    /// <c>HStack</c>, <c>Grid</c>, <c>Group</c>,
+    /// <c>FlexRow</c>, <c>FlexColumn</c>, …). Mutating that buffer
+    /// after the call would rewrite the <i>previous</i> tree's children in place
+    /// and corrupt the <c>ReferenceEquals</c>-based skip decision. The idiomatic
+    /// pattern — passing a fresh <c>params</c> array per render — is always safe.
+    /// </para>
+    /// <para>
+    /// In-framework container factories honor this by never writing back into a
+    /// filtered/caller array: cell-positioning factories
+    /// (<c>UniformGrid</c>, <c>InterspersedGrid</c>) build their
+    /// <c>.Grid(...)</c> wrappers into a separate owned array. A Release-path
+    /// defensive clone is intentionally <b>not</b> taken — it would reintroduce
+    /// the per-render allocation #173 removed for the common case.
+    /// </para>
+    /// </remarks>
     private static Element[] FilterChildren(Element?[] children)
     {
         // Fast path: check if any nulls or GroupElements need expansion
@@ -1925,6 +1954,10 @@ public static partial class Factories
                 break;
             }
         }
+        // Fast path: no nulls / GroupElement / EmptyElement → return the caller's
+        // array instance directly (zero-copy). See the array-ownership contract
+        // in this method's <remarks>: callers must not retain and then mutate an
+        // array passed to a container factory.
         if (!needsExpansion) return (Element[])(object)children;
 
         // #173 — slow path: two passes (count, then fill an exactly-sized array)
