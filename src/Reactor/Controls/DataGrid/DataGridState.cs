@@ -770,6 +770,21 @@ public class DataGridState<T>
     /// shown — tracked by <see cref="ColumnVersion"/>. The header row and every data row share the
     /// one returned definition so the reconciler can skip re-applying ColumnDefinitions.
     /// </summary>
+    /// <remarks>
+    /// The cache treats the external <paramref name="columns"/> list by REFERENCE IDENTITY
+    /// (<see cref="object.ReferenceEquals(object, object)"/>) — the same reference-identity
+    /// convention the framework's <c>ShallowEquals</c> uses for element children/refs. Per
+    /// Reactor's immutable-props contract, callers must pass a NEW list reference when the visible
+    /// column set changes (e.g. a fresh <c>el.Columns</c>); the per-column widths themselves always
+    /// come from the version-tracked <see cref="GetColumnWidth"/>, so an internal
+    /// resize/hide/show/reorder/pin (which bumps <see cref="ColumnVersion"/>) invalidates correctly.
+    /// Mutating the SAME list reference IN PLACE is UNSUPPORTED: a count change is still caught (the
+    /// <c>columns.Count</c> guard), but a same-count in-place reorder of the passed list — with no
+    /// internal mutator bumping <see cref="ColumnVersion"/> — will serve the prior layout for that
+    /// reference. This is by design: detecting it would require per-render content hashing of the
+    /// column list, which defeats the cache. See
+    /// <c>GetColumnLayout_SameCount_InPlace_Reorder_Serves_Cached_Layout_By_Design</c>.
+    /// </remarks>
     /// <param name="columns">Current visible columns (i.e. <see cref="Columns"/>).</param>
     /// <param name="hasRowDetailColumn">Whether a 24px row-detail expander column leads the grid.</param>
     /// <param name="hasSelectColumn">Whether a 40px selection column leads the grid.</param>
@@ -784,6 +799,9 @@ public class DataGridState<T>
                   | (hasSelectColumn ? 2 : 0)
                   | (hasRowEditActionsColumn ? 4 : 0);
 
+        // Cache key relies on reference-identity of `columns` (per the immutable-props
+        // convention — see <remarks>): a NEW list reference or a count change rebuilds; a
+        // same-count in-place reorder of the SAME reference is intentionally NOT detected.
         if (_cachedColWidths is not null && _cachedGridDef is not null
             && _layoutCacheVersion == _columnVersion && _layoutCacheShape == shape
             && ReferenceEquals(_layoutCacheColumns, columns)

@@ -442,6 +442,34 @@ public class DataGridPerfCacheTests
     }
 
     [Fact]
+    public void GetColumnLayout_SameCount_InPlace_Reorder_Serves_Cached_Layout_By_Design()
+    {
+        // Locks the reference-identity reliance documented in GetColumnLayout's <remarks>:
+        // the cache keys on (ColumnVersion, shape, ReferenceEquals(columns), columns.Count).
+        // A SAME-reference, SAME-count in-place REORDER of the passed list bumps NONE of those
+        // (no internal mutator ran, so ColumnVersion is unchanged), so the cache is served
+        // unchanged — by design, because detecting it would require per-render content hashing
+        // that defeats the cache. Per the immutable-props convention a caller must instead pass a
+        // NEW list reference. This test makes that silent edge an explicit, intentional contract.
+        var state = CreateState();
+        var live = new List<FieldDescriptor>(state.AllColumns); // 3 columns
+        var (w1, d1) = state.GetColumnLayout(live, false, false, false);
+
+        // Same reference, same count, different ORDER — and crucially no ColumnVersion bump.
+        (live[0], live[2]) = (live[2], live[0]);
+        var (w2, d2) = state.GetColumnLayout(live, false, false, false);
+
+        // Cache hit: the identical array + definition references are returned (stale-by-design).
+        Assert.Same(w1, w2);
+        Assert.Same(d1, d2);
+
+        // Sanity: passing a genuinely NEW reference (the supported path) DOES rebuild.
+        var fresh = new List<FieldDescriptor>(live);
+        var (w3, _) = state.GetColumnLayout(fresh, false, false, false);
+        Assert.NotSame(w1, w3);
+    }
+
+    [Fact]
     public void GetColumnLayout_Invalidates_On_Reorder_Pin_And_ToggleVisibility()
     {
         var state = CreateState();
