@@ -88,27 +88,11 @@ namespace Microsoft.UI.Reactor.Markdown
 
             // Non-ASCII: md4c classifies both the Unicode "P" (punctuation) and
             // "S" (symbol) general categories as punctuation-like for delimiter
-            // run analysis. Defer to the BCL's Unicode data rather than a table.
-            if (!Rune.TryCreate(codepoint, out Rune rune))
-                return false;
-
-            switch (Rune.GetUnicodeCategory(rune))
-            {
-                case UnicodeCategory.ConnectorPunctuation:
-                case UnicodeCategory.DashPunctuation:
-                case UnicodeCategory.OpenPunctuation:
-                case UnicodeCategory.ClosePunctuation:
-                case UnicodeCategory.InitialQuotePunctuation:
-                case UnicodeCategory.FinalQuotePunctuation:
-                case UnicodeCategory.OtherPunctuation:
-                case UnicodeCategory.MathSymbol:
-                case UnicodeCategory.CurrencySymbol:
-                case UnicodeCategory.ModifierSymbol:
-                case UnicodeCategory.OtherSymbol:
-                    return true;
-                default:
-                    return false;
-            }
+            // run analysis. Rune.IsPunctuation covers the P* categories and
+            // Rune.IsSymbol covers the S* categories; together they are exactly
+            // that set. Defer to the BCL's Unicode data rather than a table.
+            return Rune.TryCreate(codepoint, out Rune rune)
+                && (Rune.IsPunctuation(rune) || Rune.IsSymbol(rune));
         }
 
         // ---------------------------------------------------------------

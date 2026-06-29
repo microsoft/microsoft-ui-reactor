@@ -353,6 +353,16 @@ Conventions for contributors:
   `RaiseStateChanged` now route through `ReactorApp.UIDispatcher`.
   (spec 036 §4.3)
 
+- **`Microsoft.UI.Reactor.Markdown.MarkdownHtml` and its nested `HtmlFlags`
+  enum — removed from the shipped `Microsoft.UI.Reactor` assembly (issue
+  #433).** This md4c-based Markdown→HTML string renderer existed only for
+  CommonMark/spec/fuzz validation; it was never used by the native
+  `Markdown()` element (which renders directly to a WinUI inline tree via
+  `MarkdownBuilder` and is unaffected). It now lives in the test-support
+  library `tests/Reactor.Markdown.TestRenderer/`, off the framework's public
+  surface. No replacement ships in the package — the renderer was incidental
+  test/spec API, not a supported way to convert Markdown to HTML at runtime.
+
 ### Fixed
 
 - **RichTextBlock inline-UI mutations no longer scroll the ancestor scroll host to
