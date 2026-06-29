@@ -86,6 +86,12 @@ public sealed partial class Reconciler
             ComponentElement comp => MountComponent(comp, requestRerender),
             FuncElement func => MountFuncComponent(func, requestRerender),
             MemoElement memo => MountMemoComponent(memo, requestRerender),
+            // Issue #327 (Option A): a KeyedMemoElement that reaches Mount directly was used
+            // OUTSIDE a virtualized ElementFactory (which resolves it to its inner element in
+            // BuildOrCache before mounting). Treat it as a TRANSPARENT wrapper — mount its
+            // factory output with no caching. Any modifiers on the wrapper itself are applied
+            // by the post-dispatch ApplyModifiers below, exactly like any other element.
+            KeyedMemoElement km => Mount(km.Factory() ?? EmptyElement.Instance, requestRerender),
             // EmptyElement is a no-op sentinel — callers (Reconcile, panel
             // children loops, ChildReconciler) already filter it before
             // reaching Mount, but MountContext.MountChild does not, so a V1

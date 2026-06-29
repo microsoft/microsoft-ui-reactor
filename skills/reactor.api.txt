@@ -120,6 +120,7 @@ Markdown(string markdown) → Element
 Markdown(string markdown, MarkdownOptions options) → Element
 MediaPlayerElement(string source = null) → MediaPlayerElementElement
 Memo(Func<RenderContext, Element> render, object[] dependencies) → MemoElement
+Memo<TKey>(TKey key, Func<Element> factory) → KeyedMemoElement
 Menu(string title, MenuFlyoutItemBase[] items) → MenuBarItemData
 MenuBar(MenuBarItemData[] items) → MenuBarElement
 MenuFlyout(Element target, MenuFlyoutItemBase[] items) → MenuFlyoutElement
@@ -4004,6 +4005,17 @@ int Count { get; init; }
 string ControlContext { get; init; }
 Deconstruct(ref DateTime TimestampUtc, ref string ControlContext, ref KeyedListDiagnosticKind Kind, ref IReadOnlyList<string> SampleKeys, ref int Count) → void
 Equals(KeyedListDiagnostic other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record KeyedMemoElement
+new(object MemoKey, Func<Element> Factory)
+Func<Element> Factory { get; init; }
+object MemoKey { get; init; }
+Deconstruct(ref object MemoKey, ref Func<Element> Factory) → void
+Equals(Element other) → bool
+Equals(KeyedMemoElement other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string

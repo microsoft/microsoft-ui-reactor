@@ -183,6 +183,18 @@ public sealed partial class Reconciler
                 => UpdateComponent(oldEl, newEl, control, requestRerender),
             (MemoElement, MemoElement, _)
                 => UpdateComponent(oldEl, newEl, control, requestRerender),
+            // Issue #327 (Option A): transparent unwrap for a KeyedMemoElement reaching the
+            // reconciler directly (used outside a virtualized factory). Re-render BOTH sides'
+            // factories and diff the rebuilt inner trees in place against the existing control.
+            // No per-node reconciler state; child state inside the inner subtree is preserved
+            // because Update patches in place (and only remounts on an inner type change, which
+            // the recursive Update handles identically to any sibling). Modifiers on the wrapper
+            // are applied by the post-dispatch ApplyModifiers below.
+            (KeyedMemoElement oldKm, KeyedMemoElement newKm, _)
+                => Update(
+                    oldKm.Factory() ?? EmptyElement.Instance,
+                    newKm.Factory() ?? EmptyElement.Instance,
+                    control, requestRerender),
             _ => Mount(newEl, requestRerender),
         };
         }

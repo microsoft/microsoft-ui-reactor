@@ -1240,6 +1240,33 @@ public static partial class Factories
         => new(render, dependencies.Length == 0 ? null : dependencies);
 
     /// <summary>
+    /// Opt-in typed keyed memo for virtualized rows (issue #327). Wrap a row body in
+    /// <c>Memo(key, () =&gt; …)</c> to assert the body is a <b>pure function of <paramref name="key"/></b>.
+    /// Inside a virtualized list (<c>VirtualList</c>, <c>LazyVStack&lt;T&gt;</c>, …) the owning
+    /// <see cref="Core.ElementFactory{T}"/> caches the built element per key in a bounded LRU, so a
+    /// container recycle that re-asks for the same key returns the <em>same</em> element instance —
+    /// the reconciler then skips the row's rebuild + per-row diff entirely (sub-µs). This targets the
+    /// fast-scroll cost of variable-height rows, where every recycle otherwise rebuilds and diffs the
+    /// row from scratch.
+    /// <para>Usage: <c>renderItem: i =&gt; Memo(items[i].Id, () =&gt; Border(BigVariableHeightRow(items[i])))</c></para>
+    /// <para><b>Purity is your responsibility.</b> The key must capture every input the factory reads.
+    /// If the body also depends on, say, a selection flag, fold it into the key:
+    /// <c>Memo((items[i].Id, isSelected), () =&gt; …)</c>. Closing over unkeyed mutable state will serve
+    /// stale content. The cache is cleared automatically when the list's items/renderItem change.</para>
+    /// <para>Outside a virtualized factory the wrapper is transparent — it simply renders the factory
+    /// each pass with no caching — so it is always safe to use anywhere an element is expected.</para>
+    /// </summary>
+    /// <typeparam name="TKey">
+    /// Key type. Boxed to <see cref="object"/> and compared with <see cref="object.Equals(object)"/> /
+    /// <see cref="object.GetHashCode"/>, so value keys (ints, strings, records, value tuples) dedupe by
+    /// value. This is what lets the int-index <c>VirtualList</c> path hit the cache.
+    /// </typeparam>
+    /// <param name="key">Stable identity that fully determines <paramref name="factory"/>'s output.</param>
+    /// <param name="factory">Builds the row element. Invoked once per key on a cache miss.</param>
+    public static Core.KeyedMemoElement Memo<TKey>(TKey key, Func<Element> factory)
+        => new(key!, factory);
+
+    /// <summary>
     /// Define an inline function component that re-renders on every parent render
     /// (no memoization), keeping its own hook scope. Equivalent to the legacy
     /// <see cref="Func"/> behavior, made explicit so the reader can tell the

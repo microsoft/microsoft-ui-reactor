@@ -618,6 +618,14 @@ blind spot — the analyzer can't see through a method call without
 whole-program analysis (same blind spot as React's
 `react-hooks/exhaustive-deps`).
 
+**Recycle-boundary sibling.** `UseMemoCells` runs at the parent's **render**
+boundary — it skips cell-builds when the list component re-renders. It does
+*not* help during pure fast-scroll, where a virtualized list recycles
+containers without re-rendering the parent. For that, wrap the row in
+[`Memo(key, factory)`](collections.md#memoizing-rows-across-recycles) — the
+opt-in cross-recycle row cache. The two compose: `UseMemoCells` covers
+re-renders, `Memo(key, …)` covers scroll recycles.
+
 ## Patterns
 
 ### Custom hook authoring

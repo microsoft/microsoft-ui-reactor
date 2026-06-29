@@ -1433,6 +1433,36 @@ public record FuncElement(Func<RenderContext, Element> RenderFunc) : Element;
 /// </summary>
 public record MemoElement(Func<RenderContext, Element> RenderFunc, object?[]? Dependencies = null) : Element;
 
+/// <summary>
+/// Issue #327 — an opt-in, typed keyed memo wrapper produced by the
+/// <c>Memo(key, factory)</c> factory (see <see cref="Microsoft.UI.Reactor.Factories"/>).
+/// The author asserts <see cref="Factory"/> is a <b>pure function of <see cref="MemoKey"/></b>:
+/// when a virtualized <see cref="ElementFactory{T}"/> recycles a container and asks for the
+/// same key again, the factory-scoped LRU returns the previously-built inner
+/// <see cref="Element"/> instance unchanged instead of rebuilding+diffing the subtree.
+/// Returning the <em>same</em> instance lets <c>Element.ShallowEquals</c> hit its
+/// <c>ReferenceEquals</c> fast-path so the per-row reconcile descent is skipped entirely.
+///
+/// <para><b>Purity contract.</b> The key must capture <em>every</em> input the factory reads.
+/// Closing over unkeyed mutable state (a <c>UseState</c> cell, an external counter, the theme)
+/// without folding it into the key will serve stale content — that is the author's
+/// responsibility. Widen the key to a tuple (e.g. <c>Memo((item.Id, isSelected), …)</c>) to
+/// capture extra inputs. <see cref="MemoKey"/> is compared with
+/// <see cref="object.Equals(object)"/> / <see cref="object.GetHashCode"/>, so value keys
+/// (ints, strings, records, value tuples) dedupe by value — this is what makes the int-index
+/// VirtualList path hit the cache where the reference-identity <c>_viewBuilderCache</c> cannot.</para>
+///
+/// <para><b>Used outside a virtualized factory</b> (e.g. a plain <c>VStack</c> child), the
+/// reconciler treats it as a <em>transparent</em> wrapper: it renders <see cref="Factory"/> on
+/// every pass with no caching, so it is always safe to drop a <c>Memo(key, …)</c> anywhere a
+/// normal element is expected. The cache benefit only applies on the
+/// <see cref="ElementFactory{T}"/> recycle path.</para>
+///
+/// <para>The positional parameter is named <c>MemoKey</c> (not <c>Key</c>) so it does not clash
+/// with the inherited <see cref="Element.Key"/> string used for keyed reconciliation.</para>
+/// </summary>
+public sealed record KeyedMemoElement(object MemoKey, Func<Element> Factory) : Element;
+
 // ════════════════════════════════════════════════════════════════════════
 //  Semantic wrapper for composite accessibility
 // ════════════════════════════════════════════════════════════════════════
