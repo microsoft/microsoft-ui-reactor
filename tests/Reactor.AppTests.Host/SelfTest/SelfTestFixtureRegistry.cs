@@ -1459,6 +1459,7 @@ internal static class SelfTestFixtureRegistry
         "OptionalSetterCollision",
         "InitialOnly",
         "BrushHelperParse",
+        "CrossAxisMeasureStaleness",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -2869,6 +2870,7 @@ internal static class SelfTestFixtureRegistry
         "OptionalSetterCollision" => new OptionalSetterCollisionFixture.Execution(harness),
         "InitialOnly" => new InitialOnlyFixture.Execution(harness),
         "BrushHelperParse" => new BrushHelperParseFixture.Execution(harness),
+        "CrossAxisMeasureStaleness" => new CrossAxisMeasureStalenessFixture(harness),
 
         _ => null,
     };
