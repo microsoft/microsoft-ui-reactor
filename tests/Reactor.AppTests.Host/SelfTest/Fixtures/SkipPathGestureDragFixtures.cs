@@ -186,4 +186,92 @@ internal static class SkipPathGestureDragFixtures
             H.Check("SkipDrop_CachedTargetNotStale", !ReferenceEquals(state?.Target?.OnDrop, firstHandler));
         }
     }
+
+    /// <summary>
+    /// #721 mid-gesture SAFETY proof. The simple stale-closure repros above show the
+    /// refresh swaps the dispatch target; this proves the refresh is non-destructive to
+    /// an IN-FLIGHT gesture: it does NOT re-subscribe the once-per-lifetime trampolines
+    /// and does NOT reset the in-flight cursor — so a mid-interaction skip neither drops
+    /// the gesture nor double-dispatches Began/Ended.
+    ///
+    /// We simulate "Began already fired" by setting the live cursor on the cached state
+    /// (a real ManipulationDelta can't be synthesized — its args are sealed). Then a
+    /// skip-path refresh is driven by bumping unrelated state, and we assert: (a) the
+    /// cached pan config is the LATEST closure (staleness fix), (b) every manipulation
+    /// trampoline delegate is the SAME instance (no re-subscribe → no duplicate event
+    /// delivery), and (c) PanBeganDispatched is still true (cursor preserved → the delta
+    /// path's `if (!PanBeganDispatched)` Began gate stays closed → no second Began).
+    /// Finally we dispatch Changed + Ended through the cached config and confirm the
+    /// LATEST closure receives them.
+    /// </summary>
+    internal class SkipMidGesturePreservesCursorsAndSubscriptions(Harness h) : SelfTestFixtureBase(h)
+    {
+        // Reference-stable event log the per-render closures write into. Identity never
+        // changes, so it never drives a re-render — it just records which closure ran.
+        private sealed class EventLog { public readonly List<(string Phase, int Tick)> Entries = new(); }
+
+        public override async Task RunAsync()
+        {
+            var log = new EventLog();
+
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (tick, setTick) = ctx.UseState(0);
+
+                // Per-render pan config capturing the CURRENT tick into the log. The
+                // Rectangle is otherwise constant, so a tick bump is taken by the skip arm.
+                return VStack(
+                    TextBlock($"mgtick:{tick}"),
+                    Button("MgBumpTick", () => setTick(tick + 1)),
+                    Factories.Rectangle()
+                        .Size(80, 80)
+                        .OnPan(
+                            onChanged: _ => log.Entries.Add(("Changed", tick)),
+                            onEnded: _ => log.Entries.Add(("Ended", tick)),
+                            onBegan: _ => log.Entries.Add(("Began", tick)),
+                            axis: PanAxis.Both));
+            });
+
+            await Harness.Render();
+
+            var rect = H.FindControl<Microsoft.UI.Xaml.Shapes.Rectangle>(_ => true);
+            H.Check("MidGesture_TargetMounted", rect is not null);
+            var state = rect is not null ? Reconciler.DebugTryGetGestureState(rect) : null;
+            H.Check("MidGesture_GestureStateCached", state?.Pan is not null);
+
+            // Capture the once-per-lifetime trampoline delegates + simulate an in-flight
+            // gesture (Began already dispatched, partway through a drag).
+            var started0 = state!.StartedTrampoline;
+            var delta0 = state.DeltaTrampoline;
+            var completed0 = state.CompletedTrampoline;
+            var inertia0 = state.InertiaStartingTrampoline;
+            state.PanBeganDispatched = true;
+            state.PanLastTranslation = new global::Windows.Foundation.Point(12, 0);
+
+            // Drive the skip-path refresh: bump unrelated state so the child-skip arm
+            // engages while the gesture is "in flight".
+            H.ClickButton("MgBumpTick");
+            await Harness.Render();
+
+            // (a) staleness fix — cached config is the latest (tick=1) closure.
+            state.Pan!.OnChanged(default);
+            H.Check("MidGesture_LatestClosureGetsChanged",
+                log.Entries.Count > 0 && log.Entries[^1] == ("Changed", 1));
+            state.Pan!.OnEnded?.Invoke(default);
+            H.Check("MidGesture_LatestClosureGetsEnded",
+                log.Entries.Count > 0 && log.Entries[^1] == ("Ended", 1));
+
+            // (b) safety — no trampoline was re-subscribed (same delegate instances).
+            H.Check("MidGesture_StartedTrampolineUnchanged", ReferenceEquals(state.StartedTrampoline, started0));
+            H.Check("MidGesture_DeltaTrampolineUnchanged", ReferenceEquals(state.DeltaTrampoline, delta0));
+            H.Check("MidGesture_CompletedTrampolineUnchanged", ReferenceEquals(state.CompletedTrampoline, completed0));
+            H.Check("MidGesture_InertiaTrampolineUnchanged", ReferenceEquals(state.InertiaStartingTrampoline, inertia0));
+
+            // (c) safety — the in-flight cursor was NOT reset, so the delta path would not
+            // re-fire Began; and the refresh itself dispatched no Began (no duplicate).
+            H.Check("MidGesture_CursorPreserved", state.PanBeganDispatched);
+            H.Check("MidGesture_NoDuplicateBegan", !log.Entries.Exists(e => e.Phase == "Began"));
+        }
+    }
 }
