@@ -48,6 +48,12 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
     private readonly DispatcherQueue _dispatcherQueue;
     private readonly ILogger? _logger;
 
+    // Issue #660 (#86): UISettings.ColorValuesChanged invalidates the theme-brush
+    // resolution cache on high-contrast / accent / palette changes (ActualThemeChanged
+    // below covers only Light/Dark). Mirrors ReactorHost so an embedded host with no
+    // ReactorApp still drops stale brushes on a non-Light/Dark theme change.
+    private global::Windows.UI.ViewManagement.UISettings? _uiSettings;
+
     private Component? _rootComponent;
     private Func<RenderContext, Element>? _rootRenderFunc;
     private RenderContext? _funcContext;
@@ -593,6 +599,23 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
             Microsoft.UI.Reactor.Core.ThemeRef.InvalidateResolutionCache();
             RequestRender();
         };
+
+        // Issue #660 (#86): also invalidate on high-contrast / accent / palette
+        // changes, which don't raise ActualThemeChanged but can change a resolved
+        // brush. ColorValuesChanged fires off the UI thread; ThemeRef cache clear
+        // and RequestRender are both thread-safe.
+        try
+        {
+            _uiSettings = new global::Windows.UI.ViewManagement.UISettings();
+            _uiSettings.ColorValuesChanged += OnColorValuesChanged;
+        }
+        catch { /* headless / no UISettings projection — nothing to invalidate */ }
+    }
+
+    private void OnColorValuesChanged(global::Windows.UI.ViewManagement.UISettings sender, object args)
+    {
+        Microsoft.UI.Reactor.Core.ThemeRef.InvalidateResolutionCache();
+        RequestRender();
     }
 
     private void ShowErrorFallback(Exception ex)
@@ -617,6 +640,12 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
 
         Loaded -= OnLoaded;
         Unloaded -= OnUnloaded;
+
+        if (_uiSettings is not null)
+        {
+            _uiSettings.ColorValuesChanged -= OnColorValuesChanged;
+            _uiSettings = null;
+        }
 
         _rootComponent?.Context.RunCleanups();
         _funcContext?.RunCleanups();

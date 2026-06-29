@@ -68,7 +68,14 @@ public readonly record struct ThemeRef(string ResourceKey)
             return cached;
 
         var resolved = ResolveForThemeUncached(resources, resourceKey, themeName);
-        s_resolutionCache[cacheKey] = resolved;
+        // Issue #660 review: cache ONLY a successful (non-null) resolution. A null
+        // means "key not found right now" — caching it would go stale if a
+        // ResourceDictionary defining that key is merged in after this first
+        // resolve (a dictionary add fires no theme-change event, so the cache
+        // wouldn't be cleared). Unknown keys are rare and re-walking them is the
+        // same cost as before this cache existed, so this is strictly safe.
+        if (resolved is not null)
+            s_resolutionCache[cacheKey] = resolved;
         return resolved;
     }
 
