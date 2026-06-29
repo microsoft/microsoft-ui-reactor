@@ -122,18 +122,28 @@ public sealed partial class Reconciler
     internal static void RefreshGestureDragStateOnSkip(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers? newM)
     {
         // ── Gesture family (Pan/Pinch/Rotate/LongPress) ──
-        bool gestureNow = newM is not null
-            && (newM.Pan is not null || newM.Pinch is not null || newM.Rotate is not null || newM.LongPress is not null);
-        bool gestureBefore = oldM is not null
-            && (oldM.Pan is not null || oldM.Pinch is not null || oldM.Rotate is not null || oldM.LongPress is not null);
-        if (gestureNow != gestureBefore)
+        // Route on PER-SLOT presence, not aggregate: if the null/non-null pattern of ANY
+        // of the four gesture slots differs, a slot was added or removed — even alongside
+        // a co-present sibling (e.g. Pinch -> Pinch+Pan, or Pan+Pinch -> Pinch). That needs
+        // the full handler to (re)compute ManipulationMode / IsHoldingEnabled and lazily
+        // wire any new trampoline; the config-only arm would set the field but never widen
+        // the platform mode, leaving the added gesture silently dead. Only when every
+        // slot's presence is identical (a pure per-render closure swap) is config-only both
+        // sufficient AND mid-gesture-safe.
+        bool gesturePresenceChanged =
+            (oldM?.Pan is null) != (newM?.Pan is null)
+            || (oldM?.Pinch is null) != (newM?.Pinch is null)
+            || (oldM?.Rotate is null) != (newM?.Rotate is null)
+            || (oldM?.LongPress is null) != (newM?.LongPress is null);
+        if (gesturePresenceChanged)
         {
-            // ADD or REMOVE-last — wire / unwire through the full handler.
             ApplyGestureHandlers(fe, oldM, newM ?? _emptyModifiers);
         }
-        else if (gestureNow && _gestureStates.TryGetValue(fe, out var gs))
+        else if ((newM?.Pan is not null || newM?.Pinch is not null || newM?.Rotate is not null || newM?.LongPress is not null)
+                 && _gestureStates.TryGetValue(fe, out var gs))
         {
-            // Already-wired identity change — config-only refresh (mid-gesture-safe).
+            // Every slot present-identically, only the closures differ — config-only
+            // refresh (mid-gesture-safe: no trampoline re-subscribe, cursors untouched).
             gs.Pan = newM!.Pan;
             gs.Pinch = newM.Pinch;
             gs.Rotate = newM.Rotate;
@@ -141,15 +151,20 @@ public sealed partial class Reconciler
         }
 
         // ── Drag-drop family (DragSource/DropTarget) ──
-        bool dragNow = newM is not null && (newM.DragSource is not null || newM.DropTarget is not null);
-        bool dragBefore = oldM is not null && (oldM.DragSource is not null || oldM.DropTarget is not null);
-        if (dragNow != dragBefore)
+        // Per-slot presence again: a DragSource removed while a DropTarget stays present
+        // (or vice-versa) is a transition, not an identity change. Routing it to the full
+        // handler is what makes ApplyDragDropHandlers' in-flight-drag guard reachable on a
+        // mid-drag source removal (the config-only arm would null state.Source directly,
+        // stranding the pending DropCompleted -> leak + suppressed OnEnd).
+        bool dragPresenceChanged =
+            (oldM?.DragSource is null) != (newM?.DragSource is null)
+            || (oldM?.DropTarget is null) != (newM?.DropTarget is null);
+        if (dragPresenceChanged)
         {
-            // ADD or REMOVE-last — wire / unwire (CanDrag/AllowDrop + trampolines + the
-            // in-flight-drag guard so a mid-drag source removal still completes cleanly).
             ApplyDragDropHandlers(fe, oldM, newM ?? _emptyModifiers);
         }
-        else if (dragNow && _dndStates.TryGetValue(fe, out var ds))
+        else if ((newM?.DragSource is not null || newM?.DropTarget is not null)
+                 && _dndStates.TryGetValue(fe, out var ds))
         {
             ds.Source = newM!.DragSource;
             ds.Target = newM.DropTarget;
@@ -223,6 +238,13 @@ public sealed partial class Reconciler
         var mode = ComputeManipulationMode(m);
         if (mode != ManipulationModes.None)
             fe.ManipulationMode = mode;
+        else if (oldM?.Pan is not null || oldM?.Pinch is not null || oldM?.Rotate is not null)
+            // #721 — all manipulation gestures (Pan/Pinch/Rotate) were removed. Clear the
+            // mode Reactor previously set so the element stops capturing manipulations
+            // (a leftover TranslateX/Scale would keep eating an ancestor ScrollViewer's
+            // pans). Gated on oldM having had one so we never clobber a user-set mode on
+            // a control that never carried a Reactor gesture.
+            fe.ManipulationMode = ManipulationModes.None;
 
         // Lazy-attach manipulation trampolines (one-time). Skip when only LongPress is wired.
         bool needsManipulation = m.Pan is not null || m.Pinch is not null || m.Rotate is not null
@@ -286,6 +308,14 @@ public sealed partial class Reconciler
                 state.LongPressPointerMovedTrampoline = (s, e) => OnLongPressPointerMoved(fe, state, e);
                 fe.AddHandler(UIElement.PointerMovedEvent, state.LongPressPointerMovedTrampoline, handledEventsToo: true);
             }
+        }
+        else if (oldM?.LongPress is not null)
+        {
+            // #721 — LongPress removed: stop generating Holding events. The trampolines stay
+            // attached (wired-once design) but read state.LongPress == null at dispatch, so
+            // they no-op; clearing IsHoldingEnabled is what actually stops the platform from
+            // raising Holding (and the mouse-emulation arm is already inert via the null cfg).
+            fe.IsHoldingEnabled = false;
         }
     }
 

@@ -419,4 +419,180 @@ internal static class SkipPathGestureDragFixtures
             H.Check("RemoveDragIdle_CanDragCleared", rect is not null && !rect.CanDrag);
         }
     }
+
+    /// <summary>
+    /// #748 re-review — SUBFAMILY add: a gesture slot added alongside a co-present sibling
+    /// (Pinch -> Pinch+Pan) is skip-eligible and, under AGGREGATE routing, wrongly took the
+    /// config-only arm (gestureNow==gestureBefore==true) — which sets gs.Pan but never
+    /// widens ManipulationMode, so the platform never reports translation and the added Pan
+    /// is silently dead. Per-slot routing sends it to ApplyGestureHandlers, widening the mode.
+    /// </summary>
+    internal class SkipAddPanAlongsidePinchWidensMode(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (hasPan, setHasPan) = ctx.UseState(false);
+                // Pinch is present on every render; Pan is added on the 2nd. The element is
+                // otherwise structurally identical (gesture slots excluded from the diff).
+                var rect = Factories.Rectangle().Size(80, 80).OnPinch(_ => { });
+                if (hasPan)
+                    rect = rect.OnPan(_ => { }, axis: PanAxis.Both);
+                return VStack(
+                    TextBlock("submode"),
+                    Button("AddPanBtn", () => setHasPan(true)),
+                    rect);
+            });
+
+            await Harness.Render();
+            var rect = H.FindControl<Microsoft.UI.Xaml.Shapes.Rectangle>(_ => true);
+            H.Check("AddPan_PinchModeInitially",
+                rect is not null && rect.ManipulationMode.HasFlag(ManipulationModes.Scale));
+            H.Check("AddPan_NoTranslateInitially",
+                rect is not null && !rect.ManipulationMode.HasFlag(ManipulationModes.TranslateX));
+
+            H.ClickButton("AddPanBtn");
+            await Harness.Render();
+
+            // Post-fix: ManipulationMode widened to include translation; the cached Pan config exists.
+            H.Check("AddPan_ManipulationWidened",
+                rect is not null && rect.ManipulationMode.HasFlag(ManipulationModes.TranslateX));
+            var state = rect is not null ? Reconciler.DebugTryGetGestureState(rect) : null;
+            H.Check("AddPan_PanConfigCached", state?.Pan is not null);
+            H.Check("AddPan_PinchStillCached", state?.Pinch is not null);
+        }
+    }
+
+    /// <summary>
+    /// #748 re-review — SUBFAMILY add (drag): adding a DragSource alongside a co-present
+    /// DropTarget is skip-eligible; aggregate routing took config-only (set ds.Source but
+    /// never CanDrag=true) so the new source couldn't start a drag. Per-slot routing wires it.
+    /// </summary>
+    internal class SkipAddDragSourceAlongsideDropTargetWires(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (hasSource, setHasSource) = ctx.UseState(false);
+                var rect = Factories.Rectangle().Size(80, 80).OnDrop(_ => { });
+                if (hasSource)
+                    rect = rect.OnDragStart(() => new DragData());
+                return VStack(
+                    TextBlock("subdrag"),
+                    Button("AddSourceBtn", () => setHasSource(true)),
+                    rect);
+            });
+
+            await Harness.Render();
+            var rect = H.FindControl<Microsoft.UI.Xaml.Shapes.Rectangle>(_ => true);
+            H.Check("AddSource_AllowDropInitially", rect is not null && rect.AllowDrop);
+            H.Check("AddSource_CanDragFalseInitially", rect is not null && !rect.CanDrag);
+
+            H.ClickButton("AddSourceBtn");
+            await Harness.Render();
+
+            // Post-fix: CanDrag set (source wired) while DropTarget's AllowDrop is preserved.
+            H.Check("AddSource_CanDragSet", rect is not null && rect.CanDrag);
+            H.Check("AddSource_AllowDropPreserved", rect is not null && rect.AllowDrop);
+            var state = rect is not null ? Reconciler.DebugTryGetDndState(rect) : null;
+            H.Check("AddSource_SourceCached", state?.Source is not null);
+            H.Check("AddSource_TargetStillCached", state?.Target is not null);
+        }
+    }
+
+    /// <summary>
+    /// #748 re-review — THE CRITICAL case: a DragSource removed MID-DRAG while a DropTarget
+    /// stays present. Under aggregate routing dragNow==dragBefore==true → the config-only arm
+    /// nulled ds.Source DIRECTLY, bypassing the in-flight guard in ApplyDragDropHandlers →
+    /// OnDropCompleted early-returns → leaks the DragData registration + suppresses OnEnd.
+    /// Per-slot routing detects the DragSource presence change and routes to the full handler
+    /// so the guard is reached and Source is preserved for the pending completion.
+    /// </summary>
+    internal class SkipRemoveDragSourceWithDropTargetMidDragPreservesState(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (hasSource, setHasSource) = ctx.UseState(true);
+                // DropTarget present every render; DragSource removed on the 2nd.
+                var rect = Factories.Rectangle().Size(80, 80).OnDrop(_ => { });
+                if (hasSource)
+                    rect = rect.OnDragStart(() => new DragData());
+                return VStack(
+                    TextBlock("subdrag2"),
+                    Button("RemoveSourceBtn", () => setHasSource(false)),
+                    rect);
+            });
+
+            await Harness.Render();
+            var rect = H.FindControl<Microsoft.UI.Xaml.Shapes.Rectangle>(_ => true);
+            var state = rect is not null ? Reconciler.DebugTryGetDndState(rect) : null;
+            H.Check("MidDragWithTarget_SourceWiredInitially", state?.Source is not null);
+            H.Check("MidDragWithTarget_TargetWiredInitially", state?.Target is not null);
+            H.Check("MidDragWithTarget_CanDragInitially", rect is not null && rect.CanDrag);
+
+            // Simulate a drag in flight, then remove only the source (DropTarget stays).
+            if (state is not null) state.ActiveTransferId = Guid.NewGuid();
+            var inflightSource = state?.Source;
+
+            H.ClickButton("RemoveSourceBtn");
+            await Harness.Render();
+
+            var state2 = rect is not null ? Reconciler.DebugTryGetDndState(rect) : null;
+            // Post-fix: Source preserved (guard reached via per-slot routing) so the pending
+            // DropCompleted still fires OnEnd + Unregister; DropTarget stays live; CanDrag cleared.
+            H.Check("MidDragWithTarget_SourcePreserved", ReferenceEquals(state2?.Source, inflightSource));
+            H.Check("MidDragWithTarget_TransferStillInFlight", state2 is not null && state2.ActiveTransferId != Guid.Empty);
+            H.Check("MidDragWithTarget_TargetStillLive", state2?.Target is not null && rect is not null && rect.AllowDrop);
+            H.Check("MidDragWithTarget_CanDragCleared", rect is not null && !rect.CanDrag);
+        }
+    }
+
+    /// <summary>
+    /// #748 re-review — gesture REMOVE must CLEAR the platform flags ApplyGestureHandlers set:
+    /// ManipulationMode back to None (a leftover TranslateX/Scale keeps eating an ancestor
+    /// ScrollViewer's pans) and IsHoldingEnabled false (stop raising Holding). Since
+    /// ApplyGestureHandlers is shared, this corrects both the skip and non-skip paths.
+    /// </summary>
+    internal class SkipRemoveGestureClearsPlatformFlags(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (hasGesture, setHasGesture) = ctx.UseState(true);
+                var rect = Factories.Rectangle().Size(80, 80);
+                if (hasGesture)
+                    rect = rect.OnPan(_ => { }, axis: PanAxis.Both)
+                               .OnLongPress(() => { }, enableMouseEmulation: true);
+                return VStack(
+                    TextBlock("rmflags"),
+                    Button("RemoveGestureBtn", () => setHasGesture(false)),
+                    rect);
+            });
+
+            await Harness.Render();
+            var rect = H.FindControl<Microsoft.UI.Xaml.Shapes.Rectangle>(_ => true);
+            H.Check("RemoveFlags_TranslateModeInitially",
+                rect is not null && rect.ManipulationMode.HasFlag(ManipulationModes.TranslateX));
+            H.Check("RemoveFlags_HoldingEnabledInitially", rect is not null && rect.IsHoldingEnabled);
+
+            H.ClickButton("RemoveGestureBtn");
+            await Harness.Render();
+
+            // Post-fix: both platform flags cleared on the skip-path remove.
+            H.Check("RemoveFlags_ManipulationCleared",
+                rect is not null && rect.ManipulationMode == ManipulationModes.None);
+            H.Check("RemoveFlags_HoldingDisabled", rect is not null && !rect.IsHoldingEnabled);
+            var state = rect is not null ? Reconciler.DebugTryGetGestureState(rect) : null;
+            H.Check("RemoveFlags_GestureConfigsNulled", state is null || (state.Pan is null && state.LongPress is null));
+        }
+    }
 }

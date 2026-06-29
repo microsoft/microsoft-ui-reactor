@@ -862,6 +862,10 @@ internal static class SelfTestFixtureRegistry
         "SkipPath_AddFirstGestureWires",
         "SkipPath_RemoveDragSourceMidDragPreservesState",
         "SkipPath_RemoveDragSourceNotInFlightClears",
+        "SkipPath_AddPanAlongsidePinchWidensMode",
+        "SkipPath_AddDragSourceAlongsideDropTargetWires",
+        "SkipPath_RemoveDragSourceWithDropTargetMidDragPreservesState",
+        "SkipPath_RemoveGestureClearsPlatformFlags",
 
         // LongPress + focus — spec 027 Tier 3 Part 2 / Tier 5 (Phase 4)
         "Gesture_OnLongPressAutoEnablesHolding",
@@ -2317,6 +2321,10 @@ internal static class SelfTestFixtureRegistry
         "SkipPath_AddFirstGestureWires" => new SkipPathGestureDragFixtures.SkipAddFirstGestureWires(harness),
         "SkipPath_RemoveDragSourceMidDragPreservesState" => new SkipPathGestureDragFixtures.SkipRemoveDragSourceMidDragPreservesState(harness),
         "SkipPath_RemoveDragSourceNotInFlightClears" => new SkipPathGestureDragFixtures.SkipRemoveDragSourceNotInFlightClears(harness),
+        "SkipPath_AddPanAlongsidePinchWidensMode" => new SkipPathGestureDragFixtures.SkipAddPanAlongsidePinchWidensMode(harness),
+        "SkipPath_AddDragSourceAlongsideDropTargetWires" => new SkipPathGestureDragFixtures.SkipAddDragSourceAlongsideDropTargetWires(harness),
+        "SkipPath_RemoveDragSourceWithDropTargetMidDragPreservesState" => new SkipPathGestureDragFixtures.SkipRemoveDragSourceWithDropTargetMidDragPreservesState(harness),
+        "SkipPath_RemoveGestureClearsPlatformFlags" => new SkipPathGestureDragFixtures.SkipRemoveGestureClearsPlatformFlags(harness),
 
         // LongPress + focus — spec 027 Tier 3 Part 2 / Tier 5 (Phase 4)
         "Gesture_OnLongPressAutoEnablesHolding" => new GestureFixtures.OnLongPressAutoEnablesHolding(harness),
