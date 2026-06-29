@@ -128,40 +128,6 @@ internal sealed class LayoutResults
     public float GetPadding(YogaPhysicalEdge edge) => _padding[(int)edge];
     public void SetPadding(YogaPhysicalEdge edge, float value) => _padding[(int)edge] = value;
 
-    /// <summary>
-    /// Reset all layout results to default values.
-    /// </summary>
-    public void Reset()
-    {
-        ComputedFlexBasisGeneration = 0;
-        ComputedFlexBasis = float.NaN;
-        GenerationCount = 0;
-        ConfigVersion = 0;
-        LastOwnerDirection = FlexLayoutDirection.Inherit;
-        NextCachedMeasurementsIndex = 0;
-        _direction = FlexLayoutDirection.Inherit;
-        _hadOverflow = false;
-
-        _dimensions[0] = float.NaN;
-        _dimensions[1] = float.NaN;
-        _measuredDimensions[0] = float.NaN;
-        _measuredDimensions[1] = float.NaN;
-        _rawDimensions[0] = float.NaN;
-        _rawDimensions[1] = float.NaN;
-
-        for (int i = 0; i < 4; i++)
-        {
-            _position[i] = 0;
-            _margin[i] = 0;
-            _border[i] = 0;
-            _padding[i] = 0;
-        }
-
-        for (int i = 0; i < MaxCachedMeasurements; i++)
-            _cachedMeasurements[i] = new CachedMeasurement();
-        CachedLayout = new CachedMeasurement();
-    }
-
     public bool EqualTo(LayoutResults other)
     {
         if (_direction != other._direction || _hadOverflow != other._hadOverflow)
