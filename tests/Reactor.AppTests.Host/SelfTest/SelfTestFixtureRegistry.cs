@@ -1458,6 +1458,7 @@ internal static class SelfTestFixtureRegistry
         "OptionalTriStateCheckBox",
         "OptionalSetterCollision",
         "InitialOnly",
+        "BrushHelperParse",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -2867,6 +2868,7 @@ internal static class SelfTestFixtureRegistry
         "OptionalTriStateCheckBox" => new OptionalTriStateCheckBoxFixture.Execution(harness),
         "OptionalSetterCollision" => new OptionalSetterCollisionFixture.Execution(harness),
         "InitialOnly" => new InitialOnlyFixture.Execution(harness),
+        "BrushHelperParse" => new BrushHelperParseFixture.Execution(harness),
 
         _ => null,
     };
