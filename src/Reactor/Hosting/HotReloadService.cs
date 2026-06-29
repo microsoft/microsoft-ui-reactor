@@ -41,8 +41,15 @@ internal static class HotReloadService
     /// if another <c>UpdateApplication</c> fires concurrently from the
     /// hot-reload thread.
     /// </summary>
-    internal static bool ConsumeUpdatePending() =>
-        Interlocked.Exchange(ref _updatePending, 0) == 1;
+    internal static bool ConsumeUpdatePending()
+    {
+        // Issue #660 (#182): hot reload never fires in shipped apps, so this
+        // runs once per render purely to read a zero. Skip the full-barrier
+        // Interlocked.Exchange with a relaxed read fast-path; only pay the
+        // atomic claim when a hot-reload update is actually pending.
+        if (Volatile.Read(ref _updatePending) == 0) return false;
+        return Interlocked.Exchange(ref _updatePending, 0) == 1;
+    }
 
     // True for the duration of a single hot-reload-flagged render pass on the
     // UI dispatcher thread. Where UpdatePending/ConsumeUpdatePending is the

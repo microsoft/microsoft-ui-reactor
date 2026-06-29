@@ -226,4 +226,40 @@ public class AnimationAmbientTests
         Assert.True(new AmbientAnimation(AnimationKind.EaseOut).HasEffect);
         Assert.True(new AmbientAnimation(AnimationKind.EaseInOut).HasEffect);
     }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Issue #660 (#183): HasAny sentinel gate
+    // ════════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void HasAny_Is_True_Inside_Animate_And_Current_Still_Resolves()
+    {
+        // The render-loop hosts read `HasAny ? Current : null`, so inside an
+        // open transaction HasAny must be true AND Current must still resolve the
+        // ambient — otherwise a host would drop a real animation intent.
+        bool hasAnyInside = false;
+        AnimationKind? observed = null;
+        Animations.Animate(AnimationKind.Spring, () =>
+        {
+            hasAnyInside = AnimationAmbient.HasAny;
+            observed = AnimationAmbient.Current?.Kind;
+        });
+
+        Assert.True(hasAnyInside);
+        Assert.Equal(AnimationKind.Spring, observed);
+    }
+
+    [Fact]
+    public void HasAny_Stays_True_After_Transaction_Closes()
+    {
+        // The sentinel is one-way: once any ambient has existed, every later
+        // RequestRender must keep consulting the AsyncLocal (it cannot know a
+        // future transaction won't reuse this flow).
+        Animations.Animate(AnimationKind.EaseOut, () => { });
+        Assert.True(AnimationAmbient.HasAny);
+
+        // Current correctly reads back to null after the transaction closes, so
+        // the host's gated read yields null (no stale ambient applied).
+        Assert.Null(AnimationAmbient.Current);
+    }
 }

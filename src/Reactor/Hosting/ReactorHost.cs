@@ -122,6 +122,13 @@ public sealed class ReactorHost : IDisposable
     // Public perf snapshot — updated every ~1 second, readable from components
     private RenderStats _stats;
 
+    // Issue #660 (#179/#180): per-frame delegates cached once instead of
+    // re-allocated every render. _rerenderAction wraps the optional-arg
+    // RequestRender (which can't bind to an Action method group directly);
+    // _renderLoopHandler is the DispatcherQueueHandler passed to TryEnqueue.
+    private Action? _rerenderAction;
+    private Microsoft.UI.Dispatching.DispatcherQueueHandler? _renderLoopHandler;
+
     /// <summary>
     /// Live render performance snapshot, updated every ~1 second.
     /// Always available (FPS, frame time). DEBUG builds include per-reconcile element counters.
@@ -204,7 +211,9 @@ public sealed class ReactorHost : IDisposable
         var defaultCache = AppContexts.QueryCache.DefaultValue;
         defaultCache.DispatcherPost ??= action =>
         {
-            if (!dq.TryEnqueue(() => action()))
+            // Issue #660 (#178): pass the Action's Invoke method group directly
+            // instead of wrapping it in a fresh `() => action()` closure per post.
+            if (!dq.TryEnqueue(action.Invoke))
                 action(); // dispatcher shut down — fall back to inline
         };
 
@@ -372,7 +381,9 @@ public sealed class ReactorHost : IDisposable
         // setter that fires from a Task.Run that never awaits back would
         // otherwise lose the ambient. This snapshot is the explicit
         // insurance against that case (spec 042 §9 Q3).
-        var captured = Microsoft.UI.Reactor.Core.Internal.AnimationAmbient.Current;
+        var captured = Microsoft.UI.Reactor.Core.Internal.AnimationAmbient.HasAny
+            ? Microsoft.UI.Reactor.Core.Internal.AnimationAmbient.Current
+            : null;
         if (captured is not null)
             _pendingAmbientAnimation = captured;
 
@@ -412,7 +423,7 @@ public sealed class ReactorHost : IDisposable
         // in Render() so an off-UI-thread caller observes the latest value.
         _dispatcherQueue.TryEnqueue(
             RenderPriorityPolicy.PickPriority(Volatile.Read(ref _lastRenderMs)),
-            RenderLoop);
+            _renderLoopHandler ??= RenderLoop);
     }
 
     private void RenderLoop()
@@ -435,7 +446,7 @@ public sealed class ReactorHost : IDisposable
         if (_needsRerender)
         {
             if (Interlocked.CompareExchange(ref _renderPending, 1, 0) == 0)
-                _dispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, RenderLoop);
+                _dispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, _renderLoopHandler ??= RenderLoop);
         }
     }
 
@@ -534,9 +545,10 @@ public sealed class ReactorHost : IDisposable
             // sufficiently aggressive JITs.
             if (Volatile.Read(ref _chartingActiveFlag) != 0) PushChartingState();
 
-            // RequestRender has an optional `force` parameter, so it can't bind
-            // directly to an Action method group — wrap once and reuse.
-            Action rerender = () => RequestRender();
+            // Issue #660 (#179): RequestRender has an optional `force` parameter,
+            // so it can't bind to an Action method group — cache the wrapper once
+            // instead of allocating `() => RequestRender()` every render.
+            Action rerender = _rerenderAction ??= () => RequestRender();
 
             if (_rootComponent is not null)
             {
@@ -702,9 +714,10 @@ public sealed class ReactorHost : IDisposable
             // to demote to Low priority. Stored as the most-recent measurement
             // — no smoothing — so a single slow render is enough to back off,
             // and a single fast render is enough to return to Normal priority.
-            // Interlocked publishes the value to off-UI-thread RequestRender
-            // callers; the matching Volatile.Read is in RequestRender.
-            Interlocked.Exchange(ref _lastRenderMs, treeBuildMs + reconcileMs + effectsMs);
+            // Issue #660 (#185): single writer (this UI-thread Render); the
+            // off-thread RequestRender readers use Volatile.Read, so a release
+            // Volatile.Write suffices — no need for a full-barrier Interlocked.
+            Volatile.Write(ref _lastRenderMs, treeBuildMs + reconcileMs + effectsMs);
 
             OnRenderComplete?.Invoke(treeBuildMs, reconcileMs, effectsMs);
 
@@ -723,7 +736,12 @@ public sealed class ReactorHost : IDisposable
             _renderCount++;
             _totalRenderCount++;
 
-            if (_reportClock.Elapsed.TotalSeconds >= 1.0 && _renderCount > 0)
+            // Issue #660 (#186): the per-frame report gate compared
+            // Stopwatch.Elapsed.TotalSeconds — a TimeSpan construction + double
+            // division every render. ElapsedMilliseconds is a plain long read;
+            // compare against 1000 instead. The (rare) report branch still uses
+            // the precise TotalSeconds for the FPS figure.
+            if (_reportClock.ElapsedMilliseconds >= 1000 && _renderCount > 0)
             {
                 double avgTree = _treeBuildSum / _renderCount;
                 double avgReconcile = _reconcileSum / _renderCount;

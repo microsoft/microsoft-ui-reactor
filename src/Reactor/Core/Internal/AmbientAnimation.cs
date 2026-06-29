@@ -45,6 +45,22 @@ internal static class AnimationAmbient
 {
     private static readonly global::System.Threading.AsyncLocal<AmbientAnimation?> _current = new();
 
+    // Issue #660 (#183): one-way sentinel flipped true the first time any
+    // non-null ambient is pushed. RequestRender reads AnimationAmbient.Current
+    // (an AsyncLocal walk of the ExecutionContext) on every setState — ~1000/sec
+    // from background threads on the data-grid workload — even though the vast
+    // majority of apps never open an Animations.Animate(...) transaction. Gating
+    // that read behind this volatile bool turns the common case into a single
+    // relaxed bool read. Mirrors AnimationScope.HasScope.
+    private static volatile bool _hasAny;
+
+    /// <summary>
+    /// True once any <see cref="Animations.Animate(AnimationKind, global::System.Action)"/>
+    /// transaction has ever opened in this process. When false, <see cref="Current"/>
+    /// is guaranteed null, so callers can skip the AsyncLocal read entirely.
+    /// </summary>
+    public static bool HasAny => _hasAny;
+
     /// <summary>
     /// The currently-active ambient, or <see langword="null"/> when no
     /// <see cref="Animations.Animate(AnimationKind, global::System.Action)"/>
@@ -68,6 +84,11 @@ internal static class AnimationAmbient
             _previous = _current.Value;
             _current.Value = next;
             _entered = true;
+            // Issue #660 (#183): flip the sentinel so future Current reads take
+            // the real AsyncLocal path. One-way: once an ambient has existed,
+            // every read must consult the AsyncLocal to stay correct.
+            if (next is not null)
+                _hasAny = true;
         }
 
         /// <summary>Restore the ambient that was displaced when this scope was constructed.</summary>

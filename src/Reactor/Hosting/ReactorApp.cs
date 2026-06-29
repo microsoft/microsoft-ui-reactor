@@ -480,30 +480,16 @@ public static partial class ReactorApp
         Action<ReactorHost>? configure,
         bool excludeFromShutdownPolicy = false)
     {
-        Console.Error.WriteLine("[embed:trace] OpenWindowCore enter (embed=" + (spec.Embed is not null) + ")");
-        ReactorWindow window;
-        try
-        {
-            window = new ReactorWindow(spec);
-            window.ExcludeFromShutdownPolicy = excludeFromShutdownPolicy;
-            Console.Error.WriteLine("[embed:trace] OpenWindowCore: ReactorWindow ctor ok");
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine("[embed:trace] ReactorWindow ctor THREW: " + ex);
-            throw;
-        }
-        try { configure?.Invoke(window.Host); Console.Error.WriteLine("[embed:trace] OpenWindowCore: configure ok"); }
-        catch (Exception ex) { Console.Error.WriteLine("[embed:trace] configure THREW: " + ex); throw; }
+        ReactorWindow window = new ReactorWindow(spec);
+        window.ExcludeFromShutdownPolicy = excludeFromShutdownPolicy;
+        configure?.Invoke(window.Host);
         RegisterWindow(window);
         try
         {
             window.MountAndActivate(rootFactory, renderFunc);
-            Console.Error.WriteLine("[embed:trace] OpenWindowCore: MountAndActivate ok");
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            Console.Error.WriteLine("[embed:trace] MountAndActivate THREW: " + ex);
             UnregisterWindow(window);
             try { window.Dispose(); } catch { /* best effort */ }
             throw;

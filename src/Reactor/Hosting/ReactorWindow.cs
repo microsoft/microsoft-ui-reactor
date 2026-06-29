@@ -338,27 +338,14 @@ public sealed class ReactorWindow : IDisposable
 
         if (spec.Embed is { } embed)
         {
-            Console.Error.WriteLine("[embed:trace] entering embed setup (style=" + embed.Style + " hostPid=" + embed.HostPid + ")");
-            try
+            VerifyEmbedDpiAwareness(embed.Style);
+            ApplyEmbedInitialStyles(embed.Style);
+            _embedWatchdog = new EmbedHostWatchdog();
+            _embedWatchdog.Start(embed.HostPid, () =>
             {
-                VerifyEmbedDpiAwareness(embed.Style);
-                Console.Error.WriteLine("[embed:trace] VerifyEmbedDpiAwareness ok");
-                ApplyEmbedInitialStyles(embed.Style);
-                Console.Error.WriteLine("[embed:trace] ApplyEmbedInitialStyles ok");
-                _embedWatchdog = new EmbedHostWatchdog();
-                _embedWatchdog.Start(embed.HostPid, () =>
-                {
-                    try { NativeShell.SetParent(_hwnd, 0); } catch { }
-                    Environment.Exit(0);
-                });
-                Console.Error.WriteLine("[embed:trace] EmbedHostWatchdog started");
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine("[embed:trace] embed setup THREW: " + ex.GetType().FullName + ": " + ex.Message);
-                Console.Error.WriteLine(ex.ToString());
-                throw;
-            }
+                try { NativeShell.SetParent(_hwnd, 0); } catch { }
+                Environment.Exit(0);
+            });
         }
 
         // Snapshot initial per-window DPI before applying spec sizing so the
