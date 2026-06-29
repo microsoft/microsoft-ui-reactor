@@ -61,6 +61,24 @@ Conventions for contributors:
   `UseCommand`) is inert. `UseCommand` now consumes a stable hook shape regardless
   of the command's sync/async/debounce shape.
 
+- **Uniform `Command` binding across the six command buttons (issues #153, #637).**
+  The typed `Command` property on `ButtonElement`, `HyperlinkButtonElement`,
+  `RepeatButtonElement`, `ToggleButtonElement`, `SplitButtonElement`, and
+  `ToggleSplitButtonElement` is now `public { get; init; }` on every element and
+  binds uniformly: a bare `new ButtonElement(cmd.Label) { Command = cmd }` (or
+  `with { Command = cmd }`) invokes `Execute`/`ExecuteAsync` on click/toggle and
+  applies the command's `IsEnabled` + Description / Accelerator / AccessKey
+  identically to the `Button(Command)` factory and the `.Command(cmd)` modifier —
+  closing the #153 footgun where a record-init command carried metadata but never
+  dispatched. Dispatch flows from the typed property through a click trampoline
+  instead of a pre-baked `OnClick` closure, so each command-bound construct
+  allocates less (Button ~176 → ~88 B per construct) while the #153 reconcile
+  fast-path still skips re-applying an unchanged command. The `.Command(cmd)`
+  modifier makes the command fully take over (clearing any conflicting click /
+  toggle callback), and `ButtonElement`'s `IsDisabledFocusable` coercion is
+  preserved exactly. A `DebounceMs` command now re-disables across the debounce
+  window on every command button, not just via the factory path.
+
 - **`ReactorApp.RegisterAllBuiltIns()` — opt-in bulk registration of the built-in
   control catalog (spec 048 §3.4, issue #486).** Built-in handler registration is
   now lazy — each factory registers its own control on first use — so the trimmer
@@ -350,6 +368,18 @@ Conventions for contributors:
   scroll host before mutating an inline-UI-bearing block and restores the user's real
   offset once layout settles, while never fighting a genuine user scroll. No new API
   surface, no per-app boilerplate.
+- **The accessibility scanner now sees a pie chart's `.SetColors(...)` palette
+  (issue #645, spec 026).** `PieChartElement<T>.SetColors(...)` sets the colors a
+  pie actually renders, but the scanner previously only saw the separate
+  `.Palette(...)` palette — so a `.SetColors(<low-contrast>).ChartBackground(...)`
+  pie looked contrast-checked yet A11Y_CHART_011 never ran on its rendered colors.
+  The rendered `.SetColors` palette is now the single source of truth the scanner
+  validates (`.Palette(...)` is consulted only as a fallback when `.SetColors` is
+  unset), so A11Y_CHART_009/010/011 run on it exactly as they do for `.Palette(...)`.
+  **Behavior change:** existing `.SetColors(...)` users with low-contrast or
+  colorblind-unsafe palettes may now start seeing A11Y_CHART_009/010/011 findings
+  they did not before. Pie palette-fix suggestions also now name `.SetColors(...)`
+  (the modifier a pie exposes) instead of `.SeriesColors(...)`.
 - **Multi-window teardown no longer faults with an `ACCESS_VIOLATION`
   (issue #647).** Closing a docking tear-off floating preview window could
   terminate the process with `0xC0000005` deep in the WinUI backdrop interop —

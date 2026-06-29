@@ -428,9 +428,18 @@ internal static class YogaAlgorithm
         float crossAxisGap = node.Style.ComputeGapForAxis(crossAxis, availableInnerCrossDim);
         float maxLineMainDim = 0;
 
-        // Build the list of layout children once for iteration
-        var layoutChildren = new List<YogaNode>();
+        // Build the list of layout children once for iteration.
+        // Rented from the per-thread pool (#141) to avoid a per-container List
+        // allocation each frame; returned at the single method exit below.
+        var layoutChildren = FlexLineHelper.RentList();
         node.CollectLayoutChildren(layoutChildren);
+
+        // #148: baseline-ness depends only on this node's FlexDirection /
+        // AlignItems and its children's AlignSelf / PositionType — all invariant
+        // within a single layout pass. Compute it ONCE here instead of per flex
+        // line inside JustifyMainAxis (and again at STEP 8). No cross-frame cache,
+        // so no invalidation hazard.
+        bool isNodeBaselineLayout = BaselineHelper.IsBaselineLayout(node);
 
         while (startOfLineIndex < layoutChildren.Count)
         {
@@ -508,7 +517,7 @@ internal static class YogaAlgorithm
                 sizingModeMainDim, sizingModeCrossDim,
                 mainAxisOwnerSize, ownerWidth,
                 availableInnerMainDim, availableInnerCrossDim, availableInnerWidth,
-                performLayout);
+                performLayout, isNodeBaselineLayout);
 
             float containerCrossAxis = availableInnerCrossDim;
             if (sizingModeCrossDim == SizingMode.MaxContent || sizingModeCrossDim == SizingMode.FitContent)
@@ -629,12 +638,12 @@ internal static class YogaAlgorithm
             float appliedCrossGap = lineCount != 0 ? crossAxisGap : 0.0f;
             totalLineCrossDim += flexLine.Layout.CrossDim + appliedCrossGap;
             maxLineMainDim = YogaFloat.MaxOrDefined(maxLineMainDim, flexLine.Layout.MainDim);
-            FlexLineHelper.ReturnList(flexLine.ItemsInFlow);
+            FlexLineHelper.ReturnFlexLine(flexLine);
             lineCount++;
         }
 
         // STEP 8: MULTI-LINE CONTENT ALIGNMENT
-        if (performLayout && (isNodeFlexWrap || BaselineHelper.IsBaselineLayout(node)))
+        if (performLayout && (isNodeFlexWrap || isNodeBaselineLayout))
         {
             float leadPerLine = 0;
             float currentLead = leadingPaddingAndBorderCross;
@@ -898,6 +907,8 @@ internal static class YogaAlgorithm
                     0.0f, 0.0f, availableInnerWidth, availableInnerHeight);
             }
         }
+
+        FlexLineHelper.ReturnList(layoutChildren);
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -1332,7 +1343,8 @@ internal static class YogaAlgorithm
     {
         float totalOuterFlexBasis = 0.0f;
         YogaNode? singleFlexChild = null;
-        var children = new List<YogaNode>();
+        // Rented from the per-thread pool (#141); returned at the single exit.
+        var children = FlexLineHelper.RentList();
         node.CollectLayoutChildren(children);
         var sizingModeMainDim = FlexDirectionHelper.IsRow(mainAxis) ? widthSizingMode : heightSizingMode;
 
@@ -1394,6 +1406,7 @@ internal static class YogaAlgorithm
                 child.Style.ComputeMarginForAxis(mainAxis, availableInnerWidth);
         }
 
+        FlexLineHelper.ReturnList(children);
         return totalOuterFlexBasis;
     }
 
@@ -1672,7 +1685,7 @@ internal static class YogaAlgorithm
         SizingMode sizingModeMainDim, SizingMode sizingModeCrossDim,
         float mainAxisOwnerSize, float ownerWidth,
         float availableInnerMainDim, float availableInnerCrossDim,
-        float availableInnerWidth, bool performLayout)
+        float availableInnerWidth, bool performLayout, bool isNodeBaselineLayout)
     {
         var style = node.Style;
 
@@ -1739,7 +1752,6 @@ internal static class YogaAlgorithm
 
         float maxAscentForCurrentLine = 0;
         float maxDescentForCurrentLine = 0;
-        bool isNodeBaselineLayout = BaselineHelper.IsBaselineLayout(node);
         bool isMainAxisRow = FlexDirectionHelper.IsRow(mainAxis);
 
         for (int ci = 0; ci < flexLine.ItemsInFlow.Count; ci++)

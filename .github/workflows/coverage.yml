@@ -1,18 +1,28 @@
 name: Coverage
 
-# Maintainer-gated, comment-triggered coverage run for any PR (including forks).
-# A maintainer comments `@codecoverage` on a PR; this workflow runs the merged
-# unit + selftest coverage recipe from CONTRIBUTING.md and posts the result back
-# as a comment.
+# Maintainer-gated coverage run, all paths running the merged unit + selftest
+# coverage recipe from TESTING.md. Trigger it three ways:
+#   - comment `@codecoverage` on a PR — posts the result back as a PR comment;
+#   - run it manually (Actions tab / `gh workflow run`) with a PR number — same,
+#     and works for forks via refs/pull/N/head;
+#   - run it manually with the PR number left blank — measures the selected
+#     branch and writes the result to the run's job summary (no PR to comment on).
 #
 # Security: `issue_comment` workflows run in the base repo with full token
 # permissions. Untrusted code from the PR (build scripts, tests) executes here.
-# The `author_association` check below limits the trigger to maintainers, who
-# are expected to review the diff before commenting.
+# The `author_association` check below limits the comment trigger to maintainers;
+# `workflow_dispatch` is inherently restricted to users with write access. Either
+# way, the triggerer is expected to review the PR diff before starting a run.
 
 on:
   issue_comment:
     types: [created]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: PR to measure. Leave blank to measure the selected branch instead.
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -21,13 +31,23 @@ permissions:
 jobs:
   coverage:
     name: Merged coverage
+    # One in-flight run per target — a PR number, or the branch ref for a
+    # blank-input dispatch. A newer trigger supersedes an older one. Job-level
+    # (not workflow-level) concurrency so unrelated issue_comment events — which
+    # start a workflow run but skip this job — don't cancel a live coverage run.
+    concurrency:
+      group: coverage-${{ github.event.issue.number || github.event.inputs.pr_number || github.ref }}
+      cancel-in-progress: true
     if: |
-      github.event.issue.pull_request &&
-      contains(github.event.comment.body, '@codecoverage') &&
-      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       contains(github.event.comment.body, '@codecoverage') &&
+       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
     runs-on: windows-latest
     steps:
       - name: Acknowledge with reaction
+        if: github.event_name == 'issue_comment'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
@@ -38,18 +58,47 @@ jobs:
               content: 'eyes',
             });
 
-      - name: Resolve PR head SHA
+      - name: Resolve coverage target
         id: pr
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          DISPATCH_PR: ${{ github.event.inputs.pr_number }}
         with:
           script: |
-            const pr = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.issue.number,
-            });
-            core.setOutput('sha', pr.data.head.sha);
-            core.setOutput('ref', `refs/pull/${context.issue.number}/head`);
+            // Resolve what to measure:
+            //   - issue_comment             -> the PR the comment is on
+            //   - workflow_dispatch + PR#   -> that PR (works for forks)
+            //   - workflow_dispatch, blank  -> the dispatched branch (no PR)
+            let prNumber = '';
+            if (context.eventName === 'workflow_dispatch') {
+              const raw = process.env.DISPATCH_PR || '';
+              if (raw !== '') {
+                // Validate without trimming so the resolved PR stays identical to
+                // the raw value the job-level concurrency group keys on.
+                if (!/^[1-9][0-9]*$/.test(raw)) {
+                  throw new Error(`Invalid pr_number input '${process.env.DISPATCH_PR}' (expected a positive integer, or leave it blank to measure the selected branch)`);
+                }
+                prNumber = raw;
+              }
+            } else {
+              prNumber = String(context.issue.number);
+            }
+            // Emit the number before the API call so the always()-gated report
+            // step can still post back to the PR if pulls.get below fails.
+            core.setOutput('number', prNumber);
+            if (prNumber !== '') {
+              const pr = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: Number(prNumber),
+              });
+              core.setOutput('sha', pr.data.head.sha);
+              core.setOutput('ref', `refs/pull/${prNumber}/head`);
+            } else {
+              // No PR: measure the commit the workflow was dispatched on.
+              core.setOutput('sha', context.sha);
+              core.setOutput('ref', context.sha);
+            }
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -135,7 +184,7 @@ jobs:
           "branches-covered=$covered" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "branches-total=$total"     | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
-      - name: Comment results
+      - name: Report results
         if: always()
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
@@ -145,14 +194,16 @@ jobs:
           BRANCHES_TOTAL: ${{ steps.rates.outputs.branches-total }}
           SHA: ${{ steps.pr.outputs.sha }}
           OUTCOME: ${{ job.status }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
         with:
           script: |
-            const { LINE, BRANCH, BRANCHES_COVERED, BRANCHES_TOTAL, SHA, OUTCOME } = process.env;
+            const { LINE, BRANCH, BRANCHES_COVERED, BRANCHES_TOTAL, SHA, OUTCOME, PR_NUMBER } = process.env;
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const shaLabel = SHA ? SHA.slice(0, 7) : 'unknown';
             let body;
             if (OUTCOME === 'success') {
               body = [
-                `**Merged coverage** for \`${SHA.slice(0, 7)}\` (unit + selftest)`,
+                `**Merged coverage** for \`${shaLabel}\` (unit + selftest)`,
                 ``,
                 `| Metric | Coverage |`,
                 `|---|---|`,
@@ -162,11 +213,19 @@ jobs:
                 `Cobertura reports attached to the [workflow run](${runUrl}) as artifacts.`,
               ].join('\n');
             } else {
-              body = `**Coverage run failed** for \`${SHA.slice(0, 7)}\` — see the [workflow run](${runUrl}) for details.`;
+              body = `**Coverage run failed** for \`${shaLabel}\` — see the [workflow run](${runUrl}) for details.`;
+            }
+            // Always surface the result in the run summary — this is the only
+            // output for a branch run (blank-input dispatch, no PR to comment on).
+            await core.summary.addRaw(body).write();
+            const prNumber = Number(PR_NUMBER);
+            if (!Number.isInteger(prNumber) || prNumber <= 0) {
+              core.info('No PR resolved (branch run); result written to the job summary only.');
+              return;
             }
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number,
+              issue_number: prNumber,
               body,
             });

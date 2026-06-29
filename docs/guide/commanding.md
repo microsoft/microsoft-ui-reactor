@@ -201,6 +201,44 @@ so custom-content variants of each stay in sync with their command.
 > Tab (only the click is suppressed) rather than dropping it from the
 > tab order.
 
+## Binding paths are uniform
+
+The factory and the `.Command()` modifier both set the same typed `Command`
+property on the element record. That property is public, so you can also set
+it directly with a record initializer — every path below binds identically:
+the action dispatches on click and `IsEnabled` is applied from the command.
+
+```csharp
+// Factory — plain label:
+Button(saveCmd)
+
+// Modifier — custom content:
+Button(HStack(Icon(SymbolIcon("Save")), Text("Save"))).Command(saveCmd)
+
+// Record-init — the typed property is public (the Label ctor arg is required):
+new ButtonElement(saveCmd.Label) { Command = saveCmd }
+
+// `with` on an existing element hits the same property:
+Button("Save") with { Command = saveCmd }
+```
+
+The typed `Command` property is available on all six command-capable
+elements — `ButtonElement`, `HyperlinkButtonElement`, `RepeatButtonElement`,
+`ToggleButtonElement`, `SplitButtonElement`, and `ToggleSplitButtonElement` —
+so a bare `new SplitButtonElement(cmd.Label) { Command = cmd }` dispatches and
+disables exactly like the `SplitButton(cmd)` factory. (The `.Command()`
+modifier is the convenience for the clickable-content subset above; the typed
+property covers the split buttons too.)
+
+One precedence rule applies when both a command and an explicit callback are
+present on the same element:
+
+- **Record-init / `with`** keeps both — the explicit `OnClick` (or toggle
+  callback) wins for dispatch, while the command still supplies metadata and
+  `IsEnabled`. Set the command *only* (no callback) to dispatch through it.
+- **The `.Command()` modifier** makes the command fully take over — it clears
+  any conflicting callback so the command is the single dispatch path.
+
 ## Async Commands and UseCommand
 
 When a command has an `ExecuteAsync` action, wrap it with the
@@ -334,18 +372,19 @@ var regenCmd = UseCommand(new Command
 });
 ```
 
-> **Caveat:** `DebounceMs` requires `UseCommand`. The debounce window and
-> its re-enable timer are persistent state, and a plain `Command` record
-> is immutable and reconstructed on every render — it has nowhere to keep
+> **Caveat:** **`DebounceMs` requires `UseCommand`.** The debounce window and its
+> re-enable timer are persistent state, and a plain `Command` record is
+> immutable and reconstructed on every render — it has nowhere to keep
 > that state. `UseCommand` stores it in the component's hook table (the
 > same place it keeps the async re-entrance guard), so always route a
 > debounced command through `UseCommand`. A raw
 > `new Command { DebounceMs = … }` that is bound directly (never passed to
-> `UseCommand`) does **not** debounce. Debounce is **leading-edge and
-> fixed-duration** by design — fire first, then ignore. Trailing-edge
-> "wait for the input to settle, then fire once" debounce
-> (search-as-you-type) is a different concept and is not what `DebounceMs`
-> provides.
+> `UseCommand`) does **not** debounce.
+> 
+> Debounce is **leading-edge and fixed-duration** by design — fire first,
+> then ignore. Trailing-edge "wait for the input to settle, then fire
+> once" debounce (search-as-you-type) is a different concept and is not
+> what `DebounceMs` provides.
 
 ## Parameterized commands
 

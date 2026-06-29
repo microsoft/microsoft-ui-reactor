@@ -535,4 +535,343 @@ internal static class CommandingCoverageFixtures
             H.Check("CmdClear_ToolTipCleared", btn2 is not null && ToolTipService.GetToolTip(btn2) is null);
         }
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    //  Issue #637 — bare record-init / `with` Command binding equivalence.
+    //  A `new XxxElement { Command = cmd }` (no factory, no `.Command()` modifier)
+    //  must invoke the command on click/toggle AND apply IsEnabled identically to
+    //  the factory path, and must preserve Button's IsDisabledFocusable coercion.
+    //  These mount the LIVE control and raise real Click/Toggle events — the unit
+    //  tests pin the record shape; these prove the trampoline is actually wired and
+    //  fires for the bare-init path (the former "metadata-only silent footgun").
+    // ════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Issue #637: a bare <c>new ButtonElement { Command = cmd }</c> (no factory / modifier)
+    /// wires the Click trampoline and invokes the command — previously the bare record carried
+    /// metadata but never dispatched on click.
+    /// </summary>
+    internal class BareInitButtonCommandInvokesExecute(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            int count = 0;
+            var cmd = new Command { Label = "Save", Execute = () => count++, AccessKey = "S" };
+
+            var host = H.CreateHost();
+            host.Mount(ctx => new ButtonElement("Save") { Command = cmd }.Set(b => b.Name = "bareCmdBtn"));
+            await Harness.Render();
+
+            var btn = H.FindControl<Button>(b => b.Name == "bareCmdBtn");
+            H.Check("BareInitBtn_Mounted", btn is not null);
+            H.Check("BareInitBtn_Enabled", btn is not null && btn.IsEnabled);
+            H.Check("BareInitBtn_AccessKeyFlowed", btn is not null && btn.AccessKey == "S");
+
+            H.ClickButton("Save");
+            H.Check("BareInitBtn_CommandInvokedOnClick", count == 1);
+        }
+    }
+
+    /// <summary>
+    /// Issue #637: a bare <c>new ToggleButtonElement { Command = cmd }</c> invokes the command on
+    /// each real user toggle (check + uncheck) via the toggle trampoline's Command fallback.
+    /// </summary>
+    internal class BareInitToggleButtonCommandFiresOnToggle(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            int count = 0;
+            var cmd = new Command { Label = "Bold", Execute = () => count++ };
+
+            var host = H.CreateHost();
+            host.Mount(ctx => new ToggleButtonElement("Bold") { Command = cmd }.Set(b => b.Name = "bareTogBtn"));
+            await Harness.Render();
+
+            var tb = H.FindControl<ToggleButton>(b => b.Name == "bareTogBtn");
+            H.Check("BareInitTog_Mounted", tb is not null);
+            H.Check("BareInitTog_Enabled", tb is not null && tb.IsEnabled);
+            if (tb is not null)
+            {
+                var peer = Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(tb);
+                var toggle = peer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Toggle)
+                    as Microsoft.UI.Xaml.Automation.Provider.IToggleProvider;
+                toggle?.Toggle();
+                toggle?.Toggle();
+            }
+            H.Check("BareInitTog_CommandInvokedOnEachToggle", count == 2);
+        }
+    }
+
+    /// <summary>
+    /// Issue #637: <c>plain with { Command = cmd }</c> is equivalent to the factory — attaching a
+    /// command to a previously plain button via a <c>with</c>-expression wires dispatch on click.
+    /// </summary>
+    internal class WithCommandButtonInvokesExecute(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            int count = 0;
+            var cmd = new Command { Label = "Go", Execute = () => count++ };
+            var plain = new ButtonElement("Go");
+            var bound = plain with { Command = cmd };
+
+            var host = H.CreateHost();
+            host.Mount(ctx => bound.Set(b => b.Name = "withCmdBtn"));
+            await Harness.Render();
+
+            var btn = H.FindControl<Button>(b => b.Name == "withCmdBtn");
+            H.Check("WithCmdBtn_Mounted", btn is not null);
+            H.ClickButton("Go");
+            H.Check("WithCmdBtn_CommandInvokedOnClick", count == 1);
+        }
+    }
+
+    /// <summary>
+    /// Issue #637: a bare-init Button with a disabled command applies <c>IsEnabled=false</c> to the
+    /// live control (the command's enabled state is folded into <c>EffectiveIsEnabled</c>), so the
+    /// command never runs while disabled.
+    /// </summary>
+    internal class BareInitButtonDisabledCommandDisablesControl(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            int count = 0;
+            var cmd = new Command { Label = "Save", Execute = () => count++, CanExecute = false };
+
+            var host = H.CreateHost();
+            host.Mount(ctx => new ButtonElement("Save") { Command = cmd }.Set(b => b.Name = "bareDisBtn"));
+            await Harness.Render();
+
+            var btn = H.FindControl<Button>(b => b.Name == "bareDisBtn");
+            H.Check("BareInitDis_Mounted", btn is not null);
+            H.Check("BareInitDis_Disabled", btn is not null && !btn.IsEnabled);
+            H.ClickButton("Save"); // ClickButton is gated on IsEnabled — disabled button won't invoke
+            H.Check("BareInitDis_NotInvokedWhileDisabled", count == 0);
+        }
+    }
+
+    /// <summary>
+    /// Issue #637 acceptance: the bare-init path must preserve Button's IsDisabledFocusable coercion.
+    /// A disabled command + <c>IsDisabledFocusable = true</c> on a <c>new ButtonElement { ... }</c>
+    /// must keep the control <c>IsEnabled=true</c> (reachable via Tab) and dimmed (Opacity 0.4), and
+    /// the click trampoline must suppress the command (IsDisabledFocusable early-return) — exactly as
+    /// the factory/modifier path does.
+    /// </summary>
+    internal class BareInitButtonDisabledFocusableCoercionPreserved(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            int count = 0;
+            var cmd = new Command { Label = "Submit", Execute = () => count++, CanExecute = false };
+
+            var host = H.CreateHost();
+            host.Mount(ctx => new ButtonElement("Submit") { Command = cmd, IsDisabledFocusable = true }
+                .Set(b => b.Name = "bareDfBtn"));
+            await Harness.Render();
+
+            var btn = H.FindControl<Button>(b => b.Name == "bareDfBtn");
+            H.Check("BareInitDf_Mounted", btn is not null);
+            H.Check("BareInitDf_StaysFocusable", btn is not null && btn.IsEnabled);
+            H.Check("BareInitDf_Dimmed", btn is not null && global::System.Math.Abs(btn.Opacity - 0.4) < 0.001);
+            H.ClickButton("Submit"); // IsEnabled is true ⇒ Invoke raises Click ⇒ trampoline suppresses the command
+            H.Check("BareInitDf_ClickSuppressed", count == 0);
+        }
+    }
+
+    /// <summary>
+    /// Issue #637: bare-init Hyperlink/Repeat/Split buttons invoke their command on a real Invoke
+    /// (primary click) — proving the HandCodedEvent subscription gate now treats the typed Command
+    /// as a callback source on the bare-init path for all the click-style elements.
+    /// </summary>
+    internal class BareInitHyperlinkRepeatSplitInvokeExecute(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            int hl = 0, rp = 0, sp = 0;
+
+            var host = H.CreateHost();
+            host.Mount(ctx => VStack(
+                new HyperlinkButtonElement("HLgo") { Command = new Command { Label = "HLgo", Execute = () => hl++ } }.Set(b => b.Name = "bareHlGo"),
+                new RepeatButtonElement("RPgo") { Command = new Command { Label = "RPgo", Execute = () => rp++ } }.Set(b => b.Name = "bareRpGo"),
+                new SplitButtonElement("SPgo") { Command = new Command { Label = "SPgo", Execute = () => sp++ } }.Set(b => b.Name = "bareSpGo")));
+            await Harness.Render();
+
+            InvokeBase(H.FindControl<HyperlinkButton>(b => b.Name == "bareHlGo"));
+            InvokeBase(H.FindControl<RepeatButton>(b => b.Name == "bareRpGo"));
+            InvokeBase(H.FindControl<SplitButton>(b => b.Name == "bareSpGo"));
+
+            H.Check("BareInitInvoke_Hyperlink", hl == 1);
+            H.Check("BareInitInvoke_Repeat", rp == 1);
+            H.Check("BareInitInvoke_Split", sp == 1);
+        }
+
+        private static void InvokeBase(Microsoft.UI.Xaml.UIElement? b)
+        {
+            if (b is null) return;
+            var peer = Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer.CreatePeerForElement(b);
+            (peer.GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)
+                as Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)?.Invoke();
+        }
+    }
+
+    /// <summary>
+    /// Issue #637: the bare-init path applies <c>Command.IsEnabled</c> on the live control for ALL
+    /// six command-capable elements. Mounts each of the remaining five (Button is covered separately)
+    /// plus ToggleSplitButton with a disabled command and asserts the control mounts disabled.
+    /// </summary>
+    internal class BareInitAllElementsApplyDisabledFromCommand(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            static Command Dis(string l) => new Command { Label = l, Execute = () => { }, CanExecute = false };
+
+            var host = H.CreateHost();
+            host.Mount(ctx => VStack(
+                new ButtonElement("BT") { Command = Dis("BT") }.Set(b => b.Name = "bareAllBt"),
+                new HyperlinkButtonElement("HL") { Command = Dis("HL") }.Set(b => b.Name = "bareAllHl"),
+                new RepeatButtonElement("RP") { Command = Dis("RP") }.Set(b => b.Name = "bareAllRp"),
+                new ToggleButtonElement("TG") { Command = Dis("TG") }.Set(b => b.Name = "bareAllTg"),
+                new SplitButtonElement("SP") { Command = Dis("SP") }.Set(b => b.Name = "bareAllSp"),
+                new ToggleSplitButtonElement("TS") { Command = Dis("TS") }.Set(b => b.Name = "bareAllTs")));
+            await Harness.Render();
+
+            var bt = H.FindControl<Button>(b => b.Name == "bareAllBt");
+            var hl = H.FindControl<HyperlinkButton>(b => b.Name == "bareAllHl");
+            var rp = H.FindControl<RepeatButton>(b => b.Name == "bareAllRp");
+            var tg = H.FindControl<ToggleButton>(b => b.Name == "bareAllTg");
+            var sp = H.FindControl<SplitButton>(b => b.Name == "bareAllSp");
+            var ts = H.FindControl<ToggleSplitButton>(b => b.Name == "bareAllTs");
+            H.Check("BareInitAll_ButtonDisabled", bt is not null && !bt.IsEnabled);
+            H.Check("BareInitAll_HyperlinkDisabled", hl is not null && !hl.IsEnabled);
+            H.Check("BareInitAll_RepeatDisabled", rp is not null && !rp.IsEnabled);
+            H.Check("BareInitAll_ToggleDisabled", tg is not null && !tg.IsEnabled);
+            H.Check("BareInitAll_SplitDisabled", sp is not null && !sp.IsEnabled);
+            H.Check("BareInitAll_ToggleSplitDisabled", ts is not null && !ts.IsEnabled);
+        }
+    }
+
+    /// <summary>
+    /// Issue #637 acceptance (d) for ToggleSplitButton at the LIVE tier: a bare record-init
+    /// <c>new ToggleSplitButtonElement("…") { Command = cmd }</c> with no <c>OnIsCheckedChanged</c>
+    /// dispatches the command on each real toggle. The <c>.Controlled</c> callback falls back to
+    /// invoking the typed Command when the user callback is null, so a direct <c>IsChecked</c> flip
+    /// (treated as real input — no armed echo on an uncontrolled mount) runs Execute. Closes the
+    /// previously unproven live-toggle gap for this element.
+    /// </summary>
+    internal class BareInitToggleSplitButtonCommandFiresOnToggle(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            int count = 0;
+            var cmd = new Command { Label = "TSgo", Execute = () => count++ };
+
+            var host = H.CreateHost();
+            host.Mount(ctx => new ToggleSplitButtonElement("TSgo") { Command = cmd }.Set(b => b.Name = "bareTsBtn"));
+            await Harness.Render();
+
+            var tsb = H.FindControl<ToggleSplitButton>(b => b.Name == "bareTsBtn");
+            H.Check("BareInitTs_Mounted", tsb is not null);
+            H.Check("BareInitTs_Enabled", tsb is not null && tsb.IsEnabled);
+            if (tsb is not null)
+            {
+                // A direct IsChecked flip is real user input (no armed echo on an uncontrolled
+                // mount), so IsCheckedChanged fires and the command dispatches — check + uncheck.
+                tsb.IsChecked = !tsb.IsChecked;
+                await Harness.Render();
+                tsb.IsChecked = !tsb.IsChecked;
+                await Harness.Render();
+            }
+            H.Check("BareInitTs_CommandInvokedOnEachToggle", count == 2);
+        }
+    }
+
+    /// <summary>
+    /// Issue #710 review (M4) — the none → command transition at the LIVE tier. A plain
+    /// <c>Button("Run")</c> (no command, untagged, Click unsubscribed) is re-rendered as a
+    /// command-bound button across a state-driven update. The reconciler reuses the control and
+    /// subscribes the Click handler ON UPDATE (HasCallbacks false→true), so a real click then
+    /// dispatches the command — proving subscribe-on-update + dispatch, not a manual Invoke.
+    /// </summary>
+    internal class BareInitNoneToCommandDispatchesOnClickAfterUpdate(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            int count = 0;
+            var cmd = new Command { Label = "Run", Execute = () => count++ };
+
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (bound, setBound) = ctx.UseState(false);
+                return VStack(
+                    Button("toggleM4Bind", () => setBound(true)),
+                    bound
+                        ? new ButtonElement("Run") { Command = cmd }
+                        : Button("Run"));
+            });
+            await Harness.Render();
+
+            var before = H.FindControl<Button>(b => (b.Content as string) == "Run");
+            H.Check("M4None_Mounted", before is not null);
+
+            // No command yet: the plain button is untagged / Click unsubscribed, so clicking is inert.
+            H.ClickButton("Run");
+            await Harness.Render();
+            H.Check("M4None_InertBeforeBind", count == 0);
+
+            // Re-render WITH the command bound — the reconciler subscribes Click on update.
+            H.ClickButton("toggleM4Bind");
+            await Harness.Render();
+
+            var after = H.FindControl<Button>(b => (b.Content as string) == "Run");
+            H.Check("M4None_Reused", before is not null && ReferenceEquals(before, after));
+
+            // The now-bound command dispatches on a real click (subscribe-on-update worked).
+            H.ClickButton("Run");
+            await Harness.Render();
+            H.Check("M4None_DispatchesAfterBind", count == 1);
+        }
+    }
+
+    /// <summary>
+    /// Issue #710 review (M2) — an isolated <c>IsDisabledFocusable</c> flip must re-apply at the
+    /// LIVE tier. A bare <c>new ButtonElement("Submit") { IsEnabled = false }</c> (hard-disabled:
+    /// IsEnabled=false, full opacity) flips ONLY IsDisabledFocusable across a state-driven update.
+    /// No <c>.Set</c> is used, so the empty Setters array stays reference-stable and
+    /// IsDisabledFocusable is the single differing field — without the ShallowEquals fix the
+    /// fast-path skipped this and left the control hard-disabled; now the descriptor re-applies the
+    /// focusable-dim coercion (IsEnabled=true + Opacity=0.4). The control is reused, so this is a
+    /// true re-apply, not a remount. Twin of the debounce M1 re-disable guard.
+    /// </summary>
+    internal class IsDisabledFocusableReappliesOnIsolatedFlip(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (focusable, setFocusable) = ctx.UseState(false);
+                return VStack(
+                    Button("toggleIdf", () => setFocusable(true)),
+                    // No .Set — keep Setters reference-stable so ONLY IsDisabledFocusable differs
+                    // across the update (a .Set would allocate a fresh Setters array each render and
+                    // defeat the isolation, masking the fast-path fix).
+                    new ButtonElement("Submit") { IsEnabled = false, IsDisabledFocusable = focusable });
+            });
+            await Harness.Render();
+
+            var before = H.FindControl<Button>(b => (b.Content as string) == "Submit");
+            H.Check("IdfReapply_Mounted", before is not null);
+            H.Check("IdfReapply_InitiallyHardDisabled", before is not null && !before.IsEnabled);
+
+            H.ClickButton("toggleIdf");
+            await Harness.Render();
+
+            var after = H.FindControl<Button>(b => (b.Content as string) == "Submit");
+            H.Check("IdfReapply_Reused", before is not null && ReferenceEquals(before, after));
+            // The isolated flip re-applied: focusable-dim coercion (IsEnabled stays true, dimmed).
+            H.Check("IdfReapply_FocusableAfterUpdate", after is not null && after.IsEnabled);
+            H.Check("IdfReapply_DimmedAfterUpdate", after is not null && global::System.Math.Abs(after.Opacity - 0.4) < 0.001);
+        }
+    }
 }

@@ -22,7 +22,7 @@ public class CommandModifierTests
 
         var el = Button(TextBlock("Run")).Command(cmd);
 
-        Assert.True(el.IsEnabled);
+        Assert.True(el.EffectiveIsEnabled);
     }
 
     [Fact]
@@ -32,7 +32,7 @@ public class CommandModifierTests
 
         var el = Button(TextBlock("Run")).Command(cmd);
 
-        Assert.False(el.IsEnabled);
+        Assert.False(el.EffectiveIsEnabled);
     }
 
     [Fact]
@@ -42,7 +42,7 @@ public class CommandModifierTests
 
         var el = Button(TextBlock("Run")).Command(cmd);
 
-        Assert.False(el.IsEnabled);
+        Assert.False(el.EffectiveIsEnabled);
         Assert.NotNull(el.ContentElement);
     }
 
@@ -74,8 +74,8 @@ public class CommandModifierTests
         var enabled = new Command { Label = "Run", Execute = () => { }, CanExecute = true };
         var disabled = new Command { Label = "Run", Execute = () => { }, CanExecute = false };
 
-        Assert.True(Render(enabled).IsEnabled);
-        Assert.False(Render(disabled).IsEnabled);
+        Assert.True(Render(enabled).EffectiveIsEnabled);
+        Assert.False(Render(disabled).EffectiveIsEnabled);
     }
 
     [Fact]
@@ -97,11 +97,15 @@ public class CommandModifierTests
         Assert.Same(first.Setters, second.Setters);
         // A flipped command is not ShallowEqual, so the reconciler re-applies the effects.
         Assert.False(Element.ShallowEquals(first, second));
-        Assert.True(first.IsEnabled);
-        Assert.False(second.IsEnabled);
+        Assert.True(first.EffectiveIsEnabled);
+        Assert.False(second.EffectiveIsEnabled);
     }
 
-    // ── (c) Clicking invokes the command ────────────────────────────
+    // ── (c) Dispatch flows from the typed Command (issue #637) ───────
+    //     The modifier no longer bakes OnClick/OnIsCheckedChanged — the
+    //     click/toggle trampoline invokes the command. These assert the
+    //     record wiring + that the bound command dispatches; the live
+    //     click→Execute path is pinned by the Commanding selftests.
 
     [Fact]
     public void Command_Wires_Click_To_Execute()
@@ -110,9 +114,9 @@ public class CommandModifierTests
         var cmd = new Command { Label = "Run", Execute = () => count++ };
 
         var el = Button(TextBlock("Run")).Command(cmd);
-        Assert.NotNull(el.OnClick);
-        el.OnClick!();
-
+        Assert.Null(el.OnClick);              // issue #637 — dispatch via typed Command, not a baked closure
+        Assert.Same(cmd, el.Command);
+        CommandBindings.Invoke(el.Command!);  // what the click trampoline does when OnClick is null
         Assert.Equal(1, count);
     }
 
@@ -123,7 +127,8 @@ public class CommandModifierTests
         var cmd = new Command { Label = "Run", ExecuteAsync = () => { count++; return Task.CompletedTask; } };
 
         var el = Button(TextBlock("Run")).Command(cmd);
-        el.OnClick!();
+        Assert.Null(el.OnClick);
+        CommandBindings.Invoke(el.Command!);
 
         Assert.Equal(1, count);
     }
@@ -137,8 +142,9 @@ public class CommandModifierTests
         var cmd = new Command { Label = "Details", Execute = () => count++ };
 
         var el = HyperlinkButton("Details").Command(cmd);
-        Assert.NotNull(el.OnClick);
-        el.OnClick!();
+        Assert.Null(el.OnClick);
+        Assert.Same(cmd, el.Command);
+        CommandBindings.Invoke(el.Command!);
 
         Assert.Equal(1, count);
     }
@@ -150,7 +156,8 @@ public class CommandModifierTests
         var cmd = new Command { Label = "Tick", Execute = () => count++ };
 
         var el = RepeatButton("Tick").Command(cmd);
-        el.OnClick!();
+        Assert.Null(el.OnClick);
+        CommandBindings.Invoke(el.Command!);
 
         Assert.Equal(1, count);
     }
@@ -162,9 +169,11 @@ public class CommandModifierTests
         var cmd = new Command { Label = "Bold", Execute = () => count++ };
 
         var el = ToggleButton("Bold").Command(cmd);
-        Assert.NotNull(el.OnIsCheckedChanged);
-        el.OnIsCheckedChanged!(true);
-        el.OnIsCheckedChanged!(false);
+        Assert.Null(el.OnIsCheckedChanged);   // issue #637 — toggle trampoline invokes the command
+        Assert.Same(cmd, el.Command);
+        // The live trampoline fires the command on each toggle (check + uncheck) — see selftests.
+        CommandBindings.Invoke(el.Command!);
+        CommandBindings.Invoke(el.Command!);
 
         Assert.Equal(2, count);
     }
@@ -238,8 +247,9 @@ public class CommandModifierTests
     }
 
     // ── (M1, PR-review) The Button(Command) factory must defer IsEnabled to the
-    //    descriptor too (applyIsEnabled:false), so a disabled command chained with
-    //    .IsDisabledFocusable() stays in the tab order — same guarantee as the modifier.
+    //    descriptor too (folded into EffectiveIsEnabled, applyIsEnabled:false), so a
+    //    disabled command chained with .IsDisabledFocusable() stays in the tab order —
+    //    same guarantee as the modifier and the bare record-init (issue #637).
 
     [Fact]
     public void Button_Command_Factory_Applies_IsEnabled_False_When_Disabled()
@@ -248,7 +258,9 @@ public class CommandModifierTests
 
         var el = Button(cmd);
 
-        Assert.False(el.IsEnabled);
+        // issue #637 — the record IsEnabled field is left at its default (true); the
+        // command's disabled state is folded into the descriptor via EffectiveIsEnabled.
+        Assert.False(el.EffectiveIsEnabled);
     }
 
     [Fact]
@@ -259,5 +271,89 @@ public class CommandModifierTests
         var el = Button(cmd).IsDisabledFocusable();
 
         Assert.True(el.IsDisabledFocusable);
+    }
+
+    // ── (M6, issue #637 review) The .Command() modifier makes the command fully take over:
+    //    any conflicting OnClick / toggle callback already on the element is cleared so the
+    //    command — not a stale handler — dispatches. This restores the pre-#637 command-wins
+    //    semantics (the brief #637 callback-wins behavior was never released). The bare
+    //    record-init path keeps its trampoline rule (explicit callback wins) — see
+    //    CommandTypedPropertyTests.BareInit_BothPresent_CallbackWins.
+
+    [Fact]
+    public void Command_Modifier_Clears_Conflicting_OnClick_Command_Wins()
+    {
+        int onClickCount = 0, cmdCount = 0;
+        var cmd = new Command { Label = "Run", Execute = () => cmdCount++ };
+
+        var el = Button("Run", () => onClickCount++).Command(cmd);
+
+        Assert.Null(el.OnClick);              // the modifier cleared the conflicting click handler
+        Assert.Same(cmd, el.Command);
+        // OnClick null ⇒ the click trampoline invokes the command, not the original onClick.
+        CommandBindings.Invoke(el.Command!);
+        Assert.Equal(1, cmdCount);
+        Assert.Equal(0, onClickCount);
+    }
+
+    [Fact]
+    public void Command_Modifier_Clears_Conflicting_HyperlinkButton_OnClick_Command_Wins()
+    {
+        int onClickCount = 0, cmdCount = 0;
+        var cmd = new Command { Label = "Go", Execute = () => cmdCount++ };
+
+        var el = HyperlinkButton("Go", onClick: () => onClickCount++).Command(cmd);
+
+        Assert.Null(el.OnClick);              // the modifier cleared the conflicting click handler
+        Assert.Same(cmd, el.Command);
+        // OnClick null ⇒ the click trampoline invokes the command, not the original onClick.
+        CommandBindings.Invoke(el.Command!);
+        Assert.Equal(1, cmdCount);
+        Assert.Equal(0, onClickCount);
+    }
+
+    [Fact]
+    public void Command_Modifier_Clears_Conflicting_RepeatButton_OnClick_Command_Wins()
+    {
+        int onClickCount = 0, cmdCount = 0;
+        var cmd = new Command { Label = "Tick", Execute = () => cmdCount++ };
+
+        var el = RepeatButton("Tick", () => onClickCount++).Command(cmd);
+
+        Assert.Null(el.OnClick);
+        Assert.Same(cmd, el.Command);
+        CommandBindings.Invoke(el.Command!);
+        Assert.Equal(1, cmdCount);
+        Assert.Equal(0, onClickCount);
+    }
+
+    [Fact]
+    public void Command_Modifier_Clears_Conflicting_ToggleButton_Callbacks_Command_Wins()
+    {
+        int toggleCount = 0, cmdCount = 0;
+        var cmd = new Command { Label = "Bold", Execute = () => cmdCount++ };
+
+        var el = ToggleButton("Bold", onIsCheckedChanged: _ => toggleCount++).Command(cmd);
+
+        Assert.Null(el.OnIsCheckedChanged);   // both toggle callbacks cleared
+        Assert.Null(el.OnCheckedStateChanged);
+        Assert.Same(cmd, el.Command);
+        CommandBindings.Invoke(el.Command!);
+        Assert.Equal(1, cmdCount);
+        Assert.Equal(0, toggleCount);
+    }
+
+    [Fact]
+    public void Command_Modifier_Clears_ThreeState_Toggle_Callback()
+    {
+        // ThreeStateToggleButton sets OnCheckedStateChanged; .Command() clears it (and
+        // OnIsCheckedChanged) so the command takes over dispatch.
+        var cmd = new Command { Label = "Tri", Execute = () => { } };
+
+        var el = ThreeStateToggleButton("Tri", onCheckedStateChanged: _ => { }).Command(cmd);
+
+        Assert.Null(el.OnCheckedStateChanged);
+        Assert.Null(el.OnIsCheckedChanged);
+        Assert.Same(cmd, el.Command);
     }
 }

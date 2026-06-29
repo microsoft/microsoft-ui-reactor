@@ -213,6 +213,18 @@ internal sealed class ExpanderEventPayload
         Microsoft.UI.Xaml.Controls.ExpanderCollapsedEventArgs>? CollapsedTrampoline;
 }
 
+/// <summary>Issue #637 — ToggleSplitButton <c>IsChecked</c> round-trip payload.
+/// One trampoline slot for the <c>IsCheckedChanged</c> event. The descriptor uses
+/// <c>HandCodedControlled</c> (value-diff echo) so a button bound only via the typed
+/// <c>Command</c> (no <c>OnIsCheckedChanged</c>) dispatches through this static
+/// trampoline instead of allocating an <c>Action&lt;bool&gt;</c> per toggle event.</summary>
+internal sealed class ToggleSplitButtonEventPayload
+{
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.ToggleSplitButton,
+        Microsoft.UI.Xaml.Controls.ToggleSplitButtonIsCheckedChangedEventArgs>? IsCheckedChangedTrampoline;
+}
+
 /// <summary>Spec 047 §14 Phase 3 batch 9 — SplitView named-slot container
 /// payload. <c>IsPaneOpen</c> is a plain <c>.OneWay</c> write (mirrors the
 /// legacy arm — programmatic writes fire the same events as user toggles).

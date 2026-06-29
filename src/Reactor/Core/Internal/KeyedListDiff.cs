@@ -1,3 +1,4 @@
+using System.Buffers;
 using Microsoft.Extensions.Logging;
 
 namespace Microsoft.UI.Reactor.Core.Internal;
@@ -42,6 +43,19 @@ namespace Microsoft.UI.Reactor.Core.Internal;
 /// </remarks>
 internal static class KeyedListDiff
 {
+    // Cached sample for the null-key bailout diagnostic so the slow path
+    // doesn't allocate a fresh single-element array every time (#41).
+    private static readonly string[] NullKeySample = { "<null>" };
+
+    // Descending-by-index comparer used to remove doomed rows from the tail
+    // first so earlier OC indices stay stable. Singleton — avoids capturing a
+    // fresh comparison delegate on every diff that has deletions.
+    private sealed class RowIndexDescendingComparer : IComparer<ReactorRow>
+    {
+        public static readonly RowIndexDescendingComparer Instance = new();
+        public int Compare(ReactorRow? a, ReactorRow? b) => b!.Index.CompareTo(a!.Index);
+    }
+
     /// <summary>
     /// Per-diff bookkeeping returned to callers (tests, telemetry, the
     /// Phase 3 animation pipeline) so they can observe the op shape
@@ -118,21 +132,55 @@ internal static class KeyedListDiff
         ArgumentNullException.ThrowIfNull(newItems);
         ArgumentNullException.ThrowIfNull(keySelector);
 
+        int newCount = newItems.Count;
+
+        // Rent the new-keys buffer (#2) rather than allocating a fresh array
+        // every diff. The rented array may be larger than newCount, so the
+        // explicit length is threaded to every consumer below — never
+        // newKeys.Length. The buffer is cleared + returned on every exit
+        // (including exceptions and the early bailouts) via the finally.
+        string[] newKeys = newCount == 0
+            ? global::System.Array.Empty<string>()
+            : ArrayPool<string>.Shared.Rent(newCount);
+        bool rentedKeys = newCount != 0;
+        try
+        {
+            return ApplyCore(state, newItems, keySelector, logger, diagnosticContext, ambient, controlInstance, newKeys, newCount);
+        }
+        finally
+        {
+            if (rentedKeys)
+                ArrayPool<string>.Shared.Return(newKeys, clearArray: true);
+        }
+    }
+
+    /// <summary>
+    /// Core keyed diff over a pre-materialized <paramref name="newKeys"/> buffer
+    /// (valid length <paramref name="newCount"/>; the array may be larger). Split
+    /// out from <see cref="Apply{T}"/> so the rented key buffer is released on
+    /// every exit path via a single try/finally in the caller.
+    /// </summary>
+    private static DiffStats ApplyCore<T>(
+        ReactorListState state,
+        IReadOnlyList<T> newItems,
+        Func<T, int, string> keySelector,
+        ILogger? logger,
+        string? diagnosticContext,
+        AmbientAnimation? ambient,
+        object? controlInstance,
+        string[] newKeys,
+        int newCount)
+    {
         // Resolve the animation intent for this diff once up front. A null
         // result means "no per-container animation work this diff" — every
         // op path below shortcuts on this rather than re-checking the kind.
-        // The contract is symmetric across Insert / Move / Remove so the
-        // user can predict the visual effect from the ambient alone.
         AnimationKind? enterKind = (ambient is { HasEffect: true }) ? ambient.Kind : null;
 
-        int newCount = newItems.Count;
         int oldCount = state.LastKeys.Count;
 
-        // Materialize new keys once. We need this list twice (lockstep walk
-        // and the survivor pass), so paying for one allocation up front is
-        // cheaper than calling keySelector twice and avoids the user-callback
-        // observing each item more than once per diff.
-        string[] newKeys = newCount == 0 ? global::System.Array.Empty<string>() : new string[newCount];
+        // Materialize new keys into the rented buffer. We read them twice
+        // (lockstep walk + survivor pass), so projecting once up front avoids
+        // the user callback observing each item more than once per diff.
         for (int i = 0; i < newCount; i++)
         {
             var k = keySelector(newItems[i], i);
@@ -146,41 +194,56 @@ internal static class KeyedListDiff
                 ReportBailout(
                     controlInstance, diagnosticContext, logger,
                     Microsoft.UI.Reactor.Core.Diagnostics.KeyedListDiagnosticKind.NullKey,
-                    new[] { "<null>" },
+                    NullKeySample,
                     indexHint: i);
                 return Bailout(state, newItems, keySelector);
             }
             newKeys[i] = k;
         }
 
-        // Detect duplicate keys via the same hash set used by the survivor
-        // map below. This costs O(n) on top of the diff but is the only way
-        // to give a useful diagnostic; duplicates inside newKeys would
-        // otherwise silently corrupt the diff (the second occurrence would
-        // never find a survivor because the first one consumed the map entry,
-        // so it would emit an Insert with a duplicate key — and then a later
-        // diff would have two rows with the same key in ByKey).
-        if (HasDuplicates(newKeys))
-        {
-            ReportBailout(
-                controlInstance, diagnosticContext, logger,
-                Microsoft.UI.Reactor.Core.Diagnostics.KeyedListDiagnosticKind.DuplicateKey,
-                CollectDuplicates(newKeys),
-                indexHint: null);
-            return Bailout(state, newItems, keySelector);
-        }
-
-        // ── Fast path 1: no change ─────────────────────────────────────
+        // ── Fast path 1: no change (FLAGSHIP #1) ───────────────────────
         // Most renders don't touch the list shape — Reactor's reducer model
         // means immutable list replacement, but the *contents* (and thus the
-        // keys) usually match. Skip the diff entirely and let the caller's
+        // keys) usually match. This now runs ABOVE the duplicate scan so the
+        // steady-state grid case (keys never change) never allocates or scans
+        // a dup set. Skip the diff entirely and let the caller's
         // RefreshRealizedContainers handle per-row content reconciliation.
-        if (oldCount == newCount && SequenceEqualOrdinal(state.LastKeys, newKeys))
+        //
+        // The `ByKey.Count == oldCount` guard keeps this fast path strictly for
+        // the duplicate-free steady state. A prior duplicate bailout leaves
+        // Source/LastKeys still holding the dup keys but ByKey collapsed to
+        // first occurrences (ReactorListState.Reset), so ByKey.Count < oldCount
+        // there. Without the guard an *unchanged* duplicate list would match
+        // LastKeys and return Empty, silently skipping the duplicate
+        // bailout/diagnostic the remarks at the top of this file promise. The
+        // check is O(1) and short-circuits before the O(n) SequenceEqualOrdinal,
+        // so the common unique-key path pays nothing extra.
+        if (oldCount == newCount
+            && state.ByKey.Count == oldCount
+            && SequenceEqualOrdinal(state.LastKeys, newKeys, newCount))
             return DiffStats.Empty;
 
         // ── Fast path 2: empty ↔ empty ─────────────────────────────────
         if (oldCount == 0 && newCount == 0)
             return DiffStats.Empty;
+
+        // Detect duplicate keys. Runs after the no-op fast path (#1) so an
+        // unchanged list never pays for it, and reuses the pooled Scratch dict
+        // instead of allocating a HashSet (#11). Duplicates inside newKeys
+        // would otherwise silently corrupt the diff (the second occurrence
+        // would never find a survivor because the first one consumed the map
+        // entry, so it would emit an Insert with a duplicate key — and then a
+        // later diff would have two rows with the same key in ByKey), so they
+        // force a correctness-preserving bailout.
+        if (HasDuplicates(newKeys, newCount, state))
+        {
+            ReportBailout(
+                controlInstance, diagnosticContext, logger,
+                Microsoft.UI.Reactor.Core.Diagnostics.KeyedListDiagnosticKind.DuplicateKey,
+                CollectDuplicates(newKeys, newCount),
+                indexHint: null);
+            return Bailout(state, newItems, keySelector);
+        }
 
         // ── Fast path 3: empty → non-empty (mount-shaped diff) ─────────
         if (oldCount == 0)
@@ -261,52 +324,33 @@ internal static class KeyedListDiff
             return new DiffStats(Inserts: 0, Removes: 1, Moves: 0, Survivors: newCount, Bailout: false);
         }
 
-        // ── Bulk-replace bailout ───────────────────────────────────────
-        // If churn (removed + inserted) exceeds 25% AND the absolute number
-        // of churned ops is large enough that the diff genuinely won't help
-        // animation, fall back to the legacy ItemsSource swap.
-        //
-        // The absolute floor (8 ops) is what keeps small lists from
-        // ever bailing — a 4-item list with Insert+Remove (churn=2) is just
-        // a normal small-list edit; the WinUI delta path animates it
-        // beautifully and we lose nothing by running the general algorithm.
-        //
-        // We approximate churn by counting how many new keys are NOT present
-        // in the old key set. That overcounts "different position same key"
-        // as zero churn (correct), but undercounts deletes — we add the
-        // length delta for that side.
-        state.Scratch.Clear();
-        for (int i = 0; i < oldCount; i++)
-            state.Scratch[state.LastKeys[i]] = null!; // null marker; replaced below
-
-        int additions = 0;
-        int retained = 0;
-        for (int i = 0; i < newCount; i++)
-        {
-            if (state.Scratch.ContainsKey(newKeys[i])) retained++;
-            else additions++;
-        }
-
-        int removals = oldCount - retained;
-        int churn = additions + removals;
-        const int BailoutFloor = 8;
-        // Bailout if (churn / max(oldCount, 1)) > 0.25 AND churn >= floor.
-        // Compute the ratio without floats: churn * 4 > oldCount.
-        if (churn >= BailoutFloor && churn * 4 > global::System.Math.Max(oldCount, 1))
-        {
-            state.Scratch.Clear();
-            return Bailout(state, newItems, keySelector);
-        }
-
         // ── General case: React-style keyed diff ───────────────────────
-        return ApplyGeneral(state, newKeys, enterKind);
+        // The bulk-replace (churn) bailout decision now lives INSIDE
+        // ApplyGeneral (#34): it is computed from the same scratch map the
+        // general walk builds over the post-prefix/suffix diff range, so we
+        // no longer pay a separate O(oldCount) null-marker pre-pass + a second
+        // Scratch.Clear/repopulate. Churn over the diff range is provably
+        // equal to full-range churn because the shared prefix/suffix keys
+        // cancel on both sides (duplicates are already ruled out above).
+        return ApplyGeneral(state, newItems, keySelector, newKeys, newCount, oldCount, enterKind);
     }
 
-    private static DiffStats ApplyGeneral(ReactorListState state, string[] newKeys, AnimationKind? enterKind)
+    /// <summary>
+    /// General keyed diff over the post-prefix/suffix range. Builds the
+    /// survivor map on <see cref="ReactorListState.Scratch"/> once, folds the
+    /// churn-bailout decision into that same map, then emits the minimal
+    /// Insert/Move/Remove op sequence. <paramref name="newKeys"/> is valid for
+    /// <paramref name="newCount"/> entries (the buffer may be larger).
+    /// </summary>
+    private static DiffStats ApplyGeneral<T>(
+        ReactorListState state,
+        IReadOnlyList<T> newItems,
+        Func<T, int, string> keySelector,
+        string[] newKeys,
+        int newCount,
+        int oldCount,
+        AnimationKind? enterKind)
     {
-        int oldCount = state.LastKeys.Count;
-        int newCount = newKeys.Length;
-
         // 1) Lockstep prefix walk — find where the lists first diverge.
         int prefix = 0;
         int sharedFromStart = global::System.Math.Min(oldCount, newCount);
@@ -334,12 +378,32 @@ internal static class KeyedListDiff
         for (int i = prefix; i < oldDiffEnd; i++)
             state.Scratch[state.LastKeys[i]] = state.Source[i];
 
+        // 3a) Bulk-replace bailout (#34, folded in). Count how many new
+        // diff-range keys survive (are present in the old diff-range map);
+        // additions/removals follow without a second populate pass.
+        int retained = 0;
+        for (int i = prefix; i < newDiffEnd; i++)
+            if (state.Scratch.ContainsKey(newKeys[i])) retained++;
+
+        int additions = (newDiffEnd - prefix) - retained;
+        int removals = (oldDiffEnd - prefix) - retained;
+        int churn = additions + removals;
+        const int BailoutFloor = 8;
+        // Bailout if (churn / max(oldCount, 1)) > 0.25 AND churn >= floor.
+        // Compute the ratio without floats: churn * 4 > oldCount.
+        if (churn >= BailoutFloor && churn * 4 > global::System.Math.Max(oldCount, 1))
+        {
+            state.Scratch.Clear();
+            return Bailout(state, newItems, keySelector);
+        }
+
         int inserts = 0;
         int moves = 0;
         int survivors = prefix + suffix;
-        // Collected only when an ambient is active. Null avoids the
-        // allocation in the non-animated (overwhelmingly common) case.
-        List<ReactorRow>? movedRows = enterKind is not null ? new List<ReactorRow>() : null;
+        // Collected lazily — only allocated when an ambient animation is
+        // active AND at least one survivor actually moves (#35). Consumers
+        // treat null as "no moved rows" (they gate on `is { Count: > 0 }`).
+        List<ReactorRow>? movedRows = null;
 
         // 4) Walk new keys in the diff range.
         for (int desired = prefix; desired < newDiffEnd; desired++)
@@ -354,7 +418,8 @@ internal static class KeyedListDiff
                     state.Source.Move(currentIndex, desired);
                     RefreshIndices(state, global::System.Math.Min(desired, currentIndex), global::System.Math.Max(desired, currentIndex));
                     moves++;
-                    movedRows?.Add(survivor);
+                    if (enterKind is not null)
+                        (movedRows ??= new List<ReactorRow>()).Add(survivor);
                 }
                 survivors++;
             }
@@ -370,26 +435,37 @@ internal static class KeyedListDiff
 
         // 5) Whatever remains in the scratch map are removed rows. Remove
         // them in descending OC-index order so earlier indices stay stable.
+        // The doomed buffer is rented from the pool and cleared+returned on
+        // every exit (#3) so it never pins removed rows across frames.
         int removes = state.Scratch.Count;
         if (removes > 0)
         {
-            var doomed = new ReactorRow[removes];
-            int j = 0;
-            foreach (var row in state.Scratch.Values) doomed[j++] = row;
-            global::System.Array.Sort(doomed, static (a, b) => b.Index.CompareTo(a.Index));
-            for (int i = 0; i < removes; i++)
+            ReactorRow[] doomed = ArrayPool<ReactorRow>.Shared.Rent(removes);
+            try
             {
-                state.Source.RemoveAt(doomed[i].Index);
-                state.ByKey.Remove(doomed[i].Key);
+                int j = 0;
+                foreach (var row in state.Scratch.Values) doomed[j++] = row;
+                global::System.Array.Sort(doomed, 0, removes, RowIndexDescendingComparer.Instance);
+                for (int i = 0; i < removes; i++)
+                {
+                    state.Source.RemoveAt(doomed[i].Index);
+                    state.ByKey.Remove(doomed[i].Key);
+                }
+            }
+            finally
+            {
+                ArrayPool<ReactorRow>.Shared.Return(doomed, clearArray: true);
             }
             RefreshIndices(state, 0, state.Source.Count - 1);
         }
 
         state.Scratch.Clear();
 
-        // 6) Sync LastKeys to match the final Source order.
-        state.LastKeys.Clear();
-        for (int i = 0; i < state.Source.Count; i++) state.LastKeys.Add(state.Source[i].Key);
+        // 6) Sync LastKeys to match the final Source order in place (#10),
+        // overwriting shared slots and trimming/extending the tail rather
+        // than Clear()+Add — which would null the whole backing array and
+        // regrow it every diff.
+        SyncLastKeysToSource(state);
 
         return new DiffStats(
             Inserts: inserts,
@@ -398,6 +474,28 @@ internal static class KeyedListDiff
             Survivors: survivors,
             Bailout: false,
             MovedRows: movedRows);
+    }
+
+    /// <summary>
+    /// Overwrites <see cref="ReactorListState.LastKeys"/> to match the current
+    /// <see cref="ReactorListState.Source"/> key order without the full
+    /// Clear()+Add churn. Shared leading slots are overwritten; the tail is
+    /// trimmed or extended as needed. Always leaves LastKeys exactly equal to
+    /// the Source key sequence, so it cannot desync.
+    /// </summary>
+    private static void SyncLastKeysToSource(ReactorListState state)
+    {
+        var lastKeys = state.LastKeys;
+        var source = state.Source;
+        int srcCount = source.Count;
+        int common = global::System.Math.Min(lastKeys.Count, srcCount);
+        for (int i = 0; i < common; i++)
+            lastKeys[i] = source[i].Key;
+        if (lastKeys.Count > srcCount)
+            lastKeys.RemoveRange(srcCount, lastKeys.Count - srcCount);
+        else
+            for (int i = lastKeys.Count; i < srcCount; i++)
+                lastKeys.Add(source[i].Key);
     }
 
     private static void RefreshIndices(ReactorListState state, int fromInclusive, int toInclusive)
@@ -436,28 +534,40 @@ internal static class KeyedListDiff
             Bailout: true);
     }
 
-    private static bool HasDuplicates(string[] keys)
+    private static bool HasDuplicates(string[] keys, int count, ReactorListState state)
     {
-        if (keys.Length < 2) return false;
-        // Small-N optimization: 0/1 already handled, 2..3 is a quick scan.
-        if (keys.Length <= 3)
+        if (count < 2) return false;
+        // Small-N optimization: 0/1 already handled, 2..3 is a quick scan
+        // that never touches the shared scratch dict.
+        if (count <= 3)
         {
-            if (keys.Length == 2) return string.Equals(keys[0], keys[1], global::System.StringComparison.Ordinal);
-            // length == 3
+            if (count == 2) return string.Equals(keys[0], keys[1], global::System.StringComparison.Ordinal);
+            // count == 3
             return string.Equals(keys[0], keys[1], global::System.StringComparison.Ordinal)
                 || string.Equals(keys[0], keys[2], global::System.StringComparison.Ordinal)
                 || string.Equals(keys[1], keys[2], global::System.StringComparison.Ordinal);
         }
-        var seen = new HashSet<string>(keys.Length, global::System.StringComparer.Ordinal);
-        for (int i = 0; i < keys.Length; i++)
-            if (!seen.Add(keys[i])) return true;
+        // Reuse the pooled scratch dict (#11) instead of allocating a fresh
+        // HashSet every diff with 4+ keys. Cleared on entry and on every exit
+        // so it never leaks into the survivor-map build that follows.
+        var scratch = state.Scratch;
+        scratch.Clear();
+        for (int i = 0; i < count; i++)
+        {
+            if (!scratch.TryAdd(keys[i], null!))
+            {
+                scratch.Clear();
+                return true;
+            }
+        }
+        scratch.Clear();
         return false;
     }
 
-    private static bool SequenceEqualOrdinal(List<string> a, string[] b)
+    private static bool SequenceEqualOrdinal(List<string> a, string[] b, int count)
     {
-        if (a.Count != b.Length) return false;
-        for (int i = 0; i < b.Length; i++)
+        if (a.Count != count) return false;
+        for (int i = 0; i < count; i++)
             if (!string.Equals(a[i], b[i], global::System.StringComparison.Ordinal)) return false;
         return true;
     }
@@ -527,15 +637,16 @@ internal static class KeyedListDiff
     // (not every occurrence). For a list with [a, b, a, c, b] returns
     // [a, b] — the dev overlay reader cares about which keys collided,
     // not the per-occurrence count.
-    private static IReadOnlyList<string> CollectDuplicates(string[] keys)
+    private static IReadOnlyList<string> CollectDuplicates(string[] keys, int count)
     {
         // Small set — duplicates in production are rare and the dev surface
-        // caps the displayed list anyway.
+        // caps the displayed list anyway. This is a slow (bailout) path so
+        // the throwaway HashSets are acceptable.
         var seen = new HashSet<string>(global::System.StringComparer.Ordinal);
         var dupes = new HashSet<string>(global::System.StringComparer.Ordinal);
-        foreach (var k in keys)
+        for (int i = 0; i < count; i++)
         {
-            if (!seen.Add(k)) dupes.Add(k);
+            if (!seen.Add(keys[i])) dupes.Add(keys[i]);
         }
         if (dupes.Count == 0) return global::System.Array.Empty<string>();
         var arr = new string[dupes.Count];

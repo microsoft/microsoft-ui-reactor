@@ -563,9 +563,13 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
     /// the override and restores the default palette — we deliberately don't store an
     /// empty palette because every downstream consumer would have to mod-by-zero
     /// guard, and "no colors" isn't a meaningful render state.
-    /// <para><b>Accessibility note:</b> colors set via <c>.SetColors(...)</c> are NOT seen by
-    /// the a11y scanner, so A11Y_CHART_011 contrast checks do not run on them. Use
-    /// <see cref="Palette(Accessibility.ChartPalette)"/> for a scanner-visible palette.</para>
+    /// <para><b>Accessibility:</b> these are the colors the slices are actually drawn with, so the
+    /// a11y scanner validates them as a Tier-3 custom palette (A11Y_CHART_009/010/011) — exactly
+    /// like <see cref="Palette(Accessibility.ChartPalette)"/> colors (issue #645). They are the
+    /// single source of truth for both rendering and the scanner: when both <c>.SetColors(...)</c>
+    /// and <c>.Palette(...)</c> are set, the rendered <c>.SetColors(...)</c> colors are the ones
+    /// scanned. Declare <see cref="ChartBackground(D3Color)"/> to scope the contrast check to the
+    /// background the chart renders on.</para>
     /// </summary>
     public PieChartElement<T> SetColors(params D3Color[] colors)
     {
@@ -620,7 +624,16 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
         return this;
     }
 
-    /// <summary>Sets a curated accessible palette (Tier 1).</summary>
+    /// <summary>
+    /// Declares a scanner-visible accessible palette for the pie. For a pie this is
+    /// <b>advisory-only</b>: it does <b>not</b> change the rendered slice colors (a pie renders the
+    /// <c>.SetColors(...)</c> colors when set, otherwise the built-in Category10 default) and is
+    /// consulted by the accessibility scanner only as a contrast-check fallback when
+    /// <c>.SetColors(...)</c> is unset (issue #645). Accepts any <see cref="Accessibility.ChartPalette"/>:
+    /// a curated palette such as <c>ChartPalette.OkabeIto</c> (Tier 1) is recommended for guaranteed
+    /// contrast, but <c>ChartPalette.FromColors(...)</c> (Tier 3) and <c>ChartPalette.FromRaw(...)</c>
+    /// (Tier 4) are accepted too. Use <see cref="SetColors"/> to control the colors a pie actually draws.
+    /// </summary>
     public PieChartElement<T> Palette(Accessibility.ChartPalette palette) { _palette = palette; return this; }
 
     /// <summary>
@@ -629,9 +642,12 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
     /// contrast check to this single active background (a <c>warning</c>) instead of flagging
     /// failure against either fixed light/dark background (an <c>info</c>). Omit for charts
     /// that may render on any background.
-    /// <para><b>Note:</b> only a scanner-visible palette (set via <see cref="Palette(Accessibility.ChartPalette)"/>)
-    /// is contrast-checked against this background. Colors set via <c>.SetColors(...)</c> are
-    /// not seen by the scanner.</para>
+    /// <para><b>Note:</b> the palette contrast-checked against this background is the one the pie
+    /// actually renders — the <c>.SetColors(...)</c> colors — when set. A
+    /// <see cref="Palette(Accessibility.ChartPalette)"/> palette does <b>not</b> change what a pie
+    /// draws (a pie renders the built-in Category10 default unless <c>.SetColors(...)</c> overrides
+    /// it); it is consulted by the scanner only as an advisory fallback when <c>.SetColors(...)</c>
+    /// is unset (issue #645).</para>
     /// <para>The stored value is normalized to opaque RGB: contrast math
     /// (<see cref="Accessibility.ChartPalette.ContrastRatio"/>) cannot evaluate a semi-transparent
     /// background without knowing what is behind it, so any alpha is dropped.</para>
@@ -662,7 +678,34 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
 
     // Internal accessors for scanner
     internal bool IsColorOnly => _colorOnly;
-    internal Accessibility.ChartPalette? CustomPalette => _palette;
+    internal Accessibility.ChartPalette? CustomPalette => ScannerPalette;
+
+    /// <summary>
+    /// The single custom palette the accessibility scanner validates, kept in lockstep with what
+    /// the pie actually renders (issue #645). The pie draws <c>_colorPalette</c>
+    /// (<see cref="SetColors"/>) when set, otherwise the default Category10; <see cref="Palette"/>
+    /// is advisory-only and never changes pie rendering. So that the scanner sees exactly the
+    /// rendered slices, the rendered <c>.SetColors(...)</c> palette wins as a Tier-3
+    /// (<see cref="Accessibility.ChartPalette.FromColors(D3Color[])"/>) scanner-validated palette; the
+    /// <see cref="Palette"/> palette is the fallback only when <c>.SetColors(...)</c> is unset,
+    /// preserving the prior scanner-visible behavior. Null — neither set — means the pre-vetted
+    /// Category10 default, which stays unscanned as before.
+    /// </summary>
+    private Accessibility.ChartPalette? ScannerPalette =>
+        _colorPalette is { Count: > 0 } colors
+            ? Accessibility.ChartPalette.FromColors(colors)
+            : _palette;
+
+    /// <summary>
+    /// The DSL modifier the scanner names in its palette-fix suggestions (A11Y_CHART_009/010/011),
+    /// tracking <b>which field actually fed</b> <see cref="ScannerPalette"/>: <c>"SetColors"</c> when
+    /// the rendered <c>_colorPalette</c> (<see cref="SetColors"/>) is the source, otherwise
+    /// <c>"Palette"</c> for the advisory <c>_palette</c> (<see cref="Palette"/>) fallback. Naming a
+    /// call the author never made — e.g. telling a pie that only set <c>.Palette(...)</c> to fix or
+    /// remove a non-existent <c>.SetColors(...)</c> call — is the wrong-guidance footgun issue #645
+    /// exists to kill, so the remediation must reference the call that produced the scanned palette.
+    /// </summary>
+    private string ScannerPaletteModifier => _colorPalette is { Count: > 0 } ? "SetColors" : "Palette";
 
     public Element ToElement()
     {
@@ -735,7 +778,9 @@ public sealed class PieChartElement<T> : IChartAccessibilityData
         (Core.CanvasElement)canvas.SetAttached(new Accessibility.ChartA11yData(this)
         {
             IsColorOnly = _colorOnly,
-            CustomPalette = _palette,
+            CustomPalette = ScannerPalette,
+            CustomPaletteModifier = ScannerPaletteModifier,
+            IsPaletteAdvisoryOnly = true,
             ChartBackground = _chartBackground,
         });
 

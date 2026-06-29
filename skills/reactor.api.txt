@@ -1436,7 +1436,7 @@ ToString() → string
 ### record ButtonElement
 new(string Label, Action OnClick = null)
 Action OnClick { get; init; }
-Command Command { get; }
+Command Command { get; init; }
 Element ContentElement { get; init; }
 bool IsDisabledFocusable { get; init; }
 bool IsEnabled { get; init; }
@@ -3581,7 +3581,7 @@ new(string message)
 ### record HyperlinkButtonElement
 new(string Content, Uri NavigateUri = null, Action OnClick = null)
 Action OnClick { get; init; }
-Command Command { get; }
+Command Command { get; init; }
 Uri NavigateUri { get; init; }
 string Content { get; init; }
 Deconstruct(ref string Content, ref Uri NavigateUri, ref Action OnClick) → void
@@ -5759,7 +5759,7 @@ long TotalRenders { get; init; }
 ### record RepeatButtonElement
 new(string Label, Action OnClick = null)
 Action OnClick { get; init; }
-Command Command { get; }
+Command Command { get; init; }
 int Delay { get; init; }
 int Interval { get; init; }
 string Label { get; init; }
@@ -6279,7 +6279,7 @@ ToString() → string
 ### record SplitButtonElement
 new(string Label, Action OnClick = null, Element Flyout = null)
 Action OnClick { get; init; }
-Command Command { get; }
+Command Command { get; init; }
 Element Flyout { get; init; }
 string Label { get; init; }
 Deconstruct(ref string Label, ref Action OnClick, ref Element Flyout) → void
@@ -6848,7 +6848,7 @@ ToString() → string
 new(string Label, bool IsChecked = false, Action<bool> OnIsCheckedChanged = null)
 Action<bool> OnIsCheckedChanged { get; init; }
 Action<bool?> OnCheckedStateChanged { get; init; }
-Command Command { get; }
+Command Command { get; init; }
 bool IsChecked { get; init; }
 bool IsThreeState { get; init; }
 bool? CheckedState { get; init; }
@@ -6877,7 +6877,7 @@ ToString() → string
 ### record ToggleSplitButtonElement
 new(string Label, Optional<bool> IsChecked = null, Action<bool> OnIsCheckedChanged = null, Element Flyout = null)
 Action<bool> OnIsCheckedChanged { get; init; }
-Command Command { get; }
+Command Command { get; init; }
 Element Flyout { get; init; }
 Optional<bool> IsChecked { get; init; }
 string Label { get; init; }

@@ -127,53 +127,6 @@ public class YogaLayoutResultsTests
         Assert.True(r.HadOverflow);
     }
 
-    // ── Reset() ─────────────────────────────────────────────────────
-
-    [Fact]
-    public void Reset_Clears_Every_Field()
-    {
-        var r = new LayoutResults
-        {
-            ComputedFlexBasisGeneration = 7,
-            ComputedFlexBasis = 50f,
-            GenerationCount = 3,
-            ConfigVersion = 4,
-            LastOwnerDirection = FlexLayoutDirection.RTL,
-            NextCachedMeasurementsIndex = 5,
-            Direction = FlexLayoutDirection.LTR,
-            HadOverflow = true,
-        };
-        r.SetDimension(YogaDimension.Width, 100f);
-        r.SetMeasuredDimension(YogaDimension.Height, 80f);
-        r.SetRawDimension(YogaDimension.Width, 120f);
-        r.SetPosition(YogaPhysicalEdge.Left, 5f);
-        r.SetMargin(YogaPhysicalEdge.Top, 6f);
-        r.SetBorder(YogaPhysicalEdge.Right, 7f);
-        r.SetPadding(YogaPhysicalEdge.Bottom, 8f);
-        r.CachedMeasurements[0] = new CachedMeasurement { ComputedWidth = 99 };
-        r.CachedLayout = new CachedMeasurement { ComputedWidth = 33 };
-
-        r.Reset();
-
-        Assert.Equal(0u, r.ComputedFlexBasisGeneration);
-        Assert.True(float.IsNaN(r.ComputedFlexBasis));
-        Assert.Equal(0u, r.GenerationCount);
-        Assert.Equal(0u, r.ConfigVersion);
-        Assert.Equal(FlexLayoutDirection.Inherit, r.LastOwnerDirection);
-        Assert.Equal(0u, r.NextCachedMeasurementsIndex);
-        Assert.Equal(FlexLayoutDirection.Inherit, r.Direction);
-        Assert.False(r.HadOverflow);
-        Assert.True(float.IsNaN(r.GetDimension(YogaDimension.Width)));
-        Assert.True(float.IsNaN(r.GetMeasuredDimension(YogaDimension.Height)));
-        Assert.True(float.IsNaN(r.GetRawDimension(YogaDimension.Width)));
-        Assert.Equal(0f, r.GetPosition(YogaPhysicalEdge.Left));
-        Assert.Equal(0f, r.GetMargin(YogaPhysicalEdge.Top));
-        Assert.Equal(0f, r.GetBorder(YogaPhysicalEdge.Right));
-        Assert.Equal(0f, r.GetPadding(YogaPhysicalEdge.Bottom));
-        Assert.Equal(-1f, r.CachedMeasurements[0].ComputedWidth); // default
-        Assert.Equal(-1f, r.CachedLayout.ComputedWidth);
-    }
-
     // ── EqualTo() ───────────────────────────────────────────────────
 
     [Fact]

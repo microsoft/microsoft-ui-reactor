@@ -378,6 +378,9 @@ internal static class SelfTestFixtureRegistry
         "ComponentHook_UseBreakpoint",
         "ComponentHook_MultipleComponents",
         "ComponentMemo_SkipRefreshesLiveDelegate",
+        "StructuralSkip_LifecycleParity",
+        "StructuralSkip_ThemeRangeParity",
+        "StructuralSkip_HotReloadWrapperReRender",
         "HotReload_ChildHookOrderRecovery",
         "HotReload_ComponentMigratesState",
         // DSL and extension tests
@@ -883,6 +886,18 @@ internal static class SelfTestFixtureRegistry
         "Commanding_BoundSplitButtonCommandChangeUpdatesMetadata",
         "Commanding_BoundToggleSplitButtonCommandChangeUpdatesMetadata",
         "Commanding_BoundButtonCommandClearedWhenRemoved",
+
+        // Issue #637 — bare record-init / `with` Command binding equivalence
+        "Commanding_BareInitButtonCommandInvokesExecute",
+        "Commanding_BareInitToggleButtonCommandFiresOnToggle",
+        "Commanding_BareInitToggleSplitButtonCommandFiresOnToggle",
+        "Commanding_WithCommandButtonInvokesExecute",
+        "Commanding_BareInitButtonDisabledCommandDisablesControl",
+        "Commanding_BareInitButtonDisabledFocusableCoercionPreserved",
+        "Commanding_BareInitHyperlinkRepeatSplitInvokeExecute",
+        "Commanding_BareInitAllElementsApplyDisabledFromCommand",
+        "Commanding_BareInitNoneToCommandDispatchesOnClickAfterUpdate",
+        "Commanding_IsDisabledFocusableReappliesOnIsolatedFlip",
 
         // Drag-and-drop — spec 027 Tier 6 (Phase 6a)
         "DragDrop_OnDragStartAutoSetsCanDrag",
@@ -1443,6 +1458,7 @@ internal static class SelfTestFixtureRegistry
         "OptionalTriStateCheckBox",
         "OptionalSetterCollision",
         "InitialOnly",
+        "BrushHelperParse",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -1801,6 +1817,9 @@ internal static class SelfTestFixtureRegistry
         "ComponentHook_UseBreakpoint" => new ComponentHookFixtures.UseBreakpointHook(harness),
         "ComponentHook_MultipleComponents" => new ComponentHookFixtures.MultipleComponents(harness),
         "ComponentMemo_SkipRefreshesLiveDelegate" => new CallbacksMemoSkipFixtures.SkipRefreshesLiveDelegate(harness),
+        "StructuralSkip_LifecycleParity" => new StructuralSkipFixtures.LifecycleParity(harness),
+        "StructuralSkip_ThemeRangeParity" => new StructuralSkipFixtures.ThemeRangeParity(harness),
+        "StructuralSkip_HotReloadWrapperReRender" => new StructuralSkipFixtures.HotReloadWrapperReRender(harness),
         "HotReload_ChildHookOrderRecovery" => new HotReloadRecoveryFixtures.ChildRecoversAndSiblingStateSurvives(harness),
         "HotReload_ComponentMigratesState" => new HotReloadComponentMigrationFixtures.MigratesPreservingState(harness),
         // DSL and extension tests
@@ -2313,6 +2332,18 @@ internal static class SelfTestFixtureRegistry
         "Commanding_BoundSplitButtonCommandChangeUpdatesMetadata" => new CommandingCoverageFixtures.BoundSplitButtonCommandChangeUpdatesMetadata(harness),
         "Commanding_BoundToggleSplitButtonCommandChangeUpdatesMetadata" => new CommandingCoverageFixtures.BoundToggleSplitButtonCommandChangeUpdatesMetadata(harness),
         "Commanding_BoundButtonCommandClearedWhenRemoved" => new CommandingCoverageFixtures.BoundButtonCommandClearedWhenRemoved(harness),
+
+        // Issue #637 — bare record-init / `with` Command binding equivalence
+        "Commanding_BareInitButtonCommandInvokesExecute" => new CommandingCoverageFixtures.BareInitButtonCommandInvokesExecute(harness),
+        "Commanding_BareInitToggleButtonCommandFiresOnToggle" => new CommandingCoverageFixtures.BareInitToggleButtonCommandFiresOnToggle(harness),
+        "Commanding_BareInitToggleSplitButtonCommandFiresOnToggle" => new CommandingCoverageFixtures.BareInitToggleSplitButtonCommandFiresOnToggle(harness),
+        "Commanding_WithCommandButtonInvokesExecute" => new CommandingCoverageFixtures.WithCommandButtonInvokesExecute(harness),
+        "Commanding_BareInitButtonDisabledCommandDisablesControl" => new CommandingCoverageFixtures.BareInitButtonDisabledCommandDisablesControl(harness),
+        "Commanding_BareInitButtonDisabledFocusableCoercionPreserved" => new CommandingCoverageFixtures.BareInitButtonDisabledFocusableCoercionPreserved(harness),
+        "Commanding_BareInitHyperlinkRepeatSplitInvokeExecute" => new CommandingCoverageFixtures.BareInitHyperlinkRepeatSplitInvokeExecute(harness),
+        "Commanding_BareInitAllElementsApplyDisabledFromCommand" => new CommandingCoverageFixtures.BareInitAllElementsApplyDisabledFromCommand(harness),
+        "Commanding_BareInitNoneToCommandDispatchesOnClickAfterUpdate" => new CommandingCoverageFixtures.BareInitNoneToCommandDispatchesOnClickAfterUpdate(harness),
+        "Commanding_IsDisabledFocusableReappliesOnIsolatedFlip" => new CommandingCoverageFixtures.IsDisabledFocusableReappliesOnIsolatedFlip(harness),
 
         // Drag-and-drop — spec 027 Tier 6 (Phase 6a)
         "DragDrop_OnDragStartAutoSetsCanDrag" => new DragDropFixtures.OnDragStartAutoSetsCanDrag(harness),
@@ -2837,6 +2868,7 @@ internal static class SelfTestFixtureRegistry
         "OptionalTriStateCheckBox" => new OptionalTriStateCheckBoxFixture.Execution(harness),
         "OptionalSetterCollision" => new OptionalSetterCollisionFixture.Execution(harness),
         "InitialOnly" => new InitialOnlyFixture.Execution(harness),
+        "BrushHelperParse" => new BrushHelperParseFixture.Execution(harness),
 
         _ => null,
     };

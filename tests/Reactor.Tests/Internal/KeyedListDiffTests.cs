@@ -365,6 +365,36 @@ public class KeyedListDiffTests
     }
 
     [Fact]
+    public void Apply_Unchanged_Duplicate_List_Re_Bails_Instead_Of_NoOp_FastPath()
+    {
+        // Regression for the #657 review (#1/#4): the no-op fast path runs ABOVE
+        // the duplicate scan, so it is gated on `ByKey.Count == oldCount`. A list
+        // that is UNCHANGED yet already holds duplicate keys — the state a prior
+        // duplicate bailout leaves behind, since ReactorListState.Reset preserves
+        // the dups in Source/LastKeys but ByKey collapses to first occurrences —
+        // must NOT short-circuit to Empty. It has to re-take the duplicate
+        // bailout so the keyed diff never runs in an invalid duplicate state.
+        var s = Seed("a", "b", "c");
+
+        // 1) First diff with a duplicate → bailout. State now carries the dup:
+        //    LastKeys = [a,b,c,a] (count 4), ByKey = {a,b,c} (count 3).
+        var first = KeyedListDiff.Apply(s, Items("a", "b", "c", "a"), Key);
+        Assert.True(first.Bailout);
+        Assert.Equal(4, s.LastKeys.Count);
+        Assert.Equal(3, s.ByKey.Count); // duplicate collapsed in ByKey
+
+        // 2) Re-apply the IDENTICAL duplicate list. oldCount(4) == newCount(4)
+        //    and LastKeys matches, so WITHOUT the ByKey.Count guard this would
+        //    hit the no-op fast path and return Empty (Bailout == false), leaving
+        //    the duplicate state unhandled. The guard forces the bailout again.
+        var second = KeyedListDiff.Apply(s, Items("a", "b", "c", "a"), Key);
+        Assert.True(second.Bailout,
+            "an unchanged duplicate list must re-take the duplicate bailout, not " +
+            "the no-op fast path (the ByKey.Count == oldCount guard enforces this)");
+        Assert.Equal(4, s.Source.Count);
+    }
+
+    [Fact]
     public void Apply_Null_Key_Triggers_Bailout()
     {
         var s = Seed("a", "b");

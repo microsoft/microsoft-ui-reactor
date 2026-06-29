@@ -408,6 +408,70 @@ Assert-True ($src -match 'if \(\$mm -and \$pm\) \{ \$mainKeyedRuns \+= \$mm; \$p
 Assert-True ($src -match 'elseif \(\$mm -or \$pm\) \{ Write-Log "  keyed pair #\$i incomplete') '[keyed] a one-sided keyed run drops both halves (paired CI stays aligned)'
 
 # ===========================================================================
+#  Flex leg — static wiring contract (param + registry + leg + comment)
+# ===========================================================================
+# Mirrors the keyed-list leg contract above: a fourth interleaved A/B leg
+# (StressPerf.Flex) whose opt-out switch defaults on, registry resolves the right
+# exe/csproj, interleave runs both sides with drop-both pairing, and aggregates reach
+# the renderer. Its Invoke-OneRun threading inherits $Percent (no -RunPercent), as the
+# keyed leg does.
+$fp = $ast.ParamBlock.Parameters | Where-Object { $_.Name.VariablePath.UserPath -eq 'IncludeFlex' } | Select-Object -First 1
+Assert-True ($null -ne $fp) '[flex] -IncludeFlex parameter exists'
+Assert-True ($fp -and $fp.DefaultValue -and $fp.DefaultValue.Extent.Text -eq '$true') '[flex] -IncludeFlex defaults to $true (on unless opted out)'
+Assert-True ($src -match "Flex\s*=\s*@\{\s*AppName\s*=\s*'StressPerf\.Flex';\s*ProjectRel\s*=\s*'tests\\stress_perf\\StressPerf\.Flex") '[flex] AppRegistry maps Flex -> StressPerf.Flex exe + csproj'
+Assert-True ($src -match "-Tag 'main-flex'") '[flex] leg interleaves the main side (main-flex)'
+Assert-True ($src -match "-Tag 'pr-flex'")   '[flex] leg interleaves the PR side (pr-flex)'
+Assert-True ($src -match '-MainFlex \$mainFlex') '[flex] Format-PerfComment receives the main flex aggregate'
+Assert-True ($src -match '-PrFlex \$prFlex')     '[flex] Format-PerfComment receives the PR flex aggregate'
+
+# Opt-out + best-effort build fallback: the flex build is guarded by the switch, and a
+# build failure flips the switch off (omit the table, never throw) so the leg is skipped.
+Assert-True ($src -match 'if \(\$IncludeFlex -and -not \$SkipBuild\)') '[flex] build is guarded by -IncludeFlex (and -SkipBuild)'
+Assert-True ($src -match '(?s)flex workload build failed.*?\$IncludeFlex = \$false') '[flex] a build failure flips -IncludeFlex off (best-effort: omit table, never throw)'
+Assert-True ($src -match '\$mainFlexRuns = @\(\); \$prFlexRuns = @\(\)\s*\r?\n\s*if \(\$IncludeFlex\)') '[flex] the run leg is skipped unless -IncludeFlex is on'
+
+# Paired drop-both alignment: a complete flex pair appends BOTH sides; a one-sided
+# failure drops BOTH halves so the paired CI's main[i]/pr[i] zip stays index-aligned.
+Assert-True ($src -match 'if \(\$mm -and \$pm\) \{ \$mainFlexRuns \+= \$mm; \$prFlexRuns \+= \$pm \}') '[flex] a complete pair appends both main + pr samples'
+Assert-True ($src -match 'elseif \(\$mm -or \$pm\) \{ Write-Log "  flex pair #\$i incomplete') '[flex] a one-sided flex run drops both halves (paired CI stays aligned)'
+
+# result.json carries the flex aggregates so downstream tooling can read the leg.
+Assert-True ($src -match 'mainFlex = \$mainFlex')   '[flex] result.json object includes the main flex aggregate'
+Assert-True ($src -match 'prFlex = \$prFlex')       '[flex] result.json object includes the PR flex aggregate'
+
+# ===========================================================================
+#  DataGrid leg — static wiring contract (param + registry + leg + comment)
+# ===========================================================================
+# Mirrors the flex leg contract above: a fifth interleaved A/B leg
+# (StressPerf.DataGrid) whose opt-out switch defaults on, registry resolves the right
+# exe/csproj, interleave runs both sides with drop-both pairing, and aggregates reach
+# the renderer. Its Invoke-OneRun threading inherits $Percent (no -RunPercent), as the
+# flex leg does.
+$dp = $ast.ParamBlock.Parameters | Where-Object { $_.Name.VariablePath.UserPath -eq 'IncludeDataGrid' } | Select-Object -First 1
+Assert-True ($null -ne $dp) '[datagrid] -IncludeDataGrid parameter exists'
+Assert-True ($dp -and $dp.DefaultValue -and $dp.DefaultValue.Extent.Text -eq '$true') '[datagrid] -IncludeDataGrid defaults to $true (on unless opted out)'
+Assert-True ($src -match "DataGrid\s*=\s*@\{\s*AppName\s*=\s*'StressPerf\.DataGrid';\s*ProjectRel\s*=\s*'tests\\stress_perf\\StressPerf\.DataGrid") '[datagrid] AppRegistry maps DataGrid -> StressPerf.DataGrid exe + csproj'
+Assert-True ($src -match "-Tag 'main-datagrid'") '[datagrid] leg interleaves the main side (main-datagrid)'
+Assert-True ($src -match "-Tag 'pr-datagrid'")   '[datagrid] leg interleaves the PR side (pr-datagrid)'
+Assert-True ($src -match '-MainDataGrid \$mainDataGrid') '[datagrid] Format-PerfComment receives the main datagrid aggregate'
+Assert-True ($src -match '-PrDataGrid \$prDataGrid')     '[datagrid] Format-PerfComment receives the PR datagrid aggregate'
+
+# Opt-out + best-effort build fallback: the datagrid build is guarded by the switch, and
+# a build failure flips the switch off (omit the table, never throw) so the leg is skipped.
+Assert-True ($src -match 'if \(\$IncludeDataGrid -and -not \$SkipBuild\)') '[datagrid] build is guarded by -IncludeDataGrid (and -SkipBuild)'
+Assert-True ($src -match '(?s)datagrid workload build failed.*?\$IncludeDataGrid = \$false') '[datagrid] a build failure flips -IncludeDataGrid off (best-effort: omit table, never throw)'
+Assert-True ($src -match '\$mainDataGridRuns = @\(\); \$prDataGridRuns = @\(\)\s*\r?\n\s*if \(\$IncludeDataGrid\)') '[datagrid] the run leg is skipped unless -IncludeDataGrid is on'
+
+# Paired drop-both alignment: a complete datagrid pair appends BOTH sides; a one-sided
+# failure drops BOTH halves so the paired CI's main[i]/pr[i] zip stays index-aligned.
+Assert-True ($src -match 'if \(\$mm -and \$pm\) \{ \$mainDataGridRuns \+= \$mm; \$prDataGridRuns \+= \$pm \}') '[datagrid] a complete pair appends both main + pr samples'
+Assert-True ($src -match 'elseif \(\$mm -or \$pm\) \{ Write-Log "  datagrid pair #\$i incomplete') '[datagrid] a one-sided datagrid run drops both halves (paired CI stays aligned)'
+
+# result.json carries the datagrid aggregates so downstream tooling can read the leg.
+Assert-True ($src -match 'mainDataGrid = \$mainDataGrid') '[datagrid] result.json object includes the main datagrid aggregate'
+Assert-True ($src -match 'prDataGrid = \$prDataGrid')     '[datagrid] result.json object includes the PR datagrid aggregate'
+
+# ===========================================================================
 #  Micro rep-interleave — ConvertTo-MicroRepLines + Invoke-MicroInterleaved
 # ===========================================================================
 # Per-rep interleaving runs a FRESH process per round per side (so the
