@@ -6,8 +6,12 @@ using System.Text;
 namespace Microsoft.UI.Reactor.Markdown;
 
 /// <summary>
-/// Renders Markdown to HTML using the md4c parser.
-/// This is primarily used for testing against the CommonMark spec.
+/// Renders Markdown to HTML using the md4c parser. Used for validating the
+/// Markdown parser against the CommonMark spec and the fuzz corpus — the
+/// shipped <c>Markdown()</c> control renders natively and never calls this.
+/// Lives in the test-support library <c>Reactor.Markdown.TestRenderer</c>
+/// (issue #433) so it stays off the core Reactor assembly's public API; the
+/// namespace is unchanged so consumers only add a ProjectReference.
 /// </summary>
 public static class MarkdownHtml
 {

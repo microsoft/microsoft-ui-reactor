@@ -61,6 +61,10 @@
     <InternalsVisibleTo Include="Reactor.Tests" />
     <InternalsVisibleTo Include="Reactor.AppTests.Host" />
     <InternalsVisibleTo Include="Reactor.Fuzz" />
+    <!-- Issue #433: the md4c HTML renderer (MarkdownHtml) was moved out of this
+         assembly into the test-support library tests/Reactor.Markdown.TestRenderer.
+         It still needs the parser internals (Md4cParser, Md4cEntity). -->
+    <InternalsVisibleTo Include="Reactor.Markdown.TestRenderer" />
     <InternalsVisibleTo Include="Microsoft.UI.Reactor.Devtools" />
     <!-- Spec 047 — PerfBench.ControlModel benches the V1 control model
          against the Direct/Bound baselines; it references internal descriptor

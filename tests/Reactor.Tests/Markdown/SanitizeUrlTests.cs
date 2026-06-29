@@ -21,10 +21,10 @@ public class SanitizeUrlTests
         Justification = "Same as IL2026 — Assembly.GetType return doesn't propagate DAM annotation.")]
     [return: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.NonPublicMethods)]
     private static Type LoadMarkdownHtmlType() =>
-        typeof(Microsoft.UI.Reactor.Factories).Assembly
+        typeof(Microsoft.UI.Reactor.Markdown.MarkdownHtml).Assembly
             .GetType("Microsoft.UI.Reactor.Markdown.MarkdownHtml")
         ?? throw new InvalidOperationException(
-            "MarkdownHtml type not found in Reactor assembly.");
+            "MarkdownHtml type not found in Reactor.Markdown.TestRenderer assembly.");
 
     private static string Sanitize(string url, bool unsafeAllowed = false)
     {

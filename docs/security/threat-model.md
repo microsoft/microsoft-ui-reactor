@@ -213,18 +213,18 @@ Same shape as Boundary A: loopback-only HTTP (`http://127.0.0.1:<port>/mcp`) wit
 
 ### 7.4 Markdown rendering
 
-**File:** `src/Reactor/Markdown/MarkdownHtml.cs` (renderer) + `src/Reactor/Markdown/Md4cParser.cs` (parser).
+**File:** `src/Reactor/Markdown/MarkdownBuilder.cs` (native renderer) + `src/Reactor/Markdown/Md4cParser.cs` (parser). The CommonMark/spec HTML renderer (`MarkdownHtml`) is test-support only and lives in `tests/Reactor.Markdown.TestRenderer/MarkdownHtml.cs`; it is not part of the shipped framework surface.
 **Activation:** consuming-app developer calls `Markdown(text)` element with attacker-influenced content.
 
 **Mitigations:**
 
-- **Default safe mode:** raw HTML is stripped (`NoHtml` parser flag added automatically unless caller opts in via `HtmlFlags.AllowRawHtml`). `MarkdownHtml.cs:74`.
-- **URL scheme allow-list** on `href` / `src`: only `http`, `https`, `mailto` survive; everything else (`javascript:`, `data:`, `vbscript:`, `file:`, `about:` other than `blank`) rewritten to `about:blank`. `MarkdownHtml.cs:35`. Regression test: `tests/Reactor.Tests/Markdown/SanitizeUrlTests.cs`.
+- **No HTML sink in the native renderer:** the `Markdown(text)` element builds a WinUI inline tree, not an HTML document, so embedded markup/script can never execute. Raw HTML blocks render as inert plain text (`MarkdownBuilder.cs:603`) and inline HTML is passed through verbatim as text (`MarkdownBuilder.cs:888`). (The test-only `MarkdownHtml` renderer additionally defaults to the `NoHtml` parser flag unless the caller opts in via `HtmlFlags.AllowRawHtml`.)
+- **URL scheme allow-list** on link `href` and image `src`: `MarkdownBuilder.IsSafeUri` admits only absolute `http`, `https`, `mailto` URIs; everything else (`javascript:`, `data:`, `vbscript:`, `file:`, and relative schemes such as `slack:` / `vscode:`) is rejected and the link/image is dropped to plain text. `MarkdownBuilder.cs:779` (TASK-047), applied at lines 736 / 746. Regression test: `tests/Reactor.Tests/MarkdownBuilderTests.cs`. The test-only `MarkdownHtml` renderer enforces the same allow-list for its HTML-string output (rewriting unsafe URLs to `about:blank`), covered by `tests/Reactor.Tests/Markdown/SanitizeUrlTests.cs`.
 - **Managed-memory parser.** Pure-C# port of md4c; the unmanaged-memory exploitation classes that affect the upstream C parser do not apply.
 
 **Residual risk:**
 
-- A logic defect in the URL sanitizer (e.g., scheme-confusion via tab/newline) could let through a dangerous URL. Mitigation: `SanitizeUrlTests` covers the OWASP XSS filter-evasion cheat sheet entries that apply to URL parsing.
+- A logic defect in the URL sanitizer (e.g., scheme-confusion via tab/newline) could let through a dangerous URL. Mitigation: `MarkdownBuilderTests` covers the native `IsSafeUri` allow-list (javascript/relative/data scheme blocking) and `SanitizeUrlTests` covers the OWASP XSS filter-evasion cheat-sheet entries that apply to URL parsing.
 - A logic defect in `Md4cParser` could cause infinite loop / OOM on adversarial input. Mitigation today: ~2,200 xUnit tests including 590 Yoga-style fixture cases and the upstream md4c spec tests. Mitigation in flight: a SharpFuzz harness (`tests/Reactor.Fuzz/`) covers `MarkdownHtml.Render` on every PR via the `fuzz-smoke` CI job and is being onboarded for continuous fuzzing.
 - Markdown is rendered into the consuming-app's tree; the consuming app decides whether to display attacker-influenced markdown at all. **The threat is the consuming app's choice to render untrusted markdown, not the framework's. Reactor's job is to make the default rendering safe.**
 
@@ -303,7 +303,8 @@ Microsoft's internal Security Assessment policy lists six trust-boundary trigger
 - [`ThirdPartyNoticeText.txt`](../../ThirdPartyNoticeText.txt) — OSS attributions for Yoga / md4c / D3 and NuGet deps
 - [`src/Reactor/Hosting/PreviewCaptureServer.cs`](../../src/Reactor/Hosting/PreviewCaptureServer.cs) — dev preview server
 - [`src/Reactor/Hosting/Devtools/DevtoolsMcpServer.cs`](../../src/Reactor/Hosting/Devtools/DevtoolsMcpServer.cs) — devtools MCP server
-- [`src/Reactor/Markdown/MarkdownHtml.cs`](../../src/Reactor/Markdown/MarkdownHtml.cs) — Markdown URL sanitizer + safe-mode renderer
+- [`src/Reactor/Markdown/MarkdownBuilder.cs`](../../src/Reactor/Markdown/MarkdownBuilder.cs) — native `Markdown()` renderer + URL allow-list (`IsSafeUri`)
+- [`tests/Reactor.Markdown.TestRenderer/MarkdownHtml.cs`](../../tests/Reactor.Markdown.TestRenderer/MarkdownHtml.cs) — test-only CommonMark/spec HTML renderer + URL sanitizer
 - [`tools/install-skill-kit.ps1`](../../tools/install-skill-kit.ps1) — installer with guard-rails
 - [`tests/Reactor.Tests/Markdown/SanitizeUrlTests.cs`](../../tests/Reactor.Tests/Markdown/SanitizeUrlTests.cs) — URL-sanitizer regression tests
 - [`tests/Reactor.Fuzz/`](../../tests/Reactor.Fuzz/) — SharpFuzz harnesses for `MarkdownHtml.Render` and `PathDataParser.ParseTokens`

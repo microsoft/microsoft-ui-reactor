@@ -64,6 +64,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Reactor\Reactor.csproj" />
+    <!-- Issue #433: md4c HTML renderer used by MarkdownHtmlFixtures. -->
+    <ProjectReference Include="..\Reactor.Markdown.TestRenderer\Reactor.Markdown.TestRenderer.csproj" />
     <ProjectReference Include="..\..\src\Reactor.Advanced\Reactor.Advanced.csproj" />
     <ProjectReference Include="..\..\src\Reactor.Devtools\Reactor.Devtools.csproj" />
     <!-- Standalone library used by Issue142_ThirdPartyControlPrivateDp_Renders to

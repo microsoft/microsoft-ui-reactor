@@ -6,8 +6,9 @@ namespace Microsoft.UI.Reactor.Tests;
 /// <summary>
 /// Tests for Md4cUnicode — character classification and case-folding functions
 /// used by the Markdown parser. These are pure functions with no dependencies.
-/// Exercising all classification categories also covers the static lookup tables
-/// (PunctMap, WhitespaceMap, FoldMaps) that contribute ~475 lines.
+/// Whitespace and punctuation/symbol classification defer to the BCL's Unicode
+/// categories (System.Text.Rune); case folding still uses the retained FoldMap
+/// lookup tables. Exercising every category also covers those code paths.
 /// </summary>
 public class Md4cUnicodeTests
 {
@@ -118,7 +119,7 @@ public class Md4cUnicodeTests
         Assert.Equal(expected, Md4cUnicode.IsPunct(ch));
 
     // ════════════════════════════════════════════════════════════════
-    //  Unicode whitespace — exercises WhitespaceMap table
+    //  Unicode whitespace — exercises the Zs (SpaceSeparator) category path
     // ════════════════════════════════════════════════════════════════
 
     [Theory]
@@ -146,7 +147,7 @@ public class Md4cUnicodeTests
         Assert.False(Md4cUnicode.IsUnicodeWhitespace(0x61)); // 'a'
 
     // ════════════════════════════════════════════════════════════════
-    //  Unicode punctuation — exercises PunctMap table (298 lines!)
+    //  Unicode punctuation — exercises the P/S general-category path
     // ════════════════════════════════════════════════════════════════
 
     [Theory]
@@ -277,9 +278,9 @@ public class Md4cUnicodeTests
     }
 
     // ════════════════════════════════════════════════════════════════
-    //  Extended PunctMap coverage — exercise many table regions
-    //  Binary search visits different pivot entries depending on
-    //  the target codepoint. Spread tests across the full table.
+    //  Extended punctuation coverage — exercise many P/S category codepoints
+    //  spread across Unicode blocks (the classifier visits the BCL Unicode
+    //  data; spread tests across the full range).
     // ════════════════════════════════════════════════════════════════
 
     [Theory]

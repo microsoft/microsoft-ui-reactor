@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Issue #433 — test-support library hosting the md4c HTML renderer
+       (MarkdownHtml). The renderer exists only to validate the Markdown parser
+       against the CommonMark spec / fuzz corpus; the shipped Markdown() control
+       has its own native rendering path and never calls it. Moving it out of
+       src/Reactor keeps it (and its HtmlFlags enum) off the core assembly's
+       public API surface while leaving the parser internals it depends on
+       (Md4cParser, Md4cEntity) reachable via InternalsVisibleTo. The namespace
+       stays Microsoft.UI.Reactor.Markdown so consumers only add a
+       ProjectReference — no `using` changes. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <Platforms>x64;ARM64</Platforms>
+    <AssemblyName>Reactor.Markdown.TestRenderer</AssemblyName>
+    <RootNamespace>Microsoft.UI.Reactor.Markdown</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWinUI>true</UseWinUI>
+    <!-- Class library: consume the installed Windows App Runtime rather than
+         bundling a self-contained copy (see root Directory.Build.props). -->
+    <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Reactor\Reactor.csproj" />
+  </ItemGroup>
+
+</Project>

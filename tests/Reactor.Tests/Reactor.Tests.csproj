@@ -39,6 +39,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Reactor\Reactor.csproj" />
+    <!-- Issue #433: md4c HTML renderer used by the Markdown/CommonMark tests. -->
+    <ProjectReference Include="..\Reactor.Markdown.TestRenderer\Reactor.Markdown.TestRenderer.csproj" />
     <!-- Authoring attributes; referenced directly (Reactor's reference is
          PrivateAssets="all", so it does not flow transitively). Also puts the
          DLL on this project's output so the in-memory generator tests resolve

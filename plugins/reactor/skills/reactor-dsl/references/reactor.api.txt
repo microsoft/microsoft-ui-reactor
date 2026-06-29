@@ -1024,7 +1024,6 @@ ListFormatType { Conjunction, Disjunction }
 NumberStyle { Default, Currency, Percent }
 MarkdownAlign { Default, Left, Center, Right }
 MarkdownBlockType { Doc, Quote, Ul, Ol, Li, Hr, H, Code, Html, P, Table, Thead, Tbody, Tr, Th, Td }
-HtmlFlags { None, Debug, VerbatimEntities, SkipUtf8Bom, Xhtml, AllowUnsafeUrls, AllowRawHtml }
 MarkdownParserFlags { None, DialectCommonMark, CollapseWhitespace, PermissiveAtxHeaders, PermissiveUrlAutolinks, PermissiveEmailAutolinks, NoIndentedCodeBlocks, NoHtmlBlocks, NoHtmlSpans, NoHtml, Tables, Strikethrough, PermissiveWwwAutolinks, PermissiveAutolinks, TaskLists, DialectGitHub, LatexMathSpans, WikiLinks, Underline, HardSoftBreaks }
 MarkdownSpanType { Em, Strong, A, Img, Code, Del, LatexMath, LatexMathDisplay, WikiLink, U }
 MarkdownTextType { Normal, NullChar, Br, SoftBr, Entity, Code, Html, LatexMath }

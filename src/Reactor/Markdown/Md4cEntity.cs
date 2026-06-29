@@ -3,7 +3,10 @@
 //
 // AI-HINT: Auto-generated lookup table — ~2100 HTML named entities mapping to Unicode codepoints.
 // Used by the inline parser to resolve &amp; sequences. Binary search by entity name.
-// Do not edit by hand; regenerate from the md4c source if the upstream changes.
+// Retained by design (issue #433 item 5): Markdown() needs entity decoding for native
+// text rendering and System.Net.WebUtility.HtmlDecode does not cover the full
+// HTML5/CommonMark named-entity set. Do not edit by hand; regenerate from the md4c
+// source if the upstream changes.
 
 using System;
 using System.Collections.Generic;
