@@ -96,6 +96,12 @@ public sealed partial class Reconciler
             // Re-resolve ThemeRef-based resource overrides on theme change
             if (newEl.ResourceOverrides is { ThemeRefs.Count: > 0 } && control is FrameworkElement resFeSE)
                 ApplyResourceOverrides(resFeSE, newEl.ResourceOverrides, newEl.ResourceOverrides);
+            // #721 — refresh the cached gesture/drag dispatch closures so a skipped
+            // element whose only change is a per-render gesture/drag closure dispatches
+            // the latest closure (not a stale capture) without re-arming the trampolines.
+            if ((HasGestureOrDragSlots(modifiers) || HasGestureOrDragSlots(oldModifiers))
+                && control is FrameworkElement gestFeSE)
+                RefreshGestureDragStateOnSkip(gestFeSE, oldModifiers, modifiers);
             return null; // null = keep existing control as-is
         }
 

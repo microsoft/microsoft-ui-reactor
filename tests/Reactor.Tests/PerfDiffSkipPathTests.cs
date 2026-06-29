@@ -206,6 +206,26 @@ public class PerfDiffSkipPathTests
     }
 
     [Fact]
+    public void HasGestureOrDragSlots_True_For_Each_Slot_False_Otherwise()
+    {
+        // #721 — the skip-path gesture/drag dispatch-state refresh is gated on this
+        // cheap predicate so a leaf with no gesture/drag slot (every grid cell) never
+        // probes the gesture/drag CWTs or fetches its control. Lock that it sees every
+        // slot and stays false for the common no-gesture leaf + null modifiers.
+        Assert.False(Reconciler.HasGestureOrDragSlots(null));
+        Assert.False(Reconciler.HasGestureOrDragSlots(new ElementModifiers()));
+        // A modifier set carrying only routed handlers / layout is NOT a gesture/drag carrier.
+        Assert.False(Reconciler.HasGestureOrDragSlots(new ElementModifiers { OnTapped = (_, _) => { } }));
+
+        Assert.True(Reconciler.HasGestureOrDragSlots(new ElementModifiers { Pan = new(_ => { }) }));
+        Assert.True(Reconciler.HasGestureOrDragSlots(new ElementModifiers { Pinch = new(_ => { }) }));
+        Assert.True(Reconciler.HasGestureOrDragSlots(new ElementModifiers { Rotate = new(_ => { }) }));
+        Assert.True(Reconciler.HasGestureOrDragSlots(new ElementModifiers { LongPress = new(_ => { }) }));
+        Assert.True(Reconciler.HasGestureOrDragSlots(new ElementModifiers { DragSource = new(() => default!) }));
+        Assert.True(Reconciler.HasGestureOrDragSlots(new ElementModifiers { DropTarget = new() }));
+    }
+
+    [Fact]
     public void ShallowEquals_GridCell_Stable_Primary_Plus_Changing_Secondary_Declines_Skip()
     {
         // Combined FLAGSHIP-1 regression at the ShallowEquals/element level, mirroring

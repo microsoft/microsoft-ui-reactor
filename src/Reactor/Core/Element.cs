@@ -1247,8 +1247,12 @@ public abstract record Element
     /// skipped, re-arming an in-flight gesture mid-interaction (e.g. re-registering
     /// a long-press handler between its Began and Ended phases, so the released
     /// callback fires against a refreshed closure and double-dispatches). Excluding
-    /// them preserves observable behavior exactly; grid cells use only routed
-    /// handlers, so the skip-path perf lever is unaffected.
+    /// them keeps the skip-path perf lever intact (grid cells use only routed
+    /// handlers). The latent staleness this creates — a skipped element keeping a
+    /// previous-render gesture/drag closure — is closed on the skip path itself by
+    /// <see cref="Reconciler.RefreshGestureDragStateOnSkip"/> (#721), which refreshes
+    /// the cached dispatch closures WITHOUT re-subscribing the trampolines, so the
+    /// latest closure fires while no in-flight gesture is re-armed.
     /// </summary>
     private static bool ModifierCallbacksEqual(ElementModifiers a, ElementModifiers b)
     {

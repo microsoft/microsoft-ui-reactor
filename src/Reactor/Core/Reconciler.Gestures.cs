@@ -68,6 +68,72 @@ public sealed partial class Reconciler
         return state;
     }
 
+    // Test-only accessor (InternalsVisibleTo Reactor.Tests / Reactor.AppTests.Host).
+    // Lets the #721 skip-path regression fixture read the cached gesture dispatch
+    // closures so it can invoke the latest OnChanged after a skipped render.
+    internal static GestureState? DebugTryGetGestureState(FrameworkElement fe)
+        => _gestureStates.TryGetValue(fe, out var state) ? state : null;
+
+    /// <summary>
+    /// #721 — cheap predicate: does this modifier set carry any gesture
+    /// (Pan/Pinch/Rotate/LongPress) or drag-drop (DragSource/DropTarget) slot? Used to
+    /// gate the skip-path dispatch-state refresh so a leaf with no gesture/drag slot
+    /// (every grid cell) never probes the gesture/drag CWTs or fetches its control.
+    /// </summary>
+    internal static bool HasGestureOrDragSlots(ElementModifiers? m)
+        => m is not null
+            && (m.Pan is not null || m.Pinch is not null || m.Rotate is not null
+                || m.LongPress is not null || m.DragSource is not null || m.DropTarget is not null);
+
+    /// <summary>
+    /// #721 — refresh the cached gesture/drag dispatch closures on a skip fast-path
+    /// WITHOUT re-subscribing the manipulation/drag trampolines.
+    ///
+    /// The skip predicate (<c>ModifierCallbacksEqual</c>) deliberately excludes the
+    /// gesture and drag-drop slots, so an element whose only change is a per-render
+    /// gesture/drag closure is skip-eligible — yet those handlers dispatch through the
+    /// mutable <see cref="GestureState"/>/<see cref="DragDropState"/> config fields the
+    /// stable trampolines read at dispatch time, and those fields are otherwise
+    /// refreshed only on the non-skip Update path (<c>ApplyGestureHandlers</c>/
+    /// <c>ApplyDragDropHandlers</c>). Without this, a skipped render strands the
+    /// previous closure and dispatch fires stale captured state.
+    ///
+    /// Overwriting just the config fields swaps the dispatch target to the latest
+    /// closure — mirroring how the Tag / <c>ModifierEventHandlerState</c> refresh keeps
+    /// routed handlers current on skip — while leaving the trampolines and the in-flight
+    /// gesture cursors (<c>PanBeganDispatched</c>, the LongPress timer, …) untouched, so
+    /// an in-flight gesture is never re-armed mid-interaction (no Began/Ended
+    /// double-dispatch). Sourcing the fields from <paramref name="newM"/> also correctly
+    /// clears a slot that was removed across a skipped render (stale removed gesture no
+    /// longer dispatches).
+    ///
+    /// Using <c>ConditionalWeakTable.TryGetValue</c> (not GetOrCreate) avoids
+    /// allocating state for an element that was never wired — a mounted gesture/drag
+    /// element always has its state, and an unwired one has nothing to dispatch.
+    /// </summary>
+    internal static void RefreshGestureDragStateOnSkip(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers? newM)
+    {
+        bool gestureNow = newM is not null
+            && (newM.Pan is not null || newM.Pinch is not null || newM.Rotate is not null || newM.LongPress is not null);
+        bool gestureBefore = oldM is not null
+            && (oldM.Pan is not null || oldM.Pinch is not null || oldM.Rotate is not null || oldM.LongPress is not null);
+        if ((gestureNow || gestureBefore) && _gestureStates.TryGetValue(fe, out var gs))
+        {
+            gs.Pan = newM?.Pan;
+            gs.Pinch = newM?.Pinch;
+            gs.Rotate = newM?.Rotate;
+            gs.LongPress = newM?.LongPress;
+        }
+
+        bool dragNow = newM is not null && (newM.DragSource is not null || newM.DropTarget is not null);
+        bool dragBefore = oldM is not null && (oldM.DragSource is not null || oldM.DropTarget is not null);
+        if ((dragNow || dragBefore) && _dndStates.TryGetValue(fe, out var ds))
+        {
+            ds.Source = newM?.DragSource;
+            ds.Target = newM?.DropTarget;
+        }
+    }
+
     /// <summary>
     /// Computes the union of <see cref="ManipulationModes"/> flags required by the
     /// currently-attached gestures. Returns <see cref="ManipulationModes.None"/> when

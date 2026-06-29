@@ -133,6 +133,11 @@ internal static class ChildReconciler
             // or drive it negative. The producer publishes deduped, in-range indices,
             // so visited == the real changed count in steady state; this only hardens
             // the directly-supplied-hint path.
+            // #721 — no gesture/drag dispatch-state refresh is needed for the skipped
+            // (untouched) indices: they are reference-equal old↔new, so their gesture/
+            // drag closures are the SAME instances already cached — there is no stale
+            // capture to refresh. Only the changed indices (handled by UpdateCommonChild
+            // above, which refreshes on its own skip arm) can carry a new closure.
             reconciler.DebugElementsSkipped += common - visited;
             return;
         }
@@ -194,8 +199,18 @@ internal static class ChildReconciler
             // (e.g., Counter's `() => setCount(count + 1)` would keep capturing
             // the initial count). For callback-free elements we still avoid
             // the children.Get COM call.
-            if (newEl.HasCallbacks && children.Get(i) is FrameworkElement fe)
-                Reconciler.SetElementTag(fe, newEl);
+            // #721 — the gesture/drag slots are excluded from the skip predicate,
+            // so refresh their cached dispatch closures here too (same stale-closure
+            // hazard as Tag). Fetch the control once for either need.
+            if ((newEl.HasCallbacks
+                    || Reconciler.HasGestureOrDragSlots(newEl.Modifiers)
+                    || Reconciler.HasGestureOrDragSlots(oldEl.Modifiers))
+                && children.Get(i) is FrameworkElement fe)
+            {
+                if (newEl.HasCallbacks)
+                    Reconciler.SetElementTag(fe, newEl);
+                Reconciler.RefreshGestureDragStateOnSkip(fe, oldEl.Modifiers, newEl.Modifiers);
+            }
             return;
         }
 
@@ -265,8 +280,17 @@ internal static class ChildReconciler
                 reconciler.DebugElementsSkipped++;
                 // Refresh the Tag when the element carries callbacks so the
                 // event trampoline dispatches through the latest closure.
-                if (newEl.HasCallbacks && prefixLen < childCount && children.Get(prefixLen) is FrameworkElement fe)
-                    Reconciler.SetElementTag(fe, newEl);
+                // #721 — likewise refresh the cached gesture/drag dispatch closures
+                // (excluded from the skip predicate). Fetch the control once.
+                if ((newEl.HasCallbacks
+                        || Reconciler.HasGestureOrDragSlots(newEl.Modifiers)
+                        || Reconciler.HasGestureOrDragSlots(oldEl.Modifiers))
+                    && prefixLen < childCount && children.Get(prefixLen) is FrameworkElement fe)
+                {
+                    if (newEl.HasCallbacks)
+                        Reconciler.SetElementTag(fe, newEl);
+                    Reconciler.RefreshGestureDragStateOnSkip(fe, oldEl.Modifiers, newEl.Modifiers);
+                }
                 prefixLen++;
                 continue;
             }
@@ -303,8 +327,16 @@ internal static class ChildReconciler
                 && !reconciler.ForceRenderThroughWrapper(newEl))
             {
                 reconciler.DebugElementsSkipped++;
-                if (newEl.HasCallbacks && panelIdx >= 0 && panelIdx < childCount && children.Get(panelIdx) is FrameworkElement fe)
-                    Reconciler.SetElementTag(fe, newEl);
+                // #721 — refresh Tag + cached gesture/drag dispatch closures on skip.
+                if ((newEl.HasCallbacks
+                        || Reconciler.HasGestureOrDragSlots(newEl.Modifiers)
+                        || Reconciler.HasGestureOrDragSlots(oldEl.Modifiers))
+                    && panelIdx >= 0 && panelIdx < childCount && children.Get(panelIdx) is FrameworkElement fe)
+                {
+                    if (newEl.HasCallbacks)
+                        Reconciler.SetElementTag(fe, newEl);
+                    Reconciler.RefreshGestureDragStateOnSkip(fe, oldEl.Modifiers, newEl.Modifiers);
+                }
                 suffixLen++;
                 continue;
             }

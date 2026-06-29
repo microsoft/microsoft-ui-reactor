@@ -854,6 +854,11 @@ internal static class SelfTestFixtureRegistry
         "Gesture_OnRotateSetsRotateFlag",
         "Gesture_PanAndPinchCombine",
 
+        // #721 — skip fast-path refreshes cached gesture/drag dispatch closures
+        "SkipPath_RefreshesLivePanClosure",
+        "SkipPath_RefreshesLivePanClosure_Keyed",
+        "SkipPath_RefreshesLiveDropTarget",
+
         // LongPress + focus — spec 027 Tier 3 Part 2 / Tier 5 (Phase 4)
         "Gesture_OnLongPressAutoEnablesHolding",
         "Gesture_OnLongPressMouseEmulationOptIn",
@@ -2299,6 +2304,11 @@ internal static class SelfTestFixtureRegistry
         "Gesture_OnPinchSetsScaleFlag" => new GestureFixtures.OnPinchSetsScaleFlag(harness),
         "Gesture_OnRotateSetsRotateFlag" => new GestureFixtures.OnRotateSetsRotateFlag(harness),
         "Gesture_PanAndPinchCombine" => new GestureFixtures.PanAndPinchCombine(harness),
+
+        // #721 — skip fast-path refreshes cached gesture/drag dispatch closures
+        "SkipPath_RefreshesLivePanClosure" => new SkipPathGestureDragFixtures.SkipRefreshesLivePanClosure(harness),
+        "SkipPath_RefreshesLivePanClosure_Keyed" => new SkipPathGestureDragFixtures.SkipRefreshesLivePanClosure_Keyed(harness),
+        "SkipPath_RefreshesLiveDropTarget" => new SkipPathGestureDragFixtures.SkipRefreshesLiveDropTarget(harness),
 
         // LongPress + focus — spec 027 Tier 3 Part 2 / Tier 5 (Phase 4)
         "Gesture_OnLongPressAutoEnablesHolding" => new GestureFixtures.OnLongPressAutoEnablesHolding(harness),

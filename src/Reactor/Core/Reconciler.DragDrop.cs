@@ -43,6 +43,12 @@ public sealed partial class Reconciler
         return state;
     }
 
+    // Test-only accessor (InternalsVisibleTo Reactor.Tests / Reactor.AppTests.Host).
+    // Lets the #721 skip-path regression fixture read the cached drag dispatch
+    // closures so it can invoke the latest Source/Target config after a skipped render.
+    internal static DragDropState? DebugTryGetDndState(FrameworkElement fe)
+        => _dndStates.TryGetValue(fe, out var state) ? state : null;
+
     private static void ApplyDragDropHandlers(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers m)
     {
         if (m.DragSource is null && m.DropTarget is null
