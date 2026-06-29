@@ -145,15 +145,22 @@ public sealed class RenderContext
         // render. The cached delegate captures the (identity-stable) hook cell
         // and `this`, so it always reads the live value and the current
         // re-render callback — identical observable behavior, zero per-render
-        // closure allocation. `is` re-materializes on an (invalid) hook-order mix.
-        if (hook.Setter is not Action<T> setter)
+        // closure allocation. The kind guard (review LOW) re-materializes if the
+        // slot was (invalidly) used by a different hook flavour with a
+        // coincidentally same-typed delegate.
+        if (hook.SetterKind != SetterKindState || hook.Setter is not Action<T> setter)
         {
             setter = MakeStateSetter(hook);
             hook.Setter = setter;
+            hook.SetterKind = SetterKindState;
         }
 
         return (current, setter);
     }
+
+    private const byte SetterKindState = 1;
+    private const byte SetterKindReducer = 2;
+    private const byte SetterKindDispatch = 3;
 
     // <snippet:set-state>
     private Action<T> MakeStateSetter<T>(ValueHookState<T> h)
@@ -222,10 +229,11 @@ public sealed class RenderContext
         // Issue #659 (#44): reuse the ref-stable updater. The updater receives
         // its reducer as a call-time argument (not a captured render value), so
         // caching it has no stale-capture risk.
-        if (hook.Setter is not Action<Func<T, T>> updater)
+        if (hook.SetterKind != SetterKindReducer || hook.Setter is not Action<Func<T, T>> updater)
         {
             updater = MakeReducerUpdater(hook);
             hook.Setter = updater;
+            hook.SetterKind = SetterKindReducer;
         }
 
         return (current, updater);
@@ -304,10 +312,11 @@ public sealed class RenderContext
         // and have the cached dispatch read it, so dispatch identity is stable
         // across renders while still using the current render's reducer.
         hook.Reducer = reducer;
-        if (hook.Setter is not Action<TAction> dispatch)
+        if (hook.SetterKind != SetterKindDispatch || hook.Setter is not Action<TAction> dispatch)
         {
             dispatch = MakeReducerDispatch<TState, TAction>(hook);
             hook.Setter = dispatch;
+            hook.SetterKind = SetterKindDispatch;
         }
 
         return (current, dispatch);
@@ -368,10 +377,13 @@ public sealed class RenderContext
         {
             hook.PendingCleanup = hook.Cleanup;
             hook.Cleanup = null;
-            // Issue #659 (#48): store the caller's params array directly; it is a
-            // fresh compiler-generated temporary, so the prior .ToArray() copy was
-            // redundant.
-            hook.Dependencies = dependencies;
+            // Issue #659 review (#3): snapshot the deps. A params-array LITERAL is a
+            // fresh compiler temporary, but a caller passing an explicit mutable
+            // object[] could mutate it afterward and corrupt this stored "previous
+            // deps", breaking the next render's change detection. ToArray runs only
+            // on the deps-CHANGED path (never the steady-state hot path), so the copy
+            // is ~free; the per-render win is the call-site array, not this.
+            hook.Dependencies = dependencies.ToArray();
             hook.Effect = effect;
             hook.Pending = true;
         }
@@ -398,7 +410,8 @@ public sealed class RenderContext
         {
             hook.PendingCleanup = hook.Cleanup;
             hook.Cleanup = null;
-            hook.Dependencies = dependencies;
+            // Issue #659 review (#3): snapshot deps (see UseEffect above).
+            hook.Dependencies = dependencies.ToArray();
             hook.EffectWithCleanup = effectWithCleanup;
             hook.Pending = true;
         }
@@ -423,7 +436,8 @@ public sealed class RenderContext
         if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, dependencies))
         {
             hook.Value = factory();
-            hook.Dependencies = dependencies;
+            // Issue #659 review (#3): snapshot deps (see UseEffect).
+            hook.Dependencies = dependencies.ToArray();
         }
 
         return hook.Value;
@@ -453,7 +467,8 @@ public sealed class RenderContext
         if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, dependencies))
         {
             hook.Value = callback;
-            hook.Dependencies = dependencies;
+            // Issue #659 review (#3): snapshot deps (see UseEffect).
+            hook.Dependencies = dependencies.ToArray();
         }
 
         return hook.Value;
@@ -2102,10 +2117,14 @@ public sealed class RenderContext
         // built once on first render and reused every render thereafter (was a
         // fresh closure per render). Typed as Delegate so one field serves
         // UseState (Action<T>), UseReducer<T> (Action<Func<T,T>>), and the
-        // two-arg UseReducer dispatch (Action<TAction>); the consuming hook
-        // re-checks the concrete type with `is` so an (invalid) hook-order
-        // mix re-materializes rather than throwing.
+        // two-arg UseReducer dispatch (Action<TAction>).
         public Delegate? Setter;
+        // Issue #659 review (LOW): discriminates which hook flavour owns Setter.
+        // UseState<int> and UseReducer<int,int> both produce an Action<int>, so a
+        // type-only `is` check could reuse the wrong delegate across an (invalid,
+        // rules-of-hooks-forbidden) same-slot swap. Mismatched kind re-materializes
+        // the correct delegate rather than returning the wrong one.
+        public byte SetterKind;
         // Issue #659 (#44): latest reducer for the two-arg UseReducer, refreshed
         // every render so the cached dispatch reads the current reducer.
         public object? Reducer;

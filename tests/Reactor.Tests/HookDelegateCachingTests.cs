@@ -204,7 +204,7 @@ public class HookDelegateCachingTests
     }
 
     [Fact]
-    public void UseMemoCellsByKey_Full_CacheHit_Returns_Prior_Array()
+    public void UseMemoCellsByKey_Full_CacheHit_Reuses_Element_References()
     {
         var ctx = new RenderContext();
         var items = new[] { new Cell("a"), new Cell("b") };
@@ -218,8 +218,12 @@ public class HookDelegateCachingTests
         var second = ctx.UseMemoCellsByKey<Cell, string>(
             items, x => x.Content, (it, i) => { builds++; return it; }, "deps");
 
-        Assert.Same(first, second);
+        // ByKey has no array-reuse early-out (dropped on review for key-purity
+        // safety): the array is fresh, but the element references are reused and
+        // the builder is not re-invoked on a key+value match.
         Assert.Equal(2, builds);
+        for (int i = 0; i < first.Length; i++)
+            Assert.Same(first[i], second[i]);
     }
 
     // ── UseCallback inline (no wrapper) keeps its semantics ──────────────

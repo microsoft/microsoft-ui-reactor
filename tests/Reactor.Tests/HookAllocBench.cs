@@ -147,6 +147,18 @@ public class HookAllocBench
         {
             var children = ctx.UseMemoCells<int>(ints, static (it, i) => new Cell($"v={it}"), "deps");
         });
+        // Theme-sensitive children: the early-out is intentionally GATED OFF (a
+        // reference-equal array would let the container ShallowEquals-skip the
+        // subtree and drop child theme re-application), so this falls through to
+        // the fresh-array path — measured here for transparency.
+        var themed = new global::System.Collections.Generic.Dictionary<string, ThemeRef> { ["Foreground"] = Theme.PrimaryText };
+        var themedRows = new Element[8];
+        for (int i = 0; i < themedRows.Length; i++) themedRows[i] = new Cell($"r{i}") { ThemeBindings = themed };
+        var themedItems = new[] { 1, 2, 3, 4, 5, 6, 7, 8 };
+        Measure("UseMemoCells hit (theme-sensitive)", ctx =>
+        {
+            var children = ctx.UseMemoCells<int>(themedItems, (it, i) => themedRows[i], "deps");
+        });
 
         // --- A realistic per-cell mix (state + memo + effect, all unchanged) -
         Measure("MIX cell (state+memo+effect)", static ctx =>
