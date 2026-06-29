@@ -367,14 +367,23 @@ public static partial class ElementExtensions
 
     /// <summary>
     /// Zero-argument convenience overload for long-press. Use when you don't need the
-    /// gesture snapshot (Position, Duration, Phase).
+    /// gesture snapshot (Position, Duration, Phase). Fires exactly ONCE per recognized
+    /// long-press, at the moment it triggers (<see cref="Microsoft.UI.Reactor.Input.GesturePhase.Began"/>) —
+    /// not again on release (<see cref="Microsoft.UI.Reactor.Input.GesturePhase.Ended"/>)
+    /// or cancel. The underlying <c>OnTriggered</c> contract fires Began then Ended/Cancelled;
+    /// a phase-agnostic convenience action must filter to Began or it double-fires. (This
+    /// was previously masked when a per-render capturing action went stale across a skipped
+    /// render — both calls became idempotent; the skip-path closure refresh in #721 exposed
+    /// it, so the filter makes the single-fire contract explicit.)
     /// </summary>
     public static T OnLongPress<T>(this T el,
         Action onTriggered,
         TimeSpan? minimumDuration = null,
         double cancelDistance = 10.0,
         bool enableMouseEmulation = false) where T : Element =>
-        el.OnLongPress(_ => onTriggered(), minimumDuration, cancelDistance, enableMouseEmulation);
+        el.OnLongPress(
+            g => { if (g.Phase == Microsoft.UI.Reactor.Input.GesturePhase.Began) onTriggered(); },
+            minimumDuration, cancelDistance, enableMouseEmulation);
 
     /// <summary>
     /// Zero-argument convenience overload for double-tap. Equivalent to

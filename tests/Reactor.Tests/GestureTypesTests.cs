@@ -203,14 +203,21 @@ public class GestureTypesTests
     }
 
     [Fact]
-    public void OnLongPress_ZeroArgOverload_RoutesToOnTriggered()
+    public void OnLongPress_ZeroArgOverload_FiresOnceAtBegan_NotOnEndedOrCancelled()
     {
         int count = 0;
         var el = TextBlock("x").OnLongPress(() => count++);
 
-        // Invoke the wrapped action directly to verify the adapter closes over the zero-arg.
-        el.Modifiers!.LongPress!.OnTriggered(new LongPressGesture(
-            Position: new Point(0, 0), Duration: TimeSpan.Zero, Phase: GesturePhase.Began));
+        // OnTriggered fires Began then Ended (or Cancelled) per the gesture contract.
+        // The phase-agnostic zero-arg convenience action must filter to Began so a single
+        // recognized long-press increments exactly once — otherwise it double-fires
+        // (the regression #721's skip-path closure refresh unmasked, since a stale
+        // captured closure previously made both calls idempotent). E2E canary:
+        // GestureTests.Interactive_OnLongPress_FiresAfterHold.
+        var cfg = el.Modifiers!.LongPress!;
+        cfg.OnTriggered(new LongPressGesture(new Point(0, 0), TimeSpan.Zero, GesturePhase.Began));
+        cfg.OnTriggered(new LongPressGesture(new Point(0, 0), TimeSpan.Zero, GesturePhase.Ended));
+        cfg.OnTriggered(new LongPressGesture(new Point(0, 0), TimeSpan.Zero, GesturePhase.Cancelled));
         Assert.Equal(1, count);
     }
 
