@@ -81,6 +81,17 @@ public static class UseMemoCellsExtensions
         var prev = stateRef.Current;
         var depsChanged = prev is null || !DepsEqual(prev.Deps, dependencies);
         var count = items.Count;
+
+        // Issue #659 (#47): full-cache-hit fast path. When deps are unchanged
+        // and every item compares equal to the previous render's snapshot at the
+        // same index (same count), no cell rebuilds — return the prior children
+        // array with ZERO new allocations (no children[], no item/dep snapshots,
+        // no state record). The retained snapshot stays valid because the values
+        // are Equal, which is exactly the comparison the next render uses. The
+        // returned reference-stable array makes the reconciler skip diffing.
+        if (!depsChanged && prev!.Items.Length == count && AllItemsEqual(items, prev.Items, count))
+            return prev.Children;
+
         var children = new Element[count];
 
         if (depsChanged)
@@ -142,6 +153,15 @@ public static class UseMemoCellsExtensions
         var prev = stateRef.Current;
         var depsChanged = prev is null || !DepsEqual(prev.Deps, dependencies);
         var count = items.Count;
+
+        // Issue #659 (#47): full-cache-hit fast path. Positionally-equal items
+        // with unchanged deps imply identical keys too, so the prior KeyToIndex
+        // map and children array remain valid — return them with ZERO new
+        // allocations (skips children[], item/dep snapshots, and the per-render
+        // Dictionary rebuild).
+        if (!depsChanged && prev!.Items.Length == count && AllItemsEqual(items, prev.Items, count))
+            return prev.Children;
+
         var children = new Element[count];
         var keyToIndex = depsChanged ? null : prev!.KeyToIndex;
 
@@ -164,7 +184,9 @@ public static class UseMemoCellsExtensions
         var snapshotKeyMap = new Dictionary<TKey, int>(count);
         for (int i = 0; i < count; i++)
         {
-            // Last-write-wins on duplicate keys.
+            // Last-write-wins on duplicate keys. Compute each key once (issue
+            // #659 #59): the build loop above already consulted the PREVIOUS
+            // map; this snapshot map is built from the fresh items here.
             snapshotKeyMap[keySelector(snapshotItems[i])] = i;
         }
         stateRef.Current = new MemoCellsByKeyState<T, TKey>(snapshotItems, children, SnapshotDeps(dependencies), snapshotKeyMap);
@@ -384,6 +406,21 @@ public static class UseMemoCellsExtensions
         for (int i = 0; i < prev.Length; i++)
         {
             if (!Equals(prev[i], next[i])) return false;
+        }
+        return true;
+    }
+
+    // Issue #659 (#47): positional value-equality scan for the full-cache-hit
+    // fast path. Caller guarantees prev.Length == count. Uses
+    // EqualityComparer<T>.Default to avoid boxing value-type items (the per-cell
+    // reuse loop's object.Equals is semantically equivalent for the all-equal
+    // decision; this only gates the zero-alloc early-out).
+    private static bool AllItemsEqual<T>(IReadOnlyList<T> items, T[] prevItems, int count)
+    {
+        var cmp = EqualityComparer<T>.Default;
+        for (int i = 0; i < count; i++)
+        {
+            if (!cmp.Equals(items[i], prevItems[i])) return false;
         }
         return true;
     }

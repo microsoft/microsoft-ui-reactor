@@ -10,7 +10,7 @@ namespace Microsoft.UI.Reactor.Core;
 /// </summary>
 public sealed class RenderContext
 {
-    private readonly List<HookState> _hooks = new();
+    private readonly List<HookState> _hooks = new(8);
     private int _hookIndex;
     private Action? _requestRerender;
     private ContextScope? _contextScope;
@@ -137,18 +137,33 @@ public sealed class RenderContext
 
         T current;
         if (hook.ThreadSafe)
-            lock (hook.Lock) { current = hook.Value; }
+            lock (hook.Lock!) { current = hook.Value; }
         else
             current = hook.Value;
 
-        // <snippet:set-state>
+        // Issue #659 (#43): reuse the ref-stable setter built on the first
+        // render. The cached delegate captures the (identity-stable) hook cell
+        // and `this`, so it always reads the live value and the current
+        // re-render callback — identical observable behavior, zero per-render
+        // closure allocation. `is` re-materializes on an (invalid) hook-order mix.
+        if (hook.Setter is not Action<T> setter)
+        {
+            setter = MakeStateSetter(hook);
+            hook.Setter = setter;
+        }
+
+        return (current, setter);
+    }
+
+    // <snippet:set-state>
+    private Action<T> MakeStateSetter<T>(ValueHookState<T> h)
+    {
         void Setter(T newValue)
         {
-            var h = (ValueHookState<T>)_hooks[currentIndex];
             bool changed;
             if (h.ThreadSafe)
             {
-                lock (h.Lock)
+                lock (h.Lock!)
                 {
                     changed = !EqualityComparer<T>.Default.Equals(h.Value, newValue);
                     if (changed) h.Value = newValue;
@@ -171,10 +186,9 @@ public sealed class RenderContext
                 if (changed) _requestRerender?.Invoke();
             }
         }
-        // </snippet:set-state>
-
-        return (current, Setter);
+        return Setter;
     }
+    // </snippet:set-state>
 
     /// <summary>
     /// Declares a piece of state with a functional updater variant.
@@ -201,17 +215,30 @@ public sealed class RenderContext
 
         T current;
         if (hook.ThreadSafe)
-            lock (hook.Lock) { current = hook.Value; }
+            lock (hook.Lock!) { current = hook.Value; }
         else
             current = hook.Value;
 
+        // Issue #659 (#44): reuse the ref-stable updater. The updater receives
+        // its reducer as a call-time argument (not a captured render value), so
+        // caching it has no stale-capture risk.
+        if (hook.Setter is not Action<Func<T, T>> updater)
+        {
+            updater = MakeReducerUpdater(hook);
+            hook.Setter = updater;
+        }
+
+        return (current, updater);
+    }
+
+    private Action<Func<T, T>> MakeReducerUpdater<T>(ValueHookState<T> h)
+    {
         void Updater(Func<T, T> reducer)
         {
-            var h = (ValueHookState<T>)_hooks[currentIndex];
             bool changed;
             if (h.ThreadSafe)
             {
-                lock (h.Lock)
+                lock (h.Lock!)
                 {
                     var prev = h.Value;
                     var next = reducer(prev);
@@ -238,8 +265,7 @@ public sealed class RenderContext
                 if (changed) _requestRerender?.Invoke();
             }
         }
-
-        return (current, Updater);
+        return Updater;
     }
 
     /// <summary>
@@ -269,17 +295,33 @@ public sealed class RenderContext
 
         TState current;
         if (hook.ThreadSafe)
-            lock (hook.Lock) { current = hook.Value; }
+            lock (hook.Lock!) { current = hook.Value; }
         else
             current = hook.Value;
 
+        // Issue #659 (#44): the dispatch closes over the reducer, which is a
+        // per-render argument. Store the latest reducer on the cell every render
+        // and have the cached dispatch read it, so dispatch identity is stable
+        // across renders while still using the current render's reducer.
+        hook.Reducer = reducer;
+        if (hook.Setter is not Action<TAction> dispatch)
+        {
+            dispatch = MakeReducerDispatch<TState, TAction>(hook);
+            hook.Setter = dispatch;
+        }
+
+        return (current, dispatch);
+    }
+
+    private Action<TAction> MakeReducerDispatch<TState, TAction>(ValueHookState<TState> h)
+    {
         void Dispatch(TAction action)
         {
-            var h = (ValueHookState<TState>)_hooks[currentIndex];
+            var reducer = (Func<TState, TAction, TState>)h.Reducer!;
             if (h.ThreadSafe)
             {
                 bool changed;
-                lock (h.Lock)
+                lock (h.Lock!)
                 {
                     var prev = h.Value;
                     var next = reducer(prev, action);
@@ -300,8 +342,7 @@ public sealed class RenderContext
                 }
             }
         }
-
-        return (current, Dispatch);
+        return Dispatch;
     }
 
     /// <summary>
@@ -327,7 +368,10 @@ public sealed class RenderContext
         {
             hook.PendingCleanup = hook.Cleanup;
             hook.Cleanup = null;
-            hook.Dependencies = dependencies.ToArray();
+            // Issue #659 (#48): store the caller's params array directly; it is a
+            // fresh compiler-generated temporary, so the prior .ToArray() copy was
+            // redundant.
+            hook.Dependencies = dependencies;
             hook.Effect = effect;
             hook.Pending = true;
         }
@@ -354,7 +398,7 @@ public sealed class RenderContext
         {
             hook.PendingCleanup = hook.Cleanup;
             hook.Cleanup = null;
-            hook.Dependencies = dependencies.ToArray();
+            hook.Dependencies = dependencies;
             hook.EffectWithCleanup = effectWithCleanup;
             hook.Pending = true;
         }
@@ -379,7 +423,7 @@ public sealed class RenderContext
         if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, dependencies))
         {
             hook.Value = factory();
-            hook.Dependencies = dependencies.ToArray();
+            hook.Dependencies = dependencies;
         }
 
         return hook.Value;
@@ -390,7 +434,29 @@ public sealed class RenderContext
     /// </summary>
     public Action UseCallback(Action callback, params object[] dependencies)
     {
-        return UseMemo(() => callback, dependencies);
+        // Issue #659 (#46): store the callback directly in a memo slot instead of
+        // UseMemo(() => callback, deps). The old form allocated a `() => callback`
+        // wrapper closure every render (even when deps were unchanged, because the
+        // factory is materialized before the deps short-circuit). Inlining the slot
+        // logic removes that wrapper entirely.
+        if (_hookIndex >= _hooks.Count)
+        {
+            _hooks.Add(new MemoHookState<Action> { Dependencies = null });
+        }
+
+        if (_hooks[_hookIndex] is not MemoHookState<Action> hook)
+            throw new HookOrderException(
+                $"Hook at index {_hookIndex} is {_hooks[_hookIndex].GetType().Name}, expected MemoHookState<Action> (UseCallback). " +
+                "Hooks must be called in the same order every render.");
+        _hookIndex++;
+
+        if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, dependencies))
+        {
+            hook.Value = callback;
+            hook.Dependencies = dependencies;
+        }
+
+        return hook.Value;
     }
 
     /// <summary>
@@ -468,18 +534,28 @@ public sealed class RenderContext
 
         T current = hook.Value;
 
+        // Issue #659 (#53): reuse the ref-stable persisted setter built once.
+        if (hook.CachedSetter is not Action<T> setter)
+        {
+            setter = MakePersistedSetter(hook);
+            hook.CachedSetter = setter;
+        }
+
+        return (current, setter);
+    }
+
+    private Action<T> MakePersistedSetter<T>(PersistedHookState<T> h)
+    {
         void Setter(T newValue)
         {
             if (MarshalIfOffUIThread("UsePersisted", () => Setter(newValue))) return;
-            var h = (PersistedHookState<T>)_hooks[currentIndex];
             if (!EqualityComparer<T>.Default.Equals(h.Value, newValue))
             {
                 h.Value = newValue;
                 _requestRerender?.Invoke();
             }
         }
-
-        return (current, Setter);
+        return Setter;
     }
 
     // ════════════════════════════════════════════════════════════════
@@ -728,15 +804,63 @@ public sealed class RenderContext
     /// <summary>
     /// Enumerates ContextHookState entries for memo change detection (Phase 3).
     /// </summary>
-    internal IEnumerable<ContextHookState> ContextHooks
+    /// <remarks>
+    /// Issue #659 (#51): returns a struct enumerable instead of a
+    /// <c>yield</c>-generated iterator. The reconciler iterates this every
+    /// render for every component, so the old <c>IEnumerable</c> path heap-
+    /// allocated an enumerator per component per render. <c>foreach</c> binds to
+    /// the public struct <c>GetEnumerator</c> (zero allocation); the
+    /// <see cref="IEnumerable{T}"/> implementation is retained only so test
+    /// helpers that call <c>.ToList()</c> keep working.
+    /// </remarks>
+    internal ContextHookEnumerable ContextHooks => new(_hooks);
+
+    internal readonly struct ContextHookEnumerable : IEnumerable<ContextHookState>
     {
-        get
+        private readonly List<HookState> _hooks;
+        public ContextHookEnumerable(List<HookState> hooks) => _hooks = hooks;
+
+        public Enumerator GetEnumerator() => new(_hooks);
+        IEnumerator<ContextHookState> IEnumerable<ContextHookState>.GetEnumerator() => GetEnumerator();
+        global::System.Collections.IEnumerator global::System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+
+        public struct Enumerator : IEnumerator<ContextHookState>
         {
-            for (int i = 0; i < _hooks.Count; i++)
+            private readonly List<HookState> _hooks;
+            private int _index;
+            private ContextHookState? _current;
+
+            public Enumerator(List<HookState> hooks)
             {
-                if (_hooks[i] is ContextHookState ctx)
-                    yield return ctx;
+                _hooks = hooks;
+                _index = 0;
+                _current = null;
             }
+
+            public ContextHookState Current => _current!;
+            object global::System.Collections.IEnumerator.Current => _current!;
+
+            public bool MoveNext()
+            {
+                while (_index < _hooks.Count)
+                {
+                    if (_hooks[_index++] is ContextHookState ctx)
+                    {
+                        _current = ctx;
+                        return true;
+                    }
+                }
+                _current = null;
+                return false;
+            }
+
+            public void Reset()
+            {
+                _index = 0;
+                _current = null;
+            }
+
+            public void Dispose() { }
         }
     }
 
@@ -1970,11 +2094,26 @@ public sealed class RenderContext
     {
         public T Value;
         public readonly bool ThreadSafe;
-        public readonly object Lock = new();
+        // Issue #659 (#42): only allocate the lock when threadSafe was requested.
+        // The default (false) path never touches Lock, so most state cells now
+        // carry no per-hook Lock object.
+        public readonly object? Lock;
+        // Issue #659 (#43/#44): the ref-stable setter/updater/dispatch delegate,
+        // built once on first render and reused every render thereafter (was a
+        // fresh closure per render). Typed as Delegate so one field serves
+        // UseState (Action<T>), UseReducer<T> (Action<Func<T,T>>), and the
+        // two-arg UseReducer dispatch (Action<TAction>); the consuming hook
+        // re-checks the concrete type with `is` so an (invalid) hook-order
+        // mix re-materializes rather than throwing.
+        public Delegate? Setter;
+        // Issue #659 (#44): latest reducer for the two-arg UseReducer, refreshed
+        // every render so the cached dispatch reads the current reducer.
+        public object? Reducer;
         public ValueHookState(T value, bool threadSafe = false)
         {
             Value = value;
             ThreadSafe = threadSafe;
+            Lock = threadSafe ? new object() : null;
         }
     }
 
@@ -2022,6 +2161,8 @@ public sealed class RenderContext
     private class PersistedHookState<T> : PersistedHookStateBase
     {
         public T Value;
+        // Issue #659 (#53): ref-stable setter cached on first render.
+        public Action<T>? CachedSetter;
         public PersistedHookState(T value) => Value = value;
         public override void SaveToCache()
         {
