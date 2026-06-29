@@ -34,11 +34,46 @@ public readonly record struct ThemeRef(string ResourceKey)
         return ResolveForTheme(resourceKey, isDark ? "Dark" : "Light");
     }
 
+    // Issue #660 (#86): cache the (resourceKey, themeName) -> Brush resolution.
+    // TryResolveFromThemeDictionaries recurses Application.Resources.MergedDictionaries
+    // (XamlControlsResources and its nested dictionaries) on EVERY ThemeRef.Resolve —
+    // i.e. per cell x per color token x per render on the data-grid workload. The
+    // resolved brush for a given (key, theme) is deterministic and stable until the
+    // theme/palette changes, so cache it and clear the cache on a theme change
+    // (InvalidateResolutionCache, wired from the hosts' theme-change handlers).
+    // The cached value mirrors the uncached return EXACTLY, including a null result
+    // for an unknown key (so missing keys aren't re-walked). Brushes resolved from a
+    // ThemeDictionary are shared instances today, so returning the cached reference
+    // is identical to the prior behavior.
+    private static readonly global::System.Collections.Concurrent.ConcurrentDictionary<(string Key, string Theme), Brush?> s_resolutionCache = new();
+
+    /// <summary>
+    /// Drops every cached <see cref="ResolveForTheme"/> result. Called by the host
+    /// when the effective theme or the system palette changes so the next resolve
+    /// re-reads the (now-updated) ThemeDictionaries.
+    /// </summary>
+    internal static void InvalidateResolutionCache() => s_resolutionCache.Clear();
+
     private static Brush? ResolveForTheme(string resourceKey, string themeName)
     {
         var resources = Application.Current?.Resources;
+        // Don't consult or populate the cache while resources are transiently
+        // unavailable (very early startup) — caching a null here would be stale
+        // once XamlControlsResources loads. A theme change later clears the cache
+        // anyway, but this avoids a poisoned entry in the first place.
         if (resources is null) return null;
 
+        var cacheKey = (resourceKey, themeName);
+        if (s_resolutionCache.TryGetValue(cacheKey, out var cached))
+            return cached;
+
+        var resolved = ResolveForThemeUncached(resources, resourceKey, themeName);
+        s_resolutionCache[cacheKey] = resolved;
+        return resolved;
+    }
+
+    private static Brush? ResolveForThemeUncached(ResourceDictionary resources, string resourceKey, string themeName)
+    {
         // WinUI's XamlControlsResources ThemeDictionary keys vary by app configuration:
         //   Keys observed: "Default", "Light", "HighContrast" (no "Dark")
         // "Default" contains the base/dark brushes; "Light" contains light overrides.

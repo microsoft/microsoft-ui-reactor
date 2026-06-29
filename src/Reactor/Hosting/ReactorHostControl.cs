@@ -588,6 +588,9 @@ public sealed partial class ReactorHostControl : ContentControl, IDisposable
         fe.ActualThemeChanged += (_, _) =>
         {
             _logger?.LogDebug("Theme changed to {Theme} — re-rendering", fe.ActualTheme);
+            // Issue #660 (#86): drop the (key,theme)->Brush cache so ThemeRef
+            // resolves re-read the now-current ThemeDictionaries.
+            Microsoft.UI.Reactor.Core.ThemeRef.InvalidateResolutionCache();
             RequestRender();
         };
     }

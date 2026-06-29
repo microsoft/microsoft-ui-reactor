@@ -810,6 +810,9 @@ public sealed class ReactorHost : IDisposable
     private void OnActualThemeChanged(FrameworkElement sender, object args)
     {
         _logger?.LogDebug("Theme changed to {Theme} — re-rendering", sender.ActualTheme);
+        // Issue #660 (#86): drop the (key,theme)->Brush cache so ThemeRef
+        // resolves re-read the now-current ThemeDictionaries on the next render.
+        Microsoft.UI.Reactor.Core.ThemeRef.InvalidateResolutionCache();
         // Intentionally NOT calling Reconciler.ClearStyleCache() here:
         //   - Cached Styles are content-addressed (BuildCacheKey over the
         //     bindings dict) and use {ThemeResource} markup that WinUI
@@ -835,6 +838,9 @@ public sealed class ReactorHost : IDisposable
             _isForcedColors = a11y.HighContrast;
             _forcedColorsTheme = _isForcedColors ? s_chartingBridge?.CaptureForcedColorsTheme() : null;
         }
+        // Issue #660 (#86): a palette / high-contrast change can alter the brush
+        // a (key,theme) pair resolves to — drop the cache so it re-resolves.
+        Microsoft.UI.Reactor.Core.ThemeRef.InvalidateResolutionCache();
         RequestRender();
     }
 
