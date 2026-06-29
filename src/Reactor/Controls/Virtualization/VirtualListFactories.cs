@@ -17,7 +17,9 @@ public static partial class Factories
         double estimatedItemHeight = 40,
         double spacing = 0,
         Action<VirtualListRef>? @ref = null,
-        Action<int, int>? onVisibleRangeChanged = null)
+        Action<int, int>? onVisibleRangeChanged = null,
+        Func<int, string>? cacheRowsBy = null,
+        int rowCacheCapacity = VirtualListElement.DefaultRowCacheCapacity)
     {
         var props = new VirtualListElement
         {
@@ -29,6 +31,8 @@ public static partial class Factories
             Spacing = spacing,
             Ref = @ref,
             OnVisibleRangeChanged = onVisibleRangeChanged,
+            CacheRowsBy = cacheRowsBy,
+            RowCacheCapacity = rowCacheCapacity,
         };
 
         return Component<VirtualListComponent, VirtualListElement>(props)

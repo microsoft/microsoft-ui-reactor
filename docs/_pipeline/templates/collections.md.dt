@@ -330,6 +330,86 @@ return LazyVStack<Note>(notes, n => n.Id, (note, i) => Row(note));
 You then own the parts `Memo` handles for you: bound the dictionary (evict so
 it can't grow without limit) and drop or rebuild an entry when the data behind
 its key changes — the purity contract above, enforced by hand.
+### Cross-recycle row memoization (`cacheRowsBy`)
+
+Variable-height rows have a hidden scroll cost. With no `itemHeight`, every
+time `ItemsRepeater` recycles a container and re-realizes a row, the list
+rebuilds that row's element tree from `renderItem` and the reconciler diffs
+it against the previous tree. During a fast flick over tall rows that
+rebuild-and-diff can dominate scroll wall-clock. `cacheRowsBy` is an opt-in
+that collapses it:
+
+```csharp
+VirtualList(
+    itemCount: rows.Count,
+    renderItem: i => RenderRow(rows[i]),      // builds a multi-node subtree
+    getItemKey: i => rows[i].Id,
+    estimatedItemHeight: 64,
+    cacheRowsBy: i => rows[i].Id)             // ← opt in
+```
+
+When set, the list keeps a bounded **LRU cache of already-built row
+`Element` instances**, keyed by `cacheRowsBy(index)`. On a recycle for a key
+still in the cache it returns the *same* `Element` instance instead of calling
+`renderItem` again — the reconciler then short-circuits on `ReferenceEquals`
+and skips the entire per-row diff. The rebuild *and* the reconcile descent
+both go to ~zero on a cache hit.
+
+<!-- ai:caveat -->
+`cacheRowsBy` is a **purity assertion you are making**, not a transparent
+optimization. By opting in you promise that `renderItem` is a pure function of
+the inputs your key captures: for a given key, the element it produces must
+not depend on anything the key leaves out. If `renderItem` closes over mutable
+state the key omits — the current selection, a row-revision counter, a theme
+flag it reads ad hoc — cached rows can render **stale** content, and that is
+your bug to fix. Fold every such input into the key:
+
+```csharp
+// Row appearance depends on the item AND whether it's selected — so both
+// must be in the key, or selecting a row won't repaint a cached instance.
+cacheRowsBy: i => $"{rows[i].Id}:{rows[i].Rev}:{(i == selected ? 1 : 0)}"
+```
+
+The framework still resets the whole cache automatically whenever `itemCount`
+or the `renderItem` delegate identity changes (a fresh closure may capture new
+state it can't see through), so a re-render with new data can never be served
+from a stale instance. The cache is **bounded** — it defaults to
+`rowCacheCapacity: 128` (a few× a typical realized window) and evicts
+least-recently-used rows, so it never grows with scroll distance. Reuse the
+key projection only for rows that are genuinely pure; identity (`getItemKey`)
+and purity (`cacheRowsBy`) are deliberately separate opt-ins.
+<!-- /ai:caveat -->
+
+#### Doing it by hand (no `cacheRowsBy`)
+
+The same idea works today without the flag, as a user-land memo: hold a
+`Dictionary` keyed by your row identity in a `UseRef`, return the cached
+`Element` on a hit, and invalidate when your data changes. This is the escape
+hatch if you need custom eviction or are pinned to an older build:
+
+```csharp
+var rowMemo = UseRef(new Dictionary<string, Element>());
+
+// Reset when the data set changes — same role as cacheRowsBy's auto-reset.
+UseEffect(() => { rowMemo.Current.Clear(); return () => { }; }, rows);
+
+Element RenderRowMemoized(int i)
+{
+    // Key must capture everything RenderRow reads — exactly the purity
+    // contract cacheRowsBy formalizes.
+    var key = $"{rows[i].Id}:{rows[i].Rev}";
+    if (!rowMemo.Current.TryGetValue(key, out var cached))
+        rowMemo.Current[key] = cached = RenderRow(rows[i]);
+    return cached;
+}
+
+return VirtualList(rows.Count, RenderRowMemoized, getItemKey: i => rows[i].Id);
+```
+
+`cacheRowsBy` is just this pattern moved into the list, with a bounded LRU and
+automatic invalidation wired in. Prefer the flag; reach for the hand-rolled
+dictionary only when you need behavior it doesn't offer (e.g. a custom
+eviction policy).
 
 ## ForEach
 

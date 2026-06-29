@@ -209,7 +209,7 @@ UniformGrid(Orientation orientation, Element[] items) → GridElement
 VStack(Element[] children) → StackElement
 VStack(double spacing, Element[] children) → StackElement
 Viewbox(Element child) → ViewboxElement
-VirtualList(int itemCount, Func<int, Element> renderItem, Func<int, string> getItemKey = null, double? itemHeight = null, double estimatedItemHeight = 40, double spacing = 0, Action<VirtualListRef> ref = null, Action<int, int> onVisibleRangeChanged = null) → ComponentElement<VirtualListElement>
+VirtualList(int itemCount, Func<int, Element> renderItem, Func<int, string> getItemKey = null, double? itemHeight = null, double estimatedItemHeight = 40, double spacing = 0, Action<VirtualListRef> ref = null, Action<int, int> onVisibleRangeChanged = null, Func<int, string> cacheRowsBy = null, int rowCacheCapacity = 128) → ComponentElement<VirtualListElement>
 WebView2(Uri source = null) → WebView2Element
 When(bool condition, Func<Element> then) → Element
 WrapGrid(Element[] children) → WrapGridElement
@@ -7175,11 +7175,13 @@ Render() → Element
 Action<VirtualListRef> Ref { get; init; }
 Action<int, int> OnVisibleRangeChanged { get; init; }
 Func<int, Element> RenderItem { get; init; }
+Func<int, string> CacheRowsBy { get; init; }
 Func<int, string> GetItemKey { get; init; }
 double EstimatedItemHeight { get; init; }
 double Spacing { get; init; }
 double? ItemHeight { get; init; }
 int ItemCount { get; init; }
+int RowCacheCapacity { get; init; }
 Equals(Element other) → bool
 Equals(VirtualListElement other) → bool
 Equals(object obj) → bool

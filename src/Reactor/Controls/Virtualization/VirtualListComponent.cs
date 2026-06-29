@@ -26,19 +26,48 @@ public class VirtualListComponent : Component<VirtualListElement>
 
         // View builder: wrap the RenderItem callback, applying fixed height when set
         var fixedHeight = el.ItemHeight;
+
+        // Issue #327 — opt-in cross-recycle row memoization. The cache lives in a
+        // UseMemo cell so its lifetime is pinned to (ItemCount, RenderItem identity,
+        // CacheRowsBy identity, fixedHeight, capacity): any change there could alter
+        // what a row renders to, and a fresh RenderItem closure may close over new
+        // state we can't see through, so we conservatively drop the whole cache. The
+        // hook is called unconditionally (null cache when not opted in) to keep hook
+        // order stable across renders. Scroll-driven realize/recycle does NOT re-run
+        // this Render, so the cache persists across every ItemsRepeater container
+        // cycle between component renders — exactly the hot path #327 targets.
+        var cacheRowsBy = el.CacheRowsBy;
+        var rowCache = UseMemo<RowMemoCache?>(
+            () => cacheRowsBy is null ? null : new RowMemoCache(el.RowCacheCapacity),
+            el.ItemCount, el.RenderItem, (object)cacheRowsBy!, fixedHeight ?? double.NaN, el.RowCacheCapacity);
+
         Func<int, int, Element> viewBuilder = (index, _) =>
         {
             if (index < 0 || index >= el.ItemCount)
                 return Empty();
 
-            var item = el.RenderItem(index);
+            // Default path (no opt-in): byte-for-byte the original behavior.
+            if (rowCache is null || cacheRowsBy is null)
+            {
+                var plain = el.RenderItem(index);
+                if (fixedHeight.HasValue)
+                    plain = plain.Height(fixedHeight.Value);
+                return plain;
+            }
 
-            // Fixed-height fast path: force each item to the exact height
-            // so ItemsRepeater skips per-item measurement (O(1) offset)
+            var rowKey = cacheRowsBy(index);
+            if (rowCache.TryGet(rowKey, out var cached))
+                return cached; // hit → same instance → reconciler ReferenceEquals-skips
+
+            var built = el.RenderItem(index);
+            // Apply fixedHeight BEFORE caching. `.Height(...)` returns a NEW element
+            // (modifiers are immutable), so the post-Height instance is the one the
+            // reconciler later compares by reference — caching it (not the pre-Height
+            // element) is what keeps cache hits reference-stable.
             if (fixedHeight.HasValue)
-                item = item.Height(fixedHeight.Value);
-
-            return item;
+                built = built.Height(fixedHeight.Value);
+            rowCache.Set(rowKey, built);
+            return built;
         };
 
         // Configure the LazyVStack with appropriate settings

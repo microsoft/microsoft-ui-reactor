@@ -19,6 +19,7 @@ class VirtualizationDemo : Component
         var (mode, setMode) = UseState("LazyVStack");
         var (itemCount, setItemCount) = UseState(1000);
         var (selectedIndex, setSelectedIndex) = UseState(-1);
+        var (cacheRows, setCacheRows) = UseState(true);
 
         // Generate item data
         var items = Enumerable.Range(0, itemCount)
@@ -71,6 +72,38 @@ class VirtualizationDemo : Component
             )
             .Set(lv => { lv.Height = 500; lv.SelectionMode = Microsoft.UI.Xaml.Controls.ListViewSelectionMode.Single; }),
 
+            // Count-based VirtualList over genuinely variable-height rows (the
+            // description wraps to 1–4 lines), so there is no fixed itemHeight and
+            // every container recycle would otherwise rebuild + re-diff the whole
+            // row subtree. Issue #327: `cacheRowsBy` opts the row into a bounded LRU
+            // keyed by the item Id — on a recycle for a row still in the cache the
+            // list hands back the *same* Element instance and the reconciler skips
+            // the per-row diff. The row is a pure function of the item here, so the
+            // Id is a complete key; toggle "Cache rows" to A/B it.
+            "VirtualList" => VirtualList(
+                itemCount: items.Count,
+                renderItem: index =>
+                {
+                    var item = items[index];
+                    var lines = 1 + (item.Id % 4);
+                    var blurb = string.Join("  •  ", Enumerable.Repeat(item.Subtitle, lines));
+                    return Border(
+                        HStack(12,
+                            Border(
+                                Caption($"{item.Id}")
+                            ).Background(SubtleFill).CornerRadius(4).Width(48).MinHeight(32).HAlign(HorizontalAlignment.Center),
+                            VStack(4,
+                                TextBlock(item.Title).SemiBold(),
+                                Caption(blurb).Foreground(SecondaryText)
+                            )
+                        )
+                    ).Padding(horizontal: 12, vertical: 8).Margin(0, 0, 0, 1);
+                },
+                getItemKey: index => items[index].Id.ToString(),
+                estimatedItemHeight: 64,
+                cacheRowsBy: cacheRows ? index => items[index].Id.ToString() : null
+            ),
+
             _ => Empty()
         };
 
@@ -85,6 +118,8 @@ class VirtualizationDemo : Component
                     HStack(8,
                         Button("LazyVStack", () => setMode("LazyVStack"))
                             .IsEnabled(!(mode == "LazyVStack")),
+                        Button("VirtualList", () => setMode("VirtualList"))
+                            .IsEnabled(!(mode == "VirtualList")),
                         Button("ListView", () => setMode("ListView"))
                             .IsEnabled(!(mode == "ListView"))
                     )
@@ -97,7 +132,14 @@ class VirtualizationDemo : Component
                         Button("5000", () => setItemCount(5000)).IsEnabled(!(itemCount == 5000)),
                         Button("10000", () => setItemCount(10000)).IsEnabled(!(itemCount == 10000))
                     )
-                )
+                ),
+                mode == "VirtualList"
+                    ? VStack(4,
+                        TextBlock("Row memoization (#327):"),
+                        Button(cacheRows ? "Cache rows: ON" : "Cache rows: OFF",
+                            () => setCacheRows(!cacheRows))
+                      )
+                    : Empty()
             ),
 
             TextBlock($"Mode: {mode} | Items: {itemCount}").Foreground(SecondaryText),
