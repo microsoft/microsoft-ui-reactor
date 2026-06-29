@@ -5,6 +5,7 @@ using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Input;
 using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Input;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
@@ -272,6 +273,150 @@ internal static class SkipPathGestureDragFixtures
             // re-fire Began; and the refresh itself dispatched no Began (no duplicate).
             H.Check("MidGesture_CursorPreserved", state.PanBeganDispatched);
             H.Check("MidGesture_NoDuplicateBegan", !log.Entries.Exists(e => e.Phase == "Began"));
+        }
+    }
+
+    /// <summary>
+    /// #721 H1 — gesture PRESENCE TRANSITION (add-first) on the skip path. A gesture slot
+    /// is excluded from the skip predicate, so adding <c>.OnPan</c> to an otherwise
+    /// skip-equal element takes the skip arm. The config-only refresh can't wire a brand
+    /// new gesture (no GestureState exists yet), so the skip path must route an
+    /// add-transition to the full ApplyGestureHandlers — otherwise the gesture is silently
+    /// dead. Asserts the gesture actually wires (state + ManipulationMode) and fires.
+    /// </summary>
+    internal class SkipAddFirstGestureWires(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (hasGesture, setHasGesture) = ctx.UseState(false);
+                var (fired, setFired) = ctx.UseState(false);
+
+                var rect = Factories.Rectangle().Size(80, 80);
+                // Gesture appears only on the 2nd render; the element is otherwise
+                // structurally identical, so the reconciler skips it.
+                if (hasGesture)
+                    rect = rect.OnPan(_ => setFired(true), axis: PanAxis.Both);
+
+                return VStack(
+                    TextBlock($"addfired:{fired}"),
+                    Button("AddGestureBtn", () => setHasGesture(true)),
+                    rect);
+            });
+
+            await Harness.Render();
+            var rect0 = H.FindControl<Microsoft.UI.Xaml.Shapes.Rectangle>(_ => true);
+            H.Check("AddGesture_NoStateInitially",
+                rect0 is null || Reconciler.DebugTryGetGestureState(rect0)?.Pan is null);
+
+            // Add the gesture on a skip-eligible render.
+            H.ClickButton("AddGestureBtn");
+            await Harness.Render();
+
+            var rect = H.FindControl<Microsoft.UI.Xaml.Shapes.Rectangle>(_ => true);
+            H.Check("AddGesture_TargetMounted", rect is not null);
+            var state = rect is not null ? Reconciler.DebugTryGetGestureState(rect) : null;
+
+            // Post-fix: the add-on-skip routed to the full handler → gesture wired.
+            H.Check("AddGesture_Wired", state?.Pan is not null);
+            H.Check("AddGesture_ManipulationModeSet",
+                rect is not null && rect.ManipulationMode.HasFlag(ManipulationModes.TranslateX));
+
+            state?.Pan?.OnChanged(default);
+            await Harness.Render();
+            H.Check("AddGesture_ClosureFires", H.FindText("addfired:True") is not null);
+        }
+    }
+
+    /// <summary>
+    /// #721 H1 — drag SOURCE removal MID-DRAG on the skip path must not strand the
+    /// in-flight transfer. A naive config-only null of <c>DragDropState.Source</c> would
+    /// make the pending <c>OnDropCompleted</c> early-return (<c>state.Source is null</c>),
+    /// leaking the DragData registration and suppressing <c>OnEnd</c>. The remove is a
+    /// presence transition routed to the full ApplyDragDropHandlers, whose in-flight guard
+    /// preserves Source while a drag is active (ActiveTransferId set) yet still clears
+    /// CanDrag so no NEW drag starts.
+    /// </summary>
+    internal class SkipRemoveDragSourceMidDragPreservesState(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (hasDrag, setHasDrag) = ctx.UseState(true);
+
+                var rect = Factories.Rectangle().Size(80, 80);
+                if (hasDrag)
+                    rect = rect.OnDragStart(() => new DragData());
+
+                return VStack(
+                    TextBlock("dragstate"),
+                    Button("RemoveDragBtn", () => setHasDrag(false)),
+                    rect);
+            });
+
+            await Harness.Render();
+            var rect = H.FindControl<Microsoft.UI.Xaml.Shapes.Rectangle>(_ => true);
+            H.Check("RemoveDrag_TargetMounted", rect is not null);
+            var state = rect is not null ? Reconciler.DebugTryGetDndState(rect) : null;
+            H.Check("RemoveDrag_SourceWiredInitially", state?.Source is not null);
+            H.Check("RemoveDrag_CanDragInitially", rect is not null && rect.CanDrag);
+
+            // Simulate a drag in flight: DragStarting fired, transfer registered.
+            if (state is not null) state.ActiveTransferId = Guid.NewGuid();
+            var inflightSource = state?.Source;
+
+            // Remove the drag source on a skip-eligible render.
+            H.ClickButton("RemoveDragBtn");
+            await Harness.Render();
+
+            var state2 = rect is not null ? Reconciler.DebugTryGetDndState(rect) : null;
+            // Post-fix: in-flight guard preserves Source so the pending DropCompleted can
+            // still fire OnEnd + Unregister. Pre-fix the config-only null stranded it.
+            H.Check("RemoveDrag_SourcePreservedMidDrag", ReferenceEquals(state2?.Source, inflightSource));
+            H.Check("RemoveDrag_TransferStillInFlight", state2 is not null && state2.ActiveTransferId != Guid.Empty);
+            // But a NEW drag can no longer start.
+            H.Check("RemoveDrag_CanDragClearedAfterRemove", rect is not null && !rect.CanDrag);
+        }
+    }
+
+    /// <summary>
+    /// #721 H1 regression — the in-flight guard is in-flight-SPECIFIC: removing a drag
+    /// source on the skip path while NO drag is active must still null the cached Source
+    /// and clear CanDrag (full unwire), so the guard never over-preserves a stale source.
+    /// </summary>
+    internal class SkipRemoveDragSourceNotInFlightClears(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (hasDrag, setHasDrag) = ctx.UseState(true);
+                var rect = Factories.Rectangle().Size(80, 80);
+                if (hasDrag)
+                    rect = rect.OnDragStart(() => new DragData());
+                return VStack(
+                    TextBlock("dragstate2"),
+                    Button("RemoveDragBtn2", () => setHasDrag(false)),
+                    rect);
+            });
+
+            await Harness.Render();
+            var rect = H.FindControl<Microsoft.UI.Xaml.Shapes.Rectangle>(_ => true);
+            H.Check("RemoveDragIdle_SourceWiredInitially",
+                rect is not null && Reconciler.DebugTryGetDndState(rect)?.Source is not null);
+
+            // No ActiveTransferId set → not in flight.
+            H.ClickButton("RemoveDragBtn2");
+            await Harness.Render();
+
+            var state2 = rect is not null ? Reconciler.DebugTryGetDndState(rect) : null;
+            H.Check("RemoveDragIdle_SourceCleared", state2?.Source is null);
+            H.Check("RemoveDragIdle_CanDragCleared", rect is not null && !rect.CanDrag);
         }
     }
 }

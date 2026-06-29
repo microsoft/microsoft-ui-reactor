@@ -56,7 +56,18 @@ public sealed partial class Reconciler
             return;
 
         var state = GetOrCreateDndState(fe);
-        state.Source = m.DragSource;
+        // #721 — if the drag SOURCE is being removed while a drag is in flight, keep the
+        // previous Source config alive so the pending DropCompleted can still fire OnEnd
+        // and Unregister the transfer. Nulling it here would make OnDropCompleted
+        // early-return on `state.Source is null`, leaking the DragData registration and
+        // suppressing the completion callback. CanDrag is still cleared below, so no NEW
+        // drag can start. (Reconciler-path-agnostic: also hardens the non-skip Update
+        // path's mid-drag source removal.)
+        bool removingSourceMidDrag = m.DragSource is null
+            && oldM?.DragSource is not null
+            && state.ActiveTransferId != Guid.Empty;
+        if (!removingSourceMidDrag)
+            state.Source = m.DragSource;
         state.Target = m.DropTarget;
 
         // ── Source side ───────────────────────────────────────────────

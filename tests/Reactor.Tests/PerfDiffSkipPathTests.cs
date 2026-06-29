@@ -226,6 +226,25 @@ public class PerfDiffSkipPathTests
     }
 
     [Fact]
+    public void CanSkipUpdate_False_For_ModifiedElement_So_Wrapper_Gesture_Cannot_Strand()
+    {
+        // #721 MEDIUM — a gesture/drag carried via a ModifiedElement WRAPPER
+        // (WrappedModifiers) is not seen by the child skip arms' direct
+        // HasGestureOrDragSlots(newEl.Modifiers) probe. That hole is UNREACHABLE: the
+        // main ShallowEquals has no ModifiedElement arm → default false, so CanSkipUpdate
+        // is false for any ModifiedElement pair and such a child never enters a child skip
+        // arm. It goes through the full Update path, which unwraps WrappedModifiers and
+        // applies gesture/drag correctly. (Production never constructs ModifiedElement;
+        // it's a test/legacy-only wrapper.) Lock the invariant so the child-skip probe
+        // staying on newEl.Modifiers can never silently strand a wrapped gesture.
+        var inner = TextBlock("x");
+        var a = new ModifiedElement(inner, new ElementModifiers { Pan = new(_ => { }) });
+        var b = new ModifiedElement(inner, new ElementModifiers { Pan = new(_ => { }) });
+        Assert.False(Element.ShallowEquals(a, b));
+        Assert.False(Element.CanSkipUpdate(a, b));
+    }
+
+    [Fact]
     public void ShallowEquals_GridCell_Stable_Primary_Plus_Changing_Secondary_Declines_Skip()
     {
         // Combined FLAGSHIP-1 regression at the ShallowEquals/element level, mirroring

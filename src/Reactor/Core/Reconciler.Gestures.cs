@@ -85,52 +85,74 @@ public sealed partial class Reconciler
             && (m.Pan is not null || m.Pinch is not null || m.Rotate is not null
                 || m.LongPress is not null || m.DragSource is not null || m.DropTarget is not null);
 
+    // Shared empty sentinel so a (theoretically) null newM on a remove transition can be
+    // passed to the Apply* handlers (which require a non-null modifier set) without
+    // allocating. On the skip path newM is never null when a transition is detected
+    // (ModifiersEqual requires both sides non-null or both null), so this is defensive.
+    private static readonly ElementModifiers _emptyModifiers = new();
+
     /// <summary>
-    /// #721 — refresh the cached gesture/drag dispatch closures on a skip fast-path
-    /// WITHOUT re-subscribing the manipulation/drag trampolines.
+    /// #721 — keep the cached gesture/drag dispatch state correct when the reconciler
+    /// takes its skip fast-path for an element whose gesture/drag slots changed (those
+    /// slots are excluded from the skip predicate, so such an element is skip-eligible).
+    /// Two distinct cases, handled differently:
     ///
-    /// The skip predicate (<c>ModifierCallbacksEqual</c>) deliberately excludes the
-    /// gesture and drag-drop slots, so an element whose only change is a per-render
-    /// gesture/drag closure is skip-eligible — yet those handlers dispatch through the
-    /// mutable <see cref="GestureState"/>/<see cref="DragDropState"/> config fields the
-    /// stable trampolines read at dispatch time, and those fields are otherwise
-    /// refreshed only on the non-skip Update path (<c>ApplyGestureHandlers</c>/
-    /// <c>ApplyDragDropHandlers</c>). Without this, a skipped render strands the
-    /// previous closure and dispatch fires stale captured state.
+    /// <para><b>Presence transition</b> (a family is present on exactly one side — an
+    /// ADD or a REMOVE-last): route to the full <see cref="ApplyGestureHandlers"/> /
+    /// <see cref="ApplyDragDropHandlers"/>. The config-only refresh below is NOT enough
+    /// here — an ADD has no <see cref="GestureState"/>/<see cref="DragDropState"/> yet
+    /// (so a <c>TryGetValue</c>-only path would no-op and the gesture/drag would never
+    /// wire — silently dead), and a REMOVE must clear the platform flags
+    /// (<c>ManipulationMode</c> / <c>CanDrag</c> / <c>AllowDrop</c>), which only the full
+    /// handler does. A transition means the family was inactive on one side, so the full
+    /// Apply is safe: there is no in-flight gesture of a not-yet/​no-longer-present family
+    /// to re-arm (and a mid-drag source removal is preserved by the in-flight guard in
+    /// <see cref="ApplyDragDropHandlers"/> so its pending DropCompleted still fires).</para>
     ///
-    /// Overwriting just the config fields swaps the dispatch target to the latest
-    /// closure — mirroring how the Tag / <c>ModifierEventHandlerState</c> refresh keeps
-    /// routed handlers current on skip — while leaving the trampolines and the in-flight
-    /// gesture cursors (<c>PanBeganDispatched</c>, the LongPress timer, …) untouched, so
-    /// an in-flight gesture is never re-armed mid-interaction (no Began/Ended
-    /// double-dispatch). Sourcing the fields from <paramref name="newM"/> also correctly
-    /// clears a slot that was removed across a skipped render (stale removed gesture no
-    /// longer dispatches).
-    ///
-    /// Using <c>ConditionalWeakTable.TryGetValue</c> (not GetOrCreate) avoids
-    /// allocating state for an element that was never wired — a mounted gesture/drag
-    /// element always has its state, and an unwired one has nothing to dispatch.
+    /// <para><b>Identity change</b> (a family is present on BOTH sides, only the captured
+    /// closure changed): overwrite just the mutable config fields the stable trampolines
+    /// read at dispatch time. This swaps the dispatch target to the latest closure —
+    /// mirroring how the Tag / <c>ModifierEventHandlerState</c> refresh keeps routed
+    /// handlers current on skip — while leaving the trampolines and the in-flight gesture
+    /// cursors (<c>PanBeganDispatched</c>, the LongPress timer, …) untouched, so an
+    /// in-flight gesture is never re-armed mid-interaction (no Began/Ended
+    /// double-dispatch). <c>TryGetValue</c> (not GetOrCreate) never allocates: an
+    /// already-wired family always has its state.</para>
     /// </summary>
     internal static void RefreshGestureDragStateOnSkip(FrameworkElement fe, ElementModifiers? oldM, ElementModifiers? newM)
     {
+        // ── Gesture family (Pan/Pinch/Rotate/LongPress) ──
         bool gestureNow = newM is not null
             && (newM.Pan is not null || newM.Pinch is not null || newM.Rotate is not null || newM.LongPress is not null);
         bool gestureBefore = oldM is not null
             && (oldM.Pan is not null || oldM.Pinch is not null || oldM.Rotate is not null || oldM.LongPress is not null);
-        if ((gestureNow || gestureBefore) && _gestureStates.TryGetValue(fe, out var gs))
+        if (gestureNow != gestureBefore)
         {
-            gs.Pan = newM?.Pan;
-            gs.Pinch = newM?.Pinch;
-            gs.Rotate = newM?.Rotate;
-            gs.LongPress = newM?.LongPress;
+            // ADD or REMOVE-last — wire / unwire through the full handler.
+            ApplyGestureHandlers(fe, oldM, newM ?? _emptyModifiers);
+        }
+        else if (gestureNow && _gestureStates.TryGetValue(fe, out var gs))
+        {
+            // Already-wired identity change — config-only refresh (mid-gesture-safe).
+            gs.Pan = newM!.Pan;
+            gs.Pinch = newM.Pinch;
+            gs.Rotate = newM.Rotate;
+            gs.LongPress = newM.LongPress;
         }
 
+        // ── Drag-drop family (DragSource/DropTarget) ──
         bool dragNow = newM is not null && (newM.DragSource is not null || newM.DropTarget is not null);
         bool dragBefore = oldM is not null && (oldM.DragSource is not null || oldM.DropTarget is not null);
-        if ((dragNow || dragBefore) && _dndStates.TryGetValue(fe, out var ds))
+        if (dragNow != dragBefore)
         {
-            ds.Source = newM?.DragSource;
-            ds.Target = newM?.DropTarget;
+            // ADD or REMOVE-last — wire / unwire (CanDrag/AllowDrop + trampolines + the
+            // in-flight-drag guard so a mid-drag source removal still completes cleanly).
+            ApplyDragDropHandlers(fe, oldM, newM ?? _emptyModifiers);
+        }
+        else if (dragNow && _dndStates.TryGetValue(fe, out var ds))
+        {
+            ds.Source = newM!.DragSource;
+            ds.Target = newM.DropTarget;
         }
     }
 

@@ -859,6 +859,9 @@ internal static class SelfTestFixtureRegistry
         "SkipPath_RefreshesLivePanClosure_Keyed",
         "SkipPath_RefreshesLiveDropTarget",
         "SkipPath_MidGesturePreservesCursorsAndSubscriptions",
+        "SkipPath_AddFirstGestureWires",
+        "SkipPath_RemoveDragSourceMidDragPreservesState",
+        "SkipPath_RemoveDragSourceNotInFlightClears",
 
         // LongPress + focus — spec 027 Tier 3 Part 2 / Tier 5 (Phase 4)
         "Gesture_OnLongPressAutoEnablesHolding",
@@ -2311,6 +2314,9 @@ internal static class SelfTestFixtureRegistry
         "SkipPath_RefreshesLivePanClosure_Keyed" => new SkipPathGestureDragFixtures.SkipRefreshesLivePanClosure_Keyed(harness),
         "SkipPath_RefreshesLiveDropTarget" => new SkipPathGestureDragFixtures.SkipRefreshesLiveDropTarget(harness),
         "SkipPath_MidGesturePreservesCursorsAndSubscriptions" => new SkipPathGestureDragFixtures.SkipMidGesturePreservesCursorsAndSubscriptions(harness),
+        "SkipPath_AddFirstGestureWires" => new SkipPathGestureDragFixtures.SkipAddFirstGestureWires(harness),
+        "SkipPath_RemoveDragSourceMidDragPreservesState" => new SkipPathGestureDragFixtures.SkipRemoveDragSourceMidDragPreservesState(harness),
+        "SkipPath_RemoveDragSourceNotInFlightClears" => new SkipPathGestureDragFixtures.SkipRemoveDragSourceNotInFlightClears(harness),
 
         // LongPress + focus — spec 027 Tier 3 Part 2 / Tier 5 (Phase 4)
         "Gesture_OnLongPressAutoEnablesHolding" => new GestureFixtures.OnLongPressAutoEnablesHolding(harness),
