@@ -132,11 +132,22 @@
     (a Flex build failure just omits the table). Disable with -IncludeFlex:$false to skip
     the extra leg.
 
+.PARAMETER IncludeDataGrid
+    Run a fifth interleaved A/B leg on StressPerf.DataGrid — the real DataGrid control
+    (DataGridComponent) over a 30-column × 200-row IObservableDataSource whose cells are
+    mutated on a `--percent` fraction each tick, forcing a full DataGridComponent.Render()
+    every frame — and append its own PR-vs-main table to the comment (compare mode). This
+    exercises the DataGrid control's per-render array/LINQ allocation path (#663/#669) and
+    its per-cell/row modifier-delegate churn (#671) that the StocksGrid / keyed-list / flex
+    legs never reach, so it is the sensitive macro measure for DataGrid allocation +
+    delegate-stability optimizations. Default $true; build is best-effort (a DataGrid build
+    failure just omits the table). Disable with -IncludeDataGrid:$false to skip the extra leg.
+
 .PARAMETER Apps
     Which harnesses to run in single-tree mode: ReactorOptimized, Direct, KeyedList,
-    Flex. Ignored in compare mode (which always does ReactorOptimized both sides +
+    Flex, DataGrid. Ignored in compare mode (which always does ReactorOptimized both sides +
     Direct once for the WinUI3 column, and — unless -IncludeKeyedList:$false /
-    -IncludeFlex:$false — KeyedList and Flex both sides).
+    -IncludeFlex:$false / -IncludeDataGrid:$false — KeyedList, Flex and DataGrid both sides).
 
 .PARAMETER OutDir
     Where logs, comment.md and result.json land. Defaults to ci\out next to this
@@ -211,7 +222,8 @@ param(
     [bool]$IncludeSkipFloor = $true,
     [bool]$IncludeKeyedList = $true,
     [bool]$IncludeFlex = $true,
-    [ValidateSet('ReactorOptimized', 'Direct', 'KeyedList', 'Flex')]
+    [bool]$IncludeDataGrid = $true,
+    [ValidateSet('ReactorOptimized', 'Direct', 'KeyedList', 'Flex', 'DataGrid')]
     [string[]]$Apps = @('ReactorOptimized', 'Direct'),
     [string]$OutDir,
     [switch]$SkipBuild,
@@ -245,6 +257,7 @@ $AppRegistry = @{
     Direct           = @{ AppName = 'StressPerf.Direct';           ProjectRel = 'tests\stress_perf\StressPerf.Direct\StressPerf.Direct.csproj' }
     KeyedList        = @{ AppName = 'StressPerf.KeyedList';         ProjectRel = 'tests\stress_perf\StressPerf.KeyedList\StressPerf.KeyedList.csproj' }
     Flex             = @{ AppName = 'StressPerf.Flex';              ProjectRel = 'tests\stress_perf\StressPerf.Flex\StressPerf.Flex.csproj' }
+    DataGrid         = @{ AppName = 'StressPerf.DataGrid';          ProjectRel = 'tests\stress_perf\StressPerf.DataGrid\StressPerf.DataGrid.csproj' }
     MicroControlModel = @{ AppName = 'PerfBench.ControlModel';     ProjectRel = 'tests\perf_bench\PerfBench.ControlModel\PerfBench.ControlModel.csproj' }
 }
 
@@ -857,10 +870,11 @@ Write-Log ("runner: {0} | {1} cores | {2} GB | {3}" -f $runner.Cpu, $runner.Core
 $modeSuffix = if ($Compare) {
     # COMPARE mode runs the interleaved A/B legs, so the skip-floor / keyed-list
     # opt-out switches are what actually decide which legs run.
-    "skip-floor={0} | keyed-list={1} | flex={2}" -f `
+    "skip-floor={0} | keyed-list={1} | flex={2} | datagrid={3}" -f `
         $(if ($IncludeSkipFloor) { "on (--percent $SkipFloorPercent)" } else { 'off' }), `
         $(if ($IncludeKeyedList) { 'on' } else { 'off' }), `
-        $(if ($IncludeFlex) { 'on' } else { 'off' })
+        $(if ($IncludeFlex) { 'on' } else { 'off' }), `
+        $(if ($IncludeDataGrid) { 'on' } else { 'off' })
 } else {
     # LOCAL mode ignores the interleaved-leg switches entirely; the workload set is
     # whatever -Apps selects, so report that instead of a misleading on/off.
@@ -876,6 +890,7 @@ try {
         $direct = $AppRegistry.Direct
         $keyed = $AppRegistry.KeyedList
         $flex = $AppRegistry.Flex
+        $datagrid = $AppRegistry.DataGrid
         $microMeta = $AppRegistry.MicroControlModel
 
         if (-not $SkipBuild) {
@@ -908,6 +923,15 @@ try {
             } catch {
                 Write-Log "flex workload build failed ($_) — omitting the flex table" 'Yellow'
                 $IncludeFlex = $false
+            }
+        }
+        if ($IncludeDataGrid -and -not $SkipBuild) {
+            try {
+                Build-Harness -TreeRoot $BaselineRoot -AppMeta $datagrid
+                Build-Harness -TreeRoot $Root -AppMeta $datagrid
+            } catch {
+                Write-Log "datagrid workload build failed ($_) — omitting the datagrid table" 'Yellow'
+                $IncludeDataGrid = $false
             }
         }
         $mainExe = Resolve-HarnessExe -TreeRoot $BaselineRoot -AppMeta $ro
@@ -1007,6 +1031,37 @@ try {
             }
         }
 
+        # Fifth interleaved A/B leg: the DataGrid workload. StressPerf.DataGrid stands up
+        # the real DataGrid control (DataGridComponent) over a 30-column × 200-row
+        # IObservableDataSource and mutates a --percent fraction of cells each tick,
+        # forcing a full DataGridComponent.Render() every frame — the per-render
+        # array/LINQ allocation path (#663/#669) and per-cell/row .OnTapped/.OnPointerPressed
+        # delegate churn (#671) that StocksGrid's native Grid, the keyed-list reorder leg
+        # and the flex layout leg never reach. Same paired interleaving + drop-both
+        # alignment as above. Best-effort: if either exe is missing (build omitted/failed)
+        # the leg is skipped and the datagrid table is omitted — the StocksGrid comparison
+        # is unaffected.
+        $mainDataGridRuns = @(); $prDataGridRuns = @()
+        if ($IncludeDataGrid) {
+            $mainDataGridExe = Resolve-HarnessExe -TreeRoot $BaselineRoot -AppMeta $datagrid
+            $prDataGridExe   = Resolve-HarnessExe -TreeRoot $Root -AppMeta $datagrid
+            if (-not $mainDataGridExe -or -not $prDataGridExe) {
+                Write-Log "datagrid exe not found (main=$([bool]$mainDataGridExe) pr=$([bool]$prDataGridExe)) — omitting the datagrid table" 'Yellow'
+            } else {
+                Write-Log "interleaving main/PR datagrid (--percent $Percent; $($Warmup) warmup + $($Reps) measured each)" 'Green'
+                for ($i = 1; $i -le ($Warmup + $Reps); $i++) {
+                    $mm = Invoke-OneRun -Exe $mainDataGridExe -AppMeta $datagrid -Index $i -Tag 'main-datagrid'
+                    $pm = Invoke-OneRun -Exe $prDataGridExe -AppMeta $datagrid -Index $i -Tag 'pr-datagrid'
+                    if ($i -le $Warmup) { Write-Log "  (datagrid warmup pair #$i discarded)" 'DarkGray'; continue }
+                    if ($mm -and $pm) { $mainDataGridRuns += $mm; $prDataGridRuns += $pm }
+                    elseif ($mm -or $pm) { Write-Log "  datagrid pair #$i incomplete (main=$([bool]$mm) pr=$([bool]$pm)) — dropped to keep the paired CI aligned" 'Yellow' }
+                }
+                if ($mainDataGridRuns.Count -lt $Reps -or $prDataGridRuns.Count -lt $Reps) {
+                    Write-Log "  datagrid leg short (main $($mainDataGridRuns.Count)/$Reps, PR $($prDataGridRuns.Count)/$Reps) — its paired CI uses fewer samples" 'Yellow'
+                }
+            }
+        }
+
         $winRuns = @()
         if ($directExe) {
             Write-Log "vanilla WinUI3 (StressPerf.Direct)" 'Green'
@@ -1081,6 +1136,8 @@ try {
         $prKeyed = if ($prKeyedRuns.Count) { Measure-PerfRuns -Runs $prKeyedRuns } else { $null }
         $mainFlex = if ($mainFlexRuns.Count) { Measure-PerfRuns -Runs $mainFlexRuns } else { $null }
         $prFlex = if ($prFlexRuns.Count) { Measure-PerfRuns -Runs $prFlexRuns } else { $null }
+        $mainDataGrid = if ($mainDataGridRuns.Count) { Measure-PerfRuns -Runs $mainDataGridRuns } else { $null }
+        $prDataGrid = if ($prDataGridRuns.Count) { Measure-PerfRuns -Runs $prDataGridRuns } else { $null }
 
         $note = $null
         if ($prRuns.Count -eq 0 -or $mainRuns.Count -eq 0) {
@@ -1105,17 +1162,18 @@ try {
             MainFloorSamples = $mainFloorRuns.Count; PrFloorSamples = $prFloorRuns.Count
             MainKeyedSamples = $mainKeyedRuns.Count; PrKeyedSamples = $prKeyedRuns.Count
             MainFlexSamples = $mainFlexRuns.Count; PrFlexSamples = $prFlexRuns.Count
+            MainDataGridSamples = $mainDataGridRuns.Count; PrDataGridSamples = $prDataGridRuns.Count
             BaseSha = $(if ($BaseSha) { $BaseSha.Substring(0, [Math]::Min(7, $BaseSha.Length)) } else { '' })
             HeadSha = $(if ($HeadSha) { $HeadSha.Substring(0, [Math]::Min(7, $HeadSha.Length)) } else { '' })
             Runner = $runner.Runner; Cpu = $runner.Cpu; Cores = $runner.Cores; MemoryGB = $runner.MemoryGB
             RunUrl = $RunUrl; Timestamp = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'); Note = $note
         }
-        $comment = Format-PerfComment -Main $main -Pr $pr -WinUI3 $winui3 -Rust $rust -Micro $micro -MicroOmitReason $microOmitReason -MainFloor $mainFloor -PrFloor $prFloor -MainKeyed $mainKeyed -PrKeyed $prKeyed -MainFlex $mainFlex -PrFlex $prFlex -Context $ctx
+        $comment = Format-PerfComment -Main $main -Pr $pr -WinUI3 $winui3 -Rust $rust -Micro $micro -MicroOmitReason $microOmitReason -MainFloor $mainFloor -PrFloor $prFloor -MainKeyed $mainKeyed -PrKeyed $prKeyed -MainFlex $mainFlex -PrFlex $prFlex -MainDataGrid $mainDataGrid -PrDataGrid $prDataGrid -Context $ctx
         $commentPath = Join-Path $OutDir 'comment.md'
         Set-Content -LiteralPath $commentPath -Value $comment -Encoding UTF8
         Write-Log "comment.md written -> $commentPath" 'Green'
 
-        $result = [pscustomobject]@{ main = $main; pr = $pr; winui3 = $winui3; mainFloor = $mainFloor; prFloor = $prFloor; mainKeyed = $mainKeyed; prKeyed = $prKeyed; mainFlex = $mainFlex; prFlex = $prFlex; rust = $rust; micro = $micro; runner = $runner; context = $ctx }
+        $result = [pscustomobject]@{ main = $main; pr = $pr; winui3 = $winui3; mainFloor = $mainFloor; prFloor = $prFloor; mainKeyed = $mainKeyed; prKeyed = $prKeyed; mainFlex = $mainFlex; prFlex = $prFlex; mainDataGrid = $mainDataGrid; prDataGrid = $prDataGrid; rust = $rust; micro = $micro; runner = $runner; context = $ctx }
         $result | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $OutDir 'result.json') -Encoding UTF8
 
         Write-Host "`n----- comment.md -----" -ForegroundColor DarkGray

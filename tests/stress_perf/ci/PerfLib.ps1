@@ -1050,6 +1050,102 @@ function Format-PerfFlexSection {
     return $lines.ToArray()
 }
 
+function Format-PerfDataGridSection {
+    <#
+    .SYNOPSIS
+        Render the DataGrid workload section: the four headline metrics plus an
+        allocation sub-table measured on StressPerf.DataGrid — the real DataGrid control
+        (DataGridComponent) over a 30-column × 200-row IObservableDataSource whose cells
+        are mutated on a fraction each tick. Empty array when there is nothing to show.
+    .DESCRIPTION
+        Unlike the positional StocksGrid headline/skip-floor legs (a native Grid mutated
+        in place), the keyed-list leg (reordered keyed rows) and the flex leg (Yoga layout),
+        this is a SEPARATE macro workload that drives the **DataGrid control** itself: each
+        tick mutates a fraction of cells and fires DataChanged, forcing a full
+        DataGridComponent.Render() that unconditionally rebuilds its per-render arrays / LINQ
+        (the sortKey join, the DataRequest + .ToList()s, the header+row colWidths/gridColDefs
+        arrays, the Columns getter Where+ToList, the per-column lookups, the row-def arrays,
+        the setter spread — #663/#669) and re-allocates the per-realized-cell/row
+        .OnTapped/.OnPointerPressed closures (#671). It is the sensitive macro measure for
+        DataGrid per-render allocation + delegate-stability work that the positional
+        StocksGrid, keyed-list and flex legs can never exercise. Reuses the same paired-Δ
+        95% CI machinery (Get-PerfDelta over the index-aligned per-run samples) as the
+        headline table. Also appends an **allocation** sub-table — the shared
+        PerfAllocMetricSpec (alloc bytes/render + Gen0 GC / 1k renders) over the DataGrid
+        aggregates — the sensitive macro signal for DataGrid allocation reductions that the
+        positional StocksGrid allocation table can never isolate; rendered only when the
+        DataGrid leg reported allocation metrics. Returns an empty array when either
+        aggregate is $null (DataGrid leg disabled, build omitted, or one side produced no
+        metrics), so the caller renders nothing.
+    .PARAMETER MainDataGrid  Aggregated baseline DataGrid metrics (Measure-PerfRuns), or $null.
+    .PARAMETER PrDataGrid    Aggregated PR-head DataGrid metrics, or $null.
+    .PARAMETER Percent       The churn percent the DataGrid leg ran at (heading / preamble).
+    #>
+    param(
+        [AllowNull()][pscustomobject]$MainDataGrid,
+        [AllowNull()][pscustomobject]$PrDataGrid,
+        [double]$Percent = 50
+    )
+    if ($null -eq $MainDataGrid -or $null -eq $PrDataGrid) { return @() }
+
+    $lines = [System.Collections.Generic.List[string]]::new()
+    $lines.Add("### DataGrid control workload (``StressPerf.DataGrid``, ``--percent $Percent``)")
+    $lines.Add('')
+    $lines.Add("A separate macro workload: the **real DataGrid control** (``DataGridComponent``) over a **30-column × 200-row** ``IObservableDataSource`` whose cells are mutated on a ``--percent`` fraction each tick, forcing a full ``DataGridComponent.Render()`` every frame. This re-runs &mdash; unconditionally, regardless of whether sort/filter changed &mdash; the per-render array/LINQ rebuilds (#663/#669) and re-allocates the per-realized-cell/row ``.OnTapped``/``.OnPointerPressed`` closures (#671) that the StocksGrid, keyed-list and flex legs never reach. Same interleaved paired-Δ 95% CI as the headline table.")
+    $lines.Add('')
+    $lines.Add("> **Reading this table:** the DataGrid's re-render is **async / dispatcher-debounced** (``DataChanged`` &rarr; ``LoadDataAsync`` &rarr; coalesced ``forceRender`` + a scroll-settle timer), so the **reconcile / diff timing** rows are noisier here and a render may be coalesced. Judge DataGrid allocation / delegate wins primarily on the **DataGrid allocation table** below (process-wide GC counters capture the whole run) and the **renders-per-second** figure. The working-set memory figure is informational only.")
+    $lines.Add('')
+    $lines.Add('| Metric | `main` (baseline) | This PR | Δ (95% CI) | Status |')
+    $lines.Add('|---|--:|--:|--:|:--|')
+    foreach ($m in $script:PerfMetricSpec) {
+        $bVal = $MainDataGrid.($m.Key)
+        $pVal = $PrDataGrid.($m.Key)
+        $spread = [math]::Max([double]$MainDataGrid."$($m.Key)Spread", [double]$PrDataGrid."$($m.Key)Spread")
+        $delta = Get-PerfDelta -Baseline $bVal -Candidate $pVal -LowerIsBetter $m.LowerIsBetter -SpreadPct $spread `
+            -BaselineSamples $MainDataGrid."$($m.Key)Samples" -CandidateSamples $PrDataGrid."$($m.Key)Samples"
+        $lines.Add(('| {0} {1} | {2} | {3} | {4} | {5} |' -f `
+                $m.Label, $m.Arrow, `
+            (Format-PerfNumber $bVal $m.Digits), `
+            (Format-PerfNumber $pVal $m.Digits), `
+            (Format-PerfDeltaCell $delta), `
+            (Get-PerfStatusGlyph $delta.Status)))
+    }
+    $lines.Add('')
+
+    # Allocation sub-table for the DataGrid workload: the shared PerfAllocMetricSpec
+    # (Alloc bytes/render, Gen0 GC / 1k renders) rendered over the DataGrid aggregates with
+    # the identical paired-Δ 95% CI machinery used above. This is the sensitive MACRO
+    # signal for DataGrid allocation reductions — allocBytesPerRender tracks the per-render
+    # array/LINQ + delegate-closure alloc volume on the DataGridComponent path, an alloc
+    # signal the positional StocksGrid allocation table can never isolate. Rendered only
+    # when the DataGrid leg reported allocation metrics (every StressPerf.DataGrid build
+    # does; n/a only for a legacy head opened before the metric landed).
+    $hasDgAlloc = ($null -ne $MainDataGrid.AllocBytesPerRender) -or ($null -ne $PrDataGrid.AllocBytesPerRender) -or
+                  ($null -ne $MainDataGrid.Gen0PerKRenders) -or ($null -ne $PrDataGrid.Gen0PerKRenders)
+    if ($hasDgAlloc) {
+        $lines.Add('**Allocation (datagrid)** &mdash; lower is better')
+        $lines.Add('')
+        $lines.Add('| Metric | `main` (baseline) | This PR | Δ (95% CI) | Status |')
+        $lines.Add('|---|--:|--:|--:|:--|')
+        foreach ($m in $script:PerfAllocMetricSpec) {
+            $bVal = $MainDataGrid.($m.Key)
+            $pVal = $PrDataGrid.($m.Key)
+            $spread = [math]::Max([double]$MainDataGrid."$($m.Key)Spread", [double]$PrDataGrid."$($m.Key)Spread")
+            $delta = Get-PerfDelta -Baseline $bVal -Candidate $pVal -LowerIsBetter $m.LowerIsBetter -SpreadPct $spread `
+                -BaselineSamples $MainDataGrid."$($m.Key)Samples" -CandidateSamples $PrDataGrid."$($m.Key)Samples"
+            $lines.Add(('| {0} {1} | {2} | {3} | {4} | {5} |' -f `
+                    $m.Label, $m.Arrow, `
+                (Format-PerfNumber $bVal $m.Digits), `
+                (Format-PerfNumber $pVal $m.Digits), `
+                (Format-PerfDeltaCell $delta), `
+                (Get-PerfStatusGlyph $delta.Status)))
+        }
+        $lines.Add('')
+    }
+
+    return $lines.ToArray()
+}
+
 function Format-PerfComment {
     <#
     .SYNOPSIS
@@ -1072,6 +1168,8 @@ function Format-PerfComment {
     .PARAMETER PrKeyed     Aggregated PR-head keyed-list workload metrics, or $null.
     .PARAMETER MainFlex   Aggregated baseline flex workload metrics, or $null.
     .PARAMETER PrFlex      Aggregated PR-head flex workload metrics, or $null.
+    .PARAMETER MainDataGrid  Aggregated baseline DataGrid workload metrics, or $null.
+    .PARAMETER PrDataGrid    Aggregated PR-head DataGrid workload metrics, or $null.
     .PARAMETER Context    Hashtable: Percent, Duration, Reps, Warmup, SkipFloorPercent,
                           BaseSha, HeadSha, Runner, Cpu, Cores, MemoryGB, RunUrl,
                           Timestamp, Note.
@@ -1089,6 +1187,8 @@ function Format-PerfComment {
         [AllowNull()][pscustomobject]$PrKeyed,
         [AllowNull()][pscustomobject]$MainFlex,
         [AllowNull()][pscustomobject]$PrFlex,
+        [AllowNull()][pscustomobject]$MainDataGrid,
+        [AllowNull()][pscustomobject]$PrDataGrid,
         [Parameter(Mandatory)][hashtable]$Context
     )
 
@@ -1179,6 +1279,15 @@ function Format-PerfComment {
     # Rendered only when both flex aggregates are present.
     $flexPct = if ($Context.ContainsKey('Percent')) { [double]$Context.Percent } else { 50 }
     foreach ($fline in (Format-PerfFlexSection -MainFlex $MainFlex -PrFlex $PrFlex -Percent $flexPct)) { & $add $fline }
+
+    # ── DataGrid control workload table (StressPerf.DataGrid) ────────────────
+    # A separate macro workload driving the real DataGrid control (DataGridComponent) —
+    # its per-render array/LINQ rebuilds (#663/#669) and per-cell/row modifier-delegate
+    # churn (#671) — that neither the positional StocksGrid legs, the keyed-list leg nor
+    # the flex layout leg reach. The sensitive macro signal for DataGrid allocation +
+    # delegate-stability optimizations. Rendered only when both DataGrid aggregates present.
+    $dataGridPct = if ($Context.ContainsKey('Percent')) { [double]$Context.Percent } else { 50 }
+    foreach ($dline in (Format-PerfDataGridSection -MainDataGrid $MainDataGrid -PrDataGrid $PrDataGrid -Percent $dataGridPct)) { & $add $dline }
 
     # ── Reconciler micro-benchmarks (ns-resolution, WinUI-undiluted) ──────────
     # Rendered only when the PerfBench.ControlModel micro leg produced results for
