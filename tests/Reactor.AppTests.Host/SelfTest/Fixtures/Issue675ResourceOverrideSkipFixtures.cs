@@ -294,4 +294,144 @@ internal static class Issue675ResourceOverrideSkipFixtures
             return Task.CompletedTask;
         }
     }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  ResourceOverrides transition-away (remove side of the contract) — RED pre-fix
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// A cell carrying a <c>ResourceOverrides.ThemeRefs</c> override DROPS it while
+    /// otherwise shallow-equal (a conditional <c>.Resources(...)</c> whose condition flips).
+    /// <c>ShallowEquals</c> does not compare ResourceOverrides, and the new element has no
+    /// ThemeRefs so the <c>CanSkipUpdate</c> gate doesn't decline either — so before the
+    /// ShallowEquals ResourceOverrides comparison the cell is child-skipped,
+    /// <c>ApplyResourceOverrides</c> never runs, and the resolved brush survives stale in
+    /// <c>fe.Resources[key]</c>. After the fix <c>ShallowEquals</c> declines (overrides
+    /// differ) → full Update → the removal gate strips the dropped managed key. RED pre-fix,
+    /// GREEN post-fix. This closes the remove side, symmetric with ThemeBindings transition-away.
+    /// </summary>
+    internal sealed class TransitionAwayRemovesStaleOverride(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var red = MakeBrush(180, 30, 30);
+            var srcDict = InstallSourceDict(SrcKey, red);
+            try
+            {
+                Action<int>? bump = null;
+                var host = H.CreateHost();
+                host.Mount(ctx =>
+                {
+                    var (n, setN) = ctx.UseState(0);
+                    bump = setN;
+                    // n==0: carries the ThemeRef override; n>=1: drops it (otherwise identical).
+                    var cell = TextBlock("transCell");
+                    if (n == 0)
+                        cell = cell.Resources(r => r.Set(TargetKey, Theme.Ref(SrcKey)));
+                    return VStack(cell);
+                });
+
+                await Harness.Render();
+                var cell = H.FindControl<TextBlock>(t => t.Text == "transCell");
+                H.Check("Issue675_TransitionAway_MountHasOverride",
+                    ResourceBrush(cell, TargetKey) is not null);
+
+                // Drop the override while the cell is otherwise shallow-equal.
+                bump!(1);
+                await Harness.Render();
+
+                cell = H.FindControl<TextBlock>(t => t.Text == "transCell");
+                H.Check("Issue675_TransitionAway_StaleOverrideRemoved",
+                    ResourceBrush(cell, TargetKey) is null);
+            }
+            finally
+            {
+                Application.Current.Resources.MergedDictionaries.Remove(srcDict);
+            }
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Keyed SUFFIX child-skip re-resolve (coverage parity with the keyed prefix)
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Coverage companion to <see cref="KeyedChildSkipReResolves"/> (which exercises the keyed
+    /// PREFIX arm). Here the FIRST child's KEY changes every render, so the keyed prefix scan
+    /// stops at index 0 (KeyMatch fails) and the trailing themed cell (stable key) is matched
+    /// by the keyed SUFFIX scan instead — locking the shared <c>CanSkipUpdate</c> contract on
+    /// the suffix arm too. The themed cell re-resolves its ThemeRef across a source-brush change.
+    /// </summary>
+    internal sealed class KeyedSuffixChildSkipReResolves(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var red = MakeBrush(60, 60, 200);
+            var blue = MakeBrush(200, 60, 60);
+            var srcDict = InstallSourceDict(SrcKey, red);
+            try
+            {
+                Action<int>? bump = null;
+                var host = H.CreateHost();
+                host.Mount(ctx =>
+                {
+                    var (n, setN) = ctx.UseState(0);
+                    bump = setN;
+                    // First child's KEY changes each render → keyed prefix scan stops at index 0,
+                    // so the trailing themed cell (stable key) is consumed by the SUFFIX scan.
+                    return VStack(
+                        TextBlock("keySuffixSibling").WithKey($"sib{n}"),
+                        TextBlock("keySuffixCell")
+                            .Resources(r => r.Set(TargetKey, Theme.Ref(SrcKey)))
+                            .WithKey("cellSuffix"));
+                });
+
+                await Harness.Render();
+                var cell = H.FindControl<TextBlock>(t => t.Text == "keySuffixCell");
+                H.Check("Issue675_KeyedSuffix_MountResolvedRed",
+                    ReferenceEquals(ResourceBrush(cell, TargetKey), red));
+
+                srcDict[SrcKey] = blue;
+                bump!(1);
+                await Harness.Render();
+
+                cell = H.FindControl<TextBlock>(t => t.Text == "keySuffixCell");
+                H.Check("Issue675_KeyedSuffix_ReResolvedBlueOnChildSkip",
+                    ReferenceEquals(ResourceBrush(cell, TargetKey), blue));
+            }
+            finally
+            {
+                Application.Current.Resources.MergedDictionaries.Remove(srcDict);
+            }
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Literal-override no-false-decline (skip-floor guard for the RO compare)
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Live (brush creation needs WinUI activation): proves the new ShallowEquals
+    /// ResourceOverrides comparison does NOT regress the skip-floor for literal-override
+    /// cells. A hex literal is re-parsed to a FRESH brush instance each render, so a
+    /// reference compare would false-decline an UNCHANGED override; ResourceOverridesEqual
+    /// compares brush literals by value (BrushesEqual) → same hex stays shallow-equal, a
+    /// changed hex declines.
+    /// </summary>
+    internal sealed class LiteralOverrideNoFalseDecline(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override Task RunAsync()
+        {
+            var same1 = TextBlock("lit").Resources(r => r.Set("ButtonBackground", "#0078D4"));
+            var same2 = TextBlock("lit").Resources(r => r.Set("ButtonBackground", "#0078D4"));
+            H.Check("Issue675_LiteralBrush_SameHex_ShallowEqual",
+                Element.ShallowEquals(same1, same2));
+
+            var diff = TextBlock("lit").Resources(r => r.Set("ButtonBackground", "#106EBE"));
+            H.Check("Issue675_LiteralBrush_DiffHex_NotShallowEqual",
+                !Element.ShallowEquals(same1, diff));
+
+            return Task.CompletedTask;
+        }
+    }
 }

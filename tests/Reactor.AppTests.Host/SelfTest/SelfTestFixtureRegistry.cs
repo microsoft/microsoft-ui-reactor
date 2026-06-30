@@ -387,6 +387,9 @@ internal static class SelfTestFixtureRegistry
         "Issue675_PositionalChildSkipReResolves",
         "Issue675_KeyedChildSkipReResolves",
         "Issue675_RemovalGateStaleKeyWhenOldOverridesNull",
+        "Issue675_TransitionAwayRemovesStaleOverride",
+        "Issue675_KeyedSuffixChildSkipReResolves",
+        "Issue675_LiteralOverrideNoFalseDecline",
         "HotReload_ChildHookOrderRecovery",
         "HotReload_ComponentMigratesState",
         // DSL and extension tests
@@ -1848,6 +1851,9 @@ internal static class SelfTestFixtureRegistry
         "Issue675_PositionalChildSkipReResolves" => new Issue675ResourceOverrideSkipFixtures.PositionalChildSkipReResolves(harness),
         "Issue675_KeyedChildSkipReResolves" => new Issue675ResourceOverrideSkipFixtures.KeyedChildSkipReResolves(harness),
         "Issue675_RemovalGateStaleKeyWhenOldOverridesNull" => new Issue675ResourceOverrideSkipFixtures.RemovalGateStaleKeyWhenOldOverridesNull(harness),
+        "Issue675_TransitionAwayRemovesStaleOverride" => new Issue675ResourceOverrideSkipFixtures.TransitionAwayRemovesStaleOverride(harness),
+        "Issue675_KeyedSuffixChildSkipReResolves" => new Issue675ResourceOverrideSkipFixtures.KeyedSuffixChildSkipReResolves(harness),
+        "Issue675_LiteralOverrideNoFalseDecline" => new Issue675ResourceOverrideSkipFixtures.LiteralOverrideNoFalseDecline(harness),
         "HotReload_ChildHookOrderRecovery" => new HotReloadRecoveryFixtures.ChildRecoversAndSiblingStateSurvives(harness),
         "HotReload_ComponentMigratesState" => new HotReloadComponentMigrationFixtures.MigratesPreservingState(harness),
         // DSL and extension tests

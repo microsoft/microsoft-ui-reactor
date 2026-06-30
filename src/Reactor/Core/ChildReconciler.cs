@@ -196,14 +196,21 @@ internal static class ChildReconciler
         // is therefore the single place that performs skip-path theme re-resolution.
         //
         // We deliberately do NOT also gate this arm on IsOnDirtyAncestorPath (the
-        // element-level skip in Update.cs does). It is provably unnecessary here:
-        // every container arm in Element.ShallowEquals compares its children/child BY
-        // REFERENCE, and Component/Memo/Func wrappers return false — so any element
-        // that is CanSkipUpdate-eligible is either a leaf or a reference-equal-children
-        // container, neither of which can be a STRICT ANCESTOR of a freshly re-rendered
-        // self-triggered descendant (that ancestor would carry a new children reference
-        // and fail ShallowEquals). Adding a dirty-ancestor check would only force a
-        // COM fetch on the hot skip-floor for a path that cannot be reached.
+        // element-level skip in Update.cs does). For non-explicitly-memoized trees this
+        // is unnecessary: every container arm in Element.ShallowEquals compares its
+        // children/child BY REFERENCE, and Component/Memo/Func wrappers return false — so
+        // a CanSkipUpdate-eligible element is a leaf or a reference-equal-children
+        // container, and a parent that re-rendered to reach a self-triggered descendant
+        // would carry a NEW children reference and fail ShallowEquals (so it wouldn't be
+        // skip-eligible here). The one residual (pre-existing, LOW) edge is an EXPLICITLY
+        // memoized wrapper — e.g. UseMemo(() => Border(Counter()), []) yields a
+        // reference-equal Border whose Counter self-triggers; this arm (lacking the
+        // IsOnDirtyAncestorPath check) could in principle swallow that re-render. That is
+        // a pre-existing property of the child-skip path, orthogonal to #675 (a ThemeRef
+        // child inherits the dirty-ancestor check via the Update fall-through), and the
+        // bulk array-fast-path (ReconcilePositional, ~line 119) retains the
+        // IsOnDirtyAncestorPath gate as cheap insurance. We keep this per-child arm free
+        // of the COM fetch a membership check would cost on the hot skip-floor.
         var oldEl = oldChildren[i];
         var newEl = newChildren[i];
         if (Element.CanSkipUpdate(oldEl, newEl)

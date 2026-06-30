@@ -427,6 +427,10 @@ public abstract record Element
         {
             if (!AttachedEqual(a.Attached, b.Attached)) return false;
             if (!ThemeBindingsEqual(a.ThemeBindings, b.ThemeBindings)) return false;
+            // Issue #675 — compare ResourceOverrides for symmetry with ThemeBindings: a
+            // dropped/changed override while otherwise shallow-equal must decline the skip
+            // so ApplyResourceOverrides on the full-Update path strips/re-applies it.
+            if (!ResourceOverridesEqual(a.ResourceOverrides, b.ResourceOverrides)) return false;
             if (!ContextValuesEqual(a.ContextValues, b.ContextValues)) return false;
         }
 
@@ -1357,6 +1361,59 @@ public abstract record Element
             if (!Equals(valA, valB)) return false;
         }
         return true;
+    }
+
+    // Issue #675 — structural equality for per-control ResourceOverrides (lightweight
+    // styling). ShallowEquals must compare these for the SAME reason it compares
+    // ThemeBindings (line ~417): without it, an element that DROPS or CHANGES a
+    // ResourceOverrides entry while otherwise shallow-equal would be skipped and the
+    // stale resolved brush (or stale literal) would survive in fe.Resources[key] — the
+    // remove/change side of the contract. Returning false here routes the element through
+    // full Update, where ApplyResourceOverrides(old, new) strips the dropped managed key
+    // and applies the new value. This is symmetric with the ThemeBindings transition-away
+    // handling (ShallowEquals catches it + ClearThemeBindings on the Update path). Gated
+    // behind the no-extras fast-path in ShallowEquals, so override-free cells pay nothing.
+    // The CanSkipUpdate ThemeRefs gate is still required for the STEADY-STATE case (same
+    // overrides, effective theme changed → ShallowEquals stays true → the gate forces the
+    // re-resolve); the two are complementary.
+    internal static bool ResourceOverridesEqual(
+        Microsoft.UI.Reactor.Elements.ResourceOverrides? a,
+        Microsoft.UI.Reactor.Elements.ResourceOverrides? b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a is null || b is null) return false;
+
+        // Literals: compare by VALUE. Brushes are re-parsed to fresh instances each render
+        // (e.g. .Set("X", "#0078D4")), so reference compare would false-decline the skip for
+        // an UNCHANGED literal-override cell — use BrushesEqual; other literal kinds (double,
+        // CornerRadius) are value types whose Equals is correct.
+        var la = a.Literals;
+        var lb = b.Literals;
+        if (la.Count != lb.Count) return false;
+        foreach (var (key, valA) in la)
+        {
+            if (!lb.TryGetValue(key, out var valB)) return false;
+            if (!ResourceLiteralEqual(valA, valB)) return false;
+        }
+
+        // ThemeRefs: compare by key + ResourceKey (same semantics as ThemeBindingsEqual).
+        var ta = a.ThemeRefs;
+        var tb = b.ThemeRefs;
+        if (ta.Count != tb.Count) return false;
+        foreach (var (key, valA) in ta)
+        {
+            if (!tb.TryGetValue(key, out var valB)) return false;
+            if (valA.ResourceKey != valB.ResourceKey) return false;
+        }
+        return true;
+    }
+
+    private static bool ResourceLiteralEqual(object? a, object? b)
+    {
+        if (ReferenceEquals(a, b)) return true;
+        if (a is null || b is null) return false;
+        if (a is Brush ba && b is Brush bb) return BrushesEqual(ba, bb);
+        return a.Equals(b);
     }
 }
 
