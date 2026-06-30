@@ -318,6 +318,13 @@ internal static class Issue675ResourceOverrideSkipFixtures
             var srcDict = InstallSourceDict(SrcKey, red);
             try
             {
+                // #721 positive guard: absent the override the leaf is structurally
+                // shallow-equal, so the transition's skip-decline is driven by the override
+                // DROP (detected by the ShallowEquals ResourceOverrides compare), not an
+                // incidental modifier.
+                H.Check("Issue675_TransitionAway_BaseShapeSkipEligible",
+                    Element.ShallowEquals(TextBlock("transCell"), TextBlock("transCell")));
+
                 Action<int>? bump = null;
                 var host = H.CreateHost();
                 host.Mount(ctx =>
@@ -333,6 +340,7 @@ internal static class Issue675ResourceOverrideSkipFixtures
 
                 await Harness.Render();
                 var cell = H.FindControl<TextBlock>(t => t.Text == "transCell");
+                var cellBefore = cell;
                 H.Check("Issue675_TransitionAway_MountHasOverride",
                     ResourceBrush(cell, TargetKey) is not null);
 
@@ -341,6 +349,11 @@ internal static class Issue675ResourceOverrideSkipFixtures
                 await Harness.Render();
 
                 cell = H.FindControl<TextBlock>(t => t.Text == "transCell");
+                // #721 right-reason: the control is REUSED in place (not remounted), so the
+                // override removal is the removal-gate stripping the managed key on the full
+                // Update path — a remount would trivially drop resources for the wrong reason.
+                H.Check("Issue675_TransitionAway_ControlReusedInPlace",
+                    ReferenceEquals(cellBefore, cell));
                 H.Check("Issue675_TransitionAway_StaleOverrideRemoved",
                     ResourceBrush(cell, TargetKey) is null);
             }
@@ -371,6 +384,12 @@ internal static class Issue675ResourceOverrideSkipFixtures
             var srcDict = InstallSourceDict(SrcKey, red);
             try
             {
+                // #721 positive guard: the themed cell is structurally shallow-equal across
+                // renders, so its keyed-suffix skip eligibility hinges only on the ThemeRefs gate.
+                H.Check("Issue675_KeyedSuffix_CellSkipEligible", Element.ShallowEquals(
+                    TextBlock("keySuffixCell").Resources(r => r.Set(TargetKey, Theme.Ref(SrcKey))).WithKey("cellSuffix"),
+                    TextBlock("keySuffixCell").Resources(r => r.Set(TargetKey, Theme.Ref(SrcKey))).WithKey("cellSuffix")));
+
                 Action<int>? bump = null;
                 var host = H.CreateHost();
                 host.Mount(ctx =>
@@ -388,6 +407,7 @@ internal static class Issue675ResourceOverrideSkipFixtures
 
                 await Harness.Render();
                 var cell = H.FindControl<TextBlock>(t => t.Text == "keySuffixCell");
+                var cellBefore = cell;
                 H.Check("Issue675_KeyedSuffix_MountResolvedRed",
                     ReferenceEquals(ResourceBrush(cell, TargetKey), red));
 
@@ -396,6 +416,10 @@ internal static class Issue675ResourceOverrideSkipFixtures
                 await Harness.Render();
 
                 cell = H.FindControl<TextBlock>(t => t.Text == "keySuffixCell");
+                // #721 right-reason: the cell is updated IN PLACE (control reused), confirming
+                // it was matched by the keyed SUFFIX arm, not remounted by the keyed middle.
+                H.Check("Issue675_KeyedSuffix_ControlReusedInPlace",
+                    ReferenceEquals(cellBefore, cell));
                 H.Check("Issue675_KeyedSuffix_ReResolvedBlueOnChildSkip",
                     ReferenceEquals(ResourceBrush(cell, TargetKey), blue));
             }
