@@ -592,6 +592,32 @@ public class HookArityOverloadTests
         Assert.Equal(2, calls);
     }
 
+    [Fact]
+    public void UseEffect_Arity1_ReferenceType_IEquatable_Without_ObjectEquals_Matches_Params_Identity()
+    {
+        // The case from PR review (Copilot): a reference type implementing IEquatable<T>
+        // but NOT overriding Equals(object). The params path compares it by reference
+        // (identity); typed-arity must agree — NOT compare by the IEquatable value
+        // semantics that EqualityComparer<T>.Default would use. Two equal-X but distinct
+        // instances each render must re-run on BOTH paths in lockstep.
+        var ctx = NewCtx();
+        int arityRuns = 0, paramsRuns = 0;
+
+        ctx.UseEffect(() => { arityRuns++; }, new RefEquatableNoObjectOverride(1));
+        ctx.UseEffect(() => { paramsRuns++; }, new object[] { new RefEquatableNoObjectOverride(1) });
+        ctx.FlushEffects();
+        Assert.Equal(1, arityRuns);
+        Assert.Equal(1, paramsRuns);
+
+        Rerender(ctx);
+        ctx.UseEffect(() => { arityRuns++; }, new RefEquatableNoObjectOverride(1)); // new instance, equal X
+        ctx.UseEffect(() => { paramsRuns++; }, new object[] { new RefEquatableNoObjectOverride(1) });
+        ctx.FlushEffects();
+        Assert.Equal(2, paramsRuns); // reference identity differs → params re-runs
+        Assert.Equal(2, arityRuns);  // typed-arity matches params (would be 1 if it used IEquatable)
+        Assert.Equal(paramsRuns, arityRuns);
+    }
+
     // ── Params-vs-arity equivalence (same skip/re-run decision) ──────────────
 
     [Fact]
@@ -617,4 +643,16 @@ public class HookArityOverloadTests
 
     private sealed record Point(int X, int Y);
     private readonly record struct PointStruct(int X, int Y);
+
+    // A reference type with by-value IEquatable<T> but no Equals(object) override:
+    // EqualityComparer<T>.Default compares it by value, while object.Equals (the params
+    // path) compares it by reference. Locks the reference-type branch of DepEquals.
+#pragma warning disable CA1067 // intentional: exercises the reference-identity params path
+    private sealed class RefEquatableNoObjectOverride : IEquatable<RefEquatableNoObjectOverride>
+    {
+        private readonly int _x;
+        public RefEquatableNoObjectOverride(int x) => _x = x;
+        public bool Equals(RefEquatableNoObjectOverride? other) => other is not null && other._x == _x;
+    }
+#pragma warning restore CA1067
 }

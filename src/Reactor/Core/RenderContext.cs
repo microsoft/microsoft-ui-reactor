@@ -753,15 +753,19 @@ public sealed class RenderContext
     // a dependency's runtime type at the same hook slot across renders; an
     // InvalidCastException while COMPARING deps is worse than simply treating the slot
     // as changed, so a type mismatch returns false ("changed"). Like the non-generic
-    // params DepsEqual, this never throws on a type change. Equality itself goes through
-    // EqualityComparer<T>.Default — the same comparer UseState/UseReducer use — rather than
-    // the params path's boxed object.Equals. The two agree for every well-behaved type and
-    // this keeps the value-type fast path allocation-free; the only observable difference
-    // is a (pathological) value type whose IEquatable<T>.Equals disagrees with its
-    // object.Equals override, which compares by the former here. That is an intentional,
-    // boxing-free choice consistent with the rest of the hooks runtime.
-    // Value-type T unboxes through the `is T` pattern with no extra allocation, and the
-    // current dep is still passed through EqualityComparer<T> unboxed.
+    // params DepsEqual, this never throws on a type change.
+    //
+    // Equality is split by kind so typed-arity stays behaviorally identical to params:
+    //   • Reference-type T compares via object.Equals (stored.Equals(current)), EXACTLY
+    //     like the params path's Equals(prev[i], next[i]). References don't box, so this
+    //     costs nothing, and it avoids a divergence for a reference type that implements
+    //     IEquatable<T> but does not override Equals(object) — EqualityComparer<T>.Default
+    //     would compare such a type by value, while params compares it by reference.
+    //   • Value-type T uses EqualityComparer<T>.Default — the allocation-free, no-boxing
+    //     fast path this overload exists for, and the same comparer UseState/UseReducer use.
+    //     It unboxes the stored value through the `is T` pattern with no extra allocation.
+    // typeof(T).IsValueType is a JIT-time constant, so each instantiation keeps only its
+    // branch with no runtime type check.
     //
     // Nullable value-type deps (T = U?) are handled correctly. Boxing a non-null
     // Nullable<U> stores a boxed U, but the GENERIC `stored is T` test still succeeds for
@@ -774,6 +778,10 @@ public sealed class RenderContext
     private static bool DepEquals<T>(object? stored, T current)
     {
         if (stored is null) return current is null;
+        // Reference-type deps: object.Equals, matching the params path exactly (no boxing).
+        if (!typeof(T).IsValueType)
+            return stored.Equals(current);
+        // Value-type deps: typed comparer, allocation-free and boxing-free.
         return stored is T t && EqualityComparer<T>.Default.Equals(t, current);
     }
 
