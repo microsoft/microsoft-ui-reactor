@@ -6,8 +6,8 @@
 and [spec 054 — Windowing Evolution](054-windowing-evolution.md) (modern title bar), and consumes
 the auto-mapping path from [spec 058 — Control Wrapper Generator](058-control-wrapper-generator.md).
 
-The triggering question was open-ended: *"survey the Windows App SDK 2.x release notes and find new
-APIs Reactor could leverage."* This spec captures that survey, adopts the one high-value uptake it
+The triggering question was open-ended: \*"survey the Windows App SDK 2.x release notes and find new
+APIs Reactor could leverage."\* This spec captures that survey, adopts the one high-value uptake it
 surfaced (the `Microsoft.UI.Xaml.Controls.TitleBar` drag-region APIs added in 2.1.3), and records the
 rest of the survey as considered-but-deferred so the decision trail is durable.
 
@@ -40,7 +40,7 @@ to *XAML / UI* surface (the AI / ML / Video / Storage additions are out of scope
 the new APIs vs. 2.0.1 are:
 
 | API (version) | Reactor relevance | Verdict |
-|---|---|---|
+| --- | --- | --- |
 | **`TitleBar` drag regions** — `SetIsDragRegion` / `GetIsDragRegion`, `AutoRefreshDragRegions`, `RecomputeDragRegions()` (2.1.3) | `TitleBarElement` maps **directly** to `Microsoft.UI.Xaml.Controls.TitleBar` and exposes a user `Content` slot. The gallery sample already places an `AutoSuggestBox` + `Button` there — the exact mixed interactive / non-interactive case these APIs fix. | **Adopt** (this spec) |
 | `XamlBindingHelper.SetPropertyFromThickness` / `…CornerRadius` / `…Color` (2.2.0) | Boxing-free value-type DP sets. Reactor sets value props through source-generated strongly-typed CLR setters; no boxing-pool infra exists today. | Defer (§5) |
 | `Setter.ValueProperty` (2.2.0) | Exposes the `Setter.Value` DP; relevant only to programmatic `Style`/`Setter` construction. | Defer (§5) |
@@ -86,7 +86,7 @@ title-bar drag-region APIs. Rationale for "minimum, not latest":
 its samples consume the *installed* runtime):
 
 | Concern | Finding |
-|---|---|
+| --- | --- |
 | Side-by-side runtime family | All 2.x releases share **one** SbS framework keyed on the API-contract major (`Microsoft.WindowsAppRuntime.2.msix`), per the comment in `Run-PerfBenchmark.ps1`. So 2.0.1 → 2.1.3 is an **in-place servicing** bump, not a new SbS runtime. |
 | `bootstrap.ps1` | Installs `Microsoft.WindowsAppRuntime.2.0` (the major-2 winget id), which services forward to ≥ 2.1.3. The "matching `WindowsAppSDKVersion=2.0.1`" comment should be refreshed to 2.1.3; the winget id itself does not change. |
 | In-process test hosts | `Reactor.Tests`, `Reactor.AppTests.Host`, etc. set `WindowsAppSDKSelfContained=true`, so they **bundle** the matching 2.1.3 runtime and don't depend on a machine install — unit tests + selftests validate against the bumped version directly. |
@@ -103,12 +103,12 @@ both succeed clean. The descriptor generator regenerates without new diagnostics
 
 Add a non-nullable `bool AutoRefreshDragRegions` to the `TitleBarElement` record. Because the title-bar
 wrapper runs in **descriptor-only auto-discovery** mode (spec 058 §15), the generator discovers the new
-`TitleBar.AutoRefreshDragRegions` dependency property and emits the `.OneWay(e => e.AutoRefreshDragRegions,
-(c, v) => c.AutoRefreshDragRegions = v)` mapping automatically; a non-nullable value-typed record prop is
+`TitleBar.AutoRefreshDragRegions` dependency property and emits the \`.OneWay(e => e.AutoRefreshDragRegions,
+(c, v) => c.AutoRefreshDragRegions = v)\` mapping automatically; a non-nullable value-typed record prop is
 promoted to an unconditional write, so no `Customize` hand-wiring is needed. Default `false` matches the
 WinUI control default.
 
-```csharp
+````csharp
 // fluent modifier (ElementExtensions)
 public static TitleBarElement AutoRefreshDragRegions(this TitleBarElement el, bool value = true) =>
     el with { AutoRefreshDragRegions = value };
@@ -176,6 +176,7 @@ scenario needs a one-shot recompute that `AutoRefreshDragRegions` can't cover (�
 | D2 | `AutoRefreshDragRegions` default | **`false`** (match WinUI). Opt-in via `.AutoRefreshDragRegions()`. Avoids a per-layout recompute cost no author asked for. |
 | D3 | Expose `RecomputeDragRegions()`? | **No** (§4.3). |
 | D4 | Spec home — standalone **059** vs. a new section in **054** (windowing) | **Standalone**, because the SDK bump is repo-wide, not windowing-local. |
+| D5 | Forced consumer floor — the bump makes `Microsoft.UI.Reactor` advertise `Microsoft.WindowsAppSDK >= 2.1.3` (transitive, no `PrivateAssets`), so every consumer's floor rises. Mitigate (compile against 2.0.1 + reflection-guard the drag-region DPs so the feature lights up only on 2.1.3+, matching the `BackdropKind.Transparent` graceful-degradation precedent) vs. accept? | **Accept.** 2.0 → 2.1 is an **in-place servicing** bump within the *same* side-by-side 2.x runtime family (`Microsoft.WindowsAppRuntime.2.msix`), not a new SxS major — so the upgrade is low-friction for consumers. The reflection-guard alternative keeps the floor at 2.0.1 but adds string-based reflection + `[UnconditionalSuppressMessage]` to the AOT-strict core hot path (`ApplyModifiers`) and silently no-ops drag regions on 2.0 runtimes; the added complexity and the "silently does nothing" failure mode aren't worth avoiding a within-family servicing bump. Revisit only if a concrete consumer is pinned to 2.0.x and cannot service forward. |
 
 ## §7 Implementation phases
 
@@ -195,3 +196,4 @@ scenario needs a one-shot recompute that `AutoRefreshDragRegions` can't cover (�
 | Unit (`Reactor.Tests`) | `.IsDragRegion()` / `.AutoRefreshDragRegions()` produce the expected `ElementModifiers` / `TitleBarElement` records (modifier plumbing, default + override values). |
 | Selftest (`Reactor.AppTests.Host/SelfTest/Fixtures`) | Mount a real `TitleBar` with content; assert `TitleBar.GetIsDragRegion(child)` reflects `.IsDragRegion(false/true)` and clears on unset; assert `AutoRefreshDragRegions` round-trips on the control. |
 | Build / CI | Full `Reactor.slnx` build + unit tests + selftests on the bumped SDK (the standard PR gate). |
+````
