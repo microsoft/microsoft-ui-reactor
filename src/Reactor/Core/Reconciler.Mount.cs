@@ -48,6 +48,15 @@ public sealed partial class Reconciler
             ctxCount = ctxValues.Count;
         }
 
+        // Thread the ancestor-aware effective theme for ThemeRef-backed ResourceOverrides
+        // resolution (mount-theme bug). The element's own RequestedTheme wins; otherwise
+        // the subtree inherits the ambient threaded from its ancestors. Children mounted
+        // inside MountXxx (and this element's own ApplyResourceOverrides below) see it;
+        // restored in the finally so siblings are unaffected.
+        var prevAmbientTheme = _ambientRequestedTheme;
+        if (modifiers?.RequestedTheme is { } ownTheme && ownTheme != ElementTheme.Default)
+            _ambientRequestedTheme = ownTheme;
+
         UIElement? control;
         // Push stagger scope if this element has StaggerConfig — children mounted
         // inside MountXxx will consume stagger indices for their enter transitions.
@@ -132,7 +141,7 @@ public sealed partial class Reconciler
 
         // Apply per-control resource overrides (lightweight styling)
         if (element.ResourceOverrides is not null && control is FrameworkElement resFe)
-            ApplyResourceOverrides(resFe, null, element.ResourceOverrides);
+            ApplyResourceOverrides(resFe, null, element.ResourceOverrides, _ambientRequestedTheme);
 
         // Apply transitions after mounting (runs after .Set() callbacks)
         if (control is not null && (element.ImplicitTransitions is not null || element.ThemeTransitions is not null))
@@ -180,6 +189,7 @@ public sealed partial class Reconciler
                 PopStaggerScope();
             if (ctxCount > 0)
                 _contextScope.Pop(ctxCount);
+            _ambientRequestedTheme = prevAmbientTheme;
         }
 
         return control;

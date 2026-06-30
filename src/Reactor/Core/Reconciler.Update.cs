@@ -60,6 +60,16 @@ public sealed partial class Reconciler
         if (newEl.Modifiers is not null && !ReferenceEquals(modifiers, newEl.Modifiers))
             modifiers = modifiers is not null ? modifiers.Merge(newEl.Modifiers) : newEl.Modifiers;
 
+        // Thread the ancestor-aware effective theme for ThemeRef-backed ResourceOverrides
+        // resolution (mount-theme bug): the element's own RequestedTheme wins, else the
+        // subtree inherits the ambient threaded from its ancestors. Set the field BEFORE
+        // the shallow-skip check so children recursed inside UpdateXxx — and any fresh
+        // subtree this Update mounts — resolve against it; restored on every exit.
+        var prevAmbientTheme = _ambientRequestedTheme;
+        var effectiveTheme = (modifiers?.RequestedTheme is { } ownTheme && ownTheme != ElementTheme.Default)
+            ? ownTheme : prevAmbientTheme;
+        _ambientRequestedTheme = effectiveTheme;
+
         // Short-circuit: if old and new elements are structurally identical,
         // skip all WinUI property access. This is the critical optimization for
         // large grids where only a fraction of elements change each frame.
@@ -93,15 +103,17 @@ public sealed partial class Reconciler
                 SetElementTag(tagFeSE, newEl);
             if (newEl.ThemeBindings is not null && control is FrameworkElement thFeSE)
                 ApplyThemeBindings(thFeSE, newEl.ThemeBindings);
-            // Re-resolve ThemeRef-based resource overrides on theme change
+            // Re-resolve ThemeRef-based resource overrides on theme change, against the
+            // ancestor-aware effective theme (lag-free vs. fe's own ActualTheme view).
             if (newEl.ResourceOverrides is { ThemeRefs.Count: > 0 } && control is FrameworkElement resFeSE)
-                ApplyResourceOverrides(resFeSE, newEl.ResourceOverrides, newEl.ResourceOverrides);
+                ApplyResourceOverrides(resFeSE, newEl.ResourceOverrides, newEl.ResourceOverrides, effectiveTheme);
             // #721 — refresh the cached gesture/drag dispatch closures so a skipped
             // element whose only change is a per-render gesture/drag closure dispatches
             // the latest closure (not a stale capture) without re-arming the trampolines.
             if ((HasGestureOrDragSlots(modifiers) || HasGestureOrDragSlots(oldModifiers))
                 && control is FrameworkElement gestFeSE)
                 RefreshGestureDragStateOnSkip(gestFeSE, oldModifiers, modifiers);
+            _ambientRequestedTheme = prevAmbientTheme;
             return null; // null = keep existing control as-is
         }
 
@@ -220,7 +232,7 @@ public sealed partial class Reconciler
 
         // Apply per-control resource overrides (lightweight styling)
         if ((newEl.ResourceOverrides is not null || oldEl.ResourceOverrides is not null) && target is FrameworkElement resFe)
-            ApplyResourceOverrides(resFe, oldEl.ResourceOverrides, newEl.ResourceOverrides);
+            ApplyResourceOverrides(resFe, oldEl.ResourceOverrides, newEl.ResourceOverrides, effectiveTheme);
 
         // Apply transitions after update (re-applies when transition config changes)
         if (newEl.ImplicitTransitions is not null || newEl.ThemeTransitions is not null)
@@ -265,6 +277,7 @@ public sealed partial class Reconciler
         {
             if (ctxCount > 0)
                 _contextScope.Pop(ctxCount);
+            _ambientRequestedTheme = prevAmbientTheme;
         }
 
         return result;
