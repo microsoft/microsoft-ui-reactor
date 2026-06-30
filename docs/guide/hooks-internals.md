@@ -273,7 +273,7 @@ If you find yourself wanting `UseRef` to trigger re-renders, you
 probably want `UseState` instead. `UseRef`'s value is an escape hatch
 for state that shouldn't drive UI.
 
-## UseObservable, UseResource, UseContext
+## UseObservable, UseExternalStore, UseResource, UseContext
 
 ```csharp
 public sealed class PendingScope
@@ -299,6 +299,13 @@ public sealed class PendingScope
 `INotifyPropertyChanged` source. Internally it builds an effect that
 attaches `PropertyChanged += ...` and stores the latest value in a
 local `UseState`. Cleanup unsubscribes.
+
+`UseExternalStore<TSnapshot>` follows the same ownership model for non-INPC
+stores that expose `subscribe` plus `getSnapshot`. The hook reads the snapshot
+during render, keeps the latest getter and comparer in a stable ref-backed cell,
+and installs one effect-owned subscription. Each change notification re-reads
+the snapshot and only schedules a re-render when the comparer reports a real
+change.
 
 `UseResource<T>` (and `UseInfiniteResource`, `UseMutation`) walks a
 fuller slot shape — a `ResourceHookState<T>` carrying the cache key,

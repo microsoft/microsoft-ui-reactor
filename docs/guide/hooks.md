@@ -33,6 +33,7 @@ lifecycle methods.
 | [UseCallback](reference/hooks/UseCallback.md) | `Action` | Stable delegate identity across renders. |
 | [UseContext](reference/hooks/UseContext.md) | `T` | Read the ambient [Context](context.md) value. |
 | [UseObservable](reference/hooks/UseObservable.md) | `T` | Re-render when a tracked `INotifyPropertyChanged` source raises a change. |
+| `UseExternalStore` | `TSnapshot` | Bridge subscribe/getSnapshot stores into Reactor and re-render only when the snapshot changes. |
 | [UseResource](reference/hooks/UseResource.md) | `AsyncValue<T>` | Cached async read (see [Async Resources](async-resources.md)). |
 | [UsePersisted](reference/hooks/UsePersisted.md) | `(T, Action<T>)` | `UseState` that survives app launches (see [Persistence](persistence.md)). |
 
@@ -310,6 +311,41 @@ Without `UseCallback`, the lambda `() => updateCount(c => c + 1)` would be a new
 object every render. `UseCallback` returns the same delegate instance as long
 as the dependencies haven't changed. This matters when passing callbacks to
 memoized [child components](components.md).
+
+## External Stores
+
+Some state lives outside Reactor but still has a clean subscription shape:
+subscribe to notifications, then ask for the latest snapshot. For that class of
+store, `UseExternalStore` removes the usual `UseEffect` plus `UseReducer`
+boilerplate:
+
+```csharp
+public sealed class SessionStore
+{
+    public event Action? Changed;
+    public SessionSnapshot Snapshot => _snapshot;
+
+    public Action Subscribe(Action onChanged)
+    {
+        Changed += onChanged;
+        return () => Changed -= onChanged;
+    }
+}
+
+public override Element Render()
+{
+    var snapshot = UseExternalStore(
+        _store.Subscribe,
+        () => _store.Snapshot);
+
+    return TextBlock(snapshot.Title);
+}
+```
+
+`UseExternalStore` reads the snapshot during render, subscribes in an effect,
+and only queues a re-render when a notification produces a different snapshot.
+Pass a custom comparer when the snapshot type needs value semantics different
+from `EqualityComparer<T>.Default`.
 
 ## Updating State From Background Work
 

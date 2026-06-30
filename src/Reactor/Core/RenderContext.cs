@@ -617,6 +617,50 @@ public sealed class RenderContext
     }
 
     /// <summary>
+    /// Subscribes to an external store that exposes a current snapshot getter.
+    /// Re-renders only when a change notification yields a different snapshot.
+    /// </summary>
+    public TSnapshot UseExternalStore<TSnapshot>(
+        Func<Action, Action> subscribe,
+        Func<TSnapshot> getSnapshot,
+        IEqualityComparer<TSnapshot>? comparer = null)
+    {
+        var snapshot = getSnapshot();
+        var effectiveComparer = comparer ?? EqualityComparer<TSnapshot>.Default;
+        var state = UseRef(new ExternalStoreState<TSnapshot>(snapshot, getSnapshot, effectiveComparer));
+        var (_, forceRender) = UseReducer(0, threadSafe: true);
+
+        lock (state.Current.Gate)
+        {
+            state.Current.Snapshot = snapshot;
+            state.Current.GetSnapshot = getSnapshot;
+            state.Current.Comparer = effectiveComparer;
+        }
+
+        UseEffect(() =>
+        {
+            void OnChanged()
+            {
+                bool changed;
+                lock (state.Current.Gate)
+                {
+                    var nextSnapshot = state.Current.GetSnapshot();
+                    changed = !state.Current.Comparer.Equals(state.Current.Snapshot, nextSnapshot);
+                    if (changed)
+                        state.Current.Snapshot = nextSnapshot;
+                }
+
+                if (changed)
+                    forceRender(revision => revision + 1);
+            }
+
+            return subscribe(OnChanged);
+        }, subscribe);
+
+        return snapshot;
+    }
+
+    /// <summary>
     /// Subscribes to a specific property on an INotifyPropertyChanged source.
     /// Re-renders only when that property changes.
     /// </summary>
@@ -877,6 +921,24 @@ public sealed class RenderContext
 
             public void Dispose() { }
         }
+    }
+
+    private sealed class ExternalStoreState<TSnapshot>
+    {
+        public ExternalStoreState(
+            TSnapshot snapshot,
+            Func<TSnapshot> getSnapshot,
+            IEqualityComparer<TSnapshot> comparer)
+        {
+            Snapshot = snapshot;
+            GetSnapshot = getSnapshot;
+            Comparer = comparer;
+        }
+
+        public object Gate { get; } = new();
+        public TSnapshot Snapshot { get; set; }
+        public Func<TSnapshot> GetSnapshot { get; set; }
+        public IEqualityComparer<TSnapshot> Comparer { get; set; }
     }
 
     // ════════════════════════════════════════════════════════════════

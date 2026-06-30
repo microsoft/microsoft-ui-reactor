@@ -11,6 +11,33 @@ namespace Microsoft.UI.Reactor.Tests;
 /// </summary>
 public class ObservableHookTests
 {
+    private sealed class ExternalStore<T>
+    {
+        private T _snapshot;
+
+        public ExternalStore(T initialSnapshot)
+        {
+            _snapshot = initialSnapshot;
+        }
+
+        public event Action? Changed;
+
+        public T Snapshot => _snapshot;
+
+        public void SetSnapshot(T value, bool notify = true)
+        {
+            _snapshot = value;
+            if (notify)
+                Changed?.Invoke();
+        }
+
+        public Action Subscribe(Action onChanged)
+        {
+            Changed += onChanged;
+            return () => Changed -= onChanged;
+        }
+    }
+
     private class NotifyModel : INotifyPropertyChanged
     {
         private string _name = "";
@@ -45,6 +72,141 @@ public class ObservableHookTests
 
         public void RaiseAllPropertiesChanged()
             => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(null));
+    }
+
+    // ── UseExternalStore ──────────────────────────────────────────
+
+    [Fact]
+    public void UseExternalStore_Returns_Current_Snapshot()
+    {
+        var ctx = new RenderContext();
+        var store = new ExternalStore<string>("Alice");
+
+        ctx.BeginRender(() => { });
+        var result = ctx.UseExternalStore(store.Subscribe, () => store.Snapshot);
+        ctx.FlushEffects();
+
+        Assert.Equal("Alice", result);
+    }
+
+    [Fact]
+    public void UseExternalStore_Triggers_Rerender_When_Snapshot_Changes()
+    {
+        var ctx = new RenderContext();
+        var store = new ExternalStore<string>("Alice");
+        int rerenderCount = 0;
+
+        ctx.BeginRender(() => rerenderCount++);
+        ctx.UseExternalStore(store.Subscribe, () => store.Snapshot);
+        ctx.FlushEffects();
+
+        ctx.BeginRender(() => rerenderCount++);
+        ctx.UseExternalStore(store.Subscribe, () => store.Snapshot);
+        ctx.FlushEffects();
+
+        store.SetSnapshot("Bob");
+
+        Assert.Equal(1, rerenderCount);
+    }
+
+    [Fact]
+    public void UseExternalStore_Does_Not_Rerender_When_Snapshot_Is_Equal()
+    {
+        var ctx = new RenderContext();
+        var store = new ExternalStore<string>("Alice");
+        int rerenderCount = 0;
+
+        ctx.BeginRender(() => rerenderCount++);
+        ctx.UseExternalStore(store.Subscribe, () => store.Snapshot);
+        ctx.FlushEffects();
+
+        ctx.BeginRender(() => rerenderCount++);
+        ctx.UseExternalStore(store.Subscribe, () => store.Snapshot);
+        ctx.FlushEffects();
+
+        store.SetSnapshot("Alice");
+
+        Assert.Equal(0, rerenderCount);
+    }
+
+    [Fact]
+    public void UseExternalStore_Cleanup_Unsubscribes()
+    {
+        var ctx = new RenderContext();
+        var store = new ExternalStore<string>("Alice");
+        int rerenderCount = 0;
+
+        ctx.BeginRender(() => rerenderCount++);
+        ctx.UseExternalStore(store.Subscribe, () => store.Snapshot);
+        ctx.FlushEffects();
+
+        ctx.RunCleanups();
+        store.SetSnapshot("Bob");
+
+        Assert.Equal(0, rerenderCount);
+    }
+
+    [Fact]
+    public void UseExternalStore_Uses_Custom_Comparer()
+    {
+        var ctx = new RenderContext();
+        var store = new ExternalStore<string>("Alice");
+        int rerenderCount = 0;
+
+        ctx.BeginRender(() => rerenderCount++);
+        ctx.UseExternalStore(store.Subscribe, () => store.Snapshot, StringComparer.OrdinalIgnoreCase);
+        ctx.FlushEffects();
+
+        ctx.BeginRender(() => rerenderCount++);
+        ctx.UseExternalStore(store.Subscribe, () => store.Snapshot, StringComparer.OrdinalIgnoreCase);
+        ctx.FlushEffects();
+
+        store.SetSnapshot("alice");
+
+        Assert.Equal(0, rerenderCount);
+    }
+
+    [Fact]
+    public void UseExternalStore_Source_Changes_Between_Renders_Resubscribes()
+    {
+        var ctx = new RenderContext();
+        var store1 = new ExternalStore<string>("First");
+        var store2 = new ExternalStore<string>("Second");
+        int rerenderCount = 0;
+
+        ctx.BeginRender(() => rerenderCount++);
+        ctx.UseExternalStore(store1.Subscribe, () => store1.Snapshot);
+        ctx.FlushEffects();
+
+        ctx.BeginRender(() => rerenderCount++);
+        ctx.UseExternalStore(store2.Subscribe, () => store2.Snapshot);
+        ctx.FlushEffects();
+
+        store1.SetSnapshot("Changed");
+        Assert.Equal(0, rerenderCount);
+
+        store2.SetSnapshot("Updated");
+        Assert.Equal(1, rerenderCount);
+    }
+
+    [Fact]
+    public void UseExternalStore_Returns_Updated_Snapshot_On_Next_Render()
+    {
+        var ctx = new RenderContext();
+        var store = new ExternalStore<string>("Alice");
+
+        ctx.BeginRender(() => { });
+        var first = ctx.UseExternalStore(store.Subscribe, () => store.Snapshot);
+        ctx.FlushEffects();
+
+        store.SetSnapshot("Bob");
+
+        ctx.BeginRender(() => { });
+        var second = ctx.UseExternalStore(store.Subscribe, () => store.Snapshot);
+        ctx.FlushEffects();
+
+        Assert.Equal("Alice", first);
+        Assert.Equal("Bob", second);
     }
 
     // ── UseObservable ──────────────────────────────────────────────
