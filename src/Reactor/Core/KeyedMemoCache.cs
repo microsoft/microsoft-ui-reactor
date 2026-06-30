@@ -90,8 +90,8 @@ internal sealed class KeyedMemoCache
         // `with` expression) bypassing the Memo<TKey> factory's validation. Guard here so a null
         // key/factory fails deterministically at the contract violation instead of later as an
         // opaque Dictionary ArgumentNullException or a null-delegate NullReferenceException.
-        global::System.ArgumentNullException.ThrowIfNull(memo.MemoKey, "memo.MemoKey");
-        global::System.ArgumentNullException.ThrowIfNull(memo.Factory, "memo.Factory");
+        global::System.ArgumentNullException.ThrowIfNull(memo.MemoKey);
+        global::System.ArgumentNullException.ThrowIfNull(memo.Factory);
         var key = memo.MemoKey;
         if (_map.TryGetValue(key, out var existing))
         {
