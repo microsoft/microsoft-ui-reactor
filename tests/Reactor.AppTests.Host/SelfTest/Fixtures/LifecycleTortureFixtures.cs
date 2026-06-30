@@ -59,6 +59,16 @@ internal sealed class LT_OnMountUnmountBalanced(Harness h) : SelfTestFixtureBase
             await Harness.WaitFor(() => H.FindTextContaining("item0") is null);
         }
 
+        // Quiesce before asserting the conserved counts. The per-cycle wait above
+        // keys off a VISUAL-tree predicate (item0 removed), but .OnUnmount callbacks
+        // increment their counter during reconcile, which can lag the visual removal
+        // by a dispatcher tick — so the final clear batch's last few unmounts may not
+        // have flushed yet. Drain render passes until the counts settle (mirrors
+        // LT_EffectCleanupBalanced / LT_NavSwapNoLeak). The asserts stay exact, so a
+        // genuine missed-unmount regression still fails: WaitFor just exhausts its
+        // passes and the Check below reports the real number.
+        await Harness.WaitFor(() => mounts == 30 && unmounts == 30);
+
         H.Check("LT_Mounts_Exactly_30", mounts == 30);
         H.Check("LT_Unmounts_Exactly_30", unmounts == 30);
         H.Check("LT_OnMount_Received_Control", gotControl == mounts);
