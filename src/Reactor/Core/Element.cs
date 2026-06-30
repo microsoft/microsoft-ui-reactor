@@ -379,19 +379,31 @@ public abstract record Element
     /// <summary>
     /// Returns true if two elements are structurally identical AND the child can be
     /// completely skipped during reconciliation (no need to call Update at all).
-    /// This is stricter than ShallowEquals: elements with ThemeBindings must still
-    /// go through Update so bindings can be re-evaluated against the current theme,
-    /// and a change in callback *presence* must run Update so the lazy-wire path
-    /// can subscribe to the WinRT event on a null→non-null transition.
+    /// This is stricter than ShallowEquals: elements with ThemeBindings or
+    /// theme-reactive <see cref="ResourceOverrides"/> (<c>ThemeRefs</c>) must still
+    /// go through Update so the themed values can be re-resolved against the current
+    /// effective theme, and a change in callback *presence* must run Update so the
+    /// lazy-wire path can subscribe to the WinRT event on a null→non-null transition.
     /// IMPORTANT: keep in sync with the ShallowEquals fast-path in Reconciler.Update().
     /// Note: when both elements have a null <see cref="Extensions"/> bucket (spec 047
     /// §4.4 — the common no-extras leaf), ShallowEquals skips the Attached /
     /// ThemeBindings / ContextValues structural compares entirely, since all 14
     /// bucketed fields are provably null on both sides.
     /// </summary>
+    /// <remarks>
+    /// Issue #675 — the <c>ResourceOverrides.ThemeRefs</c> gate mirrors the
+    /// <c>ThemeBindings</c> gate and <see cref="Core.ChildDiffHints.IsThemeSensitive"/>.
+    /// A child themed only via <c>ResourceOverrides.ThemeRefs</c> (no ThemeBindings)
+    /// must NOT take the cheap child-skip arms in <c>ChildReconciler</c>: declining
+    /// the skip routes it through <c>Update</c>, whose element-level shallow-skip
+    /// re-resolves the ThemeRef into <c>fe.Resources[...]</c> on an effective-theme
+    /// change. This keeps Reconciler.Update the single source of truth for skip
+    /// side-effects rather than duplicating the re-resolve across every child-skip arm.
+    /// </remarks>
     internal static bool CanSkipUpdate(Element oldEl, Element newEl)
         => ShallowEquals(oldEl, newEl)
             && newEl.ThemeBindings is null
+            && newEl.ResourceOverrides is not { ThemeRefs.Count: > 0 }
             && oldEl.HasCallbacks == newEl.HasCallbacks;
 
     /// <summary>

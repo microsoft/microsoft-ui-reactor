@@ -183,10 +183,27 @@ internal static class ChildReconciler
         Reconciler reconciler,
         Action requestRerender)
     {
-        // Early skip: if the element is structurally identical (and has no
-        // theme bindings that need re-evaluation), we can avoid the expensive
-        // children.Get(i) COM call entirely. This saves ~2 COM roundtrips per
-        // unchanged child (IVector.GetAt + all the property diffing inside Update).
+        // Early skip: if the element is structurally identical (and carries no
+        // theme-reactive resources that need re-evaluation), we can avoid the
+        // expensive children.Get(i) COM call entirely. This saves ~2 COM roundtrips
+        // per unchanged child (IVector.GetAt + all the property diffing inside Update).
+        //
+        // Issue #675 — the skip contract lives entirely in Element.CanSkipUpdate
+        // (shared by the positional + keyed prefix/suffix arms): it declines the skip
+        // for any element carrying ThemeBindings OR ResourceOverrides.ThemeRefs, so a
+        // theme-sensitive child falls through to UpdateChild → Update, whose
+        // element-level shallow-skip re-resolves the themed value. Reconciler.Update
+        // is therefore the single place that performs skip-path theme re-resolution.
+        //
+        // We deliberately do NOT also gate this arm on IsOnDirtyAncestorPath (the
+        // element-level skip in Update.cs does). It is provably unnecessary here:
+        // every container arm in Element.ShallowEquals compares its children/child BY
+        // REFERENCE, and Component/Memo/Func wrappers return false — so any element
+        // that is CanSkipUpdate-eligible is either a leaf or a reference-equal-children
+        // container, neither of which can be a STRICT ANCESTOR of a freshly re-rendered
+        // self-triggered descendant (that ancestor would carry a new children reference
+        // and fail ShallowEquals). Adding a dirty-ancestor check would only force a
+        // COM fetch on the hot skip-floor for a path that cannot be reached.
         var oldEl = oldChildren[i];
         var newEl = newChildren[i];
         if (Element.CanSkipUpdate(oldEl, newEl)
@@ -274,6 +291,9 @@ internal static class ChildReconciler
             // keyed prefix is the steady-state path for stable lists (e.g. grid
             // rows whose keys never change), so without this they re-diff every
             // tick.
+            // Issue #675 — shares Element.CanSkipUpdate with the positional arm, so a
+            // ThemeBindings/ResourceOverrides.ThemeRefs child likewise declines the
+            // skip and re-resolves through Update (see UpdateCommonChild's contract note).
             if (Element.CanSkipUpdate(oldEl, newEl)
                 && !reconciler.ForceRenderThroughWrapper(newEl))
             {

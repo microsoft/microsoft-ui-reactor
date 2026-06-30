@@ -890,6 +890,58 @@ public class ElementTests
         Assert.Equal(new Thickness(10), merged.Margin);
     }
 
+    // ════════════════════════════════════════════════════════════════
+    //  CanSkipUpdate — theme-sensitivity gate (issue #675)
+    // ════════════════════════════════════════════════════════════════
+    //
+    // CanSkipUpdate drives the cheap child-skip arms in ChildReconciler
+    // (positional + keyed prefix/suffix). It must decline the skip for any
+    // element carrying ResourceOverrides.ThemeRefs — exactly as it already
+    // does for ThemeBindings — so such a child falls through to Update, where
+    // the element-level shallow-skip re-resolves the ThemeRef against the
+    // current effective theme. Without the gate the child is skipped wholesale
+    // and its themed fe.Resources[...] entry goes stale on a theme change.
+
+    [Fact]
+    public void CanSkipUpdate_ThemeRefOnly_ForcesUpdate()
+    {
+        // Two shallow-equal TextBlocks; one carries a ThemeRef-only resource
+        // override (no ThemeBindings). CanSkipUpdate must return false so the
+        // child-skip arms route it through Update for re-resolution.
+        var themeRef = global::Microsoft.UI.Reactor.Core.Theme.Ref("Issue675AccentBrush");
+        var a = TextBlock("Hello").Resources(r => r.Set("Foreground", themeRef));
+        var b = TextBlock("Hello").Resources(r => r.Set("Foreground", themeRef));
+
+        // Sanity: they are shallow-equal (ResourceOverrides is not part of the
+        // own-props compare), so only the explicit ThemeRefs gate keeps the
+        // child-skip from engaging.
+        Assert.True(Element.ShallowEquals(a, b));
+        Assert.False(Element.CanSkipUpdate(a, b));
+    }
+
+    [Fact]
+    public void CanSkipUpdate_LiteralOnlyOverrides_StillSkips()
+    {
+        // Literal overrides are NOT theme-reactive (they never re-resolve), so
+        // a literal-only override must NOT block the cheap child-skip.
+        var a = TextBlock("Hello").Resources(r => r.Set("ControlCornerRadius", 8.0));
+        var b = TextBlock("Hello").Resources(r => r.Set("ControlCornerRadius", 8.0));
+
+        Assert.True(Element.ShallowEquals(a, b));
+        Assert.True(Element.CanSkipUpdate(a, b));
+    }
+
+    [Fact]
+    public void CanSkipUpdate_NoOverrides_StillSkips()
+    {
+        // The gesture-free skip-floor: plain shallow-equal leaves with no
+        // theme-sensitive resources must keep skipping (zero added cost).
+        var a = TextBlock("Hello");
+        var b = TextBlock("Hello");
+
+        Assert.True(Element.CanSkipUpdate(a, b));
+    }
+
     // ── Test component stubs ────────────────────────────────────────
 
     private class TestComponent : Component

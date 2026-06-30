@@ -383,6 +383,10 @@ internal static class SelfTestFixtureRegistry
         "StructuralSkip_ThemeRangeParity",
         "UseMemoCells_BaseReThemeOnAncestorToggle",
         "StructuralSkip_HotReloadWrapperReRender",
+        "Issue675_ElementLevelSkipReResolves",
+        "Issue675_PositionalChildSkipReResolves",
+        "Issue675_KeyedChildSkipReResolves",
+        "Issue675_RemovalGateStaleKeyWhenOldOverridesNull",
         "HotReload_ChildHookOrderRecovery",
         "HotReload_ComponentMigratesState",
         // DSL and extension tests
@@ -1840,6 +1844,10 @@ internal static class SelfTestFixtureRegistry
         "StructuralSkip_ThemeRangeParity" => new StructuralSkipFixtures.ThemeRangeParity(harness),
         "UseMemoCells_BaseReThemeOnAncestorToggle" => new UseMemoCellsThemeReResolveFixtures.BaseMemoCellsReThemeOnAncestorToggle(harness),
         "StructuralSkip_HotReloadWrapperReRender" => new StructuralSkipFixtures.HotReloadWrapperReRender(harness),
+        "Issue675_ElementLevelSkipReResolves" => new Issue675ResourceOverrideSkipFixtures.ElementLevelSkipReResolves(harness),
+        "Issue675_PositionalChildSkipReResolves" => new Issue675ResourceOverrideSkipFixtures.PositionalChildSkipReResolves(harness),
+        "Issue675_KeyedChildSkipReResolves" => new Issue675ResourceOverrideSkipFixtures.KeyedChildSkipReResolves(harness),
+        "Issue675_RemovalGateStaleKeyWhenOldOverridesNull" => new Issue675ResourceOverrideSkipFixtures.RemovalGateStaleKeyWhenOldOverridesNull(harness),
         "HotReload_ChildHookOrderRecovery" => new HotReloadRecoveryFixtures.ChildRecoversAndSiblingStateSurvives(harness),
         "HotReload_ComponentMigratesState" => new HotReloadComponentMigrationFixtures.MigratesPreservingState(harness),
         // DSL and extension tests

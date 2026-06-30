@@ -4808,15 +4808,23 @@ public sealed partial class Reconciler : IDisposable
         // Track which keys Reactor has set on this element
         var managed = _managedResourceKeys.GetOrCreateValue(fe);
 
-        // Remove old keys that are no longer present in the new overrides
-        if (oldOverrides is not null)
+        // Remove managed keys that are no longer present in the new overrides.
+        // Issue #675 — drive removal off `managed` vs `newOverrides`, independent of
+        // `oldOverrides` nullness. A control can carry Reactor-managed keys that did
+        // NOT arrive via `oldOverrides` (e.g. a pooled/reused control, or the Mount
+        // path which always passes oldOverrides==null): gating removal on
+        // `oldOverrides is not null` would leak those stale keys into fe.Resources.
+        // Removal only strips managed keys absent from newOverrides; the apply loop
+        // below re-adds the current keys, so this never fights the apply path. At a
+        // truly-fresh mount `managed` is empty and this is a no-op.
+        if (managed.Count > 0)
         {
             var newKeys = newOverrides?.AllKeys.ToHashSet() ?? new HashSet<string>();
             foreach (var key in managed.ToArray())
             {
                 if (!newKeys.Contains(key))
                 {
-                    fe.Resources.Remove(key);
+                    fe.Resources?.Remove(key);
                     managed.Remove(key);
                 }
             }
