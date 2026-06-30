@@ -172,6 +172,34 @@ public class DataGridState<T>
     private IReadOnlyList<FieldDescriptor>? _layoutCacheColumns;
     private int _layoutCacheColumnCount = -1;
 
+    // Per-(row, slot) stabilized modifier-handler caches (#671). The static, virtualized
+    // RenderRow attaches three routed-input modifier handlers per realized row — the row
+    // .OnPointerPressed (select/range/toggle), the cell .OnTapped (click-to-edit) and the
+    // expand .OnTapped (row-detail toggle). Rebuilt fresh each render, their delegate identity
+    // churned, so post-#665 (per-slot ReferenceEquals modifier comparison) every cell/row failed
+    // ShallowEquals and could never hit the reconciler's Update-free skip path. These caches hand
+    // RenderRow a REFERENCE-STABLE delegate per (rowKey[, column]) so unchanged cells/rows skip.
+    //
+    // CAPTURE SAFETY (#721 bug class): the cached delegates capture only the stable rowKey (and
+    // column NAME) — never the per-render row INDEX or the per-render element props. They resolve
+    // the LIVE row index via GetRowIndex(key) and the live column index via _columnIndexByName at
+    // INVOCATION time, and route the post-edit commit through CommitDispatcher (refreshed each
+    // render from el.OnRowChanged). So after a data mutation / sort / filter that moves a row, a
+    // cached handler still fires against that row's CURRENT position, not a stale one. A handler
+    // for a since-removed key resolves to index -1 and no-ops, so a stale entry is harmless.
+    //
+    // LIFETIME: handlers persist across renders (that reference-stability IS the optimization) and
+    // are NOT cleared on data-value churn or reload — the per-tick mutation path keeps the same
+    // keys, so clearing would needlessly defeat the skip. They are bounded instead: a cache that
+    // grows past StabilizedHandlerCacheCap (a grid scrolled across far more distinct keys than any
+    // realistic working set) is dropped wholesale and lazily rebuilt for the currently-visible rows
+    // — a one-render skip reset, then steady-state stable again. ClearStabilizedHandlerCaches()
+    // also drops them explicitly.
+    private const int StabilizedHandlerCacheCap = 50_000;
+    private Dictionary<RowKey, Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs>>? _rowPointerHandlerCache;
+    private Dictionary<RowKey, Action<object, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs>>? _expandHandlerCache;
+    private Dictionary<(RowKey Key, string Column), Action<object, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs>>? _cellEditHandlerCache;
+
     /// <summary>Monotonically increasing version, bumped whenever column order/size/visibility changes.</summary>
     internal int ColumnVersion => _columnVersion;
 
@@ -970,6 +998,182 @@ public class DataGridState<T>
             _expandedRows.Clear();
             StateChanged?.Invoke();
         }
+    }
+
+    // ── Stabilized row/cell modifier handlers (#671) ──────────────────
+    // Each factory returns a reference-stable delegate per (rowKey[, column]). RenderRow calls
+    // these instead of allocating a fresh closure per render, so post-#665 unchanged cells/rows
+    // hit the reconciler's Update-free skip path. The delegates resolve the live row/column index
+    // at invocation (never capture the per-render index), so they always act on the row's CURRENT
+    // position after a mutation/sort/filter — the #721 stale-closure-capture hazard does not apply.
+
+    /// <summary>
+    /// Reference-stable <c>.OnPointerPressed</c> handler for the row identified by
+    /// <paramref name="key"/> (row select / shift-range / ctrl-toggle). Resolves the live row
+    /// index via <see cref="GetRowIndex"/> at click time; commits any in-flight edit on a
+    /// DIFFERENT row first. Returns the same delegate instance across renders so the row can skip.
+    /// </summary>
+    internal Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs> GetRowPointerHandler(RowKey key)
+    {
+        _rowPointerHandlerCache ??= new();
+        if (_rowPointerHandlerCache.TryGetValue(key, out var cached)) return cached;
+        if (_rowPointerHandlerCache.Count >= StabilizedHandlerCacheCap) _rowPointerHandlerCache.Clear();
+
+        var capturedKey = key;
+        Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs> handler = (sender, e) =>
+        {
+            var props = e.GetCurrentPoint(null).Properties;
+            if (!props.IsLeftButtonPressed) return;
+
+            var mods = e.KeyModifiers;
+            var ctrl = mods.HasFlag(global::Windows.System.VirtualKeyModifiers.Control);
+            var shift = mods.HasFlag(global::Windows.System.VirtualKeyModifiers.Shift);
+            Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() =>
+            {
+                InvokeRowPointerClick(capturedKey, ctrl, shift);
+            });
+        };
+
+        _rowPointerHandlerCache[key] = handler;
+        return handler;
+    }
+
+    /// <summary>
+    /// The resolved row-click action behind <see cref="GetRowPointerHandler"/>, split out so the
+    /// live-index resolution + commit + focus + selection logic is testable without fabricating a
+    /// WinUI <c>PointerRoutedEventArgs</c> (and without a dispatcher). Resolves the row's CURRENT
+    /// index from <paramref name="key"/>, so it acts on the right row after a mutation/sort/filter.
+    /// </summary>
+    internal void InvokeRowPointerClick(RowKey key, bool ctrlKey, bool shiftKey)
+    {
+        var idx = GetRowIndex(key);
+        if (idx < 0) return; // row no longer present (filtered/removed)
+
+        // Commit any active edit when clicking a DIFFERENT row. Clicking within the same row is
+        // handled by the cell's OnTapped handler (commit-then-begin); skipping it here prevents the
+        // editing TextBox being dismissed when the user clicks to position the cursor.
+        if (IsEditing)
+        {
+            var editingKey = EditingRowKey;
+            if (editingKey is null || !editingKey.Value.Equals(key))
+                CommitInFlightEditThroughDispatcher();
+        }
+
+        SetFocus(idx, _focusedColIndex >= 0 ? _focusedColIndex : 0);
+
+        if (_selectionMode != SelectionMode.None)
+            HandleRowClick(key, ctrlKey: ctrlKey, shiftKey: shiftKey);
+    }
+
+    /// <summary>
+    /// Reference-stable expand/collapse <c>.OnTapped</c> handler for the row-detail toggle of
+    /// <paramref name="key"/>. Index-free (<see cref="ToggleRowExpansion"/> keys on the row key),
+    /// so it is inherently stable; cached so the toggle cell can skip across renders.
+    /// </summary>
+    internal Action<object, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs> GetExpandHandler(RowKey key)
+    {
+        _expandHandlerCache ??= new();
+        if (_expandHandlerCache.TryGetValue(key, out var cached)) return cached;
+        if (_expandHandlerCache.Count >= StabilizedHandlerCacheCap) _expandHandlerCache.Clear();
+
+        var capturedKey = key;
+        Action<object, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs> handler = (_, _) =>
+        {
+            Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() =>
+            {
+                ToggleRowExpansion(capturedKey);
+            });
+        };
+
+        _expandHandlerCache[key] = handler;
+        return handler;
+    }
+
+    /// <summary>
+    /// Reference-stable click-to-edit <c>.OnTapped</c> handler for the cell at
+    /// (<paramref name="key"/>, <paramref name="columnName"/>). Resolves the live row index via
+    /// <see cref="GetRowIndex"/> and the live column index via the name→index map at click time,
+    /// commits any in-flight edit first, then begins editing the resolved cell. Returns the same
+    /// delegate instance across renders so the cell can skip.
+    /// </summary>
+    internal Action<object, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs> GetCellEditHandler(RowKey key, string columnName)
+    {
+        _cellEditHandlerCache ??= new();
+        var cacheKey = (key, columnName);
+        if (_cellEditHandlerCache.TryGetValue(cacheKey, out var cached)) return cached;
+        if (_cellEditHandlerCache.Count >= StabilizedHandlerCacheCap) _cellEditHandlerCache.Clear();
+
+        var capturedKey = key;
+        var capturedColumn = columnName;
+        Action<object, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs> handler = (sender, e) =>
+        {
+            Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() =>
+            {
+                InvokeCellEditClick(capturedKey, capturedColumn);
+            });
+        };
+
+        _cellEditHandlerCache[cacheKey] = handler;
+        return handler;
+    }
+
+    /// <summary>
+    /// The resolved click-to-edit action behind <see cref="GetCellEditHandler"/>, split out so the
+    /// live row/column resolution + commit + begin-edit logic is testable without a WinUI
+    /// <c>TappedRoutedEventArgs</c> or a dispatcher. Resolves the CURRENT row index from
+    /// <paramref name="key"/> and the CURRENT column index from <paramref name="columnName"/>, so
+    /// it edits the right cell after a mutation/sort/filter or a column reorder/hide.
+    /// </summary>
+    internal void InvokeCellEditClick(RowKey key, string columnName)
+    {
+        var rowIdx = GetRowIndex(key);
+        if (rowIdx < 0) return; // row no longer present
+        if (!_columnIndexByName.TryGetValue(columnName, out var colIdx)) return; // column hidden/removed
+
+        // Commit any in-flight edit BEFORE starting a new one — BeginEdit overwrites the pending
+        // value with the new cell's current value, which would destroy an in-flight edit otherwise.
+        if (IsEditing)
+            CommitInFlightEditThroughDispatcher();
+
+        SetFocus(rowIdx, colIdx);
+        BeginEdit(rowIdx, colIdx);
+    }
+
+    /// <summary>
+    /// Commits the in-flight edit (if any) and routes the result through the installed
+    /// <see cref="CommitDispatcher"/> (the same path <c>HandleAsyncCommit</c> uses), capturing the
+    /// pre-commit item for optimistic-revert. Used by the stabilized handlers so they never capture
+    /// the per-render element to reach <c>el.OnRowChanged</c>; the dispatcher is refreshed each
+    /// render and is null exactly when no <c>OnRowChanged</c> is wired.
+    /// </summary>
+    private void CommitInFlightEditThroughDispatcher()
+    {
+        if (!IsEditing) return;
+
+        var editingKey = EditingRowKey;
+        T? originalItem = default;
+        if (editingKey is not null)
+        {
+            var oi = GetRowIndex(editingKey.Value);
+            if (oi >= 0) originalItem = GetItemAt(oi);
+        }
+
+        var result = CommitEdit();
+        if (result is not null && CommitDispatcher is { } dispatch)
+            dispatch(result.Value.Key, result.Value.NewItem, originalItem);
+    }
+
+    /// <summary>
+    /// Drops all cached stabilized row/cell/expand handlers (#671). Safe to call any time — the
+    /// handlers are pure functions of (rowKey[, column]) and are lazily recreated on the next
+    /// render. Not called on routine reloads (that would needlessly defeat the skip); exposed for
+    /// explicit invalidation and covered by the size-cap eviction in the factory methods.
+    /// </summary>
+    internal void ClearStabilizedHandlerCaches()
+    {
+        _rowPointerHandlerCache?.Clear();
+        _expandHandlerCache?.Clear();
+        _cellEditHandlerCache?.Clear();
     }
 
     // ── Focus navigation ──────────────────────────────────────────

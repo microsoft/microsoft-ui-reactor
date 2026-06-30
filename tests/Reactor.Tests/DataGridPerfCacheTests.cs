@@ -538,4 +538,125 @@ public class DataGridPerfCacheTests
         // GetColumnWidth on an unknown column falls back to the 120 default (no resize, no descriptor).
         Assert.Equal(120, state.GetColumnWidth("Nope"));
     }
+
+    // ════════════════════════════════════════════════════════════════
+    //  #671 — stabilized row/cell/expand modifier handlers
+    //  (reference stability for the skip path + live-index resolution so a
+    //   cached handler never fires against a stale row after a sort/mutation)
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void StabilizedHandlers_Are_Reference_Stable_Per_Key_And_Distinct_Across_Keys()
+    {
+        // The whole point of #671: a given (row[, column]) slot must return the SAME delegate
+        // instance across renders, so post-#665 ModifiersEqual (per-slot ReferenceEquals) is true
+        // and the unchanged cell/row skips Update. Distinct keys must get distinct instances.
+        var state = CreateState();
+        var k1 = new RowKey("1");
+        var k2 = new RowKey("2");
+
+        Assert.Same(state.GetRowPointerHandler(k1), state.GetRowPointerHandler(k1));
+        Assert.Same(state.GetExpandHandler(k1), state.GetExpandHandler(k1));
+        Assert.Same(state.GetCellEditHandler(k1, "Name"), state.GetCellEditHandler(k1, "Name"));
+
+        Assert.NotSame(state.GetRowPointerHandler(k1), state.GetRowPointerHandler(k2));
+        Assert.NotSame(state.GetExpandHandler(k1), state.GetExpandHandler(k2));
+        Assert.NotSame(state.GetCellEditHandler(k1, "Name"), state.GetCellEditHandler(k1, "Score"));
+    }
+
+    [Fact]
+    public void ClearStabilizedHandlerCaches_Forces_Fresh_Instances()
+    {
+        var state = CreateState();
+        var k1 = new RowKey("1");
+        var rp = state.GetRowPointerHandler(k1);
+        var ex = state.GetExpandHandler(k1);
+        var ce = state.GetCellEditHandler(k1, "Name");
+
+        state.ClearStabilizedHandlerCaches();
+
+        Assert.NotSame(rp, state.GetRowPointerHandler(k1));
+        Assert.NotSame(ex, state.GetExpandHandler(k1));
+        Assert.NotSame(ce, state.GetCellEditHandler(k1, "Name"));
+    }
+
+    [Fact]
+    public async Task RowPointerClick_Resolves_The_Live_Row_Index_After_A_Sort_Reorders_Rows()
+    {
+        // Stale-closure regression (the #721 bug class): a handler captured while row "3" sat at
+        // index 2 must, after a re-sort moves "3" to index 0, still act on "3" — i.e. it resolves
+        // the CURRENT index, never a captured one.
+        var state = await CreateClientFallbackLoadedState(); // sorted by Id asc: 1,2,3
+        var key3 = new RowKey("3");
+        Assert.Equal(2, state.GetRowIndex(key3));
+
+        // Grab the stabilized handler BEFORE the reorder (simulating a delegate cached on an
+        // earlier render), then reorder so "3" lands at index 0.
+        var handlerBefore = state.GetRowPointerHandler(key3);
+        state.ToggleSort("Id"); // asc -> desc
+        await state.LoadDataAsync(TestContext.Current.CancellationToken); // 3,2,1
+        Assert.Equal(0, state.GetRowIndex(key3));
+
+        // The cached delegate is the same instance (skip-stable) ...
+        Assert.Same(handlerBefore, state.GetRowPointerHandler(key3));
+        // ... and invoking its resolved action lands on "3"'s CURRENT position, not the stale 2.
+        state.InvokeRowPointerClick(key3, ctrlKey: false, shiftKey: false);
+
+        Assert.Equal(0, state.FocusedRowIndex);
+        Assert.Equal("3", state.FocusedKey?.Value);
+        Assert.Contains(key3, state.SelectedKeys);
+    }
+
+    [Fact]
+    public async Task CellEditClick_Begins_Edit_On_The_Correct_Cell_After_A_Sort_Reorders_Rows()
+    {
+        var state = await CreateClientFallbackLoadedState(); // 1,2,3
+        var key1 = new RowKey("1");
+        Assert.Equal(0, state.GetRowIndex(key1));
+
+        var handlerBefore = state.GetCellEditHandler(key1, "Name");
+        state.ToggleSort("Id"); // -> desc: 3,2,1
+        await state.LoadDataAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(2, state.GetRowIndex(key1)); // "1" now last
+
+        Assert.Same(handlerBefore, state.GetCellEditHandler(key1, "Name"));
+        state.InvokeCellEditClick(key1, "Name");
+
+        // Editing the right logical row ("1") + column ("Name"), resolved at the new index.
+        Assert.True(state.IsEditing);
+        Assert.Equal("1", state.EditingRowKey?.Value);
+        Assert.Equal("Name", state.EditingColumnName);
+        Assert.Equal(2, state.FocusedRowIndex);
+    }
+
+    [Fact]
+    public async Task StabilizedHandlers_NoOp_For_A_Key_No_Longer_In_The_Set()
+    {
+        var state = await CreateClientFallbackLoadedState(); // 1,2,3
+        var ghost = new RowKey("999"); // never present
+        Assert.Equal(-1, state.GetRowIndex(ghost));
+
+        // A handler for a departed/absent key resolves to index -1 and must no-op (no throw, no
+        // focus/selection/edit side effects) — so a stale cached handler is harmless.
+        state.InvokeRowPointerClick(ghost, ctrlKey: false, shiftKey: false);
+        state.InvokeCellEditClick(ghost, "Name");
+
+        Assert.False(state.IsEditing);
+        Assert.Empty(state.SelectedKeys);
+    }
+
+    [Fact]
+    public void ExpandHandler_Toggles_The_Keyed_Rows_Detail_State()
+    {
+        // The expand handler is index-free (keys on the row key), so it is inherently stable and
+        // correct regardless of row movement. Verify the underlying toggle it routes to.
+        var state = CreateState();
+        var k2 = new RowKey("2");
+        Assert.False(state.IsExpanded(k2));
+
+        state.ToggleRowExpansion(k2); // the action the cached handler dispatches
+        Assert.True(state.IsExpanded(k2));
+        state.ToggleRowExpansion(k2);
+        Assert.False(state.IsExpanded(k2));
+    }
 }

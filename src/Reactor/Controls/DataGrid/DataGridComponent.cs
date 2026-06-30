@@ -34,6 +34,13 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
     /// </summary>
     private readonly record struct CommitMutationInput(RowKey Key, T NewItem, T? OriginalItem);
 
+    // Reference-stable no-op handlers for PLACEHOLDER rows (#671). A loading placeholder has no
+    // row key, so it gets these shared stable delegates instead of a per-row cached handler — the
+    // original inline closures early-returned for placeholders anyway. Sharing one ref keeps
+    // placeholder cells/rows on the reconciler skip path too (and avoids a per-placeholder closure).
+    private static readonly Action<object, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs> StableNoopTap = (_, _) => { };
+    private static readonly Action<object, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs> StableNoopPointer = (_, _) => { };
+
     public override Element Render()
     {
         var el = Props;
@@ -535,20 +542,13 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         {
             var isExpanded = !isPlaceholder && state.IsExpanded(rowKey);
             var expandIcon = isExpanded ? "\u25BC" : "\u25B6";
-            var capturedKeyForExpand = rowKey;
-            var capturedIsPlaceholder2 = isPlaceholder;
             cells[0] = TextBlock(expandIcon)
                 .FontSize(10).Opacity(0.6)
                 .HAlign(HorizontalAlignment.Center)
                 .VAlign(VerticalAlignment.Center)
-                .OnTapped((_, _) =>
-                {
-                    if (capturedIsPlaceholder2) return;
-                    Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() =>
-                    {
-                        state.ToggleRowExpansion(capturedKeyForExpand);
-                    });
-                })
+                // #671: reference-stable expand handler (cached per rowKey) so the toggle cell can
+                // skip across renders. Placeholders (no key) share the stable no-op.
+                .OnTapped(isPlaceholder ? StableNoopTap : state.GetExpandHandler(rowKey))
                 .Grid(row: 0, column: 0);
         }
 
@@ -629,29 +629,10 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                 && !isCellEditing && !isRowInRowEdit
                 && !col.IsReadOnly && col.SetValue is not null)
             {
-                var capturedRow = index;
-                var capturedCol = c;
-                cell = cell.OnTapped((sender, e) =>
-                {
-                    Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() =>
-                    {
-                        // Commit any in-flight edit BEFORE starting a new one.
-                        // BeginEdit unconditionally overwrites _editingValue with the
-                        // new cell's current value, which would destroy the in-flight
-                        // edit's pending value if we didn't commit first.
-                        if (state.IsEditing)
-                        {
-                            var editKey = state.EditingRowKey;
-                            var origItem = editKey is not null
-                                ? GetOriginalItem(state, editKey.Value) : default;
-                            var result = state.CommitEdit();
-                            if (result is not null && el.OnRowChanged is not null)
-                                HandleAsyncCommit(state, el, result.Value.Key, result.Value.NewItem, origItem!);
-                        }
-                        state.SetFocus(capturedRow, capturedCol);
-                        state.BeginEdit(capturedRow, capturedCol);
-                    });
-                });
+                // #671: reference-stable click-to-edit handler (cached per (rowKey, column)). It
+                // resolves the live row + column index at click time, so it always edits the right
+                // cell after a mutation/sort, while its stable identity lets unchanged cells skip.
+                cell = cell.OnTapped(state.GetCellEditHandler(rowKey, col.Name));
             }
 
             cells[c + cellOffset] = cell.Grid(row: 0, column: c + cellOffset);
@@ -710,48 +691,11 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         row = row.Background(rowBg);
 
         // Click handler — always present (maintains element tree structure).
-        // For placeholders the handler is a no-op.
-        {
-            var capturedKey = rowKey;
-            var capturedIndex = index;
-            var capturedIsPlaceholder = isPlaceholder;
-            row = row.OnPointerPressed((sender, e) =>
-            {
-                if (capturedIsPlaceholder) return;
-                var props = e.GetCurrentPoint(null).Properties;
-                if (!props.IsLeftButtonPressed) return;
-
-                var mods = e.KeyModifiers;
-                Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() =>
-                {
-                    // Commit any active edit when clicking a different row.
-                    // Clicking within the same row is handled by the cell's OnTapped
-                    // handler (which commits-then-begins). Skipping commit here prevents
-                    // the editing TextBox from being prematurely dismissed when the user
-                    // clicks it to position the cursor.
-                    if (state.IsEditing)
-                    {
-                        var editingKey = state.EditingRowKey;
-                        if (editingKey is null || !editingKey.Value.Equals(capturedKey))
-                        {
-                            var origItem = editingKey is not null ? GetOriginalItem(state, editingKey.Value) : default;
-                            var commitResult = state.CommitEdit();
-                            if (commitResult is not null && el.OnRowChanged is not null)
-                                HandleAsyncCommit(state, el, commitResult.Value.Key, commitResult.Value.NewItem, origItem!);
-                        }
-                    }
-
-                    state.SetFocus(capturedIndex, state.FocusedColIndex >= 0 ? state.FocusedColIndex : 0);
-
-                    if (selectable)
-                    {
-                        state.HandleRowClick(capturedKey,
-                            ctrlKey: mods.HasFlag(VirtualKeyModifiers.Control),
-                            shiftKey: mods.HasFlag(VirtualKeyModifiers.Shift));
-                    }
-                });
-            });
-        }
+        // #671: reference-stable per-row pointer handler (cached per rowKey) so unchanged rows can
+        // skip across renders. It resolves the live row index at click time (correct after a
+        // mutation/sort), commits an in-flight edit on a different row, focuses, and runs selection.
+        // Placeholders (no key) share the stable no-op — the original handler early-returned for them.
+        row = row.OnPointerPressed(isPlaceholder ? StableNoopPointer : state.GetRowPointerHandler(rowKey));
 
         // Per-row validation visualizer — always evaluate (never wraps for placeholders
         // since isEditingThisRow is false, so the element tree stays flat).
