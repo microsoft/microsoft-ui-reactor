@@ -659,4 +659,79 @@ public class DataGridPerfCacheTests
         state.ToggleRowExpansion(k2);
         Assert.False(state.IsExpanded(k2));
     }
+
+    // ── #759 dual-review required coverage: commit-routing + column dimension ──
+    // The commit-in-flight path moved into CommitInFlightEditThroughDispatcher (routed via
+    // CommitDispatcher) and the column-index resolution are the riskiest relocated logic; these
+    // lock them. CommitDispatcher is null headless, so the existing suites never exercised it.
+
+    [Fact]
+    public async Task RowPointerClick_On_A_Different_Row_Commits_The_InFlight_Edit_Through_The_Dispatcher_Once()
+    {
+        var state = await CreateClientFallbackLoadedState(); // rows 1,2,3 (Id asc)
+        var commits = new List<(RowKey Key, TestItem NewItem, TestItem? Orig)>();
+        state.CommitDispatcher = (k, n, o) => commits.Add((k, n, o));
+
+        // Begin editing row "1" (index 0), column "Name", with a pending new value.
+        Assert.True(state.BeginEdit(0, 1));
+        state.UpdateEditingValue("Alice2");
+
+        // Click a DIFFERENT row ("2") — must commit row "1"'s in-flight edit exactly ONCE, routed
+        // through CommitDispatcher, carrying the PRE-commit original-item snapshot for revert.
+        state.InvokeRowPointerClick(new RowKey("2"), ctrlKey: false, shiftKey: false);
+
+        Assert.Single(commits);
+        Assert.Equal("1", commits[0].Key.Value);
+        Assert.Equal("Alice", commits[0].Orig?.Name);   // pre-edit snapshot, not the new value
+        Assert.Equal("Alice2", commits[0].NewItem.Name); // committed value
+        Assert.False(state.IsEditing);                   // edit committed, not left dangling
+    }
+
+    [Fact]
+    public async Task CellEditClick_On_A_New_Cell_Commits_The_InFlight_Edit_Through_The_Dispatcher_Once_Then_Begins()
+    {
+        var state = await CreateClientFallbackLoadedState(); // rows 1,2,3
+        var commits = new List<(RowKey Key, TestItem NewItem, TestItem? Orig)>();
+        state.CommitDispatcher = (k, n, o) => commits.Add((k, n, o));
+
+        Assert.True(state.BeginEdit(0, 1)); // row "1", column "Name"
+        state.UpdateEditingValue("Alice2");
+
+        // Tap a different cell — commits the in-flight edit (once, via the dispatcher) BEFORE the new
+        // edit begins.
+        state.InvokeCellEditClick(new RowKey("2"), "Score");
+
+        Assert.Single(commits);
+        Assert.Equal("1", commits[0].Key.Value);
+        Assert.Equal("Alice", commits[0].Orig?.Name);
+        Assert.Equal("Alice2", commits[0].NewItem.Name);
+
+        // ...and a NEW edit began on the tapped cell (row "2", column "Score").
+        Assert.True(state.IsEditing);
+        Assert.Equal("2", state.EditingRowKey?.Value);
+        Assert.Equal("Score", state.EditingColumnName);
+    }
+
+    [Fact]
+    public async Task CellEditClick_NoOps_For_An_Absent_Column_And_Resolves_The_Right_Column_By_Name_After_Reorder()
+    {
+        var state = await CreateClientFallbackLoadedState(); // rows 1,2,3; columns Id,Name,Score
+        var key1 = new RowKey("1");
+
+        // Absent column name -> the name->index lookup misses -> no-op (no edit begins).
+        state.InvokeCellEditClick(key1, "Nope");
+        Assert.False(state.IsEditing);
+
+        // A cached cell handler resolves its column BY NAME at invocation, so after a column reorder
+        // it still edits the same logical column ("Score"), not whatever now sits at Score's old
+        // index. The handler instance also stays reference-stable across the reorder.
+        var handlerBefore = state.GetCellEditHandler(key1, "Score");
+        state.ReorderColumn(2, 0); // move Score (idx 2) to the front -> columns become Score,Id,Name
+        Assert.Same(handlerBefore, state.GetCellEditHandler(key1, "Score"));
+
+        state.InvokeCellEditClick(key1, "Score");
+        Assert.True(state.IsEditing);
+        Assert.Equal("1", state.EditingRowKey?.Value);
+        Assert.Equal("Score", state.EditingColumnName); // correct column by name despite the reorder
+    }
 }
