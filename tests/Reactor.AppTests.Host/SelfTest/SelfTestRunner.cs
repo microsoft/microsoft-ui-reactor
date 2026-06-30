@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Microsoft.UI.Reactor;
@@ -24,8 +25,15 @@ internal static class SelfTestRunner
     /// <c>CTitleBar::Uninitialize</c> double-releases a caption-buttons UI
     /// Automation provider, 0xC0000409) survives the harness's accumulated live
     /// XAML graph. We capture the code here and hard-terminate instead (issue #680).
+    /// <para>
+    /// Defaults to <c>1</c> (failure), not <c>0</c>: the only reader of this
+    /// property is the last-resort <c>Environment.Exit(ExitCode)</c> fallback in
+    /// <c>Program.cs</c>, reached only if the dispatcher loop ever unwinds without
+    /// <see cref="EndProcessImmediately"/> running. Defaulting to failure means
+    /// such an abnormal exit can never masquerade as a clean pass.
+    /// </para>
     /// </summary>
-    internal static int ExitCode { get; private set; }
+    internal static int ExitCode { get; private set; } = 1;
 
     // Guards the one-shot final exit so a per-fixture timeout racing the normal
     // completion path can't terminate the process twice.
@@ -403,32 +411,53 @@ internal static class SelfTestRunner
     /// </summary>
     private static void EndProcessImmediately(int exitCode)
     {
-        ExitCode = exitCode;
         // One-shot: a per-fixture timeout that raced the normal completion path
         // (both funnel here through the run's finally) must not terminate twice.
         if (Interlocked.Exchange(ref _shutdownStarted, 1) != 0)
             return;
+        // Set only after winning the one-shot guard, so a racing second caller
+        // (e.g. the off-dispatcher watchdog) can't overwrite the exit code the
+        // first caller is already terminating with.
+        ExitCode = exitCode;
 
         // Flush TAP/stderr to the OS pipe before the hard kill — TerminateProcess
-        // discards anything still sitting in the managed stream buffers.
-        try { Console.Out.Flush(); } catch { /* mid-exit: nothing we can do */ }
-        try { Console.Error.Flush(); } catch { /* mid-exit: nothing we can do */ }
+        // discards anything still sitting in the managed stream buffers. Flushing a
+        // closed/redirected stdio pipe throws IOException, and a stream already torn
+        // down by an in-flight exit throws ObjectDisposedException; both are expected
+        // on this emergency path and ignored (a typed catch, not a blanket one).
+        try { Console.Out.Flush(); } catch (IOException) { } catch (ObjectDisposedException) { }
+        try { Console.Error.Flush(); } catch (IOException) { } catch (ObjectDisposedException) { }
 
-        // Immediate, teardown-free termination (see the remarks above). Does not
-        // return on success.
-        TerminateProcess(GetCurrentProcess(), unchecked((uint)exitCode));
+        // Immediate, teardown-free termination (see the remarks above). -1 is the
+        // Win32 current-process pseudo-handle, so no separate GetCurrentProcess
+        // interop is needed. On success this never returns — the OS tears the
+        // process down abruptly, running no TLS destructors or window-close cascade
+        // (the whole point). Reaching the lines below therefore means the syscall
+        // itself failed (e.g. blocked by policy); record why before falling back.
+        if (!TerminateProcess(CurrentProcessPseudoHandle, unchecked((uint)exitCode)))
+            Debug.WriteLine($"TerminateProcess failed: 0x{Marshal.GetLastWin32Error():X8}");
 
-        // Unreachable unless TerminateProcess itself failed; fall back to the
-        // managed exit so the process still leaves with the captured code.
+        // Last resort: force a managed exit so a Host that somehow survived the
+        // kill still leaves with the captured code rather than running on. This
+        // path may itself trip the #680 teardown fault, but an abrupt exit beats a
+        // hung Host.
         Environment.Exit(exitCode);
     }
 
-    [DllImport("kernel32.dll")]
-    private static extern IntPtr GetCurrentProcess();
+    // The Win32 current-process pseudo-handle, (HANDLE)-1. Passing it directly
+    // avoids a second P/Invoke just to fetch the current process handle.
+    private static readonly nint CurrentProcessPseudoHandle = -1;
 
+    // The single retained Win32 import. No managed API gives a teardown-free exit
+    // that ALSO carries a specific 0/1 exit code: Environment.Exit runs the loader's
+    // TLS destructors (the issue #680 fault we are dodging), Environment.FailFast
+    // leaves a fail-fast exit code (0xC0000409) plus a WER dump on every run, and
+    // Process.Kill forces exit code -1 — each would defeat the fix or trip the
+    // HostProcessExitsCleanly_NoTeardownCrash regression guard. TerminateProcess is
+    // the only mechanism that terminates immediately with the exact captured code.
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool TerminateProcess(IntPtr hProcess, uint uExitCode);
+    private static extern bool TerminateProcess(nint hProcess, uint uExitCode);
 
     private static void StartHangWatchdog()
     {
