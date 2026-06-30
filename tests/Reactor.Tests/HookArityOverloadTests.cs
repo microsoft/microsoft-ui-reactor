@@ -458,4 +458,163 @@ public class HookArityOverloadTests
         Action cb3 = ctx.UseCallback(Cb(3), deps); // unchanged contents
         Assert.Same(cb2, cb3); // cached
     }
+
+    // ── UseCallback arity-1 scalar (issue #688 follow-up coverage) ───────────
+
+    [Fact]
+    public void UseCallback_Arity1_Scalar_Dep_Keeps_Identity_While_Unchanged_And_Adopts_On_Change()
+    {
+        var ctx = NewCtx();
+        Action a1 = () => { };
+        Action a2 = () => { };
+        Action a3 = () => { };
+        var r1 = ctx.UseCallback(a1, 5);
+        Rerender(ctx);
+        var r2 = ctx.UseCallback(a2, 5); // dep unchanged → keep a1
+        Rerender(ctx);
+        var r3 = ctx.UseCallback(a3, 6); // dep changed → adopt a3
+
+        Assert.Same(a1, r1);
+        Assert.Same(a1, r2);
+        Assert.Same(a3, r3);
+    }
+
+    // ── Arity-2/3 reruns on change (not just the unchanged/skip path) ────────
+
+    [Fact]
+    public void UseEffect_Arity2_And_Arity3_Rerun_When_A_Dep_Changes()
+    {
+        var ctx = NewCtx();
+        int runs2 = 0, runs3 = 0;
+
+        ctx.UseEffect(() => { runs2++; }, 1, "x");
+        ctx.UseEffect(() => { runs3++; }, 1, "x", 2.5);
+        ctx.FlushEffects();
+        Assert.Equal(1, runs2);
+        Assert.Equal(1, runs3);
+
+        Rerender(ctx);
+        ctx.UseEffect(() => { runs2++; }, 2, "x");      // d1 changed
+        ctx.UseEffect(() => { runs3++; }, 1, "x", 9.9); // d3 changed
+        ctx.FlushEffects();
+        Assert.Equal(2, runs2);
+        Assert.Equal(2, runs3);
+
+        Rerender(ctx);
+        ctx.UseEffect(() => { runs2++; }, 2, "x");      // unchanged → skip
+        ctx.UseEffect(() => { runs3++; }, 1, "x", 9.9); // unchanged → skip
+        ctx.FlushEffects();
+        Assert.Equal(2, runs2);
+        Assert.Equal(2, runs3);
+    }
+
+    [Fact]
+    public void UseMemo_Arity2_And_Arity3_Recompute_When_A_Dep_Changes()
+    {
+        var ctx = NewCtx();
+        int calls2 = 0, calls3 = 0;
+
+        ctx.UseMemo(() => { calls2++; return calls2; }, 1, "x");
+        ctx.UseMemo(() => { calls3++; return calls3; }, 1, "x", true);
+        Assert.Equal(1, calls2);
+        Assert.Equal(1, calls3);
+
+        Rerender(ctx);
+        ctx.UseMemo(() => { calls2++; return calls2; }, 1, "x");       // unchanged → cached
+        ctx.UseMemo(() => { calls3++; return calls3; }, 1, "x", true); // unchanged → cached
+        Assert.Equal(1, calls2);
+        Assert.Equal(1, calls3);
+
+        Rerender(ctx);
+        ctx.UseMemo(() => { calls2++; return calls2; }, 9, "x");        // d1 changed
+        ctx.UseMemo(() => { calls3++; return calls3; }, 1, "x", false); // d3 changed
+        Assert.Equal(2, calls2);
+        Assert.Equal(2, calls3);
+    }
+
+    // ── Cleanup runs on unmount (RunCleanups), not just on dep change ────────
+
+    [Fact]
+    public void UseEffect_Cleanup_Arity_Runs_Cleanup_Once_On_Unmount()
+    {
+        var ctx = NewCtx();
+        int runs = 0, cleanups = 0;
+        ctx.UseEffect(() => { runs++; return () => cleanups++; }, 1, "x", 2.5);
+        ctx.FlushEffects();
+        Assert.Equal(1, runs);
+        Assert.Equal(0, cleanups);
+
+        ctx.RunCleanups(); // unmount → live cleanup fires exactly once
+        Assert.Equal(1, cleanups);
+    }
+
+    // ── Reference-type / struct value equality (DepEquals) ───────────────────
+
+    [Fact]
+    public void UseEffect_Arity1_ReferenceType_Dep_Uses_Value_Equality()
+    {
+        // A reference type with value equality (record) skips while equal-by-value across
+        // distinct instances and re-runs when the value differs — matching the params
+        // path's object.Equals.
+        var ctx = NewCtx();
+        int runs = 0;
+        ctx.UseEffect(() => { runs++; }, new Point(1, 2));
+        ctx.FlushEffects();
+        Assert.Equal(1, runs);
+
+        Rerender(ctx);
+        ctx.UseEffect(() => { runs++; }, new Point(1, 2)); // distinct instance, equal value → skip
+        ctx.FlushEffects();
+        Assert.Equal(1, runs);
+
+        Rerender(ctx);
+        ctx.UseEffect(() => { runs++; }, new Point(1, 3)); // different value → re-run
+        ctx.FlushEffects();
+        Assert.Equal(2, runs);
+    }
+
+    [Fact]
+    public void UseMemo_Arity1_Struct_Dep_Skips_While_Equal_And_Recomputes_On_Change()
+    {
+        // A struct dep compares by value through EqualityComparer<T>.Default with no
+        // params object[] allocation and no boxing on the unchanged path.
+        var ctx = NewCtx();
+        int calls = 0;
+        var v1 = ctx.UseMemo(() => { calls++; return calls; }, new PointStruct(1, 2));
+        Rerender(ctx);
+        var v2 = ctx.UseMemo(() => { calls++; return calls; }, new PointStruct(1, 2)); // equal → cached
+        Rerender(ctx);
+        var v3 = ctx.UseMemo(() => { calls++; return calls; }, new PointStruct(1, 9)); // changed → recompute
+
+        Assert.Equal(1, v1);
+        Assert.Equal(1, v2);
+        Assert.Equal(2, v3);
+        Assert.Equal(2, calls);
+    }
+
+    // ── Params-vs-arity equivalence (same skip/re-run decision) ──────────────
+
+    [Fact]
+    public void Arity_And_Params_Make_The_Same_Skip_Or_Rerun_Decision()
+    {
+        var ctx = NewCtx();
+        int arityRuns = 0, paramsRuns = 0;
+        var seq = new (int a, string b)[] { (1, "x"), (1, "x"), (2, "x"), (2, "y"), (2, "y") };
+        int[] expected = { 1, 1, 2, 3, 3 }; // cumulative run count after each render
+
+        for (int i = 0; i < seq.Length; i++)
+        {
+            if (i > 0) Rerender(ctx);
+            var (a, b) = seq[i];
+            ctx.UseEffect(() => { arityRuns++; }, a, b);                   // arity-2
+            ctx.UseEffect(() => { paramsRuns++; }, new object[] { a, b }); // params
+            ctx.FlushEffects();
+            Assert.Equal(expected[i], arityRuns);
+            Assert.Equal(expected[i], paramsRuns);
+            Assert.Equal(arityRuns, paramsRuns); // never diverge
+        }
+    }
+
+    private sealed record Point(int X, int Y);
+    private readonly record struct PointStruct(int X, int Y);
 }

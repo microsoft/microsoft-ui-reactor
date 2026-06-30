@@ -263,6 +263,7 @@ namespace Microsoft.UI.Reactor.Core
         protected void UseEffect(System.Action effect, params object[] deps) { }
         protected void UseEffect<T1>(System.Action effect, T1 d1) { }
         protected void UseEffect<T1, T2>(System.Action effect, T1 d1, T2 d2) { }
+        protected void UseEffect<T1, T2, T3>(System.Action effect, T1 d1, T2 d2, T3 d3) { }
         protected T UseMemo<T>(System.Func<T> factory, params object[] deps) => factory();
         protected T UseMemo<T, T1>(System.Func<T> factory, T1 d1) => factory();
     }
@@ -342,6 +343,73 @@ class C : Microsoft.UI.Reactor.Core.Component
     {
         int userId = 42;
         UseEffect(() => { }, userId);
+        return """";
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task UseEffect_Arity3_With_New_Object_In_Third_Dep_Flags()
+    {
+        // Two stable scalars bind T1/T2; the fresh allocation in the THIRD positional
+        // dep maps to parameter "d3", which the gate now inspects.
+        var test = ArityStubs + @"
+class C : Microsoft.UI.Reactor.Core.Component
+{
+    public override string Render()
+    {
+        int a = 1, b = 2;
+        UseEffect(() => { }, a, b, {|REACTOR_HOOKS_004:new object()|});
+        return """";
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task UseEffect_Arity1_ValueType_Array_Dep_Flags_Whole_Array()
+    {
+        // A value-type array (int[]) binds UseEffect<T1> with T1 = int[]. The runtime
+        // compares it as ONE reference dep (AsParamsArrayDep only unwraps reference-type
+        // arrays), so a fresh int[] each render re-runs the effect — the analyzer must
+        // flag the whole freshly-allocated array, NOT iterate its (stable) elements.
+        var test = ArityStubs + @"
+class C : Microsoft.UI.Reactor.Core.Component
+{
+    public override string Render()
+    {
+        UseEffect(() => { }, {|REACTOR_HOOKS_004:new int[] { 1, 2 }|});
+        return """";
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task UseEffect_Arity1_ReferenceType_Array_Dep_Compared_ElementWise_No_Diagnostic()
+    {
+        // A reference-type array (string[]) is the covariant case the runtime unwraps and
+        // compares element-wise, so the analyzer inspects elements individually. Stable
+        // string elements are not flagged, and the array itself must NOT be reported.
+        var test = ArityStubs + @"
+class C : Microsoft.UI.Reactor.Core.Component
+{
+    public override string Render()
+    {
+        UseEffect(() => { }, new[] { ""a"", ""b"" });
         return """";
     }
 }";

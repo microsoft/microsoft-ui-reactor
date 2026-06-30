@@ -41,9 +41,11 @@ pass the deps positionally instead of through a `params object[]`, so the
 unchanged-deps path allocates no array and never boxes value-type deps (`int`,
 `bool`, enums, structs). Behaviour is otherwise identical — the same per-element
 equality comparison decides whether the body re-runs — so prefer them on hot
-render paths. A single dependency whose compile-time type is an array (for
-example `string[]`) is still compared element-by-element, matching the `params`
-form.
+render paths. A single dependency whose compile-time type is an array **of
+reference types** (for example `string[]`) is still compared element-by-element,
+matching the `params` form; a value-type array such as `int[]` is treated as one
+reference-compared dependency, so pass its elements as separate deps if you want
+element-wise comparison.
 
 ## Running Once on Mount
 

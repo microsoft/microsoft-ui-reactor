@@ -752,8 +752,14 @@ public sealed class RenderContext
     // unconditional (T)stored cast. A hot-reload edit or a dynamic call site can change
     // a dependency's runtime type at the same hook slot across renders; an
     // InvalidCastException while COMPARING deps is worse than simply treating the slot
-    // as changed, so a type mismatch returns false ("changed"). This mirrors the
-    // non-generic params DepsEqual, which compares via object.Equals and never throws.
+    // as changed, so a type mismatch returns false ("changed"). Like the non-generic
+    // params DepsEqual, this never throws on a type change. Equality itself goes through
+    // EqualityComparer<T>.Default — the same comparer UseState/UseReducer use — rather than
+    // the params path's boxed object.Equals. The two agree for every well-behaved type and
+    // this keeps the value-type fast path allocation-free; the only observable difference
+    // is a (pathological) value type whose IEquatable<T>.Equals disagrees with its
+    // object.Equals override, which compares by the former here. That is an intentional,
+    // boxing-free choice consistent with the rest of the hooks runtime.
     // Value-type T unboxes through the `is T` pattern with no extra allocation, and the
     // current dep is still passed through EqualityComparer<T> unboxed.
     //
