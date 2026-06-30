@@ -291,10 +291,12 @@ list's items or row builder is replaced (the same boundary that invalidates
 Reactor's internal view cache), so a new builder closure can never serve an
 instance the old one built.
 
-**Outside a virtualized list,** `Memo(key, factory)` is a transparent wrapper:
-it renders `factory()` on every reconcile with no caching. Caching only
-happens when a virtualized list's factory owns the cache; as a plain child
-(say, a `VStack` child) it is a safe no-op.
+**Outside a virtualized list,** `Memo(key, factory)` is a transparent but *keyed*
+wrapper: a re-render with the same key is a no-op (the factory is not re-invoked
+and the subtree is not diffed), and a changed key replaces the inner (unmount +
+fresh mount of a new `factory()` result). The cross-recycle cache only happens
+when a virtualized list's factory owns the cache; as a plain child (say, a
+`VStack` child) it is a safe, keyed no-op.
 
 ### Escape hatch without the API
 

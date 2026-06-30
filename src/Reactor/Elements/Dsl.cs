@@ -1253,8 +1253,11 @@ public static partial class Factories
     /// If the body also depends on, say, a selection flag, fold it into the key:
     /// <c>Memo((items[i].Id, isSelected), () =&gt; …)</c>. Closing over unkeyed mutable state will serve
     /// stale content. The cache is cleared automatically when the list's items/renderItem change.</para>
-    /// <para>Outside a virtualized factory the wrapper is transparent — it simply renders the factory
-    /// each pass with no caching — so it is always safe to use anywhere an element is expected.</para>
+    /// <para>Outside a virtualized factory the wrapper is transparent but <em>keyed</em>: a re-render
+    /// with the same key is a no-op (the factory is not re-invoked and the inner subtree is not
+    /// diffed), while a changed key replaces the inner (unmount + fresh mount of the new factory
+    /// output). The cross-recycle cache only applies on the virtualized-list path. It is always safe
+    /// to use anywhere an element is expected.</para>
     /// </summary>
     /// <typeparam name="TKey">
     /// Key type. Boxed to <see cref="object"/> and compared with <see cref="object.Equals(object)"/> /
