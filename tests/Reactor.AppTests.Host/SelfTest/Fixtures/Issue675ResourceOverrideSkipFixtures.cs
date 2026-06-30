@@ -52,11 +52,29 @@ internal static class Issue675ResourceOverrideSkipFixtures
     // (Source-less) dictionary merged into Application.Current.Resources, which
     // ThemeRef.Resolve discovers via its TryResolveNonThemed MergedDictionaries scan.
     // Mutating the brush is then a write to our dictionary, never the sealed app one.
+    //
+    // #660 — ThemeRef.Resolve now caches (resourceKey, themeName) -> Brush, cleared only
+    // by InvalidateResolutionCache (wired to the hosts' theme-change handlers). Our test
+    // mutates the source brush WITHOUT a theme change, so we must invalidate the cache
+    // ourselves — faithfully mirroring what the host does on an effective-theme change —
+    // both here (clears any prior fixture's cached entry for the shared key) and after
+    // each mutation. Without it the cache returns the stale resolved brush and a skipped
+    // child's re-resolution can't be observed.
     private static ResourceDictionary InstallSourceDict(string key, SolidColorBrush initial)
     {
         var dict = new ResourceDictionary { [key] = initial };
         Application.Current.Resources.MergedDictionaries.Add(dict);
+        global::Microsoft.UI.Reactor.Core.ThemeRef.InvalidateResolutionCache();
         return dict;
+    }
+
+    // Mutate the source brush AND invalidate the #660 resolution cache, so the next
+    // ThemeRef.Resolve re-reads the merged dictionary (as it would after a real theme
+    // change). A skip path that drops re-resolution still leaves fe.Resources[key] stale.
+    private static void SetSource(ResourceDictionary dict, string key, SolidColorBrush brush)
+    {
+        dict[key] = brush;
+        global::Microsoft.UI.Reactor.Core.ThemeRef.InvalidateResolutionCache();
     }
 
     // ════════════════════════════════════════════════════════════════════
@@ -107,7 +125,7 @@ internal static class Issue675ResourceOverrideSkipFixtures
                     ReferenceEquals(ResourceBrush(tb, TargetKey), red));
 
                 // Mutate the SOURCE brush, then re-render shallow-equal.
-                srcDict[SrcKey] = blue;
+                SetSource(srcDict, SrcKey, blue);
                 bump!(1);
                 await Harness.Render();
 
@@ -174,7 +192,7 @@ internal static class Issue675ResourceOverrideSkipFixtures
                 H.Check("Issue675_Positional_MountResolvedRed",
                     ReferenceEquals(ResourceBrush(cell, TargetKey), red));
 
-                srcDict[SrcKey] = blue;
+                SetSource(srcDict, SrcKey, blue);
                 bump!(1);
                 await Harness.Render();
 
@@ -236,7 +254,7 @@ internal static class Issue675ResourceOverrideSkipFixtures
                 H.Check("Issue675_Keyed_MountResolvedRed",
                     ReferenceEquals(ResourceBrush(cell, TargetKey), red));
 
-                srcDict[SrcKey] = blue;
+                SetSource(srcDict, SrcKey, blue);
                 bump!(1);
                 await Harness.Render();
 
@@ -411,7 +429,7 @@ internal static class Issue675ResourceOverrideSkipFixtures
                 H.Check("Issue675_KeyedSuffix_MountResolvedRed",
                     ReferenceEquals(ResourceBrush(cell, TargetKey), red));
 
-                srcDict[SrcKey] = blue;
+                SetSource(srcDict, SrcKey, blue);
                 bump!(1);
                 await Harness.Render();
 
