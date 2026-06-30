@@ -731,6 +731,15 @@ internal static class ChildReconciler
         public void Patch(int oldRelIdx, int newIdx, int panelIdx)
         {
             if (panelIdx >= _children.Count) return;
+            // Issue #701 (theme-correctness audit) — the keyed-MIDDLE patch intentionally has NO
+            // CanSkipUpdate early-skip arm (unlike the positional / keyed prefix+suffix arms): it
+            // unconditionally routes every reordered survivor through UpdateChild → Update, whose
+            // element-level shallow-skip is the single place that re-resolves ThemeBindings /
+            // ThemeRef ResourceOverrides against the current effective theme. This is what keeps a
+            // themed survivor's fe.Resources[key] fresh across a LIS reorder. A future optimization
+            // that adds a CanSkipUpdate fast-path here MUST mirror Reconciler.Update's skip arm
+            // (ApplyThemeBindings + ApplyResourceOverrides) or it will re-introduce the #701/#675
+            // staleness — see Issue675ResourceOverrideSkipFixtures.KeyedMiddleReorderReResolves.
             var replacement = _reconciler.UpdateChild(
                 _oldChildren[_oldStart + oldRelIdx],
                 _newChildren[_newStart + newIdx],
