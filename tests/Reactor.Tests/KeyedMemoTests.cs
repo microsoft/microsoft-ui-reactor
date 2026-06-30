@@ -39,7 +39,9 @@ public class KeyedMemoTests
 
     // Legacy int-index path: key is the index string, item is the boxed index, keyed=false.
     private static Element Realize(ElementFactory<int> factory, int index)
-        => factory.BuildOrCache(index.ToString(), index, index, keyed: false);
+        => factory.BuildOrCache(
+            index.ToString(global::System.Globalization.CultureInfo.InvariantCulture),
+            index, index, keyed: false);
 
     // ── Overload resolution (required) ──────────────────────────────
 

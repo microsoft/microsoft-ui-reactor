@@ -259,6 +259,12 @@ wrap behave exactly as before — and works on every `ElementFactory`-backed
 collection: `VirtualList`, `LazyVStack<T>`, `LazyHStack<T>`, `ItemsView<T>`,
 `ItemsRepeater<T>`, and `DataGrid` rows.
 
+**Keep the modifier *inside* the factory.** The cache only kicks in for a *bare*
+`Memo(key, …)` returned by the row builder. Writing `Memo(id, () => …).Padding(8)`
+— a modifier on the *wrapper* — opts that row out of the cache and silently loses
+the perf benefit. Put modifiers on the element the factory returns instead:
+`Memo(id, () => Border(…).Padding(8))` (as above).
+
 **Purity contract — the key must capture every input the factory reads.**
 The cache cannot see through your closure. If the factory reads anything not
 folded into the key — a selection flag, the current theme, an expand toggle —

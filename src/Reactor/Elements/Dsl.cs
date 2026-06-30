@@ -1253,6 +1253,11 @@ public static partial class Factories
     /// If the body also depends on, say, a selection flag, fold it into the key:
     /// <c>Memo((items[i].Id, isSelected), () =&gt; …)</c>. Closing over unkeyed mutable state will serve
     /// stale content. The cache is cleared automatically when the list's items/renderItem change.</para>
+    /// <para><b>Apply modifiers inside the factory, not on the wrapper.</b> The cross-recycle cache
+    /// only unwraps a <em>bare</em> <c>Memo(key, …)</c>. Writing <c>Memo(id, () =&gt; …).Padding(8)</c>
+    /// — a modifier on the wrapper itself — opts the row out of caching and silently loses the perf
+    /// benefit; put modifiers on the element the factory returns instead:
+    /// <c>Memo(id, () =&gt; Border(…).Padding(8))</c>.</para>
     /// <para>Outside a virtualized factory the wrapper is transparent but <em>keyed</em>: a re-render
     /// with the same key is a no-op (the factory is not re-invoked and the inner subtree is not
     /// diffed), while a changed key replaces the inner (unmount + fresh mount of the new factory
