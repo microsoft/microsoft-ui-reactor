@@ -355,9 +355,10 @@ public sealed class HookRulesAnalyzer : DiagnosticAnalyzer
             }
 
             if (param is null) continue;
-            // Skip unless this is the "deps" parameter (conventionally named). Several
-            // overloads exist — names include "deps", "dependencies".
-            if (param.Name is not ("deps" or "dependencies")) continue;
+            // Skip unless this is a "deps" parameter. Several overloads exist: the
+            // `params object[]` flavor names it "deps"/"dependencies", while the typed-arity
+            // overloads (UseEffect&lt;T1&gt;, UseMemo&lt;T,T1&gt;, ...) name them "d1"/"d2"/"d3".
+            if (param.Name is not ("deps" or "dependencies" or "d1" or "d2" or "d3")) continue;
             // Params arrays are handled by the tail-pass below; skip here to avoid
             // double-reporting when the user passes a scalar to a `params object[] deps`
             // parameter.

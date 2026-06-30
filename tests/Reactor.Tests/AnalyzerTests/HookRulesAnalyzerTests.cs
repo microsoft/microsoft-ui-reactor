@@ -243,6 +243,115 @@ class C : Microsoft.UI.Reactor.Core.Component
         await analyzerTest.RunAsync(TestContext.Current.CancellationToken);
     }
 
+    // ── REACTOR_HOOKS_004 — freshly-allocated deps via typed-arity overloads ──
+    //
+    // Issue #688: the typed-arity overloads name their deps "d1"/"d2"/"d3" (not
+    // "deps"). A non-object fresh allocation binds the arity overload (identity
+    // conversion beats boxing-to-object), so REACTOR_HOOKS_004 must fire through
+    // the d1/d2/d3 parameters too. These stubs expose both the params and arity
+    // overloads so overload resolution mirrors the real framework.
+
+    private const string ArityStubs = @"
+namespace Microsoft.UI.Reactor.Core
+{
+    public class RenderContext { }
+
+    public abstract class Component
+    {
+        protected internal RenderContext Context { get; } = new RenderContext();
+        public abstract string Render();
+        protected void UseEffect(System.Action effect, params object[] deps) { }
+        protected void UseEffect<T1>(System.Action effect, T1 d1) { }
+        protected void UseEffect<T1, T2>(System.Action effect, T1 d1, T2 d2) { }
+        protected T UseMemo<T>(System.Func<T> factory, params object[] deps) => factory();
+        protected T UseMemo<T, T1>(System.Func<T> factory, T1 d1) => factory();
+    }
+}
+";
+
+    [Fact]
+    public async Task UseEffect_Arity1_With_New_List_Dep_Flags()
+    {
+        // new List<int>() has static type List<int> (not object) → binds UseEffect<T1>
+        // with the dep at parameter "d1", which the gate now inspects.
+        var test = ArityStubs + @"
+class C : Microsoft.UI.Reactor.Core.Component
+{
+    public override string Render()
+    {
+        UseEffect(() => { }, {|REACTOR_HOOKS_004:new System.Collections.Generic.List<int>()|});
+        return """";
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task UseMemo_Arity1_With_New_List_Dep_Flags()
+    {
+        var test = ArityStubs + @"
+class C : Microsoft.UI.Reactor.Core.Component
+{
+    public override string Render()
+    {
+        UseMemo(() => 1, {|REACTOR_HOOKS_004:new System.Collections.Generic.List<int>()|});
+        return """";
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task UseEffect_Arity2_With_New_Object_In_Second_Dep_Flags()
+    {
+        // userId (int) binds T1; the fresh allocation in the SECOND positional dep
+        // maps to parameter "d2".
+        var test = ArityStubs + @"
+class C : Microsoft.UI.Reactor.Core.Component
+{
+    public override string Render()
+    {
+        int userId = 42;
+        UseEffect(() => { }, userId, {|REACTOR_HOOKS_004:new object()|});
+        return """";
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task UseEffect_Arity1_With_Stable_Scalar_Dep_No_Diagnostic()
+    {
+        // A stable local read passed as d1 must NOT be flagged.
+        var test = ArityStubs + @"
+class C : Microsoft.UI.Reactor.Core.Component
+{
+    public override string Render()
+    {
+        int userId = 42;
+        UseEffect(() => { }, userId);
+        return """";
+    }
+}";
+        var analyzerTest = new CSharpAnalyzerTest<HookRulesAnalyzer, DefaultVerifier>
+        {
+            TestCode = test,
+        };
+        await analyzerTest.RunAsync(TestContext.Current.CancellationToken);
+    }
+
     // ── REACTOR_HOOKS_005 — hook outside Render/custom hook ────────────
 
     [Fact]

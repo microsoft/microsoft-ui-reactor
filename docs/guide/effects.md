@@ -26,6 +26,7 @@ subscriptions, and DOM manipulation all belong in effects, not in `Render()`.
 |---|---|---|
 | `UseEffect(Action body, params object[] deps)` | After every commit where any entry in `deps` compares unequal (`Array.Empty<object>()` → mount only). | Never — no cleanup function. |
 | `UseEffect(Func<Action> bodyWithCleanup, params object[] deps)` | Same as above. | Before the next body run, and on unmount. |
+| `UseEffect<T1>(Action body, T1 d1)` (also `<T1,T2>`, `<T1,T2,T3>`, and `Func<Action>` flavors) | Same as the `params` overload — typed-arity sugar for 1–3 deps. | As above. |
 
 Both overloads accept a `params` deps argument; pass no values for "run every
 commit" (rarely correct), `Array.Empty<object>()` for "run once on mount",
@@ -33,6 +34,16 @@ or one-or-more reactive values for "re-run when any of these change". Compare
 with [UseResource](reference/hooks/UseResource.md) when the side effect is a cached async read —
 see [Async Resources](async-resources.md) for the cached-fetch shape, which
 handles cancellation, retry, and revalidation for you.
+
+When you have one, two, or three dependencies, the **typed-arity overloads**
+(`UseEffect(body, a, b)`) are a drop-in alternative to the `params` form. They
+pass the deps positionally instead of through a `params object[]`, so the
+unchanged-deps path allocates no array and never boxes value-type deps (`int`,
+`bool`, enums, structs). Behaviour is otherwise identical — the same per-element
+equality comparison decides whether the body re-runs — so prefer them on hot
+render paths. A single dependency whose compile-time type is an array (for
+example `string[]`) is still compared element-by-element, matching the `params`
+form.
 
 ## Running Once on Mount
 

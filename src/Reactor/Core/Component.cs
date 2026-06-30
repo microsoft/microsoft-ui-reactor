@@ -48,14 +48,65 @@ public abstract class Component
     protected void UseEffect(Action effect, params object[] dependencies)
         => Context.UseEffect(effect, dependencies);
 
+    /// <summary>Typed-arity <see cref="UseEffect(Action, object[])"/> — passes one dependency
+    /// positionally, avoiding the <c>params object[]</c> allocation and value-type boxing.</summary>
+    protected void UseEffect<T1>(Action effect, T1 d1)
+        => Context.UseEffect(effect, d1);
+
+    /// <inheritdoc cref="UseEffect{T1}(Action, T1)"/>
+    protected void UseEffect<T1, T2>(Action effect, T1 d1, T2 d2)
+        => Context.UseEffect(effect, d1, d2);
+
+    /// <inheritdoc cref="UseEffect{T1}(Action, T1)"/>
+    protected void UseEffect<T1, T2, T3>(Action effect, T1 d1, T2 d2, T3 d3)
+        => Context.UseEffect(effect, d1, d2, d3);
+
     protected void UseEffect(Func<Action> effectWithCleanup, params object[] dependencies)
         => Context.UseEffect(effectWithCleanup, dependencies);
+
+    /// <inheritdoc cref="UseEffect{T1}(Action, T1)"/>
+    protected void UseEffect<T1>(Func<Action> effectWithCleanup, T1 d1)
+        => Context.UseEffect(effectWithCleanup, d1);
+
+    /// <inheritdoc cref="UseEffect{T1}(Action, T1)"/>
+    protected void UseEffect<T1, T2>(Func<Action> effectWithCleanup, T1 d1, T2 d2)
+        => Context.UseEffect(effectWithCleanup, d1, d2);
+
+    /// <inheritdoc cref="UseEffect{T1}(Action, T1)"/>
+    protected void UseEffect<T1, T2, T3>(Func<Action> effectWithCleanup, T1 d1, T2 d2, T3 d3)
+        => Context.UseEffect(effectWithCleanup, d1, d2, d3);
 
     protected T UseMemo<T>(Func<T> factory, params object[] dependencies)
         => Context.UseMemo(factory, dependencies);
 
+    /// <summary>Typed-arity <see cref="UseMemo{T}(Func{T}, object[])"/> — passes one dependency
+    /// positionally, avoiding the <c>params object[]</c> allocation and value-type boxing.</summary>
+    protected T UseMemo<T, T1>(Func<T> factory, T1 d1)
+        => Context.UseMemo(factory, d1);
+
+    /// <inheritdoc cref="UseMemo{T, T1}(Func{T}, T1)"/>
+    protected T UseMemo<T, T1, T2>(Func<T> factory, T1 d1, T2 d2)
+        => Context.UseMemo(factory, d1, d2);
+
+    /// <inheritdoc cref="UseMemo{T, T1}(Func{T}, T1)"/>
+    protected T UseMemo<T, T1, T2, T3>(Func<T> factory, T1 d1, T2 d2, T3 d3)
+        => Context.UseMemo(factory, d1, d2, d3);
+
     protected Action UseCallback(Action callback, params object[] dependencies)
         => Context.UseCallback(callback, dependencies);
+
+    /// <summary>Typed-arity <see cref="UseCallback(Action, object[])"/> — passes one dependency
+    /// positionally, avoiding the <c>params object[]</c> allocation and value-type boxing.</summary>
+    protected Action UseCallback<T1>(Action callback, T1 d1)
+        => Context.UseCallback(callback, d1);
+
+    /// <inheritdoc cref="UseCallback{T1}(Action, T1)"/>
+    protected Action UseCallback<T1, T2>(Action callback, T1 d1, T2 d2)
+        => Context.UseCallback(callback, d1, d2);
+
+    /// <inheritdoc cref="UseCallback{T1}(Action, T1)"/>
+    protected Action UseCallback<T1, T2, T3>(Action callback, T1 d1, T2 d2, T3 d3)
+        => Context.UseCallback(callback, d1, d2, d3);
 
     protected Ref<T> UseRef<T>(T initialValue = default!)
         => Context.UseRef(initialValue);
