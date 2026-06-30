@@ -817,13 +817,18 @@ internal static class ReconcilerBigCoverageFixtures
             H.Check("ExitTr_Initial3", H.FindText("ex-item-2") is not null);
 
             H.ClickButton("ExitRemove");
-            // Wait long enough for the exit animation (default ~300ms) to complete.
-            await Harness.Render(450);
-            H.Check("ExitTr_Removed", H.FindText("ex-item-2") is null);
+            // The child plays a Fade exit transition (~300ms) before it leaves
+            // the tree; poll with per-pass wall-clock time so we converge as soon
+            // as the transition completes rather than betting on one fixed wait
+            // (which flakes under NativeAOT cold-start jitter — see issue #715).
+            H.Check("ExitTr_Removed",
+                await Harness.WaitFor(() => H.FindText("ex-item-2") is null,
+                    maxPasses: 12, perPassMs: 100));
 
             H.ClickButton("ExitRemove");
-            await Harness.Render(450);
-            H.Check("ExitTr_RemovedAgain", H.FindText("ex-item-1") is null);
+            H.Check("ExitTr_RemovedAgain",
+                await Harness.WaitFor(() => H.FindText("ex-item-1") is null,
+                    maxPasses: 12, perPassMs: 100));
         }
     }
 
