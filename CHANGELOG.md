@@ -410,6 +410,33 @@ Conventions for contributors:
   them; and `ReactorWindow.Close()` is now idempotent — a redundant or
   owner-cascade close performs the native close exactly once instead of
   re-entering native teardown.
+- **The full self-test suite no longer faults with an `ACCESS_VIOLATION` at
+  final process exit (issue #680; test infrastructure only).** Distinct from
+  the mid-run multi-window fault fixed in #647/#673, the *entire* self-test
+  suite (~600 fixtures in one process) crashed with `0xC0000005` during final
+  process teardown — green TAP output, then a non-zero process exit. It
+  reproduced only for the whole suite, never for any subset. Root cause is a
+  **Microsoft.UI.Xaml / Microsoft.UI.Windowing framework use-after-free** walked
+  over state the harness deliberately accumulates and never disposes: one shared
+  `Window` carrying hundreds of `Closed` handlers (one per never-disposed
+  `ReactorHost`) plus the windowing fixtures' real `ReactorWindow`s with custom
+  title bars. Every orderly process-exit path trips it — `Environment.Exit`
+  runs the loader's TLS destructors into the XAML core's already-freed tear-off
+  map (`TearoffMemoryInfoPrivate::Discard` → `0xC0000005`), and
+  `Application.Exit` double-releases the caption-buttons UI Automation provider
+  inside `CTitleBar::Uninitialize` (`0xC0000005` → fast-fail `0xC0000409`). Both
+  faults live *inside* framework teardown, so the issue's suspected
+  fix — making Reactor's own `SetTitleBar`/`WindowMessageMonitor`/backdrop
+  unregister idempotent — cannot stop them. Because no real Reactor app
+  accumulates this state (apps dispose hosts and exit via the orderly
+  `ReactorApp.SafeExit` / `Application.Exit` path, already hardened by #647), the
+  fix is scoped to the harness: after flushing the TAP stream, the self-test
+  runner ends via `TerminateProcess(GetCurrentProcess(), exitCode)`, an
+  immediate teardown-free kill that runs neither the loader's TLS destructors nor
+  WinUI's window-close cascade, preserving the exact `0`/`1` exit code. A new CI
+  regression guard (`SelfTestBatch.HostProcessExitsCleanly_NoTeardownCrash`)
+  fails if the Host ever again exits with anything other than `0` or `1`. **No
+  product code changed.**
 - **TitleBar in a non-content-extended window no longer corrupts the heap on
   close (issue #537).** A window whose `WindowSpec` set
   `ExtendsContentIntoTitleBar = false` while its content still rendered a

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
@@ -13,6 +14,22 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 internal static class SelfTestRunner
 {
     public static string? Filter { get; set; }
+
+    /// <summary>
+    /// Process exit code captured by the final-exit path (<see
+    /// cref="EndProcessImmediately"/>). The full suite must never run any orderly
+    /// process-exit teardown — neither <see cref="Environment.Exit(int)"/> (whose
+    /// <c>ExitProcess</c> TLS destructors fault in Microsoft.UI.Xaml's tear-off
+    /// teardown, 0xC0000005) nor <see cref="Application.Exit"/> (whose
+    /// <c>CTitleBar::Uninitialize</c> double-releases a caption-buttons UI
+    /// Automation provider, 0xC0000409) survives the harness's accumulated live
+    /// XAML graph. We capture the code here and hard-terminate instead (issue #680).
+    /// </summary>
+    internal static int ExitCode { get; private set; }
+
+    // Guards the one-shot final exit so a per-fixture timeout racing the normal
+    // completion path can't terminate the process twice.
+    private static int _shutdownStarted;
 
     /// <summary>
     /// When true (the default), <see cref="DefaultAotSkipPatterns"/> is honoured
@@ -304,7 +321,15 @@ internal static class SelfTestRunner
                                     Console.WriteLine($"not ok {testIndex} {fixtureName}_TIMEOUT - exceeded {timeout.TotalSeconds:0}s");
                                     Console.Out.Flush();
                                     harness.RecordFailure();
-                                    Environment.Exit(1);
+                                    // Issue #680: do NOT Environment.Exit(1) here. Mark this
+                                    // fixture failed and break so the shared finally drives the
+                                    // single teardown-free EndProcessImmediately() exit (ExitCode
+                                    // = 1 via Failures > 0). Any orderly process-exit from inside
+                                    // the live dispatcher loop, with the suite's accumulated XAML
+                                    // graph still mounted, faults in framework teardown.
+                                    Volatile.Write(ref _currentFixture, null);
+                                    harness.MarkFixtureResult(testIndex - 1, false);
+                                    break;
                                 }
                                 else
                                 {
@@ -338,12 +363,72 @@ internal static class SelfTestRunner
                 }
                 finally
                 {
-                    Console.Out.Flush();
-                    Environment.Exit(harness.Failures > 0 ? 1 : 0);
+                    EndProcessImmediately(harness.Failures > 0 ? 1 : 0);
                 }
             });
         });
     }
+
+    /// <summary>
+    /// Ends the self-test process **without running any WinUI or CLR teardown**.
+    /// <para>
+    /// The harness reuses a single <see cref="Window"/> across ~600 fixtures and
+    /// never disposes the <c>ReactorHost</c>s it creates, and the windowing
+    /// fixtures open real <c>ReactorWindow</c>s with custom title bars. Every
+    /// orderly process-exit path walks that accumulated, still-live XAML object
+    /// graph and trips a Microsoft.UI.Xaml / Microsoft.UI.Windowing framework
+    /// use-after-free during teardown (issue #680):
+    /// </para>
+    /// <list type="bullet">
+    /// <item><see cref="Environment.Exit(int)"/> → <c>ExitProcess</c> runs the
+    /// loader's TLS destructors, which destroy live <c>DependencyObject</c>s and
+    /// dereference the XAML core's already-freed tear-off map
+    /// (<c>TearoffMemoryInfoPrivate::Discard</c>) → 0xC0000005.</item>
+    /// <item><see cref="Application.Exit"/> tears the windows down in order, but
+    /// <c>CTitleBar::Uninitialize</c> double-releases the caption-buttons UI
+    /// Automation provider (<c>CTitleBarCaptionButtonsFragmentProvider</c>),
+    /// which the suite's windowing fixtures created via
+    /// <c>OverlappedPresenter.SetBorderAndTitleBar</c> → 0xC0000005 escalated to
+    /// STATUS_FATAL_USER_CALLBACK_EXCEPTION → fast-fail 0xC0000409.</item>
+    /// </list>
+    /// <para>
+    /// Both faults live in framework teardown the harness cannot make safe from
+    /// managed code, so — once the TAP stream is flushed — we
+    /// <c>TerminateProcess</c> ourselves with the captured exit code. That kills
+    /// every thread immediately, running neither the loader's TLS destructors nor
+    /// WinUI's window-close cascade, so neither teardown bug can fire. A real
+    /// Reactor app never accumulates this state and keeps exiting via the orderly
+    /// <c>ReactorApp.SafeExit</c> / <see cref="Application.Exit"/> path.
+    /// </para>
+    /// </summary>
+    private static void EndProcessImmediately(int exitCode)
+    {
+        ExitCode = exitCode;
+        // One-shot: a per-fixture timeout that raced the normal completion path
+        // (both funnel here through the run's finally) must not terminate twice.
+        if (Interlocked.Exchange(ref _shutdownStarted, 1) != 0)
+            return;
+
+        // Flush TAP/stderr to the OS pipe before the hard kill — TerminateProcess
+        // discards anything still sitting in the managed stream buffers.
+        try { Console.Out.Flush(); } catch { /* mid-exit: nothing we can do */ }
+        try { Console.Error.Flush(); } catch { /* mid-exit: nothing we can do */ }
+
+        // Immediate, teardown-free termination (see the remarks above). Does not
+        // return on success.
+        TerminateProcess(GetCurrentProcess(), unchecked((uint)exitCode));
+
+        // Unreachable unless TerminateProcess itself failed; fall back to the
+        // managed exit so the process still leaves with the captured code.
+        Environment.Exit(exitCode);
+    }
+
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr GetCurrentProcess();
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool TerminateProcess(IntPtr hProcess, uint uExitCode);
 
     private static void StartHangWatchdog()
     {
