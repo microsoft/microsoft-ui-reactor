@@ -80,6 +80,14 @@ internal static class Issue675ResourceOverrideSkipFixtures
             var srcDict = InstallSourceDict(SrcKey, red);
             try
             {
+                // #721 positive guard: the leaf is structurally shallow-equal across renders, so
+                // Update takes the element-level shallow-skip arm (Update.cs:81 -> 97-98
+                // skip-AND-re-resolve, return null) rather than a full property diff. This pins the
+                // GREEN to the skip-and-re-resolve path, not an incidental full update.
+                H.Check("Issue675_ElementLevel_CellSkipEligible", Element.ShallowEquals(
+                    TextBlock("elemMarker").Resources(r => r.Set(TargetKey, Theme.Ref(SrcKey))),
+                    TextBlock("elemMarker").Resources(r => r.Set(TargetKey, Theme.Ref(SrcKey)))));
+
                 Action<int>? bump = null;
                 var host = H.CreateHost();
                 host.Mount(ctx =>
@@ -137,6 +145,16 @@ internal static class Issue675ResourceOverrideSkipFixtures
             var srcDict = InstallSourceDict(SrcKey, red);
             try
             {
+                // #721 positive skip-eligibility guard: prove the themed cell is structurally
+                // shallow-equal across renders, so its child-skip eligibility hinges ONLY on the
+                // ResourceOverrides.ThemeRefs gate — not an incidental Setters/modifier difference
+                // that would route it through full Update and mask a broken child-skip re-resolve as
+                // a false-green. ShallowEquals ignores ResourceOverrides, so this stays true pre/post
+                // fix; a refactor that makes the cell decline the skip for any OTHER reason flips it.
+                H.Check("Issue675_Positional_CellSkipEligible", Element.ShallowEquals(
+                    TextBlock("posCell").Resources(r => r.Set(TargetKey, Theme.Ref(SrcKey))),
+                    TextBlock("posCell").Resources(r => r.Set(TargetKey, Theme.Ref(SrcKey)))));
+
                 Action<int>? bump = null;
                 var host = H.CreateHost();
                 host.Mount(ctx =>
@@ -191,6 +209,15 @@ internal static class Issue675ResourceOverrideSkipFixtures
             var srcDict = InstallSourceDict(SrcKey, red);
             try
             {
+                // #721 positive skip-eligibility guard (see PositionalChildSkipReResolves): the keyed
+                // cell is structurally shallow-equal across renders (Key is not compared by
+                // ShallowEquals — it is matched separately via KeyMatch), so its keyed child-skip
+                // eligibility hinges only on the ResourceOverrides.ThemeRefs gate. Guards against a
+                // refactor silently turning the RED into a false-green.
+                H.Check("Issue675_Keyed_CellSkipEligible", Element.ShallowEquals(
+                    TextBlock("keyCell").Resources(r => r.Set(TargetKey, Theme.Ref(SrcKey))).WithKey("cell"),
+                    TextBlock("keyCell").Resources(r => r.Set(TargetKey, Theme.Ref(SrcKey))).WithKey("cell")));
+
                 Action<int>? bump = null;
                 var host = H.CreateHost();
                 host.Mount(ctx =>
