@@ -424,9 +424,13 @@ internal static class SelfTestRunner
         // discards anything still sitting in the managed stream buffers. Flushing a
         // closed/redirected stdio pipe throws IOException, and a stream already torn
         // down by an in-flight exit throws ObjectDisposedException; both are expected
-        // on this emergency path and ignored (a typed catch, not a blanket one).
-        try { Console.Out.Flush(); } catch (IOException) { } catch (ObjectDisposedException) { }
-        try { Console.Error.Flush(); } catch (IOException) { } catch (ObjectDisposedException) { }
+        // on this emergency path, so we trace and continue rather than rethrow.
+        try { Console.Out.Flush(); }
+        catch (IOException ex) { Debug.WriteLine($"stdout flush failed during exit, ignored: {ex.Message}"); }
+        catch (ObjectDisposedException ex) { Debug.WriteLine($"stdout flush failed during exit, ignored: {ex.Message}"); }
+        try { Console.Error.Flush(); }
+        catch (IOException ex) { Debug.WriteLine($"stderr flush failed during exit, ignored: {ex.Message}"); }
+        catch (ObjectDisposedException ex) { Debug.WriteLine($"stderr flush failed during exit, ignored: {ex.Message}"); }
 
         // Immediate, teardown-free termination (see the remarks above). -1 is the
         // Win32 current-process pseudo-handle, so no separate GetCurrentProcess
