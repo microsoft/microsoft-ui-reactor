@@ -25,6 +25,15 @@
 // .OnTapped/.OnPointerPressed closures inside RenderRow (the #671 churn). A small
 // rowHeight keeps many rows realized so that delegate churn is at measurable scale.
 //
+// EDITABLE BY DEFAULT: the columns are editable, so the control attaches the per-cell click-to-edit
+// .OnTapped to every realized cell — #671's skip-blocker (site 2). Stabilizing those handlers (#671)
+// lets unchanged cells skip Update: a reconcile/diff-time + skip-avoided-alloc win (local A/B:
+// reconcile -17%@50% / -25%@5%, alloc -7%/-10%, rps +10%/+26%). A read-only grid attaches no per-cell
+// handler, so #671's primary path would be unmeasurable — hence editable is the /perf default. A
+// future #663/#669-class array/LINQ PR author can set REACTOR_DATAGRID_EDITABLE=0 to run this leg
+// READ-ONLY locally for the clean low-baseline per-render alloc signal (the editable path adds
+// ~+6.8MB/render of cell-edit machinery), with no harness re-wiring and no recurring dual-run cost.
+//
 // MEASUREMENT CAVEAT (for maintainers + whoever measures #669/#671 against this leg):
 // the DataGrid's re-render is ASYNC/DEBOUNCED — DataChanged → LoadDataAsync →
 // StateChanged → a dispatcher-coalesced forceRender (plus a scroll-settle timer) —
@@ -79,6 +88,24 @@ class DataGridApp : Component
 
     public static CliOptions CliOpts { get; set; } = new();
 
+    // EDITABLE BY DEFAULT. The /perf run measures the DataGrid with editable cells so the per-cell
+    // click-to-edit .OnTapped (#671's skip-blocker, site 2) is attached to every realized cell — the
+    // delegate-stabilization win #671 targets only shows when that handler exists. A future
+    // #663/#669-class array/LINQ PR author can set REACTOR_DATAGRID_EDITABLE=0 (also false/no) to run
+    // this leg READ-ONLY locally, recovering the clean low-baseline per-render alloc signal for their
+    // change — without re-wiring the harness or paying a recurring dual-run on every /perf. Unset or
+    // any other value = editable (the /perf default).
+    private static readonly bool Editable = ResolveEditable();
+
+    private static bool ResolveEditable()
+    {
+        var v = Environment.GetEnvironmentVariable("REACTOR_DATAGRID_EDITABLE");
+        if (v is null) return true; // default: editable
+        return !(v == "0"
+                 || v.Equals("false", StringComparison.OrdinalIgnoreCase)
+                 || v.Equals("no", StringComparison.OrdinalIgnoreCase));
+    }
+
     // Cache brushes — lazy because SolidColorBrush requires the WinUI thread.
     private static SolidColorBrush? _greenBrush;
     private static SolidColorBrush? _redBrush;
@@ -130,8 +157,11 @@ class DataGridApp : Component
             CompositionTarget.Rendering += (_, _) => perf.FrameRendered();
         }
 
-        // Build column descriptors once. 30 sortable columns over StockRow.Cells[col],
-        // so the per-column header/row LINQ lookups (#128) run at full width each render.
+        // Build column descriptors once. 30 sortable columns over StockRow.Cells[col], so the
+        // per-column header/row LINQ lookups (#128) run at full width each render. EDITABLE by
+        // default (see the `Editable` field): editable columns make the control attach the per-cell
+        // click-to-edit .OnTapped to every realized cell — #671's skip-blocker. Set
+        // REACTOR_DATAGRID_EDITABLE=0 to run read-only (clean per-render array/LINQ alloc baseline).
         var columns = UseMemo(() =>
         {
             var cols = new FieldDescriptor[ColumnCount];
@@ -144,7 +174,11 @@ class DataGridApp : Component
                     DisplayName = $"Col {c}",
                     FieldType = typeof(StockItem),
                     GetValue = obj => ((StockRow)obj).Cells[col],
-                    IsReadOnly = true,
+                    // No-op setter: non-null + IsReadOnly:false is all the control needs to attach the
+                    // per-cell .OnTapped (#671 site 2). The benchmark never commits an edit (headless:
+                    // no taps fire), so the body is intentionally inert.
+                    SetValue = Editable ? (obj, val) => obj : null,
+                    IsReadOnly = !Editable,
                     Width = 64,
                     Sortable = true,
                     Filterable = false,
@@ -226,6 +260,7 @@ class DataGridApp : Component
             source: source,
             columns: columns,
             selectionMode: SelectionMode.Multiple,
+            editable: Editable,
             rowHeight: 18,
             showSearch: false,
             cellTemplate: ctx =>
