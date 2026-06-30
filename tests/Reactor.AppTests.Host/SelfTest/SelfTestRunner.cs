@@ -35,8 +35,11 @@ internal static class SelfTestRunner
     /// </summary>
     internal static int ExitCode { get; private set; } = 1;
 
-    // Guards the one-shot final exit so a per-fixture timeout racing the normal
-    // completion path can't terminate the process twice.
+    // Defensive idempotency latch for the final exit. EndProcessImmediately has a
+    // single caller today — the run's finally — so this normally just passes
+    // through; it ensures the process still terminates exactly once should a future
+    // change ever add a second exit path. (The off-dispatcher hang watchdog is a
+    // separate, independent FailFast path and never calls EndProcessImmediately.)
     private static int _shutdownStarted;
 
     /// <summary>
@@ -411,13 +414,14 @@ internal static class SelfTestRunner
     /// </summary>
     private static void EndProcessImmediately(int exitCode)
     {
-        // One-shot: a per-fixture timeout that raced the normal completion path
-        // (both funnel here through the run's finally) must not terminate twice.
+        // Idempotency latch. EndProcessImmediately is invoked once, from the run's
+        // finally; the per-fixture timeout path doesn't call it directly — it marks
+        // the fixture failed and breaks into that same finally. The latch is
+        // defensive so any future second exit path still terminates exactly once.
         if (Interlocked.Exchange(ref _shutdownStarted, 1) != 0)
             return;
-        // Set only after winning the one-shot guard, so a racing second caller
-        // (e.g. the off-dispatcher watchdog) can't overwrite the exit code the
-        // first caller is already terminating with.
+        // Set after the latch so that if a second exit path is ever added, the
+        // first caller's code is the one the process terminates with.
         ExitCode = exitCode;
 
         // Flush TAP/stderr to the OS pipe before the hard kill — TerminateProcess
