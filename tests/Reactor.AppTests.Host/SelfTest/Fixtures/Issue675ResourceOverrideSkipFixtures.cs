@@ -42,8 +42,8 @@ internal static class Issue675ResourceOverrideSkipFixtures
 
     private static SolidColorBrush? ResourceBrush(FrameworkElement? fe, string key)
     {
-        if (fe?.Resources is { } res && res.ContainsKey(key))
-            return res[key] as SolidColorBrush;
+        if (fe?.Resources is { } res && res.TryGetValue(key, out var v))
+            return v as SolidColorBrush;
         return null;
     }
 
@@ -110,7 +110,7 @@ internal static class Issue675ResourceOverrideSkipFixtures
                 var host = H.CreateHost();
                 host.Mount(ctx =>
                 {
-                    var (n, setN) = ctx.UseState(0);
+                    var (_, setN) = ctx.UseState(0);
                     bump = setN;
                     // Leaf output → reconciled via Update directly. Shallow-equal across the
                     // state bump (ResourceOverrides is not part of ShallowEquals), so the
