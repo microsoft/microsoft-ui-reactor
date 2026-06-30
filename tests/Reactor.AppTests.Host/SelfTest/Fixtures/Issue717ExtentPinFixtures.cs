@@ -298,8 +298,11 @@ internal static class Issue717ExtentPinFixtures
             const double authorMinHeight = 1234.0;
             rtb.MinHeight = authorMinHeight;
 
-            // Spin past the pin's scheduled release frames.
-            await Harness.WaitFor(() => false, maxPasses: 30, perPassMs: 12);
+            // Pump a bounded number of render/compositor passes so the pin's scheduled
+            // release frames elapse (there is no condition to wait on — we are asserting a
+            // non-event, that the release does NOT fire a restore).
+            for (int i = 0; i < 30; i++)
+                await Harness.Render(12);
 
             // The release must leave the author's value intact, not restore the pre-pin floor.
             H.Check("Issue717_AuthorMinHeightNotClobbered",

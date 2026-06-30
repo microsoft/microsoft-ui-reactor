@@ -142,7 +142,7 @@ internal static class Issue487ScrollAnchorFixtures
         // The ScrollViewer variant clamps synchronously and usually wins that race; the
         // InteractionTracker-backed ScrollView clamps a pass or two later, landing inside
         // the pin's release window — hence the flake this clear removes.
-        if (rtb is not null) rtb.MinHeight = 0;
+        rtb?.ClearValue(FrameworkElement.MinHeightProperty);
         rtb?.InvalidateMeasure();
         await Harness.Render();
 
@@ -418,7 +418,7 @@ internal static class Issue487ScrollAnchorFixtures
             }
             // Drop any residual #717 extent pin so the simulated collapse isn't held up
             // by the pinned MinHeight floor (see DriveInlineUiClampCycleAsync).
-            if (rtb is not null) rtb.MinHeight = 0;
+            rtb?.ClearValue(FrameworkElement.MinHeightProperty);
             rtb?.InvalidateMeasure();
             await Harness.Render();
             for (int i = 0; i < detachCount; i++)

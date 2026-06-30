@@ -163,7 +163,16 @@ public sealed partial class Reconciler
     {
         public double OriginalMinHeight;
         public bool HasOriginal;
-        public int Generation;
+
+        // Frames left before the floor is released. Reset to the full window on every
+        // mutation so rapid successive mutations extend the same pin rather than stacking.
+        public int FramesRemaining;
+
+        // The single CompositionTarget.Rendering delegate subscribed while a pin is pending
+        // (null when not hooked). Reused across successive mutations on the same RTB so we
+        // never accumulate more than one handler per pinned block, and so cancel / pool
+        // return can unsubscribe it deterministically.
+        public EventHandler<object>? RenderingHandler;
 
         // Whether MinHeight had a *local* value before the pin raised it. If it came from
         // a Style/theme setter instead, restoring by assignment would promote it to a
@@ -236,52 +245,58 @@ public sealed partial class Reconciler
 
         InlineUiPinEngagementCount++;
 
-        // Release on a later rendered frame, once WinUI's deferred re-measure + reattach
-        // has re-grown the content. A generation token ensures only the latest pin
-        // releases, so rapid successive mutations supersede earlier (still-pending) pins
-        // rather than releasing the floor mid-collapse.
-        int generation = ++pin.Generation;
-        int framesRemaining = 2;
-        EventHandler<object>? onRendering = null;
-        onRendering = (_, _) =>
+        // Release a couple of rendered frames after the *latest* mutation, once WinUI's
+        // deferred re-measure + reattach has re-grown the content. The frame budget is
+        // reset on every mutation and a single CompositionTarget.Rendering handler is kept
+        // per RTB (subscribed once while a pin is pending), so rapid successive mutations
+        // extend the same pin instead of piling up a fresh handler each time — every
+        // stacked handler would otherwise wake the next frame only to find it superseded.
+        pin.FramesRemaining = 2;
+        if (pin.RenderingHandler is null)
         {
-            if (pin.Generation != generation)
+            EventHandler<object> onRendering = null!;
+            onRendering = (_, _) =>
             {
-                CompositionTarget.Rendering -= onRendering;
-                return;
-            }
-            if (--framesRemaining > 0) return;
+                if (--pin.FramesRemaining > 0) return;
 
-            CompositionTarget.Rendering -= onRendering;
-            // Content is full again. Restore the original MinHeight only if the floor we
-            // raised is still in place — if the author changed MinHeight during the pin
-            // window (their setter runs after UpdateRichTextBlocks in the same reconcile,
-            // or on a later render), leave their value untouched.
-            if (IsFloorStillPinned(rtb, pin))
-                RestorePinnedMinHeight(rtb, pin);
-            pin.HasOriginal = false;
-            pin.PinnedFloor = double.NaN;
-        };
-        CompositionTarget.Rendering += onRendering;
+                CompositionTarget.Rendering -= onRendering;
+                pin.RenderingHandler = null;
+                // Content is full again. Restore the original MinHeight only if the floor
+                // we raised is still in place — if the author changed MinHeight during the
+                // pin window (their setter runs after UpdateRichTextBlocks in the same
+                // reconcile, or on a later render), leave their value untouched.
+                if (IsFloorStillPinned(rtb, pin))
+                    RestorePinnedMinHeight(rtb, pin);
+                pin.HasOriginal = false;
+                pin.PinnedFloor = double.NaN;
+            };
+            pin.RenderingHandler = onRendering;
+            CompositionTarget.Rendering += onRendering;
+        }
     }
 
     // Cancels any in-flight inline-UI extent pin for a RichTextBlock that is being
     // unmounted / returned to the ElementPool. Without this, the pin's pending
     // CompositionTarget.Rendering release closes over the control and would fire a frame
     // or two later — restoring a stale MinHeight onto a control that a different renter
-    // has since rented (cross-renter floor bleed), and keeping the handler subscribed.
-    // Bumping the generation makes the still-subscribed release no-op + unhook on its
-    // next tick; we also undo the floor here so the recycled control starts clean.
+    // has since rented (cross-renter floor bleed), and keeping the handler subscribed. So
+    // we unsubscribe the single pending handler and undo the floor here, leaving the
+    // recycled control clean.
     internal static void CancelInlineUiExtentPin(WinUI.RichTextBlock rtb)
     {
         if (!s_inlineUiExtentPins.TryGetValue(rtb, out InlineUiExtentPin? pin))
             return;
 
-        pin.Generation++; // supersede any pending release so it unhooks without writing
+        if (pin.RenderingHandler is not null)
+        {
+            CompositionTarget.Rendering -= pin.RenderingHandler;
+            pin.RenderingHandler = null;
+        }
         if (pin.HasOriginal && IsFloorStillPinned(rtb, pin))
             RestorePinnedMinHeight(rtb, pin);
         pin.HasOriginal = false;
         pin.PinnedFloor = double.NaN;
+        pin.FramesRemaining = 0;
         s_inlineUiExtentPins.Remove(rtb);
     }
 
