@@ -130,7 +130,8 @@ public sealed partial class Reconciler
         // an explicit size being dropped on an already-mounted stack. We are past the
         // structural-equality short-circuit above, so this only runs when something actually
         // changed; the emit-once dedup keyed on element identity prevents repeat spam.
-        if (global::Microsoft.UI.Reactor.Diagnostics.LayoutFootgunDetector.AlwaysOnInDebug || ReactorFeatureFlags.WarnLayoutFootguns)
+        if ((global::Microsoft.UI.Reactor.Diagnostics.LayoutFootgunDetector.AlwaysOnInDebug || ReactorFeatureFlags.WarnLayoutFootguns)
+            && newEl is GridElement)
             global::Microsoft.UI.Reactor.Diagnostics.LayoutFootgunDetector.Inspect(newEl);
 
         // Push context values onto scope before processing children
@@ -191,6 +192,9 @@ public sealed partial class Reconciler
         // modifiers are null, pass an empty instance so ApplyModifiers can clear
         // stale values (same principle as the flex attached-property fix).
         var target = result ?? control;
+        // Coalesce the repeated `target is FrameworkElement` RCW type-tests below
+        // into a single cast (perf #14) — each `is` on a WinRT RCW crosses COM.
+        var targetFe = target as FrameworkElement;
 
         // Record the control for highlight overlay only when the element's own
         // WinUI properties were actually updated (not just children recursed).
@@ -200,27 +204,27 @@ public sealed partial class Reconciler
             && _highlightModified is not null
             && (!Element.OwnPropsEqual(oldEl, newEl) || !Element.ModifiersEqual(oldModifiers, modifiers)))
             _highlightModified.Add(control);
-        if ((modifiers is not null || oldModifiers is not null) && target is FrameworkElement fe)
-            ApplyModifiers(fe, oldModifiers, modifiers ?? new ElementModifiers(), requestRerender);
-        if (target is FrameworkElement dragFe)
-            ApplyDragAttached(dragFe, newEl.GetAttached<DragAttached>());
+        if ((modifiers is not null || oldModifiers is not null) && targetFe is not null)
+            ApplyModifiers(targetFe, oldModifiers, modifiers, requestRerender);
+        if (targetFe is not null)
+            ApplyDragAttached(targetFe, newEl.GetAttached<DragAttached>());
 
         // Re-apply the caption-derived default after modifiers have run so a
         // label change ("+ 1" → "+ 2") updates UIA Name when the author never
         // set an explicit name. No-ops when the author did.
-        if (target is FrameworkElement captionFe)
+        if (targetFe is not null)
             UpdateDefaultAutomationName(
-                captionFe,
+                targetFe,
                 ResolveCaptionForElement(oldEl),
                 ResolveCaptionForElement(newEl));
 
         // Apply theme-resource bindings (ThemeRef → resolved Brush from WinUI resources)
-        if (newEl.ThemeBindings is not null && target is FrameworkElement thFe)
-            ApplyThemeBindings(thFe, newEl.ThemeBindings);
+        if (newEl.ThemeBindings is not null && targetFe is not null)
+            ApplyThemeBindings(targetFe, newEl.ThemeBindings);
 
         // Apply per-control resource overrides (lightweight styling)
-        if ((newEl.ResourceOverrides is not null || oldEl.ResourceOverrides is not null) && target is FrameworkElement resFe)
-            ApplyResourceOverrides(resFe, oldEl.ResourceOverrides, newEl.ResourceOverrides);
+        if ((newEl.ResourceOverrides is not null || oldEl.ResourceOverrides is not null) && targetFe is not null)
+            ApplyResourceOverrides(targetFe, oldEl.ResourceOverrides, newEl.ResourceOverrides);
 
         // Apply transitions after update (re-applies when transition config changes)
         if (newEl.ImplicitTransitions is not null || newEl.ThemeTransitions is not null)
@@ -1097,6 +1101,11 @@ public sealed partial class Reconciler
     /// </summary>
     // Internal so the V1-owned TemplatedListLifecycle can drive per-row content
     // reconciliation; also reused 1:1 by Reconciler.KeyedItemsBinding.cs.
+    // Reused snapshot buffer so the realized-container refresh doesn't allocate a
+    // List per call (perf #22; this runs ~once per list per frame). Borrowed for the
+    // duration of one refresh; a reentrant refresh (nested list) uses a fresh list.
+    private List<UIElement>? _realizedScratch = new();
+
     internal void RefreshRealizedContainers(WinUI.ListViewBase listViewBase, Internal.IItemViewSource viewSource, Action requestRerender)
     {
         var panel = listViewBase.ItemsPanelRoot;
@@ -1105,36 +1114,54 @@ public sealed partial class Reconciler
         // Snapshot first — Update may indirectly mount new controls and modifying
         // Children during enumeration throws (WinUI's UIElementCollection enforces
         // this). Counts are small (one viewport's worth) so the copy is cheap.
-        var realized = new List<UIElement>(panel.Children.Count);
-        foreach (var child in panel.Children) realized.Add(child);
+        var realized = _realizedScratch;
+        if (realized is null)
+            realized = new List<UIElement>(panel.Children.Count);
+        else
+            _realizedScratch = null;
 
-        foreach (var child in realized)
+        try
         {
-            // Cast to SelectorItem so both ListView (ListViewItem) and GridView
-            // (GridViewItem) containers are handled — both derive from SelectorItem
-            // and share the same ContentTemplateRoot pattern.
-            if (child is not Microsoft.UI.Xaml.Controls.Primitives.SelectorItem container) continue;
-            if (container.ContentTemplateRoot is not ContentControl cc) continue;
+            foreach (var child in panel.Children) realized.Add(child);
 
-            var index = listViewBase.IndexFromContainer(container);
-            if (index < 0 || index >= viewSource.ItemCount) continue;
-
-            var oldItemElement = GetElementTag(cc);
-            var newItemElement = viewSource.BuildItemView(index);
-
-            if (oldItemElement is not null && cc.Content is UIElement existingCtrl && CanUpdate(oldItemElement, newItemElement))
+            foreach (var child in realized)
             {
-                var replacement = Update(oldItemElement, newItemElement, existingCtrl, requestRerender);
-                if (replacement is not null && !ReferenceEquals(cc.Content, replacement))
-                    cc.Content = replacement;
+                // Cast to SelectorItem so both ListView (ListViewItem) and GridView
+                // (GridViewItem) containers are handled — both derive from SelectorItem
+                // and share the same ContentTemplateRoot pattern.
+                if (child is not Microsoft.UI.Xaml.Controls.Primitives.SelectorItem container) continue;
+                if (container.ContentTemplateRoot is not ContentControl cc) continue;
+
+                var index = listViewBase.IndexFromContainer(container);
+                if (index < 0 || index >= viewSource.ItemCount) continue;
+
+                var oldItemElement = GetElementTag(cc);
+                var newItemElement = viewSource.BuildItemView(index);
+
+                if (oldItemElement is not null && cc.Content is UIElement existingCtrl && CanUpdate(oldItemElement, newItemElement))
+                {
+                    var replacement = Update(oldItemElement, newItemElement, existingCtrl, requestRerender);
+                    if (replacement is not null && !ReferenceEquals(cc.Content, replacement))
+                        cc.Content = replacement;
+                }
+                else
+                {
+                    if (cc.Content is UIElement oldCtrl)
+                        Unmount(oldCtrl);
+                    cc.Content = Mount(newItemElement, requestRerender);
+                }
+                SetElementTag(cc, newItemElement);
             }
-            else
-            {
-                if (cc.Content is UIElement oldCtrl)
-                    Unmount(oldCtrl);
-                cc.Content = Mount(newItemElement, requestRerender);
-            }
-            SetElementTag(cc, newItemElement);
+        }
+        finally
+        {
+            realized.Clear();
+            // perf #22 follow-up: don't pin an oversized backing array from a one-off
+            // large refresh — only retain the scratch at a modest capacity; otherwise
+            // let it be collected and re-allocate (sized to the viewport) next call.
+            const int realizedScratchRetainCap = 256;
+            if (realized.Capacity <= realizedScratchRetainCap)
+                _realizedScratch ??= realized;
         }
     }
 
