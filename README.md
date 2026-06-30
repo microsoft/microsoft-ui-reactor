@@ -83,6 +83,15 @@ cd MyApp
 dotnet run -p:Platform=x64
 ```
 
+> ⚠️ **Clone to a short path**: Clone into a short root directory such as
+> `C:\src\` (e.g. `C:\src\microsoft-ui-reactor`), not a deeply nested or
+> OneDrive-synced folder. The Windows App SDK's XAML and resource compilers are
+> 32-bit tools with no long-path support, so a long checkout path can push a
+> project's generated `obj`/`bin` output past the Windows 260-character
+> `MAX_PATH` limit and break the build (`MSB3073` / `PRI210`) — most often on
+> ARM64 dev boxes, where those tools run under emulation. See
+> [#678](https://github.com/microsoft/microsoft-ui-reactor/issues/678).
+
 > ⚠️ **Platform flag required**: Always build with an explicit platform:
 > `dotnet build -p:Platform=x64` (or `ARM64`). Omitting `-p:Platform=...`
 > causes `WindowsAppSDKSelfContained` errors. This applies to `dotnet build`,

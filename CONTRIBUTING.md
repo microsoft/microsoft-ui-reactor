@@ -28,6 +28,19 @@ This project has adopted the [Microsoft Open Source Code of Conduct](https://ope
 
 > **Package version:** All projects reference `Microsoft.WindowsAppSDK` **2.0.1** (public NuGet). The version is centralized in `Directory.Build.props` — update it there to change the version for every project at once.
 
+> **Clone to a short path (Windows):** Clone into a short root directory such as
+> `C:\src\` (for example `C:\src\microsoft-ui-reactor`) rather than a deeply
+> nested or OneDrive-synced folder. The Windows App SDK XAML markup compiler
+> (`XamlCompiler.exe`) and resource indexer (`MakePri.exe`) are 32-bit tools with
+> no long-path support, so when the repository sits on a long path a project's
+> generated `obj`/`bin` output can exceed the Windows 260-character `MAX_PATH`
+> limit and the build fails with errors such as `MSB3073`, `PRI210`, or
+> `APPX0002`. This is most common on ARM64 dev boxes, where these tools run under
+> x86 emulation. Enabling `git config --global core.longpaths true` lets Git
+> itself check out long paths, but the Windows App SDK build tools still require
+> the short checkout path. See
+> [issue #678](https://github.com/microsoft/microsoft-ui-reactor/issues/678).
+
 ---
 
 ## Building
