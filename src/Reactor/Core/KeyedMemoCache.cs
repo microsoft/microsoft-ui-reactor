@@ -39,7 +39,7 @@ internal sealed class KeyedMemoCache
     private sealed class Entry
     {
         public readonly object Key;
-        public Element Value;
+        public readonly Element Value;
         public Entry(object key, Element value) { Key = key; Value = value; }
     }
 
