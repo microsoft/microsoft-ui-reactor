@@ -120,6 +120,40 @@ public class KeyedMemoTests
         Assert.False(rec.CanUpdate(sameKeyA, otherKey));
     }
 
+    // ── Value-type T: the never-hitting _viewBuilderCache is skipped (no unbounded growth) ──
+
+    [Fact]
+    public void BuildOrCache_ValueTypeKey_DoesNotPopulateViewBuilderCache()
+    {
+        // On the int-index (value-type T) path the _viewBuilderCache ReferenceEquals(item) guard
+        // can never hit, so populating it would only grow unbounded — one pinned row Element per
+        // scrolled index. It must stay empty no matter how many distinct keys scroll past; the
+        // bounded KeyedMemoCache is the real cache here.
+        var items = Enumerable.Range(0, 200).ToList();
+        var memoFactory = MakeIntFactory(items, (i, _) => Memo(i, () => Row(i)));
+        for (int i = 0; i < 200; i++) _ = Realize(memoFactory, i);
+        Assert.Equal(0, memoFactory.DebugViewBuilderCacheCount);
+
+        // The skip is unconditional for value-type T — a plain (non-Memo) row also never populates
+        // it, and behavior is unchanged because the cache never hit on this path to begin with.
+        var plainFactory = MakeIntFactory(items, (i, _) => Row(i));
+        for (int i = 0; i < 50; i++) _ = Realize(plainFactory, i);
+        Assert.Equal(0, plainFactory.DebugViewBuilderCacheCount);
+    }
+
+    [Fact]
+    public void KeyedMemoCache_Resolve_NullMemoKeyOrFactory_ThrowsArgumentNullException()
+    {
+        // KeyedMemoElement is a public record, so direct construction (or a `with`) can bypass the
+        // Memo<TKey> factory's validation. Resolve must still fail deterministically rather than
+        // throwing opaquely from the dictionary lookup or a null-delegate invocation.
+        var cache = new KeyedMemoCache();
+        Assert.Throws<global::System.ArgumentNullException>(
+            () => { cache.Resolve(new KeyedMemoElement(null!, () => new TextBlockElement("x")), null); });
+        Assert.Throws<global::System.ArgumentNullException>(
+            () => { cache.Resolve(new KeyedMemoElement("k", null!), null); });
+    }
+
     // ── Effectiveness: rebuilds collapse across recycle cycles ───────
 
     [Fact]

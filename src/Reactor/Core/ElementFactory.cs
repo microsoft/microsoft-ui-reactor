@@ -67,6 +67,7 @@ public sealed partial class ElementFactory<T> : IElementFactory
     internal int DebugLastElementByControlCount => _lastElementByControl.Count;
     internal int DebugMountedElementsCount => _mountedElements.Count;
     internal int DebugKeyByControlCount => _keyByControl.Count;
+    internal int DebugViewBuilderCacheCount => _viewBuilderCache.Count;
     internal bool DebugTryGetLastElementByControl(UIElement control, out Element? element)
         => _lastElementByControl.TryGetValue(control, out element!);
 
@@ -111,6 +112,13 @@ public sealed partial class ElementFactory<T> : IElementFactory
     // KeyedMemoCache for bound/eviction/invalidation.
     private readonly KeyedMemoCache _keyedMemoCache = new();
 
+    // Issue #327 review — for a value-type T (the int-index VirtualList path) the
+    // _viewBuilderCache lookup can never hit (its ReferenceEquals(item) guard re-boxes both
+    // operands), so populating it is dead weight that also grows UNBOUNDED — one retained entry
+    // per distinct key (index) as the user scrolls. JIT-folded per instantiation, so the guard is
+    // free. The cross-recycle cache for value-type T is the bounded KeyedMemoCache (opt-in Memo).
+    private static readonly bool s_valueTypeItem = typeof(T).IsValueType;
+
     /// <summary>
     /// Resolve the viewBuilder output for a (key, item, index) tuple,
     /// memoized by reference identity of <paramref name="item"/>. See
@@ -150,7 +158,12 @@ public sealed partial class ElementFactory<T> : IElementFactory
             built = _keyedMemoCache.Resolve(km, keyed ? key : null);
         else if (keyed)
             built = ApplyItemIdentityKey(built, key);
-        _viewBuilderCache[key] = new ViewBuilderCacheEntry(item, index, built);
+        // Skip the never-hitting _viewBuilderCache for value-type T (see s_valueTypeItem): on the
+        // int-index path it can only grow unbounded (one pinned row Element per scrolled index)
+        // without ever serving a hit. Reference-type T (LazyVStack<record>, ItemsView resize, …)
+        // still uses the ReferenceEquals fast-path, so keep populating there. (issue #327 review)
+        if (!s_valueTypeItem)
+            _viewBuilderCache[key] = new ViewBuilderCacheEntry(item, index, built);
         return built;
     }
 

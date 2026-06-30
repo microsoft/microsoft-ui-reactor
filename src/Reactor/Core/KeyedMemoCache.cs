@@ -86,6 +86,12 @@ internal sealed class KeyedMemoCache
     /// </param>
     internal Element Resolve(KeyedMemoElement memo, string? identityKey)
     {
+        // KeyedMemoElement is a public record, so a caller can construct it directly (or via a
+        // `with` expression) bypassing the Memo<TKey> factory's validation. Guard here so a null
+        // key/factory fails deterministically at the contract violation instead of later as an
+        // opaque Dictionary ArgumentNullException or a null-delegate NullReferenceException.
+        global::System.ArgumentNullException.ThrowIfNull(memo.MemoKey, "memo.MemoKey");
+        global::System.ArgumentNullException.ThrowIfNull(memo.Factory, "memo.Factory");
         var key = memo.MemoKey;
         if (_map.TryGetValue(key, out var existing))
         {
