@@ -158,6 +158,7 @@ git worktree remove ../main
 | `-IncludeSkipFloor` | `$true` | Run a **second interleaved A/B leg** at `-SkipFloorPercent` and append a low-mutation skip-floor table (compare mode). Set `$false` to skip it (halves the macro runtime). |
 | `-SkipFloorPercent` | `0` | Mutation percent for the skip-floor leg. At `0` the workload still mutates one cell/tick (`StockDataSource.Update` clamps the count to `Math.Max(1, …)`), so reconcile/diff isolate the O(n) per-tick child skip-walk floor the 50% leg dilutes. |
 | `-IncludeKeyedList` | `$true` | Run a **third interleaved A/B leg** on `StressPerf.KeyedList` — a ~500-row stably keyed list reordered/inserted/removed each tick — and append its own table (compare mode). Drives the child reconciler's **keyed arm** (`ReconcileKeyed` → `ReconcileKeyedMiddle`, the LIS minimal-move pass) the positional StocksGrid cells never reach. Build is best-effort; set `$false` to skip the leg. |
+| `-IncludeRowMemo` | `$true` | Run a **single-tree, best-effort leg** that builds + runs `PerfBench.RowMemo` from the **PR head only** (never the `main` baseline — `main` lacks the opt-in `Memo(key, () => row)` API this measures, so it couldn't compile there) and appends a **same-build Baseline-vs-Memo** table for the keyed row-memoization win (#327). The StocksGrid legs can't show it — they never opt into the API, so it reads within-noise. Build + run are best-effort; set `$false` to skip. |
 | `-Apps` | `ReactorOptimized,Direct` | Single-tree mode only: which harnesses to run (`ReactorOptimized`, `Direct`, `KeyedList`). |
 | `-Platform` | host arch | Target architecture (`x64` or `ARM64`). Defaults to your machine's native arch so the WinUI harness runs without emulation. |
 | `-SelfContained` | `$true` | Build with the bundled WinApp runtime (no machine-wide install). |
@@ -246,6 +247,18 @@ Several tables plus footnotes:
   only when the keyed leg reports the metric. Same paired-CI gating as Table 1; omitted
   when `-IncludeKeyedList $false`, the workload build fails, or a side produces no
   metrics.
+- **Row memoization (opt-in)** — a **same-build Baseline-vs-Memo** table from
+  `PerfBench.RowMemo`, the one leg that is **single-tree** (PR head only) rather than a
+  `main`-vs-PR A/B. It recycles a realistic 9-node variable-height row ~1,000,000× through
+  the real `ElementFactory.BuildOrCache` realize path with vs without `Memo(i, () => row)`
+  and reports `ns/recycle`, `bytes/recycle` and factory rebuilds for each arm plus a `Win`
+  ratio. It exists because the StocksGrid legs can't surface the #327 win (they never opt
+  into the API, so every metric reads within-noise) and `main` can't even build the `Memo`
+  API — hence PR-head-only and best-effort: a build / run / parse failure simply omits the
+  table, leaving every other table intact. The headless figures time only `BuildOrCache`;
+  the reconcile-descent + WinUI control-patch that `Memo` *also* skips (via `ReferenceEquals`
+  + `Element.CanSkipUpdate`) stack on top and aren't captured in the number. Omitted when
+  `-IncludeRowMemo $false`, the bench build/run fails, or its output won't parse.
 - **Reconciler micro-benchmarks** — per-bench `ns/op` and `B/op` from the
   `PerfBench.ControlModel` micro-suite (M1–M13), `main` vs PR. ns-resolution and
   WinUI-undiluted, so it resolves Core/Reconciler time and allocation deltas the

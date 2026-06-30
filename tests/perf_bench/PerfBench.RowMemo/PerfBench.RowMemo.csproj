@@ -1,0 +1,71 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Issue #327 / PR #753 — opt-in keyed row-memoization micro-bench.
+
+    A SEPARATE, single-tree perf_bench project that ISOLATES and MEASURES the win
+    of `Memo(key, () => row)` (the cross-container row-memoization API added on PR
+    #753). It deliberately does NOT live in PerfBench.ControlModel: the /perf
+    workflow builds the micro-suite from BOTH the PR-head AND the `main` baseline
+    trees, and `main` lacks the `Memo` API — so a `Memo`-using bench there would
+    break the main-side build. Run-PerfBenchmark.ps1 builds + runs this one from
+    the PR-head tree ONLY, best-effort (a build/run failure just omits the table).
+
+    Shape mirrors PerfBench.ControlModel (UseWinUI=true + WindowsPackageType=None,
+    which is why ControlModel builds cleanly headless), but this bench needs NO
+    WinUI window: it runs the measurement directly in Main (pure managed — Element
+    construction + ElementFactory.BuildOrCache + Element.CanSkipUpdate) and exits,
+    so OutputType is a plain console Exe. No UIElement is ever realized, so the
+    Windows App SDK runtime is never activated.
+
+    Output: human-readable lines to stdout PLUS machine-parseable `key=value`
+    lines (also written to the path passed via the out-path argument), consumed
+    by the Format-PerfRowMemoSection renderer in PerfLib.ps1.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <Platforms>x64;ARM64</Platforms>
+    <RootNamespace>PerfBench.RowMemo</RootNamespace>
+    <AssemblyName>PerfBench.RowMemo</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <!--
+      This bench never realizes a UIElement, so it never activates the Windows App
+      SDK runtime. By default a framework-dependent Exe with WindowsPackageType=None
+      gets an auto-injected bootstrap module-initializer (MddBootstrapAutoInitializer)
+      that calls MddBootstrapInitialize before Main and HARD-FAILS on a machine with
+      no machine-wide WinAppSDK runtime install (DllNotFound). Disable it: we resolve
+      only Element records + BuildOrCache + CanSkipUpdate, all pure managed, so the
+      bootstrapper is dead weight that would otherwise crash the headless launch.
+    -->
+    <WindowsAppSdkBootstrapInitialize>false</WindowsAppSdkBootstrapInitialize>
+  </PropertyGroup>
+
+  <!--
+    Same gated self-contained knob as PerfBench.ControlModel: when
+    Run-PerfBenchmark.ps1 builds with -p:PerfCiSelfContained=true the bench carries
+    its own Windows App SDK runtime next to the exe, so it launches on a CI runner
+    with no machine-wide runtime install. (This bench never activates the runtime,
+    so even a framework-dependent build runs — the knob is kept purely for parity
+    with how the other perf legs are built.) Scoped to THIS executable so the flag
+    never flows into the referenced Reactor.csproj, which rejects self-contained
+    packaging.
+  -->
+  <PropertyGroup Condition="'$(PerfCiSelfContained)' == 'true'">
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(Platform)' == 'ARM64'">win-arm64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(Platform)' != 'ARM64'">win-x64</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Reactor\Reactor.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.WindowsDesktop.App" />
+  </ItemGroup>
+</Project>

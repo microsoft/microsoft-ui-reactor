@@ -1146,6 +1146,121 @@ function Format-PerfDataGridSection {
     return $lines.ToArray()
 }
 
+function Read-RowMemoResults {
+    <#
+    .SYNOPSIS
+        Parse the PerfBench.RowMemo `key=value` output into a typed result object for
+        the Format-PerfRowMemoSection renderer.
+    .DESCRIPTION
+        PerfBench.RowMemo is a SINGLE self-contained PR-head build (no `main` A/B — see
+        the section renderer) that isolates the opt-in keyed-row-memoization win (#327):
+        a realistic 9-node variable-height row recycled ~1,000,000 times through the real
+        ElementFactory.BuildOrCache realize path, once WITHOUT Memo (Baseline) and once
+        WITH Memo(i, () => row). It emits stable `key=value` lines (also written to its
+        --out path); this reads them into a pscustomobject. Returns $null when the file is
+        missing/empty or any required key is absent/unparseable, so the caller omits the
+        table (the leg is best-effort).
+    .OUTPUTS
+        [pscustomobject] with BaselineNs/MemoNs (double), BaselineBytes/MemoBytes and
+        BaselineRebuilds/MemoRebuilds (long), the four bool skip-precondition flags, and
+        RecyclesPerArm (long) / RowNodes / Window (int) — or $null.
+    #>
+    param([AllowNull()][string]$Path)
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path)) { return $null }
+    $kv = @{}
+    foreach ($line in [System.IO.File]::ReadLines($Path)) {
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        $m = [regex]::Match($line, '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.+?)\s*$')
+        if ($m.Success) { $kv[$m.Groups[1].Value] = $m.Groups[2].Value }
+    }
+    $inv = [System.Globalization.CultureInfo]::InvariantCulture
+    # The Win column + the skip-precondition note are computed from these; a row missing
+    # any of them can't render a trustworthy table, so treat it as "no result" and omit.
+    $required = @('baseline_ns', 'baseline_bytes', 'baseline_rebuilds',
+        'memo_ns', 'memo_bytes', 'memo_rebuilds', 'memo_same_instance', 'memo_can_skip')
+    foreach ($k in $required) { if (-not $kv.ContainsKey($k)) { return $null } }
+    $toD = { param($s) [double]::Parse([string]$s, [System.Globalization.NumberStyles]::Float, $inv) }
+    $toL = { param($s) [long]::Parse([string]$s, [System.Globalization.NumberStyles]::Integer, $inv) }
+    $toB = { param($s) (([string]$s).Trim().ToLowerInvariant() -eq 'true') }
+    try {
+        return [pscustomobject]@{
+            BaselineNs           = & $toD $kv['baseline_ns']
+            BaselineBytes        = & $toL $kv['baseline_bytes']
+            BaselineRebuilds     = & $toL $kv['baseline_rebuilds']
+            BaselineSameInstance = if ($kv.ContainsKey('baseline_same_instance')) { & $toB $kv['baseline_same_instance'] } else { $false }
+            BaselineCanSkip      = if ($kv.ContainsKey('baseline_can_skip')) { & $toB $kv['baseline_can_skip'] } else { $false }
+            MemoNs               = & $toD $kv['memo_ns']
+            MemoBytes            = & $toL $kv['memo_bytes']
+            MemoRebuilds         = & $toL $kv['memo_rebuilds']
+            MemoSameInstance     = & $toB $kv['memo_same_instance']
+            MemoCanSkip          = & $toB $kv['memo_can_skip']
+            RecyclesPerArm       = if ($kv.ContainsKey('recycles_per_arm')) { & $toL $kv['recycles_per_arm'] } else { [long]0 }
+            RowNodes             = if ($kv.ContainsKey('row_nodes')) { [int](& $toL $kv['row_nodes']) } else { 0 }
+            Window               = if ($kv.ContainsKey('window')) { [int](& $toL $kv['window']) } else { 0 }
+        }
+    } catch { return $null }
+}
+
+function Format-PerfRowMemoSection {
+    <#
+    .SYNOPSIS
+        Render the opt-in row-memoization section: a SAME-BUILD Baseline-vs-Memo table
+        (ns/recycle, bytes/recycle, factory rebuilds) measured by PerfBench.RowMemo.
+    .DESCRIPTION
+        Unlike every other leg (each a PR-head-vs-`main` interleaved A/B), this is a single
+        self-contained PR-head build that internally compares two arms — a realistic
+        variable-height row realized through the real ElementFactory.BuildOrCache path
+        WITHOUT Memo (Baseline) vs WITH Memo(i, () => row) (#327's opt-in keyed row memo).
+        It exists because the StocksGrid /perf legs can't surface this win: StocksGrid never
+        opts into the API, so its metrics read within-noise, and `main` lacks the Memo API
+        entirely (hence single-tree, PR head only, best-effort). Returns an empty array when
+        $RowMemo is $null (leg disabled, or build/run/parse failed), so the caller renders
+        nothing.
+    .PARAMETER RowMemo  Parsed PerfBench.RowMemo result (Read-RowMemoResults), or $null.
+    #>
+    param([AllowNull()][pscustomobject]$RowMemo)
+    if ($null -eq $RowMemo) { return @() }
+
+    $down = [char]0x2193
+    $times = [char]0x00D7
+    $inv = [System.Globalization.CultureInfo]::InvariantCulture
+    $n0 = { param($v) ([long][math]::Round([double]$v)).ToString('N0', $inv) }
+
+    $nodes = if ($RowMemo.RowNodes -gt 0) { [string]$RowMemo.RowNodes } else { 'multi' }
+    $rec = if ($RowMemo.RecyclesPerArm -gt 0) { & $n0 $RowMemo.RecyclesPerArm } else { 'N' }
+
+    $lines = [System.Collections.Generic.List[string]]::new()
+    $lines.Add("### Row memoization (opt-in) &mdash; same-build Baseline vs Memo")
+    $lines.Add('')
+    $lines.Add("A separate **single-build** micro-bench (``PerfBench.RowMemo``, **PR head only**) that isolates the opt-in keyed **row-memoization** win from #327: a realistic **$nodes-node variable-height row** recycled **$rec times** through the real ``ElementFactory.BuildOrCache`` realize path &mdash; once **without** ``Memo`` (Baseline) and once **with** ``Memo(i, () => row)`` (Memo). The StocksGrid ``/perf`` legs can't show this (StocksGrid never opts into the API, so they read within-noise) and ``main`` lacks the ``Memo`` API entirely, so this leg is built + run from the **PR head only**, best-effort. Both arms share **one build**, so the two columns are an apples-to-apples A/B with no cross-tree drift; absolute ns is runner-dependent, so trust the **Win** ratios and the rebuilds&rarr;0 / ``CanSkipUpdate`` facts.")
+    $lines.Add('')
+    $lines.Add('| Metric | Baseline | Memo | Win |')
+    $lines.Add('|---|--:|--:|:--|')
+
+    $nsWin = if ($RowMemo.MemoNs -gt 0) { '{0}{1} faster' -f (Format-PerfNumber ($RowMemo.BaselineNs / $RowMemo.MemoNs) 1), $times } else { [char]0x2014 }
+    $lines.Add(('| ns/recycle {0} | {1} | {2} | {3} |' -f $down,
+        (Format-PerfNumber $RowMemo.BaselineNs 1), (Format-PerfNumber $RowMemo.MemoNs 1), $nsWin))
+
+    $byWin = if ($RowMemo.MemoBytes -gt 0) { '{0}{1} less' -f (Format-PerfNumber ($RowMemo.BaselineBytes / [double]$RowMemo.MemoBytes) 1), $times } else { [char]0x2014 }
+    $lines.Add(('| bytes/recycle {0} | {1} | {2} | {3} |' -f $down,
+        (& $n0 $RowMemo.BaselineBytes), (& $n0 $RowMemo.MemoBytes), $byWin))
+
+    $perN = if ($RowMemo.RecyclesPerArm -gt 0) { ' (per {0} recycles)' -f (& $n0 $RowMemo.RecyclesPerArm) } else { '' }
+    $rbWin = if ($RowMemo.BaselineRebuilds -gt 0 -and $RowMemo.MemoRebuilds -eq 0) { '**eliminated**' } elseif ($RowMemo.MemoRebuilds -lt $RowMemo.BaselineRebuilds) { 'reduced' } else { [char]0x2014 }
+    $lines.Add(('| factory rebuilds{0} {1} | {2} | {3} | {4} |' -f $perN, $down,
+        (& $n0 $RowMemo.BaselineRebuilds), (& $n0 $RowMemo.MemoRebuilds), $rbWin))
+    $lines.Add('')
+
+    if ($RowMemo.MemoSameInstance -and $RowMemo.MemoCanSkip) {
+        $lines.Add("> **Why the real win is bigger than the table.** On a recycle that re-asks a still-cached key, ``Memo`` returns the **same ``Element`` instance**, so ``ReferenceEquals`` holds and ``Element.CanSkipUpdate`` is **true** &mdash; the reconciler returns at the row **root** and skips the entire $nodes-node per-row descent **and** the downstream WinUI control-patch. That stacked reconcile + control-patch saving is **not** captured by the headless ns/bytes figures above (which time only ``BuildOrCache``). Baseline hands the reconciler a fresh-but-equal tree every recycle (``sameInstance=false``, ``CanSkipUpdate=false``), forcing the full walk.")
+    } else {
+        $lines.Add("> **Note.** These are headless ``BuildOrCache`` timings only; the reconcile-descent + WinUI control-patch savings that ``Memo`` unlocks via ``ReferenceEquals`` + ``Element.CanSkipUpdate`` stack on top and aren't captured here.")
+    }
+    $lines.Add('')
+
+    return $lines.ToArray()
+}
+
 function Format-PerfComment {
     <#
     .SYNOPSIS
@@ -1170,6 +1285,8 @@ function Format-PerfComment {
     .PARAMETER PrFlex      Aggregated PR-head flex workload metrics, or $null.
     .PARAMETER MainDataGrid  Aggregated baseline DataGrid workload metrics, or $null.
     .PARAMETER PrDataGrid    Aggregated PR-head DataGrid workload metrics, or $null.
+    .PARAMETER RowMemo    Parsed opt-in row-memoization bench result (Read-RowMemoResults),
+                          or $null when the row-memo leg was disabled / its build/run failed.
     .PARAMETER Context    Hashtable: Percent, Duration, Reps, Warmup, SkipFloorPercent,
                           BaseSha, HeadSha, Runner, Cpu, Cores, MemoryGB, RunUrl,
                           Timestamp, Note.
@@ -1189,6 +1306,7 @@ function Format-PerfComment {
         [AllowNull()][pscustomobject]$PrFlex,
         [AllowNull()][pscustomobject]$MainDataGrid,
         [AllowNull()][pscustomobject]$PrDataGrid,
+        [AllowNull()][pscustomobject]$RowMemo,
         [Parameter(Mandatory)][hashtable]$Context
     )
 
@@ -1288,6 +1406,13 @@ function Format-PerfComment {
     # delegate-stability optimizations. Rendered only when both DataGrid aggregates present.
     $dataGridPct = if ($Context.ContainsKey('Percent')) { [double]$Context.Percent } else { 50 }
     foreach ($dline in (Format-PerfDataGridSection -MainDataGrid $MainDataGrid -PrDataGrid $PrDataGrid -Percent $dataGridPct)) { & $add $dline }
+
+    # ── Row memoization (opt-in) — same-build Baseline vs Memo ───────────────
+    # A single PR-head build that internally A/Bs the #327 Memo(key, () => row) opt-in
+    # keyed row memo (Baseline vs Memo) — the win the StocksGrid legs can't show (they
+    # never opt in) and `main` can't even build (it lacks the Memo API), so this leg is
+    # single-tree / best-effort. Rendered only when the bench produced a parseable result.
+    foreach ($rline in (Format-PerfRowMemoSection -RowMemo $RowMemo)) { & $add $rline }
 
     # ── Reconciler micro-benchmarks (ns-resolution, WinUI-undiluted) ──────────
     # Rendered only when the PerfBench.ControlModel micro leg produced results for

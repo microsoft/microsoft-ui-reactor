@@ -1199,6 +1199,82 @@ finally {
 }
 
 
+# ── Read-RowMemoResults + Format-PerfRowMemoSection: opt-in row-memo leg ───────
+# The row-memo leg is the one SINGLE-TREE leg: a single PR-head build that prints
+# stable key=value lines internally A/Bing Baseline vs Memo(i, () => row) (#327). The
+# parser must read those lines into a typed object (or null on missing/garbage), and the
+# renderer must produce the same-build Baseline|Memo|Win table + the skip-precondition note.
+$rowMemoTmp = Join-Path ([IO.Path]::GetTempPath()) ("perflib-rowmemo-{0}" -f ([guid]::NewGuid().ToString('N')))
+New-Item -ItemType Directory -Path $rowMemoTmp -Force | Out-Null
+try {
+    $rmKv = Join-Path $rowMemoTmp 'rowmemo.kv.txt'
+    @(
+        'baseline_ns=379.275', 'baseline_bytes=4616', 'baseline_rebuilds=1000000',
+        'baseline_same_instance=false', 'baseline_can_skip=false',
+        'memo_ns=43.633', 'memo_bytes=224', 'memo_rebuilds=0',
+        'memo_same_instance=true', 'memo_can_skip=true',
+        'recycles_per_arm=1000000', 'row_nodes=9', 'window=50'
+    ) | Set-Content -LiteralPath $rmKv -Encoding UTF8
+
+    $rm = Read-RowMemoResults -Path $rmKv
+    Assert-True ($null -ne $rm)              'row-memo parser returns an object for valid key=value output'
+    Assert-Equal 379.275 $rm.BaselineNs      'row-memo parser reads baseline_ns'
+    Assert-Equal 4616    $rm.BaselineBytes   'row-memo parser reads baseline_bytes'
+    Assert-Equal 1000000 $rm.BaselineRebuilds 'row-memo parser reads baseline_rebuilds'
+    Assert-Equal 43.633  $rm.MemoNs          'row-memo parser reads memo_ns'
+    Assert-Equal 224     $rm.MemoBytes       'row-memo parser reads memo_bytes'
+    Assert-Equal 0       $rm.MemoRebuilds    'row-memo parser reads memo_rebuilds'
+    Assert-True  $rm.MemoSameInstance        'row-memo parser reads memo_same_instance=true'
+    Assert-True  $rm.MemoCanSkip             'row-memo parser reads memo_can_skip=true'
+    Assert-True (-not $rm.BaselineSameInstance) 'row-memo parser reads baseline_same_instance=false'
+    Assert-Equal 1000000 $rm.RecyclesPerArm  'row-memo parser reads recycles_per_arm'
+    Assert-Equal 9       $rm.RowNodes         'row-memo parser reads row_nodes'
+
+    # Missing-required-key and missing-file both yield $null so the leg omits the table.
+    $rmBadKv = Join-Path $rowMemoTmp 'rowmemo-bad.kv.txt'
+    @('baseline_ns=379.275', 'memo_ns=43.633') | Set-Content -LiteralPath $rmBadKv -Encoding UTF8
+    Assert-Null (Read-RowMemoResults -Path $rmBadKv)                              'row-memo parser returns null when required keys are missing'
+    Assert-Null (Read-RowMemoResults -Path (Join-Path $rowMemoTmp 'nope.txt'))    'row-memo parser returns null when the file is missing'
+    Assert-Null (Read-RowMemoResults -Path $null)                                'row-memo parser returns null for a null path'
+
+    # Renderer: empty array when null; full table + Win ratios + note when populated.
+    $times = [char]0x00D7
+    Assert-Equal 0 @(Format-PerfRowMemoSection -RowMemo $null).Count 'row-memo section empty when result null'
+    $rmSection = Format-PerfRowMemoSection -RowMemo $rm
+    $rmText = $rmSection -join "`n"
+    Assert-Match $rmText 'Row memoization (opt-in)'           'row-memo section has the heading'
+    Assert-Match $rmText '| Metric | Baseline | Memo | Win |' 'row-memo table uses the Baseline|Memo|Win columns'
+    Assert-Match $rmText 'ns/recycle'                         'row-memo table has the ns/recycle row'
+    Assert-Match $rmText 'bytes/recycle'                      'row-memo table has the bytes/recycle row'
+    Assert-Match $rmText 'factory rebuilds'                   'row-memo table has the factory-rebuilds row'
+    Assert-Match $rmText ("8.7$times faster")                'row-memo Win cell: 8.7x faster (379.275/43.633)'
+    Assert-Match $rmText ("20.6$times less")                 'row-memo Win cell: 20.6x less alloc (4616/224)'
+    Assert-Match $rmText '**eliminated**'                     'row-memo Win cell: rebuilds eliminated (baseline>0, memo=0)'
+    Assert-Match $rmText '1,000,000'                          'row-memo renders the per-arm recycle count with separators'
+    Assert-Match $rmText 'CanSkipUpdate'                      'row-memo note cites the CanSkipUpdate skip precondition'
+    # The headless-only caveat must be present so reviewers know the real win is bigger.
+    Assert-Match $rmText 'captured by the headless' 'row-memo note flags that the stacked reconcile/patch saving is not captured headlessly'
+
+    # Threaded through Format-PerfComment: present when set (after the regression table,
+    # before the cross-framework reference), omitted when null (back-compat with callers
+    # that never pass -RowMemo).
+    $rmComment = Format-PerfComment -Main $main -Pr $pr -WinUI3 $null -Rust $null -RowMemo $rm -Context $ctx
+    Assert-Match $rmComment 'Row memoization (opt-in)' 'comment renders the row-memo table when a result is supplied'
+    $idxRegRm = $rmComment.IndexOf('Regression vs')
+    $idxRowMemo = $rmComment.IndexOf('Row memoization (opt-in)')
+    $idxXfwRm = $rmComment.IndexOf('Cross-framework reference')
+    Assert-True (($idxRegRm -lt $idxRowMemo) -and ($idxRowMemo -lt $idxXfwRm)) 'row-memo table sits after the regression table and before cross-framework'
+    $noRmComment = Format-PerfComment -Main $main -Pr $pr -WinUI3 $null -Rust $null -RowMemo $null -Context $ctx
+    Assert-True (-not ($noRmComment -like '*Row memoization (opt-in)*')) 'row-memo table omitted when no result supplied'
+    # Existing callers that never pass -RowMemo at all must still omit the section.
+    $legacyComment = Format-PerfComment -Main $main -Pr $pr -WinUI3 $null -Rust $null -Context $ctx
+    Assert-True (-not ($legacyComment -like '*Row memoization (opt-in)*')) 'row-memo table omitted for callers that do not pass -RowMemo'
+}
+finally {
+    Remove-Item -LiteralPath $rowMemoTmp -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+
 if ($script:Fail -gt 0) {
     Write-Host "FAILED: $($script:Fail) / $($script:Pass + $script:Fail) assertions" -ForegroundColor Red
     foreach ($f in $script:Failures) { Write-Host "  ✗ $f" -ForegroundColor Red }
