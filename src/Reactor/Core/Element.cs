@@ -1453,9 +1453,12 @@ public record MemoElement(Func<RenderContext, Element> RenderFunc, object?[]? De
 /// VirtualList path hit the cache where the reference-identity <c>_viewBuilderCache</c> cannot.</para>
 ///
 /// <para><b>Used outside a virtualized factory</b> (e.g. a plain <c>VStack</c> child), the
-/// reconciler treats it as a <em>transparent</em> wrapper: it renders <see cref="Factory"/> on
-/// every pass with no caching, so it is always safe to drop a <c>Memo(key, …)</c> anywhere a
-/// normal element is expected. The cache benefit only applies on the
+/// reconciler treats it as a <em>transparent, keyed</em> wrapper: a re-render with the same
+/// <see cref="MemoKey"/> is a no-op (by the purity contract the factory output is identical to
+/// the mounted inner, so there is nothing to diff), and a CHANGED key replaces the inner
+/// (unmount + fresh mount of the new <see cref="Factory"/> output). The old factory is never
+/// re-invoked at update time, so it is always safe to drop a <c>Memo(key, …)</c> anywhere a
+/// normal element is expected. The cross-recycle cache benefit only applies on the
 /// <see cref="ElementFactory{T}"/> recycle path.</para>
 ///
 /// <para>The positional parameter is named <c>MemoKey</c> (not <c>Key</c>) so it does not clash

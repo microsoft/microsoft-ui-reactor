@@ -1264,7 +1264,17 @@ public static partial class Factories
     /// <param name="key">Stable identity that fully determines <paramref name="factory"/>'s output.</param>
     /// <param name="factory">Builds the row element. Invoked once per key on a cache miss.</param>
     public static Core.KeyedMemoElement Memo<TKey>(TKey key, Func<Element> factory)
-        => new(key!, factory);
+    {
+        // Validate up front so a null reference key fails HERE (with the argument name) instead
+        // of later as an opaque throw from the KeyedMemoCache dictionary lookup at realize time.
+        // Boxing a value-type key yields a non-null object, so int / value-tuple / record keys
+        // always pass; the boxed instance is reused for the element, so there is no double-box on
+        // the per-row virtualized path.
+        object? boxedKey = key;
+        global::System.ArgumentNullException.ThrowIfNull(boxedKey, nameof(key));
+        global::System.ArgumentNullException.ThrowIfNull(factory);
+        return new(boxedKey, factory);
+    }
 
     /// <summary>
     /// Define an inline function component that re-renders on every parent render

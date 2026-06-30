@@ -183,18 +183,17 @@ public sealed partial class Reconciler
                 => UpdateComponent(oldEl, newEl, control, requestRerender),
             (MemoElement, MemoElement, _)
                 => UpdateComponent(oldEl, newEl, control, requestRerender),
-            // Issue #327 (Option A): transparent unwrap for a KeyedMemoElement reaching the
-            // reconciler directly (used outside a virtualized factory). Re-render BOTH sides'
-            // factories and diff the rebuilt inner trees in place against the existing control.
-            // No per-node reconciler state; child state inside the inner subtree is preserved
-            // because Update patches in place (and only remounts on an inner type change, which
-            // the recursive Update handles identically to any sibling). Modifiers on the wrapper
-            // are applied by the post-dispatch ApplyModifiers below.
-            (KeyedMemoElement oldKm, KeyedMemoElement newKm, _)
-                => Update(
-                    oldKm.Factory() ?? EmptyElement.Instance,
-                    newKm.Factory() ?? EmptyElement.Instance,
-                    control, requestRerender),
+            // Issue #327 (Option A) — a KeyedMemoElement reconciled directly (used OUTSIDE a
+            // virtualized ElementFactory, which resolves it to its inner element in BuildOrCache
+            // before mounting). CanUpdate only routes here when the MemoKey is UNCHANGED, so by
+            // the purity contract the factory output is identical to what is already mounted —
+            // skip the inner diff entirely (return null = keep the existing control). A CHANGED
+            // key returns false from CanUpdate and takes the standard replace path (unmount old +
+            // mount the new factory output), so the OLD factory is never re-invoked at update
+            // time to reconstruct the old tree (which would diff against the wrong "old" if the
+            // factory reads mutable state by reference). Wrapper modifiers are still applied by
+            // the post-dispatch ApplyModifiers below.
+            (KeyedMemoElement, KeyedMemoElement, _) => null,
             _ => Mount(newEl, requestRerender),
         };
         }

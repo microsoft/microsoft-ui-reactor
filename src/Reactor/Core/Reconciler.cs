@@ -2455,6 +2455,15 @@ public sealed partial class Reconciler : IDisposable
             return oldComp.ComponentType == newComp.ComponentType;
         if (oldEl is XamlHostElement oldHost && newEl is XamlHostElement newHost)
             return oldHost.TypeKey == newHost.TypeKey;
+        // Issue #327 — a directly-reconciled KeyedMemoElement (used outside a virtualized
+        // ElementFactory, which resolves it to its inner before reconcile) can update in place
+        // only when its MemoKey is unchanged: same key ⇒ identical factory output by contract ⇒
+        // the existing inner control is already correct (the KeyedMemoElement arm in
+        // Reconciler.Update then skips). A changed key means different content, so return false to
+        // take the standard replace path (unmount + fresh mount of the new factory output) rather
+        // than re-invoking the OLD factory at update time to reconstruct the old tree.
+        if (oldEl is KeyedMemoElement oldKm && newEl is KeyedMemoElement newKm)
+            return Equals(oldKm.MemoKey, newKm.MemoKey);
         // MemoElement can always update to MemoElement (same type check above handles it)
         return true;
     }

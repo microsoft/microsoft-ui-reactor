@@ -89,8 +89,11 @@ public sealed partial class Reconciler
             // Issue #327 (Option A): a KeyedMemoElement that reaches Mount directly was used
             // OUTSIDE a virtualized ElementFactory (which resolves it to its inner element in
             // BuildOrCache before mounting). Treat it as a TRANSPARENT wrapper — mount its
-            // factory output with no caching. Any modifiers on the wrapper itself are applied
-            // by the post-dispatch ApplyModifiers below, exactly like any other element.
+            // factory output directly (no extra control, no cache). A later update is keyed:
+            // CanUpdate skips when the MemoKey is unchanged and replaces (remounts the new
+            // factory output) when it changes, so the mounted inner is never re-derived from
+            // the old factory. Any modifiers on the wrapper itself are applied by the
+            // post-dispatch ApplyModifiers below, exactly like any other element.
             KeyedMemoElement km => Mount(km.Factory() ?? EmptyElement.Instance, requestRerender),
             // EmptyElement is a no-op sentinel — callers (Reconcile, panel
             // children loops, ChildReconciler) already filter it before

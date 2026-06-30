@@ -74,6 +74,50 @@ public class KeyedMemoTests
         Assert.Equal((7, true), keyed.MemoKey);
     }
 
+    // ── Argument validation (issue #327 review) ─────────────────────
+
+    [Fact]
+    public void Memo_KeyedOverload_NullKey_ThrowsArgumentNullException()
+    {
+        // A null reference key is rejected up front with the argument name, instead of being
+        // deferred to an opaque throw from the KeyedMemoCache dictionary lookup at realize time.
+        var ex = Assert.Throws<global::System.ArgumentNullException>(
+            () => { Memo((string)null!, () => new TextBlockElement("x")); });
+        Assert.Equal("key", ex.ParamName);
+    }
+
+    [Fact]
+    public void Memo_KeyedOverload_NullFactory_ThrowsArgumentNullException()
+    {
+        var ex = Assert.Throws<global::System.ArgumentNullException>(
+            () => { Memo(1, (global::System.Func<Element>)null!); });
+        Assert.Equal("factory", ex.ParamName);
+    }
+
+    // ── Direct (non-virtualized) reconcile: keyed update-vs-replace ──
+
+    [Fact]
+    public void KeyedMemo_DirectReconcile_IsKeyed_SameKeyUpdates_DifferentKeyReplaces()
+    {
+        // When a KeyedMemoElement is reconciled directly (outside a virtualized ElementFactory),
+        // the reconciler must NOT reconstruct the "old" inner tree by re-invoking the old factory
+        // (which would diff against the wrong "old" if the factory reads mutable state by ref).
+        // Instead CanUpdate is key-driven: SAME key ⇒ update in place (the Update arm then skips,
+        // since the factory output is identical by contract — regardless of factory identity);
+        // DIFFERENT key ⇒ replace (unmount + fresh mount of the new factory output). This proves
+        // the old factory is never re-run at update time.
+        var rec = new Reconciler();
+
+        // Different factory closures, SAME key → update in place (key, not closure, decides).
+        var sameKeyA = Memo(1, () => new TextBlockElement("a"));
+        var sameKeyB = Memo(1, () => new TextBlockElement("b"));
+        Assert.True(rec.CanUpdate(sameKeyA, sameKeyB));
+
+        // Changed key → replace path (no old-factory re-invocation).
+        var otherKey = Memo(2, () => new TextBlockElement("a"));
+        Assert.False(rec.CanUpdate(sameKeyA, otherKey));
+    }
+
     // ── Effectiveness: rebuilds collapse across recycle cycles ───────
 
     [Fact]
