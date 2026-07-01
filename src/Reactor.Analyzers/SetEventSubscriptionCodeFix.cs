@@ -29,21 +29,23 @@ public sealed class SetEventSubscriptionCodeFix : CodeFixProvider
             var node = root.FindNode(diagnostic.Location.SourceSpan);
             if (node is not InvocationExpressionSyntax invocation)
                 continue;
-            if (!SetEventSubscriptionAnalyzer.TryGetSetInvocationData(invocation, out var setTarget, out _, out var assignment))
+            if (!SetEventSubscriptionAnalyzer.TryGetSetInvocationData(invocation, out _, out var assignment))
                 continue;
             if (assignment.Kind() != SyntaxKind.AddAssignmentExpression)
                 continue;
             if (assignment.Left is not MemberAccessExpressionSyntax leftAccess)
                 continue;
+            if (invocation.Expression is not MemberAccessExpressionSyntax setMemberAccess)
+                continue;
 
             var eventName = leftAccess.Name.Identifier.Text;
-            if (!SetEventSubscriptionAnalyzer.CodeFixableEventModifiers.TryGetValue(eventName, out var modifierName))
+            if (!SetEventSubscriptionAnalyzer.EventModifiers.TryGetValue(eventName, out var modifierName))
                 continue;
 
             var newInvocation = SyntaxFactory.InvocationExpression(
                     SyntaxFactory.MemberAccessExpression(
                         SyntaxKind.SimpleMemberAccessExpression,
-                        setTarget,
+                        setMemberAccess.Expression,
                         SyntaxFactory.IdentifierName(modifierName)),
                     SyntaxFactory.ArgumentList(
                         SyntaxFactory.SingletonSeparatedList(SyntaxFactory.Argument(assignment.Right))))
@@ -51,7 +53,7 @@ public sealed class SetEventSubscriptionCodeFix : CodeFixProvider
 
             context.RegisterCodeFix(
                 CodeAction.Create(
-                    $"Use .{modifierName}() modifier",
+                    $"Use .{modifierName}(...) modifier",
                     ct => Task.FromResult(context.Document.WithSyntaxRoot(root.ReplaceNode(invocation, newInvocation))),
                     equivalenceKey: SetEventSubscriptionAnalyzer.DiagnosticId + ":" + modifierName),
                 diagnostic);

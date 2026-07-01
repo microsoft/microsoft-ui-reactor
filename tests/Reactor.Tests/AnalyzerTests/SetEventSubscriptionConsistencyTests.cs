@@ -12,6 +12,17 @@ namespace Microsoft.UI.Reactor.Tests.AnalyzerTests;
 
 public class SetEventSubscriptionConsistencyTests
 {
+    private static readonly HashSet<string> IntentionallyExcludedModifiers =
+        new(StringComparer.Ordinal)
+        {
+            // These are drop-target abstractions over DragTargetArgs/DropTargetConfig,
+            // not 1:1 replacements for raw WinUI drag event subscriptions.
+            "OnDragEnter",
+            "OnDragOver",
+            "OnDragLeave",
+            "OnDrop",
+        };
+
     [Fact]
     public void Every_Tracked_Event_Has_A_Matching_Modifier()
     {
@@ -32,7 +43,9 @@ public class SetEventSubscriptionConsistencyTests
         var trackedModifiers = SetEventSubscriptionAnalyzer.EventModifiers.Values.ToHashSet(StringComparer.Ordinal);
 
         var missing = safeModifiers
-            .Where(modifierName => !trackedModifiers.Contains(modifierName))
+            .Where(modifierName =>
+                !IntentionallyExcludedModifiers.Contains(modifierName) &&
+                !trackedModifiers.Contains(modifierName))
             .OrderBy(name => name)
             .ToList();
 
@@ -43,13 +56,13 @@ public class SetEventSubscriptionConsistencyTests
     }
 
     [Fact]
-    public void Every_CodeFixable_Event_Is_A_Tracked_Event()
+    public void Intentionally_Excluded_Modifiers_Exist()
     {
-        foreach (var (eventName, modifierName) in SetEventSubscriptionAnalyzer.CodeFixableEventModifiers)
+        var safeModifiers = ReadSafeEventModifiers();
+
+        foreach (var modifierName in IntentionallyExcludedModifiers)
         {
-            Assert.True(
-                SetEventSubscriptionAnalyzer.EventModifiers.TryGetValue(eventName, out var trackedModifierName) && trackedModifierName == modifierName,
-                $"Code-fixable event '{eventName}' -> '{modifierName}' must also exist in EventModifiers.");
+            Assert.Contains(modifierName, safeModifiers);
         }
     }
 
@@ -78,14 +91,11 @@ public class SetEventSubscriptionConsistencyTests
 
     private static bool MethodBodyContainsSameNamedModifierAssignment(MethodDeclarationSyntax method)
     {
-        var marker = method.Identifier.Text + " =";
-
-        if (method.ExpressionBody is not null)
-            return method.ExpressionBody.Expression.ToString().Contains(marker, StringComparison.Ordinal);
-
-        if (method.Body is not null)
-            return method.Body.ToString().Contains(marker, StringComparison.Ordinal);
-
-        return false;
+        return method
+            .DescendantNodes()
+            .OfType<AssignmentExpressionSyntax>()
+            .Any(assignment =>
+                assignment.Left is IdentifierNameSyntax leftIdentifier &&
+                leftIdentifier.Identifier.Text == method.Identifier.Text);
     }
 }

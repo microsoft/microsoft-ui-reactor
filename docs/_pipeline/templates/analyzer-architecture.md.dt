@@ -122,6 +122,7 @@ via `.editorconfig`.
 | `REACTOR_DSL_001` | Warning | Dynamic list item missing .WithKey | `MissingWithKeyAnalyzer.cs` |
 | `REACTOR_DOCK_001` | Warning | OnLiveLayoutChanged feeds the live layout back into state | `OnLiveLayoutRoundTripAnalyzer.cs` |
 | `REACTOR_DOC_001` | Warning | Public API missing XML doc summary | `XmlDocSummaryAnalyzer.cs` |
+| `REACTOR_EVENT_001` | Warning | `.Set(...)` subscribes to an event that already has a declarative `On*` modifier | `SetEventSubscriptionAnalyzer.cs` |
 | `REACTOR_POOL_001` | Warning | `.Set` writes to a property that pool reset clears | `PoolResetSetAnalyzer.cs` |
 | `REACTOR0050` | Warning | Optional OneWay descriptor entry has no `dp:` ClearValue fallback | `OneWayClearValueAnalyzer.cs` |
 

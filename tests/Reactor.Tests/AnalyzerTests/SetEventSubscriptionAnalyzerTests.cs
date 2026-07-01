@@ -49,6 +49,21 @@ public sealed class ChildTarget
     public event Action? Tapped { add {} remove {} }
 }
 
+public sealed class PointerRoutedEventArgs {}
+public sealed class TappedRoutedEventArgs {}
+
+public class TypedFakeElement
+{
+    public event Action<object, TappedRoutedEventArgs>? Tapped { add {} remove {} }
+
+    public TypedFakeElement Set(Action<TypedFakeElement> configure) { configure(this); return this; }
+}
+
+public static class TypedFakeElementExtensions
+{
+    public static TypedFakeElement OnTapped(this TypedFakeElement el, Action<object, TappedRoutedEventArgs> handler) => el;
+}
+
 public static class FakeElementExtensions
 {
     public static FakeElement OnPointerPressed(this FakeElement el, Action handler) => el;
@@ -71,10 +86,6 @@ public static class FakeElementExtensions
     public static FakeElement OnAccessKeyDisplayRequested(this FakeElement el, Action handler) => el;
     public static FakeElement OnGotFocus(this FakeElement el, Action handler) => el;
     public static FakeElement OnLostFocus(this FakeElement el, Action handler) => el;
-    public static FakeElement OnDragEnter(this FakeElement el, Action handler) => el;
-    public static FakeElement OnDragOver(this FakeElement el, Action handler) => el;
-    public static FakeElement OnDragLeave(this FakeElement el, Action handler) => el;
-    public static FakeElement OnDrop(this FakeElement el, Action handler) => el;
     public static FakeElement OnSizeChanged(this FakeElement el, Action handler) => el;
 }
 ";
@@ -106,12 +117,12 @@ class C
         var source = Stubs + @"
 class C
 {
-    void OnDrop() {}
+    void OnTapped() {}
 
     void M()
     {
         var el = new FakeElement();
-        {|REACTOR_EVENT_001:el.Set(fe => { fe.Drop += OnDrop; })|};
+        {|REACTOR_EVENT_001:el.Set(fe => { fe.Tapped += OnTapped; })|};
     }
 }";
 
@@ -134,9 +145,8 @@ class C
         var el = new FakeElement();
         {|REACTOR_EVENT_001:el.Set(fe => fe.PointerPressed += OnHandler)|};
         {|REACTOR_EVENT_001:el.Set(fe => fe.RightTapped += OnHandler)|};
-        {|REACTOR_EVENT_001:el.Set(fe => fe.DragEnter += OnHandler)|};
-        {|REACTOR_EVENT_001:el.Set(fe => fe.DragLeave += OnHandler)|};
         {|REACTOR_EVENT_001:el.Set(fe => fe.SizeChanged += OnHandler)|};
+        {|REACTOR_EVENT_001:el.Set(fe => fe.AccessKeyDisplayRequested += OnHandler)|};
     }
 }";
 
@@ -210,6 +220,73 @@ class C
     }
 
     [Fact]
+    public async Task No_Diagnostic_For_Remove_Assignment()
+    {
+        var source = Stubs + @"
+class C
+{
+    void OnTapped() {}
+
+    void M()
+    {
+        var el = new FakeElement();
+        el.Set(fe => fe.Tapped -= OnTapped);
+    }
+}";
+
+        await new CSharpAnalyzerTest<SetEventSubscriptionAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task No_Diagnostic_For_Multi_Statement_Block_Lambda()
+    {
+        var source = Stubs + @"
+class C
+{
+    void OnTapped() {}
+    void Log() {}
+
+    void M()
+    {
+        var el = new FakeElement();
+        el.Set(fe => { Log(); fe.Tapped += OnTapped; });
+    }
+}";
+
+        await new CSharpAnalyzerTest<SetEventSubscriptionAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task No_Diagnostic_For_Drag_Target_Events()
+    {
+        var source = Stubs + @"
+class C
+{
+    void OnHandler() {}
+
+    void M()
+    {
+        var el = new FakeElement();
+        el.Set(fe => fe.DragEnter += OnHandler);
+        el.Set(fe => fe.DragOver += OnHandler);
+        el.Set(fe => fe.DragLeave += OnHandler);
+        el.Set(fe => fe.Drop += OnHandler);
+    }
+}";
+
+        await new CSharpAnalyzerTest<SetEventSubscriptionAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
     public async Task CodeFix_Rewrites_To_OnTapped()
     {
         var before = Stubs + @"
@@ -244,7 +321,7 @@ class C
     }
 
     [Fact]
-    public async Task CodeFix_Rewrites_Block_Body_To_OnDrop()
+    public async Task CodeFix_Rewrites_Block_Body_To_OnTapped()
     {
         var before = Stubs + @"
 class C
@@ -278,24 +355,36 @@ class C
     }
 
     [Fact]
-    public async Task Analyzer_Fires_But_CodeFix_Suppressed_For_DragOver()
+    public async Task CodeFix_Rewrites_With_Realistic_Typed_Handler_Signature()
     {
-        var code = Stubs + @"
+        var before = Stubs + @"
 class C
 {
-    void OnDragOver() {}
+    void OnTapped(object sender, TappedRoutedEventArgs args) {}
 
     void M()
     {
-        var el = new FakeElement();
-        {|REACTOR_EVENT_001:el.Set(fe => fe.DragOver += OnDragOver)|};
+        var el = new TypedFakeElement();
+        {|REACTOR_EVENT_001:el.Set(fe => fe.Tapped += OnTapped)|};
+    }
+}";
+
+        var after = Stubs + @"
+class C
+{
+    void OnTapped(object sender, TappedRoutedEventArgs args) {}
+
+    void M()
+    {
+        var el = new TypedFakeElement();
+        el.OnTapped(OnTapped);
     }
 }";
 
         await new CSharpCodeFixTest<SetEventSubscriptionAnalyzer, SetEventSubscriptionCodeFix, DefaultVerifier>
         {
-            TestCode = code,
-            FixedCode = code,
+            TestCode = before,
+            FixedCode = after,
         }.RunAsync(TestContext.Current.CancellationToken);
     }
 }
