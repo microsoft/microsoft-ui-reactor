@@ -108,9 +108,9 @@ Full coverage on [Controls](controls.md).
 | Group | Methods |
 |---|---|
 | Size | `.Width(n)` `.Height(n)` `.Size(w,h)` |
-| Spacing | `.Margin(n)` `.Padding(n)` `.HAlign(...)` `.VAlign(...)` |
+| Spacing | `.Margin(n)` `.Padding(n)` `.HAlign(...)` `.VAlign(...)` `.HorizontalContentAlignment(...)` `.VerticalContentAlignment(...)` |
 | Text | `.FontSize(n)` `.Bold()` `.SemiBold()` `.Opacity(n)` |
-| Color | `.Background(token)` `.Foreground(token)` `.WithBorder(token, thickness?)` |
+| Color | `.Background(token)` `.Foreground(token)` `.BorderBrush(token)` `.BorderThickness(...)` `.WithBorder(token, thickness?)` |
 | Shape | `.CornerRadius(n)` |
 | Behavior | `.IsEnabled(bool)` `.IsVisible(bool)` `.ToolTip(s)` |
 | Keying | `.WithKey(s)` |

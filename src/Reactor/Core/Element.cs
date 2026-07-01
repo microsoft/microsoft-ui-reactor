@@ -1794,6 +1794,16 @@ public record ElementModifiers
         get => Layout?.VerticalAlignment;
         init => Layout = Layout is null ? new LayoutModifiers { VerticalAlignment = value } : Layout with { VerticalAlignment = value };
     }
+    public HorizontalAlignment? HorizontalContentAlignment
+    {
+        get => Layout?.HorizontalContentAlignment;
+        init => Layout = Layout is null ? new LayoutModifiers { HorizontalContentAlignment = value } : Layout with { HorizontalContentAlignment = value };
+    }
+    public VerticalAlignment? VerticalContentAlignment
+    {
+        get => Layout?.VerticalContentAlignment;
+        init => Layout = Layout is null ? new LayoutModifiers { VerticalContentAlignment = value } : Layout with { VerticalContentAlignment = value };
+    }
     public double? Opacity
     {
         get => Visual?.Opacity;
@@ -2076,6 +2086,8 @@ public record LayoutModifiers
     public double? MaxHeight { get; init; }
     public HorizontalAlignment? HorizontalAlignment { get; init; }
     public VerticalAlignment? VerticalAlignment { get; init; }
+    public HorizontalAlignment? HorizontalContentAlignment { get; init; }
+    public VerticalAlignment? VerticalContentAlignment { get; init; }
     public bool? IsVisible { get; init; }
     public double? MarginInlineStart { get; init; }
     public double? MarginInlineEnd { get; init; }
@@ -2102,6 +2114,8 @@ public record LayoutModifiers
         MaxHeight = other.MaxHeight ?? MaxHeight,
         HorizontalAlignment = other.HorizontalAlignment ?? HorizontalAlignment,
         VerticalAlignment = other.VerticalAlignment ?? VerticalAlignment,
+        HorizontalContentAlignment = other.HorizontalContentAlignment ?? HorizontalContentAlignment,
+        VerticalContentAlignment = other.VerticalContentAlignment ?? VerticalContentAlignment,
         IsVisible = other.IsVisible ?? IsVisible,
         MarginInlineStart = other.MarginInlineStart ?? MarginInlineStart,
         MarginInlineEnd = other.MarginInlineEnd ?? MarginInlineEnd,

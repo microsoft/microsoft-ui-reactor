@@ -341,6 +341,16 @@ VStack(8, items).Margin(24).Padding(16)
 | `.HAlign(alignment)` | Horizontal alignment (Left, Center, Right, Stretch) |
 | `.VAlign(alignment)` | Vertical alignment (Top, Center, Bottom, Stretch) |
 
+Use the content-alignment fluents when the control itself should stretch,
+but its child content also needs an explicit placement contract. A common
+case is a full-width button whose inner row should also stretch:
+
+```csharp
+Button(Text("Open"), onClick)
+    .HAlign(HorizontalAlignment.Stretch)
+    .HorizontalContentAlignment(HorizontalAlignment.Stretch)
+```
+
 See [modifier-system](modifier-system.md) for how these chain
 internally.
 

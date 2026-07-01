@@ -131,6 +131,12 @@ public static partial class ElementExtensions
     public static T VerticalAlignment<T>(this T el, Microsoft.UI.Xaml.VerticalAlignment alignment) where T : Element =>
         ModifyLayout(el, new LayoutModifiers { VerticalAlignment = alignment });
 
+    public static T HorizontalContentAlignment<T>(this T el, Microsoft.UI.Xaml.HorizontalAlignment alignment) where T : Element =>
+        ModifyLayout(el, new LayoutModifiers { HorizontalContentAlignment = alignment });
+
+    public static T VerticalContentAlignment<T>(this T el, Microsoft.UI.Xaml.VerticalAlignment alignment) where T : Element =>
+        ModifyLayout(el, new LayoutModifiers { VerticalContentAlignment = alignment });
+
     public static T Center<T>(this T el) where T : Element =>
         ModifyLayout(el, new LayoutModifiers
         {
@@ -1151,6 +1157,27 @@ public static partial class ElementExtensions
         ModifyVisual(el, new VisualModifiers { CornerRadius = new Microsoft.UI.Xaml.CornerRadius(topLeft, topRight, bottomRight, bottomLeft) });
 
     // ── Border brush/thickness (on Control and Border) ─────────────
+
+    public static T BorderBrush<T>(this T el, string color) where T : Element =>
+        ModifyVisual(el, new VisualModifiers { BorderBrush = BrushHelper.Parse(color) });
+
+    public static T BorderBrush<T>(this T el, Brush brush) where T : Element =>
+        ModifyVisual(el, new VisualModifiers { BorderBrush = brush });
+
+    public static T BorderBrush<T>(this T el, ThemeRef theme) where T : Element =>
+        ModifyTheme(el, "BorderBrush", theme);
+
+    public static T BorderThickness<T>(this T el, double thickness) where T : Element =>
+        ModifyVisual(el, new VisualModifiers { BorderThickness = new Thickness(thickness) });
+
+    public static T BorderThickness<T>(this T el, double horizontal, double vertical) where T : Element =>
+        ModifyVisual(el, new VisualModifiers { BorderThickness = new Thickness(horizontal, vertical, horizontal, vertical) });
+
+    public static T BorderThickness<T>(this T el, double left, double top, double right, double bottom) where T : Element =>
+        ModifyVisual(el, new VisualModifiers { BorderThickness = new Thickness(left, top, right, bottom) });
+
+    public static T BorderThickness<T>(this T el, Thickness thickness) where T : Element =>
+        ModifyVisual(el, new VisualModifiers { BorderThickness = thickness });
 
     /// <summary>
     /// Sets the border from a color string (named color or #RRGGBB / #AARRGGBB).

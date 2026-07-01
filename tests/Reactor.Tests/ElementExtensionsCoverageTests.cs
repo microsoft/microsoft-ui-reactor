@@ -180,6 +180,25 @@ public class ElementExtensionsCoverageTests
         Assert.Equal(new Thickness(4.0), bd.Modifiers!.BorderThickness);
     }
 
+    [Fact]
+    public void ContentAlignment_And_Independent_Border_Modifiers()
+    {
+        var aligned = Button("x")
+            .HorizontalContentAlignment(HorizontalAlignment.Right)
+            .VerticalContentAlignment(VerticalAlignment.Bottom)
+            .BorderBrush(Theme.CardStroke)
+            .BorderThickness(1, 2, 3, 4);
+
+        Assert.Equal(HorizontalAlignment.Right, aligned.Modifiers!.HorizontalContentAlignment);
+        Assert.Equal(VerticalAlignment.Bottom, aligned.Modifiers.VerticalContentAlignment);
+        Assert.True(aligned.ThemeBindings!.ContainsKey("BorderBrush"));
+        Assert.Equal(new Thickness(1, 2, 3, 4), aligned.Modifiers.BorderThickness);
+
+        Assert.Equal(new Thickness(6), Button("x").BorderThickness(6).Modifiers!.BorderThickness);
+        Assert.Equal(new Thickness(8, 4, 8, 4), Button("x").BorderThickness(8, 4).Modifiers!.BorderThickness);
+        Assert.Equal(new Thickness(7), Button("x").BorderThickness(new Thickness(7)).Modifiers!.BorderThickness);
+    }
+
     // ────────────────────────────────────────────────────────────────
     //  CornerRadius / IsEnabled
     // ────────────────────────────────────────────────────────────────

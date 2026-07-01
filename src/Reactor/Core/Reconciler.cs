@@ -3657,6 +3657,18 @@ public sealed partial class Reconciler : IDisposable
         else if (!m.HorizontalAlignment.HasValue && oldM?.HorizontalAlignment.HasValue == true) fe.HorizontalAlignment = HorizontalAlignment.Stretch;
         if (m.VerticalAlignment.HasValue && m.VerticalAlignment != oldM?.VerticalAlignment) fe.VerticalAlignment = m.VerticalAlignment.Value;
         else if (!m.VerticalAlignment.HasValue && oldM?.VerticalAlignment.HasValue == true) fe.VerticalAlignment = VerticalAlignment.Stretch;
+        if (fe is WinUI.Control contentAlignmentControl)
+        {
+            if (m.HorizontalContentAlignment.HasValue && m.HorizontalContentAlignment != oldM?.HorizontalContentAlignment)
+                contentAlignmentControl.HorizontalContentAlignment = m.HorizontalContentAlignment.Value;
+            else if (!m.HorizontalContentAlignment.HasValue && oldM?.HorizontalContentAlignment.HasValue == true)
+                contentAlignmentControl.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+
+            if (m.VerticalContentAlignment.HasValue && m.VerticalContentAlignment != oldM?.VerticalContentAlignment)
+                contentAlignmentControl.VerticalContentAlignment = m.VerticalContentAlignment.Value;
+            else if (!m.VerticalContentAlignment.HasValue && oldM?.VerticalContentAlignment.HasValue == true)
+                contentAlignmentControl.VerticalContentAlignment = VerticalAlignment.Stretch;
+        }
         if (m.Opacity.HasValue && m.Opacity != oldM?.Opacity)
             AnimationHelper.SetOrAnimate(fe, "Opacity", (float)m.Opacity.Value);
         else if (!m.Opacity.HasValue && oldM?.Opacity.HasValue == true)
