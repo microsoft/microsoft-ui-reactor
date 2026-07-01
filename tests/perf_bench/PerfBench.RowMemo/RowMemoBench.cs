@@ -116,7 +116,7 @@ internal static class RowMemoBench
         sb.AppendLine($"  Baseline: sameInstance={baseSameInstance}  CanSkipUpdate={baseSkippable}  -> reconciler must WALK the {RowNodeCount}-node subtree");
         sb.AppendLine($"  Memo    : sameInstance={memoSameInstance}  CanSkipUpdate={memoSkippable}  -> reconciler returns at the ROOT (1 node), descent skipped");
         Console.WriteLine();
-        Console.WriteLine(sb.ToString());
+        Console.WriteLine(sb);
 
         // ── Machine-parseable key=value lines (stable contract for PerfLib.ps1) ───
         var kv = new List<string>
@@ -152,8 +152,17 @@ internal static class RowMemoBench
                 File.WriteAllLines(outPath, kv);
                 Console.WriteLine($"wrote {kv.Count} key=value lines -> {outPath}");
             }
-            catch (Exception ex)
+            catch (Exception ex) when (
+                ex is System.IO.IOException
+                or UnauthorizedAccessException
+                or System.Security.SecurityException
+                or ArgumentException
+                or NotSupportedException)
             {
+                // Writing the --out file is a best-effort convenience (stdout carries the
+                // authoritative key=value block the harness parses). Swallow only the expected
+                // path/permission/IO failures so a bad --out never fails the bench; anything
+                // unexpected still propagates.
                 Console.Error.WriteLine($"failed to write --out '{outPath}': {ex.Message}");
             }
         }
@@ -171,6 +180,9 @@ internal static class RowMemoBench
         long bestNs = long.MaxValue, alloc = 0;
         for (int r = 0; r < Reps; r++)
         {
+            // Stabilize the measurement window: drain pending finalizers and collect so a GC
+            // triggered mid-run doesn't pollute the timed loop's ns or the alloc delta. This is
+            // the same isolation the repo's PerfBench.Shared BenchRunner does before each rep.
             GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
             long a0 = GC.GetAllocatedBytesForCurrentThread();
             var sw = Stopwatch.StartNew();
