@@ -1275,7 +1275,14 @@ function Format-PerfRowMemoSection {
         $baseSkip = ([string]$RowMemo.BaselineCanSkip).ToLowerInvariant()
         $lines.Add("> **Why the real win is bigger than the table.** On a recycle that re-asks a still-cached key, ``Memo`` returns the **same ``Element`` instance**, so ``ReferenceEquals`` holds and ``Element.CanSkipUpdate`` is **true** &mdash; the reconciler returns at the row **root** and skips the entire $nodes-node per-row descent **and** the downstream WinUI control-patch. That stacked reconcile + control-patch saving is **not** captured by the headless ns/bytes figures above (which time only ``BuildOrCache``). Baseline hands the reconciler a fresh-but-equal tree every recycle (``sameInstance=$baseSame``, ``CanSkipUpdate=$baseSkip``), forcing the full walk.")
     } else {
-        $lines.Add("> **Note.** These are headless ``BuildOrCache`` timings only; the reconcile-descent + WinUI control-patch savings that ``Memo`` unlocks via ``ReferenceEquals`` + ``Element.CanSkipUpdate`` stack on top and aren't captured here.")
+        # The Memo arm did NOT achieve the skip precondition this run (sameInstance and/or
+        # CanSkipUpdate came back false). Do NOT restate the "Memo unlocks reconcile/patch
+        # savings" claim — those savings depend on exactly the precondition that failed here,
+        # so asserting them would mislead. Surface the MEASURED flags and flag it as a likely
+        # regression instead.
+        $memoSame = ([string]$RowMemo.MemoSameInstance).ToLowerInvariant()
+        $memoSkip = ([string]$RowMemo.MemoCanSkip).ToLowerInvariant()
+        $lines.Add("> **Note &mdash; the expected skip precondition did NOT hold this run.** The Memo arm measured ``sameInstance=$memoSame`` / ``CanSkipUpdate=$memoSkip``, so on this build a recycle did **not** short-circuit at the row root &mdash; the reconcile-descent + WinUI control-patch savings keyed memoization is meant to unlock are **not** in effect here (the ns/bytes above remain headless ``BuildOrCache`` timings only). That usually signals a bench or runtime regression worth investigating.")
     }
     $lines.Add('')
 

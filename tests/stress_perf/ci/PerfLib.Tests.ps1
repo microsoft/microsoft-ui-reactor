@@ -1296,6 +1296,17 @@ try {
     Assert-Match $rmFlippedText 'CanSkipUpdate=true'         'row-memo note reflects a measured Baseline CanSkipUpdate=true (note is data-driven, not hard-coded)'
     # The headless-only caveat must be present so reviewers know the real win is bigger.
     Assert-Match $rmText 'captured by the headless' 'row-memo note flags that the stacked reconcile/patch saving is not captured headlessly'
+    # Fallback note (Memo skip precondition did NOT hold): when MemoSameInstance/MemoCanSkip
+    # come back false (a regression / bench change), the note must NOT restate the "Memo unlocks
+    # reconcile/patch savings" claim — those savings depend on the failed precondition. It must
+    # instead surface the measured flags and flag it as a likely regression.
+    $rmNoSkip = $rm.PSObject.Copy()
+    $rmNoSkip.MemoCanSkip = $false
+    $rmNoSkipText = (Format-PerfRowMemoSection -RowMemo $rmNoSkip) -join "`n"
+    Assert-Match $rmNoSkipText 'did NOT hold'          'row-memo fallback note flags the missing skip precondition'
+    Assert-Match $rmNoSkipText 'CanSkipUpdate=false'   'row-memo fallback note surfaces the measured Memo CanSkipUpdate=false'
+    Assert-Match $rmNoSkipText 'in effect'             'row-memo fallback states the savings are (not) in effect rather than claiming Memo unlocks them'
+    Assert-True (-not ($rmNoSkipText -match 'Why the real win is bigger')) 'row-memo fallback does not render the win narrative when the precondition failed'
 
     # Threaded through Format-PerfComment: present when set (after the regression table,
     # before the cross-framework reference), omitted when null (back-compat with callers
