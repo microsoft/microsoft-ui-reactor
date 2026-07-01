@@ -340,6 +340,8 @@ VStack(8, items).Margin(24).Padding(16)
 | `.Padding(n)` | Inner spacing (all sides) |
 | `.HAlign(alignment)` | Horizontal alignment (Left, Center, Right, Stretch) |
 | `.VAlign(alignment)` | Vertical alignment (Top, Center, Bottom, Stretch) |
+| `.HorizontalContentAlignment(alignment)` | Horizontal child/content alignment inside a Control |
+| `.VerticalContentAlignment(alignment)` | Vertical child/content alignment inside a Control |
 
 Use the content-alignment fluents when the control itself should stretch,
 but its child content also needs an explicit placement contract. A common

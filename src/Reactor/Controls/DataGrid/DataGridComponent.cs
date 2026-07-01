@@ -1199,15 +1199,10 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                     filterIcon
                 ) with { AlignItems = FlexAlign.Center },
                 toggleSort)
-                .Set(b =>
-                {
-                    b.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(
-                        Microsoft.UI.Colors.Transparent);
-                    b.BorderThickness = new Thickness(0);
-                    b.Padding = new Thickness(8, 6, 8, 6);
-                    b.HorizontalAlignment = HorizontalAlignment.Stretch;
-                    b.HorizontalContentAlignment = HorizontalAlignment.Stretch;
-                })
+                .Background("#00000000")
+                .BorderThickness(0)
+                .Padding(8, 6, 8, 6)
+                .HorizontalContentAlignment(HorizontalAlignment.Stretch)
                 .HAlign(HorizontalAlignment.Stretch);
         }
 
