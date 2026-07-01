@@ -53,14 +53,27 @@ internal static class RowMemoBench
         => new(items, vb, new Reconciler(), requestRerender: static () => { }, pool: null);
 
     // The real realize entry point. keyed:false = the legacy int-index VirtualList path, where
-    // each call re-boxes `i` so the built-in _viewBuilderCache cannot hit.
+    // each call re-boxes `i` (the T=int item) so the built-in _viewBuilderCache cannot hit. The
+    // key string comes from the precomputed KeyCache so no per-recycle string is allocated
+    // outside BuildOrCache (see KeyCache).
     private static Element Realize(ElementFactory<int> f, int i)
-        => f.BuildOrCache(i.ToString(CultureInfo.InvariantCulture), i, i, keyed: false);
+        => f.BuildOrCache(KeyCache[i], i, i, keyed: false);
 
     private const int Window = 50;          // realized working set (rows in/near the viewport)
     private const int WarmCycles = 300;     // populate cache + JIT before timing
     private const int MeasureCycles = 20_000;
     private const int Reps = 5;             // report the best (min-time) rep to cut noise
+
+    // Precomputed per-index key strings. BuildOrCache needs a string key, but calling
+    // i.ToString() on every Realize would allocate a string per recycle OUTSIDE BuildOrCache
+    // and inflate the measured bytes/recycle — most visibly on the Memo arm, where BuildOrCache
+    // itself allocates almost nothing, so that stray string would dominate its byte figure.
+    // Interning the Window keys once keeps the timed loop measuring only BuildOrCache. (The key
+    // is a stable string per index; it does NOT re-box the int item, so the #327 legacy-path
+    // behaviour BuildOrCache exercises — ReferenceEquals(item) missing on the re-boxed int — is
+    // unchanged.)
+    private static readonly string[] KeyCache =
+        Enumerable.Range(0, Window).Select(static i => i.ToString(CultureInfo.InvariantCulture)).ToArray();
 
     public static void Run(string? outPath)
     {
@@ -164,10 +177,12 @@ internal static class RowMemoBench
                 or ArgumentException
                 or NotSupportedException)
             {
-                // Writing the --out file is a best-effort convenience (stdout carries the
-                // authoritative key=value block the harness parses). Swallow only the expected
-                // path/permission/IO failures so a bad --out never fails the bench; anything
-                // unexpected still propagates.
+                // The --out file is what the harness (Run-PerfBenchmark.ps1 / Invoke-RowMemoRun)
+                // actually parses; stdout carries a human-readable copy for the run log. Writing
+                // the file is best-effort: swallow only the expected path/permission/IO failures
+                // so a bad --out path never crashes the bench (anything unexpected still
+                // propagates). If the write fails the harness finds no file and simply omits the
+                // row-memo table — the intended graceful degradation.
                 Console.Error.WriteLine($"failed to write --out '{outPath}': {ex.Message}");
             }
         }
