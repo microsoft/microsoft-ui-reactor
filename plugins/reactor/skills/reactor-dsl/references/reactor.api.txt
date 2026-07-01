@@ -5607,7 +5607,8 @@ IReadOnlyList<UIElement> LastModifiedElements { get; }
 IReadOnlyList<UIElement> LastMountedElements { get; }
 bool EnableBitmaskDiff { get; set; }
 ApplyDefaultAutomationName(FrameworkElement fe, string caption) → void
-ApplyResourceOverrides(FrameworkElement fe, ResourceOverrides oldOverrides, ResourceOverrides newOverrides, ElementTheme effectiveTheme = ElementTheme.Default) → void
+ApplyResourceOverrides(FrameworkElement fe, ResourceOverrides oldOverrides, ResourceOverrides newOverrides) → void
+ApplyResourceOverrides(FrameworkElement fe, ResourceOverrides oldOverrides, ResourceOverrides newOverrides, ElementTheme effectiveTheme) → void
 ApplySetters<T>(Action<T>[] setters, T control) → void
 ApplyThemeBindings(FrameworkElement fe, IReadOnlyDictionary<string, ThemeRef> bindings) → void
 DetachReactorState(FrameworkElement fe) → void

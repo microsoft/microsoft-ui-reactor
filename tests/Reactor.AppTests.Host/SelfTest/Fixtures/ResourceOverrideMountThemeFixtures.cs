@@ -220,4 +220,139 @@ internal static class ResourceOverrideMountThemeFixtures
             }
         }
     }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Post-mount ancestor theme toggle re-resolves through BOTH Update paths
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// The mount fix also threads the effective theme through the UPDATE path. Toggling an
+    /// ancestor's <c>RequestedTheme</c> on a later render must re-resolve the descendants'
+    /// ThemeRef ResourceOverrides — through BOTH arms of <c>Reconciler.Update</c>:
+    /// <list type="bullet">
+    /// <item>a child that stays shallow-equal (constant text) is declined by
+    /// <c>CanSkipUpdate</c> (it carries ThemeRefs) and routed to Update's element-level
+    /// shallow-skip arm, which re-applies against the ancestor-aware effective theme;</item>
+    /// <item>a child that also changes a prop (text carries a counter) takes the full-update
+    /// branch, which re-applies the same way.</item>
+    /// </list>
+    /// Uses concrete ThemeRef overrides (NOT self-healing {ThemeResource}), so the brush
+    /// only flips if Reactor actually re-resolves — and does so lag-free via the threaded
+    /// ambient rather than fe's ActualTheme view. Also guards the MUST-FIX exception-safety
+    /// refactor of the ambient save/restore in Update.
+    /// </summary>
+    internal sealed class PostMountAncestorToggleReResolves(Harness h) : SelfTestFixtureBase(h)
+    {
+        private const string SrcKey = "Item1ThemedBrush_Toggle";
+        private const string TargetKey = "Item1Target_Toggle";
+
+        public override async Task RunAsync()
+        {
+            var light = MakeBrush(0, 0, 160);
+            var dark = MakeBrush(160, 0, 0);
+            var dict = InstallThemedDict(SrcKey, light, dark);
+            try
+            {
+                var host = H.CreateHost();
+                host.Mount(ctx =>
+                {
+                    var (theme, setTheme) = ctx.UseState(ElementTheme.Dark);
+                    var (counter, setCounter) = ctx.UseState(0);
+                    return VStack(
+                        Button("ToggleAncestorTheme", () =>
+                        {
+                            setTheme(theme == ElementTheme.Dark ? ElementTheme.Light : ElementTheme.Dark);
+                            setCounter(counter + 1);
+                        }),
+                        VStack(
+                            // Constant text → shallow-equal across renders → Update's
+                            // element-level shallow-skip arm re-resolves via the ambient.
+                            TextBlock("toggleSkipChild").Resources(r => r.Set(TargetKey, Theme.Ref(SrcKey))),
+                            // Text carries the counter → NOT shallow-equal → Update's
+                            // full-update branch re-resolves via the ambient.
+                            TextBlock($"toggleFullChild-{counter}").Resources(r => r.Set(TargetKey, Theme.Ref(SrcKey))))
+                        .RequestedTheme(theme));
+                });
+
+                await Harness.Render();
+
+                // Ancestor Dark at mount → both children resolve the Dark brush.
+                var skipTb = H.FindControl<TextBlock>(t => t.Text == "toggleSkipChild");
+                var fullTb = H.FindControl<TextBlock>(t => t.Text == "toggleFullChild-0");
+                H.Check("Item1Toggle_MountChildrenPresent", skipTb is not null && fullTb is not null);
+                H.Check("Item1Toggle_SkipChildMountDark", ReferenceEquals(ResourceBrush(skipTb, TargetKey), dark));
+                H.Check("Item1Toggle_FullChildMountDark", ReferenceEquals(ResourceBrush(fullTb, TargetKey), dark));
+
+                // Toggle ancestor Dark→Light (and bump the counter so fullChild changes a prop).
+                H.ClickButton("ToggleAncestorTheme");
+
+                // Shallow-equal child re-resolves to Light via Update's shallow-skip arm.
+                var skipReResolved = await Harness.WaitFor(() =>
+                {
+                    var tb = H.FindControl<TextBlock>(t => t.Text == "toggleSkipChild");
+                    return ReferenceEquals(ResourceBrush(tb, TargetKey), light);
+                });
+                H.Check("Item1Toggle_SkipChildReResolvedLight", skipReResolved);
+
+                // Prop-changed child re-resolves to Light via Update's full-update branch.
+                var fullReResolved = await Harness.WaitFor(() =>
+                {
+                    var tb = H.FindControl<TextBlock>(t => t.Text == "toggleFullChild-1");
+                    return ReferenceEquals(ResourceBrush(tb, TargetKey), light);
+                });
+                H.Check("Item1Toggle_FullChildReResolvedLight", fullReResolved);
+            }
+            finally
+            {
+                Application.Current.Resources.MergedDictionaries.Remove(dict);
+                global::Microsoft.UI.Reactor.Core.ThemeRef.InvalidateResolutionCache();
+            }
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Sibling isolation — the ambient save/restore must not leak across peers
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Two sibling subtrees under different <c>RequestedTheme</c>s, each with a ThemeRef
+    /// override, in a single render. Each must resolve its OWN ancestor brush — proving the
+    /// per-frame ambient save/restore (and the exception-safe field placement) never leaks
+    /// the first sibling's theme into the second's subtree.
+    /// </summary>
+    internal sealed class SiblingSubtreesResolveIndependently(Harness h) : SelfTestFixtureBase(h)
+    {
+        private const string SrcKey = "Item1ThemedBrush_Sibling";
+        private const string TargetKey = "Item1Target_Sibling";
+
+        public override async Task RunAsync()
+        {
+            var light = MakeBrush(0, 0, 140);
+            var dark = MakeBrush(140, 0, 0);
+            var dict = InstallThemedDict(SrcKey, light, dark);
+            try
+            {
+                var host = H.CreateHost();
+                host.Mount(ctx =>
+                    VStack(
+                        VStack(TextBlock("siblingDark").Resources(r => r.Set(TargetKey, Theme.Ref(SrcKey))))
+                            .RequestedTheme(ElementTheme.Dark),
+                        VStack(TextBlock("siblingLight").Resources(r => r.Set(TargetKey, Theme.Ref(SrcKey))))
+                            .RequestedTheme(ElementTheme.Light)));
+
+                await Harness.Render();
+
+                var darkTb = H.FindControl<TextBlock>(t => t.Text == "siblingDark");
+                var lightTb = H.FindControl<TextBlock>(t => t.Text == "siblingLight");
+                H.Check("Item1Sibling_ChildrenPresent", darkTb is not null && lightTb is not null);
+                H.Check("Item1Sibling_DarkSubtreeResolvedDark", ReferenceEquals(ResourceBrush(darkTb, TargetKey), dark));
+                H.Check("Item1Sibling_LightSubtreeResolvedLight", ReferenceEquals(ResourceBrush(lightTb, TargetKey), light));
+            }
+            finally
+            {
+                Application.Current.Resources.MergedDictionaries.Remove(dict);
+                global::Microsoft.UI.Reactor.Core.ThemeRef.InvalidateResolutionCache();
+            }
+        }
+    }
 }

@@ -4802,12 +4802,26 @@ public sealed partial class Reconciler : IDisposable
     /// Applies per-control resource overrides (lightweight styling) to a
     /// <see cref="FrameworkElement"/>. Literal values are set directly;
     /// <see cref="ThemeRef"/>-based values are resolved from
-    /// <c>Application.Current.Resources</c>.
+    /// <c>Application.Current.Resources</c> using the element's own effective theme.
     /// </summary>
+    /// <remarks>
+    /// Binary-compatible original 3-arg surface (Spec 047 §14 Phase 1 (1.3), promoted
+    /// from private per audit existing-api-surface.md). Delegates to the 4-arg overload
+    /// with <see cref="ElementTheme.Default"/>; the reconciler uses the 4-arg form to
+    /// pass an explicit ancestor-aware theme (needed at mount, before the control is
+    /// parented). Provisional API; see <c>REACTOR_V1_PREVIEW</c>.
+    /// </remarks>
+    public static void ApplyResourceOverrides(
+        FrameworkElement fe,
+        Microsoft.UI.Reactor.Elements.ResourceOverrides? oldOverrides,
+        Microsoft.UI.Reactor.Elements.ResourceOverrides? newOverrides)
+        => ApplyResourceOverrides(fe, oldOverrides, newOverrides, ElementTheme.Default);
+
     /// <summary>
-    /// Spec 047 §14 Phase 1 (1.3) — promoted from private (per audit
-    /// existing-api-surface.md). Applies per-control resource overrides
-    /// (lightweight styling). Provisional API; see <c>REACTOR_V1_PREVIEW</c>.
+    /// Applies per-control resource overrides (lightweight styling), resolving
+    /// <see cref="ThemeRef"/>-backed values against an explicit
+    /// <paramref name="effectiveTheme"/>. Provisional API (Spec 047 §14 Phase 1);
+    /// see <c>REACTOR_V1_PREVIEW</c>.
     /// </summary>
     /// <param name="fe">The control whose <c>Resources</c> receive the overrides.</param>
     /// <param name="oldOverrides">The previously-applied overrides, or null at mount.</param>
@@ -4817,15 +4831,15 @@ public sealed partial class Reconciler : IDisposable
     /// ThemeRef-backed overrides resolve their concrete brush against it via
     /// <see cref="ThemeRef.Resolve(string, bool)"/> — necessary at mount, where the
     /// element is not yet parented and so an ancestor <c>RequestedTheme</c> is
-    /// unreachable through <paramref name="fe"/>'s own visual-tree walk. Defaults to
-    /// <see cref="ElementTheme.Default"/>, which falls back to fe-based resolution for
-    /// direct callers / host-window themes set outside the Reactor element tree.
+    /// unreachable through <paramref name="fe"/>'s own visual-tree walk. Pass
+    /// <see cref="ElementTheme.Default"/> to fall back to fe-based resolution
+    /// (host-window themes set outside the Reactor tree; the 3-arg overload).
     /// </param>
     public static void ApplyResourceOverrides(
         FrameworkElement fe,
         Microsoft.UI.Reactor.Elements.ResourceOverrides? oldOverrides,
         Microsoft.UI.Reactor.Elements.ResourceOverrides? newOverrides,
-        ElementTheme effectiveTheme = ElementTheme.Default)
+        ElementTheme effectiveTheme)
     {
         // Track which keys Reactor has set on this element
         var managed = _managedResourceKeys.GetOrCreateValue(fe);

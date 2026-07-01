@@ -48,14 +48,14 @@ public sealed partial class Reconciler
             ctxCount = ctxValues.Count;
         }
 
-        // Thread the ancestor-aware effective theme for ThemeRef-backed ResourceOverrides
+        // Compute the ancestor-aware effective theme for ThemeRef-backed ResourceOverrides
         // resolution (mount-theme bug). The element's own RequestedTheme wins; otherwise
-        // the subtree inherits the ambient threaded from its ancestors. Children mounted
-        // inside MountXxx (and this element's own ApplyResourceOverrides below) see it;
-        // restored in the finally so siblings are unaffected.
+        // the subtree inherits the ambient threaded from its ancestors. Saved here so the
+        // finally can restore the parent's value; the field itself is written INSIDE the
+        // try below so an exception during child mount can't leak it to siblings.
         var prevAmbientTheme = _ambientRequestedTheme;
-        if (modifiers?.RequestedTheme is { } ownTheme && ownTheme != ElementTheme.Default)
-            _ambientRequestedTheme = ownTheme;
+        var effectiveTheme = (modifiers?.RequestedTheme is { } ownTheme && ownTheme != ElementTheme.Default)
+            ? ownTheme : prevAmbientTheme;
 
         UIElement? control;
         // Push stagger scope if this element has StaggerConfig — children mounted
@@ -65,6 +65,11 @@ public sealed partial class Reconciler
             PushStaggerScope(element.StaggerConfig!.Delay);
         try
         {
+        // Publish the effective theme for the subtree — INSIDE the try so the finally
+        // restores it on every exit (including an exception during child mount below).
+        // Children mounted inside MountXxx and this element's own ApplyResourceOverrides
+        // resolve ThemeRef ResourceOverrides against it.
+        _ambientRequestedTheme = effectiveTheme;
 
         // Spec 048 §8 — four-arm dispatch precedence:
         //   (1) per-host `_v1Handlers` (explicit RegisterHandler + cached
