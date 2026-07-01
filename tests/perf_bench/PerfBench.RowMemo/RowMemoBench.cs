@@ -70,16 +70,21 @@ internal static class RowMemoBench
         long baselineRebuilds = 0;
         var fb = Factory(items, (i, _) => { baselineRebuilds++; return DeepRow(i); });
         Warm(fb);
-        var (baseNs, baseBytes) = TimeAndAlloc(fb);
-        long baselineMeasuredRebuilds = (long)Window * MeasureCycles; // baseline rebuilds EVERY realize
+        // Measure the factory rebuilds for the SAME (best) rep whose time/alloc we report, by
+        // reading the live counter across that rep — a genuine measurement, not a hardcoded
+        // constant. For baseline this comes out to Window*MeasureCycles (it rebuilds on every
+        // realize), but reading it back proves that rather than asserting it, so a regression
+        // that unexpectedly let baseline cache would show up as a smaller number.
+        var (baseNs, baseBytes, baselineMeasuredRebuilds) = TimeAndAlloc(fb, () => baselineRebuilds);
 
         // ── Memo: Memo(i, …). A recycle that re-asks a cached key returns the same instance. ──
         long memoRebuilds = 0;
         var fm = Factory(items, (i, _) => Memo(i, () => { memoRebuilds++; return DeepRow(i); }));
         Warm(fm);
-        long warmMemoRebuilds = memoRebuilds; // == Window (one build per distinct key)
-        var (memoNs, memoBytes) = TimeAndAlloc(fm);
-        long memoMeasuredRebuilds = memoRebuilds - warmMemoRebuilds; // expected 0
+        // Same measurement, symmetric with baseline: rebuilds during the reported rep. After the
+        // warm pass populated the cache, a recycle re-asking a cached key never re-invokes the
+        // inner factory, so this is 0.
+        var (memoNs, memoBytes, memoMeasuredRebuilds) = TimeAndAlloc(fm, () => memoRebuilds);
 
         // ── Reconcile-skip precondition: prove what each arm hands the reconciler on re-realize. ──
         var fbb = Factory(items, (i, _) => DeepRow(i));
@@ -175,9 +180,10 @@ internal static class RowMemoBench
                 _ = Realize(f, i);
     }
 
-    private static (double NsPerRecycle, long BytesPerRecycle) TimeAndAlloc(ElementFactory<int> f)
+    private static (double NsPerRecycle, long BytesPerRecycle, long Rebuilds) TimeAndAlloc(
+        ElementFactory<int> f, Func<long> readRebuilds)
     {
-        long bestNs = long.MaxValue, alloc = 0;
+        long bestNs = long.MaxValue, alloc = 0, rebuilds = 0;
         for (int r = 0; r < Reps; r++)
         {
             // Stabilize the measurement window: drain pending finalizers and collect so a GC
@@ -185,6 +191,7 @@ internal static class RowMemoBench
             // the same isolation the repo's PerfBench.Shared BenchRunner does before each rep.
             GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
             long a0 = GC.GetAllocatedBytesForCurrentThread();
+            long rb0 = readRebuilds();
             var sw = Stopwatch.StartNew();
             for (int c = 0; c < MeasureCycles; c++)
                 for (int i = 0; i < Window; i++)
@@ -192,9 +199,11 @@ internal static class RowMemoBench
             sw.Stop();
             long a1 = GC.GetAllocatedBytesForCurrentThread();
             long ns = (long)(sw.Elapsed.TotalMilliseconds * 1_000_000.0);
-            if (ns < bestNs) { bestNs = ns; alloc = a1 - a0; }
+            // Keep the rebuild count from the SAME rep we keep the time/alloc from, so all three
+            // reported numbers describe one representative measured pass.
+            if (ns < bestNs) { bestNs = ns; alloc = a1 - a0; rebuilds = readRebuilds() - rb0; }
         }
         long total = (long)Window * MeasureCycles;
-        return (bestNs / (double)total, alloc / total);
+        return (bestNs / (double)total, alloc / total, rebuilds);
     }
 }

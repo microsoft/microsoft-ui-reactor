@@ -1185,6 +1185,15 @@ function Read-RowMemoResults {
         'baseline_same_instance', 'baseline_can_skip',
         'memo_ns', 'memo_bytes', 'memo_rebuilds', 'memo_same_instance', 'memo_can_skip')
     foreach ($k in $required) { if (-not $kv.ContainsKey($k)) { return $null } }
+    # The four skip-precondition flags must be EXACTLY true/false (case-insensitive). A plain
+    # "== 'true'" test would silently read any other token (e.g. "maybe", a truncated "tru", an
+    # empty value) as false and render a wrong skip-precondition claim, so validate the tokens
+    # up front and fail fast to $null (omit the table) on anything unrecognized.
+    $boolKeys = @('baseline_same_instance', 'baseline_can_skip', 'memo_same_instance', 'memo_can_skip')
+    foreach ($bk in $boolKeys) {
+        $tok = ([string]$kv[$bk]).Trim().ToLowerInvariant()
+        if ($tok -ne 'true' -and $tok -ne 'false') { return $null }
+    }
     $toD = { param($s) [double]::Parse([string]$s, [System.Globalization.NumberStyles]::Float, $inv) }
     $toL = { param($s) [long]::Parse([string]$s, [System.Globalization.NumberStyles]::Integer, $inv) }
     $toB = { param($s) (([string]$s).Trim().ToLowerInvariant() -eq 'true') }

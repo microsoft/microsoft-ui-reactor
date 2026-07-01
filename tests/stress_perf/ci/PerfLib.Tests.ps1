@@ -1250,6 +1250,21 @@ try {
         @($rmFull | Where-Object { -not $_.StartsWith("$drop=") }) | Set-Content -LiteralPath $rmDropKv -Encoding UTF8
         Assert-Null (Read-RowMemoResults -Path $rmDropKv) "row-memo parser returns null when $drop is missing (now required)"
     }
+    # A boolean flag present but with a token that isn't exactly true/false (case-insensitive)
+    # must fail fast to $null — never silently read as $false — so a malformed/truncated capture
+    # can't render a wrong skip-precondition claim. Cover each flag with a bad token, and confirm
+    # case-insensitive true/false is still accepted.
+    foreach ($bk in 'baseline_same_instance', 'baseline_can_skip', 'memo_same_instance', 'memo_can_skip') {
+        $rmBadBool = Join-Path $rowMemoTmp ("rowmemo-badbool-{0}.kv.txt" -f $bk)
+        @($rmFull | ForEach-Object { if ($_.StartsWith("$bk=")) { "$bk=maybe" } else { $_ } }) | Set-Content -LiteralPath $rmBadBool -Encoding UTF8
+        Assert-Null (Read-RowMemoResults -Path $rmBadBool) "row-memo parser returns null when $bk has a malformed (non true/false) token"
+    }
+    $rmMixedCase = Join-Path $rowMemoTmp 'rowmemo-mixedcase.kv.txt'
+    @($rmFull | ForEach-Object { if ($_.StartsWith('baseline_can_skip=')) { 'baseline_can_skip=FALSE' } elseif ($_.StartsWith('memo_can_skip=')) { 'memo_can_skip=True' } else { $_ } }) | Set-Content -LiteralPath $rmMixedCase -Encoding UTF8
+    $rmMixed = Read-RowMemoResults -Path $rmMixedCase
+    Assert-True ($null -ne $rmMixed)          'row-memo parser accepts case-insensitive true/false tokens'
+    Assert-True (-not $rmMixed.BaselineCanSkip) 'row-memo parser reads FALSE (upper) as $false'
+    Assert-True $rmMixed.MemoCanSkip           'row-memo parser reads True (mixed) as $true'
 
     # Renderer: empty array when null; full table + Win ratios + note when populated.
     $times = [char]0x00D7
