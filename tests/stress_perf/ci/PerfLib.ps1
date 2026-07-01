@@ -1240,6 +1240,17 @@ function Format-PerfRowMemoSection {
     $times = [char]0x00D7
     $inv = [System.Globalization.CultureInfo]::InvariantCulture
     $n0 = { param($v) ([long][math]::Round([double]$v)).ToString('N0', $inv) }
+    # Direction-aware Win cell for a lower-is-better metric (ns and bytes are both
+    # lower-is-better, Memo is the candidate). Memo better => "N× {better}", Memo WORSE =>
+    # "N× {worse}" (so a regression reads as a slowdown/increase, not a misleading "0.8×
+    # faster"), tie => "no change". The ratio is always the larger/smaller so it reads >= 1.
+    $winCell = {
+        param([double]$base, [double]$cand, [string]$better, [string]$worse)
+        if ($base -le 0 -or $cand -le 0) { return [char]0x2014 }
+        if ($cand -lt $base) { return ('{0}{1} {2}' -f (Format-PerfNumber ($base / $cand) 1), $times, $better) }
+        elseif ($cand -gt $base) { return ('{0}{1} {2}' -f (Format-PerfNumber ($cand / $base) 1), $times, $worse) }
+        else { return 'no change' }
+    }
 
     $nodes = if ($RowMemo.RowNodes -gt 0) { [string]$RowMemo.RowNodes } else { 'multi' }
     $rec = if ($RowMemo.RecyclesPerArm -gt 0) { & $n0 $RowMemo.RecyclesPerArm } else { 'N' }
@@ -1252,11 +1263,11 @@ function Format-PerfRowMemoSection {
     $lines.Add('| Metric | Baseline | Memo | Win |')
     $lines.Add('|---|--:|--:|:--|')
 
-    $nsWin = if ($RowMemo.MemoNs -gt 0) { '{0}{1} faster' -f (Format-PerfNumber ($RowMemo.BaselineNs / $RowMemo.MemoNs) 1), $times } else { [char]0x2014 }
+    $nsWin = & $winCell $RowMemo.BaselineNs $RowMemo.MemoNs 'faster' 'slower'
     $lines.Add(('| ns/recycle {0} | {1} | {2} | {3} |' -f $down,
         (Format-PerfNumber $RowMemo.BaselineNs 1), (Format-PerfNumber $RowMemo.MemoNs 1), $nsWin))
 
-    $byWin = if ($RowMemo.MemoBytes -gt 0) { '{0}{1} less' -f (Format-PerfNumber ($RowMemo.BaselineBytes / [double]$RowMemo.MemoBytes) 1), $times } else { [char]0x2014 }
+    $byWin = & $winCell $RowMemo.BaselineBytes $RowMemo.MemoBytes 'less' 'more'
     $lines.Add(('| bytes/recycle {0} | {1} | {2} | {3} |' -f $down,
         (& $n0 $RowMemo.BaselineBytes), (& $n0 $RowMemo.MemoBytes), $byWin))
 

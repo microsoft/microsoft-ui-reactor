@@ -1279,6 +1279,21 @@ try {
     Assert-Match $rmText ("8.7$times faster")                'row-memo Win cell: 8.7x faster (379.275/43.633)'
     Assert-Match $rmText ("20.6$times less")                 'row-memo Win cell: 20.6x less alloc (4616/224)'
     Assert-Match $rmText '**eliminated**'                     'row-memo Win cell: rebuilds eliminated (baseline>0, memo=0)'
+    # Direction-aware Win cell: if the Memo arm REGRESSES (higher ns / more bytes than
+    # Baseline) the ratio must read "× slower" / "× more", never a misleading "0.8× faster".
+    $rmRegress = $rm.PSObject.Copy()
+    $rmRegress.MemoNs = 758.55      # 2x the baseline 379.275 -> Memo slower
+    $rmRegress.MemoBytes = 9232     # 2x the baseline 4616     -> Memo more
+    $rmRegressText = (Format-PerfRowMemoSection -RowMemo $rmRegress) -join "`n"
+    Assert-Match $rmRegressText ("2.0$times slower")         'row-memo Win cell reads "slower" when Memo ns regresses above Baseline'
+    Assert-Match $rmRegressText ("2.0$times more")           'row-memo Win cell reads "more" when Memo bytes regress above Baseline'
+    Assert-True (-not ($rmRegressText -match "0\.\d$times faster")) 'row-memo Win cell never emits a sub-1x "faster" ratio on a regression'
+    # Tie: equal Baseline/Memo -> "no change" rather than "1.0x faster".
+    $rmTie = $rm.PSObject.Copy()
+    $rmTie.MemoNs = $rm.BaselineNs
+    $rmTie.MemoBytes = $rm.BaselineBytes
+    $rmTieText = (Format-PerfRowMemoSection -RowMemo $rmTie) -join "`n"
+    Assert-Match $rmTieText 'no change'                       'row-memo Win cell reads "no change" when Memo equals Baseline'
     Assert-Match $rmText '1,000,000'                          'row-memo renders the per-arm recycle count with separators'
     Assert-Match $rmText 'CanSkipUpdate'                      'row-memo note cites the CanSkipUpdate skip precondition'
     # The note renders the MEASURED Baseline flags, not hard-coded literals. $rm carries
