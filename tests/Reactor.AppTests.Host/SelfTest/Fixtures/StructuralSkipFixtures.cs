@@ -40,7 +40,7 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// being gated off) — and they still re-theme, because WinUI auto-re-resolves a
 /// <c>{ThemeResource}</c> Style setter on any effective-theme change. That native
 /// self-heal is exactly why the gate could be narrowed; the deterministic
-/// skip-plus-self-heal proof (with a <c>DebugElementsSkipped</c> assertion) lives in
+/// skip-plus-self-heal proof (with a <c>DebugElementsDiffed</c> discriminator) lives in
 /// <c>ThemeBindingsSkipSelfHealFixtures</c>. The one snapshot a skip truly leaves
 /// stale — <c>ApplyResourceOverrides</c>' concrete <c>ThemeRef.Resolve</c> into
 /// <c>fe.Resources[key]</c> — is the arm the gate KEEPS (see <c>Issue675…</c> +

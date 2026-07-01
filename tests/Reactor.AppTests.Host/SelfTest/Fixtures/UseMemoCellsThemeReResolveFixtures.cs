@@ -27,7 +27,7 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// early-out and the container ACTUALLY structural-skips the cells on the toggle — this
 /// fixture therefore now exercises (not just anticipates) the skipped-child self-heal
 /// path, and the Foreground still re-resolves. (The deterministic skip-plus-self-heal
-/// proof with a DebugElementsSkipped assertion is in <c>ThemeBindingsSkipSelfHealFixtures</c>.)
+/// proof with a DebugElementsDiffed discriminator is in <c>ThemeBindingsSkipSelfHealFixtures</c>.)
 ///
 /// Note: a <c>ResourceOverride</c> ThemeRef resolved to a CONCRETE brush does NOT
 /// self-heal on this toggle — it is the arm KEPT by #758 (and, resolved correctly at
