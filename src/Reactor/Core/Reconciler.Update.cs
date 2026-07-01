@@ -454,25 +454,28 @@ public sealed partial class Reconciler
         RichTextBlockElement next,
         Action requestRerender)
     {
-        // Issue #487 — arm scroll-offset preservation BEFORE mutating the
-        // document. WinUI re-measures any inline-UI-bearing paragraph from
-        // scratch (RemoveEmbeddedElements + desiredSize=0), which silently
-        // clamps an ancestor ScrollViewer/ScrollView's VerticalOffset up. The
-        // anchor restores the user's real offset once layout settles.
-        PreserveScrollAroundInlineUiMutation(rtb, next);
-
         if (TryIncrementalUpdateRichTextBlocks(rtb, prev, next, requestRerender, out bool mutated))
         {
-            // Issue #717 — only an actual document mutation triggers WinUI's
-            // inline-UI re-measure, so skip the (extent-pinning) fix otherwise.
+            // Issues #487 + #717 — only an actual document mutation triggers WinUI's
+            // asynchronous inline-UI re-measure (RemoveEmbeddedElements + desiredSize=0),
+            // which silently clamps an ancestor scroll host's offset (#487) and transiently
+            // collapses the extent (#717). A no-op / property-only update never re-measures,
+            // so skip BOTH the scroll anchor and the extent pin for it. The re-measure is
+            // deferred past this synchronous reconcile, so arming here — after the text
+            // write but before the dispatcher yield — still captures the real pre-clamp
+            // offset / extent.
             if (mutated)
+            {
+                PreserveScrollAroundInlineUiMutation(rtb, next);
                 PinExtentAcrossInlineUiMutation(rtb, next);
+            }
             return;
         }
         RebuildRichTextBlocks(next, rtb, requestRerender);
-        // A rebuild always re-creates the document (and therefore re-measures any
-        // inline UI from scratch), so pin the extent unconditionally when inline UI is
-        // present.
+        // A rebuild always re-creates the document (and therefore re-measures any inline UI
+        // from scratch), so arm the anchor + pin the extent unconditionally when inline UI
+        // is present.
+        PreserveScrollAroundInlineUiMutation(rtb, next);
         PinExtentAcrossInlineUiMutation(rtb, next);
     }
 
