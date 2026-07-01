@@ -1176,7 +1176,13 @@ function Read-RowMemoResults {
     $inv = [System.Globalization.CultureInfo]::InvariantCulture
     # The Win column + the skip-precondition note are computed from these; a row missing
     # any of them can't render a trustworthy table, so treat it as "no result" and omit.
+    # PerfBench.RowMemo always emits the four same_instance / can_skip flags, and the
+    # narrative asserts the Baseline pair is false vs the Memo pair true, so ALL of them are
+    # required: a truncated/partial capture that dropped one must fail fast (return $null and
+    # omit the table) rather than silently default a flag to $false and render a story the
+    # bench never actually measured.
     $required = @('baseline_ns', 'baseline_bytes', 'baseline_rebuilds',
+        'baseline_same_instance', 'baseline_can_skip',
         'memo_ns', 'memo_bytes', 'memo_rebuilds', 'memo_same_instance', 'memo_can_skip')
     foreach ($k in $required) { if (-not $kv.ContainsKey($k)) { return $null } }
     $toD = { param($s) [double]::Parse([string]$s, [System.Globalization.NumberStyles]::Float, $inv) }
@@ -1187,8 +1193,8 @@ function Read-RowMemoResults {
             BaselineNs           = & $toD $kv['baseline_ns']
             BaselineBytes        = & $toL $kv['baseline_bytes']
             BaselineRebuilds     = & $toL $kv['baseline_rebuilds']
-            BaselineSameInstance = if ($kv.ContainsKey('baseline_same_instance')) { & $toB $kv['baseline_same_instance'] } else { $false }
-            BaselineCanSkip      = if ($kv.ContainsKey('baseline_can_skip')) { & $toB $kv['baseline_can_skip'] } else { $false }
+            BaselineSameInstance = & $toB $kv['baseline_same_instance']
+            BaselineCanSkip      = & $toB $kv['baseline_can_skip']
             MemoNs               = & $toD $kv['memo_ns']
             MemoBytes            = & $toL $kv['memo_bytes']
             MemoRebuilds         = & $toL $kv['memo_rebuilds']
@@ -1252,7 +1258,13 @@ function Format-PerfRowMemoSection {
     $lines.Add('')
 
     if ($RowMemo.MemoSameInstance -and $RowMemo.MemoCanSkip) {
-        $lines.Add("> **Why the real win is bigger than the table.** On a recycle that re-asks a still-cached key, ``Memo`` returns the **same ``Element`` instance**, so ``ReferenceEquals`` holds and ``Element.CanSkipUpdate`` is **true** &mdash; the reconciler returns at the row **root** and skips the entire $nodes-node per-row descent **and** the downstream WinUI control-patch. That stacked reconcile + control-patch saving is **not** captured by the headless ns/bytes figures above (which time only ``BuildOrCache``). Baseline hands the reconciler a fresh-but-equal tree every recycle (``sameInstance=false``, ``CanSkipUpdate=false``), forcing the full walk.")
+        # Render the Baseline flags from the MEASURED values rather than hard-coding
+        # "false"/"false": the bench asserts them false, but if a bench bug or a future
+        # runtime change ever flipped one, the note must reflect what was actually measured
+        # instead of a stale claim (the data is right here in $RowMemo).
+        $baseSame = ([string]$RowMemo.BaselineSameInstance).ToLowerInvariant()
+        $baseSkip = ([string]$RowMemo.BaselineCanSkip).ToLowerInvariant()
+        $lines.Add("> **Why the real win is bigger than the table.** On a recycle that re-asks a still-cached key, ``Memo`` returns the **same ``Element`` instance**, so ``ReferenceEquals`` holds and ``Element.CanSkipUpdate`` is **true** &mdash; the reconciler returns at the row **root** and skips the entire $nodes-node per-row descent **and** the downstream WinUI control-patch. That stacked reconcile + control-patch saving is **not** captured by the headless ns/bytes figures above (which time only ``BuildOrCache``). Baseline hands the reconciler a fresh-but-equal tree every recycle (``sameInstance=$baseSame``, ``CanSkipUpdate=$baseSkip``), forcing the full walk.")
     } else {
         $lines.Add("> **Note.** These are headless ``BuildOrCache`` timings only; the reconcile-descent + WinUI control-patch savings that ``Memo`` unlocks via ``ReferenceEquals`` + ``Element.CanSkipUpdate`` stack on top and aren't captured here.")
     }

@@ -1236,6 +1236,20 @@ try {
     Assert-Null (Read-RowMemoResults -Path $rmBadKv)                              'row-memo parser returns null when required keys are missing'
     Assert-Null (Read-RowMemoResults -Path (Join-Path $rowMemoTmp 'nope.txt'))    'row-memo parser returns null when the file is missing'
     Assert-Null (Read-RowMemoResults -Path $null)                                'row-memo parser returns null for a null path'
+    # The two Baseline skip-precondition flags are REQUIRED (the narrative asserts them),
+    # so a capture that dropped either one must fail fast to $null rather than silently
+    # defaulting the flag to $false and rendering a story the bench never measured.
+    $rmFull = @(
+        'baseline_ns=379.275', 'baseline_bytes=4616', 'baseline_rebuilds=1000000',
+        'baseline_same_instance=false', 'baseline_can_skip=false',
+        'memo_ns=43.633', 'memo_bytes=224', 'memo_rebuilds=0',
+        'memo_same_instance=true', 'memo_can_skip=true'
+    )
+    foreach ($drop in 'baseline_same_instance', 'baseline_can_skip') {
+        $rmDropKv = Join-Path $rowMemoTmp ("rowmemo-drop-{0}.kv.txt" -f $drop)
+        @($rmFull | Where-Object { -not $_.StartsWith("$drop=") }) | Set-Content -LiteralPath $rmDropKv -Encoding UTF8
+        Assert-Null (Read-RowMemoResults -Path $rmDropKv) "row-memo parser returns null when $drop is missing (now required)"
+    }
 
     # Renderer: empty array when null; full table + Win ratios + note when populated.
     $times = [char]0x00D7
@@ -1252,6 +1266,19 @@ try {
     Assert-Match $rmText '**eliminated**'                     'row-memo Win cell: rebuilds eliminated (baseline>0, memo=0)'
     Assert-Match $rmText '1,000,000'                          'row-memo renders the per-arm recycle count with separators'
     Assert-Match $rmText 'CanSkipUpdate'                      'row-memo note cites the CanSkipUpdate skip precondition'
+    # The note renders the MEASURED Baseline flags, not hard-coded literals. $rm carries
+    # both false, so the note must show sameInstance=false / CanSkipUpdate=false.
+    Assert-Match $rmText 'sameInstance=false'                'row-memo note renders the measured Baseline sameInstance flag'
+    Assert-Match $rmText 'CanSkipUpdate=false'               'row-memo note renders the measured Baseline CanSkipUpdate flag'
+    # Prove it is DATA-DRIVEN, not a constant: a (hypothetical) result whose Baseline flags
+    # read true must surface true in the note — so a bench bug / runtime change can't leave
+    # the comment asserting a stale "false".
+    $rmFlipped = $rm.PSObject.Copy()
+    $rmFlipped.BaselineSameInstance = $true
+    $rmFlipped.BaselineCanSkip = $true
+    $rmFlippedText = (Format-PerfRowMemoSection -RowMemo $rmFlipped) -join "`n"
+    Assert-Match $rmFlippedText 'sameInstance=true'          'row-memo note reflects a measured Baseline sameInstance=true (note is data-driven, not hard-coded)'
+    Assert-Match $rmFlippedText 'CanSkipUpdate=true'         'row-memo note reflects a measured Baseline CanSkipUpdate=true (note is data-driven, not hard-coded)'
     # The headless-only caveat must be present so reviewers know the real win is bigger.
     Assert-Match $rmText 'captured by the headless' 'row-memo note flags that the stacked reconcile/patch saving is not captured headlessly'
 
