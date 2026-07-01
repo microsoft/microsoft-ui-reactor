@@ -147,13 +147,18 @@ public class HookAllocBench
         {
             var children = ctx.UseMemoCells<int>(ints, static (it, i) => new Cell($"v={it}"), "deps");
         });
-        // Theme-sensitive children: the early-out is intentionally GATED OFF (a
-        // reference-equal array would let the container ShallowEquals-skip the
-        // subtree and drop child theme re-application), so this falls through to
-        // the fresh-array path — measured here for transparency.
-        var themed = new global::System.Collections.Generic.Dictionary<string, ThemeRef> { ["Foreground"] = Theme.PrimaryText };
+        // Theme-sensitive children (a ResourceOverrides.ThemeRef — a CONCRETE brush,
+        // the arm RETAINED by #758): the early-out is intentionally GATED OFF (a
+        // reference-equal array would let the container ShallowEquals-skip the subtree
+        // and strand the non-self-healing resolved brush), so this falls through to the
+        // fresh-array path — measured here for transparency. (A ThemeBindings-only cell
+        // is NOT theme-sensitive after #758 — it self-heals — so it would instead hit
+        // the reuse fast path measured by the non-theme-sensitive case above.)
+        var themedOverride = new global::Microsoft.UI.Reactor.Elements.ResourceOverrides(
+            Literals: new global::System.Collections.Generic.Dictionary<string, object>(),
+            ThemeRefs: new global::System.Collections.Generic.Dictionary<string, ThemeRef> { ["Foreground"] = Theme.PrimaryText });
         var themedRows = new Element[8];
-        for (int i = 0; i < themedRows.Length; i++) themedRows[i] = new Cell($"r{i}") { ThemeBindings = themed };
+        for (int i = 0; i < themedRows.Length; i++) themedRows[i] = new Cell($"r{i}") { ResourceOverrides = themedOverride };
         var themedItems = new[] { 1, 2, 3, 4, 5, 6, 7, 8 };
         Measure("UseMemoCells hit (theme-sensitive)", ctx =>
         {

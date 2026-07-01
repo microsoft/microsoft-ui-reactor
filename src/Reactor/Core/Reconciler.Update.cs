@@ -74,10 +74,14 @@ public sealed partial class Reconciler
         // Short-circuit: if old and new elements are structurally identical,
         // skip all WinUI property access. This is the critical optimization for
         // large grids where only a fraction of elements change each frame.
-        // Exception: elements with ThemeBindings must always re-apply because
-        // the resolved brush value depends on the control's effective theme,
-        // which can change independently of the element tree (e.g., parent
-        // RequestedTheme toggle).
+        // Theme note (narrowed per #758): this element-level shallow-skip arm still
+        // re-applies a ThemeRef-backed ResourceOverride — its CONCRETE brush depends on
+        // the effective theme, which can change independently of the element tree (e.g.
+        // a parent RequestedTheme toggle), so it must be re-resolved. ThemeBindings are
+        // ALSO re-applied here but no longer strictly need to be: their {ThemeResource}
+        // setters self-heal natively (which is why the CHILD-level CanSkipUpdate /
+        // container-skip gates no longer decline for them) — the re-apply is a cheap
+        // cached-Style no-op retained for the element-level path.
         // ReferenceEquals would fail constantly because fluent chains like
         // .Width(200).Margin(10) produce a fresh ElementModifiers each render —
         // identical values, new instance. Use structural equality so we skip

@@ -391,18 +391,22 @@ public abstract record Element
     /// bucketed fields are provably null on both sides.
     /// </summary>
     /// <remarks>
-    /// Issue #675 — the <c>ResourceOverrides.ThemeRefs</c> gate mirrors the
-    /// <c>ThemeBindings</c> gate and <see cref="Core.ChildDiffHints.IsThemeSensitive"/>.
-    /// A child themed only via <c>ResourceOverrides.ThemeRefs</c> (no ThemeBindings)
-    /// must NOT take the cheap child-skip arms in <c>ChildReconciler</c>: declining
-    /// the skip routes it through <c>Update</c>, whose element-level shallow-skip
-    /// re-resolves the ThemeRef into <c>fe.Resources[...]</c> on an effective-theme
-    /// change. This keeps Reconciler.Update the single source of truth for skip
-    /// side-effects rather than duplicating the re-resolve across every child-skip arm.
+    /// Theme-sensitivity gate (issue #675, narrowed per #758): the ONLY theme input
+    /// that blocks the cheap child-skip arms is a <c>ResourceOverrides.ThemeRefs</c>
+    /// override — it resolves to a CONCRETE brush at reconcile
+    /// (<c>ApplyResourceOverrides</c> → <c>fe.Resources[...]</c>), which does NOT
+    /// re-resolve on an effective-theme change unless <c>Update</c> re-runs, so a
+    /// child carrying one must decline the skip and route through <c>Update</c>
+    /// (its element-level shallow-skip re-resolves the ThemeRef). <c>ThemeBindings</c>
+    /// deliberately do NOT block the skip: <c>.Foreground(Theme.X)</c> compiles to a
+    /// <c>{ThemeResource}</c> Style setter that WinUI re-resolves NATIVELY on the
+    /// control's effective-theme change (app theme OR an ancestor <c>RequestedTheme</c>)
+    /// — self-healing whether or not Reactor re-applies it, so re-running
+    /// <c>ApplyThemeBindings</c> on a skipped child is redundant (it re-applies the same
+    /// content-addressed cached Style). Mirrors <see cref="Core.ChildDiffHints.IsThemeSensitive"/>.
     /// </remarks>
     internal static bool CanSkipUpdate(Element oldEl, Element newEl)
         => ShallowEquals(oldEl, newEl)
-            && newEl.ThemeBindings is null
             && newEl.ResourceOverrides is not { ThemeRefs.Count: > 0 }
             && oldEl.HasCallbacks == newEl.HasCallbacks;
 

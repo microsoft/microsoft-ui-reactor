@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Elements;
 using Microsoft.UI.Reactor.Hooks;
 using Microsoft.UI.Xaml.Controls;
 using Xunit;
@@ -13,24 +14,38 @@ namespace Microsoft.UI.Reactor.Tests;
 /// Mechanism (load-bearing): a container element's <see cref="Element.ShallowEquals"/>
 /// reference-compares its <c>Children</c> array (Element.cs ~622-699: "Same children
 /// reference = truly unchanged subtree = safe to skip entirely"). When it returns
-/// true, <c>Reconciler.Update</c> (Update.cs:81-99) keeps the existing control and
-/// re-applies ONLY the container's OWN ThemeBindings/ResourceOverrides — it does NOT
-/// recurse into the children, so a theme-sensitive DESCENDANT inside the memo'd
+/// true, <c>Reconciler.Update</c> keeps the existing control and re-applies ONLY the
+/// container's OWN ThemeBindings/ResourceOverrides — it does NOT recurse into the
+/// children, so a NON-self-healing theme-sensitive DESCENDANT inside the memo'd
 /// children never re-resolves its brush on a theme change.
 ///
 /// Therefore: returning a reference-equal children array from a full-cache-hit is
-/// only safe when NO child is theme-sensitive. When any child IS theme-sensitive,
-/// the hook must return a FRESH array so the container falls through to the recursive
-/// update and the theme re-applies (the old "fresh array every render" behavior).
+/// only safe when NO child is theme-sensitive. Narrowed per #758: "theme-sensitive"
+/// here means a child carrying a <c>ResourceOverrides.ThemeRef</c> (a CONCRETE brush
+/// resolved at reconcile). A <c>ThemeBindings</c>-only child is NOT theme-sensitive —
+/// its <c>{ThemeResource}</c> setters self-heal natively on the effective-theme change
+/// even when the subtree is skipped (proven live in
+/// <c>ThemeBindingsSkipSelfHealFixtures</c>), so reusing the array for it is safe.
 /// </summary>
 public class UseMemoCellsThemeSafetyTests
 {
     private record Cell(string Content) : Element;
 
+    // NON-self-healing theme sensitivity (the arm that still forces a fresh array):
+    // a ResourceOverrides.ThemeRef resolves to a concrete brush at reconcile.
+    private static readonly ResourceOverrides ThemeRefOverride =
+        new ResourceOverrides(
+            Literals: new Dictionary<string, object>(),
+            ThemeRefs: new Dictionary<string, ThemeRef> { ["Foreground"] = Theme.PrimaryText });
+
+    // Self-healing theme binding ({ThemeResource}) — NO longer theme-sensitive (#758).
     private static readonly IReadOnlyDictionary<string, ThemeRef> ThemeBinding =
         new Dictionary<string, ThemeRef> { ["Foreground"] = Theme.PrimaryText };
 
     private static Cell ThemeSensitiveCell(string content) =>
+        new Cell(content) { ResourceOverrides = ThemeRefOverride };
+
+    private static Cell ThemeBindingCell(string content) =>
         new Cell(content) { ThemeBindings = ThemeBinding };
 
     // ── Mechanism: ShallowEquals reference-compares Children ──────────────
@@ -93,6 +108,28 @@ public class UseMemoCellsThemeSafetyTests
 
         // No theme-sensitive children → the container skip is harmless (nothing to
         // re-apply), so the zero-allocation same-array fast path is retained.
+        Assert.Same(first, second);
+    }
+
+    // ── #758: ThemeBindings-only children self-heal, so the array is reused ─
+
+    [Fact]
+    public void FullCacheHit_ThemeBindingsOnly_May_Reuse_Array()
+    {
+        var ctx = new RenderContext();
+        var items = new[] { 1, 2, 3 };
+
+        ctx.BeginRender(() => { });
+        var first = ctx.UseMemoCells<int>(items, (v, i) => ThemeBindingCell($"v={v}"), "deps");
+
+        ctx.BeginRender(() => { });
+        var second = ctx.UseMemoCells<int>(items, (v, i) => ThemeBindingCell($"v={v}"), "deps");
+
+        // Narrowed per #758: a ThemeBindings-only child is NOT theme-sensitive — its
+        // {ThemeResource} setter self-heals natively even when the container
+        // ShallowEquals-skips the subtree. So the same-array reuse fast path is now
+        // retained for it (was previously forced to a fresh array). Reverting the
+        // ChildDiffHints.IsThemeSensitive arm makes this go red (NotSame).
         Assert.Same(first, second);
     }
 }

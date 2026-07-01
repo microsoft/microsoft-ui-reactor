@@ -51,19 +51,21 @@ internal sealed class ChildDiffHint
     internal WeakReference<Element[]> PreviousChildren { get; }
 
     /// <summary>
-    /// Number of cells carrying <c>ThemeBindings</c> or a ThemeRef-backed
-    /// <c>ResourceOverrides</c>. Carried forward incrementally across reuse
-    /// renders so the producer stays O(changed) in steady state.
+    /// Number of cells carrying a ThemeRef-backed <c>ResourceOverrides</c> (a
+    /// concrete brush that is NOT self-healing). Carried forward incrementally
+    /// across reuse renders so the producer stays O(changed) in steady state.
     /// </summary>
     internal int ThemeSensitiveCount { get; }
 
     /// <summary>
-    /// True when ANY cell re-resolves a theme-keyed value. The positional fast
-    /// path must then fall back to the full walk so <c>ApplyThemeBindings</c> /
-    /// <c>ApplyResourceOverrides</c> re-resolve against the (possibly changed)
-    /// effective theme even on untouched, reference-equal cells — a parent
-    /// <c>RequestedTheme</c> toggle changes the effective theme WITHOUT touching
-    /// the element tree, so a structural skip would otherwise leave brushes stale.
+    /// True when ANY cell re-resolves a NON-self-healing theme value. The positional
+    /// fast path must then fall back to the full walk so <c>ApplyResourceOverrides</c>
+    /// re-resolves the concrete brush against the (possibly changed) effective theme
+    /// even on untouched, reference-equal cells — a parent <c>RequestedTheme</c> toggle
+    /// changes the effective theme WITHOUT touching the element tree, so a structural
+    /// skip would otherwise leave a resolved-brush override stale. (<c>ThemeBindings</c>
+    /// are excluded: their <c>{ThemeResource}</c> setters self-heal natively — see
+    /// <see cref="ChildDiffHints.IsThemeSensitive"/>.)
     /// </summary>
     /// <remarks>
     /// Tested with <c>!= 0</c> rather than <c>&gt; 0</c> as a fail-safe. The only
@@ -95,17 +97,23 @@ internal static class ChildDiffHints
         => s_hints.TryGetValue(children, out hint);
 
     /// <summary>
-    /// True when the element re-resolves a theme-keyed value on each update —
-    /// either <c>ThemeBindings</c> brushes or a ThemeRef-backed resource override.
-    /// Mirrors the theme arms in <c>Reconciler.Update</c> (the only work the full
-    /// walk performs for an untouched cell that a structural skip would drop).
+    /// True when the element re-resolves a NON-self-healing theme value on each
+    /// update — i.e. a ThemeRef-backed <c>ResourceOverrides</c>, which
+    /// <c>ApplyResourceOverrides</c> resolves to a CONCRETE brush at reconcile
+    /// (and which therefore goes stale on an effective-theme change unless
+    /// <c>Update</c> re-runs). <c>ThemeBindings</c> are deliberately EXCLUDED
+    /// (narrowed per #758): <c>.Foreground(Theme.X)</c> compiles to a
+    /// <c>{ThemeResource}</c> Style setter that WinUI re-resolves NATIVELY on the
+    /// control's effective-theme change (app theme OR an ancestor
+    /// <c>RequestedTheme</c>) — self-healing whether or not Reactor recurses into the
+    /// cell, so a ThemeBindings-only cell is safe to structurally skip. Mirrors
+    /// <see cref="Element.CanSkipUpdate"/>.
     /// A <c>null</c> cell is treated as non-theme-sensitive: child arrays may
     /// legitimately contain nulls (a builder may return null; <c>ChildReconciler.Filter</c>
-    /// drops them downstream), and a null has no bindings to re-resolve — so the
+    /// drops them downstream), and a null has no override to re-resolve — so the
     /// theme tally must tolerate it rather than throw.
     /// </summary>
     internal static bool IsThemeSensitive(Element? element)
         => element is not null
-           && (element.ThemeBindings is not null
-               || element.ResourceOverrides is { ThemeRefs.Count: > 0 });
+           && element.ResourceOverrides is { ThemeRefs.Count: > 0 };
 }
