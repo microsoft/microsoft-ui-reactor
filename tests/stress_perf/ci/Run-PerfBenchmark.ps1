@@ -793,21 +793,38 @@ function Invoke-RowMemoRun {
         -RedirectStandardOutput $stdout -RedirectStandardError $stderr -WindowStyle Hidden
     try { $proc.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High } catch {}
 
+    # On any failure, dump BOTH the stderr and stdout tails. PerfBench.RowMemo prints the
+    # machine-parseable key=value block to stdout as well as to --out, so when the --out FILE
+    # write is what failed (parse returned $null) the stdout tail still shows the block — that
+    # is the difference between "the bench crashed" and "the bench ran fine but couldn't write
+    # the file", which stderr alone can't distinguish.
+    $dumpTails = {
+        if (Test-Path $stderr) {
+            $et = @(Get-Content $stderr -Tail 8)
+            if ($et.Count) { Write-Host "      stderr tail:" -ForegroundColor DarkYellow; $et | ForEach-Object { Write-Host "        $_" -ForegroundColor DarkYellow } }
+        }
+        if (Test-Path $stdout) {
+            $ot = @(Get-Content $stdout -Tail 12)
+            if ($ot.Count) { Write-Host "      stdout tail (PerfBench.RowMemo echoes the key=value block here):" -ForegroundColor DarkYellow; $ot | ForEach-Object { Write-Host "        $_" -ForegroundColor DarkYellow } }
+        }
+    }
+
     if (-not $proc.WaitForExit($TimeoutSec * 1000)) {
         Write-Log "  row-memo TIMEOUT after ${TimeoutSec}s — killing PerfBench.RowMemo" 'Yellow'
         try { $proc.Kill($true) } catch { try { $proc.Kill() } catch {} }
         Start-Sleep -Seconds 2
+        & $dumpTails
         return $null
     }
     if ($proc.ExitCode -ne 0) {
-        Write-Log "  row-memo exited non-zero ($($proc.ExitCode)). stderr tail:" 'Yellow'
-        if (Test-Path $stderr) { Get-Content $stderr -Tail 8 | ForEach-Object { Write-Host "      $_" -ForegroundColor DarkYellow } }
+        Write-Log "  row-memo exited non-zero ($($proc.ExitCode)). stderr + stdout tails:" 'Yellow'
+        & $dumpTails
         return $null
     }
     $parsed = Read-RowMemoResults -Path $outKv
     if ($null -eq $parsed) {
-        Write-Log "  row-memo produced no parseable key=value output (exit=$($proc.ExitCode))." 'Yellow'
-        if (Test-Path $stderr) { Get-Content $stderr -Tail 8 | ForEach-Object { Write-Host "      $_" -ForegroundColor DarkYellow } }
+        Write-Log "  row-memo produced no parseable key=value output (exit=$($proc.ExitCode)) — the --out file was missing/partial. stderr + stdout tails:" 'Yellow'
+        & $dumpTails
         return $null
     }
     Write-Log ("  -> baseline {0} ns / {1} B; memo {2} ns / {3} B; memo_rebuilds={4} can_skip={5}" -f `
