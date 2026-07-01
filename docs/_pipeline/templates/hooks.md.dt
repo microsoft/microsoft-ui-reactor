@@ -44,6 +44,7 @@ lifecycle methods.
 | <!-- ref:UseCallback --> | `Action` | Stable delegate identity across renders. |
 | <!-- ref:UseContext --> | `T` | Read the ambient [Context](context.md) value. |
 | <!-- ref:UseObservable --> | `T` | Re-render when a tracked `INotifyPropertyChanged` source raises a change. |
+| <!-- ref:UseExternalStore --> | `TSnapshot` | Bridge subscribe/getSnapshot stores into Reactor and re-render only when the snapshot changes. |
 | <!-- ref:UseResource --> | `AsyncValue<T>` | Cached async read (see [Async Resources](async-resources.md)). |
 | <!-- ref:UsePersisted --> | `(T, Action<T>)` | `UseState` that survives app launches (see [Persistence](persistence.md)). |
 

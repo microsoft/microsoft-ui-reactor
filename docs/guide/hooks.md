@@ -33,7 +33,7 @@ lifecycle methods.
 | [UseCallback](reference/hooks/UseCallback.md) | `Action` | Stable delegate identity across renders. |
 | [UseContext](reference/hooks/UseContext.md) | `T` | Read the ambient [Context](context.md) value. |
 | [UseObservable](reference/hooks/UseObservable.md) | `T` | Re-render when a tracked `INotifyPropertyChanged` source raises a change. |
-| `UseExternalStore` | `TSnapshot` | Bridge subscribe/getSnapshot stores into Reactor and re-render only when the snapshot changes. |
+| [UseExternalStore](reference/hooks/UseExternalStore.md) | `TSnapshot` | Bridge subscribe/getSnapshot stores into Reactor and re-render only when the snapshot changes. |
 | [UseResource](reference/hooks/UseResource.md) | `AsyncValue<T>` | Cached async read (see [Async Resources](async-resources.md)). |
 | [UsePersisted](reference/hooks/UsePersisted.md) | `(T, Action<T>)` | `UseState` that survives app launches (see [Persistence](persistence.md)). |
 

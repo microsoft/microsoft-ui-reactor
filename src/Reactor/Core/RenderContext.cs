@@ -654,7 +654,14 @@ public sealed class RenderContext
                     forceRender(revision => revision + 1);
             }
 
-            return subscribe(OnChanged);
+            var unsubscribe = subscribe(OnChanged);
+
+            // Close the render-to-subscribe race: if the store changed after the
+            // render-time snapshot read but before the subscription became active,
+            // re-read once immediately and schedule a rerender if needed.
+            OnChanged();
+
+            return unsubscribe;
         }, subscribe);
 
         return snapshot;

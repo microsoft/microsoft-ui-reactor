@@ -36,6 +36,13 @@ public class ObservableHookTests
             Changed += onChanged;
             return () => Changed -= onChanged;
         }
+
+        public Action SubscribeAndChange(Action onChanged, T nextSnapshot)
+        {
+            Changed += onChanged;
+            _snapshot = nextSnapshot;
+            return () => Changed -= onChanged;
+        }
     }
 
     private class NotifyModel : INotifyPropertyChanged
@@ -206,6 +213,30 @@ public class ObservableHookTests
         ctx.FlushEffects();
 
         Assert.Equal("Alice", first);
+        Assert.Equal("Bob", second);
+    }
+
+    [Fact]
+    public void UseExternalStore_Rechecks_Snapshot_After_Subscribe()
+    {
+        var ctx = new RenderContext();
+        var store = new ExternalStore<string>("Alice");
+        int rerenderCount = 0;
+
+        ctx.BeginRender(() => rerenderCount++);
+        var first = ctx.UseExternalStore(
+            onChanged => store.SubscribeAndChange(onChanged, "Bob"),
+            () => store.Snapshot);
+        ctx.FlushEffects();
+
+        ctx.BeginRender(() => rerenderCount++);
+        var second = ctx.UseExternalStore(
+            onChanged => store.Subscribe(onChanged),
+            () => store.Snapshot);
+        ctx.FlushEffects();
+
+        Assert.Equal("Alice", first);
+        Assert.Equal(1, rerenderCount);
         Assert.Equal("Bob", second);
     }
 
