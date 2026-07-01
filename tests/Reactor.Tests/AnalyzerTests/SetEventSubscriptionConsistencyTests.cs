@@ -23,6 +23,9 @@ public class SetEventSubscriptionConsistencyTests
             "OnDrop",
         };
 
+    private static readonly Lazy<HashSet<string>> SafeEventModifiers =
+        new(ReadSafeEventModifiersCore);
+
     [Fact]
     public void Every_Tracked_Event_Has_A_Matching_Modifier()
     {
@@ -67,6 +70,9 @@ public class SetEventSubscriptionConsistencyTests
     }
 
     private static HashSet<string> ReadSafeEventModifiers()
+        => SafeEventModifiers.Value;
+
+    private static HashSet<string> ReadSafeEventModifiersCore()
     {
         var root = RepoRootFinder.FindRepoRoot();
         Assert.NotNull(root);
