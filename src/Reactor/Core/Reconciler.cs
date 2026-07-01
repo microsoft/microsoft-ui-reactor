@@ -4665,10 +4665,15 @@ public sealed partial class Reconciler : IDisposable
     /// <summary>
     /// Applies ThemeRef bindings by setting properties through WinUI's {ThemeResource}
     /// mechanism. Builds a local Style with ThemeResource setters and applies it to the
-    /// element. WinUI then handles theme-reactive resolution natively for system theme
-    /// changes (Light ↔ Dark). Note: {ThemeResource} in dynamically-loaded Styles resolves
-    /// against the app theme, not per-element RequestedTheme overrides — for subtree theme
-    /// overrides, rely on native WinUI control theming instead of ThemeRef bindings.
+    /// element. WinUI then handles theme-reactive resolution natively — the live
+    /// {ThemeResource} Style setter re-resolves on the control's effective-theme change,
+    /// which tracks the per-element/inherited <c>ActualTheme</c> (an ancestor
+    /// <c>RequestedTheme</c> override included), not just the app-level theme. This native
+    /// self-heal is why a ThemeBindings-only element is safe to structurally skip
+    /// (#758; empirically verified in <c>ThemeBindingsSkipSelfHealFixtures</c> across
+    /// immediate and inherited ancestor <c>RequestedTheme</c> toggles). Contrast a
+    /// <c>ResourceOverrides.ThemeRef</c>, which resolves to a CONCRETE brush at reconcile
+    /// and does NOT self-heal (so it stays theme-sensitive for the skip gate).
     /// </summary>
     /// <summary>
     /// Spec 047 §14 Phase 1 (1.3) — promoted from private (per audit

@@ -403,11 +403,13 @@ public abstract record Element
     /// control's effective-theme change (app theme OR an ancestor <c>RequestedTheme</c>)
     /// — self-healing whether or not Reactor re-applies it, so re-running
     /// <c>ApplyThemeBindings</c> on a skipped child is redundant (it re-applies the same
-    /// content-addressed cached Style). Mirrors <see cref="Core.ChildDiffHints.IsThemeSensitive"/>.
+    /// content-addressed cached Style). The theme predicate is SHARED with
+    /// <see cref="Core.ChildDiffHints.IsThemeSensitive"/> (the child-diff-hint / container
+    /// fast-path gate) so the two arms can never desync.
     /// </remarks>
     internal static bool CanSkipUpdate(Element oldEl, Element newEl)
         => ShallowEquals(oldEl, newEl)
-            && newEl.ResourceOverrides is not { ThemeRefs.Count: > 0 }
+            && !ChildDiffHints.IsThemeSensitive(newEl)
             && oldEl.HasCallbacks == newEl.HasCallbacks;
 
     /// <summary>

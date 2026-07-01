@@ -97,17 +97,18 @@ internal static class ChildDiffHints
         => s_hints.TryGetValue(children, out hint);
 
     /// <summary>
-    /// True when the element re-resolves a NON-self-healing theme value on each
-    /// update — i.e. a ThemeRef-backed <c>ResourceOverrides</c>, which
-    /// <c>ApplyResourceOverrides</c> resolves to a CONCRETE brush at reconcile
-    /// (and which therefore goes stale on an effective-theme change unless
-    /// <c>Update</c> re-runs). <c>ThemeBindings</c> are deliberately EXCLUDED
+    /// The CANONICAL theme-skip predicate, SHARED with <see cref="Element.CanSkipUpdate"/>
+    /// (which calls <c>!IsThemeSensitive</c>) so the child-diff-hint / container fast-path
+    /// gate and the per-element child-skip gate can never desync. True when the element
+    /// re-resolves a NON-self-healing theme value on each update — i.e. a ThemeRef-backed
+    /// <c>ResourceOverrides</c>, which <c>ApplyResourceOverrides</c> resolves to a
+    /// CONCRETE brush at reconcile (and which therefore goes stale on an effective-theme
+    /// change unless <c>Update</c> re-runs). <c>ThemeBindings</c> are deliberately EXCLUDED
     /// (narrowed per #758): <c>.Foreground(Theme.X)</c> compiles to a
     /// <c>{ThemeResource}</c> Style setter that WinUI re-resolves NATIVELY on the
     /// control's effective-theme change (app theme OR an ancestor
     /// <c>RequestedTheme</c>) — self-healing whether or not Reactor recurses into the
-    /// cell, so a ThemeBindings-only cell is safe to structurally skip. Mirrors
-    /// <see cref="Element.CanSkipUpdate"/>.
+    /// cell, so a ThemeBindings-only cell is safe to structurally skip.
     /// A <c>null</c> cell is treated as non-theme-sensitive: child arrays may
     /// legitimately contain nulls (a builder may return null; <c>ChildReconciler.Filter</c>
     /// drops them downstream), and a null has no override to re-resolve — so the
