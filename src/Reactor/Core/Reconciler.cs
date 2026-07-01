@@ -3662,12 +3662,12 @@ public sealed partial class Reconciler : IDisposable
             if (m.HorizontalContentAlignment.HasValue && m.HorizontalContentAlignment != oldM?.HorizontalContentAlignment)
                 contentAlignmentControl.HorizontalContentAlignment = m.HorizontalContentAlignment.Value;
             else if (!m.HorizontalContentAlignment.HasValue && oldM?.HorizontalContentAlignment.HasValue == true)
-                contentAlignmentControl.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+                contentAlignmentControl.ClearValue(WinUI.Control.HorizontalContentAlignmentProperty);
 
             if (m.VerticalContentAlignment.HasValue && m.VerticalContentAlignment != oldM?.VerticalContentAlignment)
                 contentAlignmentControl.VerticalContentAlignment = m.VerticalContentAlignment.Value;
             else if (!m.VerticalContentAlignment.HasValue && oldM?.VerticalContentAlignment.HasValue == true)
-                contentAlignmentControl.VerticalContentAlignment = VerticalAlignment.Stretch;
+                contentAlignmentControl.ClearValue(WinUI.Control.VerticalContentAlignmentProperty);
         }
         if (m.Opacity.HasValue && m.Opacity != oldM?.Opacity)
             AnimationHelper.SetOrAnimate(fe, "Opacity", (float)m.Opacity.Value);
@@ -3767,8 +3767,8 @@ public sealed partial class Reconciler : IDisposable
         }
         else if (!resolvedBorder.HasValue && oldM?.BorderThickness.HasValue == true)
         {
-            if (fe is WinUI.Control btCtrl) btCtrl.BorderThickness = new Thickness(0);
-            else if (fe is WinUI.Border btBdr) btBdr.BorderThickness = new Thickness(0);
+            if (fe is WinUI.Control btCtrl) btCtrl.ClearValue(WinUI.Control.BorderThicknessProperty);
+            else if (fe is WinUI.Border btBdr) btBdr.ClearValue(WinUI.Border.BorderThicknessProperty);
         }
 
         // Background (Panel, Control, or Border)
