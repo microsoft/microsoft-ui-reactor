@@ -1173,7 +1173,7 @@ public static partial class ElementExtensions
     public static T BorderThickness<T>(this T el, double horizontal, double vertical) where T : Element =>
         ModifyVisual(el, new VisualModifiers { BorderThickness = new Thickness(horizontal, vertical, horizontal, vertical) });
 
-    public static T BorderThickness<T>(this T el, double left, double top, double right, double bottom) where T : Element =>
+    public static T BorderThickness<T>(this T el, double left = 0.0, double top = 0.0, double right = 0.0, double bottom = 0.0) where T : Element =>
         ModifyVisual(el, new VisualModifiers { BorderThickness = new Thickness(left, top, right, bottom) });
 
     public static T BorderThickness<T>(this T el, Thickness thickness) where T : Element =>

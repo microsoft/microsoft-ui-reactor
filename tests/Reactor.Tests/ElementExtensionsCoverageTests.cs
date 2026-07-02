@@ -196,6 +196,7 @@ public class ElementExtensionsCoverageTests
 
         Assert.Equal(new Thickness(6), Button("x").BorderThickness(6).Modifiers!.BorderThickness);
         Assert.Equal(new Thickness(8, 4, 8, 4), Button("x").BorderThickness(8, 4).Modifiers!.BorderThickness);
+        Assert.Equal(new Thickness(0, 0, 0, 1), Button("x").BorderThickness(bottom: 1).Modifiers!.BorderThickness);
         Assert.Equal(new Thickness(7), Button("x").BorderThickness(new Thickness(7)).Modifiers!.BorderThickness);
     }
 
