@@ -61,6 +61,15 @@ internal static class FixtureRegistry
         // Collections
         "ListView_TypedRendering",
 
+        // ItemClick once-fire guard (issue #679 (a) — E2E real-pointer-click coverage of
+        // the ListViewHandler once-subscribe contract across re-renders + items change)
+        "ItemClick_OnceFire",
+
+        // Host theme-change re-resolution (issue #679 (b) — E2E proof that the host
+        // ActualThemeChanged → RequestRender wiring re-resolves a concrete ResourceOverride
+        // ThemeRef brush on a real root-theme change)
+        "ThemeChange_ResourceOverrideReResolve",
+
         // TreeView expand/collapse (mirrors ReactorGallery Basic TreeView —
         // E2E repro/guard for the item-body-collapse bug)
         "TreeView_BasicTextTree",
@@ -215,6 +224,12 @@ internal static class FixtureRegistry
 
         // Collections
         "ListView_TypedRendering" => CollectionFixtures.ListViewTyped(ctx),
+
+        // ItemClick once-fire guard (issue #679 (a))
+        "ItemClick_OnceFire" => ItemClickE2EFixtures.OnceFire(ctx),
+
+        // Host theme-change re-resolution (issue #679 (b))
+        "ThemeChange_ResourceOverrideReResolve" => ThemeChangeE2EFixtures.ThemeReResolve(ctx),
 
         // TreeView expand/collapse
         "TreeView_BasicTextTree" => TreeViewE2EFixtures.BasicTextTree(ctx),
