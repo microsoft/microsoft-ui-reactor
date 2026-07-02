@@ -323,7 +323,7 @@ lambda"); `RenderContext.cs:363-482`.
 every frame, plus memo bookkeeping overhead.
 
 > **Accuracy note (review):** `MemoElement` deps are compared with `Equals`, not
-> reference identity (`Reconciler.cs`), so `new[] { filter, sort }` passed to the
+> reference identity (`Reconciler.cs:2630`, `DepsEqual`), so `new[] { filter, sort }` passed to the
 > `params object?[]` slot compares element-wise **by value** and is *fine* when
 > the elements have value equality. The real miss is a single dep whose type
 > lacks value equality (an array, a `List<T>`, a plain class). Reword accordingly
@@ -405,7 +405,7 @@ provider.
 **Detect.** Syntactic: a `.Provide(ctx, value)` call where `value` is an
 object/array/collection creation. `Provide` is the extension method
 `ContextExtensions.Provide<T,TValue>(this T element, Context<TValue> context,
-TValue value)` (`ContextExtensions.cs`), not a method on `Context<T>` — resolve
+TValue value)` (`ContextExtensions.cs:11`), not a method on `Context<T>` — resolve
 accordingly. Then a semantic check that `TValue` is a reference type **without**
 value equality — not a `record`, not a struct, no `IEquatable<TValue>`, **and** no
 user override of `Equals(object)` (a plain class overriding `Equals` has value
@@ -420,7 +420,7 @@ inferable).
 is wrong (see correction). That check is mandatory, not optional.
 
 **Grounding.** `Element.cs:1358` (`ContextValuesEqual` → `Equals`);
-[context.md](../guide/context.md); `ContextExtensions.cs`.
+[context.md](../guide/context.md); `ContextExtensions.cs:11`.
 
 ### §4.2 Controlled properties & controls
 
@@ -719,8 +719,8 @@ member.
 UI-thread-guarded semantically.
 
 **Grounding.** [threading-and-dispatch.md](../guide/threading-and-dispatch.md)
-(`ThrowIfNotOnUIThread`); [windows.md](../guide/windows.md); `ReactorWindow.cs`
-(guarded call sites).
+(`ThrowIfNotOnUIThread`); [windows.md](../guide/windows.md); `ReactorWindow.cs:1777-1817`
+(guarded call sites, e.g. `Activate`/`Hide`/`Show`/`Close`).
 
 #### `REACTOR_THREAD_002` — Blocking a Task on the UI thread *(Reactor.Threading · Warning · no fix)*
 
