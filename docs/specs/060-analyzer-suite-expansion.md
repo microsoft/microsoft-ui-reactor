@@ -11,11 +11,14 @@ analyzer source, focused on one question: **what mistakes does a developer
 arriving from XAML/WinUI make in Reactor that the type system can't catch, and
 which of those are cheap for an analyzer to catch reliably?**
 
-Three of the rules below are already *called for by name* in the codebase (a
-source comment, an `[Obsolete]` overload, and a tracked issue) but have never
-been built — those are the lowest-risk to land first. The rest were selected for
-high XAML-habit frequency, a silent/loud failure that's hard to diagnose at
-runtime, and a low false-positive detection shape.
+Three of the **§4 core** rules below are already *called for by name* in the
+codebase (a source comment, an `[Obsolete]` overload, and a tracked issue) but
+have never been built — those are the lowest-risk to land first. The rest were
+selected for high XAML-habit frequency, a silent/loud failure that's hard to
+diagnose at runtime, and a low false-positive detection shape. (The later
+blind-spot pass surfaces four *more* doc-named-but-unbuilt rules in
+[§12](#12-batch-2--cross-model-blind-spot-additions) — so "three" scopes to the
+core catalog, not the whole document.)
 
 > **Revision — 2026-07-01 (post-review).** This draft was reviewed by five models
 > (Claude Opus 4.8 / Opus 4.7, GPT‑5.5, GPT‑5.3‑Codex, Gemini 3.1 Pro), each at
@@ -117,9 +120,12 @@ From [Analyzer Architecture](../guide/analyzer-architecture.md):
   filtered the node down.
 - **Code-fix handoff via `Diagnostic.Properties`.** Anything the fix needs beyond
   the diagnostic `Location` goes in the property bag, never the message text.
-- **Release tracking.** Every rule gets a descriptor id on the
+- **Release tracking.** Every **diagnostic** rule gets a descriptor id on the
   `REACTOR_<CATEGORY>_<NNN>` convention and an entry in
-  `AnalyzerReleases.Unshipped.md`.
+  `AnalyzerReleases.Unshipped.md`. Two documented exceptions: the string-track
+  `Grid` fixer (§4.5) is a `CodeFixProvider` registered on `CS0618` with **no**
+  descriptor and no release row; and one id carried over verbatim from existing
+  docs (`REACTOR_PERF_FUNCREF`, §12) predates the `<NNN>` numbering.
 - **Validate against `samples/`.** A new rule that finds nothing across the sample
   apps is over-fit or gated too narrowly.
 
