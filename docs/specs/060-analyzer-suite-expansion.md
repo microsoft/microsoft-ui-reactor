@@ -713,7 +713,11 @@ member.
 > carries a small framework API change and can't ship purely from
 > `Reactor.Analyzers` — sequence it after that annotation lands (see OQ#5).
 
-**Fix.** Wrap: `ReactorApp.UIDispatcher!.TryEnqueue(() => window.Close());`.
+**Fix.** Marshal through the dispatcher, **null-safe** — `ReactorApp.UIDispatcher`
+is `DispatcherQueue?`, null until the first window bootstraps (`ReactorApp.cs:89`),
+so the fix must fall back to the direct call rather than a null-forgiving `!` that
+can `NullReferenceException` at startup / in unit-test contexts: emit
+`var d = ReactorApp.UIDispatcher; if (d is null) window.Close(); else d.TryEnqueue(() => window.Close());`.
 
 **FP risk.** Low for the background-lambda shape once the callee is confirmed
 UI-thread-guarded semantically.
