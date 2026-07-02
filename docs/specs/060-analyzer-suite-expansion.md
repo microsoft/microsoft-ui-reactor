@@ -915,7 +915,9 @@ three highest-coverage samples first (`ReactorGallery`, `StylingGallery`,
 - **Ship most rules at `Warning`.** Ship at **Info** the five nudge-class rules
   whose "violation" is sometimes a legitimate choice or whose coverage is
   intentionally narrow: `HOOKS_002`, `CTX_001`, `OPT_001`, `DSL_002`, `CMD_001`.
-- No rule in this spec is `Error` by default; teams opt into that via
+- No **§4 core** rule is `Error` by default. The single exception is the Batch-2
+  `WIN2D_001` (§12) — a fatal cross-device crash — which defaults to `Error`;
+  every other rule ships `Warning` or `Info`. Teams opt into further promotion via
   `.editorconfig`, matching current guidance ("treat analyzer warnings as build
   errors in CI").
 
@@ -1064,8 +1066,10 @@ earns its cost.
 (Opus 4.8/4.7, GPT‑5.5, GPT‑5.3‑Codex, Gemini 3.1 Pro) each independently
 brainstormed "blind spot" analyzers the spec missed; the pooled 38 candidates
 were then cross-vetted by all five (every model judged every candidate
-ADD/DUP/DEFER/REJECT). The 15 below cleared a ≥3/5 ADD bar with no unresolved
-premise error. Batch 2 is intentionally lighter-weight than §4 — these are
+ADD/DUP/DEFER/REJECT). The 15 below cleared a ≥3/5 ADD bar — with one documented
+exception, `WIN2D_001` at 2/5† (retained after verification disproved the lone
+objection; see the table's † note) — and carry no unresolved premise error. Batch 2
+is intentionally lighter-weight than §4 — these are
 *endorsed candidates*, not yet through the same two-round source-hardening — so
 each carries its vote tally and needs an implementation-time verification pass.
 
@@ -1076,28 +1080,28 @@ they exist, so building them just makes the docs true (like the §4 ⭐ set):
 rule, reclaiming the id freed in §4.5), and `REACTOR_A11Y_004` (runtime scanner
 `A11Y_KEYBOARD_001`, input-and-gestures.md:643).
 
-| Id | Catches | Sev | Fix | Vote |
-|---|---|---|---|---|
-| `REACTOR_INPUT_001` ⭐ | Ctrl/Alt chord on `.OnKeyDown` instead of a `Command` accelerator | Warning | ✔ template | 5/5 |
-| `REACTOR_PERF_FUNCREF` ⭐ | Inline `new Command{…}` in `Render()` without `UseMemo` (accelerator-table churn) | Info | ✔ `UseMemo` | 5/5 |
-| `REACTOR_GRID_001` ⭐ | A declared `Grid` track that no child occupies ("unused column") | Warning | — | 4/5 |
-| `REACTOR_A11Y_004` ⭐ | Clickable `Border`/`Grid`/`Rectangle` (`.OnTapped`) with no `.IsTabStop`/`.TabIndex` | Warning | ✔ `.IsTabStop(true)` | 5/5 |
-| `REACTOR_DIALOG_001` | Imperative `new ContentDialog().ShowAsync()` instead of controlled `IsOpen` | Warning | — | 5/5 |
-| `REACTOR_NAV_001` | `UseNavigation` handle captured into a `static` field | Warning | — | 5/5 |
-| `REACTOR_ANIM_002` | `.Keyframes(name, <unstable trigger>)` (e.g. `DateTime.Now`) re-fires every render | Info | — | 5/5 |
-| `REACTOR_LIFECYCLE_002` | `UseEffect(Action)` allocates a timer/subscription/`IDisposable` with no returned cleanup | Warning | ~ template | 4/5 |
-| `REACTOR_INPUT_002` | Unsafe `TryGetFiles` in `.OnDrop` instead of `TryGetSafeLocalFiles` | Warning | ✔ swap | 4/5 |
-| `REACTOR_MOD_001` | Duplicate atomic modifier in one chain (`.Grid().Grid()`) — last-wins overwrite | Info | ✔ merge | 4/5 |
-| `REACTOR_ANIM_003` | `async` lambda to `AnimationScope.WithAnimation` (ThreadStatic scope lost post-await) | Warning | ✔ `WithAnimationAsync` | 4/5 |
-| `REACTOR_DSL_003` | Typed `keySelector` that never keys by item (returns null/const/ignores the param) | Warning | ~ | 4/5 |
-| `REACTOR_MEDIA_001` | `WebView2` in an auto-layout stack with no explicit `Width`/`Height` | Info | — | 4/5 |
-| `REACTOR_MEMO_001` | Modifiers on a keyed `Memo(key,factory)` wrapper silently opt out of the recycle cache | Info | ✔ move inside factory | 3/5 |
-| `REACTOR_WIN2D_001` | `UseCanvasResources` without `.UseSharedDevice()` on the canvas → cross-device crash | Error | ✔ append `.UseSharedDevice()` | 2/5† |
+| Id | Category | Catches | Sev | Fix | Vote |
+|---|---|---|---|---|---|
+| `REACTOR_INPUT_001` ⭐ | Reactor.Input | Ctrl/Alt chord on `.OnKeyDown` instead of a `Command` accelerator | Warning | ✔ template | 5/5 |
+| `REACTOR_PERF_FUNCREF` ⭐ | Reactor.Performance | Inline `new Command{…}` in `Render()` without `UseMemo` (accelerator rewire churn) | Info | ✔ `UseMemo` | 5/5 |
+| `REACTOR_GRID_001` ⭐ | Reactor.Layout | A declared `Grid` track that no child occupies ("unused column") | Warning | — | 4/5 |
+| `REACTOR_A11Y_004` ⭐ | Microsoft.UI.Reactor.Accessibility | Clickable `Border`/`Grid`/`Rectangle` (`.OnTapped`) with no `.IsTabStop`/`.TabIndex` | Warning | ✔ `.IsTabStop(true)` | 5/5 |
+| `REACTOR_DIALOG_001` | Reactor.Lifecycle | Imperative `new ContentDialog().ShowAsync()` instead of controlled `IsOpen` | Warning | — | 5/5 |
+| `REACTOR_NAV_001` | Reactor.Navigation | `UseNavigation` handle captured into a `static` field | Warning | — | 5/5 |
+| `REACTOR_ANIM_002` | Reactor.Animation | `.Keyframes(name, <unstable trigger>)` (e.g. `DateTime.Now`) re-fires every render | Info | — | 5/5 |
+| `REACTOR_LIFECYCLE_002` | Reactor.Lifecycle | `UseEffect(Action)` allocates a timer/subscription/`IDisposable` with no returned cleanup | Warning | ~ template | 4/5 |
+| `REACTOR_INPUT_002` | Reactor.Input | Unsafe `TryGetFiles` in `.OnDrop` instead of `TryGetSafeLocalFiles` | Warning | ✔ swap | 4/5 |
+| `REACTOR_MOD_001` | Reactor.Modifier | Duplicate atomic modifier in one chain (`.Grid().Grid()`) — last-wins overwrite | Info | ✔ merge | 4/5 |
+| `REACTOR_ANIM_003` | Reactor.Animation | `async` lambda to `AnimationScope.WithAnimation` (ThreadStatic scope lost post-await) | Warning | — (split phases) | 4/5 |
+| `REACTOR_DSL_003` | Reactor.Dsl | Typed `keySelector` that never keys by item (returns null/const/ignores the param) | Warning | ~ | 4/5 |
+| `REACTOR_MEDIA_001` | Reactor.Layout | `WebView2` in an auto-layout stack with no explicit `Width`/`Height` | Info | — | 4/5 |
+| `REACTOR_MEMO_001` | Reactor.Performance | Modifiers on a keyed `Memo(key,factory)` wrapper silently opt out of the recycle cache | Info | ✔ move inside factory | 3/5 |
+| `REACTOR_WIN2D_001` | Reactor.Win2D | `UseCanvasResources` without `.UseSharedDevice()` on the canvas → cross-device crash | Error | ✔ append `.UseSharedDevice()` | 2/5† |
 
 Terse entries (pitfall → detect → grounding):
 
-- **`REACTOR_INPUT_001`** ⭐ — `TextBox(…).OnKeyDown((s,e) => { if (e.Key==VirtualKey.S && ctrl) Save(); })` is focus-scoped, so the intended app-wide `Ctrl+S` fires nowhere else and never reaches `AccessKeyManager`. Detect: `.OnKeyDown` lambda testing `VirtualKeyModifiers.Control`/`.Menu`. Fix: rewrite to a `Command` with `AccessKey`/`AccessKeyModifiers`. (input-and-gestures.md:631; ElementExtensions.cs:230.)
-- **`REACTOR_PERF_FUNCREF`** ⭐ — `var save = new Command{…}` built in `Render()` gives a fresh identity each render → a fresh `KeyboardAccelerator` is wired and the accelerator table grows unbounded. Detect: `new Command{…}` in a `Render`/`Use*` body not wrapped in `UseMemo`/`UseCommand`. (commanding.md:645.)
+- **`REACTOR_INPUT_001`** ⭐ — `TextBox(…).OnKeyDown((s,e) => { if (e.Key==VirtualKey.S && ctrl) Save(); })` is focus-scoped, so the intended app-wide `Ctrl+S` fires nowhere else and never reaches `AccessKeyManager`. Detect: `.OnKeyDown` lambda testing `VirtualKeyModifiers.Control`/`.Menu`. Fix: rewrite to a `Command` whose `Accelerator = Accelerator(VirtualKey.S, VirtualKeyModifiers.Control)` — `Command` exposes `Accelerator`/`AccessKey` (`Command.cs:76`), *not* an `AccessKeyModifiers` member; the chord helper is `Accelerator(VirtualKey, VirtualKeyModifiers)` (`Dsl.cs:1935`). (input-and-gestures.md:631.)
+- **`REACTOR_PERF_FUNCREF`** ⭐ — `var save = new Command{…}` built in `Render()` gives a fresh identity each render → the command's `KeyboardAccelerator` is torn down and rewired every render (avoidable churn — the host clears and rebuilds accelerators each render, `CommandBindings.cs:73`, `CompositeLifecycle.cs:48`; it does *not* grow unbounded). Detect: `new Command{…}` in a `Render`/`Use*` body not wrapped in `UseMemo`/`UseCommand`. (commanding.md:645.)
 - **`REACTOR_GRID_001`** ⭐ — a `GridSize` track with no child assigned to that row/column. Detect: literal track array vs. the `.Grid(row:/column:)` placements in the same call. Intent-heavy ("when enabled" per the doc) — ship at Warning, no auto-fix. (layout.md:555.)
 - **`REACTOR_A11Y_004`** ⭐ — `Border(content).OnTapped(Open)` is mouse/touch-hittable but not in the tab order. Detect: A11Y_001-style chain walk — a non-focusable container factory with a tap handler and no `.IsTabStop`/`.TabIndex`/`.OnKeyDown`. Fix: append `.IsTabStop(true)`. (input-and-gestures.md:639-643; `.IsTabStop` is in POOL_001's `TrappedProperties`.)
 - **`REACTOR_DIALOG_001`** — `Button("Save", async () => await new ContentDialog{…}.ShowAsync())` escapes the render tree (no parent theme, untestable, can't be driven by `IsOpen`). Detect: `new ContentDialog`/`.ShowAsync()` on the WinUI type (an `IdentifierNameSyntax` `ContentDialog(...)` factory is the correct, distinguishable path). (dialogs-and-flyouts.md:554-594.)
@@ -1106,7 +1110,7 @@ Terse entries (pitfall → detect → grounding):
 - **`REACTOR_LIFECYCLE_002`** — `UseEffect(() => { var t = new PeriodicTimer(…); … }, [])` with no cleanup: the timer fires post-unmount and the setter hits a dead context. Detect: an `Action`-overload `UseEffect` whose body creates a known lifetime type (`new PeriodicTimer`/`Timer`/`.Subscribe(`/`event +=`) with no `using`/`Dispose` in-body. Distinct from §4 `HOOKS_003` (async-void body) and `THREAD_002`. (effects.md:340-376; RenderContext.cs:363,379.)
 - **`REACTOR_INPUT_002`** — `.OnDrop(args => args.Data.TryGetFiles(out var f))` accepts UNC/reparse/virtual files. Detect: `TryGetFiles` on a `DragData` receiver inside `.OnDrop`. Fix: swap to `TryGetSafeLocalFiles`. (DragData.cs:193; input-and-gestures.md:480-486.)
 - **`REACTOR_MOD_001`** — `.Grid(row:1).Grid(column:2)` resets `row` to 0 (attached modifiers are atomic-replace, not merge). Detect: the same atomic-replace modifier name ≥2× in one linear chain. Fix: merge into one call. (modifier-system.md:290-341.)
-- **`REACTOR_ANIM_003`** — `AnimationScope.WithAnimation(curve, async () => { …; await X; setStage(…); })`: `AnimationScope` is `[ThreadStatic]`, so post-await mutations run with an empty scope and animate nothing. Detect: `async` lambda arg to `WithAnimation` (no `Func<Task>` overload). Fix: `WithAnimationAsync` (AnimationScope.cs:63). (animation.md:708-724; AnimationScope.cs:28.)
+- **`REACTOR_ANIM_003`** — `AnimationScope.WithAnimation(curve, async () => { …; await X; setStage(…); })`: `AnimationScope` is `[ThreadStatic]`, so post-await mutations run with an empty scope and animate nothing. Detect: `async` lambda arg to `WithAnimation` (no `Func<Task>` overload). Fix: **no clean mechanical rewrite** — `WithAnimationAsync(Curve?, Action)` (AnimationScope.cs:63) also takes an `Action`, not a `Func<Task>`, so it wouldn't remove the `async void`; the diagnostic should advise splitting the animated mutations into per-phase `WithAnimation` calls around the `await` (a real `Func<Task>` overload would be needed for a one-click fix). (animation.md:708-724; AnimationScope.cs:28,63.)
 - **`REACTOR_DSL_003`** — `ListView(items, _ => "row", …)` / a `keySelector` returning null/const/ignoring the item → duplicate keys force a keyed-diff bailout (full re-realization). Detect: the typed `keySelector` lambda body is null/literal or never references its parameter. Distinct from `DSL_001/002` (`.WithKey`). (Dsl.cs:1464; KeyedListDiff.cs:230; collections.md:74-92.)
 - **`REACTOR_MEDIA_001`** — `HStack(WebView2(uri))` with no size oscillates in an indeterminate container. Detect: `WebView2(...)` child of `HStack`/`VStack`/`FlexRow`/`FlexColumn` lacking `.Width`/`.Height`. (text-and-media.md:423-428.)
 - **`REACTOR_MEMO_001`** — `Memo(item.Id, () => Row(item)).Padding(8)` — modifiers on the keyed-`Memo` wrapper bypass the cross-recycle cache. Detect: post-call modifiers on a `Memo(key, factory)` receiver (semantic-confirm the keyed overload). Fix: move modifiers into the factory body. (Dsl.cs:1256; ElementFactory.cs:151.)
