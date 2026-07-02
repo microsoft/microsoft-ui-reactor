@@ -2518,6 +2518,16 @@ public static partial class ElementExtensions
         Modify(el, new ElementModifiers { IsTabStop = isTabStop });
 
     /// <summary>
+    /// Sets UIElement.IsHitTestVisible — whether the element (and its subtree) can be
+    /// the target of pointer input. Set <c>false</c> for decorative or overlay layers
+    /// that should let pointer events pass through to whatever is underneath.
+    /// Works on any element type (Panel, Control, etc.) in WinUI 3.
+    /// </summary>
+    /// <example>Border(content).IsHitTestVisible(false)</example>
+    public static T IsHitTestVisible<T>(this T el, bool isHitTestVisible = true) where T : Element =>
+        Modify(el, new ElementModifiers { IsHitTestVisible = isHitTestVisible });
+
+    /// <summary>
     /// Marks how this element participates in a window title bar's drag region
     /// (<c>Microsoft.UI.Xaml.Controls.TitleBar.IsDragRegion</c>, WinApp SDK ≥ 2.1.3):
     /// <c>true</c> = draggable, <c>false</c> = clickable, <c>null</c> = defer to the

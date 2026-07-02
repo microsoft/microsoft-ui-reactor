@@ -608,6 +608,7 @@ T.Immediate<T>() → T
 T.InteractionStates<T>(Func<InteractionStatesBuilder, InteractionStatesBuilder> configure, Curve curve = null) → T
 T.IsDragRegion<T>(bool? isDragRegion = true) → T
 T.IsEnabled<T>(bool enabled = true) → T
+T.IsHitTestVisible<T>(bool isHitTestVisible = true) → T
 T.IsTabStop<T>(bool isTabStop = true) → T
 T.IsVisible<T>(bool isVisible) → T
 T.ItemContainerTransitions<T>(Transition[] transitions) → T
@@ -2979,6 +2980,7 @@ VisualModifiers Visual { get; init; }
 XYFocusKeyboardNavigationMode? XYFocusKeyboardNavigation { get; init; }
 bool? IsDragRegion { get; init; }
 bool? IsEnabled { get; init; }
+bool? IsHitTestVisible { get; init; }
 bool? IsTabStop { get; init; }
 bool? IsVisible { get; init; }
 double? FontSize { get; init; }

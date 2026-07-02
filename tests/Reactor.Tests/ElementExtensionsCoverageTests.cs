@@ -203,6 +203,15 @@ public class ElementExtensionsCoverageTests
     }
 
     [Fact]
+    public void IsHitTestVisible_Sets_Modifier()
+    {
+        var el = Button("Y").IsHitTestVisible(false);
+        Assert.False(el.Modifiers!.IsHitTestVisible);
+        var hitTestable = Button("Y").IsHitTestVisible();
+        Assert.True(hitTestable.Modifiers!.IsHitTestVisible);
+    }
+
+    [Fact]
     [Obsolete("Tests the deprecated Disabled shim")]
     public void Disabled_Shim_Inverts_To_IsEnabled()
     {

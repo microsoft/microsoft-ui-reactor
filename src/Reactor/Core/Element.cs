@@ -1191,6 +1191,7 @@ public abstract record Element
             && a.HeadingLevel == b.HeadingLevel
             && a.IsDragRegion == b.IsDragRegion
             && a.IsTabStop == b.IsTabStop
+            && a.IsHitTestVisible == b.IsHitTestVisible
             && a.TabIndex == b.TabIndex
             && a.AccessKey == b.AccessKey
             && ReferenceEquals(a.XYFocusUpRef, b.XYFocusUpRef)
@@ -1997,6 +1998,7 @@ public record ElementModifiers
     // ── Accessibility — Tier 1 (inline, commonly needed for WCAG AA) ─
     public Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel? HeadingLevel { get; init; }
     public bool? IsTabStop { get; init; }
+    public bool? IsHitTestVisible { get; init; }
     public int? TabIndex { get; init; }
     public string? AccessKey { get; init; }
     public Microsoft.UI.Xaml.Input.XYFocusKeyboardNavigationMode? XYFocusKeyboardNavigation { get; init; }
@@ -2084,6 +2086,7 @@ public record ElementModifiers
             HeadingLevel = other.HeadingLevel ?? HeadingLevel,
             IsDragRegion = other.IsDragRegion ?? IsDragRegion,
             IsTabStop = other.IsTabStop ?? IsTabStop,
+            IsHitTestVisible = other.IsHitTestVisible ?? IsHitTestVisible,
             TabIndex = other.TabIndex ?? TabIndex,
             AccessKey = other.AccessKey ?? AccessKey,
             XYFocusKeyboardNavigation = other.XYFocusKeyboardNavigation ?? XYFocusKeyboardNavigation,
