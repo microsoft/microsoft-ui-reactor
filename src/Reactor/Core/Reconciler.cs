@@ -3767,8 +3767,8 @@ public sealed partial class Reconciler : IDisposable
         }
         else if (!resolvedBorder.HasValue && oldM?.BorderThickness.HasValue == true)
         {
-            if (fe is WinUI.Control btCtrl) btCtrl.ClearValue(WinUI.Control.BorderThicknessProperty);
-            else if (fe is WinUI.Border btBdr) btBdr.ClearValue(WinUI.Border.BorderThicknessProperty);
+            if (fe is WinUI.Control btCtrl) btCtrl.BorderThickness = new Thickness(0);
+            else if (fe is WinUI.Border btBdr) btBdr.BorderThickness = new Thickness(0);
         }
 
         // Background (Panel, Control, or Border)

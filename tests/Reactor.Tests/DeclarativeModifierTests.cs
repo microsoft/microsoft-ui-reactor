@@ -100,12 +100,30 @@ public class DeclarativeModifierTests
     [Fact]
     public void ContentAlignment_ModifiersEqual_Tracks_Field_Changes()
     {
-        var a = new ElementModifiers { HorizontalContentAlignment = HorizontalAlignment.Stretch };
-        var b = new ElementModifiers { HorizontalContentAlignment = HorizontalAlignment.Stretch };
-        var c = new ElementModifiers { HorizontalContentAlignment = HorizontalAlignment.Left };
+        var a = new ElementModifiers
+        {
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            VerticalContentAlignment = VerticalAlignment.Center,
+        };
+        var b = new ElementModifiers
+        {
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            VerticalContentAlignment = VerticalAlignment.Center,
+        };
+        var c = new ElementModifiers
+        {
+            HorizontalContentAlignment = HorizontalAlignment.Left,
+            VerticalContentAlignment = VerticalAlignment.Center,
+        };
+        var d = new ElementModifiers
+        {
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            VerticalContentAlignment = VerticalAlignment.Bottom,
+        };
 
         Assert.True(Element.ModifiersEqual(a, b));
         Assert.False(Element.ModifiersEqual(a, c));
+        Assert.False(Element.ModifiersEqual(a, d));
     }
 
     // FontFamily_Merge_Overwrites moved to selfhost fixtures (WinUIActivationFixtures).
