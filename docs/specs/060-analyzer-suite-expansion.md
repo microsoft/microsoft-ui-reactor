@@ -604,7 +604,7 @@ where the assigned member is `Visibility` and the receiver derives from
 
 **Fix.** Offer the auto-fix **only** when the RHS is a literal `Visibility.Collapsed`
 → `.IsVisible(false)` or `Visibility.Visible` → `.IsVisible(true)`; `.IsVisible`
-round-trips only those two values (`Reconciler.cs:3690`), so any other value gets a
+round-trips only those two values (`Reconciler.cs:3691`), so any other value gets a
 diagnostic but no rewrite. For a **conditional** RHS (`cond ? Collapsed : Visible`)
 the fix must read both branches and emit `.IsVisible(!cond)` / `.IsVisible(cond)`
 by polarity; if the polarity can't be determined syntactically, nudge only (never
@@ -615,7 +615,7 @@ target. Best implemented as part of the shared `.Set`-family analyzer — ideall
 adding `Visibility` to `POOL_001`'s table with a `.IsVisible` fix
 ([§5](#5-cross-cutting-notes)).
 
-**Grounding.** `ElementExtensions.cs:159` (`.IsVisible`); `Reconciler.cs:3690`
+**Grounding.** `ElementExtensions.cs:159` (`.IsVisible`); `Reconciler.cs:3691`
 (Visible/Collapsed round-trip); `PoolResetSetAnalyzer.cs:36,124`;
 [layout.md](../guide/layout.md).
 
