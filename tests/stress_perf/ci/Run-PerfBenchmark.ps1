@@ -143,6 +143,17 @@
     delegate-stability optimizations. Default $true; build is best-effort (a DataGrid build
     failure just omits the table). Disable with -IncludeDataGrid:$false to skip the extra leg.
 
+.PARAMETER IncludeRowMemo
+    Run a SINGLE-TREE, best-effort leg that builds + runs PerfBench.RowMemo from the PR
+    head ONLY (never the `main` baseline — `main` lacks the opt-in `Memo(key, () => row)`
+    API this measures, so building it there would fail) and appends a same-build
+    Baseline-vs-Memo table demonstrating the keyed row-memoization win (#327): a realistic
+    9-node variable-height row recycled ~1,000,000× through the real ElementFactory.BuildOrCache
+    realize path, with vs without `Memo`. The StocksGrid macro legs can't surface this — they
+    never opt into the API, so the optimization is dormant there and every metric reads
+    within-noise. Default $true; build + run are best-effort (any failure just omits the
+    table, leaving the rest of the comment unaffected). Disable with -IncludeRowMemo:$false.
+
 .PARAMETER Apps
     Which harnesses to run in single-tree mode: ReactorOptimized, Direct, KeyedList,
     Flex, DataGrid. Ignored in compare mode (which always does ReactorOptimized both sides +
@@ -223,6 +234,7 @@ param(
     [bool]$IncludeKeyedList = $true,
     [bool]$IncludeFlex = $true,
     [bool]$IncludeDataGrid = $true,
+    [bool]$IncludeRowMemo = $true,
     [ValidateSet('ReactorOptimized', 'Direct', 'KeyedList', 'Flex', 'DataGrid')]
     [string[]]$Apps = @('ReactorOptimized', 'Direct'),
     [string]$OutDir,
@@ -259,6 +271,7 @@ $AppRegistry = @{
     Flex             = @{ AppName = 'StressPerf.Flex';              ProjectRel = 'tests\stress_perf\StressPerf.Flex\StressPerf.Flex.csproj' }
     DataGrid         = @{ AppName = 'StressPerf.DataGrid';          ProjectRel = 'tests\stress_perf\StressPerf.DataGrid\StressPerf.DataGrid.csproj' }
     MicroControlModel = @{ AppName = 'PerfBench.ControlModel';     ProjectRel = 'tests\perf_bench\PerfBench.ControlModel\PerfBench.ControlModel.csproj' }
+    RowMemo          = @{ AppName = 'PerfBench.RowMemo';            ProjectRel = 'tests\perf_bench\PerfBench.RowMemo\PerfBench.RowMemo.csproj' }
 }
 
 function Write-Log {
@@ -758,6 +771,69 @@ function Invoke-MicroRun {
     return $outJson
 }
 
+function Invoke-RowMemoRun {
+    <# Run PerfBench.RowMemo once (a single self-contained PR-head build) and return the
+       parsed Baseline-vs-Memo result (Read-RowMemoResults) or $null. The bench runs the
+       measurement headlessly IN-PROCESS — no window, no main-vs-PR interleave: it internally
+       A/Bs a 9-node row realized through ElementFactory.BuildOrCache with vs without
+       Memo(i, () => row), then writes stable key=value lines to the --out path, which we
+       parse. Best-effort: a timeout / nonzero exit / missing or unparseable output yields
+       $null so the caller omits the row-memo table. Mirrors Invoke-MicroRun's launch shape
+       (High priority, redirected std streams, bounded wait). #>
+    param([string]$Exe, [int]$TimeoutSec = 180)
+
+    $outKv = Join-Path $OutDir 'rowmemo.kv.txt'
+    if (Test-Path $outKv) { Remove-Item $outKv -Force -ErrorAction SilentlyContinue }
+    $stdout = Join-Path $OutDir 'rowmemo.out.log'
+    $stderr = Join-Path $OutDir 'rowmemo.err.log'
+    $rmArgs = @('--headless', '--out', $outKv)
+
+    Write-Log "  row-memo PerfBench.RowMemo --out rowmemo.kv.txt"
+    $proc = Start-Process -FilePath $Exe -ArgumentList $rmArgs -PassThru `
+        -RedirectStandardOutput $stdout -RedirectStandardError $stderr -WindowStyle Hidden
+    try { $proc.PriorityClass = [System.Diagnostics.ProcessPriorityClass]::High } catch {}
+
+    # On any failure, dump BOTH the stderr and stdout tails. PerfBench.RowMemo prints the
+    # machine-parseable key=value block to stdout as well as to --out, so when the --out FILE
+    # write is what failed (parse returned $null) the stdout tail still shows the block — that
+    # is the difference between "the bench crashed" and "the bench ran fine but couldn't write
+    # the file", which stderr alone can't distinguish.
+    $dumpTails = {
+        if (Test-Path $stderr) {
+            $et = @(Get-Content $stderr -Tail 8)
+            if ($et.Count) { Write-Host "      stderr tail:" -ForegroundColor DarkYellow; $et | ForEach-Object { Write-Host "        $_" -ForegroundColor DarkYellow } }
+        }
+        if (Test-Path $stdout) {
+            $ot = @(Get-Content $stdout -Tail 12)
+            if ($ot.Count) { Write-Host "      stdout tail (PerfBench.RowMemo echoes the key=value block here):" -ForegroundColor DarkYellow; $ot | ForEach-Object { Write-Host "        $_" -ForegroundColor DarkYellow } }
+        }
+    }
+
+    if (-not $proc.WaitForExit($TimeoutSec * 1000)) {
+        Write-Log "  row-memo TIMEOUT after ${TimeoutSec}s — killing PerfBench.RowMemo" 'Yellow'
+        try { $proc.Kill($true) } catch { try { $proc.Kill() } catch {} }
+        Start-Sleep -Seconds 2
+        & $dumpTails
+        return $null
+    }
+    if ($proc.ExitCode -ne 0) {
+        Write-Log "  row-memo exited non-zero ($($proc.ExitCode)). stderr + stdout tails:" 'Yellow'
+        & $dumpTails
+        return $null
+    }
+    $parsed = Read-RowMemoResults -Path $outKv
+    if ($null -eq $parsed) {
+        Write-Log "  row-memo produced no parseable key=value output (exit=$($proc.ExitCode)) — the --out file was missing/partial. stderr + stdout tails:" 'Yellow'
+        & $dumpTails
+        return $null
+    }
+    Write-Log ("  -> baseline {0} ns / {1} B; memo {2} ns / {3} B; memo_rebuilds={4} can_skip={5}" -f `
+        (Format-PerfNumber $parsed.BaselineNs 1), (Format-PerfNumber $parsed.BaselineBytes 0), `
+        (Format-PerfNumber $parsed.MemoNs 1), (Format-PerfNumber $parsed.MemoBytes 0), `
+            $parsed.MemoRebuilds, $parsed.MemoCanSkip) 'DarkGray'
+    return $parsed
+}
+
 function ConvertTo-MicroRepLines {
     <# Read one per-round micro .jsonl (produced by a single --reps 1 launch, so every
        line carries "repetition":0) and renumber its repetition to $RepIndex, returning
@@ -870,11 +946,12 @@ Write-Log ("runner: {0} | {1} cores | {2} GB | {3}" -f $runner.Cpu, $runner.Core
 $modeSuffix = if ($Compare) {
     # COMPARE mode runs the interleaved A/B legs, so the skip-floor / keyed-list
     # opt-out switches are what actually decide which legs run.
-    "skip-floor={0} | keyed-list={1} | flex={2} | datagrid={3}" -f `
+    "skip-floor={0} | keyed-list={1} | flex={2} | datagrid={3} | row-memo={4}" -f `
         $(if ($IncludeSkipFloor) { "on (--percent $SkipFloorPercent)" } else { 'off' }), `
         $(if ($IncludeKeyedList) { 'on' } else { 'off' }), `
         $(if ($IncludeFlex) { 'on' } else { 'off' }), `
-        $(if ($IncludeDataGrid) { 'on' } else { 'off' })
+        $(if ($IncludeDataGrid) { 'on' } else { 'off' }), `
+        $(if ($IncludeRowMemo) { 'on (PR head only)' } else { 'off' })
 } else {
     # LOCAL mode ignores the interleaved-leg switches entirely; the workload set is
     # whatever -Apps selects, so report that instead of a misleading on/off.
@@ -892,6 +969,7 @@ try {
         $flex = $AppRegistry.Flex
         $datagrid = $AppRegistry.DataGrid
         $microMeta = $AppRegistry.MicroControlModel
+        $rowMemoMeta = $AppRegistry.RowMemo
 
         if (-not $SkipBuild) {
             Build-Harness -TreeRoot $BaselineRoot -AppMeta $ro
@@ -932,6 +1010,19 @@ try {
             } catch {
                 Write-Log "datagrid workload build failed ($_) — omitting the datagrid table" 'Yellow'
                 $IncludeDataGrid = $false
+            }
+        }
+        if ($IncludeRowMemo -and -not $SkipBuild) {
+            try {
+                # SINGLE-TREE: build the row-memo bench from the PR head ONLY. It calls the
+                # opt-in Memo(key, () => row) API (#327) that exists on the PR but NOT on the
+                # `main` baseline, so building it against $BaselineRoot would fail the compile —
+                # which is exactly why this leg is single-tree. Best-effort: a build failure
+                # just omits the row-memo table and leaves the rest of the comment intact.
+                Build-Harness -TreeRoot $Root -AppMeta $rowMemoMeta
+            } catch {
+                Write-Log "row-memo bench build failed ($_) — omitting the row-memo table" 'Yellow'
+                $IncludeRowMemo = $false
             }
         }
         $mainExe = Resolve-HarnessExe -TreeRoot $BaselineRoot -AppMeta $ro
@@ -1062,6 +1153,29 @@ try {
             }
         }
 
+        # Row-memoization leg (#327 opt-in win). SINGLE-TREE, NOT a main-vs-PR interleave:
+        # one self-contained PR-head build internally A/Bs Baseline vs Memo(i, () => row) and
+        # prints key=value lines, so it needs no `main` side (which couldn't even compile the
+        # Memo API) and doesn't use the paired-CI machinery — the two columns come from the
+        # bench's own two arms. Best-effort: a missing exe / nonzero exit / unparseable output
+        # leaves $rowMemo = $null and the table is omitted; the StocksGrid comparison and every
+        # other leg are unaffected.
+        $rowMemo = $null
+        if ($IncludeRowMemo) {
+            try {
+                $rowMemoExe = Resolve-HarnessExe -TreeRoot $Root -AppMeta $rowMemoMeta
+                if (-not $rowMemoExe) {
+                    Write-Log "row-memo exe not found under the PR head — omitting the row-memo table" 'Yellow'
+                } else {
+                    Write-Log "row-memo bench (PerfBench.RowMemo, PR head only; same-build Baseline vs Memo)" 'Green'
+                    $rowMemo = Invoke-RowMemoRun -Exe $rowMemoExe
+                }
+            } catch {
+                Write-Log "row-memo leg failed ($_) — omitting the row-memo table" 'Yellow'
+                $rowMemo = $null
+            }
+        }
+
         $winRuns = @()
         if ($directExe) {
             Write-Log "vanilla WinUI3 (StressPerf.Direct)" 'Green'
@@ -1168,12 +1282,12 @@ try {
             Runner = $runner.Runner; Cpu = $runner.Cpu; Cores = $runner.Cores; MemoryGB = $runner.MemoryGB
             RunUrl = $RunUrl; Timestamp = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'); Note = $note
         }
-        $comment = Format-PerfComment -Main $main -Pr $pr -WinUI3 $winui3 -Rust $rust -Micro $micro -MicroOmitReason $microOmitReason -MainFloor $mainFloor -PrFloor $prFloor -MainKeyed $mainKeyed -PrKeyed $prKeyed -MainFlex $mainFlex -PrFlex $prFlex -MainDataGrid $mainDataGrid -PrDataGrid $prDataGrid -Context $ctx
+        $comment = Format-PerfComment -Main $main -Pr $pr -WinUI3 $winui3 -Rust $rust -Micro $micro -MicroOmitReason $microOmitReason -MainFloor $mainFloor -PrFloor $prFloor -MainKeyed $mainKeyed -PrKeyed $prKeyed -MainFlex $mainFlex -PrFlex $prFlex -MainDataGrid $mainDataGrid -PrDataGrid $prDataGrid -RowMemo $rowMemo -Context $ctx
         $commentPath = Join-Path $OutDir 'comment.md'
         Set-Content -LiteralPath $commentPath -Value $comment -Encoding UTF8
         Write-Log "comment.md written -> $commentPath" 'Green'
 
-        $result = [pscustomobject]@{ main = $main; pr = $pr; winui3 = $winui3; mainFloor = $mainFloor; prFloor = $prFloor; mainKeyed = $mainKeyed; prKeyed = $prKeyed; mainFlex = $mainFlex; prFlex = $prFlex; mainDataGrid = $mainDataGrid; prDataGrid = $prDataGrid; rust = $rust; micro = $micro; runner = $runner; context = $ctx }
+        $result = [pscustomobject]@{ main = $main; pr = $pr; winui3 = $winui3; mainFloor = $mainFloor; prFloor = $prFloor; mainKeyed = $mainKeyed; prKeyed = $prKeyed; mainFlex = $mainFlex; prFlex = $prFlex; mainDataGrid = $mainDataGrid; prDataGrid = $prDataGrid; rowMemo = $rowMemo; rust = $rust; micro = $micro; runner = $runner; context = $ctx }
         $result | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $OutDir 'result.json') -Encoding UTF8
 
         Write-Host "`n----- comment.md -----" -ForegroundColor DarkGray

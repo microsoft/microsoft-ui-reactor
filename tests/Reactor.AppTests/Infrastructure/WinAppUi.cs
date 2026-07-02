@@ -59,6 +59,16 @@ public sealed class WinAppUi
 
     private static string ResolveWinAppExe()
     {
+        // Explicit override — an absolute path to a winapp.exe, honored first.
+        // Needed when the machine's `winapp.exe` app-execution-alias resolves to an
+        // older build that lacks the `ui` UIA verb (alias drift from a sideloaded
+        // winapp-dev package), while a newer ui-capable winapp is installed elsewhere
+        // (e.g. %LOCALAPPDATA%\Microsoft\WindowsApps\winapp_8wekyb3d8bbwe\winapp.exe).
+        // Also lets CI pin an exact winapp build. No effect unless the var is set.
+        var overridePath = Environment.GetEnvironmentVariable("REACTOR_WINAPP_EXE");
+        if (!string.IsNullOrEmpty(overridePath) && File.Exists(overridePath))
+            return Path.GetFullPath(overridePath);
+
         var local = Environment.GetEnvironmentVariable("LOCALAPPDATA");
         if (!string.IsNullOrEmpty(local))
         {
@@ -80,7 +90,8 @@ public sealed class WinAppUi
 
         throw new WinAppException(
             "Could not find winapp.exe. Install the winapp CLI (winget install Microsoft.WinAppCli) " +
-            "or ensure an absolute PATH entry contains winapp.exe.");
+            "or ensure an absolute PATH entry contains winapp.exe, or set REACTOR_WINAPP_EXE to an " +
+            "absolute path to a ui-capable winapp.exe.");
     }
 
     /// <summary>

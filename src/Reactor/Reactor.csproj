@@ -70,6 +70,10 @@
          against the Direct/Bound baselines; it references internal descriptor
          and handler types to construct representative element trees. -->
     <InternalsVisibleTo Include="PerfBench.ControlModel" />
+    <!-- Issue #327 / PR #753 — PerfBench.RowMemo measures the opt-in keyed
+         row-memoization win; it drives the internal ElementFactory{T}.BuildOrCache
+         realize path and Element.CanSkipUpdate skip decision directly. -->
+    <InternalsVisibleTo Include="PerfBench.RowMemo" />
     <!-- Spec 045 §2.19: the Phase-1 WinUI.Dock XAML wrapper
          (src/Reactor.Docking.Xaml/) and its vendored WinUI.Dock
          dependency were removed at the §2.29 review gate. The docking
@@ -241,6 +245,8 @@
           Pack="true" PackagePath="agentkit/plugins/reactor/skills/reactor-recipes/references/" Visible="false" />
     <None Include="..\..\plugins\reactor\skills\reactor-wrapping\*.md"
           Pack="true" PackagePath="agentkit/plugins/reactor/skills/reactor-wrapping/" Visible="false" />
+    <None Include="..\..\plugins\reactor\skills\reactor-windowing\*.md"
+          Pack="true" PackagePath="agentkit/plugins/reactor/skills/reactor-windowing/" Visible="false" />
   </ItemGroup>
 
   <!-- ═══════════════════════════════════════════════════════════════════

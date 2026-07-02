@@ -1199,6 +1199,150 @@ finally {
 }
 
 
+# ── Read-RowMemoResults + Format-PerfRowMemoSection: opt-in row-memo leg ───────
+# The row-memo leg is the one SINGLE-TREE leg: a single PR-head build that prints
+# stable key=value lines internally A/Bing Baseline vs Memo(i, () => row) (#327). The
+# parser must read those lines into a typed object (or null on missing/garbage), and the
+# renderer must produce the same-build Baseline|Memo|Win table + the skip-precondition note.
+$rowMemoTmp = Join-Path ([IO.Path]::GetTempPath()) ("perflib-rowmemo-{0}" -f ([guid]::NewGuid().ToString('N')))
+New-Item -ItemType Directory -Path $rowMemoTmp -Force | Out-Null
+try {
+    $rmKv = Join-Path $rowMemoTmp 'rowmemo.kv.txt'
+    @(
+        'baseline_ns=379.275', 'baseline_bytes=4616', 'baseline_rebuilds=1000000',
+        'baseline_same_instance=false', 'baseline_can_skip=false',
+        'memo_ns=43.633', 'memo_bytes=224', 'memo_rebuilds=0',
+        'memo_same_instance=true', 'memo_can_skip=true',
+        'recycles_per_arm=1000000', 'row_nodes=9', 'window=50'
+    ) | Set-Content -LiteralPath $rmKv -Encoding UTF8
+
+    $rm = Read-RowMemoResults -Path $rmKv
+    Assert-True ($null -ne $rm)              'row-memo parser returns an object for valid key=value output'
+    Assert-Equal 379.275 $rm.BaselineNs      'row-memo parser reads baseline_ns'
+    Assert-Equal 4616    $rm.BaselineBytes   'row-memo parser reads baseline_bytes'
+    Assert-Equal 1000000 $rm.BaselineRebuilds 'row-memo parser reads baseline_rebuilds'
+    Assert-Equal 43.633  $rm.MemoNs          'row-memo parser reads memo_ns'
+    Assert-Equal 224     $rm.MemoBytes       'row-memo parser reads memo_bytes'
+    Assert-Equal 0       $rm.MemoRebuilds    'row-memo parser reads memo_rebuilds'
+    Assert-True  $rm.MemoSameInstance        'row-memo parser reads memo_same_instance=true'
+    Assert-True  $rm.MemoCanSkip             'row-memo parser reads memo_can_skip=true'
+    Assert-True (-not $rm.BaselineSameInstance) 'row-memo parser reads baseline_same_instance=false'
+    Assert-Equal 1000000 $rm.RecyclesPerArm  'row-memo parser reads recycles_per_arm'
+    Assert-Equal 9       $rm.RowNodes         'row-memo parser reads row_nodes'
+
+    # Missing-required-key and missing-file both yield $null so the leg omits the table.
+    $rmBadKv = Join-Path $rowMemoTmp 'rowmemo-bad.kv.txt'
+    @('baseline_ns=379.275', 'memo_ns=43.633') | Set-Content -LiteralPath $rmBadKv -Encoding UTF8
+    Assert-Null (Read-RowMemoResults -Path $rmBadKv)                              'row-memo parser returns null when required keys are missing'
+    Assert-Null (Read-RowMemoResults -Path (Join-Path $rowMemoTmp 'nope.txt'))    'row-memo parser returns null when the file is missing'
+    Assert-Null (Read-RowMemoResults -Path $null)                                'row-memo parser returns null for a null path'
+    # The two Baseline skip-precondition flags are REQUIRED (the narrative asserts them),
+    # so a capture that dropped either one must fail fast to $null rather than silently
+    # defaulting the flag to $false and rendering a story the bench never measured.
+    $rmFull = @(
+        'baseline_ns=379.275', 'baseline_bytes=4616', 'baseline_rebuilds=1000000',
+        'baseline_same_instance=false', 'baseline_can_skip=false',
+        'memo_ns=43.633', 'memo_bytes=224', 'memo_rebuilds=0',
+        'memo_same_instance=true', 'memo_can_skip=true'
+    )
+    foreach ($drop in 'baseline_same_instance', 'baseline_can_skip') {
+        $rmDropKv = Join-Path $rowMemoTmp ("rowmemo-drop-{0}.kv.txt" -f $drop)
+        @($rmFull | Where-Object { -not $_.StartsWith("$drop=") }) | Set-Content -LiteralPath $rmDropKv -Encoding UTF8
+        Assert-Null (Read-RowMemoResults -Path $rmDropKv) "row-memo parser returns null when $drop is missing (now required)"
+    }
+    # A boolean flag present but with a token that isn't exactly true/false (case-insensitive)
+    # must fail fast to $null — never silently read as $false — so a malformed/truncated capture
+    # can't render a wrong skip-precondition claim. Cover each flag with a bad token, and confirm
+    # case-insensitive true/false is still accepted.
+    foreach ($bk in 'baseline_same_instance', 'baseline_can_skip', 'memo_same_instance', 'memo_can_skip') {
+        $rmBadBool = Join-Path $rowMemoTmp ("rowmemo-badbool-{0}.kv.txt" -f $bk)
+        @($rmFull | ForEach-Object { if ($_.StartsWith("$bk=")) { "$bk=maybe" } else { $_ } }) | Set-Content -LiteralPath $rmBadBool -Encoding UTF8
+        Assert-Null (Read-RowMemoResults -Path $rmBadBool) "row-memo parser returns null when $bk has a malformed (non true/false) token"
+    }
+    $rmMixedCase = Join-Path $rowMemoTmp 'rowmemo-mixedcase.kv.txt'
+    @($rmFull | ForEach-Object { if ($_.StartsWith('baseline_can_skip=')) { 'baseline_can_skip=FALSE' } elseif ($_.StartsWith('memo_can_skip=')) { 'memo_can_skip=True' } else { $_ } }) | Set-Content -LiteralPath $rmMixedCase -Encoding UTF8
+    $rmMixed = Read-RowMemoResults -Path $rmMixedCase
+    Assert-True ($null -ne $rmMixed)          'row-memo parser accepts case-insensitive true/false tokens'
+    Assert-True (-not $rmMixed.BaselineCanSkip) 'row-memo parser reads FALSE (upper) as $false'
+    Assert-True $rmMixed.MemoCanSkip           'row-memo parser reads True (mixed) as $true'
+
+    # Renderer: empty array when null; full table + Win ratios + note when populated.
+    $times = [char]0x00D7
+    Assert-Equal 0 @(Format-PerfRowMemoSection -RowMemo $null).Count 'row-memo section empty when result null'
+    $rmSection = Format-PerfRowMemoSection -RowMemo $rm
+    $rmText = $rmSection -join "`n"
+    Assert-Match $rmText 'Row memoization (opt-in)'           'row-memo section has the heading'
+    Assert-Match $rmText '| Metric | Baseline | Memo | Win |' 'row-memo table uses the Baseline|Memo|Win columns'
+    Assert-Match $rmText 'ns/recycle'                         'row-memo table has the ns/recycle row'
+    Assert-Match $rmText 'bytes/recycle'                      'row-memo table has the bytes/recycle row'
+    Assert-Match $rmText 'factory rebuilds'                   'row-memo table has the factory-rebuilds row'
+    Assert-Match $rmText ("8.7$times faster")                'row-memo Win cell: 8.7x faster (379.275/43.633)'
+    Assert-Match $rmText ("20.6$times less")                 'row-memo Win cell: 20.6x less alloc (4616/224)'
+    Assert-Match $rmText '**eliminated**'                     'row-memo Win cell: rebuilds eliminated (baseline>0, memo=0)'
+    # Direction-aware Win cell: if the Memo arm REGRESSES (higher ns / more bytes than
+    # Baseline) the ratio must read "× slower" / "× more", never a misleading "0.8× faster".
+    $rmRegress = $rm.PSObject.Copy()
+    $rmRegress.MemoNs = 758.55      # 2x the baseline 379.275 -> Memo slower
+    $rmRegress.MemoBytes = 9232     # 2x the baseline 4616     -> Memo more
+    $rmRegressText = (Format-PerfRowMemoSection -RowMemo $rmRegress) -join "`n"
+    Assert-Match $rmRegressText ("2.0$times slower")         'row-memo Win cell reads "slower" when Memo ns regresses above Baseline'
+    Assert-Match $rmRegressText ("2.0$times more")           'row-memo Win cell reads "more" when Memo bytes regress above Baseline'
+    Assert-True (-not ($rmRegressText -match "0\.\d$times faster")) 'row-memo Win cell never emits a sub-1x "faster" ratio on a regression'
+    # Tie: equal Baseline/Memo -> "no change" rather than "1.0x faster".
+    $rmTie = $rm.PSObject.Copy()
+    $rmTie.MemoNs = $rm.BaselineNs
+    $rmTie.MemoBytes = $rm.BaselineBytes
+    $rmTieText = (Format-PerfRowMemoSection -RowMemo $rmTie) -join "`n"
+    Assert-Match $rmTieText 'no change'                       'row-memo Win cell reads "no change" when Memo equals Baseline'
+    Assert-Match $rmText '1,000,000'                          'row-memo renders the per-arm recycle count with separators'
+    Assert-Match $rmText 'CanSkipUpdate'                      'row-memo note cites the CanSkipUpdate skip precondition'
+    # The note renders the MEASURED Baseline flags, not hard-coded literals. $rm carries
+    # both false, so the note must show sameInstance=false / CanSkipUpdate=false.
+    Assert-Match $rmText 'sameInstance=false'                'row-memo note renders the measured Baseline sameInstance flag'
+    Assert-Match $rmText 'CanSkipUpdate=false'               'row-memo note renders the measured Baseline CanSkipUpdate flag'
+    # Prove it is DATA-DRIVEN, not a constant: a (hypothetical) result whose Baseline flags
+    # read true must surface true in the note — so a bench bug / runtime change can't leave
+    # the comment asserting a stale "false".
+    $rmFlipped = $rm.PSObject.Copy()
+    $rmFlipped.BaselineSameInstance = $true
+    $rmFlipped.BaselineCanSkip = $true
+    $rmFlippedText = (Format-PerfRowMemoSection -RowMemo $rmFlipped) -join "`n"
+    Assert-Match $rmFlippedText 'sameInstance=true'          'row-memo note reflects a measured Baseline sameInstance=true (note is data-driven, not hard-coded)'
+    Assert-Match $rmFlippedText 'CanSkipUpdate=true'         'row-memo note reflects a measured Baseline CanSkipUpdate=true (note is data-driven, not hard-coded)'
+    # The headless-only caveat must be present so reviewers know the real win is bigger.
+    Assert-Match $rmText 'captured by the headless' 'row-memo note flags that the stacked reconcile/patch saving is not captured headlessly'
+    # Fallback note (Memo skip precondition did NOT hold): when MemoSameInstance/MemoCanSkip
+    # come back false (a regression / bench change), the note must NOT restate the "Memo unlocks
+    # reconcile/patch savings" claim — those savings depend on the failed precondition. It must
+    # instead surface the measured flags and flag it as a likely regression.
+    $rmNoSkip = $rm.PSObject.Copy()
+    $rmNoSkip.MemoCanSkip = $false
+    $rmNoSkipText = (Format-PerfRowMemoSection -RowMemo $rmNoSkip) -join "`n"
+    Assert-Match $rmNoSkipText 'did NOT hold'          'row-memo fallback note flags the missing skip precondition'
+    Assert-Match $rmNoSkipText 'CanSkipUpdate=false'   'row-memo fallback note surfaces the measured Memo CanSkipUpdate=false'
+    Assert-Match $rmNoSkipText 'in effect'             'row-memo fallback states the savings are (not) in effect rather than claiming Memo unlocks them'
+    Assert-True (-not ($rmNoSkipText -match 'Why the real win is bigger')) 'row-memo fallback does not render the win narrative when the precondition failed'
+
+    # Threaded through Format-PerfComment: present when set (after the regression table,
+    # before the cross-framework reference), omitted when null (back-compat with callers
+    # that never pass -RowMemo).
+    $rmComment = Format-PerfComment -Main $main -Pr $pr -WinUI3 $null -Rust $null -RowMemo $rm -Context $ctx
+    Assert-Match $rmComment 'Row memoization (opt-in)' 'comment renders the row-memo table when a result is supplied'
+    $idxRegRm = $rmComment.IndexOf('Regression vs')
+    $idxRowMemo = $rmComment.IndexOf('Row memoization (opt-in)')
+    $idxXfwRm = $rmComment.IndexOf('Cross-framework reference')
+    Assert-True (($idxRegRm -lt $idxRowMemo) -and ($idxRowMemo -lt $idxXfwRm)) 'row-memo table sits after the regression table and before cross-framework'
+    $noRmComment = Format-PerfComment -Main $main -Pr $pr -WinUI3 $null -Rust $null -RowMemo $null -Context $ctx
+    Assert-True (-not ($noRmComment -like '*Row memoization (opt-in)*')) 'row-memo table omitted when no result supplied'
+    # Existing callers that never pass -RowMemo at all must still omit the section.
+    $legacyComment = Format-PerfComment -Main $main -Pr $pr -WinUI3 $null -Rust $null -Context $ctx
+    Assert-True (-not ($legacyComment -like '*Row memoization (opt-in)*')) 'row-memo table omitted for callers that do not pass -RowMemo'
+}
+finally {
+    Remove-Item -LiteralPath $rowMemoTmp -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+
 if ($script:Fail -gt 0) {
     Write-Host "FAILED: $($script:Fail) / $($script:Pass + $script:Fail) assertions" -ForegroundColor Red
     foreach ($f in $script:Failures) { Write-Host "  ✗ $f" -ForegroundColor Red }

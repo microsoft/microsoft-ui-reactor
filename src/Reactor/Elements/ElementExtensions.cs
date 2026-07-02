@@ -1752,6 +1752,15 @@ public static partial class ElementExtensions
         el with { Icon = new ImageIconData(new Uri(imageUri)) };
 
     /// <summary>
+    /// When <c>true</c>, the title bar re-derives its drag regions on every layout
+    /// pass — the right fit for content that changes across renders. WinApp SDK ≥ 2.1.3.
+    /// Interactive controls are auto-excluded from the drag region either way; use
+    /// <see cref="IsDragRegion{T}"/> on a child to override per element.
+    /// </summary>
+    public static TitleBarElement AutoRefreshDragRegions(this TitleBarElement el, bool value = true) =>
+        el with { AutoRefreshDragRegions = value };
+
+    /// <summary>
     /// Auto-syncs this TitleBar's back button with a NavigationHandle: sets
     /// <c>IsBackButtonVisible</c> and <c>IsBackButtonEnabled</c> from <c>CanGoBack</c>,
     /// and wires <c>OnBackRequested</c> to <c>GoBack</c>.
@@ -2507,6 +2516,18 @@ public static partial class ElementExtensions
     /// <example>Border(content).IsTabStop(false)</example>
     public static T IsTabStop<T>(this T el, bool isTabStop = true) where T : Element =>
         Modify(el, new ElementModifiers { IsTabStop = isTabStop });
+
+    /// <summary>
+    /// Marks how this element participates in a window title bar's drag region
+    /// (<c>Microsoft.UI.Xaml.Controls.TitleBar.IsDragRegion</c>, WinApp SDK ≥ 2.1.3):
+    /// <c>true</c> = draggable, <c>false</c> = clickable, <c>null</c> = defer to the
+    /// title bar (interactive controls are auto-excluded from the drag region). Only
+    /// meaningful for an element inside a <c>TitleBar</c>'s content; inert elsewhere.
+    /// The nullable parameter lets callers forward a <c>bool?</c> state without branching.
+    /// </summary>
+    /// <example>Button("\uE713", OnSettings).IsDragRegion(false)</example>
+    public static T IsDragRegion<T>(this T el, bool? isDragRegion = true) where T : Element =>
+        Modify(el, new ElementModifiers { IsDragRegion = isDragRegion });
 
     /// <summary>
     /// Sets Control.TabIndex — Tab order position. Lower values receive focus first.

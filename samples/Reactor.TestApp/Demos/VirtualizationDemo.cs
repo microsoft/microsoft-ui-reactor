@@ -30,7 +30,20 @@ class VirtualizationDemo : Component
             "LazyVStack" => LazyVStack<ItemData>(
                 items,
                 item => item.Id.ToString(),
-                (item, index) => Border(
+                // Issue #327 (Option A): opt into cross-container row memoization. On a fast
+                // scroll over these variable-height rows the ItemsRepeater recycles containers
+                // constantly; without the memo every recycle rebuilds this whole Border/HStack
+                // tree and the reconciler diffs it. Memo(key, factory) caches the inner element
+                // per key in the ElementFactory's bounded LRU, so a recycle that re-asks for a
+                // key still in the window returns the SAME instance → Element.ShallowEquals'
+                // ReferenceEquals fast-path fires and the per-row reconcile is skipped.
+                //
+                // Purity contract: the key MUST capture every input the factory reads. Here the
+                // row is a pure function of `item`, and `item` is fully determined by `item.Id`
+                // (Title/Subtitle are derived from it), so the int Id is a complete key. If this
+                // row closed over state NOT derived from the key (e.g. a selection flag or theme),
+                // fold it into the key to avoid staleness, e.g. Memo((item.Id, isSelected), …).
+                (item, index) => Memo(item.Id, () => Border(
                     HStack(12,
                         Border(
                             Caption($"{item.Id}")
@@ -40,7 +53,7 @@ class VirtualizationDemo : Component
                             Caption(item.Subtitle).Foreground(SecondaryText)
                         )
                     )
-                ).Padding(horizontal: 12, vertical: 8).Margin(0, 0, 0, 1)
+                ).Padding(horizontal: 12, vertical: 8).Margin(0, 0, 0, 1))
             ),
 
             "ListView" => ListView(

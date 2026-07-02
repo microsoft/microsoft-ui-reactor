@@ -16,8 +16,19 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// <summary>
 /// Issue #675 — live-FrameworkElement proofs that <c>ResourceOverrides.ThemeRefs</c>
 /// re-resolve across ALL reconciler skip fast-paths (element-level shallow-skip,
-/// positional child-skip, keyed child-skip) plus the <c>ApplyResourceOverrides</c>
-/// stale-key removal gate.
+/// positional child-skip, keyed prefix/suffix child-skip) plus the
+/// <c>ApplyResourceOverrides</c> stale-key removal gate.
+///
+/// <para>Issue #701 audit completion — extends the proofs to the sixth and final reconciler
+/// surface, the keyed-MIDDLE (LIS reorder) patch (<see cref="KeyedMiddleReorderReResolves"/>).
+/// The #701 cross-cutting audit confirmed every reconciler skip/patch surface re-resolves a
+/// ThemeRef <c>ResourceOverrides</c>: surfaces 1-5 (element-level, positional child-skip,
+/// keyed prefix, keyed suffix, bulk array fast-path) decline the skip — via
+/// <c>Element.CanSkipUpdate</c> and <c>ChildDiffHints.IsThemeSensitive</c> — and re-resolve in
+/// <c>Reconciler.Update</c>'s element-level shallow-skip arm; the keyed-middle (#6) has no skip
+/// arm at all and re-resolves by unconditionally routing every survivor through
+/// <c>UpdateChild</c> → <c>Update</c>. <c>Reconciler.Update</c> is the single source of truth
+/// for skip-path theme re-resolution.</para>
 ///
 /// <para>WHY A SOURCE-RESOURCE MUTATION, NOT A RequestedTheme TOGGLE: the existing
 /// <c>StructuralSkipFixtures</c> remarks document that a parent <c>RequestedTheme</c>
@@ -42,8 +53,8 @@ internal static class Issue675ResourceOverrideSkipFixtures
 
     private static SolidColorBrush? ResourceBrush(FrameworkElement? fe, string key)
     {
-        if (fe?.Resources is { } res && res.ContainsKey(key))
-            return res[key] as SolidColorBrush;
+        if (fe?.Resources is { } res && res.TryGetValue(key, out var v))
+            return v as SolidColorBrush;
         return null;
     }
 
@@ -110,7 +121,7 @@ internal static class Issue675ResourceOverrideSkipFixtures
                 var host = H.CreateHost();
                 host.Mount(ctx =>
                 {
-                    var (n, setN) = ctx.UseState(0);
+                    var (_, setN) = ctx.UseState(0);
                     bump = setN;
                     // Leaf output → reconciled via Update directly. Shallow-equal across the
                     // state bump (ResourceOverrides is not part of ShallowEquals), so the
@@ -475,5 +486,102 @@ internal static class Issue675ResourceOverrideSkipFixtures
 
             return Task.CompletedTask;
         }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Keyed-MIDDLE (LIS reorder) patch re-resolve — #701 audit completion
+    // ════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Issue #701 audit completion — the keyed-MIDDLE (LIS reorder) patch surface, the one
+    /// reconciler skip/patch arm the #675 fixtures above did not cover. The keyed prefix/suffix
+    /// arms (<see cref="KeyedChildSkipReResolves"/> / <see cref="KeyedSuffixChildSkipReResolves"/>)
+    /// share <c>Element.CanSkipUpdate</c>, but a REORDERED keyed survivor is patched by
+    /// <c>RealKeyedMiddleSink.Patch</c> instead, which has NO skip arm — it unconditionally routes
+    /// every survivor through <c>UpdateChild</c> → <c>Update</c>, whose element-level shallow-skip
+    /// re-applies <c>ApplyResourceOverrides</c>. So the middle path re-resolves a ThemeRef override
+    /// by construction; this fixture pins that and is the teeth guarding against a future
+    /// middle-path skip optimization that forgets to re-resolve.
+    ///
+    /// <para>Three keyed children <c>[anchor(a), themed(t), other(o)]</c> reorder to
+    /// <c>[anchor(a), other(o), themed(t)]</c>: the keyed prefix consumes <c>a</c>, the suffix is
+    /// empty (tail <c>o</c> vs <c>t</c> mismatch), and the <c>{t,o}</c> middle reorders, so
+    /// <c>ReconcileKeyedMiddle</c>'s LIS pass patches the themed survivor via
+    /// <c>RealKeyedMiddleSink.Patch</c> (<c>RunKeyedMiddleCore</c> calls <c>sink.Patch</c> for
+    /// every survivor, LIS member or mover alike). Uses the file's deterministic source-brush
+    /// mutation rather than a <c>RequestedTheme</c> toggle — an unreliable observable for the
+    /// <c>ThemeRef.Resolve</c> snapshot (see the class remarks).</para>
+    /// </summary>
+    internal sealed class KeyedMiddleReorderReResolves(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var red = MakeBrush(30, 90, 150);
+            var blue = MakeBrush(150, 90, 30);
+            var srcDict = InstallSourceDict(SrcKey, red);
+            try
+            {
+                // #721-style positive guard: the themed cell is structurally shallow-equal across
+                // renders (its Key is matched separately via KeyMatch, not by ShallowEquals), so
+                // its re-resolution hinges only on the middle path routing through Update — not an
+                // incidental modifier diff that would force a full property update and mask a broken
+                // middle-path re-resolve as a false-green.
+                H.Check("Issue701_KeyedMiddle_CellSkipEligible", Element.ShallowEquals(
+                    TextBlock("kmThemed").Resources(r => r.Set(TargetKey, Theme.Ref(SrcKey))).WithKey("t"),
+                    TextBlock("kmThemed").Resources(r => r.Set(TargetKey, Theme.Ref(SrcKey))).WithKey("t")));
+
+                Action<int>? bump = null;
+                var host = H.CreateHost();
+                host.Mount(ctx =>
+                {
+                    var (n, setN) = ctx.UseState(0);
+                    bump = setN;
+                    var anchor = TextBlock("kmAnchor").WithKey("a");
+                    var themed = TextBlock("kmThemed")
+                        .Resources(r => r.Set(TargetKey, Theme.Ref(SrcKey)))
+                        .WithKey("t");
+                    var other = TextBlock("kmOther").WithKey("o");
+                    // n even: [a, t, o]; n odd: [a, o, t]. The {t,o} middle reorders — the keyed
+                    // prefix consumes 'a', the suffix is empty — forcing ReconcileKeyedMiddle.
+                    return (n % 2 == 0)
+                        ? VStack(anchor, themed, other)
+                        : VStack(anchor, other, themed);
+                });
+
+                await Harness.Render();
+                var cell = H.FindControl<TextBlock>(t => t.Text == "kmThemed");
+                var cellBefore = cell;
+                int idxBefore = ChildIndex(cell);
+                H.Check("Issue701_KeyedMiddle_MountResolvedRed",
+                    ReferenceEquals(ResourceBrush(cell, TargetKey), red));
+
+                // Mutate the SOURCE brush, then trigger the reorder render.
+                SetSource(srcDict, SrcKey, blue);
+                bump!(1);
+                await Harness.Render();
+
+                cell = H.FindControl<TextBlock>(t => t.Text == "kmThemed");
+                // Right-reason A: the control is REUSED in place (not remounted) — proves it was
+                // patched by RealKeyedMiddleSink.Patch, not dropped + freshly mounted (a remount
+                // would carry the new brush for the wrong reason).
+                H.Check("Issue701_KeyedMiddle_ControlReusedInPlace",
+                    ReferenceEquals(cellBefore, cell));
+                // Right-reason B: the themed cell actually MOVED within its parent panel — proves
+                // the keyed-MIDDLE reorder engaged, not an incidental prefix/suffix skip.
+                int idxAfter = ChildIndex(cell);
+                H.Check($"Issue701_KeyedMiddle_ReorderEngaged[{idxBefore}->{idxAfter}]",
+                    idxBefore >= 0 && idxAfter >= 0 && idxBefore != idxAfter);
+                // The payload: the themed survivor re-resolved its ThemeRef through the middle patch.
+                H.Check("Issue701_KeyedMiddle_ReResolvedBlueOnMiddlePatch",
+                    ReferenceEquals(ResourceBrush(cell, TargetKey), blue));
+            }
+            finally
+            {
+                Application.Current.Resources.MergedDictionaries.Remove(srcDict);
+            }
+        }
+
+        private static int ChildIndex(TextBlock? cell) =>
+            cell?.Parent is Panel panel ? panel.Children.IndexOf(cell) : -1;
     }
 }

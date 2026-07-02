@@ -28,6 +28,12 @@ Conventions for contributors:
 
 ### Added
 
+- **TitleBar drag regions — `.AutoRefreshDragRegions()` and `.IsDragRegion()`
+  (spec 059).** Windows App SDK bumped 2.0.1 → 2.1.3; custom `TitleBar` content
+  now auto-excludes interactive controls from the window drag region by default.
+  Override per element with `.IsDragRegion(false)` (force clickable) /
+  `.IsDragRegion(true)` (force draggable), and set `.AutoRefreshDragRegions()` to
+  re-derive regions when content changes across renders.
 - **`DockFloatingWindowClosedEventArgs.Reason` — close-reason discriminator
   for floating-window closes (spec 045 §5.3.5, issue #417).** A new
   `required DockFloatingCloseReason Reason { get; init; }` on
@@ -365,6 +371,28 @@ Conventions for contributors:
 
 ### Fixed
 
+- **RichTextBlock inline-UI scroll drift hardened with a prevention-at-source extent
+  pin (issue #717).** The #487 scroll-anchor (below) restores the offset reactively
+  *after* the ancestor scroll host clamps it; this adds a complementary guard that aims
+  to stop the clamp from happening in the first place. The underlying cause is that the
+  live app applies the document mutation inside the reconcile and then returns to the
+  dispatcher, letting the compositor commit a frame carrying WinUI's transient
+  collapsed extent (`RemoveEmbeddedElements` → `desiredSize=0`) *before* the inline UI
+  re-attaches — the very frame the scroll host clamps against. The collapse is
+  scheduled on a *separate* dispatcher callback (not a layout-dirty flag), so a
+  synchronous `UpdateLayout` inside the reconcile measures the still-intact tree and
+  cannot coalesce it. `UpdateRichTextBlocks` now, after mutating an inline-UI-bearing
+  block, pins the block's `MinHeight` to its full pre-collapse `ActualHeight` (raising
+  the floor only, never lowering an author value) and releases the pin a couple of
+  rendered frames later once the inline UI has re-attached. With the floor pinned the
+  transient `desiredSize=0` cannot shrink the block's measured height, so
+  `ScrollableHeight` never drops, the scroll host never clamps, and there is no lost
+  offset to restore. This lands as **defense-in-depth behind the #487/#649 anchor**:
+  in the current build WinUI coalesces the transient collapse so the live drift is not
+  reproducible, but the failure mode is real if it ever commits (e.g. different
+  hardware/content or a future WinUI change), so the pin guards it at the source. No new
+  API surface; the pin only engages for blocks that actually host inline UI and actually
+  mutated.
 - **RichTextBlock inline-UI mutations no longer scroll the ancestor scroll host to
   the top (issue #487).** Mutating any `Run.Text` inside a paragraph that hosts an
   `InlineUIContainer` (charts/sliders/buttons embedded via `InlineUI(...)`) made the
@@ -410,6 +438,33 @@ Conventions for contributors:
   them; and `ReactorWindow.Close()` is now idempotent — a redundant or
   owner-cascade close performs the native close exactly once instead of
   re-entering native teardown.
+- **The full self-test suite no longer faults with an `ACCESS_VIOLATION` at
+  final process exit (issue #680; test infrastructure only).** Distinct from
+  the mid-run multi-window fault fixed in #647/#673, the *entire* self-test
+  suite (~600 fixtures in one process) crashed with `0xC0000005` during final
+  process teardown — green TAP output, then a non-zero process exit. It
+  reproduced only for the whole suite, never for any subset. Root cause is a
+  **Microsoft.UI.Xaml / Microsoft.UI.Windowing framework use-after-free** walked
+  over state the harness deliberately accumulates and never disposes: one shared
+  `Window` carrying hundreds of `Closed` handlers (one per never-disposed
+  `ReactorHost`) plus the windowing fixtures' real `ReactorWindow`s with custom
+  title bars. Every orderly process-exit path trips it — `Environment.Exit`
+  runs the loader's TLS destructors into the XAML core's already-freed tear-off
+  map (`TearoffMemoryInfoPrivate::Discard` → `0xC0000005`), and
+  `Application.Exit` double-releases the caption-buttons UI Automation provider
+  inside `CTitleBar::Uninitialize` (`0xC0000005` → fast-fail `0xC0000409`). Both
+  faults live *inside* framework teardown, so the issue's suspected
+  fix — making Reactor's own `SetTitleBar`/`WindowMessageMonitor`/backdrop
+  unregister idempotent — cannot stop them. Because no real Reactor app
+  accumulates this state (apps dispose hosts and exit via the orderly
+  `ReactorApp.SafeExit` / `Application.Exit` path, already hardened by #647), the
+  fix is scoped to the harness: after flushing the TAP stream, the self-test
+  runner ends via `TerminateProcess(GetCurrentProcess(), exitCode)`, an
+  immediate teardown-free kill that runs neither the loader's TLS destructors nor
+  WinUI's window-close cascade, preserving the exact `0`/`1` exit code. A new CI
+  regression guard (`SelfTestBatch.HostProcessExitsCleanly_NoTeardownCrash`)
+  fails if the Host ever again exits with anything other than `0` or `1`. **No
+  product code changed.**
 - **TitleBar in a non-content-extended window no longer corrupts the heap on
   close (issue #537).** A window whose `WindowSpec` set
   `ExtendsContentIntoTitleBar = false` while its content still rendered a

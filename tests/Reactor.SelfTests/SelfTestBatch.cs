@@ -26,6 +26,9 @@ public class SelfTestBatch
     private static string _fullOutput = "";
     private static bool _initialized;
     private static string? _initError;
+    // Captured process outcome for the teardown-exit-code guard (issue #680).
+    private static int _exitCode;
+    private static bool _timedOut;
     // When the Host run aborts (hang/timeout) we attribute the failure to a
     // single fixture, but every later fixture still has no entry in
     // _byFixture. _abortedReason marks the run as not-fully-executed so the
@@ -39,6 +42,8 @@ public class SelfTestBatch
     {
         var exe = FindHostExe();
         var (stdout, stderr, exitCode, timedOut) = RunProcess(exe, "--self-test", SelfTestTimeoutMs);
+        _exitCode = exitCode;
+        _timedOut = timedOut;
 
         _fullOutput = stdout;
         if (!string.IsNullOrEmpty(stderr))
@@ -313,6 +318,44 @@ public class SelfTestBatch
 
         if (!result.Passed)
             Assert.Fail(result.Detail);
+    }
+
+    /// <summary>
+    /// Regression guard for issue #680. The full self-test suite used to fault
+    /// with 0xC0000005 at *final process teardown*: <c>SelfTestRunner</c> called
+    /// <see cref="System.Environment.Exit(int)"/> from inside the live WinUI
+    /// desktop message loop, which jumps straight to <c>ExitProcess</c> and lets
+    /// the Windows loader run Microsoft.UI.Xaml's TLS destructors while the
+    /// suite's accumulated XAML object graph is still mounted — a
+    /// <c>DependencyObject</c> destructor then dereferences the XAML core's
+    /// already-freed tear-off bookkeeping map and access-violates.
+    /// <para>
+    /// The per-fixture <see cref="Fixture"/> tests can't catch this: every
+    /// fixture has already emitted its TAP result before the teardown crash, so
+    /// the run looks green even though the process exited with a crash code.
+    /// This guard asserts the Host exited with one of the only two codes the
+    /// runner legitimately produces — 0 (all passed) or 1 (fixture failures) —
+    /// so a teardown access violation (a large negative exit code) fails CI.
+    /// </para>
+    /// </summary>
+    [TestMethod]
+    public void HostProcessExitsCleanly_NoTeardownCrash()
+    {
+        Assert.IsTrue(_initialized, "Self-test batch did not run.");
+        if (_initError is not null)
+            Assert.Fail(_initError);
+
+        // Hang/timeout is surfaced per-fixture by the watchdog path and the
+        // process is killed (exit code is not meaningful), so this teardown
+        // guard only applies to a run that completed on its own.
+        if (_timedOut || _abortedReason is not null)
+            Assert.Inconclusive(_abortedReason ?? "Self-test process timed out; teardown exit code is not meaningful.");
+
+        Assert.IsTrue(_exitCode is 0 or 1,
+            $"Self-test Host exited with code {_exitCode} (0x{_exitCode & 0xFFFFFFFFL:X8}) — the runner only " +
+            $"ever returns 0 (all passed) or 1 (fixture failures), so any other code means the process faulted " +
+            $"at teardown (e.g. 0xC0000005). This is the issue #680 final-exit access violation.\n" +
+            $"--- tail of full output ---\n{Tail(_fullOutput, 4000)}");
     }
 
     // -- Discovery: one-shot Host launch to list fixture names -----------------

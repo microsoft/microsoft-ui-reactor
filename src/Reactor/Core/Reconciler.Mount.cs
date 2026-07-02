@@ -48,6 +48,15 @@ public sealed partial class Reconciler
             ctxCount = ctxValues.Count;
         }
 
+        // Compute the ancestor-aware effective theme for ThemeRef-backed ResourceOverrides
+        // resolution (mount-theme bug). The element's own RequestedTheme wins; otherwise
+        // the subtree inherits the ambient threaded from its ancestors. Saved here so the
+        // finally can restore the parent's value; the field itself is written INSIDE the
+        // try below so an exception during child mount can't leak it to siblings.
+        var prevAmbientTheme = _ambientRequestedTheme;
+        var effectiveTheme = (modifiers?.RequestedTheme is { } ownTheme && ownTheme != ElementTheme.Default)
+            ? ownTheme : prevAmbientTheme;
+
         UIElement? control;
         // Push stagger scope if this element has StaggerConfig — children mounted
         // inside MountXxx will consume stagger indices for their enter transitions.
@@ -56,6 +65,11 @@ public sealed partial class Reconciler
             PushStaggerScope(element.StaggerConfig!.Delay);
         try
         {
+        // Publish the effective theme for the subtree — INSIDE the try so the finally
+        // restores it on every exit (including an exception during child mount below).
+        // Children mounted inside MountXxx and this element's own ApplyResourceOverrides
+        // resolve ThemeRef ResourceOverrides against it.
+        _ambientRequestedTheme = effectiveTheme;
 
         // Spec 048 §8 — four-arm dispatch precedence:
         //   (1) per-host `_v1Handlers` (explicit RegisterHandler + cached
@@ -86,6 +100,15 @@ public sealed partial class Reconciler
             ComponentElement comp => MountComponent(comp, requestRerender),
             FuncElement func => MountFuncComponent(func, requestRerender),
             MemoElement memo => MountMemoComponent(memo, requestRerender),
+            // Issue #327 (Option A): a KeyedMemoElement that reaches Mount directly was used
+            // OUTSIDE a virtualized ElementFactory (which resolves it to its inner element in
+            // BuildOrCache before mounting). Treat it as a TRANSPARENT wrapper — mount its
+            // factory output directly (no extra control, no cache). A later update is keyed:
+            // CanUpdate skips when the MemoKey is unchanged and replaces (remounts the new
+            // factory output) when it changes, so the mounted inner is never re-derived from
+            // the old factory. Any modifiers on the wrapper itself are applied by the
+            // post-dispatch ApplyModifiers below, exactly like any other element.
+            KeyedMemoElement km => Mount(km.Factory() ?? EmptyElement.Instance, requestRerender),
             // EmptyElement is a no-op sentinel — callers (Reconcile, panel
             // children loops, ChildReconciler) already filter it before
             // reaching Mount, but MountContext.MountChild does not, so a V1
@@ -132,7 +155,7 @@ public sealed partial class Reconciler
 
         // Apply per-control resource overrides (lightweight styling)
         if (element.ResourceOverrides is not null && control is FrameworkElement resFe)
-            ApplyResourceOverrides(resFe, null, element.ResourceOverrides);
+            ApplyResourceOverrides(resFe, null, element.ResourceOverrides, _ambientRequestedTheme);
 
         // Apply transitions after mounting (runs after .Set() callbacks)
         if (control is not null && (element.ImplicitTransitions is not null || element.ThemeTransitions is not null))
@@ -180,6 +203,7 @@ public sealed partial class Reconciler
                 PopStaggerScope();
             if (ctxCount > 0)
                 _contextScope.Pop(ctxCount);
+            _ambientRequestedTheme = prevAmbientTheme;
         }
 
         return control;

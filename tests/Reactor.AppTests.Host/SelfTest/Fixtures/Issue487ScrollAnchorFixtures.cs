@@ -134,6 +134,15 @@ internal static class Issue487ScrollAnchorFixtures
             savedHeights[i] = inlineChildren[i].Height;
             inlineChildren[i].Height = 0;
         }
+        // Neutralize any residual extent pin (issue #717) the production reconcile left
+        // on the block from clickMutate(). The pinned MinHeight floor legitimately holds
+        // the extent up for a couple of frames to PREVENT the real collapse — but this
+        // fixture *simulates* the collapse (zeroing inline heights), a scenario the pin
+        // is not meant to cover, so the lingering floor would race the simulated clamp.
+        // The ScrollViewer variant clamps synchronously and usually wins that race; the
+        // InteractionTracker-backed ScrollView clamps a pass or two later, landing inside
+        // the pin's release window — hence the flake this clear removes.
+        rtb?.ClearValue(FrameworkElement.MinHeightProperty);
         rtb?.InvalidateMeasure();
         await Harness.Render();
 
@@ -407,6 +416,9 @@ internal static class Issue487ScrollAnchorFixtures
                 savedHeights[i] = inlineChildren[i].Height;
                 inlineChildren[i].Height = 0;
             }
+            // Drop any residual #717 extent pin so the simulated collapse isn't held up
+            // by the pinned MinHeight floor (see DriveInlineUiClampCycleAsync).
+            rtb?.ClearValue(FrameworkElement.MinHeightProperty);
             rtb?.InvalidateMeasure();
             await Harness.Render();
             for (int i = 0; i < detachCount; i++)

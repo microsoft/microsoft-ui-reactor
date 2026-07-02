@@ -355,38 +355,31 @@ public sealed class HookRulesAnalyzer : DiagnosticAnalyzer
             }
 
             if (param is null) continue;
-            // Skip unless this is the "deps" parameter (conventionally named). Several
-            // overloads exist — names include "deps", "dependencies".
-            if (param.Name is not ("deps" or "dependencies")) continue;
+            // Skip unless this is a "deps" parameter. Several overloads exist: the
+            // `params object[]` flavor names it "deps"/"dependencies", while the typed-arity
+            // overloads (UseEffect&lt;T1&gt;, UseMemo&lt;T,T1&gt;, ...) name them "d1"/"d2"/"d3".
+            if (param.Name is not ("deps" or "dependencies" or "d1" or "d2" or "d3")) continue;
             // Params arrays are handled by the tail-pass below; skip here to avoid
             // double-reporting when the user passes a scalar to a `params object[] deps`
             // parameter.
             if (param.IsParams) continue;
 
-            // If the deps parameter is an explicit `object[]`, the argument will be a
-            // single array-creation expression (explicit or implicit). Flag the array
-            // elements individually.
-            if (arg.Expression is ArrayCreationExpressionSyntax arrCreation
-                && arrCreation.Initializer is { } init)
+            // An array-literal argument bound to a deps parameter is treated as a
+            // dependency LIST (flagged element-by-element) only when its element type is
+            // a REFERENCE type — mirroring the runtime AsParamsArrayDep gate, which
+            // unwraps a covariant object[]/string[] but compares a value-type array
+            // (e.g. int[]) as ONE reference dep. For a value-type array we fall through
+            // and flag the freshly-allocated array itself, matching the per-render
+            // re-run the hook actually performs at runtime.
+            var depListElements = ReferenceArrayDepElements(model, arg.Expression);
+            if (depListElements is not null)
             {
-                foreach (var el in init.Expressions) CheckSingleDepExpression(context, el, methodName);
-            }
-            else if (arg.Expression is ImplicitArrayCreationExpressionSyntax implArr)
-            {
-                foreach (var el in implArr.Initializer.Expressions) CheckSingleDepExpression(context, el, methodName);
-            }
-            else if (arg.Expression is CollectionExpressionSyntax collExpr)
-            {
-                foreach (var el in collExpr.Elements)
-                {
-                    if (el is ExpressionElementSyntax exprEl)
-                        CheckSingleDepExpression(context, exprEl.Expression, methodName);
-                }
+                foreach (var el in depListElements) CheckSingleDepExpression(context, el, methodName);
             }
             else
             {
-                // Single scalar / reference passed. For params-arrays this is the happy
-                // path; check the one expression.
+                // A single scalar / reference / value-type-array dep — check the one
+                // expression (a fresh allocation here is the REACTOR_HOOKS_004 case).
                 CheckSingleDepExpression(context, arg.Expression, methodName);
             }
         }
@@ -407,6 +400,29 @@ public sealed class HookRulesAnalyzer : DiagnosticAnalyzer
                 CheckSingleDepExpression(context, args[i].Expression, methodName);
             }
         }
+    }
+
+    // Returns the per-element dependency expressions when <paramref name="expr"/> is an
+    // array-literal deps argument whose ELEMENT type is a reference type (object[],
+    // string[], …) — the only arrays the runtime unwraps and compares element-wise
+    // (AsParamsArrayDep). Returns null for non-array deps and for value-type arrays such
+    // as int[], which the runtime compares as a single reference dependency (so a fresh
+    // one each render is the freshly-allocated-deps case the caller then flags).
+    private static IEnumerable<ExpressionSyntax>? ReferenceArrayDepElements(SemanticModel model, ExpressionSyntax expr)
+    {
+        var type = model.GetTypeInfo(expr).Type ?? model.GetTypeInfo(expr).ConvertedType;
+        if (type is not IArrayTypeSymbol { ElementType.IsReferenceType: true })
+            return null;
+
+        return expr switch
+        {
+            ArrayCreationExpressionSyntax { Initializer: { } init } => init.Expressions,
+            ImplicitArrayCreationExpressionSyntax impl => impl.Initializer.Expressions,
+            CollectionExpressionSyntax coll => coll.Elements
+                .OfType<ExpressionElementSyntax>()
+                .Select(static e => e.Expression),
+            _ => null,
+        };
     }
 
     private static void CheckSingleDepExpression(SyntaxNodeAnalysisContext context, ExpressionSyntax expr, string methodName)

@@ -30,24 +30,21 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 ///     the skip arm and never fires it — identical under the fast path and the full
 ///     walk. This pins the changed-index ⇒ fires / untouched ⇒ skipped semantics.
 ///   • <see cref="ThemeRangeParity"/> is a live PARITY / SMOKE check over a
-///     theme-sensitive reference-equal range under a parent <c>RequestedTheme</c>
-///     toggle: every themed cell must render and its <c>{ThemeResource}</c> Foreground
-///     must re-resolve Light↔Dark, with no cell dropped by the fast-path-eligible
-///     range. It is deliberately NOT the gate teeth — see its remarks.
+///     reference-equal range of <c>{ThemeResource}</c>-themed cells under a parent
+///     <c>RequestedTheme</c> toggle: every themed cell must render and its Foreground
+///     must re-resolve Light↔Dark, with no cell dropped by the fast-path-eligible range.
 ///
-/// <para>WHY THE GATE TEETH IS HEADLESS, NOT HERE: the load-bearing teeth for the
-/// <c>!AnyThemeSensitive</c> gate is the headless
-/// <c>ChildReconcilerStructuralSkipTests.ThemeSensitive_Hint_Forces_Full_Walk</c>
-/// (revert the gate → it FAILS). A live color delta CANNOT witness the gate because
-/// WinUI auto-re-resolves a <c>{ThemeResource}</c> Style setter on any effective-theme
-/// change — empirically, with the gate reverted the themed cells were structurally
-/// skipped (ApplyThemeBindings never re-ran) yet their Foreground brushes STILL went
-/// Light→Dark. The one snapshot a skip truly leaves stale —
-/// <c>ApplyResourceOverrides</c>' concrete <c>ThemeRef.Resolve</c> into
-/// <c>fe.Resources[key]</c> — does not reliably re-resolve in the reconcile harness
-/// (its effective-theme view lags a parent RequestedTheme propagation), so it makes
-/// an unreliable live observable. The headless visited-index assertion is therefore
-/// the authoritative gate teeth; this fixture is the end-to-end parity companion.</para>
+/// <para>NOTE (updated for #758): since ThemeBindings were dropped from the
+/// theme-sensitivity gate, these <c>{ThemeResource}</c> cells are NO LONGER
+/// theme-sensitive, so the structural fast path now ENGAGES over them (rather than
+/// being gated off) — and they still re-theme, because WinUI auto-re-resolves a
+/// <c>{ThemeResource}</c> Style setter on any effective-theme change. That native
+/// self-heal is exactly why the gate could be narrowed; the deterministic
+/// skip-plus-self-heal proof (with a <c>DebugElementsDiffed</c> discriminator) lives in
+/// <c>ThemeBindingsSkipSelfHealFixtures</c>. The one snapshot a skip truly leaves
+/// stale — <c>ApplyResourceOverrides</c>' concrete <c>ThemeRef.Resolve</c> into
+/// <c>fe.Resources[key]</c> — is the arm the gate KEEPS (see <c>Issue675…</c> +
+/// <c>ChildReconcilerStructuralSkipTests</c>).</para>
 /// </summary>
 internal static class StructuralSkipFixtures
 {
@@ -116,29 +113,32 @@ internal static class StructuralSkipFixtures
     }
 
     /// <summary>
-    /// THEME RANGE PARITY (live smoke): a reference-equal range of theme-sensitive cells
-    /// (each carries a <c>{ThemeResource}</c> Foreground via <c>.Foreground(Theme.PrimaryText)</c>)
-    /// sits under a parent whose <c>RequestedTheme</c> is toggled Light↔Dark. Because the
-    /// producer flags <c>AnyThemeSensitive=true</c>, the structural fast path is gated off
-    /// (gate 5) and the full walk runs; this fixture proves the end-to-end scenario is
-    /// healthy — every themed cell renders, none is dropped across the toggle, and each
-    /// cell's Foreground brush re-resolves to the new effective theme.
+    /// THEME RANGE PARITY (live smoke): a reference-equal range of cells (each carries a
+    /// <c>{ThemeResource}</c> Foreground via <c>.Foreground(Theme.PrimaryText)</c>) sits
+    /// under a parent whose <c>RequestedTheme</c> is toggled Light↔Dark. Since #758 these
+    /// ThemeBindings cells are NOT theme-sensitive, so the producer flags
+    /// <c>AnyThemeSensitive=false</c> and the structural fast path ENGAGES (skips the
+    /// untouched range); this fixture proves the end-to-end scenario is healthy — every
+    /// themed cell renders, none is dropped across the toggle, and each cell's Foreground
+    /// brush re-resolves to the new effective theme even though it was structurally skipped.
     ///
     /// <para>NOT THE GATE TEETH (by construction it cannot be): WinUI auto-re-resolves a
     /// <c>{ThemeResource}</c> Style setter on any effective-theme change, so the Foreground
-    /// brush flips Light↔Dark whether the cell is re-applied OR structurally skipped — this
-    /// check passes under both the correct gate and a reverted one. Its value is catching a
-    /// fast path that DROPS or CORRUPTS themed cells, not detecting an over-eager skip. The
-    /// authoritative teeth for the <c>!AnyThemeSensitive</c> gate is the deterministic
-    /// headless visited-index assertion
-    /// <c>ChildReconcilerStructuralSkipTests.ThemeSensitive_Hint_Forces_Full_Walk</c>
-    /// (revert the gate → that test FAILS). See the class remarks for the empirical basis.</para>
+    /// brush flips Light↔Dark whether the cell is re-applied OR structurally skipped. Its
+    /// value is catching a fast path that DROPS or CORRUPTS themed cells. The authoritative
+    /// deterministic teeth are headless
+    /// (<c>ElementTests.CanSkipUpdate_ThemeBindingsOnly_NowSkips_SelfHealing</c>,
+    /// <c>ChildDiffHintsTests.IsThemeSensitive_False_For_ThemeBindings_SelfHealing</c>,
+    /// <c>UseMemoCellsTests.ByIndex_Reuse_ThemeBindings_Cells_Are_Not_ThemeSensitive</c> —
+    /// each reverts red if the arm is restored); the deterministic live skip-plus-self-heal
+    /// proof is <c>ThemeBindingsSkipSelfHealFixtures</c>.</para>
     /// </summary>
     internal class ThemeRangeParity(Harness h) : SelfTestFixtureBase(h)
     {
         // Reference-stable items: changedIndices is ALWAYS empty, so every cell is reused
         // reference-equal across the theme toggle (the untouched-range case the fast path
-        // targets — here defeated by AnyThemeSensitive, exercising the gated full walk).
+        // targets — since #758 the ThemeBindings cells are non-sensitive, so the fast path
+        // engages and structurally skips them; they self-heal via {ThemeResource}).
         private static readonly int[] Items = { 0, 1, 2, 3, 4 };
 
         public override async Task RunAsync()

@@ -25,6 +25,11 @@ if (args.Contains("--self-test"))
     if (args.Contains("--no-aot-skip"))
         SelfTestRunner.SkipAotPatterns = false;
     SelfTestRunner.RunAll();
+    // Unreachable in practice: RunAll terminates the process from inside the
+    // dispatcher via SelfTestRunner.EndProcessImmediately (a teardown-free
+    // TerminateProcess — issue #680). This Environment.Exit is only a last-resort
+    // fallback if the message loop ever unwinds without that hard exit firing.
+    Environment.Exit(SelfTestRunner.ExitCode);
 }
 else if (args.Contains("--devtools-stress"))
 {

@@ -208,6 +208,21 @@ VStack(
     TextBlock("Body"));
 ```
 
+`TitleBar(...)` accepts custom `Content` (and a trailing `RightHeader`). Interactive
+controls inside the content are excluded from the window drag region automatically
+(WinApp SDK ≥ 2.1.3). Override per element with `.IsDragRegion(false)` to force a
+visual clickable or `.IsDragRegion(true)` to force it draggable, and set
+`.AutoRefreshDragRegions()` on the title bar when the content changes across renders:
+
+```csharp
+(TitleBar("Gallery") with
+{
+    Content = HStack(8,
+        AutoSuggestBox("", _ => {}).Width(200),
+        Button("\uE713", OnSettings).IsDragRegion(false)),
+}).AutoRefreshDragRegions();
+```
+
 Caveats:
 
 - Setting `ExtendsContentIntoTitleBar = false` while still rendering a `TitleBar(...)`

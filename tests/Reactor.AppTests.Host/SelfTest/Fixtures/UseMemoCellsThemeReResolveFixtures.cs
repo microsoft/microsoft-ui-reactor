@@ -10,29 +10,28 @@ using static Microsoft.UI.Reactor.Factories;
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
 /// <summary>
-/// Issue #659 — end-to-end guard for the base <c>UseMemoCells</c> full-cache-hit
-/// early-out vs theme propagation. A base <c>UseMemoCells</c> list of
-/// theme-sensitive cells sits in a container under an ancestor
+/// Issue #659 / #758 — end-to-end guard for the base <c>UseMemoCells</c>
+/// full-cache-hit early-out vs theme propagation. A base <c>UseMemoCells</c> list of
+/// <c>ThemeBindings</c> cells sits in a container under an ancestor
 /// <c>RequestedTheme</c> toggle, driven through a full value-equal cache hit
 /// (items + deps unchanged), then the theme is toggled and the cell's themed
 /// Foreground must re-resolve to the new theme's brush.
 ///
-/// EMPIRICAL FINDING (verified by running this WITH and WITHOUT the
-/// <c>AnyThemeSensitive</c> gate): the themed Foreground re-resolves identically in
-/// both cases (000000 Light -> FFFFFF Dark). A <c>.Foreground(Theme.X)</c> binding
-/// compiles to a <c>{ThemeResource}</c> Style setter which WinUI re-resolves
+/// EMPIRICAL FINDING (verified WITH and WITHOUT the <c>AnyThemeSensitive</c> gate,
+/// and the basis for narrowing it in #758): the themed Foreground re-resolves
+/// identically in both cases (000000 Light -> FFFFFF Dark). A <c>.Foreground(Theme.X)</c>
+/// binding compiles to a <c>{ThemeResource}</c> Style setter which WinUI re-resolves
 /// NATIVELY on the cell's effective-theme change — independent of whether Reactor
-/// recurses into the cell or the container <c>ShallowEquals</c>-skips it. So the
-/// early-out's container skip does not strand a themed-Foreground descendant. The
-/// <c>AnyThemeSensitive</c> gate is retained as conservative insurance (it matches
-/// the established <c>ChildDiffHints.IsThemeSensitive</c> predicate and only forgoes
-/// the array-reuse optimization for theme-sensitive lists).
+/// recurses into the cell or the container <c>ShallowEquals</c>-skips it. Since #758,
+/// ThemeBindings are NO LONGER theme-sensitive, so this list now takes the array-reuse
+/// early-out and the container ACTUALLY structural-skips the cells on the toggle — this
+/// fixture therefore now exercises (not just anticipates) the skipped-child self-heal
+/// path, and the Foreground still re-resolves. (The deterministic skip-plus-self-heal
+/// proof with a DebugElementsDiffed discriminator is in <c>ThemeBindingsSkipSelfHealFixtures</c>.)
 ///
 /// Note: a <c>ResourceOverride</c> ThemeRef resolved to a CONCRETE brush does NOT
-/// re-resolve on this toggle — but it is wrong already at MOUNT (resolves the app
-/// fallback theme, not the ancestor <c>RequestedTheme</c>), a pre-existing
-/// <c>GetEffectiveThemeName</c>-during-reconcile limitation unrelated to this PR, so
-/// it is not asserted here.
+/// self-heal on this toggle — it is the arm KEPT by #758 (and, resolved correctly at
+/// mount against the ancestor theme since #771).
 /// </summary>
 internal static class UseMemoCellsThemeReResolveFixtures
 {

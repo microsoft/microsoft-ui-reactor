@@ -120,6 +120,7 @@ Markdown(string markdown) → Element
 Markdown(string markdown, MarkdownOptions options) → Element
 MediaPlayerElement(string source = null) → MediaPlayerElementElement
 Memo(Func<RenderContext, Element> render, object[] dependencies) → MemoElement
+Memo<TKey>(TKey key, Func<Element> factory) → KeyedMemoElement
 Menu(string title, MenuFlyoutItemBase[] items) → MenuBarItemData
 MenuBar(MenuBarItemData[] items) → MenuBarElement
 MenuFlyout(Element target, MenuFlyoutItemBase[] items) → MenuFlyoutElement
@@ -605,6 +606,7 @@ T.HierarchyLevel<T>(int level) → T
 T.HorizontalAlignment<T>(HorizontalAlignment alignment) → T
 T.Immediate<T>() → T
 T.InteractionStates<T>(Func<InteractionStatesBuilder, InteractionStatesBuilder> configure, Curve curve = null) → T
+T.IsDragRegion<T>(bool? isDragRegion = true) → T
 T.IsEnabled<T>(bool enabled = true) → T
 T.IsTabStop<T>(bool isTabStop = true) → T
 T.IsVisible<T>(bool isVisible) → T
@@ -797,6 +799,7 @@ TextBoxElement.TextWrapping(TextWrapping wrapping = TextWrapping.Wrap) → TextB
 TextBoxElement.UrlInput() → TextBoxElement
 TimePickerElement.Set(Action<TimePicker> configure) → TimePickerElement
 TimePickerElement.TimeChanged(Action<TimeSpan> handler) → TimePickerElement
+TitleBarElement.AutoRefreshDragRegions(bool value = true) → TitleBarElement
 TitleBarElement.BackButtonEnabled(bool enabled) → TitleBarElement
 TitleBarElement.BackButtonVisible(bool visible) → TitleBarElement
 TitleBarElement.BackRequested(Action handler) → TitleBarElement
@@ -857,6 +860,9 @@ RenderContext.UseAnnounce() → AnnounceHandle
 RenderContext.UseBreakpoint(Window window, double minWidth) → bool
 RenderContext.UseBreakpoint(double minWidth) → bool
 RenderContext.UseCallback(Action callback, object[] dependencies) → Action
+RenderContext.UseCallback<T1, T2, T3>(Action callback, T1 d1, T2 d2, T3 d3) → Action
+RenderContext.UseCallback<T1, T2>(Action callback, T1 d1, T2 d2) → Action
+RenderContext.UseCallback<T1>(Action callback, T1 d1) → Action
 RenderContext.UseChildValidationContext() → ValueTuple<ValidationContext, ValidationContext>
 RenderContext.UseClosingGuard(Func<bool> canClose) → void
 RenderContext.UseCollection<T>(ObservableCollection<T> collection) → IReadOnlyList<T>
@@ -875,6 +881,12 @@ RenderContext.UseDockState() → DockPaneState
 RenderContext.UseDpi() → UInt32
 RenderContext.UseEffect(Action effect, object[] dependencies) → void
 RenderContext.UseEffect(Func<Action> effectWithCleanup, object[] dependencies) → void
+RenderContext.UseEffect<T1, T2, T3>(Action effect, T1 d1, T2 d2, T3 d3) → void
+RenderContext.UseEffect<T1, T2, T3>(Func<Action> effectWithCleanup, T1 d1, T2 d2, T3 d3) → void
+RenderContext.UseEffect<T1, T2>(Action effect, T1 d1, T2 d2) → void
+RenderContext.UseEffect<T1, T2>(Func<Action> effectWithCleanup, T1 d1, T2 d2) → void
+RenderContext.UseEffect<T1>(Action effect, T1 d1) → void
+RenderContext.UseEffect<T1>(Func<Action> effectWithCleanup, T1 d1) → void
 RenderContext.UseElementFocus(FocusState state = FocusState.Programmatic) → ValueTuple<ElementRef, Action>
 RenderContext.UseElementRef<T>() → ElementRef<T>
 RenderContext.UseExternalStore<TSnapshot>(Func<Action, Action> subscribe, Func<TSnapshot> getSnapshot, IEqualityComparer<TSnapshot> comparer = null) → TSnapshot
@@ -891,6 +903,9 @@ RenderContext.UseIsActive() → bool
 RenderContext.UseIsActivePane() → bool
 RenderContext.UseIsCovered() → bool
 RenderContext.UseIsDarkTheme() → bool
+RenderContext.UseMemo<T, T1, T2, T3>(Func<T> factory, T1 d1, T2 d2, T3 d3) → T
+RenderContext.UseMemo<T, T1, T2>(Func<T> factory, T1 d1, T2 d2) → T
+RenderContext.UseMemo<T, T1>(Func<T> factory, T1 d1) → T
 RenderContext.UseMemo<T>(Func<T> factory, object[] dependencies) → T
 RenderContext.UseMemoCells<T>(IReadOnlyList<T> items, Func<T, int, Element> builder, object[] dependencies) → Element[]
 RenderContext.UseMemoCellsByIndex<T>(IReadOnlyList<T> items, IReadOnlyList<int> changedIndices, Func<T, int, Element> builder, object[] dependencies) → Element[]
@@ -2963,6 +2978,7 @@ Vector3? Translation { get; init; }
 VerticalAlignment? VerticalAlignment { get; init; }
 VisualModifiers Visual { get; init; }
 XYFocusKeyboardNavigationMode? XYFocusKeyboardNavigation { get; init; }
+bool? IsDragRegion { get; init; }
 bool? IsEnabled { get; init; }
 bool? IsTabStop { get; init; }
 bool? IsVisible { get; init; }
@@ -4005,6 +4021,17 @@ int Count { get; init; }
 string ControlContext { get; init; }
 Deconstruct(ref DateTime TimestampUtc, ref string ControlContext, ref KeyedListDiagnosticKind Kind, ref IReadOnlyList<string> SampleKeys, ref int Count) → void
 Equals(KeyedListDiagnostic other) → bool
+Equals(object obj) → bool
+GetHashCode() → int
+ToString() → string
+
+### record KeyedMemoElement
+new(object MemoKey, Func<Element> Factory)
+Func<Element> Factory { get; init; }
+object MemoKey { get; init; }
+Deconstruct(ref object MemoKey, ref Func<Element> Factory) → void
+Equals(Element other) → bool
+Equals(KeyedMemoElement other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
@@ -5609,6 +5636,7 @@ IReadOnlyList<UIElement> LastMountedElements { get; }
 bool EnableBitmaskDiff { get; set; }
 ApplyDefaultAutomationName(FrameworkElement fe, string caption) → void
 ApplyResourceOverrides(FrameworkElement fe, ResourceOverrides oldOverrides, ResourceOverrides newOverrides) → void
+ApplyResourceOverrides(FrameworkElement fe, ResourceOverrides oldOverrides, ResourceOverrides newOverrides, ElementTheme effectiveTheme) → void
 ApplySetters<T>(Action<T>[] setters, T control) → void
 ApplyThemeBindings(FrameworkElement fe, IReadOnlyDictionary<string, ThemeRef> bindings) → void
 DetachReactorState(FrameworkElement fe) → void
@@ -5700,6 +5728,9 @@ new()
 UseBreakpoint(Window window, double minWidth) → bool
 UseBreakpoint(double minWidth) → bool
 UseCallback(Action callback, object[] dependencies) → Action
+UseCallback<T1, T2, T3>(Action callback, T1 d1, T2 d2, T3 d3) → Action
+UseCallback<T1, T2>(Action callback, T1 d1, T2 d2) → Action
+UseCallback<T1>(Action callback, T1 d1) → Action
 UseClosingGuard(Func<bool> canClose) → void
 UseCollection<T>(ObservableCollection<T> collection) → IReadOnlyList<T>
 UseColorScheme() → ColorScheme
@@ -5710,6 +5741,12 @@ UseDisplays() → IReadOnlyList<DisplayInfo>
 UseDpi() → UInt32
 UseEffect(Action effect, object[] dependencies) → void
 UseEffect(Func<Action> effectWithCleanup, object[] dependencies) → void
+UseEffect<T1, T2, T3>(Action effect, T1 d1, T2 d2, T3 d3) → void
+UseEffect<T1, T2, T3>(Func<Action> effectWithCleanup, T1 d1, T2 d2, T3 d3) → void
+UseEffect<T1, T2>(Action effect, T1 d1, T2 d2) → void
+UseEffect<T1, T2>(Func<Action> effectWithCleanup, T1 d1, T2 d2) → void
+UseEffect<T1>(Action effect, T1 d1) → void
+UseEffect<T1>(Func<Action> effectWithCleanup, T1 d1) → void
 UseExternalStore<TSnapshot>(Func<Action, Action> subscribe, Func<TSnapshot> getSnapshot, IEqualityComparer<TSnapshot> comparer = null) → TSnapshot
 UseFilePickerAsync(FilePickerOptions options) → Task<StorageFile>
 UseFolderPickerAsync(FolderPickerOptions options) → Task<StorageFolder>
@@ -5719,6 +5756,9 @@ UseIntl() → IntlAccessor
 UseIsActive() → bool
 UseIsCovered() → bool
 UseIsDarkTheme() → bool
+UseMemo<T, T1, T2, T3>(Func<T> factory, T1 d1, T2 d2, T3 d3) → T
+UseMemo<T, T1, T2>(Func<T> factory, T1 d1, T2 d2) → T
+UseMemo<T, T1>(Func<T> factory, T1 d1) → T
 UseMemo<T>(Func<T> factory, object[] dependencies) → T
 UseNavigation<TRoute>() → NavigationHandle<TRoute>
 UseNavigation<TRoute>(TRoute initial) → NavigationHandle<TRoute>
@@ -6833,6 +6873,7 @@ Action OnPaneToggleRequested { get; init; }
 Element Content { get; init; }
 Element RightHeader { get; init; }
 IconData Icon { get; init; }
+bool AutoRefreshDragRegions { get; init; }
 bool IsBackButtonEnabled { get; init; }
 bool IsBackButtonVisible { get; init; }
 bool IsPaneToggleButtonVisible { get; init; }

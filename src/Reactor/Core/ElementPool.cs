@@ -248,6 +248,9 @@ public sealed class ElementPool : IDisposable
         fe.ClearValue(UIElement.IsHitTestVisibleProperty);
         if (fe is Control tabStopControl)
             tabStopControl.ClearValue(Control.IsTabStopProperty);
+        // spec 059: clear the TitleBar.IsDragRegion attached prop so a pooled
+        // control marked .IsDragRegion(...) can't poison the next renter.
+        fe.ClearValue(WinUI.TitleBar.IsDragRegionProperty);
         fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.IsRequiredForFormProperty);
         fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.LiveSettingProperty);
         fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.PositionInSetProperty);
@@ -317,6 +320,7 @@ public sealed class ElementPool : IDisposable
                 tb.ClearValue(TextBlock.FontFamilyProperty);
                 break;
             case WinUI.RichTextBlock rtb:
+                Reconciler.CancelInlineUiExtentPin(rtb);
                 rtb.Blocks.Clear();
                 break;
             case WinUI.ProgressBar pb:

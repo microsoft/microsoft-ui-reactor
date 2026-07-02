@@ -391,19 +391,25 @@ public abstract record Element
     /// bucketed fields are provably null on both sides.
     /// </summary>
     /// <remarks>
-    /// Issue #675 — the <c>ResourceOverrides.ThemeRefs</c> gate mirrors the
-    /// <c>ThemeBindings</c> gate and <see cref="Core.ChildDiffHints.IsThemeSensitive"/>.
-    /// A child themed only via <c>ResourceOverrides.ThemeRefs</c> (no ThemeBindings)
-    /// must NOT take the cheap child-skip arms in <c>ChildReconciler</c>: declining
-    /// the skip routes it through <c>Update</c>, whose element-level shallow-skip
-    /// re-resolves the ThemeRef into <c>fe.Resources[...]</c> on an effective-theme
-    /// change. This keeps Reconciler.Update the single source of truth for skip
-    /// side-effects rather than duplicating the re-resolve across every child-skip arm.
+    /// Theme-sensitivity gate (issue #675, narrowed per #758): the ONLY theme input
+    /// that blocks the cheap child-skip arms is a <c>ResourceOverrides.ThemeRefs</c>
+    /// override — it resolves to a CONCRETE brush at reconcile
+    /// (<c>ApplyResourceOverrides</c> → <c>fe.Resources[...]</c>), which does NOT
+    /// re-resolve on an effective-theme change unless <c>Update</c> re-runs, so a
+    /// child carrying one must decline the skip and route through <c>Update</c>
+    /// (its element-level shallow-skip re-resolves the ThemeRef). <c>ThemeBindings</c>
+    /// deliberately do NOT block the skip: <c>.Foreground(Theme.X)</c> compiles to a
+    /// <c>{ThemeResource}</c> Style setter that WinUI re-resolves NATIVELY on the
+    /// control's effective-theme change (app theme OR an ancestor <c>RequestedTheme</c>)
+    /// — self-healing whether or not Reactor re-applies it, so re-running
+    /// <c>ApplyThemeBindings</c> on a skipped child is redundant (it re-applies the same
+    /// content-addressed cached Style). The theme predicate is SHARED with
+    /// <see cref="Core.ChildDiffHints.IsThemeSensitive"/> (the child-diff-hint / container
+    /// fast-path gate) so the two arms can never desync.
     /// </remarks>
     internal static bool CanSkipUpdate(Element oldEl, Element newEl)
         => ShallowEquals(oldEl, newEl)
-            && newEl.ThemeBindings is null
-            && newEl.ResourceOverrides is not { ThemeRefs.Count: > 0 }
+            && !ChildDiffHints.IsThemeSensitive(newEl)
             && oldEl.HasCallbacks == newEl.HasCallbacks;
 
     /// <summary>
@@ -1183,6 +1189,7 @@ public abstract record Element
             && a.ContextFlyout is null && b.ContextFlyout is null
             // Accessibility Tier 1
             && a.HeadingLevel == b.HeadingLevel
+            && a.IsDragRegion == b.IsDragRegion
             && a.IsTabStop == b.IsTabStop
             && a.TabIndex == b.TabIndex
             && a.AccessKey == b.AccessKey
@@ -1501,6 +1508,39 @@ public record FuncElement(Func<RenderContext, Element> RenderFunc) : Element;
 /// null Dependencies = render once on mount + self-triggered state changes only.
 /// </summary>
 public record MemoElement(Func<RenderContext, Element> RenderFunc, object?[]? Dependencies = null) : Element;
+
+/// <summary>
+/// Issue #327 — an opt-in, typed keyed memo wrapper produced by the
+/// <c>Memo(key, factory)</c> factory (see <see cref="Microsoft.UI.Reactor.Factories"/>).
+/// The author asserts <see cref="Factory"/> is a <b>pure function of <see cref="MemoKey"/></b>:
+/// when a virtualized <see cref="ElementFactory{T}"/> recycles a container and asks for the
+/// same key again, the factory-scoped LRU returns the previously-built inner
+/// <see cref="Element"/> instance unchanged instead of rebuilding+diffing the subtree.
+/// Returning the <em>same</em> instance lets <c>Element.ShallowEquals</c> hit its
+/// <c>ReferenceEquals</c> fast-path so the per-row reconcile descent is skipped entirely.
+///
+/// <para><b>Purity contract.</b> The key must capture <em>every</em> input the factory reads.
+/// Closing over unkeyed mutable state (a <c>UseState</c> cell, an external counter, the theme)
+/// without folding it into the key will serve stale content — that is the author's
+/// responsibility. Widen the key to a tuple (e.g. <c>Memo((item.Id, isSelected), …)</c>) to
+/// capture extra inputs. <see cref="MemoKey"/> is compared with
+/// <see cref="object.Equals(object)"/> / <see cref="object.GetHashCode"/>, so value keys
+/// (ints, strings, records, value tuples) dedupe by value — this is what makes the int-index
+/// VirtualList path hit the cache where the reference-identity <c>_viewBuilderCache</c> cannot.</para>
+///
+/// <para><b>Used outside a virtualized factory</b> (e.g. a plain <c>VStack</c> child), the
+/// reconciler treats it as a <em>transparent, keyed</em> wrapper: a re-render with the same
+/// <see cref="MemoKey"/> is a no-op (by the purity contract the factory output is identical to
+/// the mounted inner, so there is nothing to diff), and a CHANGED key replaces the inner
+/// (unmount + fresh mount of the new <see cref="Factory"/> output). The old factory is never
+/// re-invoked at update time, so it is always safe to drop a <c>Memo(key, …)</c> anywhere a
+/// normal element is expected. The cross-recycle cache benefit only applies on the
+/// <see cref="ElementFactory{T}"/> recycle path.</para>
+///
+/// <para>The positional parameter is named <c>MemoKey</c> (not <c>Key</c>) so it does not clash
+/// with the inherited <see cref="Element.Key"/> string used for keyed reconciliation.</para>
+/// </summary>
+public sealed record KeyedMemoElement(object MemoKey, Func<Element> Factory) : Element;
 
 // ════════════════════════════════════════════════════════════════════════
 //  Semantic wrapper for composite accessibility
@@ -1945,6 +1985,15 @@ public record ElementModifiers
         init => Layout = Layout is null ? new LayoutModifiers { RequestedTheme = value } : Layout with { RequestedTheme = value };
     }
 
+    /// <summary>
+    /// When set, writes the <c>Microsoft.UI.Xaml.Controls.TitleBar.IsDragRegion</c>
+    /// attached property on this element's control (WinApp SDK ≥ 2.1.3):
+    /// <c>true</c> = draggable, <c>false</c> = clickable. Unset leaves the title bar
+    /// to decide (interactive controls are auto-excluded from the drag region).
+    /// Inert on elements that are not inside a TitleBar. See spec 059.
+    /// </summary>
+    public bool? IsDragRegion { get; init; }
+
     // ── Accessibility — Tier 1 (inline, commonly needed for WCAG AA) ─
     public Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel? HeadingLevel { get; init; }
     public bool? IsTabStop { get; init; }
@@ -2033,6 +2082,7 @@ public record ElementModifiers
             DragSource = other.DragSource ?? DragSource,
             DropTarget = other.DropTarget ?? DropTarget,
             HeadingLevel = other.HeadingLevel ?? HeadingLevel,
+            IsDragRegion = other.IsDragRegion ?? IsDragRegion,
             IsTabStop = other.IsTabStop ?? IsTabStop,
             TabIndex = other.TabIndex ?? TabIndex,
             AccessKey = other.AccessKey ?? AccessKey,
@@ -4547,7 +4597,7 @@ public partial record NavigationViewElement(
 }
 
 // Spec 058 §15 (P5.23) — Title/Subtitle/IsBackButtonVisible/IsBackButtonEnabled/
-// IsPaneToggleButtonVisible auto-map. Content+RightHeader (NamedSlots → overwrite d.Children),
+// IsPaneToggleButtonVisible/AutoRefreshDragRegions auto-map. Content+RightHeader (NamedSlots → overwrite d.Children),
 // Icon (Icon→IconSource via IconResolver transform), the window.SetTitleBar registration
 // (.Imperative) and the BackRequested/PaneToggleRequested events (Excluded) are bespoke.
 // Replaces TitleBarDescriptor.
@@ -4565,6 +4615,13 @@ public partial record TitleBarElement(
     public Action? OnBackRequested { get; init; }
     public bool IsPaneToggleButtonVisible { get; init; }
     public Action? OnPaneToggleRequested { get; init; }
+    /// <summary>
+    /// When <c>true</c>, the WinUI <c>TitleBar</c> re-derives its drag regions on
+    /// every layout pass (WinApp SDK ≥ 2.1.3). Useful when <see cref="Content"/>
+    /// changes across renders. Default <c>false</c> (matches the control default;
+    /// interactive controls are still auto-excluded from the drag region). See spec 059.
+    /// </summary>
+    public bool AutoRefreshDragRegions { get; init; }
     public Element? Content { get; init; }
     public Element? RightHeader { get; init; }
     /// <summary>

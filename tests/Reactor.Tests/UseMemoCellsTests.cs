@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Elements;
 using Microsoft.UI.Reactor.Hooks;
 using Xunit;
 
@@ -340,7 +341,22 @@ public class UseMemoCellsTests
     //  UseMemoCellsByIndex — PR-C ChildDiffHint publication (spec 034 §C)
     // ════════════════════════════════════════════════════════════════
 
+    // Theme-sensitive cell for the ChildDiffHint counting-machinery tests below.
+    // Uses a ResourceOverrides.ThemeRef (a CONCRETE brush resolved at reconcile) — the
+    // arm RETAINED by #758 — NOT a ThemeBindings {ThemeResource} (which self-heals and is
+    // no longer counted). The tally/publication logic under test is identical either way;
+    // this keeps it exercised against the arm that still gates the skip.
     private static Element MakeThemedCell(int v)
+        => new DivElement(Array.Empty<Element>(), $"v={v}")
+        {
+            ResourceOverrides = new ResourceOverrides(
+                Literals: new Dictionary<string, object>(),
+                ThemeRefs: new Dictionary<string, ThemeRef> { ["Foreground"] = new ThemeRef("SystemAccentColor") }),
+        };
+
+    // A ThemeBindings-only cell is NOT theme-sensitive after #758 (it self-heals) — used
+    // to prove the producer no longer counts / gates on it.
+    private static Element MakeThemeBindingCell(int v)
         => new DivElement(Array.Empty<Element>(), $"v={v}")
         {
             ThemeBindings = new Dictionary<string, ThemeRef> { ["Foreground"] = new ThemeRef("SystemAccentColor") },
@@ -421,6 +437,25 @@ public class UseMemoCellsTests
         Assert.True(ChildDiffHints.TryGet(second, out var hint));
         Assert.True(hint!.AnyThemeSensitive);
         Assert.Equal(2, hint.ThemeSensitiveCount);
+    }
+
+    [Fact]
+    public void ByIndex_Reuse_ThemeBindings_Cells_Are_Not_ThemeSensitive()
+    {
+        // #758 gate-teeth: a range of ThemeBindings-only cells must publish
+        // AnyThemeSensitive=false (was true) so the #750 container fast-path engages and
+        // structurally skips them — their {ThemeResource} setters self-heal natively.
+        // Reverting the ChildDiffHints.IsThemeSensitive arm makes this go red.
+        var ctx = NewCtx();
+        Func<int, int, Element> themed = (item, i) => MakeThemeBindingCell(item);
+        var items = new[] { 10, 20, 30 };
+        ctx.UseMemoCellsByIndex<int>(items, Array.Empty<int>(), themed);
+        ctx.BeginRender(() => { });
+        var second = ctx.UseMemoCellsByIndex<int>(items, Array.Empty<int>(), themed);
+
+        Assert.True(ChildDiffHints.TryGet(second, out var hint));
+        Assert.False(hint!.AnyThemeSensitive);
+        Assert.Equal(0, hint.ThemeSensitiveCount);
     }
 
     [Fact]

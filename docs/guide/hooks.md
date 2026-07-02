@@ -207,6 +207,11 @@ Key details:
 - **Empty dependencies** `UseEffect(() => { ... })` — runs once on mount.
 - **With dependencies** `UseEffect(() => { ... }, running)` — runs when
   `running` changes.
+- **Typed-arity overloads** — for one, two, or three dependencies,
+  `UseEffect(body, a, b)` passes the deps positionally instead of through a
+  `params object[]`. The unchanged-deps path allocates no array and avoids
+  boxing value-type deps; behaviour is otherwise identical. The same overloads
+  exist for `UseMemo` and `UseCallback`.
 
 ## UseMemo
 
@@ -242,6 +247,10 @@ class MemoDemo : Component
 `UseMemo` compares the dependency values between renders. If they haven't
 changed, it returns the cached result. Use it for string processing, filtering
 large lists, or any computation you don't want to repeat every render.
+
+For one to three dependencies, the typed-arity overloads
+`UseMemo(factory, a, b)` avoid the `params object[]` allocation and value-type
+boxing on the unchanged path — handy when a memo sits on a hot render path.
 
 ## UseRef
 
@@ -311,6 +320,10 @@ Without `UseCallback`, the lambda `() => updateCount(c => c + 1)` would be a new
 object every render. `UseCallback` returns the same delegate instance as long
 as the dependencies haven't changed. This matters when passing callbacks to
 memoized [child components](components.md).
+
+As with `UseEffect` and `UseMemo`, the typed-arity overloads
+`UseCallback(callback, a, b)` (1-3 deps) skip the `params object[]` allocation
+and value-type boxing on the unchanged path.
 
 ## External Stores
 

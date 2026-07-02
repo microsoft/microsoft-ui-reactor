@@ -40,6 +40,51 @@ public class ElementModifiersCoverageTests
     }
 
     // ════════════════════════════════════════════════════════════════
+    //  TitleBar.IsDragRegion — cross-cutting attached prop (spec 059)
+    // ════════════════════════════════════════════════════════════════
+
+    [Fact]
+    public void IsDragRegion_DefaultsTrue_SetsModifier()
+    {
+        var el = TextBlock("x").IsDragRegion();
+        Assert.True(el.Modifiers!.IsDragRegion);
+    }
+
+    [Fact]
+    public void IsDragRegion_False_SetsModifier()
+    {
+        var el = Button("click", () => { }).IsDragRegion(false);
+        Assert.False(el.Modifiers!.IsDragRegion);
+    }
+
+    [Fact]
+    public void IsDragRegion_Unset_IsNull()
+    {
+        var el = TextBlock("x");
+        Assert.Null(el.Modifiers?.IsDragRegion);
+    }
+
+    [Fact]
+    public void IsDragRegion_SurvivesAsNonFirstModifier()
+    {
+        // Regression (spec 059): ElementModifiers.Merge must carry IsDragRegion
+        // through a chain — otherwise .IsDragRegion() applied after another
+        // modifier is silently dropped (the gallery-sample order).
+        var el = Button("x", () => { }).Width(36).Height(36).IsDragRegion(false);
+        Assert.False(el.Modifiers!.IsDragRegion);
+    }
+
+    [Fact]
+    public void ModifiersEqual_DistinguishesIsDragRegion()
+    {
+        // Regression (spec 059): a runtime IsDragRegion toggle must not be
+        // collapsed by the reconciler skip fast-path (ModifiersEqual gate).
+        var a = new ElementModifiers { IsDragRegion = true };
+        var b = new ElementModifiers { IsDragRegion = false };
+        Assert.False(Element.ModifiersEqual(a, b));
+    }
+
+    // ════════════════════════════════════════════════════════════════
     //  Accessibility Tier 2 — on AccessibilityModifiers
     // ════════════════════════════════════════════════════════════════
 

@@ -1240,6 +1240,53 @@ public static partial class Factories
         => new(render, dependencies.Length == 0 ? null : dependencies);
 
     /// <summary>
+    /// Opt-in typed keyed memo for virtualized rows (issue #327). Wrap a row body in
+    /// <c>Memo(key, () =&gt; …)</c> to assert the body is a <b>pure function of <paramref name="key"/></b>.
+    /// Inside a virtualized list (<c>VirtualList</c>, <c>LazyVStack&lt;T&gt;</c>, …) the owning
+    /// <see cref="Core.ElementFactory{T}"/> caches the built element per key in a bounded LRU, so a
+    /// container recycle that re-asks for the same key returns the <em>same</em> element instance —
+    /// the reconciler then skips the row's rebuild + per-row diff entirely (sub-µs). This targets the
+    /// fast-scroll cost of variable-height rows, where every recycle otherwise rebuilds and diffs the
+    /// row from scratch.
+    /// <para>Usage: <c>renderItem: i =&gt; Memo(items[i].Id, () =&gt; Border(BigVariableHeightRow(items[i])))</c></para>
+    /// <para><b>Purity is your responsibility.</b> The key must capture every input the factory reads.
+    /// If the body also depends on, say, a selection flag, fold it into the key:
+    /// <c>Memo((items[i].Id, isSelected), () =&gt; …)</c>. Closing over unkeyed mutable state will serve
+    /// stale content. The cache is cleared automatically when the list's items/renderItem change.</para>
+    /// <para><b>Apply modifiers inside the factory, not on the wrapper.</b> The cross-recycle cache
+    /// only unwraps a <em>bare</em> <c>Memo(key, …)</c> — one with no fluent modifiers, no
+    /// <c>.WithKey(…)</c>, and no attached state (Grid/Canvas attached properties, <c>.Provide(…)</c>
+    /// context, or theme bindings) on the wrapper itself. Decorating the wrapper
+    /// (<c>Memo(id, () =&gt; …).Padding(8)</c>) opts the row out of caching and silently loses the perf
+    /// benefit; put modifiers on the element the factory returns instead:
+    /// <c>Memo(id, () =&gt; Border(…).Padding(8))</c>.</para>
+    /// <para>Outside a virtualized factory the wrapper is transparent but <em>keyed</em>: a re-render
+    /// with the same key is a no-op (the factory is not re-invoked and the inner subtree is not
+    /// diffed), while a changed key replaces the inner (unmount + fresh mount of the new factory
+    /// output). The cross-recycle cache only applies on the virtualized-list path. It is always safe
+    /// to use anywhere an element is expected.</para>
+    /// </summary>
+    /// <typeparam name="TKey">
+    /// Key type. Boxed to <see cref="object"/> and compared with <see cref="object.Equals(object)"/> /
+    /// <see cref="object.GetHashCode"/>, so value keys (ints, strings, records, value tuples) dedupe by
+    /// value. This is what lets the int-index <c>VirtualList</c> path hit the cache.
+    /// </typeparam>
+    /// <param name="key">Stable identity that fully determines <paramref name="factory"/>'s output.</param>
+    /// <param name="factory">Builds the row element. Invoked once per key on a cache miss.</param>
+    public static Core.KeyedMemoElement Memo<TKey>(TKey key, Func<Element> factory)
+    {
+        // Validate up front so a null reference key fails HERE (with the argument name) instead
+        // of later as an opaque throw from the KeyedMemoCache dictionary lookup at realize time.
+        // Boxing a value-type key yields a non-null object, so int / value-tuple / record keys
+        // always pass; the boxed instance is reused for the element, so there is no double-box on
+        // the per-row virtualized path.
+        object? boxedKey = key;
+        global::System.ArgumentNullException.ThrowIfNull(boxedKey, nameof(key));
+        global::System.ArgumentNullException.ThrowIfNull(factory);
+        return new(boxedKey, factory);
+    }
+
+    /// <summary>
     /// Define an inline function component that re-renders on every parent render
     /// (no memoization), keeping its own hook scope. Equivalent to the legacy
     /// <see cref="Func"/> behavior, made explicit so the reader can tell the

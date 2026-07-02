@@ -120,6 +120,22 @@ spec value is `null`. Explicit `true` or `false` wins.
 > path) so it is safe. Prefer omitting `TitleBar(...)` when you want the system
 > title bar.
 
+### Custom title-bar content and drag regions
+
+`TitleBar(...)` accepts custom `Content`. Interactive controls are excluded from
+the drag region automatically (WinApp SDK ≥ 2.1.3). Override per element with
+`.IsDragRegion(false)` (force clickable) or `.IsDragRegion(true)` (force draggable),
+and add `.AutoRefreshDragRegions()` when the content changes across renders:
+
+```csharp
+(TitleBar("Gallery") with
+{
+    Content = HStack(8,
+        AutoSuggestBox("", _ => {}).Width(200),
+        Button("\uE713", OnSettings).IsDragRegion(false)),
+}).AutoRefreshDragRegions();
+```
+
 ```csharp
 VStack(...).Backdrop(BackdropKind.Mica);
 new WindowSpec { Backdrop = BackdropChoice.Of(BackdropKind.DesktopAcrylic) };

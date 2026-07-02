@@ -362,31 +362,14 @@ public sealed class RenderContext
     // <snippet:effect-schedule>
     public void UseEffect(Action effect, params object[] dependencies)
     {
-        if (_hookIndex >= _hooks.Count)
-        {
-            _hooks.Add(new EffectHookState { Dependencies = null, Effect = effect });
-        }
-
-        if (_hooks[_hookIndex] is not EffectHookState hook)
-            throw new HookOrderException(
-                $"Hook at index {_hookIndex} is {_hooks[_hookIndex].GetType().Name}, expected EffectHookState. " +
-                "Hooks must be called in the same order every render.");
-        _hookIndex++;
-
+        var hook = AcquireEffectSlot();
+        // Snapshot the deps on store (SnapshotDeps): a caller can pass — and then
+        // reuse and mutate in place — the same array instance across renders, so the
+        // stored copy must be isolated or DepsEqual would alias prev/next and skip a
+        // real change (Issue #659 review #3). Only the deps-CHANGED path stores, so
+        // this adds no steady-state allocation.
         if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, dependencies))
-        {
-            hook.PendingCleanup = hook.Cleanup;
-            hook.Cleanup = null;
-            // Issue #659 review (#3): snapshot the deps. A params-array LITERAL is a
-            // fresh compiler temporary, but a caller passing an explicit mutable
-            // object[] could mutate it afterward and corrupt this stored "previous
-            // deps", breaking the next render's change detection. ToArray runs only
-            // on the deps-CHANGED path (never the steady-state hot path), so the copy
-            // is ~free; the per-render win is the call-site array, not this.
-            hook.Dependencies = dependencies.ToArray();
-            hook.Effect = effect;
-            hook.Pending = true;
-        }
+            ScheduleEffect(hook, effect, null, SnapshotDeps(dependencies));
     }
     // </snippet:effect-schedule>
 
@@ -395,26 +378,111 @@ public sealed class RenderContext
     /// </summary>
     public void UseEffect(Func<Action> effectWithCleanup, params object[] dependencies)
     {
-        if (_hookIndex >= _hooks.Count)
-        {
-            _hooks.Add(new EffectHookState { Dependencies = null });
-        }
-
-        if (_hooks[_hookIndex] is not EffectHookState hook)
-            throw new HookOrderException(
-                $"Hook at index {_hookIndex} is {_hooks[_hookIndex].GetType().Name}, expected EffectHookState. " +
-                "Hooks must be called in the same order every render.");
-        _hookIndex++;
-
+        var hook = AcquireEffectSlot();
         if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, dependencies))
+            ScheduleEffect(hook, null, effectWithCleanup, SnapshotDeps(dependencies));
+    }
+
+    // #688: arity 1-3 overloads so the common "a couple of deps" call avoids the
+    // params-array allocation AND the value-type boxing on the steady-state
+    // (deps-unchanged) path. Storage stays object[] for hot-reload / snapshot /
+    // DepsEqual compatibility; the array is only allocated when deps actually
+    // change. Comparison unboxes the stored value (no new allocation) and uses
+    // the typed EqualityComparer so the incoming dep is never boxed.
+    /// <summary>
+    /// Single-dependency <c>UseEffect</c> overload that avoids the
+    /// <c>params object[]</c> allocation (and value-type boxing) on the
+    /// deps-unchanged path. Semantically identical to the params overload called
+    /// with one dependency: the effect re-runs only when <paramref name="d1"/>
+    /// changes.
+    /// </summary>
+    /// <remarks>
+    /// If <paramref name="d1"/>'s compile-time type is an array of reference types
+    /// (e.g. <c>string[]</c>), it is treated as a dependency <em>list</em> and compared
+    /// element-wise — matching the <c>params object[]</c> overload — not as a single
+    /// reference-compared value. A dependency whose static type is not an array is
+    /// always compared as one value, even if its runtime value happens to be an array.
+    /// </remarks>
+    public void UseEffect<T1>(Action effect, T1 d1)
+    {
+        var hook = AcquireEffectSlot();
+        // A lone dependency whose compile-time type is a reference-type array (e.g. a
+        // covariant string[]) binds this generic but historically went through the
+        // params overload and was compared element-wise — preserve that so an array
+        // re-allocated each render with equal contents does not spuriously re-run.
+        if (AsParamsArrayDep(d1) is { } arr)
         {
-            hook.PendingCleanup = hook.Cleanup;
-            hook.Cleanup = null;
-            // Issue #659 review (#3): snapshot deps (see UseEffect above).
-            hook.Dependencies = dependencies.ToArray();
-            hook.EffectWithCleanup = effectWithCleanup;
-            hook.Pending = true;
+            if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, arr))
+                ScheduleEffect(hook, effect, null, SnapshotDeps(arr));
+            return;
         }
+        if (!DepsEqual1(hook.Dependencies, d1)) ScheduleEffect(hook, effect, null, PackDeps(d1));
+    }
+
+    /// <summary>
+    /// Two-dependency <c>UseEffect</c> overload that avoids the
+    /// <c>params object[]</c> allocation on the deps-unchanged path. Re-runs when
+    /// either dependency changes.
+    /// </summary>
+    public void UseEffect<T1, T2>(Action effect, T1 d1, T2 d2)
+    {
+        var hook = AcquireEffectSlot();
+        if (!DepsEqual2(hook.Dependencies, d1, d2)) ScheduleEffect(hook, effect, null, PackDeps(d1, d2));
+    }
+
+    /// <summary>
+    /// Three-dependency <c>UseEffect</c> overload that avoids the
+    /// <c>params object[]</c> allocation on the deps-unchanged path. Re-runs when
+    /// any dependency changes.
+    /// </summary>
+    public void UseEffect<T1, T2, T3>(Action effect, T1 d1, T2 d2, T3 d3)
+    {
+        var hook = AcquireEffectSlot();
+        if (!DepsEqual3(hook.Dependencies, d1, d2, d3)) ScheduleEffect(hook, effect, null, PackDeps(d1, d2, d3));
+    }
+
+    /// <summary>
+    /// Single-dependency cleanup-flavor <c>UseEffect</c> overload that avoids the
+    /// <c>params object[]</c> allocation on the deps-unchanged path. Semantically
+    /// identical to the params overload called with one dependency.
+    /// </summary>
+    /// <remarks>
+    /// If <paramref name="d1"/>'s compile-time type is an array of reference types
+    /// (e.g. <c>string[]</c>), it is treated as a dependency <em>list</em> and compared
+    /// element-wise — matching the <c>params object[]</c> overload — not as a single
+    /// reference-compared value. A dependency whose static type is not an array is
+    /// always compared as one value, even if its runtime value happens to be an array.
+    /// </remarks>
+    public void UseEffect<T1>(Func<Action> effectWithCleanup, T1 d1)
+    {
+        var hook = AcquireEffectSlot();
+        if (AsParamsArrayDep(d1) is { } arr)
+        {
+            if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, arr))
+                ScheduleEffect(hook, null, effectWithCleanup, SnapshotDeps(arr));
+            return;
+        }
+        if (!DepsEqual1(hook.Dependencies, d1)) ScheduleEffect(hook, null, effectWithCleanup, PackDeps(d1));
+    }
+
+    /// <summary>
+    /// Two-dependency cleanup-flavor <c>UseEffect</c> overload that avoids the
+    /// <c>params object[]</c> allocation on the deps-unchanged path.
+    /// </summary>
+    public void UseEffect<T1, T2>(Func<Action> effectWithCleanup, T1 d1, T2 d2)
+    {
+        var hook = AcquireEffectSlot();
+        if (!DepsEqual2(hook.Dependencies, d1, d2)) ScheduleEffect(hook, null, effectWithCleanup, PackDeps(d1, d2));
+    }
+
+    /// <summary>
+    /// Three-dependency cleanup-flavor <c>UseEffect</c> overload that avoids the
+    /// <c>params object[]</c> allocation on the deps-unchanged path.
+    /// </summary>
+    public void UseEffect<T1, T2, T3>(Func<Action> effectWithCleanup, T1 d1, T2 d2, T3 d3)
+    {
+        var hook = AcquireEffectSlot();
+        if (!DepsEqual3(hook.Dependencies, d1, d2, d3)) ScheduleEffect(hook, null, effectWithCleanup, PackDeps(d1, d2, d3));
     }
 
     /// <summary>
@@ -422,24 +490,79 @@ public sealed class RenderContext
     /// </summary>
     public T UseMemo<T>(Func<T> factory, params object[] dependencies)
     {
-        if (_hookIndex >= _hooks.Count)
-        {
-            _hooks.Add(new MemoHookState<T> { Dependencies = null });
-        }
-
-        if (_hooks[_hookIndex] is not MemoHookState<T> hook)
-            throw new HookOrderException(
-                $"Hook at index {_hookIndex} is {_hooks[_hookIndex].GetType().Name}, expected MemoHookState<{typeof(T).Name}>. " +
-                "Hooks must be called in the same order every render.");
-        _hookIndex++;
-
+        var hook = AcquireMemoSlot<T>();
         if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, dependencies))
         {
             hook.Value = factory();
             // Issue #659 review (#3): snapshot deps (see UseEffect).
-            hook.Dependencies = dependencies.ToArray();
+            hook.Dependencies = SnapshotDeps(dependencies);
         }
+        return hook.Value;
+    }
 
+    // #688: arity overloads mirror UseEffect — no params array / boxing on the
+    // deps-unchanged path; factory only runs (and array only allocates) on change.
+
+    /// <summary>
+    /// Single-dependency <c>UseMemo</c> overload that avoids the
+    /// <c>params object[]</c> allocation (and value-type boxing) on the
+    /// deps-unchanged path. Recomputes only when <paramref name="d1"/> changes.
+    /// </summary>
+    /// <remarks>
+    /// If <paramref name="d1"/>'s compile-time type is an array of reference types
+    /// (e.g. <c>string[]</c>), it is treated as a dependency <em>list</em> and compared
+    /// element-wise — matching the <c>params object[]</c> overload — not as a single
+    /// reference-compared value. A dependency whose static type is not an array is
+    /// always compared as one value, even if its runtime value happens to be an array.
+    /// </remarks>
+    public T UseMemo<T, T1>(Func<T> factory, T1 d1)
+    {
+        var hook = AcquireMemoSlot<T>();
+        // See UseEffect<T1>: a compile-time array dep keeps element-wise semantics.
+        if (AsParamsArrayDep(d1) is { } arr)
+        {
+            if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, arr))
+            {
+                hook.Value = factory();
+                hook.Dependencies = SnapshotDeps(arr);
+            }
+            return hook.Value;
+        }
+        if (!DepsEqual1(hook.Dependencies, d1))
+        {
+            hook.Value = factory();
+            hook.Dependencies = PackDeps(d1);
+        }
+        return hook.Value;
+    }
+
+    /// <summary>
+    /// Two-dependency <c>UseMemo</c> overload that avoids the
+    /// <c>params object[]</c> allocation on the deps-unchanged path.
+    /// </summary>
+    public T UseMemo<T, T1, T2>(Func<T> factory, T1 d1, T2 d2)
+    {
+        var hook = AcquireMemoSlot<T>();
+        if (!DepsEqual2(hook.Dependencies, d1, d2))
+        {
+            hook.Value = factory();
+            hook.Dependencies = PackDeps(d1, d2);
+        }
+        return hook.Value;
+    }
+
+    /// <summary>
+    /// Three-dependency <c>UseMemo</c> overload that avoids the
+    /// <c>params object[]</c> allocation on the deps-unchanged path.
+    /// </summary>
+    public T UseMemo<T, T1, T2, T3>(Func<T> factory, T1 d1, T2 d2, T3 d3)
+    {
+        var hook = AcquireMemoSlot<T>();
+        if (!DepsEqual3(hook.Dependencies, d1, d2, d3))
+        {
+            hook.Value = factory();
+            hook.Dependencies = PackDeps(d1, d2, d3);
+        }
         return hook.Value;
     }
 
@@ -451,27 +574,215 @@ public sealed class RenderContext
         // Issue #659 (#46): store the callback directly in a memo slot instead of
         // UseMemo(() => callback, deps). The old form allocated a `() => callback`
         // wrapper closure every render (even when deps were unchanged, because the
-        // factory is materialized before the deps short-circuit). Inlining the slot
-        // logic removes that wrapper entirely.
-        if (_hookIndex >= _hooks.Count)
-        {
-            _hooks.Add(new MemoHookState<Action> { Dependencies = null });
-        }
-
-        if (_hooks[_hookIndex] is not MemoHookState<Action> hook)
-            throw new HookOrderException(
-                $"Hook at index {_hookIndex} is {_hooks[_hookIndex].GetType().Name}, expected MemoHookState<Action> (UseCallback). " +
-                "Hooks must be called in the same order every render.");
-        _hookIndex++;
-
+        // factory is materialized before the deps short-circuit). The slot is still
+        // MemoHookState<Action> so hook-order checks / devtools labels are unchanged.
+        var hook = AcquireMemoSlot<Action>();
         if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, dependencies))
         {
             hook.Value = callback;
-            // Issue #659 review (#3): snapshot deps (see UseEffect).
-            hook.Dependencies = dependencies.ToArray();
+            hook.Dependencies = SnapshotDeps(dependencies);
         }
-
         return hook.Value;
+    }
+
+    /// <summary>
+    /// Single-dependency <c>UseCallback</c> overload that avoids the
+    /// <c>params object[]</c> allocation (and value-type boxing) on the
+    /// deps-unchanged path. Returns a stable reference until <paramref name="d1"/>
+    /// changes.
+    /// </summary>
+    /// <remarks>
+    /// If <paramref name="d1"/>'s compile-time type is an array of reference types
+    /// (e.g. <c>string[]</c>), it is treated as a dependency <em>list</em> and compared
+    /// element-wise — matching the <c>params object[]</c> overload — not as a single
+    /// reference-compared value. A dependency whose static type is not an array is
+    /// always compared as one value, even if its runtime value happens to be an array.
+    /// </remarks>
+    public Action UseCallback<T1>(Action callback, T1 d1)
+    {
+        var hook = AcquireMemoSlot<Action>();
+        // See UseEffect<T1>: a compile-time array dep keeps element-wise semantics.
+        if (AsParamsArrayDep(d1) is { } arr)
+        {
+            if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, arr))
+            {
+                hook.Value = callback;
+                hook.Dependencies = SnapshotDeps(arr);
+            }
+            return hook.Value;
+        }
+        if (!DepsEqual1(hook.Dependencies, d1))
+        {
+            hook.Value = callback;
+            hook.Dependencies = PackDeps(d1);
+        }
+        return hook.Value;
+    }
+
+    /// <summary>
+    /// Two-dependency <c>UseCallback</c> overload that avoids the
+    /// <c>params object[]</c> allocation on the deps-unchanged path.
+    /// </summary>
+    public Action UseCallback<T1, T2>(Action callback, T1 d1, T2 d2)
+    {
+        var hook = AcquireMemoSlot<Action>();
+        if (!DepsEqual2(hook.Dependencies, d1, d2))
+        {
+            hook.Value = callback;
+            hook.Dependencies = PackDeps(d1, d2);
+        }
+        return hook.Value;
+    }
+
+    /// <summary>
+    /// Three-dependency <c>UseCallback</c> overload that avoids the
+    /// <c>params object[]</c> allocation on the deps-unchanged path.
+    /// </summary>
+    public Action UseCallback<T1, T2, T3>(Action callback, T1 d1, T2 d2, T3 d3)
+    {
+        var hook = AcquireMemoSlot<Action>();
+        if (!DepsEqual3(hook.Dependencies, d1, d2, d3))
+        {
+            hook.Value = callback;
+            hook.Dependencies = PackDeps(d1, d2, d3);
+        }
+        return hook.Value;
+    }
+
+    // ── Hook-slot + deps helpers (shared by the effect / memo / callback hooks) ──
+
+    private EffectHookState AcquireEffectSlot()
+    {
+        if (_hookIndex >= _hooks.Count)
+            _hooks.Add(new EffectHookState { Dependencies = null });
+
+        if (_hooks[_hookIndex] is not EffectHookState hook)
+            throw new HookOrderException(
+                $"Hook at index {_hookIndex} is {_hooks[_hookIndex].GetType().Name}, expected EffectHookState. " +
+                "Hooks must be called in the same order every render.");
+        _hookIndex++;
+        return hook;
+    }
+
+    private MemoHookState<T> AcquireMemoSlot<T>()
+    {
+        if (_hookIndex >= _hooks.Count)
+            _hooks.Add(new MemoHookState<T> { Dependencies = null });
+
+        if (_hooks[_hookIndex] is not MemoHookState<T> hook)
+            throw new HookOrderException(
+                $"Hook at index {_hookIndex} is {_hooks[_hookIndex].GetType().Name}, expected MemoHookState<{typeof(T).Name}>. " +
+                "Hooks must be called in the same order every render.");
+        _hookIndex++;
+        return hook;
+    }
+
+    // The caller is responsible for passing an isolated deps array — either a
+    // freshly packed array (PackDeps, arity overloads) or a defensive clone
+    // (SnapshotDeps, params/AsParamsArrayDep paths). Storing it by reference here
+    // is therefore safe: no caller-owned array is ever aliased onto the hook slot,
+    // so an in-place mutation of a reused caller array cannot make prev/next deps
+    // alias and wrongly short-circuit DepsEqual.
+    private static void ScheduleEffect(EffectHookState hook, Action? effect, Func<Action>? withCleanup, object[] dependencies)
+    {
+        hook.PendingCleanup = hook.Cleanup;
+        hook.Cleanup = null;
+        hook.Dependencies = dependencies;
+        hook.Effect = effect;
+        hook.EffectWithCleanup = withCleanup;
+        hook.Pending = true;
+    }
+
+    private static object[] PackDeps<T1>(T1 d1) => new object[] { d1! };
+    private static object[] PackDeps<T1, T2>(T1 d1, T2 d2) => new object[] { d1!, d2! };
+    private static object[] PackDeps<T1, T2, T3>(T1 d1, T2 d2, T3 d3) => new object[] { d1!, d2!, d3! };
+
+    // Snapshot a caller-supplied deps array before persisting it on a hook slot.
+    // Callers can pass — and then reuse and mutate in place — the same array
+    // instance across renders (a params target, or a covariant array routed through
+    // AsParamsArrayDep). Storing it by reference would alias prev/next so an in-place
+    // mutation is invisible to DepsEqual and would wrongly skip the effect or memo
+    // recompute. Cloning isolates the stored copy. This runs only on the
+    // deps-CHANGED store path (the deps-equal path short-circuits before storing), so
+    // it adds no steady-state allocation; the empty "run once" case reuses the shared
+    // empty array. Always returns a genuine object[] even when the source is a
+    // covariant array (e.g. string[]).
+    private static object[] SnapshotDeps(object[] dependencies)
+    {
+        if (dependencies.Length == 0) return Array.Empty<object>();
+        var copy = new object[dependencies.Length];
+        Array.Copy(dependencies, copy, dependencies.Length);
+        return copy;
+    }
+
+    // A lone arity-1 dependency whose COMPILE-TIME type is an array of reference types
+    // — e.g. a covariant string[]/Element[] — is treated as a dependency LIST and
+    // compared element-wise, matching how the params overload behaved before these
+    // generics existed. The gate is on the *static* type (typeof(T1)) on purpose: a
+    // value whose static type is object/Array/an interface but whose runtime value
+    // happens to be an object[] historically bound the params overload in EXPANDED
+    // form (wrapped as new object[]{ dep }) and was compared as ONE reference dep, so
+    // it must stay a single dep here too — unwrapping it would be a silent semantic
+    // change (observable for UseMemo, whose two overloads are both generic so the
+    // arity-1 wins overload resolution). typeof(T1).IsArray is a JIT-time constant per
+    // instantiation, so value-type and non-array deps fold this to null and never
+    // reach the IsAssignableFrom check or box.
+    private static object[]? AsParamsArrayDep<T1>(T1 d1)
+        => typeof(T1).IsArray && typeof(object[]).IsAssignableFrom(typeof(T1)) && d1 is object[] arr ? arr : null;
+
+    // Returns true when the stored deps already match. Each element is compared via
+    // DepEquals, which unboxes the stored value (no allocation) and compares through
+    // the typed comparer so the incoming dep is never boxed. A null/wrong-arity stored
+    // array counts as "changed".
+    private static bool DepsEqual1<T1>(object[]? prev, T1 d1)
+        => prev is { Length: 1 } && DepEquals(prev[0], d1);
+
+    private static bool DepsEqual2<T1, T2>(object[]? prev, T1 d1, T2 d2)
+        => prev is { Length: 2 }
+           && DepEquals(prev[0], d1)
+           && DepEquals(prev[1], d2);
+
+    private static bool DepsEqual3<T1, T2, T3>(object[]? prev, T1 d1, T2 d2, T3 d3)
+        => prev is { Length: 3 }
+           && DepEquals(prev[0], d1)
+           && DepEquals(prev[1], d2)
+           && DepEquals(prev[2], d3);
+
+    // Compare a stored (boxed) dependency against the current typed value without an
+    // unconditional (T)stored cast. A hot-reload edit or a dynamic call site can change
+    // a dependency's runtime type at the same hook slot across renders; an
+    // InvalidCastException while COMPARING deps is worse than simply treating the slot
+    // as changed, so a type mismatch returns false ("changed"). Like the non-generic
+    // params DepsEqual, this never throws on a type change.
+    //
+    // Equality is split by kind so typed-arity stays behaviorally identical to params:
+    //   • Reference-type T compares via object.Equals (stored.Equals(current)), EXACTLY
+    //     like the params path's Equals(prev[i], next[i]). References don't box, so this
+    //     costs nothing, and it avoids a divergence for a reference type that implements
+    //     IEquatable<T> but does not override Equals(object) — EqualityComparer<T>.Default
+    //     would compare such a type by value, while params compares it by reference.
+    //   • Value-type T uses EqualityComparer<T>.Default — the allocation-free, no-boxing
+    //     fast path this overload exists for, and the same comparer UseState/UseReducer use.
+    //     It unboxes the stored value through the `is T` pattern with no extra allocation.
+    // typeof(T).IsValueType is a JIT-time constant, so each instantiation keeps only its
+    // branch with no runtime type check.
+    //
+    // Nullable value-type deps (T = U?) are handled correctly. Boxing a non-null
+    // Nullable<U> stores a boxed U, but the GENERIC `stored is T` test still succeeds for
+    // that boxed U and binds the nullable-wrapped value — the CLR special-cases nullable
+    // type-tests (the symmetric counterpart of `(U?)(object)u` unboxing). So an unchanged
+    // nullable dep compares equal, a null nullable boxes to a null reference handled by
+    // the `stored is null` guard above, and value<->null transitions are detected. This
+    // matches the pre-existing `(T)prev[i]` behavior exactly (verified across
+    // int?/long?/double?/enum? incl. null transitions) — it is NOT a per-render re-run.
+    private static bool DepEquals<T>(object? stored, T current)
+    {
+        if (stored is null) return current is null;
+        // Reference-type deps: object.Equals, matching the params path exactly (no boxing).
+        if (!typeof(T).IsValueType)
+            return stored.Equals(current);
+        // Value-type deps: typed comparer, allocation-free and boxing-free.
+        return stored is T t && EqualityComparer<T>.Default.Equals(t, current);
     }
 
     /// <summary>

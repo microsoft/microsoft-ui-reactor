@@ -29,7 +29,10 @@ If none of those apply, close this file and write the obvious thing.
 
 The everyday wrappers. `UseMemo` caches the result of an expensive
 computation; `UseCallback` returns a stable callback identity across renders.
-Both take trailing `params object[] deps`.
+Both take trailing `params object[] deps`; for one to three deps the typed-arity
+overloads (`UseMemo(() => Sort(items), items)`, `UseCallback(cb, a, b)`) skip the
+`params object[]` allocation and value-type boxing on the unchanged-deps path —
+prefer them on the hot paths this file is about.
 
 ```csharp
 var sortedItems = ctx.UseMemo(() => Sort(items), items);

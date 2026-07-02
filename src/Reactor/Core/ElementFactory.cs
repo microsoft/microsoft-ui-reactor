@@ -67,8 +67,16 @@ public sealed partial class ElementFactory<T> : IElementFactory
     internal int DebugLastElementByControlCount => _lastElementByControl.Count;
     internal int DebugMountedElementsCount => _mountedElements.Count;
     internal int DebugKeyByControlCount => _keyByControl.Count;
+    internal int DebugViewBuilderCacheCount => _viewBuilderCache.Count;
     internal bool DebugTryGetLastElementByControl(UIElement control, out Element? element)
         => _lastElementByControl.TryGetValue(control, out element!);
+
+    // Issue #327 (Option A) test seam: the keyed-memo LRU's rebuild (Factory invocation)
+    // counter and live entry count. The headless effectiveness fixture drives BuildOrCache
+    // through N recycle cycles and asserts FactoryInvocations stops climbing once keys are
+    // cached. Gated by InternalsVisibleTo on Reactor.Tests / Reactor.AppTests.Host.
+    internal long DebugKeyedMemoFactoryInvocations => _keyedMemoCache.FactoryInvocations;
+    internal int DebugKeyedMemoCacheCount => _keyedMemoCache.Count;
 
     // Per-key memoization of the last viewBuilder result. Critical for
     // WinUI ItemsView under <see cref="WinUI.UniformGridLayout"/>: window
@@ -96,6 +104,21 @@ public sealed partial class ElementFactory<T> : IElementFactory
         { Item = item; Index = index; Built = built; }
     }
 
+    // Issue #327 (Option A) — opt-in keyed memo LRU. When the viewBuilder returns a
+    // KeyedMemoElement (author wrote `Memo(key, () => …)`), BuildOrCache resolves it here.
+    // Keyed by the author's MemoKey with value equality, so the int-index VirtualList path
+    // (where _viewBuilderCache's ReferenceEquals(item) guard never hits because each access
+    // re-boxes the index) still serves the SAME inner Element instance across recycles. See
+    // KeyedMemoCache for bound/eviction/invalidation.
+    private readonly KeyedMemoCache _keyedMemoCache = new();
+
+    // Issue #327 review — for a value-type T (the int-index VirtualList path) the
+    // _viewBuilderCache lookup can never hit (its ReferenceEquals(item) guard re-boxes both
+    // operands), so populating it is dead weight that also grows UNBOUNDED — one retained entry
+    // per distinct key (index) as the user scrolls. JIT-folded per instantiation, so the guard is
+    // free. The cross-recycle cache for value-type T is the bounded KeyedMemoCache (opt-in Memo).
+    private static readonly bool s_valueTypeItem = typeof(T).IsValueType;
+
     /// <summary>
     /// Resolve the viewBuilder output for a (key, item, index) tuple,
     /// memoized by reference identity of <paramref name="item"/>. See
@@ -108,7 +131,7 @@ public sealed partial class ElementFactory<T> : IElementFactory
     /// legacy int-index path, where the "key" is just the realized index and
     /// propagating it would force a control swap on every scroll.</para>
     /// </summary>
-    private Element BuildOrCache(string key, T item, int index, bool keyed)
+    internal Element BuildOrCache(string key, T item, int index, bool keyed)
     {
         if (_viewBuilderCache.TryGetValue(key, out var cached)
             && ReferenceEquals(cached.Item, item)
@@ -117,9 +140,30 @@ public sealed partial class ElementFactory<T> : IElementFactory
             return cached.Built;
         }
         var built = _viewBuilder(item, index);
-        if (keyed)
+        // Issue #327 (Option A): a KeyedMemoElement asserts its inner Factory is a pure
+        // function of MemoKey. Resolve it through the factory-owned bounded LRU so a cache
+        // HIT returns the SAME inner Element instance across container recycles → the next
+        // Reconcile observes ReferenceEquals via Element.ShallowEquals and skips the per-row
+        // reconcile descent; a MISS invokes Factory() exactly once. The identity-key stamp is
+        // folded into the resolve (keyed path only) so the cached instance is the final one
+        // returned on every subsequent hit (preserving ReferenceEquals).
+        //
+        // Only a "bare" wrapper is memoized: resolution returns the inner element, so any
+        // modifiers / Key / Extensions applied ON the wrapper itself (the non-idiomatic
+        // `Memo(k, …).Margin(8)` shape — modifiers belong inside the factory lambda) would be
+        // dropped. A decorated wrapper instead falls through unchanged and is rendered by the
+        // reconciler's transparent unwrap path (Mount/Update), which preserves those modifiers.
+        if (built is KeyedMemoElement km
+            && km.Modifiers is null && km.Key is null && km.Extensions is null)
+            built = _keyedMemoCache.Resolve(km, keyed ? key : null);
+        else if (keyed)
             built = ApplyItemIdentityKey(built, key);
-        _viewBuilderCache[key] = new ViewBuilderCacheEntry(item, index, built);
+        // Skip the never-hitting _viewBuilderCache for value-type T (see s_valueTypeItem): on the
+        // int-index path it can only grow unbounded (one pinned row Element per scrolled index)
+        // without ever serving a hit. Reference-type T (LazyVStack<record>, ItemsView resize, …)
+        // still uses the ReferenceEquals fast-path, so keep populating there. (issue #327 review)
+        if (!s_valueTypeItem)
+            _viewBuilderCache[key] = new ViewBuilderCacheEntry(item, index, built);
         return built;
     }
 
@@ -171,14 +215,17 @@ public sealed partial class ElementFactory<T> : IElementFactory
     {
         _items = items;
         _viewBuilder = viewBuilder;
-        // A new viewBuilder closure may capture different external state
-        // (UseState cells, Observable subscriptions, theme, etc.) than
-        // the one that produced the cached <see cref="ViewBuilderCacheEntry.Built"/>
-        // entries. We can't see through delegate captures cheaply, so
-        // invalidate conservatively here. Resize-driven recycle/realize
-        // cycles still hit the cache because window resize doesn't run
+        // A new viewBuilder closure may capture different external state (UseState
+        // cells, Observable subscriptions, theme, etc.) than the one that produced the
+        // cached <see cref="ViewBuilderCacheEntry.Built"/> entries. We can't see through
+        // delegate captures cheaply, so invalidate conservatively here. Resize-driven
+        // recycle/realize cycles still hit the cache because window resize doesn't run
         // the component render path → UpdateInPlace doesn't fire.
         _viewBuilderCache.Clear();
+        // Issue #327 (Option A): same invalidation boundary for the keyed memo LRU — a new
+        // viewBuilder closure may produce different inner content for the same MemoKey, so a
+        // previously-cached inner instance must not be served (mirrors the clear above).
+        _keyedMemoCache.Clear();
     }
 
     /// <summary>

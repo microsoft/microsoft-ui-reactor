@@ -25,11 +25,18 @@ namespace Microsoft.UI.Reactor.Core;
 // the content recovered. Five mechanisms — learned from the hand-rolled prototype —
 // are ALL load-bearing (see the numbered notes inline below).
 //
-// This is a client-side guard for a WinUI text-engine bug (the transient
-// RemoveEmbeddedElements re-measure permanently clamps the scroll host's
-// VerticalOffset). An upstream WinUI issue tracks the root cause; once the text
-// engine preserves the offset across that re-measure this whole anchor can be
-// retired. See microsoft/microsoft-ui-reactor#487 for the full diagnosis.
+// This anchor is the reactive mitigation. The ROOT cause (issue #717) is not a
+// standalone WinUI defect: the transient RemoveEmbeddedElements re-measure coalesces
+// invisibly in pure WinUI, but Reactor's reconcile applies the document mutation and
+// returns to the dispatcher, letting the compositor commit the collapsed frame before
+// the inline UI re-attaches — and the (correct) scroll host clamps against it. The
+// primary fix lives alongside this file in PinExtentAcrossInlineUiMutation (below):
+// after an inline-UI-bearing block is mutated, UpdateRichTextBlocks pins the block's
+// MinHeight to its full pre-collapse height (releasing it a few frames later) so the
+// transient collapse can never shrink the scroll host's extent and there is no clamp.
+// With that in place this anchor degrades to a belt-and-suspenders safety net. See
+// microsoft/microsoft-ui-reactor#487 (mitigation) and #717 (root-cause fix) for the
+// full diagnosis.
 public sealed partial class Reconciler
 {
     // Mechanism #1 — per-scroll-host state keyed off the host instance via an
@@ -116,6 +123,181 @@ public sealed partial class Reconciler
                 if (inline is RichTextInlineUIContainer) return true;
         }
         return false;
+    }
+
+    // Issue #717 — root-cause fix for the RichTextBlock inline-UI scroll drift that
+    // #487's anchor (above) mitigates reactively.
+    //
+    // Mutating a Run.Text inside an inline-UI-bearing paragraph makes WinUI's text
+    // engine re-measure that paragraph from scratch: ParagraphNode::Measure calls
+    // RemoveEmbeddedElements and reports desiredSize=0 for ONE pass, then re-attaches
+    // the embedded UIElements roughly a frame later. In pure WinUI (and in the selftest
+    // harness, which renders via a synchronous UpdateLayout) the detach + re-attach
+    // coalesce into one cycle, so the collapsed extent is never committed. The live
+    // Reactor app, by contrast, mutates the document inside the reconcile and then
+    // yields to the dispatcher; the compositor commits a frame carrying the transient
+    // collapsed extent BEFORE the re-attach pass, and the (correct) scroll host clamps
+    // VerticalOffset down to the smaller ScrollableHeight. That clamp is silent and
+    // LOSSY — re-growing the extent afterwards does not restore the offset (see issue
+    // #717: "ViewChanged ext 796→666 IsIntermediate=False" committed, children reattach
+    // ~3ms later).
+    //
+    // The collapse is asynchronous and unreachable from the reconcile: WinUI schedules
+    // the embedded-element re-measure on a separate dispatcher callback, so a synchronous
+    // rtb.UpdateLayout() — or a same-pass offset restore — cannot pre-empt it (both
+    // measure the still-intact tree and are no-ops for offset preservation). Instead we
+    // PREVENT the extent from ever shrinking: pin the RichTextBlock's MinHeight to its
+    // current (full, pre-collapse) height before yielding, so the transient desiredSize=0
+    // cannot lower the block's measured height and the scroll host never observes a
+    // smaller extent — there is no clamp and nothing to restore. The pin must straddle
+    // the async collapse window, so it is released only after the content has re-grown,
+    // on a later rendered frame (a synchronous release would remove the pin before the
+    // collapse fires).
+    //
+    // Gated on HasInlineUi (pure text/hyperlink/linebreak blocks never re-measure an
+    // InlineUIContainer) and on the caller having actually mutated the document, so
+    // unchanged renders pay nothing. The #487 anchor is retained as a belt-and-suspenders
+    // backstop for any path the pin cannot cover (e.g. the block is not yet in a live,
+    // measured visual tree when the mutation lands).
+    private sealed class InlineUiExtentPin
+    {
+        public double OriginalMinHeight;
+        public bool HasOriginal;
+
+        // Frames left before the floor is released. Reset to the full window on every
+        // mutation so rapid successive mutations extend the same pin rather than stacking.
+        public int FramesRemaining;
+
+        // The single CompositionTarget.Rendering delegate subscribed while a pin is pending
+        // (null when not hooked). Reused across successive mutations on the same RTB so we
+        // never accumulate more than one handler per pinned block, and so cancel / pool
+        // return can unsubscribe it deterministically.
+        public EventHandler<object>? RenderingHandler;
+
+        // Whether MinHeight had a *local* value before the pin raised it. If it came from
+        // a Style/theme setter instead, restoring by assignment would promote it to a
+        // local value and freeze later style/theme updates — so we ClearValue in that
+        // case rather than writing the snapshot back.
+        public bool OriginalWasLocal;
+
+        // The floor value the pin last wrote to rtb.MinHeight (NaN when the pin did not
+        // raise it, e.g. an author MinHeight already exceeded the extent). The deferred
+        // release restores OriginalMinHeight only while MinHeight still equals this — so
+        // an author who changes MinHeight during the pin window is never clobbered.
+        public double PinnedFloor = double.NaN;
+    }
+
+    // Undo the pinned floor, preserving the original WinUI value precedence: ClearValue
+    // when MinHeight had no local value before the pin (so a Style/theme value re-applies
+    // and keeps tracking), otherwise restore the captured local value.
+    private static void RestorePinnedMinHeight(WinUI.RichTextBlock rtb, InlineUiExtentPin pin)
+    {
+        if (pin.OriginalWasLocal)
+            rtb.MinHeight = pin.OriginalMinHeight;
+        else
+            rtb.ClearValue(FrameworkElement.MinHeightProperty);
+    }
+
+    // True only while MinHeight still holds the exact double the pin wrote (PinnedFloor).
+    // Exact equality is intentional here: we compare the live dependency-property value
+    // against the value we ourselves stored, as an identity check for "the author has not
+    // changed MinHeight since the pin raised the floor." A double DP round-trips losslessly
+    // and MinHeight is an input property that layout never coerces, so there is no
+    // floating-point drift to absorb — an epsilon would instead open a window where an
+    // author value within tolerance of the floor is silently clobbered. PinnedFloor is NaN
+    // whenever the pin never raised the floor, so this is correctly false in that case too.
+    private static bool IsFloorStillPinned(WinUI.RichTextBlock rtb, InlineUiExtentPin pin)
+        => rtb.MinHeight == pin.PinnedFloor;
+
+    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<WinUI.RichTextBlock, InlineUiExtentPin> s_inlineUiExtentPins = new();
+
+    // Test-only seam (InternalsVisibleTo Reactor.AppTests.Host): counts how many times
+    // the inline-UI extent pin actually engaged (raised, or held, a block's MinHeight
+    // floor) on an inline-UI-bearing mutation. A selftest asserts this increments so it
+    // can prove the production reconcile engages the pin without racing the
+    // compositor-frame-timed release.
+    internal static int InlineUiPinEngagementCount;
+
+    private static void PinExtentAcrossInlineUiMutation(WinUI.RichTextBlock rtb, RichTextBlockElement next)
+    {
+        if (!HasInlineUi(next)) return;
+
+        double pinHeight = rtb.ActualHeight;
+        if (pinHeight <= 0) return; // Not in a live/measured tree yet — the anchor covers this.
+
+        InlineUiExtentPin pin = s_inlineUiExtentPins.GetValue(rtb, static _ => new InlineUiExtentPin());
+        if (!pin.HasOriginal)
+        {
+            pin.OriginalMinHeight = rtb.MinHeight;
+            pin.OriginalWasLocal =
+                rtb.ReadLocalValue(FrameworkElement.MinHeightProperty) != DependencyProperty.UnsetValue;
+            pin.HasOriginal = true;
+        }
+
+        // Raise the floor only — never lower an author-specified MinHeight. Record the
+        // value we wrote so the release can tell a still-pinned floor from one the author
+        // has since changed.
+        if (pinHeight > rtb.MinHeight)
+        {
+            rtb.MinHeight = pinHeight;
+            pin.PinnedFloor = pinHeight;
+        }
+
+        InlineUiPinEngagementCount++;
+
+        // Release a couple of rendered frames after the *latest* mutation, once WinUI's
+        // deferred re-measure + reattach has re-grown the content. The frame budget is
+        // reset on every mutation and a single CompositionTarget.Rendering handler is kept
+        // per RTB (subscribed once while a pin is pending), so rapid successive mutations
+        // extend the same pin instead of piling up a fresh handler each time — every
+        // stacked handler would otherwise wake the next frame only to find it superseded.
+        pin.FramesRemaining = 2;
+        if (pin.RenderingHandler is null)
+        {
+            EventHandler<object> onRendering = null!;
+            onRendering = (_, _) =>
+            {
+                if (--pin.FramesRemaining > 0) return;
+
+                CompositionTarget.Rendering -= onRendering;
+                pin.RenderingHandler = null;
+                // Content is full again. Restore the original MinHeight only if the floor
+                // we raised is still in place — if the author changed MinHeight during the
+                // pin window (their setter runs after UpdateRichTextBlocks in the same
+                // reconcile, or on a later render), leave their value untouched.
+                if (IsFloorStillPinned(rtb, pin))
+                    RestorePinnedMinHeight(rtb, pin);
+                pin.HasOriginal = false;
+                pin.PinnedFloor = double.NaN;
+            };
+            pin.RenderingHandler = onRendering;
+            CompositionTarget.Rendering += onRendering;
+        }
+    }
+
+    // Cancels any in-flight inline-UI extent pin for a RichTextBlock that is being
+    // unmounted / returned to the ElementPool. Without this, the pin's pending
+    // CompositionTarget.Rendering release closes over the control and would fire a frame
+    // or two later — restoring a stale MinHeight onto a control that a different renter
+    // has since rented (cross-renter floor bleed), and keeping the handler subscribed. So
+    // we unsubscribe the single pending handler and undo the floor here, leaving the
+    // recycled control clean.
+    internal static void CancelInlineUiExtentPin(WinUI.RichTextBlock rtb)
+    {
+        if (!s_inlineUiExtentPins.TryGetValue(rtb, out InlineUiExtentPin? pin))
+            return;
+
+        if (pin.RenderingHandler is not null)
+        {
+            CompositionTarget.Rendering -= pin.RenderingHandler;
+            pin.RenderingHandler = null;
+        }
+        if (pin.HasOriginal && IsFloorStillPinned(rtb, pin))
+            RestorePinnedMinHeight(rtb, pin);
+        pin.HasOriginal = false;
+        pin.PinnedFloor = double.NaN;
+        pin.FramesRemaining = 0;
+        s_inlineUiExtentPins.Remove(rtb);
     }
 
     private static FrameworkElement? FindAncestorScrollHost(DependencyObject start)

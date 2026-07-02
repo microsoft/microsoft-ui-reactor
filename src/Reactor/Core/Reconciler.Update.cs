@@ -60,13 +60,28 @@ public sealed partial class Reconciler
         if (newEl.Modifiers is not null && !ReferenceEquals(modifiers, newEl.Modifiers))
             modifiers = modifiers is not null ? modifiers.Merge(newEl.Modifiers) : newEl.Modifiers;
 
+        // Compute the ancestor-aware effective theme for ThemeRef-backed ResourceOverrides
+        // resolution (mount-theme bug): the element's own RequestedTheme wins, else the
+        // subtree inherits the ambient threaded from its ancestors. Kept as a LOCAL here;
+        // the shallow-skip arm below passes it directly. The _ambientRequestedTheme FIELD
+        // (read by children recursed inside UpdateXxx / fresh subtrees this Update mounts)
+        // is written ONLY on the non-skip path inside the try/finally below, so the
+        // early-returning skip arm can never leak it to callers/siblings on an exception.
+        var prevAmbientTheme = _ambientRequestedTheme;
+        var effectiveTheme = (modifiers?.RequestedTheme is { } ownTheme && ownTheme != ElementTheme.Default)
+            ? ownTheme : prevAmbientTheme;
+
         // Short-circuit: if old and new elements are structurally identical,
         // skip all WinUI property access. This is the critical optimization for
         // large grids where only a fraction of elements change each frame.
-        // Exception: elements with ThemeBindings must always re-apply because
-        // the resolved brush value depends on the control's effective theme,
-        // which can change independently of the element tree (e.g., parent
-        // RequestedTheme toggle).
+        // Theme note (narrowed per #758): this element-level shallow-skip arm still
+        // re-applies a ThemeRef-backed ResourceOverride — its CONCRETE brush depends on
+        // the effective theme, which can change independently of the element tree (e.g.
+        // a parent RequestedTheme toggle), so it must be re-resolved. ThemeBindings are
+        // ALSO re-applied here but no longer strictly need to be: their {ThemeResource}
+        // setters self-heal natively (which is why the CHILD-level CanSkipUpdate /
+        // container-skip gates no longer decline for them) — the re-apply is a cheap
+        // cached-Style no-op retained for the element-level path.
         // ReferenceEquals would fail constantly because fluent chains like
         // .Width(200).Margin(10) produce a fresh ElementModifiers each render —
         // identical values, new instance. Use structural equality so we skip
@@ -93,15 +108,19 @@ public sealed partial class Reconciler
                 SetElementTag(tagFeSE, newEl);
             if (newEl.ThemeBindings is not null && control is FrameworkElement thFeSE)
                 ApplyThemeBindings(thFeSE, newEl.ThemeBindings);
-            // Re-resolve ThemeRef-based resource overrides on theme change
+            // Re-resolve ThemeRef-based resource overrides on theme change, against the
+            // ancestor-aware effective theme (lag-free vs. fe's own ActualTheme view).
             if (newEl.ResourceOverrides is { ThemeRefs.Count: > 0 } && control is FrameworkElement resFeSE)
-                ApplyResourceOverrides(resFeSE, newEl.ResourceOverrides, newEl.ResourceOverrides);
+                ApplyResourceOverrides(resFeSE, newEl.ResourceOverrides, newEl.ResourceOverrides, effectiveTheme);
             // #721 — refresh the cached gesture/drag dispatch closures so a skipped
             // element whose only change is a per-render gesture/drag closure dispatches
             // the latest closure (not a stale capture) without re-arming the trampolines.
             if ((HasGestureOrDragSlots(modifiers) || HasGestureOrDragSlots(oldModifiers))
                 && control is FrameworkElement gestFeSE)
                 RefreshGestureDragStateOnSkip(gestFeSE, oldModifiers, modifiers);
+            // No _ambientRequestedTheme restore here: the field is written only on the
+            // non-skip path inside the try below, never on this early-return arm (which
+            // reads the LOCAL effectiveTheme at line ~109), so it cannot leak.
             return null; // null = keep existing control as-is
         }
 
@@ -145,6 +164,12 @@ public sealed partial class Reconciler
         UIElement? result;
         try
         {
+        // Publish the effective theme for the subtree now that we're committed to the
+        // non-skip path — INSIDE the try so the finally restores it on every exit
+        // (including an exception in the recursion below). Children recursed inside
+        // UpdateXxx (and any fresh subtree this Update mounts) resolve ThemeRef
+        // ResourceOverrides against it.
+        _ambientRequestedTheme = effectiveTheme;
 
         // Spec 048 §8 — four-arm dispatch precedence (matches Mount):
         //   (1) per-host `_v1Handlers`, (2) per-host `_typeRegistry`,
@@ -183,6 +208,17 @@ public sealed partial class Reconciler
                 => UpdateComponent(oldEl, newEl, control, requestRerender),
             (MemoElement, MemoElement, _)
                 => UpdateComponent(oldEl, newEl, control, requestRerender),
+            // Issue #327 (Option A) — a KeyedMemoElement reconciled directly (used OUTSIDE a
+            // virtualized ElementFactory, which resolves it to its inner element in BuildOrCache
+            // before mounting). CanUpdate only routes here when the MemoKey is UNCHANGED, so by
+            // the purity contract the factory output is identical to what is already mounted —
+            // skip the inner diff entirely (return null = keep the existing control). A CHANGED
+            // key returns false from CanUpdate and takes the standard replace path (unmount old +
+            // mount the new factory output), so the OLD factory is never re-invoked at update
+            // time to reconstruct the old tree (which would diff against the wrong "old" if the
+            // factory reads mutable state by reference). Wrapper modifiers are still applied by
+            // the post-dispatch ApplyModifiers below.
+            (KeyedMemoElement, KeyedMemoElement, _) => null,
             _ => Mount(newEl, requestRerender),
         };
         }
@@ -220,7 +256,7 @@ public sealed partial class Reconciler
 
         // Apply per-control resource overrides (lightweight styling)
         if ((newEl.ResourceOverrides is not null || oldEl.ResourceOverrides is not null) && target is FrameworkElement resFe)
-            ApplyResourceOverrides(resFe, oldEl.ResourceOverrides, newEl.ResourceOverrides);
+            ApplyResourceOverrides(resFe, oldEl.ResourceOverrides, newEl.ResourceOverrides, effectiveTheme);
 
         // Apply transitions after update (re-applies when transition config changes)
         if (newEl.ImplicitTransitions is not null || newEl.ThemeTransitions is not null)
@@ -265,6 +301,7 @@ public sealed partial class Reconciler
         {
             if (ctxCount > 0)
                 _contextScope.Pop(ctxCount);
+            _ambientRequestedTheme = prevAmbientTheme;
         }
 
         return result;
@@ -454,24 +491,40 @@ public sealed partial class Reconciler
         RichTextBlockElement next,
         Action requestRerender)
     {
-        // Issue #487 — arm scroll-offset preservation BEFORE mutating the
-        // document. WinUI re-measures any inline-UI-bearing paragraph from
-        // scratch (RemoveEmbeddedElements + desiredSize=0), which silently
-        // clamps an ancestor ScrollViewer/ScrollView's VerticalOffset up. The
-        // anchor restores the user's real offset once layout settles.
-        PreserveScrollAroundInlineUiMutation(rtb, next);
-
-        if (TryIncrementalUpdateRichTextBlocks(rtb, prev, next, requestRerender))
+        if (TryIncrementalUpdateRichTextBlocks(rtb, prev, next, requestRerender, out bool mutated))
+        {
+            // Issues #487 + #717 — only an actual document mutation triggers WinUI's
+            // asynchronous inline-UI re-measure (RemoveEmbeddedElements + desiredSize=0),
+            // which silently clamps an ancestor scroll host's offset (#487) and transiently
+            // collapses the extent (#717). A no-op / property-only update never re-measures,
+            // so skip BOTH the scroll anchor and the extent pin for it. The re-measure is
+            // deferred past this synchronous reconcile, so arming here — after the text
+            // write but before the dispatcher yield — still captures the real pre-clamp
+            // offset / extent.
+            if (mutated)
+            {
+                PreserveScrollAroundInlineUiMutation(rtb, next);
+                PinExtentAcrossInlineUiMutation(rtb, next);
+            }
             return;
+        }
         RebuildRichTextBlocks(next, rtb, requestRerender);
+        // A rebuild always re-creates the document (and therefore re-measures any inline UI
+        // from scratch), so arm the anchor + pin the extent unconditionally when inline UI
+        // is present.
+        PreserveScrollAroundInlineUiMutation(rtb, next);
+        PinExtentAcrossInlineUiMutation(rtb, next);
     }
 
     private bool TryIncrementalUpdateRichTextBlocks(
         WinUI.RichTextBlock rtb,
         RichTextBlockElement prev,
         RichTextBlockElement next,
-        Action requestRerender)
+        Action requestRerender,
+        out bool mutated)
     {
+        mutated = false;
+
         // Case A — both .Paragraphs null: text-only fallback path.
         if (prev.Paragraphs is null && next.Paragraphs is null)
         {
@@ -482,6 +535,7 @@ public sealed partial class Reconciler
             if (string.Equals(prev.Text, next.Text, global::System.StringComparison.Ordinal))
                 return true;
             r1.Text = next.Text ?? string.Empty;
+            mutated = true;
             MarkRichTextBlockModified(rtb);
             return true;
         }
@@ -558,6 +612,7 @@ public sealed partial class Reconciler
 
         if (anyMutation)
             MarkRichTextBlockModified(rtb);
+        mutated = anyMutation;
         return true;
     }
 

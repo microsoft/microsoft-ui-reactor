@@ -12,6 +12,12 @@
       <Platform Solution="*|x64" Project="x64" />
     </Project>
   </Folder>
+  <Folder Name="/perf_bench/RowMemo/">
+    <Project Path="tests/perf_bench/PerfBench.RowMemo/PerfBench.RowMemo.csproj">
+      <Platform Solution="*|ARM64" Project="ARM64" />
+      <Platform Solution="*|x64" Project="x64" />
+    </Project>
+  </Folder>
   <Folder Name="/perf_bench/Allocation/">
     <Project Path="tests/perf_bench/PerfBench.Allocation/Allocation.Bound/Allocation.Bound.csproj">
       <Platform Solution="*|ARM64" Project="ARM64" />

@@ -903,6 +903,22 @@ public class ElementTests
     // and its themed fe.Resources[...] entry goes stale on a theme change.
 
     [Fact]
+    public void CanSkipUpdate_ThemeBindingsOnly_NowSkips_SelfHealing()
+    {
+        // Gate-teeth for #758: two shallow-equal TextBlocks carrying a ThemeBindings-only
+        // {ThemeResource} Foreground (no ResourceOverrides.ThemeRefs). BEFORE the narrowing
+        // CanSkipUpdate returned false (the dropped `newEl.ThemeBindings is null` arm); NOW
+        // it returns true, because {ThemeResource} self-heals natively on an effective-theme
+        // change (proven live in ThemeBindingsSkipSelfHealFixtures). Reverting the arm makes
+        // this go red. The ThemeRef arm (next test) stays load-bearing.
+        var a = TextBlock("Hello").Foreground(global::Microsoft.UI.Reactor.Core.Theme.PrimaryText);
+        var b = TextBlock("Hello").Foreground(global::Microsoft.UI.Reactor.Core.Theme.PrimaryText);
+
+        Assert.True(Element.ShallowEquals(a, b));
+        Assert.True(Element.CanSkipUpdate(a, b));
+    }
+
+    [Fact]
     public void CanSkipUpdate_ThemeRefOnly_ForcesUpdate()
     {
         // Two shallow-equal TextBlocks; one carries a ThemeRef-only resource
@@ -915,6 +931,21 @@ public class ElementTests
         // Sanity: they are shallow-equal (ResourceOverrides is not part of the
         // own-props compare), so only the explicit ThemeRefs gate keeps the
         // child-skip from engaging.
+        Assert.True(Element.ShallowEquals(a, b));
+        Assert.False(Element.CanSkipUpdate(a, b));
+    }
+
+    [Fact]
+    public void CanSkipUpdate_ThemeBindings_And_ThemeRef_ForcesUpdate()
+    {
+        // Combined: a cell with BOTH a self-healing ThemeBinding AND a load-bearing
+        // ThemeRef override must still decline the skip — the ThemeRef arm dominates.
+        var themeRef = global::Microsoft.UI.Reactor.Core.Theme.Ref("Issue675AccentBrush");
+        var a = TextBlock("Hello").Foreground(global::Microsoft.UI.Reactor.Core.Theme.PrimaryText)
+            .Resources(r => r.Set("Background", themeRef));
+        var b = TextBlock("Hello").Foreground(global::Microsoft.UI.Reactor.Core.Theme.PrimaryText)
+            .Resources(r => r.Set("Background", themeRef));
+
         Assert.True(Element.ShallowEquals(a, b));
         Assert.False(Element.CanSkipUpdate(a, b));
     }

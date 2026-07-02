@@ -231,6 +231,106 @@ Set `itemHeight` for a fixed-height fast path (O(1) offset calculation) or
 `estimatedItemHeight` for variable-height rows with automatic measurement.
 Use `onVisibleRangeChanged` to load data blocks as the user scrolls.
 
+## Memoizing rows across recycles
+
+Virtualized lists recycle containers as you scroll. On a **variable-height**
+list the `ItemsRepeater` recycles aggressively, and by default each recycle
+rebuilds that row's element tree and diffs it — even when the row's data
+didn't change. When a row is a pure function of a stable key, `Memo<TKey>`
+removes that rebuild:
+
+```csharp
+LazyVStack<Note>(notes, n => n.Id, (note, i) =>
+    Memo(note.Id, () =>                 // ← key, then the row factory
+        Border(
+            VStack(4,
+                TextBlock(note.Title).SemiBold(),
+                Caption(note.Body).Foreground(SecondaryText)
+            )
+        ).Padding(12)));
+```
+
+`Memo(key, factory)` caches the element `factory` returns in a bounded,
+per-list cache keyed by `key`. When a recycle re-asks for a key still in the
+cache it returns the **same element instance**, so the reconciler's
+`ReferenceEquals` shortcut fires and the row's diff is skipped entirely
+(sub-µs) instead of walking the subtree. It is **opt-in** — lists you don't
+wrap behave exactly as before — and works on every `ElementFactory`-backed
+collection: `VirtualList`, `LazyVStack<T>`, `LazyHStack<T>`, `ItemsView<T>`,
+`ItemsRepeater<T>`, and `DataGrid` rows.
+
+**Keep modifiers (and attached state) *inside* the factory.** The cache only kicks
+in for a *bare* `Memo(key, …)` returned by the row builder — no fluent modifiers,
+no `.WithKey(…)`, and no attached props / `.Provide(…)` / theme bindings on the
+wrapper. Decorating the wrapper (`Memo(id, () => …).Padding(8)`) opts that row out
+of the cache and silently loses the perf benefit. Put them on the element the
+factory returns instead: `Memo(id, () => Border(…).Padding(8))` (as above).
+
+**Purity contract — the key must capture every input the factory reads.**
+The cache cannot see through your closure. If the factory reads anything not
+folded into the key — a selection flag, the current theme, an expand toggle —
+a cached instance is served and the change is **silently lost**. That is the
+author's responsibility, not the framework's. Widen the key to a tuple so it
+changes whenever any input does:
+
+```csharp
+// Row chrome depends on selection AND theme, so both belong in the key.
+Memo((note.Id, isSelected, theme.IsDark), () => RowBody(note, isSelected));
+```
+
+Keying on the whole item record (`Memo(note, …)`) is the simplest safe choice
+when the row is a pure function of the item — records compare by value, so any
+field change is a new key.
+
+**`Memo(key, …)` is not `Memo(ctx => …)`.** They share a name but the compiler
+picks by argument shape. `Memo(key, factory)` is the cross-recycle row cache
+here. [`Memo(ctx => …, deps)`](advanced.md#memo) is the render-time subtree
+skip — it freezes a subtree across a parent **re-render**. They also compose
+with [`UseMemoCells`](advanced.md#memoizing-list-cells): `UseMemoCells` skips
+cell-builds when the parent re-renders, while `Memo(key, …)` additionally
+skips them on pure scroll recycles, where no re-render runs at all.
+
+**Cache policy.** A bounded LRU, default capacity 128 (a few× a typical
+realized window), so it never grows with list length — scrolling a
+million-row list keeps at most 128 entries warm and evicts the
+least-recently-used beyond that. It is cleared automatically whenever the
+list's items or row builder is replaced (the same boundary that invalidates
+Reactor's internal view cache), so a new builder closure can never serve an
+instance the old one built.
+
+**Outside a virtualized list,** `Memo(key, factory)` is a transparent but *keyed*
+wrapper: a re-render with the same key is a no-op (the factory is not re-invoked
+and the subtree is not diffed), and a changed key replaces the inner (unmount +
+fresh mount of a new `factory()` result). The cross-recycle cache only happens
+when a virtualized list's factory owns the cache; as a plain child (say, a
+`VStack` child) it is a safe, keyed no-op.
+
+### Escape hatch without the API
+
+`Memo<TKey>` is the supported path, but the same idea works today with a plain
+dictionary you own — handy on a Reactor build without the API, or when you
+want full control over the cache's lifetime. Cache the **element instance** by
+key yourself and return the cached one on a hit, so the reconciler's
+`ReferenceEquals` skip still fires:
+
+```csharp
+// Held in the parent component via UseRef so it survives re-renders.
+var cache = UseRef(new Dictionary<int, Element>()).Current;
+
+Element Row(Note note)
+{
+    if (!cache.TryGetValue(note.Id, out var el))
+        cache[note.Id] = el = Border(/* … */);   // build once per id
+    return el;                                    // same instance on reuse
+}
+
+return LazyVStack<Note>(notes, n => n.Id, (note, i) => Row(note));
+```
+
+You then own the parts `Memo` handles for you: bound the dictionary (evict so
+it can't grow without limit) and drop or rebuild an entry when the data behind
+its key changes — the purity contract above, enforced by hand.
+
 ## ForEach
 
 For small, non-virtualized inline lists, use `ForEach`. It maps a collection

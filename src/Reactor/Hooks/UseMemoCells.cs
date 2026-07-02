@@ -303,14 +303,13 @@ public static class UseMemoCellsExtensions
             // the positional reconciler can safely structural-skip the untouched
             // (reference-equal) range. Start from the previous render's hint —
             // O(1); only on the first reuse after a full rebuild do we scan once.
-            // "Theme-sensitive" = ThemeBindings OR a ThemeRef-backed ResourceOverride
-            // (see ChildDiffHints.IsThemeSensitive). The ResourceOverrides arm is
-            // conservative: today the full-walk fallback also skips a reference-equal
-            // ResourceOverrides cell (Element.CanSkipUpdate only un-skips for
-            // ThemeBindings), so gating on it costs a fallback without a re-resolve —
-            // kept deliberately as belt-and-suspenders / future-proofing, and because
-            // making CanSkipUpdate consistent is a framework-wide change out of scope
-            // here.
+            // "Theme-sensitive" = a ThemeRef-backed ResourceOverride ONLY (narrowed
+            // per #758; see ChildDiffHints.IsThemeSensitive). ThemeBindings are NOT
+            // counted: their {ThemeResource} setters self-heal natively on a theme
+            // change even when the container structural-skips them. The ResourceOverrides
+            // arm is load-bearing here and consistent with Element.CanSkipUpdate (which
+            // also declines the child-skip only for a ThemeRef override), so the count
+            // gates exactly the cells whose concrete brush would otherwise go stale.
             int themeSensitiveCount = ChildDiffHints.TryGet(prevChildren, out var prevHint)
                 ? prevHint.ThemeSensitiveCount
                 : CountThemeSensitive(prevChildren);
@@ -435,11 +434,12 @@ public static class UseMemoCellsExtensions
 
     private sealed record MemoCellsState<T>(T[] Items, Element[] Children, object[] Deps)
     {
-        // Issue #659 review: true when any cell in Children is theme-sensitive
-        // (ThemeBindings or a ThemeRef ResourceOverride). Gates the base
-        // full-cache-hit early-out: a reference-equal Children array would let the
-        // container ShallowEquals-skip the subtree and drop child theme
-        // re-application, so the early-out only fires when this is false.
+        // Issue #659 review (narrowed #758): true when any cell in Children carries a
+        // ThemeRef-backed ResourceOverride (a concrete brush that does NOT self-heal).
+        // Gates the base full-cache-hit early-out: a reference-equal Children array would
+        // let the container ShallowEquals-skip the subtree and strand such a resolved
+        // brush, so the early-out only fires when this is false. ThemeBindings are
+        // excluded — their {ThemeResource} setters self-heal natively across a skip.
         public bool AnyThemeSensitive { get; init; }
     }
 

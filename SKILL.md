@@ -208,7 +208,7 @@ Workflow modes (Phase-2 ranker):
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.UI.Reactor" Version="0.0.0-local" />
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.0.1" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.1.3" />
   </ItemGroup>
 </Project>
 ```
