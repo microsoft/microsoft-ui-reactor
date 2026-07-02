@@ -154,7 +154,7 @@ Summary (⭐ = already called for by name in the codebase — exactly three;
 |---|---|---|---|---|
 | `REACTOR_STATE_001` | Reactor.State | `INotifyPropertyChanged` implemented on a `Component` | Warning | — |
 | `REACTOR_HOOKS_010` | Reactor.Hooks | Reference state mutated in place, same ref re-passed to setter | Warning | ✔ |
-| `REACTOR_HOOKS_011` | Reactor.Hooks | Controlled input with `onChange` present but empty (fake `Mode=OneWay`) | Warning | ✔ |
+| `REACTOR_HOOKS_011` | Reactor.Hooks | Controlled input with `onChanged` present but empty (fake `Mode=OneWay`) | Warning | ✔ |
 | `REACTOR_HOOKS_002` | Reactor.Hooks | Hook after an early-`return` guard (comment-reserved slot) | Info | — |
 | `REACTOR_HOOKS_003` | Reactor.Hooks | `async`-void `UseEffect` body (comment-reserved slot) | Warning | ✔ |
 | `REACTOR_HOOKS_012` | Reactor.Hooks | `Memo(builder, params deps)` given deps that lack value equality | Warning | — |
