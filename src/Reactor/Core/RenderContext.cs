@@ -938,8 +938,10 @@ public sealed class RenderContext
     {
         var snapshot = getSnapshot();
         var effectiveComparer = comparer ?? EqualityComparer<TSnapshot>.Default;
-        var state = UseRef(new ExternalStoreState<TSnapshot>(snapshot, getSnapshot, effectiveComparer));
+        var state = UseRef<ExternalStoreState<TSnapshot>?>(null);
         var (_, forceRender) = UseReducer(0, threadSafe: true);
+
+        state.Current ??= new ExternalStoreState<TSnapshot>(snapshot, getSnapshot, effectiveComparer);
 
         lock (state.Current.Gate)
         {
