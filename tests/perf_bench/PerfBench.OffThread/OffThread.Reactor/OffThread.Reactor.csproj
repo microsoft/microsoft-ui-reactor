@@ -9,7 +9,8 @@
     <Nullable>enable</Nullable>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
-  </PropertyGroup>  <ItemGroup>
+  </PropertyGroup>
+  <ItemGroup>
     <ProjectReference Include="..\..\PerfBench.Shared\PerfBench.Shared.csproj" />
     <ProjectReference Include="..\..\..\..\src\Reactor\Reactor.csproj" />
   </ItemGroup>

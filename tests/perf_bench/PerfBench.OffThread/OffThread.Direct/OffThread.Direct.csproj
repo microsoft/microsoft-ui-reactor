@@ -9,7 +9,8 @@
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
     <DefineConstants>DISABLE_XAML_GENERATED_MAIN</DefineConstants>
-  </PropertyGroup>  <ItemGroup>
+  </PropertyGroup>
+  <ItemGroup>
     <ProjectReference Include="..\..\PerfBench.Shared\PerfBench.Shared.csproj" />
   </ItemGroup>
 </Project>

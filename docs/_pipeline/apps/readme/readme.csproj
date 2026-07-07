@@ -7,7 +7,8 @@
     <Nullable>enable</Nullable>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
-  </PropertyGroup>  <ItemGroup>
+  </PropertyGroup>
+  <ItemGroup>
     <ProjectReference Include="..\..\..\..\src\Reactor\Reactor.csproj" />
   </ItemGroup>
 </Project>

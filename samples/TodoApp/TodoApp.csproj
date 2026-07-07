@@ -9,7 +9,8 @@
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
   </PropertyGroup>
-  <!-- </snippet:unpackaged-shape> -->  <ItemGroup>
+  <!-- </snippet:unpackaged-shape> -->
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Reactor\Reactor.csproj" />
   </ItemGroup>
 </Project>

@@ -82,7 +82,7 @@ public class WinAppSDKReferenceGuardTests
         var root = RepoRootFinder.FindRepoRoot();
         Assert.NotNull(root);
 
-        var assets = Path.Combine(root!, "src", "Reactor", "obj", "project.assets.json");
+        var assets = Path.Join(root!, "src", "Reactor", "obj", "project.assets.json");
         Assert.True(File.Exists(assets), $"Reactor restore graph not found at {assets}");
 
         using var doc = JsonDocument.Parse(File.ReadAllText(assets));
