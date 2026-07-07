@@ -48,8 +48,8 @@ Component.Render() → Element tree (records)
 ### Reconciler is split across partial classes
 
 - `Reconciler.cs` — orchestration, child reconciliation, unmount, helpers
-- `Reconciler.Mount.cs` — `MountXxx()` handler per control type
-- `Reconciler.Update.cs` — `UpdateXxx()` handler per control type
+- `Reconciler.Mount.cs` — mount dispatch + composition-primitive handlers (controls mount via their registered `ControlDescriptor`/`IElementHandler`)
+- `Reconciler.Update.cs` — update dispatch + composition-primitive handlers (controls update via the same registered descriptors/handlers)
 
 ### Hooks follow React rules
 
