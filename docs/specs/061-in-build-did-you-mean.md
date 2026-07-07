@@ -2,10 +2,10 @@
 
 ## Status
 
-**Proposed — 2026-07-07.** First analyzer (`REACTOR_DYM_001`) implemented; the fuzzy
-name-resolution phases are design-only. This spec is the design of record for bringing Reactor's
-"did you mean" suggestions — today reachable only through the `mur check` CLI — into a plain
-`dotnet build` and the IDE, for consumers of the `Microsoft.UI.Reactor` NuGet package.
+**Proposed — 2026-07-07.** Phase 1 (`REACTOR_DYM_001`) and Phase 2 (`REACTOR_DYM_002`) are
+implemented; the fuzzy name-resolution phases remain design-only. This spec is the design of record
+for bringing Reactor's "did you mean" suggestions — today reachable only through the `mur check` CLI —
+into a plain `dotnet build` and the IDE, for consumers of the `Microsoft.UI.Reactor` NuGet package.
 
 > **Process note.** The mechanism decision below was reached by an investigation that mined the
 > real eval corpus, ran empirical Roslyn spikes, and put the question to a panel of models
@@ -24,10 +24,11 @@ name-resolution phases are design-only. This spec is the design of record for br
 - [§3 Evidence](#3-evidence)
 - [§4 Design](#4-design)
 - [§5 Phase 1 — `REACTOR_DYM_001` (shipped)](#5-phase-1--reactor_dym_001-shipped)
-- [§6 Later phases — the fuzzy cases](#6-later-phases--the-fuzzy-cases)
-- [§7 Risks and guardrails](#7-risks-and-guardrails)
-- [§8 Relationship to `mur check`](#8-relationship-to-mur-check)
-- [§9 Non-goals / superseded](#9-non-goals--superseded)
+- [§6 Phase 2 — `REACTOR_DYM_002` (shipped)](#6-phase-2--reactor_dym_002-shipped)
+- [§7 Later phases — the fuzzy cases](#7-later-phases--the-fuzzy-cases)
+- [§8 Risks and guardrails](#8-risks-and-guardrails)
+- [§9 Relationship to `mur check`](#9-relationship-to-mur-check)
+- [§10 Non-goals / superseded](#10-non-goals--superseded)
 
 ---
 
@@ -116,41 +117,99 @@ first increment.
 - **Tests.** Positive (`GridSize.Auto()`), negatives (`Star()`/`Px(1)`/`Auto`, and a non-Reactor
   `Widget.Thing()` to prove namespace gating), and the fix round-trip.
 
-## §6 Later phases — the fuzzy cases
+## §6 Phase 2 — `REACTOR_DYM_002` (shipped)
+
+Phase 2 ships the **deterministic vocabulary** did-you-mean case that is still live against the
+current Reactor surface, as a dedicated non-fuzzy analyzer + one-click code fix mirroring an existing
+`mur check` Tier-3 rule (spec 038 §6). The fuzzy Jaro-Winkler typo matcher is deliberately **deferred**
+to a later phase — it carries a higher false-positive risk and needs the shared match engine (below).
+
+- **`REACTOR_DYM_002` — `ThemeBackgroundSuffixAnalyzer`** (+ `ThemeBackgroundSuffixCodeFix`). Corpus
+  mistake **#3** (`Theme.*` wrong suffix, CS0117, ~27 events): an English-plausible token such as
+  `Theme.AppBackground` that Reactor doesn't define. Any un-overridden `*Background` maps to
+  `Theme.SolidBackground`; the exact override `Theme.LayerBackground` → `Theme.LayerFill` matches the
+  CLI rule's run5 cross-trial refinement. Mirrors `ThemeBackgroundSuffixRule`; the target
+  `Microsoft.UI.Reactor.Core.Theme` genuinely lacks these tokens (it has `SolidBackground`/`LayerFill`
+  but no `AppBackground`/`LayerBackground`/…), so `Theme.AppBackground` still produces CS0117 on real
+  code — the analyzer is live, not dead.
+
+**Detection.** The analyzer registers a `SimpleMemberAccessExpression` action and fires only when
+(a) the access did not bind (`GetSymbolInfo(...).Symbol == null`), so it always co-occurs with the
+compiler's CS0117; (b) the receiver is *exactly* `Microsoft.UI.Reactor.Core.Theme` by symbol equality
+(a look-alike `Theme` in another namespace is ruled out); and (c) the chosen target still exists on the
+live `Theme` surface (resolved once per compilation via a `CompilationStart` action), so a future
+rename self-disables the rule rather than proposing a member that no longer compiles. As in Phase 1,
+firing only on the unbound shape keeps **Warning** severity safe under `TreatWarningsAsErrors` while
+still surfacing in a plain `dotnet build`.
+
+**Alignment case (#4) intentionally not shipped.** Corpus mistake #4 —
+`.VerticalAlignment(...)` / `.HorizontalAlignment(...)` (CS1061) — was **already fixed upstream in the
+DSL**: `Microsoft.UI.Reactor.ElementExtensions` now defines `.HorizontalAlignment(...)` and
+`.VerticalAlignment(...)` as real modifier aliases for `.HAlign(...)` / `.VAlign(...)` (added in commit
+`e38b57c2`, PR #319 — *"reduce reactor-dev agent build-attempt fix-loops"*). Those calls now **bind**,
+so no CS1061 occurs and there is nothing to augment; an in-build analyzer here would be dead code and
+could even mis-fire on a wrong-argument call to the real modifier (overload-resolution failure, not a
+missing member). The mirrored `mur check` `AlignmentShortcutRule` is obsolete for the same reason —
+its fixture stubs omit the aliases, masking it. **Follow-up: retire `AlignmentShortcutRule`** when the
+CLI-rule change budget allows.
+
+**Shared-engine decision (deferred).** The analyzer keeps its small vocabulary map **local** rather
+than sharing the CLI's match engine. Extracting `StringSimilarity` / `FactoryIndex` out of
+`src/Reactor.Cli` now would churn `mur check` and its ~28 rule/suggester test files, and the
+`netstandard2.0` analyzer project cannot consume the `net8` `FrozenDictionary` APIs `FactoryIndex`
+relies on. To keep the two engines from silently diverging in the meantime, a cross-check parity test
+(`DidYouMeanAnalyzerParityTests`) drives the Tier-3 rule for every analyzer map entry and asserts both
+resolve the same target. The **full shared match-engine unification remains a follow-up** (§7) —
+required before the fuzzy phases, which must share one ranker with `mur check`.
+
+**Tests.** Positives (`AppBackground`/`WindowBackground` → `SolidBackground`, `LayerBackground` →
+`LayerFill` override), negatives (an existing `*Background` token that binds, a non-`Background` suffix,
+a look-alike `Theme` in another namespace, and the target-missing self-disable), the code-fix
+round-trips, and the parity cross-check.
+
+## §7 Later phases — the fuzzy cases
 
 Follow-up analyzers, each reusing the shared match engine and gated to Reactor symbols:
 
 1. **Unresolved member** (CS1061/CS0117 shapes) — receiver type resolves, member unresolved →
-   fuzzy-match against the receiver's members; covers `.VerticalAlignment` → `.VAlign`,
-   `Theme.AppBackground` → `.SolidBackground`, `GridSize.Pixel` → `.Px`, `TextBlock.Style` →
-   modifier chain, `Button.OnClick` → `onClick:`.
+   fuzzy-match against the receiver's members. The one deterministic vocabulary member still live in
+   this family — `Theme.AppBackground` → `Theme.SolidBackground` — shipped in Phase 2 (§6) as a
+   dedicated non-fuzzy analyzer; the alignment member (`.VerticalAlignment` → `.VAlign`) is now a
+   no-op because the DSL added real aliases (§6). The remaining fuzzy members (`GridSize.Pixel` →
+   `.Px`, `TextBlock.Style` → modifier chain, `Button.OnClick` → `onClick:`) await the shared match
+   engine.
 2. **Unresolved name** (CS0103 shape) — fuzzy-match against the factory index.
 3. **Argument shape** (CS1503/CS7036) — `CandidateReason == OverloadResolutionFailure` +
    `ClassifyConversion`; lower priority (rare in corpus), IDE code-fix first (Roslynator ships
    these as code-fixes).
 4. **`HelpLinkUri`** on `REACTOR_*` descriptors — endorsed by every reviewer; **deferred** until a
    stable published-docs URL scheme exists (the package is not yet public — spec 022).
+5. **Shared match-engine extraction** — factor `StringSimilarity` + `FactoryIndex` + the vocabulary
+   tables out of `src/Reactor.Cli` into one Roslyn-only library consumed by **both** `mur check` and
+   the analyzers, replacing Phase 2's local maps + parity test. Blocked today by the `netstandard2.0`
+   analyzer target (no `net8` `FrozenDictionary`) and the blast radius across the CLI's ~28
+   rule/suggester test files; land it before the fuzzy phases so both engines share one ranker.
 
 Each phase lands with a perf check (IDE typing latency on a representative project) and a
 false-positive audit over `samples/`.
 
-## §7 Risks and guardrails
+## §8 Risks and guardrails
 
 | Risk | Guardrail |
 |---|---|
 | False positives under cascading / partial-edit errors | Bail when the receiver type is unresolved or an error type; only fire when the invocation didn't bind; gate to Reactor symbols; (fuzzy phases) require high similarity thresholds. |
 | IDE typing latency | Use the provided `context.SemanticModel` (never `Compilation.GetSemanticModel`, RS1030); narrow syntax-node actions; cheap symbol pre-checks before any fuzzy match. |
-| Divergence between analyzer and `mur check` | One shared match library + shared fixtures (fuzzy phases). |
+| Divergence between analyzer and `mur check` | Phase 2: local maps locked to the CLI Tier-3 rules by a cross-check parity test (`DidYouMeanAnalyzerParityTests`). Fuzzy phases: one shared match library + shared fixtures (§7 item 5). |
 | Noise (a second diagnostic atop the CS error) | Concise message; `REACTOR_DYM_*` only ever accompanies a genuine compile error; consumers can tune severity via `.editorconfig`. |
 
-## §8 Relationship to `mur check`
+## §9 Relationship to `mur check`
 
 `mur check` stays the output-driven CLI: it reacts to the compiler's *actual* diagnostics, so it
 retains broader coverage (any CS code, the long tail) and its agent-tuned ranker/iteration modes.
 The analyzers cover the common cases natively in build + IDE. The two are complementary; the fuzzy
 phases share one match engine so behaviour cannot drift.
 
-## §9 Non-goals / superseded
+## §10 Non-goals / superseded
 
 - **Superseded:** the earlier output-driven-in-build proposal (a `Reactor.Check` engine extraction,
   a bundled tool packed under `tools/`, `ErrorLog` SARIF wiring, and a
