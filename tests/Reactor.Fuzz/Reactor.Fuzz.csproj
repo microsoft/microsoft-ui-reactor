@@ -19,7 +19,6 @@
 
   <ItemGroup>
     <PackageReference Include="SharpFuzz" />
-    <PackageReference Include="Microsoft.WindowsAppSDK" />
   </ItemGroup>
 
   <ItemGroup>

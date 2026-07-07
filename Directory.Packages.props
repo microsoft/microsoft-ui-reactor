@@ -21,8 +21,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Windows App SDK / WinUI 3 (version sourced from Directory.Build.props) -->
+    <!-- Windows App SDK / WinUI 3 (versions sourced from Directory.Build.props).
+         Directory.Build.targets injects the right one per project: framework-dependent
+         projects get Microsoft.WindowsAppSDK.WinUI; self-contained / MSIX projects keep
+         the full Microsoft.WindowsAppSDK metapackage (Runtime + DWriteCore redist). -->
     <PackageVersion Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
+    <PackageVersion Include="Microsoft.WindowsAppSDK.WinUI" Version="$(WindowsAppSDKWinUIVersion)" />
+    <PackageVersion Include="Microsoft.WindowsAppSDK.Runtime" Version="$(WindowsAppSDKVersion)" />
     <PackageVersion Include="Microsoft.Graphics.Win2D" Version="$(Win2DVersion)" />
   </ItemGroup>
 

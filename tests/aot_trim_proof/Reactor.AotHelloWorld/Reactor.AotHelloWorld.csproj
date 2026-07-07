@@ -79,10 +79,6 @@
   </Target>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" />
-  </ItemGroup>
-
-  <ItemGroup>
     <!--
       The whole point: reference Reactor.External.TestControl so the Marquee
       handler / control type metadata is available for the trimmer's

@@ -220,7 +220,9 @@ function Get-VsExtensionSkipReason {
 # output stays a standalone deployable.
 #
 # Net effect: the user needs the WindowsAppRuntime 2.0 install matching
-# our WindowsAppSDKVersion=2.1.3 to run most things in this repo.
+# our WindowsAppSDKVersion=2.1.3 to run most things in this repo. (Framework-
+# dependent projects reference the Microsoft.WindowsAppSDK.WinUI sub-package
+# rather than the full metapackage, but still bind that same machine-wide runtime.)
 #
 # So we prompt by default. `-InstallWinAppSdk` to force-install,
 # `-InstallWinAppSdk:$false` to skip the prompt non-interactively.

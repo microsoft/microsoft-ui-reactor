@@ -28,4 +28,51 @@
     <PublishAot>false</PublishAot>
   </PropertyGroup>
 
+  <!--
+    Windows App SDK reference injection (centralized — see docs/specs/022 and
+    Directory.Build.props / Directory.Packages.props).
+
+    Windows App SDK 2.0 split the monolithic Microsoft.WindowsAppSDK metapackage
+    into independently-versioned sub-packages. Reactor only needs the WinUI slice,
+    which transitively brings Base + Foundation + InteractiveExperiences + WebView2
+    (the bootstrapper, deployment manager, MRT Core and app-lifecycle MSBuild
+    targets). The metapackage also aggregates AI / ML / Widgets / DWrite, which the
+    repo never uses — so framework-dependent projects reference only
+    Microsoft.WindowsAppSDK.WinUI and let the machine-wide installed
+    Microsoft.WindowsAppRuntime.2 supply native bits (DWriteCore, etc.) at runtime.
+
+    Projects that BUNDLE the native runtime keep the full metapackage, which carries
+    the Runtime redist + DWriteCore: WindowsAppSDKSelfContained=true, or
+    framework-dependent MSIX (WindowsPackageType=MSIX). A framework-dependent WinUI
+    *executable* additionally needs Microsoft.WindowsAppSDK.Runtime — the SDK's
+    Microsoft.WindowsAppSDK.Base.targets rejects a framework-dependent app that
+    references neither Runtime nor WindowsAppSDKSelfContained. Libraries don't produce
+    an app, so they take the lean WinUI reference alone.
+
+    Evaluating the conditions here in .targets (a late import) means per-project
+    OutputType / WindowsAppSDKSelfContained / WindowsPackageType values are already
+    resolved — including the perf harnesses that flip WindowsAppSDKSelfContained to
+    true only under -p:PerfCiSelfContained=true, a case a static per-csproj reference
+    would classify wrong and ship broken.
+
+    Gated on ManagePackageVersionsCentrally=true so it applies only to repo projects
+    under central package management — never external consumers or the scaffolded
+    template (bootstrap writes a CPM-off Directory.Packages.props to mimic a real
+    consumer, and the shipped template pins Microsoft.WindowsAppSDK itself with an
+    explicit version). Set ReactorSkipWinAppSDKInjection=true to opt a repo project
+    out entirely.
+  -->
+  <PropertyGroup Condition="'$(UseWinUI)' == 'true'">
+    <_ReactorWinAppSDKMetapackage>false</_ReactorWinAppSDKMetapackage>
+    <_ReactorWinAppSDKMetapackage Condition="'$(WindowsAppSDKSelfContained)' == 'true' or '$(WindowsPackageType)' == 'MSIX'">true</_ReactorWinAppSDKMetapackage>
+    <_ReactorWinAppSDKFrameworkDependentApp>false</_ReactorWinAppSDKFrameworkDependentApp>
+    <_ReactorWinAppSDKFrameworkDependentApp Condition="'$(_ReactorWinAppSDKMetapackage)' != 'true' and ('$(OutputType)' == 'Exe' or '$(OutputType)' == 'WinExe')">true</_ReactorWinAppSDKFrameworkDependentApp>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(UseWinUI)' == 'true' and '$(ManagePackageVersionsCentrally)' == 'true' and '$(ReactorSkipWinAppSDKInjection)' != 'true'">
+    <PackageReference Include="Microsoft.WindowsAppSDK" Condition="'$(_ReactorWinAppSDKMetapackage)' == 'true'" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Condition="'$(_ReactorWinAppSDKMetapackage)' != 'true'" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Runtime" Condition="'$(_ReactorWinAppSDKFrameworkDependentApp)' == 'true'" />
+  </ItemGroup>
+
 </Project>

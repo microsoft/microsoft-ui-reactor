@@ -9,11 +9,7 @@
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
   </PropertyGroup>
-  <!-- </snippet:unpackaged-shape> -->
-  <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" />
-  </ItemGroup>
-  <ItemGroup>
+  <!-- </snippet:unpackaged-shape> -->  <ItemGroup>
     <ProjectReference Include="..\..\src\Reactor\Reactor.csproj" />
   </ItemGroup>
 </Project>

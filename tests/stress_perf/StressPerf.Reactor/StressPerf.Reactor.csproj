@@ -15,10 +15,6 @@
   <!-- </snippet:aot-stress-shape> -->
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\StressPerf.Shared\StressPerf.Shared.csproj" />
     <ProjectReference Include="..\..\..\src\Reactor\Reactor.csproj" />
   </ItemGroup>

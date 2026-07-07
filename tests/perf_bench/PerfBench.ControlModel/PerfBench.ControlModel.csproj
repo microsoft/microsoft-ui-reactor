@@ -47,10 +47,6 @@
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(Platform)' == 'ARM64'">win-arm64</RuntimeIdentifier>
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(Platform)' != 'ARM64'">win-x64</RuntimeIdentifier>
   </PropertyGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" />
-  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\PerfBench.Shared\PerfBench.Shared.csproj" />
     <ProjectReference Include="..\..\..\src\Reactor\Reactor.csproj" />

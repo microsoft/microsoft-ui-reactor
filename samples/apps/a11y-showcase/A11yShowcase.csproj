@@ -12,10 +12,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\..\..\src\Reactor\Reactor.csproj" />
     <!-- Roslyn analyzers — produces REACTOR_A11Y_001/002/003 build warnings -->
     <ProjectReference Include="..\..\..\src\Reactor.Analyzers\Reactor.Analyzers.csproj"
