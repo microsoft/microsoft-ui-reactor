@@ -26,17 +26,17 @@ namespace Microsoft.UI.Reactor.Tests.CheckCommandTests.Rules;
 
 public class RulePerformanceTests
 {
-    // Combined stub: every DeclaredTarget across ALL six rules in
-    // RuleRegistry.Default — three Class-B (ThemeBackgroundSuffixRule,
-    // AlignmentShortcutRule, ButtonOnClickFactoryMoveRule) plus three
-    // Class-A (GridSizeFactoryParensRule, GridSizePxRenameRule,
-    // TextBlockStyleHintRule). All six must pass RuleRegistry.TargetsResolve
-    // and reach TryMatch; if any self-disables, the perf budget assertion
-    // measures a smaller set than RuleRegistry.Default.All.Length and the
-    // scaling becomes misleading (Copilot CR feedback on this file).
+    // Combined stub: every DeclaredTarget across all rules in
+    // RuleRegistry.Default, so each rule passes RuleRegistry.TargetsResolve
+    // and reaches TryMatch. If any rule self-disables, the perf budget
+    // assertion measures a smaller set than RuleRegistry.Default.All.Length
+    // and the scaling becomes misleading (Copilot CR feedback on this file).
+    // The stub-coverage guard in the test body enforces this dynamically, so
+    // adding a rule whose target the stub lacks fails loudly rather than
+    // silently shrinking the measured set.
     //
     // The diagnostic is shaped so exactly one rule
-    // (ButtonOnClickFactoryMoveRule) matches — the other five short-circuit
+    // (ButtonOnClickFactoryMoveRule) matches — the others short-circuit
     // early inside TryMatch (different code, different receiver, different
     // missing-member name). That mix is the representative cost shape:
     // every rule pays the symbol-resolution gate, most rules then bail
@@ -61,11 +61,6 @@ namespace Microsoft.UI.Reactor
         public static GridSize Auto { get; } = new(1, 0);
         public static GridSize Star(double weight = 1) => new(weight, 1);
         public static GridSize Px(double pixels) => new(pixels, 2);
-    }
-    public static class ElementExtensions
-    {
-        public static T HAlign<T>(this T el, int alignment) where T : Element => el;
-        public static T VAlign<T>(this T el, int alignment) where T : Element => el;
     }
     public static class Factories
     {

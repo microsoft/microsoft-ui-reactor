@@ -121,9 +121,14 @@ first increment.
 Follow-up analyzers, each reusing the shared match engine and gated to Reactor symbols:
 
 1. **Unresolved member** (CS1061/CS0117 shapes) — receiver type resolves, member unresolved →
-   fuzzy-match against the receiver's members; covers `.VerticalAlignment` → `.VAlign`,
+   fuzzy-match against the receiver's members; covers
    `Theme.AppBackground` → `.SolidBackground`, `GridSize.Pixel` → `.Px`, `TextBlock.Style` →
    modifier chain, `Button.OnClick` → `onClick:`.
+   *(The `.VerticalAlignment` / `.HorizontalAlignment` → `.VAlign` / `.HAlign` case that
+   originally motivated this shape is now resolved at the API level: `ElementExtensions` ships
+   real long-form `.HorizontalAlignment(...)` / `.VerticalAlignment(...)` aliases, so those calls
+   bind and raise no diagnostic. The corresponding `mur check` `AlignmentShortcutRule` has been
+   removed as dead code.)*
 2. **Unresolved name** (CS0103 shape) — fuzzy-match against the factory index.
 3. **Argument shape** (CS1503/CS7036) — `CandidateReason == OverloadResolutionFailure` +
    `ClassifyConversion`; lower priority (rare in corpus), IDE code-fix first (Roslynator ships
