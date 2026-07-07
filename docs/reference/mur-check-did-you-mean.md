@@ -109,8 +109,8 @@ mur check <path>
    │             fuzzy-match against the real Reactor API surface.
    │
    │   Tier 3 — induced + vocabulary rules   (SHIPPED in part, Phase 3)
-   │             Small symbol-bound rewriters. Six rules live today
-   │             (three Class-A induced + three Class-B vocabulary).
+   │             Small symbol-bound rewriters. Five rules live today
+   │             (three Class-A induced + two Class-B vocabulary).
    │             Rules can cover diagnostic codes Tier-2 doesn't
    │             (e.g. CS1955). Rules WIN over Tier-2 when both match.
    │
@@ -502,7 +502,7 @@ Branch: `eval/spec-038-ec3-2026-05-11` at commit `2b7090f`. Six rules + the two 
 - `RuleSymbolResolver.cs` — `ResolveType(string)`, `ResolveMethod(INamedTypeSymbol, string)`, `ResolveMember(INamedTypeSymbol, string)`. Cached via `ConditionalWeakTable<CSharpCompilation, _>` so two callers with the same compilation reference share caches; per-compilation resolver identity is test-locked.
 - CLI: `--disable-rule <Name>` (repeatable), `--list-rules` (prints name/provenance/status table; short-circuits before `dotnet build` runs). Unknown `--disable-rule` names warn instead of error.
 
-**The six rules** — see the table in §3 for the full inventory. Three Class-A (induced from the cross-corpus audit) + three Class-B (vocabulary-translation, structurally justified). All six bind through `RuleSymbolResolver`; no string-matching.
+**The five rules** — see the table in §3 for the full inventory. Three Class-A (induced from the cross-corpus audit) + two Class-B (vocabulary-translation, structurally justified). All five bind through `RuleSymbolResolver`; no string-matching.
 
 **Two critical correctness fixes** (both blocked any real-world rule firing prior; surfaced by end-to-end smoke testing during Phase 3):
 
