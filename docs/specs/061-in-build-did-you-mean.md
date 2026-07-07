@@ -2,8 +2,8 @@
 
 ## Status
 
-**Proposed — 2026-07-07.** Phase 1 (`REACTOR_DYM_001`) and Phase 2 (`REACTOR_DYM_002`) are
-implemented; the fuzzy name-resolution phases remain design-only. This spec is the design of record
+**Implemented (in part) — 2026-07-07.** Phase 1 (`REACTOR_DYM_001`) and Phase 2 (`REACTOR_DYM_002`)
+have shipped; the fuzzy name-resolution phases remain design-only. This spec is the design of record
 for bringing Reactor's "did you mean" suggestions — today reachable only through the `mur check` CLI —
 into a plain `dotnet build` and the IDE, for consumers of the `Microsoft.UI.Reactor` NuGet package.
 

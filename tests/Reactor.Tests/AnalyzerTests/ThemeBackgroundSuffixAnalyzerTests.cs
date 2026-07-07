@@ -16,8 +16,8 @@ namespace Microsoft.UI.Reactor.Tests.AnalyzerTests;
 public class ThemeBackgroundSuffixAnalyzerTests
 {
     // Reactor's Theme surface with the canonical token (SolidBackground), the override target
-    // (LayerFill), a real *Background sibling (CardBackground — the binds-fine negative), plus a
-    // non-Reactor look-alike Theme (the symbol-equality gating negative).
+    // (LayerFill), a real *Background sibling (CardBackground) for the "binds fine" negative case, and
+    // a non-Reactor look-alike Theme for the symbol-equality gating negative.
     private const string Stubs = @"
 namespace Microsoft.UI.Reactor.Core
 {
