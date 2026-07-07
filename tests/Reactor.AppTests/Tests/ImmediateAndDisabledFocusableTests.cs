@@ -86,6 +86,13 @@ public class ImmediateAndDisabledFocusableTests : AppTestBase
     {
         NavigateToFixtureFresh("Validation_ImmediateAndDisabledFocusable");
 
+        // Wait for the fixture's controls to be realized before driving input. Without this the
+        // first keystrokes race control realization and the age input is dropped entirely
+        // (observed: AgeDisplay stuck at 'Age: 0'), which then surfaces as a misleading downstream
+        // tab-focus flake. Mirrors the readiness wait the reliable Immediate_* sibling performs.
+        WaitForText("ValImmediate_AgeDisplay", "Age: 0");
+        WaitForText("ValImmediate_FormValid", "invalid");
+
         // Pre-fill email so only the age field can flip form validity.
         var email = FindById("ValImmediate_Email");
         email.Click();
@@ -93,7 +100,11 @@ public class ImmediateAndDisabledFocusableTests : AppTestBase
 
         var age = FindById("ValImmediate_Age");
         age.Click();
-        age.SendKeys("25");
+        // Type digit-by-digit, confirming each lands, so a dropped keystroke fails loudly here
+        // rather than as a misleading downstream tab-focus timeout.
+        age.SendKeys("2");
+        WaitForTextContaining("ValImmediate_AgeDisplay", "Age: 2", timeoutMs: 3000);
+        age.SendKeys("5");
         WaitForText("ValImmediate_AgeDisplay", "Age: 25");
         WaitForText("ValImmediate_FormValid", "valid");
 

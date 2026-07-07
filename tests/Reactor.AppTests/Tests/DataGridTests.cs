@@ -88,8 +88,59 @@ public class DataGridTests : AppTestBase
     private void TypeIntoFocusedEditor(string value, bool commitWithEnter = false)
     {
         var editor = WaitForEditor();
-        editor.Clear();
-        editor.SendKeys(commitWithEnter ? value + Keys.Enter : value);
+
+        // The inline editor's UIA SetFocus does not reliably select-all, so a Clear that races the
+        // editor's focus/realization can leave the old text in place — the new value then
+        // interleaves with it (observed 'aAlicialice') or is dropped. Clear+type, then confirm the
+        // editor holds exactly the new value before the caller commits. Retry only when we can
+        // positively read a wrong value; never blind-retry (that would double-type when the
+        // editor value can't be read).
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            ClearEditor(editor);
+
+            if (commitWithEnter)
+            {
+                editor.SendKeys(value + Keys.Enter); // Enter commits + closes the editor; can't re-read it
+                return;
+            }
+
+            editor.SendKeys(value);
+            var actual = ReadEditorValueSettled(editor, value, timeoutMs: 1500);
+            if (actual is null || actual == value)
+                return; // confirmed correct, or unreadable (don't risk double-typing)
+        }
+    }
+
+    /// <summary>Clear the inline editor, confirming it reads empty when the value is readable.</summary>
+    private static void ClearEditor(UiElement editor, int attempts = 3)
+    {
+        for (int i = 0; i < attempts; i++)
+        {
+            editor.Clear();
+            var v = ReadEditorValueSettled(editor, string.Empty, timeoutMs: 500);
+            if (v is null || v.Length == 0)
+                return; // empty, or unreadable — stop (avoid over-clearing)
+        }
+    }
+
+    /// <summary>
+    /// Poll the editor's value until it equals <paramref name="expected"/> or the timeout elapses,
+    /// returning the last value read (null when winapp cannot read the editor's value).
+    /// </summary>
+    private static string? ReadEditorValueSettled(UiElement editor, string expected, int timeoutMs)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        string? last;
+        do
+        {
+            last = editor.Text;
+            if (last == expected)
+                return last;
+            Thread.Sleep(150);
+        }
+        while (DateTime.UtcNow < deadline);
+        return last;
     }
 
     /// <summary>Wait for the DataGrid inline editor (a UIA <c>Edit</c> control) to mount.</summary>
