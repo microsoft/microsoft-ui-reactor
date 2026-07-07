@@ -56,3 +56,4 @@ REACTOR_ANIM_003 | Reactor.Animation | Warning | AnimationScopeAsyncAnalyzer - a
 REACTOR_LIFECYCLE_002 | Reactor.Lifecycle | Warning | EffectCleanupAnalyzer - UseEffect(Action) allocates a timer/subscription/event with no returned cleanup
 REACTOR_MEMO_001 | Reactor.Performance | Info | MemoWrapperModifierAnalyzer - Modifiers on a keyed Memo(key,factory) wrapper opt the row out of the recycle cache
 REACTOR_DYM_001 | Reactor.DidYouMean | Warning | NonInvocableMemberParensAnalyzer - Reactor property/field invoked like a method (e.g. GridSize.Auto()); remove the parentheses
+REACTOR_DYM_003 | Reactor.DidYouMean | Warning | FuzzyFactoryNameAnalyzer - Mistyped Reactor factory name in call position (e.g. Buton(...)); did-you-mean the closest factory

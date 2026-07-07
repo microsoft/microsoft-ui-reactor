@@ -2,7 +2,8 @@
 
 ## Status
 
-**Proposed — 2026-07-07.** First analyzer (`REACTOR_DYM_001`) implemented; the fuzzy
+**Proposed — 2026-07-07.** First analyzer (`REACTOR_DYM_001`) and the first fuzzy analyzer
+(`REACTOR_DYM_003`, the CS0103 mistyped-factory-name case) implemented; the remaining fuzzy
 name-resolution phases are design-only. This spec is the design of record for bringing Reactor's
 "did you mean" suggestions — today reachable only through the `mur check` CLI — into a plain
 `dotnet build` and the IDE, for consumers of the `Microsoft.UI.Reactor` NuGet package.
@@ -125,6 +126,7 @@ Follow-up analyzers, each reusing the shared match engine and gated to Reactor s
    `Theme.AppBackground` → `.SolidBackground`, `GridSize.Pixel` → `.Px`, `TextBlock.Style` →
    modifier chain, `Button.OnClick` → `onClick:`.
 2. **Unresolved name** (CS0103 shape) — fuzzy-match against the factory index.
+   **Shipped as `REACTOR_DYM_003` (`FuzzyFactoryNameAnalyzer` + `FuzzyFactoryNameCodeFix`) — see §6.1.**
 3. **Argument shape** (CS1503/CS7036) — `CandidateReason == OverloadResolutionFailure` +
    `ClassifyConversion`; lower priority (rare in corpus), IDE code-fix first (Roslynator ships
    these as code-fixes).
@@ -133,6 +135,56 @@ Follow-up analyzers, each reusing the shared match engine and gated to Reactor s
 
 Each phase lands with a perf check (IDE typing latency on a representative project) and a
 false-positive audit over `samples/`.
+
+### §6.1 `REACTOR_DYM_003` — mistyped factory name (CS0103, shipped)
+
+`FuzzyFactoryNameAnalyzer` covers the **#2** corpus mistake (~63 events): a mistyped Reactor factory
+name in call position (e.g. `Buton("x")` for `Button`, `Vstack(...)` for `VStack`). It is the first
+**fuzzy** analyzer, so **false-positive control is the design centre** ("a wrong suggestion is worse
+than no suggestion", spec 038 §1): precision is favoured over recall.
+
+- **Detection.** On an `InvocationExpression` whose callee is a **bare identifier** (`Foo(...)` — the
+  factory-call shape; member access `x.Foo()` is phase 1's CS1061/CS0117 territory), report only when
+  the name is genuinely unbound (`GetSymbolInfo(...).Symbol == null` **and** no `CandidateSymbols` —
+  i.e. the CS0103 shape, not an overload/accessibility failure).
+- **Live factory set.** Candidate names are enumerated once per compilation from the real
+  `Microsoft.UI.Reactor.Factories` type via `GetTypeByMetadataName` (public static ordinary methods,
+  deduped) — always current with the referenced package, and a no-op in non-Reactor projects. The
+  CLI's `FactoryIndex` is deliberately **not** reused: it depends on net8 `FrozenDictionary` APIs
+  unavailable in the netstandard2.0 analyzer.
+- **Similarity.** Jaro-Winkler, ported **verbatim** from the CLI's `StringSimilarity` into
+  `src/Reactor.Analyzers/StringSimilarity.cs` (the net10 CLI engine can't be referenced from the
+  netstandard2.0 analyzer). A parity unit test (`StringSimilarityParityTests`) asserts the two copies
+  return **bit-identical** scores across a battery of inputs, so the analyzer and `mur check` cannot
+  drift.
+- **False-positive gating (all must hold).** (a) unbound name; (b) bare-identifier call position;
+  (c) **PascalCase** first letter — excludes the dominant CS0103 false-positive shape, a typo'd
+  camelCase local/parameter; (d) length ≥ 4; (e) not itself an exact factory name (that's a missing
+  `using static`, a different fix); (f) the closest factory — searched **only among names within ±2
+  of the same length** — clears the threshold and is a **unique** best (a tie such as `Stack` between
+  `HStack`/`VStack` stays silent).
+- **Threshold: 0.88** (stricter than the CLI's CS0103 floor of 0.75, as an always-on analyzer
+  demands). Chosen from an empirical false-positive spike over the 156 live factory names, 40
+  realistic factory typos, and 66 realistic non-factory unknown identifiers (typo'd camelCase locals,
+  unrelated PascalCase types/methods, and short words that prefix long factories). Results:
+  0.75 with no extra gating → **41 false positives** (unusable always-on); the full gate at **0.88 /
+  length-Δ ≤ 2 / minLen ≥ 4 / PascalCase / tie-guard → 0 false positives at 40/40 recall**. The
+  firing positives cluster at ≥ 0.90 (`Vstack` → `VStack` = 0.900 is the floor); the closest
+  non-firing negative is `Compute` → `Component` at 0.871 — 0.88 sits in that valley. The **length-Δ
+  gate is the key lever**: it defeats the Jaro-Winkler common-prefix inflation that would otherwise
+  "correct" `List` → `ListBox`, `Text` → `TextBox`, `Command` → `CommandBar` (all 0.90+ but Δlen ≥ 3).
+- **Severity: Warning.** Fires only alongside the compiler's CS0103, so Warning is safe under
+  `TreatWarningsAsErrors` (the build already fails) while still surfacing in a plain `dotnet build`
+  and the IDE. Tunable via `.editorconfig`.
+- **Fix.** Renames the identifier to the suggested factory (`Buton("x")` → `Button("x")`),
+  batch-fixable; the suggestion travels via the diagnostic property bag so the fix never re-computes
+  similarity.
+- **Tests.** Positive (typo, wrong-case, nested-in-a-real-factory, message-arguments); the gating
+  negatives (valid calls, camelCase name, unrelated name, exact-name-missing-using, bound non-factory
+  method, member-access typo, short-prefix-of-long-factory, ambiguous tie, no-Reactor compilation);
+  the code-fix round-trip; and the `StringSimilarity` parity test.
+- **Scope note.** Generic-name callees (`Foo<int>(...)`) are intentionally out of scope for v1 to keep
+  the fix trivial and the gate tight; they can be added later if the corpus shows demand.
 
 ## §7 Risks and guardrails
 
