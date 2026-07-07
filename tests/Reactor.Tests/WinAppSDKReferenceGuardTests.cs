@@ -45,6 +45,7 @@ public class WinAppSDKReferenceGuardTests
         Assert.NotNull(root);
 
         var offenders = new List<string>();
+        var unparseable = new List<string>();
         foreach (var csproj in EnumerateProjectFiles(root!))
         {
             var rel = Path.GetRelativePath(root!, csproj).Replace('\\', '/');
@@ -53,11 +54,30 @@ public class WinAppSDKReferenceGuardTests
                 continue;
             }
 
-            if (ReferencesMetapackage(csproj))
+            XDocument doc;
+            try
+            {
+                doc = XDocument.Load(csproj);
+            }
+            catch (global::System.Xml.XmlException ex)
+            {
+                // A malformed project file must fail the guard loudly rather than
+                // slip through — otherwise a broken csproj could silently bypass
+                // the metapackage policy this test enforces.
+                unparseable.Add($"{rel} ({ex.Message})");
+                continue;
+            }
+
+            if (ReferencesMetapackage(doc))
             {
                 offenders.Add(rel);
             }
         }
+
+        Assert.True(
+            unparseable.Count == 0,
+            "These project files could not be parsed as XML — fix the malformed csproj:\n  "
+                + string.Join("\n  ", unparseable.OrderBy(x => x, StringComparer.Ordinal)));
 
         Assert.True(
             offenders.Count == 0,
@@ -96,18 +116,8 @@ public class WinAppSDKReferenceGuardTests
         Assert.DoesNotContain(winAppSdk, k => k.StartsWith("Microsoft.WindowsAppSDK/", StringComparison.Ordinal));
     }
 
-    private static bool ReferencesMetapackage(string csproj)
+    private static bool ReferencesMetapackage(XDocument doc)
     {
-        XDocument doc;
-        try
-        {
-            doc = XDocument.Load(csproj);
-        }
-        catch (global::System.Xml.XmlException)
-        {
-            return false;
-        }
-
         return doc.Descendants()
             .Where(e => e.Name.LocalName == "PackageReference")
             .Any(e =>
