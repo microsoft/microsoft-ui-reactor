@@ -14,7 +14,7 @@ The doc pipeline needs:
 
 | Tool             | Purpose                                | Required for                |
 |------------------|----------------------------------------|-----------------------------|
-| .NET 9 SDK       | Building the `mur` CLI + doc apps      | Always                      |
+| .NET 10 SDK      | Building the `mur` CLI + doc apps      | Always                      |
 | Windows App SDK  | Doc apps render WinUI controls         | Screenshot capture          |
 | Node.js 20+      | Hosts `mermaid-cli`                    | `.mmd` → `.svg` diagrams    |
 | `mermaid-cli`    | CLI front-end for Mermaid              | `.mmd` → `.svg` diagrams    |

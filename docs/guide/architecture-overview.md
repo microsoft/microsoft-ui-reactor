@@ -130,19 +130,23 @@ public UIElement GetElement(ElementFactoryGetArgs args)
     //   3. Fallback: unknown shape, treat as index 0.
     string key;
     int index;
+    bool keyed;
     switch (args.Data)
     {
         case ReactorRow row:
             key = row.Key;
             index = row.Index;
+            keyed = true;
             break;
         case int i:
             index = i;
             key = i.ToString(global::System.Globalization.CultureInfo.InvariantCulture);
+            keyed = false;
             break;
         default:
             index = 0;
             key = "0";
+            keyed = false;
             break;
     }
 
@@ -150,7 +154,7 @@ public UIElement GetElement(ElementFactoryGetArgs args)
         return new TextBlock { Text = "" };
 
     var item = _items[index];
-    var element = BuildOrCache(key, item, index);
+    var element = BuildOrCache(key, item, index, keyed);
 
     UIElement? control;
     if (_recyclePool.Count > 0)
@@ -196,6 +200,17 @@ public UIElement GetElement(ElementFactoryGetArgs args)
     {
         _keyByControl[control] = key;
         _lastElementByControl[control] = element;
+
+        // Issue #383: arm the multi-select checkmark flicker guard on the
+        // realized container. Idempotent per container instance.
+        // Intentionally scoped to ItemContainer (the ItemsView item-root
+        // wrapper): LazyVStack/LazyHStack realize into plain panels via
+        // ItemsRepeater, not ItemContainer, and the MultiSelectStates.Multiple
+        // storyboard the guard collapses only ever runs for multi-select
+        // ItemContainers — so widening this to all controls would be inert
+        // work everywhere else. Do not "generalize" it.
+        if (control is ItemContainer itemContainer)
+            ItemContainerSelectionFlickerGuard.Ensure(itemContainer);
     }
 
     return control ?? new TextBlock { Text = "" };
@@ -240,11 +255,11 @@ the [element pool](element-pool.md)); the Update path uses
 in place or unmount-and-remount. The Unmount path returns to the pool
 and walks effect cleanups in reverse slot order.
 
-The reconciler is split across partial files so the Mount and Update
-switches stay tractable: `Reconciler.Mount.cs` holds the 40+ MountXxx
-handlers, `Reconciler.Update.cs` holds the matching UpdateXxx, and
-[`ChildReconciler.cs`](reconciliation.md) holds the keyed-vs-positional
-child diff. There is one reconciler instance per host; component
+The reconciler is split across partial files: `Reconciler.Mount.cs`
+and `Reconciler.Update.cs` hold the dispatch logic plus the
+composition-primitive handlers, registered descriptors/handlers hold
+per-control mount/update logic, and [`ChildReconciler.cs`](reconciliation.md)
+holds the keyed-vs-positional child diff. There is one reconciler instance per host; component
 recursion shares the dispatch.
 
 ## Hooks — slot table per RenderContext

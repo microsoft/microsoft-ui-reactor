@@ -72,7 +72,7 @@ JSON-RPC result code.
 ## ETW trace correlation
 
 Reactor emits a TraceLogging-style `EventSource` at `Microsoft-UI-Reactor`
-(see `Core/Diagnostics/ReactorEventSource.cs`). Hot-path emit sites are
+(see `../Reactor/Core/Diagnostics/ReactorEventSource.cs`). Hot-path emit sites are
 guarded by call-site `IsEnabled()` checks, so when no listener is attached
 the disabled path does no Stopwatch, type-name, or event-method work beyond
 a single word-sized flag read. Events cover reconcile passes, component

@@ -244,7 +244,7 @@ tests/
   Reactor.AppTests.Host/    Selfhost test app — 60+ in-process fixtures
   stress_perf/              Performance benchmarks
 samples/
-  apps/                     Sample apps (wordpuzzle, ductfiles, regedit, etc.)
+  apps/                     Sample apps (wordpuzzle, regedit, minesweeper, chat, netpulse, etc.)
   TodoApp/                  Todo app sample
 ```
 

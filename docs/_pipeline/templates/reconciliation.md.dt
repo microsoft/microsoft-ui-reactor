@@ -47,7 +47,7 @@ source pointers that let you verify it.
 |---|---|---|
 | `newEl` is null or `EmptyElement`, `existingControl` exists | Unmount | `Unmount` runs effect cleanups, returns control to pool |
 | `oldEl` is null/Empty, `existingControl` is null | Mount | `Mount` rents from pool or allocates, populates, returns new control |
-| both elements present, `CanUpdate(old, new)` returns true | Update | `UpdateXxx` patches changed properties only; child lists diff |
+| both elements present, `CanUpdate(old, new)` returns true | Update | the matching handler patches changed properties only; child lists diff |
 | both present, `CanUpdate` false (type changed) | Replace | Unmount then Mount; the new control replaces the old in the parent |
 
 Every section below explains how one of those rows is implemented.
@@ -111,13 +111,18 @@ need to mirror it.
 ```csharp snippet="source:src/Reactor/Core/Reconciler.Mount.cs#mount-phase"
 ```
 
-`Mount` is a type-switch over `Element` subclasses. Each branch
-(`MountButton`, `MountText`, `MountStack`, …) allocates or rents a
-WinUI control, sets the properties the element specifies, recurses
-into children, attaches event-trampoline handlers once at mount time,
-and returns the control. The 40+ MountXxx methods live in
-`Reconciler.Mount.cs` — see the [Architecture
-Overview](architecture-overview.md) source map for the structure.
+`Mount` unwraps modifiers, enters the context/theme scopes, and then
+resolves the element through four dispatch arms: per-host `_v1Handlers`,
+per-host `_typeRegistry`, the global `ControlRegistry`, and finally a
+small switch for composition primitives. Built-in and custom WinUI
+controls such as `Button`, `TextBlock`, and stacks mount through their
+registered `ControlDescriptor` or `IElementHandler`; those handlers rent
+or allocate the control, apply initial properties, reconcile children
+through their declared children strategy, wire event trampolines, and
+return the control. The fallback switch in `Reconciler.Mount.cs` is only
+for structural elements: components, function components, memo
+components, error boundaries, transparent `KeyedMemoElement` wrappers,
+and `EmptyElement`.
 
 The reconciler maintains a context-value scope so children rendered
 inside `Mount` see the same [Context](context.md) values their
@@ -132,32 +137,27 @@ don't end up paying GC cost proportional to scroll velocity.
 
 ## Update — patching in place
 
-```csharp
-private void UpdateButton(ButtonElement oldEl, ButtonElement newEl, Button control)
-{
-    if (oldEl.Content != newEl.Content)
-        control.Content = newEl.Content;
-
-    ApplyModifiers(control, oldEl.Modifiers, newEl.Modifiers);
-    ReconcileChildren(oldEl.Children, newEl.Children, control);
-}
-```
-
-`Update` is the other type-switch. For each subclass, `UpdateXxx`
-compares the old element's record fields against the new and writes
-only the differences onto the existing WinUI control. `Button.Content`
-changed? Update that DP. `IsEnabled` is the same? Skip. Modifiers like
-margin and corner-radius diff the same way, just against the merged
-`ElementModifiers` records.
+`Update` mirrors the Mount dispatch: per-host `_v1Handlers`,
+per-host `_typeRegistry`, the global `ControlRegistry`, then the
+composition-primitive fallback switch. Real WinUI controls are patched
+by their registered descriptor or handler, which compares the old and
+new element fields and writes only the changed properties onto the
+existing control. `Button.Content` changed? The descriptor path updates
+that DP. `IsEnabled` is the same? Its prop entry skips the write.
+Modifiers like margin and corner-radius diff the same way, just against
+the merged `ElementModifiers` records. The fallback switch only updates
+structural wrappers such as components and error boundaries; an unchanged
+`KeyedMemoElement` is transparent and returns `null` to keep the
+existing control.
 
 The early-skip optimization is in two places. At the element level,
 `Element.CanSkipUpdate(oldEl, newEl)` returns true when the records
-are structurally identical (and have no theme bindings that need
-re-evaluation) — the reconciler can avoid the `children.Get(i)` COM
-call entirely and just refresh the
+are structurally identical, are not theme-sensitive,
+and have the same callback presence — the reconciler can avoid the
+`children.Get(i)` COM call entirely and just refresh the
 [Tag](#tag-based-event-dispatch) if the element carries callbacks. At
-the property level, each `UpdateXxx` short-circuits per-property:
-unchanged property → no DP write.
+the property level, the descriptor or handler short-circuits per
+property: unchanged property → no DP write.
 
 `CanUpdate(old, new)` is the type-shape check: the same Element record
 type, the same control-target type. Returns true for `(ButtonElement,
@@ -260,9 +260,9 @@ familiar `Panel.Children`:
 - **MenuBar / CommandBar** — `Items` / `PrimaryCommands` / `SecondaryCommands`
 
 The child reconciler walks `Panel.Children`-shaped containers
-uniformly. Gap nodes are handled imperatively in their respective
-MountXxx / UpdateXxx methods — the framework knows which collection
-to walk for each control type and runs a second-pass diff over it.
+uniformly. Gap nodes are handled imperatively by their mount/update handlers —
+the framework knows which collection to walk for each control type and
+runs a second-pass diff over it.
 
 ## Patterns
 
