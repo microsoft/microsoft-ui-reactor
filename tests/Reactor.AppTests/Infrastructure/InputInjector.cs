@@ -339,6 +339,18 @@ public static class InputInjector
                 Thread.Sleep(60);
             }
 
+            // Dwell at the release point with a few pulsed pointer-moves before button-up. A
+            // hover-armed WinUI drop target latches its accept-state from repeated pointer-move
+            // events, and the drag-over needs a beat to settle; without this the drop is
+            // occasionally not registered and the target count stays 0. Mirrors the pulsed dwell
+            // the docking tear-off/merge drag uses.
+            var release = screenPath[screenPath.Count - 1];
+            for (int pulse = 0; pulse < 4; pulse++)
+            {
+                MoveTo(release.X, release.Y);
+                Thread.Sleep(60);
+            }
+
             Thread.Sleep(80);
         }
         catch (Exception ex)
