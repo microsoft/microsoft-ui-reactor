@@ -88,6 +88,32 @@ namespace App
     }
 
     [Fact]
+    public async Task Flags_Via_Using_Alias_Receiver()
+    {
+        // Receiver reached through a using-alias: GetSymbolInfo resolves the alias to its target type
+        // (the alias itself is only exposed via GetAliasInfo), so the exact-Theme gate still matches.
+        var body = @"
+namespace App
+{
+    using ReTheme = Microsoft.UI.Reactor.Core.Theme;
+    static class C { static object M() => ReTheme.{|REACTOR_DYM_002:AppBackground|}; }
+}";
+        await MakeAnalyzerTest(body).RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Flags_Via_Fully_Qualified_Receiver()
+    {
+        // Fully-qualified receiver: GetSymbolInfo on the qualified name still resolves to Theme.
+        var body = @"
+namespace App
+{
+    static class C { static object M() => global::Microsoft.UI.Reactor.Core.Theme.{|REACTOR_DYM_002:AppBackground|}; }
+}";
+        await MakeAnalyzerTest(body).RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
     public async Task Does_Not_Flag_Existing_Background_Token()
     {
         // CardBackground is a real Theme member — the access binds, so nothing to suggest even though
