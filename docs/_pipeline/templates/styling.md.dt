@@ -332,9 +332,10 @@ code-fix to the modifier. See [advanced](advanced.md) for the broader
 
 | Analyzer | Severity | Flags |
 |---|---|---|
-| `REACTOR_THEME_001` | Warning | Hard-coded color string where a `Theme.*` token exists. |
-| `REACTOR_THEME_002` | Info | `.Set()` brush assignment that has a lightweight-styling key equivalent. |
-| `REACTOR_THEME_003` | Info | `.Set(fe => fe.RequestedTheme = ...)` — use the `.RequestedTheme(...)` modifier. |
+| `REACTOR_THEME_001` | Warning | Use `ThemeRef` instead of a hard-coded color string. |
+| `REACTOR_THEME_002` | Info | Consider lightweight styling for visual-state overrides. |
+| `REACTOR_THEME_003` | Info | `RequestedTheme` modifier available. |
+| `REACTOR_THEME_004` | Warning | Hard-coded `Brush`/`Color` object bypasses theme tokens. |
 
 Each analyzer ships a code-fix that converts to the preferred pattern.
 Enable them by referencing the `Reactor.Analyzers` project — they're on

@@ -142,7 +142,7 @@ tests/
   stress_perf/                    Performance benchmarks
 samples/
   Reactor.TestApp/                Interactive control showcase / demo app
-  apps/                           Sample apps (wordpuzzle, ductfiles, regedit, etc.)
+  apps/                           Sample apps (wordpuzzle, regedit, minesweeper, chat, netpulse, etc.)
   TodoApp/                        Todo app sample
 ```
 

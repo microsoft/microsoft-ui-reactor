@@ -60,6 +60,8 @@ var draw = ctx.UseDrawCommand(model, static (session, args, m) =>
 
 `UseCanvasResources` is the device-loss recipe: allocate from the supplied `CanvasDevice`, draw only when the returned ref is non-null, and let the hook dispose/recreate after `CanvasDevice.DeviceLost`.
 
+For multiple canvases, use `.UseSharedDevice()` on the elements to share a single `CanvasDevice` instead of creating one per control — reduces device-creation overhead and memory footprint.
+
 ## Performance proof
 
 The Particle Storm sample (`samples/apps/particle-storm/`) is the canonical pattern: pure Reactor chrome controls parameters; `Win2DAnimatedCanvas` renders the hot particle path; `UseDrawState` holds the particle buffers; `UseCanvasResources` owns sprites and other device resources.

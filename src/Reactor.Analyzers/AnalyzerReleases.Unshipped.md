@@ -55,3 +55,4 @@ REACTOR_MEDIA_001 | Reactor.Layout | Info | UnsizedWebViewInStackAnalyzer - WebV
 REACTOR_ANIM_003 | Reactor.Animation | Warning | AnimationScopeAsyncAnalyzer - async lambda to WithAnimation loses the ThreadStatic scope after await
 REACTOR_LIFECYCLE_002 | Reactor.Lifecycle | Warning | EffectCleanupAnalyzer - UseEffect(Action) allocates a timer/subscription/event with no returned cleanup
 REACTOR_MEMO_001 | Reactor.Performance | Info | MemoWrapperModifierAnalyzer - Modifiers on a keyed Memo(key,factory) wrapper opt the row out of the recycle cache
+REACTOR_DYM_001 | Reactor.DidYouMean | Warning | NonInvocableMemberParensAnalyzer - Reactor property/field invoked like a method (e.g. GridSize.Auto()); remove the parentheses

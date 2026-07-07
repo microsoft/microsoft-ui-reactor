@@ -298,7 +298,7 @@ string keys do not. If a color is missing from the typed surface and
 it's a stable WinUI brush, add it to `Theme.cs` rather than
 proliferating `Theme.Ref("…")` calls.
 
-**Treat REACTOR_THEME_001 as an error in CI.** The cost of fixing a
+**Treat REACTOR_THEME_001 and REACTOR_THEME_004 as errors in CI.** The cost of fixing a
 hardcoded color is one line; the cost of a dark-theme regression
 landing on main is a customer report.
 
@@ -315,7 +315,7 @@ scheme actually changes.
 | Escape hatch | `Theme.Ref(key)` | Any XAML resource key, including app-level overrides. |
 | Reactive read | `UseColorScheme()` | Returns `ColorScheme`; triggers re-render on swap. |
 | Per-element override | `.RequestedTheme(ElementTheme)` | Walks visual tree, resolves nearest override. |
-| Analyzer | `REACTOR_THEME_001` | Flags hardcoded literals on theme-aware modifiers. |
+| Analyzer | `REACTOR_THEME_001`, `REACTOR_THEME_004` | Flags hardcoded literals and `Brush`/`Color` objects on theme-aware modifiers. |
 | WinUI surface | `XamlControlsResources` | Owning ThemeDictionary for every named token. |
 
 ## Next Steps

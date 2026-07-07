@@ -1,0 +1,179 @@
+# Automatic build-metrics (artifact size-diff) comment on every PR.
+#
+# ── What it does ──────────────────────────────────────────────────────────────
+# On every PR commit this builds + packs the shipped Reactor NuGet packages twice
+# — once at the PR head, once at the PR base branch — measures each artifact's
+# size, and renders a sticky "Build metrics" comment showing the size delta.
+# Informational only: it never fails the PR.
+#
+#   Packages (compressed .nupkg)   the download size a consumer pays
+#   Assemblies (uncompressed)      the real "did our code grow" signal
+#
+# ── Why two workflows (measure here, comment in build-metrics-comment.yml) ─────
+# This job BUILDS PR-authored code (`dotnet pack` runs the PR's MSBuild), so it
+# must stay unprivileged: it runs in the `pull_request` context with a read-only
+# token and NO ability to comment. It uploads ONLY the machine-readable size data
+# (head/base sizes.json); the privileged `build-metrics-comment.yml`
+# (`workflow_run`) checks out trusted code, validates those numbers, and renders +
+# posts the comment. That split is the standard secure pattern for commenting on
+# PRs — including from forks — without ever handing a write token to untrusted
+# build code, and without letting untrusted code produce the comment markdown. It
+# mirrors the trust boundary in perf-compare.yml, but runs automatically.
+name: Build metrics
+
+on:
+  pull_request:
+    # docs/guide/** is generated (see release.yml); doc-only changes (incl. the
+    # docs/_pipeline templates + doc apps that generate them) ship no binaries, so
+    # skip the ~10-min double build for them.
+    paths-ignore:
+      - 'docs/guide/**'
+      - 'docs/_pipeline/**'
+      - '**/*.md'
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: PR number to measure against its base branch.
+        required: true
+        type: string
+
+# One in-flight run per PR; a newer commit supersedes an older run.
+concurrency:
+  group: build-metrics-${{ github.event.pull_request.number || github.event.inputs.pr_number || github.ref }}
+  cancel-in-progress: true
+
+# Read-only: this job runs untrusted PR build code and must not hold a write
+# token. The comment is posted by the separate privileged workflow_run workflow.
+# pull-requests: read only serves the manual workflow_dispatch path (resolving a
+# PR's head/base via the API); the automatic pull_request path uses the event.
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  measure:
+    name: Measure artifact sizes
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          # PR-authored build code runs later; don't leave a git credential on disk.
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: 10.0.x
+
+      # Cheap guard: unit-test the pure renderer + orchestrator helpers before
+      # spending minutes packing.
+      - name: Test build-metrics scripts
+        shell: pwsh
+        run: |
+          ./tests/build_metrics/ci/BuildMetricsLib.Tests.ps1
+          ./tests/build_metrics/ci/Measure-BuildMetrics.Tests.ps1
+
+      # Resolve the PR's head + base SHAs. For pull_request they come straight
+      # from the event; for a manual dispatch we read them from the API (works
+      # for forks). Both commits are fetched so we can build each in a worktree.
+      - name: Resolve head + base
+        id: resolve
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_NUMBER_EVENT: ${{ github.event.pull_request.number }}
+          PR_NUMBER_INPUT: ${{ github.event.inputs.pr_number }}
+        run: |
+          if ($env:EVENT_NAME -eq 'pull_request') {
+            $pr = $env:PR_NUMBER_EVENT
+            $head = $env:PR_HEAD_SHA
+            $base = $env:PR_BASE_SHA
+            $baseRef = $env:PR_BASE_REF
+          } else {
+            $pr = $env:PR_NUMBER_INPUT
+            if ($pr -notmatch '^[1-9][0-9]*$') { throw "Invalid pr_number input '$pr' (expected a positive integer)." }
+            $json = gh api "repos/$env:GH_REPO/pulls/$pr" | ConvertFrom-Json
+            $head = $json.head.sha
+            $base = $json.base.sha
+            $baseRef = $json.base.ref
+          }
+          if ($head -notmatch '^[0-9a-f]{40}$') { throw "Could not resolve head sha (got '$head')." }
+          if ($base -notmatch '^[0-9a-f]{40}$') { throw "Could not resolve base sha (got '$base')." }
+          if ([string]::IsNullOrWhiteSpace($baseRef)) { throw "Could not resolve base ref." }
+          Write-Host "PR #$pr  head=$head  base=$base ($baseRef)"
+
+          # Fetch both commits so we can build each in a worktree. The head (incl.
+          # forks) lives at refs/pull/N/head. Fetch the base by its BRANCH REF, not
+          # its raw SHA: `git fetch origin <sha>` is rejected unless the server
+          # advertises that object, whereas the branch ref is always fetchable and
+          # the base commit is an ancestor of it. Anonymous fetch — no token needed.
+          git fetch --no-tags --force origin "pull/$pr/head" 2>&1 | Out-Host
+          git fetch --no-tags --force origin "refs/heads/${baseRef}:refs/remotes/origin/${baseRef}" 2>&1 | Out-Host
+
+          $headTree = Join-Path $env:RUNNER_TEMP 'head-tree'
+          $baseTree = Join-Path $env:RUNNER_TEMP 'base-tree'
+          foreach ($t in @($headTree, $baseTree)) {
+            if (Test-Path $t) { git worktree remove --force $t 2>&1 | Out-Host }
+          }
+          git worktree add --force --detach $headTree $head 2>&1 | Out-Host
+          git worktree add --force --detach $baseTree $base 2>&1 | Out-Host
+
+          "pr=$pr"             | Out-File $env:GITHUB_OUTPUT -Append
+          "head_sha=$head"     | Out-File $env:GITHUB_OUTPUT -Append
+          "base_sha=$base"     | Out-File $env:GITHUB_OUTPUT -Append
+          "head_tree=$headTree" | Out-File $env:GITHUB_OUTPUT -Append
+          "base_tree=$baseTree" | Out-File $env:GITHUB_OUTPUT -Append
+
+      # Build + pack + measure each side. continue-on-error so a failing build
+      # doesn't abort the job — the upload + trusted poster still run, and the
+      # poster renders a "build failed" comment when no real sizes were produced.
+      - name: Measure PR head
+        id: head
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          ./tests/build_metrics/ci/Measure-BuildMetrics.ps1 `
+            -Root "${{ steps.resolve.outputs.head_tree }}" `
+            -OutFile "${{ github.workspace }}/build-metrics-out/head.sizes.json" `
+            -PackOutput "${{ runner.temp }}/head-nupkg"
+
+      - name: Measure base branch
+        id: base
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          ./tests/build_metrics/ci/Measure-BuildMetrics.ps1 `
+            -Root "${{ steps.resolve.outputs.base_tree }}" `
+            -OutFile "${{ github.workspace }}/build-metrics-out/base.sizes.json" `
+            -PackOutput "${{ runner.temp }}/base-nupkg"
+
+      # SECURITY: this job builds untrusted PR code, so it must NOT render the
+      # comment body — a PR could otherwise make the privileged poster publish
+      # arbitrary markdown. It uploads ONLY the machine-readable sizes.json. The
+      # privileged workflow_run poster (build-metrics-comment.yml) checks out
+      # trusted default-branch code, resolves the PR from the trusted workflow_run
+      # head SHA (never from this artifact), validates these numbers against a fixed
+      # target spec, and renders + posts the comment. Ensure the output dir exists
+      # even if both measure steps failed before writing.
+      - name: Ensure output dir
+        if: always()
+        shell: pwsh
+        run: New-Item -ItemType Directory -Force -Path (Join-Path $env:GITHUB_WORKSPACE 'build-metrics-out') | Out-Null
+
+      - name: Upload size data artifact
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: build-metrics-data
+          path: |
+            build-metrics-out/head.sizes.json
+            build-metrics-out/base.sizes.json
+          if-no-files-found: warn
+          retention-days: 14

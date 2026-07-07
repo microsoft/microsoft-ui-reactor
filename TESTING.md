@@ -235,13 +235,22 @@ Replace `$(RuntimeIdentifier)` with `ARM64` or `x64`, or omit the platform segme
 
 You don't have to run the merge locally — the **Coverage** workflow
 (`.github/workflows/coverage.yml`) runs this same unit + selftest recipe and
-reports the merged line/branch numbers. Trigger it any of these ways:
+reports the merged line/branch numbers.
 
-- **Comment trigger:** a maintainer comments `@codecoverage` on a PR. The result
-  is posted back as a PR comment.
+- **Automatic on every PR:** it runs on each PR commit and posts the merged
+  line/branch numbers as a **sticky comment** that updates in place on new
+  commits. No action needed — it just works. (Doc-only PRs are skipped.)
 - **Manual trigger (PR):** use **Actions → Coverage → Run workflow** and enter the
-  PR number, or run `gh workflow run coverage.yml -f pr_number=<PR>`. Same PR
-  comment output; works for forks too.
+  PR number, or run `gh workflow run coverage.yml -f pr_number=<PR>`. This measures
+  that PR (works for forks) and writes the result to the run's **job summary** —
+  it does not post a PR comment (the poster only comments for automatic
+  `pull_request` runs, where the PR is resolved from the trusted head SHA).
 - **Manual trigger (branch):** run it with the PR number left **blank** to measure
-  the selected branch — e.g. `gh workflow run coverage.yml --ref main`. With no PR
-  to comment on, the numbers are written to the run's **job summary** instead.
+  the selected branch — e.g. `gh workflow run coverage.yml --ref main`. The numbers
+  are written to the run's **job summary**.
+
+The measurement runs in the unprivileged `pull_request` context (it builds and
+runs PR code, so it holds no write token) and uploads only the raw numbers; the
+privileged `coverage-comment.yml` (`workflow_run`) checks out trusted code,
+renders the comment, and posts it, resolving the target PR from the trusted
+`workflow_run` head SHA. See that workflow's header for the security rationale.

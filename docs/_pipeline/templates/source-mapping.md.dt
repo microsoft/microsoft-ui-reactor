@@ -77,9 +77,10 @@ elements, and Y of them resulted in real WinUI writes."
 
 ## Why ETW attribution stops at the component
 
-The reconciler hand-rolls per-mount calls into `MountXxx` handlers,
-each of which constructs a fresh WinUI control. The handler doesn't
-know which user line called `Text("hello")`:
+The reconciler resolves mounts through registered descriptors/handlers
+before falling back to composition-primitive handlers. The handler that
+constructs the WinUI control doesn't know which user line called
+`Text("hello")`:
 
 ```csharp snippet="source:src/Reactor/Core/Component.cs#render-loop"
 ```

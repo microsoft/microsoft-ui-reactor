@@ -5,9 +5,10 @@ WinUI automation properties (`.AutomationName`, `.HeadingLevel`,
 add runtime behavior (`UseFocusTrap` for modal focus trapping,
 `UseAnnounce` for live-region announcements, `SemanticPanel` for
 custom automation peers that the modifier set can't express). The
-analyzer set is the third layer — `REACTOR_A11Y_001..003` catch the
-three most common omissions (icon-only buttons missing an automation
-name, images missing alt text, form fields missing a label) at
+analyzer set is the third layer — `REACTOR_A11Y_001..004` catch the
+most common omissions (icon-only buttons missing an automation
+name, images missing alt text, form fields missing a label, and
+clickable containers that aren't keyboard-reachable) at
 compile time. The `AccessibilityScanner` is the runtime cousin: it
 walks the post-reconciliation element tree and emits 8 categories of
 WCAG-mapped diagnostics with concrete fix suggestions. Aim for clean
@@ -38,6 +39,7 @@ how often you need them.
 | `REACTOR_A11Y_001` | analyzer | Icon-only `Button(icon, action)` without `.AutomationName()`. |
 | `REACTOR_A11Y_002` | analyzer | `Image()` without `.AutomationName()` or `.AccessibilityHidden()`. |
 | `REACTOR_A11Y_003` | analyzer | Form field without `header:` or label modifier. |
+| `REACTOR_A11Y_004` | analyzer | Clickable container (`Border`/`Grid`/`Canvas`/`Rectangle`/`Ellipse`/`VStack`/`HStack`) with `.OnTapped` but no enabling `.IsTabStop(true)`. |
 
 ## Tier 1 Modifiers
 
@@ -474,7 +476,7 @@ and value to add. Export to JSON with `AccessibilityScanner.ExportJson()`.
 
 ## Roslyn Analyzers
 
-Reactor ships three compile-time accessibility analyzers that flag violations
+Reactor ships four compile-time accessibility analyzers that flag violations
 as you type in your IDE:
 
 | Diagnostic ID | Rule |
@@ -482,6 +484,7 @@ as you type in your IDE:
 | `REACTOR_A11Y_001` | Icon-only `Button(icon, action)` calls without `.AutomationName()` |
 | `REACTOR_A11Y_002` | `Image()` without `.AutomationName()` or `.AccessibilityHidden()` |
 | `REACTOR_A11Y_003` | `TextBox`/`NumberBox`/`PasswordBox` without `header:` arg or label modifier |
+| `REACTOR_A11Y_004` | Clickable `Border`/`Grid`/`Canvas`/`Rectangle`/`Ellipse`/`VStack`/`HStack` (`.OnTapped`) without an enabling `.IsTabStop(true)` |
 
 These analyzers run automatically when you reference the `Reactor.Analyzers`
 package. They complement the runtime `AccessibilityScanner` by catching the
@@ -601,5 +604,5 @@ WinUI renders the key tips automatically when the user presses Alt.
 - **[Navigation](navigation.md)** — add landmarks and keyboard-navigable page structure
 - **[Styling and Theming](styling.md)** — ensure high-contrast themes work with your accessible controls
 - **[Dialogs and Flyouts](dialogs-and-flyouts.md)** — focus traps and ARIA semantics for modal surfaces
-- **[Analyzer Architecture](analyzer-architecture.md)** — how `REACTOR_A11Y_001..003` are authored
+- **[Analyzer Architecture](analyzer-architecture.md)** — how `REACTOR_A11Y_001..004` are authored
 - **[WinForms Interop](winforms-interop.md)** — accessibility bridging between WinForms and Reactor

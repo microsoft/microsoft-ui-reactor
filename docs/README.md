@@ -4,7 +4,6 @@
 - **[reference/](reference/)** — Architecture deep dives for framework contributors.
 - **[specs/](specs/)** — Design specs, implementation tasks, and proposals.
 - **[research/](research/)** — Competitive analysis, investigations, bug write-ups.
-- **[pitch/](pitch/)** — Marketing materials and design targets.
 - **[reports/](reports/)** — Point-in-time reports (work summaries, metrics).
 - **_pipeline/** — Internals of the doc-generation pipeline. Not reader-facing.
 

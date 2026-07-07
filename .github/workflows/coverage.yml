@@ -1,22 +1,35 @@
 name: Coverage
 
-# Maintainer-gated coverage run, all paths running the merged unit + selftest
-# coverage recipe from TESTING.md. Trigger it three ways:
-#   - comment `@codecoverage` on a PR — posts the result back as a PR comment;
-#   - run it manually (Actions tab / `gh workflow run`) with a PR number — same,
-#     and works for forks via refs/pull/N/head;
-#   - run it manually with the PR number left blank — measures the selected
-#     branch and writes the result to the run's job summary (no PR to comment on).
+# Automatic merged unit + selftest coverage on every PR, posted as a sticky,
+# self-updating comment. Runs the merged coverage recipe from TESTING.md and
+# reports line + branch rates. Also runnable manually:
+#   - workflow_dispatch with a PR number  -> measures that PR (works for forks);
+#   - workflow_dispatch with the number blank -> measures the selected branch and
+#     writes the result to the run's job summary (no PR to comment on).
 #
-# Security: `issue_comment` workflows run in the base repo with full token
-# permissions. Untrusted code from the PR (build scripts, tests) executes here.
-# The `author_association` check below limits the comment trigger to maintainers;
-# `workflow_dispatch` is inherently restricted to users with write access. Either
-# way, the triggerer is expected to review the PR diff before starting a run.
+# ── Security: why pull_request + workflow_run (not issue_comment) ──────────────
+# Coverage BUILDS + INSTRUMENTS + RUNS the PR's code (build scripts and tests
+# execute here). The old design triggered on `issue_comment` — which runs in the
+# base repo with a full write token — so it had to be gated to maintainers via
+# author_association. Running it automatically on every PR under that model would
+# hand a write token to untrusted PR code, which is unsafe.
+#
+# Instead this workflow runs in the unprivileged `pull_request` context: a
+# read-only token, no secrets, and NO ability to comment. It writes the result to
+# the run summary and uploads ONLY the raw coverage numbers; the privileged
+# `coverage-comment.yml` (`workflow_run`) checks out trusted code, renders the
+# comment, and posts it. That split runs untrusted build code with zero write
+# privilege and still comments on PRs — including from forks. It mirrors
+# build-metrics.yml and the trust boundary documented in perf-compare.yml.
 
 on:
-  issue_comment:
-    types: [created]
+  pull_request:
+    # Doc-only PRs change no measured code; skip the ~10-min instrumented run.
+    # This includes the docs/_pipeline templates + doc apps that generate the guide.
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/guide/**'
+      - 'docs/_pipeline/**'
   workflow_dispatch:
     inputs:
       pr_number:
@@ -24,85 +37,69 @@ on:
         required: false
         type: string
 
+# Read-only: this job runs untrusted PR code and must not hold a write token.
+# The comment is posted by the separate privileged workflow_run workflow.
+# pull-requests: read only serves the manual workflow_dispatch path (resolving a
+# PR's head sha via the API); the automatic pull_request path uses the event.
 permissions:
   contents: read
-  pull-requests: write
+  pull-requests: read
 
 jobs:
   coverage:
     name: Merged coverage
     # One in-flight run per target — a PR number, or the branch ref for a
-    # blank-input dispatch. A newer trigger supersedes an older one. Job-level
-    # (not workflow-level) concurrency so unrelated issue_comment events — which
-    # start a workflow run but skip this job — don't cancel a live coverage run.
+    # blank-input dispatch. A newer trigger supersedes an older one.
     concurrency:
-      group: coverage-${{ github.event.issue.number || github.event.inputs.pr_number || github.ref }}
+      group: coverage-${{ github.event.pull_request.number || github.event.inputs.pr_number || github.ref }}
       cancel-in-progress: true
-    if: |
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'issue_comment' &&
-       github.event.issue.pull_request &&
-       contains(github.event.comment.body, '@codecoverage') &&
-       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
     runs-on: windows-latest
     steps:
-      - name: Acknowledge with reaction
-        if: github.event_name == 'issue_comment'
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            await github.rest.reactions.createForIssueComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              comment_id: context.payload.comment.id,
-              content: 'eyes',
-            });
-
       - name: Resolve coverage target
         id: pr
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
+          EVENT_NAME: ${{ github.event_name }}
           DISPATCH_PR: ${{ github.event.inputs.pr_number }}
         with:
           script: |
             // Resolve what to measure:
-            //   - issue_comment             -> the PR the comment is on
-            //   - workflow_dispatch + PR#   -> that PR (works for forks)
-            //   - workflow_dispatch, blank  -> the dispatched branch (no PR)
+            //   - pull_request             -> the PR that triggered the run
+            //   - workflow_dispatch + PR#  -> that PR (works for forks)
+            //   - workflow_dispatch, blank -> the dispatched branch (no PR)
             let prNumber = '';
-            if (context.eventName === 'workflow_dispatch') {
+            if (context.eventName === 'pull_request') {
+              const pr = context.payload.pull_request;
+              prNumber = String(pr.number);
+              core.setOutput('sha', pr.head.sha);
+              // Build the PR head commit; refs/pull/N/head resolves for forks too.
+              core.setOutput('ref', `refs/pull/${pr.number}/head`);
+            } else {
               const raw = process.env.DISPATCH_PR || '';
               if (raw !== '') {
-                // Validate without trimming so the resolved PR stays identical to
-                // the raw value the job-level concurrency group keys on.
                 if (!/^[1-9][0-9]*$/.test(raw)) {
                   throw new Error(`Invalid pr_number input '${process.env.DISPATCH_PR}' (expected a positive integer, or leave it blank to measure the selected branch)`);
                 }
                 prNumber = raw;
+                const pr = await github.rest.pulls.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: Number(prNumber),
+                });
+                core.setOutput('sha', pr.data.head.sha);
+                core.setOutput('ref', `refs/pull/${prNumber}/head`);
+              } else {
+                // No PR: measure the commit the workflow was dispatched on.
+                core.setOutput('sha', context.sha);
+                core.setOutput('ref', context.sha);
               }
-            } else {
-              prNumber = String(context.issue.number);
             }
-            // Emit the number before the API call so the always()-gated report
-            // step can still post back to the PR if pulls.get below fails.
             core.setOutput('number', prNumber);
-            if (prNumber !== '') {
-              const pr = await github.rest.pulls.get({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: Number(prNumber),
-              });
-              core.setOutput('sha', pr.data.head.sha);
-              core.setOutput('ref', `refs/pull/${prNumber}/head`);
-            } else {
-              // No PR: measure the commit the workflow was dispatched on.
-              core.setOutput('sha', context.sha);
-              core.setOutput('ref', context.sha);
-            }
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ steps.pr.outputs.ref }}
+          persist-credentials: false
 
       - name: Setup .NET
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
@@ -184,7 +181,13 @@ jobs:
           "branches-covered=$covered" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "branches-total=$total"     | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
-      - name: Report results
+      # SECURITY: this job runs untrusted PR code, so it must NOT render the PR
+      # comment body. It writes the human-readable result to the RUN SUMMARY
+      # (informational, not a privileged PR post) and uploads the raw numbers as
+      # coverage.json. The privileged workflow_run poster (coverage-comment.yml)
+      # checks out trusted code, validates the numbers, and renders + posts the
+      # sticky comment. Always runs so a failed run still yields a data file.
+      - name: Emit coverage data
         if: always()
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
@@ -197,35 +200,33 @@ jobs:
           PR_NUMBER: ${{ steps.pr.outputs.number }}
         with:
           script: |
+            const fs = require('fs');
             const { LINE, BRANCH, BRANCHES_COVERED, BRANCHES_TOTAL, SHA, OUTCOME, PR_NUMBER } = process.env;
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const shaLabel = SHA ? SHA.slice(0, 7) : 'unknown';
-            let body;
-            if (OUTCOME === 'success') {
-              body = [
-                `**Merged coverage** for \`${shaLabel}\` (unit + selftest)`,
-                ``,
-                `| Metric | Coverage |`,
-                `|---|---|`,
-                `| Line   | ${LINE}% |`,
-                `| Branch | ${BRANCH}% (${BRANCHES_COVERED}/${BRANCHES_TOTAL}) |`,
-                ``,
-                `Cobertura reports attached to the [workflow run](${runUrl}) as artifacts.`,
-              ].join('\n');
-            } else {
-              body = `**Coverage run failed** for \`${shaLabel}\` — see the [workflow run](${runUrl}) for details.`;
-            }
-            // Always surface the result in the run summary — this is the only
-            // output for a branch run (blank-input dispatch, no PR to comment on).
-            await core.summary.addRaw(body).write();
-            const prNumber = Number(PR_NUMBER);
-            if (!Number.isInteger(prNumber) || prNumber <= 0) {
-              core.info('No PR resolved (branch run); result written to the job summary only.');
-              return;
-            }
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: prNumber,
-              body,
-            });
+            // Run-summary body — the only output for a branch run (blank-input
+            // dispatch, no PR). Not a PR comment, so rendering it here is fine.
+            const summary = OUTCOME === 'success'
+              ? [`## 🧪 Merged coverage`, ``, `Coverage for \`${shaLabel}\` (unit + selftest).`, ``,
+                 `| Metric | Coverage |`, `|---|---|`, `| Line   | ${LINE}% |`,
+                 `| Branch | ${BRANCH}% (${BRANCHES_COVERED}/${BRANCHES_TOTAL}) |`].join('\n')
+              : `## 🧪 Merged coverage\n\nCoverage run failed for \`${shaLabel}\` — see the [workflow run](${runUrl}).`;
+            await core.summary.addRaw(summary).write();
+            // Machine-readable data for the trusted poster to render + post.
+            fs.mkdirSync('coverage-out', { recursive: true });
+            fs.writeFileSync('coverage-out/coverage.json', JSON.stringify({
+              line: LINE || '',
+              branch: BRANCH || '',
+              branchesCovered: BRANCHES_COVERED || '',
+              branchesTotal: BRANCHES_TOTAL || '',
+              outcome: OUTCOME || '',
+            }));
+
+      - name: Upload coverage data artifact
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage-data
+          path: coverage-out/coverage.json
+          if-no-files-found: warn
+          retention-days: 14

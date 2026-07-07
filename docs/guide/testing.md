@@ -185,16 +185,16 @@ component you ship.
 `Reactor.SelfTests` is the layer between the unit suite (pure C#, no
 WinUI) and the full E2E suite (winapp ui). A self-test mounts a
 real fixture into the `Reactor.AppTests.Host` window, walks the WinUI
-visual tree, and emits TAP. The xUnit wrapper in `SelfTestBatch.cs`
+visual tree, and emits TAP. The MSTest wrapper in `SelfTestBatch.cs`
 parses the TAP and surfaces one test method per fixture.
 
 To add a self-test:
 
 1. Add a new fixture file under
-   `tests/Reactor.AppTests.Host/Fixtures/` returning the component
+   `tests/Reactor.AppTests.Host/SelfTest/Fixtures/` returning the component
    under test wrapped in a small assertion harness.
-2. Register the fixture name in `FixtureRegistry`.
-3. The xUnit wrapper picks it up at discovery time via
+2. Register the fixture name in `SelfTestFixtureRegistry`.
+3. The MSTest wrapper picks it up at discovery time via
    `--list-fixtures`; no code change needed on the test runner side.
 
 Reach for a self-test when the unit layer can't see the answer — e.g.

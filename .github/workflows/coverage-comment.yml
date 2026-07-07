@@ -1,0 +1,151 @@
+# Privileged poster for the automatic coverage comment.
+#
+# The measure workflow (coverage.yml) builds + runs untrusted PR code, so it runs
+# unprivileged and uploads ONLY the coverage numbers (coverage.json). This workflow
+# runs from the DEFAULT branch with a write token, executes NO PR code, RENDERS the
+# comment itself from validated numbers, and posts/updates the sticky comment.
+# Standard secure pull_request + workflow_run split (see coverage.yml).
+#
+# Security: the comment body is built here from a fixed template + numeric values
+# that are re-validated (a non-negative number, optionally with a decimal part)
+# before use; the target PR is resolved from the TRUSTED
+# github.event.workflow_run head SHA, never from the artifact.
+name: Coverage comment
+
+on:
+  workflow_run:
+    workflows: ["Coverage"]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read          # download the triggering run's artifact
+  pull-requests: write   # resolve the PR + post/update the comment
+  issues: write          # PR conversation comments use the issues API
+
+jobs:
+  comment:
+    name: Post coverage comment
+    runs-on: ubuntu-latest
+    # Only PR-originated measure runs produce a comment. A workflow_dispatch measure
+    # run has no PR to safely resolve from its head SHA, so skip the poster entirely
+    # (the numbers still live in that run's artifact + summary).
+    if: github.event.workflow_run.event == 'pull_request'
+    steps:
+      - name: Download coverage data artifact
+        id: dl
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set +e
+          gh run download "$RUN_ID" --repo "$GH_REPO" -n coverage-data -D artifact
+          if [ ! -f artifact/coverage.json ]; then
+            echo "No coverage-data artifact on run $RUN_ID; nothing to post."
+            echo "have_data=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "have_data=true" >> "$GITHUB_OUTPUT"
+
+      # Resolve the PR SOLELY from the trusted workflow_run head SHA — never from
+      # the (untrusted) artifact.
+      - name: Resolve target PR
+        id: pr
+        if: steps.dl.outputs.have_data == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          pr=$(gh api "repos/$GH_REPO/commits/$HEAD_SHA/pulls" \
+                 --jq "[.[] | select(.state==\"open\") | select(.head.sha==\"$HEAD_SHA\")][0].number" 2>/dev/null || true)
+          if [ -z "$pr" ] || [ "$pr" = "null" ]; then
+            echo "No open PR for head $HEAD_SHA; nothing to post."
+            echo "number=" >> "$GITHUB_OUTPUT"
+          else
+            echo "Target PR: #$pr"
+            echo "number=$pr" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Render the comment from a FIXED template + numbers re-validated here (a
+      # non-negative number, optionally with a decimal part).
+      - name: Render comment (trusted)
+        id: render
+        if: steps.dl.outputs.have_data == 'true' && steps.pr.outputs.number != ''
+        shell: pwsh
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          # coverage.json is an untrusted artifact; a malformed file must not crash
+          # the poster (which would drop the comment). Fall back to an empty object
+          # so the CAUTION "run failed" path renders.
+          try { $d = Get-Content artifact/coverage.json -Raw | ConvertFrom-Json }
+          catch { Write-Host "Malformed coverage.json: $($_.Exception.Message)"; $d = [pscustomobject]@{} }
+          function Get-Prop($obj, $name) {
+            if ($obj.PSObject.Properties[$name]) { return $obj.$name } else { return $null }
+          }
+          function SafeNum($v) {
+            if ($null -eq $v) { return $null }
+            $s = ([string]$v).Trim()
+            if ($s -match '^\d+(\.\d+)?$') { return $s } else { return $null }
+          }
+          $line = SafeNum (Get-Prop $d 'line')
+          $branch = SafeNum (Get-Prop $d 'branch')
+          $bc = SafeNum (Get-Prop $d 'branchesCovered')
+          $bt = SafeNum (Get-Prop $d 'branchesTotal')
+          $sha = $env:HEAD_SHA
+          $sha7 = if ($sha) { $sha.Substring(0, [math]::Min(7, $sha.Length)) } else { 'unknown' }
+          $marker = '<!-- reactor-coverage -->'
+          $ok = ((Get-Prop $d 'outcome') -eq 'success') -and ($null -ne $line) -and ($null -ne $branch)
+          if ($ok) {
+            $branchCell = if ($null -ne $bc -and $null -ne $bt) { "$branch% ($bc/$bt)" } else { "$branch%" }
+            $body = @(
+              $marker,
+              '## 🧪 Merged coverage',
+              '',
+              "Coverage for ``$sha7`` (unit + selftest).",
+              '',
+              '| Metric | Coverage |',
+              '|---|---|',
+              "| Line   | $line% |",
+              "| Branch | $branchCell |",
+              '',
+              "<sub>Cobertura reports attached to the <a href=`"$env:RUN_URL`">workflow run</a> as artifacts.</sub>"
+            ) -join "`n"
+          } else {
+            $body = @(
+              $marker,
+              '## 🧪 Merged coverage',
+              '',
+              '> [!CAUTION]',
+              "> Coverage run failed for ``$sha7`` — see the [workflow run]($env:RUN_URL) for details."
+            ) -join "`n"
+          }
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          Set-Content -LiteralPath out/comment.md -Value $body -Encoding UTF8
+          Write-Host "Rendered coverage comment (ok=$ok)"
+
+      - name: Post / update sticky comment
+        if: steps.dl.outputs.have_data == 'true' && steps.pr.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          marker='<!-- reactor-coverage -->'
+          file=out/comment.md
+          # --paginate emits per-page results, so select matching ids across ALL
+          # pages and take the first — never assign a multi-line value to $existing.
+          # Restrict to OUR bot's own comments so a PR author can't plant a
+          # marker-prefixed comment and have us PATCH (hijack) it.
+          existing=$(gh api "repos/$GH_REPO/issues/$PR_NUMBER/comments" --paginate \
+                       --jq ".[] | select(.user.login == \"github-actions[bot]\") | select(.body | startswith(\"$marker\")) | .id" | head -n1 || true)
+          if [ -n "$existing" ]; then
+            echo "Updating existing comment $existing"
+            gh api -X PATCH "repos/$GH_REPO/issues/comments/$existing" -F "body=@$file" >/dev/null
+          else
+            echo "Creating new sticky comment on #$PR_NUMBER"
+            gh api "repos/$GH_REPO/issues/$PR_NUMBER/comments" -F "body=@$file" >/dev/null
+          fi

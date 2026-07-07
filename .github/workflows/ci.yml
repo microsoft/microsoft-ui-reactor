@@ -95,8 +95,16 @@ jobs:
           dotnet restore tests/Reactor.Advanced.Tests/Reactor.Advanced.Tests.csproj -p:Platform=x64
 
       - name: Test
+        # SkipSignaturesGen / SkipReactorApiGen disable the on-build regeneration of
+        # skills/reactor.api.txt. Without them, building Reactor.Tests regenerates the
+        # committed index in place (host arch == target arch on the x64 runner), so
+        # Tooling.ApiIndexGeneratorTests.Index_IsUpToDate compares the freshly-written
+        # file against itself and passes even when the checked-in index is stale. That
+        # is exactly how a stale index reached main (only the internal nightly, which
+        # gates the regen via -p:CI=true, caught it). Gating the regen off here makes
+        # Index_IsUpToDate verify the committed copies against the live surface in PR CI.
         run: |
-          dotnet test tests/Reactor.Tests/Reactor.Tests.csproj --no-restore -p:Platform=x64 --logger "console;verbosity=normal" --blame-hang-timeout 180s --blame-hang-dump-type none
+          dotnet test tests/Reactor.Tests/Reactor.Tests.csproj --no-restore -p:Platform=x64 -p:SkipSignaturesGen=true -p:SkipReactorApiGen=true --logger "console;verbosity=normal" --blame-hang-timeout 180s --blame-hang-dump-type none
           dotnet test tests/Reactor.Advanced.Tests/Reactor.Advanced.Tests.csproj --no-restore -p:Platform=x64 --logger "console;verbosity=normal" --blame-hang-timeout 180s --blame-hang-dump-type none
 
   integration-tests:

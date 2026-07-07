@@ -48,8 +48,8 @@ Component.Render() → Element tree (records)
 ### Reconciler is split across partial classes
 
 - `Reconciler.cs` — orchestration, child reconciliation, unmount, helpers
-- `Reconciler.Mount.cs` — `MountXxx()` handler per control type
-- `Reconciler.Update.cs` — `UpdateXxx()` handler per control type
+- `Reconciler.Mount.cs` — mount dispatch + composition-primitive handlers (controls mount via their registered `ControlDescriptor`/`IElementHandler`)
+- `Reconciler.Update.cs` — update dispatch + composition-primitive handlers (controls update via the same registered descriptors/handlers)
 
 ### Hooks follow React rules
 
@@ -107,7 +107,7 @@ The legacy Element-record + `MountXxx`/`UpdateXxx` dispatch-switch path is gone.
 3. **Register** it in `RegisterV1BuiltInHandlers`.
 4. **Selftest fixture** in `tests/Reactor.AppTests.Host/SelfTest/Fixtures/`.
 
-See [`docs/guide/extensibility-preview.md`](docs/guide/extensibility-preview.md) for the authoring-shape decision tree (prop/engine shapes, children strategies, echo handling, pooling).
+See [`docs/guide/extending-reactor-controls.md`](docs/guide/extending-reactor-controls.md) for the authoring-shape decision tree (prop/engine shapes, children strategies, echo handling, pooling).
 
 Optionally: a factory method in `src/Reactor/Elements/Dsl.cs`, fluent modifiers in `ElementExtensions.cs`, and unit tests in `Reactor.Tests/`.
 

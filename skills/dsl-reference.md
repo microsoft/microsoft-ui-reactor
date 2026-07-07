@@ -347,6 +347,7 @@ Modifiers return `Element`, so type-specific sugar (`.Bold()`,
 .Width(300) / .Height(200) / .Size(w, h)
 .MinWidth(...) / .MinHeight(...) / .MaxWidth(...) / .MaxHeight(...)
 .HAlign(HorizontalAlignment.Center) / .VAlign(VerticalAlignment.Top)
+.HorizontalContentAlignment(...) / .VerticalContentAlignment(...)
 .Center()               // both H and V
 .IsVisible(bool)          // Collapsed when false
 .Opacity(0.6)
@@ -375,7 +376,7 @@ Modifiers return `Element`, so type-specific sugar (`.Bold()`,
 ```csharp
 TextBlock("Hello").Bold() / .SemiBold() / .FontSize(24) / .FontStyle(style)
 Button("Click").IsEnabled(false) / .IsEnabled(!condition)
-Border(child).CornerRadius(8).Background("#f5f5f5").WithBorder("#ccc", 1)
+Border(child).CornerRadius(8).Background("#f5f5f5").WithBorder("#ccc", 1).BorderThickness(l, t, r, b)
 VStack(...).Spacing(16)
 ComboBox(items).PlaceholderText("...").IsEditable()
 NumberBox(v).Range(0, 100).SpinButtons()
