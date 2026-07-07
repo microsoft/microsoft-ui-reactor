@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
+using System.Xml.Linq;
 using Microsoft.UI.Reactor.Cli.Pack;
 using Xunit;
 
@@ -11,27 +13,31 @@ namespace Microsoft.UI.Reactor.Tests;
 /// Guards the Windows App SDK dependency policy (see <c>Directory.Build.targets</c>).
 /// Repo projects must not reference the full <c>Microsoft.WindowsAppSDK</c>
 /// metapackage directly: the correct package is injected centrally —
-/// <c>Microsoft.WindowsAppSDK.WinUI</c> for framework-dependent projects, the full
+/// <c>Microsoft.WindowsAppSDK.WinUI</c> for framework-dependent libraries, WinUI +
+/// <c>Microsoft.WindowsAppSDK.Runtime</c> for framework-dependent apps, and the full
 /// metapackage only for self-contained / MSIX projects. A stray direct reference
 /// bypasses that rule and re-drags the unused AI / ML / Widgets / DWrite slices back
-/// into the dependency graph, so this test fails if one creeps in.
+/// into the dependency graph.
 ///
 /// The scaffolded end-user template is exempt: it ships to external consumers who do
 /// not inherit this repo's central injection, so it pins the metapackage itself.
 /// </summary>
 public class WinAppSDKReferenceGuardTests
 {
+    private const string Metapackage = "Microsoft.WindowsAppSDK";
+
     // Repo-root-relative, '/'-separated csproj paths allowed to reference the
     // Microsoft.WindowsAppSDK metapackage directly.
-    private static readonly HashSet<string> Allowlist = new(StringComparer.Ordinal)
+    private static readonly HashSet<string> Allowlist = new(StringComparer.OrdinalIgnoreCase)
     {
         "tools/Templates/templates/WinUIApp-CSharp/Company.ReactorApp1.csproj",
     };
 
-    // Precise metapackage-reference marker. The trailing quote right after "SDK"
-    // ensures this does not match the sub-packages (…SDK.WinUI", …SDK.Runtime", …).
-    private const string MetapackageRef = "Include=\"Microsoft.WindowsAppSDK\"";
-
+    /// <summary>
+    /// Source-level guard: no repo project may declare a direct
+    /// <c>Microsoft.WindowsAppSDK</c> PackageReference (parsed as XML so whitespace,
+    /// quote style, casing, and <c>Update=</c> variants are all covered).
+    /// </summary>
     [Fact]
     public void No_repo_project_references_the_WindowsAppSDK_metapackage_directly()
     {
@@ -47,7 +53,7 @@ public class WinAppSDKReferenceGuardTests
                 continue;
             }
 
-            if (File.ReadAllText(csproj).Contains(MetapackageRef, StringComparison.Ordinal))
+            if (ReferencesMetapackage(csproj))
             {
                 offenders.Add(rel);
             }
@@ -57,9 +63,62 @@ public class WinAppSDKReferenceGuardTests
             offenders.Count == 0,
             "These projects reference the Microsoft.WindowsAppSDK metapackage directly. "
                 + "Remove the reference — Directory.Build.targets injects "
-                + "Microsoft.WindowsAppSDK.WinUI (framework-dependent) or the metapackage "
+                + "Microsoft.WindowsAppSDK.WinUI (+ .Runtime for apps) or the metapackage "
                 + "(self-contained / MSIX) centrally. Offenders:\n  "
                 + string.Join("\n  ", offenders.OrderBy(x => x, StringComparer.Ordinal)));
+    }
+
+    /// <summary>
+    /// Outcome-level guard: the shipped <c>Microsoft.UI.Reactor</c> library must
+    /// resolve the lean WinUI sub-package and must NOT flow the full metapackage to
+    /// consumers. Reads Reactor's restore graph (present because this test project
+    /// references Reactor), so it catches a central-rule regression wherever it is
+    /// introduced — including in <c>Directory.Build.*</c>, which the source scan above
+    /// does not cover.
+    /// </summary>
+    [Fact]
+    public void Reactor_library_resolves_WinUI_subpackage_not_the_metapackage()
+    {
+        var root = RepoRootFinder.FindRepoRoot();
+        Assert.NotNull(root);
+
+        var assets = Path.Combine(root!, "src", "Reactor", "obj", "project.assets.json");
+        Assert.True(File.Exists(assets), $"Reactor restore graph not found at {assets}");
+
+        using var doc = JsonDocument.Parse(File.ReadAllText(assets));
+        var winAppSdk = doc.RootElement.GetProperty("libraries")
+            .EnumerateObject()
+            .Select(p => p.Name) // e.g. "Microsoft.WindowsAppSDK.WinUI/2.1.0"
+            .Where(k => k.StartsWith("Microsoft.WindowsAppSDK", StringComparison.Ordinal))
+            .ToList();
+
+        Assert.Contains(winAppSdk, k => k.StartsWith("Microsoft.WindowsAppSDK.WinUI/", StringComparison.Ordinal));
+        Assert.DoesNotContain(winAppSdk, k => k.StartsWith("Microsoft.WindowsAppSDK/", StringComparison.Ordinal));
+    }
+
+    private static bool ReferencesMetapackage(string csproj)
+    {
+        XDocument doc;
+        try
+        {
+            doc = XDocument.Load(csproj);
+        }
+        catch (global::System.Xml.XmlException)
+        {
+            return false;
+        }
+
+        return doc.Descendants()
+            .Where(e => e.Name.LocalName == "PackageReference")
+            .Any(e =>
+                AttributeEquals(e, "Include", Metapackage)
+                || AttributeEquals(e, "Update", Metapackage));
+    }
+
+    private static bool AttributeEquals(XElement element, string name, string value)
+    {
+        var attr = element.Attribute(name)?.Value;
+        return attr is not null && attr.Trim().Equals(value, StringComparison.OrdinalIgnoreCase);
     }
 
     private static IEnumerable<string> EnumerateProjectFiles(string root)

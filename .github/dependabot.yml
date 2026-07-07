@@ -22,9 +22,11 @@ updates:
     open-pull-requests-limit: 10
     ignore:
       # Windows App SDK packages are pinned via Directory.Build.props
-      # (WindowsAppSDKVersion / WindowsAppSDKWinUIVersion) and bumped intentionally.
+      # (WindowsAppSDKVersion / WindowsAppSDKWinUIVersion) and bumped intentionally,
+      # in lockstep across the metapackage and the individually-referenced sub-packages.
       - dependency-name: "Microsoft.WindowsAppSDK"
       - dependency-name: "Microsoft.WindowsAppSDK.WinUI"
+      - dependency-name: "Microsoft.WindowsAppSDK.Runtime"
 
   - package-ecosystem: "npm"
     directory: "/src/vscode-reactor"
