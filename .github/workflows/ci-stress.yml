@@ -398,7 +398,7 @@ jobs:
       - name: Aggregate reliability
         shell: pwsh
         run: |
-          & ./tests/Reactor.AppTests/StressReport.ps1 -Path stress-artifacts -Title "E2E winapp-ui stress reliability (retries ON)"
+          & ./tests/Reactor.AppTests/StressReport.ps1 -Path stress-artifacts -Title "E2E winapp-ui stress reliability"
 
   summary:
     name: Stress summary
