@@ -30,6 +30,11 @@ on:
         required: false
         default: ""
         type: string
+      e2e_retries:
+        description: "E2E only: REACTOR_E2E_RETRIES (0 = retries-OFF diagnostic to measure true per-attempt flake; empty = production default of 3)"
+        required: false
+        default: ""
+        type: string
 
 jobs:
   plan:
@@ -303,6 +308,10 @@ jobs:
     if: ${{ inputs.target == 'e2e' || inputs.target == 'all' }}
     runs-on: windows-latest
     timeout-minutes: 350
+    env:
+      # Empty = production default (3 retries). "0" = retries-OFF diagnostic: the custom
+      # E2eRetryAttribute reads this to measure the true per-attempt flake rate that [Retry] masks.
+      REACTOR_E2E_RETRIES: ${{ inputs.e2e_retries }}
     strategy:
       fail-fast: false
       matrix:
@@ -325,10 +334,10 @@ jobs:
       - name: Build (once)
         run: dotnet build tests/Reactor.AppTests/Reactor.AppTests.csproj -c Debug -p:Platform=x64
 
-      # Retries-ON baseline: run the full winapp-ui suite N times as CI runs it. Each iteration
-      # is a fresh `dotnet test` process (natural per-iteration isolation); we record the
-      # dotnet-test exit code (0 = green suite) plus a per-iteration TRX for per-test drill-down.
-      # Report-only: we never fail the shard, so every iteration's data is collected.
+      # Run the full winapp-ui suite N times as CI runs it (retry mode set by REACTOR_E2E_RETRIES
+      # above). Each iteration is a fresh `dotnet test` process (natural per-iteration isolation);
+      # we record the dotnet-test exit code (0 = green suite) plus a per-iteration TRX for per-test
+      # drill-down. Report-only: we never fail the shard, so every iteration's data is collected.
       - name: Stress loop
         shell: pwsh
         env:
@@ -371,6 +380,9 @@ jobs:
     needs: [plan, e2e-tests]
     if: ${{ always() && (inputs.target == 'e2e' || inputs.target == 'all') }}
     runs-on: ubuntu-latest
+    env:
+      # Only used so the aggregate report labels the run's retry mode correctly.
+      REACTOR_E2E_RETRIES: ${{ inputs.e2e_retries }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 

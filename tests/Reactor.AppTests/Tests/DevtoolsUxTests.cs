@@ -52,7 +52,7 @@ public class DevtoolsUxTests : AppTestBase
     // [Retry] mops up the rare unattended-desktop input-injection flake: Win32 SendInput is
     // occasionally dropped before the Host window foregrounds on CI. A real regression still
     // fails every attempt. Removable once winappCli #562 (send-keys)/#498 (drag) ship native verbs.
-    [Retry(3)]
+    [E2eRetry(3)]
     [TestMethod]
     public void Devtools_Menu_Toggle_Flows_Through_To_Subscribers()
     {
@@ -82,7 +82,7 @@ public class DevtoolsUxTests : AppTestBase
     /// Observable notification path works in both directions, not just on first
     /// activation.
     /// </summary>
-    [Retry(3)]
+    [E2eRetry(3)]
     [TestMethod]
     public void Devtools_Menu_Toggle_Is_Reversible()
     {

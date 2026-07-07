@@ -34,7 +34,7 @@ public class EventHandlerTests : AppTestBase
     // [Retry] mops up the rare unattended-desktop input-injection flake: Win32 SendInput is
     // occasionally dropped before the Host window foregrounds on CI. A real regression still
     // fails every attempt. Removable once winappCli #562 (send-keys)/#498 (drag) ship native verbs.
-    [Retry(3)]
+    [E2eRetry(3)]
     [TestMethod]
     public void Interactive_OnTapped_Updates_State()
     {
@@ -80,7 +80,7 @@ public class EventHandlerTests : AppTestBase
     /// so this E2E test uses Button.OnClick as a proxy. The declarative OnPointerPressed
     /// API is verified by unit tests; this tests the input plumbing end-to-end.
     /// </summary>
-    [Retry(3)]
+    [E2eRetry(3)]
     [TestMethod]
     public void Interactive_OnPointerPressed_Detects_Click()
     {
@@ -96,7 +96,7 @@ public class EventHandlerTests : AppTestBase
     /// OnKeyDown: focus a TextBox and send a key, verify the key is captured
     /// by the declarative .OnKeyDown() handler.
     /// </summary>
-    [Retry(3)]
+    [E2eRetry(3)]
     [TestMethod]
     public void Interactive_OnKeyDown_Captures_Keys()
     {

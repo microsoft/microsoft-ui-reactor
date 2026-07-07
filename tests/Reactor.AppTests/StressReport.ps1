@@ -59,6 +59,20 @@ $resTotal = 0
 $resInconclusive = 0
 $failedBucket = @('Failed', 'Error', 'Timeout', 'Aborted')
 $inconBucket = @('Inconclusive', 'NotExecuted', 'Pending', 'Warning', 'NotRunnable', 'Disconnected')
+$resEnvInconclusive = 0
+
+# Same signature the ci.yml E2E gate uses to catch a guard-fired Inconclusive (locked / disconnected
+# desktop, or no input injection). If any of these appear the interactivity guard actually fired — a
+# potential failure-masking signal — so surface them loudly instead of folding them into the benign
+# "prerequisite skip" bucket.
+$guardMsgRegex = 'cannot inject synthetic input|workstation is|locked desktop|disconnected session'
+$prereqMsgRegex = 'published|REACTOR_SPEC051|DISCOVER_PUBLISHED|missing executable'
+
+function Get-InconclusiveCategory([string]$msg) {
+    if ($msg -match $guardMsgRegex) { return 'Environmental/guard' }
+    if ($msg -match $prereqMsgRegex) { return 'Prerequisite' }
+    return 'Other'
+}
 
 foreach ($t in $trxFiles) {
     try {
@@ -72,12 +86,23 @@ foreach ($t in $trxFiles) {
             if ([string]::IsNullOrEmpty($name)) { continue }
             $resTotal++
             if (-not $tests.ContainsKey($name)) {
-                $tests[$name] = [pscustomobject]@{ Test = $name; Runs = 0; Passed = 0; Failed = 0; Inconclusive = 0 }
+                $tests[$name] = [pscustomobject]@{ Test = $name; Runs = 0; Passed = 0; Failed = 0; Inconclusive = 0; Category = 'None'; IncMsg = '' }
             }
             $rec = $tests[$name]
             $rec.Runs++
             if ($failedBucket -contains $outcome) { $rec.Failed++; $iterFailed++ }
-            elseif ($inconBucket -contains $outcome) { $rec.Inconclusive++; $resInconclusive++ }
+            elseif ($inconBucket -contains $outcome) {
+                $rec.Inconclusive++; $resInconclusive++
+                $msgNode = $n.Node.SelectSingleNode("*[local-name()='Output']/*[local-name()='ErrorInfo']/*[local-name()='Message']")
+                $msg = if ($msgNode) { $msgNode.InnerText } else { '' }
+                $cat = Get-InconclusiveCategory $msg
+                if ($cat -eq 'Environmental/guard') { $resEnvInconclusive++ }
+                # Keep the most-serious category seen for this test (Environmental > Prerequisite > Other).
+                if ($rec.Category -eq 'None' -or $cat -eq 'Environmental/guard') { $rec.Category = $cat }
+                if ([string]::IsNullOrEmpty($rec.IncMsg) -and -not [string]::IsNullOrEmpty($msg)) {
+                    $rec.IncMsg = ($msg -replace '\s+', ' ').Trim()
+                }
+            }
             elseif ($outcome -eq 'Passed') { $rec.Passed++ }
         }
         if ($iterFailed -eq 0) { $trxIterGreen++ }
@@ -99,6 +124,11 @@ function Format-Pct($num, $den) {
 $greenPct = Format-Pct $iterGreen $iterTotal
 $envAvail = if ($resTotal -gt 0) { Format-Pct ($resTotal - $resInconclusive) $resTotal } else { 'n/a' }
 
+$retriesRaw = $env:REACTOR_E2E_RETRIES
+$retriesMode = if ($retriesRaw -eq '0') { 'retries OFF (REACTOR_E2E_RETRIES=0)' }
+    elseif ([string]::IsNullOrEmpty($retriesRaw)) { 'retries ON (default)' }
+    else { "REACTOR_E2E_RETRIES=$retriesRaw" }
+
 $leader = @($tests.Values |
     Where-Object { $_.Failed -gt 0 } |
     Sort-Object -Property `
@@ -115,15 +145,16 @@ $sb = New-Object System.Text.StringBuilder
 [void]$sb.AppendLine("")
 [void]$sb.AppendLine("| Metric | Value |")
 [void]$sb.AppendLine("|---|---|")
-[void]$sb.AppendLine("| Suite-level green rate (retries ON) | **$greenPct** ($iterGreen / $iterTotal iterations) |")
+[void]$sb.AppendLine("| Suite-level green rate ($retriesMode) | **$greenPct** ($iterGreen / $iterTotal iterations) |")
 [void]$sb.AppendLine("| Interactive-env availability | $envAvail ($($resTotal - $resInconclusive) / $resTotal results) |")
+[void]$sb.AppendLine("| Environmental/guard Inconclusive results | $resEnvInconclusive |")
 [void]$sb.AppendLine("| Distinct tests observed | $($tests.Count) |")
 [void]$sb.AppendLine("| Tests that failed >=1 attempt | $($leader.Count) |")
 [void]$sb.AppendLine("")
 
 if ($leader.Count -gt 0) {
     [void]$sb.AppendLine("### Failure leaderboard (attempt-level, retries ON)")
-    [void]$sb.AppendLine("Fail% = failed / (runs - inconclusive). With ``[Retry(3)]`` a listed test may still have been *healed by retry* in the suite run, so this is an early-warning signal, not necessarily a red suite.")
+    [void]$sb.AppendLine("Fail% = failed / (runs - inconclusive). With ``[E2eRetry(3)]`` a listed test may still have been *healed by retry* in the suite run, so this is an early-warning signal, not necessarily a red suite.")
     [void]$sb.AppendLine("")
     [void]$sb.AppendLine("| Test | Failed | Runs | Inconclusive | Fail% |")
     [void]$sb.AppendLine("|---|--:|--:|--:|--:|")
@@ -135,13 +166,22 @@ if ($leader.Count -gt 0) {
     [void]$sb.AppendLine("")
 }
 
-if ($everIncon.Count -gt 0) {
-    [void]$sb.AppendLine("### Tests ever Inconclusive (environment / input-injection)")
+if ($resEnvInconclusive -gt 0) {
+    [void]$sb.AppendLine("> [!WARNING]")
+    [void]$sb.AppendLine("> **$resEnvInconclusive environmental/guard Inconclusive result(s) detected.** The interactivity guard fired (locked/disconnected desktop or no input injection). On a healthy CI runner this should be **0** — investigate before trusting the green rate, because a guard trip coinciding with a real failure is the classic masking vector. (The ``E2eRetry`` anti-masking policy prevents a first-run failure from being downgraded, and the ci.yml E2E gate turns these red in the main job.)")
     [void]$sb.AppendLine("")
-    [void]$sb.AppendLine("| Test | Inconclusive | Runs |")
-    [void]$sb.AppendLine("|---|--:|--:|")
+}
+
+if ($everIncon.Count -gt 0) {
+    [void]$sb.AppendLine("### Tests ever Inconclusive")
+    [void]$sb.AppendLine("**Environmental/guard** = interactivity guard fired (investigate); **Prerequisite** = self-skip for a missing prereq (e.g. an unpublished sample); **Other** = uncategorised.")
+    [void]$sb.AppendLine("")
+    [void]$sb.AppendLine("| Test | Category | Inconclusive | Runs | Sample message |")
+    [void]$sb.AppendLine("|---|---|--:|--:|---|")
     foreach ($r in ($everIncon | Select-Object -First 40)) {
-        [void]$sb.AppendLine("| $($r.Test) | $($r.Inconclusive) | $($r.Runs) |")
+        $m = $r.IncMsg -replace '\|', '/'
+        if ($m.Length -gt 90) { $m = $m.Substring(0, 90) + '...' }
+        [void]$sb.AppendLine("| $($r.Test) | $($r.Category) | $($r.Inconclusive) | $($r.Runs) | $m |")
     }
     [void]$sb.AppendLine("")
 }

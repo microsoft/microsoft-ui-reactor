@@ -34,7 +34,7 @@ public class ItemClickInteractionTests : AppTestBase
     /// </summary>
     // [Retry] mops up the rare unattended-desktop input-injection flake (SendInput dropped
     // before the Host foregrounds). A real regression still fails every attempt.
-    [Retry(3)]
+    [E2eRetry(3)]
     [TestMethod]
     public void ItemClick_FiresExactlyOnce_AfterReRenders()
     {
@@ -58,7 +58,7 @@ public class ItemClickInteractionTests : AppTestBase
     /// After the items array is rebuilt (the #495 ItemsSource-rebuild path), a single real
     /// click still fires the callback exactly once with the correct index.
     /// </summary>
-    [Retry(3)]
+    [E2eRetry(3)]
     [TestMethod]
     public void ItemClick_FiresExactlyOnce_AfterItemsChange()
     {
