@@ -18,6 +18,7 @@ on:
           - selftests
           - aot
           - integration
+          - e2e
           - all
       shards:
         description: "Number of parallel runners (iterations are divided across shards)"
@@ -296,9 +297,100 @@ jobs:
           path: aot-*.tap
           if-no-files-found: ignore
 
+  e2e-tests:
+    name: E2E (shard ${{ matrix.shard }})
+    needs: plan
+    if: ${{ inputs.target == 'e2e' || inputs.target == 'all' }}
+    runs-on: windows-latest
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.shard-list) }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: 10.0.x
+
+      # winapp ui drives the cross-process UIA automation. The action adds winapp to PATH,
+      # which WinAppUi.ResolveWinAppExe() picks up via its PATH fallback (mirrors ci.yml).
+      - name: Setup winapp CLI
+        uses: microsoft/setup-WinAppCli@cc8ea9a08b3ee3db43d5aa6bddda4a0e87d800f7 # v0.1
+
+      # Build the E2E test project once (Debug/x64 — the path TestSession.FindHostExe expects).
+      # The ProjectReference pulls in Reactor.AppTests.Host, so the Host is built too.
+      - name: Build (once)
+        run: dotnet build tests/Reactor.AppTests/Reactor.AppTests.csproj -c Debug -p:Platform=x64
+
+      # Retries-ON baseline: run the full winapp-ui suite N times as CI runs it. Each iteration
+      # is a fresh `dotnet test` process (natural per-iteration isolation); we record the
+      # dotnet-test exit code (0 = green suite) plus a per-iteration TRX for per-test drill-down.
+      # Report-only: we never fail the shard, so every iteration's data is collected.
+      - name: Stress loop
+        shell: pwsh
+        env:
+          PER_SHARD: ${{ needs.plan.outputs.per-shard }}
+          REMAINDER: ${{ needs.plan.outputs.remainder }}
+          SHARD_INDEX: ${{ matrix.shard }}
+        run: |
+          $per = [int]$env:PER_SHARD
+          $rem = [int]$env:REMAINDER
+          $idx = [int]$env:SHARD_INDEX
+          $count = if ($idx -le $rem) { $per + 1 } else { $per }
+          if ($count -lt 1) { Write-Host "Shard $idx has no work."; exit 0 }
+          New-Item -ItemType Directory -Force -Path TestResults | Out-Null
+          $csv = "TestResults/iters-$idx.csv"
+          "shard,iter,exit" | Out-File -FilePath $csv -Encoding utf8
+          for ($i = 1; $i -le $count; $i++) {
+            Write-Host "::group::E2E iteration $i / $count (shard $idx)"
+            dotnet test tests/Reactor.AppTests/Reactor.AppTests.csproj -c Debug -p:Platform=x64 --no-build --logger "console;verbosity=minimal" --logger "trx;LogFileName=e2e-$idx-$i.trx" --results-directory TestResults
+            $code = $LASTEXITCODE
+            "$idx,$i,$code" | Add-Content -Path $csv
+            Write-Host "::endgroup::"
+            if ($code -ne 0) { Write-Host "::warning::E2E iteration $i (shard $idx) exited $code (suite not green)" }
+          }
+          # Per-shard reliability snapshot (report-only; never fails the shard).
+          & ./tests/Reactor.AppTests/StressReport.ps1 -Path TestResults -Title "E2E stress - shard $idx"
+          Write-Host "Shard ${idx}: $count iterations completed."
+
+      - name: Upload results
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-stress-trx-shard-${{ matrix.shard }}
+          path: |
+            TestResults/*.trx
+            TestResults/iters-*.csv
+          if-no-files-found: ignore
+
+  e2e-report:
+    name: E2E stress report
+    needs: [plan, e2e-tests]
+    if: ${{ always() && (inputs.target == 'e2e' || inputs.target == 'all') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Download all shard results
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: e2e-stress-trx-shard-*
+          path: stress-artifacts
+          merge-multiple: true
+
+      # Aggregate every shard's iterations into the headline reliability report, rendered on
+      # the run summary page. Report-only: this step reports the numbers, it does not gate.
+      - name: Aggregate reliability
+        shell: pwsh
+        run: |
+          & ./tests/Reactor.AppTests/StressReport.ps1 -Path stress-artifacts -Title "E2E winapp-ui stress reliability (retries ON)"
+
   summary:
     name: Stress summary
-    needs: [plan, unit-tests, selftests, aot-selftests, integration-tests]
+    needs: [plan, unit-tests, selftests, aot-selftests, integration-tests, e2e-tests]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
@@ -308,14 +400,16 @@ jobs:
           SELFTESTS_RESULT: ${{ needs.selftests.result }}
           AOT_RESULT: ${{ needs.aot-selftests.result }}
           INTEGRATION_RESULT: ${{ needs.integration-tests.result }}
+          E2E_RESULT: ${{ needs.e2e-tests.result }}
         run: |
           echo "Unit shards:         $UNIT_RESULT"
           echo "Selftest shards:     $SELFTESTS_RESULT"
           echo "AOT selftest shards: $AOT_RESULT"
           echo "Integration shards:  $INTEGRATION_RESULT"
+          echo "E2E shards:          $E2E_RESULT"
           fail=0
           # 'skipped' is OK (target filter); 'success' is OK; anything else is a fail.
-          for r in "$UNIT_RESULT" "$SELFTESTS_RESULT" "$AOT_RESULT" "$INTEGRATION_RESULT"; do
+          for r in "$UNIT_RESULT" "$SELFTESTS_RESULT" "$AOT_RESULT" "$INTEGRATION_RESULT" "$E2E_RESULT"; do
             case "$r" in
               success|skipped|"") ;;
               *) fail=1 ;;
