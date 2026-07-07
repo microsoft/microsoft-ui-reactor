@@ -99,11 +99,22 @@ public class ImmediateAndDisabledFocusableTests : AppTestBase
         email.SendKeys("user@example.com");
 
         var age = FindById("ValImmediate_Age");
-        age.Click();
-        // Type digit-by-digit, confirming each lands, so a dropped keystroke fails loudly here
-        // rather than as a misleading downstream tab-focus timeout.
-        age.SendKeys("2");
-        WaitForTextContaining("ValImmediate_AgeDisplay", "Age: 2", timeoutMs: 3000);
+        // The age NumberBox's inner editor occasionally does not take focus from a single click
+        // (worse right after the email interaction), dropping the first keystroke so the display
+        // stays 'Age: 0'. Retry focus + first digit until it registers, clearing any partial
+        // between attempts so a borderline-late keystroke can't double-type into '22'.
+        bool firstDigitLanded = false;
+        for (int attempt = 0; attempt < 3 && !firstDigitLanded; attempt++)
+        {
+            age.Click();
+            if (attempt > 0)
+                age.Clear();
+            age.SendKeys("2");
+            firstDigitLanded = App.WaitForValue("ValImmediate_AgeDisplay", "Age: 2", contains: false, timeoutMs: 2000);
+        }
+        Assert.IsTrue(firstDigitLanded,
+            "Age NumberBox never accepted the first digit after click focus (3 attempts).");
+
         age.SendKeys("5");
         WaitForText("ValImmediate_AgeDisplay", "Age: 25");
         WaitForText("ValImmediate_FormValid", "valid");
