@@ -77,7 +77,7 @@ public class DataGridTests : AppTestBase
     /// commit fires because Tab moves real focus out of the single-tab-stop grid; previously it ran
     /// after the editing-Tab flow had already committed + reopened the editor and committed a second
     /// time, destroying it (the editor never reappeared). Guarded by
-    /// <c>DataGridState.SuppressNextLostFocusCommit</c>.
+    /// <c>DataGridState&lt;T&gt;.SuppressNextLostFocusCommit</c>.
     /// </summary>
     [E2eRetry(3)]
     [TestMethod]
