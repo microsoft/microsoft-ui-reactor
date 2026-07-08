@@ -15,6 +15,11 @@ internal static class HostLaunch
     internal static (Process proc, long hwnd) LaunchAndBind(
         string exePath, string windowTitle, int attempts = 3, int perAttemptTimeoutMs = 15000)
     {
+        if (attempts < 1)
+            throw new ArgumentOutOfRangeException(nameof(attempts), attempts, "Must be at least 1.");
+        if (perAttemptTimeoutMs <= 0)
+            throw new ArgumentOutOfRangeException(nameof(perAttemptTimeoutMs), perAttemptTimeoutMs, "Must be positive.");
+
         Exception? last = null;
         for (int attempt = 1; attempt <= attempts; attempt++)
         {
@@ -31,21 +36,30 @@ internal static class HostLaunch
             {
                 last = ex;
                 Console.WriteLine($"Host '{windowTitle}' launch attempt {attempt}/{attempts} failed: {ex.Message}");
-                TryKill(proc);
+                KillAndWait(proc);
                 if (attempt < attempts)
                     Thread.Sleep(500);
             }
         }
 
-        throw last ?? new WinAppTimeoutException(
-            $"Host window '{windowTitle}' did not appear after {attempts} launch attempts.");
+        throw new WinAppTimeoutException(
+            $"Host window '{windowTitle}' did not appear after {attempts} launch attempts " +
+            $"(<={perAttemptTimeoutMs}ms each). Last error: {last?.Message ?? "unknown"}.");
     }
 
-    private static void TryKill(Process? proc)
+    private static void KillAndWait(Process? proc)
     {
         if (proc is null)
             return;
-        try { proc.Kill(entireProcessTree: true); } catch { /* best effort */ }
-        try { proc.Dispose(); } catch { /* best effort */ }
+        try
+        {
+            proc.Kill(entireProcessTree: true);
+            proc.WaitForExit(2000); // best-effort: don't relaunch on top of a still-exiting host
+        }
+        catch { /* best effort */ }
+        finally
+        {
+            try { proc.Dispose(); } catch { /* best effort */ }
+        }
     }
 }
