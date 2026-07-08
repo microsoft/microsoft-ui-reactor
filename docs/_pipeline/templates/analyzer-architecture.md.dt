@@ -164,6 +164,7 @@ via `.editorconfig`.
 | `REACTOR_LIFECYCLE_002` | Warning | UseEffect(Action) allocates a timer/subscription/event with no returned cleanup | `EffectCleanupAnalyzer.cs` |
 | `REACTOR_MEMO_001` | Info | Modifiers on a keyed Memo(key,factory) wrapper opt the row out of the recycle cache | `MemoWrapperModifierAnalyzer.cs` |
 | `REACTOR_DYM_001` | Warning | Reactor property/field invoked like a method (e.g. `GridSize.Auto()`) | `NonInvocableMemberParensAnalyzer.cs` |
+| `REACTOR_DYM_002` | Warning | Invented `Theme.*Background` token (e.g. `Theme.AppBackground`); use `Theme.SolidBackground` (`Theme.LayerBackground` → `Theme.LayerFill`) | `ThemeBackgroundSuffixAnalyzer.cs` |
 | `REACTOR_DYM_003` | Warning | Mistyped Reactor factory name in call position (e.g. `Buton(...)`) | `FuzzyFactoryNameAnalyzer.cs` |
 
 `REACTOR_HOOKS_002` and `_003` were the reserved control-flow / data-flow slots

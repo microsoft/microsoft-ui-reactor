@@ -88,13 +88,20 @@ internal sealed class ListViewHandler : IElementHandler<ListViewElement, WinUI.L
                 h(l.SelectedItems.OfType<int>().ToList());
             }
         };
-        if (lv.OnItemClick is not null)
-            listView.ItemClick += (s, args) =>
-            {
-                var l = (WinUI.ListView)s!;
-                if (args.ClickedItem is int idx)
-                    (Reconciler.GetElementTag(l) as ListViewElement)?.OnItemClick?.Invoke(idx);
-            };
+        // Issue #779 — subscribe unconditionally (mirrors SelectionChanged above)
+        // so a later record-with that attaches OnItemClick is picked up without a
+        // second subscription. The trampoline no-ops when the current element's
+        // OnItemClick is null, and IsItemClickEnabled (set on mount + every update)
+        // gates whether WinUI raises ItemClick at all — so exactly one subscription
+        // for the control's lifetime fires the callback once per click across any
+        // toggle sequence. A conditional mount + Update-time re-subscribe (the old
+        // shape) leaked a second live handler on present→null→present.
+        listView.ItemClick += (s, args) =>
+        {
+            var l = (WinUI.ListView)s!;
+            if (args.ClickedItem is int idx)
+                (Reconciler.GetElementTag(l) as ListViewElement)?.OnItemClick?.Invoke(idx);
+        };
 
         // Set ItemsSource LAST — triggers container creation which needs the handler above
         listView.ItemsSource = Enumerable.Range(0, lv.Items.Length).ToList();
@@ -160,17 +167,13 @@ internal sealed class ListViewHandler : IElementHandler<ListViewElement, WinUI.L
 
         Reconciler.SetElementTag(lv, n);
 
-        // Mount subscribes SelectionChanged unconditionally and reads handlers
-        // via GetElementTag, so no lazy wire here — the tag refresh above
-        // makes a newly-attached OnSelectedIndexChanged / OnSelectionChanged
-        // pick up on the very next selection.
-        if (o.OnItemClick is null && n.OnItemClick is not null)
-            lv.ItemClick += (s, args) =>
-            {
-                var l = (WinUI.ListView)s!;
-                if (args.ClickedItem is int idx)
-                    (Reconciler.GetElementTag(l) as ListViewElement)?.OnItemClick?.Invoke(idx);
-            };
+        // Mount subscribes both SelectionChanged and ItemClick unconditionally and
+        // reads handlers via GetElementTag, so no lazy wire here — the tag refresh
+        // above makes a newly-attached OnSelectedIndexChanged / OnSelectionChanged /
+        // OnItemClick pick up on the very next event. Re-subscribing ItemClick on a
+        // null→present transition here would leak a second live handler (never
+        // removed on present→null), so a single click would fire the callback twice
+        // (issue #779).
 
         // Issue #495 — wrap the SelectedIndex write so the SelectionChanged
         // ListView fires after the property set doesn't echo back into

@@ -80,13 +80,20 @@ internal sealed class GridViewHandler : IElementHandler<GridViewElement, WinUI.G
                 h(g.SelectedItems.OfType<int>().ToList());
             }
         };
-        if (gv.OnItemClick is not null)
-            gridView.ItemClick += (s, args) =>
-            {
-                var g = (WinUI.GridView)s!;
-                if (args.ClickedItem is int idx)
-                    (Reconciler.GetElementTag(g) as GridViewElement)?.OnItemClick?.Invoke(idx);
-            };
+        // Issue #779 — subscribe unconditionally (mirrors SelectionChanged above)
+        // so a later record-with that attaches OnItemClick is picked up without a
+        // second subscription. The trampoline no-ops when the current element's
+        // OnItemClick is null, and IsItemClickEnabled (set on mount + every update)
+        // gates whether WinUI raises ItemClick at all — so exactly one subscription
+        // for the control's lifetime fires the callback once per click across any
+        // toggle sequence. A conditional mount + Update-time re-subscribe (the old
+        // shape) leaked a second live handler on present→null→present.
+        gridView.ItemClick += (s, args) =>
+        {
+            var g = (WinUI.GridView)s!;
+            if (args.ClickedItem is int idx)
+                (Reconciler.GetElementTag(g) as GridViewElement)?.OnItemClick?.Invoke(idx);
+        };
 
         gridView.ItemsSource = Enumerable.Range(0, gv.Items.Length).ToList();
 
@@ -144,16 +151,12 @@ internal sealed class GridViewHandler : IElementHandler<GridViewElement, WinUI.G
 
         Reconciler.SetElementTag(gv, n);
 
-        // SelectionChanged is wired unconditionally in Mount (see comment in
-        // ListViewHandler.Update). Tag refresh suffices to pick up a later-attached
-        // OnSelectedIndexChanged / OnSelectionChanged.
-        if (o.OnItemClick is null && n.OnItemClick is not null)
-            gv.ItemClick += (s, args) =>
-            {
-                var g = (WinUI.GridView)s!;
-                if (args.ClickedItem is int idx)
-                    (Reconciler.GetElementTag(g) as GridViewElement)?.OnItemClick?.Invoke(idx);
-            };
+        // SelectionChanged and ItemClick are both wired unconditionally in Mount
+        // (see comment in ListViewHandler.Update). Tag refresh suffices to pick up a
+        // later-attached OnSelectedIndexChanged / OnSelectionChanged / OnItemClick.
+        // Re-subscribing ItemClick on a null→present transition here would leak a
+        // second live handler (never removed on present→null), so a single click
+        // would fire the callback twice (issue #779).
 
         // Issue #464 — wrap the SelectedIndex write so the deferred
         // SelectionChanged GridView fires after the property set doesn't echo

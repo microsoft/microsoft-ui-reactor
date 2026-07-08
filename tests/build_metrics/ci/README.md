@@ -14,38 +14,57 @@ Example:
 > | Artifact | base | PR | Δ | |
 > |---|--:|--:|--:|:-:|
 > | Microsoft.UI.Reactor.nupkg | 1.94 MB | 1.95 MB | +8.4 KB (+0.42%) | ⚠️ |
+> | Microsoft.UI.Reactor.Advanced.nupkg | 12.0 KB | 12.0 KB | +0 B (0.00%) | ≈ |
+> | Microsoft.UI.Reactor.Devtools.nupkg | 180 KB | 180 KB | +0 B (0.00%) | ≈ |
 >
-> ### Assemblies (uncompressed)
+> ### Assemblies in Microsoft.UI.Reactor
 >
 > | Artifact | base | PR | Δ | |
 > |---|--:|--:|--:|:-:|
+> | Reactor.Analyzers.dll | 296 KB | 296 KB | +0 B (0.00%) | ≈ |
+> | Reactor.Localization.Generator.dll | 16.0 KB | 16.0 KB | +0 B (0.00%) | ≈ |
+> | Reactor.Wrappers.Abstractions.dll | 10.0 KB | 10.0 KB | +0 B (0.00%) | ≈ |
+> | Reactor.Wrappers.Generator.dll | 100 KB | 100 KB | +0 B (0.00%) | ≈ |
 > | Reactor.dll | 3.16 MB | 3.16 MB | +0 B (0.00%) | ≈ |
 
 ## What is measured
 
-For each shipped package the report tracks two numbers:
+For each shipped package the report tracks:
 
 | Group | What | Why |
 |---|---|---|
 | **Packages (compressed .nupkg)** | the `.nupkg` file size | the download a consumer actually pays for |
-| **Assemblies (uncompressed)** | the primary DLL inside `lib/<tfm>/` | the real "did our code grow" signal, unaffected by zip compression noise |
+| **Assemblies in `<package>`** | **every** DLL shipped inside the package (all `lib/<tfm>/*.dll` and `analyzers/**/*.dll`, one row per assembly) | the real "did our code grow" signal, unaffected by zip compression noise |
 
-Tracked packages (see `$targets` in `Measure-BuildMetrics.ps1`):
+Assemblies are enumerated automatically per package (`Get-NupkgAssemblies` in
+`Measure-BuildMetrics.ps1`) — **every** `lib/` and `analyzers/` DLL is measured,
+with satellite resource assemblies (`*.resources.dll`) excluded. There is **no
+hard-coded per-DLL list**, so a DLL newly added to a package appears in the
+comment on its own. When the same basename ships under multiple target
+frameworks, the largest uncompressed length is reported.
 
-- `Microsoft.UI.Reactor` → `Reactor.dll`
+Tracked packages (see `$targets` in `Measure-BuildMetrics.ps1`) and the DLLs they
+currently ship:
+
+- `Microsoft.UI.Reactor` → `Reactor.dll`, `Reactor.Wrappers.Abstractions.dll`,
+  `Reactor.Analyzers.dll`, `Reactor.Wrappers.Generator.dll`,
+  `Reactor.Localization.Generator.dll`
 - `Microsoft.UI.Reactor.Advanced` → `Reactor.Advanced.dll`
 - `Microsoft.UI.Reactor.Devtools` → `Microsoft.UI.Reactor.Devtools.dll`
 
-Adding a package is a one-line entry in that `$targets` array.
+Adding a package is a one-line entry in that `$targets` array (only `PkgKey`,
+`PkgLabel`, `Project`, `PackageId` are needed); its DLLs are then discovered
+automatically. Adding a package also needs a matching entry in the trusted
+`$BuildMetricsPackageSpec` in `BuildMetricsLib.ps1` (see the trust boundary below).
 
 ## Files
 
 | File | Role |
 |---|---|
-| `BuildMetricsLib.ps1` | **Pure** helpers (no filesystem side effects): byte formatting, `Get-SizeDelta`, the sticky-comment renderer, the trusted `Get-BuildMetricsTargetSpec` and `ConvertTo-SafeMeasurements` (the render-time security boundary). Unit-testable headless. |
-| `BuildMetricsLib.Tests.ps1` | Dependency-free assertions for the pure lib (incl. the sanitizer). Exits non-zero on failure. |
-| `Measure-BuildMetrics.ps1` | Orchestrator: `dotnet pack` each package in a source tree and emit a `sizes.json` of measurements. |
-| `Measure-BuildMetrics.Tests.ps1` | AST-extracted tests for the orchestrator's `Select-LatestNupkg` + `Get-NupkgAssemblyBytes` (synthesizes real `.nupkg` ZIPs; no `dotnet`). |
+| `BuildMetricsLib.ps1` | **Pure** helpers (no filesystem side effects): byte formatting, `Get-SizeDelta`, the sticky-comment renderer, the trusted `Get-BuildMetricsPackageSpec` and `ConvertTo-SafeMeasurements` (the render-time security boundary). Unit-testable headless. |
+| `BuildMetricsLib.Tests.ps1` | Dependency-free assertions for the pure lib (incl. the sanitizer + DLL-filename allowlist). Exits non-zero on failure. |
+| `Measure-BuildMetrics.ps1` | Orchestrator: `dotnet pack` each package in a source tree, enumerate every shipped DLL (`Get-NupkgAssemblies`), and emit a `sizes.json` of measurements. |
+| `Measure-BuildMetrics.Tests.ps1` | AST-extracted tests for the orchestrator's `Select-LatestNupkg` + `Get-NupkgAssemblies` (synthesizes real `.nupkg` ZIPs; no `dotnet`). |
 
 ## Workflows
 
@@ -68,11 +87,28 @@ artifact.
 **Why the poster renders (not the measure job):** the measure job builds
 untrusted PR code, so if it produced the final markdown a PR could make the
 privileged bot post arbitrary content. Instead the artifact carries only
-per-artifact byte counts (the `sizes.json` also includes label/group strings, but
-the poster **ignores** them). The trusted poster re-maps every row through a fixed
-`Key → Label` spec — dropping unknown keys, using its own trusted labels/groups,
-and accepting only non-negative integer byte counts — so the comment is fully
-determined by trusted code plus a handful of validated integers.
+per-artifact rows (byte counts plus, for assemblies, a DLL filename); the poster
+re-maps every row through the trusted `$BuildMetricsPackageSpec`:
+
+- Each package's compressed-`.nupkg` row is emitted with a **trusted** label and
+  group; only its non-negative-integer byte count is taken from the artifact.
+- Each per-DLL row is keyed `asm|<PkgKey>|<Dll>`. It is kept **only** when
+  `<PkgKey>` is a known package *and* `<Dll>` passes the strict, case-sensitive,
+  absolutely-anchored allowlist `\A[A-Za-z0-9._+-]+\.dll\z`. That validated
+  filename is the **only** artifact-derived string that ever reaches the rendered
+  markdown — and because the allowlist forbids every markdown/HTML meta-character
+  (backtick, pipe, angle bracket, bracket, space, newline — including a trailing
+  newline, which `\z` rejects) and is matched case-sensitively (so Unicode
+  case-folding can't smuggle a non-ASCII glyph through `[A-Za-z]`), it is always
+  safe to emit verbatim. The DLL's group is the package's trusted assembly group;
+  unknown keys, malformed keys, and filenames that fail the allowlist are dropped.
+- Per-DLL rows are **hard-capped per package** (32 rows) after a deterministic
+  sort by filename, so a malicious PR that emits thousands of validly-shaped DLL
+  keys can't flood the comment or push it past GitHub's comment-size limit.
+
+So the comment is fully determined by trusted code plus a set of validated
+integers and allowlisted DLL filenames — the untrusted artifact can never inject
+markdown, package labels, or section headers into the bot-authored comment.
 
 The sticky comment is found + updated in place via a hidden marker
 (`<!-- reactor-build-metrics -->`) — the same *mechanism* as
