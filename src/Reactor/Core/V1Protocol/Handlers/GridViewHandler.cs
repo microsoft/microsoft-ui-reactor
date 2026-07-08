@@ -122,10 +122,16 @@ internal sealed class GridViewHandler : IElementHandler<GridViewElement, WinUI.G
     {
         gv.SelectionMode = n.SelectionMode;
         gv.IsItemClickEnabled = n.OnItemClick is not null;
-        if (n.Header is not null) gv.Header = n.Header;
+        // Issue #845 — gate on CHANGE, not non-null presence, so a present→null
+        // transition clears the property on the control. Header/ItemContainerStyle
+        // raise no WinUI events (unlike SelectedIndex), so no echo-suppression is
+        // needed and a plain reference-change gate is correct. WinUI accepts null
+        // for both (Header=null removes the header; ItemContainerStyle=null resets
+        // to the default container style).
+        if (!ReferenceEquals(o.Header, n.Header)) gv.Header = n.Header;
         if (gv.IncrementalLoadingTrigger != n.IncrementalLoadingTrigger)
             gv.IncrementalLoadingTrigger = n.IncrementalLoadingTrigger;
-        if (!ReferenceEquals(o.ItemContainerStyle, n.ItemContainerStyle) && n.ItemContainerStyle is not null)
+        if (!ReferenceEquals(o.ItemContainerStyle, n.ItemContainerStyle))
             gv.ItemContainerStyle = n.ItemContainerStyle;
 
         // Issue #495 / #464 — rebuild ItemsSource on Items-array change so

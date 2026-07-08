@@ -134,10 +134,16 @@ internal sealed class ListViewHandler : IElementHandler<ListViewElement, WinUI.L
     {
         lv.SelectionMode = n.SelectionMode;
         lv.IsItemClickEnabled = n.OnItemClick is not null;
-        if (n.Header is not null) lv.Header = n.Header;
+        // Issue #845 — gate on CHANGE, not non-null presence, so a present→null
+        // transition clears the property on the control. Header/ItemContainerStyle
+        // raise no WinUI events (unlike SelectedIndex), so no echo-suppression is
+        // needed and a plain reference-change gate is correct. WinUI accepts null
+        // for both (Header=null removes the header; ItemContainerStyle=null resets
+        // to the default container style).
+        if (!ReferenceEquals(o.Header, n.Header)) lv.Header = n.Header;
         if (lv.IncrementalLoadingTrigger != n.IncrementalLoadingTrigger)
             lv.IncrementalLoadingTrigger = n.IncrementalLoadingTrigger;
-        if (!ReferenceEquals(o.ItemContainerStyle, n.ItemContainerStyle) && n.ItemContainerStyle is not null)
+        if (!ReferenceEquals(o.ItemContainerStyle, n.ItemContainerStyle))
             lv.ItemContainerStyle = n.ItemContainerStyle;
 
         // Issue #495 — when the Items array changes (idiomatic Reactor authors
