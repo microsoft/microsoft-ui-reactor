@@ -86,7 +86,7 @@ public class DataGridTests : AppTestBase
         NavigateToFixtureFresh("DataGrid_EditableGrid");
         WaitForText("EditLog", "Edits:");
         Assert.IsNotNull(WaitForName("Alice"), "'Alice' should be visible");
-        Assert.IsNotNull(FindByName("Smith"), "'Smith' (the next cell) should be visible");
+        Assert.IsNotNull(WaitForName("Smith"), "'Smith' (the next cell) should be visible");
 
         // Edit row-1 FirstName (Alice); type a new value but do NOT commit.
         TapCell("Alice");
