@@ -493,6 +493,7 @@ public static class InputInjector
     public static void PressKeyWith(ushort virtualKey, bool ctrl = false, bool shift = false, bool alt = false)
     {
         bool ctrlDown = false, shiftDown = false, altDown = false;
+        bool pressSucceeded = false;
         try
         {
             // Track each modifier the moment it latches so the finally releases exactly those that
@@ -505,12 +506,21 @@ public static class InputInjector
             Thread.Sleep(10);
             PressVirtualKey(virtualKey);
             Thread.Sleep(10);
+            pressSucceeded = true;
         }
         finally
         {
-            if (altDown) KeyUp(VK_MENU);
-            if (shiftDown) KeyUp(VK_SHIFT);
-            if (ctrlDown) KeyUp(VK_CONTROL);
+            // Release EVERY modifier that latched, even if an individual KeyUp throws — SendInput can
+            // fail on key-up too, and a modifier left physically down would contaminate later tests.
+            // If the press itself failed we're already unwinding that exception, so swallow key-up
+            // failures (don't mask the original). If the press succeeded but a release failed, surface
+            // that failure after attempting all releases.
+            Exception? releaseFailure = null;
+            if (altDown) { try { KeyUp(VK_MENU); } catch (Exception ex) { releaseFailure ??= ex; } }
+            if (shiftDown) { try { KeyUp(VK_SHIFT); } catch (Exception ex) { releaseFailure ??= ex; } }
+            if (ctrlDown) { try { KeyUp(VK_CONTROL); } catch (Exception ex) { releaseFailure ??= ex; } }
+            if (pressSucceeded && releaseFailure is not null)
+                throw releaseFailure;
         }
     }
 
