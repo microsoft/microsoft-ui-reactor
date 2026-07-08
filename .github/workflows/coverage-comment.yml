@@ -78,24 +78,34 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set +e
-          rows=$(gh api "repos/$GH_REPO/actions/workflows/coverage.yml/runs?branch=main&status=success&per_page=30" \
-                   --jq '.workflow_runs[] | "\(.id) \(.head_sha)"')
-          if [ $? -ne 0 ]; then
-            echo "::warning::Could not list main Coverage runs (API error); rendering baseline-unavailable."
-            rows=""
-          fi
           base_sha=""
           found=false
-          while IFS=' ' read -r id sha; do
-            [ -z "$id" ] && continue
-            # Expired/absent artifacts (or non-baseline main runs) fail here — skip to
-            # the next candidate; that is expected, so keep this download quiet.
-            if gh run download "$id" --repo "$GH_REPO" -n coverage-baseline -D baseline 2>/dev/null; then
-              base_sha="$sha"
-              found=true
+          page=1
+          # Page through successful main runs (newest first), breaking as soon as a
+          # coverage-baseline artifact downloads. Bounded to a few pages so a long run
+          # of non-baseline dispatch runs can't push the newest baseline out of view
+          # (the reason a single 30-run window was unreliable) without unbounded API
+          # calls. In practice the baseline is on page 1.
+          while [ "$found" != "true" ] && [ "$page" -le 5 ]; do
+            rows=$(gh api "repos/$GH_REPO/actions/workflows/coverage.yml/runs?branch=main&status=success&per_page=100&page=$page" \
+                     --jq '.workflow_runs[] | "\(.id) \(.head_sha)"')
+            if [ $? -ne 0 ]; then
+              echo "::warning::Could not list main Coverage runs (API error); rendering baseline-unavailable."
               break
             fi
-          done <<< "$rows"
+            [ -z "$rows" ] && break   # no more runs
+            while IFS=' ' read -r id sha; do
+              [ -z "$id" ] && continue
+              # Expired/absent artifacts (or non-baseline main runs) fail here — skip to
+              # the next candidate; that is expected, so keep this download quiet.
+              if gh run download "$id" --repo "$GH_REPO" -n coverage-baseline -D baseline 2>/dev/null; then
+                base_sha="$sha"
+                found=true
+                break
+              fi
+            done <<< "$rows"
+            page=$((page + 1))
+          done
           echo "found=$found" >> "$GITHUB_OUTPUT"
           echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
           if [ "$found" = "true" ]; then

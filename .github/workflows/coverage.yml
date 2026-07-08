@@ -164,23 +164,35 @@ jobs:
             -WorkDir "$env:GITHUB_WORKSPACE/coverage-out/reports"
 
       - name: Ensure coverage data
+        id: ensure
         if: always()
         shell: pwsh
         env:
           MEASURE_OUTCOME: ${{ steps.measure.outcome }}
         run: |
+          . ./tests/coverage/ci/CoverageLib.ps1
           $out = Join-Path $env:GITHUB_WORKSPACE 'coverage-out'
           New-Item -ItemType Directory -Force -Path $out | Out-Null
           $file = Join-Path $out 'coverage.json'
-          # Trust the file ONLY when the measure step succeeded. This job runs
-          # untrusted PR test code with write access to the workspace, so a PR could
-          # pre-plant a fake coverage.json. Keying off the trusted STEP OUTCOME (not
-          # mere file presence) means a failed measure renders the CAUTION "run failed"
-          # comment rather than being masked by a planted file.
-          if ($env:MEASURE_OUTCOME -ne 'success') {
-            '{ "line": null, "branch": null, "branchesCovered": null, "branchesTotal": null, "outcome": "failed" }' |
-              Set-Content -LiteralPath $file -Encoding UTF8
+          $failedJson = '{ "line": null, "branch": null, "branchesCovered": null, "branchesTotal": null, "outcome": "failed" }'
+          # Trust the numbers ONLY when the measure step SUCCEEDED *and* actually
+          # produced a valid coverage.json. This job runs untrusted PR test code with
+          # write access to the workspace, so a PR could pre-plant a fake file; and a
+          # green-but-empty measure (a script/path regression that exits 0 without
+          # writing real numbers) must not silently post a blank comment. In either
+          # case overwrite with a failed placeholder — the poster then renders CAUTION
+          # and the run goes red via the data_ok gate below.
+          $ok = $false
+          if ($env:MEASURE_OUTCOME -eq 'success') {
+            $raw = $null
+            if (Test-Path $file) { try { $raw = Get-Content $file -Raw | ConvertFrom-Json } catch { $raw = $null } }
+            if (Test-CoverageMetricsPresent (ConvertTo-SafeCoverageMetrics $raw)) { $ok = $true }
           }
+          if (-not $ok) {
+            Set-Content -LiteralPath $file -Value $failedJson -Encoding UTF8
+            Write-Warning "No valid coverage numbers (measure outcome=$($env:MEASURE_OUTCOME)); the comment will render CAUTION and the check will be red."
+          }
+          "data_ok=$(if ($ok) { 'true' } else { 'false' })" | Out-File $env:GITHUB_OUTPUT -Append
 
       # Run-summary body — informational, not a PR post. This job doesn't hold the
       # baseline (the poster fetches it), so the summary shows the measured commit's
@@ -231,7 +243,7 @@ jobs:
           retention-days: 14
 
       - name: Upload coverage baseline (main)
-        if: ${{ steps.pr.outputs.is_baseline == 'true' && steps.measure.outcome == 'success' }}
+        if: ${{ steps.pr.outputs.is_baseline == 'true' && steps.ensure.outputs.data_ok == 'true' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-baseline
@@ -239,15 +251,16 @@ jobs:
           if-no-files-found: warn
           retention-days: 90
 
-      # Surface a red check if the measurement failed (comment still posted for PRs;
-      # a failed main baseline is visible so we notice it broke).
+      # Surface a red check when coverage produced no valid numbers — a build/measure
+      # failure OR a green-but-empty measure (data_ok is false in both). The comment
+      # is still posted (CAUTION) for PRs; a bad main baseline is visible too.
       - name: Reflect coverage status
         if: always()
         shell: pwsh
         env:
-          MEASURE_OUTCOME: ${{ steps.measure.outcome }}
+          DATA_OK: ${{ steps.ensure.outputs.data_ok }}
         run: |
-          if ($env:MEASURE_OUTCOME -ne 'success') {
-            throw 'Coverage measurement failed — see the coverage comment and the coverage-reports artifact.'
+          if ($env:DATA_OK -ne 'true') {
+            throw 'Coverage produced no valid numbers (build/measure failed or emitted nothing) — see the coverage comment and the coverage-reports artifact.'
           }
           Write-Host 'Coverage measurement completed successfully.'
