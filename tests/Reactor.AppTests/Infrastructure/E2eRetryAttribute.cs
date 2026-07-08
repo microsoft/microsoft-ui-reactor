@@ -74,6 +74,11 @@ public sealed class E2eRetryAttribute : RetryBaseAttribute
     /// <inheritdoc />
     protected override async Task<RetryResult> ExecuteAsync(RetryContext retryContext)
     {
+        // Contract: MSTest consumes only RetryResult.TryGetLast() as the reported outcome
+        // (UnitTestRunner: `result = retryResult.TryGetLast()`); every other AddResult entry is
+        // discarded and never reaches the TRX. So this method's whole job is to make the *last*
+        // added result the authoritative one — a genuine pass heals, otherwise a hard failure is
+        // surfaced, and a retry-attempt Inconclusive is never allowed to become the last result.
         var result = new RetryResult();
         int attempts = EffectiveRetryAttempts;
 
