@@ -100,6 +100,7 @@ public class DataGridTests : AppTestBase
         // editor holds exactly the new value before the caller commits. Retry only when we can
         // positively read a wrong value; never blind-retry (that would double-type when the
         // editor value can't be read).
+        string? lastSeen = null;
         for (int attempt = 0; attempt < 3; attempt++)
         {
             ClearEditor(editor);
@@ -111,10 +112,15 @@ public class DataGridTests : AppTestBase
             }
 
             editor.SendKeys(value);
-            var actual = ReadEditorValueSettled(editor, value, timeoutMs: 1500);
-            if (actual is null || actual == value)
+            lastSeen = ReadEditorValueSettled(editor, value, timeoutMs: 1500);
+            if (lastSeen is null || lastSeen == value)
                 return; // confirmed correct, or unreadable (don't risk double-typing)
         }
+
+        // Every attempt positively read a wrong value — fail loudly here (with the last value seen)
+        // rather than letting the caller's downstream assertion time out with a confusing message.
+        throw new WinAppException(
+            $"Inline editor did not accept '{value}' after 3 clear+type attempts; last-seen value was '{lastSeen}'.");
     }
 
     /// <summary>Clear the inline editor, confirming it reads empty when the value is readable.</summary>

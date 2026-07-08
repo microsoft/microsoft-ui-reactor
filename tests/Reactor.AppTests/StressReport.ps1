@@ -74,6 +74,16 @@ function Get-InconclusiveCategory([string]$msg) {
     return 'Other'
 }
 
+# Precedence for "worst category seen" per test: Environmental/guard > Prerequisite > Other > None.
+function Get-CategoryRank([string]$cat) {
+    switch ($cat) {
+        'Environmental/guard' { 3 }
+        'Prerequisite'        { 2 }
+        'Other'               { 1 }
+        default               { 0 }
+    }
+}
+
 foreach ($t in $trxFiles) {
     try {
         $nodes = @(Select-Xml -Path $t.FullName -XPath "//*[local-name()='UnitTestResult']")
@@ -98,7 +108,7 @@ foreach ($t in $trxFiles) {
                 $cat = Get-InconclusiveCategory $msg
                 if ($cat -eq 'Environmental/guard') { $resEnvInconclusive++ }
                 # Keep the most-serious category seen for this test (Environmental > Prerequisite > Other).
-                if ($rec.Category -eq 'None' -or $cat -eq 'Environmental/guard') { $rec.Category = $cat }
+                if ((Get-CategoryRank $cat) -gt (Get-CategoryRank $rec.Category)) { $rec.Category = $cat }
                 if ([string]::IsNullOrEmpty($rec.IncMsg) -and -not [string]::IsNullOrEmpty($msg)) {
                     $rec.IncMsg = ($msg -replace '\s+', ' ').Trim()
                 }
@@ -153,7 +163,7 @@ $sb = New-Object System.Text.StringBuilder
 [void]$sb.AppendLine("")
 
 if ($leader.Count -gt 0) {
-    [void]$sb.AppendLine("### Failure leaderboard (attempt-level, retries ON)")
+    [void]$sb.AppendLine("### Failure leaderboard (attempt-level, $retriesMode)")
     [void]$sb.AppendLine("Fail% = failed / (runs - inconclusive). With ``[E2eRetry(3)]`` a listed test may still have been *healed by retry* in the suite run, so this is an early-warning signal, not necessarily a red suite.")
     [void]$sb.AppendLine("")
     [void]$sb.AppendLine("| Test | Failed | Runs | Inconclusive | Fail% |")
