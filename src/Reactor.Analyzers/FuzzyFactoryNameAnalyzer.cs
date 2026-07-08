@@ -92,6 +92,13 @@ public sealed class FuzzyFactoryNameAnalyzer : DiagnosticAnalyzer
     /// <summary>Minimum length of the mistyped name; shorter names give noisy similarity.</summary>
     internal const int MinNameLength = 4;
 
+    /// <summary>
+    /// Epsilon for tie detection between two candidate scores. Set far below the smallest gap
+    /// between two <em>distinct</em> Jaro-Winkler scores for factory-length strings, so it flags
+    /// only exact (structural) ties — it is not a similarity margin.
+    /// </summary>
+    private const double TieEpsilon = 1e-9;
+
     private const string FactoriesMetadataName = "Microsoft.UI.Reactor.Factories";
 
     private static readonly LocalizableString Title =
@@ -213,22 +220,30 @@ public sealed class FuzzyFactoryNameAnalyzer : DiagnosticAnalyzer
                 continue;
 
             var score = StringSimilarity.JaroWinkler(name, candidate);
-            if (score > bestScore)
+            if (score > bestScore + TieEpsilon)
             {
+                // A strictly better match — the new sole leader.
                 bestScore = score;
                 bestName = candidate;
                 bestCount = 1;
             }
-            else if (score == bestScore)
+            else if (score > bestScore - TieEpsilon)
             {
+                // Indistinguishable from the current best. Two factories tie only when their
+                // Jaro-Winkler scores are *identical* (e.g. `Stack` is structurally equidistant from
+                // `HStack` and `VStack`, producing bit-identical scores); distinct candidates differ
+                // by far more than TieEpsilon, so this never collapses a genuine sole winner. The
+                // epsilon exists only to avoid a float-equality footgun — the intent is exact-tie
+                // detection, NOT a similarity margin (a marginally-closer factory still wins and is
+                // suggested; see the spike calibration in spec 061 §6.1).
                 bestCount++;
             }
         }
 
         if (bestScore < SimilarityThreshold)
             return false;
-        // A tie between two equally-close factories (e.g. `Stack` vs HStack/VStack) is genuinely
-        // ambiguous — stay silent rather than guess.
+        // A tie between two equally-close factories is genuinely ambiguous — stay silent rather than
+        // guess which the author meant.
         if (bestCount != 1)
             return false;
 
