@@ -18,9 +18,10 @@
       Format-BuildMetricsComment  the sticky size-diff markdown comment.
 
     A "measurement" is a [pscustomobject] with:
-      Key    stable identifier (e.g. 'nupkg.Reactor')
-      Label  display name (e.g. 'Microsoft.UI.Reactor.nupkg')
-      Group  section header ('Packages (compressed)' | 'Assemblies (uncompressed)')
+      Key    stable identifier ('nupkg.<PkgKey>' for a package, or
+             'asm|<PkgKey>|<Dll>' for one shipped DLL inside it)
+      Label  display name (e.g. 'Microsoft.UI.Reactor.nupkg' or 'Reactor.dll')
+      Group  section header ('Packages (compressed .nupkg)' | 'Assemblies in <package>')
       Bytes  size in bytes, or $null when the artifact was not produced.
 
     Growth is the "bad" direction for every tracked artifact (smaller ships
@@ -41,44 +42,98 @@ $script:BuildMetricsCommentMarker = '<!-- reactor-build-metrics -->'
 $script:BuildMetricsNoiseFloorBytes = 64
 $script:BuildMetricsNoiseFloorPct   = 0.05
 
-# ── Trusted artifact spec ────────────────────────────────────────────────────
-# The canonical Key → { Label, Group } map. This is the SINGLE SOURCE OF TRUTH for
-# what the comment can display. The measure job runs untrusted PR code, so the
-# privileged poster must NOT trust label/group strings that come back in the
-# uploaded sizes.json — it re-maps every row through this trusted spec via
-# ConvertTo-SafeMeasurements and takes only the (validated numeric) byte counts.
-# Keys here must match those emitted by Measure-BuildMetrics.ps1.
-$script:BuildMetricsTargetSpec = @(
-    [pscustomobject]@{ Key = 'nupkg.Reactor';  Label = 'Microsoft.UI.Reactor.nupkg';          Group = 'Packages (compressed .nupkg)' }
-    [pscustomobject]@{ Key = 'asm.Reactor';    Label = 'Reactor.dll';                          Group = 'Assemblies (uncompressed)' }
-    [pscustomobject]@{ Key = 'nupkg.Advanced'; Label = 'Microsoft.UI.Reactor.Advanced.nupkg';  Group = 'Packages (compressed .nupkg)' }
-    [pscustomobject]@{ Key = 'asm.Advanced';   Label = 'Reactor.Advanced.dll';                 Group = 'Assemblies (uncompressed)' }
-    [pscustomobject]@{ Key = 'nupkg.Devtools'; Label = 'Microsoft.UI.Reactor.Devtools.nupkg';  Group = 'Packages (compressed .nupkg)' }
-    [pscustomobject]@{ Key = 'asm.Devtools';   Label = 'Microsoft.UI.Reactor.Devtools.dll';    Group = 'Assemblies (uncompressed)' }
+# ── Trusted package spec ─────────────────────────────────────────────────────
+# The canonical, ordered list of shipped packages. This is the SINGLE SOURCE OF
+# TRUTH for what the comment can display. The measure job runs untrusted PR code,
+# so the privileged poster must NOT trust label/group strings that come back in
+# the uploaded sizes.json — it re-maps every row through this spec via
+# ConvertTo-SafeMeasurements:
+#   * each package's compressed .nupkg row gets a TRUSTED PkgLabel + PackageGroup,
+#     keyed 'nupkg.<PkgKey>';
+#   * each per-DLL row (keyed 'asm|<PkgKey>|<Dll>') is accepted only when <PkgKey>
+#     is one of these known keys AND <Dll> passes a strict .dll-filename allowlist.
+# The validated DLL filename is then the ONLY artifact-derived string that ever
+# reaches the rendered markdown, and the allowlist forbids every markdown/HTML
+# meta-character, so it is always safe to emit verbatim. Byte counts are validated
+# as non-negative integers. PkgKey is alphanumeric, so it can never contain the
+# '|' delimiter used in the asm row keys. New DLLs shipped by a package appear on
+# their own — no per-DLL list is hard-coded here.
+$script:BuildMetricsPackageSpec = @(
+    [pscustomobject]@{ PkgKey = 'Reactor';  PkgLabel = 'Microsoft.UI.Reactor.nupkg';          PackageGroup = 'Packages (compressed .nupkg)'; AssemblyGroup = 'Assemblies in Microsoft.UI.Reactor' }
+    [pscustomobject]@{ PkgKey = 'Advanced'; PkgLabel = 'Microsoft.UI.Reactor.Advanced.nupkg'; PackageGroup = 'Packages (compressed .nupkg)'; AssemblyGroup = 'Assemblies in Microsoft.UI.Reactor.Advanced' }
+    [pscustomobject]@{ PkgKey = 'Devtools'; PkgLabel = 'Microsoft.UI.Reactor.Devtools.nupkg'; PackageGroup = 'Packages (compressed .nupkg)'; AssemblyGroup = 'Assemblies in Microsoft.UI.Reactor.Devtools' }
 )
 
-function Get-BuildMetricsTargetSpec {
+# Strict allowlist for the ONLY artifact-derived string allowed into the rendered
+# comment: a DLL filename. Absolutely anchored (\A ... \z, so a trailing newline
+# cannot slip past a '$' end-of-line match) and CASE-SENSITIVELY matched below via
+# -cnotmatch (so Unicode case-folding — e.g. the Kelvin sign U+212A folding to 'k'
+# — cannot smuggle a non-ASCII glyph through [A-Za-z]). Limited to characters that
+# cannot carry markdown/HTML meaning (no backtick, pipe, angle bracket, bracket,
+# space, or newline), so a validated filename is always safe to drop verbatim into
+# a table cell. A name that fails this is dropped (never rendered).
+$script:BuildMetricsDllNameRegex = '\A[A-Za-z0-9._+-]+\.dll\z'
+
+# Defense-in-depth cap: the per-DLL rows come from the untrusted sizes.json a PR
+# build produced, and a malicious PR could edit the measure script to emit
+# thousands of validly-shaped 'asm|<PkgKey>|<name>.dll' keys, bloating the
+# rendered comment (or blowing past GitHub's comment-size limit and failing the
+# privileged poster). Real packages ship a handful of DLLs, so we hard-cap how
+# many per-DLL rows any single package may contribute. Rows are sorted by
+# filename BEFORE the cap is applied, so the selection is deterministic (the
+# lexicographically smallest names win) and can't be steered by row ordering.
+$script:BuildMetricsMaxDllRowsPerPackage = 32
+
+function Get-BuildMetricsPackageSpec {
     <#
     .SYNOPSIS
-        The trusted, ordered Key → { Label, Group } spec for the tracked artifacts.
+        The trusted, ordered package spec (PkgKey → PkgLabel / PackageGroup /
+        AssemblyGroup) for the tracked NuGet packages.
     #>
-    return $script:BuildMetricsTargetSpec
+    return $script:BuildMetricsPackageSpec
+}
+
+function ConvertTo-SafeBytes {
+    <#
+    .SYNOPSIS
+        Return $Value as a non-negative [long], or $null when it is missing,
+        non-integer, negative, or otherwise not a plain integer (e.g. '1.5',
+        '1e9', 'not-a-number'). The sole gate for artifact-supplied byte counts.
+    #>
+    param([AllowNull()]$Value)
+    if ($null -eq $Value) { return $null }
+    $parsed = [long]0
+    if ([long]::TryParse([string]$Value, [ref]$parsed) -and $parsed -ge 0) {
+        return $parsed
+    }
+    return $null
 }
 
 function ConvertTo-SafeMeasurements {
     <#
     .SYNOPSIS
         Project raw (untrusted) measurement objects — e.g. parsed from a sizes.json
-        an unprivileged PR job produced — onto the trusted target spec.
+        an unprivileged PR job produced — onto the trusted package spec.
 
     .DESCRIPTION
         Security boundary for the privileged poster: never render label/group text
-        that came from the artifact. For each entry in the trusted spec this looks
-        up the raw row by Key, accepts its Bytes ONLY if it is a non-negative
-        integer, and emits a measurement carrying the TRUSTED Label/Group. Unknown
-        keys in the raw input are dropped; a missing/garbage/negative Bytes becomes
-        $null (rendered as n/a). The output is therefore fully determined by trusted
-        code plus a handful of validated integers.
+        that came from the artifact.
+
+        (a) For each trusted package, emit the compressed-.nupkg row (key
+            'nupkg.<PkgKey>') carrying the TRUSTED PkgLabel + PackageGroup and a
+            byte count accepted ONLY when it is a non-negative integer.
+
+        (b) For each raw row keyed 'asm|<PkgKey>|<Dll>' where <PkgKey> is a KNOWN
+            package and <Dll> passes the strict .dll allowlist, emit a per-DLL row
+            using the validated <Dll> filename as the display Label and the
+            package's TRUSTED AssemblyGroup as the Group. Rows are sorted by Label
+            for deterministic output and then hard-capped per package
+            ($BuildMetricsMaxDllRowsPerPackage) so a malicious PR cannot flood the
+            comment with unboundedly many rows. Unknown keys, malformed keys, and
+            filenames that fail the allowlist are dropped.
+
+        The output is therefore fully determined by trusted code plus a set of
+        validated integers and allowlisted DLL filenames.
     #>
     param([AllowNull()]$RawMeasurements)
 
@@ -92,19 +147,42 @@ function ConvertTo-SafeMeasurements {
     }
 
     $out = [System.Collections.Generic.List[object]]::new()
-    foreach ($t in $script:BuildMetricsTargetSpec) {
+
+    # (a) One compressed-.nupkg row per trusted package, in spec order — so the
+    # single "Packages (compressed .nupkg)" section renders first.
+    foreach ($p in $script:BuildMetricsPackageSpec) {
+        $key = 'nupkg.' + $p.PkgKey
         $bytes = $null
-        if ($rawByKey.ContainsKey($t.Key)) {
-            $raw = $rawByKey[$t.Key]
-            if ($raw.PSObject.Properties['Bytes'] -and $null -ne $raw.Bytes) {
-                $parsed = [long]0
-                if ([long]::TryParse([string]$raw.Bytes, [ref]$parsed) -and $parsed -ge 0) {
-                    $bytes = $parsed
-                }
-            }
+        if ($rawByKey.ContainsKey($key)) {
+            $raw = $rawByKey[$key]
+            if ($raw.PSObject.Properties['Bytes']) { $bytes = ConvertTo-SafeBytes $raw.Bytes }
         }
-        $out.Add([pscustomobject]@{ Key = $t.Key; Label = $t.Label; Group = $t.Group; Bytes = $bytes })
+        $out.Add([pscustomobject]@{ Key = $key; Label = $p.PkgLabel; Group = $p.PackageGroup; Bytes = $bytes })
     }
+
+    # (b) Per-DLL rows, grouped by package (spec order), sorted by validated
+    # filename within each package.
+    foreach ($p in $script:BuildMetricsPackageSpec) {
+        $rows = [System.Collections.Generic.List[object]]::new()
+        foreach ($rawKey in $rawByKey.Keys) {
+            $parts = ([string]$rawKey).Split('|')
+            if ($parts.Count -ne 3) { continue }
+            if ($parts[0] -ne 'asm') { continue }
+            if ($parts[1] -ne $p.PkgKey) { continue }
+            $name = $parts[2]
+            if ($name -cnotmatch $script:BuildMetricsDllNameRegex) { continue }
+            $raw = $rawByKey[$rawKey]
+            $bytes = $null
+            if ($raw.PSObject.Properties['Bytes']) { $bytes = ConvertTo-SafeBytes $raw.Bytes }
+            $rows.Add([pscustomobject]@{ Key = $rawKey; Label = $name; Group = $p.AssemblyGroup; Bytes = $bytes })
+        }
+        # Sort by validated filename first, THEN cap, so the kept subset is
+        # deterministic and independent of artifact row ordering.
+        $sorted = @($rows | Sort-Object Label)
+        $limit = [Math]::Min($sorted.Count, $script:BuildMetricsMaxDllRowsPerPackage)
+        for ($i = 0; $i -lt $limit; $i++) { $out.Add($sorted[$i]) }
+    }
+
     return $out
 }
 

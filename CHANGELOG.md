@@ -233,8 +233,9 @@ Conventions for contributors:
   CS0103 / CS0117 / CS1503 / CS7036), Tier-3 precision rules anchored on
   Roslyn `ISymbol` binding (`GridSizeFactoryParensRule`,
   `GridSizePxRenameRule`, `TextBlockStyleHintRule`,
-  `ThemeBackgroundSuffixRule`, `AlignmentShortcutRule`,
-  `ButtonOnClickFactoryMoveRule`). Workflow modes: default iteration mode
+  `ThemeBackgroundSuffixRule`, `ThemeRawResourceKeyRule`,
+  `ButtonOnClickFactoryMoveRule`).
+  Workflow modes: default iteration mode
   suppresses cosmetic noise; `mur check --final` is an optional pre-merge
   sweep; `--strict`, `--quiet`, and `mur check -- <msbuild-args>`
   passthrough also supported. `--trace <path>` writes JSONL diagnostic

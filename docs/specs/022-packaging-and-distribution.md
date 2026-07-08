@@ -434,7 +434,7 @@ Consumer gets: framework, analyzers, source generator, and WinUI SDK (transitive
 - **Internal feed ownership.** Which Azure Artifacts organization hosts the P1 feed? Creating one takes ~a day plus approvals.
 - **Signing prerequisite for P1.** Does the chosen internal feed enforce signed packages? If yes, P1 needs ESRP too, not just P2.
 - **Package ID.** `Microsoft.UI.Reactor` assumes we stay in the `Microsoft.UI.*` namespace (see spec 018 for the namespace rename). If that namespace decision changes, the package ID follows.
-- **WinUI SDK version.** We currently pin `Microsoft.WindowsAppSDK` 2.0.1. Consumers who want a different WinUI version will conflict. Decide: float this transitively, or lock it and force consumers to match.
+- **WinUI SDK version.** The right Windows App SDK package is injected centrally per project shape (`Directory.Build.targets`): framework-dependent libraries — including the shipped `Microsoft.UI.Reactor` — reference `Microsoft.WindowsAppSDK.WinUI` (pinned via `WindowsAppSDKWinUIVersion`), so the published package flows only WinUI to consumers rather than the full metapackage (AI/ML/Widgets/DWrite); framework-dependent apps additionally reference `Microsoft.WindowsAppSDK.Runtime`; self-contained/MSIX projects keep the `Microsoft.WindowsAppSDK` metapackage (`WindowsAppSDKVersion`). Consumers who want a different WinUI version can reference their own `Microsoft.WindowsAppSDK*` version — NuGet unifies it transitively with the library's.
 - **`mur` install-script trust boundary.** `iwr | iex` from GitHub Releases works for P1 but will concern P3 users. Document the signed-binary fallback (direct download + verify signature) before public launch.
 
 ## 14. Implementation Phases

@@ -6,12 +6,15 @@
 .DESCRIPTION
     Runs `dotnet pack -c Release` for each tracked package, then measures:
       * the compressed .nupkg (what a consumer downloads), and
-      * the primary uncompressed assembly inside it (lib/<tfm>/<Assembly>.dll —
-        the real "did our code grow" signal).
+      * every uncompressed DLL shipped inside it (all lib/<tfm>/*.dll and
+        analyzers/**/*.dll, excluding satellite *.resources.dll) — the real "did
+        our code grow" signal. New DLLs appear automatically; nothing is
+        hard-coded per package.
 
     The output JSON is an array of measurement objects consumed by
     BuildMetricsLib.ps1's Format-BuildMetricsComment:
       { "Key": "...", "Label": "...", "Group": "...", "Bytes": <int|null> }
+    with keys 'nupkg.<PkgKey>' for a package and 'asm|<PkgKey>|<Dll>' per DLL.
 
     A fixed -PackageVersion is used for both sides (the PR's base branch and head)
     so the version string embedded in the .nuspec is identical and never
@@ -76,37 +79,35 @@ New-Item -ItemType Directory -Force -Path $packFull | Out-Null
 $PackOutput = $packFull
 
 # ── Tracked packages ─────────────────────────────────────────────────────────
-# Keys are stable identifiers (NOT filenames — the .nupkg carries a version), so
-# base and head rows line up even when their MinVer versions differ. Advanced +
+# PkgKey is a stable, alphanumeric identifier (NOT a filename — the .nupkg carries
+# a version), so base and head rows line up even when their MinVer versions differ
+# and so it can never contain the '|' delimiter used in per-DLL row keys. Advanced +
 # Devtools pack from their AnyCPU output (mirrors release.yml), which the standalone
 # `dotnet pack` produces by default; passing it explicitly keeps parity if the
-# csproj default ever changes.
+# csproj default ever changes. Every shipped DLL inside each package is enumerated
+# automatically (see Get-NupkgAssemblies), so no per-assembly list lives here.
 $targets = @(
     [pscustomobject]@{
-        PkgKey = 'nupkg.Reactor'; PkgLabel = 'Microsoft.UI.Reactor.nupkg'
-        AsmKey = 'asm.Reactor';   AsmLabel = 'Reactor.dll'
+        PkgKey = 'Reactor'; PkgLabel = 'Microsoft.UI.Reactor.nupkg'
         Project = 'src/Reactor/Reactor.csproj'
-        PackageId = 'Microsoft.UI.Reactor'; AssemblyFile = 'Reactor.dll'
+        PackageId = 'Microsoft.UI.Reactor'
         ExtraArgs = @()
     }
     [pscustomobject]@{
-        PkgKey = 'nupkg.Advanced'; PkgLabel = 'Microsoft.UI.Reactor.Advanced.nupkg'
-        AsmKey = 'asm.Advanced';   AsmLabel = 'Reactor.Advanced.dll'
+        PkgKey = 'Advanced'; PkgLabel = 'Microsoft.UI.Reactor.Advanced.nupkg'
         Project = 'src/Reactor.Advanced/Reactor.Advanced.csproj'
-        PackageId = 'Microsoft.UI.Reactor.Advanced'; AssemblyFile = 'Reactor.Advanced.dll'
+        PackageId = 'Microsoft.UI.Reactor.Advanced'
         ExtraArgs = @('-p:Platform=AnyCPU')
     }
     [pscustomobject]@{
-        PkgKey = 'nupkg.Devtools'; PkgLabel = 'Microsoft.UI.Reactor.Devtools.nupkg'
-        AsmKey = 'asm.Devtools';   AsmLabel = 'Microsoft.UI.Reactor.Devtools.dll'
+        PkgKey = 'Devtools'; PkgLabel = 'Microsoft.UI.Reactor.Devtools.nupkg'
         Project = 'src/Reactor.Devtools/Reactor.Devtools.csproj'
-        PackageId = 'Microsoft.UI.Reactor.Devtools'; AssemblyFile = 'Microsoft.UI.Reactor.Devtools.dll'
+        PackageId = 'Microsoft.UI.Reactor.Devtools'
         ExtraArgs = @('-p:Platform=AnyCPU')
     }
 )
 
-$packageGroup  = 'Packages (compressed .nupkg)'
-$assemblyGroup = 'Assemblies (uncompressed)'
+$packageGroup = 'Packages (compressed .nupkg)'
 
 function Select-LatestNupkg {
     <#
@@ -126,27 +127,41 @@ function Select-LatestNupkg {
         Select-Object -First 1
 }
 
-function Get-NupkgAssemblyBytes {
+function Get-NupkgAssemblies {
     <#
     .SYNOPSIS
-        Uncompressed size of the largest lib/<tfm>/<AssemblyFile> entry in a
-        .nupkg, without extracting it. $null if the archive has no such entry.
+        Enumerate every shipped DLL in a .nupkg — one entry per assembly basename —
+        without extracting the archive. Returns objects { Name; Bytes }.
+    .DESCRIPTION
+        Includes every zip entry whose forward-slash path matches
+        ^(lib|analyzers)/.+\.dll$ — the framework assemblies under lib/<tfm>/ and
+        the analyzer / source-generator DLLs shipped under analyzers/dotnet/cs/ —
+        while EXCLUDING satellite resource assemblies (*.resources.dll). When the
+        same basename appears under multiple TFMs the largest uncompressed length
+        is reported. Returns an empty array if the archive has no such entries or
+        cannot be read.
     #>
-    param([string]$NupkgPath, [string]$AssemblyFile)
+    param([string]$NupkgPath)
     $zip = $null
     try {
         $zip = [System.IO.Compression.ZipFile]::OpenRead($NupkgPath)
-        $best = $null
+        $bySize = @{}
         foreach ($entry in $zip.Entries) {
-            # NuGet lib assets: lib/<tfm>/<file>. FullName uses forward slashes.
-            if ($entry.FullName -match ('^lib/[^/]+/' + [regex]::Escape($AssemblyFile) + '$')) {
-                if ($null -eq $best -or $entry.Length -gt $best) { $best = $entry.Length }
+            # NuGet asset paths use forward slashes regardless of OS.
+            if ($entry.FullName -notmatch '^(lib|analyzers)/.+\.dll$') { continue }
+            if ($entry.FullName -match '\.resources\.dll$') { continue }
+            $name = [System.IO.Path]::GetFileName($entry.FullName)
+            if (-not $bySize.ContainsKey($name) -or $entry.Length -gt $bySize[$name]) {
+                $bySize[$name] = $entry.Length
             }
         }
-        return $best
+        $result = foreach ($name in $bySize.Keys) {
+            [pscustomobject]@{ Name = $name; Bytes = $bySize[$name] }
+        }
+        return @($result)
     } catch {
-        Write-Warning "Failed to read '$AssemblyFile' from ${NupkgPath}: $($_.Exception.Message)"
-        return $null
+        Write-Warning "Failed to enumerate assemblies from ${NupkgPath}: $($_.Exception.Message)"
+        return @()
     } finally {
         if ($zip) { $zip.Dispose() }
     }
@@ -161,7 +176,7 @@ foreach ($t in $targets) {
     Write-Host "==> Packing $($t.PackageId) ($($t.Project))"
 
     $nupkgBytes = $null
-    $asmBytes = $null
+    $assemblies = @()
 
     if (-not (Test-Path -LiteralPath $projPath)) {
         Write-Warning "Project not found: $projPath — emitting n/a for $($t.PackageId)."
@@ -181,16 +196,27 @@ foreach ($t in $targets) {
             $nupkg = Select-LatestNupkg -PackOutput $PackOutput -PackageId $t.PackageId
             if ($nupkg) {
                 $nupkgBytes = $nupkg.Length
-                $asmBytes = Get-NupkgAssemblyBytes -NupkgPath $nupkg.FullName -AssemblyFile $t.AssemblyFile
-                Write-Host "    $($nupkg.Name): nupkg=$nupkgBytes B, $($t.AssemblyFile)=$asmBytes B"
+                $assemblies = Get-NupkgAssemblies -NupkgPath $nupkg.FullName
+                Write-Host "    $($nupkg.Name): nupkg=$nupkgBytes B, $(@($assemblies).Count) DLL(s)"
+                foreach ($asm in ($assemblies | Sort-Object Name)) {
+                    Write-Host "      $($asm.Name) = $($asm.Bytes) B"
+                }
             } else {
                 Write-Warning "No .nupkg matching '$($t.PackageId).<version>.nupkg' in $PackOutput."
             }
         }
     }
 
-    $measurements.Add([pscustomobject]@{ Key = $t.PkgKey; Label = $t.PkgLabel; Group = $packageGroup;  Bytes = $nupkgBytes })
-    $measurements.Add([pscustomobject]@{ Key = $t.AsmKey; Label = $t.AsmLabel; Group = $assemblyGroup; Bytes = $asmBytes })
+    # Compressed package row.
+    $measurements.Add([pscustomobject]@{ Key = "nupkg.$($t.PkgKey)"; Label = $t.PkgLabel; Group = $packageGroup; Bytes = $nupkgBytes })
+
+    # One row per shipped DLL, keyed 'asm|<PkgKey>|<Dll>'. The Group here is
+    # informational (the trusted poster re-derives it from the package spec via
+    # ConvertTo-SafeMeasurements); it makes local, direct renders group per package.
+    $assemblyGroup = "Assemblies in $($t.PackageId)"
+    foreach ($asm in @($assemblies)) {
+        $measurements.Add([pscustomobject]@{ Key = "asm|$($t.PkgKey)|$($asm.Name)"; Label = $asm.Name; Group = $assemblyGroup; Bytes = $asm.Bytes })
+    }
 }
 
 # Depth 5 is plenty for the flat measurement objects; force an array shape even

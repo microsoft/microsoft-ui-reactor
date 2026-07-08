@@ -44,10 +44,16 @@ XAML runtime), `WindowsPackageType=None` (no MSIX wrapper —
 builds reject the AnyCPU default — the template orders x64 first so
 unqualified `dotnet build` picks the right default on x64 dev
 machines, with ARM64 second for Snapdragon X). The
+[`Microsoft.WindowsAppSDK.WinUI`](https://www.nuget.org/packages/Microsoft.WindowsAppSDK.WinUI)
+sub-package brings the WinUI 3 SDK — reference assemblies plus the MSBuild
+build/props/targets — while the native WinUI runtime is supplied by the
+machine-wide Windows App Runtime install (or bundled into the publish output
+when `WindowsAppSDKSelfContained=true`). The scaffolded template instead
+pins the full
 [`Microsoft.WindowsAppSDK`](https://www.nuget.org/packages/Microsoft.WindowsAppSDK)
-package reference pulls the WinUI runtime; the `WindowsAppSDKVersion`
-property comes from `Directory.Build.props` so every project in the
-repo pins the same SDK build.
+metapackage (see below); inside this repo the correct reference is injected
+centrally from `Directory.Build.targets` and versioned by
+`WindowsAppSDKWinUIVersion` / `WindowsAppSDKVersion` in `Directory.Build.props`.
 
 `WindowsAppSDKSelfContained=true` is the other load-bearing piece —
 it bundles the WinUI runtime alongside the published exe so the app

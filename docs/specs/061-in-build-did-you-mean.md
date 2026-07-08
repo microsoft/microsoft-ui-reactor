@@ -149,9 +149,8 @@ DSL**: `Microsoft.UI.Reactor.ElementExtensions` now defines `.HorizontalAlignmen
 `e38b57c2`, PR #319 — *"reduce reactor-dev agent build-attempt fix-loops"*). Those calls now **bind**,
 so no CS1061 occurs and there is nothing to augment; an in-build analyzer here would be dead code and
 could even mis-fire on a wrong-argument call to the real modifier (overload-resolution failure, not a
-missing member). The mirrored `mur check` `AlignmentShortcutRule` is obsolete for the same reason —
-its fixture stubs omit the aliases, masking it. **Follow-up: retire `AlignmentShortcutRule`** when the
-CLI-rule change budget allows.
+missing member). The mirrored `mur check` `AlignmentShortcutRule` was obsolete for the same reason —
+its fixture stubs omit the aliases, masking it — and has since been **removed as dead code** (PR #831).
 
 **Shared-engine decision (deferred).** The analyzer keeps its small vocabulary map **local** rather
 than sharing the CLI's match engine. Extracting `StringSimilarity` / `FactoryIndex` out of
@@ -174,10 +173,13 @@ Follow-up analyzers, each reusing the shared match engine and gated to Reactor s
 1. **Unresolved member** (CS1061/CS0117 shapes) — receiver type resolves, member unresolved →
    fuzzy-match against the receiver's members. The one deterministic vocabulary member still live in
    this family — `Theme.AppBackground` → `Theme.SolidBackground` — shipped in Phase 2 (§6) as a
-   dedicated non-fuzzy analyzer; the alignment member (`.VerticalAlignment` → `.VAlign`) is now a
-   no-op because the DSL added real aliases (§6). The remaining fuzzy members (`GridSize.Pixel` →
-   `.Px`, `TextBlock.Style` → modifier chain, `Button.OnClick` → `onClick:`) await the shared match
-   engine.
+   dedicated non-fuzzy analyzer; the remaining fuzzy members (`GridSize.Pixel` → `.Px`,
+   `TextBlock.Style` → modifier chain, `Button.OnClick` → `onClick:`) await the shared match engine.
+   *(The `.VerticalAlignment` / `.HorizontalAlignment` → `.VAlign` / `.HAlign` case that originally
+   motivated this shape is now resolved at the API level: `ElementExtensions` ships real long-form
+   `.HorizontalAlignment(...)` / `.VerticalAlignment(...)` aliases, so those calls bind and raise no
+   diagnostic. The corresponding `mur check` `AlignmentShortcutRule` has been removed as dead code —
+   see §6.)*
 2. **Unresolved name** (CS0103 shape) — fuzzy-match against the factory index.
 3. **Argument shape** (CS1503/CS7036) — `CandidateReason == OverloadResolutionFailure` +
    `ClassifyConversion`; lower priority (rare in corpus), IDE code-fix first (Roslynator ships

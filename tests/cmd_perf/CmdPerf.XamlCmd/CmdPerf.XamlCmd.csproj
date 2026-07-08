@@ -12,10 +12,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\CmdPerf.Shared\CmdPerf.Shared.csproj" />
   </ItemGroup>
 

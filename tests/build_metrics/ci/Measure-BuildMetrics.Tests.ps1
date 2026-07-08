@@ -2,7 +2,7 @@
 .SYNOPSIS
     Dependency-free unit tests for the testable helpers in Measure-BuildMetrics.ps1
     (the build-metrics pack/measure orchestrator): Select-LatestNupkg (package
-    selection) and Get-NupkgAssemblyBytes (ZIP assembly-size extraction).
+    selection) and Get-NupkgAssemblies (ZIP shipped-DLL enumeration).
 
 .DESCRIPTION
     Measure-BuildMetrics.ps1 isn't dot-sourceable (it has a param block + a main
@@ -36,6 +36,11 @@ function Assert-Null {
     if ($null -eq $Actual) { $script:Pass++ }
     else { $script:Fail++; $script:Failures.Add("$Message`n    expected: <null>`n    actual:   [$Actual]") }
 }
+function Assert-True {
+    param([bool]$Condition, [string]$Message)
+    if ($Condition) { $script:Pass++ }
+    else { $script:Fail++; $script:Failures.Add($Message) }
+}
 
 # --- Extract the functions under test from the orchestrator script via AST. ---
 $scriptPath = Join-Path $PSScriptRoot 'Measure-BuildMetrics.ps1'
@@ -54,7 +59,7 @@ function Get-Func([string]$name) {
     $f.Extent.Text
 }
 Invoke-Expression (Get-Func 'Select-LatestNupkg')
-Invoke-Expression (Get-Func 'Get-NupkgAssemblyBytes')
+Invoke-Expression (Get-Func 'Get-NupkgAssemblies')
 
 # --- Test scratch dir + helpers to synthesize .nupkg ZIPs. ---
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ("bm-measure-tests-" + [Guid]::NewGuid().ToString('N'))
@@ -80,34 +85,48 @@ function New-Nupkg {
 }
 
 try {
-    # ── Get-NupkgAssemblyBytes ────────────────────────────────────────────────
-    # Largest lib/<tfm>/Reactor.dll wins; ref/ and non-lib entries are ignored.
-    $multi = Join-Path $tmp 'multi.nupkg'
-    New-Nupkg -Path $multi -Entries ([ordered]@{
-        'lib/net8.0/Reactor.dll'                     = 3000
-        'lib/net10.0-windows10.0.22621.0/Reactor.dll' = 5000
-        'ref/net10.0/Reactor.dll'                    = 9999   # not under lib/ -> ignored
-        '[Content_Types].xml'                        = 200
+    # ── Get-NupkgAssemblies ───────────────────────────────────────────────────
+    # Enumerate EVERY shipped DLL: lib/<tfm>/*.dll AND analyzers/**/*.dll, one row
+    # per basename (largest length wins across TFMs), excluding satellite
+    # *.resources.dll and any non-DLL file.
+    $pkg = Join-Path $tmp 'all-dlls.nupkg'
+    New-Nupkg -Path $pkg -Entries ([ordered]@{
+        'lib/net8.0/A.dll'                            = 3000    # same basename, smaller TFM
+        'lib/net10.0-windows10.0.22621.0/A.dll'       = 5000    # largest -> wins
+        'analyzers/dotnet/cs/B.dll'                   = 296000  # analyzers/ DLL included
+        'lib/net10.0-windows10.0.22621.0/C.resources.dll' = 999 # satellite -> excluded
+        'lib/net10.0-windows10.0.22621.0/D.dll'       = 100     # a second, distinct lib DLL
+        '[Content_Types].xml'                         = 200     # non-DLL -> excluded
+        'docs/readme.md'                              = 10      # non-DLL -> excluded
     })
-    Assert-Equal 5000 (Get-NupkgAssemblyBytes -NupkgPath $multi -AssemblyFile 'Reactor.dll') 'largest lib/<tfm> assembly wins; ref/ ignored'
+    $asms = @(Get-NupkgAssemblies -NupkgPath $pkg)
+    $byName = @{}; foreach ($a in $asms) { $byName[$a.Name] = $a.Bytes }
+    Assert-Equal 3 $asms.Count 'enumerates A.dll, B.dll, D.dll (satellite + non-DLL excluded)'
+    Assert-Equal 5000 $byName['A.dll'] 'largest lib/<tfm> length wins for a shared basename'
+    Assert-Equal 296000 $byName['B.dll'] 'analyzers/ DLL is enumerated'
+    Assert-Equal 100 $byName['D.dll'] 'a second distinct lib DLL is enumerated'
+    Assert-True (-not $byName.ContainsKey('C.resources.dll')) 'satellite *.resources.dll excluded'
 
-    # A single-TFM package returns that entry's uncompressed length.
+    # A single-TFM, single-DLL package returns exactly that entry's length.
     $single = Join-Path $tmp 'single.nupkg'
     New-Nupkg -Path $single -Entries ([ordered]@{ 'lib/net10.0/Reactor.Advanced.dll' = 33792 })
-    Assert-Equal 33792 (Get-NupkgAssemblyBytes -NupkgPath $single -AssemblyFile 'Reactor.Advanced.dll') 'single-TFM assembly size'
+    $singleAsms = @(Get-NupkgAssemblies -NupkgPath $single)
+    Assert-Equal 1 $singleAsms.Count 'single-DLL package -> one row'
+    Assert-Equal 'Reactor.Advanced.dll' $singleAsms[0].Name 'single-DLL package -> correct name'
+    Assert-Equal 33792 $singleAsms[0].Bytes 'single-TFM assembly size'
 
-    # No matching assembly -> null.
+    # No shipped DLLs -> empty array.
     $noAsm = Join-Path $tmp 'noasm.nupkg'
-    New-Nupkg -Path $noAsm -Entries ([ordered]@{ 'lib/net10.0/Other.dll' = 1234; 'readme.md' = 10 })
-    Assert-Null (Get-NupkgAssemblyBytes -NupkgPath $noAsm -AssemblyFile 'Reactor.dll') 'no matching lib assembly -> null'
+    New-Nupkg -Path $noAsm -Entries ([ordered]@{ 'ref/net10.0/Only.dll' = 1234; 'readme.md' = 10 })
+    Assert-Equal 0 (@(Get-NupkgAssemblies -NupkgPath $noAsm)).Count 'no lib/ or analyzers/ DLL -> empty'
 
-    # Corrupt / non-ZIP file -> null (the try/catch swallows the open failure).
+    # Corrupt / non-ZIP file -> empty (the try/catch swallows the open failure).
     $corrupt = Join-Path $tmp 'corrupt.nupkg'
     Set-Content -LiteralPath $corrupt -Value 'this is not a zip' -Encoding ascii
-    Assert-Null (Get-NupkgAssemblyBytes -NupkgPath $corrupt -AssemblyFile 'Reactor.dll' -WarningAction SilentlyContinue) 'corrupt archive -> null'
+    Assert-Equal 0 (@(Get-NupkgAssemblies -NupkgPath $corrupt -WarningAction SilentlyContinue)).Count 'corrupt archive -> empty'
 
-    # Missing file -> null.
-    Assert-Null (Get-NupkgAssemblyBytes -NupkgPath (Join-Path $tmp 'nope.nupkg') -AssemblyFile 'Reactor.dll' -WarningAction SilentlyContinue) 'missing file -> null'
+    # Missing file -> empty.
+    Assert-Equal 0 (@(Get-NupkgAssemblies -NupkgPath (Join-Path $tmp 'nope.nupkg') -WarningAction SilentlyContinue)).Count 'missing file -> empty'
 
     # ── Select-LatestNupkg ────────────────────────────────────────────────────
     $pkgDir = Join-Path $tmp 'pkgs'
