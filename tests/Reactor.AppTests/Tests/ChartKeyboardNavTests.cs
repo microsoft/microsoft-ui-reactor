@@ -32,10 +32,12 @@ public class ChartKeyboardNavTests : AppTestBase
 
     /// <summary>
     /// Focus the interactive chart, confirm the keyboard pipeline is live (Enter on the focused
-    /// point invokes it), then drive the full key vocabulary: point/series navigation,
-    /// Home/End (+Ctrl), zoom (+/- , Ctrl+= , Ctrl+- , Ctrl+0), legend (L), summary (S),
+    /// point invokes it), drive the full key vocabulary for line coverage — point/series
+    /// navigation, Home/End (+Ctrl), zoom (+/- , Ctrl+= , Ctrl+- , Ctrl+0), legend (L), summary (S),
     /// alternate view (T), help (F1), brush (Shift+←/→), pan (Alt+arrows), invoke (Space) and
-    /// deactivate (Esc). This reaches every top-level HandleKeyDown arm; the legend-focused
+    /// deactivate (Esc) — then behaviorally assert every arm whose effect the fixture can observe
+    /// (see <see cref="AssertObservablePointArms"/>). This reaches every top-level HandleKeyDown
+    /// arm; the legend-focused
     /// Enter/Space/Esc sub-branches need a legend the fixture doesn't enable.
     /// </summary>
     // [E2eRetry] mops up the rare unattended-desktop input-injection flake (Win32 SendInput is
@@ -58,26 +60,23 @@ public class ChartKeyboardNavTests : AppTestBase
                 $"(status never became 'invoked:'; last-seen '{App.GetValue(StatusId)}').");
         }
 
-        // 2. Drive the full key vocabulary — every top-level HandleKeyDown arm (the legend-focused
-        //    Enter/Space/Esc sub-branches need a legend this fixture doesn't enable). Re-focus
-        //    before every key so each arm reaches the handler even when the focus-overlay re-render
-        //    (bare Canvas -> Canvas+overlay Grid) drops keyboard focus.
+        // 2. Line-coverage pass: drive EVERY top-level HandleKeyDown arm once — including the arms
+        //    whose option handlers the DSL leaves null (zoom / pan / brush / legend / summary /
+        //    help), the series-switch arms, and Escape, whose effects this fixture's
+        //    point-index-only status cannot observe. This is a COVERAGE drive, not a behavioral
+        //    assertion; the per-arm behavioral proof is step 3. Re-focus before every key so each
+        //    arm reaches the handler even when the focus-overlay re-render (bare Canvas ->
+        //    Canvas+overlay Grid) drops keyboard focus.
         DriveFullKeyboardVocabulary();
 
-        // 3. Non-vacuous behavioral proof that navigation + invoke actually reach the handler
-        //    AFTER the whole vocabulary — a check the earlier liveness invoke ("invoked:0")
-        //    cannot satisfy on its own. Home resets PointIndex to 0, three Rights advance it to
-        //    3, and Enter invokes the current point, so the status must become exactly
-        //    "invoked:3". SampleLine has 10 points and the FocusState persists in the fixture's
-        //    Component state, so the index is deterministic. If focus were lost during the
-        //    vocabulary (leaving a stale status), this fresh, distinct signal would not appear
-        //    and the wait would fail — which is the point.
-        PressOnChart(InputInjector.VkHome);
-        PressOnChart(InputInjector.VkRight);
-        PressOnChart(InputInjector.VkRight);
-        PressOnChart(InputInjector.VkRight);
-        PressOnChart(InputInjector.VkEnter);
-        WaitForTextContaining(StatusId, "invoked:3");
+        // 3. Non-vacuous behavioral proof for every arm whose effect the fixture CAN observe: each
+        //    key that moves the focused point index (Home, Right, Left, End, Ctrl+Home, Ctrl+End,
+        //    and the Shift+arrow brush keys, which also move PointIndex) plus the two invoke keys
+        //    (Enter, Space). Each assertion there fails if the arm it targets is deleted or no-op'd.
+        //    (Series-switch Up/Down, the null-handler zoom/pan/brush-callback/legend/summary/help
+        //    arms, and Escape's focus-deactivate produce no point-index change this fixture
+        //    surfaces, so they stay covered-only by step 2 — not behaviorally asserted.)
+        AssertObservablePointArms();
 
         Assert.IsTrue(App.Exists(StatusId), "Chart keyboard fixture should still be present (no crash).");
     }
@@ -171,9 +170,13 @@ public class ChartKeyboardNavTests : AppTestBase
     }
 
     /// <summary>
-    /// Inject the whole keyboard vocabulary understood by <c>ChartKeyboardNavigator.HandleKeyDown</c>.
-    /// Each key is preceded by a re-focus so it reaches the handler regardless of the overlay
-    /// re-render dropping focus.
+    /// Line-coverage drive of the whole keyboard vocabulary understood by
+    /// <c>ChartKeyboardNavigator.HandleKeyDown</c> — every top-level switch arm, including the ones
+    /// this fixture cannot observe (null-handler zoom / pan / brush-callback / legend / summary /
+    /// help, series-switch Up/Down, and Escape). This asserts nothing on its own; behavioral
+    /// validation of the observable arms lives in <see cref="AssertObservablePointArms"/>. Each key
+    /// is preceded by a re-focus so it reaches the handler regardless of the overlay re-render
+    /// dropping focus.
     /// </summary>
     private void DriveFullKeyboardVocabulary()
     {
@@ -223,6 +226,68 @@ public class ChartKeyboardNavTests : AppTestBase
         // Space : invoke the focused point again. Escape : deactivate the focus indicator.
         PressOnChart(InputInjector.VkSpace);
         PressOnChart(InputInjector.VkEscape);
+    }
+
+    /// <summary>
+    /// Behavioral proof for every HandleKeyDown arm whose effect this fixture can observe: each key
+    /// that moves the focused point index — Home, Right, Left, End, Ctrl+Home, Ctrl+End, and the
+    /// Shift+arrow brush keys (which also move <c>PointIndex</c>) — plus the two invoke keys (Enter,
+    /// Space). Each step navigates from a known position and invokes, asserting the EXACT resulting
+    /// point index, so the assertion fails if that arm is deleted or made a no-op (the anti-vacuous
+    /// contract). Consecutive target indices are always distinct, so every assertion observes a real
+    /// state transition rather than a stale status. SampleLine has 10 points, the FocusState persists
+    /// in the fixture Component, and a non-shift move resets any prior brush selection, so every
+    /// index below is deterministic.
+    /// </summary>
+    private void AssertObservablePointArms()
+    {
+        // Home -> point 0, then Enter invokes: proves the Home and Enter arms.
+        PressOnChart(InputInjector.VkHome);
+        PressOnChart(InputInjector.VkEnter);
+        WaitForTextContaining(StatusId, "invoked:0");
+
+        // Right x3 -> point 3: proves Right advances the focused point.
+        PressOnChart(InputInjector.VkRight);
+        PressOnChart(InputInjector.VkRight);
+        PressOnChart(InputInjector.VkRight);
+        PressOnChart(InputInjector.VkEnter);
+        WaitForTextContaining(StatusId, "invoked:3");
+
+        // Left -> point 2: proves Left retreats the focused point.
+        PressOnChart(InputInjector.VkLeft);
+        PressOnChart(InputInjector.VkEnter);
+        WaitForTextContaining(StatusId, "invoked:2");
+
+        // End -> point 9 (last): proves End.
+        PressOnChart(InputInjector.VkEnd);
+        PressOnChart(InputInjector.VkEnter);
+        WaitForTextContaining(StatusId, "invoked:9");
+
+        // Ctrl+Home -> point 0 (first series, first point): proves Ctrl+Home.
+        PressOnChart(InputInjector.VkHome, ctrl: true);
+        PressOnChart(InputInjector.VkEnter);
+        WaitForTextContaining(StatusId, "invoked:0");
+
+        // Ctrl+End -> point 9 (last series, last point): proves Ctrl+End.
+        PressOnChart(InputInjector.VkEnd, ctrl: true);
+        PressOnChart(InputInjector.VkEnter);
+        WaitForTextContaining(StatusId, "invoked:9");
+
+        // Home -> 0, then Space invokes: proves the Space invoke key (distinct from Enter).
+        PressOnChart(InputInjector.VkHome);
+        PressOnChart(InputInjector.VkSpace);
+        WaitForTextContaining(StatusId, "invoked:0");
+
+        // Shift+Right moves PointIndex to brushEnd (0 -> 1); Space invokes: proves the Shift+Right
+        // brush arm actually advances the focused point.
+        PressOnChart(InputInjector.VkRight, shift: true);
+        PressOnChart(InputInjector.VkSpace);
+        WaitForTextContaining(StatusId, "invoked:1");
+
+        // Shift+Left moves PointIndex back (1 -> 0); Space invokes: proves the Shift+Left brush arm.
+        PressOnChart(InputInjector.VkLeft, shift: true);
+        PressOnChart(InputInjector.VkSpace);
+        WaitForTextContaining(StatusId, "invoked:0");
     }
 
     /// <summary>Re-focus the plot area, then inject one (optionally chorded) key.</summary>
