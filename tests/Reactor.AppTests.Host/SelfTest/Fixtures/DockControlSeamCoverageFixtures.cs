@@ -73,6 +73,23 @@ internal static class OverlaySeamCoverageFixtures
             overlay.ConfirmTargetForTest(DockTarget.DockLeft);
             H.Check("Overlay_Disabled_ConfirmRefused", confirmCount == 0);
 
+            // The disabled guard also holds through the GEOMETRY seams (the
+            // real tear-off drop path), not just the direct hooks. The button
+            // is dimmed, not hidden, so it still hit-tests — but driving
+            // UpdateHoverAt / TryConfirmAt over it must neither latch a hover
+            // nor fire a confirm.
+            await Harness.WaitFor(() => overlay.ActualWidth > 1 && overlay.ActualHeight > 1);
+            var atDisabledLeft = new Point(
+                DockDropTargetOverlayControl.ButtonSizeDip / 2, overlay.ActualHeight / 2);
+            H.Check("Overlay_Disabled_HitTestStillResolvesButton",
+                overlay.HitTestForTarget(atDisabledLeft) == DockTarget.DockLeft);
+            overlay.UpdateHoverAt(atDisabledLeft);
+            H.Check("Overlay_Disabled_UpdateHoverAt_NoLatchNoEvent",
+                overlay.CurrentHoveredTarget is null && hoverCount == 0);
+            var confirmDisabledViaGeom = overlay.TryConfirmAt(atDisabledLeft);
+            H.Check("Overlay_Disabled_TryConfirmAt_RefusedReturnsNull",
+                confirmDisabledViaGeom is null && confirmCount == 0);
+
             // An enabled target still hovers.
             overlay.SetHoveredForTest(DockTarget.DockRight);
             H.Check("Overlay_Enabled_HoverFires", hoverCount == 1 && lastHover == DockTarget.DockRight);
@@ -117,7 +134,7 @@ internal static class OverlaySeamCoverageFixtures
             await Harness.WaitFor(() => overlay.ActualWidth > 1 && overlay.ActualHeight > 1);
 
             double w = overlay.ActualWidth, hgt = overlay.ActualHeight;
-            const double half = 22; // ButtonSizeDip / 2
+            const double half = DockDropTargetOverlayControl.ButtonSizeDip / 2;
             var atLeft = new Point(half, hgt / 2);
             var atRight = new Point(w - half, hgt / 2);
             var atTop = new Point(w / 2, half);
