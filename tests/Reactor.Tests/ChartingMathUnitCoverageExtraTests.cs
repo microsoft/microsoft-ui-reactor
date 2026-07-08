@@ -7,7 +7,7 @@ using System.Linq;
 using Microsoft.UI.Reactor.Charting.D3;
 using Xunit;
 
-namespace Microsoft.UI.Reactor.Tests.D3;
+namespace Microsoft.UI.Reactor.Tests;
 
 public class ChartingMathUnitCoverageExtraTests
 {
@@ -26,19 +26,14 @@ public class ChartingMathUnitCoverageExtraTests
     // ── PartitionLayout / PartitionNode ─────────────────────────────────────
 
     [Fact]
-    public void Partition_RelayoutOverload_RoundsAndPreservesInstance()
+    public void Partition_RelayoutOverload_SumsValuesAndPreservesInstance()
     {
-        var layout = PartitionLayout.Create<FileItem>().Size(120, 90).SetPadding(1).SetRound(true);
+        var layout = PartitionLayout.Create<FileItem>().Size(120, 90).SetPadding(1);
 
         var root = layout.Layout(SampleTree(), n => n.Children, n => n.Size);
 
-        // Summed leaf values bubble up to the root.
+        // Summed leaf values bubble up to the root (10 + 20 + 30).
         Assert.Equal(60, root.Value);
-
-        // SetRound(true) snapped every bound to an integer.
-        Assert.Equal(Math.Round(root.X0), root.X0);
-        Assert.Equal(Math.Round(root.X1), root.X1);
-        Assert.Equal(Math.Round(root.Y1), root.Y1);
 
         // maxDepth = 2 -> depthHeight = 90 / 3 = 30; root spans one band.
         Assert.Equal(30, root.Height);
@@ -46,6 +41,33 @@ public class ChartingMathUnitCoverageExtraTests
         // The compute-only overload re-lays out the same instance in place.
         var again = layout.Layout(root);
         Assert.Same(root, again);
+    }
+
+    [Fact]
+    public void Partition_SetRound_SnapsFractionalBoundsToIntegers()
+    {
+        // Size(100,90)+padding(1) puts a1's right edge at 47*(1/3)+2 = 17.666...,
+        // so rounding has an observable effect (a grid that divides evenly would not).
+        var unrounded = PartitionLayout.Create<FileItem>().Size(100, 90).SetPadding(1)
+            .Layout(SampleTree(), n => n.Children, n => n.Size);
+        var rawLeaf = unrounded.Children[0].Children[0]; // "a1"
+        Assert.NotEqual(Math.Round(rawLeaf.X1), rawLeaf.X1); // fractional before rounding
+
+        var rounded = PartitionLayout.Create<FileItem>().Size(100, 90).SetPadding(1).SetRound(true)
+            .Layout(SampleTree(), n => n.Children, n => n.Size);
+
+        // RoundAll walked the whole tree: every bound of every node is now integral.
+        foreach (var node in rounded.Descendants())
+        {
+            Assert.Equal(Math.Round(node.X0), node.X0);
+            Assert.Equal(Math.Round(node.X1), node.X1);
+            Assert.Equal(Math.Round(node.Y0), node.Y0);
+            Assert.Equal(Math.Round(node.Y1), node.Y1);
+        }
+
+        // The previously-fractional leaf is snapped to exactly its rounded integer.
+        var roundedLeaf = rounded.Children[0].Children[0];
+        Assert.Equal(Math.Round(rawLeaf.X1), roundedLeaf.X1);
     }
 
     [Fact]
