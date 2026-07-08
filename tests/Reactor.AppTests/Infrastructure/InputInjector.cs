@@ -228,8 +228,26 @@ public static class InputInjector
         KeyUp(vk);
     }
 
-    private static void KeyDown(ushort vk) => SendKey(vk, 0, 0);
-    private static void KeyUp(ushort vk) => SendKey(vk, 0, KEYEVENTF_KEYUP);
+    private static void KeyDown(ushort vk) => SendKey(vk, 0, ExtendedFlag(vk));
+    private static void KeyUp(ushort vk) => SendKey(vk, 0, KEYEVENTF_KEYUP | ExtendedFlag(vk));
+
+    // Navigation keys (arrows, Home, End, PageUp/PageDown, Insert, Delete) are "extended" keys:
+    // SendInput must set KEYEVENTF_EXTENDEDKEY for them, or a target can mis-handle them (e.g. treat
+    // an arrow as its numpad twin) or drop them — which would make the keyboard-nav E2E flaky across
+    // machines. Non-extended keys (letters, Tab, Enter, Space, numpad +/-, OEM +/-) return 0.
+    private static uint ExtendedFlag(ushort vk) => IsExtendedKey(vk) ? KEYEVENTF_EXTENDEDKEY : 0u;
+
+    private static bool IsExtendedKey(ushort vk) => vk is
+        0x21 or // PageUp
+        0x22 or // PageDown
+        0x23 or // End
+        0x24 or // Home
+        0x25 or // Left
+        0x26 or // Up
+        0x27 or // Right
+        0x28 or // Down
+        0x2D or // Insert
+        0x2E;   // Delete
 
     private static void SendKey(ushort vk, ushort scan, uint flags)
     {
@@ -529,11 +547,12 @@ public static class InputInjector
     // alongside (not inside) the string-oriented TypeKeys path: TypeKeys releases held modifiers
     // after each emitted character, so it can't express single chords like Ctrl+= or numpad Add,
     // nor non-text keys like the arrows / Home / F1. Hence a small public Vk* table + PressKeyWith
-    // rather than more Keys/TypeKeys tokens. (The private VK_* consts above serve the typing path.)
+    // rather than more Keys/TypeKeys tokens. (The private VK_* consts in the P/Invoke section below
+    // serve the typing path.)
     public const ushort VkLeft = 0x25, VkUp = 0x26, VkRight = 0x27, VkDown = 0x28;
     public const ushort VkHome = 0x24, VkEnd = 0x23, VkEnter = 0x0D, VkSpace = 0x20, VkEscape = 0x1B;
     public const ushort VkAdd = 0x6B, VkSubtract = 0x6D, VkOemPlus = 0xBB, VkOemMinus = 0xBD;
-    public const ushort VkF1 = 0x70, Vk0 = 0x30, VkL = 0x4C, VkS = 0x53, VkT = 0x54;
+    public const ushort VkF1 = 0x70, Vk0 = 0x30, VkL = 0x4C, VkS = 0x53, VkT = 0x54, VkOem2 = 0xBF;
 
     private static void MoveTo(int x, int y)
     {
@@ -619,6 +638,7 @@ public static class InputInjector
 
     private const uint KEYEVENTF_KEYUP = 0x0002;
     private const uint KEYEVENTF_UNICODE = 0x0004;
+    private const uint KEYEVENTF_EXTENDEDKEY = 0x0001;
 
     private const uint MOUSEEVENTF_MOVE = 0x0001;
     private const uint MOUSEEVENTF_LEFTDOWN = 0x0002;

@@ -85,8 +85,9 @@ public class ChartKeyboardNavTests : AppTestBase
 
     /// <summary>
     /// Acquire keyboard focus on the chart plot area and confirm the keyboard pipeline responds.
-    /// Tries UIA SetFocus (primary), then a real pointer click on the plot area, then Tab-in — any
-    /// strategy is "confirmed" only when a subsequent Enter actually invokes a point.
+    /// Tries UIA SetFocus (primary), then a real pointer click on the plot area. Both strategies
+    /// first LOCATE the chart, so we never inject the Enter probe blindly at an arbitrary focused
+    /// element; a strategy is "confirmed" only when a subsequent Enter actually invokes a point.
     /// </summary>
     private bool EnsureChartFocusedAndKeyboardLive()
     {
@@ -96,16 +97,10 @@ public class ChartKeyboardNavTests : AppTestBase
             if (UiaFocusChart() && PressEnterAndCheckInvoked())
                 return true;
 
-            // Strategy 2: real pointer click inside the focusable plot area.
-            ClickChartToFocus();
-            if (PressEnterAndCheckInvoked())
-                return true;
-
-            // Strategy 3: Tab in from the status label until the plot area takes focus.
-            InputInjector.Foreground(HostHwnd);
-            for (int t = 0; t < 4; t++)
-                InputInjector.Tab();
-            if (PressEnterAndCheckInvoked())
+            // Strategy 2: real pointer click inside the located plot area. Only probe with Enter when
+            // the chart was actually located and clicked — never inject Enter blindly at whatever
+            // holds focus, which could activate an unrelated control (nav/reset) and add noise/flake.
+            if (ClickChartToFocus() && PressEnterAndCheckInvoked())
                 return true;
 
             Thread.Sleep(200);
@@ -127,7 +122,7 @@ public class ChartKeyboardNavTests : AppTestBase
         }
         catch (WinAppException)
         {
-            return false; // some builds reject SetFocus on a Canvas; caller falls back to click/Tab
+            return false; // some builds reject SetFocus on a Canvas; caller falls back to a click
         }
 
         // winapp's focus process may have briefly taken foreground; restore the Host so injected
@@ -136,12 +131,17 @@ public class ChartKeyboardNavTests : AppTestBase
         return true;
     }
 
-    /// <summary>Click inside the plot area to focus the Canvas via a real pointer.</summary>
-    private void ClickChartToFocus()
+    /// <summary>
+    /// Click inside the plot area to focus the Canvas via a real pointer. Returns whether the chart
+    /// was located and clicked — a <c>false</c> return means the caller must NOT treat focus as
+    /// acquired (and must not then inject keys blindly). Pass a pre-resolved <paramref name="match"/>
+    /// to click it directly and avoid a second, possibly-null, lookup.
+    /// </summary>
+    private bool ClickChartToFocus(UiMatch? match = null)
     {
-        var match = FindChartMatch();
+        match ??= FindChartMatch();
         if (match is null)
-            return;
+            return false;
 
         InputInjector.Foreground(HostHwnd);
         // Offset in from the left edge, vertically centered, so the click lands on the focusable
@@ -149,6 +149,7 @@ public class ChartKeyboardNavTests : AppTestBase
         int x = match.X + Math.Max(12, match.Width / 4);
         int y = match.Y + match.Height / 2;
         InputInjector.Click(x, y);
+        return true;
     }
 
     /// <summary>The plot-area match whose AutomationName carries the chart title.</summary>
@@ -204,11 +205,13 @@ public class ChartKeyboardNavTests : AppTestBase
         PressOnChart(InputInjector.Vk0, ctrl: true);
         Thread.Sleep(40);
 
-        // Legend focus (L), speak summary (S), alternate-view toggle (T, bubbles), help (F1).
+        // Legend focus (L), speak summary (S), alternate-view toggle (T, bubbles), help (F1), and
+        // the Shift+? help chord (VK_OEM_2 191 in the shift branch → OnShowHelp).
         PressOnChart(InputInjector.VkL);
         PressOnChart(InputInjector.VkS);
         PressOnChart(InputInjector.VkT);
         PressOnChart(InputInjector.VkF1);
+        PressOnChart(InputInjector.VkOem2, shift: true);
         Thread.Sleep(40);
 
         // Shift+← / Shift+→ : brush selection.
@@ -310,16 +313,17 @@ public class ChartKeyboardNavTests : AppTestBase
         // Re-focus before each key. UIA SetFocus is primary; if it's rejected on this build
         // (UiaFocusChart returns false) fall back to a real pointer click on the plot area — the
         // same strategy EnsureChartFocusedAndKeyboardLive uses — so the key actually lands on the
-        // chart rather than on whatever else currently holds focus. If the plot area can't even be
-        // LOCATED, fail fast instead of injecting the key blindly at the current focus: a silent
-        // miss would otherwise surface as a confusing downstream status-wait timeout.
+        // chart rather than on whatever else currently holds focus. Locate the chart ONCE and click
+        // that exact match (no TOCTOU re-find that could return null and become a silent no-op); if
+        // it can't be located at all, fail fast instead of injecting the key blindly at the current
+        // focus — a silent miss would otherwise surface as a confusing downstream status-wait timeout.
         if (!UiaFocusChart())
         {
-            if (FindChartMatch() is null)
-                throw new WinAppException(
+            var match = FindChartMatch()
+                ?? throw new WinAppException(
                     $"Chart plot area '{ChartName}' could not be located to receive keyboard input; " +
                     "the fixture may have failed to render or lost its AutomationName.");
-            ClickChartToFocus();
+            ClickChartToFocus(match);
         }
         InputInjector.PressKeyWith(virtualKey, ctrl: ctrl, shift: shift, alt: alt);
         Thread.Sleep(45);
