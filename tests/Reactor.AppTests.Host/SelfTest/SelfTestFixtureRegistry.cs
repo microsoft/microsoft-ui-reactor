@@ -1500,6 +1500,9 @@ internal static class SelfTestFixtureRegistry
         "InitialOnly",
         "BrushHelperParse",
         "CrossAxisMeasureStaleness",
+        // Issue #845 — LV/GV Update clears Header/ItemContainerStyle to null
+        "Issue845_ListViewClearsHeaderAndStyle",
+        "Issue845_GridViewClearsHeaderAndStyle",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -2950,6 +2953,8 @@ internal static class SelfTestFixtureRegistry
         "InitialOnly" => new InitialOnlyFixture.Execution(harness),
         "BrushHelperParse" => new BrushHelperParseFixture.Execution(harness),
         "CrossAxisMeasureStaleness" => new CrossAxisMeasureStalenessFixture(harness),
+        "Issue845_ListViewClearsHeaderAndStyle" => new Issue845ClearHeaderItemContainerStyleFixtures.ListViewClearsHeaderAndItemContainerStyle(harness),
+        "Issue845_GridViewClearsHeaderAndStyle" => new Issue845ClearHeaderItemContainerStyleFixtures.GridViewClearsHeaderAndItemContainerStyle(harness),
 
         _ => null,
     };
