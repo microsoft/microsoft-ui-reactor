@@ -74,11 +74,12 @@ public class PathDataParserUnitCoverageExtraTests
     }
 
     [Fact]
-    public void ParseTokens_UnknownCommandsOnly_AreSkipped()
+    public void ParseTokens_SkipsUnknownCommandsAndReachesLaterCommand()
     {
-        // None of these are recognised commands (M/L/h/v/A/Q/C/Z), so every char
-        // hits the default skip arm; the loop still terminates. This is a real oracle:
-        // if the default arm stopped advancing the index the walk would hang, not pass.
-        Assert.Null(Record.Exception(() => PathDataParser.ParseTokens("R T P G K X Y N")));
+        // The parser must advance past every unknown char via the default skip arm and
+        // still reach the trailing M command, whose malformed operand throws. An
+        // implementation that stopped or looped on the first unknown ('R') would never
+        // reach it — so this is a real oracle for "unknown chars are skipped, not fatal".
+        Assert.Throws<FormatException>(() => PathDataParser.ParseTokens("R T P G K X Y M 1.2.3"));
     }
 }

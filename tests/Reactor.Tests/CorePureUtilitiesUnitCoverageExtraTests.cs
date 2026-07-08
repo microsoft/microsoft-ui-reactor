@@ -26,15 +26,17 @@ public class CorePureUtilitiesUnitCoverageExtraTests
     }
 
     [Fact]
-    public void QueryCache_TryGetFetchedAt_SlotWithoutEntry_ReturnsFalseThenTrueAfterSet()
+    public void QueryCache_TryGetFetchedAt_SlotWithoutEntry_MissesUntilSet()
     {
         using var cache = new QueryCache();
 
-        // Subscribe creates a slot but leaves Entry null -> still a metadata miss.
+        // Subscribe creates a slot (Count == 1) but leaves Entry null, so the metadata
+        // lookup still misses — Count distinguishes this arm from the missing-key case.
         cache.Subscribe("k");
+        Assert.Equal(1, cache.Count);
         Assert.False(cache.TryGetFetchedAt("k", out _, out _));
 
-        // After a Set the same key now reports its fetched/stale metadata.
+        // After a Set the same slot now reports its fetched/stale metadata.
         cache.Set("k", 42, TimeSpan.FromSeconds(3), TimeSpan.FromMinutes(1));
         Assert.True(cache.TryGetFetchedAt("k", out _, out var staleTime));
         Assert.Equal(TimeSpan.FromSeconds(3), staleTime);

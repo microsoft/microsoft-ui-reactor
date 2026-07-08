@@ -38,9 +38,13 @@ public class ChartingMathUnitCoverageExtraTests
         // maxDepth = 2 -> depthHeight = 90 / 3 = 30; root spans one band.
         Assert.Equal(30, root.Height);
 
-        // The compute-only overload re-lays out the same instance in place.
+        // The compute-only overload recomputes bounds on the same instance in place.
+        // Corrupt a bound, relayout, and confirm it was restored — a no-op overload
+        // would leave the corrupted value and fail this.
+        root.X1 = -999;
         var again = layout.Layout(root);
         Assert.Same(root, again);
+        Assert.Equal(120, root.X1); // recomputed to _x1 (the Size width)
     }
 
     [Fact]
