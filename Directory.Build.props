@@ -31,6 +31,23 @@
   </PropertyGroup>
 
   <!--
+    Release builds treat warnings as errors, globally, for every project in the
+    repo. The CI PR-gate and the official release/pack pipeline both build with
+    `-c Release` (see .github/workflows/ci.yml + release.yml), so this makes any
+    compiler / analyzer / NuGet-restore warning a hard build break there while
+    keeping Debug (the inner developer loop) warning-tolerant for fast iteration.
+
+    Scoped to Configuration=Release only, and set in Directory.Build.props (an
+    early import) so an individual csproj can still opt out or add codes via the
+    usual TreatWarningsAsErrors / WarningsNotAsErrors / NoWarn knobs after this.
+    NuGet honors TreatWarningsAsErrors during restore, so NU-prefixed warnings
+    escalate too — keep package versions aligned (Directory.Packages.props).
+  -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <!--
     Repository / project URL metadata for every packable project. NuGet.org's
     Microsoft compliance policy (https://aka.ms/Microsoft-NuGet-Compliance)
     REJECTS any Microsoft-signed package that is missing ProjectUrl — the push
