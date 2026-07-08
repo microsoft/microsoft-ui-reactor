@@ -189,51 +189,112 @@ Assert-Match    $baseGoneComment 'Microsoft.UI.Reactor.nupkg' 'baseline-unavaila
 Assert-NotMatch $baseGoneComment '<sub>new</sub>'            'baseline-unavailable does not mislabel rows as new'
 Assert-NotMatch $baseGoneComment 'No size change beyond'      'baseline-unavailable suppresses the no-change note'
 
-# ── Get-BuildMetricsTargetSpec / ConvertTo-SafeMeasurements (security boundary) ─
-$spec = Get-BuildMetricsTargetSpec
-Assert-Equal 6 $spec.Count 'target spec has all six tracked artifacts'
-Assert-Equal 'Microsoft.UI.Reactor.nupkg' ($spec | Where-Object { $_.Key -eq 'nupkg.Reactor' }).Label 'spec maps the framework nupkg label'
+# ── Get-BuildMetricsPackageSpec / ConvertTo-SafeMeasurements (security boundary) ─
+$spec = Get-BuildMetricsPackageSpec
+Assert-Equal 3 $spec.Count 'package spec has all three tracked packages'
+Assert-Equal 'Microsoft.UI.Reactor.nupkg' ($spec | Where-Object { $_.PkgKey -eq 'Reactor' }).PkgLabel 'spec maps the framework nupkg label'
+Assert-Equal 'Assemblies in Microsoft.UI.Reactor' ($spec | Where-Object { $_.PkgKey -eq 'Reactor' }).AssemblyGroup 'spec maps the framework assembly group'
 
-# Well-formed raw input: trusted labels applied, numeric bytes preserved, order = spec.
+# Well-formed raw input: every shipped DLL row is projected onto its package's
+# trusted assembly group, the nupkg rows keep trusted labels, and byte counts are
+# preserved. nupkg rows come first (spec order), then per-DLL rows sorted by name.
 $raw = @(
-    [pscustomobject]@{ Key = 'asm.Reactor';   Label = 'IGNORED';  Group = 'IGNORED'; Bytes = 3384320 }
-    [pscustomobject]@{ Key = 'nupkg.Reactor'; Label = 'IGNORED';  Group = 'IGNORED'; Bytes = 2034863 }
+    [pscustomobject]@{ Key = 'nupkg.Reactor';                       Label = 'IGNORED'; Group = 'IGNORED'; Bytes = 2034863 }
+    [pscustomobject]@{ Key = 'asm|Reactor|Reactor.dll';             Label = 'IGNORED'; Group = 'IGNORED'; Bytes = 3384320 }
+    [pscustomobject]@{ Key = 'asm|Reactor|Reactor.Analyzers.dll';   Label = 'IGNORED'; Group = 'IGNORED'; Bytes = 303104 }
+    [pscustomobject]@{ Key = 'asm|Reactor|Reactor.Wrappers.Abstractions.dll'; Label = 'IGNORED'; Group = 'IGNORED'; Bytes = 10240 }
+    [pscustomobject]@{ Key = 'nupkg.Advanced';                      Label = 'IGNORED'; Group = 'IGNORED'; Bytes = 33792 }
+    [pscustomobject]@{ Key = 'asm|Advanced|Reactor.Advanced.dll';   Label = 'IGNORED'; Group = 'IGNORED'; Bytes = 33792 }
 )
 $safe = ConvertTo-SafeMeasurements -RawMeasurements $raw
-Assert-Equal 6 $safe.Count 'safe measurements always cover the full spec'
-Assert-Equal 'nupkg.Reactor' $safe[0].Key 'safe output is in spec order (nupkg.Reactor first)'
-Assert-Equal 'Microsoft.UI.Reactor.nupkg' $safe[0].Label 'safe output uses the TRUSTED label, not the artifact label'
-Assert-Equal 2034863 $safe[0].Bytes 'valid integer bytes preserved'
-Assert-Equal 3384320 ($safe | Where-Object { $_.Key -eq 'asm.Reactor' }).Bytes 'valid bytes preserved regardless of raw order'
+# 3 nupkg rows (one per package, even when no data) + 3 valid Reactor DLLs + 1 Advanced DLL.
+Assert-Equal 7 $safe.Count 'safe measurements: 3 nupkg rows + all validated DLL rows'
+Assert-Equal 'nupkg.Reactor' $safe[0].Key 'safe output starts with the nupkg rows in spec order'
+Assert-Equal 'Microsoft.UI.Reactor.nupkg' $safe[0].Label 'safe output uses the TRUSTED package label, not the artifact label'
+Assert-Equal 'nupkg.Advanced' $safe[1].Key 'second nupkg row is Advanced (spec order)'
+Assert-Equal 'nupkg.Devtools' $safe[2].Key 'third nupkg row is Devtools even with no data'
+Assert-Null  $safe[2].Bytes 'a package with no raw data still emits a null nupkg row'
+Assert-Equal 2034863 $safe[0].Bytes 'valid integer nupkg bytes preserved'
 
-# Security: a malicious Label/Group in the artifact must never reach the output.
-$evil = @([pscustomobject]@{ Key = 'nupkg.Reactor'; Label = '<img src=x onerror=alert(1)>'; Group = '[!WARNING] pwned'; Bytes = 100 })
+# Per-DLL rows: validated filename is the label, package assembly group is the group.
+$reactorDlls = @($safe | Where-Object { $_.Group -eq 'Assemblies in Microsoft.UI.Reactor' })
+Assert-Equal 3 $reactorDlls.Count 'all three Reactor DLL rows mapped to the framework assembly group'
+Assert-Equal 'Reactor.Analyzers.dll' $reactorDlls[0].Label 'DLL rows sorted deterministically by filename (Analyzers first)'
+Assert-Equal 'Reactor.Wrappers.Abstractions.dll' $reactorDlls[2].Label 'DLL rows sorted deterministically by filename (Wrappers last)'
+Assert-Equal 3384320 ($reactorDlls | Where-Object { $_.Label -eq 'Reactor.dll' }).Bytes 'per-DLL bytes preserved'
+Assert-Equal 'Reactor.Analyzers.dll' ($reactorDlls[0].Label) 'analyzer DLL displayed with its own filename'
+$advancedDlls = @($safe | Where-Object { $_.Group -eq 'Assemblies in Microsoft.UI.Reactor.Advanced' })
+Assert-Equal 1 $advancedDlls.Count 'Advanced package contributes its single DLL'
+Assert-Equal 'Reactor.Advanced.dll' $advancedDlls[0].Label 'Advanced DLL uses its filename'
+
+# Security: a malicious Label/Group in the artifact must never reach the output;
+# the trusted labels/groups are used instead.
+$evil = @(
+    [pscustomobject]@{ Key = 'nupkg.Reactor';           Label = '<img src=x onerror=alert(1)>'; Group = '[!WARNING] pwned'; Bytes = 100 }
+    [pscustomobject]@{ Key = 'asm|Reactor|Reactor.dll'; Label = '<script>evil</script>';        Group = '| pipes | here';  Bytes = 200 }
+)
 $safeEvil = ConvertTo-SafeMeasurements -RawMeasurements $evil
-Assert-Equal 'Microsoft.UI.Reactor.nupkg' $safeEvil[0].Label 'injected label is dropped for the trusted label'
-Assert-NotMatch (($safeEvil | ForEach-Object { $_.Label + '|' + $_.Group }) -join ' ') 'onerror' 'no injected markup survives sanitization'
+Assert-Equal 'Microsoft.UI.Reactor.nupkg' $safeEvil[0].Label 'injected package label is dropped for the trusted label'
+$evilJoined = (($safeEvil | ForEach-Object { $_.Label + '|' + $_.Group }) -join ' ')
+Assert-NotMatch $evilJoined 'onerror' 'no injected markup survives sanitization (label)'
+Assert-NotMatch $evilJoined 'script'  'no injected markup survives sanitization (script)'
 
-# Unknown keys are dropped; non-integer / negative / decimal bytes become null.
+# Security: a malicious DLL FILENAME (the only artifact-derived string that can be
+# rendered) must be rejected unless it passes ^[A-Za-z0-9._+-]+\.dll$.
+$badNames = @(
+    [pscustomobject]@{ Key = 'asm|Reactor|<img>';         Label = 'x'; Group = 'y'; Bytes = 1 }  # angle brackets
+    [pscustomobject]@{ Key = 'asm|Reactor|a|b.dll';       Label = 'x'; Group = 'y'; Bytes = 2 }  # embedded pipe -> 4-part key
+    [pscustomobject]@{ Key = 'asm|Reactor|x.dll`bad`';    Label = 'x'; Group = 'y'; Bytes = 3 }  # backticks
+    [pscustomobject]@{ Key = 'asm|Reactor|..\evil.dll';   Label = 'x'; Group = 'y'; Bytes = 4 }  # path traversal / backslash
+    [pscustomobject]@{ Key = 'asm|Reactor|no-extension';  Label = 'x'; Group = 'y'; Bytes = 5 }  # not a .dll
+    [pscustomobject]@{ Key = 'asm|Reactor|has space.dll'; Label = 'x'; Group = 'y'; Bytes = 6 }  # space
+    [pscustomobject]@{ Key = 'asm|Unknown|Good.dll';      Label = 'x'; Group = 'y'; Bytes = 7 }  # unknown PkgKey
+    [pscustomobject]@{ Key = 'asm|Reactor|Legit.dll';     Label = 'x'; Group = 'y'; Bytes = 8 }  # the one valid row
+)
+$safeBad = ConvertTo-SafeMeasurements -RawMeasurements $badNames
+$asmRows = @($safeBad | Where-Object { $_.Group -like 'Assemblies in*' })
+Assert-Equal 1 $asmRows.Count 'only the single well-formed DLL filename is kept'
+Assert-Equal 'Legit.dll' $asmRows[0].Label 'the kept row is the allowlisted filename'
+$safeBadJoined = (($safeBad | ForEach-Object { [string]$_.Label }) -join ' ')
+Assert-NotMatch $safeBadJoined 'img'         'angle-bracket filename dropped'
+Assert-NotMatch $safeBadJoined 'evil'        'path-traversal filename dropped'
+Assert-NotMatch $safeBadJoined 'bad'         'backtick filename dropped'
+Assert-NotMatch $safeBadJoined 'no-extension' 'non-.dll name dropped'
+Assert-NotMatch $safeBadJoined 'space'       'filename with a space dropped'
+Assert-NotMatch $safeBadJoined 'Good.dll'    'DLL under an unknown package key dropped'
+
+# Unknown package keys are dropped; non-integer / negative / decimal bytes become null.
 $junk = @(
-    [pscustomobject]@{ Key = 'nupkg.Evil';    Label = 'x'; Group = 'y'; Bytes = 5 }   # unknown key -> dropped
-    [pscustomobject]@{ Key = 'asm.Reactor';   Label = 'x'; Group = 'y'; Bytes = 'not-a-number' }
-    [pscustomobject]@{ Key = 'nupkg.Advanced';Label = 'x'; Group = 'y'; Bytes = -50 }
-    [pscustomobject]@{ Key = 'asm.Advanced';  Label = 'x'; Group = 'y'; Bytes = '1e9' }
+    [pscustomobject]@{ Key = 'nupkg.Evil';                Label = 'x'; Group = 'y'; Bytes = 5 }   # unknown key -> dropped
+    [pscustomobject]@{ Key = 'asm|Reactor|Reactor.dll';   Label = 'x'; Group = 'y'; Bytes = 'not-a-number' }
+    [pscustomobject]@{ Key = 'nupkg.Advanced';            Label = 'x'; Group = 'y'; Bytes = -50 }
+    [pscustomobject]@{ Key = 'asm|Advanced|Reactor.Advanced.dll'; Label = 'x'; Group = 'y'; Bytes = '1e9' }
 )
 $safeJunk = ConvertTo-SafeMeasurements -RawMeasurements $junk
-Assert-True ((@($safeJunk | Where-Object { $_.Key -eq 'nupkg.Evil' })).Count -eq 0) 'unknown key dropped'
-Assert-Null ($safeJunk | Where-Object { $_.Key -eq 'asm.Reactor' }).Bytes   'non-numeric bytes -> null'
-Assert-Null ($safeJunk | Where-Object { $_.Key -eq 'nupkg.Advanced' }).Bytes 'negative bytes -> null'
-Assert-Null ($safeJunk | Where-Object { $_.Key -eq 'asm.Advanced' }).Bytes   'scientific-notation bytes -> null'
+Assert-True ((@($safeJunk | Where-Object { $_.Key -eq 'nupkg.Evil' })).Count -eq 0) 'unknown package key dropped'
+Assert-Null ($safeJunk | Where-Object { $_.Key -eq 'asm|Reactor|Reactor.dll' }).Bytes   'non-numeric DLL bytes -> null'
+Assert-Null ($safeJunk | Where-Object { $_.Key -eq 'nupkg.Advanced' }).Bytes 'negative nupkg bytes -> null'
+Assert-Null ($safeJunk | Where-Object { $_.Key -eq 'asm|Advanced|Reactor.Advanced.dll' }).Bytes 'scientific-notation bytes -> null'
 
-# Null input -> full spec with all-null bytes (renders as a "failed" set).
+# Null input -> just the three nupkg rows with all-null bytes (renders as a "failed" set).
 $safeNull = ConvertTo-SafeMeasurements -RawMeasurements $null
-Assert-Equal 6 $safeNull.Count 'null raw -> full spec'
+Assert-Equal 3 $safeNull.Count 'null raw -> the three package nupkg rows only'
 Assert-Equal 0 (@($safeNull | Where-Object { $null -ne $_.Bytes }).Count) 'null raw -> all bytes null'
 
-# End-to-end: a sanitized set renders a normal comment with trusted labels only.
+# End-to-end: a sanitized set renders a normal comment with trusted labels only,
+# with each package's DLLs under its own assembly section.
 $safeComment = Format-BuildMetricsComment -BaseMeasurements $safeNull -HeadMeasurements $safe -HeadSha 'abc1234' -BaseSha 'def5678'
-Assert-Match    $safeComment 'Microsoft.UI.Reactor.nupkg' 'sanitized render shows trusted labels'
-Assert-NotMatch $safeComment 'IGNORED'                    'sanitized render drops artifact-supplied labels'
+Assert-Match    $safeComment 'Microsoft.UI.Reactor.nupkg'        'sanitized render shows trusted package labels'
+Assert-Match    $safeComment '### Packages (compressed .nupkg)'  'sanitized render has the packages section first'
+Assert-Match    $safeComment '### Assemblies in Microsoft.UI.Reactor' 'sanitized render has the per-package assembly section'
+Assert-Match    $safeComment 'Reactor.Analyzers.dll'             'sanitized render lists the analyzer DLL'
+Assert-Match    $safeComment 'Reactor.Wrappers.Abstractions.dll' 'sanitized render lists the abstractions DLL'
+Assert-Match    $safeComment 'Reactor.Advanced.dll'              'sanitized render lists the Advanced DLL'
+Assert-NotMatch $safeComment 'IGNORED'                           'sanitized render drops artifact-supplied labels'
+# The packages section must render before the assemblies sections.
+$pkgIdx = $safeComment.IndexOf('### Packages')
+$asmIdx = $safeComment.IndexOf('### Assemblies in')
+Assert-True (($pkgIdx -ge 0) -and ($asmIdx -gt $pkgIdx)) 'nupkg section renders before the assemblies sections'
 
 # ── Summary ──────────────────────────────────────────────────────────────────
 Write-Host ''

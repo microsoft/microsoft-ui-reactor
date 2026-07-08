@@ -7,7 +7,7 @@
 # Informational only: it never fails the PR.
 #
 #   Packages (compressed .nupkg)   the download size a consumer pays
-#   Assemblies (uncompressed)      the real "did our code grow" signal
+#   Assemblies in <package>        every shipped DLL — the "did our code grow" signal
 #
 # ── Why two workflows (measure here, comment in build-metrics-comment.yml) ─────
 # This job BUILDS PR-authored code (`dotnet pack` runs the PR's MSBuild), so it
