@@ -90,6 +90,19 @@ public static partial class SessionInteractivityGuard
             return;
 
         var state = GetState();
+        // A loaded CI runner can momentarily report a non-Active state (a WTS connect-state blip,
+        // or the input desktop not yet resolving to "Default") even though it is genuinely
+        // interactive. Re-probe a few times before concluding locked/disconnected, so a transient
+        // blip doesn't wrongly reclassify a real input-injection E2E as Inconclusive (which the CI
+        // gate then fails). A genuinely locked/disconnected session stays non-Active across the
+        // retries and is still correctly surfaced as Inconclusive below.
+        for (int attempt = 0;
+             attempt < 4 && (state == SessionInteractivity.Locked || state == SessionInteractivity.Disconnected);
+             attempt++)
+        {
+            Thread.Sleep(500);
+            state = GetState();
+        }
         // Unknown means the OS gave us an unexpected error from the desktop
         // probe — don't fabricate a verdict. Let the test run; if winapp
         // really can't drive input, the post-failure recheck will catch
