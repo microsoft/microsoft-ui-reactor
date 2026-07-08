@@ -10,12 +10,11 @@ namespace Microsoft.UI.Reactor.AppTests.Host.Fixtures;
 /// E2E fixture for issue #679 (a) — the ListView <c>OnItemClick</c> "once-fire" guard.
 ///
 /// <para>The production <c>ListViewHandler</c> subscribes the native
-/// <c>ListView.ItemClick</c> event exactly once (Mount when <c>OnItemClick</c> is present,
-/// or the Update transition <c>null → non-null</c>) and dispatches through the current
-/// element via <c>GetElementTag</c>. A handler that stays present but changes identity every
-/// render (the idiomatic <c>idx =&gt; setState(...)</c> lambda) must therefore NOT cause a
-/// re-subscribe. If the reconciler regressed to <c>ItemClick +=</c> on every render, a single
-/// real pointer click would invoke the callback N+1 times.</para>
+/// <c>ListView.ItemClick</c> event exactly once (unconditionally at Mount) and dispatches
+/// through the current element via <c>GetElementTag</c>. A handler that stays present but
+/// changes identity every render (the idiomatic <c>idx =&gt; setState(...)</c> lambda) must
+/// therefore NOT cause a re-subscribe. If the reconciler regressed to <c>ItemClick +=</c> on
+/// every render, a single real pointer click would invoke the callback N+1 times.</para>
 ///
 /// <para>This scene exposes that as UIA-readable state: an authoritative <see cref="Ref{T}"/>
 /// counter (incremented on every dispatch, so a double-fire can't be masked by state
