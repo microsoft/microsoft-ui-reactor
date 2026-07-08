@@ -58,3 +58,5 @@ REACTOR_MEMO_001 | Reactor.Performance | Info | MemoWrapperModifierAnalyzer - Mo
 REACTOR_DYM_001 | Reactor.DidYouMean | Warning | NonInvocableMemberParensAnalyzer - Reactor property/field invoked like a method (e.g. GridSize.Auto()); remove the parentheses
 REACTOR_DYM_002 | Reactor.DidYouMean | Warning | ThemeBackgroundSuffixAnalyzer - Invented Theme.*Background token (e.g. Theme.AppBackground); use Theme.SolidBackground (Theme.LayerBackground -> Theme.LayerFill)
 REACTOR_DYM_003 | Reactor.DidYouMean | Warning | FuzzyFactoryNameAnalyzer - Mistyped Reactor factory name in call position (e.g. Buton(...)); did-you-mean the closest factory
+REACTOR_DYM_004 | Reactor.DidYouMean | Warning | MissingFactoryArgumentAnalyzer - Reactor factory called with too few arguments (CS7036); suggests the full parameter shape (single unique overload only)
+REACTOR_DYM_005 | Reactor.DidYouMean | Warning | StringForElementArgumentAnalyzer - String passed where a Reactor Element is expected (CS1503); wrap it in a text factory (e.g. TextBlock)

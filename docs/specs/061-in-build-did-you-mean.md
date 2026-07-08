@@ -4,7 +4,9 @@
 
 **Implemented (in part) — 2026-07-07.** Phase 1 (`REACTOR_DYM_001`) and Phase 2 (`REACTOR_DYM_002`)
 have shipped, along with the first fuzzy analyzer (`REACTOR_DYM_003`, the CS0103
-mistyped-factory-name case); the remaining fuzzy name-resolution phases remain design-only. This spec
+mistyped-factory-name case) and the argument-shape analyzers (`REACTOR_DYM_004`, CS7036 missing
+argument; `REACTOR_DYM_005`, the CS1503 string-for-Element case — see §7.2); the remaining fuzzy
+member-resolution phases and the shared match-engine extraction remain design-only. This spec
 is the design of record for bringing Reactor's "did you mean" suggestions — today reachable only
 through the `mur check` CLI — into a plain `dotnet build` and the IDE, for consumers of the
 `Microsoft.UI.Reactor` NuGet package.
@@ -185,8 +187,10 @@ Follow-up analyzers, each reusing the shared match engine and gated to Reactor s
 2. **Unresolved name** (CS0103 shape) — fuzzy-match against the factory index.
    **Shipped as `REACTOR_DYM_003` (`FuzzyFactoryNameAnalyzer` + `FuzzyFactoryNameCodeFix`) — see §7.1.**
 3. **Argument shape** (CS1503/CS7036) — `CandidateReason == OverloadResolutionFailure` +
-   `ClassifyConversion`; lower priority (rare in corpus), IDE code-fix first (Roslynator ships
-   these as code-fixes).
+   `ClassifyConversion`; lower priority (rare in corpus). **Shipped as `REACTOR_DYM_004`
+   (`MissingFactoryArgumentAnalyzer`, CS7036) and `REACTOR_DYM_005`
+   (`StringForElementArgumentAnalyzer`, the CS1503 string-for-Element case) — see §7.2**, with a
+   deliberately narrow scope; the broader CS1503 type-mismatch surface is left uncovered by design.
 4. **`HelpLinkUri`** on `REACTOR_*` descriptors — endorsed by every reviewer; **deferred** until a
    stable published-docs URL scheme exists (the package is not yet public — spec 022).
 5. **Shared match-engine extraction** — factor `StringSimilarity` + `FactoryIndex` + the vocabulary
@@ -248,13 +252,82 @@ than no suggestion", spec 038 §1): precision is favoured over recall.
 - **Scope note.** Generic-name callees (`Foo<int>(...)`) are intentionally out of scope for v1 to keep
   the fix trivial and the gate tight; they can be added later if the corpus shows demand.
 
+### §7.2 `REACTOR_DYM_004` / `REACTOR_DYM_005` — argument shape (CS7036 / CS1503, shipped)
+
+The argument-shape case (item 3 above) is the **completeness** phase: CS1503/CS7036 are **rare** in the
+eval corpus — the 525-run tuning drop recorded **zero** CS1503 firings and only three no-match CS7036
+firings (`Thresholds.cs` calibration history), and the corpus stubs can't even reproduce these codes.
+So the value is marginal and the guiding rule — *"a wrong suggestion is worse than no suggestion"* (spec
+038 §1) — bites harder here than anywhere: overload resolution is genuinely complex (optional / named /
+`params` / generics / extension methods / accessibility), and `CandidateReason == OverloadResolutionFailure`
+is broad. The phase therefore ships **only the high-confidence slices** and documents what it deliberately
+does **not** cover.
+
+**False-positive spike (mandatory, ran first).** A throwaway Roslyn probe constructed realistic
+Reactor-shaped factories with overloads and measured — via `GetSymbolInfo` only, **not** compiler
+diagnostics — whether the intended detection fires **only** on the true shapes. Across **29 cases it was
+0 false positives**. Key findings that shaped the gating:
+
+- Every argument-shape non-binding failure reports `CandidateReason.OverloadResolutionFailure`; an
+  accessibility failure (even on `Factories`) reports `CandidateReason.Inaccessible`, and an unknown name
+  reports `None` — so the reason gate cleanly separates the argument-shape family from its neighbours.
+- A **unique** candidate (`CandidateSymbols.Length == 1`) is the decisive false-positive defence. It
+  silences every multi-overload factory — including the three-overload `Button()`, which was the
+  motivating example but is correctly **left silent**: with three overloads there is no single argument
+  shape to propose, so guessing one would be exactly the "wrong suggestion." Ambiguous calls surface as
+  multiple candidates too, and are likewise dropped.
+- Gating to Reactor's `Factories` type (by symbol equality) silences same-named APIs in other namespaces
+  **and** Reactor's own fluent-modifier extension methods (`ElementExtensions`).
+- Bailing when any argument is an **error type** silences cascading edit-in-progress errors; requiring
+  every *supplied* positional argument to implicitly convert cleanly separates "missing argument" (CS7036,
+  DYM_004) from "type mismatch" (CS1503, DYM_005), so a call that is *both* short an argument *and*
+  mismatched (`Grid("x")`) fires **neither**.
+
+**`REACTOR_DYM_004` — `MissingFactoryArgumentAnalyzer` (CS7036).** Fires when a call did not bind, failed
+overload resolution against a **unique** `Factories` candidate, uses only positional arguments, supplies
+**fewer** than the candidate's required (non-optional, non-`params`) parameter count, has no error-typed
+argument, and every supplied argument converts. Message lists the full parameter shape as named-argument
+hints (e.g. `ScrollViewer()` → *"did you mean 'ScrollViewer(child: <Element>)'?"*). This is the more
+tractable and valuable of the two slices.
+
+**`REACTOR_DYM_005` — `StringForElementArgumentAnalyzer` (CS1503).** Fires only on the one narrow,
+high-confidence special case the CLI's `SymbolSuggester` already encodes: a `string` supplied where an
+`Element` (or subtype) is expected — same unique-`Factories`-candidate gate, no `params` tail, and
+**exactly one** failing positional argument whose type is `string` and whose parameter is `Element`. It
+suggests wrapping the string in a text factory (`TextBlock` / `Heading` / `Caption`). A parity test
+(`DidYouMeanAnalyzerParityTests`) drives both engines on this shape so they cannot silently diverge.
+
+**No code fix, by design.** Both analyzers ship **message-only**. A CS7036 "add the arguments" fix would
+insert non-compiling placeholders (`child: <Element>`); a CS1503 `TextBlock(...)` wrap compiles only when a
+text factory is in scope (a bare `using static` vs. a qualified call needs different syntax). A fix that
+produces uncompilable code is worse than none, so neither ships one.
+
+**Deliberately not covered (and why).**
+
+- **The CLI's other CS1503 special case — `Action<T>` supplied where a parameterless `Action` is expected
+  — is omitted.** The spike showed it fires only when a *typed* `Action<T>` variable is passed, and **never**
+  for the far more common *lambda* shape (a lambda argument has no type to classify). That is poor coverage
+  for real code; the CLI's `SymbolSuggester` shares the same limitation (its heuristic keys off an
+  `'Action<…>'` substring in the diagnostic message, absent for lambdas), so nothing is lost in-build.
+- **General CS1503 type mismatches** (numeric, wrong-element-subtype, etc.) are not matched — only the
+  string-for-`Element` case. A general type-mismatch matcher was judged too broad to gate to ~zero false
+  positives given how varied real overload sets are.
+- **Multi-overload factories** (e.g. `Button`), **named-argument** calls, **`params`** calls,
+  **generic-inference** failures, and **extension-method** calls all fall outside the gates above and
+  degrade gracefully to the raw compiler error.
+
+**Severity: Warning.** Both fire only alongside the compiler's own CS7036 / CS1503, so Warning is safe under
+`TreatWarningsAsErrors` (the build already fails) while still surfacing the hint in a plain `dotnet build`
+and the IDE. Tunable via `.editorconfig`. The shared gating lives in one `ArgumentShapeGate` helper so the
+two analyzers can't drift.
+
 ## §8 Risks and guardrails
 
 | Risk | Guardrail |
 |---|---|
 | False positives under cascading / partial-edit errors | Bail when the receiver type is unresolved or an error type; only fire when the invocation didn't bind; gate to Reactor symbols; (fuzzy phases) require high similarity thresholds. |
 | IDE typing latency | Use the provided `context.SemanticModel` (never `Compilation.GetSemanticModel`, RS1030); narrow syntax-node actions; cheap symbol pre-checks before any fuzzy match. |
-| Divergence between analyzer and `mur check` | Phase 2: local maps locked to the CLI Tier-3 rules by a cross-check parity test (`DidYouMeanAnalyzerParityTests`). Fuzzy phases: one shared match library + shared fixtures (§7 item 5). |
+| Divergence between analyzer and `mur check` | Phase 2: local maps locked to the CLI Tier-3 rules by a cross-check parity test (`DidYouMeanAnalyzerParityTests`). Argument-shape phase (§7.2): the same test asserts `REACTOR_DYM_004`/`_005` and the CLI `SymbolSuggester` both fire on the representative CS7036 / CS1503 shapes. Fuzzy phases: one shared match library + shared fixtures (§7 item 5). |
 | Noise (a second diagnostic atop the CS error) | Concise message; `REACTOR_DYM_*` only ever accompanies a genuine compile error; consumers can tune severity via `.editorconfig`. |
 
 ## §9 Relationship to `mur check`
