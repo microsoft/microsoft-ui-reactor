@@ -97,11 +97,17 @@ public class DataGridTests : AppTestBase
         InputInjector.Tab();
 
         // The inline editor must still be present (reopened on the next cell), not torn down by the
-        // LostFocus safety-net. WaitForEditor throws if the editor is absent — that IS the regression.
-        var editor = WaitForEditor(timeoutMs: 4000);
+        // LostFocus safety-net.
+        UiElement? editor = null;
+        try { editor = WaitForEditor(timeoutMs: 4000); }
+        catch (WinAppException ex)
+        {
+            Assert.Fail("Inline editor did not REOPEN on the next cell after the editing-Tab — the reopen " +
+                        "regressed (the LostFocus safety-net likely committed a second time and tore it down). " + ex.Message);
+        }
 
         // When winapp can read the value, confirm the editor reopened on the LastName cell ("Smith").
-        var value = ReadEditorValueSettled(editor, "Smith", timeoutMs: 1500);
+        var value = ReadEditorValueSettled(editor!, "Smith", timeoutMs: 1500);
         if (value is not null)
             Assert.AreEqual("Smith", value, "Reopened editor should be on the LastName cell");
 
