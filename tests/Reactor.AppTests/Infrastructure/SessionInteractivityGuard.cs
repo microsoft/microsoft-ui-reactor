@@ -97,12 +97,16 @@ public static partial class SessionInteractivityGuard
         // lock/disconnect, so a single transient Unknown reading can't flip a genuinely locked
         // session to a pass — that would reopen the silent-skip hole the gate exists to close.
         var state = GetState();
-        var sawLocked = state is SessionInteractivity.Locked or SessionInteractivity.Disconnected;
+        // Remember the most recent DEFINITE non-interactive reading, so if the window ends on a
+        // trailing Unknown we still report the actionable Locked/Disconnected signal (and still fail).
+        SessionInteractivity? lockedState =
+            state is SessionInteractivity.Locked or SessionInteractivity.Disconnected ? state : null;
         for (int attempt = 0; attempt < 4 && state != SessionInteractivity.Active; attempt++)
         {
             Thread.Sleep(500);
             state = GetState();
-            sawLocked |= state is SessionInteractivity.Locked or SessionInteractivity.Disconnected;
+            if (state is SessionInteractivity.Locked or SessionInteractivity.Disconnected)
+                lockedState = state;
         }
 
         if (state == SessionInteractivity.Active)
@@ -113,12 +117,14 @@ public static partial class SessionInteractivityGuard
         // window (then the session is genuinely non-interactive and must surface as Inconclusive).
         // Pure-Unknown proceeds; if winapp really can't drive input, the post-failure recheck catches
         // a definite Locked/Disconnected on the second look.
-        if (state == SessionInteractivity.Unknown && !sawLocked)
+        if (state == SessionInteractivity.Unknown && lockedState is null)
             return;
 
-        WriteMarker(state, operation);
+        // Prefer the definite locked/disconnected signal over a trailing Unknown reading.
+        var verdict = lockedState ?? state;
+        WriteMarker(verdict, operation);
         Assert.Inconclusive(
-            $"Cannot perform '{operation}': workstation is {state}. " +
+            $"Cannot perform '{operation}': workstation is {verdict}. " +
             "UI automation needs an active interactive desktop — locked screen, " +
             "idle/sleep lock, or RDP disconnect makes every winapp click " +
             "fail with a generic error. Treating these as Inconclusive " +
