@@ -75,8 +75,9 @@ dotnet test tests/Reactor.Tests --filter "FullyQualifiedName~CheckCommandTests" 
 
 `-p:SkipSignaturesGen=true` avoids the `CS2012 …\intermediatexaml\Reactor.dll` build race;
 `-p:Platform=x64` avoids the WinUI architecture failure. If you touched
-`RulePerformanceTests`/`CombinedStub`, run `--filter "FullyQualifiedName~RulePerformanceTests"`
-explicitly (the perf trait is excluded by default).
+`RulePerformanceTests`/`CombinedStub`, run them explicitly with
+`--filter "FullyQualifiedName~RulePerformanceTests"` (they carry
+`[Trait("Category", "Perf")]` — the whole perf set runs via `--filter "Category=Perf"`).
 
 ### 5. Sync docs and skills (generated!)
 

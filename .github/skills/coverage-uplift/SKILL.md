@@ -72,7 +72,7 @@ geometry, `BitmapImage`, or **`AutomationPeer`-derived** type) — you get a `CO
 If a target needs one, it is NOT a unit target → drop it (note why) or move to a selftest.
 Internal seams are testable: `InternalsVisibleTo("Reactor.Tests")` is set in
 `src/Reactor/Reactor.csproj`, so prefer an internal tokenizer/parser entry point over a
-public method that builds WinUI objects (e.g. `PathDataParser.ParseTokens(geometry:null)`
+public method that builds WinUI objects (e.g. `PathDataParser.ParseTokens(pathData)`
 vs the public `Parse`). Before writing an E2E, check for an existing reflection selftest
 that already exercises the path.
 
@@ -85,7 +85,8 @@ that already exercises the path.
 - **Selftest fixture:** file under `tests/Reactor.AppTests.Host/SelfTest/Fixtures/`,
   subclass `SelfTestFixtureBase`, use `H.CreateHost()`, `host.Mount(...)`,
   `Harness.Render()` / `WaitFor(...)`, `H.FindControl<T>()`, `H.Check(...)`. **Register in
-  BOTH** `SelfTestFixtureRegistry.cs` `AllFixtures` **and** its `Create()` switch.
+  BOTH** `tests/Reactor.AppTests.Host/SelfTest/SelfTestFixtureRegistry.cs` `AllFixtures`
+  **and** its `Create()` switch.
 - **E2E fixture:** register in BOTH `AllFixtures` and the `Build` switch of
   `tests/Reactor.AppTests.Host/FixtureRegistry.cs`. Use `Component<T>()` fixtures for
   stateful UI — raw `ctx.UseState` does not persist because TestHost uses a fresh
@@ -101,7 +102,7 @@ oracle** — reviewers flag it.
 
 ```powershell
 # unit
-dotnet build tests/Reactor.Tests -c Debug -p:Platform=x64 -p:Optimize=false -p:DebugType=portable
+dotnet build tests/Reactor.Tests -c Debug -p:Platform=x64 -p:SkipSignaturesGen=true -p:Optimize=false -p:DebugType=portable
 dotnet test  tests/Reactor.Tests --no-build -p:Platform=x64 --filter "FullyQualifiedName~UnitCoverageExtra"
 # selftest (fast TAP loop)
 dotnet run --project tests/Reactor.AppTests.Host --no-build -c Debug -p:Platform=x64 -- --self-test --filter "<Prefix>"

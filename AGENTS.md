@@ -184,7 +184,7 @@ Hard-won specifics that repeatedly cost sessions time. Prefer these exact comman
   geometry, `BitmapImage`, or **`AutomationPeer`-derived** type — you get a `COMException`.
   Test only pure-managed logic + WinRT value structs/enums; push anything live to a
   selftest. Internal seams are fair game: `InternalsVisibleTo("Reactor.Tests")` is set, so
-  prefer an internal tokenizer/parser (e.g. `PathDataParser.ParseTokens(geometry:null)`)
+  prefer an internal tokenizer/parser (e.g. `PathDataParser.ParseTokens(pathData)`)
   over a public method that builds WinUI objects.
 - In the `Microsoft.UI.Reactor.*.Tests` namespaces, `Microsoft.UI.System` shadows `System`
   — use `global::System.IO.Path`, `global::System.IO.File`, etc.
