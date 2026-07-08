@@ -114,7 +114,7 @@ internal static class FixtureRegistry
         "D3_LineChart",
         "D3_BarChart",
         "D3_PieChart",
-        "Chart_KeyboardNav",
+        "D3_ChartKeyboardNav",
 
         // Localization
         "Localization_LocaleSwitching",
@@ -278,7 +278,7 @@ internal static class FixtureRegistry
         "D3_LineChart" => D3Fixtures.LineChart(ctx),
         "D3_BarChart" => D3Fixtures.BarChart(ctx),
         "D3_PieChart" => D3Fixtures.PieChart(ctx),
-        "Chart_KeyboardNav" => D3Fixtures.ChartKeyboardNav(ctx),
+        "D3_ChartKeyboardNav" => D3Fixtures.ChartKeyboardNav(ctx),
 
         // Localization
         "Localization_LocaleSwitching" => LocalizationFixtures.LocaleSwitching(ctx),

@@ -8,8 +8,10 @@ namespace Microsoft.UI.Reactor.AppTests.Tests;
 /// <c>BuildFocusIndicator</c> overlay it triggers). Focuses an interactive chart's plot area
 /// through the real Windows UIA pipeline, then injects the full keyboard-navigation vocabulary
 /// with the Win32 <see cref="InputInjector"/> fallback (winapp ui has no keyboard typing / arrow
-/// keys). This drives every arm of the navigator's key switch cross-process — something the
-/// in-process selftests cannot, because the modifier-state reads
+/// keys). This reaches every top-level arm of the navigator's key switch (plus
+/// <c>BuildFocusIndicator</c>) cross-process — though not the legend-focused Enter/Space/Esc
+/// sub-branches, which need a legend this fixture doesn't enable — something the in-process
+/// selftests cannot do, because the modifier-state reads
 /// (<c>InputKeyboardSource.GetKeyStateForCurrentThread</c>) require real injected key state.
 ///
 /// The interactive chart wraps itself in a <c>FuncElement</c>, so an AutomationId on it does not
@@ -30,10 +32,11 @@ public class ChartKeyboardNavTests : AppTestBase
 
     /// <summary>
     /// Focus the interactive chart, confirm the keyboard pipeline is live (Enter on the focused
-    /// point invokes it), then drive the entire HandleKeyDown vocabulary: point/series navigation,
+    /// point invokes it), then drive the full key vocabulary: point/series navigation,
     /// Home/End (+Ctrl), zoom (+/- , Ctrl+= , Ctrl+- , Ctrl+0), legend (L), summary (S),
     /// alternate view (T), help (F1), brush (Shift+←/→), pan (Alt+arrows), invoke (Space) and
-    /// deactivate (Esc).
+    /// deactivate (Esc). This reaches every top-level HandleKeyDown arm; the legend-focused
+    /// Enter/Space/Esc sub-branches need a legend the fixture doesn't enable.
     /// </summary>
     // [E2eRetry] mops up the rare unattended-desktop input-injection flake (Win32 SendInput is
     // occasionally dropped before the Host window foregrounds, or UIA SetFocus loses the race with
@@ -43,7 +46,7 @@ public class ChartKeyboardNavTests : AppTestBase
     [TestMethod]
     public void Interactive_Chart_KeyboardVocabulary_DrivesHandleKeyDown()
     {
-        NavigateToFixtureFresh("Chart_KeyboardNav");
+        NavigateToFixtureFresh("D3_ChartKeyboardNav");
         WaitForTextContaining(StatusId, "none");
 
         // 1. Focus the plot area and prove the cross-process keyboard pipeline is live: Enter on
@@ -55,9 +58,10 @@ public class ChartKeyboardNavTests : AppTestBase
                 $"(status never became 'invoked:'; last-seen '{App.GetValue(StatusId)}').");
         }
 
-        // 2. Drive the FULL HandleKeyDown switch. Re-focus before every key so each arm reaches
-        //    the handler even when the focus-overlay re-render (bare Canvas -> Canvas+overlay Grid)
-        //    drops keyboard focus.
+        // 2. Drive the full key vocabulary — every top-level HandleKeyDown arm (the legend-focused
+        //    Enter/Space/Esc sub-branches need a legend this fixture doesn't enable). Re-focus
+        //    before every key so each arm reaches the handler even when the focus-overlay re-render
+        //    (bare Canvas -> Canvas+overlay Grid) drops keyboard focus.
         DriveFullKeyboardVocabulary();
 
         // 3. Non-vacuous behavioral proof that navigation + invoke actually reach the handler
