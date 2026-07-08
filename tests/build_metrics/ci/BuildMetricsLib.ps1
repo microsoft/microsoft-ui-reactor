@@ -65,11 +65,14 @@ $script:BuildMetricsPackageSpec = @(
 )
 
 # Strict allowlist for the ONLY artifact-derived string allowed into the rendered
-# comment: a DLL filename. Anchored and limited to characters that cannot carry
-# markdown/HTML meaning (no backtick, pipe, angle bracket, bracket, space, or
-# newline), so a validated filename is always safe to drop verbatim into a table
-# cell. A name that fails this is dropped (never rendered).
-$script:BuildMetricsDllNameRegex = '^[A-Za-z0-9._+-]+\.dll$'
+# comment: a DLL filename. Absolutely anchored (\A ... \z, so a trailing newline
+# cannot slip past a '$' end-of-line match) and CASE-SENSITIVELY matched below via
+# -cnotmatch (so Unicode case-folding — e.g. the Kelvin sign U+212A folding to 'k'
+# — cannot smuggle a non-ASCII glyph through [A-Za-z]). Limited to characters that
+# cannot carry markdown/HTML meaning (no backtick, pipe, angle bracket, bracket,
+# space, or newline), so a validated filename is always safe to drop verbatim into
+# a table cell. A name that fails this is dropped (never rendered).
+$script:BuildMetricsDllNameRegex = '\A[A-Za-z0-9._+-]+\.dll\z'
 
 function Get-BuildMetricsPackageSpec {
     <#
@@ -155,7 +158,7 @@ function ConvertTo-SafeMeasurements {
             if ($parts[0] -ne 'asm') { continue }
             if ($parts[1] -ne $p.PkgKey) { continue }
             $name = $parts[2]
-            if ($name -notmatch $script:BuildMetricsDllNameRegex) { continue }
+            if ($name -cnotmatch $script:BuildMetricsDllNameRegex) { continue }
             $raw = $rawByKey[$rawKey]
             $bytes = $null
             if ($raw.PSObject.Properties['Bytes']) { $bytes = ConvertTo-SafeBytes $raw.Bytes }

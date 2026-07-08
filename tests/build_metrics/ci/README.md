@@ -93,13 +93,15 @@ re-maps every row through the trusted `$BuildMetricsPackageSpec`:
 - Each package's compressed-`.nupkg` row is emitted with a **trusted** label and
   group; only its non-negative-integer byte count is taken from the artifact.
 - Each per-DLL row is keyed `asm|<PkgKey>|<Dll>`. It is kept **only** when
-  `<PkgKey>` is a known package *and* `<Dll>` passes the strict allowlist
-  `^[A-Za-z0-9._+-]+\.dll$`. That validated filename is the **only**
-  artifact-derived string that ever reaches the rendered markdown — and because
-  the allowlist forbids every markdown/HTML meta-character (backtick, pipe, angle
-  bracket, bracket, space, newline), it is always safe to emit verbatim. The
-  DLL's group is the package's trusted assembly group; unknown keys, malformed
-  keys, and filenames that fail the allowlist are dropped.
+  `<PkgKey>` is a known package *and* `<Dll>` passes the strict, case-sensitive,
+  absolutely-anchored allowlist `\A[A-Za-z0-9._+-]+\.dll\z`. That validated
+  filename is the **only** artifact-derived string that ever reaches the rendered
+  markdown — and because the allowlist forbids every markdown/HTML meta-character
+  (backtick, pipe, angle bracket, bracket, space, newline — including a trailing
+  newline, which `\z` rejects) and is matched case-sensitively (so Unicode
+  case-folding can't smuggle a non-ASCII glyph through `[A-Za-z]`), it is always
+  safe to emit verbatim. The DLL's group is the package's trusted assembly group;
+  unknown keys, malformed keys, and filenames that fail the allowlist are dropped.
 
 So the comment is fully determined by trusted code plus a set of validated
 integers and allowlisted DLL filenames — the untrusted artifact can never inject
