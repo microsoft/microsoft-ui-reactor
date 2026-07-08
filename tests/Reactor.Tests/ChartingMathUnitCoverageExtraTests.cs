@@ -153,7 +153,7 @@ public class ChartingMathUnitCoverageExtraTests
     public void Delaunay_OverPointCap_ReturnsEmptyTriangulation()
     {
         var pts = new (double x, double y)[Delaunay.MaxPointsForDelaunay + 1];
-        for (int i = 0; i < pts.Length; i++) pts[i] = (i % 100, i / 100);
+        for (int i = 0; i < pts.Length; i++) pts[i] = (i % 100, i / 100.0);
 
         var d = Delaunay.From(pts);
 
