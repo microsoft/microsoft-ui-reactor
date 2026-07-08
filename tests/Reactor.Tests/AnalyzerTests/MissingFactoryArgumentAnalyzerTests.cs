@@ -44,6 +44,7 @@ namespace Microsoft.UI.Reactor
         public static Element Button(Element content, Action? onClick = null) => null!;
         public static Element VStack(params Element[] children) => null!;
         public static Element Grid(int rows, int cols) => null!;
+        public static Element CommandHost(Element child, Action onClick) => null!;
     }
 
     public static class Ext
@@ -142,6 +143,39 @@ namespace App
         await test.RunAsync(TestContext.Current.CancellationToken);
     }
 
+    [Fact]
+    public async Task Reports_Optional_Parameters_Bracketed_In_Shape()
+    {
+        // `content` is required; the two trailing optionals render bracketed so the hint never implies
+        // they must be supplied.
+        var body = @"
+namespace App
+{
+    using static Microsoft.UI.Reactor.Factories;
+    static class C { static object M() => {|#0:HyperlinkButton|}(); }
+}";
+        var test = MakeAnalyzerTest(body);
+        test.ExpectedDiagnostics.Add(
+            AnalyzerVerifier.Diagnostic(MissingFactoryArgumentAnalyzer.DiagnosticId)
+                .WithLocation(0)
+                .WithArguments("HyperlinkButton", "content: <String>, [navigateUri: <Uri>], [onClick: <Action>]"));
+        await test.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Flags_When_Valid_Null_Argument_But_Still_Short()
+    {
+        // CommandHost(null): `null` is a valid Element for the first parameter, but the second required
+        // argument is still missing — a genuine missing-argument shape, so it fires.
+        var body = @"
+namespace App
+{
+    using static Microsoft.UI.Reactor.Factories;
+    static class C { static object M() => {|REACTOR_DYM_004:CommandHost|}(null); }
+}";
+        await MakeAnalyzerTest(body).RunAsync(TestContext.Current.CancellationToken);
+    }
+
     // ── Negatives (false-positive gating) ───────────────────────────
 
     [Fact]
@@ -212,6 +246,21 @@ namespace App
 {
     using static Microsoft.UI.Reactor.Factories;
     static class C { static object M() => Grid(""x""); }
+}";
+        await MakeAnalyzerTest(body).RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Does_Not_Flag_Too_Few_With_Untyped_Argument_Mismatch()
+    {
+        // CommandHost(() => {}): short an argument AND the supplied lambda doesn't fit the first
+        // parameter (Element). Classifying the expression (not just its resolved type) catches the
+        // mismatch so we don't emit a misleading "missing argument" hint.
+        var body = @"
+namespace App
+{
+    using static Microsoft.UI.Reactor.Factories;
+    static class C { static object M() => CommandHost(() => {}); }
 }";
         await MakeAnalyzerTest(body).RunAsync(TestContext.Current.CancellationToken);
     }

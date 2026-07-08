@@ -145,9 +145,10 @@ public sealed class StringForElementArgumentAnalyzer : DiagnosticAnalyzer
             var argType = model.GetTypeInfo(args[i].Expression, ct).Type;
             if (argType is IErrorTypeSymbol || (argType is not null && argType.TypeKind == TypeKind.Error))
                 return false; // cascading edit-in-progress error.
-            if (argType is null)
-                continue; // untyped (lambda / null) — cannot classify; not the string shape.
-            var conversion = model.Compilation.ClassifyCommonConversion(argType, candidate.Parameters[i].Type);
+            // Classify the argument EXPRESSION so an untyped lambda / `null` still counts as a failure
+            // when it doesn't fit its parameter — otherwise a second, differently-broken argument would
+            // be silently ignored and let the single-string-arg gate mis-fire.
+            var conversion = model.ClassifyConversion(args[i].Expression, candidate.Parameters[i].Type);
             if (!conversion.Exists || !conversion.IsImplicit)
             {
                 failingIndex = i;

@@ -23,6 +23,7 @@ using System;
 namespace Microsoft.UI.Reactor.Core
 {
     public abstract record Element;
+    public sealed record SpecialElement : Element;
 }
 namespace Microsoft.UI.Reactor
 {
@@ -39,6 +40,8 @@ namespace Microsoft.UI.Reactor
         public static Element VStack(params Element[] children) => null!;
         public static Element Grid(int rows, int cols) => null!;
         public static Element OnTapped(Action handler) => null!;
+        public static Element SpecialHost(SpecialElement child) => null!;
+        public static Element Panel2(Element a, Element b) => null!;
     }
 
     public static class Ext
@@ -89,6 +92,20 @@ namespace App
 {
     using static Microsoft.UI.Reactor.Factories;
     static class C { static object M() => Border({|REACTOR_DYM_005:""x""|}); }
+}";
+        await MakeAnalyzerTest(body).RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Flags_String_For_Element_Subtype()
+    {
+        // SpecialHost takes a SpecialElement (a subtype of Element); the base-type walk in IsElementType
+        // must recognise it so the string-for-Element hint still fires.
+        var body = @"
+namespace App
+{
+    using static Microsoft.UI.Reactor.Factories;
+    static class C { static object M() => SpecialHost({|REACTOR_DYM_005:""x""|}); }
 }";
         await MakeAnalyzerTest(body).RunAsync(TestContext.Current.CancellationToken);
     }
@@ -165,6 +182,34 @@ namespace App
 {
     using static Microsoft.UI.Reactor.Factories;
     static class C { static object M() => Grid(""x"", ""y""); }
+}";
+        await MakeAnalyzerTest(body).RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Does_Not_Flag_Surplus_Arguments()
+    {
+        // ScrollViewer("x", 1): more arguments than parameters (CS1501) — a different error shape, not
+        // a single string-for-Element mismatch.
+        var body = @"
+namespace App
+{
+    using static Microsoft.UI.Reactor.Factories;
+    static class C { static object M() => ScrollViewer(""x"", 1); }
+}";
+        await MakeAnalyzerTest(body).RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Does_Not_Flag_When_An_Untyped_Argument_Also_Fails()
+    {
+        // Panel2(() => {}, "x"): the string fails against Element, but the lambda also fails against the
+        // first Element parameter — two failing arguments, so the single-string-arg gate must not fire.
+        var body = @"
+namespace App
+{
+    using static Microsoft.UI.Reactor.Factories;
+    static class C { static object M() => Panel2(() => {}, ""x""); }
 }";
         await MakeAnalyzerTest(body).RunAsync(TestContext.Current.CancellationToken);
     }

@@ -120,7 +120,7 @@ public sealed class MissingFactoryArgumentAnalyzer : DiagnosticAnalyzer
 
         // Every supplied argument must positionally convert; otherwise the call is a type mismatch
         // (CS1503 territory) as well as short, and "missing argument" would be the wrong hint.
-        if (!AllProvidedArgumentsConvert(candidate, args, model, ct))
+        if (!AllProvidedArgumentsConvert(candidate, args, model))
             return;
 
         var shape = string.Join(", ", candidate.Parameters.Select(FormatParameter));
@@ -132,27 +132,28 @@ public sealed class MissingFactoryArgumentAnalyzer : DiagnosticAnalyzer
     }
 
     private static bool AllProvidedArgumentsConvert(
-        IMethodSymbol candidate, SeparatedSyntaxList<ArgumentSyntax> args, SemanticModel model, CancellationToken ct)
+        IMethodSymbol candidate, SeparatedSyntaxList<ArgumentSyntax> args, SemanticModel model)
     {
         for (var i = 0; i < args.Count; i++)
         {
             if (i >= candidate.Parameters.Length)
                 return false; // more args than parameters — a surplus (CS1501), not a shortage.
-            var argType = model.GetTypeInfo(args[i].Expression, ct).Type;
-            if (argType is null)
-                continue; // untyped argument (lambda / null literal) — accept, can't disprove.
-            var conversion = model.Compilation.ClassifyCommonConversion(argType, candidate.Parameters[i].Type);
+            // Classify the argument EXPRESSION (not just its resolved type) so untyped arguments — a
+            // lambda or a bare `null` — are still checked against the target parameter. A lambda that
+            // doesn't match its positional parameter makes the call a type mismatch (CS1503), not a
+            // pure missing-argument shape, so "missing argument" would be the wrong hint.
+            var conversion = model.ClassifyConversion(args[i].Expression, candidate.Parameters[i].Type);
             if (!conversion.Exists || !conversion.IsImplicit)
                 return false;
         }
         return true;
     }
 
-    // Named-argument hint form, e.g. "child: <Element>". Optional parameters are marked so the hint
-    // never implies an optional must be supplied.
+    // Named-argument hint form, e.g. "child: <Element>"; optional parameters are bracketed
+    // ("[navigateUri: <Uri>]") so the hint never implies an optional must be supplied.
     private static string FormatParameter(IParameterSymbol p)
     {
         var shape = $"{p.Name}: <{p.Type.Name}>";
-        return p.IsOptional ? shape + " = …" : shape;
+        return p.IsOptional ? $"[{shape}]" : shape;
     }
 }
