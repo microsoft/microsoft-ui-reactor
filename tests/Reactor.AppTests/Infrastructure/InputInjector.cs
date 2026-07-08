@@ -522,8 +522,7 @@ public static class InputInjector
     public const ushort VkLeft = 0x25, VkUp = 0x26, VkRight = 0x27, VkDown = 0x28;
     public const ushort VkHome = 0x24, VkEnd = 0x23, VkEnter = 0x0D, VkSpace = 0x20, VkEscape = 0x1B;
     public const ushort VkAdd = 0x6B, VkSubtract = 0x6D, VkOemPlus = 0xBB, VkOemMinus = 0xBD;
-    public const ushort VkF1 = 0x70, VkF2 = 0x71, Vk0 = 0x30, VkL = 0x4C, VkS = 0x53, VkT = 0x54;
-    public const ushort VkTab = 0x09;
+    public const ushort VkF1 = 0x70, Vk0 = 0x30, VkL = 0x4C, VkS = 0x53, VkT = 0x54;
 
     private static void MoveTo(int x, int y)
     {

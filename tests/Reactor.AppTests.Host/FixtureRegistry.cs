@@ -159,7 +159,6 @@ internal static class FixtureRegistry
 
         // DataGrid
         "DataGrid_EditableGrid",
-        "DataGrid_KeyboardNav",
 
         // Input & Gestures (spec 027 — E2E validation via WinAppDriver)
         "Gesture_Pan",
@@ -324,7 +323,6 @@ internal static class FixtureRegistry
 
         // DataGrid
         "DataGrid_EditableGrid" => DataGridFixtures.EditableGrid(ctx),
-        "DataGrid_KeyboardNav" => DataGridFixtures.KeyboardNavGrid(ctx),
 
         // Devtools UX (spec 028 — E2E validation)
         "DevtoolsUx_MenuAndToggle" => DevtoolsUxFixtures.DevtoolsUxTest(ctx),
