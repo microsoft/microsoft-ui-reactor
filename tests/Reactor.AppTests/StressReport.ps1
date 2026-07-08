@@ -168,8 +168,8 @@ $sb = New-Object System.Text.StringBuilder
 [void]$sb.AppendLine("")
 
 if ($leader.Count -gt 0) {
-    [void]$sb.AppendLine("### Failure leaderboard (attempt-level, $retriesMode)")
-    [void]$sb.AppendLine("Fail% = failed / (runs - inconclusive). With ``[E2eRetry(3)]`` a listed test may still have been *healed by retry* in the suite run, so this is an early-warning signal, not necessarily a red suite.")
+    [void]$sb.AppendLine("### Failure leaderboard (per-test final outcome, $retriesMode)")
+    [void]$sb.AppendLine("Fail% = failed / (runs - inconclusive), counting each iteration's final reported outcome. In a retries-ON run a flake healed by ``[E2eRetry]`` is reported Passed and won't appear here — the retries-OFF lane (``REACTOR_E2E_RETRIES=0``) is where true per-attempt flake surfaces.")
     [void]$sb.AppendLine("")
     [void]$sb.AppendLine("| Test | Failed | Runs | Inconclusive | Fail% |")
     [void]$sb.AppendLine("|---|--:|--:|--:|--:|")

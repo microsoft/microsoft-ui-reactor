@@ -134,11 +134,15 @@ public class E2eRetryAttributeTests
             ?? throw new InvalidOperationException("E2eRetryAttribute.ExecuteAsync not found.");
         var result = await (Task<RetryResult>)exec.Invoke(attr, new[] { ctx })!;
 
-        var testResults = (List<TestResult[]>)typeof(RetryResult)
-            .GetField("_testResults", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .GetValue(result)!;
-        Assert.IsTrue(testResults.Count > 0, "ExecuteAsync must add at least one result.");
-        return testResults[^1][0].Outcome;
+        // Read the outcome the same way MSTest's adapter does — RetryResult.TryGetLast() — rather
+        // than the private _testResults field, so this stays valid as long as the public contract
+        // (the adapter uses `result = retryResult.TryGetLast()`) holds.
+        var tryGetLast = typeof(RetryResult).GetMethod(
+            "TryGetLast", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("RetryResult.TryGetLast not found.");
+        var last = (TestResult[]?)tryGetLast.Invoke(result, null);
+        Assert.IsNotNull(last, "ExecuteAsync must add at least one result (TryGetLast returned null).");
+        return last![0].Outcome;
     }
 }
 #pragma warning restore MSTESTEXP
