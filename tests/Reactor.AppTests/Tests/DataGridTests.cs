@@ -35,7 +35,7 @@ public class DataGridTests : AppTestBase
         NavigateToFixtureFresh("DataGrid_EditableGrid");
 
         // 1. Wait for grid data
-        WaitForText("EditStatus", "Last edit: none");
+        WaitForText("EditLog", "Edits:");
         Assert.IsNotNull(WaitForName("Alice"), "'Alice' should be visible");
         Assert.IsNotNull(FindByName("Smith"), "'Smith' should be visible");
 
@@ -49,12 +49,13 @@ public class DataGridTests : AppTestBase
         Assert.IsNotNull(FindByName("Bob"), "'Bob' should be visible while editing");
         TapCell("Bob");
 
-        // 5. Verify the first edit committed. Assert on the persistent grid VALUE, not the async
-        // 'Last edit' status: the fixture's onRowChanged updates that status via Task.Run +
-        // DispatcherQueue.TryEnqueue, so when the cross-row commit-tap also fires a spurious
-        // unchanged row-2 commit, the two async writes race and the status can settle on
-        // '2:Bob,Jones', overwriting '1:Alicia,Smith' before the poll observes it — even though the
-        // committed data is correct. See the E2E flake investigation. The grid value is the truth.
+        // 5. Verify the first edit committed. The fixture logs every onRowChanged callback into an
+        // append-only EditLog, so we can deterministically assert the row-1 commit callback fired
+        // with the right key + values — even when the cross-row commit-tap also fires a spurious
+        // unchanged row-2 commit (an overwrite-style status would race and settle on '2:Bob,Jones').
+        // Also confirm the persisted grid value, so both the callback contract and the data commit
+        // are covered. See the E2E flake investigation.
+        WaitForTextContaining("EditLog", "[1:Alicia,Smith]", timeoutMs: 5000);
         Assert.IsNotNull(WaitForName("Alicia"), "'Alicia' should be visible after the cross-row commit-tap");
 
         // 6. Click "Smith" to edit LastName in row 1
@@ -65,7 +66,7 @@ public class DataGridTests : AppTestBase
         TypeIntoFocusedEditor("Johnson", commitWithEnter: true);
 
         // 9. Verify second edit committed
-        WaitForText("EditStatus", "Last edit: 1:Alicia,Johnson");
+        WaitForTextContaining("EditLog", "[1:Alicia,Johnson]", timeoutMs: 5000);
         Assert.IsNotNull(WaitForName("Alicia"), "'Alicia' should still be visible");
         Assert.IsNotNull(WaitForName("Johnson"), "'Johnson' should be visible after commit");
     }
