@@ -1,4 +1,5 @@
 using System;
+using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Xunit;
 
