@@ -484,6 +484,30 @@ public static class InputInjector
         Thread.Sleep(40);
     }
 
+    // ─── Navigation / chord keys (for keyboard-navigation E2E) ───────────────
+
+    /// <summary>Press and release a virtual key (no modifiers).</summary>
+    public static void PressKey(ushort virtualKey) => PressVirtualKey(virtualKey);
+
+    /// <summary>Press a virtual key with optional Ctrl/Shift/Alt held for the duration.</summary>
+    public static void PressKeyWith(ushort virtualKey, bool ctrl = false, bool shift = false, bool alt = false)
+    {
+        if (ctrl) KeyDown(VK_CONTROL);
+        if (shift) KeyDown(VK_SHIFT);
+        if (alt) KeyDown(VK_MENU);
+        Thread.Sleep(10);
+        PressVirtualKey(virtualKey);
+        Thread.Sleep(10);
+        if (alt) KeyUp(VK_MENU);
+        if (shift) KeyUp(VK_SHIFT);
+        if (ctrl) KeyUp(VK_CONTROL);
+    }
+
+    public const ushort VkLeft = 0x25, VkUp = 0x26, VkRight = 0x27, VkDown = 0x28;
+    public const ushort VkHome = 0x24, VkEnd = 0x23, VkEnter = 0x0D, VkSpace = 0x20, VkEscape = 0x1B;
+    public const ushort VkAdd = 0x6B, VkSubtract = 0x6D, VkOemPlus = 0xBB, VkOemMinus = 0xBD;
+    public const ushort VkF1 = 0x70, Vk0 = 0x30, VkL = 0x4C, VkS = 0x53, VkT = 0x54;
+
     private static void MoveTo(int x, int y)
     {
         // Normalize to 0..65535 across the whole virtual desktop.
@@ -580,6 +604,7 @@ public static class InputInjector
     private const ushort VK_RETURN = 0x0D;
     private const ushort VK_SHIFT = 0x10;
     private const ushort VK_CONTROL = 0x11;
+    private const ushort VK_MENU = 0x12;
     private const ushort VK_ESCAPE = 0x1B;
     private const ushort VK_SPACE = 0x20;
     private const ushort VK_END = 0x23;
