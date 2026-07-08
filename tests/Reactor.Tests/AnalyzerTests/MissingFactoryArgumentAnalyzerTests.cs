@@ -223,6 +223,21 @@ namespace App
     }
 
     [Fact]
+    public async Task Does_Not_Flag_NonBinding_Params_Call()
+    {
+        // VStack(1): a non-binding call against a pure-params factory (int doesn't fit params Element[]).
+        // This reaches the required-count logic, where the params parameter is excluded (!p.IsParams),
+        // so required == 0, provided == 1 >= 0, and the missing-argument shape never applies — silent.
+        var body = @"
+namespace App
+{
+    using static Microsoft.UI.Reactor.Factories;
+    static class C { static object M() => VStack(1); }
+}";
+        await MakeAnalyzerTest(body).RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
     public async Task Does_Not_Flag_Cascading_Error_Argument()
     {
         // Grid(Undefined()) is short an argument AND the supplied one is an error type — an
@@ -280,10 +295,13 @@ namespace App
     public async Task Does_Not_Flag_Reactor_Extension_Method()
     {
         // Ext.Margin(this Element, int) is a Reactor-namespace method but NOT on Factories — the
-        // Factories-type gate excludes fluent modifiers.
+        // Factories-type gate excludes fluent modifiers. `using Microsoft.UI.Reactor;` brings the
+        // extension into scope so the failing call resolves to Ext.Margin (OverloadResolutionFailure),
+        // exercising the Factories-type gate rather than a "no such member" (CandidateReason.None) bail.
         var body = @"
 namespace App
 {
+    using Microsoft.UI.Reactor;
     using static Microsoft.UI.Reactor.Factories;
     static class C { static object M() => Border(null).Margin(); }
 }";

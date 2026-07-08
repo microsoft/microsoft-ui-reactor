@@ -253,9 +253,14 @@ namespace App
     [Fact]
     public async Task Does_Not_Flag_Reactor_Extension_Method()
     {
+        // Ext.Margin(this Element, int) is a Reactor-namespace method but NOT on Factories.
+        // `using Microsoft.UI.Reactor;` brings the extension into scope so the failing call resolves to
+        // Ext.Margin (OverloadResolutionFailure), exercising the Factories-type gate rather than a
+        // "no such member" (CandidateReason.None) bail.
         var body = @"
 namespace App
 {
+    using Microsoft.UI.Reactor;
     using static Microsoft.UI.Reactor.Factories;
     static class C { static object M() => Border(null).Margin(""x""); }
 }";
