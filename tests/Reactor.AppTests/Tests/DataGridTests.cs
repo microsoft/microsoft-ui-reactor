@@ -71,6 +71,232 @@ public class DataGridTests : AppTestBase
         Assert.IsNotNull(WaitForName("Johnson"), "'Johnson' should be visible after commit");
     }
 
+    private const string GridId = "KbdNavGrid";
+    private const string StatusId = "KbdNav_Status";
+    private const string EditLogId = "KbdNav_EditLog";
+
+    /// <summary>
+    /// Drives the DataGrid's REAL keyboard-navigation pipeline end to end: focuses the grid
+    /// (a tab stop) via UIA, then injects the full non-editing + editing key vocabulary with the
+    /// Win32 <see cref="InputInjector"/> fallback (winapp ui has no arrow/keystroke input). This is
+    /// coverage the in-process <c>DataGrid_KeyReflect_*</c> selftest cannot reach: that selftest
+    /// reflectively invokes the private <c>HandleKeyDown</c> directly, so it never runs the real
+    /// <c>OnMount</c> AddHandler lambda + <c>ShouldHandleKey</c> gate, and never exercises the Up /
+    /// Left arrow arms or <c>ShouldHandleKey(Space)</c> — those are only reachable through injected
+    /// keys landing on a focused grid.
+    ///
+    /// Every navigation assertion is deterministic: the grid's three columns hold globally-unique
+    /// cell values, so the inline editor that <c>BeginEdit</c> opens (Enter / F2) reveals exactly
+    /// which cell the focus moved to — proving the arrow / Home / End / Tab handler bodies actually
+    /// moved cell focus. Row selection (Space) and edit commits (editing Enter / Tab) are asserted
+    /// through the fixture's status + edit-log TextBlocks.
+    /// </summary>
+    // [E2eRetry] mops up the rare unattended-desktop input-injection flake (Win32 SendInput is
+    // occasionally dropped before the Host window foregrounds, or UIA SetFocus loses the race with
+    // the grid's focus/edit re-render). A real regression still fails every attempt. Removable once
+    // winappCli #562 (send-keys) ships native keyboard verbs.
+    [E2eRetry(3)]
+    [TestMethod]
+    public void Interactive_DataGrid_KeyboardNavigation()
+    {
+        NavigateToFixtureFresh("DataGrid_KeyboardNav");
+        WaitForText(StatusId, "Sel:none");
+        Assert.IsNotNull(WaitForName("Alice"), "'Alice' should be visible");
+
+        // 0. Acquire keyboard focus on the grid and prove the cross-process key pipeline is live
+        //    (a focused grid + Enter opens the inline editor). Confirmed before any assertion so a
+        //    non-interactive/mis-focused run fails here with a clear message instead of mid-way.
+        if (!EnsureGridFocusedAndKeyboardLive())
+        {
+            Assert.Fail(
+                "Could not focus the DataGrid and drive its keyboard pipeline (an Enter on the " +
+                "focused grid never opened the inline editor). The grid is a tab stop; injected " +
+                "arrow/Enter keys should route to its KeyDown handler.");
+        }
+        // After liveness the internal focus rests on cell (0,0) and no edit is active.
+
+        // 1. Right + Down move cell focus; Enter begins editing the landed cell. The editor value
+        //    (unique per cell) proves focus reached row 1 / col 1 (Last = "Jones"). Covers the
+        //    Right + Down arms, the real AddHandler lambda, and BeginEdit via Enter.
+        PressNavKey(InputInjector.VkRight); // (0,0) -> (0,1)
+        PressNavKey(InputInjector.VkDown);  // (0,1) -> (1,1)
+        PressNavKey(InputInjector.VkEnter); // BeginEdit(1,1)
+        AssertEditorValue("Jones", "Right+Down should focus row 1 / col 1 (Last='Jones')");
+
+        // Escape cancels the edit (editing-branch ShouldHandleKey + CancelEdit). Focus stays (1,1).
+        PressEditingKey(InputInjector.VkEscape);
+        AssertNoEditor("Escape should cancel the inline edit");
+
+        // 2. Left + Up — the two arrow arms NO existing test drives — then F2 begins editing.
+        //    Landing on (0,0) => First = "Alice" proves both moved focus.
+        PressNavKey(InputInjector.VkLeft); // (1,1) -> (1,0)
+        PressNavKey(InputInjector.VkUp);   // (1,0) -> (0,0)
+        PressNavKey(InputInjector.VkF2);   // BeginEdit(0,0)
+        AssertEditorValue("Alice", "Left+Up should focus row 0 / col 0 (First='Alice')");
+        PressEditingKey(InputInjector.VkEscape);
+        AssertNoEditor("Escape should cancel after F2 edit");
+
+        // 3. End jumps to the last column (City='Reno'); Home returns to the first (First='Alice').
+        PressNavKey(InputInjector.VkEnd);   // (0,0) -> (0,2)
+        PressNavKey(InputInjector.VkEnter); // BeginEdit(0,2)
+        AssertEditorValue("Reno", "End should focus the last column (City='Reno')");
+        PressEditingKey(InputInjector.VkEscape);
+        AssertNoEditor("Escape should cancel after End edit");
+
+        PressNavKey(InputInjector.VkHome);  // (0,2) -> (0,0)
+        PressNavKey(InputInjector.VkEnter); // BeginEdit(0,0)
+        AssertEditorValue("Alice", "Home should focus the first column (First='Alice')");
+        PressEditingKey(InputInjector.VkEscape);
+        AssertNoEditor("Escape should cancel after Home edit");
+
+        // 4. Tab (not editing) advances to the next cell (FocusNextCell): (0,0) -> (0,1) Last='Smith'.
+        PressNavKey(InputInjector.VkTab);   // FocusNextCell -> (0,1)
+        PressNavKey(InputInjector.VkEnter); // BeginEdit(0,1)
+        AssertEditorValue("Smith", "Tab should advance focus to the next cell (Last='Smith')");
+
+        // 5. Tab WHILE EDITING commits the current cell (onRowChanged fires) and reopens the editor
+        //    on the next cell — the editing-branch Tab arm (CommitAndMoveNext + BeginEdit). The
+        //    grid registers its handler with handledEventsToo so Tab reaches it even after WinUI's
+        //    FocusManager consumes it. Editor now at (0,2) City='Reno'; the commit logs row 1.
+        PressEditingKey(InputInjector.VkTab);
+        WaitForTextContaining(EditLogId, "[1:", timeoutMs: 5000);
+        AssertEditorValue("Reno", "Editing Tab should commit and advance the editor to City='Reno'");
+
+        // 6. Enter WHILE EDITING commits and closes the editor (editing-branch Enter arm + CommitEdit).
+        PressEditingKey(InputInjector.VkEnter);
+        AssertNoEditor("Editing Enter should commit and close the editor");
+
+        // 7. Space selects the focused row (Space arm: ShouldHandleKey(Space) + HandleRowClick).
+        //    The fixture surfaces the selection through the status TextBlock -> "Sel:1".
+        PressNavKey(InputInjector.VkSpace);
+        WaitForTextContaining(StatusId, "Sel:1", timeoutMs: 5000);
+
+        Assert.IsTrue(App.Exists(GridId), "Keyboard-nav grid should still be present (no crash).");
+    }
+
+    // ─── Keyboard-nav helpers ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// Move keyboard focus to the grid and confirm the injected-key pipeline reaches its KeyDown
+    /// handler: a focused grid + Right (lands cell 0,0) + Enter opens the inline editor. Retries a
+    /// few times, falling back to Tab-in, and leaves the fixture on a clean, non-editing (0,0).
+    /// </summary>
+    private bool EnsureGridFocusedAndKeyboardLive()
+    {
+        for (int attempt = 0; attempt < 6; attempt++)
+        {
+            FocusGrid();
+            InputInjector.PressKey(InputInjector.VkRight); // first arrow lands focus on (0,0)
+            Thread.Sleep(50);
+            InputInjector.PressKey(InputInjector.VkEnter); // BeginEdit(0,0) if the grid is focused
+
+            if (WaitForEditorPresent(1500))
+            {
+                // Reset to a known non-editing (0,0) before the assertions run.
+                PressEditingKey(InputInjector.VkEscape);
+                WaitForNoEditor(2000);
+                return true;
+            }
+
+            // Fallback: Tab into the grid from the status label, then retry the UIA focus path.
+            InputInjector.Foreground(HostHwnd);
+            for (int t = 0; t < 3; t++)
+                InputInjector.Tab();
+            Thread.Sleep(120);
+        }
+        return false;
+    }
+
+    /// <summary>UIA-focus the grid (a tab stop), keeping the Host foreground so injected keys route to it.</summary>
+    private void FocusGrid()
+    {
+        InputInjector.Foreground(HostHwnd);
+        try { App.Focus(GridId); }
+        catch (WinAppException) { /* some builds reject SetFocus on a panel; Tab-in/foreground focus still applies */ }
+        // winapp's focus process can briefly steal foreground; restore the Host so keys land on it.
+        InputInjector.Foreground(HostHwnd);
+    }
+
+    /// <summary>Re-focus the grid, then inject one navigation key (used when NOT editing).</summary>
+    private void PressNavKey(ushort virtualKey)
+    {
+        FocusGrid();
+        InputInjector.PressKey(virtualKey);
+        Thread.Sleep(60);
+    }
+
+    /// <summary>
+    /// Focus the open inline editor, then inject an editing key (Enter / Escape / Tab). Keeping
+    /// focus inside the grid subtree guarantees the key bubbles to the grid's KeyDown handler even
+    /// though the editor, not the grid, holds WinUI focus while editing.
+    /// </summary>
+    private void PressEditingKey(ushort virtualKey)
+    {
+        var editor = App.FindFirstEditableSelector();
+        InputInjector.Foreground(HostHwnd);
+        if (editor is not null)
+        {
+            try { App.Focus(editor); }
+            catch (WinAppException) { /* slug may have staled on a re-render; foreground focus still targets it */ }
+            InputInjector.Foreground(HostHwnd);
+        }
+        InputInjector.PressKey(virtualKey);
+        Thread.Sleep(80);
+    }
+
+    private void AssertEditorValue(string expected, string because)
+    {
+        var last = WaitForEditorValue(expected, timeoutMs: 4000);
+        Assert.AreEqual(expected, last?.Trim(),
+            $"{because}. Inline editor value should be '{expected}' but last-seen was '{last ?? "<no editor>"}'.");
+    }
+
+    private void AssertNoEditor(string because)
+        => Assert.IsTrue(WaitForNoEditor(4000), $"{because}. An inline editor was still present.");
+
+    /// <summary>Poll the inline editor's value until it equals <paramref name="expected"/>; returns the last read.</summary>
+    private string? WaitForEditorValue(string expected, int timeoutMs)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        string? last = null;
+        do
+        {
+            var sel = App.FindFirstEditableSelector();
+            last = sel is null ? null : App.GetValue(sel);
+            if (last?.Trim() == expected)
+                return last;
+            Thread.Sleep(120);
+        }
+        while (DateTime.UtcNow < deadline);
+        return last;
+    }
+
+    private bool WaitForEditorPresent(int timeoutMs)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        do
+        {
+            if (App.FindFirstEditableSelector() is not null)
+                return true;
+            Thread.Sleep(100);
+        }
+        while (DateTime.UtcNow < deadline);
+        return false;
+    }
+
+    private bool WaitForNoEditor(int timeoutMs)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        do
+        {
+            if (App.FindFirstEditableSelector() is null)
+                return true;
+            Thread.Sleep(100);
+        }
+        while (DateTime.UtcNow < deadline);
+        return false;
+    }
+
     /// <summary>
     /// Tap a DataGrid cell by its visible text to enter/commit cell edit. The cells are
     /// display-only TextBlocks (no InvokePattern), and a WinUI <c>Tapped</c> only fires on an
