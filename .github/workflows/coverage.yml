@@ -255,15 +255,12 @@ jobs:
           $out = Join-Path $env:GITHUB_WORKSPACE 'coverage-out'
           $head = ConvertTo-SafeCoverageMetrics (Read-Json (Join-Path $out 'head.coverage.json'))
           $base = ConvertTo-SafeCoverageMetrics (Read-Json (Join-Path $out 'base.coverage.json'))
-          if (-not (Test-CoverageMetricsPresent $head)) {
-            $body = Format-CoverageComment -Failed -HeadSha $env:HEAD_SHA
-          } elseif ($env:HAS_BASE -eq 'true' -and (Test-CoverageMetricsPresent $base)) {
-            $body = Format-CoverageComment -BaseMetrics $base -HeadMetrics $head -HeadSha $env:HEAD_SHA -BaseSha $env:BASE_SHA
-          } elseif ($env:HAS_BASE -eq 'true') {
-            $body = Format-CoverageComment -HeadMetrics $head -BaselineUnavailable -HeadSha $env:HEAD_SHA -BaseSha $env:BASE_SHA
-          } else {
-            $body = Format-CoverageComment -HeadMetrics $head -BaselineUnavailable -HeadSha $env:HEAD_SHA
-          }
+          # Same selector the poster uses. For a blank-input branch dispatch HAS_BASE
+          # is false, so this renders the absolute (no-baseline) summary rather than a
+          # misleading "baseline unavailable" note.
+          $hasBase = ($env:HAS_BASE -eq 'true')
+          $body = Format-CoverageCommentFromMetrics -HeadMetrics $head -BaseMetrics $base -HasBase $hasBase `
+            -HeadSha $env:HEAD_SHA -BaseSha $env:BASE_SHA
           # Drop the leading sticky marker line for the summary (it is an HTML comment
           # meant for the PR-comment lookup, not the run summary).
           $summary = ($body -split "`n" | Select-Object -Skip 1) -join "`n"

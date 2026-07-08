@@ -96,6 +96,15 @@ try {
     Assert-Null $missing.Line   'missing report file -> null line'
     Assert-Null $missing.Branch 'missing report file -> null branch'
 
+    # Malformed XML -> all-null metrics, no throw (the catch branch in Get-CoberturaRates).
+    $badPath = Join-Path $tmp 'malformed.cobertura.xml'
+    Set-Content -LiteralPath $badPath -Encoding UTF8 -Value '<coverage line-rate="0.5"><packages><oops'
+    $malformed = Get-CoberturaRates -Path $badPath
+    Assert-Null $malformed.Line            'malformed report -> null line (no throw)'
+    Assert-Null $malformed.Branch          'malformed report -> null branch'
+    Assert-Null $malformed.BranchesCovered 'malformed report -> null covered'
+    Assert-Null $malformed.BranchesTotal   'malformed report -> null total'
+
     # --- JSON contract: what Measure-Coverage writes, the poster must read back. ---
     # Mirrors the [ordered] payload the orchestrator emits, round-tripped through the
     # poster's security-boundary projection.

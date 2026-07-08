@@ -117,19 +117,14 @@ jobs:
           }
           $head = ConvertTo-SafeCoverageMetrics (Read-CoverageJson 'artifact/head.coverage.json')
           $base = ConvertTo-SafeCoverageMetrics (Read-CoverageJson 'artifact/base.coverage.json')
-          $headPresent = Test-CoverageMetricsPresent $head
-          $basePresent = Test-CoverageMetricsPresent $base
-          if (-not $headPresent) {
-            $body = Format-CoverageComment -Failed -HeadSha $env:HEAD_SHA -RunUrl $env:RUN_URL
-          } elseif ($basePresent) {
-            $body = Format-CoverageComment -BaseMetrics $base -HeadMetrics $head `
-              -HeadSha $env:HEAD_SHA -BaseSha $env:BASE_SHA -RunUrl $env:RUN_URL
-          } else {
-            $body = Format-CoverageComment -HeadMetrics $head -BaselineUnavailable `
-              -HeadSha $env:HEAD_SHA -BaseSha $env:BASE_SHA -RunUrl $env:RUN_URL
-          }
+          # A PR always has a base, so the base file's presence (kept only when the
+          # base leg succeeded) selects comparison vs baseline-unavailable.
+          $body = Format-CoverageCommentFromMetrics -HeadMetrics $head -BaseMetrics $base -HasBase $true `
+            -HeadSha $env:HEAD_SHA -BaseSha $env:BASE_SHA -RunUrl $env:RUN_URL
           New-Item -ItemType Directory -Force -Path out | Out-Null
           Set-Content -LiteralPath out/comment.md -Value $body -Encoding UTF8
+          $headPresent = Test-CoverageMetricsPresent $head
+          $basePresent = Test-CoverageMetricsPresent $base
           Write-Host "Rendered coverage comment (headPresent=$headPresent basePresent=$basePresent)"
 
       - name: Post / update sticky comment

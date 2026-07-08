@@ -324,6 +324,10 @@ function Format-CoverageComment {
         When set, the base branch measurement is missing (e.g. its build failed), so
         render the PR's absolute coverage with an em-dash delta and a note, instead
         of a misleading comparison.
+    .PARAMETER NoBaseline
+        When set, there is intentionally no base to compare against (a manual
+        branch-dispatch measure). Render the head's absolute coverage as a plain
+        two-column table with no base column, delta, or "vs the base branch" wording.
     #>
     param(
         [AllowNull()]$BaseMetrics,
@@ -332,7 +336,8 @@ function Format-CoverageComment {
         [string]$BaseSha = '',
         [string]$RunUrl = '',
         [switch]$Failed,
-        [switch]$BaselineUnavailable
+        [switch]$BaselineUnavailable,
+        [switch]$NoBaseline
     )
     $marker = $script:CoverageCommentMarker
     $flask = [char]::ConvertFromUtf32(0x1F9EA)  # test tube
@@ -349,6 +354,26 @@ function Format-CoverageComment {
         $suffix = if ($RunUrl) { " See the [workflow run]($RunUrl) for details." } else { '' }
         $lines.Add("> Coverage run failed for ``$headShort`` (build or measurement error).$suffix")
         $lines.Add('')
+        return ($lines -join "`n")
+    }
+
+    if ($NoBaseline) {
+        # No base to compare against (a manual branch-dispatch measure). Show the
+        # absolute numbers in a plain two-column table — no base column, no delta,
+        # and none of the "vs the base branch" / "baseline unavailable" wording.
+        $lines.Add("Coverage for ``$headShort`` — unit + selftest merged.")
+        $lines.Add('')
+        $lines.Add('| Metric | Coverage |')
+        $lines.Add('|---|--:|')
+        $lines.Add("| Line   | $(Format-Percent $HeadMetrics.Line) |")
+        $lines.Add("| Branch | $(Format-BranchCell $HeadMetrics.Branch $HeadMetrics.BranchesCovered $HeadMetrics.BranchesTotal) |")
+        $lines.Add('')
+        $absLegend = 'Coverage is unit + selftest merged (Debug x64) on the CI runner; no base branch to compare against.'
+        if ($RunUrl) {
+            $lines.Add("<sub>$absLegend Cobertura reports attached to the <a href=`"$RunUrl`">workflow run</a> as artifacts.</sub>")
+        } else {
+            $lines.Add("<sub>$absLegend</sub>")
+        }
         return ($lines -join "`n")
     }
 
@@ -399,4 +424,40 @@ function Format-CoverageComment {
     }
 
     return ($lines -join "`n")
+}
+
+function Format-CoverageCommentFromMetrics {
+    <#
+    .SYNOPSIS
+        Pick the right Format-CoverageComment render mode from a pair of (already
+        sanitized) metrics objects, so the poster and the run-summary select the mode
+        the same way — one tested code path instead of duplicated YAML branching.
+    .DESCRIPTION
+        Selection:
+          - head not present                -> Failed (CAUTION).
+          - head present, HasBase = $false  -> NoBaseline (absolute, branch dispatch).
+          - head + base present             -> full base | PR | Δ comparison.
+          - head present, base missing      -> BaselineUnavailable (absolute + warning).
+        Pass metrics already run through ConvertTo-SafeCoverageMetrics.
+    #>
+    param(
+        [AllowNull()]$HeadMetrics,
+        [AllowNull()]$BaseMetrics,
+        [bool]$HasBase = $true,
+        [string]$HeadSha = '',
+        [string]$BaseSha = '',
+        [string]$RunUrl = ''
+    )
+    if (-not (Test-CoverageMetricsPresent $HeadMetrics)) {
+        return Format-CoverageComment -Failed -HeadSha $HeadSha -RunUrl $RunUrl
+    }
+    if (-not $HasBase) {
+        return Format-CoverageComment -HeadMetrics $HeadMetrics -NoBaseline -HeadSha $HeadSha -RunUrl $RunUrl
+    }
+    if (Test-CoverageMetricsPresent $BaseMetrics) {
+        return Format-CoverageComment -BaseMetrics $BaseMetrics -HeadMetrics $HeadMetrics `
+            -HeadSha $HeadSha -BaseSha $BaseSha -RunUrl $RunUrl
+    }
+    return Format-CoverageComment -HeadMetrics $HeadMetrics -BaselineUnavailable `
+        -HeadSha $HeadSha -BaseSha $BaseSha -RunUrl $RunUrl
 }

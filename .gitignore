@@ -224,8 +224,11 @@ coverage/
 !tools/coverage/**
 # `tests/coverage/ci/` holds the source-controlled coverage-comment CI scripts
 # (see .github/workflows/coverage.yml); carve it out of the `coverage/` ignore too.
+# The `**` negation would also re-include generated cobertura reports, so re-assert
+# the report ignore afterwards (a later pattern wins) to keep them untracked.
 !tests/coverage/
 !tests/coverage/**
+tests/coverage/**/*.cobertura.xml
 
 # Eval / scratch run output — local artifacts from eval drivers, never tracked.
 runs/

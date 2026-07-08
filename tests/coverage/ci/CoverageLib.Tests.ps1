@@ -45,13 +45,15 @@ function Assert-True {
 
 function Assert-Match {
     param([string]$Haystack, [string]$Needle, [string]$Message)
-    if ($Haystack -like "*$Needle*") { $script:Pass++ }
+    # Ordinal substring test — NOT -like, whose wildcard metacharacters ([ ] * ?)
+    # would make needles such as '[!CAUTION]' match without the literal text.
+    if ($Haystack.Contains($Needle)) { $script:Pass++ }
     else { $script:Fail++; $script:Failures.Add("$Message`n    missing substring: [$Needle]") }
 }
 
 function Assert-NotMatch {
     param([string]$Haystack, [string]$Needle, [string]$Message)
-    if ($Haystack -notlike "*$Needle*") { $script:Pass++ }
+    if (-not $Haystack.Contains($Needle)) { $script:Pass++ }
     else { $script:Fail++; $script:Failures.Add("$Message`n    unexpected substring: [$Needle]") }
 }
 
@@ -234,6 +236,44 @@ Assert-NotMatch $baseGone '+0.00 pp'                   'baseline-unavailable sho
 $evilRaw = ConvertTo-SafeCoverageMetrics ([pscustomobject]@{ line = '<img src=x onerror=alert(1)>'; branch = '75.2'; branchesCovered = '510'; branchesTotal = '678' })
 $evilComment = Format-CoverageComment -BaseMetrics $base -HeadMetrics $evilRaw -HeadSha 'aaa' -BaseSha 'bbb'
 Assert-NotMatch $evilComment 'onerror' 'sanitized metrics never inject markup into the comment'
+
+# ── Format-CoverageComment: no-baseline (branch dispatch) mode ────────────────
+$nb = Format-CoverageComment -HeadMetrics $head -NoBaseline -HeadSha 'abcdef1234567' -RunUrl 'https://example/run/5'
+Assert-Match    $nb '<!-- reactor-coverage -->' 'no-baseline keeps the marker'
+Assert-Match    $nb '| Metric | Coverage |'     'no-baseline uses a plain two-column table'
+Assert-Match    $nb '| Line   | 87.30% |'       'no-baseline shows absolute line coverage'
+Assert-Match    $nb '| Branch | 75.20% (510/678) |' 'no-baseline shows absolute branch coverage'
+Assert-NotMatch $nb 'vs the base branch'        'no-baseline omits the base-branch wording'
+Assert-NotMatch $nb '[!WARNING]'                'no-baseline is not a warning'
+Assert-NotMatch $nb ' pp'                        'no-baseline shows no delta column'
+Assert-NotMatch $nb ([string][char]0x0394)      'no-baseline has no delta header'
+
+# ── Format-CoverageCommentFromMetrics: the shared render-mode selector ────────
+$present = ConvertTo-SafeCoverageMetrics ([pscustomobject]@{ line = '87.3'; branch = '75.2'; branchesCovered = '510'; branchesTotal = '678' })
+$basePresent = ConvertTo-SafeCoverageMetrics ([pscustomobject]@{ line = '86.1'; branch = '74.5'; branchesCovered = '500'; branchesTotal = '671' })
+$absent = ConvertTo-SafeCoverageMetrics $null
+
+# head absent -> Failed body.
+$selFailed = Format-CoverageCommentFromMetrics -HeadMetrics $absent -BaseMetrics $basePresent -HasBase $true -HeadSha 'aaa' -BaseSha 'bbb'
+Assert-Match    $selFailed '[!CAUTION]'          'selector: absent head -> failed body'
+Assert-NotMatch $selFailed '| Metric |'          'selector: failed body has no table'
+
+# head + base present, HasBase true -> full comparison.
+$selCompare = Format-CoverageCommentFromMetrics -HeadMetrics $present -BaseMetrics $basePresent -HasBase $true -HeadSha 'aaa' -BaseSha 'bbb'
+Assert-Match    $selCompare 'Metric | base | PR' 'selector: head+base -> comparison table'
+Assert-Match    $selCompare '+1.20 pp'           'selector: comparison shows the delta'
+Assert-NotMatch $selCompare '[!WARNING]'         'selector: comparison has no warning'
+
+# head present, base absent, HasBase true -> baseline unavailable.
+$selUnavail = Format-CoverageCommentFromMetrics -HeadMetrics $present -BaseMetrics $absent -HasBase $true -HeadSha 'aaa' -BaseSha 'bbb'
+Assert-Match    $selUnavail '[!WARNING]'          'selector: missing base -> baseline-unavailable'
+Assert-Match    $selUnavail '87.30%'              'selector: baseline-unavailable still shows head'
+
+# head present, HasBase false -> no-baseline absolute (branch dispatch).
+$selNoBase = Format-CoverageCommentFromMetrics -HeadMetrics $present -BaseMetrics $absent -HasBase $false -HeadSha 'aaa'
+Assert-Match    $selNoBase '| Metric | Coverage |' 'selector: no base -> absolute table'
+Assert-NotMatch $selNoBase 'vs the base branch'    'selector: no base omits base-branch wording'
+Assert-NotMatch $selNoBase '[!WARNING]'            'selector: no base is not a warning'
 
 # ── Summary ──────────────────────────────────────────────────────────────────
 Write-Host ''
