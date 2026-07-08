@@ -1282,6 +1282,17 @@ internal static class SelfTestFixtureRegistry
         "SplitterCov_DragWithoutFlexParent_StillFiresEvent",
         "SplitterCov_AutomationPeer_ReportsThumbAndClassName",
 
+        // Supplemental docking native-control seam coverage
+        // (DockControlSeamCoverageFixtures.cs) — overlay disabled/hit-test/
+        // reveal/peer, splitter DiagnosticSink MOVE branch, tear-off
+        // XamlRoot-null abort + seam guards.
+        "SeamCov_Overlay_SetDisabledTargets_GuardsHoverAndConfirm",
+        "SeamCov_Overlay_HitTestPipeline_ResolvesTargetsAndConfirms",
+        "SeamCov_Overlay_PointerEnterExit_TogglesGroupReveal",
+        "SeamCov_Overlay_AutomationPeer_ReportsGroup",
+        "SeamCov_Splitter_DiagnosticSink_TracesDragLifecycle",
+        "SeamCov_TearOff_MoveWithoutXamlRoot_AbortsAndGuards",
+
         // Deterministic splitter matrix — 41 cases driving the new
         // BeginSimulatedDrag / ContinueSimulatedDrag / EndSimulatedDrag
         // injection API against a real FlexPanel + N panes + (N-1) splitters.
@@ -2754,6 +2765,13 @@ internal static class SelfTestFixtureRegistry
         "SplitterCov_RaiseResizeDelta_PropagatesEventArgs" => new NativeDockingCoverageSplitterFixtures.Splitter_RaiseResizeDelta_PropagatesEventArgs(harness),
         "SplitterCov_DragWithoutFlexParent_StillFiresEvent" => new NativeDockingCoverageSplitterFixtures.Splitter_DragWithoutFlexParent_StillFiresEvent(harness),
         "SplitterCov_AutomationPeer_ReportsThumbAndClassName" => new NativeDockingCoverageSplitterFixtures.Splitter_AutomationPeer_ReportsThumbAndClassName(harness),
+
+        "SeamCov_Overlay_SetDisabledTargets_GuardsHoverAndConfirm" => new OverlaySeamCoverageFixtures.Overlay_SetDisabledTargets_GuardsHoverAndConfirm(harness),
+        "SeamCov_Overlay_HitTestPipeline_ResolvesTargetsAndConfirms" => new OverlaySeamCoverageFixtures.Overlay_HitTestPipeline_ResolvesTargetsAndConfirms(harness),
+        "SeamCov_Overlay_PointerEnterExit_TogglesGroupReveal" => new OverlaySeamCoverageFixtures.Overlay_PointerEnterExit_TogglesGroupReveal(harness),
+        "SeamCov_Overlay_AutomationPeer_ReportsGroup" => new OverlaySeamCoverageFixtures.Overlay_AutomationPeer_ReportsGroup(harness),
+        "SeamCov_Splitter_DiagnosticSink_TracesDragLifecycle" => new SplitterSeamCoverageFixtures.Splitter_DiagnosticSink_TracesDragLifecycle(harness),
+        "SeamCov_TearOff_MoveWithoutXamlRoot_AbortsAndGuards" => new TearOffSeamCoverageFixtures.TearOff_MoveWithoutXamlRoot_AbortsAndGuards(harness),
 
         "SplitterMatrix_A01_TwoPaneH_DragForward" => new SplitterMatrixFixtures.A01_TwoPaneH_DragForward_LeadingTracksCursor(harness),
         "SplitterMatrix_A02_TwoPaneH_DragBackward" => new SplitterMatrixFixtures.A02_TwoPaneH_DragBackward_LeadingTracksCursor(harness),
