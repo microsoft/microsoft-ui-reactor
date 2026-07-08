@@ -157,7 +157,8 @@ public class DataGridTests : AppTestBase
         // 5. Tab WHILE EDITING commits the current cell (onRowChanged fires) and reopens the editor
         //    on the next cell — the editing-branch Tab arm (CommitAndMoveNext + BeginEdit). The
         //    grid registers its handler with handledEventsToo so Tab reaches it even after WinUI's
-        //    FocusManager consumes it. Editor now at (0,2) City='Reno'; the commit logs row 1.
+        //    FocusManager consumes it. Editor now at (0,2) City='Reno'; the commit logs the edited
+        //    row under its key (Id=1, the first row), so EditLog gains a "[1:" entry.
         PressEditingKey(InputInjector.VkTab);
         WaitForTextContaining(EditLogId, "[1:", timeoutMs: 5000);
         AssertEditorValue("Reno", "Editing Tab should commit and advance the editor to City='Reno'");

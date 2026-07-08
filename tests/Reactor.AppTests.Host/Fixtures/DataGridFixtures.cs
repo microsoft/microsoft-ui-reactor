@@ -112,12 +112,15 @@ internal static class DataGridFixtures
             var (editLog, appendEdit) = UseReducer("");
             var (selStatus, setSelStatus) = UseState("none");
 
-            // Capture the UI-thread dispatcher up front. The DataGrid commits edits through its
-            // UseMutation pipeline (see DataGridComponent), whose async mutator awaits onRowChanged
-            // with ConfigureAwait(false), so neither the callback nor its continuation is guaranteed
-            // to run on the UI thread. Marshal the state updates (appendEdit/setSelStatus) back
-            // through this dispatcher so they are always applied on the UI thread.
-            var dq = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+            // The DataGrid commits edits through its UseMutation pipeline (see DataGridComponent),
+            // whose async mutator awaits onRowChanged with ConfigureAwait(false), so neither the
+            // callback nor its continuation is guaranteed to run on the UI thread. Capture the
+            // UI-thread dispatcher and marshal every state update through it. Render always runs on
+            // the UI thread, so require a non-null queue here (fail fast) rather than guarding each
+            // enqueue with dq? — a silently-dropped update would surface as a confusing test timeout.
+            var dq = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()
+                ?? throw new InvalidOperationException(
+                    "KeyboardNavGrid fixture Render must run on a UI thread with a DispatcherQueue.");
 
             var source = UseMemo(() => new ListDataSource<NavItem>(
                 new[]
@@ -160,11 +163,11 @@ internal static class DataGridFixtures
                         var selected = "none";
                         foreach (var k in keys)
                             selected = k.Value; // SelectionMode.Single -> at most one key
-                        dq?.TryEnqueue(() => setSelStatus(selected));
+                        dq.TryEnqueue(() => setSelStatus(selected));
                     },
                     onRowChanged: (key, item) =>
                     {
-                        dq?.TryEnqueue(() =>
+                        dq.TryEnqueue(() =>
                         {
                             appendEdit(prev => prev + $"[{key.Value}:{item.First},{item.Last},{item.City}]");
                         });
