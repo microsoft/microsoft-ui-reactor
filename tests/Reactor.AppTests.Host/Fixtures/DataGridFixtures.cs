@@ -112,8 +112,11 @@ internal static class DataGridFixtures
             var (editLog, appendEdit) = UseReducer("");
             var (selStatus, setSelStatus) = UseState("none");
 
-            // Capture the UI-thread dispatcher: onRowChanged runs on a threadpool thread (via
-            // HandleAsyncCommit's Task.Run), so its state update must hop back to the UI thread.
+            // Capture the UI-thread dispatcher up front. The DataGrid commits edits through its
+            // UseMutation pipeline (see DataGridComponent), whose async mutator awaits onRowChanged
+            // with ConfigureAwait(false), so neither the callback nor its continuation is guaranteed
+            // to run on the UI thread. Marshal the state updates (appendEdit/setSelStatus) back
+            // through this dispatcher so they are always applied on the UI thread.
             var dq = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
 
             var source = UseMemo(() => new ListDataSource<NavItem>(
