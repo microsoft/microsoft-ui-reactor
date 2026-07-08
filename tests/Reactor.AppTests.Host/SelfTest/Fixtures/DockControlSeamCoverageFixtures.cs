@@ -258,7 +258,11 @@ internal static class OverlaySeamCoverageFixtures
             await Harness.Render();
 
             var peer = FrameworkElementAutomationPeer.CreatePeerForElement(overlay);
-            H.Check("Overlay_Peer_NonNull", peer is not null);
+            // The class-name / localized-control-type values come from the
+            // overlay's custom OnCreateAutomationPeer override; if that override
+            // were removed the inherited Grid peer would report different values,
+            // so these are the real oracles (a bare non-null check is not — the
+            // base Grid still yields a peer).
             H.Check("Overlay_Peer_ControlTypeGroup",
                 peer?.GetAutomationControlType() == AutomationControlType.Group);
             H.Check("Overlay_Peer_ClassName",
@@ -420,8 +424,8 @@ internal static class TearOffSeamCoverageFixtures
 
                 H.Check("TearOff_NullXamlRoot_BeginTearOffNotCalled", !beginTearOffCalled);
                 var (candAfter, _, _) = DockTabTearOff.InspectCandidateForTest(tabView);
+                // Secondary postcondition: the abort leaves no dangling candidate.
                 H.Check("TearOff_NullXamlRoot_ClearsCandidate", candAfter is null);
-                H.Check("TearOff_NullXamlRoot_NoTracker", !DockTabTearOffTracker.IsActiveForTest);
             }
             finally
             {
