@@ -45,10 +45,18 @@ public class CorePureUtilitiesUnitCoverageExtraTests
     // ── Optional<T>.Equals(object) ──────────────────────────────────────────
 
     [Fact]
-    public void Optional_ObjectEquals_MatchesOnlyEqualBoxedOptional()
+    public void Optional_ObjectEquals_IsDeclaredOverride_AndMatchesOnlyEqualBoxedOptional()
     {
-        var seven = Optional<int>.Of(7);
+        // The Equals(object) override is declared on Optional<T> itself, not inherited
+        // from ValueType. This is the real oracle: deleting the override would make the
+        // boxed calls below fall back to ValueType.Equals (which returns the same
+        // results for these int cases), so only the DeclaringType check distinguishes it.
+        var equalsObj = typeof(Optional<int>).GetMethod(
+            nameof(object.Equals), new[] { typeof(object) });
+        Assert.NotNull(equalsObj);
+        Assert.Equal(typeof(Optional<int>), equalsObj!.DeclaringType);
 
+        var seven = Optional<int>.Of(7);
         Assert.True(seven.Equals((object)Optional<int>.Of(7)));   // equal boxed Optional
         Assert.False(seven.Equals((object)Optional<int>.Of(8)));  // different value
         Assert.False(seven.Equals((object)"7"));                  // wrong runtime type
