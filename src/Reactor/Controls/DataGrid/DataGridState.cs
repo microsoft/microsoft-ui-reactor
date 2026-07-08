@@ -109,10 +109,11 @@ public class DataGridState<T>
 
     /// <summary>
     /// One-shot guard, set synchronously when Tab is pressed while a cell is being edited. An
-    /// editing-Tab moves real focus out of the single-tab-stop grid, which fires the grid's deferred
-    /// LostFocus commit — but the editing-Tab flow (HandleKeyDown) itself commits the current cell and
-    /// reopens the editor on the next cell. Without this guard the LostFocus safety-net would commit a
-    /// second time and tear down that just-reopened editor. Consumed (cleared) by the next LostFocus tick.
+    /// editing-Tab moves real focus out of the single-tab-stop grid, which fires the grid's LostFocus
+    /// handler — but the editing-Tab flow (HandleKeyDown) itself commits the current cell and reopens
+    /// the editor on the next cell. Without this guard the LostFocus safety-net would commit a second
+    /// time and tear down that just-reopened editor. Consumed (cleared) synchronously by the next
+    /// LostFocus event handler, before it schedules its deferred commit check.
     /// </summary>
     internal bool SuppressNextLostFocusCommit { get; set; }
 
