@@ -40,8 +40,11 @@
     Scoped to Configuration=Release only, and set in Directory.Build.props (an
     early import) so an individual csproj can still opt out or add codes via the
     usual TreatWarningsAsErrors / WarningsNotAsErrors / NoWarn knobs after this.
-    NuGet honors TreatWarningsAsErrors during restore, so NU-prefixed warnings
-    escalate too — keep package versions aligned (Directory.Packages.props).
+    NuGet honors TreatWarningsAsErrors during restore, so a Release-configured
+    restore escalates NU-prefixed warnings too. Note the CI/release pipelines
+    restore separately (`dotnet restore` without `-c Release`) and then build with
+    `no-restore`, so NU-prefixed restore warnings only hard-fail on a combined
+    Release restore+build — keep package versions aligned (Directory.Packages.props).
   -->
   <PropertyGroup Condition="'$(Configuration)' == 'Release'">
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
