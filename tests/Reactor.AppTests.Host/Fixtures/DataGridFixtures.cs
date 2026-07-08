@@ -70,7 +70,10 @@ internal static class DataGridFixtures
                         return Task.CompletedTask;
                     },
                     rowHeight: 36
-                ).AutomationId("EditableGrid")
+                ).AutomationId("EditableGrid"),
+                // Focusable target OUTSIDE the grid, so an E2E can move focus off the grid and
+                // exercise the "focus left the grid" LostFocus commit path.
+                Button("blur anchor", () => { }).AutomationId("BlurAnchor")
             );
         }
     }

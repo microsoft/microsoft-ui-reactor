@@ -368,6 +368,20 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                     lostFocusWired.Current = true;
                     g.LostFocus += (sender, e) =>
                     {
+                        // Consume the one-shot editing-Tab guard synchronously here, before the IsEditing
+                        // guard. A keyboard editing-Tab owns this focus-out: it already committed the
+                        // current cell and, when the next cell is editable, reopened the editor there — so
+                        // skip the safety-net commit. Consuming here (not in the deferred tick) is essential:
+                        // when the Tab lands on a NON-editable cell the reopen fails and IsEditing is already
+                        // false by the time this fires, so the guard below would short-circuit and never
+                        // schedule the tick — leaving the flag set to wrongly suppress a later legitimate
+                        // blur-commit (lost edit). The flag is set synchronously in the KeyDown handler,
+                        // before this LostFocus fires.
+                        if (state.SuppressNextLostFocusCommit)
+                        {
+                            state.SuppressNextLostFocusCommit = false;
+                            return;
+                        }
                         if (!state.IsEditing && !state.IsRowEditing) return;
                         // Defer the entire check to the next tick. During DOM transitions
                         // (e.g., cell switching from TextBlock to TextBox), the old element
@@ -375,18 +389,6 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                         // synchronously would falsely conclude that focus left the grid.
                         Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() =>
                         {
-                            // Consume the one-shot editing-Tab guard FIRST, before the IsEditing check.
-                            // A keyboard editing-Tab owns this focus-out: it already committed the current
-                            // cell and, when the next cell is editable, reopened the editor there — so skip
-                            // the safety-net commit. Consuming before the IsEditing guard is essential: if
-                            // the next cell was NOT editable the reopen fails and IsEditing is already false
-                            // here, so consuming afterwards would leave the flag set and wrongly suppress a
-                            // later legitimate blur-commit (lost edit).
-                            if (state.SuppressNextLostFocusCommit)
-                            {
-                                state.SuppressNextLostFocusCommit = false;
-                                return;
-                            }
                             if (!state.IsEditing && !state.IsRowEditing) return;
                             var focused = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(g.XamlRoot);
                             if (focused is DependencyObject dep)

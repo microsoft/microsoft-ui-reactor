@@ -110,6 +110,40 @@ public class DataGridTests : AppTestBase
     }
 
     /// <summary>
+    /// Regression for the SuppressNextLostFocusCommit guard's one-shot lifetime: an editing-Tab into a
+    /// NON-editable next cell reopens no editor (IsEditing ends false), so the guard must still be
+    /// consumed — otherwise it lingers on the persistent state and silently suppresses the NEXT
+    /// legitimate focus-out commit, losing that edit. Here: edit row-1 LastName (its next tab-order
+    /// cell, Salary, is read-only), press Tab, then edit a different row's cell and move focus off the
+    /// grid (click the anchor button). That second edit must commit.
+    /// </summary>
+    [E2eRetry(3)]
+    [TestMethod]
+    public void Interactive_DataGrid_EditingTabToReadOnly_DoesNotSuppressNextCommit()
+    {
+        NavigateToFixtureFresh("DataGrid_EditableGrid");
+        WaitForText("EditLog", "Edits:");
+        Assert.IsNotNull(WaitForName("Smith"), "'Smith' (row 1 LastName) should be visible");
+
+        // Edit row-1 LastName (Smith -> Brown); Tab moves to Salary (read-only) so no editor reopens.
+        TapCell("Smith");
+        TypeIntoFocusedEditor("Brown");
+        InputInjector.Foreground(HostHwnd);
+        InputInjector.Tab();
+        WaitForTextContaining("EditLog", "[1:Alice,Brown]", timeoutMs: 5000);
+
+        // Now edit a different row's cell, then move focus OUT of the grid by clicking the anchor
+        // button. That fires the grid's "focus left the grid" LostFocus commit — the exact path the
+        // guard suppresses. If the guard leaked from the Tab-into-read-only above, 'Bobby' is lost.
+        Assert.IsNotNull(WaitForName("Bob"), "'Bob' (row 2 FirstName) should be visible");
+        TapCell("Bob");
+        TypeIntoFocusedEditor("Bobby");
+        Element("BlurAnchor").Click(); // focus leaves the grid -> blur-commit through LostFocus
+
+        WaitForTextContaining("EditLog", "[2:Bobby,Jones]", timeoutMs: 5000);
+    }
+
+    /// <summary>
     /// Tap a DataGrid cell by its visible text to enter/commit cell edit. The cells are
     /// display-only TextBlocks (no InvokePattern), and a WinUI <c>Tapped</c> only fires on an
     /// ACTIVE window, so winapp's UIA invoke/click can't drive them. We foreground the host and
