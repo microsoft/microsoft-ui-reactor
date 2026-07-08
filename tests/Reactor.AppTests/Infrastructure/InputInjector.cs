@@ -492,24 +492,25 @@ public static class InputInjector
     /// <summary>Press a virtual key with optional Ctrl/Shift/Alt held for the duration.</summary>
     public static void PressKeyWith(ushort virtualKey, bool ctrl = false, bool shift = false, bool alt = false)
     {
-        if (ctrl) KeyDown(VK_CONTROL);
-        if (shift) KeyDown(VK_SHIFT);
-        if (alt) KeyDown(VK_MENU);
+        bool ctrlDown = false, shiftDown = false, altDown = false;
         try
         {
+            // Track each modifier the moment it latches so the finally releases exactly those that
+            // went down — even if a LATER modifier KeyDown, or the key press itself, throws a
+            // partial-SendInput. Pressing the modifiers outside the try would let an earlier one
+            // stay physically latched when a later KeyDown fails, contaminating the next test.
+            if (ctrl) { KeyDown(VK_CONTROL); ctrlDown = true; }
+            if (shift) { KeyDown(VK_SHIFT); shiftDown = true; }
+            if (alt) { KeyDown(VK_MENU); altDown = true; }
             Thread.Sleep(10);
             PressVirtualKey(virtualKey);
             Thread.Sleep(10);
         }
         finally
         {
-            // Always release the modifiers — in reverse order — even if PressVirtualKey threw
-            // (a partial SendInput). Otherwise a failed injection leaves Ctrl/Shift/Alt physically
-            // latched and contaminates the next test's input, matching the try/finally guard the
-            // ShiftTab/ClearViaKeyboard helpers already use.
-            if (alt) KeyUp(VK_MENU);
-            if (shift) KeyUp(VK_SHIFT);
-            if (ctrl) KeyUp(VK_CONTROL);
+            if (altDown) KeyUp(VK_MENU);
+            if (shiftDown) KeyUp(VK_SHIFT);
+            if (ctrlDown) KeyUp(VK_CONTROL);
         }
     }
 

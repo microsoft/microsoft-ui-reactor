@@ -224,7 +224,12 @@ public class ChartKeyboardNavTests : AppTestBase
     /// <summary>Re-focus the plot area, then inject one (optionally chorded) key.</summary>
     private void PressOnChart(ushort virtualKey, bool ctrl = false, bool shift = false, bool alt = false)
     {
-        UiaFocusChart();
+        // Re-focus before each key. If UIA SetFocus is rejected on this build (UiaFocusChart
+        // returns false), fall back to a real pointer click on the plot area — the same focus
+        // strategy EnsureChartFocusedAndKeyboardLive uses — so the key actually lands on the chart
+        // rather than on whatever else currently holds focus.
+        if (!UiaFocusChart())
+            ClickChartToFocus();
         InputInjector.PressKeyWith(virtualKey, ctrl: ctrl, shift: shift, alt: alt);
         Thread.Sleep(45);
     }
