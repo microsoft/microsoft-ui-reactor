@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -62,28 +63,12 @@ internal static class ArgumentShapeGate
     /// </summary>
     internal static bool AnyArgumentIsErrorType(
         SeparatedSyntaxList<ArgumentSyntax> args, SemanticModel model, CancellationToken ct)
-    {
-        foreach (var arg in args)
-        {
-            var type = model.GetTypeInfo(arg.Expression, ct).Type;
-            if (type is null)
-                continue; // untyped (lambda / null literal) — not an error type.
-            if (type is IErrorTypeSymbol || type.TypeKind == TypeKind.Error)
-                return true;
-        }
-        return false;
-    }
+        => args.Any(arg => model.GetTypeInfo(arg.Expression, ct).Type is { } type
+            && (type is IErrorTypeSymbol || type.TypeKind == TypeKind.Error));
 
     /// <summary>True when any argument is passed by name; both analyzers only reason about positional args.</summary>
     internal static bool HasNamedArgument(SeparatedSyntaxList<ArgumentSyntax> args)
-    {
-        foreach (var arg in args)
-        {
-            if (arg.NameColon is not null)
-                return true;
-        }
-        return false;
-    }
+        => args.Any(arg => arg.NameColon is not null);
 
     /// <summary>Highlights the callee name (the identifier, or the member name in <c>X.Foo()</c>).</summary>
     internal static Location CalleeLocation(InvocationExpressionSyntax invocation) => invocation.Expression switch

@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Linq;
 using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -107,11 +108,8 @@ public sealed class StringForElementArgumentAnalyzer : DiagnosticAnalyzer
             return;
 
         // A params tail makes positional arg->parameter mapping ambiguous; stay out of that shape.
-        foreach (var p in candidate.Parameters)
-        {
-            if (p.IsParams)
-                return;
-        }
+        if (candidate.Parameters.Any(p => p.IsParams))
+            return;
 
         if (!TryFindSingleFailingArgument(candidate, args, model, ct, out var failingIndex))
             return;
