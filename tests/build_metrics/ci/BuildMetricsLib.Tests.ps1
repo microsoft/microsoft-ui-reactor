@@ -291,6 +291,19 @@ Assert-Null ($safeJunk | Where-Object { $_.Key -eq 'nupkg.Advanced' }).Bytes 'ne
 Assert-Null ($safeJunk | Where-Object { $_.Key -eq 'asm|Advanced|Reactor.Advanced.dll' }).Bytes 'scientific-notation bytes -> null'
 Assert-Null ($safeJunk | Where-Object { $_.Key -eq 'asm|Devtools|Microsoft.UI.Reactor.Devtools.dll' }).Bytes 'decimal bytes -> null'
 
+# Defense-in-depth: a malicious PR that emits an unbounded number of validly-shaped
+# per-DLL rows must not flood the rendered comment. Rows are capped per package,
+# and the kept subset is deterministic (sorted by filename, smallest names win).
+$flood = for ($i = 0; $i -lt 500; $i++) {
+    [pscustomobject]@{ Key = ('asm|Reactor|Flood{0:D4}.dll' -f $i); Label = 'x'; Group = 'y'; Bytes = 1 }
+}
+$safeFlood = ConvertTo-SafeMeasurements -RawMeasurements $flood
+$reactorFlood = @($safeFlood | Where-Object { $_.Group -eq 'Assemblies in Microsoft.UI.Reactor' })
+Assert-Equal 32 $reactorFlood.Count 'per-DLL rows hard-capped per package (flood bounded to 32)'
+Assert-Equal 'Flood0000.dll' $reactorFlood[0].Label  'capped subset is deterministic (smallest filename kept first)'
+Assert-Equal 'Flood0031.dll' $reactorFlood[31].Label 'capped subset keeps the lexicographically smallest 32 names'
+Assert-True (-not ($safeFlood | Where-Object { $_.Label -eq 'Flood0032.dll' })) 'rows beyond the cap are dropped'
+
 # Null input -> just the three nupkg rows with all-null bytes (renders as a "failed" set).
 $safeNull = ConvertTo-SafeMeasurements -RawMeasurements $null
 Assert-Equal 3 $safeNull.Count 'null raw -> the three package nupkg rows only'

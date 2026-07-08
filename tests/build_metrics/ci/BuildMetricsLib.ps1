@@ -74,6 +74,16 @@ $script:BuildMetricsPackageSpec = @(
 # a table cell. A name that fails this is dropped (never rendered).
 $script:BuildMetricsDllNameRegex = '\A[A-Za-z0-9._+-]+\.dll\z'
 
+# Defense-in-depth cap: the per-DLL rows come from the untrusted sizes.json a PR
+# build produced, and a malicious PR could edit the measure script to emit
+# thousands of validly-shaped 'asm|<PkgKey>|<name>.dll' keys, bloating the
+# rendered comment (or blowing past GitHub's comment-size limit and failing the
+# privileged poster). Real packages ship a handful of DLLs, so we hard-cap how
+# many per-DLL rows any single package may contribute. Rows are sorted by
+# filename BEFORE the cap is applied, so the selection is deterministic (the
+# lexicographically smallest names win) and can't be steered by row ordering.
+$script:BuildMetricsMaxDllRowsPerPackage = 32
+
 function Get-BuildMetricsPackageSpec {
     <#
     .SYNOPSIS
@@ -117,8 +127,10 @@ function ConvertTo-SafeMeasurements {
             package and <Dll> passes the strict .dll allowlist, emit a per-DLL row
             using the validated <Dll> filename as the display Label and the
             package's TRUSTED AssemblyGroup as the Group. Rows are sorted by Label
-            for deterministic output. Unknown keys, malformed keys, and filenames
-            that fail the allowlist are dropped.
+            for deterministic output and then hard-capped per package
+            ($BuildMetricsMaxDllRowsPerPackage) so a malicious PR cannot flood the
+            comment with unboundedly many rows. Unknown keys, malformed keys, and
+            filenames that fail the allowlist are dropped.
 
         The output is therefore fully determined by trusted code plus a set of
         validated integers and allowlisted DLL filenames.
@@ -164,7 +176,11 @@ function ConvertTo-SafeMeasurements {
             if ($raw.PSObject.Properties['Bytes']) { $bytes = ConvertTo-SafeBytes $raw.Bytes }
             $rows.Add([pscustomobject]@{ Key = $rawKey; Label = $name; Group = $p.AssemblyGroup; Bytes = $bytes })
         }
-        foreach ($r in ($rows | Sort-Object Label)) { $out.Add($r) }
+        # Sort by validated filename first, THEN cap, so the kept subset is
+        # deterministic and independent of artifact row ordering.
+        $sorted = @($rows | Sort-Object Label)
+        $limit = [Math]::Min($sorted.Count, $script:BuildMetricsMaxDllRowsPerPackage)
+        for ($i = 0; $i -lt $limit; $i++) { $out.Add($sorted[$i]) }
     }
 
     return $out

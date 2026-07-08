@@ -102,6 +102,9 @@ re-maps every row through the trusted `$BuildMetricsPackageSpec`:
   case-folding can't smuggle a non-ASCII glyph through `[A-Za-z]`), it is always
   safe to emit verbatim. The DLL's group is the package's trusted assembly group;
   unknown keys, malformed keys, and filenames that fail the allowlist are dropped.
+- Per-DLL rows are **hard-capped per package** (32 rows) after a deterministic
+  sort by filename, so a malicious PR that emits thousands of validly-shaped DLL
+  keys can't flood the comment or push it past GitHub's comment-size limit.
 
 So the comment is fully determined by trusted code plus a set of validated
 integers and allowlisted DLL filenames — the untrusted artifact can never inject
