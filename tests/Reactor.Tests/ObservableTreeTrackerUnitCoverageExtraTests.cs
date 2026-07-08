@@ -27,6 +27,10 @@ public class ObservableTreeTrackerUnitCoverageExtraTests
 
         public string Name { get; set; } = string.Empty;
 
+        // Grow the graph WITHOUT raising PropertyChanged, so the tracker's subscribed
+        // set only changes if a re-sync actually runs.
+        public void AttachNextSilently(Leaf next) => _next = next;
+
         public void Raise(string? propertyName)
             => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
@@ -57,23 +61,32 @@ public class ObservableTreeTrackerUnitCoverageExtraTests
     }
 
     [Fact]
-    public void SyncSubscriptions_ValueTypeChangeOnNestedNode_RequestsRerender()
+    public void SyncSubscriptions_ValueTypeChange_RerendersButDoesNotResubscribe()
     {
         int renders = 0;
         using var tracker = new ObservableTreeTracker(() => renders++);
 
         var root = new Leaf();
+        tracker.SyncSubscriptions(root); // subscribes root only
+
+        // Silently grow the graph: a re-sync (if one ran) would now subscribe child.
         var child = new Leaf();
-        root.Next = child;
-        tracker.SyncSubscriptions(root);
+        root.AttachNextSilently(child);
 
         renders = 0;
-        child.Count = 5; // value-type property -> rerender then early-return arm
+        root.Count = 5; // value-type change fires the unconditional rerender...
         Assert.Equal(1, renders);
+
+        // ...but the value-type guard returns before re-syncing, so `child` was never
+        // subscribed. Removing that guard would resync and subscribe child, making the
+        // next mutation rerender — so this is the oracle for the guard, not the count.
+        renders = 0;
+        child.Count = 7;
+        Assert.Equal(0, renders);
     }
 
     [Fact]
-    public void SyncSubscriptions_EmptyPropertyName_RequestsRerenderThenReturns()
+    public void SyncSubscriptions_EmptyPropertyName_RerendersButDoesNotResubscribe()
     {
         int renders = 0;
         using var tracker = new ObservableTreeTracker(() => renders++);
@@ -81,9 +94,18 @@ public class ObservableTreeTrackerUnitCoverageExtraTests
         var root = new Leaf();
         tracker.SyncSubscriptions(root);
 
+        var child = new Leaf();
+        root.AttachNextSilently(child);
+
         renders = 0;
-        root.Raise(string.Empty); // null/empty name -> rerender, then the guard returns
+        root.Raise(string.Empty); // nameless change fires the unconditional rerender...
         Assert.Equal(1, renders);
+
+        // ...then the handler returns before re-syncing, so a nameless notification
+        // never grows the subscription set: the silently-attached child stays unheard.
+        renders = 0;
+        child.Count = 7;
+        Assert.Equal(0, renders);
     }
 
     [Fact]

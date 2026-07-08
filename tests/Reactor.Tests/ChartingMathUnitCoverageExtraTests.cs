@@ -128,61 +128,77 @@ public class ChartingMathUnitCoverageExtraTests
     }
 
     [Fact]
-    public void RadialArea_Setters_ProduceClosedRing_AndOuterRadiusChangesGeometry()
+    public void RadialArea_Setters_ProduceClosedRing_AndDistinctEndAngleChangesGeometry()
     {
         var data = new (double angle, double value)[]
         {
             (0, 50), (Math.PI / 2, 60), (Math.PI, 70),
         };
 
-        // SetAngle is applied FIRST so the subsequent SetStartAngle/SetEndAngle
-        // survive (SetAngle resets the end-angle accessor to null); this keeps the
-        // non-null end-angle path in Generate exercised.
-        var gen = RadialAreaGenerator.Create<(double angle, double value)>(
+        // A DISTINCT end-angle: the outer (forward) pass uses _angle1 while the inner
+        // pass uses _angle0, so the ring differs from the single-angle version below.
+        var twoAngle = RadialAreaGenerator.Create<(double angle, double value)>(
                 d => d.angle, _ => 10, d => d.value)
-            .SetAngle((d, _) => d.angle)
             .SetStartAngle((d, _) => d.angle)
-            .SetEndAngle((d, _) => d.angle)
+            .SetEndAngle((d, _) => d.angle + 0.5)
             .SetInnerRadius((_, _) => 10)
             .SetOuterRadius((d, _) => d.value)
             .SetDefined((_, _) => true)
-            .SetDigits(2);
-        var path = gen.Generate(data);
-        Assert.NotNull(path);
-        Assert.Contains("Z", path); // area is a closed ring
+            .SetDigits(2).Generate(data);
+        Assert.NotNull(twoAngle);
+        Assert.Contains("Z", twoAngle); // closed ring
 
-        // Doubling the outer radius yields a different ring -> SetOuterRadius applied.
+        // Same inputs, but SetAngle collapses the accessor to a single angle (resets
+        // _angle1 to null), so the outer pass falls back to _angle0 -> a different ring.
+        // This is the oracle for the non-null end-angle branch in Generate.
+        var oneAngle = RadialAreaGenerator.Create<(double angle, double value)>(
+                d => d.angle, _ => 10, d => d.value)
+            .SetStartAngle((d, _) => d.angle)
+            .SetEndAngle((d, _) => d.angle + 0.5)
+            .SetAngle((d, _) => d.angle) // resets _angle1 = null
+            .SetInnerRadius((_, _) => 10)
+            .SetOuterRadius((d, _) => d.value)
+            .SetDefined((_, _) => true)
+            .SetDigits(2).Generate(data);
+        Assert.NotEqual(twoAngle, oneAngle);
+
+        // And the outer radius genuinely drives the geometry.
         var wider = RadialAreaGenerator.Create<(double angle, double value)>(
                 d => d.angle, _ => 10, d => d.value)
-            .SetAngle((d, _) => d.angle)
             .SetStartAngle((d, _) => d.angle)
-            .SetEndAngle((d, _) => d.angle)
+            .SetEndAngle((d, _) => d.angle + 0.5)
             .SetInnerRadius((_, _) => 10)
             .SetOuterRadius((d, _) => d.value * 2)
             .SetDefined((_, _) => true)
             .SetDigits(2).Generate(data);
-        Assert.NotEqual(path, wider);
+        Assert.NotEqual(twoAngle, wider);
     }
 
     [Fact]
-    public void RadialLink_Setters_ProduceQuadratic_AndTargetChangesEndpoint()
+    public void RadialLink_SourceAndTargetSetters_MoveTheCurveEndpoints()
     {
-        // Baseline: target accessor == source accessor.
+        // Baseline: source and target both use the constructor-default accessors.
         var baseline = new RadialLinkGenerator<(double a, double r)>(
                 d => (d.a, d.r), d => (d.a, d.r))
             .SetDigits(2).Generate((1.0, 50.0));
         Assert.NotNull(baseline);
-        Assert.Contains("Q", baseline);
 
-        // Moving the target to a different angle/radius changes the curve endpoint.
-        var moved = new RadialLinkGenerator<(double a, double r)>(
+        // A distinct source accessor moves the start point (the MoveTo).
+        var movedSource = new RadialLinkGenerator<(double a, double r)>(
                 d => (d.a, d.r), d => (d.a, d.r))
-            .SetSource(d => (d.a, d.r))
+            .SetSource(d => (d.a + Math.PI, d.r * 3))
+            .SetDigits(2).Generate((1.0, 50.0));
+        Assert.NotEqual(baseline, movedSource); // SetSource moved the start point
+
+        // A distinct target accessor moves the quadratic's endpoint.
+        var movedTarget = new RadialLinkGenerator<(double a, double r)>(
+                d => (d.a, d.r), d => (d.a, d.r))
             .SetTarget(d => (d.a + Math.PI, d.r * 2))
             .SetDigits(2).Generate((1.0, 50.0));
-        Assert.NotNull(moved);
-        Assert.Contains("Q", moved);
-        Assert.NotEqual(baseline, moved); // SetTarget moved the endpoint
+        Assert.NotEqual(baseline, movedTarget); // SetTarget moved the endpoint
+
+        // Source-only and target-only edits produce distinct paths (independent axes).
+        Assert.NotEqual(movedSource, movedTarget);
     }
 
     // ── Delaunay ────────────────────────────────────────────────────────────
