@@ -1,20 +1,22 @@
 # Privileged poster for the automatic coverage comparison comment.
 #
-# The measure workflow (coverage.yml) builds + runs untrusted PR code for the PR
-# head AND its base branch, so it runs unprivileged and uploads ONLY the per-side
-# coverage numbers (head/base.coverage.json). This workflow runs from the DEFAULT
-# branch with a write token, executes NO PR code, checks out TRUSTED default-branch
-# code, RENDERS the comparison comment itself (via the trusted CoverageLib.ps1) from
-# re-validated numbers, and posts/updates the sticky comment. Standard secure
-# pull_request + workflow_run split (see coverage.yml + build-metrics-comment.yml).
+# The measure workflow (coverage.yml) builds + runs untrusted PR code, so it runs
+# unprivileged and uploads ONLY the PR head's coverage numbers (coverage-data). This
+# workflow runs from the DEFAULT branch with a write token, executes NO PR code,
+# checks out TRUSTED default-branch code, fetches the cached `main` baseline
+# (coverage-baseline, produced by a push-to-main measure run), RENDERS the comparison
+# comment itself from re-validated numbers, and posts/updates the sticky comment.
+# Standard secure pull_request + workflow_run split (see coverage.yml).
 #
 # Security:
-#   - The comment body is built here from a fixed template + numeric values that are
-#     re-validated (ConvertTo-SafeCoverageMetrics: percentages in [0,100] and
-#     non-negative integer counts; everything else dropped to null) before use, so
-#     the untrusted artifact can never inject markdown into a bot-authored comment.
-#   - The target PR (and its base SHA) are resolved from the TRUSTED
-#     github.event.workflow_run head SHA, never from the artifact.
+#   - The comment body is built here from a fixed template + numbers re-validated via
+#     ConvertTo-SafeCoverageMetrics (percentages in [0,100], non-negative integer
+#     counts; everything else dropped to null), so neither the untrusted PR artifact
+#     nor the baseline artifact can inject markdown into a bot-authored comment.
+#   - The target PR is resolved from the TRUSTED github.event.workflow_run head SHA,
+#     never from an artifact.
+#   - The baseline is produced by a push to the default branch (main code), so its
+#     numbers are trustworthy; they are re-validated anyway.
 name: Coverage comment
 
 on:
@@ -24,7 +26,7 @@ on:
 
 permissions:
   contents: read
-  actions: read          # download the triggering run's artifact
+  actions: read          # download the triggering run's artifact + the baseline
   pull-requests: write   # resolve the PR + post/update the comment
   issues: write          # PR conversation comments use the issues API
 
@@ -32,9 +34,9 @@ jobs:
   comment:
     name: Post coverage comment
     runs-on: ubuntu-latest
-    # Only PR-originated measure runs produce a comment. A workflow_dispatch measure
-    # run has no PR to safely resolve from its head SHA, so skip the poster entirely
-    # (the numbers still live in that run's artifact + summary).
+    # Only PR-originated measure runs produce a comment. Push (baseline) and
+    # workflow_dispatch runs have no PR to safely resolve from their head SHA, so
+    # skip the poster entirely (their numbers still live in the run's artifact).
     if: github.event.workflow_run.event == 'pull_request'
     steps:
       # Trusted default-branch checkout — the source of the comment renderer.
@@ -44,7 +46,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Download coverage data artifact
+      - name: Download coverage data artifact (PR head)
         id: dl
         env:
           GH_TOKEN: ${{ github.token }}
@@ -53,17 +55,57 @@ jobs:
         run: |
           set +e
           gh run download "$RUN_ID" --repo "$GH_REPO" -n coverage-data -D artifact
-          if [ ! -f artifact/head.coverage.json ]; then
+          if [ ! -f artifact/coverage.json ]; then
             echo "No head coverage data on run $RUN_ID; nothing to post."
             echo "have_data=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           echo "have_data=true" >> "$GITHUB_OUTPUT"
 
-      # Resolve the PR + its base SHA SOLELY from the trusted workflow_run head SHA —
-      # never from the (untrusted) artifact. One commits/{sha}/pulls call returns the
-      # PR object, from which we read the number + base sha. The job `if` already
-      # restricts this to pull_request-originated runs.
+      # Fetch the cached main baseline: the newest successful Coverage run on `main`
+      # that still has a coverage-baseline artifact (produced by a push to main, or a
+      # manual default-branch refresh; older artifacts expire). branch=main excludes
+      # PR runs (different head branch), and only baseline-publishing runs carry the
+      # artifact, so a non-baseline main run is simply skipped by the download. Its
+      # numbers are trusted (main code produced them) and re-validated at render time.
+      # Best-effort: if none is found (e.g. before the first post-merge baseline, or an
+      # API error), the comment degrades to "baseline unavailable".
+      - name: Fetch cached main baseline
+        id: baseline
+        if: steps.dl.outputs.have_data == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set +e
+          rows=$(gh api "repos/$GH_REPO/actions/workflows/coverage.yml/runs?branch=main&status=success&per_page=30" \
+                   --jq '.workflow_runs[] | "\(.id) \(.head_sha)"')
+          if [ $? -ne 0 ]; then
+            echo "::warning::Could not list main Coverage runs (API error); rendering baseline-unavailable."
+            rows=""
+          fi
+          base_sha=""
+          found=false
+          while IFS=' ' read -r id sha; do
+            [ -z "$id" ] && continue
+            # Expired/absent artifacts (or non-baseline main runs) fail here — skip to
+            # the next candidate; that is expected, so keep this download quiet.
+            if gh run download "$id" --repo "$GH_REPO" -n coverage-baseline -D baseline 2>/dev/null; then
+              base_sha="$sha"
+              found=true
+              break
+            fi
+          done <<< "$rows"
+          echo "found=$found" >> "$GITHUB_OUTPUT"
+          echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
+          if [ "$found" = "true" ]; then
+            echo "Using cached main baseline from $base_sha"
+          else
+            echo "No cached main baseline found; will render baseline-unavailable."
+          fi
+
+      # Resolve the PR SOLELY from the trusted workflow_run head SHA — never from an
+      # artifact. The job `if` already restricts this to pull_request-originated runs.
       - name: Resolve target PR
         id: pr
         if: steps.dl.outputs.have_data == 'true'
@@ -72,53 +114,48 @@ jobs:
           GH_REPO: ${{ github.repository }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          pr_json=$(gh api "repos/$GH_REPO/commits/$HEAD_SHA/pulls" \
-                 --jq "[.[] | select(.state==\"open\") | select(.head.sha==\"$HEAD_SHA\")][0]" 2>/dev/null || true)
-          pr=$(printf '%s' "$pr_json" | jq -r '.number // empty' 2>/dev/null || true)
-          basesha=$(printf '%s' "$pr_json" | jq -r '.base.sha // empty' 2>/dev/null || true)
-          if [ -z "$pr" ]; then
+          pr=$(gh api "repos/$GH_REPO/commits/$HEAD_SHA/pulls" \
+                 --jq "[.[] | select(.state==\"open\") | select(.head.sha==\"$HEAD_SHA\")][0].number" 2>/dev/null || true)
+          if [ -z "$pr" ] || [ "$pr" = "null" ]; then
             echo "No open PR for head $HEAD_SHA; nothing to post."
             echo "number=" >> "$GITHUB_OUTPUT"
-            exit 0
+          else
+            echo "Target PR: #$pr"
+            echo "number=$pr" >> "$GITHUB_OUTPUT"
           fi
-          echo "Target PR: #$pr"
-          # Validate the base SHA (40 hex chars); if the lookup returned null/empty,
-          # emit an empty value so the renderer shows the base column without a stray
-          # "(null)" in the header.
-          if ! printf '%s' "$basesha" | grep -Eq '^[0-9a-f]{40}$'; then
-            basesha=""
-          fi
-          echo "number=$pr" >> "$GITHUB_OUTPUT"
-          echo "base_sha=$basesha" >> "$GITHUB_OUTPUT"
 
-      # Render the comment from TRUSTED code + numbers re-validated here. The
-      # untrusted head/base.coverage.json are passed through ConvertTo-SafeCoverageMetrics,
-      # which keeps only in-range percentages and non-negative integer counts — so
-      # nothing from the artifact can inject markdown. The head SHA is the trusted
-      # workflow_run head (exactly what was measured); the base SHA comes from the
-      # same trusted commits/{sha}/pulls lookup.
+      # Render from TRUSTED code + numbers re-validated here. The head (untrusted PR
+      # artifact) and the base (trusted baseline artifact) both go through
+      # ConvertTo-SafeCoverageMetrics, so nothing from either artifact can inject
+      # markdown. The head SHA is the trusted workflow_run head; the base SHA is the
+      # baseline run's commit.
       - name: Render comment (trusted)
         id: render
         if: steps.dl.outputs.have_data == 'true' && steps.pr.outputs.number != ''
         shell: pwsh
         env:
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
-          BASE_SHA: ${{ steps.pr.outputs.base_sha }}
+          BASE_SHA: ${{ steps.baseline.outputs.base_sha }}
+          BASE_FOUND: ${{ steps.baseline.outputs.found }}
           RUN_URL: ${{ github.event.workflow_run.html_url }}
         run: |
           . ./tests/coverage/ci/CoverageLib.ps1
-          # The *.coverage.json are untrusted artifacts; a malformed file must not
-          # crash the poster (which would drop the comment). Treat a parse failure as
-          # missing data so the failed / baseline-unavailable paths render.
+          # Artifacts are untrusted; a malformed file must not crash the poster (which
+          # would drop the comment). Treat a parse failure as missing data so the
+          # failed / baseline-unavailable paths render.
           function Read-CoverageJson($path) {
             if (-not (Test-Path $path)) { return $null }
             try { return Get-Content $path -Raw | ConvertFrom-Json }
             catch { Write-Host "Ignoring malformed ${path}: $($_.Exception.Message)"; return $null }
           }
-          $head = ConvertTo-SafeCoverageMetrics (Read-CoverageJson 'artifact/head.coverage.json')
-          $base = ConvertTo-SafeCoverageMetrics (Read-CoverageJson 'artifact/base.coverage.json')
-          # A PR always has a base, so the base file's presence (kept only when the
-          # base leg succeeded) selects comparison vs baseline-unavailable.
+          $head = ConvertTo-SafeCoverageMetrics (Read-CoverageJson 'artifact/coverage.json')
+          $base = if ($env:BASE_FOUND -eq 'true') {
+            ConvertTo-SafeCoverageMetrics (Read-CoverageJson 'baseline/coverage.json')
+          } else {
+            ConvertTo-SafeCoverageMetrics $null
+          }
+          # A PR always has a conceptual base; the cached baseline's presence selects
+          # comparison vs baseline-unavailable.
           $body = Format-CoverageCommentFromMetrics -HeadMetrics $head -BaseMetrics $base -HasBase $true `
             -HeadSha $env:HEAD_SHA -BaseSha $env:BASE_SHA -RunUrl $env:RUN_URL
           New-Item -ItemType Directory -Force -Path out | Out-Null
