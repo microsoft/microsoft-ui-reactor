@@ -29,13 +29,15 @@ public class PathDataParserUnitCoverageExtraTests
     [Fact]
     public void ParseTokens_ValidChainReachesTrailingMalformed_Throws()
     {
-        // Every command completes and updates the current point (covering the
-        // post-read "cx=…; break;" arms), so the walk reaches the trailing malformed
-        // operand of the final C command and throws. Commands exercised in one pass:
-        // M, Z, L, relative h/v, the unknown-char default skip ('W'), A (widest token
-        // list incl. flags), Q, C. Numbers cover sign, decimal, and e/E scientific
-        // notation. This is a real oracle, not a smoke test: a no-op parser — or a
-        // deleted final command arm — would never reach/throw on the trailing "1.2.3".
+        // Coverage pass: exercises every command arm in one walk — M, Z, L, relative
+        // h/v, the unknown-char default skip ('W'), A, Q, C — plus signed, decimal and
+        // scientific (1e+2) number reads and each completed command's post-read
+        // current-point update. The ASSERTION is a real oracle for the final step only:
+        // a correct walk reaches the trailing malformed C operand and throws, whereas a
+        // no-op parser (or a deleted final C arm) would char-skip to the end and never
+        // throw. Per-command arity is verified independently by
+        // ParseTokens_MalformedTrailingOperand below; this test does not claim to verify
+        // the intermediate arms it merely exercises.
         const string path =
             "M -1.5 +2 Z L 3.0 4 h 5 v -6 W " +
             "A 1 1 0 1 0 7 8 " +
