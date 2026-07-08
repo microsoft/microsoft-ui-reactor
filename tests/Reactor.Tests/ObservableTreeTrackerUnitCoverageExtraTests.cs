@@ -86,7 +86,7 @@ public class ObservableTreeTrackerUnitCoverageExtraTests
     }
 
     [Fact]
-    public void SyncSubscriptions_EmptyPropertyName_RerendersButDoesNotResubscribe()
+    public void SyncSubscriptions_EmptyPropertyName_StillFiresUnconditionalRerender()
     {
         int renders = 0;
         using var tracker = new ObservableTreeTracker(() => renders++);
@@ -94,18 +94,14 @@ public class ObservableTreeTrackerUnitCoverageExtraTests
         var root = new Leaf();
         tracker.SyncSubscriptions(root);
 
-        var child = new Leaf();
-        root.AttachNextSilently(child);
-
+        // A PropertyChanged with no name still fires the unconditional rerender, which
+        // runs before the name/type guards (removing that _requestRerender call would
+        // make this fail). This covers the empty-name early-return line; the guard
+        // itself is a fast-path the later null-property check also backstops, so its
+        // return is not independently observable — hence no oracle is claimed for it.
         renders = 0;
-        root.Raise(string.Empty); // nameless change fires the unconditional rerender...
+        root.Raise(string.Empty);
         Assert.Equal(1, renders);
-
-        // ...then the handler returns before re-syncing, so a nameless notification
-        // never grows the subscription set: the silently-attached child stays unheard.
-        renders = 0;
-        child.Count = 7;
-        Assert.Equal(0, renders);
     }
 
     [Fact]

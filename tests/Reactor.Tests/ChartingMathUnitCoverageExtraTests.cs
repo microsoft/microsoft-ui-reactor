@@ -175,30 +175,33 @@ public class ChartingMathUnitCoverageExtraTests
     }
 
     [Fact]
-    public void RadialLink_SourceAndTargetSetters_MoveTheCurveEndpoints()
+    public void RadialLink_SourceAndTargetSetters_MoveDistinctEndpoints()
     {
-        // Baseline: source and target both use the constructor-default accessors.
+        // The start point (the "M x,y" prefix) is derived solely from the source
+        // accessor; the target accessor drives the curve's control/endpoint. Compare
+        // the M prefix in isolation so each setter's effect is attributable (a source
+        // wired to the target, or vice versa, would flip these and fail).
+        static string StartSegment(string path) => path.Substring(0, path.IndexOf('Q'));
+
         var baseline = new RadialLinkGenerator<(double a, double r)>(
                 d => (d.a, d.r), d => (d.a, d.r))
-            .SetDigits(2).Generate((1.0, 50.0));
-        Assert.NotNull(baseline);
+            .SetDigits(2).Generate((1.0, 50.0))!;
 
-        // A distinct source accessor moves the start point (the MoveTo).
         var movedSource = new RadialLinkGenerator<(double a, double r)>(
                 d => (d.a, d.r), d => (d.a, d.r))
             .SetSource(d => (d.a + Math.PI, d.r * 3))
-            .SetDigits(2).Generate((1.0, 50.0));
-        Assert.NotEqual(baseline, movedSource); // SetSource moved the start point
+            .SetDigits(2).Generate((1.0, 50.0))!;
 
-        // A distinct target accessor moves the quadratic's endpoint.
         var movedTarget = new RadialLinkGenerator<(double a, double r)>(
                 d => (d.a, d.r), d => (d.a, d.r))
             .SetTarget(d => (d.a + Math.PI, d.r * 2))
-            .SetDigits(2).Generate((1.0, 50.0));
-        Assert.NotEqual(baseline, movedTarget); // SetTarget moved the endpoint
+            .SetDigits(2).Generate((1.0, 50.0))!;
 
-        // Source-only and target-only edits produce distinct paths (independent axes).
-        Assert.NotEqual(movedSource, movedTarget);
+        // SetSource moves the start point; SetTarget leaves it untouched.
+        Assert.NotEqual(StartSegment(baseline), StartSegment(movedSource));
+        Assert.Equal(StartSegment(baseline), StartSegment(movedTarget));
+        // ...and SetTarget still changes the curve (control point + endpoint).
+        Assert.NotEqual(baseline, movedTarget);
     }
 
     // ── Delaunay ────────────────────────────────────────────────────────────

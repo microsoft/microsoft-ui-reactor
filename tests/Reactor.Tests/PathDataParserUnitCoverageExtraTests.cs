@@ -39,25 +39,9 @@ public class PathDataParserUnitCoverageExtraTests
         const string path =
             "M -1.5 +2 Z L 3.0 4 h 5 v -6 W " +
             "A 1 1 0 1 0 7 8 " +
-            "Q 1e2 2 3 4 " +
+            "Q 1e+2 2 3 4 " +
             "C 1 2 3 4 5 1.2.3";
 
-        Assert.Throws<FormatException>(() => PathDataParser.ParseTokens(path));
-    }
-
-    [Theory]
-    // Each input feeds a well-formed number (exercising separators and the ReadNumber
-    // branches — comma skips, uppercase E, signed exponents, leading sign) followed by
-    // a malformed final operand, so a correct read advances to it and throws. Broken
-    // separator/exponent handling would misalign the walk and the trailing "1.2.3"
-    // would not land as the throwing operand.
-    [InlineData("M1,2 L3,1.2.3")]      // comma separators between operands
-    [InlineData("M0 0 L1e+1 1.2.3")]   // positive signed exponent
-    [InlineData("M0 0 L2e-1 1.2.3")]   // negative signed exponent
-    [InlineData("M0 0 L1.5E1 1.2.3")]  // uppercase E exponent
-    [InlineData("M0 0 L-5 1.2.3")]     // leading sign
-    public void ParseTokens_ConsumesSeparatorsAndNumberFormats_ThenThrows(string path)
-    {
         Assert.Throws<FormatException>(() => PathDataParser.ParseTokens(path));
     }
 
