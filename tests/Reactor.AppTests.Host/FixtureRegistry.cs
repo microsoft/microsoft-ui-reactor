@@ -65,6 +65,12 @@ internal static class FixtureRegistry
         // the ListViewHandler once-subscribe contract across re-renders + items change)
         "ItemClick_OnceFire",
 
+        // ItemClick toggle-path double-subscribe guard (issue #779 — E2E proof that
+        // toggling OnItemClick off then on again still fires exactly once, on both
+        // ListView and GridView)
+        "ItemClick_ToggleListView",
+        "ItemClick_ToggleGridView",
+
         // Host theme-change re-resolution (issue #679 (b) — E2E proof that the host
         // ActualThemeChanged → RequestRender wiring re-resolves a concrete ResourceOverride
         // ThemeRef brush on a real root-theme change)
@@ -227,6 +233,10 @@ internal static class FixtureRegistry
 
         // ItemClick once-fire guard (issue #679 (a))
         "ItemClick_OnceFire" => ItemClickE2EFixtures.OnceFire(ctx),
+
+        // ItemClick toggle-path double-subscribe guard (issue #779)
+        "ItemClick_ToggleListView" => ItemClickE2EFixtures.ToggleListView(ctx),
+        "ItemClick_ToggleGridView" => ItemClickE2EFixtures.ToggleGridView(ctx),
 
         // Host theme-change re-resolution (issue #679 (b))
         "ThemeChange_ResourceOverrideReResolve" => ThemeChangeE2EFixtures.ThemeReResolve(ctx),

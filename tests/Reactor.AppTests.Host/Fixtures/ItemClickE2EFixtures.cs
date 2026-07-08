@@ -79,4 +79,112 @@ internal static class ItemClickE2EFixtures
     }
 
     internal static Element OnceFire(RenderContext ctx) => Component<OnceFireComponent>();
+
+    // Shared row labels for the #779 toggle fixtures below.
+    private static readonly string[] ToggleLabels = ["Alpha", "Bravo", "Charlie", "Delta"];
+
+    /// <summary>
+    /// E2E fixture for issue #779 — the ListView <c>OnItemClick</c> "toggle-path"
+    /// double-subscribe guard (<see cref="GridViewToggleComponent"/> is the symmetric case).
+    ///
+    /// <para>ListView/GridView update <b>in place</b>, so toggling <c>OnItemClick</c>
+    /// off (present→null) then on (null→present) used to leave the Mount-time native
+    /// <c>ItemClick</c> subscription live AND add a second one on the null→present
+    /// Update, so a single real click dispatched the callback twice (and stacked
+    /// another handler on every further off→on cycle). The fix subscribes
+    /// <c>ItemClick</c> unconditionally at Mount and never re-subscribes on Update.</para>
+    ///
+    /// <para>This scene toggles a real <c>OnItemClick</c> handler with a button
+    /// (<c>hasHandler ? (idx =&gt; fires++) : null</c>) and exposes an authoritative
+    /// <see cref="Ref{T}"/> fire counter as UIA-readable <c>Fires</c> text (a Ref, not
+    /// just state, so a synchronous double-dispatch can't be masked by state batching).
+    /// The E2E test starts ON → toggles OFF → toggles ON → real-clicks a row and asserts
+    /// the callback fired EXACTLY once.</para>
+    /// </summary>
+    internal class ListViewToggleComponent : Component
+    {
+        public override Element Render()
+        {
+            var (hasHandler, setHasHandler) = UseState(true);
+            var (firesDisplay, setFiresDisplay) = UseState(0);
+            var (lastIndex, setLastIndex) = UseState(-1);
+
+            // Authoritative fire count — a native double-subscription fires both
+            // handlers synchronously for one click, so counting on a Ref guarantees
+            // the second dispatch is observed even if the two setState calls collapse.
+            var fires = UseRef(0);
+
+            // Memoize the rows so Items stays reference-stable across toggle re-renders
+            // (ListViewHandler.Update sees ReferenceEquals → no ItemsSource rebuild),
+            // isolating the pure OnItemClick null↔present toggle path — exactly the
+            // in-place-update sequence that leaked the second subscription.
+            var rows = UseMemo(() => ToggleLabels
+                .Select((label, i) => (Element)TextBlock($"{i}: {label}").AutomationId($"LvToggleItem_{i}"))
+                .ToArray(), 0);
+
+            // The idiomatic conditional-handler pattern: OnItemClick is a real handler
+            // while enabled, null while disabled. Toggling it drives the present→null→present
+            // in-place Update that used to leak a second native subscription.
+            Action<int>? onItemClick = hasHandler
+                ? idx =>
+                {
+                    fires.Current += 1;
+                    setFiresDisplay(fires.Current);
+                    setLastIndex(idx);
+                }
+                : null;
+
+            return VStack(8,
+                TextBlock($"HasHandler: {hasHandler}").AutomationId("LvToggleState"),
+                Button("ToggleHandler", () => setHasHandler(!hasHandler)).AutomationId("LvToggleBtn"),
+
+                ListView(rows)
+                    .ItemClick(onItemClick)
+                    .Height(220),
+
+                TextBlock($"Fires: {firesDisplay}").AutomationId("LvToggleFires"),
+                TextBlock($"LastIndex: {lastIndex}").AutomationId("LvToggleLastIndex")
+            );
+        }
+    }
+
+    internal class GridViewToggleComponent : Component
+    {
+        public override Element Render()
+        {
+            var (hasHandler, setHasHandler) = UseState(true);
+            var (firesDisplay, setFiresDisplay) = UseState(0);
+            var (lastIndex, setLastIndex) = UseState(-1);
+            var fires = UseRef(0);
+
+            var rows = UseMemo(() => ToggleLabels
+                .Select((label, i) => (Element)TextBlock($"{i}: {label}").AutomationId($"GvToggleItem_{i}"))
+                .ToArray(), 0);
+
+            Action<int>? onItemClick = hasHandler
+                ? idx =>
+                {
+                    fires.Current += 1;
+                    setFiresDisplay(fires.Current);
+                    setLastIndex(idx);
+                }
+                : null;
+
+            return VStack(8,
+                TextBlock($"HasHandler: {hasHandler}").AutomationId("GvToggleState"),
+                Button("ToggleHandler", () => setHasHandler(!hasHandler)).AutomationId("GvToggleBtn"),
+
+                GridView(rows)
+                    .ItemClick(onItemClick)
+                    .Height(220),
+
+                TextBlock($"Fires: {firesDisplay}").AutomationId("GvToggleFires"),
+                TextBlock($"LastIndex: {lastIndex}").AutomationId("GvToggleLastIndex")
+            );
+        }
+    }
+
+    internal static Element ToggleListView(RenderContext ctx) => Component<ListViewToggleComponent>();
+
+    internal static Element ToggleGridView(RenderContext ctx) => Component<GridViewToggleComponent>();
 }
