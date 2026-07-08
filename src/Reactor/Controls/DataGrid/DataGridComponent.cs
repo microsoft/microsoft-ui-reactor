@@ -376,6 +376,14 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                         Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() =>
                         {
                             if (!state.IsEditing && !state.IsRowEditing) return;
+                            // A keyboard editing-Tab already owns this focus-out: it commits the current cell
+                            // and reopens the editor on the next cell. Skip exactly one deferred commit here,
+                            // otherwise we tear down that just-reopened editor.
+                            if (state.SuppressNextLostFocusCommit)
+                            {
+                                state.SuppressNextLostFocusCommit = false;
+                                return;
+                            }
                             var focused = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(g.XamlRoot);
                             if (focused is DependencyObject dep)
                             {
@@ -435,6 +443,14 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                         {
                             e.Handled = true;
                             var capturedKey = e.Key;
+                            // An editing-Tab moves real focus out of the single-tab-stop grid, which fires
+                            // the grid's deferred LostFocus commit. But the editing-Tab path (HandleKeyDown)
+                            // itself commits the current cell and reopens the editor on the next cell, so the
+                            // LostFocus safety-net must NOT also commit — that would tear down the just-reopened
+                            // editor. Claim that one focus-out here, synchronously (before either handler
+                            // defers), so the guard is robust to dispatcher ordering.
+                            if (capturedKey == VirtualKey.Tab && state.IsEditing)
+                                state.SuppressNextLostFocusCommit = true;
                             Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() =>
                             {
                                 HandleKeyDown(state, currentEl, capturedKey);

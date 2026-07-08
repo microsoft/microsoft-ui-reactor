@@ -72,6 +72,44 @@ public class DataGridTests : AppTestBase
     }
 
     /// <summary>
+    /// Regression: pressing Tab WHILE EDITING must commit the current cell AND leave the inline
+    /// editor reopened on the next cell — it must not be torn down. The grid's deferred LostFocus
+    /// commit fires because Tab moves real focus out of the single-tab-stop grid; previously it ran
+    /// after the editing-Tab flow had already committed + reopened the editor and committed a second
+    /// time, destroying it (the editor never reappeared). Guarded by
+    /// <c>DataGridState.SuppressNextLostFocusCommit</c>.
+    /// </summary>
+    [E2eRetry(3)]
+    [TestMethod]
+    public void Interactive_DataGrid_EditingTab_ReopensEditorOnNextCell()
+    {
+        NavigateToFixtureFresh("DataGrid_EditableGrid");
+        WaitForText("EditLog", "Edits:");
+        Assert.IsNotNull(WaitForName("Alice"), "'Alice' should be visible");
+        Assert.IsNotNull(FindByName("Smith"), "'Smith' (the next cell) should be visible");
+
+        // Edit row-1 FirstName (Alice); type a new value but do NOT commit.
+        TapCell("Alice");
+        TypeIntoFocusedEditor("Alicia");
+
+        // Editing-Tab: commits FirstName and should reopen the editor on the LastName cell.
+        InputInjector.Foreground(HostHwnd);
+        InputInjector.Tab();
+
+        // The inline editor must still be present (reopened on the next cell), not torn down by the
+        // LostFocus safety-net. WaitForEditor throws if the editor is absent — that IS the regression.
+        var editor = WaitForEditor(timeoutMs: 4000);
+
+        // When winapp can read the value, confirm the editor reopened on the LastName cell ("Smith").
+        var value = ReadEditorValueSettled(editor, "Smith", timeoutMs: 1500);
+        if (value is not null)
+            Assert.AreEqual("Smith", value, "Reopened editor should be on the LastName cell");
+
+        // And the FirstName commit must have landed.
+        WaitForTextContaining("EditLog", "[1:Alicia,Smith]", timeoutMs: 5000);
+    }
+
+    /// <summary>
     /// Tap a DataGrid cell by its visible text to enter/commit cell edit. The cells are
     /// display-only TextBlocks (no InvokePattern), and a WinUI <c>Tapped</c> only fires on an
     /// ACTIVE window, so winapp's UIA invoke/click can't drive them. We foreground the host and
