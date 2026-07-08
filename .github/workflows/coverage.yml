@@ -107,10 +107,14 @@ jobs:
             core.setOutput('number', prNumber);
             core.setOutput('has_base', hasBase ? 'true' : 'false');
 
-      # Trusted checkout of the scripts + the ability to worktree head/base. For a
-      # pull_request event this is the merge ref; the head/base COMMITS are built in
-      # their own worktrees below (never the merge). fetch-depth: 0 so origin/<base>
-      # resolves. persist-credentials: false — untrusted PR build code runs later.
+      # Checkout for the scripts + the ability to worktree head/base. On a
+      # pull_request event this is the PR MERGE ref — i.e. PR-authored code, NOT
+      # trusted — but this job is unprivileged (read-only token, no secrets), so
+      # running the PR's own measurement scripts here is acceptable; the trusted
+      # poster (coverage-comment.yml) is what renders + posts. The head/base COMMITS
+      # are measured in their own worktrees below (never the merge). fetch-depth: 0
+      # so origin/<base> resolves. persist-credentials: false — the PR build code
+      # that runs later gets no usable git credential.
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
@@ -166,6 +170,11 @@ jobs:
               $baseRef = $env:BASE_REF
               if ($baseSha -notmatch '^[0-9a-f]{40}$') { throw "Could not resolve base sha (got '$baseSha')." }
               if ([string]::IsNullOrWhiteSpace($baseRef)) { throw 'Could not resolve base ref.' }
+              # base_ref comes from the trusted PR event/API (the base branch name),
+              # but it is interpolated into a git refspec below — constrain it to a
+              # conservative branch-name allow-list so an unexpected character can't
+              # alter the refspec. A reject degrades to "baseline unavailable".
+              if ($baseRef -notmatch '^[A-Za-z0-9._/-]+$') { throw "Base ref '$baseRef' has unexpected characters." }
               git fetch --no-tags --force origin "refs/heads/${baseRef}:refs/remotes/origin/${baseRef}" 2>&1 | Out-Host
               if ($LASTEXITCODE -ne 0) { throw "git fetch of base ref '$baseRef' failed (exit $LASTEXITCODE)." }
               $baseTree = Join-Path $env:RUNNER_TEMP 'cov-base-tree'
