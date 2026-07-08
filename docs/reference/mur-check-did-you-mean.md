@@ -109,8 +109,8 @@ mur check <path>
    │             fuzzy-match against the real Reactor API surface.
    │
    │   Tier 3 — induced + vocabulary rules   (SHIPPED in part, Phase 3)
-   │             Small symbol-bound rewriters. Five rules live today
-   │             (three Class-A induced + two Class-B vocabulary).
+   │             Small symbol-bound rewriters. Six rules live today
+   │             (four Class-A induced + two Class-B vocabulary).
    │             Rules can cover diagnostic codes Tier-2 doesn't
    │             (e.g. CS1955). Rules WIN over Tier-2 when both match.
    │
@@ -168,7 +168,7 @@ Each rule is a small file under `src/Reactor.Cli/Check/Rules/`, registered into 
 
 Each rule passes a six-bar **Validation Gate** before merge (frequency, cross-agent reproducibility, positive fixtures, negative counter-examples, independent reviewer signoff, kill-switch). The gate exists because a bad rule is worse than no rule — it contaminates every downstream agent session. Class-B (vocabulary-translation) rules waive bar #1 (frequency) — their justification is the documented prior-framework citation rather than a corpus cluster. The audit at `docs/specs/tasks/038-tuning-reports/2026-05-11-cross-agent-audit.md` is where bar #2 (cross-agent) gets formally cleared per cluster.
 
-**Five rules shipped to date** (three Class-A induced + two Class-B vocabulary):
+**Six rules shipped to date** (four Class-A induced + two Class-B vocabulary):
 
 | Rule | Class | Code(s) | Receiver | What it suggests | Cross-agent events |
 |---|---|---|---|---|---|
@@ -177,6 +177,7 @@ Each rule passes a six-bar **Validation Gate** before merge (frequency, cross-ag
 | `GridSizeFactoryParensRule` | A | CS1955 | `GridSize` | drop the parens (`GridSize.Auto`); **first cross-tier rule** (CS1955 outside Tier-2 codes) | **146** |
 | `GridSizePxRenameRule` | A | CS0117 | `GridSize` | `GridSize.Px(...)` for `Pixel`/`Pixels`/`Fixed` legacy names | 9 |
 | `TextBlockStyleHintRule` | A | CS1061 / CS0117 | `TextBlockElement` | fluent text helpers (`.FontSize`, `.SemiBold`, …); Reactor has no `Style` member | 5 across both `.Style(...)` and `with { Style = ... }` shapes |
+| `ThemeRawResourceKeyRule` | A | CS0117 | `Theme` | real `Theme.*` aliases (`Theme.LayerFill`, `Theme.Accent`, …) for WinUI `<X>FillColor<Y>` ThemeResource key names | run5 opus-4.7 only; bar #2 partial |
 
 ### Suggest-gate carve-out for Tier-3 rules
 
@@ -502,7 +503,7 @@ Branch: `eval/spec-038-ec3-2026-05-11` at commit `2b7090f`. Six rules + the two 
 - `RuleSymbolResolver.cs` — `ResolveType(string)`, `ResolveMethod(INamedTypeSymbol, string)`, `ResolveMember(INamedTypeSymbol, string)`. Cached via `ConditionalWeakTable<CSharpCompilation, _>` so two callers with the same compilation reference share caches; per-compilation resolver identity is test-locked.
 - CLI: `--disable-rule <Name>` (repeatable), `--list-rules` (prints name/provenance/status table; short-circuits before `dotnet build` runs). Unknown `--disable-rule` names warn instead of error.
 
-**The five rules** — see the table in §3 for the full inventory. Three Class-A (induced from the cross-corpus audit) + two Class-B (vocabulary-translation, structurally justified). All five bind through `RuleSymbolResolver`; no string-matching.
+**The six rules** — see the table in §3 for the full inventory. Four Class-A (induced from the cross-corpus audit) + two Class-B (vocabulary-translation, structurally justified). All six bind through `RuleSymbolResolver`; no string-matching.
 
 **Two critical correctness fixes** (both blocked any real-world rule firing prior; surfaced by end-to-end smoke testing during Phase 3):
 
