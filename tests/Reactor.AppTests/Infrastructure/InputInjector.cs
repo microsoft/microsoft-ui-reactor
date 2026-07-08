@@ -495,14 +495,29 @@ public static class InputInjector
         if (ctrl) KeyDown(VK_CONTROL);
         if (shift) KeyDown(VK_SHIFT);
         if (alt) KeyDown(VK_MENU);
-        Thread.Sleep(10);
-        PressVirtualKey(virtualKey);
-        Thread.Sleep(10);
-        if (alt) KeyUp(VK_MENU);
-        if (shift) KeyUp(VK_SHIFT);
-        if (ctrl) KeyUp(VK_CONTROL);
+        try
+        {
+            Thread.Sleep(10);
+            PressVirtualKey(virtualKey);
+            Thread.Sleep(10);
+        }
+        finally
+        {
+            // Always release the modifiers — in reverse order — even if PressVirtualKey threw
+            // (a partial SendInput). Otherwise a failed injection leaves Ctrl/Shift/Alt physically
+            // latched and contaminates the next test's input, matching the try/finally guard the
+            // ShiftTab/ClearViaKeyboard helpers already use.
+            if (alt) KeyUp(VK_MENU);
+            if (shift) KeyUp(VK_SHIFT);
+            if (ctrl) KeyUp(VK_CONTROL);
+        }
     }
 
+    // Discrete virtual-key + chord presses for the keyboard-navigation E2E tests. These live
+    // alongside (not inside) the string-oriented TypeKeys path: TypeKeys releases held modifiers
+    // after each emitted character, so it can't express single chords like Ctrl+= or numpad Add,
+    // nor non-text keys like the arrows / Home / F1. Hence a small public Vk* table + PressKeyWith
+    // rather than more Keys/TypeKeys tokens. (The private VK_* consts above serve the typing path.)
     public const ushort VkLeft = 0x25, VkUp = 0x26, VkRight = 0x27, VkDown = 0x28;
     public const ushort VkHome = 0x24, VkEnd = 0x23, VkEnter = 0x0D, VkSpace = 0x20, VkEscape = 0x1B;
     public const ushort VkAdd = 0x6B, VkSubtract = 0x6D, VkOemPlus = 0xBB, VkOemMinus = 0xBD;

@@ -60,9 +60,21 @@ public class ChartKeyboardNavTests : AppTestBase
         //    drops keyboard focus.
         DriveFullKeyboardVocabulary();
 
-        // 3. The keyboard pipeline ran cross-process (an invoke landed) and the fixture survived
-        //    the whole vocabulary without crashing.
-        WaitForTextContaining(StatusId, "invoked:");
+        // 3. Non-vacuous behavioral proof that navigation + invoke actually reach the handler
+        //    AFTER the whole vocabulary — a check the earlier liveness invoke ("invoked:0")
+        //    cannot satisfy on its own. Home resets PointIndex to 0, three Rights advance it to
+        //    3, and Enter invokes the current point, so the status must become exactly
+        //    "invoked:3". SampleLine has 10 points and the FocusState persists in the fixture's
+        //    Component state, so the index is deterministic. If focus were lost during the
+        //    vocabulary (leaving a stale status), this fresh, distinct signal would not appear
+        //    and the wait would fail — which is the point.
+        PressOnChart(InputInjector.VkHome);
+        PressOnChart(InputInjector.VkRight);
+        PressOnChart(InputInjector.VkRight);
+        PressOnChart(InputInjector.VkRight);
+        PressOnChart(InputInjector.VkEnter);
+        WaitForTextContaining(StatusId, "invoked:3");
+
         Assert.IsTrue(App.Exists(StatusId), "Chart keyboard fixture should still be present (no crash).");
     }
 
