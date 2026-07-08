@@ -319,17 +319,12 @@ public class ChartKeyboardNavTests : AppTestBase
 
     // ─── Polling ──────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Wait (up to <paramref name="timeoutMs"/>) for the status text to contain
+    /// <paramref name="substring"/>, returning whether it did. Delegates to winapp's own
+    /// single-process internal polling (<see cref="WinAppUi.WaitForValue"/>) rather than looping
+    /// <c>App.GetValue</c>, which would spawn a winapp.exe per tick.
+    /// </summary>
     private bool PollStatusContains(string substring, int timeoutMs)
-    {
-        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
-        do
-        {
-            var value = App.GetValue(StatusId);
-            if (value != null && value.Contains(substring))
-                return true;
-            Thread.Sleep(100);
-        }
-        while (DateTime.UtcNow < deadline);
-        return false;
-    }
+        => App.WaitForValue(StatusId, substring, contains: true, timeoutMs: timeoutMs);
 }
