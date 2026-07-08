@@ -1503,6 +1503,24 @@ internal static class SelfTestFixtureRegistry
         // Issue #845 — LV/GV Update clears Header/ItemContainerStyle to null
         "Issue845_ListViewClearsHeaderAndStyle",
         "Issue845_GridViewClearsHeaderAndStyle",
+
+        // Core reconciler / RenderContext / V1 lifecycle coverage
+        // (CoreReconcilerRenderCoverageFixtures).
+        "CoreRRC_OverlayFlyoutUpdate",
+        "CoreRRC_OverlayMenuFlyoutUpdate",
+        "CoreRRC_OverlayPopupUpdate",
+        "CoreRRC_OverlayCommandBarUpdate",
+        "CoreRRC_OverlayCommandBarFlyoutUpdate",
+        "CoreRRC_OverlayMenuBarUpdate",
+        "CoreRRC_CompositeFormFieldValidationUpdate",
+        "CoreRRC_CompositeValidationVisualizerStyles",
+        "CoreRRC_CompositeValidationRuleUpdate",
+        "CoreRRC_PreMountedFlipViewReconcile",
+        "CoreRRC_NavigationHostCacheEviction",
+        "CoreRRC_RenderContextReducers",
+        "CoreRRC_RenderContextThreadSafeState",
+        "CoreRRC_RenderContextWindowEnvHooks",
+        "CoreRRC_UntypedTreeViewReconcile",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -2955,6 +2973,23 @@ internal static class SelfTestFixtureRegistry
         "CrossAxisMeasureStaleness" => new CrossAxisMeasureStalenessFixture(harness),
         "Issue845_ListViewClearsHeaderAndStyle" => new Issue845ClearHeaderItemContainerStyleFixtures.ListViewClearsHeaderAndItemContainerStyle(harness),
         "Issue845_GridViewClearsHeaderAndStyle" => new Issue845ClearHeaderItemContainerStyleFixtures.GridViewClearsHeaderAndItemContainerStyle(harness),
+
+        // Core reconciler / RenderContext / V1 lifecycle coverage.
+        "CoreRRC_OverlayFlyoutUpdate" => new CoreReconcilerRenderCoverageFixtures.OverlayFlyoutUpdate(harness),
+        "CoreRRC_OverlayMenuFlyoutUpdate" => new CoreReconcilerRenderCoverageFixtures.OverlayMenuFlyoutUpdate(harness),
+        "CoreRRC_OverlayPopupUpdate" => new CoreReconcilerRenderCoverageFixtures.OverlayPopupUpdate(harness),
+        "CoreRRC_OverlayCommandBarUpdate" => new CoreReconcilerRenderCoverageFixtures.OverlayCommandBarUpdate(harness),
+        "CoreRRC_OverlayCommandBarFlyoutUpdate" => new CoreReconcilerRenderCoverageFixtures.OverlayCommandBarFlyoutUpdate(harness),
+        "CoreRRC_OverlayMenuBarUpdate" => new CoreReconcilerRenderCoverageFixtures.OverlayMenuBarUpdate(harness),
+        "CoreRRC_CompositeFormFieldValidationUpdate" => new CoreReconcilerRenderCoverageFixtures.CompositeFormFieldValidationUpdate(harness),
+        "CoreRRC_CompositeValidationVisualizerStyles" => new CoreReconcilerRenderCoverageFixtures.CompositeValidationVisualizerStyles(harness),
+        "CoreRRC_CompositeValidationRuleUpdate" => new CoreReconcilerRenderCoverageFixtures.CompositeValidationRuleUpdate(harness),
+        "CoreRRC_PreMountedFlipViewReconcile" => new CoreReconcilerRenderCoverageFixtures.PreMountedFlipViewReconcile(harness),
+        "CoreRRC_NavigationHostCacheEviction" => new CoreReconcilerRenderCoverageFixtures.NavigationHostCacheEviction(harness),
+        "CoreRRC_RenderContextReducers" => new CoreReconcilerRenderCoverageFixtures.RenderContextReducers(harness),
+        "CoreRRC_RenderContextThreadSafeState" => new CoreReconcilerRenderCoverageFixtures.RenderContextThreadSafeState(harness),
+        "CoreRRC_RenderContextWindowEnvHooks" => new CoreReconcilerRenderCoverageFixtures.RenderContextWindowEnvHooks(harness),
+        "CoreRRC_UntypedTreeViewReconcile" => new CoreReconcilerRenderCoverageFixtures.UntypedTreeViewReconcile(harness),
 
         _ => null,
     };
