@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-  Aggregate winapp-ui E2E stress results (retries-ON baseline) into a reliability report.
+  Aggregate winapp-ui E2E stress results into a reliability report (retries ON or OFF).
 
 .DESCRIPTION
   Consumes the artifacts produced by the `e2e` target in ci-stress.yml:
@@ -10,7 +10,7 @@
   and reports:
     * Suite-level green rate      = iterations with dotnet-test exit 0 / total iterations
     * Interactive-env availability = 1 - (inconclusive results / total results)
-    * Per-test failure leaderboard = failed / (runs - inconclusive), worst first
+    * Per-test failure leaderboard = failed / (runs - inconclusive), highest rate first
     * Tests ever Inconclusive      = environment / input-injection blockers
 
   Output goes to the console and, when GITHUB_STEP_SUMMARY is set, is appended there as
@@ -18,9 +18,11 @@
 
 .NOTES
   Iteration green/red uses the dotnet-test exit code, which is robust to how MSTest records
-  [Retry(3)] attempts in the TRX. The TRX is only mined for per-test detail: a test that
-  failed one attempt but was healed by [Retry(3)] can still surface here as a failed attempt
-  ("healed by retry" signal) without making the suite iteration red.
+  [E2eRetry] attempts. The per-test leaderboard is mined from the TRX outcomes, which record the
+  final reported outcome per test: MSTest's retry surfaces only the last attempt (RetryResult
+  TryGetLast), so a failure healed by a later retry generally does NOT appear here as a failed
+  attempt in a retries-ON run. True per-attempt flake is therefore measured with the retries-OFF
+  lane (REACTOR_E2E_RETRIES=0), where each test runs once and its single real outcome is recorded.
 
   This is report-only: it never sets a non-zero exit code, so it never fails the shard.
 #>
@@ -139,11 +141,14 @@ $retriesMode = if ($retriesRaw -eq '0') { 'retries OFF (REACTOR_E2E_RETRIES=0)' 
     elseif ([string]::IsNullOrEmpty($retriesRaw)) { 'retries ON (default)' }
     else { "REACTOR_E2E_RETRIES=$retriesRaw" }
 
+# Leaderboard: highest failure rate first (failed / (runs - inconclusive)), so a test with more
+# excluded Inconclusive results isn't unfairly ranked below one with a lower true rate; absolute
+# failed count breaks ties. Guard the denominator against zero (all-Inconclusive → rate 0).
 $leader = @($tests.Values |
     Where-Object { $_.Failed -gt 0 } |
     Sort-Object -Property `
-        @{ Expression = { $_.Failed }; Descending = $true }, `
-        @{ Expression = { if (($_.Runs - $_.Inconclusive) -gt 0) { $_.Failed / ($_.Runs - $_.Inconclusive) } else { 0 } }; Descending = $true })
+        @{ Expression = { if (($_.Runs - $_.Inconclusive) -gt 0) { $_.Failed / ($_.Runs - $_.Inconclusive) } else { 0 } }; Descending = $true }, `
+        @{ Expression = { $_.Failed }; Descending = $true })
 
 $everIncon = @($tests.Values |
     Where-Object { $_.Inconclusive -gt 0 } |
