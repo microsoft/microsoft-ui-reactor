@@ -78,7 +78,8 @@ internal static class OverlaySeamCoverageFixtures
             // is dimmed, not hidden, so it still hit-tests — but driving
             // UpdateHoverAt / TryConfirmAt over it must neither latch a hover
             // nor fire a confirm.
-            await Harness.WaitFor(() => overlay.ActualWidth > 1 && overlay.ActualHeight > 1);
+            H.Check("Overlay_Disabled_OverlayArranged",
+                await Harness.WaitFor(() => overlay.ActualWidth > 1 && overlay.ActualHeight > 1));
             var atDisabledLeft = new Point(
                 DockDropTargetOverlayControl.ButtonSizeDip / 2, overlay.ActualHeight / 2);
             H.Check("Overlay_Disabled_HitTestStillResolvesButton",
@@ -143,8 +144,10 @@ internal static class OverlaySeamCoverageFixtures
             var overlay = MakeHostOverlay();
             H.SetContent(overlay);
             await Harness.Render();
-            // Geometry needs a real arrange pass.
-            await Harness.WaitFor(() => overlay.ActualWidth > 1 && overlay.ActualHeight > 1);
+            // Geometry needs a real arrange pass — assert it actually happened
+            // so a layout stall fails here rather than via near-zero hit points.
+            H.Check("Overlay_HitTest_OverlayArranged",
+                await Harness.WaitFor(() => overlay.ActualWidth > 1 && overlay.ActualHeight > 1));
 
             double w = overlay.ActualWidth, hgt = overlay.ActualHeight;
             const double half = DockDropTargetOverlayControl.ButtonSizeDip / 2;
@@ -307,7 +310,10 @@ internal static class SplitterSeamCoverageFixtures
 
             H.SetContent(panel);
             await Harness.Render();
-            await Harness.Render(); // double-pump so ActualWidth populates
+            // Pump renders until the panes actually arrange (live ActualWidth),
+            // rather than a fixed wave count a contended runner can outpace.
+            H.Check("SplitterDiag_PanesArranged",
+                await Harness.WaitFor(() => leading.ActualWidth > 0 && trailing.ActualWidth > 0));
 
             var traces = new List<string>();
             splitter.DiagnosticSink = msg => traces.Add(msg);
