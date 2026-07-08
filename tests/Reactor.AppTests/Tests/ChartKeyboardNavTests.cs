@@ -234,60 +234,74 @@ public class ChartKeyboardNavTests : AppTestBase
     /// Shift+arrow brush keys (which also move <c>PointIndex</c>) — plus the two invoke keys (Enter,
     /// Space). Each step navigates from a known position and invokes, asserting the EXACT resulting
     /// point index, so the assertion fails if that arm is deleted or made a no-op (the anti-vacuous
-    /// contract). Consecutive target indices are always distinct, so every assertion observes a real
-    /// state transition rather than a stale status. SampleLine has 10 points, the FocusState persists
-    /// in the fixture Component, and a non-shift move resets any prior brush selection, so every
-    /// index below is deterministic.
+    /// contract). Consecutive target indices are always distinct, and <see
+    /// cref="InvokeAndAssertFreshIndex"/> additionally guards that the status doesn't already show
+    /// the target before each invoke — so every assertion must observe a real state transition and
+    /// cannot pass on a stale status. SampleLine has 10 points, the FocusState persists in the
+    /// fixture Component, and a non-shift move resets any prior brush selection, so every index below
+    /// is deterministic.
     /// </summary>
     private void AssertObservablePointArms()
     {
         // Home -> point 0, then Enter invokes: proves the Home and Enter arms.
         PressOnChart(InputInjector.VkHome);
-        PressOnChart(InputInjector.VkEnter);
-        WaitForTextContaining(StatusId, "invoked:0");
+        InvokeAndAssertFreshIndex(InputInjector.VkEnter, 0);
 
         // Right x3 -> point 3: proves Right advances the focused point.
         PressOnChart(InputInjector.VkRight);
         PressOnChart(InputInjector.VkRight);
         PressOnChart(InputInjector.VkRight);
-        PressOnChart(InputInjector.VkEnter);
-        WaitForTextContaining(StatusId, "invoked:3");
+        InvokeAndAssertFreshIndex(InputInjector.VkEnter, 3);
 
         // Left -> point 2: proves Left retreats the focused point.
         PressOnChart(InputInjector.VkLeft);
-        PressOnChart(InputInjector.VkEnter);
-        WaitForTextContaining(StatusId, "invoked:2");
+        InvokeAndAssertFreshIndex(InputInjector.VkEnter, 2);
 
         // End -> point 9 (last): proves End.
         PressOnChart(InputInjector.VkEnd);
-        PressOnChart(InputInjector.VkEnter);
-        WaitForTextContaining(StatusId, "invoked:9");
+        InvokeAndAssertFreshIndex(InputInjector.VkEnter, 9);
 
         // Ctrl+Home -> point 0 (first series, first point): proves Ctrl+Home.
         PressOnChart(InputInjector.VkHome, ctrl: true);
-        PressOnChart(InputInjector.VkEnter);
-        WaitForTextContaining(StatusId, "invoked:0");
+        InvokeAndAssertFreshIndex(InputInjector.VkEnter, 0);
 
         // Ctrl+End -> point 9 (last series, last point): proves Ctrl+End.
         PressOnChart(InputInjector.VkEnd, ctrl: true);
-        PressOnChart(InputInjector.VkEnter);
-        WaitForTextContaining(StatusId, "invoked:9");
+        InvokeAndAssertFreshIndex(InputInjector.VkEnter, 9);
 
         // Home -> 0, then Space invokes: proves the Space invoke key (distinct from Enter).
         PressOnChart(InputInjector.VkHome);
-        PressOnChart(InputInjector.VkSpace);
-        WaitForTextContaining(StatusId, "invoked:0");
+        InvokeAndAssertFreshIndex(InputInjector.VkSpace, 0);
 
         // Shift+Right moves PointIndex to brushEnd (0 -> 1); Space invokes: proves the Shift+Right
         // brush arm actually advances the focused point.
         PressOnChart(InputInjector.VkRight, shift: true);
-        PressOnChart(InputInjector.VkSpace);
-        WaitForTextContaining(StatusId, "invoked:1");
+        InvokeAndAssertFreshIndex(InputInjector.VkSpace, 1);
 
         // Shift+Left moves PointIndex back (1 -> 0); Space invokes: proves the Shift+Left brush arm.
         PressOnChart(InputInjector.VkLeft, shift: true);
-        PressOnChart(InputInjector.VkSpace);
-        WaitForTextContaining(StatusId, "invoked:0");
+        InvokeAndAssertFreshIndex(InputInjector.VkSpace, 0);
+    }
+
+    /// <summary>
+    /// Press an invoke key (Enter / Space) on the focused chart and wait until the status reports
+    /// exactly <paramref name="expectedIndex"/>. Guards against a vacuous pass: the status must NOT
+    /// already show that index before the invoke — <see cref="WaitForTextContaining"/> returns
+    /// immediately on an already-matching value, so without this guard an assertion whose target
+    /// happened to equal the current status would pass without the just-navigated arm proving
+    /// anything. The caller therefore must navigate to a point index different from the last-invoked
+    /// one before each call (the sequence in <see cref="AssertObservablePointArms"/> does), and this
+    /// guard fails loudly if that ever stops holding.
+    /// </summary>
+    private void InvokeAndAssertFreshIndex(ushort invokeKey, int expectedIndex)
+    {
+        var target = $"invoked:{expectedIndex}";
+        var before = App.GetValue(StatusId) ?? "";
+        Assert.IsFalse(before.Contains(target),
+            $"Vacuous-assertion guard: status already reads '{before}' before invoking for '{target}'. " +
+            "The preceding navigation must land on a point index different from the last invoked one.");
+        PressOnChart(invokeKey);
+        WaitForTextContaining(StatusId, target);
     }
 
     /// <summary>Re-focus the plot area, then inject one (optionally chorded) key.</summary>
