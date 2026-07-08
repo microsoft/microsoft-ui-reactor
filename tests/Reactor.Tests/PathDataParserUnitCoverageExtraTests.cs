@@ -59,6 +59,21 @@ public class PathDataParserUnitCoverageExtraTests
         Assert.Throws<FormatException>(() => PathDataParser.ParseTokens(path));
     }
 
+    [Theory]
+    // A malformed token in a command's LATER operand slot must throw — which proves
+    // the command consumed the correct number of preceding operands and advanced to
+    // that slot. If arity were wrong, the bad token would instead be re-dispatched as
+    // an unknown command char and silently skipped (no throw). ParseTokens is void, so
+    // this throw-position check is the strongest headless assertion of command semantics.
+    [InlineData("M 0 0 L 10 1.2.3")]           // LineTo consumes 2 operands (x y)
+    [InlineData("M 0 0 Q 1 2 3 1.2.3")]        // Quadratic consumes 4 (x1 y1 x y)
+    [InlineData("M 0 0 C 1 2 3 4 5 1.2.3")]    // Cubic consumes 6 (x1 y1 x2 y2 x y)
+    [InlineData("M 0 0 A 1 1 0 1 0 10 1.2.3")] // Arc consumes 7 (rx ry rot large sweep x y)
+    public void ParseTokens_MalformedTrailingOperand_ThrowsProvingCommandArity(string path)
+    {
+        Assert.Throws<FormatException>(() => PathDataParser.ParseTokens(path));
+    }
+
     [Fact]
     public void ParseTokens_UnknownCommandsOnly_AreSkipped()
     {

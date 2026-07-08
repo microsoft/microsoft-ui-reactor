@@ -93,58 +93,96 @@ public class ChartingMathUnitCoverageExtraTests
     // ── Radial generators ───────────────────────────────────────────────────
 
     [Fact]
-    public void RadialLine_Setters_AndUndefinedPoint_ProduceGappedPath()
+    public void RadialLine_SettersChangeGeometry_AndUndefinedPointSplitsPath()
     {
-        var gen = RadialLineGenerator.Create()
-            .SetAngle((d, _) => d.angle)
-            .SetRadius((d, _) => d.radius)
-            .SetDefined((_, i) => i != 1) // index 1 undefined -> the (0,0) placeholder arm
-            .SetDigits(2);
-
         var data = new (double angle, double radius)[] { (0, 100), (1, 80), (2, 120) };
-        var path = gen.Generate(data);
 
-        Assert.NotNull(path);
-        Assert.StartsWith("M", path);
+        // Baseline: factory-default accessors at 2 digits.
+        var baseline = RadialLineGenerator.Create().SetDigits(2).Generate(data);
+        Assert.NotNull(baseline);
+        Assert.StartsWith("M", baseline);
+
+        // Each setter is exercised AND proven to change the emitted geometry vs the
+        // baseline — so the test fails if a setter were silently ignored.
+        var scaledRadius = RadialLineGenerator.Create()
+            .SetAngle((d, _) => d.angle)
+            .SetRadius((d, _) => d.radius * 2) // doubled radius -> different coordinates
+            .SetDigits(2).Generate(data);
+        Assert.NotEqual(baseline, scaledRadius);
+
+        var rotated = RadialLineGenerator.Create()
+            .SetAngle((d, _) => d.angle + 1)   // rotated -> different coordinates
+            .SetDigits(2).Generate(data);
+        Assert.NotEqual(baseline, rotated);
+
+        var coarse = RadialLineGenerator.Create().SetDigits(0).Generate(data);
+        Assert.NotEqual(baseline, coarse);      // fewer digits -> different rounding
+
+        // Marking the middle vertex undefined drives the (0,0) placeholder arm and
+        // splits the polyline, so the output differs from the fully-defined baseline.
+        var gapped = RadialLineGenerator.Create()
+            .SetDefined((_, i) => i != 1)
+            .SetDigits(2).Generate(data);
+        Assert.NotNull(gapped);
+        Assert.NotEqual(baseline, gapped);
     }
 
     [Fact]
-    public void RadialArea_Setters_ProduceClosedPath()
+    public void RadialArea_Setters_ProduceClosedRing_AndOuterRadiusChangesGeometry()
     {
-        var gen = RadialAreaGenerator.Create<(double angle, double value)>(
-                d => d.angle, _ => 10, d => d.value)
-            .SetInnerRadius((_, _) => 10)
-            .SetOuterRadius((d, _) => d.value)
-            .SetStartAngle((d, _) => d.angle)
-            .SetEndAngle((d, _) => d.angle)
-            .SetDefined((_, _) => true)
-            .SetDigits(2)
-            .SetAngle((d, _) => d.angle);
-
         var data = new (double angle, double value)[]
         {
             (0, 50), (Math.PI / 2, 60), (Math.PI, 70),
         };
 
+        // SetAngle is applied FIRST so the subsequent SetStartAngle/SetEndAngle
+        // survive (SetAngle resets the end-angle accessor to null); this keeps the
+        // non-null end-angle path in Generate exercised.
+        var gen = RadialAreaGenerator.Create<(double angle, double value)>(
+                d => d.angle, _ => 10, d => d.value)
+            .SetAngle((d, _) => d.angle)
+            .SetStartAngle((d, _) => d.angle)
+            .SetEndAngle((d, _) => d.angle)
+            .SetInnerRadius((_, _) => 10)
+            .SetOuterRadius((d, _) => d.value)
+            .SetDefined((_, _) => true)
+            .SetDigits(2);
         var path = gen.Generate(data);
-
         Assert.NotNull(path);
-        Assert.Contains("Z", path);
+        Assert.Contains("Z", path); // area is a closed ring
+
+        // Doubling the outer radius yields a different ring -> SetOuterRadius applied.
+        var wider = RadialAreaGenerator.Create<(double angle, double value)>(
+                d => d.angle, _ => 10, d => d.value)
+            .SetAngle((d, _) => d.angle)
+            .SetStartAngle((d, _) => d.angle)
+            .SetEndAngle((d, _) => d.angle)
+            .SetInnerRadius((_, _) => 10)
+            .SetOuterRadius((d, _) => d.value * 2)
+            .SetDefined((_, _) => true)
+            .SetDigits(2).Generate(data);
+        Assert.NotEqual(path, wider);
     }
 
     [Fact]
-    public void RadialLink_Setters_ProduceQuadraticPath()
+    public void RadialLink_Setters_ProduceQuadratic_AndTargetChangesEndpoint()
     {
-        var gen = new RadialLinkGenerator<(double a, double r)>(
+        // Baseline: target accessor == source accessor.
+        var baseline = new RadialLinkGenerator<(double a, double r)>(
+                d => (d.a, d.r), d => (d.a, d.r))
+            .SetDigits(2).Generate((1.0, 50.0));
+        Assert.NotNull(baseline);
+        Assert.Contains("Q", baseline);
+
+        // Moving the target to a different angle/radius changes the curve endpoint.
+        var moved = new RadialLinkGenerator<(double a, double r)>(
                 d => (d.a, d.r), d => (d.a, d.r))
             .SetSource(d => (d.a, d.r))
             .SetTarget(d => (d.a + Math.PI, d.r * 2))
-            .SetDigits(2);
-
-        var path = gen.Generate((1.0, 50.0));
-
-        Assert.NotNull(path);
-        Assert.Contains("Q", path);
+            .SetDigits(2).Generate((1.0, 50.0));
+        Assert.NotNull(moved);
+        Assert.Contains("Q", moved);
+        Assert.NotEqual(baseline, moved); // SetTarget moved the endpoint
     }
 
     // ── Delaunay ────────────────────────────────────────────────────────────
@@ -173,19 +211,29 @@ public class ChartingMathUnitCoverageExtraTests
 
         var d = Delaunay.From(pts);
         // Right edge x<=50 cuts through the interior circumcenters, forcing cells
-        // near the boundary to be clipped (straddling a single edge).
+        // near the boundary to be clipped (straddling that single edge).
         var v = d.Voronoi(0, 0, 50, 100);
 
         const double eps = 1e-6;
+        int nonNullCells = 0;
+        bool clippedOntoRightEdge = false;
         for (int i = 0; i < pts.Count; i++)
         {
             var cell = v.CellPolygon(i);
             if (cell is null) continue;
+            nonNullCells++;
             foreach (var (x, y) in cell)
             {
                 Assert.InRange(x, 0 - eps, 50 + eps);
                 Assert.InRange(y, 0 - eps, 100 + eps);
+                if (Math.Abs(x - 50) < eps) clippedOntoRightEdge = true;
             }
         }
+
+        // Prove clipping actually produced surviving polygons (not all-null, which
+        // would make the bounds checks above vacuous)...
+        Assert.True(nonNullCells > 0, "expected at least one surviving clipped cell");
+        // ...and that at least one polygon was clipped exactly onto the x==50 edge.
+        Assert.True(clippedOntoRightEdge, "expected a cell vertex on the x==50 clip boundary");
     }
 }
