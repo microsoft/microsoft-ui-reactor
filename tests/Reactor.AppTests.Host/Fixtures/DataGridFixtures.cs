@@ -138,6 +138,12 @@ internal static class DataGridFixtures
             return VStack(8,
                 TextBlock($"Sel:{selStatus}").AutomationId("KbdNav_Status"),
                 TextBlock($"Edits:{editLog}").AutomationId("KbdNav_EditLog"),
+                // Focusable anchor immediately before the grid. The DataGrid's own Grid container is
+                // a tab stop but does NOT surface its AutomationId in UIA (so it can't be reached by
+                // winapp SetFocus), whereas a Button does. The E2E focuses this anchor via UIA, then
+                // presses Tab once to land keyboard focus on the grid (the next tab stop) so injected
+                // arrow keys route to its KeyDown handler.
+                Button("Focus grid").AutomationId("KbdNav_FocusAnchor"),
                 DataGrid(
                     source: source,
                     columns: columns,

@@ -71,7 +71,7 @@ public class DataGridTests : AppTestBase
         Assert.IsNotNull(WaitForName("Johnson"), "'Johnson' should be visible after commit");
     }
 
-    private const string GridId = "KbdNavGrid";
+    private const string AnchorId = "KbdNav_FocusAnchor";
     private const string StatusId = "KbdNav_Status";
     private const string EditLogId = "KbdNav_EditLog";
 
@@ -171,50 +171,62 @@ public class DataGridTests : AppTestBase
         PressNavKey(InputInjector.VkSpace);
         WaitForTextContaining(StatusId, "Sel:1", timeoutMs: 5000);
 
-        Assert.IsTrue(App.Exists(GridId), "Keyboard-nav grid should still be present (no crash).");
+        Assert.IsTrue(App.Exists(AnchorId), "Keyboard-nav fixture should still be present (no crash).");
     }
 
     // ─── Keyboard-nav helpers ─────────────────────────────────────────────────
 
     /// <summary>
-    /// Move keyboard focus to the grid and confirm the injected-key pipeline reaches its KeyDown
-    /// handler: a focused grid + Right (lands cell 0,0) + Enter opens the inline editor. Retries a
-    /// few times, falling back to Tab-in, and leaves the fixture on a clean, non-editing (0,0).
+    /// Move keyboard focus onto the grid and confirm the injected-key pipeline reaches its KeyDown
+    /// handler. The grid's own Grid container is a tab stop but is not UIA-addressable, so we focus
+    /// the adjacent anchor Button and Tab onto the grid (see <see cref="FocusGrid"/>). Confirmation
+    /// is by editor VALUE: from the fixture's fresh state the first arrow lands on cell (0,0), so
+    /// Enter must open an editor reading "Alice". This is self-consistent across retries — a failed
+    /// attempt whose keys never reached the grid leaves the internal focus untouched (still fresh),
+    /// so the next attempt's first arrow again lands on (0,0). Leaves a clean, non-editing (0,0).
     /// </summary>
     private bool EnsureGridFocusedAndKeyboardLive()
     {
         for (int attempt = 0; attempt < 6; attempt++)
         {
             FocusGrid();
-            InputInjector.PressKey(InputInjector.VkRight); // first arrow lands focus on (0,0)
+            InputInjector.PressKey(InputInjector.VkDown); // from fresh state -> cell (0,0)
             Thread.Sleep(50);
             InputInjector.PressKey(InputInjector.VkEnter); // BeginEdit(0,0) if the grid is focused
 
-            if (WaitForEditorPresent(1500))
+            if (WaitForEditorValue("Alice", 1500)?.Trim() == "Alice")
             {
-                // Reset to a known non-editing (0,0) before the assertions run.
+                // Grid is focusable and the pipeline is live; return to a known non-editing (0,0).
                 PressEditingKey(InputInjector.VkEscape);
                 WaitForNoEditor(2000);
                 return true;
             }
 
-            // Fallback: Tab into the grid from the status label, then retry the UIA focus path.
-            InputInjector.Foreground(HostHwnd);
-            for (int t = 0; t < 3; t++)
-                InputInjector.Tab();
+            // Clear any stray editor before retrying so the next attempt starts clean.
+            if (App.FindFirstEditableSelector() is not null)
+            {
+                PressEditingKey(InputInjector.VkEscape);
+                WaitForNoEditor(1000);
+            }
             Thread.Sleep(120);
         }
         return false;
     }
 
-    /// <summary>UIA-focus the grid (a tab stop), keeping the Host foreground so injected keys route to it.</summary>
+    /// <summary>
+    /// Put keyboard focus on the grid: UIA-focus the adjacent anchor Button (the grid's Grid
+    /// container isn't UIA-addressable), then inject a single Tab to move focus onto the grid — the
+    /// next tab stop. Focus is on the anchor (not the grid) when this Tab fires, so it does NOT
+    /// trigger the grid's own Tab handler; the grid's internal cell focus is left untouched.
+    /// </summary>
     private void FocusGrid()
     {
         InputInjector.Foreground(HostHwnd);
-        try { App.Focus(GridId); }
-        catch (WinAppException) { /* some builds reject SetFocus on a panel; Tab-in/foreground focus still applies */ }
-        // winapp's focus process can briefly steal foreground; restore the Host so keys land on it.
+        try { App.Focus(AnchorId); }
+        catch (WinAppException) { /* anchor should always be focusable; foreground focus still applies */ }
         InputInjector.Foreground(HostHwnd);
+        InputInjector.Tab(); // anchor -> grid (next tab stop)
+        Thread.Sleep(40);
     }
 
     /// <summary>Re-focus the grid, then inject one navigation key (used when NOT editing).</summary>
@@ -269,19 +281,6 @@ public class DataGridTests : AppTestBase
         }
         while (DateTime.UtcNow < deadline);
         return last;
-    }
-
-    private bool WaitForEditorPresent(int timeoutMs)
-    {
-        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
-        do
-        {
-            if (App.FindFirstEditableSelector() is not null)
-                return true;
-            Thread.Sleep(100);
-        }
-        while (DateTime.UtcNow < deadline);
-        return false;
     }
 
     private bool WaitForNoEditor(int timeoutMs)
