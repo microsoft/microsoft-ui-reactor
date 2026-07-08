@@ -307,12 +307,20 @@ public class ChartKeyboardNavTests : AppTestBase
     /// <summary>Re-focus the plot area, then inject one (optionally chorded) key.</summary>
     private void PressOnChart(ushort virtualKey, bool ctrl = false, bool shift = false, bool alt = false)
     {
-        // Re-focus before each key. If UIA SetFocus is rejected on this build (UiaFocusChart
-        // returns false), fall back to a real pointer click on the plot area — the same focus
-        // strategy EnsureChartFocusedAndKeyboardLive uses — so the key actually lands on the chart
-        // rather than on whatever else currently holds focus.
+        // Re-focus before each key. UIA SetFocus is primary; if it's rejected on this build
+        // (UiaFocusChart returns false) fall back to a real pointer click on the plot area — the
+        // same strategy EnsureChartFocusedAndKeyboardLive uses — so the key actually lands on the
+        // chart rather than on whatever else currently holds focus. If the plot area can't even be
+        // LOCATED, fail fast instead of injecting the key blindly at the current focus: a silent
+        // miss would otherwise surface as a confusing downstream status-wait timeout.
         if (!UiaFocusChart())
+        {
+            if (FindChartMatch() is null)
+                throw new WinAppException(
+                    $"Chart plot area '{ChartName}' could not be located to receive keyboard input; " +
+                    "the fixture may have failed to render or lost its AutomationName.");
             ClickChartToFocus();
+        }
         InputInjector.PressKeyWith(virtualKey, ctrl: ctrl, shift: shift, alt: alt);
         Thread.Sleep(45);
     }
