@@ -375,15 +375,19 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                         // synchronously would falsely conclude that focus left the grid.
                         Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() =>
                         {
-                            if (!state.IsEditing && !state.IsRowEditing) return;
-                            // A keyboard editing-Tab already owns this focus-out: it commits the current cell
-                            // and reopens the editor on the next cell. Skip exactly one deferred commit here,
-                            // otherwise we tear down that just-reopened editor.
+                            // Consume the one-shot editing-Tab guard FIRST, before the IsEditing check.
+                            // A keyboard editing-Tab owns this focus-out: it already committed the current
+                            // cell and, when the next cell is editable, reopened the editor there — so skip
+                            // the safety-net commit. Consuming before the IsEditing guard is essential: if
+                            // the next cell was NOT editable the reopen fails and IsEditing is already false
+                            // here, so consuming afterwards would leave the flag set and wrongly suppress a
+                            // later legitimate blur-commit (lost edit).
                             if (state.SuppressNextLostFocusCommit)
                             {
                                 state.SuppressNextLostFocusCommit = false;
                                 return;
                             }
+                            if (!state.IsEditing && !state.IsRowEditing) return;
                             var focused = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(g.XamlRoot);
                             if (focused is DependencyObject dep)
                             {
