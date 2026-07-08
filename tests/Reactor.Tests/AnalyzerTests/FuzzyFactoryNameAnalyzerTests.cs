@@ -202,6 +202,25 @@ namespace App
     }
 
     [Fact]
+    public async Task Does_Not_Flag_Overload_Resolution_Failure_On_Local_Method()
+    {
+        // 'Buton' IS defined (a real local method) but called with the wrong argument type. Roslyn
+        // reports Symbol == null WITH candidate symbols (overload-resolution failure, CS1503), which
+        // is NOT the CS0103 "name does not exist" shape — the CandidateSymbols half of the unbound
+        // gate must suppress it. (Without that half, this would fuzzy-match Buton -> Button and fire.)
+        var body = @"
+namespace App
+{
+    static class C
+    {
+        static object Buton(int x) { return new object(); }
+        static object M() => Buton(""x"");
+    }
+}";
+        await MakeAnalyzerTest(body).RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
     public async Task Does_Not_Flag_Member_Access_Typo()
     {
         // Member-access typo (x.Buton()) is a different shape (CS1061 phase), not a bare factory call.
@@ -274,6 +293,67 @@ namespace App
 {
     using static Microsoft.UI.Reactor.Factories;
     static class C { static object M() => Button(""x""); }
+}";
+        var test = new CSharpCodeFixTest<FuzzyFactoryNameAnalyzer, FuzzyFactoryNameCodeFix, DefaultVerifier>
+        {
+            TestCode = before,
+            FixedCode = after,
+            CompilerDiagnostics = CompilerDiagnostics.None,
+        };
+        test.DisabledDiagnostics.Add("CS1591");
+        await test.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task CodeFix_Renames_Nested_Call_Preserving_Trivia()
+    {
+        // The fix replaces only the identifier node (WithTriviaFrom), so a nested typo inside a real
+        // factory call is renamed while the surrounding call structure and comments are preserved.
+        var before = Stubs + @"
+namespace App
+{
+    using static Microsoft.UI.Reactor.Factories;
+    static class C { static object M() => VStack(/*a*/{|REACTOR_DYM_003:Buton|}(""x"")/*b*/); }
+}";
+        var after = Stubs + @"
+namespace App
+{
+    using static Microsoft.UI.Reactor.Factories;
+    static class C { static object M() => VStack(/*a*/Button(""x"")/*b*/); }
+}";
+        var test = new CSharpCodeFixTest<FuzzyFactoryNameAnalyzer, FuzzyFactoryNameCodeFix, DefaultVerifier>
+        {
+            TestCode = before,
+            FixedCode = after,
+            CompilerDiagnostics = CompilerDiagnostics.None,
+        };
+        test.DisabledDiagnostics.Add("CS1591");
+        await test.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task CodeFix_FixAll_Renames_Multiple_Occurrences()
+    {
+        // Two mistyped factories in one file are both renamed — exercises the registered BatchFixer.
+        var before = Stubs + @"
+namespace App
+{
+    using static Microsoft.UI.Reactor.Factories;
+    static class C
+    {
+        static object A() => {|REACTOR_DYM_003:Buton|}(""x"");
+        static object B() => {|REACTOR_DYM_003:NumbrBox|}();
+    }
+}";
+        var after = Stubs + @"
+namespace App
+{
+    using static Microsoft.UI.Reactor.Factories;
+    static class C
+    {
+        static object A() => Button(""x"");
+        static object B() => NumberBox();
+    }
 }";
         var test = new CSharpCodeFixTest<FuzzyFactoryNameAnalyzer, FuzzyFactoryNameCodeFix, DefaultVerifier>
         {
