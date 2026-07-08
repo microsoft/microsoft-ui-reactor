@@ -105,10 +105,23 @@ internal static class OverlaySeamCoverageFixtures
             int dimmedAfter = H.FindAllControls<Border>(b => Math.Abs(b.Opacity - 0.35) < 1e-3).Count;
             H.Check("Overlay_ReEnabled_NoDimming", dimmedAfter == 0);
 
-            // Same mask again = early-return no-op (still no dimming).
+            // Differential oracle for the mask-clear: DockRight — disabled at
+            // the previous step — must now hover AND confirm again. (Probing an
+            // already-enabled target would still pass if the clear was a no-op.)
+            int confirmsBeforeReEnable = confirmCount;
+            overlay.SetHoveredForTest(DockTarget.DockRight);
+            H.Check("Overlay_ReEnabled_PreviouslyDisabledHoversAgain",
+                overlay.HoveredTarget == DockTarget.DockRight);
+            overlay.ConfirmTargetForTest(DockTarget.DockRight);
+            H.Check("Overlay_ReEnabled_PreviouslyDisabledConfirmsAgain",
+                confirmCount == confirmsBeforeReEnable + 1);
+
+            // Setting the same (already-empty) mask is an early-return no-op —
+            // targets stay enabled.
             overlay.SetDisabledTargets(null);
             overlay.SetHoveredForTest(DockTarget.DockLeft);
-            H.Check("Overlay_ReEnabled_HoverWorksAgain", overlay.HoveredTarget == DockTarget.DockLeft);
+            H.Check("Overlay_SameEmptyMask_NoOp_StillEnabled",
+                overlay.HoveredTarget == DockTarget.DockLeft);
 
             H.SetContent(null);
             await Harness.Render();
@@ -324,6 +337,17 @@ internal static class SplitterSeamCoverageFixtures
             H.Check("SplitterDiag_SinkSawRelease",
                 traces.Any(t => t.StartsWith("RELEASE") && t.Contains("cumDelta=")));
 
+            // Non-vacuous oracle for the sink-gated visual-tree snapshot
+            // sub-branch: the MOVE trace must carry LIVE leading-pane widths
+            // read from the FlexPanel child — NOT the -1 sentinel that the
+            // no-FlexPanel / no-op path would log. If the snapshot sub-branch
+            // regressed to always log placeholders, this fails.
+            var moveTrace = traces.FirstOrDefault(t => t.StartsWith("MOVE"));
+            H.Check("SplitterDiag_MoveTrace_LiveLeadingWidths",
+                moveTrace is not null
+                && !moveTrace.Contains("preLeadingActual=-1")
+                && !moveTrace.Contains("postLeadingActual=-1"));
+
             // The drag actually moved grow off the leading pane.
             double leadGrowAfter = FlexPanel.GetGrow(leading);
             H.Check("SplitterDiag_GrowRedistributed",
@@ -373,11 +397,11 @@ internal static class TearOffSeamCoverageFixtures
                 // tree, so XamlRoot stays null), press a tab, then move past
                 // the threshold. MoveCore must hit the XamlRoot==null abort.
                 var tabView = new TabView();
+                bool beginTearOffCalled = false;
                 DockTabTearOff.AttachPressHook(
                     tabView,
                     resolveTab: _ => (pane, 0),
-                    beginTearOff: _ => throw new InvalidOperationException(
-                        "BeginTearOff must not run when XamlRoot is null"));
+                    beginTearOff: _ => { beginTearOffCalled = true; return null; });
 
                 H.Check("TearOff_HookAttached", DockTabTearOff.IsHookAttachedForTest(tabView));
                 H.Check("TearOff_BareTabView_NoXamlRoot", tabView.XamlRoot is null);
@@ -386,9 +410,15 @@ internal static class TearOffSeamCoverageFixtures
                 var (candBefore, _, _) = DockTabTearOff.InspectCandidateForTest(tabView);
                 H.Check("TearOff_PressRecordedCandidate", ReferenceEquals(candBefore, pane));
 
-                // Threshold-crossing move with null XamlRoot → clean abort.
+                // Threshold-crossing move with null XamlRoot → clean abort
+                // BEFORE BeginTearOff runs. The abort is the ONLY thing that
+                // stops BeginTearOff here — the normal proceed path ALSO clears
+                // the candidate, so a candidate-null check alone is vacuous for
+                // this arm. Asserting BeginTearOff was never invoked is the real
+                // oracle: it flips to called if the null-XamlRoot guard is removed.
                 DockTabTearOff.SimulateMoveForTest(tabView, 25, 25);
 
+                H.Check("TearOff_NullXamlRoot_BeginTearOffNotCalled", !beginTearOffCalled);
                 var (candAfter, _, _) = DockTabTearOff.InspectCandidateForTest(tabView);
                 H.Check("TearOff_NullXamlRoot_ClearsCandidate", candAfter is null);
                 H.Check("TearOff_NullXamlRoot_NoTracker", !DockTabTearOffTracker.IsActiveForTest);
