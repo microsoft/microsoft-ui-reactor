@@ -235,22 +235,30 @@ Replace `$(RuntimeIdentifier)` with `ARM64` or `x64`, or omit the platform segme
 
 You don't have to run the merge locally — the **Coverage** workflow
 (`.github/workflows/coverage.yml`) runs this same unit + selftest recipe and
-reports the merged line/branch numbers.
+reports the merged line/branch numbers, **compared against the PR's base branch**
+(the `main` baseline in the common case).
 
-- **Automatic on every PR:** it runs on each PR commit and posts the merged
-  line/branch numbers as a **sticky comment** that updates in place on new
+- **Automatic on every PR:** it runs on each PR commit, measures the merged
+  coverage of **both** the PR head and its base branch, and posts a **sticky
+  comment** showing `base | PR | Δ` for line + branch, with a direction-aware
+  status (✅ higher / ⚠️ lower / ≈ within noise). It updates in place on new
   commits. No action needed — it just works. (Doc-only PRs are skipped.)
 - **Manual trigger (PR):** use **Actions → Coverage → Run workflow** and enter the
   PR number, or run `gh workflow run coverage.yml -f pr_number=<PR>`. This measures
-  that PR (works for forks) and writes the result to the run's **job summary** —
-  it does not post a PR comment (the poster only comments for automatic
-  `pull_request` runs, where the PR is resolved from the trusted head SHA).
+  that PR against its base (works for forks) and writes the comparison to the run's
+  **job summary** — it does not post a PR comment (the poster only comments for
+  automatic `pull_request` runs, where the PR is resolved from the trusted head SHA).
 - **Manual trigger (branch):** run it with the PR number left **blank** to measure
-  the selected branch — e.g. `gh workflow run coverage.yml --ref main`. The numbers
-  are written to the run's **job summary**.
+  the selected branch — e.g. `gh workflow run coverage.yml --ref main`. There is no
+  base to compare against, so the **absolute** numbers are written to the run's
+  **job summary**.
 
 The measurement runs in the unprivileged `pull_request` context (it builds and
-runs PR code, so it holds no write token) and uploads only the raw numbers; the
-privileged `coverage-comment.yml` (`workflow_run`) checks out trusted code,
-renders the comment, and posts it, resolving the target PR from the trusted
-`workflow_run` head SHA. See that workflow's header for the security rationale.
+runs PR code for both sides, so it holds no write token) and uploads only the raw
+per-side numbers; the privileged `coverage-comment.yml` (`workflow_run`) checks out
+trusted code, re-validates the numbers, renders the comparison comment, and posts
+it, resolving the target PR + base SHA from the trusted `workflow_run` head SHA.
+Measuring both sides roughly doubles the run time; a base-branch failure is
+non-fatal (it degrades to a "baseline unavailable" note). See
+[`tests/coverage/ci/README.md`](tests/coverage/ci/README.md) and the workflow
+headers for the full layout + security rationale.
