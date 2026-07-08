@@ -122,13 +122,20 @@ public class ChartingMathUnitCoverageExtraTests
         var coarse = RadialLineGenerator.Create().SetDigits(0).Generate(data);
         Assert.NotEqual(baseline, coarse);      // fewer digits -> different rounding
 
-        // Marking the middle vertex undefined drives the (0,0) placeholder arm and
-        // splits the polyline, so the output differs from the fully-defined baseline.
+        // Marking a middle vertex undefined splits the polyline into two subpaths: the
+        // surviving runs [0,1] and [3,4] each begin with their own M command. Counting
+        // two M commands is the split oracle — a broken defined-mask split would emit a
+        // single continuous path (one M) through the (0,0) placeholder and still differ
+        // from the baseline, so a bare inequality would not prove the split.
+        var gapData = new (double angle, double radius)[]
+        {
+            (0, 100), (0.5, 90), (1, 80), (1.5, 70), (2, 120),
+        };
         var gapped = RadialLineGenerator.Create()
-            .SetDefined((_, i) => i != 1)
-            .SetDigits(2).Generate(data);
+            .SetDefined((_, i) => i != 2)
+            .SetDigits(2).Generate(gapData);
         Assert.NotNull(gapped);
-        Assert.NotEqual(baseline, gapped);
+        Assert.Equal(2, gapped!.Count(c => c == 'M'));
     }
 
     [Fact]
