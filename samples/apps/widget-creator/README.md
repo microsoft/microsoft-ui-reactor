@@ -54,13 +54,16 @@ dotnet run --project samples/apps/widget-creator/widget-creator.csproj -p:Platfo
 1. **Copilot auth** — install the [GitHub CLI](https://cli.github.com/) and run
    `gh auth login --web` with a Copilot-enabled account (`gh auth status` to
    confirm). The bundled Copilot CLI rides that account.
-2. **MXC** — a build of `wxc-exec.exe`. By default the app prefers a freshly
-   built source binary under `…\mxc\src\target\<triple>\release\wxc-exec.exe`,
-   then the bundled `…\mxc\sdk\bin\<arch>\wxc-exec.exe`. Override with:
+2. **MXC** — a build of `wxc-exec.exe`. By default the app uses the **pinned,
+   vendored** copy shipped next to it (`…\mxc\<rid>\wxc-exec.exe`), which is known
+   to auto-fall back off BaseContainer. Override with:
    - `WIDGET_CREATOR_WXC_EXEC` — full path to `wxc-exec.exe`,
-   - `WIDGET_CREATOR_MXC_BIN` — a `sdk\bin` dir (the app appends `arm64`/`x64`), or
-   - `WIDGET_CREATOR_MXC_ROOT` — the MXC checkout root (default
-     `C:\Users\andersonch\Code\mxc`).
+   - `WIDGET_CREATOR_MXC_BIN` — a `sdk\bin` dir (the app appends `arm64`/`x64`),
+   - `WIDGET_CREATOR_USE_LOCAL_MXC=1` — prefer a local mxc checkout
+     (`…\mxc\src\target\<triple>\release\` then `…\mxc\sdk\bin\<arch>\`) over the
+     vendored copy, for developers iterating on the MXC CLI itself, or
+   - `WIDGET_CREATOR_MXC_ROOT` — the MXC checkout root used by the opt-in above
+     (default `C:\Users\andersonch\Code\mxc`).
 3. **Local Reactor package** — generated widgets reference
    `Microsoft.UI.Reactor 0.0.0-local`, resolved from this repo's `local-nupkgs`
    feed. Run `mur pack-local` if it's missing. Override the feed path with
@@ -88,14 +91,13 @@ MXC's tier detector chooses how to enforce that grant (BaseContainer, AppContain
 + BFS, or AppContainer + DACL). The app never edits ACLs — declaring the app
 directory in `readonlyPaths` is enough; MXC's DACL manager stamps the grant.
 
-> **Host note (this dev machine).** The newer BaseContainer backend is gated by
-> the OS build here (`Experimental_CreateProcessInSandbox → E_NOTIMPL`). The app
-> sets `MXC_DISABLE_BASE_CONTAINER=1` on the `wxc-exec` process so the tier
-> detector uses **AppContainer + DACL** instead, which grants the app dir and
-> runs. This is harmless on hosts where BaseContainer works (it just uses the
-> DACL tier). Pre-set the variable yourself to override. Requires a `wxc-exec`
-> build new enough to honor that variable — hence the source-binary preference
-> above.
+> **Host note.** The app lets `wxc-exec` select the strongest available
+> containment tier: it tries **BaseContainer** first and falls back to
+> **AppContainer + DACL** on hosts where BaseContainer is gated by the OS build
+> (`Experimental_CreateProcessInSandbox → E_NOTIMPL`). The app no longer forces
+> the weaker tier — trusting the vendored `wxc-exec` (0.7.0+) to handle fallback.
+> To pin the DACL tier for debugging, set `MXC_DISABLE_BASE_CONTAINER=1` in the
+> environment yourself; it is inherited into the `wxc-exec` process.
 
 ## Layout
 

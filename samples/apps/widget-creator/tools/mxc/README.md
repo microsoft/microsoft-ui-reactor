@@ -29,9 +29,12 @@ launches its helpers (sandbox daemon/guest, proxy shim) as siblings:
 `MxcSandbox.ResolveWxcExec()` picks the first match of:
 
 1. `WIDGET_CREATOR_WXC_EXEC` (explicit path) / `WIDGET_CREATOR_MXC_BIN` (bin dir)
-2. a local mxc checkout — `mxc/src/target/<triple>/release/` then `mxc/sdk/bin/<arch>/`
-   (so MXC developers iterating on the CLI get their freshest build)
-3. **this vendored copy**, shipped in the app output at `mxc/<rid>/`
+2. **this vendored copy**, shipped in the app output at `mxc/<rid>/` (the default —
+   pinned and known to auto-fall back off BaseContainer)
+3. a local mxc checkout — `mxc/src/target/<triple>/release/` then `mxc/sdk/bin/<arch>/`
+   — **only when `WIDGET_CREATOR_USE_LOCAL_MXC=1`** (so MXC developers iterating on
+   the CLI can opt in to their freshest build). Off by default so a stale or
+   uncontrolled local build cannot silently replace the pinned sandbox.
 
 ## Refreshing
 

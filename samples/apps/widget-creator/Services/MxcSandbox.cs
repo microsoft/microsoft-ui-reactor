@@ -77,16 +77,6 @@ public sealed class MxcSandbox
 {
     public const string SchemaVersion = "0.6.0-alpha";
 
-    /// <summary>
-    /// On this dev host the BaseContainer backend is gated by the OS build
-    /// (<c>Experimental_CreateProcessInSandbox → E_NOTIMPL</c>). Setting
-    /// <c>MXC_DISABLE_BASE_CONTAINER=1</c> makes wxc-exec's tier detector skip
-    /// BaseContainer and use AppContainer + DACL, which grants the app dir and
-    /// runs here. Harmless on hosts where BaseContainer works (it just uses the
-    /// DACL tier instead). Opt out by pre-setting the variable yourself.
-    /// </summary>
-    const string DisableBaseContainerVar = "MXC_DISABLE_BASE_CONTAINER";
-
     /// <summary>Human-readable summary of the policy this sandbox applies.</summary>
     public static (string Label, string Value, string Note)[] PolicyRows =>
     [
@@ -97,8 +87,12 @@ public sealed class MxcSandbox
         ("Input injection",  "None",     "cannot synthesize keyboard/mouse"),
     ];
 
-    /// <summary>Resolve the wxc-exec binary path: env override, a local mxc
-    /// checkout (for MXC developers), then the copy vendored in the app output.</summary>
+    /// <summary>Resolve the wxc-exec binary path: an explicit env override, the
+    /// pinned copy vendored in the app output (the default), and — only when
+    /// explicitly opted in via <see cref="UseLocalMxcVar"/> — a local mxc checkout
+    /// (for developers iterating on the MXC CLI itself). The vendored binary wins
+    /// over an uncontrolled local build by default so a stale or tampered checkout
+    /// cannot silently replace the sandbox we ship (C-2/C-3).</summary>
     public static string WxcExecPath { get; } = ResolveWxcExec();
 
     static string McxRoot =>
@@ -118,26 +112,48 @@ public sealed class MxcSandbox
     /// <summary>The wxc-exec copy shipped next to the app (output dir: mxc/&lt;rid&gt;/).</summary>
     static string BundledWxcExec => Path.Combine(AppContext.BaseDirectory, "mxc", BundleRid, "wxc-exec.exe");
 
+    /// <summary>
+    /// Opt-in env var (set to <c>1</c>/<c>true</c>): prefer a local mxc checkout
+    /// over the vendored binary, for developers iterating on the MXC CLI itself.
+    /// Off by default — an uncontrolled or stale local build must NOT silently
+    /// override the pinned sandbox we ship, both to avoid sandbox substitution
+    /// (C-3) and because older builds may not auto-fall back off BaseContainer (C-2).
+    /// </summary>
+    const string UseLocalMxcVar = "WIDGET_CREATOR_USE_LOCAL_MXC";
+
+    static bool UseLocalCheckout =>
+        Environment.GetEnvironmentVariable(UseLocalMxcVar) is { Length: > 0 } v &&
+        (v == "1" || v.Equals("true", StringComparison.OrdinalIgnoreCase));
+
     static string ResolveWxcExec()
     {
+        // 1. A fully-specified explicit override always wins (dev/test/CI).
         var direct = Environment.GetEnvironmentVariable("WIDGET_CREATOR_WXC_EXEC");
         if (!string.IsNullOrWhiteSpace(direct) && File.Exists(direct))
             return direct;
 
         var candidates = new List<string>();
+
+        // 2. An explicit bin dir override (caller-controlled, so it is trusted).
         var binBase = Environment.GetEnvironmentVariable("WIDGET_CREATOR_MXC_BIN");
         if (!string.IsNullOrWhiteSpace(binBase))
             candidates.Add(Path.Combine(binBase, Arch, "wxc-exec.exe"));
 
-        // A present local mxc checkout (developers iterating on MXC itself) wins, so a
-        // freshly built binary is used over the vendored copy. wxc-exec finds its helper
-        // binaries (sandbox daemon/guest, proxy shim) as siblings, so each candidate dir
-        // must contain the full set.
-        candidates.Add(Path.Combine(McxRoot, "src", "target", Triple, "release", "wxc-exec.exe"));
-        candidates.Add(Path.Combine(McxRoot, "sdk", "bin", Arch, "wxc-exec.exe"));
+        // 3. Only when explicitly opted in, prefer a local mxc checkout so a
+        // freshly built binary is used over the vendored copy. Off by default:
+        // the pinned vendored binary is the trusted sandbox, and a stale local
+        // build here previously broke launches by preferring BaseContainer with
+        // no fallback (C-2). wxc-exec finds its helper binaries (sandbox
+        // daemon/guest, proxy shim) as siblings, so each dir must hold the full set.
+        if (UseLocalCheckout)
+        {
+            candidates.Add(Path.Combine(McxRoot, "src", "target", Triple, "release", "wxc-exec.exe"));
+            candidates.Add(Path.Combine(McxRoot, "sdk", "bin", Arch, "wxc-exec.exe"));
+        }
 
-        // Vendored copy shipped in the app's own output dir — makes `git clone` +
-        // `dotnet run` work sandboxed with no external mxc checkout.
+        // 4. Pinned, vendored copy shipped in the app's own output dir (the
+        // default) — makes `git clone` + `dotnet run` work sandboxed with no
+        // external mxc checkout, and is known to auto-fall back off BaseContainer.
         candidates.Add(BundledWxcExec);
 
         foreach (var c in candidates)
@@ -239,9 +255,11 @@ public sealed class MxcSandbox
         };
         psi.ArgumentList.Add(configPath);
 
-        // Force the AppContainer + DACL tier unless the caller pinned the var.
-        if (Environment.GetEnvironmentVariable(DisableBaseContainerVar) is null)
-            psi.Environment[DisableBaseContainerVar] = "1";
+        // Let wxc-exec select the strongest available containment tier: it tries
+        // BaseContainer first and falls back to AppContainer + DACL on hosts where
+        // BaseContainer is gated. We no longer force the weaker tier — C-2. To pin
+        // the DACL tier for debugging, set MXC_DISABLE_BASE_CONTAINER=1 in the
+        // environment yourself; ProcessStartInfo inherits it into the child.
 
         using var proc = new Process { StartInfo = psi, EnableRaisingEvents = true };
         var sb = new StringBuilder();
