@@ -129,7 +129,7 @@ internal enum ThumbButtonFlags : uint
 /// never touch the taskbar surface stay clean of CoCreateInstance. Thread-safe;
 /// the underlying COM is free-threaded for our usage pattern.
 /// </summary>
-internal static class TaskbarComSingleton
+internal static partial class TaskbarComSingleton
 {
     private static ITaskbarList3? s_instance;
     private static readonly object s_lock = new();
@@ -144,8 +144,8 @@ internal static class TaskbarComSingleton
     // CoCreateInstance as an AOT-safe RCW for the [GeneratedComInterface] above.
     private static readonly StrategyBasedComWrappers s_comWrappers = new();
 
-    [DllImport("ole32.dll")]
-    private static extern int CoCreateInstance(
+    [LibraryImport("ole32.dll")]
+    private static partial int CoCreateInstance(
         in Guid rclsid, nint pUnkOuter, uint dwClsContext, in Guid riid, out nint ppv);
 
     /// <summary>
