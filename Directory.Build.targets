@@ -20,19 +20,15 @@
   </PropertyGroup>
 
   <!-- Promote IL trimming/AOT warnings to errors on the core Reactor library.
-       This ensures new reflection usage must be annotated before it can merge. -->
+       This ensures new reflection usage must be annotated before it can merge.
+       Other consumers carry no blanket IL2*/IL3* NoWarn: trimming/AOT warnings
+       are handled per-site (genuine [DynamicallyAccessedMembers] where reflection
+       can be made trim-safe, or localized [UnconditionalSuppressMessage] with a
+       justification, tracked under issue #70), so accidental new reflection is
+       still caught. Projects that reflect/scan IL by design set
+       <ReactorSkipAotAnalysis>true</ReactorSkipAotAnalysis> (see above). -->
   <PropertyGroup Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net10.0')) And ('$(MSBuildProjectName)' == 'Reactor' Or '$(MSBuildProjectName)' == 'Reactor.Devtools')">
     <WarningsAsErrors>$(WarningsAsErrors);IL2026;IL2062;IL2065;IL2067;IL2069;IL2070;IL2072;IL2073;IL2075;IL2087;IL2090;IL2091;IL2111;IL3000;IL3050</WarningsAsErrors>
-  </PropertyGroup>
-
-  <!-- Trimming/AOT (IL2*/IL3*) warnings are handled per-site now: genuine
-       [DynamicallyAccessedMembers] annotations where the reflection can be made
-       trim-safe, or localized [UnconditionalSuppressMessage("Trimming"|"AOT", ...)]
-       with a justification naming the reflection (tracked under issue #70) where
-       it is intentional and the project is never AOT-published. The old blanket
-       consumer NoWarn list was removed so accidental new reflection is caught. -->
-  <PropertyGroup Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net10.0')) And '$(MSBuildProjectName)' != 'Reactor' And '$(MSBuildProjectName)' != 'Reactor.Devtools'">
-    <NoWarn>$(NoWarn)</NoWarn>
   </PropertyGroup>
 
   <!-- Prevent PublishAot from leaking into netstandard projects (e.g. Roslyn
