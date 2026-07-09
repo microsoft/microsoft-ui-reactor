@@ -533,14 +533,18 @@ internal sealed class DevtoolsMcpServer : IDisposable
 
     // -- Helpers -----------------------------------------------------------------
 
-    internal static JsonSerializerOptions JsonOpts { get; } = new()
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification = "DefaultJsonTypeInfoResolver is an intentional reflection fallback for non-AOT (JIT) builds; the source-generated DevtoolsJsonContext precedes it in the resolver chain and is what serves types under NativeAOT. Devtools is gated by Reactor.DevtoolsSupport and AOT-skip-listed.")]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("AOT", "IL3050",
+        Justification = "See IL2026 note: the reflection resolver is a JIT-only fallback behind the source-gen context.")]
+    private static JsonSerializerOptions BuildJsonOpts() => new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = global::System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-#pragma warning disable IL2026, IL3050 // DefaultJsonTypeInfoResolver is intentional fallback for non-AOT builds
         TypeInfoResolverChain = { DevtoolsJsonContext.Default, new global::System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver() },
-#pragma warning restore IL2026, IL3050
     };
+
+    internal static JsonSerializerOptions JsonOpts { get; } = BuildJsonOpts();
 
     /// <summary>
     /// Canonical selector grammar the resolver accepts. Emitted by GET /mcp so an
