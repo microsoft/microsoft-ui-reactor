@@ -17,9 +17,18 @@
 
   <!-- Suppress trimming/AOT warnings in consumer projects (tests, samples, CLI).
        The core Reactor library is already warning-free; these projects intentionally
-       call reflection-based APIs and will not be AOT-published. -->
+       call reflection-based APIs. Reactor.AppTests.Host is the one consumer that IS
+       AOT-published (the aot-selftests job), so this list also covers the two ILC
+       whole-program codes that only surface during that publish: IL2069 (the
+       ComponentElement record positional-parameter to backing-field store, whose
+       ComponentType property is already DAM-annotated so the parameterless ctor is
+       preserved) and IL3052 (the taskbar COM-interop shim, inherently AOT-incompatible;
+       ILC compiles it to a runtime-throwing stub the selftests never invoke). Without
+       these, the Release-wide TreatWarningsAsErrors escalates those tolerated warnings
+       to hard ILC errors and breaks the AOT publish. Core Reactor keeps IL2069 as an
+       error via the WarningsAsErrors list above. -->
   <PropertyGroup Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net10.0')) And '$(MSBuildProjectName)' != 'Reactor' And '$(MSBuildProjectName)' != 'Reactor.Devtools'">
-    <NoWarn>$(NoWarn);IL2026;IL2062;IL2065;IL2067;IL2070;IL2072;IL2075;IL2090;IL2091;IL3000;IL3050</NoWarn>
+    <NoWarn>$(NoWarn);IL2026;IL2062;IL2065;IL2067;IL2069;IL2070;IL2072;IL2075;IL2090;IL2091;IL3000;IL3050;IL3052</NoWarn>
   </PropertyGroup>
 
   <!-- Prevent PublishAot from leaking into netstandard projects (e.g. Roslyn
