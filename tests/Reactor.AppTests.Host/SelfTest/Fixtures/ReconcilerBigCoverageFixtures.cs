@@ -1746,6 +1746,27 @@ internal static class ReconcilerBigCoverageFixtures
             };
             H.Check("PrivMount_IconSources", iconSources.Take(6).All(i => i is not null));
 
+            // Regression: a FontIcon with NO explicit FontSize must resolve to a
+            // FontIconSource that TitleBar.IconSource accepts. The IconSource path
+            // used to force FontSize = double.NaN, which TitleBar.set_IconSource
+            // rejects with ArgumentException ("Value does not fall within the
+            // expected range") — the exact failure the modernized app template hit
+            // via TitleBar(...).Icon(FontIcon("\uEA3A", "Segoe Fluent Icons")).
+            // Assign to a real TitleBar on the UI thread to lock the fix in.
+            var barFontIconNoSize = IconResolver.ResolveIconSource(
+                new FontIconData("\uEA3A", "Segoe Fluent Icons"));
+            bool titleBarAcceptedFontIcon;
+            try
+            {
+                _ = new WinXC.TitleBar { IconSource = barFontIconNoSize };
+                titleBarAcceptedFontIcon = true;
+            }
+            catch (ArgumentException)
+            {
+                titleBarAcceptedFontIcon = false;
+            }
+            H.Check("PrivMount_TitleBarFontIconNoSize", titleBarAcceptedFontIcon);
+
             var rows = new[] { new KeyRow("a"), new KeyRow("b"), new KeyRow("c") };
             int selected = -1;
             IReadOnlyList<KeyRow>? multi = null;
