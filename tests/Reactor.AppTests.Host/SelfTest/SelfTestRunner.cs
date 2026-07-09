@@ -129,7 +129,6 @@ internal static class SelfTestRunner
         "Devtools_McpServerProtocolEdges",
         "Devtools_NameSelectorMatchesButtonContent",
         "Devtools_PropertyToolsExercise",
-        "Devtools_ScreenshotReturnsPng",
         "Devtools_ScrollByAndInto",
         "Devtools_SelectListItem",
         "Devtools_StateReadsHooks",

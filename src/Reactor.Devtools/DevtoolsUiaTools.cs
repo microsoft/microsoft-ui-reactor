@@ -543,17 +543,9 @@ internal static class DevtoolsUiaTools
         }
 
         var capture = ScreenshotCapture.CaptureWindow(w, includeChrome, crop);
-        return new
-        {
-            png = Convert.ToBase64String(capture.Png),
-            bounds = new
-            {
-                x = capture.X,
-                y = capture.Y,
-                width = capture.Width,
-                height = capture.Height,
-            },
-        };
+        return new ScreenshotResult(
+            Convert.ToBase64String(capture.Png),
+            new ScreenshotBounds(capture.X, capture.Y, capture.Width, capture.Height));
     }
 
     // -- tree --------------------------------------------------------------------
@@ -991,3 +983,14 @@ internal sealed record WaitForPredicate(
         _ => null,
     };
 }
+
+/// <summary>
+/// Result of the <c>screenshot</c> tool — a base64 PNG plus the captured bounds.
+/// A named (not anonymous) record registered in <see cref="DevtoolsJsonContext"/>
+/// so the JSON-RPC response's <c>object Result</c> resolves through the source
+/// generator and serializes under NativeAOT instead of the reflection fallback.
+/// </summary>
+internal sealed record ScreenshotResult(string Png, ScreenshotBounds Bounds);
+
+/// <summary>Captured region (physical pixels) reported by the <c>screenshot</c> tool.</summary>
+internal sealed record ScreenshotBounds(int X, int Y, int Width, int Height);

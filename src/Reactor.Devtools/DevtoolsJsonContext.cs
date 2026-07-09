@@ -13,6 +13,7 @@ namespace Microsoft.UI.Reactor.Hosting.Devtools;
 [JsonSerializable(typeof(JsonRpcRequest))]
 [JsonSerializable(typeof(JsonRpcResponse))]
 [JsonSerializable(typeof(JsonRpcError))]
+[JsonSerializable(typeof(ScreenshotResult))]
 internal partial class DevtoolsJsonContext : JsonSerializerContext
 {
 }
