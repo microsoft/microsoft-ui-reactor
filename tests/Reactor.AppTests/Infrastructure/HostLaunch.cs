@@ -34,11 +34,19 @@ internal static class HostLaunch
             }
             catch (Exception ex) when (ex is WinAppTimeoutException or TimeoutException)
             {
+                // Retryable: the host window did not appear in time.
                 last = ex;
                 Console.WriteLine($"Host '{windowTitle}' launch attempt {attempt}/{attempts} failed: {ex.Message}");
                 KillAndWait(proc);
                 if (attempt < attempts)
                     Thread.Sleep(500);
+            }
+            catch
+            {
+                // Non-retryable (config/environment error, or Process.Start returned null): clean up
+                // the started host so it can't orphan, then fail fast with the real cause.
+                KillAndWait(proc);
+                throw;
             }
         }
 
