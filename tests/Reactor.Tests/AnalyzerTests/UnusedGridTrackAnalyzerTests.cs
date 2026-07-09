@@ -367,8 +367,8 @@ class C
 }");
 
     [Fact]
-    public Task No_Diagnostic_For_Obsolete_String_Grid() => VerifyAsync(@"
-// The obsolete string-track overload is out of scope (it has its own CS0618 fixer).
+    public Task No_Diagnostic_For_NonTyped_String_Grid() => VerifyAsync(@"
+// A non-typed (string[]) Grid shape is out of scope for this analyzer.
 class C
 {
     Element M() => Grid(

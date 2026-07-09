@@ -65,7 +65,7 @@ _hookIndex`. `BeginRender(requestRerender)` sets `_hookIndex = 0` and
 captures the UI thread ID; the component's `Render()` runs, hooks
 advance `_hookIndex` as they go, and after `Render()` returns the
 reconciler reads `_hooks` to know which effects to flush. There is
-one `RenderContext` per `Component` instance (and one per `Func(ctx
+one `RenderContext` per `Component` instance (and one per `RenderEachTime(ctx
 => …)` function-component invocation — function components get their
 own context per parent's render, with state preserved across that
 parent's re-renders via positional matching just like any other

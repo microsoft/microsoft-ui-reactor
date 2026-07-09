@@ -205,4 +205,30 @@ public class GridSizeTests
         Assert.Equal(new[] { "*" }, typed.Definition.Columns);
         Assert.Equal(new[] { "*" }, typed.Definition.Rows);
     }
+
+    /// <summary>
+    /// Spec 033 §5.9: the typed <see cref="Factories.Grid(GridSize[], GridSize[], Element?[])"/>
+    /// factory must serialize every canonical <see cref="GridSize"/> shape — Auto,
+    /// star (weight 1, integer, and fractional), and pixel (zero and fractional) —
+    /// into the expected canonical track strings on <see cref="GridDefinition"/>.
+    /// Element-wise, typed-only (no dependency on the removed string overload).
+    /// </summary>
+    [Fact]
+    public void Grid_Typed_Factory_Serializes_All_Canonical_Track_Shapes()
+    {
+        var typed = Factories.Grid(
+            columns: new[]
+            {
+                GridSize.Auto,
+                GridSize.Star(),     // weight 1 -> "*"
+                GridSize.Star(2),    // integer weight -> "2*"
+                GridSize.Star(0.33), // fractional weight -> "0.33*"
+                GridSize.Px(0),      // zero pixels -> "0"
+                GridSize.Px(120.5),  // fractional pixels -> "120.5"
+            },
+            rows: new[] { GridSize.Auto, GridSize.Star(1.5), GridSize.Px(48) });
+
+        Assert.Equal(new[] { "Auto", "*", "2*", "0.33*", "0", "120.5" }, typed.Definition.Columns);
+        Assert.Equal(new[] { "Auto", "1.5*", "48" }, typed.Definition.Rows);
+    }
 }

@@ -634,8 +634,8 @@ Apply with `.FocusTrap(handle)` modifier on a container element.
 
 `GridSize` value type with helpers: `GridSize.Auto`, `GridSize.Star(weight = 1)`,
 `GridSize.Px(pixels)`. Example: `Grid([GridSize.Auto, GridSize.Star()], [GridSize.Px(40)], …)`.
-The legacy string-form overload (`Grid(["Auto", "1*"], …)`) is soft-deprecated
-(`CS0618`) — prefer the typed helpers (spec 033 §1).
+The former string-form overload (`Grid(["Auto", "1*"], …)`) was removed — use the
+typed helpers exclusively (spec 033 §1).
 
 **Collections:** `ListView<T>(items, keySelector, viewBuilder)`,
 `LazyVStack<T>(items, keySelector, viewBuilder)`,

@@ -434,9 +434,8 @@ public static partial class Factories
     /// The element reconciles to a WinUI <c>ProgressBar</c>. The Reactor name
     /// <c>Progress</c> is the short, intent-naming spelling — the WinUI name
     /// includes the visual shape (<c>Bar</c>) the way agents reach for a
-    /// rendering primitive; Reactor calls it by what it does. The
-    /// <c>ProgressBar</c> alias is preserved for callers reaching for the
-    /// WinUI name. <see cref="ProgressRing(double)"/> is the circular variant.
+    /// rendering primitive; Reactor calls it by what it does.
+    /// <see cref="ProgressRing(double)"/> is the circular variant.
     /// (spec 039 §5 / §16)
     /// </remarks>
     public static ProgressElement Progress(double value)
