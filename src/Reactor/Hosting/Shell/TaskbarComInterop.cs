@@ -15,46 +15,54 @@ namespace Microsoft.UI.Reactor.Hosting.Shell;
 /// Uses the COM interop source generator (<c>System.Runtime.InteropServices.Marshalling</c>)
 /// so the marshaling stubs are emitted at compile time and are trim/NativeAOT-safe —
 /// unlike the classic <c>[ComImport]</c> path, whose runtime CoCreateInstance /
-/// built-in marshaling is unsupported under full AOT (IL3052). Every method keeps its
-/// raw <c>int</c> HRESULT return (the generator never throws for us) so callers can
-/// inspect it — the shell returns <c>S_FALSE</c> on certain spurious failures
-/// (e.g. SetProgressValue before <c>HrInit</c>) that we treat as recoverable.
+/// built-in marshaling is unsupported under full AOT (IL3052). Every method is
+/// <c>[PreserveSig]</c> so its <c>int</c> return is the raw HRESULT and the generator
+/// never throws for us. WITHOUT <c>[PreserveSig]</c> the COM source generator treats
+/// the <c>int</c> return as a <c>[retval]</c> out-param and translates failed HRESULTs
+/// into exceptions — an ABI mismatch that silently breaks every caller that inspects
+/// the code (e.g. <c>if (hr &lt; 0)</c>). The <c>[PreserveSig]</c> invariant is guarded
+/// by a reflection unit test. Callers rely on the raw code — the shell returns
+/// <c>S_FALSE</c> on certain spurious failures (e.g. SetProgressValue before
+/// <c>HrInit</c>) that we treat as recoverable.
 /// </remarks>
 [GeneratedComInterface]
 [Guid("ea1afb91-9e28-4b86-90e9-9e9f8a5eefaf")]
 internal partial interface ITaskbarList3
 {
     // ITaskbarList ----------------------------------------------------------
-    int HrInit();
-    int AddTab(nint hwnd);
-    int DeleteTab(nint hwnd);
-    int ActivateTab(nint hwnd);
-    int SetActiveAlt(nint hwnd);
+    [PreserveSig] int HrInit();
+    [PreserveSig] int AddTab(nint hwnd);
+    [PreserveSig] int DeleteTab(nint hwnd);
+    [PreserveSig] int ActivateTab(nint hwnd);
+    [PreserveSig] int SetActiveAlt(nint hwnd);
 
     // ITaskbarList2 ---------------------------------------------------------
-    int MarkFullscreenWindow(nint hwnd, [MarshalAs(UnmanagedType.Bool)] bool fFullscreen);
+    [PreserveSig] int MarkFullscreenWindow(nint hwnd, [MarshalAs(UnmanagedType.Bool)] bool fFullscreen);
 
     // ITaskbarList3 ---------------------------------------------------------
-    int SetProgressValue(nint hwnd, ulong ullCompleted, ulong ullTotal);
-    int SetProgressState(nint hwnd, NativeTaskbarProgressState state);
-    int RegisterTab(nint hwndTab, nint hwndMDI);
-    int UnregisterTab(nint hwndTab);
-    int SetTabOrder(nint hwndTab, nint hwndInsertBefore);
-    int SetTabActive(nint hwndTab, nint hwndMDI, uint dwReserved);
+    [PreserveSig] int SetProgressValue(nint hwnd, ulong ullCompleted, ulong ullTotal);
+    [PreserveSig] int SetProgressState(nint hwnd, NativeTaskbarProgressState state);
+    [PreserveSig] int RegisterTab(nint hwndTab, nint hwndMDI);
+    [PreserveSig] int UnregisterTab(nint hwndTab);
+    [PreserveSig] int SetTabOrder(nint hwndTab, nint hwndInsertBefore);
+    [PreserveSig] int SetTabActive(nint hwndTab, nint hwndMDI, uint dwReserved);
 
+    [PreserveSig]
     int ThumbBarAddButtons(nint hwnd, uint cButtons,
         [MarshalUsing(CountElementName = nameof(cButtons))] THUMBBUTTON[] pButton);
 
+    [PreserveSig]
     int ThumbBarUpdateButtons(nint hwnd, uint cButtons,
         [MarshalUsing(CountElementName = nameof(cButtons))] THUMBBUTTON[] pButton);
 
-    int ThumbBarSetImageList(nint hwnd, nint himl);
+    [PreserveSig] int ThumbBarSetImageList(nint hwnd, nint himl);
 
+    [PreserveSig]
     int SetOverlayIcon(nint hwnd, nint hIcon,
         [MarshalAs(UnmanagedType.LPWStr)] string? pszDescription);
 
-    int SetThumbnailTooltip(nint hwnd, [MarshalAs(UnmanagedType.LPWStr)] string? pszTip);
-    int SetThumbnailClip(nint hwnd, nint prcClip);
+    [PreserveSig] int SetThumbnailTooltip(nint hwnd, [MarshalAs(UnmanagedType.LPWStr)] string? pszTip);
+    [PreserveSig] int SetThumbnailClip(nint hwnd, nint prcClip);
 }
 
 /// <summary>Wire shape for <c>ITaskbarList3.SetProgressState</c>.</summary>

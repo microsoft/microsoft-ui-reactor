@@ -131,15 +131,22 @@ internal static class DevtoolsVerbs
         // Build the args object as a JsonNode tree (reflection-free / AOT-safe)
         // rather than serializing a Dictionary<string, object?> with the
         // reflection-based serializer. Values are CLI-derived primitives plus the
-        // occasional nested JsonObject (see `scroll --by`).
+        // occasional nested object (see `scroll --by` and `wait`'s `predicate`).
+        var obj = DictToJsonObject(fields);
+        using var doc = JsonDocument.Parse(obj.ToJsonString());
+        return doc.RootElement.Clone();
+    }
+
+    private static global::System.Text.Json.Nodes.JsonObject DictToJsonObject(
+        global::System.Collections.Generic.IDictionary<string, object?> fields)
+    {
         var obj = new global::System.Text.Json.Nodes.JsonObject();
         foreach (var (key, value) in fields)
         {
             if (value is null) continue;
             obj[key] = ToJsonNode(value);
         }
-        using var doc = JsonDocument.Parse(obj.ToJsonString());
-        return doc.RootElement.Clone();
+        return obj;
     }
 
     private static global::System.Text.Json.Nodes.JsonNode? ToJsonNode(object value) => value switch
@@ -151,6 +158,9 @@ internal static class DevtoolsVerbs
         long l => global::System.Text.Json.Nodes.JsonValue.Create(l),
         double d => global::System.Text.Json.Nodes.JsonValue.Create(d),
         JsonElement je => global::System.Text.Json.Nodes.JsonNode.Parse(je.GetRawText()),
+        // Nested object (e.g. `wait`'s `predicate` is a Dictionary<string, object?>).
+        // Recurse so it serializes as a JSON object, not its stringified type name.
+        global::System.Collections.Generic.IDictionary<string, object?> dict => DictToJsonObject(dict),
         _ => global::System.Text.Json.Nodes.JsonValue.Create(value.ToString()),
     };
 

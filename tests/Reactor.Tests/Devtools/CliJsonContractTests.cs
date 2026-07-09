@@ -51,6 +51,31 @@ public class CliJsonContractTests
     }
 
     [Fact]
+    public void ArgsFromDict_Supports_Nested_Dictionary()
+    {
+        // Mirrors `mur devtools wait`, which builds fields["predicate"] as a
+        // Dictionary<string, object?> (NOT a JsonObject). It must serialize as a
+        // nested JSON object — the `waitFor` tool rejects a stringified dictionary
+        // ("'predicate' must be an object."). Regression guard for the ToJsonNode
+        // fallback that previously emitted the dictionary's type name.
+        var args = DevtoolsVerbs.ArgsFromDict(new Dictionary<string, object?>
+        {
+            ["predicate"] = new Dictionary<string, object?>
+            {
+                ["selector"] = "#count-label",
+                ["textEquals"] = "count:10",
+            },
+            ["timeoutMs"] = 2000,
+        });
+
+        var predicate = args.GetProperty("predicate");
+        Assert.Equal(JsonValueKind.Object, predicate.ValueKind);
+        Assert.Equal("#count-label", predicate.GetProperty("selector").GetString());
+        Assert.Equal("count:10", predicate.GetProperty("textEquals").GetString());
+        Assert.Equal(2000, args.GetProperty("timeoutMs").GetInt32());
+    }
+
+    [Fact]
     public void ArgsFromDict_Passes_Through_JsonElement_Values()
     {
         using var inner = JsonDocument.Parse("""{"a":1,"b":["x","y"]}""");
