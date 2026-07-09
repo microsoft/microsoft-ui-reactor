@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Microsoft.UI.Reactor.Data;
 
@@ -20,12 +21,6 @@ internal sealed class GraphQLDataSource :
 {
     private readonly string _endpoint;
     private readonly HttpClient _httpClient;
-
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
 
     // Map snake_case field names → camelCase GraphQL field names
     private static readonly Dictionary<string, string> FieldToGraphQL = new()
@@ -96,16 +91,17 @@ internal sealed class GraphQLDataSource :
         var query = BuildQuery(request);
         var variables = BuildVariables(request);
 
-        var payload = new { query, variables };
+        var payload = new GraphQLRequest(query, variables);
         var content = new StringContent(
-            JsonSerializer.Serialize(payload, JsonOptions),
+            JsonSerializer.Serialize(payload, HeadTraxGraphQLJsonContext.Default.GraphQLRequest),
             Encoding.UTF8,
             "application/json");
 
         var response = await _httpClient.PostAsync(_endpoint, content, cancellationToken);
         response.EnsureSuccessStatusCode();
 
-        var result = await response.Content.ReadFromJsonAsync<GraphQLResponse>(JsonOptions, cancellationToken);
+        var result = await response.Content.ReadFromJsonAsync(
+            HeadTraxGraphQLJsonContext.Default.GraphQLResponse, cancellationToken);
 
         if (result?.Data?.Employees is null)
             return new DataPage<Dictionary<string, object?>>([], null, 0);
@@ -173,9 +169,9 @@ internal sealed class GraphQLDataSource :
             """;
     }
 
-    private static object BuildVariables(DataRequest request)
+    private static JsonObject BuildVariables(DataRequest request)
     {
-        var vars = new Dictionary<string, object?>
+        var vars = new JsonObject
         {
             ["pageSize"] = request.PageSize,
             ["continuationToken"] = request.ContinuationToken,
@@ -186,22 +182,24 @@ internal sealed class GraphQLDataSource :
 
         if (request.Sort is { Count: > 0 })
         {
-            vars["sort"] = request.Sort.Select(s => new
+            var sortItems = request.Sort.Select(s => (JsonNode?)new JsonObject
             {
-                field = FieldToGraphQL.GetValueOrDefault(s.Field, s.Field),
-                direction = s.Direction == SortDirection.Descending ? "DESC" : "ASC",
+                ["field"] = FieldToGraphQL.GetValueOrDefault(s.Field, s.Field),
+                ["direction"] = s.Direction == SortDirection.Descending ? "DESC" : "ASC",
             }).ToArray();
+            vars["sort"] = new JsonArray(sortItems);
         }
 
         if (request.Filters is { Count: > 0 })
         {
-            vars["filters"] = request.Filters.Select(f => new
+            var filterItems = request.Filters.Select(f => (JsonNode?)new JsonObject
             {
-                field = FieldToGraphQL.GetValueOrDefault(f.Field, f.Field),
-                @operator = MapFilterOperator(f.Operator),
-                value = f.Value?.ToString(),
-                valueTo = f.ValueTo?.ToString(),
+                ["field"] = FieldToGraphQL.GetValueOrDefault(f.Field, f.Field),
+                ["operator"] = MapFilterOperator(f.Operator),
+                ["value"] = f.Value?.ToString(),
+                ["valueTo"] = f.ValueTo?.ToString(),
             }).ToArray();
+            vars["filters"] = new JsonArray(filterItems);
         }
 
         return vars;
@@ -258,26 +256,43 @@ internal sealed class GraphQLDataSource :
 
     // ── Response DTOs ───────────────────────────────────────────────────────
 
-    private sealed class GraphQLResponse
+    internal sealed class GraphQLResponse
     {
         public GraphQLData? Data { get; set; }
         public List<GraphQLError>? Errors { get; set; }
     }
 
-    private sealed class GraphQLData
+    internal sealed class GraphQLData
     {
         public EmployeePage? Employees { get; set; }
     }
 
-    private sealed class EmployeePage
+    internal sealed class EmployeePage
     {
         public List<JsonElement> Items { get; set; } = [];
         public int TotalCount { get; set; }
         public string? ContinuationToken { get; set; }
     }
 
-    private sealed class GraphQLError
+    internal sealed class GraphQLError
     {
         public string? Message { get; set; }
     }
+}
+
+/// <summary>GraphQL request envelope (query + variables tree).</summary>
+internal sealed record GraphQLRequest(string query, JsonNode variables);
+
+/// <summary>
+/// Source-generated (reflection-free / NativeAOT-safe) JSON metadata for the
+/// GraphQL request/response DTOs. CamelCase + drop-nulls mirror the previous
+/// hand-rolled <c>JsonOptions</c>; the <c>variables</c> tree is a verbatim
+/// <see cref="JsonNode"/> so its keys pass through untouched.
+/// </summary>
+[JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+[JsonSerializable(typeof(GraphQLRequest))]
+[JsonSerializable(typeof(GraphQLDataSource.GraphQLResponse))]
+internal partial class HeadTraxGraphQLJsonContext : JsonSerializerContext
+{
 }

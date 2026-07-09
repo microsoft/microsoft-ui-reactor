@@ -2,8 +2,18 @@
 
   <!-- Enable AOT compatibility analysis on all projects except Roslyn
        analyzers / source-generators (netstandard2.0). Placed in .targets
-       so that TargetFramework from the project file is already resolved. -->
-  <PropertyGroup Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net10.0'))">
+       so that TargetFramework from the project file is already resolved.
+
+       Opt-out: a project that is never trimmed / AOT-published AND whose
+       reflection is intentional (build tools that reflect over arbitrary
+       assemblies, and test projects whose architecture/contract guards scan
+       IL or reflect over types by design) sets
+       <ReactorSkipAotAnalysis>true</ReactorSkipAotAnalysis> to disable the
+       IL2*/IL3* analyzer for that project. This replaces the old blanket
+       consumer-wide NoWarn: shipped/AOT-relevant consumers (the CLI, WinForms
+       interop, samples, the AOT-published hosts) stay analyzed and were fixed
+       at the source; only the genuinely-non-AOT reflection projects opt out. -->
+  <PropertyGroup Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net10.0')) And '$(ReactorSkipAotAnalysis)' != 'true'">
     <IsAotCompatible>true</IsAotCompatible>
     <!-- Show every individual trimmer warning instead of collapsing them. -->
     <TrimmerSingleWarn>false</TrimmerSingleWarn>
@@ -15,18 +25,14 @@
     <WarningsAsErrors>$(WarningsAsErrors);IL2026;IL2062;IL2065;IL2067;IL2069;IL2070;IL2072;IL2073;IL2075;IL2087;IL2090;IL2091;IL2111;IL3000;IL3050</WarningsAsErrors>
   </PropertyGroup>
 
-  <!-- Suppress trimming/AOT warnings in consumer projects (tests, samples, CLI).
-       The core Reactor library is already warning-free; these projects intentionally
-       call reflection-based APIs (PropertyGrid/DataGrid auto-discovery, UseObservable
-       INPC walking, devtools enumeration — the reflection surfaces tracked under issue
-       #70). Reactor.AppTests.Host is the one consumer that IS AOT-published (the
-       aot-selftests job); genuinely-unavoidable ILC codes there are handled per-site
-       with justified [UnconditionalSuppressMessage] instead of being blanket-listed
-       here (see TaskbarComSingleton / Harness for IL3052). This list is being pared
-       down toward zero as each code is converted to a source-generated path, a
-       DynamicallyAccessedMembers annotation, or a localized suppression. -->
+  <!-- Trimming/AOT (IL2*/IL3*) warnings are handled per-site now: genuine
+       [DynamicallyAccessedMembers] annotations where the reflection can be made
+       trim-safe, or localized [UnconditionalSuppressMessage("Trimming"|"AOT", ...)]
+       with a justification naming the reflection (tracked under issue #70) where
+       it is intentional and the project is never AOT-published. The old blanket
+       consumer NoWarn list was removed so accidental new reflection is caught. -->
   <PropertyGroup Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net10.0')) And '$(MSBuildProjectName)' != 'Reactor' And '$(MSBuildProjectName)' != 'Reactor.Devtools'">
-    <NoWarn>$(NoWarn);IL2026;IL2062;IL2065;IL2067;IL2070;IL2072;IL2075;IL2090;IL2091;IL3000;IL3050</NoWarn>
+    <NoWarn>$(NoWarn)</NoWarn>
   </PropertyGroup>
 
   <!-- Prevent PublishAot from leaking into netstandard projects (e.g. Roslyn
