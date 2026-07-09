@@ -19,4 +19,5 @@ SessionLog.Write($"[Program] launched args={string.Join(' ', System.Environment.
 ReactorApp.Run<WidgetCreatorShell>(
     "Widget Creator",
     width: 1180,
-    height: 820);
+    height: 820,
+    configure: host => Microsoft.UI.Reactor.Docking.Native.DockingNativeInterop.Register(host.Reconciler));

@@ -4,7 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
-using GitHub.Copilot.SDK;
+using GitHub.Copilot;
 
 namespace WidgetCreator.Services;
 
@@ -41,7 +41,7 @@ public sealed class CopilotSdkClient : IModelClient, IAsyncDisposable
         try
         {
             if (_client is not null) return _client;
-            var options = new CopilotClientOptions { AutoStart = false };
+            var options = new CopilotClientOptions();
             var client = new CopilotClient(options);
             SessionLog.Write($"[CopilotSdk] starting CLI server (model={_model})");
             await client.StartAsync().ConfigureAwait(false);
@@ -145,7 +145,7 @@ public sealed class CopilotSdkClient : IModelClient, IAsyncDisposable
             bool sawDeltas = false;
             bool turnEnded = false;
 
-            using var subscription = _session.On(evt =>
+            using var subscription = _session.On<SessionEvent>(evt =>
             {
                 switch (evt)
                 {

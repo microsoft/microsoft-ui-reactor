@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Reactor.Docking;
 using static Microsoft.UI.Reactor.Factories;
 
 namespace WidgetCreator;
@@ -507,10 +508,10 @@ public sealed class WidgetCreatorShell : Component
             ? [(Element)EmptyLibraryCard()]
             : apps.Select(AppCard).ToArray();
 
-        var leftPanel = (FlexColumn(
-            Border(
-                FlexColumn(
-                    SubHeading(editingApp is null ? "Create a widget" : $"Edit '{editingApp.Title}'"),
+        // Pane 1 — Edit: prompt + generate + refine. Scrolls when the refine
+        // section makes the body taller than the pane.
+        var editPaneBody = (ScrollViewer(
+                (FlexColumn(
                     Caption(editingApp is null
                         ? "Copilot generates a single-file Reactor app, publishes it, and runs it in MXC. If it later crashes, this shell resumes the creating Copilot session and sends the crash back for repair."
                         : "Editing a saved widget: tweak the prompt and Update & Run to regenerate it in place (same library entry and Copilot session). Use New widget to start fresh instead."),
@@ -521,29 +522,26 @@ public sealed class WidgetCreatorShell : Component
                         Button("Open library", () => Reveal(_library.Root))),
                     refineSection)
                 with { RowGap = 12 })
-            .Background(Theme.CardBackground)
-            .WithBorder(Theme.CardStroke)
-            .CornerRadius(8)
-            .Padding(16),
+                .Padding(12))
+            with
+            {
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            })
+            .Flex(grow: 1, basis: 0);
 
-            Border(
-                FlexColumn(
-                    SubHeading("Saved widgets"),
-                    Caption($"{apps.Count} saved - crashes repair through the original Copilot session"),
-                    (ScrollViewer(VStack(8, appCards))
-                        with
-                        {
-                            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-                            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                        })
-                    .Flex(grow: 1, basis: 0))
-                with { RowGap = 10 })
-            .Background(Theme.CardBackground)
-            .WithBorder(Theme.CardStroke)
-            .CornerRadius(8)
-            .Padding(16)
-            .Flex(grow: 1, basis: 0))
-            with { RowGap = 12 })
+        // Pane 2 — Saved widgets list.
+        var savedPaneBody = (FlexColumn(
+                Caption($"{apps.Count} saved - crashes repair through the original Copilot session"),
+                (ScrollViewer(VStack(8, appCards))
+                    with
+                    {
+                        HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                        VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                    })
+                .Flex(grow: 1, basis: 0))
+            with { RowGap = 10 })
+            .Padding(12)
             .Flex(grow: 1, basis: 0);
 
         var sourceBox = (TextBox(source, _ => { }, placeholderText: "Generated source appears here...")
@@ -586,35 +584,75 @@ public sealed class WidgetCreatorShell : Component
             : Caption($"{selected.Icon} {selected.Title} - model {selected.Model} - session {Short(selected.SessionId)}")
                 .Foreground(Theme.SecondaryText);
 
-        var rightPanel = (FlexColumn(
-            Border(
-                FlexColumn(
-                    HStack(8,
-                        SubHeading("Generated source").Flex(grow: 1, basis: 0),
-                        selected is null ? Empty() : Button("Reveal", () => Reveal(selected.SourcePath)).SubtleButton()),
-                    selectedSummary,
-                    sourceBox)
+        // Pane 3 — Generated source header + body.
+        var sourceHeader = selected is null
+            ? (Element)selectedSummary
+            : HStack(8,
+                selectedSummary.Flex(grow: 1, basis: 0),
+                Button("Reveal", () => Reveal(selected.SourcePath)).SubtleButton());
+        var sourcePaneBody = (FlexColumn(sourceHeader, sourceBox)
                 with { RowGap = 8 })
-            .Background(Theme.CardBackground)
-            .WithBorder(Theme.CardStroke)
-            .CornerRadius(8)
-            .Padding(16)
-            .Flex(grow: 1, basis: 0),
+            .Padding(12)
+            .Flex(grow: 1, basis: 0);
 
-            Border(
-                FlexColumn(
-                    HStack(8,
-                        SubHeading("Build & sandbox log").Flex(grow: 1, basis: 0),
-                        Button("Reveal session log", () => Reveal(SessionLog.Path)).SubtleButton()),
-                    logBox)
-                with { RowGap = 8 })
-            .Background(Theme.CardBackground)
-            .WithBorder(Theme.CardStroke)
-            .CornerRadius(8)
-            .Padding(16)
-            .Flex(grow: 1, basis: 0))
-            with { RowGap = 12 })
-            .Flex(grow: 2, basis: 0);
+        // Pane 4 — Build & sandbox log header + body.
+        var logPaneBody = (FlexColumn(
+                HStack(8,
+                    Caption("Build, sandbox, crash, and repair output")
+                        .Foreground(Theme.SecondaryText)
+                        .Flex(grow: 1, basis: 0),
+                    Button("Reveal session log", () => Reveal(SessionLog.Path)).SubtleButton()),
+                logBox)
+            with { RowGap = 8 })
+            .Padding(12)
+            .Flex(grow: 1, basis: 0);
+
+        // Four docked panes. Locked down (no tear-off, float, pin, or reorder);
+        // only the splitters between panes are draggable, giving free resizing.
+        // Splitter positions persist across launches via PersistenceId.
+        static DockableContent LockedPane(string title, object key, Element content) => new ToolWindow
+        {
+            Title = title,
+            Key = key,
+            Content = content,
+            CanClose = false,
+            CanPin = false,
+            CanFloat = false,
+            CanMove = false,
+            CanHide = false,
+            CanAutoHide = false,
+            CanDockAsDocument = false,
+        };
+
+        var dock = new DockManager
+        {
+            PersistenceId = "widget-creator-dock",
+            Layout = new DockSplit(Orientation.Horizontal, new DockNode[]
+            {
+                new DockSplit(Orientation.Vertical, new DockNode[]
+                {
+                    new DockTabGroup(new[]
+                    {
+                        LockedPane(editingApp is null ? "Create" : $"Edit '{editingApp.Title}'", "edit", editPaneBody),
+                    }, Height: 360),
+                    new DockTabGroup(new[]
+                    {
+                        LockedPane("Saved widgets", "saved", savedPaneBody),
+                    }),
+                }, Width: 420),
+                new DockSplit(Orientation.Vertical, new DockNode[]
+                {
+                    new DockTabGroup(new[]
+                    {
+                        LockedPane("Generated source", "source", sourcePaneBody),
+                    }, Height: 460),
+                    new DockTabGroup(new[]
+                    {
+                        LockedPane("Build & sandbox log", "log", logPaneBody),
+                    }),
+                }),
+            }),
+        }.Flex(grow: 1, basis: 0);
 
         var titleBar = TitleBar("Widget Creator") with
         {
@@ -628,7 +666,7 @@ public sealed class WidgetCreatorShell : Component
                 titleBar,
                 (FlexColumn(
                     banner is null ? Empty() : Banner(banner),
-                    (FlexRow(leftPanel, rightPanel) with { ColumnGap = 12 }).Flex(grow: 1, basis: 0))
+                    dock)
                     with { RowGap = 12 })
                 .Padding(16)
                 .Flex(grow: 1, basis: 0))),

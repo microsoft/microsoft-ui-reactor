@@ -17,12 +17,10 @@
 
   <ItemGroup>
     <!-- Generation engine: rides the user's logged-in Copilot subscription via
-         the bundled Copilot CLI. Same package the demo-script-tool sample uses. -->
-    <PackageReference Include="GitHub.Copilot.SDK" Version="0.3.0" />
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="$(WindowsAppSDKVersion)" />
-    <!-- Pin transitive Nerdbank.MessagePack (via GitHub.Copilot.SDK -> StreamJsonRpc)
-         to a patched version, matching demo-script-tool. -->
-    <PackageReference Include="Nerdbank.MessagePack" Version="1.2.4" />
+         the bundled Copilot CLI. Same package the demo-script-tool sample uses.
+         Versions come from Central Package Management (Directory.Packages.props). -->
+    <PackageReference Include="GitHub.Copilot.SDK" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" />
   </ItemGroup>
 
   <ItemGroup>
