@@ -32,7 +32,7 @@ internal static class HostLaunch
                 var hwnd = WinAppUi.FindWindowHwnd(proc.Id, windowTitle, timeoutMs: perAttemptTimeoutMs);
                 return (proc, hwnd);
             }
-            catch (Exception ex) when (ex is WinAppException or TimeoutException)
+            catch (Exception ex) when (ex is WinAppTimeoutException or TimeoutException)
             {
                 last = ex;
                 Console.WriteLine($"Host '{windowTitle}' launch attempt {attempt}/{attempts} failed: {ex.Message}");
