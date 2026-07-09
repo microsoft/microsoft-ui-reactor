@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Reactor.Hosting;
+using Microsoft.UI.Reactor.Hosting.Shell;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -33,10 +34,6 @@ internal sealed class Harness
 
     // -- TitleBar setup ---------------------------------------------------
 
-    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("AOT", "IL3052",
-        Justification = "Built-in COM activation of the taskbar shell object is inherently AOT-incompatible (issue #70). " +
-                        "The new TaskbarList() call is guarded by the try/catch below, which nulls out _taskbar and " +
-                        "skips the progress overlay when COM activation throws under NativeAOT.")]
     public void SetupTitleBar(int totalTests)
     {
         _testSegments.Clear();
@@ -101,10 +98,14 @@ internal sealed class Harness
         try
         {
             _hwnd = WinRT.Interop.WindowNative.GetWindowHandle(_window);
-            _taskbar = (ITaskbarList3)new TaskbarList();
-            _taskbar.HrInit();
-            _taskbar.SetProgressState(_hwnd, TaskbarProgressFlags.Normal);
-            _taskbar.SetProgressValue(_hwnd, 0, (ulong)totalTests);
+            // Reuse core's AOT-safe [GeneratedComInterface] singleton (which calls
+            // HrInit internally) instead of a duplicate [ComImport] activation.
+            _taskbar = TaskbarComSingleton.TryGet();
+            if (_taskbar is not null)
+            {
+                _taskbar.SetProgressState(_hwnd, NativeTaskbarProgressState.Normal);
+                _taskbar.SetProgressValue(_hwnd, 0, (ulong)totalTests);
+            }
         }
         catch
         {
@@ -128,7 +129,7 @@ internal sealed class Harness
         if (_taskbar is null) return;
         _taskbar.SetProgressValue(_hwnd, (ulong)_totalTests, (ulong)_totalTests);
         _taskbar.SetProgressState(_hwnd,
-            _failures > 0 ? TaskbarProgressFlags.Error : TaskbarProgressFlags.NoProgress);
+            _failures > 0 ? NativeTaskbarProgressState.Error : NativeTaskbarProgressState.NoProgress);
     }
 
     /// <summary>
@@ -403,39 +404,6 @@ internal sealed class Harness
     }
 }
 
-// -- ITaskbarList3 COM interop for taskbar progress overlay ---------------
-
-[Flags]
-internal enum TaskbarProgressFlags
-{
-    NoProgress = 0x00,
-    Indeterminate = 0x01,
-    Normal = 0x02,
-    Error = 0x04,
-    Paused = 0x08,
-}
-
-[ComImport]
-[Guid("ea1afb91-9e28-4b86-90e9-9e9f8a5eefaf")]
-[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-internal interface ITaskbarList3
-{
-    // ITaskbarList
-    void HrInit();
-    void AddTab(IntPtr hwnd);
-    void DeleteTab(IntPtr hwnd);
-    void ActivateTab(IntPtr hwnd);
-    void SetActiveAlt(IntPtr hwnd);
-
-    // ITaskbarList2
-    void MarkFullscreenWindow(IntPtr hwnd, [MarshalAs(UnmanagedType.Bool)] bool fFullscreen);
-
-    // ITaskbarList3
-    void SetProgressValue(IntPtr hwnd, ulong ullCompleted, ulong ullTotal);
-    void SetProgressState(IntPtr hwnd, TaskbarProgressFlags flags);
-}
-
-[ComImport]
-[Guid("56fdf344-fd6d-11d0-958a-006097c9a090")]
-[ClassInterface(ClassInterfaceType.None)]
-internal class TaskbarList { }
+// Windows taskbar progress uses core's AOT-safe
+// Microsoft.UI.Reactor.Hosting.Shell.ITaskbarList3 / TaskbarComSingleton
+// (see _taskbar init in SetupTitleBar) — no duplicate [ComImport] shim here.
