@@ -1264,10 +1264,6 @@ internal static class DevtoolsFixtures
     /// </summary>
     internal sealed class InitializeHandshake(Harness h) : SelfTestFixtureBase(h)
     {
-        [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026",
-            Justification = "Devtools MCP selftest fixture; serializes an anonymous JSON-RPC envelope. Devtools/MCP fixtures are AOT-skip-listed (SelfTestRunner.DefaultAotSkipPatterns).")]
-        [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("AOT", "IL3050",
-            Justification = "Devtools MCP selftest fixture; AOT-skip-listed (see IL2026 note).")]
         public override async Task RunAsync()
         {
             var root = MountRoot(H);
@@ -1275,19 +1271,12 @@ internal static class DevtoolsFixtures
 
             using var mcp = new McpHarness(H.Window, () => root, nameof(DevtoolsFixtureRoot));
 
-            var envelope = new
-            {
-                jsonrpc = "2.0",
-                id = 1,
-                method = "initialize",
-                @params = new
-                {
-                    protocolVersion = "2024-11-05",
-                    capabilities = new { },
-                    clientInfo = new { name = "reactor-selftest", version = "1.0" },
-                },
-            };
-            var body = JsonSerializer.Serialize(envelope, DevtoolsMcpServer.JsonOpts);
+            var envelope = new McpInitializeEnvelope("2.0", 1, "initialize",
+                new McpInitializeParams(
+                    "2024-11-05",
+                    new McpEmptyObject(),
+                    new McpClientInfo("reactor-selftest", "1.0")));
+            var body = JsonSerializer.Serialize(envelope, DevtoolsFixtureJsonContext.Default.McpInitializeEnvelope);
             using var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{mcp.Server.Port}/") };
             using var req = new HttpRequestMessage(HttpMethod.Post, "mcp")
             { Content = new StringContent(body, Encoding.UTF8, "application/json") };
@@ -1312,10 +1301,6 @@ internal static class DevtoolsFixtures
 
     internal sealed class McpServerProtocolEdges(Harness h) : SelfTestFixtureBase(h)
     {
-        [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026",
-            Justification = "Devtools MCP selftest fixture; serializes an anonymous JSON-RPC envelope. Devtools/MCP fixtures are AOT-skip-listed (SelfTestRunner.DefaultAotSkipPatterns).")]
-        [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("AOT", "IL3050",
-            Justification = "Devtools MCP selftest fixture; AOT-skip-listed (see IL2026 note).")]
         public override async Task RunAsync()
         {
             var projectId = "reactor-selftest-" + Guid.NewGuid().ToString("N");
@@ -1388,16 +1373,13 @@ internal static class DevtoolsFixtures
             using var large = await client.SendAsync(largeReq);
             H.Check("Devtools_McpLarge413", large.StatusCode == global::System.Net.HttpStatusCode.RequestEntityTooLarge);
 
-            var envelope = new
-            {
-                jsonrpc = "2.0",
-                id = 1,
-                method = "tools/call",
-                @params = new { name = "selftest.echo", arguments = new { value = "pong" } },
-            };
+            var envelope = new McpCallEnvelope("2.0", 1, "tools/call",
+                new McpCallParams("selftest.echo", new CallArgs { Value = "pong" }));
             using var validReq = new HttpRequestMessage(HttpMethod.Post, "mcp")
             {
-                Content = new StringContent(JsonSerializer.Serialize(envelope, DevtoolsMcpServer.JsonOpts), Encoding.UTF8, "application/json"),
+                Content = new StringContent(
+                    JsonSerializer.Serialize(envelope, DevtoolsFixtureJsonContext.Default.McpCallEnvelope),
+                    Encoding.UTF8, "application/json"),
             };
             validReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", server.AuthToken);
             using var valid = await client.SendAsync(validReq);
@@ -1473,8 +1455,19 @@ internal sealed record ScrollByArg(double Horizontal, double Vertical);
 /// <summary>Predicate for the <c>waitFor</c> tool: wait until <c>Selector</c>'s text equals <c>TextEquals</c>.</summary>
 internal sealed record WaitPredicate(string Selector, string TextEquals);
 
+/// <summary>The <c>initialize</c> JSON-RPC request the standard-MCP-handshake fixture sends.</summary>
+internal sealed record McpInitializeEnvelope(string Jsonrpc, int Id, string Method, McpInitializeParams Params);
+
+internal sealed record McpInitializeParams(string ProtocolVersion, McpEmptyObject Capabilities, McpClientInfo ClientInfo);
+
+internal sealed record McpClientInfo(string Name, string Version);
+
+/// <summary>An empty JSON object (<c>{}</c>) — e.g. <c>capabilities</c>.</summary>
+internal sealed record McpEmptyObject;
+
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 [JsonSerializable(typeof(McpCallEnvelope))]
+[JsonSerializable(typeof(McpInitializeEnvelope))]
 internal partial class DevtoolsFixtureJsonContext : JsonSerializerContext;
