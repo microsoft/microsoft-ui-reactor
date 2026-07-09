@@ -121,6 +121,10 @@ internal static class TaskbarComSingleton
     /// lookup fails (Windows 7 minimum normally satisfies this). Failures are
     /// cached so we don't hammer CoCreateInstance.
     /// </summary>
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("AOT", "IL3052",
+        Justification = "Built-in COM activation of the ITaskbarList3 shell object is inherently AOT-incompatible (issue #70). " +
+                        "It is guarded: CoCreateInstance throws under NativeAOT, the try/catch below caches the failure and " +
+                        "returns null, so taskbar progress simply degrades to a no-op on AOT builds.")]
     public static ITaskbarList3? TryGet()
     {
         if (Volatile.Read(ref s_initFailed) != 0) return null;

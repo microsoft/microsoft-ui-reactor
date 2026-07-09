@@ -33,6 +33,10 @@ internal sealed class Harness
 
     // -- TitleBar setup ---------------------------------------------------
 
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("AOT", "IL3052",
+        Justification = "Built-in COM activation of the taskbar shell object is inherently AOT-incompatible (issue #70). " +
+                        "The new TaskbarList() call is guarded by the try/catch below, which nulls out _taskbar and " +
+                        "skips the progress overlay when COM activation throws under NativeAOT.")]
     public void SetupTitleBar(int totalTests)
     {
         _testSegments.Clear();

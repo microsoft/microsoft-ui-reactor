@@ -1457,6 +1457,12 @@ public record ModifiedElement(Element Inner, ElementModifiers WrappedModifiers) 
 /// Created automatically by Component&lt;T&gt;() factory method.
 /// </summary>
 public record ComponentElement(
+    // The parameter annotation satisfies the positional-record parameter -> backing-field
+    // store that ILC's whole-program pass flags as IL2069; the property annotation keeps the
+    // parameterless ctor preserved for the Activator.CreateInstance fallback below. Both
+    // Component<T>() factories pass typeof(T) under a `new()` constraint, so callers already
+    // satisfy the requirement without a new warning.
+    [param: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
     [property: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
     Type ComponentType,
     object? Props = null) : Element
