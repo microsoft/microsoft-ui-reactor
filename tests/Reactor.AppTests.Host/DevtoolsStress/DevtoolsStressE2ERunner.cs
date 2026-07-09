@@ -3,6 +3,8 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.DevtoolsStress;
 
@@ -198,38 +200,27 @@ internal static class DevtoolsStressE2ERunner
         bool mcpOk = true;
         try
         {
-            var init = await PostJsonRpcAsync(http, port, new
-            {
-                jsonrpc = "2.0",
-                id = 1,
-                method = "initialize",
-                @params = new
-                {
-                    protocolVersion = "2024-11-05",
-                    capabilities = new { },
-                    clientInfo = new { name = "reactor-stress-e2e", version = "1.0" },
-                },
-            });
+            var init = await PostJsonRpcAsync(http, port, new JsonRpcRequest<InitializeParams>(
+                "2.0", 1, "initialize",
+                new InitializeParams(
+                    "2024-11-05",
+                    new EmptyArgs(),
+                    new ClientInfo("reactor-stress-e2e", "1.0"))),
+                StressRpcJsonContext.Default.JsonRpcRequestInitializeParams);
             if (!init.TryGetProperty("result", out _))
                 throw new Exception("initialize returned no result");
             log.Iter(i, pid, "initialize:ok", iterSw.ElapsedMilliseconds);
 
-            var list = await PostJsonRpcAsync(http, port, new
-            {
-                jsonrpc = "2.0",
-                id = 2,
-                method = "tools/list",
-            });
+            var list = await PostJsonRpcAsync(http, port, new JsonRpcRequest<EmptyArgs>(
+                "2.0", 2, "tools/list", null),
+                StressRpcJsonContext.Default.JsonRpcRequestEmptyArgs);
             int toolCount = list.GetProperty("result").GetProperty("tools").GetArrayLength();
             log.Iter(i, pid, $"tools/list:{toolCount}", iterSw.ElapsedMilliseconds);
 
-            var ver = await PostJsonRpcAsync(http, port, new
-            {
-                jsonrpc = "2.0",
-                id = 3,
-                method = "tools/call",
-                @params = new { name = "version", arguments = new { } },
-            });
+            var ver = await PostJsonRpcAsync(http, port, new JsonRpcRequest<ToolCallParams>(
+                "2.0", 3, "tools/call",
+                new ToolCallParams("version", new EmptyArgs())),
+                StressRpcJsonContext.Default.JsonRpcRequestToolCallParams);
             if (!ver.TryGetProperty("result", out _))
                 throw new Exception("tools/call version returned no result");
             log.Iter(i, pid, "version:ok", iterSw.ElapsedMilliseconds);
@@ -277,13 +268,10 @@ internal static class DevtoolsStressE2ERunner
 
     // -- Helpers ------------------------------------------------------------
 
-    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026",
-        Justification = "Devtools stress E2E runner; serializes an anonymous JSON-RPC envelope. Devtools fixtures are AOT-skip-listed (SelfTestRunner.DefaultAotSkipPatterns).")]
-    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("AOT", "IL3050",
-        Justification = "Devtools stress E2E runner; AOT-skip-listed (see IL2026 note).")]
-    private static async Task<JsonElement> PostJsonRpcAsync(HttpClient http, int port, object envelope)
+    private static async Task<JsonElement> PostJsonRpcAsync<T>(
+        HttpClient http, int port, T envelope, JsonTypeInfo<T> typeInfo)
     {
-        var json = JsonSerializer.Serialize(envelope);
+        var json = JsonSerializer.Serialize(envelope, typeInfo);
         using var req = new HttpRequestMessage(HttpMethod.Post, $"http://127.0.0.1:{port}/mcp")
         {
             Content = new StringContent(json, Encoding.UTF8),
@@ -416,3 +404,26 @@ internal static class DevtoolsStressE2ERunner
         public void Dispose() { try { _fs.Dispose(); } catch { } }
     }
 }
+
+// JSON-RPC request envelope types — named (not anonymous) so serialization goes
+// through the System.Text.Json source generator and stays NativeAOT/trim-safe.
+// Params is nullable and omitted when null (WhenWritingNull), matching the
+// previous anonymous envelopes byte-for-byte (e.g. tools/list carries no params).
+internal sealed record JsonRpcRequest<TParams>(string Jsonrpc, int Id, string Method, TParams? Params);
+
+internal sealed record InitializeParams(string ProtocolVersion, EmptyArgs Capabilities, ClientInfo ClientInfo);
+
+internal sealed record ClientInfo(string Name, string Version);
+
+internal sealed record ToolCallParams(string Name, EmptyArgs Arguments);
+
+/// <summary>An empty JSON object (<c>{}</c>) — e.g. <c>capabilities</c> / <c>arguments</c>.</summary>
+internal sealed record EmptyArgs;
+
+[JsonSourceGenerationOptions(
+    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+[JsonSerializable(typeof(JsonRpcRequest<InitializeParams>))]
+[JsonSerializable(typeof(JsonRpcRequest<ToolCallParams>))]
+[JsonSerializable(typeof(JsonRpcRequest<EmptyArgs>))]
+internal partial class StressRpcJsonContext : JsonSerializerContext;
