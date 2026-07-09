@@ -35,7 +35,19 @@ launches its helpers (sandbox daemon/guest, proxy shim) as siblings:
 
 ## Refreshing
 
-Re-copy from an mxc SDK build:
+The vendored set is currently **MXC SDK v0.7.0** (`v0.7.0-rc1`, `wxc-exec` reports
+`0.7.0+0e02a72`), taken from the published release binaries.
+
+Preferred — pull the arch folders straight from the GitHub release:
+
+```powershell
+gh release download v0.7.0-rc1 --repo microsoft/mxc --pattern mxc-release-binaries.zip
+# the zip contains arm64/ and x64/ — copy the six binaries below out of each:
+#   arm64/* -> samples/apps/widget-creator/tools/mxc/win-arm64/
+#   x64/*   -> samples/apps/widget-creator/tools/mxc/win-x64/
+```
+
+Or re-copy from a local mxc SDK build:
 
 ```powershell
 Copy-Item <mxc>/sdk/bin/arm64/* samples/apps/widget-creator/tools/mxc/win-arm64/ -Force
