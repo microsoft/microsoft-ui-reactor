@@ -72,6 +72,10 @@ internal static class DevtoolsFixtures
             _client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{Server.Port}/") };
         }
 
+        [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026",
+            Justification = "Devtools MCP selftest fixture; serializes an anonymous JSON-RPC envelope. Devtools/MCP fixtures are AOT-skip-listed (SelfTestRunner.DefaultAotSkipPatterns).")]
+        [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("AOT", "IL3050",
+            Justification = "Devtools MCP selftest fixture; AOT-skip-listed (see IL2026 note).")]
         public async Task<JsonElement> CallAsync(string method, object? args = null)
         {
             var envelope = new
@@ -1277,6 +1281,10 @@ internal static class DevtoolsFixtures
     /// </summary>
     internal sealed class InitializeHandshake(Harness h) : SelfTestFixtureBase(h)
     {
+        [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026",
+            Justification = "Devtools MCP selftest fixture; serializes an anonymous JSON-RPC envelope. Devtools/MCP fixtures are AOT-skip-listed (SelfTestRunner.DefaultAotSkipPatterns).")]
+        [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("AOT", "IL3050",
+            Justification = "Devtools MCP selftest fixture; AOT-skip-listed (see IL2026 note).")]
         public override async Task RunAsync()
         {
             var root = MountRoot(H);
@@ -1321,6 +1329,10 @@ internal static class DevtoolsFixtures
 
     internal sealed class McpServerProtocolEdges(Harness h) : SelfTestFixtureBase(h)
     {
+        [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026",
+            Justification = "Devtools MCP selftest fixture; serializes an anonymous JSON-RPC envelope. Devtools/MCP fixtures are AOT-skip-listed (SelfTestRunner.DefaultAotSkipPatterns).")]
+        [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("AOT", "IL3050",
+            Justification = "Devtools MCP selftest fixture; AOT-skip-listed (see IL2026 note).")]
         public override async Task RunAsync()
         {
             var projectId = "reactor-selftest-" + Guid.NewGuid().ToString("N");

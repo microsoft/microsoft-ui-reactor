@@ -277,6 +277,10 @@ internal static class DevtoolsStressE2ERunner
 
     // -- Helpers ------------------------------------------------------------
 
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification = "Devtools stress E2E runner; serializes an anonymous JSON-RPC envelope. Devtools fixtures are AOT-skip-listed (SelfTestRunner.DefaultAotSkipPatterns).")]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("AOT", "IL3050",
+        Justification = "Devtools stress E2E runner; AOT-skip-listed (see IL2026 note).")]
     private static async Task<JsonElement> PostJsonRpcAsync(HttpClient http, int port, object envelope)
     {
         var json = JsonSerializer.Serialize(envelope);

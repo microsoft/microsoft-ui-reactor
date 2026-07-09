@@ -336,6 +336,9 @@ internal static class PropertyGridFixtures
 
     private static FieldDescriptor Field(
         string name,
+        [global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMembers(
+            global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicProperties
+            | global::System.Diagnostics.CodeAnalysis.DynamicallyAccessedMemberTypes.PublicConstructors)]
         Type fieldType,
         Func<object, object?> getValue,
         Func<object, object?, object>? setValue = null)
