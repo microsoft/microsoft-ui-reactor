@@ -9,6 +9,15 @@
     <Nullable>enable</Nullable>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
+    <!-- Reflection-only build tool: it loads Reactor.dll to emit reactor.api.txt
+         and never creates a WinUI window, so it does not need the Windows App SDK
+         runtime. Suppress the auto-generated bootstrap initializer, which otherwise
+         runs at startup and throws DllNotFoundException for the native
+         Microsoft.WindowsAppRuntime.Bootstrap.dll shim (that RID-specific native
+         asset is not staged by a RID-less `dotnet build`, so the exec of this tool
+         during build — e.g. bootstrap.ps1 on a host-arch-matching machine — would
+         crash). -->
+    <WindowsAppSdkBootstrapInitialize>false</WindowsAppSdkBootstrapInitialize>
     <IsPackable>false</IsPackable>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
