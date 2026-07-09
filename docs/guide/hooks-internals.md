@@ -339,7 +339,7 @@ public abstract class Component
     protected internal virtual bool ShouldUpdate() => false;
 ```
 
-`Func(ctx => Render(ctx))` materializes as a function-component
+`Memo(ctx => Render(ctx))` materializes as a function-component
 element. The reconciler treats it like any other component — element
 record on the tree, mounted into a slot in the parent — but the
 "component instance" is an internal wrapper holding its own

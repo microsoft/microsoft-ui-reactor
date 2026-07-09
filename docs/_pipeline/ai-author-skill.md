@@ -704,8 +704,8 @@ and returns its result, no node, no hook scope, no memoization (spec 033 §5),
 
 **Function components:** `Memo(ctx => …)` for the common render-once-plus-state
 case (no deps); `Memo(ctx => …, deps)` to also re-render when any dep changes;
-`RenderEachTime(ctx => …)` for the explicit always-re-render shape. The legacy
-`Func(ctx => …)` factory is soft-deprecated (`CS0618`) — replace with `Memo`
+`RenderEachTime(ctx => …)` for the explicit always-re-render shape. The former
+`Func(ctx => …)` factory was removed in this release — use `Memo`
 (common case) or `RenderEachTime` (always-re-render case) (spec 033 §4).
 
 ### Common Modifiers (chainable on any Element)

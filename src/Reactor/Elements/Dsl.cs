@@ -133,15 +133,6 @@ public static partial class Factories
     }
 
     /// <summary>
-    /// Deprecated forwarding alias for <see cref="RichTextBlock(string)"/>.
-    /// </summary>
-    [global::System.Obsolete(
-        "Renamed to RichTextBlock for parity with WinUI's Microsoft.UI.Xaml.Controls.RichTextBlock. " +
-        "RichText will be removed in the next minor release. (spec 039 §1.3 / §14 #8)",
-        error: false)]
-    public static RichTextBlockElement RichText(string text) => RichTextBlock(text);
-
-    /// <summary>
     /// Creates a <see cref="RichEditBoxElement"/>. <paramref name="text"/> defaults to
     /// <see cref="Optional{T}.Unset"/> — omit it to let the WinUI control own its text
     /// (uncontrolled). Pass any string (implicit <c>T → Optional&lt;T&gt;</c>) to control
@@ -466,24 +457,6 @@ public static partial class Factories
         return new(null);
     }
 
-    /// <summary>
-    /// Deprecated forwarding alias for <see cref="Progress(double)"/>.
-    /// </summary>
-    [global::System.Obsolete(
-        "Use Progress(double) for parity with Reactor's intent-naming convention. " +
-        "ProgressBar(double) will be removed in the next minor release. (spec 039 §5 / §16)",
-        error: false)]
-    public static ProgressElement ProgressBar(double value) => Progress(value);
-
-    /// <summary>
-    /// Deprecated forwarding alias for <see cref="ProgressIndeterminate"/>.
-    /// </summary>
-    [global::System.Obsolete(
-        "Use ProgressIndeterminate() for parity with Reactor's intent-naming convention. " +
-        "ProgressBar() will be removed in the next minor release. (spec 039 §5 / §16)",
-        error: false)]
-    public static ProgressElement ProgressBar() => ProgressIndeterminate();
-
     public static ProgressRingElement ProgressRing()
     {
         return new(null);
@@ -736,21 +709,6 @@ public static partial class Factories
     {
         if (columns is null) throw new ArgumentNullException(nameof(columns));
         if (rows is null) throw new ArgumentNullException(nameof(rows));
-        return new(new GridDefinition(columns, rows), FilterChildren(children));
-    }
-
-    /// <summary>
-    /// Creates a <see cref="GridElement"/> with string-form track sizes. Deprecated
-    /// in favor of the typed overload; will be removed in the next minor release.
-    /// </summary>
-    [global::System.Obsolete(
-        "Use Grid(GridSize[], GridSize[], ...) — GridSize.Star/.Auto/.Px helpers. " +
-        "String-track overload will be removed in the next minor release. (spec 033 §1)",
-        error: false)]
-    public static GridElement Grid(
-        string[] columns, string[] rows,
-        params Element?[] children)
-    {
         return new(new GridDefinition(columns, rows), FilterChildren(children));
     }
 
@@ -1213,25 +1171,6 @@ public static partial class Factories
         new(typeof(T), props) { _factory = () => new T() };
 
     /// <summary>
-    /// Define an inline function component (like a React function component).
-    /// Usage: Func(ctx => { var (n,setN) = ctx.UseState(0); return TextBlock($"{n}"); })
-    /// </summary>
-    /// <remarks>
-    /// Spec 033 §4 — soft-deprecated. <c>Func(...)</c> is "inline + own hooks +
-    /// no memoization", a niche rarely used intentionally. Replace with:
-    /// <list type="bullet">
-    ///   <item><description><see cref="Memo(Func{RenderContext, Element}, object?[])"/> with no deps for the common case (render once + state-driven re-renders).</description></item>
-    ///   <item><description><see cref="RenderEachTime"/> when you specifically want the old "re-render every parent render" behavior.</description></item>
-    /// </list>
-    /// </remarks>
-    [global::System.Obsolete(
-        "Use Memo(ctx => …) for render-once-plus-state semantics, or " +
-        "RenderEachTime(ctx => …) for the explicit always-re-render case. " +
-        "Func will be removed in the next minor release. (spec 033 §4)",
-        error: false)]
-    public static FuncElement Func(Func<RenderContext, Element> render) => new(render);
-
-    /// <summary>
     /// Define a memoized inline function component. Skips re-render when dependencies haven't changed.
     /// Empty deps array = render once + own state changes only. Non-empty = re-render when any dep changes.
     /// Usage: Memo(ctx => TextBlock("stable"), someProp, otherProp)
@@ -1288,9 +1227,8 @@ public static partial class Factories
 
     /// <summary>
     /// Define an inline function component that re-renders on every parent render
-    /// (no memoization), keeping its own hook scope. Equivalent to the legacy
-    /// <see cref="Func"/> behavior, made explicit so the reader can tell the
-    /// always-re-render case apart from a missing deps array.
+    /// (no memoization), keeping its own hook scope. Made explicit so the reader
+    /// can tell the always-re-render case apart from a missing deps array.
     /// </summary>
     /// <remarks>
     /// Spec 033 §4. Use sparingly — components that re-render on every parent
@@ -1832,16 +1770,6 @@ public static partial class Factories
     {
         return new("") { Paragraphs = paragraphs };
     }
-
-    /// <summary>
-    /// Deprecated forwarding alias for <see cref="RichTextBlock(RichTextParagraph[])"/>.
-    /// </summary>
-    [global::System.Obsolete(
-        "Renamed to RichTextBlock for parity with WinUI's Microsoft.UI.Xaml.Controls.RichTextBlock. " +
-        "RichText will be removed in the next minor release. (spec 039 §1.3 / §14 #8)",
-        error: false)]
-    public static RichTextBlockElement RichText(RichTextParagraph[] paragraphs) =>
-        RichTextBlock(paragraphs);
 
     public static RichTextParagraph Paragraph(params RichTextInline[] inlines) => new(inlines);
 

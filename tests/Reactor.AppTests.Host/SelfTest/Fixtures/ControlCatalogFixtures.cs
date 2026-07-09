@@ -151,11 +151,7 @@ internal static class ControlCatalogFixtures
             Add("Ellipse", new EllipseElement() { Modifiers = new ElementModifiers { Width = 20, Height = 20 } }, null);
 
             // ── Components ──
-            // Intentionally exercises the legacy Func() factory so the catalog
-            // still covers it until the obsolete overload is removed.
-#pragma warning disable CS0618
-            Add("FuncComponent", Func(ctx => TextBlock("CatalogFunc")), "CatalogFunc");
-#pragma warning restore CS0618
+            Add("FuncComponent", RenderEachTime(ctx => TextBlock("CatalogFunc")), "CatalogFunc");
 
             return items;
         }

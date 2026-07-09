@@ -93,7 +93,7 @@ class Counter : Component
 }
 
 // Function component (inline, small reusable pieces)
-var toggle = Func(ctx =>
+var toggle = RenderEachTime(ctx =>
 {
     var (on, setOn) = ctx.UseState(false);
     return ToggleSwitch(on, setOn);

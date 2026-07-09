@@ -51,9 +51,7 @@ public static class MaskedTextBoxDsl
     /// </summary>
     /// <remarks>
     /// Named to align with WinUI's <c>TextBox</c> and Reactor's
-    /// <c>TextBox()</c> factory. The previous <c>MaskedTextField</c> name
-    /// remains as an <c>[Obsolete]</c> alias on <see cref="MaskedTextFieldDsl"/>
-    /// for one release. (issue #389)
+    /// <c>TextBox()</c> factory. (issue #389)
     /// </remarks>
     public static MaskedTextBoxElement MaskedTextBox(
         string value,
@@ -62,25 +60,4 @@ public static class MaskedTextBoxDsl
         string? header = null,
         char placeholder = '_') =>
         new(value, onChanged, mask, header, placeholder);
-}
-
-/// <summary>
-/// Deprecated DSL factory shim that forwards to <see cref="MaskedTextBoxDsl.MaskedTextBox"/>.
-/// </summary>
-public static class MaskedTextFieldDsl
-{
-    /// <summary>
-    /// Deprecated forwarding alias for <see cref="MaskedTextBoxDsl.MaskedTextBox"/>.
-    /// </summary>
-    [global::System.Obsolete(
-        "Renamed to MaskedTextBox for parity with WinUI's TextBox naming and Reactor's TextBox() factory. " +
-        "MaskedTextField will be removed in the next minor release. (issue #389)",
-        error: false)]
-    public static MaskedTextBoxElement MaskedTextField(
-        string value,
-        Action<string>? onChanged = null,
-        string? mask = null,
-        string? header = null,
-        char placeholder = '_') =>
-        MaskedTextBoxDsl.MaskedTextBox(value, onChanged, mask, header, placeholder);
 }

@@ -328,8 +328,8 @@ signatures.
 | `Memo(render, deps)` | Inline component, also re-renders when any dep changes | `(Func<RenderContext, Element>, params object?[]) → MemoElement` |
 | `RenderEachTime(render)` | Inline component, re-renders on every parent render (no memoization). Use sparingly. | `(Func<RenderContext, Element>) → FuncElement` |
 
-The legacy `Func(ctx => …)` factory is soft-deprecated (`CS0618`) — replace
-with `Memo(ctx => …)` for the common case or `RenderEachTime(ctx => …)` when
+The former `Func(ctx => …)` factory was removed in this release — use
+`Memo(ctx => …)` for the common case or `RenderEachTime(ctx => …)` when
 you specifically want the always-re-render shape (spec 033 §4).
 
 ---
