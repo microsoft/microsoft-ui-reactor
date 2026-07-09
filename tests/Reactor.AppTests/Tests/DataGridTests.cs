@@ -106,13 +106,20 @@ public class DataGridTests : AppTestBase
                         "regressed (the LostFocus safety-net likely committed a second time and tore it down). " + ex.Message);
         }
 
-        // When winapp can read the value, confirm the editor reopened on the LastName cell ("Smith").
-        var value = ReadEditorValueSettled(editor!, "Smith", timeoutMs: 1500);
-        if (value is not null)
-            Assert.AreEqual("Smith", value, "Reopened editor should be on the LastName cell");
+        Assert.IsNotNull(editor, "Inline editor should have reopened on the next cell after the editing-Tab.");
 
-        // And the FirstName commit must have landed.
+        // The FirstName commit from the Tab must have landed (LastName unchanged, still "Smith").
         WaitForTextContaining("EditLog", "[1:Alicia,Smith]", timeoutMs: 5000);
+
+        // Authoritative, unconditional proof the editor reopened on the LastName cell (not still on
+        // FirstName): type a new value into the reopened editor and commit. Editing LastName commits
+        // row 1 as [1:Alicia,Smythe] — FirstName preserved as the just-committed "Alicia"; had the
+        // editor wrongly reopened on FirstName, that commit would read [1:Smythe,Smith] and this
+        // assertion would time out. Unlike a direct editor-value read (winapp can't reliably read the
+        // inline TextBox), this behavioral oracle is unconditional.
+        TypeIntoFocusedEditor("Smythe", commitWithEnter: true);
+        WaitForTextContaining("EditLog", "[1:Alicia,Smythe]", timeoutMs: 5000);
+        Assert.IsNotNull(WaitForName("Smythe"), "Edited LastName 'Smythe' should be visible after commit.");
     }
 
     /// <summary>
