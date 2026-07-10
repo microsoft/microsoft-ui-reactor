@@ -33,6 +33,9 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  # Labels are managed through the Issues API, so applying them via
+  # `gh pr create --label` / `gh pr edit` needs issues: write.
+  issues: write
 
 concurrency:
   group: windows-nuget-updates
@@ -107,7 +110,7 @@ jobs:
             -GitHubOutput $env:GITHUB_OUTPUT
 
       - name: Open or update pull request
-        if: steps.apply.outputs.changed == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.dry-run)
+        if: steps.apply.outputs.changed == 'true' && !(github.event_name == 'workflow_dispatch' && inputs['dry-run'])
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.DEPS_BOT_TOKEN || github.token }}
