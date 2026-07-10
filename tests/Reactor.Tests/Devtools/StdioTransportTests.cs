@@ -17,10 +17,10 @@ public class StdioTransportTests
     {
         var reg = new McpToolRegistry();
         reg.Register(
-            new McpToolDescriptor("ping", "", new { type = "object" }),
+            new McpToolDescriptor("ping", "", new SchemaNode("object")),
             _ => new { ok = true });
         reg.Register(
-            new McpToolDescriptor("echo", "", new { type = "object" }),
+            new McpToolDescriptor("echo", "", new SchemaNode("object")),
             p => new { echoed = DevtoolsTools.ReadString(p, "text") });
         return new McpDispatcher(reg);
     }

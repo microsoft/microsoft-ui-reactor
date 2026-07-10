@@ -46,13 +46,10 @@ internal static class DevtoolsUiaTools
             new McpToolDescriptor(
                 Name: "invoke",
                 Description: "Calls IInvokeProvider.Invoke directly; errors if the element does not expose the pattern.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new { selector = new { type = "string" }, window = new { type = "string" } },
-                    required = new[] { "selector" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "selector" },
+                    ("selector", Schema.Str()),
+                    ("window", Schema.Str()))),
             @params => server.OnDispatcher(() =>
             {
                 var el = resolver.Resolve(RequiredString(@params, "selector"), DevtoolsTools.ReadString(@params, "window"));
@@ -75,13 +72,10 @@ internal static class DevtoolsUiaTools
             new McpToolDescriptor(
                 Name: "toggle",
                 Description: "Calls IToggleProvider.Toggle; returns the resulting state.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new { selector = new { type = "string" }, window = new { type = "string" } },
-                    required = new[] { "selector" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "selector" },
+                    ("selector", Schema.Str()),
+                    ("window", Schema.Str()))),
             @params => server.OnDispatcher(() =>
             {
                 var el = resolver.Resolve(RequiredString(@params, "selector"), DevtoolsTools.ReadString(@params, "window"));
@@ -113,18 +107,11 @@ internal static class DevtoolsUiaTools
                     "Calls ISelectionItemProvider.Select on the item matched by itemSelector. When the container is " +
                     "a closed ComboBox (or other ExpandCollapse surface), it is expanded automatically before the " +
                     "item is resolved so the popup's items materialize.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        selector = new { type = "string", description = "Container selector (ListView, ComboBox, etc.)." },
-                        itemSelector = new { type = "string", description = "Selector of the descendant item to select." },
-                        window = new { type = "string" },
-                    },
-                    required = new[] { "selector", "itemSelector" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "selector", "itemSelector" },
+                    ("selector", Schema.Str("Container selector (ListView, ComboBox, etc.).")),
+                    ("itemSelector", Schema.Str("Selector of the descendant item to select.")),
+                    ("window", Schema.Str()))),
             @params => server.OnDispatcher(() =>
             {
                 var windowId = DevtoolsTools.ReadString(@params, "window");
@@ -246,13 +233,10 @@ internal static class DevtoolsUiaTools
                     "Opens an ExpandCollapse-aware element (ComboBox popup, TreeViewItem, MenuFlyoutItem, Expander). " +
                     "Errors with `no-pattern` when the element doesn't expose IExpandCollapseProvider. Returns the " +
                     "new state.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new { selector = new { type = "string" }, window = new { type = "string" } },
-                    required = new[] { "selector" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "selector" },
+                    ("selector", Schema.Str()),
+                    ("window", Schema.Str()))),
             @params => server.OnDispatcher(() =>
             {
                 var el = resolver.Resolve(RequiredString(@params, "selector"), DevtoolsTools.ReadString(@params, "window"));
@@ -274,13 +258,10 @@ internal static class DevtoolsUiaTools
                 Description:
                     "Closes an ExpandCollapse-aware element (ComboBox popup, TreeViewItem, Expander). Errors with " +
                     "`no-pattern` when the element doesn't expose IExpandCollapseProvider.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new { selector = new { type = "string" }, window = new { type = "string" } },
-                    required = new[] { "selector" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "selector" },
+                    ("selector", Schema.Str()),
+                    ("window", Schema.Str()))),
             @params => server.OnDispatcher(() =>
             {
                 var el = resolver.Resolve(RequiredString(@params, "selector"), DevtoolsTools.ReadString(@params, "window"));
@@ -316,28 +297,15 @@ internal static class DevtoolsUiaTools
                     "which uses IScrollItemProvider.ScrollIntoView. The response carries both `scrollPercent` and " +
                     "`scrollOffsetPx` (resolved from the underlying ScrollViewer when available); an axis that isn't " +
                     "scrollable reports null rather than the UIA -1 sentinel.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        selector = new { type = "string" },
-                        by = new
-                        {
-                            type = "object",
-                            description = "Percentage deltas (0–100) added to the current scroll percent, clamped to [0, 100].",
-                            properties = new
-                            {
-                                horizontal = new { type = "number", description = "Percent delta (0–100)." },
-                                vertical = new { type = "number", description = "Percent delta (0–100)." },
-                            },
-                        },
-                        to = new { type = "string", description = "Descendant selector to scroll into view (takes precedence over `by`)." },
-                        window = new { type = "string" },
-                    },
-                    required = new[] { "selector" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "selector" },
+                    ("selector", Schema.Str()),
+                    ("by", Schema.Obj(
+                        "Percentage deltas (0–100) added to the current scroll percent, clamped to [0, 100].",
+                        ("horizontal", Schema.Num("Percent delta (0–100).")),
+                        ("vertical", Schema.Num("Percent delta (0–100).")))),
+                    ("to", Schema.Str("Descendant selector to scroll into view (takes precedence over `by`).")),
+                    ("window", Schema.Str()))),
             @params => server.OnDispatcher<object>(() =>
             {
                 var windowId = DevtoolsTools.ReadString(@params, "window");
@@ -475,18 +443,11 @@ internal static class DevtoolsUiaTools
             new McpToolDescriptor(
                 Name: "screenshot",
                 Description: "Captures a PNG of the window (or a selector-scoped region). Base64-encoded result.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        selector = new { type = "string", description = "Optional region to crop to." },
-                        window = new { type = "string" },
-                        waitIdle = new { type = "boolean", description = "Force a layout pass before capture (default true)." },
-                        includeChrome = new { type = "boolean", description = "Include the non-client titlebar frame (default false)." },
-                    },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    ("selector", Schema.Str("Optional region to crop to.")),
+                    ("window", Schema.Str()),
+                    ("waitIdle", Schema.Bool("Force a layout pass before capture (default true).")),
+                    ("includeChrome", Schema.Bool("Include the non-client titlebar frame (default false).")))),
             @params =>
             {
                 // SECURITY (TASK-015): serialize captures and enforce a 100ms
@@ -559,18 +520,11 @@ internal static class DevtoolsUiaTools
                     "Walks the visual tree and returns a flat array of nodes. view=full adds layout/context/visual " +
                     "fields for layout debugging. `includeReactorSource` is reserved for Phase 3 — setting it to " +
                     "true currently returns a not-implemented error instead of silently no-opping.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        selector = new { type = "string", description = "Optional scope; if omitted, walks the whole window." },
-                        window = new { type = "string" },
-                        view = new { type = "string", @enum = new[] { "summary", "full" } },
-                        includeReactorSource = new { type = "boolean", description = "Reserved; lands with the Phase 3 source map. Setting true is a hard error today." },
-                    },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    ("selector", Schema.Str("Optional scope; if omitted, walks the whole window.")),
+                    ("window", Schema.Str()),
+                    ("view", Schema.Str(oneOf: new[] { "summary", "full" })),
+                    ("includeReactorSource", Schema.Bool("Reserved; lands with the Phase 3 source map. Setting true is a hard error today.")))),
             @params => server.OnDispatcher(() =>
             {
                 var selector = DevtoolsTools.ReadString(@params, "selector");
@@ -618,16 +572,9 @@ internal static class DevtoolsUiaTools
                     "resolved} plus diagnostics for cycles and unresolved (perpetually-null) references. " +
                     "Node ids match the `tree` tool. Cycles are a supported topology and are reported " +
                     "informationally, not as errors.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        selector = new { type = "string", description = "Optional scope; if omitted, walks the whole window." },
-                        window = new { type = "string" },
-                    },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    ("selector", Schema.Str("Optional scope; if omitted, walks the whole window.")),
+                    ("window", Schema.Str()))),
             @params => server.OnDispatcher(() =>
             {
                 var selector = DevtoolsTools.ReadString(@params, "selector");
@@ -656,17 +603,10 @@ internal static class DevtoolsUiaTools
             new McpToolDescriptor(
                 Name: "click",
                 Description: "Clicks the element matching the selector. Prefers IInvokeProvider, falls back to Toggle → SelectionItem → pointer.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        selector = new { type = "string" },
-                        window = new { type = "string" },
-                    },
-                    required = new[] { "selector" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "selector" },
+                    ("selector", Schema.Str()),
+                    ("window", Schema.Str()))),
             @params => server.OnDispatcher(() =>
             {
                 var selector = RequiredString(@params, "selector");
@@ -709,19 +649,12 @@ internal static class DevtoolsUiaTools
             new McpToolDescriptor(
                 Name: "type",
                 Description: "Sets text on a value-bearing control. Clears first when clear=true.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        selector = new { type = "string" },
-                        text = new { type = "string" },
-                        clear = new { type = "boolean" },
-                        window = new { type = "string" },
-                    },
-                    required = new[] { "selector", "text" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "selector", "text" },
+                    ("selector", Schema.Str()),
+                    ("text", Schema.Str()),
+                    ("clear", Schema.Bool()),
+                    ("window", Schema.Str()))),
             @params => server.OnDispatcher(() =>
             {
                 var selector = RequiredString(@params, "selector");
@@ -760,17 +693,10 @@ internal static class DevtoolsUiaTools
             new McpToolDescriptor(
                 Name: "focus",
                 Description: "Programmatically focuses the selected element.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        selector = new { type = "string" },
-                        window = new { type = "string" },
-                    },
-                    required = new[] { "selector" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "selector" },
+                    ("selector", Schema.Str()),
+                    ("window", Schema.Str()))),
             @params => server.OnDispatcher(() =>
             {
                 var selector = RequiredString(@params, "selector");
@@ -790,29 +716,17 @@ internal static class DevtoolsUiaTools
             new McpToolDescriptor(
                 Name: "waitFor",
                 Description: "Polls a predicate against the live tree until it matches or times out.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        predicate = new
-                        {
-                            type = "object",
-                            properties = new
-                            {
-                                selector = new { type = "string" },
-                                textEquals = new { type = "string" },
-                                textMatches = new { type = "string" },
-                                visible = new { type = "boolean" },
-                                count = new { type = "integer" },
-                            },
-                        },
-                        timeoutMs = new { type = "integer" },
-                        window = new { type = "string" },
-                    },
-                    required = new[] { "predicate" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "predicate" },
+                    ("predicate", Schema.Obj(
+                        null,
+                        ("selector", Schema.Str()),
+                        ("textEquals", Schema.Str()),
+                        ("textMatches", Schema.Str()),
+                        ("visible", Schema.Bool()),
+                        ("count", Schema.Int()))),
+                    ("timeoutMs", Schema.Int()),
+                    ("window", Schema.Str()))),
             @params =>
             {
                 if (@params is not { } p || p.ValueKind != JsonValueKind.Object)

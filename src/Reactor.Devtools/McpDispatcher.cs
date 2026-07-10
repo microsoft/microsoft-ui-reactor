@@ -107,9 +107,7 @@ internal sealed class McpDispatcher
             {
                 ["name"] = JsonValue.Create(tool.Name),
                 ["description"] = JsonValue.Create(tool.Description),
-                ["inputSchema"] = tool.InputSchema is null
-                    ? new JsonObject()
-                    : JsonSerializer.SerializeToNode(tool.InputSchema, tool.InputSchema.GetType()),
+                ["inputSchema"] = JsonSerializer.SerializeToNode(tool.InputSchema, DevtoolsMcpServer.JsonOpts),
             });
         }
 

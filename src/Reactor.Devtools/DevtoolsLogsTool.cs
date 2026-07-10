@@ -26,20 +26,13 @@ internal static class DevtoolsLogsTool
                     "`source` (stdout|stderr|debug|event — Debug and Trace share one listener; event is the framework ETW provider), `level`. " +
                     "Event entries carry extra `eventName` and `eventId` fields. " +
                     "Pass `waitMs > 0` to long-poll. `dropped` reports entries evicted by ring overflow.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        since = new { type = "integer", description = "Return entries with seq >= since. Pass previous `nextSeq` to continue. Default 0 returns all." },
-                        tail = new { type = "integer", description = "Keep only the last N entries after filtering." },
-                        filter = new { type = "string", description = "Regex; falls back to substring match if invalid." },
-                        source = new { type = "string", description = "stdout | stderr | debug | event (Debug and Trace both surface as `debug`; `event` selects Microsoft-UI-Reactor ETW events)" },
-                        level = new { type = "string", description = "Exact level match (case-insensitive). For source=event the levels are Critical|Error|Warning|Info|Debug|Trace." },
-                        waitMs = new { type = "integer", description = "Max time to block waiting for new entries. 0 returns immediately." },
-                    },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    ("since", Schema.Int("Return entries with seq >= since. Pass previous `nextSeq` to continue. Default 0 returns all.")),
+                    ("tail", Schema.Int("Keep only the last N entries after filtering.")),
+                    ("filter", Schema.Str("Regex; falls back to substring match if invalid.")),
+                    ("source", Schema.Str("stdout | stderr | debug | event (Debug and Trace both surface as `debug`; `event` selects Microsoft-UI-Reactor ETW events)")),
+                    ("level", Schema.Str("Exact level match (case-insensitive). For source=event the levels are Critical|Error|Warning|Info|Debug|Trace.")),
+                    ("waitMs", Schema.Int("Max time to block waiting for new entries. 0 returns immediately.")))),
             @params => BuildPayload(getBuffer(), @params));
     }
 

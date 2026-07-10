@@ -15,10 +15,10 @@ public class McpDispatcherTests
     {
         reg = new McpToolRegistry();
         reg.Register(
-            new McpToolDescriptor("echo", "Echo the input text back.", new { type = "object" }),
+            new McpToolDescriptor("echo", "Echo the input text back.", new SchemaNode("object")),
             @params => new { echoed = DevtoolsTools.ReadString(@params, "text") });
         reg.Register(
-            new McpToolDescriptor("badparam", "Always complains about params.", new { type = "object" }),
+            new McpToolDescriptor("badparam", "Always complains about params.", new SchemaNode("object")),
             _ => throw new McpToolException(
                 "required",
                 JsonRpcErrorCodes.InvalidParams,

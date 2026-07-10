@@ -1310,7 +1310,7 @@ internal static class DevtoolsFixtures
                 H.Window,
                 projectIdentifier: projectId);
             server.Tools.Register(
-                new McpToolDescriptor("selftest.echo", "Echoes a value", new { type = "object" }),
+                new McpToolDescriptor("selftest.echo", "Echoes a value", new SchemaNode("object")),
                 args => new { ok = true, value = args is { } a && a.TryGetProperty("value", out var value) ? value.GetString() : null });
             server.Start();
             server.AnnounceReady();

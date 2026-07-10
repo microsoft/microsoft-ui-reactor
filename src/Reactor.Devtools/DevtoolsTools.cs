@@ -91,7 +91,7 @@ internal static class DevtoolsTools
             new McpToolDescriptor(
                 Name: "version",
                 Description: "Returns the running app's build tag, pid, and MCP port. Zero side effects.",
-                InputSchema: new { type = "object", properties = new { }, additionalProperties = false }),
+                InputSchema: Schema.Root()),
             _ => new
             {
                 build = server.BuildTag,
@@ -111,7 +111,7 @@ internal static class DevtoolsTools
                     "Lists the Component class names in the loaded assembly, top-level first. Each entry carries " +
                     "`isNested` (true for inner helper components like `ContextDemo+AccentBadge`) so agents can pick " +
                     "the user-facing demo without guessing. Use `current` to verify what's mounted now.",
-                InputSchema: new { type = "object", properties = new { }, additionalProperties = false }),
+                InputSchema: Schema.Root()),
             _ =>
             {
                 if (ctx.GetComponentsDetailed is { } detailed)
@@ -134,16 +134,9 @@ internal static class DevtoolsTools
             new McpToolDescriptor(
                 Name: "switchComponent",
                 Description: "Switches the hosted root component. Invalidates every tree id in the target window.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        name = new { type = "string", description = "Component class name" },
-                    },
-                    required = new[] { "name" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "name" },
+                    ("name", Schema.Str("Component class name")))),
             @params =>
             {
                 var name = ReadString(@params, "name")
@@ -190,15 +183,8 @@ internal static class DevtoolsTools
                 Description:
                     "Flushes the response, closes listeners, and exits with sentinel code 42 so the " +
                     "`mur devtools` supervisor rebuilds and relaunches. Old node ids do not carry over.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        component = new { type = "string", description = "Optional component to focus after restart" },
-                    },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    ("component", Schema.Str("Optional component to focus after restart")))),
             @params =>
             {
                 // Return the response immediately; the reload fires after the HTTP write flushes.
@@ -219,7 +205,7 @@ internal static class DevtoolsTools
                     "Closes the app cleanly. Flushes the HTTP response, disposes the MCP listener, " +
                     "closes the window, and exits with code 0 so the `mur devtools` supervisor " +
                     "returns without rebuilding. Use to release file locks on the build output.",
-                InputSchema: new { type = "object", properties = new { }, additionalProperties = false }),
+                InputSchema: Schema.Root()),
             @params =>
             {
                 var exitingBuild = server.BuildTag;
@@ -242,19 +228,8 @@ internal static class DevtoolsTools
                     "`window` when more than one is active. " +
                     "Pass `includeHwnd: true` to include raw native window handles; omitted by " +
                     "default to keep HWNDs out of agent transcripts unless explicitly requested.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        includeHwnd = new
-                        {
-                            type = "boolean",
-                            description = "Include raw HWND values in the response. Defaults to false (W-7).",
-                        },
-                    },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    ("includeHwnd", Schema.Bool("Include raw HWND values in the response. Defaults to false (W-7).")))),
             @params =>
             {
                 // W-7: HWND opt-in. The token-holding caller is already
@@ -293,7 +268,7 @@ internal static class DevtoolsTools
                     "Lists active Reactor windows with id, key, title, DIP size, DPI, " +
                     "state, and isMain. Use this to discover ids for windows.activate / " +
                     "windows.close. Spec 036 §10.",
-                InputSchema: new { type = "object", properties = new { }, additionalProperties = false }),
+                InputSchema: Schema.Root()),
             _ => server.OnDispatcher(() => new WindowsListResult(
                 ctx.Windows.Snapshot().Select(w => new WindowListItem(
                     Id: w.Id,
@@ -312,16 +287,9 @@ internal static class DevtoolsTools
             new McpToolDescriptor(
                 Name: "windows.activate",
                 Description: "Activates (focuses) the window with the given id. Spec 036 §10.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        id = new { type = "string", description = "Window id from windows.list." },
-                    },
-                    required = new[] { "id" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "id" },
+                    ("id", Schema.Str("Window id from windows.list.")))),
             @params =>
             {
                 var id = ReadString(@params, "id")
@@ -350,16 +318,9 @@ internal static class DevtoolsTools
                     "Closes the window with the given id. Honors UseClosingGuard / Closing " +
                     "subscribers — returns { ok: false, cancelled: true } when the close was " +
                     "vetoed. Spec 036 §10.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        id = new { type = "string", description = "Window id from windows.list." },
-                    },
-                    required = new[] { "id" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "id" },
+                    ("id", Schema.Str("Window id from windows.list.")))),
             @params =>
             {
                 var id = ReadString(@params, "id")
@@ -427,20 +388,13 @@ internal static class DevtoolsTools
                     "component name must be in the existing devtools allowlist (same gate " +
                     "as switchComponent) — loopback callers cannot spawn arbitrary types. " +
                     "Spec 036 §10. Returns { ok, id } on success.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        component = new { type = "string", description = "Component class name (allowlisted)." },
-                        title = new { type = "string" },
-                        width = new { type = "number", description = "Initial DIP width (default 1024)." },
-                        height = new { type = "number", description = "Initial DIP height (default 768)." },
-                        key = new { type = "string", description = "Optional WindowKey for FindWindow lookup." },
-                    },
-                    required = new[] { "component" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "component" },
+                    ("component", Schema.Str("Component class name (allowlisted).")),
+                    ("title", Schema.Str()),
+                    ("width", Schema.Num("Initial DIP width (default 1024).")),
+                    ("height", Schema.Num("Initial DIP height (default 768).")),
+                    ("key", Schema.Str("Optional WindowKey for FindWindow lookup.")))),
             @params =>
             {
                 var component = ReadString(@params, "component")

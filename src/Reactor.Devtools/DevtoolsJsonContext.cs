@@ -45,6 +45,8 @@ namespace Microsoft.UI.Reactor.Hosting.Devtools;
 [JsonSerializable(typeof(WaitForResult))]
 [JsonSerializable(typeof(WaitObserved))]
 [JsonSerializable(typeof(TreeResult))]
+[JsonSerializable(typeof(SchemaNode))]
+[JsonSerializable(typeof(SchemaDocument))]
 internal partial class DevtoolsJsonContext : JsonSerializerContext
 {
 }

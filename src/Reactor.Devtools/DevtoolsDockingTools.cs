@@ -42,12 +42,7 @@ internal static class DevtoolsDockingTools
                     "Returns { hosts: [{ id, paneCount, activeKey, sideCounts }] }. " +
                     "Host ids are stable for the lifetime of the underlying element; " +
                     "agents pass them to docking.snapshot / docking.dock.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new { },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root()),
             _ => server.OnDispatcher<object>(() => BuildListPayload()));
     }
 
@@ -61,16 +56,9 @@ internal static class DevtoolsDockingTools
                     "side strips, and active pane key. Tree carries identity + role + " +
                     "permissions per pane; never the app-owned Content references " +
                     "(privacy + AOT-safe).",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        hostId = new { type = "string", description = "Host id from docking.list (e.g. 'dh:1')." },
-                    },
-                    required = new[] { "hostId" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "hostId" },
+                    ("hostId", Schema.Str("Host id from docking.list (e.g. 'dh:1').")))),
             @params => server.OnDispatcher<object>(() => BuildSnapshotPayload(@params)));
     }
 
@@ -87,20 +75,13 @@ internal static class DevtoolsDockingTools
                     "fires the matching lifecycle event (OnContentDocked / OnDocumentClosed " +
                     "/ OnToolWindowHiding / OnContentFloating / ...). Mid-flight drag state " +
                     "is intentionally not exposed (spec N6).",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        hostId = new { type = "string", description = "Host id from docking.list." },
-                        paneKey = new { type = "string", description = "Stringified pane Key (matches DockableContent.Key.ToString())." },
-                        action = new { type = "string", description = "dock | float | hide | show | close | activate | pinToSide" },
-                        target = new { type = "string", description = "DockTarget for action=dock (Center, SplitLeft, ...)." },
-                        side = new { type = "string", description = "DockSide for action=pinToSide (Left, Top, Right, Bottom)." },
-                    },
-                    required = new[] { "hostId", "paneKey", "action" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "hostId", "paneKey", "action" },
+                    ("hostId", Schema.Str("Host id from docking.list.")),
+                    ("paneKey", Schema.Str("Stringified pane Key (matches DockableContent.Key.ToString()).")),
+                    ("action", Schema.Str("dock | float | hide | show | close | activate | pinToSide")),
+                    ("target", Schema.Str("DockTarget for action=dock (Center, SplitLeft, ...).")),
+                    ("side", Schema.Str("DockSide for action=pinToSide (Left, Top, Right, Bottom).")))),
             @params => server.OnDispatcher<object>(() => BuildDockPayload(@params)));
     }
 

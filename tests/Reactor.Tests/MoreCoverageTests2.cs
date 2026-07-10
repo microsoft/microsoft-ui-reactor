@@ -104,7 +104,7 @@ public class MoreCoverageTests2
     private static McpDispatcher BuildPingDispatcher()
     {
         var reg = new McpToolRegistry();
-        reg.Register(new McpToolDescriptor("ping", "", new { type = "object" }),
+        reg.Register(new McpToolDescriptor("ping", "", new SchemaNode("object")),
             _ => new { ok = true });
         return new McpDispatcher(reg);
     }
@@ -160,7 +160,7 @@ public class MoreCoverageTests2
     public void McpDispatcher_DirectMethodInvocation_ReachesHandler()
     {
         var reg = new McpToolRegistry();
-        reg.Register(new McpToolDescriptor("pong", "", new { }), _ => new { ok = true });
+        reg.Register(new McpToolDescriptor("pong", "", new SchemaNode("object")), _ => new { ok = true });
         var d = new McpDispatcher(reg);
 
         // Not "tools/call" — the dispatcher should fall into HandleDirect.

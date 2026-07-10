@@ -23,15 +23,8 @@ internal static class DevtoolsStateTool
             new McpToolDescriptor(
                 Name: "state",
                 Description: "Reads reactive state from the root component's hook table. Primitives return as JSON; complex objects return as { $type, $shape }.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        selector = new { type = "string", description = "Reserved — v1 always inspects the root component." },
-                    },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    ("selector", Schema.Str("Reserved — v1 always inspects the root component.")))),
             @params => server.OnDispatcher<object>(() => BuildPayload(rootComponent())));
     }
 

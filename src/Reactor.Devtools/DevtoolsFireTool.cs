@@ -39,18 +39,11 @@ internal static class DevtoolsFireTool
                     "per spec §11 'Automation verbs'. Use fire only when no UIA peer reaches the behavior " +
                     "(custom gestures, awaited async paths, unit-of-work handlers). " +
                     "Responses carry `via: \"reactor-event-injection\"` so traces make the shortcut visible.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        component = new { type = "string" },
-                        @event = new { type = "string" },
-                        args = new { type = "array", description = "Optional positional args for the handler." },
-                    },
-                    required = new[] { "component", "event" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "component", "event" },
+                    ("component", Schema.Str()),
+                    ("event", Schema.Str()),
+                    ("args", Schema.Arr("Optional positional args for the handler.")))),
             @params => server.OnDispatcher(() =>
             {
                 var componentName = DevtoolsTools.ReadString(@params, "component")
