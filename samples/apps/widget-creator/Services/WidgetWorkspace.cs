@@ -55,7 +55,7 @@ public sealed class WidgetWorkspace
                 return candidate;
             dir = dir.Parent;
         }
-        return @"C:\Users\andersonch\Code\reactor3\local-nupkgs";
+        return Path.Join(AppContext.BaseDirectory, "local-nupkgs");
     }
 
     public string NewId() => $"widget-{DateTime.Now:yyyyMMdd-HHmmss-fff}";

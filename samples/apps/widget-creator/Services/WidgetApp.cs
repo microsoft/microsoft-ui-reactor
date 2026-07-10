@@ -21,10 +21,10 @@ public sealed record WidgetApp(
     string SessionId)
 {
     /// <summary>Path to the generated source file.</summary>
-    public string SourcePath => System.IO.Path.Combine(Dir, "widget.cs");
+    public string SourcePath => System.IO.Path.Join(Dir, "widget.cs");
 
     /// <summary>Path to the per-widget MXC permission policy (absent = default policy).</summary>
-    public string PolicyPath => System.IO.Path.Combine(Dir, "policy.json");
+    public string PolicyPath => System.IO.Path.Join(Dir, "policy.json");
 
     /// <summary>Read the current generated source (empty if missing).</summary>
     public string ReadSource()

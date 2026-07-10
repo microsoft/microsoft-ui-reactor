@@ -237,20 +237,18 @@ public static class MxcPolicy
     static void RemovePathFromAll(JsonObject o, string path)
     {
         if (o["filesystem"] is not JsonObject fs) return;
-        foreach (var kind in PathKinds)
-            if (fs[kind] is JsonArray arr)
-                for (var i = arr.Count - 1; i >= 0; i--)
-                    if (string.Equals((string?)arr[i], path, StringComparison.OrdinalIgnoreCase))
-                        arr.RemoveAt(i);
+        foreach (var arr in PathKinds.Select(k => fs[k]).OfType<JsonArray>())
+            for (var i = arr.Count - 1; i >= 0; i--)
+                if (string.Equals((string?)arr[i], path, StringComparison.OrdinalIgnoreCase))
+                    arr.RemoveAt(i);
     }
 
     /// <summary>Drop empty path arrays, and the <c>filesystem</c> object if it has nothing left.</summary>
     static void PruneFilesystem(JsonObject o)
     {
         if (o["filesystem"] is not JsonObject fs) return;
-        foreach (var kind in PathKinds)
-            if (fs[kind] is JsonArray arr && arr.Count == 0)
-                fs.Remove(kind);
+        foreach (var kind in PathKinds.Where(k => fs[k] is JsonArray { Count: 0 }))
+            fs.Remove(kind);
         if (fs.Count == 0)
             o.Remove("filesystem");
     }

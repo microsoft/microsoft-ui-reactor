@@ -114,7 +114,7 @@ public sealed class MxcSandbox
     static string McxRoot =>
         Environment.GetEnvironmentVariable("WIDGET_CREATOR_MXC_ROOT") is { Length: > 0 } r
             ? r
-            : @"C:\Users\andersonch\Code\mxc";
+            : Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Code", "mxc");
 
     static string Arch => RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "arm64" : "x64";
 
@@ -126,7 +126,7 @@ public sealed class MxcSandbox
     static string BundleRid => RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "win-arm64" : "win-x64";
 
     /// <summary>The wxc-exec copy shipped next to the app (output dir: mxc/&lt;rid&gt;/).</summary>
-    static string BundledWxcExec => Path.Combine(AppContext.BaseDirectory, "mxc", BundleRid, "wxc-exec.exe");
+    static string BundledWxcExec => Path.Join(AppContext.BaseDirectory, "mxc", BundleRid, "wxc-exec.exe");
 
     /// <summary>
     /// Opt-in env var (set to <c>1</c>/<c>true</c>): prefer a local mxc checkout
@@ -153,7 +153,7 @@ public sealed class MxcSandbox
         // 2. An explicit bin dir override (caller-controlled, so it is trusted).
         var binBase = Environment.GetEnvironmentVariable("WIDGET_CREATOR_MXC_BIN");
         if (!string.IsNullOrWhiteSpace(binBase))
-            candidates.Add(Path.Combine(binBase, Arch, "wxc-exec.exe"));
+            candidates.Add(Path.Join(binBase, Arch, "wxc-exec.exe"));
 
         // 3. Only when explicitly opted in, prefer a local mxc checkout so a
         // freshly built binary is used over the vendored copy. Off by default:
@@ -163,8 +163,8 @@ public sealed class MxcSandbox
         // daemon/guest, proxy shim) as siblings, so each dir must hold the full set.
         if (UseLocalCheckout)
         {
-            candidates.Add(Path.Combine(McxRoot, "src", "target", Triple, "release", "wxc-exec.exe"));
-            candidates.Add(Path.Combine(McxRoot, "sdk", "bin", Arch, "wxc-exec.exe"));
+            candidates.Add(Path.Join(McxRoot, "src", "target", Triple, "release", "wxc-exec.exe"));
+            candidates.Add(Path.Join(McxRoot, "sdk", "bin", Arch, "wxc-exec.exe"));
         }
 
         // 4. Pinned, vendored copy shipped in the app's own output dir (the
@@ -172,10 +172,7 @@ public sealed class MxcSandbox
         // external mxc checkout, and is known to auto-fall back off BaseContainer.
         candidates.Add(BundledWxcExec);
 
-        foreach (var c in candidates)
-            if (File.Exists(c)) return c;
-
-        return BundledWxcExec;
+        return candidates.FirstOrDefault(File.Exists) ?? BundledWxcExec;
     }
 
     public bool IsAvailable => File.Exists(WxcExecPath);
@@ -316,7 +313,7 @@ public sealed class MxcSandbox
         }
 
         var configJson = BuildConfigJson(exePath, appDir, extraArgs, timeoutSeconds, policyTemplateJson);
-        var configPath = Path.Combine(Path.GetTempPath(), "widget-creator", $"mxc-{Guid.NewGuid():N}.json");
+        var configPath = Path.Join(Path.GetTempPath(), "widget-creator", $"mxc-{Guid.NewGuid():N}.json");
         Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
         await File.WriteAllTextAsync(configPath, configJson, ct).ConfigureAwait(false);
 

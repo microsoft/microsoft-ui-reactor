@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -216,63 +215,16 @@ public sealed class ArtifactIntegrity
         string ExePath,
         string Mac);
 
-    /// <summary>Minimal DPAPI (per-user) wrapper — no extra NuGet dependency.</summary>
+    /// <summary>Managed DPAPI (per-user) wrapper via <see cref="ProtectedData"/>.</summary>
     static class Dpapi
     {
-        const int CRYPTPROTECT_UI_FORBIDDEN = 0x1;
+        public static byte[] Protect(byte[] data) =>
+            ProtectedData.Protect(data, optionalEntropy: null, DataProtectionScope.CurrentUser);
 
-        public static byte[] Protect(byte[] data) => Transform(data, protect: true);
         public static byte[]? Unprotect(byte[] data)
         {
-            try { return Transform(data, protect: false); }
+            try { return ProtectedData.Unprotect(data, optionalEntropy: null, DataProtectionScope.CurrentUser); }
             catch { return null; }
         }
-
-        static byte[] Transform(byte[] data, bool protect)
-        {
-            var inBlob = new DATA_BLOB();
-            var outBlob = new DATA_BLOB();
-            try
-            {
-                inBlob.cbData = data.Length;
-                inBlob.pbData = Marshal.AllocHGlobal(data.Length == 0 ? 1 : data.Length);
-                if (data.Length > 0) Marshal.Copy(data, 0, inBlob.pbData, data.Length);
-
-                var ok = protect
-                    ? CryptProtectData(ref inBlob, "WidgetCreator integrity key", IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, CRYPTPROTECT_UI_FORBIDDEN, ref outBlob)
-                    : CryptUnprotectData(ref inBlob, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, CRYPTPROTECT_UI_FORBIDDEN, ref outBlob);
-                if (!ok)
-                    throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
-
-                var result = new byte[outBlob.cbData];
-                Marshal.Copy(outBlob.pbData, result, 0, outBlob.cbData);
-                return result;
-            }
-            finally
-            {
-                if (inBlob.pbData != IntPtr.Zero) Marshal.FreeHGlobal(inBlob.pbData);
-                if (outBlob.pbData != IntPtr.Zero) LocalFree(outBlob.pbData);
-            }
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        struct DATA_BLOB
-        {
-            public int cbData;
-            public IntPtr pbData;
-        }
-
-        [DllImport("crypt32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-        static extern bool CryptProtectData(
-            ref DATA_BLOB pDataIn, string? szDataDescr, IntPtr pOptionalEntropy,
-            IntPtr pvReserved, IntPtr pPromptStruct, int dwFlags, ref DATA_BLOB pDataOut);
-
-        [DllImport("crypt32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-        static extern bool CryptUnprotectData(
-            ref DATA_BLOB pDataIn, IntPtr ppszDataDescr, IntPtr pOptionalEntropy,
-            IntPtr pvReserved, IntPtr pPromptStruct, int dwFlags, ref DATA_BLOB pDataOut);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        static extern IntPtr LocalFree(IntPtr hMem);
     }
 }

@@ -22,9 +22,9 @@ public static class SessionLog
         lock (_gate)
         {
             if (_path is not null) return;
-            var dir = System.IO.Path.Combine(AppContext.BaseDirectory, "logs");
+            var dir = System.IO.Path.Join(AppContext.BaseDirectory, "logs");
             Directory.CreateDirectory(dir);
-            _path = System.IO.Path.Combine(dir, $"widget-creator-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+            _path = System.IO.Path.Join(dir, $"widget-creator-{DateTime.Now:yyyyMMdd-HHmmss}.log");
             File.WriteAllText(_path, $"# Widget Creator session {DateTime.Now:O}{Environment.NewLine}");
         }
     }

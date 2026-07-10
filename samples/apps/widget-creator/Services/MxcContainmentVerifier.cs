@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -231,9 +232,8 @@ public static class MxcContainmentVerifier
             var pid = stack.Pop();
             if (children.TryGetValue(pid, out var kids))
             {
-                foreach (var kid in kids)
+                foreach (var kid in kids.Where(seen.Add))
                 {
-                    if (!seen.Add(kid)) continue;
                     if (names.TryGetValue(kid, out var name) &&
                         string.Equals(name, exeName, StringComparison.OrdinalIgnoreCase))
                         return kid;

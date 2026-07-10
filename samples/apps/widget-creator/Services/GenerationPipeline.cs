@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
@@ -308,9 +309,8 @@ public sealed class GenerationPipeline(IModelClient client, WidgetWorkspace work
         var fails = new StringBuilder();
         var sawPass = false;
         var sawTimeout = false;
-        foreach (var raw in output.Split('\n'))
+        foreach (var line in output.Split('\n').Select(raw => raw.Trim()))
         {
-            var line = raw.Trim();
             if (line.Length == 0) continue;
             if (line.Contains(SelfTestFailMarker, StringComparison.Ordinal))
                 fails.AppendLine(line[line.IndexOf(SelfTestFailMarker, StringComparison.Ordinal)..]);
@@ -651,15 +651,13 @@ public sealed class GenerationPipeline(IModelClient client, WidgetWorkspace work
         if (string.IsNullOrWhiteSpace(buildOutput)) return "(no build output captured)";
 
         var errorLines = new StringBuilder();
-        foreach (var line in buildOutput.Split('\n'))
+        foreach (var line in buildOutput.Split('\n').Where(line =>
+            line.Contains(": error", StringComparison.OrdinalIgnoreCase) ||
+            line.Contains("error CS", StringComparison.OrdinalIgnoreCase) ||
+            line.Contains("error NETSDK", StringComparison.OrdinalIgnoreCase) ||
+            line.Contains("error MSB", StringComparison.OrdinalIgnoreCase)))
         {
-            if (line.Contains(": error", StringComparison.OrdinalIgnoreCase) ||
-                line.Contains("error CS", StringComparison.OrdinalIgnoreCase) ||
-                line.Contains("error NETSDK", StringComparison.OrdinalIgnoreCase) ||
-                line.Contains("error MSB", StringComparison.OrdinalIgnoreCase))
-            {
-                errorLines.AppendLine(line.Trim());
-            }
+            errorLines.AppendLine(line.Trim());
         }
 
         var result = errorLines.Length > 0 ? errorLines.ToString() : Tail(buildOutput, 3000);
@@ -678,9 +676,8 @@ public sealed class GenerationPipeline(IModelClient client, WidgetWorkspace work
     {
         if (string.IsNullOrEmpty(s)) return s;
         var sb = new StringBuilder(s.Length);
-        foreach (var ch in s)
-            if (ch is '\t' or '\n' or '\r' || (ch >= ' ' && ch != '\x7f'))
-                sb.Append(ch);
+        foreach (var ch in s.Where(ch => ch is '\t' or '\n' or '\r' || (ch >= ' ' && ch != '\x7f')))
+            sb.Append(ch);
         return sb.ToString()
             .Replace("```", "ˋˋˋ", StringComparison.Ordinal)
             .Replace("<<<WIDGET_OUTPUT_BEGIN>>>", "(begin)", StringComparison.Ordinal)
@@ -725,16 +722,12 @@ public sealed class GenerationPipeline(IModelClient client, WidgetWorkspace work
     static string LoadEmbeddedPrompt()
     {
         var asm = Assembly.GetExecutingAssembly();
-        foreach (var name in asm.GetManifestResourceNames())
-        {
-            if (name.EndsWith("SystemPrompt.txt", StringComparison.Ordinal))
-            {
-                using var s = asm.GetManifestResourceStream(name)!;
-                using var r = new System.IO.StreamReader(s);
-                return r.ReadToEnd();
-            }
-        }
-        throw new InvalidOperationException(
-            "SystemPrompt.txt embedded resource missing — check widget-creator.csproj <EmbeddedResource>.");
+        var name = asm.GetManifestResourceNames()
+            .FirstOrDefault(n => n.EndsWith("SystemPrompt.txt", StringComparison.Ordinal))
+            ?? throw new InvalidOperationException(
+                "SystemPrompt.txt embedded resource missing — check widget-creator.csproj <EmbeddedResource>.");
+        using var s = asm.GetManifestResourceStream(name)!;
+        using var r = new System.IO.StreamReader(s);
+        return r.ReadToEnd();
     }
 }

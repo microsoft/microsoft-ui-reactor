@@ -63,7 +63,7 @@ dotnet run --project samples/apps/widget-creator/widget-creator.csproj -p:Platfo
      (`…\mxc\src\target\<triple>\release\` then `…\mxc\sdk\bin\<arch>\`) over the
      vendored copy, for developers iterating on the MXC CLI itself, or
    - `WIDGET_CREATOR_MXC_ROOT` — the MXC checkout root used by the opt-in above
-     (default `C:\Users\andersonch\Code\mxc`).
+     (default `%USERPROFILE%\Code\mxc`).
 3. **Local Reactor package** — generated widgets reference
    `Microsoft.UI.Reactor 0.0.0-local`, resolved from this repo's `local-nupkgs`
    feed. Run `mur pack-local` if it's missing. Override the feed path with

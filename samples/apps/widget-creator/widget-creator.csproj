@@ -21,6 +21,8 @@
          Versions come from Central Package Management (Directory.Packages.props). -->
     <PackageReference Include="GitHub.Copilot.SDK" />
     <PackageReference Include="Microsoft.WindowsAppSDK" />
+    <!-- Managed DPAPI (per-user) for the H-3 artifact-integrity key. -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" />
   </ItemGroup>
 
   <ItemGroup>
