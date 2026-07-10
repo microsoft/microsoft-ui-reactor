@@ -55,14 +55,9 @@ internal sealed class McpDispatcher
             // response, but HTTP still needs *something* on the wire; an empty
             // result satisfies both strict MCP clients (which ignore the body when
             // id is absent) and curl-happy humans.
-            object? result;
-            if (request.Method.StartsWith("notifications/", StringComparison.Ordinal))
-            {
-                result = new EmptyResult();
-            }
-            else
-            {
-                result = request.Method switch
+            object? result = request.Method.StartsWith("notifications/", StringComparison.Ordinal)
+                ? new EmptyResult()
+                : request.Method switch
                 {
                     "initialize" => HandleInitialize(request.Params),
                     "ping" => new EmptyResult(),
@@ -75,7 +70,6 @@ internal sealed class McpDispatcher
                     "tools/call" => HandleCall(request.Params),
                     _ => HandleDirect(request.Method, request.Params),
                 };
-            }
             return new JsonRpcResponse { Id = request.Id, Result = result };
         }
         catch (McpToolException ex)

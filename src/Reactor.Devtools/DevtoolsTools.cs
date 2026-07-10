@@ -92,12 +92,10 @@ internal static class DevtoolsTools
                 Name: "version",
                 Description: "Returns the running app's build tag, pid, and MCP port. Zero side effects.",
                 InputSchema: Schema.Root()),
-            _ => new
-            {
-                build = server.BuildTag,
-                pid = Process.GetCurrentProcess().Id,
-                mcpPort = server.Port,
-            });
+            _ => new VersionResult(
+                Build: server.BuildTag,
+                Pid: Process.GetCurrentProcess().Id,
+                McpPort: server.Port));
     }
 
     // -- components --------------------------------------------------------------

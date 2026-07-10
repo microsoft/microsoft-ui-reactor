@@ -58,6 +58,9 @@ internal sealed record InitializeServerInfo(string Name, string Version);
 
 // -- reactor.* + windows.* tools (DevtoolsTools) ----------------------------------
 
+/// <summary>Result of the <c>version</c> tool.</summary>
+internal sealed record VersionResult(string Build, int Pid, int McpPort);
+
 /// <summary>Result of the <c>components</c> tool. <see cref="Components"/> is either a
 /// <c>ComponentInfo[]</c> (detailed host) or a <c>string[]</c> (name-only host).</summary>
 internal sealed record ComponentsResult(object Components, string? Current);
