@@ -45,6 +45,9 @@ namespace Microsoft.UI.Reactor
         // analyzer's element-type gate (columns/rows must be GridSize[]) is covered.
         public static GridElement Grid(object[] columns, object[] rows, params Element[] children) => new();
 
+        // Mixed: typed columns but non-GridSize rows — covers the rows half of the gate.
+        public static GridElement Grid(GridSize[] columns, object[] rows, params Element[] children) => new();
+
         public static TextElement Text(string text) => new();
     }
 
@@ -374,6 +377,17 @@ class C
 {
     Element M() => Grid(
         new object[] { ""Auto"", ""*"" },
+        new object[] { ""Auto"" },
+        Text(""a""));
+}");
+
+    [Fact]
+    public Task No_Diagnostic_When_Rows_Not_GridSize() => VerifyAsync(@"
+// Typed columns but non-GridSize rows — the gate requires BOTH tracks be GridSize[].
+class C
+{
+    Element M() => Grid(
+        new[] { GridSize.Auto, GridSize.Star() },
         new object[] { ""Auto"" },
         Text(""a""));
 }");
