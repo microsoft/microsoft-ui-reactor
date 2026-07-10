@@ -40,9 +40,15 @@ internal static class Schema
     public static SchemaNode Root(string[] required, params (string Name, SchemaNode Node)[] properties)
     {
         var props = Dict(properties);
-        global::System.Diagnostics.Debug.Assert(
-            global::System.Array.TrueForAll(required, r => props.ContainsKey(r)),
-            "Schema.Root: every 'required' name must be a declared property.");
+        // Enforced in every configuration: an input schema is part of the MCP wire
+        // contract, so a required name that isn't a declared property is a hard error,
+        // not a Debug-only assert.
+        foreach (var name in required)
+        {
+            if (!props.ContainsKey(name))
+                throw new global::System.ArgumentException(
+                    $"Schema.Root: required property '{name}' is not declared.", nameof(required));
+        }
         return new("object", Properties: props, Required: required, AdditionalProperties: false);
     }
 

@@ -33,7 +33,7 @@
        can be made trim-safe, or a justified [UnconditionalSuppressMessage],
        tracked under issue #70). Any IL code outside this curated list is still an
        error on Release via TreatWarningsAsErrors. -->
-  <PropertyGroup Condition="'$(IsAotCompatible)' == 'true'">
+  <PropertyGroup Condition="'$(IsAotCompatible)' == 'true' And '$(ReactorSkipAotAnalysis)' != 'true'">
     <WarningsAsErrors>$(WarningsAsErrors);IL2026;IL2062;IL2065;IL2067;IL2069;IL2070;IL2072;IL2073;IL2075;IL2087;IL2090;IL2091;IL2111;IL3000;IL3050</WarningsAsErrors>
   </PropertyGroup>
 
