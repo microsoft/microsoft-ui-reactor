@@ -44,6 +44,7 @@ namespace Microsoft.UI.Reactor.Hosting.Devtools;
 [JsonSerializable(typeof(OkViaResult))]
 [JsonSerializable(typeof(WaitForResult))]
 [JsonSerializable(typeof(WaitObserved))]
+[JsonSerializable(typeof(ScrollResult))]
 [JsonSerializable(typeof(TreeResult))]
 [JsonSerializable(typeof(SchemaNode))]
 [JsonSerializable(typeof(SchemaDocument))]

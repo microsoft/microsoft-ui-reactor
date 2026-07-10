@@ -28,6 +28,11 @@ internal sealed record McpErrorData(
     string[]? ActiveIds = null,
     string[]? Available = null,
     string[]? ReachableMethods = null,
+    string? Id = null,
+    string? IdWindow = null,
+    string? Requested = null,
+    string[]? Candidates = null,
+    int? Count = null,
     string? Hint = null);
 
 /// <summary>An empty JSON-RPC result object (<c>{}</c>) — <c>ping</c> / <c>notifications/*</c>.</summary>
@@ -118,3 +123,14 @@ internal sealed record WaitForResult(
     WaitObserved? Observed = null);
 
 internal sealed record WaitObserved(int? Count, string? Text, bool? Visible);
+
+/// <summary>Result of <c>scroll</c> — success plus the resulting scroll geometry.</summary>
+internal sealed record ScrollResult(
+    bool Ok,
+    ScrollAxis ScrollPercent,
+    ScrollAxis ScrollOffsetPx,
+    ScrollableSize ScrollableSizePx);
+
+internal sealed record ScrollAxis(double? Horizontal, double? Vertical);
+
+internal sealed record ScrollableSize(double? Width, double? Height);

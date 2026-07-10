@@ -409,13 +409,11 @@ internal static class DevtoolsUiaTools
                         scrollableHeight = sv.ScrollableHeight;
                     }
 
-                    return new
-                    {
-                        ok = true,
-                        scrollPercent = new { horizontal = horizPctOut, vertical = vertPctOut },
-                        scrollOffsetPx = new { horizontal = horizPxOut, vertical = vertPxOut },
-                        scrollableSizePx = new { width = scrollableWidth, height = scrollableHeight },
-                    };
+                    return new ScrollResult(
+                        Ok: true,
+                        ScrollPercent: new ScrollAxis(horizPctOut, vertPctOut),
+                        ScrollOffsetPx: new ScrollAxis(horizPxOut, vertPxOut),
+                        ScrollableSizePx: new ScrollableSize(scrollableWidth, scrollableHeight));
                 }
 
                 throw new McpToolException(

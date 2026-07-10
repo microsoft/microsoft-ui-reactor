@@ -54,23 +54,17 @@ internal static class DevtoolsPropertyTools
                     bool isLocal;
                     try { isLocal = !Equals(el.ReadLocalValue(dp), DependencyProperty.UnsetValue); }
                     catch { isLocal = false; }
-                    return new
-                    {
+                    return new PropertyResult(
                         name,
-                        value = FormatValue(value),
-                        valueType = value?.GetType().Name ?? "null",
-                        declaringType = field.DeclaringType?.Name,
-                        isLocal,
-                    };
+                        FormatValue(value),
+                        value?.GetType().Name ?? "null",
+                        field.DeclaringType?.Name,
+                        isLocal);
                 }
 
                 // Enumerate all DPs via reflection on the type hierarchy.
                 var props = EnumerateDependencyProperties(el);
-                return (object)new
-                {
-                    count = props.Count,
-                    properties = props,
-                };
+                return (object)new PropertiesResult(props.Count, props);
             }));
     }
 
@@ -106,12 +100,7 @@ internal static class DevtoolsPropertyTools
                 var parsed = ParseValue(raw, targetType);
                 el.SetValue(dp, parsed);
 
-                return new
-                {
-                    ok = true,
-                    name,
-                    newValue = FormatValue(el.GetValue(dp)),
-                };
+                return new SetPropertyResult(true, name, FormatValue(el.GetValue(dp)));
             }));
     }
 
@@ -178,7 +167,7 @@ internal static class DevtoolsPropertyTools
                 if (scope is "app")
                     CollectResources(Application.Current.Resources, "app", filterRe, results);
 
-                return new { count = results.Count, resources = results };
+                return new ResourcesResult(results.Count, results);
             }));
     }
 
@@ -222,7 +211,7 @@ internal static class DevtoolsPropertyTools
                             "scope='application' mutates Application.Current.Resources for the lifetime of the process. " +
                             "Pass confirmAppWide=true to opt in, or use 'element' / 'window' instead.",
                             JsonRpcErrorCodes.InvalidParams,
-                            new { code = "app-wide-confirmation-required" });
+                            new McpErrorData("app-wide-confirmation-required"));
                 }
                 var selector = DevtoolsTools.ReadString(@params, "selector");
                 var windowId = DevtoolsTools.ReadString(@params, "window");
@@ -267,7 +256,7 @@ internal static class DevtoolsPropertyTools
                 var parsed = ParseValue(raw, targetType);
                 dict[key] = parsed;
 
-                return new { ok = true, key, newValue = FormatValue(parsed), replaced = existedAtScope };
+                return new SetResourceResult(true, key, FormatValue(parsed), existedAtScope);
             }));
     }
 
@@ -294,9 +283,9 @@ internal static class DevtoolsPropertyTools
 
                 var style = fe.Style;
                 if (style is null)
-                    return (object)new { hasStyle = false };
+                    return new StylesResult(false);
 
-                return (object)new { hasStyle = true, style = DescribeStyle(style) };
+                return new StylesResult(true, DescribeStyle(style));
             }));
     }
 
@@ -333,7 +322,7 @@ internal static class DevtoolsPropertyTools
                     });
                     current = VisualTreeHelper.GetParent(current);
                 }
-                return new { count = chain.Count, ancestors = chain };
+                return new AncestorsResult(chain.Count, chain);
             }));
     }
 
@@ -673,3 +662,25 @@ internal static class DevtoolsPropertyTools
         };
     }
 }
+
+// -- DevtoolsPropertyTools reflective envelopes ----------------------------------
+// These carry arbitrary DP / resource / style values (object, List<object>), so they
+// stay on the reflection resolver — deliberately NOT registered in DevtoolsJsonContext,
+// which keeps the properties / setProperty / resources / setResource / styles /
+// ancestors fixtures AOT-skip-listed. Named only to keep the tool handlers free of
+// anonymous return types (the dynamic values remain object). Serialized via
+// DevtoolsMcpServer.JsonOpts (camelCase + WhenWritingNull) exactly like the prior
+// anonymous shapes.
+internal sealed record PropertyResult(string Name, object? Value, string ValueType, string? DeclaringType, bool IsLocal);
+
+internal sealed record PropertiesResult(int Count, IReadOnlyList<object> Properties);
+
+internal sealed record SetPropertyResult(bool Ok, string Name, object? NewValue);
+
+internal sealed record ResourcesResult(int Count, IReadOnlyList<object> Resources);
+
+internal sealed record SetResourceResult(bool Ok, string Key, object? NewValue, bool Replaced);
+
+internal sealed record StylesResult(bool HasStyle, object? Style = null);
+
+internal sealed record AncestorsResult(int Count, IReadOnlyList<object> Ancestors);

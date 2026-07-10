@@ -39,7 +39,7 @@ internal static class DevtoolsStateTool
             throw new McpToolException(
                 "No root component is mounted.",
                 JsonRpcErrorCodes.ToolExecution,
-                new { code = "not-ready" });
+                new McpErrorData("not-ready"));
 
         var ctx = GetContext(root);
         var snapshots = ctx.SnapshotHooks();
