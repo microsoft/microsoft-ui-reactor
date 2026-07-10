@@ -119,23 +119,20 @@ internal static class DevtoolsDockingTools
                 int paneCount = CountPanes(snapshot.Root);
                 paneCount += snapshot.LeftSide.Count + snapshot.TopSide.Count
                            + snapshot.RightSide.Count + snapshot.BottomSide.Count;
-                return (object)new
-                {
-                    id = r.Id,
-                    paneCount,
-                    activeKey = snapshot.ActiveKey,
-                    sideCounts = new
-                    {
-                        left = snapshot.LeftSide.Count,
-                        top = snapshot.TopSide.Count,
-                        right = snapshot.RightSide.Count,
-                        bottom = snapshot.BottomSide.Count,
-                    },
-                };
+                return new DockHostSummary(
+                    Id: r.Id,
+                    PaneCount: paneCount,
+                    ActiveKey: snapshot.ActiveKey,
+                    SideCounts: new DockSideCounts(
+                        Left: snapshot.LeftSide.Count,
+                        Top: snapshot.TopSide.Count,
+                        Right: snapshot.RightSide.Count,
+                        Bottom: snapshot.BottomSide.Count));
             })
             .Where(h => h is not null)
+            .Select(h => h!)
             .ToArray();
-        return new { hosts };
+        return new DockListResult(hosts);
     }
 
     internal static object BuildSnapshotPayload(JsonElement? @params)
@@ -146,12 +143,12 @@ internal static class DevtoolsDockingTools
             ?? throw new McpToolException(
                 $"Unknown hostId '{hostId}'.",
                 JsonRpcErrorCodes.ToolExecution,
-                new { code = "unknown-host", hostId });
+                new McpErrorData("unknown-host", HostId: hostId));
         var snapshot = DockSnapshotBuilder.FromRecord(record)
             ?? throw new McpToolException(
                 $"Host '{hostId}' is no longer live (manager GC'd).",
                 JsonRpcErrorCodes.ToolExecution,
-                new { code = "host-gc", hostId });
+                new McpErrorData("host-gc", HostId: hostId));
         return ToJsonShape(snapshot);
     }
 
@@ -168,17 +165,17 @@ internal static class DevtoolsDockingTools
             ?? throw new McpToolException(
                 $"Unknown hostId '{hostId}'.",
                 JsonRpcErrorCodes.ToolExecution,
-                new { code = "unknown-host", hostId });
+                new McpErrorData("unknown-host", HostId: hostId));
         var manager = record.Manager
             ?? throw new McpToolException(
                 $"Host '{hostId}' is no longer live (manager GC'd).",
                 JsonRpcErrorCodes.ToolExecution,
-                new { code = "host-gc", hostId });
+                new McpErrorData("host-gc", HostId: hostId));
         var model = DockHostModelBridge.Get(manager)
             ?? throw new McpToolException(
                 $"Host '{hostId}' has no bound DockHostModel (renderer not yet mounted?).",
                 JsonRpcErrorCodes.ToolExecution,
-                new { code = "no-model", hostId });
+                new McpErrorData("no-model", HostId: hostId));
 
         // Resolve the pane via the model's enumeration so we match docked,
         // side-stripped, and floating panes alike. Stringified-key
@@ -202,14 +199,14 @@ internal static class DevtoolsDockingTools
             throw new McpToolException(
                 $"No pane with key '{paneKey}' on host '{hostId}'.",
                 JsonRpcErrorCodes.ToolExecution,
-                new { code = "unknown-pane", hostId, paneKey });
+                new McpErrorData("unknown-pane", HostId: hostId, PaneKey: paneKey));
         if (matchCount > 1)
             throw new McpToolException(
                 $"Pane key '{paneKey}' is ambiguous on host '{hostId}' ({matchCount} matches). " +
                 "Distinct DockableContent.Key objects whose ToString() collide cannot be addressed by docking.dock today; " +
                 "give the panes unique stringified keys (spec §2.9 / §2.26 follow-up: stable pane-id field).",
                 JsonRpcErrorCodes.ToolExecution,
-                new { code = "ambiguous-pane", hostId, paneKey, matchCount });
+                new McpErrorData("ambiguous-pane", HostId: hostId, PaneKey: paneKey, MatchCount: matchCount));
 
         switch (action.ToLowerInvariant())
         {
@@ -264,7 +261,7 @@ internal static class DevtoolsDockingTools
                     JsonRpcErrorCodes.InvalidParams);
         }
 
-        return new { ok = true, hostId, paneKey, action };
+        return new DockActionResult(Ok: true, HostId: hostId, PaneKey: paneKey, Action: action);
     }
 
     // ── Shape helpers ────────────────────────────────────────────────────
@@ -278,51 +275,73 @@ internal static class DevtoolsDockingTools
         _ => 0,
     };
 
-    // Convert the typed DockSnapshot record to anonymous-object shape so the
-    // JSON-RPC framework's existing serializer surface handles it without
-    // needing source-gen entries in DevtoolsJsonContext. The shape mirrors
-    // DockSnapshotShape one-to-one.
-    internal static object ToJsonShape(DockSnapshot snap) => new
-    {
-        hostId = snap.HostId,
-        root = NodeToJson(snap.Root),
-        leftSide = snap.LeftSide.Select(PaneToJson).ToArray(),
-        topSide = snap.TopSide.Select(PaneToJson).ToArray(),
-        rightSide = snap.RightSide.Select(PaneToJson).ToArray(),
-        bottomSide = snap.BottomSide.Select(PaneToJson).ToArray(),
-        activeKey = snap.ActiveKey,
-    };
+    // Convert the typed DockSnapshot record into the devtools wire shape via
+    // named records (registered in DevtoolsJsonContext) so the JSON-RPC
+    // response serializes through the source generator under NativeAOT. The
+    // shape mirrors the previous anonymous objects one-to-one.
+    internal static object ToJsonShape(DockSnapshot snap) => new DockSnapshotResult(
+        HostId: snap.HostId,
+        Root: NodeToJson(snap.Root),
+        LeftSide: snap.LeftSide.Select(PaneToJson).ToArray(),
+        TopSide: snap.TopSide.Select(PaneToJson).ToArray(),
+        RightSide: snap.RightSide.Select(PaneToJson).ToArray(),
+        BottomSide: snap.BottomSide.Select(PaneToJson).ToArray(),
+        ActiveKey: snap.ActiveKey);
 
-    private static object? NodeToJson(DockSnapshotNode? node) => node switch
+    private static DockNodeDto? NodeToJson(DockSnapshotNode? node) => node switch
     {
         null => null,
-        DockSnapshotSplit s => new
-        {
-            kind = "split",
-            orientation = s.Orientation,
-            children = s.Children.Select(NodeToJson).ToArray(),
-        },
-        DockSnapshotTabGroup g => new
-        {
-            kind = "tabgroup",
-            selectedIndex = g.SelectedIndex,
-            documents = g.Documents.Select(PaneToJson).ToArray(),
-        },
-        DockSnapshotLeaf l => new
-        {
-            kind = "leaf",
-            pane = PaneToJson(l.Pane),
-        },
+        DockSnapshotSplit s => new DockNodeDto(
+            Kind: "split",
+            Orientation: s.Orientation,
+            Children: s.Children.Select(NodeToJson).ToArray()),
+        DockSnapshotTabGroup g => new DockNodeDto(
+            Kind: "tabgroup",
+            SelectedIndex: g.SelectedIndex,
+            Documents: g.Documents.Select(PaneToJson).ToArray()),
+        DockSnapshotLeaf l => new DockNodeDto(
+            Kind: "leaf",
+            Pane: PaneToJson(l.Pane)),
         _ => null,
     };
 
-    private static object PaneToJson(DockSnapshotPane p) => new
-    {
-        key = p.Key,
-        title = p.Title,
-        role = p.Role,
-        canClose = p.CanClose,
-        canFloat = p.CanFloat,
-        canMove = p.CanMove,
-    };
+    private static DockPaneDto PaneToJson(DockSnapshotPane p) =>
+        new(p.Key, p.Title, p.Role, p.CanClose, p.CanFloat, p.CanMove);
 }
+
+/// <summary>Result of the <c>docking list</c> tool — one summary per dock host.</summary>
+internal sealed record DockListResult(DockHostSummary[] Hosts);
+
+internal sealed record DockHostSummary(string Id, int PaneCount, string? ActiveKey, DockSideCounts SideCounts);
+
+internal sealed record DockSideCounts(int Left, int Top, int Right, int Bottom);
+
+/// <summary>Result of the <c>docking snapshot</c> tool — the full dock layout tree.</summary>
+internal sealed record DockSnapshotResult(
+    string HostId,
+    DockNodeDto? Root,
+    DockPaneDto[] LeftSide,
+    DockPaneDto[] TopSide,
+    DockPaneDto[] RightSide,
+    DockPaneDto[] BottomSide,
+    string? ActiveKey);
+
+/// <summary>
+/// A node in the dock layout tree. Union over the split/tabgroup/leaf shapes
+/// (discriminated by <see cref="Kind"/>); unused arms are null and omitted, so the
+/// wire is identical to the previous per-kind anonymous objects. Recursive via
+/// <see cref="Children"/>.
+/// </summary>
+internal sealed record DockNodeDto(
+    string Kind,
+    string? Orientation = null,
+    DockNodeDto?[]? Children = null,
+    int? SelectedIndex = null,
+    DockPaneDto[]? Documents = null,
+    DockPaneDto? Pane = null);
+
+/// <summary>Pane identity as surfaced by the <c>docking</c> tool.</summary>
+internal sealed record DockPaneDto(string? Key, string Title, string Role, bool CanClose, bool CanFloat, bool CanMove);
+
+/// <summary>Result of a <c>docking dock</c> mutation action.</summary>
+internal sealed record DockActionResult(bool Ok, string HostId, string PaneKey, string Action);
