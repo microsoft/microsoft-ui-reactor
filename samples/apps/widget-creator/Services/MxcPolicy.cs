@@ -33,9 +33,10 @@ public enum PathAccess
 /// Helpers for a widget's MXC permission policy. The policy is a JSON "template"
 /// (a partial <c>ContainerConfig</c>) that <see cref="MxcSandbox"/> merges with
 /// the computed run fields (process command line/cwd + the app-dir grant) at
-/// launch. A widget with no stored policy uses <see cref="DefaultJson"/> — the
-/// behavior shipped before this feature: a visible window plus outbound internet,
-/// with no clipboard access and no input injection.
+/// launch. A widget with no stored policy uses <see cref="DefaultJson"/> — a
+/// least-privilege baseline: a visible window with <b>no</b> outbound network, no
+/// clipboard access, and no input injection. Network (and any other capability) is
+/// opt-in per widget via the Permissions dialog.
 ///
 /// <para>The JSON string is the single source of truth. The dialog's friendly
 /// controls are typed accessors over it, and advanced mode edits it directly, so
@@ -53,19 +54,25 @@ public static class MxcPolicy
 
     static readonly JsonSerializerOptions Pretty = new() { WriteIndented = true };
 
-    /// <summary>The default policy (today's behavior) as a mutable JSON object.</summary>
+    /// <summary>The default policy (least privilege) as a mutable JSON object.</summary>
     public static JsonObject DefaultTemplate() => new()
     {
         ["version"] = MxcSandbox.SchemaVersion,
         ["containment"] = "processcontainer",
         ["appContainer"] = new JsonObject
         {
+            // H-2: no capabilities by default (no outbound network) until the user
+            // grants them per-widget in the Permissions dialog. leastPrivilege stays
+            // FALSE on purpose — the stricter AppContainer breaks WinUI window
+            // creation (managed exception at MountAndActivate); turning off network
+            // already removes the main default exfiltration channel.
             ["leastPrivilege"] = false,
-            ["capabilities"] = new JsonArray(InternetCapability),
+            ["capabilities"] = new JsonArray(),
         },
         ["network"] = new JsonObject
         {
-            ["defaultPolicy"] = "allow",
+            // H-2: outbound network is opt-in, not on by default.
+            ["defaultPolicy"] = "block",
             ["enforcementMode"] = "capabilities",
         },
         ["ui"] = new JsonObject
