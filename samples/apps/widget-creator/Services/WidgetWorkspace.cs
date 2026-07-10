@@ -97,6 +97,9 @@ public sealed class WidgetWorkspace
             !text.Contains("<TargetPlatformMinVersion>", StringComparison.Ordinal) ||
             !text.Contains("<SupportedOSPlatformVersion>", StringComparison.Ordinal) ||
             !text.Contains("Microsoft.UI.Reactor.Advanced", StringComparison.Ordinal) ||
+            // Framework-dependent switch: force a rewrite so existing widgets stop
+            // bundling the full Windows App SDK runtime (~220 MB per widget).
+            text.Contains("<WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>", StringComparison.Ordinal) ||
             // H-1: force a rewrite so existing widgets pick up the build-lockdown props.
             !text.Contains("RestorePackagesWithLockFile", StringComparison.Ordinal);
     }
@@ -123,7 +126,14 @@ public sealed class WidgetWorkspace
             <Platforms>x64;ARM64;X86</Platforms>
             <UseWinUI>true</UseWinUI>
             <WindowsPackageType>None</WindowsPackageType>
-            <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+            <!-- Framework-dependent Windows App SDK: load the machine-installed
+                 Windows App Runtime instead of copying the full ~220 MB native
+                 runtime into every widget's publish dir. The unpackaged
+                 auto-bootstrapper resolves the installed Microsoft.WindowsAppRuntime
+                 at launch; the sandbox's AppContainer already has read+execute on
+                 the framework package under C:\Program Files\WindowsApps (same way
+                 it reaches C:\Program Files\dotnet). -->
+            <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
             <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' And ('$(Platform)' == '' Or '$(Platform)' == 'AnyCPU' Or '$(Platform)' == 'Any CPU')">$(NETCoreSdkPortableRuntimeIdentifier)</RuntimeIdentifier>
             <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
             <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
