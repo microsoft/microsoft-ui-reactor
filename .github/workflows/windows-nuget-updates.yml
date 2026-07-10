@@ -1,0 +1,158 @@
+# Weekly NuGet updates for packages that GitHub-hosted Dependabot can't reach.
+#
+# Why this exists:
+#   Dependabot runs every version-update job on Linux and cannot restore this
+#   repo's Windows-only project graph — the WinUI / WindowsAppSDK apps on
+#   net*-windows TFMs, but ALSO plain net10.0 projects such as src/Reactor.Cli
+#   that Dependabot's Linux evaluation still fails on. With Central Package
+#   Management, Dependabot only bumps a <PackageVersion> when it can see a
+#   successfully-evaluated project that references it — so packages referenced
+#   ONLY by those projects (e.g. GitHub.Copilot.SDK, YamlDotNet) never get a
+#   Dependabot PR. This workflow runs the same detection on a windows-latest
+#   runner, where the restore succeeds, and opens a PR editing
+#   Directory.Packages.props.
+#
+#   Keep the Linux ecosystems (github-actions, npm, and the Linux-restorable
+#   NuGet packages) on Dependabot — this only backfills the Windows-host gap. The
+#   two may occasionally both propose the same bump; whichever lands first wins
+#   and the other becomes a no-op.
+
+name: Windows NuGet updates
+
+on:
+  schedule:
+    # Mondays 06:17 UTC — weekly, matching the Dependabot cadence.
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: 'Detect and patch Directory.Packages.props but do not open a PR'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: windows-nuget-updates
+  cancel-in-progress: false
+
+env:
+  # Pin the tool for reproducible runs.
+  DOTNET_OUTDATED_VERSION: '4.8.1'
+  # Dedicated bot branch; force-pushed each run so the PR always shows exactly
+  # one commit on top of the default branch.
+  PR_BRANCH: bot/windows-nuget-updates
+  # Package ids to hold back (exact, case-insensitive; comma separated). Seeded
+  # with MessagePack because its 3.x major was intentionally declined in #580 —
+  # remove it here to let this workflow propose that major again.
+  IGNORE_PACKAGES: 'MessagePack'
+
+jobs:
+  update:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          # Always operate on the default branch, even for a manual
+          # workflow_dispatch launched from another branch, so the bot branch is
+          # never based on unrelated feature-branch commits.
+          ref: ${{ github.event.repository.default_branch }}
+          # Default GITHUB_TOKEN pushes do NOT trigger the CI workflow on the
+          # resulting PR. Add a repo secret DEPS_BOT_TOKEN (a PAT or GitHub App
+          # token with contents+pull_requests write) to have CI run automatically.
+          token: ${{ secrets.DEPS_BOT_TOKEN || github.token }}
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install dotnet-outdated
+        shell: pwsh
+        run: |
+          dotnet tool install --global dotnet-outdated-tool --version $env:DOTNET_OUTDATED_VERSION
+          # Ensure the global tools directory is on PATH for later steps.
+          "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+      - name: Detect outdated central packages
+        shell: pwsh
+        run: |
+          # Windows restore of the full graph (incl. WinUI / WindowsAppSDK).
+          # --ignore-failed-sources tolerates the repo's `reactor-local` feed,
+          #   which does not exist on a fresh checkout.
+          # --exclude WindowsAppSDK/Win2D: those are pinned via MSBuild properties
+          #   in Directory.Build.props and must not be rewritten here (kept in sync
+          #   with the ignore list in .github/dependabot.yml).
+          # -pre Auto: only offer pre-releases when the current pin is a pre-release
+          #   (same behavior as Dependabot). CI=true (set by Actions) skips the
+          #   CLI's build-time SignaturesGen/copilot download targets.
+          dotnet-outdated Reactor.slnx `
+            --ignore-failed-sources `
+            --exclude WindowsAppSDK `
+            --exclude Win2D `
+            -pre Auto `
+            --output outdated.json --output-format json
+
+      - name: Apply upgrades to Directory.Packages.props
+        id: apply
+        shell: pwsh
+        run: |
+          ./.github/scripts/apply-cpm-upgrades.ps1 `
+            -ReportPath outdated.json `
+            -PropsPath Directory.Packages.props `
+            -IgnorePackages "$env:IGNORE_PACKAGES" `
+            -GitHubOutput $env:GITHUB_OUTPUT
+
+      - name: Open or update pull request
+        if: steps.apply.outputs.changed == 'true' && !(github.event_name == 'workflow_dispatch' && inputs.dry-run)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.DEPS_BOT_TOKEN || github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          SUMMARY_B64: ${{ steps.apply.outputs.summary_b64 }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          git checkout -B $env:PR_BRANCH
+          git add Directory.Packages.props
+          git commit -m 'deps: bump NuGet packages missed by (Linux) Dependabot'
+          git push --force origin $env:PR_BRANCH
+
+          $summary = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:SUMMARY_B64))
+          $runUrl = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+          # Build the body as an array (Set-Content writes one line per element).
+          # Avoid PowerShell here-strings: their closing "@ cannot be indented,
+          # which is impossible inside an indented YAML run block.
+          $lines = @(
+            'Automated NuGet updates for the **Windows-only project graph** that GitHub-hosted (Linux) Dependabot cannot restore.'
+            ''
+            $summary
+            '---'
+            'Detected on `windows-latest` with `dotnet-outdated` against `Reactor.slnx`.'
+            'Windows App SDK / Win2D stay pinned via `Directory.Build.props` (excluded here).'
+            'Hold packages back via the `IGNORE_PACKAGES` env in `.github/workflows/windows-nuget-updates.yml`.'
+            ''
+            "[Workflow run]($runUrl)"
+          )
+          Set-Content -Path pr-body.md -Value $lines -Encoding utf8
+
+          $existing = gh pr list --head $env:PR_BRANCH --state open --json number --jq '.[0].number // empty'
+          if ([string]::IsNullOrWhiteSpace($existing)) {
+            gh pr create `
+              --base $env:DEFAULT_BRANCH `
+              --head $env:PR_BRANCH `
+              --title 'deps: Windows NuGet updates' `
+              --body-file pr-body.md `
+              --label dependencies `
+              --label nuget
+          } else {
+            Write-Host "Refreshed existing PR #$existing (branch force-pushed)."
+            gh pr edit $existing --body-file pr-body.md
+          }
+          Remove-Item pr-body.md -ErrorAction SilentlyContinue
