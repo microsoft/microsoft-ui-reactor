@@ -50,24 +50,32 @@ internal sealed class McpDispatcher
 
         try
         {
-            object? result = request.Method switch
+            // Notifications are matched by prefix, not exact method, so they live
+            // outside the exact-dispatch switch below. Per JSON-RPC they have no
+            // response, but HTTP still needs *something* on the wire; an empty
+            // result satisfies both strict MCP clients (which ignore the body when
+            // id is absent) and curl-happy humans.
+            object? result;
+            if (request.Method.StartsWith("notifications/", StringComparison.Ordinal))
             {
-                "initialize" => HandleInitialize(request.Params),
-                "ping" => new EmptyResult(),
-                // Notifications have no response per JSON-RPC, but HTTP still
-                // needs *something* on the wire. Returning an empty result
-                // satisfies both strict MCP clients (which ignore the body
-                // when id is absent) and curl-happy humans.
-                var m when m.StartsWith("notifications/", StringComparison.Ordinal) => new EmptyResult(),
-                "tools/list" => BuildToolsListResult(),
-                // MCP resource / prompt surfaces are not implemented yet; return
-                // the empty inventory so `initialize`-speaking clients don't fail
-                // their discovery step.
-                "resources/list" => new ResourcesListResult(Array.Empty<object>()),
-                "prompts/list" => new PromptsListResult(Array.Empty<object>()),
-                "tools/call" => HandleCall(request.Params),
-                _ => HandleDirect(request.Method, request.Params),
-            };
+                result = new EmptyResult();
+            }
+            else
+            {
+                result = request.Method switch
+                {
+                    "initialize" => HandleInitialize(request.Params),
+                    "ping" => new EmptyResult(),
+                    "tools/list" => BuildToolsListResult(),
+                    // MCP resource / prompt surfaces are not implemented yet; return
+                    // the empty inventory so `initialize`-speaking clients don't fail
+                    // their discovery step.
+                    "resources/list" => new ResourcesListResult(Array.Empty<object>()),
+                    "prompts/list" => new PromptsListResult(Array.Empty<object>()),
+                    "tools/call" => HandleCall(request.Params),
+                    _ => HandleDirect(request.Method, request.Params),
+                };
+            }
             return new JsonRpcResponse { Id = request.Id, Result = result };
         }
         catch (McpToolException ex)

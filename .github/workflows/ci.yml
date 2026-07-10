@@ -111,6 +111,10 @@ jobs:
         run: dotnet test tests/Reactor.Tests/Reactor.Tests.csproj --no-restore -p:Platform=x64 -p:SkipSignaturesGen=true -p:SkipReactorApiGen=true --logger "console;verbosity=normal" --blame-hang-timeout 180s --blame-hang-dump-type none
 
       - name: Test (Reactor.Advanced.Tests)
+        # !cancelled() so this still runs when Reactor.Tests failed above — we want
+        # the full failure picture from one CI run, not one-failure-at-a-time. The
+        # job still fails because the Reactor.Tests step's non-zero exit stands.
+        if: ${{ !cancelled() }}
         run: dotnet test tests/Reactor.Advanced.Tests/Reactor.Advanced.Tests.csproj --no-restore -p:Platform=x64 --logger "console;verbosity=normal" --blame-hang-timeout 180s --blame-hang-dump-type none
 
   integration-tests:
