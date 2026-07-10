@@ -57,6 +57,25 @@ foreach ($item in $IgnorePackages) {
 $ignoreSet = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
 foreach ($p in $ignore) { [void]$ignoreSet.Add($p) }
 
+function Test-NuGetVersionGreater {
+    # True if NuGet version $a is strictly greater than $b, using full SemVer 2.0
+    # precedence (release + prerelease). [semver] parses NuGet prerelease strings
+    # like 11.0.0-preview.5.26302.115 and orders numeric identifiers correctly
+    # (preview.10 > preview.9; a stable release outranks its prereleases).
+    param([string] $a, [string] $b)
+    try {
+        return ([semver]$a).CompareTo([semver]$b) -gt 0
+    } catch {
+        # 4-segment versions (e.g. 1.2.3.4) aren't SemVer-parseable; fall back to
+        # a numeric release comparison (the prerelease suffix, if any, is dropped).
+        try {
+            return ([version]($a -replace '[-+].*$','')) -gt ([version]($b -replace '[-+].*$',''))
+        } catch {
+            return $false
+        }
+    }
+}
+
 # Collect Name -> highest LatestVersion across every project/target framework.
 $report = Get-Content $ReportPath -Raw | ConvertFrom-Json
 $wanted = @{}
@@ -68,10 +87,8 @@ foreach ($proj in @($report.Projects)) {
             if ([string]::IsNullOrWhiteSpace($name) -or [string]::IsNullOrWhiteSpace($latest)) { continue }
             if ($ignoreSet.Contains($name)) { continue }
             if ($wanted.ContainsKey($name)) {
-                # Keep the higher target if two projects disagree.
-                try {
-                    if ([version]($latest -replace '[^\d.].*$','') -gt [version]($wanted[$name] -replace '[^\d.].*$','')) { $wanted[$name] = $latest }
-                } catch { $wanted[$name] = $latest }
+                # Keep the higher target if two projects/TFMs disagree.
+                if (Test-NuGetVersionGreater $latest $wanted[$name]) { $wanted[$name] = $latest }
             } else {
                 $wanted[$name] = $latest
             }
