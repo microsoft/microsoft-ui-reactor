@@ -18,5 +18,6 @@
   </ItemGroup>
   <ItemGroup>
     <Content Include="Assets\ControlImages\**" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\GalleryIcon.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

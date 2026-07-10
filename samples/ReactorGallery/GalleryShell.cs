@@ -117,6 +117,8 @@ class GalleryShell : Component
 
             (TitleBar("Reactor WinUI Gallery") with
             {
+                Icon = new ImageIconData(new Uri(global::System.IO.Path.Combine(
+                    global::System.AppContext.BaseDirectory, "Assets", "GalleryIcon.ico"))),
                 Content = HStack(8,
                     AutoSuggestBox(searchQuery, setSearchQuery)
                         .Width(320)
