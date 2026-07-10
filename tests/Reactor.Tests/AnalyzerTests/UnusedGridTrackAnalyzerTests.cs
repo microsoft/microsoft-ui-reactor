@@ -41,8 +41,9 @@ namespace Microsoft.UI.Reactor
     {
         public static GridElement Grid(GridSize[] columns, GridSize[] rows, params Element[] children) => new();
 
-        [Obsolete(""Use the typed overload."", error: false)]
-        public static GridElement Grid(string[] columns, string[] rows, params Element[] children) => new();
+        // A non-GridSize track shape (never a real Reactor API) — exists only so the
+        // analyzer's element-type gate (columns/rows must be GridSize[]) is covered.
+        public static GridElement Grid(object[] columns, object[] rows, params Element[] children) => new();
 
         public static TextElement Text(string text) => new();
     }
@@ -367,13 +368,13 @@ class C
 }");
 
     [Fact]
-    public Task No_Diagnostic_For_NonTyped_String_Grid() => VerifyAsync(@"
-// A non-typed (string[]) Grid shape is out of scope for this analyzer.
+    public Task No_Diagnostic_For_NonGridSize_Track_Type() => VerifyAsync(@"
+// A Grid whose track arrays are not GridSize[] is out of scope for this analyzer.
 class C
 {
     Element M() => Grid(
-        new[] { ""Auto"", ""*"" },
-        new[] { ""Auto"" },
+        new object[] { ""Auto"", ""*"" },
+        new object[] { ""Auto"" },
         Text(""a""));
 }");
 
