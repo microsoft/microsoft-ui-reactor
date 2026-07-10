@@ -56,5 +56,15 @@ Or re-copy from a local mxc SDK build:
 Copy-Item <mxc>/sdk/bin/arm64/* samples/apps/widget-creator/tools/mxc/win-arm64/ -Force
 ```
 
+> **Integrity pins (C-3).** The app verifies these binaries against compiled-in
+> SHA-256 hashes before running them (`Services/MxcBinaryManifest.cs`). Whenever you
+> refresh the binaries you **must** recompute and update those hashes in the same
+> change, or the sandbox will refuse to launch:
+>
+> ```powershell
+> Get-FileHash samples\apps\widget-creator\tools\mxc\win-arm64\*.exe -Algorithm SHA256
+> Get-FileHash samples\apps\widget-creator\tools\mxc\win-x64\*.exe   -Algorithm SHA256
+> ```
+
 > These are prebuilt binaries from a separate repository. Keep them in sync with a
 > known-good mxc build, and confirm redistribution is allowed before publishing.

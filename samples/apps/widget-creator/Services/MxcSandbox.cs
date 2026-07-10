@@ -15,6 +15,10 @@ namespace WidgetCreator.Services;
 /// <summary>Outcome of a sandboxed run (full lifetime — returns when the widget exits).</summary>
 public sealed record SandboxResult(int ExitCode, string Output)
 {
+    /// <summary>Marker the host emits when its out-of-band containment check (C-2)
+    /// kills a widget it found running uncontained.</summary>
+    public const string ContainmentFailedMarker = "WIDGET_CONTAINMENT_FAILED";
+
     public string ExitCodeHex => $"0x{(uint)ExitCode:X8}";
 
     /// <summary>
@@ -27,14 +31,25 @@ public sealed record SandboxResult(int ExitCode, string Output)
         || Output.Contains("OpenWindowCore", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
+    /// True when the host's own out-of-band containment check (C-2) positively
+    /// determined the widget was running <b>uncontained</b> and terminated it. This
+    /// is a sandbox/host fail-open, not a widget bug — even if the widget had
+    /// already printed its window markers — so it is a launch failure and must
+    /// never reach the crash-repair loop.
+    /// </summary>
+    public bool ContainmentFailed =>
+        Output.Contains(ContainmentFailedMarker, StringComparison.Ordinal);
+
+    /// <summary>
     /// True when <c>wxc-exec</c> itself failed to set up the sandbox and never ran
     /// the widget — e.g. the host's BaseContainer tier is gated and the DACL
     /// fallback can't grant the requested path (no <c>WRITE_DAC</c>), or a
-    /// capability is unimplemented. These are permission/host problems, NOT widget
+    /// capability is unimplemented — or when the host's containment check found
+    /// the widget uncontained. These are permission/host problems, NOT widget
     /// bugs, so they must not trigger the Copilot crash-repair loop.
     /// </summary>
     public bool LaunchFailed =>
-        ExitCode != 0 && !WidgetStarted && HasSandboxError;
+        ContainmentFailed || (ExitCode != 0 && !WidgetStarted && HasSandboxError);
 
     /// <summary>First <c>wxc-exec</c> <c>error:</c> line, if any, for user-facing messaging.</summary>
     public string? LaunchErrorMessage =>
@@ -63,10 +78,11 @@ public sealed record SandboxResult(int ExitCode, string Output)
 
 /// <summary>
 /// Runs a built widget inside an MXC sandbox via the native <c>wxc-exec</c>
-/// binary. The policy demonstrates a "web-like" experience:
+/// binary. The default policy is <b>least privilege</b>:
 /// <list type="bullet">
 ///   <item>UI allowed — the widget shows a real WinUI window.</item>
-///   <item>Outbound network allowed (the <c>internetClient</c> capability).</item>
+///   <item>No outbound network by default — the <c>internetClient</c> capability is
+///   opt-in per widget via the Permissions dialog (H-2).</item>
 ///   <item>No local filesystem — the AppContainer is default-deny; MXC grants
 ///   read+execute to <b>only the app's own publish directory</b> (from
 ///   <c>filesystem.readonlyPaths</c>, via its DACL manager), so the user
@@ -77,11 +93,11 @@ public sealed class MxcSandbox
 {
     public const string SchemaVersion = "0.6.0-alpha";
 
-    /// <summary>Human-readable summary of the policy this sandbox applies.</summary>
+    /// <summary>Human-readable summary of the default policy this sandbox applies.</summary>
     public static (string Label, string Value, string Note)[] PolicyRows =>
     [
         ("UI / display",     "Allowed",  "the widget renders a real window"),
-        ("Outbound network", "Allowed",  "remote HTTP(S) reachable (internetClient)"),
+        ("Outbound network", "Blocked",  "off by default — grant per-widget in Permissions"),
         ("Local filesystem", "Blocked",  "only the app's own dir is granted; user files unreachable"),
         ("Clipboard",        "None",     "no clipboard read/write"),
         ("Input injection",  "None",     "cannot synthesize keyboard/mouse"),
@@ -164,6 +180,36 @@ public sealed class MxcSandbox
 
     public bool IsAvailable => File.Exists(WxcExecPath);
 
+    /// <summary>Whether the resolved wxc-exec is the pinned, vendored copy (vs a dev override).</summary>
+    static bool UsingBundled =>
+        string.Equals(WxcExecPath, BundledWxcExec, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// C-3 integrity result: <c>null</c> when the pinned vendored binary set verifies
+    /// (or when a deliberate dev override is in effect), otherwise the failure reason.
+    /// Only the vendored copy is pinned; explicit <c>WIDGET_CREATOR_WXC_EXEC</c> /
+    /// <c>WIDGET_CREATOR_MXC_BIN</c> / <c>WIDGET_CREATOR_USE_LOCAL_MXC</c> overrides are a
+    /// conscious developer choice and bypass the pin (logged). Computed once.
+    /// </summary>
+    public static string? IntegrityError => _integrity.Value;
+
+    static readonly Lazy<string?> _integrity = new(ComputeIntegrityError);
+
+    static string? ComputeIntegrityError()
+    {
+        if (!UsingBundled)
+        {
+            SessionLog.Write($"[Sandbox] integrity pin bypassed — non-vendored wxc-exec '{WxcExecPath}'");
+            return null;
+        }
+        var dir = Path.GetDirectoryName(BundledWxcExec)!;
+        var error = MxcBinaryManifest.Verify(BundleRid, dir);
+        SessionLog.Write(error is null
+            ? "[Sandbox] vendored MXC binaries verified against integrity pins."
+            : $"[Sandbox] INTEGRITY FAILURE: {error}");
+        return error;
+    }
+
     /// <summary>
     /// Build the wxc-exec ContainerConfig JSON for a widget exe. Starts from a
     /// per-widget permission policy template (<paramref name="policyTemplateJson"/>;
@@ -216,6 +262,12 @@ public sealed class MxcSandbox
 
     static string Quote(string p) => p.Contains(' ') ? $"\"{p}\"" : p;
 
+    const string RequireBaseContainerNote =
+        "Strict containment is enabled (WIDGET_CREATOR_REQUIRE_BASE_CONTAINER):";
+
+    static string Tail(string s, int max) =>
+        string.IsNullOrEmpty(s) || s.Length <= max ? s : s[^max..];
+
     /// <summary>
     /// Launch <paramref name="exePath"/> in the sandbox. Blocks until the
     /// sandboxed process exits (the widget window closes), streaming wxc-exec
@@ -233,6 +285,34 @@ public sealed class MxcSandbox
             var msg = $"wxc-exec not found at '{WxcExecPath}'. Set WIDGET_CREATOR_WXC_EXEC or WIDGET_CREATOR_MXC_BIN.";
             SessionLog.Write($"[Sandbox] {msg}");
             return new SandboxResult(-1, msg);
+        }
+
+        // C-3: refuse to run untrusted code if the pinned sandbox binaries don't
+        // verify — an unverified wxc-exec could be a no-op that runs the widget
+        // uncontained. The leading `error:` marks this as a launch/host problem
+        // (LaunchFailed) so it never triggers the crash-repair loop.
+        if (IntegrityError is { } integ)
+        {
+            var msg = $"error: MXC sandbox integrity check failed — {integ}. Refusing to run "
+                + $"'{Path.GetFileName(exePath)}' because it could not be guaranteed to be sandboxed.";
+            SessionLog.Write($"[Sandbox] {msg}");
+            return new SandboxResult(-1, msg);
+        }
+
+        // C-2 (fail closed, opt-in): when the deployment requires the strong
+        // BaseContainer tier, probe out-of-band and refuse to launch untrusted
+        // code if that tier can't be confirmed, instead of silently running under
+        // the weaker AppContainer+DACL fallback.
+        if (MxcContainmentVerifier.StrictBaseContainer)
+        {
+            var probe = await MxcContainmentVerifier.ProbeTierAsync(WxcExecPath, ct).ConfigureAwait(false);
+            if (!probe.StrongTierConfirmed)
+            {
+                var msg = $"error: {RequireBaseContainerNote} BaseContainer could not be confirmed on this host "
+                    + $"(probe: {Tail(probe.Raw, 200)}). Refusing to run '{Path.GetFileName(exePath)}' uncontained-by-policy.";
+                SessionLog.Write($"[Sandbox] {msg}");
+                return new SandboxResult(-1, msg);
+            }
         }
 
         var configJson = BuildConfigJson(exePath, appDir, extraArgs, timeoutSeconds, policyTemplateJson);
@@ -275,6 +355,40 @@ public sealed class MxcSandbox
         proc.Start();
         proc.BeginOutputReadLine();
         proc.BeginErrorReadLine();
+
+        // C-2 (out-of-band verification): independently confirm the widget really
+        // is contained instead of trusting wxc-exec stdout. Locate the sandboxed
+        // widget process from the host and inspect its token; if it is positively
+        // running uncontained, kill it and mark the run as a containment failure
+        // (a launch/host problem, never a widget crash → no repair loop).
+        using var verifyCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var widgetExeName = Path.GetFileName(exePath);
+        var rootPid = proc.Id;
+        var verifyTask = Task.Run(() =>
+        {
+            try
+            {
+                var tok = MxcContainmentVerifier.VerifyWidgetProcess(
+                    rootPid, widgetExeName, TimeSpan.FromSeconds(8), verifyCts.Token);
+                if (tok.ConfirmedUncontained)
+                {
+                    SessionLog.Write($"[Sandbox] CONTAINMENT FAILURE — widget uncontained ({tok.Detail}); killing process tree.");
+                    Sink(SandboxResult.ContainmentFailedMarker);
+                    Sink($"error: MXC containment verification failed — the widget was running uncontained "
+                        + $"({tok.Detail}) and was terminated. This is a sandbox/host problem, not a widget bug.");
+                    try { proc.Kill(entireProcessTree: true); } catch { /* already gone */ }
+                }
+                else if (tok.ConfirmedContained)
+                    SessionLog.Write($"[Sandbox] containment verified out-of-band — {tok.Detail}");
+                else
+                    SessionLog.Write($"[Sandbox] containment not verified (best-effort) — {tok.Detail}");
+            }
+            catch (Exception ex)
+            {
+                SessionLog.Write($"[Sandbox] containment verification error: {ex.Message}");
+            }
+        }, verifyCts.Token);
+
         try
         {
             await proc.WaitForExitAsync(ct).ConfigureAwait(false);
@@ -284,9 +398,16 @@ public sealed class MxcSandbox
             try { proc.Kill(entireProcessTree: true); } catch { /* already gone */ }
             SessionLog.Write("[Sandbox] wxc-exec cancelled/timed out — killed process tree");
             Sink("WIDGET_SANDBOX_TIMEOUT");
+            verifyCts.Cancel();
+            try { await verifyTask.ConfigureAwait(false); } catch { /* best-effort */ }
             try { File.Delete(configPath); } catch { /* best-effort cleanup */ }
             return new SandboxResult(unchecked((int)0xC000013A), sb.ToString());
         }
+
+        // Ensure any containment-failure marker/error line is flushed before we
+        // classify the result.
+        verifyCts.Cancel();
+        try { await verifyTask.ConfigureAwait(false); } catch { /* best-effort */ }
 
         SessionLog.Write($"[Sandbox] wxc-exec exited code={proc.ExitCode}");
         try { File.Delete(configPath); } catch { /* best-effort cleanup */ }
