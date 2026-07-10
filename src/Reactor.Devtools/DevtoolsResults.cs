@@ -21,6 +21,11 @@ internal sealed record McpErrorData(
     string? Name = null,
     string? Expected = null,
     string? Actual = null,
+    string? Pattern = null,
+    string? Axis = null,
+    string? Flag = null,
+    int? Phase = null,
+    string[]? ActiveIds = null,
     string[]? Available = null,
     string[]? ReachableMethods = null,
     string? Hint = null);
@@ -90,3 +95,26 @@ internal sealed record WindowOkResult(bool Ok, string Id);
 
 /// <summary>Result of <c>windows.close</c>.</summary>
 internal sealed record WindowCloseResult(bool Ok, bool Cancelled, string Id);
+
+// -- UIA automation tools (DevtoolsUiaTools) --------------------------------------
+
+/// <summary>Result of a UIA action that only reports success (e.g. scroll-item).</summary>
+internal sealed record OkResult(bool Ok);
+
+/// <summary>Result of <c>toggle</c> / expand-collapse — success + the new state string.</summary>
+internal sealed record OkStateResult(bool Ok, string State);
+
+/// <summary>Result of <c>select</c> — success + whether the item ended up selected.</summary>
+internal sealed record OkSelectedResult(bool Ok, bool Selected);
+
+/// <summary>Result of <c>click</c> / <c>invoke</c> — success + which UIA pattern was used.</summary>
+internal sealed record OkViaResult(bool Ok, string Via);
+
+/// <summary>Result of <c>waitFor</c> — success carries elapsedMs; timeout adds reason + observed.</summary>
+internal sealed record WaitForResult(
+    bool Ok,
+    long ElapsedMs,
+    string? Reason = null,
+    WaitObserved? Observed = null);
+
+internal sealed record WaitObserved(int? Count, string? Text, bool? Visible);

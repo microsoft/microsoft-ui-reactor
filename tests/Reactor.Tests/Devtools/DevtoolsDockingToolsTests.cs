@@ -43,8 +43,8 @@ public class DevtoolsDockingToolsTests : IDisposable
         var hosts = HostsArray(result);
         Assert.Single(hosts);
         var props = hosts[0].GetType().GetProperties().ToDictionary(p => p.Name, p => p.GetValue(hosts[0]));
-        Assert.Equal("dh:1", props["id"]);
-        Assert.Equal(2, props["paneCount"]);
+        Assert.Equal("dh:1", props["Id"]);
+        Assert.Equal(2, props["PaneCount"]);
     }
 
     [Fact]
@@ -73,8 +73,8 @@ public class DevtoolsDockingToolsTests : IDisposable
         var result = DevtoolsDockingTools.BuildSnapshotPayload(doc.RootElement);
 
         var props = result.GetType().GetProperties().ToDictionary(p => p.Name, p => p.GetValue(result));
-        Assert.Equal(record.Id, props["hostId"]);
-        Assert.NotNull(props["root"]);
+        Assert.Equal(record.Id, props["HostId"]);
+        Assert.NotNull(props["Root"]);
 
         // Round-trip the payload through the JSON serializer so a
         // shape regression — e.g. a snapshot that drops pane keys, or a
@@ -126,7 +126,7 @@ public class DevtoolsDockingToolsTests : IDisposable
         var result = DevtoolsDockingTools.BuildDockPayload(doc.RootElement);
 
         var props = result.GetType().GetProperties().ToDictionary(p => p.Name, p => p.GetValue(result));
-        Assert.Equal(true, props["ok"]);
+        Assert.Equal(true, props["Ok"]);
         Assert.Single(model.Pending);
     }
 
@@ -183,7 +183,7 @@ public class DevtoolsDockingToolsTests : IDisposable
         var result = DevtoolsDockingTools.BuildDockPayload(doc.RootElement);
 
         var props = result.GetType().GetProperties().ToDictionary(p => p.Name, p => p.GetValue(result));
-        Assert.Equal(true, props["ok"]);
+        Assert.Equal(true, props["Ok"]);
         Assert.Single(model.Pending);
     }
 
@@ -203,7 +203,7 @@ public class DevtoolsDockingToolsTests : IDisposable
 
     private static object[] HostsArray(object payload)
     {
-        var prop = payload.GetType().GetProperty("hosts")!;
+        var prop = payload.GetType().GetProperty("Hosts")!;
         return (object[])prop.GetValue(payload)!;
     }
 }

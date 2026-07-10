@@ -250,7 +250,7 @@ internal sealed class McpDispatcher
     private static bool HasOkFalse(object? result)
     {
         if (result is null) return false;
-        var prop = result.GetType().GetProperty("ok", global::System.Reflection.BindingFlags.Instance | global::System.Reflection.BindingFlags.Public);
+        var prop = result.GetType().GetProperty("ok", global::System.Reflection.BindingFlags.Instance | global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.IgnoreCase);
         if (prop is null || prop.PropertyType != typeof(bool)) return false;
         return prop.GetValue(result) is bool b && !b;
     }

@@ -106,7 +106,7 @@ internal static class DevtoolsDockingTools
 
     // ── Payload builders (testable without the live MCP transport) ──────
 
-    internal static object BuildListPayload()
+    internal static DockListResult BuildListPayload()
     {
         var records = DockHostRegistry.Snapshot();
         var hosts = records
@@ -135,7 +135,7 @@ internal static class DevtoolsDockingTools
         return new DockListResult(hosts);
     }
 
-    internal static object BuildSnapshotPayload(JsonElement? @params)
+    internal static DockSnapshotResult BuildSnapshotPayload(JsonElement? @params)
     {
         var hostId = DevtoolsTools.ReadString(@params, "hostId")
             ?? throw new McpToolException("Missing 'hostId'.", JsonRpcErrorCodes.InvalidParams);
@@ -152,7 +152,7 @@ internal static class DevtoolsDockingTools
         return ToJsonShape(snapshot);
     }
 
-    internal static object BuildDockPayload(JsonElement? @params)
+    internal static DockActionResult BuildDockPayload(JsonElement? @params)
     {
         var hostId = DevtoolsTools.ReadString(@params, "hostId")
             ?? throw new McpToolException("Missing 'hostId'.", JsonRpcErrorCodes.InvalidParams);
@@ -279,7 +279,7 @@ internal static class DevtoolsDockingTools
     // named records (registered in DevtoolsJsonContext) so the JSON-RPC
     // response serializes through the source generator under NativeAOT. The
     // shape mirrors the previous anonymous objects one-to-one.
-    internal static object ToJsonShape(DockSnapshot snap) => new DockSnapshotResult(
+    internal static DockSnapshotResult ToJsonShape(DockSnapshot snap) => new DockSnapshotResult(
         HostId: snap.HostId,
         Root: NodeToJson(snap.Root),
         LeftSide: snap.LeftSide.Select(PaneToJson).ToArray(),

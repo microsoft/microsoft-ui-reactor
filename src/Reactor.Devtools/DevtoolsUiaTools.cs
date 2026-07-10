@@ -60,12 +60,12 @@ internal static class DevtoolsUiaTools
                 if (peer?.GetPattern(PatternInterface.Invoke) is IInvokeProvider invoke)
                 {
                     invoke.Invoke();
-                    return new { ok = true };
+                    return new OkResult(Ok: true);
                 }
                 throw new McpToolException(
                     "Element does not expose the Invoke pattern.",
                     JsonRpcErrorCodes.ToolExecution,
-                    new { code = "no-pattern", pattern = "Invoke" });
+                    new McpErrorData("no-pattern", Pattern: "Invoke"));
             }));
     }
 
@@ -95,12 +95,12 @@ internal static class DevtoolsUiaTools
                         global::Microsoft.UI.Xaml.Automation.ToggleState.Off => "off",
                         _ => "indeterminate",
                     };
-                    return new { ok = true, state };
+                    return new OkStateResult(Ok: true, State: state);
                 }
                 throw new McpToolException(
                     "Element does not expose the Toggle pattern.",
                     JsonRpcErrorCodes.ToolExecution,
-                    new { code = "no-pattern", pattern = "Toggle" });
+                    new McpErrorData("no-pattern", Pattern: "Toggle"));
             }));
     }
 
@@ -155,7 +155,7 @@ internal static class DevtoolsUiaTools
                 if (selectorItem is not null)
                 {
                     selectorItem.IsSelected = true;
-                    return new { ok = true, selected = selectorItem.IsSelected };
+                    return new OkSelectedResult(Ok: true, Selected: selectorItem.IsSelected);
                 }
 
                 // Non-Selector containers (custom selectables) may still route
@@ -165,13 +165,13 @@ internal static class DevtoolsUiaTools
                 if (peer?.GetPattern(PatternInterface.SelectionItem) is ISelectionItemProvider sel)
                 {
                     sel.Select();
-                    return new { ok = true, selected = sel.IsSelected };
+                    return new OkSelectedResult(Ok: true, Selected: sel.IsSelected);
                 }
 
                 throw new McpToolException(
                     "No SelectorItem ancestor and no element exposing the SelectionItem UIA pattern (walked up from resolved element to window root).",
                     JsonRpcErrorCodes.ToolExecution,
-                    new { code = "no-pattern", pattern = "SelectionItem" });
+                    new McpErrorData("no-pattern", Pattern: "SelectionItem"));
             }));
     }
 
@@ -260,12 +260,12 @@ internal static class DevtoolsUiaTools
                 if (peer?.GetPattern(PatternInterface.ExpandCollapse) is IExpandCollapseProvider ec)
                 {
                     ec.Expand();
-                    return new { ok = true, state = FormatExpandState(ec.ExpandCollapseState) };
+                    return new OkStateResult(Ok: true, State: FormatExpandState(ec.ExpandCollapseState));
                 }
                 throw new McpToolException(
                     "Element does not expose the ExpandCollapse pattern.",
                     JsonRpcErrorCodes.ToolExecution,
-                    new { code = "no-pattern", pattern = "ExpandCollapse" });
+                    new McpErrorData("no-pattern", Pattern: "ExpandCollapse"));
             }));
 
         server.Tools.Register(
@@ -288,12 +288,12 @@ internal static class DevtoolsUiaTools
                 if (peer?.GetPattern(PatternInterface.ExpandCollapse) is IExpandCollapseProvider ec)
                 {
                     ec.Collapse();
-                    return new { ok = true, state = FormatExpandState(ec.ExpandCollapseState) };
+                    return new OkStateResult(Ok: true, State: FormatExpandState(ec.ExpandCollapseState));
                 }
                 throw new McpToolException(
                     "Element does not expose the ExpandCollapse pattern.",
                     JsonRpcErrorCodes.ToolExecution,
-                    new { code = "no-pattern", pattern = "ExpandCollapse" });
+                    new McpErrorData("no-pattern", Pattern: "ExpandCollapse"));
             }));
     }
 
@@ -352,12 +352,12 @@ internal static class DevtoolsUiaTools
                     if (itemPeer?.GetPattern(PatternInterface.ScrollItem) is IScrollItemProvider scrollItem)
                     {
                         scrollItem.ScrollIntoView();
-                        return new { ok = true };
+                        return new OkResult(Ok: true);
                     }
                     throw new McpToolException(
                         "Target does not expose the ScrollItem pattern.",
                         JsonRpcErrorCodes.ToolExecution,
-                        new { code = "no-pattern", pattern = "ScrollItem" });
+                        new McpErrorData("no-pattern", Pattern: "ScrollItem"));
                 }
 
                 // By-offset on the container's Scroll pattern.
@@ -400,12 +400,12 @@ internal static class DevtoolsUiaTools
                             throw new McpToolException(
                                 "Container's horizontal axis is not scrollable (HorizontallyScrollable=false).",
                                 JsonRpcErrorCodes.ToolExecution,
-                                new { code = "not-scrollable", axis = "horizontal" });
+                                new McpErrorData("not-scrollable", Axis: "horizontal"));
                         if (vertRequested && vertCur == NoScroll)
                             throw new McpToolException(
                                 "Container's vertical axis is not scrollable (VerticallyScrollable=false).",
                                 JsonRpcErrorCodes.ToolExecution,
-                                new { code = "not-scrollable", axis = "vertical" });
+                                new McpErrorData("not-scrollable", Axis: "vertical"));
 
                         // If an axis wasn't requested but is unavailable, pass
                         // NoScroll through so SetScrollPercent treats it as
@@ -453,7 +453,7 @@ internal static class DevtoolsUiaTools
                 throw new McpToolException(
                     "Container does not expose the Scroll pattern.",
                     JsonRpcErrorCodes.ToolExecution,
-                    new { code = "no-pattern", pattern = "Scroll" });
+                    new McpErrorData("no-pattern", Pattern: "Scroll"));
             }));
     }
 
@@ -581,7 +581,7 @@ internal static class DevtoolsUiaTools
                     throw new McpToolException(
                         "includeReactorSource requires the Phase 3 source map.",
                         JsonRpcErrorCodes.ToolExecution,
-                        new { code = "not-implemented", flag = "includeReactorSource", phase = 3 });
+                        new McpErrorData("not-implemented", Flag: "includeReactorSource", Phase: 3));
                 var view = string.Equals(viewStr, "full", StringComparison.OrdinalIgnoreCase)
                     ? TreeView.Full
                     : TreeView.Summary;
@@ -676,28 +676,28 @@ internal static class DevtoolsUiaTools
                     ?? throw new McpToolException(
                         "Element has no automation peer.",
                         JsonRpcErrorCodes.ToolExecution,
-                        new { code = "no-peer" });
+                        new McpErrorData("no-peer"));
 
                 if (peer.GetPattern(PatternInterface.Invoke) is IInvokeProvider invoke)
                 {
                     invoke.Invoke();
-                    return new { ok = true, via = "invoke" };
+                    return new OkViaResult(Ok: true, Via: "invoke");
                 }
                 if (peer.GetPattern(PatternInterface.Toggle) is IToggleProvider toggle)
                 {
                     toggle.Toggle();
-                    return new { ok = true, via = "toggle" };
+                    return new OkViaResult(Ok: true, Via: "toggle");
                 }
                 if (peer.GetPattern(PatternInterface.SelectionItem) is ISelectionItemProvider sel)
                 {
                     sel.Select();
-                    return new { ok = true, via = "selection" };
+                    return new OkViaResult(Ok: true, Via: "selection");
                 }
 
                 throw new McpToolException(
                     "No UIA pattern available to click this element.",
                     JsonRpcErrorCodes.ToolExecution,
-                    new { code = "no-pattern" });
+                    new McpErrorData("no-pattern"));
             }));
     }
 
@@ -734,7 +734,7 @@ internal static class DevtoolsUiaTools
                 if (el is TextBox tb)
                 {
                     tb.Text = clear ? text : tb.Text + text;
-                    return new { ok = true, via = "value" };
+                    return new OkViaResult(Ok: true, Via: "value");
                 }
 
                 var peer = FrameworkElementAutomationPeer.CreatePeerForElement(el);
@@ -742,13 +742,13 @@ internal static class DevtoolsUiaTools
                 {
                     var current = value.Value ?? string.Empty;
                     value.SetValue(clear ? text : current + text);
-                    return new { ok = true, via = "value" };
+                    return new OkViaResult(Ok: true, Via: "value");
                 }
 
                 throw new McpToolException(
                     "Element does not expose a value pattern.",
                     JsonRpcErrorCodes.ToolExecution,
-                    new { code = "no-pattern" });
+                    new McpErrorData("no-pattern"));
             }));
     }
 
@@ -778,7 +778,7 @@ internal static class DevtoolsUiaTools
                 var el = resolver.Resolve(selector, windowId);
                 bool focused = false;
                 if (el is Control ctl) focused = ctl.Focus(FocusState.Programmatic);
-                return new { ok = focused };
+                return new OkResult(Ok: focused);
             }));
     }
 
@@ -835,23 +835,19 @@ internal static class DevtoolsUiaTools
                 {
                     var observed = server.OnDispatcher(() => WaitForPredicate.Evaluate(pred, resolver, windowId));
                     if (observed.Satisfied)
-                        return new { ok = true, elapsedMs = sw.ElapsedMilliseconds };
+                        return new WaitForResult(Ok: true, ElapsedMs: sw.ElapsedMilliseconds);
                     Thread.Sleep(50);
                 }
 
                 var final = server.OnDispatcher(() => WaitForPredicate.Evaluate(pred, resolver, windowId));
-                return new
-                {
-                    ok = false,
-                    reason = "timeout",
-                    elapsedMs = sw.ElapsedMilliseconds,
-                    observed = new
-                    {
-                        count = final.Count,
-                        text = final.Text,
-                        visible = final.Visible,
-                    },
-                };
+                return new WaitForResult(
+                    Ok: false,
+                    ElapsedMs: sw.ElapsedMilliseconds,
+                    Reason: "timeout",
+                    Observed: new WaitObserved(
+                        Count: final.Count,
+                        Text: final.Text,
+                        Visible: final.Visible));
             });
     }
 
@@ -869,14 +865,14 @@ internal static class DevtoolsUiaTools
             var w = windows.Resolve(explicitWindowId!);
             return w ?? throw new McpToolException(
                 $"Window '{explicitWindowId}' not found.", JsonRpcErrorCodes.ToolExecution,
-                new { code = "unknown-window" });
+                new McpErrorData("unknown-window"));
         }
         var @default = windows.TryDefault(out var activeIds);
         if (@default is not null) return @default;
         throw new McpToolException(
             "Multiple windows are active — pass 'window'.",
             JsonRpcErrorCodes.InvalidParams,
-            new { code = "window-required", activeIds });
+            new McpErrorData("window-required", ActiveIds: activeIds.ToArray()));
     }
 
     private static string WindowIdFor(WindowRegistry windows, Window w)
