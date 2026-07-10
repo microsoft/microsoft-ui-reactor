@@ -26,6 +26,8 @@ namespace Microsoft.UI.Reactor.Hosting.Devtools;
 [JsonSerializable(typeof(PromptsListResult))]
 [JsonSerializable(typeof(InitializeResult))]
 [JsonSerializable(typeof(ComponentsResult))]
+[JsonSerializable(typeof(ComponentInfo[]))]
+[JsonSerializable(typeof(string[]))]
 [JsonSerializable(typeof(VersionResult))]
 [JsonSerializable(typeof(ComponentInfo))]
 [JsonSerializable(typeof(SwitchComponentResult))]

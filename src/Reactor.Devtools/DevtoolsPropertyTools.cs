@@ -664,13 +664,13 @@ internal sealed record PropertyResult(string Name, string? Value, string ValueTy
 
 internal sealed record PropertiesResult(int Count, IReadOnlyList<PropertyResult> Properties);
 
-internal sealed record SetPropertyResult(bool Ok, string Name, string? NewValue);
+internal sealed record SetPropertyResult(bool Ok, string Name, string? NewValue) : IOkResult;
 
 internal sealed record ResourceEntry(string Key, string ValueType, string? Value, string Scope);
 
 internal sealed record ResourcesResult(int Count, IReadOnlyList<ResourceEntry> Resources);
 
-internal sealed record SetResourceResult(bool Ok, string Key, string? NewValue, bool Replaced);
+internal sealed record SetResourceResult(bool Ok, string Key, string? NewValue, bool Replaced) : IOkResult;
 
 internal sealed record StyleSetterInfo(string Property, string? Value, string ValueType);
 

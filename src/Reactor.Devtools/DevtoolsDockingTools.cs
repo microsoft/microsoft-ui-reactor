@@ -325,4 +325,4 @@ internal sealed record DockNodeDto(
 internal sealed record DockPaneDto(string? Key, string Title, string Role, bool CanClose, bool CanFloat, bool CanMove);
 
 /// <summary>Result of a <c>docking dock</c> mutation action.</summary>
-internal sealed record DockActionResult(bool Ok, string HostId, string PaneKey, string Action);
+internal sealed record DockActionResult(bool Ok, string HostId, string PaneKey, string Action) : IOkResult;

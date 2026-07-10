@@ -207,4 +207,4 @@ internal static class DevtoolsFireTool
 }
 
 /// <summary>Result of the <c>fire</c> tool — the event-injection acknowledgement.</summary>
-internal sealed record FireOkResult(bool Ok, string Via);
+internal sealed record FireOkResult(bool Ok, string Via) : IOkResult;

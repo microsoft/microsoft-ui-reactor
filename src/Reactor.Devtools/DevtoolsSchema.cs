@@ -38,10 +38,13 @@ internal static class Schema
             AdditionalProperties: false);
 
     public static SchemaNode Root(string[] required, params (string Name, SchemaNode Node)[] properties)
-        => new("object",
-            Properties: Dict(properties),
-            Required: required,
-            AdditionalProperties: false);
+    {
+        var props = Dict(properties);
+        global::System.Diagnostics.Debug.Assert(
+            global::System.Array.TrueForAll(required, r => props.ContainsKey(r)),
+            "Schema.Root: every 'required' name must be a declared property.");
+        return new("object", Properties: props, Required: required, AdditionalProperties: false);
+    }
 
     public static SchemaNode Obj(string? description, params (string Name, SchemaNode Node)[] properties)
         => new("object", Description: description, Properties: Dict(properties));

@@ -1,6 +1,16 @@
 namespace Microsoft.UI.Reactor.Hosting.Devtools;
 
 /// <summary>
+/// Implemented by every tool-result record that carries an <c>ok</c> flag, so the
+/// dispatcher can detect soft failures (<c>ok:false</c>) without reflection —
+/// see <see cref="McpDispatcher"/>.
+/// </summary>
+internal interface IOkResult
+{
+    bool Ok { get; }
+}
+
+/// <summary>
 /// Structured error data attached to an <see cref="McpToolException"/> (surfaces as
 /// <c>JsonRpcError.Data</c>). One named record — every field optional and omitted
 /// when null (the devtools JSON options use <c>WhenWritingNull</c>) — replaces the
@@ -66,10 +76,10 @@ internal sealed record VersionResult(string Build, int Pid, int McpPort);
 internal sealed record ComponentsResult(object Components, string? Current);
 
 /// <summary>Result of the <c>switchComponent</c> tool.</summary>
-internal sealed record SwitchComponentResult(bool Ok, string Current);
+internal sealed record SwitchComponentResult(bool Ok, string Current) : IOkResult;
 
 /// <summary>Result of the <c>reload</c> / <c>shutdown</c> tools.</summary>
-internal sealed record ExitResult(bool Ok, string ExitingBuild);
+internal sealed record ExitResult(bool Ok, string ExitingBuild) : IOkResult;
 
 /// <summary>Result of the <c>windows</c> tool (hwnd-opt-in projection).</summary>
 internal sealed record WindowsResult(WindowDto[] Windows);
@@ -99,31 +109,31 @@ internal sealed record WindowListItem(
     bool IsMain);
 
 /// <summary>Result of <c>windows.activate</c> / <c>windows.open</c>.</summary>
-internal sealed record WindowOkResult(bool Ok, string Id);
+internal sealed record WindowOkResult(bool Ok, string Id) : IOkResult;
 
 /// <summary>Result of <c>windows.close</c>.</summary>
-internal sealed record WindowCloseResult(bool Ok, bool Cancelled, string Id);
+internal sealed record WindowCloseResult(bool Ok, bool Cancelled, string Id) : IOkResult;
 
 // -- UIA automation tools (DevtoolsUiaTools) --------------------------------------
 
 /// <summary>Result of a UIA action that only reports success (e.g. scroll-item).</summary>
-internal sealed record OkResult(bool Ok);
+internal sealed record OkResult(bool Ok) : IOkResult;
 
 /// <summary>Result of <c>toggle</c> / expand-collapse — success + the new state string.</summary>
-internal sealed record OkStateResult(bool Ok, string State);
+internal sealed record OkStateResult(bool Ok, string State) : IOkResult;
 
 /// <summary>Result of <c>select</c> — success + whether the item ended up selected.</summary>
-internal sealed record OkSelectedResult(bool Ok, bool Selected);
+internal sealed record OkSelectedResult(bool Ok, bool Selected) : IOkResult;
 
 /// <summary>Result of <c>click</c> / <c>invoke</c> — success + which UIA pattern was used.</summary>
-internal sealed record OkViaResult(bool Ok, string Via);
+internal sealed record OkViaResult(bool Ok, string Via) : IOkResult;
 
 /// <summary>Result of <c>waitFor</c> — success carries elapsedMs; timeout adds reason + observed.</summary>
 internal sealed record WaitForResult(
     bool Ok,
     long ElapsedMs,
     string? Reason = null,
-    WaitObserved? Observed = null);
+    WaitObserved? Observed = null) : IOkResult;
 
 internal sealed record WaitObserved(int? Count, string? Text, bool? Visible);
 
@@ -132,7 +142,7 @@ internal sealed record ScrollResult(
     bool Ok,
     ScrollAxis ScrollPercent,
     ScrollAxis ScrollOffsetPx,
-    ScrollableSize ScrollableSizePx);
+    ScrollableSize ScrollableSizePx) : IOkResult;
 
 internal sealed record ScrollAxis(double? Horizontal, double? Vertical);
 

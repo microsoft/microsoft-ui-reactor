@@ -121,8 +121,14 @@ internal static class DevtoolsStateTool
         if (value is IEnumerable and not string)
         {
             int? count = TryReadCollectionCount(value);
-            var collectionShape = new JsonObject { ["kind"] = "collection" };
-            if (count is int c) collectionShape["count"] = c;
+            // Match the previous Dictionary<string,object?> wire: `count` is always
+            // present, as a JSON number or explicit null (WhenWritingNull does not
+            // apply to dictionary/JsonObject values, only to object properties).
+            var collectionShape = new JsonObject
+            {
+                ["kind"] = "collection",
+                ["count"] = count is int c ? JsonValue.Create(c) : null,
+            };
             return new JsonObject
             {
                 ["$type"] = value.GetType().FullName ?? value.GetType().Name,

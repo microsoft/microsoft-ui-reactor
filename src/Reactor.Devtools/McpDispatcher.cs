@@ -240,27 +240,17 @@ internal sealed class McpDispatcher
 
     /// <summary>
     /// True when <paramref name="result"/> reports an explicit <c>ok: false</c> —
-    /// either a named result record with an <c>Ok</c> property or a tool-built
-    /// <see cref="JsonObject"/> with an <c>ok</c> member. Used to translate
-    /// tool-level soft failures into <c>err</c> log lines.
+    /// either an <see cref="IOkResult"/> record or a tool-built <see cref="JsonObject"/>
+    /// with an <c>ok</c> member. Used to translate tool-level soft failures into
+    /// <c>err</c> log lines. Reflection-free.
     /// </summary>
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "HasOkFalse uses reflection on result records for devtools logging.")]
-    [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "HasOkFalse uses reflection on result records for devtools logging.")]
-    private static bool HasOkFalse(object? result)
+    private static bool HasOkFalse(object? result) => result switch
     {
-        if (result is null) return false;
-
-        // Tools that hand back a JsonNode (e.g. a tool that builds its own JSON):
-        // read the `ok` member directly, no reflection.
-        if (result is JsonObject obj)
-            return obj.TryGetPropertyValue("ok", out var node)
-                && node is JsonValue jv && jv.TryGetValue<bool>(out var jb) && !jb;
-
-        // Named result records expose an `Ok` property.
-        var prop = result.GetType().GetProperty("ok", global::System.Reflection.BindingFlags.Instance | global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.IgnoreCase);
-        if (prop is null || prop.PropertyType != typeof(bool)) return false;
-        return prop.GetValue(result) is bool b && !b;
-    }
+        IOkResult r => !r.Ok,
+        JsonObject obj => obj.TryGetPropertyValue("ok", out var node)
+            && node is JsonValue jv && jv.TryGetValue<bool>(out var jb) && !jb,
+        _ => false,
+    };
 
     private static string? TryReadSelector(JsonElement? @params)
     {
