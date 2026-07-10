@@ -115,9 +115,10 @@ internal static class DevtoolsStateTool
         // Collections: emit the count only. A full dump is a privacy/serialization
         // pit per §12. Enumerating an arbitrary IEnumerable to count items is
         // unsafe — lazy sequences can be expensive, infinite, or have observable
-        // side effects. We only report count when the source advertises it via
-        // ICollection / IReadOnlyCollection / ICollection<T>; otherwise the count
-        // key is omitted so agents know the shape without us forcing enumeration.
+        // side effects. We only read a count when the source advertises one via
+        // ICollection / IReadOnlyCollection / ICollection<T>; otherwise `count` is
+        // reported as null (present, but null) so agents know the shape without us
+        // forcing enumeration.
         if (value is IEnumerable and not string)
         {
             int? count = TryReadCollectionCount(value);
