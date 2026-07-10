@@ -9,6 +9,9 @@
     <WindowsPackageType>None</WindowsPackageType>
     <RootNamespace>WinUIGalleryReactor</RootNamespace>
     <AssemblyName>ReactorGallery</AssemblyName>
+    <!-- Override the default WinUI.ico (from samples/Directory.Build.props) with the
+         WinUI Gallery logo, sourced from microsoft/WinUI-Gallery. -->
+    <ApplicationIcon>Assets\GalleryIcon.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Reactor\Reactor.csproj" />
