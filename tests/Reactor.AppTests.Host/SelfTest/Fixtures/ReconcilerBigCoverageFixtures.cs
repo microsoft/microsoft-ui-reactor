@@ -1752,20 +1752,28 @@ internal static class ReconcilerBigCoverageFixtures
             // rejects with ArgumentException ("Value does not fall within the
             // expected range") — the exact failure the modernized app template hit
             // via TitleBar(...).Icon(FontIcon("\uEA3A", "Segoe Fluent Icons")).
-            // Assign to a real TitleBar on the UI thread to lock the fix in.
-            var barFontIconNoSize = IconResolver.ResolveIconSource(
-                new FontIconData("\uEA3A", "Segoe Fluent Icons"));
-            bool titleBarAcceptedFontIcon;
-            try
+            // The parallel null-FontFamily slot was coerced the same way (FontFamily
+            // = null!), so cover it too. For each case assert the resolver produced a
+            // real FontIconSource (not null / some other type) AND that a real
+            // TitleBar accepts the assignment on the UI thread.
+            static bool TitleBarAcceptsFontIconSource(IconData data)
             {
-                _ = new WinXC.TitleBar { IconSource = barFontIconNoSize };
-                titleBarAcceptedFontIcon = true;
+                if (IconResolver.ResolveIconSource(data) is not WinXC.FontIconSource src)
+                    return false;
+                try
+                {
+                    _ = new WinXC.TitleBar { IconSource = src };
+                    return true;
+                }
+                catch (ArgumentException)
+                {
+                    return false;
+                }
             }
-            catch (ArgumentException)
-            {
-                titleBarAcceptedFontIcon = false;
-            }
-            H.Check("PrivMount_TitleBarFontIconNoSize", titleBarAcceptedFontIcon);
+
+            H.Check("PrivMount_TitleBarFontIconNoSize",
+                TitleBarAcceptsFontIconSource(new FontIconData("\uEA3A", "Segoe Fluent Icons"))
+                && TitleBarAcceptsFontIconSource(new FontIconData("\uEA3A", FontFamily: null, FontSize: 18)));
 
             var rows = new[] { new KeyRow("a"), new KeyRow("b"), new KeyRow("c") };
             int selected = -1;
