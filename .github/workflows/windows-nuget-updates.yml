@@ -86,9 +86,13 @@ jobs:
           # Windows restore of the full graph (incl. WinUI / WindowsAppSDK).
           # --ignore-failed-sources tolerates the repo's `reactor-local` feed,
           #   which does not exist on a fresh checkout.
-          # --exclude WindowsAppSDK/Win2D: those are pinned via MSBuild properties
-          #   in Directory.Build.props and must not be rewritten here (kept in sync
-          #   with the ignore list in .github/dependabot.yml).
+          # --exclude is a case-insensitive SUBSTRING filter (dotnet-outdated
+          #   matches packages whose id does NOT contain the string), so
+          #   `WindowsAppSDK` covers Microsoft.WindowsAppSDK / .WinUI / .Runtime and
+          #   `Win2D` covers Microsoft.Graphics.Win2D. Those are pinned via MSBuild
+          #   properties in Directory.Build.props and must not be rewritten here
+          #   (kept in sync with the ignore list in .github/dependabot.yml). As a
+          #   backstop, apply-cpm-upgrades.ps1 also skips any $(...) property pin.
           # -pre Auto: only offer pre-releases when the current pin is a pre-release
           #   (same behavior as Dependabot). CI=true (set by Actions) skips the
           #   CLI's build-time SignaturesGen/copilot download targets.
