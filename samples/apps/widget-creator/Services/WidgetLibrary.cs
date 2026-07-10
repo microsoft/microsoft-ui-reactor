@@ -32,7 +32,20 @@ public sealed class WidgetLibrary
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "WidgetCreator", "apps");
 
-    public WidgetLibrary() => Directory.CreateDirectory(Root);
+    readonly ArtifactIntegrity _integrity;
+
+    public WidgetLibrary()
+    {
+        Directory.CreateDirectory(Root);
+        _integrity = new ArtifactIntegrity(Root);
+    }
+
+    /// <summary>H-3: verify a stored widget's artifacts before relaunch.</summary>
+    public IntegrityResult VerifyIntegrity(WidgetApp app) => _integrity.Verify(app);
+
+    /// <summary>H-3: record the integrity of a widget's current artifacts (also
+    /// used to migrate a legacy widget that predates integrity protection).</summary>
+    public Task StampIntegrityAsync(WidgetApp app) => _integrity.StampAsync(app);
 
     public async Task SaveAsync(WidgetApp app)
     {
@@ -44,6 +57,7 @@ public sealed class WidgetLibrary
                 app.Id, app.Title, app.Icon, app.Prompt, app.Model, app.CreatedAt,
                 app.ExePath, app.PublishDir, app.SessionId), JsonOpts);
             await WriteAtomicWithRetriesAsync(Path.Combine(app.Dir, MetaFile), json).ConfigureAwait(false);
+            await _integrity.StampAsync(app).ConfigureAwait(false);
             SessionLog.Write($"[Library] saved {app.Id} '{app.Title}' session={app.SessionId}");
         }
         finally
@@ -119,6 +133,7 @@ public sealed class WidgetLibrary
         {
             Directory.CreateDirectory(app.Dir);
             await WriteAtomicWithRetriesAsync(app.PolicyPath, json).ConfigureAwait(false);
+            await _integrity.StampAsync(app).ConfigureAwait(false);
             SessionLog.Write($"[Library] saved policy for {app.Id}");
         }
         finally
@@ -135,6 +150,7 @@ public sealed class WidgetLibrary
         {
             try { if (File.Exists(app.PolicyPath)) File.Delete(app.PolicyPath); }
             catch (Exception ex) { SessionLog.Write($"[Library] reset policy for {app.Id} failed: {ex.Message}"); }
+            _integrity.StampAsync(app).GetAwaiter().GetResult();
         }
         finally
         {

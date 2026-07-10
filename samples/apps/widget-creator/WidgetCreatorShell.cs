@@ -374,6 +374,25 @@ public sealed class WidgetCreatorShell : Component
             {
                 try
                 {
+                    // H-3: verify the stored artifacts before relaunch. A source,
+                    // policy, or widget.exe that changed since it was built/saved
+                    // may have been tampered with (e.g. policy widened to grant the
+                    // profile, or the exe swapped) — refuse to launch, and do NOT
+                    // treat it as a widget crash (no repair loop).
+                    var integrity = _library.VerifyIntegrity(app);
+                    if (!integrity.Ok)
+                    {
+                        setStatus($"'{app.Title}' failed its integrity check — not launched.");
+                        setBanner($"'{app.Title}' was NOT launched: its stored files failed an integrity check "
+                            + $"({integrity.Reason}). The source, permissions, or executable changed since it was "
+                            + "built — it may have been tampered with. Re-generate or Refine it to rebuild from a "
+                            + "trusted state.");
+                        AppendLog($"# '{app.Title}' BLOCKED — artifact integrity check failed: {integrity.Reason}", setLog);
+                        return;
+                    }
+                    if (!integrity.Present)
+                        await _library.StampIntegrityAsync(app).ConfigureAwait(false);
+
                     var result = await _sandbox.RunAsync(
                         app.ExePath,
                         app.PublishDir,
@@ -781,7 +800,11 @@ public sealed class WidgetCreatorShell : Component
                     PermSection("Isolation",
                         CheckBox(leastPrivilege,
                             v => setPolicyJson(MxcPolicy.WithLeastPrivilege(policyJson, v)),
-                            "Run with least privilege (stricter AppContainer)")),
+                            "Run with least privilege (stricter AppContainer)"),
+                        Caption("Note: least privilege can prevent a widget from opening its window "
+                            + "(WinUI needs access this mode strips). Leave off for UI widgets.")
+                            .Foreground(Theme.SecondaryText)
+                            .TextWrapping(TextWrapping.Wrap)),
 
                     PermSection("File access",
                         Caption("The app can always read its own folder. Add folders below and choose each "
