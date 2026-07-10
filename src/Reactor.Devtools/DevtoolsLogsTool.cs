@@ -54,7 +54,7 @@ internal static class DevtoolsLogsTool
             throw new McpToolException(
                 "Log capture is disabled (--devtools-logs off).",
                 JsonRpcErrorCodes.ToolExecution,
-                new { code = "logs-disabled" });
+                new McpErrorData("logs-disabled"));
 
         long since = DevtoolsTools.ReadLong(@params, "since") ?? 0;
         int? tail = DevtoolsTools.ReadInt(@params, "tail");
@@ -94,22 +94,36 @@ internal static class DevtoolsLogsTool
 
         var result = buf.Query(sinceSeq: since, tail: tail, filterRegex: filter, source: source, level: level);
 
-        return new
-        {
-            entries = result.Entries.Select(e => (object)new
-            {
-                seq = e.Seq,
-                ts = e.TimestampUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-                source = e.Source.ToString().ToLowerInvariant(),
-                level = e.Level,
-                threadId = e.ThreadId,
-                text = e.Text,
-                eventName = e.EventName,
-                eventId = e.EventId,
-            }).ToArray(),
-            nextSeq = result.NextSeq,
-            dropped = result.Dropped,
-            capacityBytes = buf.CapacityBytes,
-        };
+        return new LogsResult(
+            Entries: result.Entries.Select(e => new LogEntryDto(
+                Seq: e.Seq,
+                Ts: e.TimestampUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                Source: e.Source.ToString().ToLowerInvariant(),
+                Level: e.Level,
+                ThreadId: e.ThreadId,
+                Text: e.Text,
+                EventName: e.EventName,
+                EventId: e.EventId)).ToArray(),
+            NextSeq: result.NextSeq,
+            Dropped: result.Dropped,
+            CapacityBytes: buf.CapacityBytes);
     }
 }
+
+/// <summary>Result of the <c>logs</c> tool — a page of captured log entries plus paging cursors.</summary>
+internal sealed record LogsResult(
+    LogEntryDto[] Entries,
+    long NextSeq,
+    long Dropped,
+    long CapacityBytes);
+
+/// <summary>One captured log entry as shaped for the <c>logs</c> tool wire response.</summary>
+internal sealed record LogEntryDto(
+    long Seq,
+    string Ts,
+    string Source,
+    string? Level,
+    int ThreadId,
+    string Text,
+    string? EventName,
+    int? EventId);

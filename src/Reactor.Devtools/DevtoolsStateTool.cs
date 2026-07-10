@@ -56,21 +56,19 @@ internal static class DevtoolsStateTool
         // agent to resolve it separately.
         var instanceId = $"r:main/{componentName}.root";
 
-        var hooks = snapshots.Select(s => new
-        {
-            component = componentName,
-            instanceId,
-            hook = s.Hook,
-            index = s.Index,
-            valueType = s.ValueType?.FullName ?? s.ValueType?.Name,
-            value = ShapeValue(s.Value),
+        var hooks = snapshots.Select(s => new HookSnapshot(
+            Component: componentName,
+            InstanceId: instanceId,
+            Hook: s.Hook,
+            Index: s.Index,
+            ValueType: s.ValueType?.FullName ?? s.ValueType?.Name,
             // Q3 (spec 049 §3.6): true when this cell's value was migrated by
             // the most recent hot-reload state-migration pass, so a devtools
             // client can visually flag preserved-across-edit state.
-            migrated = s.Migrated,
-        }).ToArray();
+            Value: ShapeValue(s.Value),
+            Migrated: s.Migrated)).ToArray();
 
-        return new { hooks };
+        return new StateResult(hooks);
     }
 
     /// <summary>
@@ -169,3 +167,22 @@ internal static class DevtoolsStateTool
         return null;
     }
 }
+
+/// <summary>Result of the <c>state</c> tool — the root component's hook snapshots.</summary>
+internal sealed record StateResult(HookSnapshot[] Hooks);
+
+/// <summary>
+/// One hook cell from the root component's hook table. <see cref="Value"/> is a
+/// shaped value (a primitive/string literal, or a <c>{ $type, $shape }</c> map for
+/// complex objects — see <see cref="DevtoolsStateTool.ShapeValue"/>), so it stays
+/// typed as <c>object</c> and the <c>state</c> tool remains on the reflection path
+/// (AOT-skip-listed).
+/// </summary>
+internal sealed record HookSnapshot(
+    string Component,
+    string InstanceId,
+    string Hook,
+    int Index,
+    string? ValueType,
+    object? Value,
+    bool Migrated);
