@@ -25,6 +25,14 @@ namespace Microsoft.UI.Reactor.Hosting.Devtools;
 [JsonSerializable(typeof(ResourcesListResult))]
 [JsonSerializable(typeof(PromptsListResult))]
 [JsonSerializable(typeof(InitializeResult))]
+[JsonSerializable(typeof(ComponentsResult))]
+[JsonSerializable(typeof(ComponentInfo))]
+[JsonSerializable(typeof(SwitchComponentResult))]
+[JsonSerializable(typeof(ExitResult))]
+[JsonSerializable(typeof(WindowsResult))]
+[JsonSerializable(typeof(WindowsListResult))]
+[JsonSerializable(typeof(WindowOkResult))]
+[JsonSerializable(typeof(WindowCloseResult))]
 internal partial class DevtoolsJsonContext : JsonSerializerContext
 {
 }

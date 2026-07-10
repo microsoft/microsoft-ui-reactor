@@ -120,17 +120,9 @@ internal static class DevtoolsTools
                         .OrderBy(c => c.IsNested ? 1 : 0)
                         .ThenBy(c => c.Name, StringComparer.Ordinal)
                         .ToArray();
-                    return new
-                    {
-                        components = infos,
-                        current = ctx.GetCurrentComponent(),
-                    };
+                    return new ComponentsResult(infos, ctx.GetCurrentComponent());
                 }
-                return new
-                {
-                    components = ctx.GetComponents().ToArray(),
-                    current = ctx.GetCurrentComponent(),
-                };
+                return new ComponentsResult(ctx.GetComponents().ToArray(), ctx.GetCurrentComponent());
             });
     }
 
@@ -171,7 +163,7 @@ internal static class DevtoolsTools
                     if (!ok)
                         throw new McpToolException($"Component '{name}' not found.",
                             JsonRpcErrorCodes.ToolExecution,
-                            new { code = "unknown-component", available = ctx.GetComponents().ToArray() });
+                            new McpErrorData("unknown-component", Available: ctx.GetComponents().ToArray()));
 
                     // The old tree is gone; invalidate its ids so a subsequent
                     // selector resolution against an old id returns `"gone"`
@@ -183,7 +175,7 @@ internal static class DevtoolsTools
                             nodes.InvalidateWindow(snap.Id);
                     }
 
-                    return new { ok = true, current = name };
+                    return new SwitchComponentResult(Ok: true, Current: name);
                 });
             });
     }
@@ -212,7 +204,7 @@ internal static class DevtoolsTools
                 // Return the response immediately; the reload fires after the HTTP write flushes.
                 var exitingBuild = server.BuildTag;
                 ctx.RequestReload();
-                return new { ok = true, exitingBuild };
+                return new ExitResult(Ok: true, ExitingBuild: exitingBuild);
             });
     }
 
@@ -232,7 +224,7 @@ internal static class DevtoolsTools
             {
                 var exitingBuild = server.BuildTag;
                 ctx.RequestShutdown();
-                return new { ok = true, exitingBuild };
+                return new ExitResult(Ok: true, ExitingBuild: exitingBuild);
             });
     }
 
@@ -272,51 +264,20 @@ internal static class DevtoolsTools
                 return server.OnDispatcher(() =>
                 {
                     var current = ctx.GetCurrentComponent();
-                    return new
-                    {
-                        windows = ctx.Windows.Snapshot().Select(w =>
-                        {
-                            // Anonymous types can't be conditionally shaped, so
-                            // emit two structurally similar projections gated
-                            // on the opt-in flag. The non-hwnd shape is the
-                            // pre-W-7 shape minus that one field.
-                            return includeHwnd
-                                ? (object)new
-                                {
-                                    id = w.Id,
-                                    title = w.Title,
-                                    hwnd = w.Hwnd,
-                                    bounds = new
-                                    {
-                                        x = w.Bounds.X,
-                                        y = w.Bounds.Y,
-                                        width = w.Bounds.Width,
-                                        height = w.Bounds.Height,
-                                    },
-                                    isMain = w.IsMain,
-                                    buildTag = w.BuildTag,
-                                    // Only the main window reflects the component switch today;
-                                    // secondary windows report null. Agents can cross-check
-                                    // components.current against this value.
-                                    currentComponent = w.IsMain ? current : null,
-                                }
-                                : new
-                                {
-                                    id = w.Id,
-                                    title = w.Title,
-                                    bounds = new
-                                    {
-                                        x = w.Bounds.X,
-                                        y = w.Bounds.Y,
-                                        width = w.Bounds.Width,
-                                        height = w.Bounds.Height,
-                                    },
-                                    isMain = w.IsMain,
-                                    buildTag = w.BuildTag,
-                                    currentComponent = w.IsMain ? current : null,
-                                };
-                        }).ToArray(),
-                    };
+                    return new WindowsResult(
+                        ctx.Windows.Snapshot().Select(w => new WindowDto(
+                            Id: w.Id,
+                            Title: w.Title,
+                            // Only the hwnd-opt-in shape carries the native handle; the
+                            // default shape omits it (null → WhenWritingNull drops it).
+                            Hwnd: includeHwnd ? w.Hwnd : (long?)null,
+                            Bounds: new WindowBoundsDto(w.Bounds.X, w.Bounds.Y, w.Bounds.Width, w.Bounds.Height),
+                            IsMain: w.IsMain,
+                            BuildTag: w.BuildTag,
+                            // Only the main window reflects the component switch today;
+                            // secondary windows report null. Agents can cross-check
+                            // components.current against this value.
+                            CurrentComponent: w.IsMain ? current : null)).ToArray());
                 });
             });
     }
@@ -333,20 +294,16 @@ internal static class DevtoolsTools
                     "state, and isMain. Use this to discover ids for windows.activate / " +
                     "windows.close. Spec 036 §10.",
                 InputSchema: new { type = "object", properties = new { }, additionalProperties = false }),
-            _ => server.OnDispatcher(() => new
-            {
-                windows = ctx.Windows.Snapshot().Select(w => new
-                {
-                    id = w.Id,
-                    key = w.Key,
-                    title = w.Title,
-                    width = w.WidthDip,
-                    height = w.HeightDip,
-                    dpi = w.Dpi,
-                    state = w.State,
-                    isMain = w.IsMain,
-                }).ToArray(),
-            }));
+            _ => server.OnDispatcher(() => new WindowsListResult(
+                ctx.Windows.Snapshot().Select(w => new WindowListItem(
+                    Id: w.Id,
+                    Key: w.Key,
+                    Title: w.Title,
+                    Width: w.WidthDip,
+                    Height: w.HeightDip,
+                    Dpi: w.Dpi,
+                    State: w.State,
+                    IsMain: w.IsMain)).ToArray())));
     }
 
     private static void Register_WindowsActivate(DevtoolsMcpServer server, ToolHostContext ctx)
@@ -377,9 +334,9 @@ internal static class DevtoolsTools
                         throw new McpToolException(
                             $"Window '{id}' not found.",
                             JsonRpcErrorCodes.ToolExecution,
-                            new { code = "unknown-window" });
+                            new McpErrorData("unknown-window"));
                     rw.Activate();
-                    return new { ok = true, id };
+                    return new WindowOkResult(Ok: true, Id: id);
                 });
             });
     }
@@ -428,7 +385,7 @@ internal static class DevtoolsTools
                         throw new McpToolException(
                             $"Window '{id}' not found.",
                             JsonRpcErrorCodes.ToolExecution,
-                            new { code = "unknown-window" });
+                            new McpErrorData("unknown-window"));
 
                     onClosed = (_, _) => doneTcs.TrySetResult(true);
                     onClosing = (_, e) =>
@@ -455,7 +412,7 @@ internal static class DevtoolsTools
                     }
                     var stillOpen = rw is not null;
                     var cancelled = observedCancel || stillOpen;
-                    return new { ok = !cancelled, cancelled, id };
+                    return new WindowCloseResult(Ok: !cancelled, Cancelled: cancelled, Id: id);
                 });
             });
     }
@@ -493,7 +450,7 @@ internal static class DevtoolsTools
                     throw new McpToolException(
                         "windows.open is not wired in this host.",
                         JsonRpcErrorCodes.ToolExecution,
-                        new { code = "not-wired" });
+                        new McpErrorData("not-wired"));
 
                 // Allowlist gate (W-3): enforced framework-side, alongside the
                 // rest of the windows.open argument validation, so a host can't
@@ -519,7 +476,7 @@ internal static class DevtoolsTools
                     throw new McpToolException(
                         $"Invalid windows.open spec: {ex.Message}",
                         JsonRpcErrorCodes.InvalidParams,
-                        new { code = "invalid-spec" });
+                        new McpErrorData("invalid-spec"));
                 }
 
                 return server.OnDispatcher<object>(() =>
@@ -529,8 +486,8 @@ internal static class DevtoolsTools
                         throw new McpToolException(
                             $"Component '{component}' could not be resolved.",
                             JsonRpcErrorCodes.ToolExecution,
-                            new { code = "open-failed" });
-                    return new { ok = true, id };
+                            new McpErrorData("open-failed"));
+                    return new WindowOkResult(Ok: true, Id: id);
                 });
             });
     }
@@ -564,11 +521,7 @@ internal static class DevtoolsTools
         throw new McpToolException(
             $"Component '{component}' is not in the devtools allowlist.",
             JsonRpcErrorCodes.ToolExecution,
-            new
-            {
-                code = "unknown-component",
-                available = allowed.ToArray(),
-            });
+            new McpErrorData("unknown-component", Available: allowed.ToArray()));
     }
 
     internal static string? ReadString(JsonElement? args, string name)

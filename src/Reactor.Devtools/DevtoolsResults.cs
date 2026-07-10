@@ -45,3 +45,48 @@ internal sealed record InitializeCapabilities(ToolsCapability Tools);
 internal sealed record ToolsCapability(bool ListChanged);
 
 internal sealed record InitializeServerInfo(string Name, string Version);
+
+// -- reactor.* + windows.* tools (DevtoolsTools) ----------------------------------
+
+/// <summary>Result of the <c>components</c> tool. <see cref="Components"/> is either a
+/// <c>ComponentInfo[]</c> (detailed host) or a <c>string[]</c> (name-only host).</summary>
+internal sealed record ComponentsResult(object Components, string? Current);
+
+/// <summary>Result of the <c>switchComponent</c> tool.</summary>
+internal sealed record SwitchComponentResult(bool Ok, string Current);
+
+/// <summary>Result of the <c>reload</c> / <c>shutdown</c> tools.</summary>
+internal sealed record ExitResult(bool Ok, string ExitingBuild);
+
+/// <summary>Result of the <c>windows</c> tool (hwnd-opt-in projection).</summary>
+internal sealed record WindowsResult(WindowDto[] Windows);
+
+internal sealed record WindowDto(
+    string Id,
+    string Title,
+    long? Hwnd,
+    WindowBoundsDto Bounds,
+    bool IsMain,
+    string? BuildTag,
+    string? CurrentComponent);
+
+internal sealed record WindowBoundsDto(int X, int Y, int Width, int Height);
+
+/// <summary>Result of the <c>windows.list</c> tool.</summary>
+internal sealed record WindowsListResult(WindowListItem[] Windows);
+
+internal sealed record WindowListItem(
+    string Id,
+    string? Key,
+    string Title,
+    double Width,
+    double Height,
+    uint Dpi,
+    string State,
+    bool IsMain);
+
+/// <summary>Result of <c>windows.activate</c> / <c>windows.open</c>.</summary>
+internal sealed record WindowOkResult(bool Ok, string Id);
+
+/// <summary>Result of <c>windows.close</c>.</summary>
+internal sealed record WindowCloseResult(bool Ok, bool Cancelled, string Id);
