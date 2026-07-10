@@ -151,7 +151,7 @@ internal static class ControlCatalogFixtures
             Add("Ellipse", new EllipseElement() { Modifiers = new ElementModifiers { Width = 20, Height = 20 } }, null);
 
             // ── Components ──
-            Add("FuncComponent", RenderEachTime(ctx => TextBlock("CatalogFunc")), "CatalogFunc");
+            Add("FunctionComponent", RenderEachTime(ctx => TextBlock("CatalogFunctionComponent")), "CatalogFunctionComponent");
 
             return items;
         }
