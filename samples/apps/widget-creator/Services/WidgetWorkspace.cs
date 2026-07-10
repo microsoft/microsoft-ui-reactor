@@ -78,7 +78,7 @@ public sealed class WidgetWorkspace
         await File.WriteAllTextAsync(csFile, source).ConfigureAwait(false);
         if (NeedsCsprojRewrite(csprojFile))
             await File.WriteAllTextAsync(csprojFile, CsprojTemplate()).ConfigureAwait(false);
-        if (!File.Exists(nugetFile))
+        if (NeedsNugetRewrite(nugetFile))
             await File.WriteAllTextAsync(nugetFile, NugetConfigTemplate(LocalNupkgsFeed)).ConfigureAwait(false);
 
         SessionLog.Write($"[Workspace] scaffolded {dir} (rid={Rid}, platform={Platform}, reuse={existingId is not null})");
@@ -96,7 +96,21 @@ public sealed class WidgetWorkspace
             text.Contains("<RuntimeIdentifier>win-", StringComparison.Ordinal) ||
             !text.Contains("<TargetPlatformMinVersion>", StringComparison.Ordinal) ||
             !text.Contains("<SupportedOSPlatformVersion>", StringComparison.Ordinal) ||
-            !text.Contains("Microsoft.UI.Reactor.Advanced", StringComparison.Ordinal);
+            !text.Contains("Microsoft.UI.Reactor.Advanced", StringComparison.Ordinal) ||
+            // H-1: force a rewrite so existing widgets pick up the build-lockdown props.
+            !text.Contains("RestorePackagesWithLockFile", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// H-1: (re)write the widget's <c>nuget.config</c> when it is missing or predates
+    /// the <c>packageSourceMapping</c> hardening, so a widget's restore always pins
+    /// each package ID to a single trusted feed (no dependency confusion).
+    /// </summary>
+    static bool NeedsNugetRewrite(string nugetFile)
+    {
+        if (!File.Exists(nugetFile))
+            return true;
+        return !File.ReadAllText(nugetFile).Contains("packageSourceMapping", StringComparison.Ordinal);
     }
 
     static string CsprojTemplate() =>
@@ -118,6 +132,13 @@ public sealed class WidgetWorkspace
             <Nullable>enable</Nullable>
             <ImplicitUsings>enable</ImplicitUsings>
             <LangVersion>preview</LangVersion>
+            <!-- H-1: harden the build of untrusted AI-generated source. A lock file
+                 makes the restored dependency graph reproducible + tamper-evident,
+                 and NuGetAudit surfaces known-vulnerable (transitive) packages. Feed
+                 pinning is enforced by the generated nuget.config packageSourceMapping. -->
+            <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+            <NuGetAudit>true</NuGetAudit>
+            <NuGetAuditMode>all</NuGetAuditMode>
           </PropertyGroup>
 
           <ItemGroup>
@@ -141,6 +162,19 @@ public sealed class WidgetWorkspace
           <disabledPackageSources>
             <clear />
           </disabledPackageSources>
+          <!-- H-1: pin each package ID to exactly one feed so a malicious or
+               typosquatted package on nuget.org cannot shadow the local Reactor
+               packages (dependency-confusion defense). All local-feed packages are
+               Microsoft.UI.Reactor*; everything else (WindowsAppSDK + transitive
+               deps) comes only from nuget.org. -->
+          <packageSourceMapping>
+            <packageSource key="reactor-local">
+              <package pattern="Microsoft.UI.Reactor*" />
+            </packageSource>
+            <packageSource key="nuget.org">
+              <package pattern="*" />
+            </packageSource>
+          </packageSourceMapping>
         </configuration>
         """;
 }
