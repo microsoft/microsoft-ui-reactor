@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.UI.Reactor.Hosting.Devtools;
 using Xunit;
 
@@ -18,10 +19,10 @@ public class StdioTransportTests
         var reg = new McpToolRegistry();
         reg.Register(
             new McpToolDescriptor("ping", "", new SchemaNode("object")),
-            _ => new { ok = true });
+            _ => new JsonObject { ["ok"] = true });
         reg.Register(
             new McpToolDescriptor("echo", "", new SchemaNode("object")),
-            p => new { echoed = DevtoolsTools.ReadString(p, "text") });
+            p => new JsonObject { ["echoed"] = DevtoolsTools.ReadString(p, "text") });
         return new McpDispatcher(reg);
     }
 

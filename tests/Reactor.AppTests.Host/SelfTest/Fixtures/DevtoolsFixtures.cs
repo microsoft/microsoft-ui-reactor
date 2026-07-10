@@ -1229,7 +1229,7 @@ internal static class DevtoolsFixtures
             {
                 ["ReflectTheme"] = new CornerRadius(4),
             });
-            var resources = new List<object>();
+            var resources = new List<ResourceEntry>();
             Invoke(
                 "CollectResources",
                 dict,
@@ -1311,7 +1311,11 @@ internal static class DevtoolsFixtures
                 projectIdentifier: projectId);
             server.Tools.Register(
                 new McpToolDescriptor("selftest.echo", "Echoes a value", new SchemaNode("object")),
-                args => new { ok = true, value = args is { } a && a.TryGetProperty("value", out var value) ? value.GetString() : null });
+                args => new global::System.Text.Json.Nodes.JsonObject
+                {
+                    ["ok"] = true,
+                    ["value"] = args is { } a && a.TryGetProperty("value", out var value) ? value.GetString() : null,
+                });
             server.Start();
             server.AnnounceReady();
 

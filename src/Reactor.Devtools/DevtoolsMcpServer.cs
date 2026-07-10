@@ -533,15 +533,11 @@ internal sealed class DevtoolsMcpServer : IDisposable
 
     // -- Helpers -----------------------------------------------------------------
 
-    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026",
-        Justification = "DefaultJsonTypeInfoResolver is an intentional reflection fallback, second in the resolver chain behind the source-generated DevtoolsJsonContext. Source-gen now serves the whole result/error/schema wire under NativeAOT; the reflection fallback is only exercised at JIT for the deliberately-unregistered reflective envelopes (state's HookSnapshot and the properties/styles/resources/ancestors tools, whose values are arbitrary object/Dictionary and cannot be source-gen'd). Those tools remain AOT-skip-listed, so this fallback is never reached under NativeAOT.")]
-    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("AOT", "IL3050",
-        Justification = "See IL2026 note: the reflection resolver is a JIT-only fallback behind the source-gen context, reached only by the reflective (AOT-skip-listed) state/properties-family tools.")]
     private static JsonSerializerOptions BuildJsonOpts() => new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = global::System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-        TypeInfoResolverChain = { DevtoolsJsonContext.Default, new global::System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver() },
+        TypeInfoResolver = DevtoolsJsonContext.Default,
     };
 
     internal static JsonSerializerOptions JsonOpts { get; } = BuildJsonOpts();

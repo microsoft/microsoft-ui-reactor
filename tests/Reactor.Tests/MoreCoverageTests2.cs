@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hosting.Devtools;
@@ -105,7 +106,7 @@ public class MoreCoverageTests2
     {
         var reg = new McpToolRegistry();
         reg.Register(new McpToolDescriptor("ping", "", new SchemaNode("object")),
-            _ => new { ok = true });
+            _ => new JsonObject { ["ok"] = true });
         return new McpDispatcher(reg);
     }
 
@@ -160,7 +161,7 @@ public class MoreCoverageTests2
     public void McpDispatcher_DirectMethodInvocation_ReachesHandler()
     {
         var reg = new McpToolRegistry();
-        reg.Register(new McpToolDescriptor("pong", "", new SchemaNode("object")), _ => new { ok = true });
+        reg.Register(new McpToolDescriptor("pong", "", new SchemaNode("object")), _ => new JsonObject { ["ok"] = true });
         var d = new McpDispatcher(reg);
 
         // Not "tools/call" — the dispatcher should fall into HandleDirect.

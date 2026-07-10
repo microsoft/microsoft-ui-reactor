@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json.Nodes;
 using System.Text.Json;
 using Microsoft.UI.Reactor.Hosting.Devtools;
 using Xunit;
@@ -150,7 +151,7 @@ public class LoggingTests : IDisposable
         var reg = new McpToolRegistry();
         reg.Register(
             new McpToolDescriptor("ping", "", new SchemaNode("object")),
-            _ => new { ok = true });
+            _ => new JsonObject { ["ok"] = true });
         reg.Register(
             new McpToolDescriptor("explode", "", new SchemaNode("object")),
             _ => throw new McpToolException("boom", JsonRpcErrorCodes.ToolExecution));

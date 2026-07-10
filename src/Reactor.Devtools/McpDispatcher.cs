@@ -90,8 +90,6 @@ internal sealed class McpDispatcher
         }
     }
 
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "JSON serialization for MCP tools/list input-schema fragments.")]
-    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "JSON serialization for MCP tools/list input-schema fragments.")]
     private JsonObject BuildToolsListResult()
     {
         var tools = new JsonArray();
@@ -101,7 +99,7 @@ internal sealed class McpDispatcher
             {
                 ["name"] = JsonValue.Create(tool.Name),
                 ["description"] = JsonValue.Create(tool.Description),
-                ["inputSchema"] = JsonSerializer.SerializeToNode(tool.InputSchema, DevtoolsMcpServer.JsonOpts),
+                ["inputSchema"] = JsonSerializer.SerializeToNode(tool.InputSchema, DevtoolsJsonContext.Default.SchemaNode),
             });
         }
 
@@ -241,15 +239,24 @@ internal sealed class McpDispatcher
     };
 
     /// <summary>
-    /// True when <paramref name="result"/> is an object with an <c>ok</c> property
-    /// whose value is explicitly <c>false</c>. Used to translate tool-level soft
-    /// failures into <c>err</c> log lines.
+    /// True when <paramref name="result"/> reports an explicit <c>ok: false</c> —
+    /// either a named result record with an <c>Ok</c> property or a tool-built
+    /// <see cref="JsonObject"/> with an <c>ok</c> member. Used to translate
+    /// tool-level soft failures into <c>err</c> log lines.
     /// </summary>
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "HasOkFalse uses reflection on result objects for devtools logging.")]
-    [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "HasOkFalse uses reflection on result objects for devtools logging.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "HasOkFalse uses reflection on result records for devtools logging.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "HasOkFalse uses reflection on result records for devtools logging.")]
     private static bool HasOkFalse(object? result)
     {
         if (result is null) return false;
+
+        // Tools that hand back a JsonNode (e.g. a tool that builds its own JSON):
+        // read the `ok` member directly, no reflection.
+        if (result is JsonObject obj)
+            return obj.TryGetPropertyValue("ok", out var node)
+                && node is JsonValue jv && jv.TryGetValue<bool>(out var jb) && !jb;
+
+        // Named result records expose an `Ok` property.
         var prop = result.GetType().GetProperty("ok", global::System.Reflection.BindingFlags.Instance | global::System.Reflection.BindingFlags.Public | global::System.Reflection.BindingFlags.IgnoreCase);
         if (prop is null || prop.PropertyType != typeof(bool)) return false;
         return prop.GetValue(result) is bool b && !b;

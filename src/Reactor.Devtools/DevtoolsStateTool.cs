@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.UI.Reactor.Core;
 
 namespace Microsoft.UI.Reactor.Hosting.Devtools;
@@ -86,34 +87,43 @@ internal static class DevtoolsStateTool
     /// </summary>
     [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Devtools state tool uses reflection to inspect hook values.")]
     [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Devtools state tool uses reflection to inspect hook values.")]
-    internal static object? ShapeValue(object? value)
+    internal static JsonNode? ShapeValue(object? value)
     {
         if (value is null) return null;
 
-        // Primitives + string + decimal ship as literals.
-        if (value is string or bool or byte or sbyte or short or ushort or int or uint or long or ulong or float or double or decimal)
-            return value;
+        // Primitives + string + decimal ship as JSON literals.
+        switch (value)
+        {
+            case string s: return JsonValue.Create(s);
+            case bool b: return JsonValue.Create(b);
+            case byte v: return JsonValue.Create(v);
+            case sbyte v: return JsonValue.Create(v);
+            case short v: return JsonValue.Create(v);
+            case ushort v: return JsonValue.Create(v);
+            case int v: return JsonValue.Create(v);
+            case uint v: return JsonValue.Create(v);
+            case long v: return JsonValue.Create(v);
+            case ulong v: return JsonValue.Create(v);
+            case float v: return JsonValue.Create(v);
+            case double v: return JsonValue.Create(v);
+            case decimal v: return JsonValue.Create(v);
+        }
 
         // Enums present as their string form — easier to read than the raw int.
-        if (value.GetType().IsEnum) return value.ToString();
+        if (value.GetType().IsEnum) return JsonValue.Create(value.ToString());
 
         // Collections: emit the count only. A full dump is a privacy/serialization
         // pit per §12. Enumerating an arbitrary IEnumerable to count items is
-        // unsafe — lazy sequences can be expensive, infinite, or have
-        // observable side effects. We only report count when the source
-        // advertises it via ICollection / IReadOnlyCollection / ICollection<T>;
-        // otherwise we ship `count: null` so agents know the shape without us
-        // forcing enumeration.
-        if (value is IEnumerable enumerable and not string)
+        // unsafe — lazy sequences can be expensive, infinite, or have observable
+        // side effects. We only report count when the source advertises it via
+        // ICollection / IReadOnlyCollection / ICollection<T>; otherwise the count
+        // key is omitted so agents know the shape without us forcing enumeration.
+        if (value is IEnumerable and not string)
         {
             int? count = TryReadCollectionCount(value);
-            var collectionShape = new Dictionary<string, object?>
-            {
-                ["kind"] = "collection",
-                ["count"] = count,
-            };
-            _ = enumerable; // keep the pattern-match binding live for readability
-            return new Dictionary<string, object?>
+            var collectionShape = new JsonObject { ["kind"] = "collection" };
+            if (count is int c) collectionShape["count"] = c;
+            return new JsonObject
             {
                 ["$type"] = value.GetType().FullName ?? value.GetType().Name,
                 ["$shape"] = collectionShape,
@@ -127,12 +137,12 @@ internal static class DevtoolsStateTool
         var props = type.GetProperties(
             global::System.Reflection.BindingFlags.Instance |
             global::System.Reflection.BindingFlags.Public);
-        var shape = new Dictionary<string, object?>();
+        var shape = new JsonObject();
         foreach (var p in props)
         {
             shape[p.Name] = p.PropertyType.Name;
         }
-        return new Dictionary<string, object?>
+        return new JsonObject
         {
             ["$type"] = type.FullName ?? type.Name,
             ["$shape"] = shape,
@@ -166,10 +176,12 @@ internal sealed record StateResult(HookSnapshot[] Hooks);
 
 /// <summary>
 /// One hook cell from the root component's hook table. <see cref="Value"/> is a
-/// shaped value (a primitive/string literal, or a <c>{ $type, $shape }</c> map for
-/// complex objects — see <see cref="DevtoolsStateTool.ShapeValue"/>), so it stays
-/// typed as <c>object</c> and the <c>state</c> tool remains on the reflection path
-/// (AOT-skip-listed).
+/// shaped value as a <see cref="JsonNode"/> (a primitive/string literal, or a
+/// <c>{ $type, $shape }</c> object for complex values — see
+/// <see cref="DevtoolsStateTool.ShapeValue"/>). Emitting a <c>JsonNode</c> (rather
+/// than a raw <c>object</c>/<c>Dictionary</c>) lets <see cref="StateResult"/>
+/// serialize through the source generator; the tool's <em>introspection</em> still
+/// uses reflection, so its selftest fixture stays AOT-skip-listed.
 /// </summary>
 internal sealed record HookSnapshot(
     string Component,
@@ -177,5 +189,5 @@ internal sealed record HookSnapshot(
     string Hook,
     int Index,
     string? ValueType,
-    object? Value,
+    JsonNode? Value,
     bool Migrated);

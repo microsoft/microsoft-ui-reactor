@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.UI.Reactor.Controls;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hosting.Devtools;
@@ -190,9 +191,9 @@ public class MoreCoverageTests
         reg.Register(new McpToolDescriptor("kaboom", "", new SchemaNode("object")),
             _ => throw new InvalidOperationException("generic failure"));
         reg.Register(new McpToolDescriptor("softfail", "", new SchemaNode("object")),
-            _ => new { ok = false, reason = "no-op" });
+            _ => new JsonObject { ["ok"] = false, ["reason"] = "no-op" });
         reg.Register(new McpToolDescriptor("ping", "", new SchemaNode("object")),
-            _ => new { ok = true });
+            _ => new JsonObject { ["ok"] = true });
         return new McpDispatcher(reg);
     }
 
@@ -313,7 +314,7 @@ public class MoreCoverageTests
             using var logger = new DevtoolsLogger(tempDir, pid: 2001, DevtoolsLogLevel.Call);
             var reg = new McpToolRegistry();
             reg.Register(new McpToolDescriptor("softfail", "", new SchemaNode("object")),
-                _ => new { ok = false });
+                _ => new JsonObject { ["ok"] = false });
             var d = new McpDispatcher(reg, logger);
 
             var resp = d.Dispatch(

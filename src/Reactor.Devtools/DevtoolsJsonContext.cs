@@ -16,12 +16,7 @@ namespace Microsoft.UI.Reactor.Hosting.Devtools;
 [JsonSerializable(typeof(ScreenshotResult))]
 [JsonSerializable(typeof(McpErrorData))]
 [JsonSerializable(typeof(FireOkResult))]
-// NOTE: StateResult is intentionally NOT registered here. Its HookSnapshot.Value
-// is an `object` holding arbitrary { $type, $shape } Dictionary<string, object?>
-// maps (see DevtoolsStateTool.ShapeValue). Source-gen can't serve those nested
-// dictionaries, so the state tool stays on the reflection resolver (JIT) and is
-// AOT-skip-listed. Registering it makes STJ pick the source-gen path and throw
-// NotSupportedException on the Dictionary value.
+[JsonSerializable(typeof(StateResult))]
 [JsonSerializable(typeof(LogsResult))]
 [JsonSerializable(typeof(DockListResult))]
 [JsonSerializable(typeof(DockSnapshotResult))]
@@ -49,6 +44,14 @@ namespace Microsoft.UI.Reactor.Hosting.Devtools;
 [JsonSerializable(typeof(TreeResult))]
 [JsonSerializable(typeof(SchemaNode))]
 [JsonSerializable(typeof(SchemaDocument))]
+[JsonSerializable(typeof(ReferenceGraphResult))]
+[JsonSerializable(typeof(PropertyResult))]
+[JsonSerializable(typeof(PropertiesResult))]
+[JsonSerializable(typeof(SetPropertyResult))]
+[JsonSerializable(typeof(ResourcesResult))]
+[JsonSerializable(typeof(SetResourceResult))]
+[JsonSerializable(typeof(StylesResult))]
+[JsonSerializable(typeof(AncestorsResult))]
 internal partial class DevtoolsJsonContext : JsonSerializerContext
 {
 }

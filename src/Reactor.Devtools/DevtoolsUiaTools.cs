@@ -873,14 +873,8 @@ internal sealed record WaitForPredicate(
         }
     }
 
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "JSON serialization to inspect MCP tool exception payload.")]
-    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "JSON serialization to inspect MCP tool exception payload.")]
     private static bool IsUnknownSelector(McpToolException ex)
-    {
-        if (ex.Payload is null) return false;
-        var json = JsonSerializer.Serialize(ex.Payload, DevtoolsMcpServer.JsonOpts);
-        return json.Contains("unknown-selector");
-    }
+        => ex.Payload is McpErrorData { Code: "unknown-selector" };
 
     private static string? ExtractText(UIElement element) => element switch
     {

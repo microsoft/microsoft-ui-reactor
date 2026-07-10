@@ -139,7 +139,7 @@ internal static class DevtoolsPropertyTools
                     catch { throw new McpToolException($"Invalid regex: {filter}", JsonRpcErrorCodes.InvalidParams); }
                 }
 
-                var results = new List<object>();
+                var results = new List<ResourceEntry>();
 
                 // Resolve starting element if given.
                 FrameworkElement? startEl = null;
@@ -307,19 +307,17 @@ internal static class DevtoolsPropertyTools
                 var windowId = DevtoolsTools.ReadString(@params, "window");
                 var el = resolver.Resolve(selector, windowId);
 
-                var chain = new List<object>();
+                var chain = new List<AncestorEntry>();
                 var current = VisualTreeHelper.GetParent(el);
                 while (current is not null)
                 {
                     var fe = current as FrameworkElement;
-                    chain.Add(new
-                    {
-                        type = current.GetType().Name,
-                        name = fe?.Name,
-                        automationId = fe is not null
+                    chain.Add(new AncestorEntry(
+                        current.GetType().Name,
+                        fe?.Name,
+                        fe is not null
                             ? Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(fe)
-                            : null,
-                    });
+                            : null));
                     current = VisualTreeHelper.GetParent(current);
                 }
                 return new AncestorsResult(chain.Count, chain);
@@ -402,10 +400,10 @@ internal static class DevtoolsPropertyTools
     /// <summary>Enumerate all public static DependencyProperty fields on the element's type chain.</summary>
     [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Devtools uses reflection to enumerate DependencyProperty fields.")]
     [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Devtools reflection for property enumeration.")]
-    private static List<object> EnumerateDependencyProperties(UIElement el)
+    private static List<PropertyResult> EnumerateDependencyProperties(UIElement el)
     {
         var seen = new HashSet<string>();
-        var results = new List<object>();
+        var results = new List<PropertyResult>();
 
         for (var type = el.GetType(); type is not null && type != typeof(object); type = type.BaseType)
         {
@@ -428,14 +426,12 @@ internal static class DevtoolsPropertyTools
                 try { isLocal = !Equals(el.ReadLocalValue(dp), DependencyProperty.UnsetValue); }
                 catch { }
 
-                results.Add(new
-                {
-                    name = propName,
-                    value = FormatValue(value),
-                    valueType = value?.GetType().Name ?? "null",
-                    declaringType = type.Name,
-                    isLocal,
-                });
+                results.Add(new PropertyResult(
+                    propName,
+                    FormatValue(value),
+                    value?.GetType().Name ?? "null",
+                    type.Name,
+                    isLocal));
             }
         }
 
@@ -594,7 +590,7 @@ internal static class DevtoolsPropertyTools
         catch { return false; }
     }
 
-    private static void CollectResources(ResourceDictionary dict, string scope, Regex? filter, List<object> results)
+    private static void CollectResources(ResourceDictionary dict, string scope, Regex? filter, List<ResourceEntry> results)
     {
         foreach (var key in dict.Keys)
         {
@@ -613,13 +609,11 @@ internal static class DevtoolsPropertyTools
             try { val = dict[key]; }
             catch { val = null; }
 
-            results.Add(new
-            {
-                key = keyStr,
-                valueType = val?.GetType().Name ?? "null",
-                value = FormatValue(val),
-                scope,
-            });
+            results.Add(new ResourceEntry(
+                keyStr,
+                val?.GetType().Name ?? "null",
+                FormatValue(val),
+                scope));
         }
 
         // Walk MergedDictionaries.
@@ -637,50 +631,57 @@ internal static class DevtoolsPropertyTools
         }
     }
 
-    private static object DescribeStyle(Style style)
+    private static StyleInfo DescribeStyle(Style style)
     {
-        var setters = new List<object>();
+        var setters = new List<StyleSetterInfo>();
         foreach (var setterBase in style.Setters)
         {
             if (setterBase is Setter setter)
             {
-                setters.Add(new
-                {
-                    property = setter.Property?.ToString() ?? "unknown",
-                    value = FormatValue(setter.Value),
-                    valueType = setter.Value?.GetType().Name ?? "null",
-                });
+                setters.Add(new StyleSetterInfo(
+                    setter.Property?.ToString() ?? "unknown",
+                    FormatValue(setter.Value),
+                    setter.Value?.GetType().Name ?? "null"));
             }
         }
 
-        return new
-        {
-            targetType = style.TargetType?.Name,
-            setterCount = setters.Count,
+        return new StyleInfo(
+            style.TargetType?.Name,
+            setters.Count,
             setters,
-            basedOn = style.BasedOn is not null ? DescribeStyle(style.BasedOn) : null,
-        };
+            style.BasedOn is not null ? DescribeStyle(style.BasedOn) : null);
     }
 }
 
-// -- DevtoolsPropertyTools reflective envelopes ----------------------------------
-// These carry arbitrary DP / resource / style values (object, List<object>), so they
-// stay on the reflection resolver — deliberately NOT registered in DevtoolsJsonContext,
-// which keeps the properties / setProperty / resources / setResource / styles /
-// ancestors fixtures AOT-skip-listed. Named only to keep the tool handlers free of
-// anonymous return types (the dynamic values remain object). Serialized via
-// DevtoolsMcpServer.JsonOpts (camelCase + WhenWritingNull) exactly like the prior
-// anonymous shapes.
-internal sealed record PropertyResult(string Name, object? Value, string ValueType, string? DeclaringType, bool IsLocal);
+// -- DevtoolsPropertyTools result shapes -----------------------------------------
+// Every dynamic DP / resource / style value is reduced to a string by FormatValue,
+// so these are fully closed, source-generated records (registered in
+// DevtoolsJsonContext). The tool *logic* still introspects via reflection
+// (EnumerateDependencyProperties, DescribeStyle), which keeps the fixtures
+// AOT-skip-listed — but the serialized payloads no longer need the reflection
+// resolver fallback.
+internal sealed record PropertyResult(string Name, string? Value, string ValueType, string? DeclaringType, bool IsLocal);
 
-internal sealed record PropertiesResult(int Count, IReadOnlyList<object> Properties);
+internal sealed record PropertiesResult(int Count, IReadOnlyList<PropertyResult> Properties);
 
-internal sealed record SetPropertyResult(bool Ok, string Name, object? NewValue);
+internal sealed record SetPropertyResult(bool Ok, string Name, string? NewValue);
 
-internal sealed record ResourcesResult(int Count, IReadOnlyList<object> Resources);
+internal sealed record ResourceEntry(string Key, string ValueType, string? Value, string Scope);
 
-internal sealed record SetResourceResult(bool Ok, string Key, object? NewValue, bool Replaced);
+internal sealed record ResourcesResult(int Count, IReadOnlyList<ResourceEntry> Resources);
 
-internal sealed record StylesResult(bool HasStyle, object? Style = null);
+internal sealed record SetResourceResult(bool Ok, string Key, string? NewValue, bool Replaced);
 
-internal sealed record AncestorsResult(int Count, IReadOnlyList<object> Ancestors);
+internal sealed record StyleSetterInfo(string Property, string? Value, string ValueType);
+
+internal sealed record StyleInfo(
+    string? TargetType,
+    int SetterCount,
+    IReadOnlyList<StyleSetterInfo> Setters,
+    StyleInfo? BasedOn);
+
+internal sealed record StylesResult(bool HasStyle, StyleInfo? Style = null);
+
+internal sealed record AncestorEntry(string Type, string? Name, string? AutomationId);
+
+internal sealed record AncestorsResult(int Count, IReadOnlyList<AncestorEntry> Ancestors);
