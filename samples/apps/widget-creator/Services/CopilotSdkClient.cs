@@ -89,7 +89,7 @@ public sealed class CopilotSdkClient : IModelClient, IAsyncDisposable
     {
         Model = _model,
         ClientName = "widget-creator",
-        OnPermissionRequest = PermissionHandler.ApproveAll,
+        OnPermissionRequest = AgentPermissionPolicy.DenyAll,
         Streaming = true,
         SystemMessage = new SystemMessageConfig
         {
@@ -102,7 +102,7 @@ public sealed class CopilotSdkClient : IModelClient, IAsyncDisposable
     {
         Model = _model,
         ClientName = "widget-creator",
-        OnPermissionRequest = PermissionHandler.ApproveAll,
+        OnPermissionRequest = AgentPermissionPolicy.DenyAll,
         Streaming = true,
         SystemMessage = new SystemMessageConfig
         {

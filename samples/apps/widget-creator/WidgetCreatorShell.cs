@@ -56,6 +56,14 @@ public sealed class WidgetCreatorShell : Component
     string _sourceText = "";
     string _logText = "";
 
+    /// <summary>
+    /// Cap on consecutive automatic crash→repair→relaunch cycles (threat-model
+    /// C-1/M-5). A widget that crashes on every launch would otherwise loop the
+    /// unsandboxed repair agent forever; after this many auto-repairs we stop and
+    /// hand control back to the user.
+    /// </summary>
+    const int MaxAutoRepairs = 2;
+
     public WidgetCreatorShell()
     {
         _client = new CopilotSdkClient();
@@ -360,7 +368,7 @@ public sealed class WidgetCreatorShell : Component
             ClosePermissions();
         }
 
-        void StartMonitor(WidgetApp app)
+        void StartMonitor(WidgetApp app, int repairAttempt = 0)
         {
             _ = Task.Run(async () =>
             {
@@ -394,12 +402,24 @@ public sealed class WidgetCreatorShell : Component
                         return;
                     }
 
+                    // Gate the auto-repair loop so a widget that crashes every launch
+                    // can't drive the unsandboxed repair agent indefinitely (C-1/M-5).
+                    if (repairAttempt >= MaxAutoRepairs)
+                    {
+                        setStatus($"'{app.Title}' keeps crashing — automatic repair stopped.");
+                        setBanner($"'{app.Title}' crashed again ({result.ExitCodeHex}) after {MaxAutoRepairs} automatic "
+                            + "repair attempts, so auto-repair was stopped. Use Run to try again, or Refine it with a "
+                            + "specific instruction.");
+                        AppendLog($"# '{app.Title}' still crashing after {MaxAutoRepairs} auto-repairs — stopping the loop.", setLog);
+                        return;
+                    }
+
                     var message =
-                        $"'{app.Title}' crashed ({result.ExitCodeHex}). Restoring Copilot session {Short(app.SessionId)} and asking the agent to repair it.";
+                        $"'{app.Title}' crashed ({result.ExitCodeHex}). Restoring Copilot session {Short(app.SessionId)} and asking the agent to repair it (attempt {repairAttempt + 1}/{MaxAutoRepairs}).";
                     setBanner(message);
                     setStatus($"Repairing '{app.Title}' after crash...");
                     AppendLog($"# {message}", setLog);
-                    await RepairCrashAsync(app, result).ConfigureAwait(false);
+                    await RepairCrashAsync(app, result, repairAttempt).ConfigureAwait(false);
                 }
                 catch (Exception ex)
                 {
@@ -410,7 +430,7 @@ public sealed class WidgetCreatorShell : Component
             });
         }
 
-        async Task RepairCrashAsync(WidgetApp app, SandboxResult crash)
+        async Task RepairCrashAsync(WidgetApp app, SandboxResult crash, int repairAttempt)
         {
             await _operationGate.WaitAsync().ConfigureAwait(false);
             setIsWorking(true);
