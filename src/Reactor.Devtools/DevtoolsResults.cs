@@ -24,3 +24,24 @@ internal sealed record McpErrorData(
     string[]? Available = null,
     string[]? ReachableMethods = null,
     string? Hint = null);
+
+/// <summary>An empty JSON-RPC result object (<c>{}</c>) — <c>ping</c> / <c>notifications/*</c>.</summary>
+internal sealed record EmptyResult;
+
+/// <summary>Result of <c>resources/list</c> — an empty inventory (not implemented yet).</summary>
+internal sealed record ResourcesListResult(object[] Resources);
+
+/// <summary>Result of <c>prompts/list</c> — an empty inventory (not implemented yet).</summary>
+internal sealed record PromptsListResult(object[] Prompts);
+
+/// <summary>Result of the MCP <c>initialize</c> handshake.</summary>
+internal sealed record InitializeResult(
+    string ProtocolVersion,
+    InitializeCapabilities Capabilities,
+    InitializeServerInfo ServerInfo);
+
+internal sealed record InitializeCapabilities(ToolsCapability Tools);
+
+internal sealed record ToolsCapability(bool ListChanged);
+
+internal sealed record InitializeServerInfo(string Name, string Version);

@@ -53,18 +53,18 @@ internal sealed class McpDispatcher
             object? result = request.Method switch
             {
                 "initialize" => HandleInitialize(request.Params),
-                "ping" => new { },
+                "ping" => new EmptyResult(),
                 // Notifications have no response per JSON-RPC, but HTTP still
                 // needs *something* on the wire. Returning an empty result
                 // satisfies both strict MCP clients (which ignore the body
                 // when id is absent) and curl-happy humans.
-                var m when m.StartsWith("notifications/", StringComparison.Ordinal) => new { },
+                var m when m.StartsWith("notifications/", StringComparison.Ordinal) => new EmptyResult(),
                 "tools/list" => BuildToolsListResult(),
                 // MCP resource / prompt surfaces are not implemented yet; return
                 // the empty inventory so `initialize`-speaking clients don't fail
                 // their discovery step.
-                "resources/list" => new { resources = Array.Empty<object>() },
-                "prompts/list" => new { prompts = Array.Empty<object>() },
+                "resources/list" => new ResourcesListResult(Array.Empty<object>()),
+                "prompts/list" => new PromptsListResult(Array.Empty<object>()),
                 "tools/call" => HandleCall(request.Params),
                 _ => HandleDirect(request.Method, request.Params),
             };
@@ -136,20 +136,12 @@ internal sealed class McpDispatcher
             _ => "2024-11-05",
         };
 
-        return new
-        {
-            protocolVersion = protocol,
-            capabilities = new
-            {
-                tools = new { listChanged = false },
-            },
-            serverInfo = new
-            {
-                name = "reactor-devtools",
-                version = typeof(McpDispatcher).Assembly
-                    .GetName().Version?.ToString() ?? "0.1.0",
-            },
-        };
+        return new InitializeResult(
+            ProtocolVersion: protocol,
+            Capabilities: new InitializeCapabilities(new ToolsCapability(ListChanged: false)),
+            ServerInfo: new InitializeServerInfo(
+                Name: "reactor-devtools",
+                Version: typeof(McpDispatcher).Assembly.GetName().Version?.ToString() ?? "0.1.0"));
     }
 
     // <snippet:tools-call-dispatch>
