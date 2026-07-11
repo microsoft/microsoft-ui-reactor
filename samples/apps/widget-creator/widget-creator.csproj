@@ -13,6 +13,13 @@
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- This is a rich integration DEMO, not an AOT-published app: it shells out to
+         vendored native MXC sandbox binaries (tools/mxc/<rid>/*.exe), rides the
+         Copilot SDK, and runs a dynamic JSON policy/artifact engine (reflection-based
+         System.Text.Json by design). It is never NativeAOT-published, so it opts out
+         of the IL2*/IL3* trim/AOT analysis (and its warnings-as-errors promotion) that
+         the repo enforces on genuinely AOT-relevant projects. See Directory.Build.targets. -->
+    <ReactorSkipAotAnalysis>true</ReactorSkipAotAnalysis>
   </PropertyGroup>
 
   <ItemGroup>
