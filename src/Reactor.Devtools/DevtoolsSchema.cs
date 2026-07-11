@@ -1,3 +1,5 @@
+using System.Linq;
+
 namespace Microsoft.UI.Reactor.Hosting.Devtools;
 
 /// <summary>
@@ -43,11 +45,10 @@ internal static class Schema
         // Enforced in every configuration: an input schema is part of the MCP wire
         // contract, so a required name that isn't a declared property is a hard error,
         // not a Debug-only assert.
-        foreach (var name in required)
+        foreach (var name in required.Where(n => !props.ContainsKey(n)))
         {
-            if (!props.ContainsKey(name))
-                throw new global::System.ArgumentException(
-                    $"Schema.Root: required property '{name}' is not declared.", nameof(required));
+            throw new global::System.ArgumentException(
+                $"Schema.Root: required property '{name}' is not declared.", nameof(required));
         }
         return new("object", Properties: props, Required: required, AdditionalProperties: false);
     }
