@@ -89,17 +89,42 @@ public static partial class SessionInteractivityGuard
         if (IsTruthy(Environment.GetEnvironmentVariable("E2E_SKIP_LOCK_GUARD")))
             return;
 
+        // A loaded CI runner can momentarily report a non-Active state (a WTS connect-state blip,
+        // or the input desktop not yet resolving to "Default") even though it is genuinely
+        // interactive. Re-probe until we get a definitive Active read or the window elapses, so a
+        // transient blip doesn't wrongly reclassify a real input-injection E2E as Inconclusive
+        // (which the CI gate then fails). Track whether ANY probe in the window saw a definite
+        // lock/disconnect, so a single transient Unknown reading can't flip a genuinely locked
+        // session to a pass — that would reopen the silent-skip hole the gate exists to close.
         var state = GetState();
-        // Unknown means the OS gave us an unexpected error from the desktop
-        // probe — don't fabricate a verdict. Let the test run; if winapp
-        // really can't drive input, the post-failure recheck will catch
-        // a definite Locked/Disconnected on the second look.
-        if (state == SessionInteractivity.Active || state == SessionInteractivity.Unknown)
+        // Remember the most recent DEFINITE non-interactive reading, so if the window ends on a
+        // trailing Unknown we still report the actionable Locked/Disconnected signal (and still fail).
+        SessionInteractivity? lockedState =
+            state is SessionInteractivity.Locked or SessionInteractivity.Disconnected ? state : null;
+        for (int attempt = 0; attempt < 4 && state != SessionInteractivity.Active; attempt++)
+        {
+            Thread.Sleep(500);
+            state = GetState();
+            if (state is SessionInteractivity.Locked or SessionInteractivity.Disconnected)
+                lockedState = state;
+        }
+
+        if (state == SessionInteractivity.Active)
             return;
 
-        WriteMarker(state, operation);
+        // Unknown means the OS gave us an unexpected error from the desktop probe — don't fabricate a
+        // verdict AND let the test run, UNLESS a probe already saw a definite lock/disconnect this
+        // window (then the session is genuinely non-interactive and must surface as Inconclusive).
+        // Pure-Unknown proceeds; if winapp really can't drive input, the post-failure recheck catches
+        // a definite Locked/Disconnected on the second look.
+        if (state == SessionInteractivity.Unknown && lockedState is null)
+            return;
+
+        // Prefer the definite locked/disconnected signal over a trailing Unknown reading.
+        var verdict = lockedState ?? state;
+        WriteMarker(verdict, operation);
         Assert.Inconclusive(
-            $"Cannot perform '{operation}': workstation is {state}. " +
+            $"Cannot perform '{operation}': workstation is {verdict}. " +
             "UI automation needs an active interactive desktop — locked screen, " +
             "idle/sleep lock, or RDP disconnect makes every winapp click " +
             "fail with a generic error. Treating these as Inconclusive " +

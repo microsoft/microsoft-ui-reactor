@@ -63,14 +63,11 @@ public class TestSession
         var exePath = FindHostExe();
         Console.WriteLine($"Host app: {exePath}");
 
-        _appProcess = Process.Start(new ProcessStartInfo(exePath) { UseShellExecute = false });
-        Console.WriteLine($"Host app launched (PID {_appProcess?.Id}).");
-
         try
         {
-            var pid = _appProcess!.Id;
-            var hwnd = WinAppUi.FindWindowHwnd(pid, WindowTitle, timeoutMs: 15000);
-            _app = new WinAppUi(pid, hwnd);
+            var (proc, hwnd) = HostLaunch.LaunchAndBind(exePath, WindowTitle);
+            _appProcess = proc;
+            _app = new WinAppUi(proc.Id, hwnd);
             _uia = new UiaPropertyReader(hwnd);
             Console.WriteLine($"winapp UI automation bound to Host window (HWND 0x{hwnd:X}).");
         }
