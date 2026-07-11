@@ -20,7 +20,9 @@
          the bundled Copilot CLI. Same package the demo-script-tool sample uses.
          Versions come from Central Package Management (Directory.Packages.props). -->
     <PackageReference Include="GitHub.Copilot.SDK" />
-    <PackageReference Include="Microsoft.WindowsAppSDK" />
+    <!-- Microsoft.WindowsAppSDK is injected centrally by Directory.Build.targets
+         (.WinUI + .Runtime for this framework-dependent app); referencing the
+         metapackage directly is forbidden by WinAppSDKReferenceGuardTests. -->
     <!-- Managed DPAPI (per-user) for the H-3 artifact-integrity key. -->
     <PackageReference Include="System.Security.Cryptography.ProtectedData" />
   </ItemGroup>
