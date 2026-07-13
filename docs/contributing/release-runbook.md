@@ -92,9 +92,12 @@ run. The hardcoded default in
 tools/Templates/Microsoft.UI.Reactor.Templates.csproj
 ```
 
-is what *local* `bootstrap.ps1` / `mur pack-local` scaffolds use (it is not overridden there),
-so keep it current with the latest **public** package as hygiene — bump it in this same PR — but
-it does not affect the published template.
+is now only a *fallback*. `bootstrap.ps1` runs `mur pack-local --framework-version latest`, which
+resolves the newest published package from NuGet and stamps it into the local template, so a fresh
+clone scaffolds against the current release automatically. The hardcoded value is used verbatim only
+by a bare `mur pack-local` (no flag) or when the `latest` lookup can't reach NuGet — keep it at a
+real **public** version so those paths still restore from NuGet.org, but it no longer gates anything
+and a stale value is harmless. Bump it here when convenient for hygiene.
 
 Update authored docs under `docs/_pipeline/templates/`, not generated `docs/guide/` files directly. Then regenerate the guide. Use a full compile for release-prep changes because some pages (for example `getting-started`) pull snippets from other topics:
 

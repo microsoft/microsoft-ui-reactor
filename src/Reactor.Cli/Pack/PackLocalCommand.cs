@@ -11,8 +11,22 @@
 //
 // Run after framework changes whenever you want recipes / scaffolded apps to
 // pick them up.
+//
+// Flags:
+//   --version <v>            package version stamped on the produced nupkgs
+//                            (default 0.0.0-local).
+//   --configuration <c>      build configuration (default Debug).
+//   --framework-version <v>  version the packed `reactorapp` template tells
+//                            generated apps to reference. Accepts an explicit
+//                            version, or `latest` to resolve the newest published
+//                            Microsoft.UI.Reactor from NuGet. Omitted → the
+//                            template's csproj default. `bootstrap.ps1` passes
+//                            `latest`, so a fresh clone scaffolds against the
+//                            current release without a manual version bump.
 
 using System.Diagnostics;
+using System.Net.Http;
+using System.Text.Json;
 
 namespace Microsoft.UI.Reactor.Cli.Pack;
 
@@ -24,6 +38,7 @@ public static class PackLocalCommand
     {
         var version = ParseFlag(args, "--version") ?? DefaultLocalVersion;
         var configuration = ParseFlag(args, "--configuration") ?? "Debug";
+        var frameworkVersionArg = ParseFlag(args, "--framework-version");
 
         var repoRoot = FindRepoRoot();
         if (repoRoot is null)
@@ -88,14 +103,20 @@ public static class PackLocalCommand
 
         // 4. Project templates — Microsoft.UI.Reactor.ProjectTemplates.<version>.nupkg.
         // Powers `dotnet new reactorapp -n MyApp` against this clone. Templates pack
-        // is AnyCPU (no arch needed). The generated app's <PackageReference> defaults
-        // to the framework version baked into template.json (the csproj's
-        // MicrosoftUIReactorVersion default = the current *public* package), so a
-        // scaffold restores from NuGet.org and builds standalone. Pass
-        // `--MSUIReactorVersion 0.0.0-local` to `dotnet new reactorapp` to instead
-        // consume the source-built framework packed into this feed.
+        // is AnyCPU (no arch needed). The framework version the generated app
+        // references is baked into template.json at pack time from
+        // MicrosoftUIReactorVersion:
+        //   • no --framework-version  → the csproj default (a real *public* package),
+        //     so a scaffold restores from NuGet.org and builds standalone.
+        //   • --framework-version <v> → stamp <v>. `bootstrap.ps1` passes `latest`,
+        //     which resolves the newest published package so the local scaffold
+        //     default tracks releases automatically instead of drifting behind them.
+        // Either way it's a public NuGet version; pass `--MSUIReactorVersion
+        // 0.0.0-local` to `dotnet new reactorapp` to instead consume the
+        // source-built framework packed into this feed.
+        var templateFrameworkVersion = ResolveTemplateFrameworkVersion(frameworkVersionArg);
         Console.WriteLine($"Packing Microsoft.UI.Reactor.ProjectTemplates {version} → {feed}");
-        rc = RunPack(repoRoot, Path.Combine("tools", "Templates", "Microsoft.UI.Reactor.Templates.csproj"), configuration, version, feed, arch: null);
+        rc = RunPack(repoRoot, Path.Combine("tools", "Templates", "Microsoft.UI.Reactor.Templates.csproj"), configuration, version, feed, arch: null, frameworkVersion: templateFrameworkVersion);
         if (rc != 0)
         {
             Console.Error.WriteLine("templates pack failed.");
@@ -245,7 +266,7 @@ public static class PackLocalCommand
         return paths;
     }
 
-    static int RunPack(string repoRoot, string projectRelative, string configuration, string version, string feed, string? arch)
+    static int RunPack(string repoRoot, string projectRelative, string configuration, string version, string feed, string? arch, string? frameworkVersion = null)
     {
         var psi = new ProcessStartInfo("dotnet")
         {
@@ -258,6 +279,10 @@ public static class PackLocalCommand
         psi.ArgumentList.Add("-v:m");
         psi.ArgumentList.Add($"-c:{configuration}");
         psi.ArgumentList.Add($"-p:Version={version}");
+        // Stamp the framework version the generated template references (baked into
+        // template.json by the templates csproj's BeforePack target). Supplied only
+        // for the templates pack; null leaves the csproj default in place.
+        if (frameworkVersion is not null) psi.ArgumentList.Add($"-p:MicrosoftUIReactorVersion={frameworkVersion}");
         psi.ArgumentList.Add($"-o:{feed}");
         if (arch is not null) psi.ArgumentList.Add($"-p:Platform={arch}");
 
@@ -291,6 +316,191 @@ public static class PackLocalCommand
         for (var i = 0; i < args.Length - 1; i++)
             if (args[i] == name) return args[i + 1];
         return null;
+    }
+
+    // Resolve the framework version to bake into the packed template's
+    // <PackageReference>, from the --framework-version flag value:
+    //   • null/empty  → null (leave the csproj default in place; today's behavior).
+    //   • "latest"    → newest published Microsoft.UI.Reactor on NuGet.org, or null
+    //                   (warn + fall back to the csproj default) when it can't be
+    //                   resolved. Best-effort so `bootstrap.ps1` on a flaky network
+    //                   still produces a usable feed.
+    //   • otherwise   → the literal version supplied.
+    internal static string? ResolveTemplateFrameworkVersion(string? frameworkVersionArg)
+    {
+        if (string.IsNullOrWhiteSpace(frameworkVersionArg))
+            return null;
+
+        var trimmed = frameworkVersionArg.Trim();
+        if (!trimmed.Equals("latest", StringComparison.OrdinalIgnoreCase))
+            return trimmed;
+
+        var latest = TryResolveLatestPublishedFrameworkVersion();
+        if (latest is null)
+        {
+            Console.Error.WriteLine(
+                "warning: could not resolve the latest published Microsoft.UI.Reactor version from NuGet; " +
+                "scaffolded apps will reference the template's built-in default version. Re-run with network " +
+                "access, or pass an explicit --framework-version <version>.");
+            return null;
+        }
+
+        Console.WriteLine($"Latest published Microsoft.UI.Reactor: {latest} (stamped into the template)");
+        return latest;
+    }
+
+    // NuGet flat-container index for the published framework package. Lists every
+    // published version (including prereleases) as a JSON string array.
+    const string FrameworkFlatContainerIndexUrl =
+        "https://api.nuget.org/v3-flatcontainer/microsoft.ui.reactor/index.json";
+
+    static string? TryResolveLatestPublishedFrameworkVersion()
+    {
+        try
+        {
+            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+            var json = http.GetStringAsync(FrameworkFlatContainerIndexUrl).GetAwaiter().GetResult();
+            return SelectLatestVersion(ParseFlatContainerVersions(json));
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(
+                $"warning: querying NuGet for the latest Microsoft.UI.Reactor version failed " +
+                $"({ex.GetType().Name}: {ex.Message}).");
+            return null;
+        }
+    }
+
+    // Extract the "versions" string array from a NuGet flat-container index.json.
+    // Returns an empty list for malformed / oddly-shaped payloads (best-effort).
+    internal static IReadOnlyList<string> ParseFlatContainerVersions(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object &&
+                doc.RootElement.TryGetProperty("versions", out var versions) &&
+                versions.ValueKind == JsonValueKind.Array)
+            {
+                var list = new List<string>();
+                foreach (var element in versions.EnumerateArray())
+                {
+                    if (element.ValueKind != JsonValueKind.String)
+                        continue;
+                    var value = element.GetString();
+                    if (!string.IsNullOrWhiteSpace(value))
+                        list.Add(value!);
+                }
+                return list;
+            }
+        }
+        catch (JsonException)
+        {
+            // Malformed payload → treat as "no versions"; caller falls back.
+        }
+        return Array.Empty<string>();
+    }
+
+    // Pick the highest SemVer from a set of version strings. Ordering is numeric on
+    // major/minor/patch (so preview.10 correctly beats preview.5 — a plain string
+    // sort gets this backwards), a release outranks a prerelease of the same core,
+    // and prereleases order by label then trailing numeric identifier. Unparseable
+    // entries are ignored. Returns null when nothing parses.
+    internal static string? SelectLatestVersion(IEnumerable<string> versions)
+    {
+        string? best = null;
+        VersionKey bestKey = default;
+        foreach (var candidate in versions)
+        {
+            if (!TryParseVersionKey(candidate, out var key))
+                continue;
+            if (best is null || key.CompareTo(bestKey) > 0)
+            {
+                best = candidate.Trim();
+                bestKey = key;
+            }
+        }
+        return best;
+    }
+
+    // Parse "MAJOR.MINOR.PATCH[-prerelease][+build]" into an orderable key. Build
+    // metadata is ignored (SemVer). The prerelease is split into a label and an
+    // optional trailing numeric identifier so "preview.11" > "preview.2".
+    internal static bool TryParseVersionKey(string? version, out VersionKey key)
+    {
+        key = default;
+        if (string.IsNullOrWhiteSpace(version))
+            return false;
+
+        var text = version.Trim();
+        var plus = text.IndexOf('+');
+        if (plus >= 0)
+            text = text[..plus];
+
+        string core;
+        string? prerelease = null;
+        var dash = text.IndexOf('-');
+        if (dash >= 0)
+        {
+            core = text[..dash];
+            prerelease = text[(dash + 1)..];
+        }
+        else
+        {
+            core = text;
+        }
+
+        var parts = core.Split('.');
+        if (parts.Length < 3 ||
+            !int.TryParse(parts[0], out var major) ||
+            !int.TryParse(parts[1], out var minor) ||
+            !int.TryParse(parts[2], out var patch))
+        {
+            return false;
+        }
+
+        if (string.IsNullOrEmpty(prerelease))
+        {
+            key = new VersionKey(major, minor, patch, IsRelease: true, PreLabel: string.Empty, PreNumber: 0);
+            return true;
+        }
+
+        var preParts = prerelease.Split('.');
+        string label;
+        long number;
+        if (preParts.Length >= 2 && long.TryParse(preParts[^1], out number))
+            label = string.Join('.', preParts[..^1]);
+        else
+        {
+            label = prerelease;
+            number = 0;
+        }
+
+        key = new VersionKey(major, minor, patch, IsRelease: false, label, number);
+        return true;
+    }
+
+    // Orderable SemVer key. A release (no prerelease tag) sorts above any
+    // prerelease of the same core; prereleases sort by label then numeric suffix.
+    internal readonly record struct VersionKey(int Major, int Minor, int Patch, bool IsRelease, string PreLabel, long PreNumber)
+        : IComparable<VersionKey>
+    {
+        public int CompareTo(VersionKey other)
+        {
+            var c = Major.CompareTo(other.Major);
+            if (c != 0) return c;
+            c = Minor.CompareTo(other.Minor);
+            if (c != 0) return c;
+            c = Patch.CompareTo(other.Patch);
+            if (c != 0) return c;
+            // Release (true) outranks prerelease (false) at the same core.
+            c = IsRelease.CompareTo(other.IsRelease);
+            if (c != 0) return c;
+            if (IsRelease) return 0;
+            c = string.CompareOrdinal(PreLabel, other.PreLabel);
+            if (c != 0) return c;
+            return PreNumber.CompareTo(other.PreNumber);
+        }
     }
 
     // Prefer CWD so a globally-installed `mur` (under ~/.dotnet/tools) still

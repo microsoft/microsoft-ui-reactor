@@ -111,6 +111,25 @@ public sealed class TemplateMetadataTests
             "the baked reference falls back to the csproj default and drifts behind the framework (issue #866).");
     }
 
+    [Fact]
+    public void Bootstrap_packs_templates_with_latest_framework_version()
+    {
+        // The local side of the same fix: bootstrap.ps1 must pack the templates with
+        // `--framework-version latest` so a fresh clone's `dotnet new reactorapp`
+        // tracks the newest published package instead of a hand-maintained csproj
+        // default. Fails the instant that wiring is dropped from either invocation
+        // path (installed `mur` or the `dotnet run` fallback).
+        var (path, text) = ReadRepoFile("bootstrap.ps1");
+        var normalized = text.Replace("\r\n", "\n");
+        var matches = global::System.Text.RegularExpressions.Regex.Matches(
+            normalized, @"pack-local\s+--framework-version\s+latest");
+        Assert.True(
+            matches.Count >= 2,
+            $"'{path}' must invoke `mur pack-local --framework-version latest` on both the installed-`mur` " +
+            $"and `dotnet run` fallback paths so local scaffolds track the latest published framework " +
+            $"(found {matches.Count}, expected >= 2). Dropping it re-introduces the drift fixed for issue #866.");
+    }
+
     // Returns the text of the YAML step whose `name:` equals stepName (the slice
     // from that step's `- name:` line up to the next `- name:` line or EOF), or
     // null if no such step exists. Deliberately simple line scanning — enough to
