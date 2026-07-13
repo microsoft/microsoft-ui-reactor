@@ -43,6 +43,9 @@ class DataGridPage : Component
 
             SampleCard("Columns, sorting & selection",
                 VStack(8,
+                    // Re-key on the mode so switching selection mode remounts the grid.
+                    // Workaround for microsoft/microsoft-ui-reactor#872 — DataGrid doesn't
+                    // reconcile SelectionMode on the live grid after first mount.
                     DataGrid(
                         source: source,
                         columns: new FieldDescriptor[]
@@ -56,8 +59,10 @@ class DataGridPage : Component
                         selectionMode: selection,
                         onSelectionChanged: keys => setSelectedCount(keys.Count),
                         rowHeight: 36
-                    ).Height(340),
-                    TextBlock($"Selected rows: {selectedCount}").Foreground(Theme.SecondaryText)),
+                    ).Height(340).WithKey($"dg-mode-{mode}"),
+                    TextBlock($"Selected rows: {selectedCount}").Foreground(Theme.SecondaryText),
+                    Caption("Multiple mode: Ctrl+click toggles a row, Shift+click selects a range.")
+                        .Foreground(Theme.SecondaryText)),
                 sourceCode: @"
 // Memoize the source so the grid isn't remounted on every render
 // (DataGrid keys off source.GetHashCode()).

@@ -14,11 +14,13 @@ class ParallaxViewPage : Component
         // capture the foreground ListView on mount, then feed it back in.
         var (scroller, setScroller) = UseState<UIElement?>(null);
 
-        var background =
-            Border(TextBlock("Parallax background").FontSize(28).SemiBold().Foreground("#FFFFFF").Center())
-                .Background(Theme.Accent);
+        var background = Border(VStack(0,
+            Border(TextBlock("▲  TOP").FontSize(22).SemiBold().Foreground("#FFFFFF").Center()).Background("#0F6CBD").Height(160),
+            Border(TextBlock("●  MIDDLE").FontSize(22).SemiBold().Foreground("#FFFFFF").Center()).Background("#8764B8").Height(160),
+            Border(TextBlock("▼  BOTTOM").FontSize(22).SemiBold().Foreground("#FFFFFF").Center()).Background("#C0397E").Height(160)))
+            .Height(480);
 
-        var parallax = ParallaxView(background, verticalShift: 100);
+        var parallax = ParallaxView(background, verticalShift: 150);
         if (scroller is not null)
             parallax = parallax.Source(scroller);
 
@@ -45,7 +47,9 @@ class ParallaxViewPage : Component
                 sourceCode: @"
 var (scroller, setScroller) = UseState<UIElement?>(null);
 
-var parallax = ParallaxView(background, verticalShift: 100);
+// `background` must be TALLER than the viewport and have visible vertical
+// structure (bands/image) — a solid colour has nothing to visibly shift.
+var parallax = ParallaxView(background, verticalShift: 150);
 if (scroller is not null) parallax = parallax.Source(scroller);
 
 Grid(columns: [GridSize.Star()], rows: [GridSize.Star()],

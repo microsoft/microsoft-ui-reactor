@@ -56,7 +56,8 @@ Popup(
                             .WithBorder(Theme.DividerStroke)
                             .CornerRadius(8),
                         persistentOpen,
-                        () => setPersistentOpen(false)),
+                        () => setPersistentOpen(false))
+                        .IsLightDismissEnabled(false),
                     Caption("Without light dismiss, the popup stays open until its close action runs.")),
                 sourceCode: @"Button(""Show persistent popup"", () => setPersistentOpen(true))
 
@@ -69,7 +70,8 @@ Popup(
         .WithBorder(Theme.DividerStroke)
         .CornerRadius(8),
     persistentOpen,
-    () => setPersistentOpen(false))")
+    () => setPersistentOpen(false))
+    .IsLightDismissEnabled(false)")
         ).Margin(36, 24, 36, 36));
     }
 }
