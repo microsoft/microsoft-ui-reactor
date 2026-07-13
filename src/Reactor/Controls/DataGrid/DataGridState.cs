@@ -21,8 +21,10 @@ public class DataGridState<T>
 
     // Reactivity of ctor-captured values (issue #872 audit):
     //  • _source    — captured once, but the DataGrid factory keys its component on the source
-    //                 (.WithKey($"dg-{T}-{source.GetHashCode()}")), so a new source remounts the
-    //                 grid with a fresh state ⇒ effectively reactive via remount.
+    //                 (.WithKey($"dg-{typeof(T).Name}-{source.GetHashCode()}")), so a changed key
+    //                 (i.e. a source whose GetHashCode() differs) remounts the grid with a fresh
+    //                 state ⇒ effectively reactive via remount. (Two distinct sources that hash to
+    //                 the same value would not remount, but that is the general WithKey contract.)
     //  • _selectionMode — reactive: reconciled from the prop each render via SetSelectionMode.
     //  • _blockSize — captured once by design: it only sizes the initial DataPageCache; re-deriving
     //                 it (from RowHeight) would rebuild the cache and discard already-loaded rows.
