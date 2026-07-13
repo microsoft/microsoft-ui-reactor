@@ -25,6 +25,8 @@
     <AssemblyName>PerfBench.ControlModel</AssemblyName>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- Perf benchmark harness — never trimmed/AOT-published; opt out of IL2*/IL3*. -->
+    <ReactorSkipAotAnalysis>true</ReactorSkipAotAnalysis>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>

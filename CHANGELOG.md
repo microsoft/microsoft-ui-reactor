@@ -319,41 +319,34 @@ Conventions for contributors:
 
 ### Deprecated
 
-- **`Microsoft.UI.Reactor.Controls.MaskedTextFieldDsl.MaskedTextField(...)`**
-  renamed to `MaskedTextBoxDsl.MaskedTextBox(...)`. Old name preserved as
-  an `[Obsolete]` forwarding alias for one release; slated for removal in
-  the next minor release. (issue #389)
-
-- **`Microsoft.UI.Reactor.Factories.Grid(string[], string[], …)`** —
-  use the strongly-typed `Grid(GridSize[], GridSize[], …)` overload
-  with `GridSize.Auto` / `GridSize.Star(weight)` / `GridSize.Px(pixels)`.
-  Slated for removal in the next minor release. (spec 033 §1)
-
-- **`Microsoft.UI.Reactor.Factories.Func(Func<RenderContext, Element>)`** —
-  replace with `Memo(ctx => …)` (render once + state changes) or
-  `RenderEachTime(ctx => …)` (always re-render). Slated for removal in
-  the next minor release. (spec 033 §4)
-
-- **`Microsoft.UI.Reactor.Factories.RichText(...)`** renamed to
-  `RichTextBlock(...)` for parity with WinUI's `RichTextBlock` (record
-  was already `RichTextBlockElement`). Old name preserved as an
-  `[Obsolete]` alias for one release. (spec 039 §1.3)
-
 - **`IDockBehavior` and `DockManager.Behavior`** (spec 045 Phase 1) marked
   `[Obsolete]` with migration pointers to the per-event Action props
   that landed in Phase 2 (`OnContentDocked` / `OnContentFloating` /
   `OnContentFloated`). Slated for removal one release after Phase 2 ships.
   (spec 045 §2.12)
 
-### Added (discoverability aliases)
-
-- **`Microsoft.UI.Reactor.Factories.ProgressBar(double)` / `ProgressBar()`**
-  added as `[Obsolete]` aliases for `Progress(double)` /
-  `ProgressIndeterminate()`. Reactor's `Progress` reconciles to WinUI's
-  `ProgressBar`; the alias helps agents reaching for the WinUI name
-  discover it. (spec 039 §5)
-
 ### Removed
+
+- **Obsolete APIs scheduled for removal have been removed (breaking, minor
+  release).** Each `[Obsolete]` member previously annotated "will be removed
+  in the next minor release" is now gone; migrate to the replacement:
+  - `Factories.Func(Func<RenderContext, Element>)` → `RenderEachTime(ctx => …)`
+    (behavior-preserving), or `Memo(ctx => …)` where memoization is wanted.
+    (spec 033 §4)
+  - `Factories.Grid(string[], string[], …)` → the typed
+    `Grid(GridSize[], GridSize[], …)` overload with
+    `GridSize.Auto` / `GridSize.Star(weight)` / `GridSize.Px(pixels)`.
+    (spec 033 §1)
+  - `Controls.MaskedTextFieldDsl.MaskedTextField(...)` →
+    `MaskedTextBoxDsl.MaskedTextBox(...)`. (issue #389)
+  - `Factories.RichText(string)` / `Factories.RichText(RichTextParagraph[])`
+    → `RichTextBlock(...)`. (spec 039 §1.3)
+  - `Factories.ProgressBar(double)` → `Progress(double)`;
+    `Factories.ProgressBar()` → `ProgressIndeterminate()`. (spec 039 §5)
+
+  The dead `GridStringTrackCodeFix` code fix (which rewrote the string-track
+  `Grid` overload to the typed form on `CS0618`) was removed alongside the
+  overload.
 
 - **`ReactorHost.MainDispatcherQueue`** (internal static, first-host-wins
   capture). Cross-thread setState marshalling and AutoSuggest's

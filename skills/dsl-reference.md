@@ -119,9 +119,9 @@ Grid(
 Track helpers: `GridSize.Star()` (1 star), `GridSize.Star(2)` (2 stars),
 `GridSize.Auto` (size to content), `GridSize.Px(200)` (fixed 200px).
 
-The legacy string-form overload (`Grid(["*", "*", "200"], ["Auto", "*"], …)`)
-still compiles but is soft-deprecated (`CS0618`) — prefer the typed helpers
-(spec 033 §1).
+The former string-form overload (`Grid(["*", "*", "200"], ["Auto", "*"], …)`)
+was removed — use the typed `Grid(GridSize[], GridSize[], …)` overload with the
+helpers above (spec 033 §1).
 
 ### Flex Layout (CSS Flexbox)
 
@@ -328,8 +328,8 @@ signatures.
 | `Memo(render, deps)` | Inline component, also re-renders when any dep changes | `(Func<RenderContext, Element>, params object?[]) → MemoElement` |
 | `RenderEachTime(render)` | Inline component, re-renders on every parent render (no memoization). Use sparingly. | `(Func<RenderContext, Element>) → FuncElement` |
 
-The legacy `Func(ctx => …)` factory is soft-deprecated (`CS0618`) — replace
-with `Memo(ctx => …)` for the common case or `RenderEachTime(ctx => …)` when
+The former `Func(ctx => …)` factory was removed in this release — use
+`Memo(ctx => …)` for the common case or `RenderEachTime(ctx => …)` when
 you specifically want the always-re-render shape (spec 033 §4).
 
 ---

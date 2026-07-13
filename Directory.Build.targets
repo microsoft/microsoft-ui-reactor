@@ -2,24 +2,39 @@
 
   <!-- Enable AOT compatibility analysis on all projects except Roslyn
        analyzers / source-generators (netstandard2.0). Placed in .targets
-       so that TargetFramework from the project file is already resolved. -->
-  <PropertyGroup Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net10.0'))">
+       so that TargetFramework from the project file is already resolved.
+
+       Opt-out: a project that is never trimmed / AOT-published AND whose
+       reflection is intentional (build tools that reflect over arbitrary
+       assemblies, and test projects whose architecture/contract guards scan
+       IL or reflect over types by design) sets
+       <ReactorSkipAotAnalysis>true</ReactorSkipAotAnalysis> to disable the
+       IL2*/IL3* analyzer for that project. This replaces the old blanket
+       consumer-wide NoWarn: shipped/AOT-relevant consumers (the CLI, WinForms
+       interop, samples, the AOT-published hosts) stay analyzed and were fixed
+       at the source; only the genuinely-non-AOT reflection projects opt out. -->
+  <PropertyGroup Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net10.0')) And '$(ReactorSkipAotAnalysis)' != 'true'">
     <IsAotCompatible>true</IsAotCompatible>
     <!-- Show every individual trimmer warning instead of collapsing them. -->
     <TrimmerSingleWarn>false</TrimmerSingleWarn>
   </PropertyGroup>
 
-  <!-- Promote IL trimming/AOT warnings to errors on the core Reactor library.
-       This ensures new reflection usage must be annotated before it can merge. -->
-  <PropertyGroup Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net10.0')) And ('$(MSBuildProjectName)' == 'Reactor' Or '$(MSBuildProjectName)' == 'Reactor.Devtools')">
+  <!-- Promote IL trimming/AOT warnings to hard errors in EVERY configuration
+       (Debug included) on every project the trim/AOT analyzer runs on (i.e.
+       IsAotCompatible was turned on above). Directory.Build.props already makes
+       ALL warnings errors on Release; this adds inner-loop (Debug) enforcement
+       for the AOT-specific codes so new un-annotated reflection is caught while
+       iterating, not only at the Release gate — uniformly across core, the
+       shipped libraries, consumers (CLI, WinForms), and the AOT-published
+       hosts/samples/proofs. Projects that reflect/scan IL by design opt out via
+       <ReactorSkipAotAnalysis>true</ReactorSkipAotAnalysis> above, which turns
+       off IsAotCompatible and therefore this promotion too. Individual codes are
+       handled per-site (genuine [DynamicallyAccessedMembers] where the reflection
+       can be made trim-safe, or a justified [UnconditionalSuppressMessage],
+       tracked under issue #70). Any IL code outside this curated list is still an
+       error on Release via TreatWarningsAsErrors. -->
+  <PropertyGroup Condition="'$(IsAotCompatible)' == 'true' And '$(ReactorSkipAotAnalysis)' != 'true'">
     <WarningsAsErrors>$(WarningsAsErrors);IL2026;IL2062;IL2065;IL2067;IL2069;IL2070;IL2072;IL2073;IL2075;IL2087;IL2090;IL2091;IL2111;IL3000;IL3050</WarningsAsErrors>
-  </PropertyGroup>
-
-  <!-- Suppress trimming/AOT warnings in consumer projects (tests, samples, CLI).
-       The core Reactor library is already warning-free; these projects intentionally
-       call reflection-based APIs and will not be AOT-published. -->
-  <PropertyGroup Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net10.0')) And '$(MSBuildProjectName)' != 'Reactor' And '$(MSBuildProjectName)' != 'Reactor.Devtools'">
-    <NoWarn>$(NoWarn);IL2026;IL2062;IL2065;IL2067;IL2070;IL2072;IL2075;IL2090;IL2091;IL3000;IL3050</NoWarn>
   </PropertyGroup>
 
   <!-- Prevent PublishAot from leaking into netstandard projects (e.g. Roslyn

@@ -7,6 +7,10 @@
     <AssemblyName>Reactor.ApiIndex</AssemblyName>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- Build-time API-index generator: reflects over arbitrary compiled assemblies
+         (Assembly.GetExportedTypes / Type.GetMembers) by design and is never shipped
+         or AOT-published. Opt out of the IL2*/IL3* analyzer. -->
+    <ReactorSkipAotAnalysis>true</ReactorSkipAotAnalysis>
     <UseWinUI>true</UseWinUI>
     <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
     <WindowsPackageType>None</WindowsPackageType>

@@ -7,6 +7,11 @@
     <RootNamespace>Microsoft.UI.Reactor.Tests</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- Never trimmed/AOT-published, and many suites (CoreControlFamilyBoundaryTests
+         IL scan, PublicApiSurfaceGuardTests, ImmutableRecordContractTests, the
+         devtools/MCP fixtures) reflect over types by design. Opt out of the IL2*/IL3*
+         analyzer rather than annotate reflection that is the point of the test. -->
+    <ReactorSkipAotAnalysis>true</ReactorSkipAotAnalysis>
     <UseWinUI>true</UseWinUI>
     <!-- Tests P/Invoke Microsoft.WindowsAppRuntime.dll from a ModuleInitializer
          (TestSetup.cs); bundle the runtime so the test host can locate it

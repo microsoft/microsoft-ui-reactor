@@ -1,5 +1,15 @@
 namespace Microsoft.UI.Reactor.Cli.Figma;
 
+/// <summary>Structured JSON event emitted to stdout by <c>mur figma watch</c>.</summary>
+internal sealed record FigmaEvent(
+    string @event,
+    string fileKey,
+    string? nodeId,
+    string fileName,
+    string lastModified,
+    string version,
+    string figmaUrl);
+
 /// <summary>
 /// <c>mur figma watch &lt;url&gt; [--interval N]</c>
 ///
@@ -180,17 +190,16 @@ internal static class FigmaWatchCommand
     /// </summary>
     private static void EmitEvent(string type, FigmaUrlParts parts, FigmaFileInfo info)
     {
-        var json = System.Text.Json.JsonSerializer.Serialize(new
-        {
-            @event = type,
-            fileKey = parts.FileKey,
-            nodeId = parts.ApiNodeId,
-            fileName = info.FileName,
-            lastModified = info.LastModified.ToString("o"),
-            version = info.Version,
-            figmaUrl = $"https://www.figma.com/design/{parts.FileKey}" +
-                (parts.NodeId != null ? $"?node-id={parts.NodeId}" : ""),
-        });
+        var evt = new FigmaEvent(
+            @event: type,
+            fileKey: parts.FileKey,
+            nodeId: parts.ApiNodeId,
+            fileName: info.FileName,
+            lastModified: info.LastModified.ToString("o"),
+            version: info.Version,
+            figmaUrl: $"https://www.figma.com/design/{parts.FileKey}" +
+                (parts.NodeId != null ? $"?node-id={parts.NodeId}" : ""));
+        var json = System.Text.Json.JsonSerializer.Serialize(evt, CliJsonContext.Default.FigmaEvent);
         Console.WriteLine(json);
     }
 

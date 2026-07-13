@@ -49,7 +49,7 @@ internal static class Telemetry
             confidence: suggestion.Confidence,
             evidence_short: Truncate(suggestion.Evidence));
 
-        var json = JsonSerializer.Serialize(row);
+        var json = JsonSerializer.Serialize(row, CliJsonContext.Default.TelemetryRow);
         using var fs = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read);
         using var sw = new StreamWriter(fs);
         sw.WriteLine(json);

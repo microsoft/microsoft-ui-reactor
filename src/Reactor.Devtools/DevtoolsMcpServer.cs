@@ -533,14 +533,14 @@ internal sealed class DevtoolsMcpServer : IDisposable
 
     // -- Helpers -----------------------------------------------------------------
 
-    internal static JsonSerializerOptions JsonOpts { get; } = new()
+    private static JsonSerializerOptions BuildJsonOpts() => new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = global::System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-#pragma warning disable IL2026, IL3050 // DefaultJsonTypeInfoResolver is intentional fallback for non-AOT builds
-        TypeInfoResolverChain = { DevtoolsJsonContext.Default, new global::System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver() },
-#pragma warning restore IL2026, IL3050
+        TypeInfoResolver = DevtoolsJsonContext.Default,
     };
+
+    internal static JsonSerializerOptions JsonOpts { get; } = BuildJsonOpts();
 
     /// <summary>
     /// Canonical selector grammar the resolver accepts. Emitted by GET /mcp so an
@@ -562,30 +562,27 @@ internal sealed class DevtoolsMcpServer : IDisposable
     /// payload so an agent can discover the server without crafting a JSON-RPC
     /// initialize + tools/list dance first.
     /// </summary>
-    private object BuildSchemaDocument()
+    private SchemaDocument BuildSchemaDocument()
     {
-        return new
-        {
-            schema = "reactor-devtools-mcp/1",
-            protocolVersion = "2024-11-05",
-            build = BuildTag,
-            transport = _transport == McpTransport.Http ? "http" : "stdio",
-            endpoint = _transport == McpTransport.Http
+        return new SchemaDocument(
+            Schema: "reactor-devtools-mcp/1",
+            ProtocolVersion: "2024-11-05",
+            Build: BuildTag,
+            Transport: _transport == McpTransport.Http ? "http" : "stdio",
+            Endpoint: _transport == McpTransport.Http
                 ? $"http://127.0.0.1:{Port}/mcp"
                 : "stdio",
-            selectorGrammar = SelectorGrammarDoc,
-            treeSchemaVersion = TreeWalker.SchemaVersion,
-            tools = _tools.List().Select(t => new
+            SelectorGrammar: SelectorGrammarDoc,
+            TreeSchemaVersion: TreeWalker.SchemaVersion,
+            Tools: _tools.List()
+                .Select(t => new SchemaToolInfo(t.Name, t.Description, t.InputSchema))
+                .ToArray(),
+            Events: new[]
             {
-                name = t.Name,
-                description = t.Description,
-                inputSchema = t.InputSchema,
-            }).ToArray(),
-            events = new[]
-            {
-                new { name = "devtools-ready", description = "One-line JSON sentinel emitted on stdout after first render. Fields: endpoint, transport, port, pid, buildTag." },
-            },
-        };
+                new SchemaEventInfo(
+                    "devtools-ready",
+                    "One-line JSON sentinel emitted on stdout after first render. Fields: endpoint, transport, port, pid, buildTag."),
+            });
     }
 
     private static int FindFreePort()

@@ -33,14 +33,4 @@ public class RenderEachTimeTests
         Assert.False(invoked);
         Assert.NotNull(el);
     }
-
-#pragma warning disable CS0618 // Validating that obsolete Func and RenderEachTime produce equivalent element shapes
-    [Fact]
-    public void Func_And_RenderEachTime_Produce_Same_Element_Type()
-    {
-        var f = Func(_ => TextBlock("x"));
-        var r = RenderEachTime(_ => TextBlock("x"));
-        Assert.Equal(f.GetType(), r.GetType());
-    }
-#pragma warning restore CS0618
 }

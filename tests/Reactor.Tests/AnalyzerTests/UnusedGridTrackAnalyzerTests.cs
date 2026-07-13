@@ -41,8 +41,12 @@ namespace Microsoft.UI.Reactor
     {
         public static GridElement Grid(GridSize[] columns, GridSize[] rows, params Element[] children) => new();
 
-        [Obsolete(""Use the typed overload."", error: false)]
-        public static GridElement Grid(string[] columns, string[] rows, params Element[] children) => new();
+        // A non-GridSize track shape (never a real Reactor API) — exists only so the
+        // analyzer's element-type gate (columns/rows must be GridSize[]) is covered.
+        public static GridElement Grid(object[] columns, object[] rows, params Element[] children) => new();
+
+        // Mixed: typed columns but non-GridSize rows — covers the rows half of the gate.
+        public static GridElement Grid(GridSize[] columns, object[] rows, params Element[] children) => new();
 
         public static TextElement Text(string text) => new();
     }
@@ -367,13 +371,24 @@ class C
 }");
 
     [Fact]
-    public Task No_Diagnostic_For_Obsolete_String_Grid() => VerifyAsync(@"
-// The obsolete string-track overload is out of scope (it has its own CS0618 fixer).
+    public Task No_Diagnostic_For_NonGridSize_Track_Type() => VerifyAsync(@"
+// A Grid whose track arrays are not GridSize[] is out of scope for this analyzer.
 class C
 {
     Element M() => Grid(
-        new[] { ""Auto"", ""*"" },
-        new[] { ""Auto"" },
+        new object[] { ""Auto"", ""*"" },
+        new object[] { ""Auto"" },
+        Text(""a""));
+}");
+
+    [Fact]
+    public Task No_Diagnostic_When_Rows_Not_GridSize() => VerifyAsync(@"
+// Typed columns but non-GridSize rows — the gate requires BOTH tracks be GridSize[].
+class C
+{
+    Element M() => Grid(
+        new[] { GridSize.Auto, GridSize.Star() },
+        new object[] { ""Auto"" },
         Text(""a""));
 }");
 

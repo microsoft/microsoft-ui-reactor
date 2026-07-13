@@ -289,6 +289,8 @@ public static partial class ReactorApp
     }
 
     [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "See RegisterControlAssembly(Assembly).")]
+    [UnconditionalSuppressMessage("Trimming", "IL2062", Justification = "See RegisterControlAssembly(Assembly).")]
+    [UnconditionalSuppressMessage("Trimming", "IL2065", Justification = "See RegisterControlAssembly(Assembly).")]
     [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "See RegisterControlAssembly(Assembly).")]
     [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "See RegisterControlAssembly(Assembly).")]
     internal static IXamlMetadataProvider? FindXamlMetadataProviderInAssembly(global::System.Reflection.Assembly assembly)

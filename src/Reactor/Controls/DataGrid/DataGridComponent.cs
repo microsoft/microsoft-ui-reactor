@@ -368,6 +368,20 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                     lostFocusWired.Current = true;
                     g.LostFocus += (sender, e) =>
                     {
+                        // Consume the one-shot editing-Tab guard synchronously here, before the IsEditing
+                        // guard. A keyboard editing-Tab owns this focus-out: it already committed the
+                        // current cell and, when the next cell is editable, reopened the editor there — so
+                        // skip the safety-net commit. Consuming here (not in the deferred tick) is essential:
+                        // when the Tab lands on a NON-editable cell the reopen fails and IsEditing is already
+                        // false by the time this fires, so the guard below would short-circuit and never
+                        // schedule the tick — leaving the flag set to wrongly suppress a later legitimate
+                        // blur-commit (lost edit). The flag is set synchronously in the KeyDown handler,
+                        // before this LostFocus fires.
+                        if (state.SuppressNextLostFocusCommit)
+                        {
+                            state.SuppressNextLostFocusCommit = false;
+                            return;
+                        }
                         if (!state.IsEditing && !state.IsRowEditing) return;
                         // Defer the entire check to the next tick. During DOM transitions
                         // (e.g., cell switching from TextBlock to TextBox), the old element
@@ -435,6 +449,15 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                         {
                             e.Handled = true;
                             var capturedKey = e.Key;
+                            // A cell editing-Tab moves real focus out of the single-tab-stop grid, which fires
+                            // the grid's LostFocus commit. But the editing-Tab path (HandleKeyDown) itself
+                            // commits the current cell and reopens the editor on the next cell, so the LostFocus
+                            // safety-net must NOT also commit — that would tear down the just-reopened editor.
+                            // Claim that one focus-out here, synchronously (before either handler defers), so the
+                            // guard is robust to dispatcher ordering. Cell edit only: in row-edit mode IsEditing
+                            // is also true, but the LostFocus there commits the whole ROW and must not be suppressed.
+                            if (capturedKey == VirtualKey.Tab && state.IsEditing && !state.IsRowEditing)
+                                state.SuppressNextLostFocusCommit = true;
                             Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() =>
                             {
                                 HandleKeyDown(state, currentEl, capturedKey);

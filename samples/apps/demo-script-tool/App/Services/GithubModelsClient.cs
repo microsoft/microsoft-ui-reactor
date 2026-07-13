@@ -5,10 +5,21 @@ using System.Net.Http;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace DemoScriptTool.App.Services;
+
+/// <summary>OpenAI/GitHub-Models chat-completion request DTOs (source-gen friendly).</summary>
+internal sealed record ChatMessage(string role, string content);
+internal sealed record ChatCompletionRequest(string model, bool stream, ChatMessage[] messages);
+
+/// <summary>Source-generated (reflection-free / NativeAOT-safe) JSON metadata.</summary>
+[JsonSerializable(typeof(ChatCompletionRequest))]
+internal partial class DemoScriptJsonContext : JsonSerializerContext
+{
+}
 
 /// <summary>
 /// Streams chat completions from the GitHub Models inference API. The
@@ -51,18 +62,16 @@ public sealed class GithubModelsClient : IModelClient, IDisposable
             ?? throw new AuthExpiredException("No GitHub token available. Sign in via the Open Folder flow.");
         SessionLog.Write($"[GithubModels] token acquired (len={token.Length})");
 
-        var payload = new
-        {
-            model = _model,
-            stream = true,
-            messages = new[]
-            {
-                new { role = "system", content = systemPrompt },
-                new { role = "user",   content = userPrompt   },
-            },
-        };
+        var payload = new ChatCompletionRequest(
+            model: _model,
+            stream: true,
+            messages:
+            [
+                new ChatMessage("system", systemPrompt),
+                new ChatMessage("user", userPrompt),
+            ]);
 
-        var json = JsonSerializer.Serialize(payload);
+        var json = JsonSerializer.Serialize(payload, DemoScriptJsonContext.Default.ChatCompletionRequest);
         using var req = new HttpRequestMessage(HttpMethod.Post, _endpoint)
         {
             Content = new StringContent(json, Encoding.UTF8, "application/json"),

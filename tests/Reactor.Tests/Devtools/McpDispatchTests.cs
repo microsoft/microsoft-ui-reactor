@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.UI.Reactor.Hosting.Devtools;
 using Xunit;
 
@@ -16,13 +17,13 @@ public class McpDispatchTests
         var reg = new McpToolRegistry();
         reg.Register(
             new McpToolDescriptor("echo", "Echo back the input.",
-                new { type = "object", properties = new { msg = new { type = "string" } } }),
-            @params => new { echoed = DevtoolsTools.ReadString(@params, "msg") });
+                Schema.Root(("msg", Schema.Str()))),
+            @params => new JsonObject { ["echoed"] = DevtoolsTools.ReadString(@params, "msg") });
         reg.Register(
             new McpToolDescriptor("boom", "Always fails with a structured error.",
-                new { type = "object", properties = new { } }),
+                Schema.Root()),
             _ => throw new McpToolException("on fire", JsonRpcErrorCodes.ToolExecution,
-                new { reason = "test" }));
+                new JsonObject { ["reason"] = "test" }));
         return reg;
     }
 
@@ -54,7 +55,7 @@ public class McpDispatchTests
         var resp = new JsonRpcResponse
         {
             Id = JsonDocument.Parse("1").RootElement,
-            Result = new { ok = true },
+            Result = new JsonObject { ["ok"] = true },
         };
         var json = JsonSerializer.Serialize(resp, DevtoolsMcpServer.JsonOpts);
         Assert.Contains("\"result\"", json);
@@ -89,7 +90,7 @@ public class McpDispatchTests
         var reg = BuildRegistry();
         Assert.Throws<InvalidOperationException>(() =>
             reg.Register(
-                new McpToolDescriptor("echo", "dup", new { }),
+                new McpToolDescriptor("echo", "dup", new SchemaNode("object")),
                 _ => null));
     }
 

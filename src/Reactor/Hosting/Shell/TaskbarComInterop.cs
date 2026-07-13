@@ -1,24 +1,33 @@
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.Marshalling;
 
 namespace Microsoft.UI.Reactor.Hosting.Shell;
 
 /// <summary>
-/// Classic <c>[ComImport]</c> wrappers for <c>ITaskbarList3</c> — the shell
-/// surface for taskbar progress, overlay icons, and thumbnail toolbars. Lives
-/// behind <see cref="TaskbarComSingleton"/> so apps that never touch any of the
-/// taskbar surface pay zero startup cost. (spec 036 §11.1 / §11.2 / §11.5)
+/// Source-generated (<c>[GeneratedComInterface]</c>) wrappers for
+/// <c>ITaskbarList3</c> — the shell surface for taskbar progress, overlay icons,
+/// and thumbnail toolbars. Lives behind <see cref="TaskbarComSingleton"/> so apps
+/// that never touch any of the taskbar surface pay zero startup cost.
+/// (spec 036 §11.1 / §11.2 / §11.5)
 /// </summary>
 /// <remarks>
-/// The interop is hand-rolled rather than generated because the public surface
-/// is small and we want trim/AOT-safe COM marshaling. <c>[PreserveSig]</c> on
-/// every method lets us inspect the HRESULT — the shell returns
+/// Uses the COM interop source generator (<c>System.Runtime.InteropServices.Marshalling</c>)
+/// so the marshaling stubs are emitted at compile time and are trim/NativeAOT-safe —
+/// unlike the classic <c>[ComImport]</c> path, whose runtime CoCreateInstance /
+/// built-in marshaling is unsupported under full AOT (IL3052). Every method is
+/// <c>[PreserveSig]</c> so its <c>int</c> return is the raw HRESULT and the generator
+/// never throws for us. WITHOUT <c>[PreserveSig]</c> the COM source generator treats
+/// the <c>int</c> return as a <c>[retval]</c> out-param and translates failed HRESULTs
+/// into exceptions — an ABI mismatch that silently breaks every caller that inspects
+/// the code (e.g. <c>if (hr &lt; 0)</c>). The <c>[PreserveSig]</c> invariant is guarded
+/// by a reflection unit test. Callers rely on the raw code — the shell returns
 /// <c>S_FALSE</c> on certain spurious failures (e.g. SetProgressValue before
-/// <c>HrInit</c>) that we want to treat as recoverable.
+/// <c>HrInit</c>) that we treat as recoverable.
 /// </remarks>
-[ComImport]
+[GeneratedComInterface]
 [Guid("ea1afb91-9e28-4b86-90e9-9e9f8a5eefaf")]
-[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-internal interface ITaskbarList3
+internal partial interface ITaskbarList3
 {
     // ITaskbarList ----------------------------------------------------------
     [PreserveSig] int HrInit();
@@ -40,11 +49,11 @@ internal interface ITaskbarList3
 
     [PreserveSig]
     int ThumbBarAddButtons(nint hwnd, uint cButtons,
-        [MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 1)] THUMBBUTTON[] pButton);
+        [MarshalUsing(CountElementName = nameof(cButtons))] THUMBBUTTON[] pButton);
 
     [PreserveSig]
     int ThumbBarUpdateButtons(nint hwnd, uint cButtons,
-        [MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 1)] THUMBBUTTON[] pButton);
+        [MarshalUsing(CountElementName = nameof(cButtons))] THUMBBUTTON[] pButton);
 
     [PreserveSig] int ThumbBarSetImageList(nint hwnd, nint himl);
 
@@ -67,21 +76,39 @@ internal enum NativeTaskbarProgressState : uint
     Paused        = 0x8,
 }
 
-[ComImport]
-[Guid("56fdf344-fd6d-11d0-958a-006097c9a090")]
-[ClassInterface(ClassInterfaceType.None)]
-internal class TaskbarInstance { }
-
-[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+[StructLayout(LayoutKind.Sequential)]
 internal struct THUMBBUTTON
 {
     public ThumbButtonMask dwMask;
     public uint iId;
     public uint iBitmap;
     public nint hIcon;
-    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
-    public string szTip;
+    // Inline 260-char buffer (was [MarshalAs(ByValTStr, SizeConst = 260)] string).
+    // Keeping it inline makes THUMBBUTTON blittable, which the COM interop source
+    // generator requires to marshal a THUMBBUTTON[] array parameter.
+    public TipBuffer szTip;
     public ThumbButtonFlags dwFlags;
+
+    /// <summary>Copies <paramref name="tip"/> into the inline szTip buffer,
+    /// truncating to fit and leaving a NUL terminator.</summary>
+    public void SetTip(string? tip)
+    {
+        Span<ushort> dst = szTip;
+        dst.Clear();
+        if (string.IsNullOrEmpty(tip)) return;
+        int n = Math.Min(tip.Length, dst.Length - 1);
+        for (int i = 0; i < n; i++) dst[i] = tip[i];
+    }
+}
+
+/// <summary>Inline 260-code-unit buffer backing <see cref="THUMBBUTTON.szTip"/>
+/// (the native <c>WCHAR szTip[260]</c> field). Uses <c>ushort</c> rather than
+/// <c>char</c> so the struct stays blittable for the COM interop source generator
+/// without needing assembly-wide <c>DisableRuntimeMarshalling</c>.</summary>
+[InlineArray(260)]
+internal struct TipBuffer
+{
+    private ushort _element0;
 }
 
 [Flags]
@@ -110,11 +137,24 @@ internal enum ThumbButtonFlags : uint
 /// never touch the taskbar surface stay clean of CoCreateInstance. Thread-safe;
 /// the underlying COM is free-threaded for our usage pattern.
 /// </summary>
-internal static class TaskbarComSingleton
+internal static partial class TaskbarComSingleton
 {
     private static ITaskbarList3? s_instance;
     private static readonly object s_lock = new();
     private static int s_initFailed;
+
+    // CLSID_TaskbarList — the shell coclass that implements ITaskbarList3.
+    private static readonly Guid CLSID_TaskbarList = new("56fdf344-fd6d-11d0-958a-006097c9a090");
+    private static readonly Guid IID_ITaskbarList3 = new("ea1afb91-9e28-4b86-90e9-9e9f8a5eefaf");
+    private const uint CLSCTX_INPROC_SERVER = 0x1;
+
+    // Source-generated ComWrappers strategy — wraps the raw COM pointer from
+    // CoCreateInstance as an AOT-safe RCW for the [GeneratedComInterface] above.
+    private static readonly StrategyBasedComWrappers s_comWrappers = new();
+
+    [LibraryImport("ole32.dll")]
+    private static partial int CoCreateInstance(
+        in Guid rclsid, nint pUnkOuter, uint dwClsContext, in Guid riid, out nint ppv);
 
     /// <summary>
     /// Returns the shared <see cref="ITaskbarList3"/> or null when the platform
@@ -132,7 +172,29 @@ internal static class TaskbarComSingleton
             if (s_instance is not null) return s_instance;
             try
             {
-                var instance = (ITaskbarList3)new TaskbarInstance();
+                // Activate the shell coclass by CLSID via a plain P/Invoke (AOT-safe,
+                // unlike `new [ComImport]TaskbarInstance()` which needs built-in COM).
+                int hrCreate = CoCreateInstance(
+                    in CLSID_TaskbarList, 0, CLSCTX_INPROC_SERVER, in IID_ITaskbarList3, out nint pUnk);
+                if (hrCreate < 0 || pUnk == 0)
+                {
+                    Volatile.Write(ref s_initFailed, 1);
+                    return null;
+                }
+
+                ITaskbarList3 instance;
+                try
+                {
+                    // GetOrCreateObjectForComInstance AddRefs its own reference, so
+                    // release the one CoCreateInstance handed us once it's wrapped.
+                    instance = (ITaskbarList3)s_comWrappers.GetOrCreateObjectForComInstance(
+                        pUnk, CreateObjectFlags.None);
+                }
+                finally
+                {
+                    Marshal.Release(pUnk);
+                }
+
                 int hr = instance.HrInit();
                 // S_OK = 0; S_FALSE = 1 (also allowed). HRESULT < 0 == failure.
                 if (hr < 0)

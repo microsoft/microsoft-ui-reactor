@@ -77,7 +77,7 @@ public abstract class Component
 the `ShouldUpdate()` hook that lets a propless component opt out of
 parent-driven renders. Everything else is convenience wiring around the
 [`RenderContext`](hooks-internals.md) that holds the hook slot table.
-Function components (`Func(ctx => ...)`) skip the class declaration but
+Function components (`Memo(ctx => ...)`) skip the class declaration but
 go through the same `RenderContext` machinery.
 
 > **Caveat:** The reconciler never recreates the WinUI control tree on a re-render.

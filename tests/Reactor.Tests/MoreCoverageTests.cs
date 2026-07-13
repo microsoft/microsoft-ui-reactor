@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.UI.Reactor.Controls;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hosting.Devtools;
@@ -131,9 +132,9 @@ public class MoreCoverageTests
     public void McpToolRegistry_Register_DuplicateName_Throws()
     {
         var reg = new McpToolRegistry();
-        reg.Register(new McpToolDescriptor("dup", "", new { }), _ => null);
+        reg.Register(new McpToolDescriptor("dup", "", new SchemaNode("object")), _ => null);
         Assert.Throws<InvalidOperationException>(() =>
-            reg.Register(new McpToolDescriptor("dup", "", new { }), _ => null));
+            reg.Register(new McpToolDescriptor("dup", "", new SchemaNode("object")), _ => null));
     }
 
     [Fact]
@@ -150,9 +151,9 @@ public class MoreCoverageTests
     public void McpToolRegistry_List_PreservesRegistrationOrder()
     {
         var reg = new McpToolRegistry();
-        reg.Register(new McpToolDescriptor("a", "", new { }), _ => null);
-        reg.Register(new McpToolDescriptor("b", "", new { }), _ => null);
-        reg.Register(new McpToolDescriptor("c", "", new { }), _ => null);
+        reg.Register(new McpToolDescriptor("a", "", new SchemaNode("object")), _ => null);
+        reg.Register(new McpToolDescriptor("b", "", new SchemaNode("object")), _ => null);
+        reg.Register(new McpToolDescriptor("c", "", new SchemaNode("object")), _ => null);
 
         var names = reg.List().Select(d => d.Name).ToArray();
         Assert.Equal(new[] { "a", "b", "c" }, names);
@@ -187,12 +188,12 @@ public class MoreCoverageTests
     private static McpDispatcher BuildDispatcherWithTools()
     {
         var reg = new McpToolRegistry();
-        reg.Register(new McpToolDescriptor("kaboom", "", new { }),
+        reg.Register(new McpToolDescriptor("kaboom", "", new SchemaNode("object")),
             _ => throw new InvalidOperationException("generic failure"));
-        reg.Register(new McpToolDescriptor("softfail", "", new { }),
-            _ => new { ok = false, reason = "no-op" });
-        reg.Register(new McpToolDescriptor("ping", "", new { }),
-            _ => new { ok = true });
+        reg.Register(new McpToolDescriptor("softfail", "", new SchemaNode("object")),
+            _ => new JsonObject { ["ok"] = false, ["reason"] = "no-op" });
+        reg.Register(new McpToolDescriptor("ping", "", new SchemaNode("object")),
+            _ => new JsonObject { ["ok"] = true });
         return new McpDispatcher(reg);
     }
 
@@ -312,8 +313,8 @@ public class MoreCoverageTests
         {
             using var logger = new DevtoolsLogger(tempDir, pid: 2001, DevtoolsLogLevel.Call);
             var reg = new McpToolRegistry();
-            reg.Register(new McpToolDescriptor("softfail", "", new { }),
-                _ => new { ok = false });
+            reg.Register(new McpToolDescriptor("softfail", "", new SchemaNode("object")),
+                _ => new JsonObject { ["ok"] = false });
             var d = new McpDispatcher(reg, logger);
 
             var resp = d.Dispatch(
@@ -339,7 +340,7 @@ public class MoreCoverageTests
         {
             using var logger = new DevtoolsLogger(tempDir, pid: 2002, DevtoolsLogLevel.Call);
             var reg = new McpToolRegistry();
-            reg.Register(new McpToolDescriptor("kaboom", "", new { }),
+            reg.Register(new McpToolDescriptor("kaboom", "", new SchemaNode("object")),
                 _ => throw new InvalidOperationException("boom"));
             var d = new McpDispatcher(reg, logger);
 

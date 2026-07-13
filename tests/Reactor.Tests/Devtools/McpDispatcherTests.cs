@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.UI.Reactor.Hosting.Devtools;
 using Xunit;
 
@@ -15,14 +16,14 @@ public class McpDispatcherTests
     {
         reg = new McpToolRegistry();
         reg.Register(
-            new McpToolDescriptor("echo", "Echo the input text back.", new { type = "object" }),
-            @params => new { echoed = DevtoolsTools.ReadString(@params, "text") });
+            new McpToolDescriptor("echo", "Echo the input text back.", new SchemaNode("object")),
+            @params => new JsonObject { ["echoed"] = DevtoolsTools.ReadString(@params, "text") });
         reg.Register(
-            new McpToolDescriptor("badparam", "Always complains about params.", new { type = "object" }),
+            new McpToolDescriptor("badparam", "Always complains about params.", new SchemaNode("object")),
             _ => throw new McpToolException(
                 "required",
                 JsonRpcErrorCodes.InvalidParams,
-                new { code = "missing-field", field = "name" }));
+                new JsonObject { ["code"] = "missing-field", ["field"] = "name" }));
         var captured = reg;
         return new McpDispatcher(captured);
     }

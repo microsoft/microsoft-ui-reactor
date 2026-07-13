@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
@@ -98,7 +99,7 @@ class PersistentSettings : Component
         UseEffect(() =>
         {
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(SettingsPath)!);
-            File.WriteAllText(SettingsPath, JsonSerializer.Serialize(settings));
+            File.WriteAllText(SettingsPath, JsonSerializer.Serialize(settings, AppSettingsJsonContext.Default.AppSettings));
             return () => { };
         }, settings);
 
@@ -109,10 +110,15 @@ class PersistentSettings : Component
 
     private static AppSettings LoadFromDisk() =>
         File.Exists(SettingsPath)
-            ? JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(SettingsPath))
+            ? JsonSerializer.Deserialize(File.ReadAllText(SettingsPath), AppSettingsJsonContext.Default.AppSettings)
                 ?? new AppSettings(NotificationsOn: true)
             : new AppSettings(NotificationsOn: true);
 }
 
 record AppSettings(bool NotificationsOn);
+
+// JSON source-generated context so the disk read/write is trim- and
+// NativeAOT-safe (no reflection-based JsonSerializer overloads).
+[JsonSerializable(typeof(AppSettings))]
+partial class AppSettingsJsonContext : JsonSerializerContext;
 // </snippet:disk-bridge>

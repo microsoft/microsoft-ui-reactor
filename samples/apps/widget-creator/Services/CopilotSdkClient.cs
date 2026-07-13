@@ -1,0 +1,213 @@
+using System;
+using System.Collections.Generic;
+using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Threading.Channels;
+using System.Threading.Tasks;
+using GitHub.Copilot;
+
+namespace WidgetCreator.Services;
+
+/// <summary>Raised when Copilot reports an auth/authorization failure mid-stream.</summary>
+public sealed class AuthExpiredException(string message) : Exception(message);
+
+/// <summary>
+/// <see cref="IModelClient"/> backed by the GitHub Copilot SDK
+/// (<c>GitHub.Copilot.SDK</c>). The SDK proxies to the bundled Copilot CLI,
+/// which rides whichever account <c>gh auth</c> considers active — auth,
+/// headers, retries, and model selection are handled by the CLI. No explicit
+/// token: <c>UseLoggedInUser</c> defaults on, so it inherits the machine login.
+///
+/// <para>A <see cref="Conversation"/> wraps one Copilot session and supports
+/// multiple streaming turns, which is what powers the build-and-fix loop:
+/// generate → build → send errors back to the same agent → regenerate.</para>
+/// </summary>
+public sealed class CopilotSdkClient : IModelClient, IAsyncDisposable
+{
+    const string DefaultModel = "claude-sonnet-4.5";
+
+    readonly string _model;
+    readonly SemaphoreSlim _initLock = new(1, 1);
+    CopilotClient? _client;
+
+    public CopilotSdkClient(string? model = null) => _model = model ?? DefaultModel;
+
+    public string ModelId => _model;
+
+    async Task<CopilotClient> GetClientAsync(CancellationToken ct)
+    {
+        if (_client is not null) return _client;
+        await _initLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (_client is not null) return _client;
+            var options = new CopilotClientOptions();
+            var client = new CopilotClient(options);
+            SessionLog.Write($"[CopilotSdk] starting CLI server (model={_model})");
+            await client.StartAsync().ConfigureAwait(false);
+            SessionLog.Write("[CopilotSdk] CLI server ready");
+            _client = client;
+            return _client;
+        }
+        finally
+        {
+            _initLock.Release();
+        }
+    }
+
+    public async Task<IModelConversation> StartConversationAsync(string systemPrompt, CancellationToken ct)
+    {
+        var client = await GetClientAsync(ct).ConfigureAwait(false);
+        var session = await client.CreateSessionAsync(BuildConfig(systemPrompt), ct).ConfigureAwait(false);
+        SessionLog.Write($"[CopilotSdk] session created id={session.SessionId}");
+        return new Conversation(session);
+    }
+
+    public async Task<IModelConversation> ResumeConversationAsync(string sessionId, string systemPrompt, CancellationToken ct)
+    {
+        var client = await GetClientAsync(ct).ConfigureAwait(false);
+        if (!string.IsNullOrWhiteSpace(sessionId))
+        {
+            try
+            {
+                var resumed = await client.ResumeSessionAsync(sessionId, BuildResumeConfig(systemPrompt), ct).ConfigureAwait(false);
+                SessionLog.Write($"[CopilotSdk] resumed session id={resumed.SessionId}");
+                return new Conversation(resumed);
+            }
+            catch (Exception ex)
+            {
+                // Session may have been pruned (e.g. days later) — fall back to a
+                // fresh session. The caller includes the current source in its
+                // fix prompt, so correctness doesn't depend on restored history.
+                SessionLog.Write($"[CopilotSdk] resume '{sessionId}' failed ({ex.Message}); starting fresh session");
+            }
+        }
+        return await StartConversationAsync(systemPrompt, ct).ConfigureAwait(false);
+    }
+
+    SessionConfig BuildConfig(string systemPrompt) => new()
+    {
+        Model = _model,
+        ClientName = "widget-creator",
+        OnPermissionRequest = AgentPermissionPolicy.DenyAll,
+        Streaming = true,
+        SystemMessage = new SystemMessageConfig
+        {
+            Mode = SystemMessageMode.Replace,
+            Content = systemPrompt,
+        },
+    };
+
+    ResumeSessionConfig BuildResumeConfig(string systemPrompt) => new()
+    {
+        Model = _model,
+        ClientName = "widget-creator",
+        OnPermissionRequest = AgentPermissionPolicy.DenyAll,
+        Streaming = true,
+        SystemMessage = new SystemMessageConfig
+        {
+            Mode = SystemMessageMode.Replace,
+            Content = systemPrompt,
+        },
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_client is { } client)
+        {
+            try { await client.StopAsync().ConfigureAwait(false); }
+            catch { /* best-effort */ }
+            try { await client.DisposeAsync().ConfigureAwait(false); }
+            catch { /* swallow */ }
+            _client = null;
+        }
+        _initLock.Dispose();
+    }
+
+    /// <summary>One Copilot session; each <see cref="SendAsync"/> is a turn.</summary>
+    sealed class Conversation(CopilotSession session) : IModelConversation
+    {
+        readonly CopilotSession _session = session;
+
+        public string SessionId => _session.SessionId;
+
+        public async IAsyncEnumerable<string> SendAsync(
+            string userPrompt,
+            [EnumeratorCancellation] CancellationToken ct)
+        {
+            var channel = Channel.CreateUnbounded<string>(new UnboundedChannelOptions
+            {
+                SingleReader = true,
+                SingleWriter = true,
+            });
+
+            Exception? terminalError = null;
+            bool sawDeltas = false;
+            bool turnEnded = false;
+
+            using var subscription = _session.On<SessionEvent>(evt =>
+            {
+                switch (evt)
+                {
+                    case AssistantMessageDeltaEvent delta:
+                        if (delta.Data.DeltaContent.Length > 0)
+                        {
+                            sawDeltas = true;
+                            channel.Writer.TryWrite(delta.Data.DeltaContent);
+                        }
+                        break;
+
+                    case AssistantMessageEvent final:
+                        if (!sawDeltas && final.Data.Content.Length > 0)
+                            channel.Writer.TryWrite(final.Data.Content);
+                        break;
+
+                    case AssistantTurnEndEvent:
+                        turnEnded = true;
+                        break;
+
+                    case SessionIdleEvent:
+                        if (turnEnded)
+                            channel.Writer.TryComplete();
+                        break;
+
+                    case SessionErrorEvent err:
+                        var msg = $"Copilot {err.Data.ErrorType}: {err.Data.Message}";
+                        SessionLog.Write($"[CopilotSdk] {msg}");
+                        terminalError = err.Data.ErrorType switch
+                        {
+                            "authentication" or "authorization" => new AuthExpiredException(msg),
+                            _ => new Exception(msg),
+                        };
+                        channel.Writer.TryComplete(terminalError);
+                        break;
+                }
+            });
+
+            try
+            {
+                await _session.SendAsync(new MessageOptions { Prompt = userPrompt }, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                channel.Writer.TryComplete(ex);
+                throw;
+            }
+
+            await foreach (var chunk in channel.Reader.ReadAllAsync(ct).ConfigureAwait(false))
+            {
+                if (!string.IsNullOrEmpty(chunk))
+                    yield return chunk;
+            }
+
+            if (terminalError is not null)
+                throw terminalError;
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            try { await _session.DisposeAsync().ConfigureAwait(false); }
+            catch { /* best-effort */ }
+        }
+    }
+}

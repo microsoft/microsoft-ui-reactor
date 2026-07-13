@@ -17,6 +17,11 @@ internal sealed record SupervisorArgs(
     bool PrintConfig,
     string? Error);
 
+// MCP client-config fragments emitted by `mur devtools --print-config`.
+internal sealed record McpServerEntry(string type, string url);
+internal sealed record McpServersConfig(Dictionary<string, McpServerEntry> mcpServers);
+internal sealed record McpServersAltConfig(Dictionary<string, McpServerEntry> servers);
+
 internal static class DevtoolsSupervisor
 {
     private const int ReloadExitCode = 42;
@@ -302,52 +307,38 @@ internal static class DevtoolsSupervisor
     {
         var url = $"http://127.0.0.1:{mcpPort}/mcp";
 
-        var claudeCode = new
+        var claudeCode = new McpServersConfig(new()
         {
-            mcpServers = new Dictionary<string, object>
-            {
-                ["reactor"] = new { type = "http", url },
-            },
-        };
+            ["reactor"] = new McpServerEntry("http", url),
+        });
 
         // VS Code's MCP config nests under `servers` (distinct from Claude Code's
         // `mcpServers`) per the VS Code MCP docs. Users paste this into their
         // `.vscode/mcp.json`.
-        var vscode = new
+        var vscode = new McpServersAltConfig(new()
         {
-            servers = new Dictionary<string, object>
-            {
-                ["reactor"] = new { type = "http", url },
-            },
-        };
+            ["reactor"] = new McpServerEntry("http", url),
+        });
 
         // GitHub Copilot's workspace MCP config follows the VS Code shape today;
         // we emit the same fragment so the user can drop it into either. If the
         // format diverges later, bump this and leave the VS Code block alone.
-        var copilot = new
+        var copilot = new McpServersAltConfig(new()
         {
-            servers = new Dictionary<string, object>
-            {
-                ["reactor"] = new { type = "http", url },
-            },
-        };
-
-        var opts = new global::System.Text.Json.JsonSerializerOptions
-        {
-            WriteIndented = true,
-        };
+            ["reactor"] = new McpServerEntry("http", url),
+        });
 
         var sb = new global::System.Text.StringBuilder();
         sb.AppendLine($"# Reactor MCP at {url}");
         sb.AppendLine();
         sb.AppendLine("## Claude Code — ~/.claude/settings.json");
-        sb.AppendLine(global::System.Text.Json.JsonSerializer.Serialize(claudeCode, opts));
+        sb.AppendLine(global::System.Text.Json.JsonSerializer.Serialize(claudeCode, CliJsonIndentedContext.Default.McpServersConfig));
         sb.AppendLine();
         sb.AppendLine("## VS Code — .vscode/mcp.json");
-        sb.AppendLine(global::System.Text.Json.JsonSerializer.Serialize(vscode, opts));
+        sb.AppendLine(global::System.Text.Json.JsonSerializer.Serialize(vscode, CliJsonIndentedContext.Default.McpServersAltConfig));
         sb.AppendLine();
         sb.AppendLine("## GitHub Copilot (workspace MCP)");
-        sb.AppendLine(global::System.Text.Json.JsonSerializer.Serialize(copilot, opts));
+        sb.AppendLine(global::System.Text.Json.JsonSerializer.Serialize(copilot, CliJsonIndentedContext.Default.McpServersAltConfig));
         return sb.ToString();
     }
 }

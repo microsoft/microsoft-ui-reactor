@@ -77,6 +77,10 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
     <PackageReference Include="System.Drawing.Common" />
     <PackageReference Include="YamlDotNet" />
+    <PackageReference Include="Vecc.YamlDotNet.Analyzers.StaticGenerator">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
   </ItemGroup>
 
   <ItemGroup>

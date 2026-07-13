@@ -213,10 +213,13 @@ public sealed class UnusedGridTrackAnalyzer : DiagnosticAnalyzer
         if (ps[0].Name != "columns" || ps[1].Name != "rows" || !ps[ps.Length - 1].IsParams)
             return false;
 
-        // Typed overload only — the obsolete string[] overload has its own CS0618 code fix.
-        return ps[0].Type is IArrayTypeSymbol { ElementType: INamedTypeSymbol element }
-            && element.ToDisplayString() == GridSizeType;
+        // Typed overload only — both track arrays must be GridSize[].
+        return IsGridSizeArray(ps[0].Type) && IsGridSizeArray(ps[1].Type);
     }
+
+    private static bool IsGridSizeArray(ITypeSymbol type) =>
+        type is IArrayTypeSymbol { ElementType: INamedTypeSymbol element }
+        && element.ToDisplayString() == GridSizeType;
 
     private static bool IsGridModifier(IMethodSymbol? method)
     {

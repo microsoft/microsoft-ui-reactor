@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.UI.Reactor.Data;
 
 namespace HeadTrax.Schema;
@@ -38,6 +39,7 @@ internal static class EmployeeSchema
     private static FieldDescriptor Col(
         string name,
         string displayName,
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties | DynamicallyAccessedMemberTypes.PublicConstructors)]
         Type type,
         double? width = null,
         bool sortable = true,

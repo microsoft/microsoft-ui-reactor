@@ -1746,6 +1746,35 @@ internal static class ReconcilerBigCoverageFixtures
             };
             H.Check("PrivMount_IconSources", iconSources.Take(6).All(i => i is not null));
 
+            // Regression: a FontIcon with NO explicit FontSize must resolve to a
+            // FontIconSource that TitleBar.IconSource accepts. The IconSource path
+            // used to force FontSize = double.NaN, which TitleBar.set_IconSource
+            // rejects with ArgumentException ("Value does not fall within the
+            // expected range") — the exact failure the modernized app template hit
+            // via TitleBar(...).Icon(FontIcon("\uEA3A", "Segoe Fluent Icons")).
+            // The parallel null-FontFamily slot was coerced the same way (FontFamily
+            // = null!), so cover it too. For each case assert the resolver produced a
+            // real FontIconSource (not null / some other type) AND that a real
+            // TitleBar accepts the assignment on the UI thread.
+            static bool TitleBarAcceptsFontIconSource(IconData data)
+            {
+                if (IconResolver.ResolveIconSource(data) is not WinXC.FontIconSource src)
+                    return false;
+                try
+                {
+                    _ = new WinXC.TitleBar { IconSource = src };
+                    return true;
+                }
+                catch (ArgumentException)
+                {
+                    return false;
+                }
+            }
+
+            H.Check("PrivMount_TitleBarFontIconNoSize",
+                TitleBarAcceptsFontIconSource(new FontIconData("\uEA3A", "Segoe Fluent Icons"))
+                && TitleBarAcceptsFontIconSource(new FontIconData("\uEA3A", FontFamily: null, FontSize: 18)));
+
             var rows = new[] { new KeyRow("a"), new KeyRow("b"), new KeyRow("c") };
             int selected = -1;
             IReadOnlyList<KeyRow>? multi = null;

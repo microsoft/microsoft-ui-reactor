@@ -306,10 +306,17 @@ internal static partial class CompileCommand
         else
         {
             Console.WriteLine("═══ Phase 2: Build ═══");
+            // In CI, build the doc apps in Release so they go through the same
+            // TreatWarningsAsErrors gate as the rest of the repo (Directory.Build.props
+            // scopes it to Release). Doc apps aren't in Reactor.slnx, so this is the
+            // only place a warning in exemplar snippet code — an obsolete API, a stray
+            // duplicate using — is caught. Locally we build Debug: faster, and it's the
+            // config the capture phase (dotnet run) launches.
+            var buildConfiguration = ci ? "Release" : "Debug";
             foreach (var (topicId, appDir) in apps)
             {
-                Console.Write($"  Building {topicId}...");
-                var exitCode = BuildApp(appDir);
+                Console.Write($"  Building {topicId} ({buildConfiguration})...");
+                var exitCode = BuildApp(appDir, buildConfiguration);
                 if (exitCode != 0)
                 {
                     Console.Error.WriteLine($" ✗ build failed (exit code {exitCode})");
@@ -551,7 +558,7 @@ internal static partial class CompileCommand
 
     // ── Build ─────────────────────────────────────────────────────────────
 
-    private static int BuildApp(string appDir)
+    private static int BuildApp(string appDir, string configuration)
     {
         var csproj = Directory.GetFiles(appDir, "*.csproj").FirstOrDefault();
         if (csproj == null) return 1;
@@ -568,7 +575,7 @@ internal static partial class CompileCommand
         var psi = new ProcessStartInfo
         {
             FileName = "dotnet",
-            Arguments = $"build \"{csproj}\" -v q --nologo -nowarn:MSB3277 -p:Platform={platform}",
+            Arguments = $"build \"{csproj}\" -c {configuration} -v q --nologo -nowarn:MSB3277 -p:Platform={platform}",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,

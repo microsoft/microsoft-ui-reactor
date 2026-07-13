@@ -91,13 +91,11 @@ internal static class DevtoolsTools
             new McpToolDescriptor(
                 Name: "version",
                 Description: "Returns the running app's build tag, pid, and MCP port. Zero side effects.",
-                InputSchema: new { type = "object", properties = new { }, additionalProperties = false }),
-            _ => new
-            {
-                build = server.BuildTag,
-                pid = Process.GetCurrentProcess().Id,
-                mcpPort = server.Port,
-            });
+                InputSchema: Schema.Root()),
+            _ => new VersionResult(
+                Build: server.BuildTag,
+                Pid: Process.GetCurrentProcess().Id,
+                McpPort: server.Port));
     }
 
     // -- components --------------------------------------------------------------
@@ -111,7 +109,7 @@ internal static class DevtoolsTools
                     "Lists the Component class names in the loaded assembly, top-level first. Each entry carries " +
                     "`isNested` (true for inner helper components like `ContextDemo+AccentBadge`) so agents can pick " +
                     "the user-facing demo without guessing. Use `current` to verify what's mounted now.",
-                InputSchema: new { type = "object", properties = new { }, additionalProperties = false }),
+                InputSchema: Schema.Root()),
             _ =>
             {
                 if (ctx.GetComponentsDetailed is { } detailed)
@@ -120,17 +118,9 @@ internal static class DevtoolsTools
                         .OrderBy(c => c.IsNested ? 1 : 0)
                         .ThenBy(c => c.Name, StringComparer.Ordinal)
                         .ToArray();
-                    return new
-                    {
-                        components = infos,
-                        current = ctx.GetCurrentComponent(),
-                    };
+                    return new ComponentsResult(infos, ctx.GetCurrentComponent());
                 }
-                return new
-                {
-                    components = ctx.GetComponents().ToArray(),
-                    current = ctx.GetCurrentComponent(),
-                };
+                return new ComponentsResult(ctx.GetComponents().ToArray(), ctx.GetCurrentComponent());
             });
     }
 
@@ -142,16 +132,9 @@ internal static class DevtoolsTools
             new McpToolDescriptor(
                 Name: "switchComponent",
                 Description: "Switches the hosted root component. Invalidates every tree id in the target window.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        name = new { type = "string", description = "Component class name" },
-                    },
-                    required = new[] { "name" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "name" },
+                    ("name", Schema.Str("Component class name")))),
             @params =>
             {
                 var name = ReadString(@params, "name")
@@ -171,7 +154,7 @@ internal static class DevtoolsTools
                     if (!ok)
                         throw new McpToolException($"Component '{name}' not found.",
                             JsonRpcErrorCodes.ToolExecution,
-                            new { code = "unknown-component", available = ctx.GetComponents().ToArray() });
+                            new McpErrorData("unknown-component", Available: ctx.GetComponents().ToArray()));
 
                     // The old tree is gone; invalidate its ids so a subsequent
                     // selector resolution against an old id returns `"gone"`
@@ -183,7 +166,7 @@ internal static class DevtoolsTools
                             nodes.InvalidateWindow(snap.Id);
                     }
 
-                    return new { ok = true, current = name };
+                    return new SwitchComponentResult(Ok: true, Current: name);
                 });
             });
     }
@@ -198,21 +181,14 @@ internal static class DevtoolsTools
                 Description:
                     "Flushes the response, closes listeners, and exits with sentinel code 42 so the " +
                     "`mur devtools` supervisor rebuilds and relaunches. Old node ids do not carry over.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        component = new { type = "string", description = "Optional component to focus after restart" },
-                    },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    ("component", Schema.Str("Optional component to focus after restart")))),
             @params =>
             {
                 // Return the response immediately; the reload fires after the HTTP write flushes.
                 var exitingBuild = server.BuildTag;
                 ctx.RequestReload();
-                return new { ok = true, exitingBuild };
+                return new ExitResult(Ok: true, ExitingBuild: exitingBuild);
             });
     }
 
@@ -227,12 +203,12 @@ internal static class DevtoolsTools
                     "Closes the app cleanly. Flushes the HTTP response, disposes the MCP listener, " +
                     "closes the window, and exits with code 0 so the `mur devtools` supervisor " +
                     "returns without rebuilding. Use to release file locks on the build output.",
-                InputSchema: new { type = "object", properties = new { }, additionalProperties = false }),
+                InputSchema: Schema.Root()),
             @params =>
             {
                 var exitingBuild = server.BuildTag;
                 ctx.RequestShutdown();
-                return new { ok = true, exitingBuild };
+                return new ExitResult(Ok: true, ExitingBuild: exitingBuild);
             });
     }
 
@@ -250,19 +226,8 @@ internal static class DevtoolsTools
                     "`window` when more than one is active. " +
                     "Pass `includeHwnd: true` to include raw native window handles; omitted by " +
                     "default to keep HWNDs out of agent transcripts unless explicitly requested.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        includeHwnd = new
-                        {
-                            type = "boolean",
-                            description = "Include raw HWND values in the response. Defaults to false (W-7).",
-                        },
-                    },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    ("includeHwnd", Schema.Bool("Include raw HWND values in the response. Defaults to false (W-7).")))),
             @params =>
             {
                 // W-7: HWND opt-in. The token-holding caller is already
@@ -272,51 +237,20 @@ internal static class DevtoolsTools
                 return server.OnDispatcher(() =>
                 {
                     var current = ctx.GetCurrentComponent();
-                    return new
-                    {
-                        windows = ctx.Windows.Snapshot().Select(w =>
-                        {
-                            // Anonymous types can't be conditionally shaped, so
-                            // emit two structurally similar projections gated
-                            // on the opt-in flag. The non-hwnd shape is the
-                            // pre-W-7 shape minus that one field.
-                            return includeHwnd
-                                ? (object)new
-                                {
-                                    id = w.Id,
-                                    title = w.Title,
-                                    hwnd = w.Hwnd,
-                                    bounds = new
-                                    {
-                                        x = w.Bounds.X,
-                                        y = w.Bounds.Y,
-                                        width = w.Bounds.Width,
-                                        height = w.Bounds.Height,
-                                    },
-                                    isMain = w.IsMain,
-                                    buildTag = w.BuildTag,
-                                    // Only the main window reflects the component switch today;
-                                    // secondary windows report null. Agents can cross-check
-                                    // components.current against this value.
-                                    currentComponent = w.IsMain ? current : null,
-                                }
-                                : new
-                                {
-                                    id = w.Id,
-                                    title = w.Title,
-                                    bounds = new
-                                    {
-                                        x = w.Bounds.X,
-                                        y = w.Bounds.Y,
-                                        width = w.Bounds.Width,
-                                        height = w.Bounds.Height,
-                                    },
-                                    isMain = w.IsMain,
-                                    buildTag = w.BuildTag,
-                                    currentComponent = w.IsMain ? current : null,
-                                };
-                        }).ToArray(),
-                    };
+                    return new WindowsResult(
+                        ctx.Windows.Snapshot().Select(w => new WindowDto(
+                            Id: w.Id,
+                            Title: w.Title,
+                            // Only the hwnd-opt-in shape carries the native handle; the
+                            // default shape omits it (null → WhenWritingNull drops it).
+                            Hwnd: includeHwnd ? w.Hwnd : (long?)null,
+                            Bounds: new WindowBoundsDto(w.Bounds.X, w.Bounds.Y, w.Bounds.Width, w.Bounds.Height),
+                            IsMain: w.IsMain,
+                            BuildTag: w.BuildTag,
+                            // Only the main window reflects the component switch today;
+                            // secondary windows report null. Agents can cross-check
+                            // components.current against this value.
+                            CurrentComponent: w.IsMain ? current : null)).ToArray());
                 });
             });
     }
@@ -332,21 +266,17 @@ internal static class DevtoolsTools
                     "Lists active Reactor windows with id, key, title, DIP size, DPI, " +
                     "state, and isMain. Use this to discover ids for windows.activate / " +
                     "windows.close. Spec 036 §10.",
-                InputSchema: new { type = "object", properties = new { }, additionalProperties = false }),
-            _ => server.OnDispatcher(() => new
-            {
-                windows = ctx.Windows.Snapshot().Select(w => new
-                {
-                    id = w.Id,
-                    key = w.Key,
-                    title = w.Title,
-                    width = w.WidthDip,
-                    height = w.HeightDip,
-                    dpi = w.Dpi,
-                    state = w.State,
-                    isMain = w.IsMain,
-                }).ToArray(),
-            }));
+                InputSchema: Schema.Root()),
+            _ => server.OnDispatcher(() => new WindowsListResult(
+                ctx.Windows.Snapshot().Select(w => new WindowListItem(
+                    Id: w.Id,
+                    Key: w.Key,
+                    Title: w.Title,
+                    Width: w.WidthDip,
+                    Height: w.HeightDip,
+                    Dpi: w.Dpi,
+                    State: w.State,
+                    IsMain: w.IsMain)).ToArray())));
     }
 
     private static void Register_WindowsActivate(DevtoolsMcpServer server, ToolHostContext ctx)
@@ -355,16 +285,9 @@ internal static class DevtoolsTools
             new McpToolDescriptor(
                 Name: "windows.activate",
                 Description: "Activates (focuses) the window with the given id. Spec 036 §10.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        id = new { type = "string", description = "Window id from windows.list." },
-                    },
-                    required = new[] { "id" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "id" },
+                    ("id", Schema.Str("Window id from windows.list.")))),
             @params =>
             {
                 var id = ReadString(@params, "id")
@@ -377,9 +300,9 @@ internal static class DevtoolsTools
                         throw new McpToolException(
                             $"Window '{id}' not found.",
                             JsonRpcErrorCodes.ToolExecution,
-                            new { code = "unknown-window" });
+                            new McpErrorData("unknown-window"));
                     rw.Activate();
-                    return new { ok = true, id };
+                    return new WindowOkResult(Ok: true, Id: id);
                 });
             });
     }
@@ -393,16 +316,9 @@ internal static class DevtoolsTools
                     "Closes the window with the given id. Honors UseClosingGuard / Closing " +
                     "subscribers — returns { ok: false, cancelled: true } when the close was " +
                     "vetoed. Spec 036 §10.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        id = new { type = "string", description = "Window id from windows.list." },
-                    },
-                    required = new[] { "id" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "id" },
+                    ("id", Schema.Str("Window id from windows.list.")))),
             @params =>
             {
                 var id = ReadString(@params, "id")
@@ -428,7 +344,7 @@ internal static class DevtoolsTools
                         throw new McpToolException(
                             $"Window '{id}' not found.",
                             JsonRpcErrorCodes.ToolExecution,
-                            new { code = "unknown-window" });
+                            new McpErrorData("unknown-window"));
 
                     onClosed = (_, _) => doneTcs.TrySetResult(true);
                     onClosing = (_, e) =>
@@ -455,7 +371,7 @@ internal static class DevtoolsTools
                     }
                     var stillOpen = rw is not null;
                     var cancelled = observedCancel || stillOpen;
-                    return new { ok = !cancelled, cancelled, id };
+                    return new WindowCloseResult(Ok: !cancelled, Cancelled: cancelled, Id: id);
                 });
             });
     }
@@ -470,20 +386,13 @@ internal static class DevtoolsTools
                     "component name must be in the existing devtools allowlist (same gate " +
                     "as switchComponent) — loopback callers cannot spawn arbitrary types. " +
                     "Spec 036 §10. Returns { ok, id } on success.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        component = new { type = "string", description = "Component class name (allowlisted)." },
-                        title = new { type = "string" },
-                        width = new { type = "number", description = "Initial DIP width (default 1024)." },
-                        height = new { type = "number", description = "Initial DIP height (default 768)." },
-                        key = new { type = "string", description = "Optional WindowKey for FindWindow lookup." },
-                    },
-                    required = new[] { "component" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "component" },
+                    ("component", Schema.Str("Component class name (allowlisted).")),
+                    ("title", Schema.Str()),
+                    ("width", Schema.Num("Initial DIP width (default 1024).")),
+                    ("height", Schema.Num("Initial DIP height (default 768).")),
+                    ("key", Schema.Str("Optional WindowKey for FindWindow lookup.")))),
             @params =>
             {
                 var component = ReadString(@params, "component")
@@ -493,7 +402,7 @@ internal static class DevtoolsTools
                     throw new McpToolException(
                         "windows.open is not wired in this host.",
                         JsonRpcErrorCodes.ToolExecution,
-                        new { code = "not-wired" });
+                        new McpErrorData("not-wired"));
 
                 // Allowlist gate (W-3): enforced framework-side, alongside the
                 // rest of the windows.open argument validation, so a host can't
@@ -519,7 +428,7 @@ internal static class DevtoolsTools
                     throw new McpToolException(
                         $"Invalid windows.open spec: {ex.Message}",
                         JsonRpcErrorCodes.InvalidParams,
-                        new { code = "invalid-spec" });
+                        new McpErrorData("invalid-spec"));
                 }
 
                 return server.OnDispatcher<object>(() =>
@@ -529,8 +438,8 @@ internal static class DevtoolsTools
                         throw new McpToolException(
                             $"Component '{component}' could not be resolved.",
                             JsonRpcErrorCodes.ToolExecution,
-                            new { code = "open-failed" });
-                    return new { ok = true, id };
+                            new McpErrorData("open-failed"));
+                    return new WindowOkResult(Ok: true, Id: id);
                 });
             });
     }
@@ -564,11 +473,7 @@ internal static class DevtoolsTools
         throw new McpToolException(
             $"Component '{component}' is not in the devtools allowlist.",
             JsonRpcErrorCodes.ToolExecution,
-            new
-            {
-                code = "unknown-component",
-                available = allowed.ToArray(),
-            });
+            new McpErrorData("unknown-component", Available: allowed.ToArray()));
     }
 
     internal static string? ReadString(JsonElement? args, string name)

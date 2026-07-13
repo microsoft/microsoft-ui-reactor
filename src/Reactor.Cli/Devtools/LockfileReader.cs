@@ -75,7 +75,7 @@ internal static class LockfileReader
             var info = new FileInfo(path);
             if (info.Length > MaxLockfileBytes) return false;
             var json = File.ReadAllText(path);
-            entry = JsonSerializer.Deserialize<LockfileEntry>(json);
+            entry = JsonSerializer.Deserialize(json, CliJsonContext.Default.LockfileEntry);
             if (entry is null) return false;
             // SECURITY (TASK-031): enforce schema tag and reject endpoints that
             // are not loopback. A lockfile pointing at off-machine endpoints is

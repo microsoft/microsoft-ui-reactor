@@ -72,6 +72,91 @@ public class DataGridTests : AppTestBase
     }
 
     /// <summary>
+    /// Regression: pressing Tab WHILE EDITING must commit the current cell AND leave the inline
+    /// editor reopened on the next cell — it must not be torn down. The grid's deferred LostFocus
+    /// commit fires because Tab moves real focus out of the single-tab-stop grid; previously it ran
+    /// after the editing-Tab flow had already committed + reopened the editor and committed a second
+    /// time, destroying it (the editor never reappeared). Guarded by
+    /// <c>DataGridState&lt;T&gt;.SuppressNextLostFocusCommit</c>.
+    /// </summary>
+    [E2eRetry(3)]
+    [TestMethod]
+    public void Interactive_DataGrid_EditingTab_ReopensEditorOnNextCell()
+    {
+        NavigateToFixtureFresh("DataGrid_EditableGrid");
+        WaitForText("EditLog", "Edits:");
+        Assert.IsNotNull(WaitForName("Alice"), "'Alice' should be visible");
+        Assert.IsNotNull(WaitForName("Smith"), "'Smith' (the next cell) should be visible");
+
+        // Edit row-1 FirstName (Alice); type a new value but do NOT commit.
+        TapCell("Alice");
+        TypeIntoFocusedEditor("Alicia");
+
+        // Editing-Tab: commits FirstName and should reopen the editor on the LastName cell.
+        InputInjector.Foreground(HostHwnd);
+        InputInjector.Tab();
+
+        // The inline editor must still be present (reopened on the next cell), not torn down by the
+        // LostFocus safety-net.
+        UiElement? editor = null;
+        try { editor = WaitForEditor(timeoutMs: 4000); }
+        catch (WinAppException ex)
+        {
+            Assert.Fail("Inline editor did not REOPEN on the next cell after the editing-Tab — the reopen " +
+                        "regressed (the LostFocus safety-net likely committed a second time and tore it down). " + ex.Message);
+        }
+
+        Assert.IsNotNull(editor, "Inline editor should have reopened on the next cell after the editing-Tab.");
+
+        // The FirstName commit from the Tab must have landed (LastName unchanged, still "Smith").
+        WaitForTextContaining("EditLog", "[1:Alicia,Smith]", timeoutMs: 5000);
+
+        // Authoritative, unconditional proof the editor reopened on the LastName cell (not still on
+        // FirstName): type a new value into the reopened editor and commit. Editing LastName commits
+        // row 1 as [1:Alicia,Smythe] — FirstName preserved as the just-committed "Alicia"; had the
+        // editor wrongly reopened on FirstName, that commit would read [1:Smythe,Smith] and this
+        // assertion would time out. Unlike a direct editor-value read (winapp can't reliably read the
+        // inline TextBox), this behavioral oracle is unconditional.
+        TypeIntoFocusedEditor("Smythe", commitWithEnter: true);
+        WaitForTextContaining("EditLog", "[1:Alicia,Smythe]", timeoutMs: 5000);
+        Assert.IsNotNull(WaitForName("Smythe"), "Edited LastName 'Smythe' should be visible after commit.");
+    }
+
+    /// <summary>
+    /// Regression for the SuppressNextLostFocusCommit guard's one-shot lifetime: an editing-Tab into a
+    /// NON-editable next cell reopens no editor (IsEditing ends false), so the guard must still be
+    /// consumed — otherwise it lingers on the persistent state and silently suppresses the NEXT
+    /// legitimate focus-out commit, losing that edit. Here: edit row-1 LastName (its next tab-order
+    /// cell, Salary, is read-only), press Tab, then edit a different row's cell and move focus off the
+    /// grid (click the anchor button). That second edit must commit.
+    /// </summary>
+    [E2eRetry(3)]
+    [TestMethod]
+    public void Interactive_DataGrid_EditingTabToReadOnly_DoesNotSuppressNextCommit()
+    {
+        NavigateToFixtureFresh("DataGrid_EditableGrid");
+        WaitForText("EditLog", "Edits:");
+        Assert.IsNotNull(WaitForName("Smith"), "'Smith' (row 1 LastName) should be visible");
+
+        // Edit row-1 LastName (Smith -> Brown); Tab moves to Salary (read-only) so no editor reopens.
+        TapCell("Smith");
+        TypeIntoFocusedEditor("Brown");
+        InputInjector.Foreground(HostHwnd);
+        InputInjector.Tab();
+        WaitForTextContaining("EditLog", "[1:Alice,Brown]", timeoutMs: 5000);
+
+        // Now edit a different row's cell, then move focus OUT of the grid by clicking the anchor
+        // button. That fires the grid's "focus left the grid" LostFocus commit — the exact path the
+        // guard suppresses. If the guard leaked from the Tab-into-read-only above, 'Bobby' is lost.
+        Assert.IsNotNull(WaitForName("Bob"), "'Bob' (row 2 FirstName) should be visible");
+        TapCell("Bob");
+        TypeIntoFocusedEditor("Bobby");
+        Element("BlurAnchor").Click(); // focus leaves the grid -> blur-commit through LostFocus
+
+        WaitForTextContaining("EditLog", "[2:Bobby,Jones]", timeoutMs: 5000);
+    }
+
+    /// <summary>
     /// Tap a DataGrid cell by its visible text to enter/commit cell edit. The cells are
     /// display-only TextBlocks (no InvokePattern), and a WinUI <c>Tapped</c> only fires on an
     /// ACTIVE window, so winapp's UIA invoke/click can't drive them. We foreground the host and

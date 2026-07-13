@@ -36,6 +36,13 @@ updates:
       - dependency-name: "Microsoft.WindowsAppSDK.WinUI"
       - dependency-name: "Microsoft.WindowsAppSDK.Runtime"
       - dependency-name: "Microsoft.Graphics.Win2D"
+      # MessagePack is a transitive dependency (Microsoft.VisualStudio.SDK ->
+      # StreamJsonRpc) pinned in Directory.Packages.props to the 2.x line for
+      # StreamJsonRpc compatibility, at >= 2.5.301 for the GHSA-hv8m-jj95-wg3x
+      # LZ4 decompression fix. Block breaking major (3.x) bumps; 2.x security
+      # patches are still allowed.
+      - dependency-name: "MessagePack"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "npm"
     directory: "/src/vscode-reactor"

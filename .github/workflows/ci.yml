@@ -94,7 +94,7 @@ jobs:
           dotnet restore tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64
           dotnet restore tests/Reactor.Advanced.Tests/Reactor.Advanced.Tests.csproj -p:Platform=x64
 
-      - name: Test
+      - name: Test (Reactor.Tests)
         # SkipSignaturesGen / SkipReactorApiGen disable the on-build regeneration of
         # skills/reactor.api.txt. Without them, building Reactor.Tests regenerates the
         # committed index in place (host arch == target arch on the x64 runner), so
@@ -103,9 +103,19 @@ jobs:
         # is exactly how a stale index reached main (only the internal nightly, which
         # gates the regen via -p:CI=true, caught it). Gating the regen off here makes
         # Index_IsUpToDate verify the committed copies against the live surface in PR CI.
-        run: |
-          dotnet test tests/Reactor.Tests/Reactor.Tests.csproj --no-restore -p:Platform=x64 -p:SkipSignaturesGen=true -p:SkipReactorApiGen=true --logger "console;verbosity=normal" --blame-hang-timeout 180s --blame-hang-dump-type none
-          dotnet test tests/Reactor.Advanced.Tests/Reactor.Advanced.Tests.csproj --no-restore -p:Platform=x64 --logger "console;verbosity=normal" --blame-hang-timeout 180s --blame-hang-dump-type none
+        #
+        # Kept as its own step (rather than chained with Reactor.Advanced.Tests in one
+        # `run:` block) so a non-zero exit here fails the job. PowerShell surfaces only
+        # the last command's exit code, so a chained failure would be masked whenever a
+        # later command succeeds — that hid 14 Devtools failures from PR CI once.
+        run: dotnet test tests/Reactor.Tests/Reactor.Tests.csproj --no-restore -p:Platform=x64 -p:SkipSignaturesGen=true -p:SkipReactorApiGen=true --logger "console;verbosity=normal" --blame-hang-timeout 180s --blame-hang-dump-type none
+
+      - name: Test (Reactor.Advanced.Tests)
+        # !cancelled() so this still runs when Reactor.Tests failed above — we want
+        # the full failure picture from one CI run, not one-failure-at-a-time. The
+        # job still fails because the Reactor.Tests step's non-zero exit stands.
+        if: ${{ !cancelled() }}
+        run: dotnet test tests/Reactor.Advanced.Tests/Reactor.Advanced.Tests.csproj --no-restore -p:Platform=x64 --logger "console;verbosity=normal" --blame-hang-timeout 180s --blame-hang-dump-type none
 
   integration-tests:
     name: Integration Tests
