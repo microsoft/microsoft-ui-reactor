@@ -13,6 +13,7 @@ class RichTextBlockPage : Component
     public override Element Render()
     {
         var (fontSize, setFontSize) = UseState(14.0);
+        var (clicks, setClicks) = UseState(0);
 
         return ScrollView(
             VStack(16,
@@ -38,6 +39,30 @@ class RichTextBlockPage : Component
                     {
                         Paragraph(Run("Bold") with { IsBold = true }, Run("normal")),
                         Paragraph(Run("Italic") with { IsItalic = true })
+                    })
+                    """),
+
+                SampleCard("Inline hyperlinks & embedded UI",
+                    RichTextBlock(new[]
+                    {
+                        Paragraph(
+                            Run("Rich text can host clickable "),
+                            Hyperlink("hyperlinks", () => setClicks(clicks + 1)),
+                            Run($" — clicked {clicks} time(s).")),
+                        Paragraph(
+                            Run("It can also embed live controls inline: "),
+                            InlineUI(Button("Press me", () => setClicks(clicks + 1))),
+                            Run(" flows with the text."))
+                    }),
+                    """
+                    RichTextBlock(new[]
+                    {
+                        Paragraph(
+                            Run("clickable "),
+                            Hyperlink("hyperlinks", () => setClicks(clicks + 1))),
+                        Paragraph(
+                            Run("embedded UI: "),
+                            InlineUI(Button("Press me", () => ...)))
                     })
                     """),
 

@@ -106,6 +106,39 @@ public static class ControlRegistry
         new("Spacing", "Margin, padding, and stack spacing for consistent layout rhythm.", "Design", "\uE790", "spacing"),
         new("Theming", "Guidance on applying light, dark, and high-contrast themes.", "Design", "\uE771", "theming", "ThemeTransition.png"),
         new("Typography", "Guidance on typographic styles, font ramps, and text hierarchy.", "Design", "\uE790", "typography", "TextBlock.png"),
+
+        // ── Added: controls surfaced from recent Reactor additions ──
+        new("RadioButtons", "A group of radio buttons where a user selects a single option.", "Basic Input", "\uE73A", "radio-buttons"),
+        new("ToggleSplitButton", "A split button whose primary part toggles on and off.", "Basic Input", "\uE73A", "toggle-split-button"),
+
+        new("ItemsRepeater", "A lightweight, data-driven panel for laying out custom collections.", "Collections", "\uE8A9", "items-repeater"),
+        new("SemanticZoom", "A control that switches between a zoomed-in and zoomed-out view of data.", "Collections", "\uE8A9", "semantic-zoom"),
+        new("SwipeControl", "A container that reveals swipe commands on its content.", "Collections", "\uE8A9", "swipe-control"),
+        new("RefreshContainer", "A pull-to-refresh container for scrollable content.", "Collections", "\uE8A9", "refresh-container"),
+
+        new("UniformGrid", "A panel that arranges children in evenly sized cells.", "Layout", "\uE8A1", "uniform-grid"),
+        new("InterspersedGrid", "A grid that places proportionally sized panels with separators between them.", "Layout", "\uE8A1", "interspersed-grid"),
+        new("AnnotatedScrollBar", "A scrollbar that shows labelled annotations along its track.", "Layout", "\uE8A1", "annotated-scroll-bar"),
+        new("Docking", "Dockable, tearable, and floatable panes with drag-to-rearrange layout.", "Layout", "\uE8A1", "docking"),
+
+        new("MediaPlayerElement", "Embeds audio and video playback with built-in transport controls.", "Media", "\uE8B9", "media-player-element"),
+        new("AnimatedVisualPlayer", "Plays vector (Lottie/codegen) animations.", "Media", "\uE8B9", "animated-visual-player"),
+        new("AnimatedIcon", "An icon that transitions between states with a vector animation.", "Media", "\uE8B9", "animated-icon"),
+        new("MapControl", "Displays an interactive, pannable, zoomable map.", "Media", "\uE8B9", "map-control"),
+        new("ParallaxView", "Shifts a background layer as content scrolls for a depth effect.", "Media", "\uE8B9", "parallax-view"),
+        new("Shapes", "Rectangle, Ellipse, Line, and Path vector primitives.", "Media", "\uE8B9", "shapes"),
+        new("Icons", "Standalone icon elements from Symbol, Font glyph, or Path sources.", "Media", "\uE8B9", "icons"),
+
+        new("PipsPager", "A pager that represents pages as a row of selectable dots.", "Navigation", "\uE8B0", "pips-pager"),
+
+        new("Popup", "A lightweight overlay that displays arbitrary content over the UI.", "Dialogs and Flyouts", "\uE8BD", "popup"),
+
+        new("Markdown", "Renders a Markdown string as a Reactor element tree.", "Text", "\uE8D2", "markdown"),
+
+        new("DataGrid", "A virtualized data grid with sortable columns, selection, and inline editing.", "Data", "\uE7C3", "data-grid"),
+        new("PropertyGrid", "A reflection-driven editor for an object's properties.", "Data", "\uE7C3", "property-grid"),
+
+        new("Commands", "Declarative Command binding with async IsExecuting tracking and debounce.", "Patterns", "\uE943", "commands"),
     }
     .OrderBy(c => c.Title, StringComparer.OrdinalIgnoreCase)
     .ToArray();
@@ -114,6 +147,7 @@ public static class ControlRegistry
     {
         "Basic Input",
         "Collections",
+        "Data",
         "Date and Time",
         "Dialogs and Flyouts",
         "Layout",
@@ -122,6 +156,7 @@ public static class ControlRegistry
         "Navigation",
         "Status and Info",
         "Text",
+        "Patterns",
         "Design",
         "Styles",
     };
