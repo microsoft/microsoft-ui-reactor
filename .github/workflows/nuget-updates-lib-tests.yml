@@ -1,0 +1,38 @@
+# Fast, headless unit + integration tests for .github/scripts/apply-cpm-upgrades.ps1
+# — the surgical Central-Package-Management version editor behind the
+# windows-nuget-updates workflow. Pure PowerShell (no build, no dotnet), so it runs
+# on a cheap Linux runner in seconds and guards the SemVer comparison + tag-rewrite
+# logic on every change under the script or its tests. Exits non-zero on any failed
+# assertion.
+name: NuGet updates script tests
+
+on:
+  push:
+    paths:
+      - '.github/scripts/apply-cpm-upgrades.ps1'
+      - 'tests/nuget_updates/ci/**'
+      - '.github/workflows/nuget-updates-lib-tests.yml'
+  pull_request:
+    paths:
+      - '.github/scripts/apply-cpm-upgrades.ps1'
+      - 'tests/nuget_updates/ci/**'
+      - '.github/workflows/nuget-updates-lib-tests.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  apply-cpm-upgrades:
+    name: apply-cpm-upgrades unit + integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      # pwsh (PowerShell 7) is preinstalled on the GitHub-hosted Ubuntu runner.
+      # The test script exits non-zero on any failed assertion.
+      - name: Run apply-cpm-upgrades tests
+        shell: pwsh
+        run: ./tests/nuget_updates/ci/ApplyCpmUpgrades.Tests.ps1

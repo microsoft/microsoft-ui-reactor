@@ -20,12 +20,23 @@
 # CI on the opened PR:
 #   A PR opened with the default GITHUB_TOKEN does NOT trigger the pull_request CI
 #   workflow (GitHub blocks token-created events from starting further workflows).
-#   Rather than require a PAT/App token, this job validates the bump itself by
-#   building the whole solution on windows-latest and opens the PR as a DRAFT if
-#   that build fails. To run the full CI suite (tests/selftests), a maintainer
-#   kicks it with Close -> Reopen (fires the `reopened` event ci.yml listens for)
-#   or by pushing any commit. Providing an optional DEPS_BOT_TOKEN secret restores
-#   automatic CI, but it is not required.
+#   Rather than require a PAT/App token, the `detect` job validates the bump itself
+#   by building the whole solution, and the PR opens as a DRAFT if that build
+#   fails. To run the full CI suite (tests/selftests), a maintainer kicks it with
+#   Close -> Reopen (fires the `reopened` event ci.yml listens for) or by pushing
+#   any commit. An optional DEPS_BOT_TOKEN secret restores automatic CI, but it is
+#   not required.
+#
+# Security — two jobs, credentials isolated from the untrusted build:
+#   `detect` restores and BUILDS the freshly-upgraded (therefore not-yet-trusted)
+#   dependency graph, whose packages can run MSBuild targets during restore/build.
+#   It runs with `contents: read` only, no write token, and
+#   `persist-credentials: false`, so a malicious package target has no credential
+#   to steal and cannot push. It hands the trusted, PRE-build patched
+#   Directory.Packages.props (plus the build result) to `publish` as job outputs.
+#   `publish` holds the write token but does a CLEAN checkout and never restores or
+#   builds the upgraded packages — it only writes our own patched file, commits,
+#   pushes, and opens the PR.
 
 name: Windows NuGet updates
 
@@ -39,13 +50,6 @@ on:
         description: 'Detect and patch Directory.Packages.props but do not open a PR'
         type: boolean
         default: false
-
-permissions:
-  contents: write
-  pull-requests: write
-  # Labels are managed through the Issues API, so applying them via
-  # `gh pr create --label` / `gh pr edit` needs issues: write.
-  issues: write
 
 concurrency:
   group: windows-nuget-updates
@@ -63,22 +67,32 @@ env:
   IGNORE_PACKAGES: 'MessagePack'
 
 jobs:
-  update:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 1 — detect + build-validate the bump WITHOUT any write credential.
+  # Read-only token, no persisted credentials: the untrusted package build here
+  # has nothing to steal and cannot push.
+  # ─────────────────────────────────────────────────────────────────────────────
+  detect:
     runs-on: windows-latest
+    permissions:
+      contents: read
+    outputs:
+      changed: ${{ steps.apply.outputs.changed }}
+      build_ok: ${{ steps.validate.outputs.build_ok }}
+      summary_b64: ${{ steps.apply.outputs.summary_b64 }}
+      props_b64: ${{ steps.capture.outputs.props_b64 }}
+      logtail_b64: ${{ steps.validate.outputs.logtail_b64 }}
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           # Always operate on the default branch, even for a manual
-          # workflow_dispatch launched from another branch, so the bot branch is
-          # never based on unrelated feature-branch commits.
+          # workflow_dispatch launched from another branch.
           ref: ${{ github.event.repository.default_branch }}
-          # Optional: if a DEPS_BOT_TOKEN secret exists (a PAT or GitHub App token
-          # with contents+pull_requests write), the opened PR will also trigger the
-          # normal pull_request CI. It is NOT required — without it the job still
-          # validates the bump via the build step below and opens the PR (draft on
-          # failure). Falls back to the built-in GITHUB_TOKEN.
-          token: ${{ secrets.DEPS_BOT_TOKEN || github.token }}
+          # No write token, and do NOT persist any credential in .git/config: this
+          # job builds the freshly-upgraded (untrusted) packages, whose MSBuild
+          # targets run during restore/build.
+          persist-credentials: false
 
       - name: Setup .NET
         uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
@@ -125,21 +139,36 @@ jobs:
             -IgnorePackages "$env:IGNORE_PACKAGES" `
             -GitHubOutput $env:GITHUB_OUTPUT
 
+      - name: Capture patched props (trusted, before the untrusted build)
+        id: capture
+        if: steps.apply.outputs.changed == 'true'
+        shell: pwsh
+        run: |
+          # Snapshot the trusted, script-patched file NOW — before the build step
+          # runs any package-supplied MSBuild targets — and hand it to `publish` as
+          # a job output, so publish never has to trust post-build workspace state.
+          $b64 = [Convert]::ToBase64String([System.IO.File]::ReadAllBytes('Directory.Packages.props'))
+          "props_b64=$b64" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
       - name: Validate the bump (build the solution)
         id: validate
         if: steps.apply.outputs.changed == 'true'
         shell: pwsh
         run: |
           # Token-free CI gate. A PR opened with the default GITHUB_TOKEN does NOT
-          # trigger the pull_request CI workflow (GitHub blocks token-created events
-          # from starting further workflows), so validate the bump here instead.
-          # Build the WHOLE solution: the packages this workflow uniquely covers
-          # (e.g. GitHub.Copilot.SDK, YamlDotNet) live in src/Reactor.Cli, which the
-          # unit tests don't exercise — only a full compile catches breakage there.
+          # trigger the pull_request CI workflow, so validate the bump here. Build
+          # the WHOLE solution: the packages this workflow uniquely covers (e.g.
+          # GitHub.Copilot.SDK, YamlDotNet) live in src/Reactor.Cli, which the unit
+          # tests don't exercise — only a full compile catches breakage there.
           # CI=true (set by Actions) skips the CLI's SignaturesGen/copilot targets.
+          # This build runs WITHOUT any write credential (see the checkout above).
           dotnet build Reactor.slnx --nologo -v:m 2>&1 | Tee-Object -FilePath build.log
           $ok = ($LASTEXITCODE -eq 0)
           "build_ok=$($ok.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          # Hand the log tail to `publish` for the draft PR body (base64, single line).
+          $tail = (Get-Content build.log -Tail 40) -join "`n"
+          $enc = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($tail))
+          "logtail_b64=$enc" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           if ($ok) {
             "✅ Solution build passed for the proposed bump." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           } else {
@@ -149,21 +178,56 @@ jobs:
           # Never fail this step: we still want to open a (draft) PR on build failure.
           exit 0
 
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 2 — open/update the PR with the write token, on a CLEAN checkout. This job
+  # never restores or builds the upgraded packages, so the token is only ever
+  # exposed to our own trusted git/gh operations.
+  # ─────────────────────────────────────────────────────────────────────────────
+  publish:
+    needs: detect
+    if: needs.detect.outputs.changed == 'true' && !(github.event_name == 'workflow_dispatch' && inputs['dry-run'])
+    runs-on: windows-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      # Labels are managed through the Issues API, so applying them via
+      # `gh pr create --label` / `gh pr edit` needs issues: write.
+      issues: write
+    steps:
+      - name: Checkout (clean tree, write token — no untrusted build runs here)
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          # Optional: a DEPS_BOT_TOKEN secret (PAT or GitHub App token) makes the
+          # opened PR also trigger the normal pull_request CI. Not required — falls
+          # back to the built-in GITHUB_TOKEN.
+          token: ${{ secrets.DEPS_BOT_TOKEN || github.token }}
+
       - name: Open or update pull request
-        if: steps.apply.outputs.changed == 'true' && !(github.event_name == 'workflow_dispatch' && inputs['dry-run'])
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.DEPS_BOT_TOKEN || github.token }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-          SUMMARY_B64: ${{ steps.apply.outputs.summary_b64 }}
-          BUILD_OK: ${{ steps.validate.outputs.build_ok }}
+          SUMMARY_B64: ${{ needs.detect.outputs.summary_b64 }}
+          PROPS_B64: ${{ needs.detect.outputs.props_b64 }}
+          BUILD_OK: ${{ needs.detect.outputs.build_ok }}
+          LOGTAIL_B64: ${{ needs.detect.outputs.logtail_b64 }}
         run: |
           $ErrorActionPreference = 'Stop'
+          # Make native command (git/gh) non-zero exits terminate the step, so a
+          # failed `git push` can't be masked by a later successful gh/cleanup.
+          $PSNativeCommandUseErrorActionPreference = $true
           $buildOk = ($env:BUILD_OK -eq 'true')
+
+          if ([string]::IsNullOrEmpty($env:PROPS_B64)) { throw 'props_b64 output missing from detect job' }
+
+          # Write the trusted, PRE-build patched file from the detect job over the
+          # clean checkout. This job never restores/builds the upgraded packages.
+          $bytes = [Convert]::FromBase64String($env:PROPS_B64)
+          [System.IO.File]::WriteAllBytes((Join-Path (Get-Location) 'Directory.Packages.props'), $bytes)
 
           git config user.name  'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-
           git checkout -B $env:PR_BRANCH
           git add Directory.Packages.props
           git commit -m 'deps: bump NuGet packages missed by (Linux) Dependabot'
@@ -187,19 +251,20 @@ jobs:
           $lines.Add('---')
           $lines.Add($status)
           $lines.Add('')
-          $lines.Add('Detected on `windows-latest` with `dotnet-outdated` against `Reactor.slnx`.')
+          $lines.Add('Detected + built on `windows-latest` with no write token; this PR was opened from a separate clean checkout.')
           $lines.Add('Windows App SDK / Win2D stay pinned via `Directory.Build.props` (excluded here).')
           $lines.Add('Hold packages back via the `IGNORE_PACKAGES` env in `.github/workflows/windows-nuget-updates.yml`.')
           $lines.Add('')
           $lines.Add('> Full CI does not auto-run on token-authored PRs. A maintainer can trigger it by **Close → Reopen** (or by pushing any commit).')
           $lines.Add('')
           $lines.Add("[Workflow run]($runUrl)")
-          if (-not $buildOk -and (Test-Path build.log)) {
+          if (-not $buildOk -and -not [string]::IsNullOrEmpty($env:LOGTAIL_B64)) {
+            $tail = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:LOGTAIL_B64))
             $lines.Add('')
             $lines.Add('<details><summary>Build log (last 40 lines)</summary>')
             $lines.Add('')
             $lines.Add('```')
-            foreach ($t in (Get-Content build.log -Tail 40)) { $lines.Add($t) }
+            foreach ($t in ($tail -split "`n")) { $lines.Add($t) }
             $lines.Add('```')
             $lines.Add('</details>')
           }
@@ -216,13 +281,14 @@ jobs:
               --label dependencies `
               --label nuget `
               @draftArg
-            if ($LASTEXITCODE -ne 0) { throw 'gh pr create failed' }
           } else {
             Write-Host "Refreshed existing PR #$existing (branch force-pushed)."
             gh pr edit $existing --body-file pr-body.md
-            if ($LASTEXITCODE -ne 0) { throw 'gh pr edit failed' }
-            # Best-effort: keep the draft state in sync with the latest build result.
-            if ($buildOk) { gh pr ready $existing } else { gh pr ready $existing --undo }
-            $global:LASTEXITCODE = 0
+            # Best-effort draft-state sync; don't fail the run if gh balks.
+            try {
+              if ($buildOk) { gh pr ready $existing } else { gh pr ready $existing --undo }
+            } catch {
+              Write-Host "Draft-state toggle skipped: $($_.Exception.Message)"
+            }
           }
           Remove-Item pr-body.md -ErrorAction SilentlyContinue
