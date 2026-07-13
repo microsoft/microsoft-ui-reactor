@@ -104,9 +104,10 @@ foreach ($name in ($wanted.Keys | Sort-Object)) {
     $to = $wanted[$name]
     $escaped = [regex]::Escape($name)
     # Match a self-closing <PackageVersion ...> tag that includes Include="NAME",
-    # regardless of attribute order.
+    # regardless of attribute order. Case-insensitive: NuGet package ids are
+    # case-insensitive, so the report's casing may differ from the props file's.
     $tagPattern = "<PackageVersion\b[^>]*\bInclude=`"$escaped`"[^>]*/>"
-    $tagRegex = [regex]::new($tagPattern)
+    $tagRegex = [regex]::new($tagPattern, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
     $m = $tagRegex.Match($content)
     if (-not $m.Success) { continue }
 

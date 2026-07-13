@@ -278,8 +278,21 @@ jobs:
           }
           Set-Content -Path pr-body.md -Value $lines -Encoding utf8
 
-          $existing = gh pr list --head $env:PR_BRANCH --state open --json number --jq '.[0].number // empty'
-          if ([string]::IsNullOrWhiteSpace($existing)) {
+          # Resolve the most recent PR for this head branch across ALL states. GitHub
+          # only rejects a NEW PR when an OPEN one already exists for the same
+          # head+base; a branch whose previous PRs were merged/closed can open a
+          # fresh PR. So reuse an open PR, reopen a closed (unmerged) one, and create
+          # a new PR when there is none or the last was merged.
+          function Sync-Body([string]$num) {
+            gh pr edit $num --body-file pr-body.md
+            # Best-effort draft-state sync; don't fail the run if gh balks.
+            try {
+              if ($buildOk) { gh pr ready $num } else { gh pr ready $num --undo }
+            } catch {
+              Write-Host "Draft-state toggle skipped: $($_.Exception.Message)"
+            }
+          }
+          function New-Pr {
             $draftArg = @(); if (-not $buildOk) { $draftArg = @('--draft') }
             gh pr create `
               --base $env:DEFAULT_BRANCH `
@@ -289,14 +302,30 @@ jobs:
               --label dependencies `
               --label nuget `
               @draftArg
-          } else {
-            Write-Host "Refreshed existing PR #$existing (branch force-pushed)."
-            gh pr edit $existing --body-file pr-body.md
-            # Best-effort draft-state sync; don't fail the run if gh balks.
+          }
+
+          $prior = gh pr list --head $env:PR_BRANCH --state all --json number,state --jq 'sort_by(.number) | last'
+          $priorNum = $null; $priorState = $null
+          if (-not [string]::IsNullOrWhiteSpace($prior) -and $prior.Trim() -ne 'null') {
+            $p = $prior | ConvertFrom-Json
+            $priorNum = $p.number; $priorState = $p.state
+          }
+
+          if ($priorState -eq 'OPEN') {
+            Write-Host "Refreshing open PR #$priorNum (branch force-pushed)."
+            Sync-Body $priorNum
+          } elseif ($priorState -eq 'CLOSED') {
+            # Closed but not merged — reopen and refresh rather than duplicate.
             try {
-              if ($buildOk) { gh pr ready $existing } else { gh pr ready $existing --undo }
+              gh pr reopen $priorNum
+              Write-Host "Reopened previously-closed PR #$priorNum."
+              Sync-Body $priorNum
             } catch {
-              Write-Host "Draft-state toggle skipped: $($_.Exception.Message)"
+              Write-Host "Reopen failed ($($_.Exception.Message)); creating a fresh PR."
+              New-Pr
             }
+          } else {
+            # No prior PR, or the last one was MERGED — open a fresh PR.
+            New-Pr
           }
           Remove-Item pr-body.md -ErrorAction SilentlyContinue
