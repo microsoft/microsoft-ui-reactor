@@ -7,7 +7,7 @@ This runbook describes how to prepare and trigger a public Microsoft.UI.Reactor 
 Releases are **tag-driven**, but pushing a tag only *starts* the pipelines — it does **not** publish to NuGet.org. The two steps people most often miss (the approval gate and the two-person rule) are called out below.
 
 1. **Pre-flight** — pick the next `v0.1.0-preview.N` and confirm the tag, GitHub release, and the four NuGet packages don't already exist (`git tag --list`, `gh release view`, NuGet.org).
-2. **Prep PR (docs only, if needed)** — the template's framework version is auto-stamped at pack time now, so it no longer gates the release; but hardcoded `0.1.0-preview.X` strings in `README.md` / `docs/` don't self-update. Sweep with `rg`, land a PR, merge to `main`.
+2. **Prep PR (bump one property + recompile docs)** — bump `<ReactorPublicVersion>` in the root `Directory.Build.props` to the version you're about to tag, run `mur docs compile --skip-screenshots --skip-diagrams`, and commit the regenerated `docs/guide` pages. That single property is the source of truth: the guide's `{{reactorVersion}}` token and the template's `MicrosoftUIReactorVersion` fallback both derive from it, and `README.md` is version-agnostic (no sweep needed). CI's docs freshness gate fails the PR if you bump the property without recompiling. Land a PR, merge to `main`.
 3. **Tag `main`** — `git checkout main && git pull`, then `git tag -a v<version> -m "Release <version>"` and `git push origin v<version>`. This starts the GitHub `Package` workflow and the OneBranch official pipeline.
 4. **Publish (gated)** — the tag push does **not** publish to NuGet.org. Approve the OneBranch `Production_PublishNuGet` stage, then verify the packages appear on NuGet.org.
 5. **Two-person rule** — the publish approver **must be a different person than whoever pushed the tag** (a self-approval is rejected by the compliance gate). Line up a second approver *before* you tag.
@@ -77,36 +77,44 @@ git pull origin main
 git switch -c release/$version
 ```
 
-Update versioned references that consumer-facing templates or docs should show. At minimum, check:
+Bump the **single source of truth** for the public package version — the
+`<ReactorPublicVersion>` property in the root `Directory.Build.props` — to the version you
+are about to tag:
 
-```powershell
-rg "0\.1\.0-preview\.[0-9]+|MicrosoftUIReactorVersion|Microsoft\.UI\.Reactor" `
-  README.md `
-  tools/Templates `
-  docs/_pipeline/templates `
-  .github/workflows `
-  build/pipelines
+```xml
+<ReactorPublicVersion>0.1.0-preview.N</ReactorPublicVersion>
 ```
 
-The template's framework reference — `MicrosoftUIReactorVersion`, baked into the generated
-app's `.csproj` — is **stamped automatically for the published package**, so there is **no
-manual version bump gating the release**. The release workflow's *Pack Templates* step passes
-`-p:MicrosoftUIReactorVersion=<resolved version>` (guarded by `TemplateMetadataTests`), so the
-published `ProjectTemplates` package always references the framework version shipped in the same
-run. The hardcoded default in
+That one property feeds every version-bearing surface, so there is **no `rg` sweep and no
+per-file bump**:
 
-```text
-tools/Templates/Microsoft.UI.Reactor.Templates.csproj
-```
+- **Guide docs** — `docs/_pipeline/templates/*.md.dt` reference the version through the
+  `{{reactorVersion}}` token, which `mur docs compile` substitutes from this property.
+- **Template fallback** — `tools/Templates/Microsoft.UI.Reactor.Templates.csproj` derives its
+  `MicrosoftUIReactorVersion` fallback default from `$(ReactorPublicVersion)`.
+- **README** — is deliberately version-agnostic (it names no version and links to NuGet /
+  Releases), so it needs no edit at all and `mur docs compile` never touches it.
 
-is now only a *fallback*. `bootstrap.ps1` runs `mur pack-local --framework-version latest`, which
-resolves the newest published package from NuGet and stamps it into the local template, so a fresh
-clone scaffolds against the current release automatically. The hardcoded value is used verbatim only
-by a bare `mur pack-local` (no flag) or when the `latest` lookup can't reach NuGet — keep it at a
-real **public** version so those paths still restore from NuGet.org, but it no longer gates anything
-and a stale value is harmless. Bump it here when convenient for hygiene.
+The template's framework reference is *also* stamped automatically for the published package:
+the release workflow's *Pack Templates* step passes `-p:MicrosoftUIReactorVersion=<resolved
+version>` (guarded by `TemplateMetadataTests`), so the published `ProjectTemplates` package
+always references the framework version shipped in the same run. `bootstrap.ps1` runs `mur
+pack-local --framework-version latest`, which resolves the newest published package from NuGet
+for local scaffolds. The `$(ReactorPublicVersion)`-derived value is therefore only a *fallback*
+(a bare `mur pack-local`, or when the `latest` lookup can't reach NuGet) — but keeping it
+current is free now, since you bump the one property anyway.
 
-Update authored docs under `docs/_pipeline/templates/`, not generated `docs/guide/` files directly. Then regenerate the guide. Use a full compile for release-prep changes because some pages (for example `getting-started`) pull snippets from other topics:
+Two guards keep the bump honest so it can't silently go stale:
+
+- **Docs freshness gate** (CI `docs-build` job) fails the PR if `<ReactorPublicVersion>`
+  changed but `docs/guide/{getting-started,packaging}.md` weren't recompiled.
+- **Tag-vs-property guard** (`release.yml`, tag pushes only) fails the release if
+  `<ReactorPublicVersion>` doesn't equal the MinVer-resolved tag version — so the tag, the
+  docs, and the stamped template pack are provably one version.
+
+Then regenerate the guide (authored docs live under `docs/_pipeline/templates/`; never edit
+generated `docs/guide/` files directly). Use a full compile for release-prep changes because
+some pages (for example `getting-started`) pull snippets from other topics:
 
 ```powershell
 mur docs compile --skip-screenshots --skip-diagrams

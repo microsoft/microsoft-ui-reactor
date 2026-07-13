@@ -59,6 +59,23 @@ internal static partial class CompileCommand
             return 1;
         }
 
+        // Resolve the single source of truth for the public package version so
+        // the {{reactorVersion}} token in guide templates renders a real, pinned
+        // version. Deterministic (reads committed Directory.Build.props, never a
+        // live NuGet lookup) so the docs freshness gate can't false-fail when a
+        // new version publishes. Threaded into every DocAssembler.Assemble call
+        // (emit + lint) below.
+        string reactorVersion;
+        try
+        {
+            reactorVersion = VersionSource.ReadPublicVersion(repoRoot);
+        }
+        catch (DocPipelineException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return 1;
+        }
+
         var docsRoot = Path.Combine(repoRoot, "docs");
         var appsDir = Path.Combine(docsRoot, "_pipeline", "apps");
         var templatesDir = Path.Combine(docsRoot, "_pipeline", "templates");
@@ -230,7 +247,7 @@ internal static partial class CompileCommand
         var tierHasErrors = false;
         foreach (var (topicId, template) in templates)
         {
-            var (assembled, snipRes, ssRes) = AssembleForLint(template, allSnippets, allScreenshots, topicId);
+            var (assembled, snipRes, ssRes) = AssembleForLint(template, allSnippets, allScreenshots, topicId, reactorVersion);
             var findings = TierLint.Lint(template, assembled, snipRes, ssRes);
             foreach (var f in findings)
             {
@@ -262,7 +279,7 @@ internal static partial class CompileCommand
             .Select(t => new CrossLinkTemplate(
                 t.topicId,
                 t.template.FilePath,
-                AssembleForLint(t.template, allSnippets, allScreenshots, t.topicId).body,
+                AssembleForLint(t.template, allSnippets, allScreenshots, t.topicId, reactorVersion).body,
                 t.template.Title,
                 t.template.ConceptAliases))
             .ToList();
@@ -435,7 +452,7 @@ internal static partial class CompileCommand
 
             var assembled = DocAssembler.Assemble(
                 template.Body, allSnippets, allScreenshots,
-                out var errors, out var warnings, topicId);
+                out var errors, out var warnings, topicId, reactorVersion);
 
             // Expand <!-- ref:Member --> markers in the assembled body so
             // hand-authored guide pages can cross-link into the generated
@@ -641,13 +658,14 @@ internal static partial class CompileCommand
         DocTemplate template,
         Dictionary<string, SnippetExtractor.Snippet> allSnippets,
         Dictionary<string, ScreenshotInfo> allScreenshots,
-        string? topicId = null)
+        string? topicId = null,
+        string? reactorVersion = null)
     {
         var snippetRefs = ExtractSnippetRefs(template.Body);
         var resolvedSnippets = snippetRefs.Count(r => allSnippets.ContainsKey(r));
         var screenshotRefs = ExtractScreenshotRefs(template.Body);
         var resolvedScreenshots = screenshotRefs.Count(r => allScreenshots.ContainsKey(r));
-        var assembled = DocAssembler.Assemble(template.Body, allSnippets, allScreenshots, out _, out _, topicId);
+        var assembled = DocAssembler.Assemble(template.Body, allSnippets, allScreenshots, out _, out _, topicId, reactorVersion);
         return (assembled, resolvedSnippets, resolvedScreenshots);
     }
 

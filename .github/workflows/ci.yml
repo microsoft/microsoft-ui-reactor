@@ -612,6 +612,31 @@ jobs:
       - name: Compile docs
         run: dotnet run --project src/Reactor.Cli -- docs compile --no-screenshots --ci
 
+      # Docs version freshness gate. The compile above substitutes the
+      # {{reactorVersion}} token — whose single source is <ReactorPublicVersion>
+      # in Directory.Build.props — into the guide pages that name the package
+      # version. If a PR bumps that property (or edits these templates) without
+      # recompiling, the committed output goes stale; fail here with a clear fix
+      # instead of shipping docs that disagree with the source of truth.
+      #
+      # Scoped to the two version-bearing pages (getting-started, packaging)
+      # rather than all of docs/guide: other committed guide pages currently
+      # carry pre-existing compile drift unrelated to versioning, which a
+      # whole-tree diff would false-fail on. Widen once that drift is
+      # reconciled separately.
+      - name: Verify docs version substitution is committed
+        shell: pwsh
+        run: |
+          # git diff --exit-code returns non-zero when the tree differs; opt out
+          # of native-command error mapping so we surface the actionable message
+          # below instead of a bare PowerShell terminating error.
+          $PSNativeCommandUseErrorActionPreference = $false
+          git diff --exit-code -- docs/guide/getting-started.md docs/guide/packaging.md
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error 'docs/guide is out of date with the doc templates and/or ReactorPublicVersion. Run: dotnet run --project src/Reactor.Cli -- docs compile --no-screenshots  then commit the regenerated docs/guide pages (the {{reactorVersion}} token is substituted from <ReactorPublicVersion> in Directory.Build.props).'
+            exit 1
+          }
+
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'

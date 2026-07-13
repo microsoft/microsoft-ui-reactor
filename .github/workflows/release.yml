@@ -104,6 +104,34 @@ jobs:
           "is_tag=$($isTag.ToString().ToLower())" >> $env:GITHUB_OUTPUT
           Write-Host "Version: $version  (event=$eventName, isTag=$isTag)"
 
+      - name: Verify docs version matches release tag
+        # On a real tag release the docs' single source of truth
+        # (<ReactorPublicVersion> in Directory.Build.props, substituted into the
+        # guide via the {{reactorVersion}} token) must equal the version being
+        # published. If a release is tagged without bumping that property (and
+        # recompiling docs), the published guide would name the wrong version —
+        # fail early with an actionable message. This pairs with the CI docs
+        # freshness gate (which proves the docs were recompiled) to make the
+        # tag, the docs, and the stamped template pack provably one version.
+        # Enforced on tag pushes only: PR/main/workflow_dispatch builds carry
+        # MinVer height versions (e.g. 0.1.0-preview.N.M+sha) that intentionally
+        # differ from the pinned property.
+        if: steps.version.outputs.is_tag == 'true'
+        shell: pwsh
+        run: |
+          $props = Get-Content Directory.Build.props -Raw
+          if ($props -notmatch '<ReactorPublicVersion>\s*([^<]+?)\s*</ReactorPublicVersion>') {
+            Write-Error 'ReactorPublicVersion not found in Directory.Build.props.'
+            exit 1
+          }
+          $propVersion = $Matches[1].Trim()
+          $tagVersion = '${{ steps.version.outputs.version }}'
+          Write-Host "ReactorPublicVersion=$propVersion  tag version=$tagVersion"
+          if ($propVersion -ne $tagVersion) {
+            Write-Error "Release tag version '$tagVersion' does not match ReactorPublicVersion '$propVersion' in Directory.Build.props. Before tagging, bump <ReactorPublicVersion> to '$tagVersion' and run: dotnet run --project src/Reactor.Cli -- docs compile --no-screenshots  then commit the regenerated docs/guide."
+            exit 1
+          }
+
       - name: Restore
         run: dotnet restore Reactor.slnx
 

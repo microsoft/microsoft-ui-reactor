@@ -102,6 +102,19 @@ generated one from the template's perspective.
 | `<!-- ai:lock --> ... <!-- /ai:lock -->`               | Body              | Author-locked block; AI passes must preserve verbatim                   |
 | `<!-- ai:caveat --> ... <!-- /ai:caveat -->`           | Body              | Caveat callout; renders as a "**Caveat:**"-led blockquote               |
 | `<!-- ref:Member -->`                                  | Body (templates)  | Expands to a link to the matching reference page                        |
+| `{{reactorVersion}}`                                   | Body              | Substituted with the pinned public package version — single source `<ReactorPublicVersion>` in root `Directory.Build.props` |
+
+> **Version substitution.** Never hardcode the public package version
+> (e.g. `0.1.0-preview.11`) in a guide template. Write the `{{reactorVersion}}`
+> token instead; `mur docs compile` replaces it with `<ReactorPublicVersion>`
+> read from the root `Directory.Build.props` (via `VersionSource`, a committed
+> file read — never a live NuGet lookup, so the output stays deterministic and
+> the CI freshness gate can't false-fail when a new version publishes). That
+> property is the one place a release bumps the version; the templates csproj
+> derives its `MicrosoftUIReactorVersion` fallback from the same property, so
+> the docs and the scaffolded template share a single literal. `README.md` is
+> deliberately version-agnostic (it names no version and links to NuGet /
+> Releases) and is **not** touched by `mur docs compile`.
 
 ## 4. Running the pipeline
 
