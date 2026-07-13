@@ -292,10 +292,11 @@ jobs:
           Set-Content -Path pr-body.md -Value $lines -Encoding utf8
 
           # ── Open/refresh the PR, or fall back to a tracking issue ──────────────
-          # This repo may not permit GitHub Actions to CREATE pull requests (and no
-          # PAT/App token is required here). Refreshing an already-open PR IS allowed,
-          # so try the PR path first; if creating one is blocked, fall back to a
-          # tracking ISSUE — issue creation is NOT governed by the PR-creation policy —
+          # This repo may not permit GitHub Actions to CREATE pull requests. When a
+          # DEPS_BOT_TOKEN (PAT/App token) is available the create path just works;
+          # without one, refreshing an already-open PR is still allowed, so try the
+          # PR path first and — if creating a new one is blocked — fall back to a
+          # tracking ISSUE (issue creation is NOT governed by the PR-creation policy)
           # carrying a one-click compare link a maintainer uses to open the PR. The
           # job summary always records the same link as a guaranteed floor.
           $compareUrl = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/compare/$($env:DEFAULT_BRANCH)...$($env:PR_BRANCH)?expand=1"
