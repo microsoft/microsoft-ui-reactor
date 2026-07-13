@@ -16,6 +16,16 @@
 #   NuGet packages) on Dependabot — this only backfills the Windows-host gap. The
 #   two may occasionally both propose the same bump; whichever lands first wins
 #   and the other becomes a no-op.
+#
+# CI on the opened PR:
+#   A PR opened with the default GITHUB_TOKEN does NOT trigger the pull_request CI
+#   workflow (GitHub blocks token-created events from starting further workflows).
+#   Rather than require a PAT/App token, this job validates the bump itself by
+#   building the whole solution on windows-latest and opens the PR as a DRAFT if
+#   that build fails. To run the full CI suite (tests/selftests), a maintainer
+#   kicks it with Close -> Reopen (fires the `reopened` event ci.yml listens for)
+#   or by pushing any commit. Providing an optional DEPS_BOT_TOKEN secret restores
+#   automatic CI, but it is not required.
 
 name: Windows NuGet updates
 
@@ -63,9 +73,11 @@ jobs:
           # workflow_dispatch launched from another branch, so the bot branch is
           # never based on unrelated feature-branch commits.
           ref: ${{ github.event.repository.default_branch }}
-          # Default GITHUB_TOKEN pushes do NOT trigger the CI workflow on the
-          # resulting PR. Add a repo secret DEPS_BOT_TOKEN (a PAT or GitHub App
-          # token with contents+pull_requests write) to have CI run automatically.
+          # Optional: if a DEPS_BOT_TOKEN secret exists (a PAT or GitHub App token
+          # with contents+pull_requests write), the opened PR will also trigger the
+          # normal pull_request CI. It is NOT required — without it the job still
+          # validates the bump via the build step below and opens the PR (draft on
+          # failure). Falls back to the built-in GITHUB_TOKEN.
           token: ${{ secrets.DEPS_BOT_TOKEN || github.token }}
 
       - name: Setup .NET
@@ -113,6 +125,30 @@ jobs:
             -IgnorePackages "$env:IGNORE_PACKAGES" `
             -GitHubOutput $env:GITHUB_OUTPUT
 
+      - name: Validate the bump (build the solution)
+        id: validate
+        if: steps.apply.outputs.changed == 'true'
+        shell: pwsh
+        run: |
+          # Token-free CI gate. A PR opened with the default GITHUB_TOKEN does NOT
+          # trigger the pull_request CI workflow (GitHub blocks token-created events
+          # from starting further workflows), so validate the bump here instead.
+          # Build the WHOLE solution: the packages this workflow uniquely covers
+          # (e.g. GitHub.Copilot.SDK, YamlDotNet) live in src/Reactor.Cli, which the
+          # unit tests don't exercise — only a full compile catches breakage there.
+          # CI=true (set by Actions) skips the CLI's SignaturesGen/copilot targets.
+          dotnet build Reactor.slnx --nologo -v:m 2>&1 | Tee-Object -FilePath build.log
+          $ok = ($LASTEXITCODE -eq 0)
+          "build_ok=$($ok.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          if ($ok) {
+            "✅ Solution build passed for the proposed bump." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          } else {
+            Write-Host "::warning::Solution build FAILED for the proposed bump — the PR will open as a draft."
+            "❌ Solution build FAILED for the proposed bump." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
+          # Never fail this step: we still want to open a (draft) PR on build failure.
+          exit 0
+
       - name: Open or update pull request
         if: steps.apply.outputs.changed == 'true' && !(github.event_name == 'workflow_dispatch' && inputs['dry-run'])
         shell: pwsh
@@ -120,8 +156,10 @@ jobs:
           GH_TOKEN: ${{ secrets.DEPS_BOT_TOKEN || github.token }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           SUMMARY_B64: ${{ steps.apply.outputs.summary_b64 }}
+          BUILD_OK: ${{ steps.validate.outputs.build_ok }}
         run: |
           $ErrorActionPreference = 'Stop'
+          $buildOk = ($env:BUILD_OK -eq 'true')
 
           git config user.name  'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
@@ -133,33 +171,58 @@ jobs:
 
           $summary = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:SUMMARY_B64))
           $runUrl = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
-          # Build the body as an array (Set-Content writes one line per element).
+          $status = if ($buildOk) {
+            '✅ **Validated:** `dotnet build Reactor.slnx` passed on windows-latest.'
+          } else {
+            '❌ **Build failed** for this bump on windows-latest — opened as a **draft** (log tail below).'
+          }
+
+          # Build the body as a list (Set-Content writes one line per element).
           # Avoid PowerShell here-strings: their closing "@ cannot be indented,
           # which is impossible inside an indented YAML run block.
-          $lines = @(
-            'Automated NuGet updates for the **Windows-only project graph** that GitHub-hosted (Linux) Dependabot cannot restore.'
-            ''
-            $summary
-            '---'
-            'Detected on `windows-latest` with `dotnet-outdated` against `Reactor.slnx`.'
-            'Windows App SDK / Win2D stay pinned via `Directory.Build.props` (excluded here).'
-            'Hold packages back via the `IGNORE_PACKAGES` env in `.github/workflows/windows-nuget-updates.yml`.'
-            ''
-            "[Workflow run]($runUrl)"
-          )
+          $lines = [System.Collections.Generic.List[string]]::new()
+          $lines.Add('Automated NuGet updates for the **Windows-only project graph** that GitHub-hosted (Linux) Dependabot cannot restore.')
+          $lines.Add('')
+          $lines.Add($summary)
+          $lines.Add('---')
+          $lines.Add($status)
+          $lines.Add('')
+          $lines.Add('Detected on `windows-latest` with `dotnet-outdated` against `Reactor.slnx`.')
+          $lines.Add('Windows App SDK / Win2D stay pinned via `Directory.Build.props` (excluded here).')
+          $lines.Add('Hold packages back via the `IGNORE_PACKAGES` env in `.github/workflows/windows-nuget-updates.yml`.')
+          $lines.Add('')
+          $lines.Add('> Full CI does not auto-run on token-authored PRs. A maintainer can trigger it by **Close → Reopen** (or by pushing any commit).')
+          $lines.Add('')
+          $lines.Add("[Workflow run]($runUrl)")
+          if (-not $buildOk -and (Test-Path build.log)) {
+            $lines.Add('')
+            $lines.Add('<details><summary>Build log (last 40 lines)</summary>')
+            $lines.Add('')
+            $lines.Add('```')
+            foreach ($t in (Get-Content build.log -Tail 40)) { $lines.Add($t) }
+            $lines.Add('```')
+            $lines.Add('</details>')
+          }
           Set-Content -Path pr-body.md -Value $lines -Encoding utf8
 
           $existing = gh pr list --head $env:PR_BRANCH --state open --json number --jq '.[0].number // empty'
           if ([string]::IsNullOrWhiteSpace($existing)) {
+            $draftArg = @(); if (-not $buildOk) { $draftArg = @('--draft') }
             gh pr create `
               --base $env:DEFAULT_BRANCH `
               --head $env:PR_BRANCH `
               --title 'deps: Windows NuGet updates' `
               --body-file pr-body.md `
               --label dependencies `
-              --label nuget
+              --label nuget `
+              @draftArg
+            if ($LASTEXITCODE -ne 0) { throw 'gh pr create failed' }
           } else {
             Write-Host "Refreshed existing PR #$existing (branch force-pushed)."
             gh pr edit $existing --body-file pr-body.md
+            if ($LASTEXITCODE -ne 0) { throw 'gh pr edit failed' }
+            # Best-effort: keep the draft state in sync with the latest build result.
+            if ($buildOk) { gh pr ready $existing } else { gh pr ready $existing --undo }
+            $global:LASTEXITCODE = 0
           }
           Remove-Item pr-body.md -ErrorAction SilentlyContinue
