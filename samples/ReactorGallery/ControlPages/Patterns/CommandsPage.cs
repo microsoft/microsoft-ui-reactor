@@ -1,4 +1,3 @@
-using System.Threading.Tasks;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using static Microsoft.UI.Reactor.Factories;
