@@ -88,8 +88,12 @@ public static class PackLocalCommand
 
         // 4. Project templates — Microsoft.UI.Reactor.ProjectTemplates.<version>.nupkg.
         // Powers `dotnet new reactorapp -n MyApp` against this clone. Templates pack
-        // is AnyCPU (no arch needed); the template's <PackageReference> resolves the
-        // matching framework version through this same feed.
+        // is AnyCPU (no arch needed). The generated app's <PackageReference> defaults
+        // to the framework version baked into template.json (the csproj's
+        // MicrosoftUIReactorVersion default = the current *public* package), so a
+        // scaffold restores from NuGet.org and builds standalone. Pass
+        // `--MSUIReactorVersion 0.0.0-local` to `dotnet new reactorapp` to instead
+        // consume the source-built framework packed into this feed.
         Console.WriteLine($"Packing Microsoft.UI.Reactor.ProjectTemplates {version} → {feed}");
         rc = RunPack(repoRoot, Path.Combine("tools", "Templates", "Microsoft.UI.Reactor.Templates.csproj"), configuration, version, feed, arch: null);
         if (rc != 0)

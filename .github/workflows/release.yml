@@ -160,10 +160,17 @@ jobs:
           -o artifacts/nupkg
 
       - name: Pack Templates
+        # MicrosoftUIReactorVersion stamps the framework version that generated
+        # apps reference (baked into template.json by the csproj's BeforePack
+        # target). Lock it to the version published in this same run so the
+        # template can never drift behind the framework — same value used for
+        # the framework/Advanced/Devtools packs above. Without this it silently
+        # falls back to the csproj's local-dev default.
         run: >
           dotnet pack tools\Templates\Microsoft.UI.Reactor.Templates.csproj
           --no-build --configuration Release
           -p:Version=${{ steps.version.outputs.version }}
+          -p:MicrosoftUIReactorVersion=${{ steps.version.outputs.version }}
           -p:Platform=AnyCPU
           -o artifacts/nupkg
 

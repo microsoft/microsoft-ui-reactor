@@ -80,6 +80,69 @@ public sealed class TemplateMetadataTests
         Assert.Equal("reactorapp", shortName);
     }
 
+    // ── Framework-version drift guard ──────────────────────────────────────
+    //
+    // The template bakes the framework version generated apps reference
+    // (`MicrosoftUIReactorVersion` → template.json `MSUIReactorVersion`
+    // defaultValue, via the csproj BeforePack target). That version used to be
+    // a hardcoded csproj default that had to be hand-bumped every release — and
+    // it silently drifted (stuck at preview.4 while the framework shipped
+    // through preview.11), so published templates generated apps referencing an
+    // ancient package (see issue #866). The fix makes the release workflow STAMP
+    // the version it's publishing onto the templates pack. This test fails the
+    // instant that automation is removed, so the drift can't silently return.
+
+    [Fact]
+    public void ReleaseWorkflow_stamps_framework_version_into_templates_pack()
+    {
+        // The release "Pack Templates" step must pass -p:MicrosoftUIReactorVersion
+        // = the resolved release version, so the published ProjectTemplates
+        // package references the framework version published in the same run.
+        var (path, text) = ReadRepoFile(Path.Combine(".github", "workflows", "release.yml"));
+        var step = ExtractYamlStep(text, "Pack Templates");
+        Assert.False(step is null,
+            $"'{path}' has no 'Pack Templates' step — the release template pack moved or was renamed.");
+        Assert.Contains("Microsoft.UI.Reactor.Templates.csproj", step, StringComparison.Ordinal);
+        Assert.True(
+            step!.Contains("-p:MicrosoftUIReactorVersion=${{ steps.version.outputs.version }}", StringComparison.Ordinal),
+            $"The 'Pack Templates' step in '{path}' must pass " +
+            "'-p:MicrosoftUIReactorVersion=${{ steps.version.outputs.version }}' so the published " +
+            "template references the framework version shipped in the same release run. Without it, " +
+            "the baked reference falls back to the csproj default and drifts behind the framework (issue #866).");
+    }
+
+    // Returns the text of the YAML step whose `name:` equals stepName (the slice
+    // from that step's `- name:` line up to the next `- name:` line or EOF), or
+    // null if no such step exists. Deliberately simple line scanning — enough to
+    // scope a Contains assertion to one step without a YAML dependency.
+    static string? ExtractYamlStep(string yaml, string stepName)
+    {
+        var lines = yaml.Replace("\r\n", "\n").Split('\n');
+        int start = -1;
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var t = lines[i].TrimStart();
+            if (t.StartsWith("- name:", StringComparison.Ordinal) &&
+                t.Substring("- name:".Length).Trim() == stepName)
+            {
+                start = i;
+                break;
+            }
+        }
+        if (start < 0) return null;
+
+        int end = lines.Length;
+        for (int i = start + 1; i < lines.Length; i++)
+        {
+            if (lines[i].TrimStart().StartsWith("- name:", StringComparison.Ordinal))
+            {
+                end = i;
+                break;
+            }
+        }
+        return string.Join("\n", lines[start..end]);
+    }
+
     static JsonDocument LoadTemplateJson()
     {
         var (_, text) = ReadTemplateJson();
@@ -97,6 +160,13 @@ public sealed class TemplateMetadataTests
         var repoRoot = FindRepoRoot();
         var path = Path.Combine(repoRoot, TemplateJsonPath);
         Assert.True(File.Exists(path), $"Expected '{path}' to exist; template.json moved or removed?");
+        return (path, File.ReadAllText(path));
+    }
+
+    static (string path, string text) ReadRepoFile(string repoRelativePath)
+    {
+        var path = Path.Combine(FindRepoRoot(), repoRelativePath);
+        Assert.True(File.Exists(path), $"Expected '{path}' to exist; file moved or removed?");
         return (path, File.ReadAllText(path));
     }
 

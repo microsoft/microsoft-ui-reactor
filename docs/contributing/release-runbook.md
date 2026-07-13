@@ -81,17 +81,20 @@ rg "0\.1\.0-preview\.[0-9]+|MicrosoftUIReactorVersion|Microsoft\.UI\.Reactor" `
   build/pipelines
 ```
 
-The app template default lives in:
+The template's framework reference — `MicrosoftUIReactorVersion`, baked into the generated
+app's `.csproj` — is **stamped automatically for the published package**, so there is **no
+manual version bump gating the release**. The release workflow's *Pack Templates* step passes
+`-p:MicrosoftUIReactorVersion=<resolved version>` (guarded by `TemplateMetadataTests`), so the
+published `ProjectTemplates` package always references the framework version shipped in the same
+run. The hardcoded default in
 
 ```text
 tools/Templates/Microsoft.UI.Reactor.Templates.csproj
 ```
 
-Set `MicrosoftUIReactorVersion` to the release version so locally installed templates and the release template package generate apps that reference the public package:
-
-```xml
-<MicrosoftUIReactorVersion Condition="'$(MicrosoftUIReactorVersion)' == ''">0.1.0-preview.3</MicrosoftUIReactorVersion>
-```
+is what *local* `bootstrap.ps1` / `mur pack-local` scaffolds use (it is not overridden there),
+so keep it current with the latest **public** package as hygiene — bump it in this same PR — but
+it does not affect the published template.
 
 Update authored docs under `docs/_pipeline/templates/`, not generated `docs/guide/` files directly. Then regenerate the guide. Use a full compile for release-prep changes because some pages (for example `getting-started`) pull snippets from other topics:
 
@@ -109,12 +112,15 @@ dotnet test tests/Reactor.Tests/Reactor.Tests.csproj `
   --filter FullyQualifiedName~TemplateMetadataTests
 ```
 
-Pack the template locally and inspect the generated default:
+Pack the template locally and inspect the generated default. Pass
+`-p:MicrosoftUIReactorVersion=$version` to mirror what the release workflow stamps, so the
+generated app references the version being released:
 
 ```powershell
 dotnet pack tools/Templates/Microsoft.UI.Reactor.Templates.csproj `
   --configuration Release `
   -p:Version=0.0.0-local `
+  -p:MicrosoftUIReactorVersion=$version `
   -p:Platform=AnyCPU `
   -o local-nupkgs
 ```
