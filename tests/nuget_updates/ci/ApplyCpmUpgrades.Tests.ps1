@@ -174,6 +174,17 @@ try {
     Assert-Match $summaryText 'GitHub.Copilot.SDK' 'summary lists an applied package'
     Assert-Match $summaryText 'Ignored by configuration: MessagePack' 'summary notes MessagePack ignored'
     Assert-Match $summaryText 'Skipped (MSBuild-property pins)' 'summary notes the property-pin skip'
+    # Summary uses the file's Include casing (Serilog.Sinks.Console), not the report's.
+    Assert-Match $summaryText 'Serilog.Sinks.Console' 'summary uses the file Include casing'
+    Assert-NotMatch $summaryText 'serilog.sinks.console' 'summary does not echo the report casing'
+
+    # Ignored-list ordering is deterministic (sorted) regardless of HashSet order.
+    $ordProps = Join-Path $tmp 'ord.props'
+    [System.IO.File]::WriteAllText($ordProps, ($propsLines -join "`n"), $noBom)
+    $ordOut = Join-Path $tmp 'ord-out.txt'
+    & pwsh -NoProfile -File $scriptPath -ReportPath $reportPath -PropsPath $ordProps -IgnorePackages 'Zzebra,Aardvark,Mango' -GitHubOutput $ordOut | Out-Null
+    $ordSummary = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(([regex]::Match((Get-Content $ordOut -Raw), 'summary_b64=(\S+)')).Groups[1].Value))
+    Assert-Match $ordSummary 'Ignored by configuration: Aardvark, Mango, Zzebra' 'ignored list is sorted deterministically'
 
     # No-op run: a report whose LatestVersion == the current pin leaves the file byte-identical.
     $noopReport = Join-Path $tmp 'noop.json'

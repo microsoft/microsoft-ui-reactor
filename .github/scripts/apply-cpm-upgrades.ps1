@@ -112,18 +112,22 @@ foreach ($name in ($wanted.Keys | Sort-Object)) {
     if (-not $m.Success) { continue }
 
     $tag = $m.Value
+    # Use the Include casing from the file (not the report's) for display/output, so
+    # the summary always matches Directory.Packages.props and is stable run-to-run.
+    $includeMatch = [regex]::Match($tag, 'Include="([^"]*)"')
+    $displayName = if ($includeMatch.Success) { $includeMatch.Groups[1].Value } else { $name }
     $verMatch = [regex]::Match($tag, 'Version="([^"]*)"')
     if (-not $verMatch.Success) { continue }
     $current = $verMatch.Groups[1].Value
 
-    if ($current -like '*$(*') { [void]$skippedProperty.Add("$name ($current)"); continue }
+    if ($current -like '*$(*') { [void]$skippedProperty.Add("$displayName ($current)"); continue }
     # Only apply strict upgrades — never rewrite to an equal or lower version, so a
     # stale/lower LatestVersion in the report can never downgrade a pin.
     if (-not (Test-NuGetVersionGreater $to $current)) { continue }
 
     $newTag = $tag -replace 'Version="[^"]*"', "Version=`"$to`""
     $content = $content.Substring(0, $m.Index) + $newTag + $content.Substring($m.Index + $m.Length)
-    $applied.Add([pscustomobject]@{ Name = $name; From = $current; To = $to })
+    $applied.Add([pscustomobject]@{ Name = $displayName; From = $current; To = $to })
 }
 
 $changed = $applied.Count -gt 0
@@ -139,17 +143,17 @@ if ($changed) {
     [void]$sb.AppendLine('')
     [void]$sb.AppendLine('| Package | From | To |')
     [void]$sb.AppendLine('| --- | --- | --- |')
-    foreach ($u in $applied) { [void]$sb.AppendLine("| $($u.Name) | $($u.From) | $($u.To) |") }
+    foreach ($u in ($applied | Sort-Object Name)) { [void]$sb.AppendLine("| $($u.Name) | $($u.From) | $($u.To) |") }
 } else {
     [void]$sb.AppendLine('No central package versions needed updating.')
 }
 if ($skippedProperty.Count -gt 0) {
     [void]$sb.AppendLine('')
-    [void]$sb.AppendLine("_Skipped (MSBuild-property pins): $([string]::Join(', ', $skippedProperty))._")
+    [void]$sb.AppendLine("_Skipped (MSBuild-property pins): $([string]::Join(', ', ($skippedProperty | Sort-Object)))._")
 }
 if ($ignoreSet.Count -gt 0) {
     [void]$sb.AppendLine('')
-    [void]$sb.AppendLine("_Ignored by configuration: $([string]::Join(', ', $ignoreSet))._")
+    [void]$sb.AppendLine("_Ignored by configuration: $([string]::Join(', ', ($ignoreSet | Sort-Object)))._")
 }
 $summary = $sb.ToString()
 Write-Host $summary
