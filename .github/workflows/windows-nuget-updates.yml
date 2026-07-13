@@ -33,9 +33,10 @@
 #   workflow (GitHub blocks token-created events from starting further workflows).
 #   Rather than require a PAT/App token, the `detect` job validates the bump itself
 #   by building the whole solution, and the PR opens as a DRAFT if that build
-#   fails. To run the full CI suite (tests/selftests), a maintainer kicks it with
-#   Close -> Reopen (fires the `reopened` event ci.yml listens for) or by pushing
-#   any commit.
+#   fails. To run the full CI suite (tests/selftests) on a GITHUB_TOKEN-authored PR,
+#   a maintainer kicks it with Close -> Reopen (fires the `reopened` event ci.yml
+#   listens for) or by pushing any commit. (A PR authored via DEPS_BOT_TOKEN triggers
+#   pull_request CI normally, so this step isn't needed then.)
 #
 # Security — two jobs, credentials isolated from the untrusted build:
 #   `detect` restores and BUILDS the freshly-upgraded (therefore not-yet-trusted)
@@ -368,9 +369,16 @@ jobs:
               Write-Host "Refreshing open PR #$priorNum (branch force-pushed)."
               Sync-Body $priorNum
             } elseif ($priorState -eq 'CLOSED') {
-              gh pr reopen $priorNum
-              Write-Host "Reopened previously-closed PR #$priorNum."
-              Sync-Body $priorNum
+              # Reopen the closed (unmerged) PR; if reopening fails, create a fresh
+              # one before giving up to the issue fallback.
+              try {
+                gh pr reopen $priorNum
+                Write-Host "Reopened previously-closed PR #$priorNum."
+                Sync-Body $priorNum
+              } catch {
+                Write-Host "Reopen failed ($($_.Exception.Message)); creating a fresh PR instead."
+                New-Pr
+              }
             } else {
               New-Pr
             }
