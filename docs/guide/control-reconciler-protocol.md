@@ -209,8 +209,17 @@ public readonly ref struct MountContext
     /// (possibly null for <c>EmptyElement</c>).</summary>
     public UIElement? MountChild(Element child) => _reconciler.Mount(child, _requestRerender);
 
-    /// <summary>Apply a setter array to the control. Equivalent to the public
-    /// <see cref="Reconciler.ApplySetters{T}(Action{T}[], T)"/> helper; provided
+    /// <summary>Reconcile a secondary element slot (mount / update-in-place / unmount)
+    /// against an already-mounted control, preserving descendant component state across
+    /// re-renders. <paramref name="existing"/> is the control currently in the slot (or
+    /// <c>null</c>). Returns the control to assign back into the slot. Public counterpart
+    /// to the engine-internal child reconcile, so external wrappers (not just built-in
+    /// descriptors) can host stateful secondary element slots — see
+    /// <c>[WrapElementSlot]</c>.</summary>
+    public UIElement? ReconcileChild(Element? oldChild, Element? newChild, UIElement? existing)
+        => _reconciler.ReconcileV1Child(oldChild, newChild, existing, _requestRerender);
+
+    /// <summary>The <see cref="Reconciler.ApplySetters{T}(Action{T}[], T)"/> helper; provided
     /// on the context for symmetry with handler-authored mount bodies.</summary>
     public void ApplySetters<T>(Action<T>[] setters, T control) where T : class
         => Reconciler.ApplySetters(setters, control);

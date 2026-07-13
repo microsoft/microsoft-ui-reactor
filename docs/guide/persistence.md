@@ -170,7 +170,7 @@ class PersistentSettings : Component
         UseEffect(() =>
         {
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(SettingsPath)!);
-            File.WriteAllText(SettingsPath, JsonSerializer.Serialize(settings));
+            File.WriteAllText(SettingsPath, JsonSerializer.Serialize(settings, AppSettingsJsonContext.Default.AppSettings));
             return () => { };
         }, settings);
 
@@ -181,12 +181,17 @@ class PersistentSettings : Component
 
     private static AppSettings LoadFromDisk() =>
         File.Exists(SettingsPath)
-            ? JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(SettingsPath))
+            ? JsonSerializer.Deserialize(File.ReadAllText(SettingsPath), AppSettingsJsonContext.Default.AppSettings)
                 ?? new AppSettings(NotificationsOn: true)
             : new AppSettings(NotificationsOn: true);
 }
 
 record AppSettings(bool NotificationsOn);
+
+// JSON source-generated context so the disk read/write is trim- and
+// NativeAOT-safe (no reflection-based JsonSerializer overloads).
+[JsonSerializable(typeof(AppSettings))]
+partial class AppSettingsJsonContext : JsonSerializerContext;
 ```
 
 The pattern is small but the constraints are real:

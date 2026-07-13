@@ -347,11 +347,13 @@ Use the content-alignment fluents when the control itself should stretch,
 but its child content also needs an explicit placement contract. A common
 case is a full-width button whose inner row should also stretch:
 
+<!-- ai:lock -->
 ```csharp
 Button(Text("Open"), onClick)
-    .HAlign(HorizontalAlignment.Stretch)
-    .HorizontalContentAlignment(HorizontalAlignment.Stretch)
+  .HAlign(HorizontalAlignment.Stretch)
+  .HorizontalContentAlignment(HorizontalAlignment.Stretch)
 ```
+<!-- /ai:lock -->
 
 See [modifier-system](modifier-system.md) for how these chain
 internally.
