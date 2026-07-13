@@ -1,8 +1,6 @@
-using System;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Controls;
-using Microsoft.UI.Reactor.Data;
 using static Microsoft.UI.Reactor.Factories;
 using static WinUIGalleryReactor.SamplePageHost;
 

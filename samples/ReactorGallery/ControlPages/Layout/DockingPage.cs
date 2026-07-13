@@ -1,4 +1,3 @@
-using System;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Docking;
