@@ -3,6 +3,13 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <!-- WindowsAppSDK targets (pulled in transitively via the Reactor reference)
+         reject AnyCPU, and Reactor.slnx maps this project's solution platforms to
+         x64/ARM64. Declare those concrete platforms (mirrors src/Reactor.Cli) so
+         the configs the solution references actually exist. Without this, opening
+         Reactor.slnx reports a project-configuration-not-found error for this
+         project. It is only ever built with an explicit -p:Platform (never AnyCPU). -->
+    <Platforms>x64;ARM64</Platforms>
     <RootNamespace>Microsoft.UI.Reactor.SignaturesGen</RootNamespace>
     <AssemblyName>Reactor.SignaturesGen</AssemblyName>
     <ImplicitUsings>enable</ImplicitUsings>
