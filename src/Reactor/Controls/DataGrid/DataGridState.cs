@@ -27,8 +27,12 @@ public class DataGridState<T>
     //  • _blockSize — captured once by design: it only sizes the initial DataPageCache; re-deriving
     //                 it (from RowHeight) would rebuild the cache and discard already-loaded rows.
     //  • _columns   — the visible grid (header/layout/cells) consumes the component's fresh columns
-    //                 arg each render, so it is reactive; the internal _columns list below tracks
-    //                 user-driven reorder/hide/resize and is intentionally not re-synced from props.
+    //                 arg each render, so what is on screen reacts to prop column changes. The
+    //                 internal _columns list below (and _columnIndexByName) additionally backs
+    //                 column reorder/hide/resize AND keyboard navigation + edit/commit column
+    //                 resolution; those internal paths are captured at construction and are
+    //                 intentionally NOT re-synced from prop column changes (reconciling them with
+    //                 user-driven column state is a separate concern beyond #872).
     private readonly IDataSource<T> _source;
     private SelectionMode _selectionMode;
     private readonly int _blockSize;

@@ -365,8 +365,13 @@ Conventions for contributors:
 
 ### Fixed
 
-- **RichTextBlock inline-UI scroll drift hardened with a prevention-at-source extent
-  pin (issue #717).** The #487 scroll-anchor (below) restores the offset reactively
+- **`DataGrid<T>` now reacts to `SelectionMode` prop changes after first mount
+  (issue #872).** The grid captured its selection mode once at construction, so a
+  later `selectionMode:` change on the same instance was silently ignored (the
+  factory keys the component only on type + source, so it did not remount either).
+  It now reconciles the mode onto the live headless state each render — narrowing
+  (`Multiple` → `Single`/`None`) trims the current selection — removing the need for
+  a mode-dependent `.WithKey(...)` remount workaround. The #487 scroll-anchor (below) restores the offset reactively
   *after* the ancestor scroll host clamps it; this adds a complementary guard that aims
   to stop the clamp from happening in the first place. The underlying cause is that the
   live app applies the document mutation inside the reconcile and then returns to the

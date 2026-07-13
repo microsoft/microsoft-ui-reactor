@@ -2093,6 +2093,7 @@ InfiniteResource<T> HookResource { get; }
 RowKey? AnchorKey { get; }
 RowKey? EditingRowKey { get; }
 RowKey? FocusedKey { get; }
+SelectionMode SelectionMode { get; }
 ValidationContext EditValidation { get; }
 bool HasPendingCommits { get; }
 bool HasValidationErrors { get; }
@@ -2163,6 +2164,7 @@ SetFilter(FilterDescriptor filter) → void
 SetFocus(int rowIndex, int colIndex) → void
 SetHookResource(InfiniteResource<T> resource) → void
 SetSearchQuery(string query) → void
+SetSelectionMode(SelectionMode mode) → void
 ShowColumn(string columnName) → void
 ToggleColumnVisibility(string columnName) → void
 ToggleRowExpansion(RowKey key) → void
