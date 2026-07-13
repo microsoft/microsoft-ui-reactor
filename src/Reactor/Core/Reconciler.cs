@@ -3834,6 +3834,8 @@ public sealed partial class Reconciler : IDisposable
 
         if (m.IsHitTestVisible.HasValue && m.IsHitTestVisible != oldM?.IsHitTestVisible)
             fe.IsHitTestVisible = m.IsHitTestVisible.Value;
+        else if (!m.IsHitTestVisible.HasValue && oldM?.IsHitTestVisible.HasValue == true)
+            fe.ClearValue(UIElement.IsHitTestVisibleProperty);
 
         if (m.TabIndex.HasValue && m.TabIndex != oldM?.TabIndex && fe is WinUI.Control tabIdxCtrl)
             tabIdxCtrl.TabIndex = m.TabIndex.Value;

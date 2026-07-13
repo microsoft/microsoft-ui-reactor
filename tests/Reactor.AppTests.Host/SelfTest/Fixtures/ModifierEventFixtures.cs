@@ -360,6 +360,7 @@ internal static class ModifierEventFixtures
                         AutomationName = "clear-name",
                         AutomationId = "clear-id",
                         IsTabStop = false,
+                        IsHitTestVisible = false,
                         TabIndex = 7,
                         AccessKey = "C",
                         XYFocusKeyboardNavigation = Microsoft.UI.Xaml.Input.XYFocusKeyboardNavigationMode.Enabled,
@@ -419,6 +420,7 @@ internal static class ModifierEventFixtures
                     Microsoft.UI.Xaml.Automation.AutomationProperties.GetName(button) != "clear-name"
                     && Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(button) != "clear-id");
                 H.Check("ModifierClear_AccessKeyCleared", button.AccessKey == "");
+                H.Check("ModifierClear_HitTestVisibleRestored", button.IsHitTestVisible);
                 H.Check("ModifierClear_BorderCleared", button.BorderThickness == new Thickness(0));
             }
 
