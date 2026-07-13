@@ -185,7 +185,7 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────────────
   publish:
     needs: detect
-    if: needs.detect.outputs.changed == 'true' && !(github.event_name == 'workflow_dispatch' && inputs['dry-run'])
+    if: needs.detect.outputs.changed == 'true' && !(github.event_name == 'workflow_dispatch' && github.event.inputs['dry-run'] == 'true')
     runs-on: windows-latest
     permissions:
       contents: write
