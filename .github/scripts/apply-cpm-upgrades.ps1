@@ -59,12 +59,14 @@ foreach ($p in $ignore) { [void]$ignoreSet.Add($p) }
 
 function Test-NuGetVersionGreater {
     # True if NuGet version $a is strictly greater than $b, using full SemVer 2.0
-    # precedence (release + prerelease). [semver] parses NuGet prerelease strings
-    # like 11.0.0-preview.5.26302.115 and orders numeric identifiers correctly
-    # (preview.10 > preview.9; a stable release outranks its prereleases).
+    # precedence (release + prerelease). SemanticVersion parses NuGet prerelease
+    # strings like 11.0.0-preview.5.26302.115 and orders numeric identifiers
+    # correctly (preview.10 > preview.9; a stable release outranks its prereleases).
+    # The fully-qualified type is used instead of the [semver] accelerator, which
+    # is not registered in every PowerShell host even where the type exists.
     param([string] $a, [string] $b)
     try {
-        return ([semver]$a).CompareTo([semver]$b) -gt 0
+        return ([System.Management.Automation.SemanticVersion]$a).CompareTo([System.Management.Automation.SemanticVersion]$b) -gt 0
     } catch {
         # 4-segment versions (e.g. 1.2.3.4) aren't SemVer-parseable; fall back to
         # a numeric release comparison (the prerelease suffix, if any, is dropped).
