@@ -208,9 +208,11 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ github.event.repository.default_branch }}
-          # Optional: a DEPS_BOT_TOKEN secret (PAT or GitHub App token) makes the
-          # opened PR also trigger the normal pull_request CI. Not required — falls
-          # back to the built-in GITHUB_TOKEN.
+          # Optional: a DEPS_BOT_TOKEN secret (a PAT or GitHub App token the org can
+          # provide) lets this workflow open the PR automatically even when the org
+          # blocks GitHub Actions from creating PRs (otherwise the publish job falls
+          # back to a tracking issue), and makes the opened PR trigger the normal
+          # pull_request CI. Not required — falls back to the built-in GITHUB_TOKEN.
           token: ${{ secrets.DEPS_BOT_TOKEN || github.token }}
 
       - name: Open or update pull request
