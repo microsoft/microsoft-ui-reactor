@@ -6402,7 +6402,8 @@ public partial record AnnotatedScrollBarElement;
 public record PopupElement(Element Child) : Element
 {
     public bool IsOpen { get; init; }
-    public bool IsLightDismissEnabled { get; init; } = true;
+    // Matches WinUI's Popup.IsLightDismissEnabled default (false); see #873.
+    public bool IsLightDismissEnabled { get; init; }
     public double HorizontalOffset { get; init; }
     public double VerticalOffset { get; init; }
     public Action? OnOpened { get; init; }
