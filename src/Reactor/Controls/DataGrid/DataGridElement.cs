@@ -85,6 +85,14 @@ public record DataGridElement<[DynamicallyAccessedMembers(DynamicallyAccessedMem
     /// When null, uses a default shimmer-style gray bar.
     /// </summary>
     public Func<FieldDescriptor, double, Element>? PlaceholderCellTemplate { get; init; }
+
+    /// <summary>
+    /// Test-only seam (consumed via <c>InternalsVisibleTo("Reactor.AppTests.Host")</c>): invoked
+    /// once with the live <see cref="DataGridState{T}"/> when the component builds it, so selftests
+    /// can drive selection/mode reconciliation that has no public imperative handle. Never set by
+    /// product code or the public <c>DataGrid(...)</c> factories.
+    /// </summary>
+    internal Action<DataGridState<T>>? OnStateReadyInternal { get; init; }
 }
 
 // ── Enums ────────────────────────────────────────────────────────

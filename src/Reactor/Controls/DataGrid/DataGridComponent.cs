@@ -147,8 +147,21 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
             };
 
             stateRef.Current = s;
+
+            // Test-only seam (InternalsVisibleTo Reactor.AppTests.Host): hands the freshly built
+            // headless state to selftests, which have no public imperative handle for driving
+            // selection. Never set by product code.
+            el.OnStateReadyInternal?.Invoke(s);
         }
         var state = stateRef.Current!;
+
+        // Reconcile the SelectionMode prop onto the live state each render (issue #872). The state
+        // is created once (above), capturing the initial mode; without this a later selectionMode:
+        // prop change on the same grid instance was silently ignored. The inequality guard makes
+        // the StateChanged->forceRender that SetSelectionMode raises idempotent (the next render
+        // finds the modes equal and skips), so this cannot loop.
+        if (state.SelectionMode != el.SelectionMode)
+            state.SetSelectionMode(el.SelectionMode);
 
         // ── Row-commit mutation (Phase 3) ────────────────────────
         // UseMutation drives the async commit lifecycle: OnOptimistic snapshots the

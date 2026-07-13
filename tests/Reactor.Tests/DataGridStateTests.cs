@@ -270,6 +270,112 @@ public class DataGridStateTests
         Assert.Equal(1, changes);
     }
 
+    // ── SetSelectionMode (issue #872 — reactive selection mode) ───
+
+    [Fact]
+    public void SelectionMode_Getter_Reflects_Constructor_Value()
+    {
+        Assert.Equal(SelectionMode.None,
+            new DataGridState<TestItem>(CreateSource(), CreateColumns(), SelectionMode.None).SelectionMode);
+        Assert.Equal(SelectionMode.Single,
+            new DataGridState<TestItem>(CreateSource(), CreateColumns(), SelectionMode.Single).SelectionMode);
+        Assert.Equal(SelectionMode.Multiple,
+            new DataGridState<TestItem>(CreateSource(), CreateColumns(), SelectionMode.Multiple).SelectionMode);
+    }
+
+    [Fact]
+    public void SetSelectionMode_Single_To_Multiple_Enables_CtrlMultiSelect()
+    {
+        var state = new DataGridState<TestItem>(CreateSource(), CreateColumns(), SelectionMode.Single);
+
+        // Baseline: in Single mode, ctrl-toggling two rows does NOT accumulate — it replaces.
+        // This makes the post-widen accumulation assertion meaningful rather than always-true.
+        state.HandleRowClick((RowKey)5, ctrlKey: true);
+        state.HandleRowClick((RowKey)10, ctrlKey: true);
+        Assert.Single(state.SelectedKeys);
+
+        var changes = 0;
+        state.StateChanged += () => changes++;
+        state.SetSelectionMode(SelectionMode.Multiple);
+
+        Assert.Equal(SelectionMode.Multiple, state.SelectionMode);
+        Assert.True(changes > 0); // a mode change raises StateChanged
+
+        // Now ctrl-toggling two distinct rows selects BOTH (multi-select is live).
+        state.ClearSelection();
+        state.HandleRowClick((RowKey)5, ctrlKey: true);
+        state.HandleRowClick((RowKey)10, ctrlKey: true);
+        Assert.Equal(2, state.SelectedKeys.Count);
+        Assert.Contains((RowKey)5, state.SelectedKeys);
+        Assert.Contains((RowKey)10, state.SelectedKeys);
+    }
+
+    [Fact]
+    public void SetSelectionMode_Single_To_Multiple_Preserves_Existing_Selection()
+    {
+        var state = new DataGridState<TestItem>(CreateSource(), CreateColumns(), SelectionMode.Single);
+        state.HandleRowClick((RowKey)5);
+        Assert.Single(state.SelectedKeys);
+
+        // Widening must not trim the current selection.
+        state.SetSelectionMode(SelectionMode.Multiple);
+        Assert.Contains((RowKey)5, state.SelectedKeys);
+    }
+
+    [Fact]
+    public void SetSelectionMode_Multiple_To_Single_Trims_To_Anchor()
+    {
+        var state = new DataGridState<TestItem>(CreateSource(), CreateColumns(), SelectionMode.Multiple);
+        state.HandleRowClick((RowKey)5);
+        state.HandleRowClick((RowKey)10, ctrlKey: true); // anchor becomes 10
+        Assert.Equal(2, state.SelectedKeys.Count);
+        var versionBefore = state.SelectionVersion;
+
+        state.SetSelectionMode(SelectionMode.Single);
+
+        Assert.Equal(SelectionMode.Single, state.SelectionMode);
+        Assert.Single(state.SelectedKeys);
+        Assert.Contains((RowKey)10, state.SelectedKeys); // the anchor is kept
+        Assert.True(state.SelectionVersion > versionBefore);
+    }
+
+    [Fact]
+    public void SetSelectionMode_Multiple_To_None_Clears_Selection_And_Anchor()
+    {
+        var state = new DataGridState<TestItem>(CreateSource(), CreateColumns(), SelectionMode.Multiple);
+        state.HandleRowClick((RowKey)5);
+        state.HandleRowClick((RowKey)10, ctrlKey: true);
+        var versionBefore = state.SelectionVersion;
+
+        state.SetSelectionMode(SelectionMode.None);
+
+        Assert.Equal(SelectionMode.None, state.SelectionMode);
+        Assert.Empty(state.SelectedKeys);
+        Assert.Null(state.AnchorKey);
+        Assert.True(state.SelectionVersion > versionBefore);
+
+        // None mode now ignores further clicks.
+        state.HandleRowClick((RowKey)7, ctrlKey: true);
+        Assert.Empty(state.SelectedKeys);
+    }
+
+    [Fact]
+    public void SetSelectionMode_Same_Mode_Is_NoOp()
+    {
+        var state = new DataGridState<TestItem>(CreateSource(), CreateColumns(), SelectionMode.Multiple);
+        state.HandleRowClick((RowKey)5);
+        state.HandleRowClick((RowKey)10, ctrlKey: true);
+        var versionBefore = state.SelectionVersion;
+        var changes = 0;
+        state.StateChanged += () => changes++;
+
+        state.SetSelectionMode(SelectionMode.Multiple);
+
+        Assert.Equal(0, changes);
+        Assert.Equal(versionBefore, state.SelectionVersion);
+        Assert.Equal(2, state.SelectedKeys.Count);
+    }
+
     // ── Column operations ────────────────────────────────────────
 
     [Fact]

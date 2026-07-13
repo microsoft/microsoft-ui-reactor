@@ -183,6 +183,79 @@ internal static class DataGridEditFixtures
     }
 
     /// <summary>
+    /// Regression test for issue #872: a DataGrid must react to <c>SelectionMode</c> prop changes
+    /// after the first mount. Mounts a grid whose <c>selectionMode</c> comes from
+    /// <c>UseState(Single)</c>, captures the live <see cref="DataGridState{T}"/> through the
+    /// internal test seam, then flips the prop to <c>Multiple</c> on a re-render (same grid
+    /// instance, no key change) and asserts the live state now performs Ctrl-toggle multi-select.
+    ///
+    /// Non-vacuous: before the fix, the state captured its mode once at mount, so after the flip it
+    /// stays in <c>Single</c> — Ctrl-toggling two rows keeps a single selection, failing both the
+    /// reconciled-mode and multi-select checks.
+    /// </summary>
+    internal class SelectionModeReactsToPropChange(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            DataGridState<TestProduct>? gridState = null;
+            Action<Microsoft.UI.Reactor.Controls.SelectionMode>? setMode = null;
+
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var source = ctx.UseMemo(() => CreateSource(10));
+                var (mode, setM) = ctx.UseState(Microsoft.UI.Reactor.Controls.SelectionMode.Single);
+                setMode = setM;
+
+                var grid = DataGrid(
+                    source: source,
+                    columns: CreateEditableColumns(),
+                    selectionMode: mode,
+                    rowHeight: 36);
+
+                // Test-only seam: capture the live headless state — it has no public imperative
+                // handle, and the visible tree reads el.SelectionMode directly (already reactive),
+                // so only the state's selection BEHAVIOR proves the fix.
+                grid = grid with { Props = grid.Props with { OnStateReadyInternal = s => gridState = s } };
+
+                return VStack(TextBlock($"Mode: {mode}"), grid);
+            });
+
+            await Harness.Render(500);
+
+            H.Check("DataGrid_SelectionMode_Mounted", gridState is not null);
+            if (gridState is null) return;
+
+            H.Check("DataGrid_SelectionMode_InitialSingle",
+                gridState.SelectionMode == Microsoft.UI.Reactor.Controls.SelectionMode.Single);
+
+            // Baseline: in Single mode, Ctrl-toggling two rows does NOT accumulate — it replaces.
+            // This makes the post-flip accumulation assertion meaningful rather than always-true.
+            gridState.HandleRowClick((RowKey)0, ctrlKey: true);
+            gridState.HandleRowClick((RowKey)1, ctrlKey: true);
+            H.Check($"DataGrid_SelectionMode_SingleDoesNotAccumulate (count={gridState.SelectedKeys.Count})",
+                gridState.SelectedKeys.Count == 1);
+
+            // Flip the prop to Multiple on a re-render (same grid instance, no key change).
+            setMode?.Invoke(Microsoft.UI.Reactor.Controls.SelectionMode.Multiple);
+            await Harness.Render(500);
+
+            // The live state must have reconciled to the new mode (the #872 fix).
+            H.Check("DataGrid_SelectionMode_ReconciledToMultiple",
+                gridState.SelectionMode == Microsoft.UI.Reactor.Controls.SelectionMode.Multiple);
+
+            // Now Ctrl-toggling two distinct rows selects BOTH.
+            gridState.ClearSelection();
+            gridState.HandleRowClick((RowKey)2, ctrlKey: true);
+            gridState.HandleRowClick((RowKey)3, ctrlKey: true);
+            H.Check($"DataGrid_SelectionMode_MultiSelectWorks (count={gridState.SelectedKeys.Count})",
+                gridState.SelectedKeys.Count == 2
+                && gridState.IsSelected((RowKey)2)
+                && gridState.IsSelected((RowKey)3));
+        }
+    }
+
+    /// <summary>
     /// Mount an editable DataGrid with a selection column, programmatically trigger
     /// cell editing via OnTapped on the Name cell, and verify the TextBox editor
     /// appears in the correct Grid column (not shifted to column 0).

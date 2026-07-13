@@ -19,8 +19,18 @@ public class DataGridState<T>
     /// </summary>
     public static int MaxClientFallbackPageSize { get; set; } = 100_000;
 
+    // Reactivity of ctor-captured values (issue #872 audit):
+    //  • _source    — captured once, but the DataGrid factory keys its component on the source
+    //                 (.WithKey($"dg-{T}-{source.GetHashCode()}")), so a new source remounts the
+    //                 grid with a fresh state ⇒ effectively reactive via remount.
+    //  • _selectionMode — reactive: reconciled from the prop each render via SetSelectionMode.
+    //  • _blockSize — captured once by design: it only sizes the initial DataPageCache; re-deriving
+    //                 it (from RowHeight) would rebuild the cache and discard already-loaded rows.
+    //  • _columns   — the visible grid (header/layout/cells) consumes the component's fresh columns
+    //                 arg each render, so it is reactive; the internal _columns list below tracks
+    //                 user-driven reorder/hide/resize and is intentionally not re-synced from props.
     private readonly IDataSource<T> _source;
-    private readonly SelectionMode _selectionMode;
+    private SelectionMode _selectionMode;
     private readonly int _blockSize;
 
     // ── Sort state ────────────────────────────────────────────────
@@ -60,6 +70,12 @@ public class DataGridState<T>
 
     /// <summary>Monotonically increasing version number, bumped on every selection change.</summary>
     public int SelectionVersion => _selectionVersion;
+
+    /// <summary>
+    /// The active selection mode. Reconciled from the <c>SelectionMode</c> prop each render via
+    /// <see cref="SetSelectionMode"/> (issue #872), so it stays in sync after the first mount.
+    /// </summary>
+    public SelectionMode SelectionMode => _selectionMode;
 
     /// <summary>Anchor key for shift-click range selection.</summary>
     public RowKey? AnchorKey { get; private set; }
@@ -653,6 +669,67 @@ public class DataGridState<T>
     }
 
     // ── Selection operations ─────────────────────────────────────
+
+    /// <summary>
+    /// Updates the selection mode in response to a <c>SelectionMode</c> prop change (issue #872).
+    /// When narrowing, trims the current selection so it stays valid for the new mode:
+    /// <list type="bullet">
+    /// <item><description><see cref="SelectionMode.None"/> — clears all selected keys and the anchor.</description></item>
+    /// <item><description><see cref="SelectionMode.Single"/> — keeps at most one key (prefers the
+    /// selection anchor, then the focused row, else any remaining key).</description></item>
+    /// </list>
+    /// Bumps <see cref="SelectionVersion"/> when the selected set actually changes, and raises
+    /// <see cref="StateChanged"/>. No-ops when the mode is unchanged. The component reconciles this
+    /// during render behind a <c>state.SelectionMode != el.SelectionMode</c> guard, so the deferred
+    /// re-render it schedules cannot loop.
+    /// </summary>
+    public void SetSelectionMode(SelectionMode mode)
+    {
+        if (_selectionMode == mode)
+            return;
+
+        _selectionMode = mode;
+
+        var selectionChanged = false;
+        if (mode == SelectionMode.None)
+        {
+            if (_selectedKeys.Count > 0)
+            {
+                _selectedKeys.Clear();
+                selectionChanged = true;
+            }
+            AnchorKey = null;
+        }
+        else if (mode == SelectionMode.Single && _selectedKeys.Count > 1)
+        {
+            // Narrowing Multiple -> Single: keep exactly one key. Prefer the selection anchor
+            // (the last row the user acted on), then the focused row, else any remaining key.
+            RowKey keep;
+            if (AnchorKey is { } anchor && _selectedKeys.Contains(anchor))
+                keep = anchor;
+            else if (FocusedKey is { } focused && _selectedKeys.Contains(focused))
+                keep = focused;
+            else
+            {
+                keep = default;
+                foreach (var k in _selectedKeys)
+                {
+                    keep = k;
+                    break;
+                }
+            }
+
+            _selectedKeys.Clear();
+            _selectedKeys.Add(keep);
+            AnchorKey = keep;
+            selectionChanged = true;
+        }
+
+        if (selectionChanged)
+            _selectionVersion++;
+
+        StateChanged?.Invoke();
+    }
 
     /// <summary>Handles a row click with optional modifier keys.</summary>
     public void HandleRowClick(RowKey key, bool ctrlKey = false, bool shiftKey = false, IReadOnlyList<RowKey>? visibleOrder = null)
