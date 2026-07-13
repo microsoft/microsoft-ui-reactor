@@ -131,6 +131,7 @@ Memo(ctx => TextBlock($"Hi, {name}"), name)    // re-render when deps change
 | `UseCallback(action, deps)` | `Action` | Stable callback reference |
 | `UseRef<T>(initial)` | `Ref<T>` | Mutable ref across renders (access via `.Current`) |
 | `UseObservable<T>(source)` | `T` | Track `INotifyPropertyChanged` |
+| `UseExternalStore<TSnapshot>(subscribe, getSnapshot)` | `TSnapshot` | Subscribe to an external store (stable `subscribe`, cached snapshot) |
 | `UseCollection<T>(coll)` | `IReadOnlyList<T>` | Track `ObservableCollection` |
 | `UseContext<T>(ctx)` | `T` | Read tree-scoped ambient state |
 | `UsePersisted<T>(key, initial)` | `(T, Action<T>)` | State that survives unmount |

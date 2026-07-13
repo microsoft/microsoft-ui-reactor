@@ -28,6 +28,14 @@ Conventions for contributors:
 
 ### Added
 
+- **`UseExternalStore<TSnapshot>` hook — first-class subscribe/getSnapshot
+  interop (issue #761).** Standardizes the external-store subscription bridge
+  (subscribe to change notifications, read the latest snapshot during render)
+  that previously required hand-rolled `UseEffect` + `UseReducer` boilerplate.
+  Re-renders only when a notification yields a snapshot the comparer treats as
+  different; accepts an optional `IEqualityComparer<TSnapshot>`. `subscribe`
+  must be a stable delegate and `getSnapshot` must return a cached value, per
+  the same guidance React gives for `useSyncExternalStore`.
 - **TitleBar drag regions — `.AutoRefreshDragRegions()` and `.IsDragRegion()`
   (spec 059).** Windows App SDK bumped 2.0.1 → 2.1.3; custom `TitleBar` content
   now auto-excludes interactive controls from the window drag region by default.

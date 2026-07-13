@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Threading.Tasks;
 using Microsoft.UI.Reactor.Core;
 using Xunit;
 
@@ -33,15 +34,29 @@ public class ObservableHookTests
 
         public Action Subscribe(Action onChanged)
         {
+            SubscribeCount++;
             Changed += onChanged;
-            return () => Changed -= onChanged;
+            return () =>
+            {
+                UnsubscribeCount++;
+                Changed -= onChanged;
+            };
         }
+
+        public int SubscribeCount { get; private set; }
+
+        public int UnsubscribeCount { get; private set; }
 
         public Action SubscribeAndChange(Action onChanged, T nextSnapshot)
         {
+            SubscribeCount++;
             Changed += onChanged;
             _snapshot = nextSnapshot;
-            return () => Changed -= onChanged;
+            return () =>
+            {
+                UnsubscribeCount++;
+                Changed -= onChanged;
+            };
         }
     }
 
@@ -238,6 +253,87 @@ public class ObservableHookTests
         Assert.Equal("Alice", first);
         Assert.Equal(1, rerenderCount);
         Assert.Equal("Bob", second);
+    }
+
+    [Fact]
+    public void UseExternalStore_Custom_Comparer_Reports_Difference_Rerenders_Once()
+    {
+        var ctx = new RenderContext();
+        var store = new ExternalStore<string>("Alice");
+        int rerenderCount = 0;
+
+        // Ordinal (case-sensitive) comparer: "Alice" -> "Bob" is a real difference.
+        ctx.BeginRender(() => rerenderCount++);
+        ctx.UseExternalStore(store.Subscribe, () => store.Snapshot, StringComparer.Ordinal);
+        ctx.FlushEffects();
+
+        ctx.BeginRender(() => rerenderCount++);
+        ctx.UseExternalStore(store.Subscribe, () => store.Snapshot, StringComparer.Ordinal);
+        ctx.FlushEffects();
+
+        store.SetSnapshot("Bob");
+
+        Assert.Equal(1, rerenderCount);
+    }
+
+    [Fact]
+    public async Task UseExternalStore_Change_Raised_Off_Thread_Rerenders_Once()
+    {
+        var ctx = new RenderContext();
+        var store = new ExternalStore<string>("Alice");
+        int rerenderCount = 0;
+
+        ctx.BeginRender(() => rerenderCount++);
+        ctx.UseExternalStore(store.Subscribe, () => store.Snapshot);
+        ctx.FlushEffects();
+
+        ctx.BeginRender(() => rerenderCount++);
+        ctx.UseExternalStore(store.Subscribe, () => store.Snapshot);
+        ctx.FlushEffects();
+
+        // The threadSafe reducer + Gate lock exist for exactly this path:
+        // a change notification raised from a non-render thread.
+        await Task.Run(() => store.SetSnapshot("Bob"), TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, rerenderCount);
+    }
+
+    [Fact]
+    public void UseExternalStore_Stable_Subscribe_Does_Not_Resubscribe_Across_Renders()
+    {
+        var ctx = new RenderContext();
+        var store = new ExternalStore<string>("Alice");
+
+        // Same method-group delegate identity across renders => no teardown/resubscribe.
+        ctx.BeginRender(() => { });
+        ctx.UseExternalStore(store.Subscribe, () => store.Snapshot);
+        ctx.FlushEffects();
+
+        ctx.BeginRender(() => { });
+        ctx.UseExternalStore(store.Subscribe, () => store.Snapshot);
+        ctx.FlushEffects();
+
+        ctx.BeginRender(() => { });
+        ctx.UseExternalStore(store.Subscribe, () => store.Snapshot);
+        ctx.FlushEffects();
+
+        Assert.Equal(1, store.SubscribeCount);
+        Assert.Equal(0, store.UnsubscribeCount);
+    }
+
+    [Fact]
+    public void UseExternalStore_Null_Arguments_Throw()
+    {
+        var ctx = new RenderContext();
+
+        ctx.BeginRender(() => { });
+        Assert.Throws<ArgumentNullException>(
+            () => ctx.UseExternalStore<string>(null!, () => "Alice"));
+
+        var ctx2 = new RenderContext();
+        ctx2.BeginRender(() => { });
+        Assert.Throws<ArgumentNullException>(
+            () => ctx2.UseExternalStore<string>(_ => () => { }, null!));
     }
 
     // ── UseObservable ──────────────────────────────────────────────

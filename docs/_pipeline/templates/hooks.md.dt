@@ -209,6 +209,21 @@ and only queues a re-render when a notification produces a different snapshot.
 Pass a custom comparer when the snapshot type needs value semantics different
 from `EqualityComparer<T>.Default`.
 
+Two stability rules keep this hook well-behaved — the same guidance React gives
+for `useSyncExternalStore`:
+
+- **`subscribe` must be a stable delegate.** It is the effect dependency that
+  decides whether the subscription is torn down and re-established, so pass a
+  method group (`_store.Subscribe`) or a `UseCallback`-memoized delegate. A fresh
+  capturing lambda (`onChanged => _store.Subscribe(onChanged)`) is a new delegate
+  every render and forces an unsubscribe/resubscribe on each one.
+- **`getSnapshot` must return a cached value.** It should only change identity
+  when the underlying data changes. Returning a fresh, never-equal value on every
+  call (`() => items.ToArray()`) alongside an unstable `subscribe` can spin —
+  re-render re-runs the effect, the immediate re-check sees a "change", and that
+  forces another render. Memoize the snapshot or return a value the comparer
+  treats as equal when nothing changed.
+
 ## Updating State From Background Work
 
 Once the host is bootstrapped, `UseState` and `UseReducer` setters are safe to
