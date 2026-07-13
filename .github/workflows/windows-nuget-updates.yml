@@ -17,6 +17,17 @@
 #   two may occasionally both propose the same bump; whichever lands first wins
 #   and the other becomes a no-op.
 #
+# Opening the PR (and what happens when Actions can't):
+#   Many orgs (and Microsoft policy) disable "Allow GitHub Actions to create and
+#   approve pull requests", and a PAT/App token may not be available. The publish
+#   job therefore ALWAYS pushes the bump branch (that needs no special permission),
+#   then tries to open/refresh the PR, and if creating one is blocked it falls back
+#   to a tracking ISSUE (issue creation is NOT governed by the PR-creation policy)
+#   with a one-click "compare" link a maintainer uses to open the PR themselves.
+#   The run's job summary always records the same bump table + link as a floor. An
+#   optional DEPS_BOT_TOKEN secret, if the org can provide one, upgrades this to a
+#   fully automatic PR.
+#
 # CI on the opened PR:
 #   A PR opened with the default GITHUB_TOKEN does NOT trigger the pull_request CI
 #   workflow (GitHub blocks token-created events from starting further workflows).
@@ -24,8 +35,7 @@
 #   by building the whole solution, and the PR opens as a DRAFT if that build
 #   fails. To run the full CI suite (tests/selftests), a maintainer kicks it with
 #   Close -> Reopen (fires the `reopened` event ci.yml listens for) or by pushing
-#   any commit. An optional DEPS_BOT_TOKEN secret restores automatic CI, but it is
-#   not required.
+#   any commit.
 #
 # Security — two jobs, credentials isolated from the untrusted build:
 #   `detect` restores and BUILDS the freshly-upgraded (therefore not-yet-trusted)
@@ -36,7 +46,7 @@
 #   Directory.Packages.props (plus the build result) to `publish` as job outputs.
 #   `publish` holds the write token but does a CLEAN checkout and never restores or
 #   builds the upgraded packages — it only writes our own patched file, commits,
-#   pushes, and opens the PR.
+#   pushes, and opens the PR (or the tracking issue).
 
 name: Windows NuGet updates
 
@@ -278,11 +288,16 @@ jobs:
           }
           Set-Content -Path pr-body.md -Value $lines -Encoding utf8
 
-          # Resolve the most recent PR for this head branch across ALL states. GitHub
-          # only rejects a NEW PR when an OPEN one already exists for the same
-          # head+base; a branch whose previous PRs were merged/closed can open a
-          # fresh PR. So reuse an open PR, reopen a closed (unmerged) one, and create
-          # a new PR when there is none or the last was merged.
+          # ── Open/refresh the PR, or fall back to a tracking issue ──────────────
+          # This repo may not permit GitHub Actions to CREATE pull requests (and no
+          # PAT/App token is required here). Refreshing an already-open PR IS allowed,
+          # so try the PR path first; if creating one is blocked, fall back to a
+          # tracking ISSUE — issue creation is NOT governed by the PR-creation policy —
+          # carrying a one-click compare link a maintainer uses to open the PR. The
+          # job summary always records the same link as a guaranteed floor.
+          $compareUrl = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/compare/$($env:DEFAULT_BRANCH)...$($env:PR_BRANCH)?expand=1"
+          $buildLine = if ($buildOk) { '✅ Build validated: `dotnet build Reactor.slnx` passed on windows-latest.' } else { '❌ Build FAILED on windows-latest — review before opening.' }
+
           function Sync-Body([string]$num) {
             gh pr edit $num --body-file pr-body.md
             # Best-effort draft-state sync; don't fail the run if gh balks.
@@ -303,6 +318,37 @@ jobs:
               --label nuget `
               @draftArg
           }
+          function Open-TrackingIssue {
+            # Find-or-update a single tracking issue with a one-click "open the PR" link.
+            $issueTitle = 'Windows NuGet updates ready to open'
+            $ib = [System.Collections.Generic.List[string]]::new()
+            $ib.Add("The weekly Windows NuGet update pushed its bump to ``$env:PR_BRANCH``, but GitHub Actions can't open a pull request in this repo — so it needs a human to open it (one click).")
+            $ib.Add('')
+            $ib.Add("### ▶ [Open the pull request]($compareUrl)")
+            $ib.Add("Opens a pre-filled PR from ``$env:PR_BRANCH`` into ``$env:DEFAULT_BRANCH`` — just click **Create pull request**.")
+            $ib.Add('')
+            $ib.Add($buildLine)
+            $ib.Add('')
+            $ib.Add($summary)
+            $ib.Add('')
+            $ib.Add("[Workflow run]($runUrl)")
+            Set-Content -Path issue-body.md -Value $ib -Encoding utf8
+
+            $open = gh issue list --state open --search 'Windows NuGet updates ready to open in:title' --json number,title | ConvertFrom-Json
+            $match = $open | Where-Object { $_.title -eq $issueTitle } | Select-Object -First 1
+            if ($match) {
+              Write-Host "Refreshing tracking issue #$($match.number)."
+              gh issue edit $match.number --body-file issue-body.md
+            } else {
+              gh issue create --title $issueTitle --body-file issue-body.md --label dependencies --label nuget
+            }
+            Remove-Item issue-body.md -ErrorAction SilentlyContinue
+          }
+
+          # Guaranteed floor: record the bump + one-click link in the run's job summary,
+          # so the info survives even if both the PR and issue paths are blocked.
+          @("## Windows NuGet updates", '', $buildLine, '', $summary, '', "**[Open the pull request]($compareUrl)**") |
+            Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
           $prior = gh pr list --head $env:PR_BRANCH --state all --json number,state --jq 'sort_by(.number) | last'
           $priorNum = $null; $priorState = $null
@@ -311,21 +357,33 @@ jobs:
             $priorNum = $p.number; $priorState = $p.state
           }
 
-          if ($priorState -eq 'OPEN') {
-            Write-Host "Refreshing open PR #$priorNum (branch force-pushed)."
-            Sync-Body $priorNum
-          } elseif ($priorState -eq 'CLOSED') {
-            # Closed but not merged — reopen and refresh rather than duplicate.
-            try {
+          # GitHub only rejects a NEW PR when an OPEN one already exists for the same
+          # head+base; merged/closed do not block a fresh PR. Reuse an open PR, reopen
+          # a closed one, else create — and if creating is blocked, use the issue.
+          $prOk = $false
+          try {
+            if ($priorState -eq 'OPEN') {
+              Write-Host "Refreshing open PR #$priorNum (branch force-pushed)."
+              Sync-Body $priorNum
+            } elseif ($priorState -eq 'CLOSED') {
               gh pr reopen $priorNum
               Write-Host "Reopened previously-closed PR #$priorNum."
               Sync-Body $priorNum
-            } catch {
-              Write-Host "Reopen failed ($($_.Exception.Message)); creating a fresh PR."
+            } else {
               New-Pr
             }
-          } else {
-            # No prior PR, or the last one was MERGED — open a fresh PR.
-            New-Pr
+            $prOk = $true
+          } catch {
+            Write-Host "Could not open/refresh a PR via Actions ($($_.Exception.Message))."
           }
+
+          if (-not $prOk) {
+            Write-Host 'Falling back to a tracking issue with a one-click PR link.'
+            try {
+              Open-TrackingIssue
+            } catch {
+              Write-Host "::warning::Could not open a PR or a tracking issue ($($_.Exception.Message)). The bump is pushed to $env:PR_BRANCH; open it here: $compareUrl"
+            }
+          }
+
           Remove-Item pr-body.md -ErrorAction SilentlyContinue
