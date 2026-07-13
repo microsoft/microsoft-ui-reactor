@@ -27,12 +27,15 @@ updates:
       - "nuget"
     open-pull-requests-limit: 10
     ignore:
-      # Windows App SDK packages are pinned via Directory.Build.props
-      # (WindowsAppSDKVersion / WindowsAppSDKWinUIVersion) and bumped intentionally,
-      # in lockstep across the metapackage and the individually-referenced sub-packages.
+      # Windows App SDK and Win2D are pinned via Directory.Build.props
+      # (WindowsAppSDKVersion / WindowsAppSDKWinUIVersion / Win2DVersion) and bumped
+      # intentionally, in lockstep across the metapackage and the individually-
+      # referenced sub-packages. Kept in sync with the --exclude list in
+      # .github/workflows/windows-nuget-updates.yml.
       - dependency-name: "Microsoft.WindowsAppSDK"
       - dependency-name: "Microsoft.WindowsAppSDK.WinUI"
       - dependency-name: "Microsoft.WindowsAppSDK.Runtime"
+      - dependency-name: "Microsoft.Graphics.Win2D"
 
   - package-ecosystem: "npm"
     directory: "/src/vscode-reactor"
