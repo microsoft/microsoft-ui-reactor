@@ -2,6 +2,19 @@
 
 This runbook describes how to prepare and trigger a public Microsoft.UI.Reactor preview release.
 
+## Quick checklist (happy path)
+
+Releases are **tag-driven**, but pushing a tag only *starts* the pipelines — it does **not** publish to NuGet.org. The two steps people most often miss (the approval gate and the two-person rule) are called out below.
+
+1. **Pre-flight** — pick the next `v0.1.0-preview.N` and confirm the tag, GitHub release, and the four NuGet packages don't already exist (`git tag --list`, `gh release view`, NuGet.org).
+2. **Prep PR (docs only, if needed)** — the template's framework version is auto-stamped at pack time now, so it no longer gates the release; but hardcoded `0.1.0-preview.X` strings in `README.md` / `docs/` don't self-update. Sweep with `rg`, land a PR, merge to `main`.
+3. **Tag `main`** — `git checkout main && git pull`, then `git tag -a v<version> -m "Release <version>"` and `git push origin v<version>`. This starts the GitHub `Package` workflow and the OneBranch official pipeline.
+4. **Publish (gated)** — the tag push does **not** publish to NuGet.org. Approve the OneBranch `Production_PublishNuGet` stage, then verify the packages appear on NuGet.org.
+5. **Two-person rule** — the publish approver **must be a different person than whoever pushed the tag** (a self-approval is rejected by the compliance gate). Line up a second approver *before* you tag.
+6. **Smoke-test** — scaffold from the published template and restore against NuGet.org.
+
+Each step is expanded in the sections below.
+
 ## Internal nightly channel
 
 Reactor also has an internal nightly channel for signed pre-release packages on
@@ -26,15 +39,9 @@ the public NuGet.org approval gate below.
 
 Reactor versions are tag-driven. A tag named `v0.1.0-preview.3` makes MinVer resolve package version `0.1.0-preview.3` for that exact commit. The tag push starts the GitHub packaging workflow and the OneBranch official pipeline; the OneBranch NuGet publish stage is approval-gated.
 
-Prepare release content in a PR before tagging. Do not create the release tag first if templates or docs need to point at the new version; otherwise the release assets are built from a commit that still points at the previous version.
+Prepare release content in a PR before tagging. Do not create the release tag first if docs need to point at the new version; otherwise the release assets are built from a commit whose docs still name the previous version. (The template's framework reference is auto-stamped at pack time, so it no longer needs a pre-tag bump — see [Prepare the release PR](#prepare-the-release-pr).)
 
-Recommended order:
-
-1. Create a release-prep PR that updates docs and template defaults to the new version.
-2. Merge that PR to `main`.
-3. Tag the merged `main` commit.
-4. Push the tag to start the release workflows.
-5. Approve/publish the gated OneBranch NuGet release.
+See the [Quick checklist](#quick-checklist-happy-path) above for the actionable order.
 
 ## Choose the version
 
