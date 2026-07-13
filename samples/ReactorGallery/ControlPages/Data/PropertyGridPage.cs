@@ -22,17 +22,17 @@ class PropertyGridPage : Component
 
         double _opacity = 1.0;
         [PropertyCategory("Appearance")]
-        public double Opacity { get => _opacity; set { if (_opacity != value) { _opacity = value; Raise(nameof(Opacity)); } } }
+        public double Opacity { get => _opacity; set { if (Math.Abs(_opacity - value) > 1e-9) { _opacity = value; Raise(nameof(Opacity)); } } }
 
         double _x;
         [PropertyCategory("Transform")]
         [PropertyDisplayName("X Position")]
-        public double X { get => _x; set { if (_x != value) { _x = value; Raise(nameof(X)); } } }
+        public double X { get => _x; set { if (Math.Abs(_x - value) > 1e-9) { _x = value; Raise(nameof(X)); } } }
 
         double _y;
         [PropertyCategory("Transform")]
         [PropertyDisplayName("Y Position")]
-        public double Y { get => _y; set { if (_y != value) { _y = value; Raise(nameof(Y)); } } }
+        public double Y { get => _y; set { if (Math.Abs(_y - value) > 1e-9) { _y = value; Raise(nameof(Y)); } } }
 
         [PropertyReadOnly]
         [PropertyCategory("Info")]
