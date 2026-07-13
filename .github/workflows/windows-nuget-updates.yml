@@ -230,6 +230,14 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git checkout -B $env:PR_BRANCH
           git add Directory.Packages.props
+          # The default branch can advance between the detect and publish jobs (e.g.
+          # another run or a maintainer lands the same bump). If it now already carries
+          # this change there is nothing staged — no-op cleanly rather than letting
+          # `git commit` fail the run under the native-command error preference.
+          if ([string]::IsNullOrWhiteSpace((git diff --cached --name-only))) {
+            Write-Host 'Directory.Packages.props already matches the default branch — nothing to publish.'
+            exit 0
+          }
           git commit -m 'deps: bump NuGet packages missed by (Linux) Dependabot'
           git push --force origin $env:PR_BRANCH
 

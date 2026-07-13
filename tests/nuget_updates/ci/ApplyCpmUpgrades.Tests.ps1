@@ -106,6 +106,7 @@ try {
         '    <PackageVersion Include="YamlDotNet" Version="18.0.0" />'
         '    <PackageVersion Include="MessagePack" Version="2.5.301" />'
         '    <PackageVersion Include="Microsoft.Data.Sqlite" Version="11.0.0-preview.5.26302.115" />'
+        '    <PackageVersion Include="Newtonsoft.Json" Version="13.0.3" />'
         '  </ItemGroup>'
         ''
         '</Project>'
@@ -122,7 +123,8 @@ try {
       { "Name": "YamlDotNet",                "ResolvedVersion": "18.0.0",                      "LatestVersion": "18.1.0" },
       { "Name": "MessagePack",               "ResolvedVersion": "2.5.301",                     "LatestVersion": "3.1.8" },
       { "Name": "Microsoft.Graphics.Win2D",  "ResolvedVersion": "1.4.0",                       "LatestVersion": "1.5.0" },
-      { "Name": "Microsoft.Data.Sqlite",     "ResolvedVersion": "11.0.0-preview.5.26302.115",  "LatestVersion": "11.0.0-preview.5.26302.115" }
+      { "Name": "Microsoft.Data.Sqlite",     "ResolvedVersion": "11.0.0-preview.5.26302.115",  "LatestVersion": "11.0.0-preview.5.26302.115" },
+      { "Name": "Newtonsoft.Json",           "ResolvedVersion": "13.0.3",                      "LatestVersion": "13.0.1" }
   ] } ] },
   { "Name": "B", "TargetFrameworks": [ { "Name": "net10.0", "Dependencies": [
       { "Name": "Microsoft.Data.Sqlite",     "ResolvedVersion": "11.0.0-preview.5.26302.115",  "LatestVersion": "11.0.0-preview.6.26302.115" }
@@ -144,6 +146,9 @@ try {
     # Ignore list + property-pin backstop leave these untouched.
     Assert-Match $after '<PackageVersion Include="MessagePack" Version="2.5.301" />' 'MessagePack ignored (unchanged)'
     Assert-Match $after '<PackageVersion Include="Microsoft.Graphics.Win2D" Version="$(Win2DVersion)" />' 'Win2D property pin skipped'
+    # Downgrade guard: report's LatestVersion (13.0.1) is LOWER than the pin (13.0.3) — leave it.
+    Assert-Match $after '<PackageVersion Include="Newtonsoft.Json" Version="13.0.3" />' 'downgrade guard: higher pin left untouched'
+    Assert-NotMatch $after '13.0.1' 'downgrade target 13.0.1 never written'
     Assert-NotMatch $after '1.5.0' 'Win2D literal 1.5.0 never written'
     Assert-NotMatch $after '3.1.8' 'MessagePack 3.1.8 never written'
 

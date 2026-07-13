@@ -116,7 +116,9 @@ foreach ($name in ($wanted.Keys | Sort-Object)) {
     $current = $verMatch.Groups[1].Value
 
     if ($current -like '*$(*') { [void]$skippedProperty.Add("$name ($current)"); continue }
-    if ($current -eq $to) { continue }
+    # Only apply strict upgrades — never rewrite to an equal or lower version, so a
+    # stale/lower LatestVersion in the report can never downgrade a pin.
+    if (-not (Test-NuGetVersionGreater $to $current)) { continue }
 
     $newTag = $tag -replace 'Version="[^"]*"', "Version=`"$to`""
     $content = $content.Substring(0, $m.Index) + $newTag + $content.Substring($m.Index + $m.Length)
