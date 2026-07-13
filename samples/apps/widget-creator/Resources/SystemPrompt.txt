@@ -152,7 +152,7 @@ static class WidgetSelfTest
 - Text: `Heading("..")`, `SubHeading("..")`, `Caption("..")`, `TextBlock("..")`.
 - Controls: `Button("label", () => ...)`, `TextBox(value, setValue, placeholderText: "..")`,
   `ToggleSwitch(isOn, setIsOn)`, `Slider(value, setValue)`,
-  `CheckBox(isChecked, setChecked)`, `ProgressRing().IsActive()`, `ProgressBar()`.
+  `CheckBox(isChecked, setChecked)`, `ProgressRing().IsActive()`, `ProgressIndeterminate()`.
 - Lists: `ListView(items, keySelector: x => x, viewBuilder: (x, i) => TextBlock(x))`.
 - Crash reporting: `CrashReporter.Install();` plus
   `ErrorBoundary(Component<WidgetBody>(), CrashReporter.ReportAndExit)`.
