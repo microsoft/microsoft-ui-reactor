@@ -46,7 +46,7 @@
          YamlStaticContext for the CLI's doc-pipeline YAML DTOs. Analyzer-only
          (PrivateAssets=all) — never shipped in the `mur` tool output. Version tracks
          YamlDotNet's major (18.x). -->
-    <PackageVersion Include="Vecc.YamlDotNet.Analyzers.StaticGenerator" Version="18.0.0" />
+    <PackageVersion Include="Vecc.YamlDotNet.Analyzers.StaticGenerator" Version="18.1.0" />
     <PackageVersion Include="GitHub.Copilot.SDK" Version="1.0.1" />
     <PackageVersion Include="MessagePack" Version="2.5.301" />
   </ItemGroup>
