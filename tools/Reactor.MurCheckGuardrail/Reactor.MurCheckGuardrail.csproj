@@ -13,6 +13,47 @@
          lets us read the internal table directly. -->
   </PropertyGroup>
 
+  <!-- NativeAOT proof, opt-in (see README.md; issue #70). The tool itself is
+       already AOT-clean: it only calls the pure PolicyTable.Score plus
+       System.Text.Json's JsonDocument (no JsonSerializer<T>, no reflection, no
+       regex). Everything else the Reactor.Cli ProjectReference drags in — Roslyn
+       (Microsoft.CodeAnalysis.CSharp), YamlDotNet, System.Drawing, the Copilot
+       SDK — is unreachable from this entry point, so the trimmer drops it: ILC
+       emits zero warnings, no TrimmerRootAssembly is needed, and the native
+       exe's stdout/stderr/exit codes are byte-identical to the JIT build.
+
+       PublishAot is set HERE (per-project) instead of via a global
+       -p:PublishAot=true so it can never leak across the ProjectReference graph
+       into a netstandard2.0 analyzer/generator and trip NETSDK1207. The gate is
+       off by default, so the ordinary framework-dependent build (and the
+       whole-solution `dotnet build Reactor.slnx`) are unchanged. Flip it on for
+       the native publish:
+
+         dotnet publish tools/Reactor.MurCheckGuardrail -r win-x64 -c Release -p:ReactorGuardrailAot=true
+  -->
+  <PropertyGroup Condition="'$(ReactorGuardrailAot)' == 'true'">
+    <PublishAot>true</PublishAot>
+    <!-- The ProjectReference is to Reactor.Cli, which is itself a
+         framework-dependent Exe (the `mur` global tool). A self-contained /
+         AOT exe normally rejects a non-self-contained executable reference
+         (NETSDK1150) — but we only consume the managed PolicyTable *type* from
+         it, never its apphost, and ILC reads mur.dll's IL directly. Disabling
+         the check lets the native publish proceed; the reference stays purely a
+         compile/trim input. (Setting PublishAot per-project instead of globally
+         means the RID/self-contained flags do not flow into Reactor.Cli, so we
+         opt out of the validation here rather than force the whole CLI
+         self-contained.)
+
+         Note: no IlcTreatWarningsAsErrors=false is needed. Unlike the sibling
+         Reactor.SearchIndex tool — which parses gallery source with Roslyn at
+         runtime, so Microsoft.CodeAnalysis stays reachable, trips IL3000, and
+         must downgrade the warning — this tool calls only the pure
+         PolicyTable.Score, so the whole Roslyn / YamlDotNet / System.Drawing
+         closure is trimmed and ILC is warning-clean even with Release's
+         TreatWarningsAsErrors. -->
+    <ValidateExecutableReferencesMatchSelfContained>false</ValidateExecutableReferencesMatchSelfContained>
+  </PropertyGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="Reactor.Tests" />
   </ItemGroup>
