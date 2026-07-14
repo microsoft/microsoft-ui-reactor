@@ -36,17 +36,10 @@ public sealed record IntegrityResult(bool Ok, bool Present, string Reason);
 /// unsophisticated tampering and corruption; strong prevention needs a
 /// higher-integrity signer outside this sample's scope.</para>
 /// </summary>
-public sealed class ArtifactIntegrity
+public sealed partial class ArtifactIntegrity
 {
     const string SidecarName = "integrity.json";
     const int CurrentVersion = 1;
-
-    static readonly JsonSerializerOptions JsonOpts = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
 
     readonly string _keyPath;
     readonly Lazy<byte[]> _key;
@@ -72,7 +65,7 @@ public sealed class ArtifactIntegrity
         try
         {
             var record = Compute(app);
-            var json = JsonSerializer.Serialize(record, JsonOpts);
+            var json = JsonSerializer.Serialize(record, IntegrityJsonContext.Default.Record);
             var path = SidecarPath(app);
             var tmp = $"{path}.{Guid.NewGuid():N}.tmp";
             await File.WriteAllTextAsync(tmp, json).ConfigureAwait(false);
@@ -99,7 +92,7 @@ public sealed class ArtifactIntegrity
             return new IntegrityResult(Ok: true, Present: false, "no integrity record (unprotected)");
         try
         {
-            var stored = JsonSerializer.Deserialize<Record>(File.ReadAllText(path), JsonOpts);
+            var stored = JsonSerializer.Deserialize(File.ReadAllText(path), IntegrityJsonContext.Default.Record);
             if (stored is null)
                 return new IntegrityResult(false, true, "integrity record is empty or invalid");
 
@@ -214,6 +207,18 @@ public sealed class ArtifactIntegrity
         string ExeSha256,
         string ExePath,
         string Mac);
+
+    // AOT/trim-safe JSON: source-generated metadata for the integrity sidecar
+    // (System.Text.Json reflection serialization is IL2026/IL3050). Nested so it
+    // can see the private Record; options mirror the former JsonOpts exactly.
+    [JsonSourceGenerationOptions(
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonSerializable(typeof(Record))]
+    sealed partial class IntegrityJsonContext : JsonSerializerContext
+    {
+    }
 
     /// <summary>Managed DPAPI (per-user) wrapper via <see cref="ProtectedData"/>.</summary>
     static class Dpapi

@@ -183,7 +183,7 @@ public static class MxcPolicy
         var existing = caps.Any(n => string.Equals((string?)n, InternetCapability, StringComparison.OrdinalIgnoreCase));
         if (access == NetworkAccess.Internet)
         {
-            if (!existing) caps.Add(JsonValue.Create(InternetCapability));
+            if (!existing) caps.Add((JsonNode?)JsonValue.Create(InternetCapability));
             net["defaultPolicy"] = "allow";
             net["enforcementMode"] ??= "capabilities";
         }
@@ -205,7 +205,7 @@ public static class MxcPolicy
             return;
         }
         var arr = new JsonArray();
-        foreach (var p in paths) arr.Add(JsonValue.Create(p));
+        foreach (var p in paths) arr.Add((JsonNode?)JsonValue.Create(p));
         fs[kind] = arr;
     });
 
@@ -223,7 +223,7 @@ public static class MxcPolicy
             PathAccess.Denied => DeniedKind,
             _ => ReadOnlyKind,
         };
-        Arr(Obj(o, "filesystem"), kind).Add(JsonValue.Create(path.Trim()));
+        Arr(Obj(o, "filesystem"), kind).Add((JsonNode?)JsonValue.Create(path.Trim()));
         PruneFilesystem(o);
     });
 

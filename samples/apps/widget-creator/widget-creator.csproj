@@ -13,14 +13,54 @@
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
-    <!-- This is a rich integration DEMO, not an AOT-published app: it shells out to
-         vendored native MXC sandbox binaries (tools/mxc/<rid>/*.exe), rides the
-         Copilot SDK, and runs a dynamic JSON policy/artifact engine (reflection-based
-         System.Text.Json by design). It is never NativeAOT-published, so it opts out
-         of the IL2*/IL3* trim/AOT analysis (and its warnings-as-errors promotion) that
-         the repo enforces on genuinely AOT-relevant projects. See Directory.Build.targets. -->
-    <ReactorSkipAotAnalysis>true</ReactorSkipAotAnalysis>
+
+    <!-- AOT: this sample IS trim/AOT-analyzed (no ReactorSkipAotAnalysis opt-out).
+         Directory.Build.targets turns on IsAotCompatible=true + promotes the IL2*/IL3*
+         trim/AOT warnings to errors for net10+, so any un-annotated reflection is caught
+         at build time. The two reflection-based System.Text.Json sites (the widget
+         library index + the artifact-integrity sidecar) use System.Text.Json source
+         generation (IntegrityJsonContext + LibraryJsonContext); the rest of the JSON
+         handling is the JsonNode DOM (policy engine), which is already AOT-safe.
+
+         A REAL NativeAOT publish is available behind an opt-in property so the normal
+         framework-dependent build/publish (which the vendored MXC binaries + Copilot SDK
+         demo path rely on) stays unchanged:
+             dotnet publish samples/apps/widget-creator/widget-creator.csproj `
+               -c Release -p:Platform=x64 -r win-x64 -p:PublishAotInternal=true `
+               -p:IlcTreatWarningsAsErrors=false
+         (PublishAotInternal is the repo-canonical AOT opt-in gate — the same property the
+         other AOT samples/hosts use — kept opt-in so an ordinary `dotnet build` / `dotnet
+         run` doesn't pay the AOT compile cost. IlcTreatWarningsAsErrors=false only relaxes
+         ILC warnings from third-party dependencies we don't own — the Copilot SDK /
+         WindowsAppSDK — not this project's own code, which stays analyzed-as-errors at
+         build time.) -->
   </PropertyGroup>
+
+  <!-- Opt-in NativeAOT publish, gated on the repo-canonical PublishAotInternal property.
+       Kept INSIDE the csproj (not a global -p:PublishAot=true) so PublishAot never flows
+       into the netstandard2.0 analyzer/generator projects Reactor references (which would
+       fail with NETSDK1207), and opt-in so the normal framework-dependent build/publish
+       stays unchanged. Mirrors samples/apps/hello-world-aot and command-palette-window. -->
+  <PropertyGroup Condition="'$(PublishAotInternal)' == 'true'">
+    <PublishAot>true</PublishAot>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+  </PropertyGroup>
+
+  <!-- WinUI keeps its compiled XAML (*.xbf) + resource index (*.pri) next to the
+       managed output; a NativeAOT publish must carry them into the publish dir or
+       the app fails to resolve XamlControlsResources at startup. Mirrors the same
+       target in samples/apps/hello-world-aot. -->
+  <Target Name="_CopyWinUIResourcesForAot" AfterTargets="Publish"
+          Condition="'$(PublishAot)' == 'true' and '$(AppxPackage)' != 'true'">
+    <ItemGroup>
+      <_WinUIResourcesForAot Include="$(OutputPath)**\*.xbf" />
+      <_WinUIResourcesForAot Include="$(OutputPath)$(AssemblyName).pri" Condition="Exists('$(OutputPath)$(AssemblyName).pri')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_WinUIResourcesForAot)"
+          DestinationFiles="@(_WinUIResourcesForAot->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
 
   <ItemGroup>
     <!-- Generation engine: rides the user's logged-in Copilot subscription via

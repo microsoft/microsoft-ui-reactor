@@ -252,7 +252,7 @@ public sealed class MxcSandbox
             fs["readonlyPaths"] = readonlyPaths;
         }
         if (!readonlyPaths.Any(n => string.Equals((string?)n, appDir, StringComparison.OrdinalIgnoreCase)))
-            readonlyPaths.Add(JsonValue.Create(appDir));
+            readonlyPaths.Add((JsonNode?)JsonValue.Create(appDir));
 
         return config.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
     }

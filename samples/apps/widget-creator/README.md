@@ -75,6 +75,41 @@ sandboxed — close it to finish the run. If it crashes instead, the creator kee
 watching the sandbox process, restores the widget's saved Copilot session, and
 asks the agent to repair the app from the crash details.
 
+## Publish as a native app (NativeAOT)
+
+Widget Creator is trim/AOT-clean and can be published as a **native** executable
+(no managed `WidgetCreator.dll`, no JIT). This is behind an opt-in property so the
+normal `dotnet run` / framework-dependent publish above stays unchanged:
+
+```pwsh
+dotnet publish samples/apps/widget-creator/widget-creator.csproj `
+  -c Release -p:Platform=x64 -r win-x64 `
+  -p:PublishAotInternal=true -p:IlcTreatWarningsAsErrors=false
+```
+
+- `-r win-x64` (or `-r win-arm64`) is required for a NativeAOT publish; match it to
+  `-p:Platform`.
+- `PublishAotInternal=true` is the repo-canonical AOT opt-in gate (the same property
+  the other AOT samples/hosts use); it flips `PublishAot` on only for this publish.
+- `-p:IlcTreatWarningsAsErrors=false` only relaxes ILC trim/AOT warnings from
+  third-party dependencies we don't own (the Copilot SDK / Windows App SDK). This
+  project's **own** code stays analyzed-as-errors at build time — the repo's
+  IL2\*/IL3\* analyzer is on for this sample (it no longer sets
+  `ReactorSkipAotAnalysis`), so the two `System.Text.Json` sidecars use source
+  generation rather than reflection.
+- `vswhere.exe` must be on `PATH` for the native link step; if it isn't, prepend
+  `C:\Program Files (x86)\Microsoft Visual Studio\Installer` to `PATH`.
+
+The published `WidgetCreator.exe` lands under
+`bin\x64\Release\net10.0-windows10.0.22621.0\win-x64\publish\`.
+
+> **Validated scope.** The native build has been verified to publish and to launch
+> the Widget Creator window, and its source-generated `meta.json` loader runs in
+> the native image. The end-to-end generate → build → MXC-sandbox workflow still
+> shells out to the bundled Copilot CLI and the vendored `wxc-exec` binaries exactly
+> as the framework-dependent build does; those child processes are unaffected by AOT
+> and the native publish does not itself re-exercise that full pipeline.
+
 ## How the sandbox policy works
 
 The app emits an MXC `ContainerConfig` (schema `0.6.0-alpha`, `processcontainer`
