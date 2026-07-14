@@ -76,7 +76,7 @@ public class VersionSubstitutionTests
         var fromReader = VersionSource.ReadPublicVersion(repoRoot);
 
         var raw = global::System.IO.File.ReadAllText(
-            global::System.IO.Path.Combine(repoRoot, "Directory.Build.props"));
+            global::System.IO.Path.Join(repoRoot, "Directory.Build.props"));
         var expected = global::System.Text.RegularExpressions.Regex
             .Match(raw, @"<ReactorPublicVersion>\s*([^<]+?)\s*</ReactorPublicVersion>")
             .Groups[1].Value.Trim();
@@ -119,7 +119,7 @@ public class VersionSubstitutionTests
     [Fact]
     public void ReadPublicVersion_missing_file_throws_with_code()
     {
-        var emptyDir = global::System.IO.Path.Combine(
+        var emptyDir = global::System.IO.Path.Join(
             global::System.IO.Path.GetTempPath(), "reactor-versionsource-" + global::System.Guid.NewGuid().ToString("N"));
         global::System.IO.Directory.CreateDirectory(emptyDir);
         try
@@ -138,7 +138,7 @@ public class VersionSubstitutionTests
         var dir = new global::System.IO.DirectoryInfo(global::System.AppContext.BaseDirectory);
         while (dir is not null)
         {
-            if (global::System.IO.File.Exists(global::System.IO.Path.Combine(dir.FullName, "Reactor.slnx")))
+            if (global::System.IO.File.Exists(global::System.IO.Path.Join(dir.FullName, "Reactor.slnx")))
                 return dir.FullName;
             dir = dir.Parent;
         }

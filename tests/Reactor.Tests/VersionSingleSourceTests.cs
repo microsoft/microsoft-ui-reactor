@@ -37,16 +37,17 @@ public sealed class VersionSingleSourceTests
     public void No_raw_version_literal_in_guide_templates()
     {
         var repoRoot = FindRepoRoot();
-        var templatesDir = Path.Combine(repoRoot, "docs", "_pipeline", "templates");
+        var templatesDir = Path.Join(repoRoot, "docs", "_pipeline", "templates");
         Assert.True(Directory.Exists(templatesDir), $"Expected '{templatesDir}' to exist.");
 
-        var offenders = new List<string>();
-        foreach (var file in Directory.EnumerateFiles(templatesDir, "*.md.dt", SearchOption.AllDirectories))
-        {
-            // _skeletons/ are authoring scaffolds, not compiled — different token scheme.
-            if (file.Replace('\\', '/').Contains("/_skeletons/", global::System.StringComparison.Ordinal))
-                continue;
+        // _skeletons/ are authoring scaffolds, not compiled — different token scheme.
+        var templateFiles = Directory
+            .EnumerateFiles(templatesDir, "*.md.dt", SearchOption.AllDirectories)
+            .Where(f => !f.Replace('\\', '/').Contains("/_skeletons/", global::System.StringComparison.Ordinal));
 
+        var offenders = new List<string>();
+        foreach (var file in templateFiles)
+        {
             var lines = File.ReadAllLines(file);
             for (int i = 0; i < lines.Length; i++)
             {
@@ -80,9 +81,10 @@ public sealed class VersionSingleSourceTests
         // Positive counterpart to the negative guards: proves the token wiring
         // is actually in place (not that the literals were merely deleted).
         var repoRoot = FindRepoRoot();
+        var templatesDir = Path.Join(repoRoot, "docs", "_pipeline", "templates");
         foreach (var rel in new[] { "getting-started.md.dt", "packaging.md.dt" })
         {
-            var path = Path.Combine(repoRoot, "docs", "_pipeline", "templates", rel);
+            var path = Path.Join(templatesDir, rel);
             var text = File.ReadAllText(path);
             Assert.True(
                 text.Contains(VersionToken, global::System.StringComparison.Ordinal),
@@ -109,7 +111,7 @@ public sealed class VersionSingleSourceTests
         // The templates csproj's MicrosoftUIReactorVersion fallback default must
         // derive from $(ReactorPublicVersion), NOT carry its own literal — that
         // is what collapses the repo to ONE framework-version literal.
-        var (path, text) = ReadRepoFile(Path.Combine(
+        var (path, text) = ReadRepoFile(Path.Join(
             "tools", "Templates", "Microsoft.UI.Reactor.Templates.csproj"));
 
         Assert.Matches(
@@ -129,7 +131,7 @@ public sealed class VersionSingleSourceTests
     [Fact]
     public void CiWorkflow_gates_docs_version_freshness()
     {
-        var (path, text) = ReadRepoFile(Path.Combine(".github", "workflows", "ci.yml"));
+        var (path, text) = ReadRepoFile(Path.Join(".github", "workflows", "ci.yml"));
         var step = ExtractYamlStep(text, "Verify docs version substitution is committed");
         Assert.False(step is null,
             $"'{path}' has no docs version freshness step — the gate that fails a PR which bumps " +
@@ -144,7 +146,7 @@ public sealed class VersionSingleSourceTests
     [Fact]
     public void ReleaseWorkflow_guards_tag_matches_ReactorPublicVersion()
     {
-        var (path, text) = ReadRepoFile(Path.Combine(".github", "workflows", "release.yml"));
+        var (path, text) = ReadRepoFile(Path.Join(".github", "workflows", "release.yml"));
         var step = ExtractYamlStep(text, "Verify docs version matches release tag");
         Assert.False(step is null,
             $"'{path}' has no tag-vs-ReactorPublicVersion guard — the check that a release tag can't diverge " +
@@ -186,7 +188,7 @@ public sealed class VersionSingleSourceTests
 
     static (string path, string text) ReadRepoFile(string repoRelativePath)
     {
-        var path = Path.Combine(FindRepoRoot(), repoRelativePath);
+        var path = Path.Join(FindRepoRoot(), repoRelativePath);
         Assert.True(File.Exists(path), $"Expected '{path}' to exist; file moved or removed?");
         return (path, File.ReadAllText(path));
     }
@@ -194,7 +196,7 @@ public sealed class VersionSingleSourceTests
     static string FindRepoRoot()
     {
         var dir = AppContext.BaseDirectory;
-        while (dir != null && !File.Exists(Path.Combine(dir, "Reactor.slnx")))
+        while (dir != null && !File.Exists(Path.Join(dir, "Reactor.slnx")))
         {
             dir = Path.GetDirectoryName(dir);
         }

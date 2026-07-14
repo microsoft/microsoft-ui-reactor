@@ -31,7 +31,7 @@ internal static partial class VersionSource
     /// </summary>
     public static string ReadPublicVersion(string repoRoot)
     {
-        var propsPath = Path.Combine(repoRoot, PropsFileName);
+        var propsPath = Path.Join(repoRoot, PropsFileName);
         if (!File.Exists(propsPath))
         {
             throw new DocPipelineException(
