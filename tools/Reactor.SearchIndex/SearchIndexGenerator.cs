@@ -135,17 +135,12 @@ public static partial class SearchIndexGenerator
     // Serialize through the System.Text.Json source generator (SearchIndexJsonContext) so the
     // tool is trim / NativeAOT-safe. The context bakes camelCase / WhenWritingNull / WriteIndented;
     // the encoder (UnsafeRelaxedJsonEscaping — keeps C# markup like => < > & "" readable) can't be
-    // set via the attribute, so it is layered on via a copied-options JsonTypeInfo.
-    static readonly JsonTypeInfo<IndexRoot> IndexRootTypeInfo = CreateIndexRootTypeInfo();
-
-    static JsonTypeInfo<IndexRoot> CreateIndexRootTypeInfo()
-    {
-        var options = new JsonSerializerOptions(SearchIndexJsonContext.Default.Options)
+    // set via the attribute, so it is layered on by building the context from copied options.
+    static readonly JsonTypeInfo<IndexRoot> IndexRootTypeInfo =
+        new SearchIndexJsonContext(new JsonSerializerOptions(SearchIndexJsonContext.Default.Options)
         {
             Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-        };
-        return (JsonTypeInfo<IndexRoot>)options.GetTypeInfo(typeof(IndexRoot));
-    }
+        }).IndexRoot;
 
     static string Serialize(IndexRoot root)
     {

@@ -11,14 +11,15 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <!-- Trim / NativeAOT-clean: JSON goes through the System.Text.Json source generator and
-         regexes through [GeneratedRegex], so the IL2*/IL3* analyzer (enabled here) runs clean
-         over our code. A native single-file build works too:
+         regexes through [GeneratedRegex], so this tool no longer opts out of AOT analysis.
+         Removing ReactorSkipAotAnalysis lets Directory.Build.targets turn on IsAotCompatible
+         (and promote IL2*/IL3* to errors) for net10+, so the analyzer runs clean over our code.
+         A native single-file build works too:
              dotnet publish -r <rid> -c Release -p:PublishAot=true -p:IlcTreatWarningsAsErrors=false
          yields a ~12 MB native generator that emits a byte-identical index. The ILC-warning
          downgrade is required only because the Roslyn dependency has trim-unsafe spots
          (e.g. CommonCompiler.GetAssemblyLocation → Assembly.Location, IL3000) that are
          unreachable at runtime for our syntax-only parsing. -->
-    <IsAotCompatible>true</IsAotCompatible>
     <IsPackable>false</IsPackable>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
