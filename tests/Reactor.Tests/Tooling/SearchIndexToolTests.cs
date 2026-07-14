@@ -218,7 +218,7 @@ public sealed class SearchIndexCliTests
         using var g = new MiniGallery(betaRouted: true);
         var ed = g.WriteEditorial(ValidEditorial);
         var outPath = Path.Join(g.Root, "out.json");
-        var log = new StringWriter();
+        using var log = new StringWriter();
 
         // --check before the file exists → stale (1).
         Assert.Equal(1, SearchIndexCli.Run(new[] { "--check", g.GalleryDir, ed, outPath }, log));
@@ -235,7 +235,7 @@ public sealed class SearchIndexCliTests
     [Fact]
     public void Run_UnknownOption_ReturnsUsageError()
     {
-        var log = new StringWriter();
+        using var log = new StringWriter();
         Assert.Equal(2, SearchIndexCli.Run(new[] { "--chek" }, log));
         Assert.Contains("unknown option", log.ToString());
     }
@@ -243,7 +243,7 @@ public sealed class SearchIndexCliTests
     [Fact]
     public void Run_TooManyPositionalArgs_ReturnsUsageError()
     {
-        var log = new StringWriter();
+        using var log = new StringWriter();
         Assert.Equal(2, SearchIndexCli.Run(new[] { "a", "b", "c", "d" }, log));
         Assert.Contains("too many arguments", log.ToString());
     }
@@ -255,7 +255,7 @@ public sealed class SearchIndexCliTests
         // orphan editorial key "ghost" → InvalidOperationException → caught → exit 2.
         var ed = g.WriteEditorial(
             @"{ ""alpha"": { ""keywords"": [""a"",""b"",""c""] }, ""beta"": { ""keywords"": [""x"",""y"",""z""] }, ""ghost"": { ""keywords"": [""p"",""q"",""r""] } }");
-        var log = new StringWriter();
+        using var log = new StringWriter();
 
         Assert.Equal(2, SearchIndexCli.Run(new[] { g.GalleryDir, ed, Path.Join(g.Root, "out.json") }, log));
         Assert.Contains("ERROR", log.ToString());

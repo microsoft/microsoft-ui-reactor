@@ -32,14 +32,15 @@ public static class SearchIndexGenerator
     /// <summary>
     /// Produces the deterministic index text (and diagnostics) from the gallery source
     /// directory (the folder holding ControlRegistry.cs / PageRouter.cs / ControlPages)
-    /// and an optional editorial sidecar JSON. A missing/blank editorial path is treated
-    /// as an empty sidecar (all defaults, no keywords).
+    /// and the editorial sidecar JSON. A missing/blank editorial path is treated as an empty
+    /// sidecar, which then fails generation because every included control requires curated
+    /// keywords — a full run needs a real editorial.json.
     /// </summary>
     public static SearchIndexResult Generate(string galleryDir, string? editorialPath)
     {
-        var registry = ParseRegistry(Path.Combine(galleryDir, "ControlRegistry.cs"));
-        var routes = ParseRouter(Path.Combine(galleryDir, "PageRouter.cs"));
-        var samplesByClass = ParseSamples(Path.Combine(galleryDir, "ControlPages"));
+        var registry = ParseRegistry(Path.Join(galleryDir, "ControlRegistry.cs"));
+        var routes = ParseRouter(Path.Join(galleryDir, "PageRouter.cs"));
+        var samplesByClass = ParseSamples(Path.Join(galleryDir, "ControlPages"));
         var editorial = LoadEditorial(editorialPath);
 
         var registryIds = new HashSet<string>(registry.Select(r => r.Id), StringComparer.Ordinal);
