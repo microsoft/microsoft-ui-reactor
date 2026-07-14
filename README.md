@@ -119,7 +119,7 @@ Reactor spans a core framework and a set of higher-level features. Each area bel
 | **Charting (D3)** | Full D3 algorithm port plus declarative chart DSL — line, bar, area, pie, tree, force-directed graphs | Preview |
 | **Markdown** | Native md4c parser with `Markdown()` element builder | Preview |
 | **Navigation** | Type-safe declarative routing, GPU composition transitions, lifecycle guards, back-stack serialization | Draft |
-| **Accessibility** | `AutomationProperties` modifiers (name, heading level, landmarks, live regions), WCAG 2.1 AA target, compile- and runtime-validation | Draft |
+| **Accessibility** | `AutomationProperties` modifiers (e.g. name, heading level, landmarks, live regions), WCAG 2.1 AA target, compile- and runtime-validation | Draft |
 | **Animation** | Compositor-layer transitions, keyframes, stagger, scroll-linked and connected animations | Draft |
 | **Theming & styling** | `ThemeRef` tokens, dark / light / high-contrast, style caching, per-control overrides | Draft |
 | **Lists & virtualization** | Virtualized `ListView`, `GridView`, `ItemsRepeater`, `LazyStack` with recycling | Draft |
