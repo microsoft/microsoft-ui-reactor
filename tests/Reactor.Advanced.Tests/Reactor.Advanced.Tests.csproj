@@ -7,8 +7,25 @@
     <RootNamespace>Microsoft.UI.Reactor.Advanced.Tests</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <!-- Test project — never trimmed/AOT-published; reflection is intentional. -->
-    <ReactorSkipAotAnalysis>true</ReactorSkipAotAnalysis>
+    <!-- AOT-honest (issue #70, wave 2). The IL2*/IL3* analyzer runs on this test project:
+         Directory.Build.targets sets IsAotCompatible=true for net10+ (no ReactorSkipAotAnalysis
+         opt-out) and promotes the curated IL2*/IL3* codes to build errors. The few intentional
+         test-only reflection sites are annotated at the source with justified
+         [UnconditionalSuppressMessage] (or a precise [DynamicallyAccessedMembers] on a *test*
+         parameter) — never a #pragma (ILC ignores those) and never a broad
+         [DynamicallyAccessedMembers] on a product type (that narrows trimmer preservation and
+         regressed ~20 selftests, per issue #70's PR #850 note).
+
+         Analyzer-on is the deliverable. A NativeAOT test *run* was investigated and is NOT
+         feasible here: `dotnet publish -r win-x64 -p:PublishAot=true` reaches ILC "Generating
+         native code" and then fails inside the xunit.v3 3.2.2 runner itself —
+         XunitTestRunnerBase.CreateTestClassInstance (Type.MakeGenericType) and
+         AsyncUtility.TryConvertToValueTask (MethodInfo.MakeGenericMethod) are IL3050
+         RequiresDynamicCode, plus IL2075/IL2070 reflection over test classes. Those are
+         framework internals, unfixable from this project, and forcing a link by muting them
+         would hide real dynamic-code breaks. So this project stays analyzer-on and JIT-run
+         (`dotnet test`); it is intentionally not NativeAOT-published. See the PR body / issue
+         #70 for the full MTP-AOT evidence. -->
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
     <!-- xUnit host loads WinUI types in-process; bundle the runtime so the

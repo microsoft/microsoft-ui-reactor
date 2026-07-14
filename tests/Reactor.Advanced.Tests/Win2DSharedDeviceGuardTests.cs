@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using Microsoft.UI.Reactor.Advanced.Win2D;
 using Xunit;
@@ -11,6 +12,10 @@ namespace Microsoft.UI.Reactor.Advanced.Tests;
 /// </summary>
 public sealed class Win2DSharedDeviceGuardTests
 {
+    [UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification = "Test-only: resolves the internal Win2DSharedDeviceGuard by name from the Reactor.Advanced assembly to exercise its mount-time invariant. The type is kept alive by the canvas handlers that call it; the trimmer can't carry that through Assembly.GetType's string lookup. Reactor.Advanced.Tests is a headless xUnit runner, not NativeAOT-published.")]
+    [UnconditionalSuppressMessage("Trimming", "IL2075",
+        Justification = "Same site: Assembly.GetType returns a Type without member annotations, so the follow-on GetMethod for the public static EnsureUseSharedDeviceUnchanged is flagged. The method is a public API of a type kept by its handler callers; test-only reflection, not NativeAOT-published.")]
     private static MethodInfo GuardMethod()
     {
         var type = typeof(Win2DCanvasElement).Assembly
