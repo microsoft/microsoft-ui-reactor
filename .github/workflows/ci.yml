@@ -70,7 +70,7 @@ jobs:
           else
             echo "docs-templates=false" >> "$GITHUB_OUTPUT"
           fi
-          if echo "$files" | grep -qE '^(src/Reactor/Hosting/|src/Reactor\.Devtools/|tools/Reactor\.MstatVerifier/|samples/apps/hello-world-aot/|samples/apps/hello-world-aot-devtools-on/)'; then
+          if echo "$files" | grep -qE '^(src/Reactor/Hosting/|src/Reactor\.Devtools/|tools/Reactor\.MstatVerifier/|tools/Reactor\.DevtoolsNegativeResolutionFixture/|samples/apps/hello-world-aot/|samples/apps/hello-world-aot-devtools-on/)'; then
             echo "devtools-trim=true" >> "$GITHUB_OUTPUT"
           else
             echo "devtools-trim=false" >> "$GITHUB_OUTPUT"
