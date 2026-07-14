@@ -377,6 +377,9 @@ public static class SearchIndexGenerator
         var result = new List<string>();
         foreach (var k in raw)
         {
+            // A hand-edited editorial.json can contain a null or blank keyword
+            // ("keywords": ["a", null]); treat those as empty and skip rather than NRE on Trim.
+            if (string.IsNullOrWhiteSpace(k)) continue;
             var norm = System.Text.RegularExpressions.Regex.Replace(k.Trim().ToLowerInvariant(), @"\s+", " ");
             if (norm.Length > 0 && seen.Add(norm))
                 result.Add(norm);

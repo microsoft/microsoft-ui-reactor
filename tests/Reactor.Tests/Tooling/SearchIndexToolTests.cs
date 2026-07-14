@@ -155,10 +155,10 @@ public sealed class SearchIndexGeneratorEdgeTests
     {
         using var g = new MiniGallery(betaRouted: true);
         var ed = g.WriteEditorial(
-            @"{ ""alpha"": { ""keywords"": ["" Click "", ""CLICK"", """", ""multi   word"", ""click""] }, " + BetaKeywords + " }");
+            @"{ ""alpha"": { ""keywords"": ["" Click "", ""CLICK"", null, """", ""multi   word"", ""click""] }, " + BetaKeywords + " }");
 
         var alpha = Find(Parse(SearchIndexGenerator.Generate(g.GalleryDir, ed).Json), "alpha");
-        // " Click "→"click"; "CLICK"/"click" dedupe; "" dropped; "multi   word"→"multi word".
+        // " Click "→"click"; "CLICK"/"click" dedupe; null + "" dropped; "multi   word"→"multi word".
         Assert.Equal(new[] { "click", "multi word" }, alpha.Keywords!.ToArray());
     }
 
