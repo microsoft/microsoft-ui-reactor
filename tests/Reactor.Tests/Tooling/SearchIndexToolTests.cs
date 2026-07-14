@@ -272,4 +272,14 @@ public sealed class SearchIndexCliTests
         Assert.Equal(2, SearchIndexCli.Run(new[] { g.GalleryDir, ed, Path.Join(g.Root, "out.json") }, log));
         Assert.Contains("ERROR", log.ToString());
     }
+
+    [Fact]
+    public void Run_MalformedPath_ReturnsErrorExitCode_NotCrash()
+    {
+        using var log = new StringWriter();
+        // "a:b:c" makes Path.GetFullPath throw NotSupportedException on Windows; elsewhere it
+        // resolves and the subsequent read fails. Either way the CLI must return 2, not crash.
+        Assert.Equal(2, SearchIndexCli.Run(new[] { "a:b:c" }, log));
+        Assert.Contains("ERROR", log.ToString());
+    }
 }

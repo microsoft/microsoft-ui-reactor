@@ -73,7 +73,8 @@ public static class SearchIndexCli
             return 0;
         }
         catch (Exception ex) when (ex is InvalidOperationException or JsonException or IOException
-            or UnauthorizedAccessException or ArgumentException or DirectoryNotFoundException)
+            or UnauthorizedAccessException or ArgumentException or NotSupportedException
+            or System.Security.SecurityException)
         {
             log.WriteLine("[search-index] ERROR: " + ex.Message);
             return 2;
