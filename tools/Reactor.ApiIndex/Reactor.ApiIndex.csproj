@@ -7,10 +7,18 @@
     <AssemblyName>Reactor.ApiIndex</AssemblyName>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <!-- Build-time API-index generator: reflects over arbitrary compiled assemblies
-         (Assembly.GetExportedTypes / Type.GetMembers) by design and is never shipped
-         or AOT-published. Opt out of the IL2*/IL3* analyzer. -->
-    <ReactorSkipAotAnalysis>true</ReactorSkipAotAnalysis>
+    <!-- Build-time API-index generator: reflects over the built Reactor.dll surface
+         (Assembly.GetExportedTypes / Type.GetMembers) by design. The IL2*/IL3* analyzer
+         is enabled (IsAotCompatible) so the intentional reflection is *annotated* rather
+         than silently ignored — every reflecting entry point carries a
+         [RequiresUnreferencedCode]/[RequiresDynamicCode] or a justified
+         [UnconditionalSuppressMessage]. This makes the generator AOT-honest. A native
+         NativeAOT publish of the SignaturesGen host IS feasible and produces a
+         byte-identical index, but only via an opt-in gate that roots the whole Reactor
+         assembly (the tool enumerates exactly what the trimmer would otherwise prune) —
+         see tools/Reactor.ApiIndex/README.md and the ReactorApiAot gate in
+         tools/Reactor.SignaturesGen/Reactor.SignaturesGen.csproj. -->
+    <IsAotCompatible>true</IsAotCompatible>
     <UseWinUI>true</UseWinUI>
     <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
     <WindowsPackageType>None</WindowsPackageType>
