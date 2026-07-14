@@ -554,7 +554,8 @@
         "rows and columns",
         "sortable",
         "virtualized grid",
-        "inline edit"
+        "inline edit",
+        "select"
       ],
       "relatedControls": [
         "ListView",
@@ -866,7 +867,8 @@
         "thumbnail grid",
         "wrapping items",
         "gallery",
-        "card grid"
+        "card grid",
+        "select"
       ],
       "relatedControls": [
         "ListView",
@@ -1079,6 +1081,7 @@
       "keywords": [
         "collection view",
         "selectable items",
+        "select",
         "data list",
         "flexible items"
       ],
@@ -1135,6 +1138,7 @@
         "data list",
         "rows",
         "selection",
+        "select",
         "virtualized list"
       ],
       "relatedControls": [

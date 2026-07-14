@@ -80,7 +80,7 @@
     "relatedControls": ["Flyout", "TeachingTip", "Popup"]
   },
   "data-grid": {
-    "keywords": ["table", "spreadsheet", "rows and columns", "sortable", "virtualized grid", "inline edit"],
+    "keywords": ["table", "spreadsheet", "rows and columns", "sortable", "virtualized grid", "inline edit", "select"],
     "relatedControls": ["ListView", "PropertyGrid", "ItemsView"],
     "usings": ["Microsoft.UI.Reactor.Data", "Microsoft.UI.Reactor.Data.Providers", "Microsoft.UI.Reactor.Controls"]
   },
@@ -127,7 +127,7 @@
     "relatedControls": ["StackPanel", "RelativePanel", "UniformGrid"]
   },
   "grid-view": {
-    "keywords": ["tile view", "thumbnail grid", "wrapping items", "gallery", "card grid"],
+    "keywords": ["tile view", "thumbnail grid", "wrapping items", "gallery", "card grid", "select"],
     "relatedControls": ["ListView", "ItemsView", "FlipView"]
   },
   "hyperlink-button": {
@@ -159,7 +159,7 @@
     "relatedControls": ["ItemsView", "ListView"]
   },
   "items-view": {
-    "keywords": ["collection view", "selectable items", "data list", "flexible items"],
+    "keywords": ["collection view", "selectable items", "select", "data list", "flexible items"],
     "relatedControls": ["ListView", "GridView", "ItemsRepeater"]
   },
   "list-box": {
@@ -167,7 +167,7 @@
     "relatedControls": ["ComboBox", "ListView"]
   },
   "list-view": {
-    "keywords": ["scrolling list", "data list", "rows", "selection", "virtualized list"],
+    "keywords": ["scrolling list", "data list", "rows", "selection", "select", "virtualized list"],
     "relatedControls": ["GridView", "ItemsView", "ItemsRepeater", "ListBox"]
   },
   "map-control": {
