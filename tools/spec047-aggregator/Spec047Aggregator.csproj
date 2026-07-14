@@ -21,4 +21,23 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+
+  <!-- Opt-in NativeAOT publish (off by default; the normal build / `dotnet run` /
+       `dotnet publish` verbs behave exactly as before). Reproduce with:
+           dotnet publish tools/spec047-aggregator/Spec047Aggregator.csproj -c Release -r win-x64 -p:Spec047Aot=true
+
+       Why opt-in rather than an unconditional <PublishAot>true</PublishAot>: this project is a
+       member of Reactor.slnx. Always-on PublishAot would turn every plain `dotnet publish` of
+       the tool (and a whole-solution publish) into a native ILC compile that requires the VS
+       C++ toolchain (vswhere.exe / link.exe) on PATH — so it would fail on any machine or CI
+       leg that lacks those tools. Gating on Spec047Aot keeps the default build/run/publish path
+       a plain managed apphost, byte-for-byte unchanged, and makes native AOT an explicit opt-in.
+
+       No TrimmerRootAssembly / IL suppressions are needed: the aggregator has zero reflection
+       and already serializes via the System.Text.Json source generator (AggregatorJsonContext),
+       so the IL2*/IL3* analyzer (on via Directory.Build.targets for net10+) is already clean.
+       Verified: the native exe emits output byte-identical to the JIT build. See README.md. -->
+  <PropertyGroup Condition="'$(Spec047Aot)' == 'true'">
+    <PublishAot>true</PublishAot>
+  </PropertyGroup>
 </Project>
