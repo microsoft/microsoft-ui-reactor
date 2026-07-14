@@ -25,19 +25,22 @@ public static class ApiIndexGenerator
 {
     // Every entry point below reflects over the whole public surface of the built
     // Reactor.dll (GetExportedTypes / GetMembers / GetType-by-name) to emit reactor.api.txt.
-    // The tool's entire purpose is to enumerate exactly what the trimmer would remove, so it
-    // is inherently trim/AOT-unsafe and is only ever run at build time (never shipped, never
-    // trimmed, never AOT-published — see Reactor.ApiIndex.csproj / README.md). The requirement
-    // is surfaced honestly via [RequiresUnreferencedCode]/[RequiresDynamicCode] rather than
-    // silenced, so the IL2*/IL3* analyzer still guards against *new*, unintended reflection.
+    // The tool's entire purpose is to enumerate exactly what the trimmer would remove, so it is
+    // inherently trim-unsafe: under trimming the metadata it reads gets pruned. It is a
+    // build-time-only generator (never shipped); a native NativeAOT publish is possible only via
+    // the opt-in ReactorApiAot proof that roots the whole Reactor assembly — see
+    // Reactor.ApiIndex.csproj / README.md. The requirement is surfaced honestly via
+    // [RequiresUnreferencedCode] rather than silenced, so the IL2*/IL3* analyzer still guards
+    // against *new*, unintended reflection. (No [RequiresDynamicCode]: this is metadata
+    // discovery + reflection-invoke only — no runtime codegen — as the successful rooted AOT
+    // publish confirms.)
     const string ReflectionJustification =
         "Reflects over the entire public surface of the built Reactor.dll to emit reactor.api.txt; " +
-        "enumerates exactly what the trimmer would remove. Build-time-only generator — never trimmed or AOT-published.";
+        "enumerates exactly what the trimmer would remove. Build-time-only generator — not AOT-published except via the opt-in ReactorApiAot proof.";
 
     // Single source of truth for the index text. Program.cs (the apphost) and the
     // ApiIndexGeneratorTests (in-process, ARM64-safe) both call this.
     [RequiresUnreferencedCode(ReflectionJustification)]
-    [RequiresDynamicCode(ReflectionJustification)]
     public static string Generate(Assembly asm)
     {
         var sb = new StringBuilder();

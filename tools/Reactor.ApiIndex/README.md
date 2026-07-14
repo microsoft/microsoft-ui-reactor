@@ -12,21 +12,21 @@ Regenerate the two committed copies with `mur --regen-api` (or just build `React
 
 ## Trimming / NativeAOT
 
-Unlike the Roslyn-only `tools/Reactor.SearchIndex` (which parses gallery *source*, so it went
-AOT-clean trivially), this tool's whole job is to **enumerate the full public surface of a
-WinUI-backed assembly via reflection** — i.e. exactly what a trimmer removes. That makes it a
-fundamentally harder AOT target, so the story is different:
+This tool's whole job is to **enumerate the full public surface of a WinUI-backed assembly via
+reflection** — i.e. exactly what a trimmer removes. That makes it a genuinely hard AOT target
+(harder than a source-parsing generator, which never touches built metadata), so the story is
+worth spelling out:
 
 **The IL2*/IL3* analyzer is enabled** (`IsAotCompatible=true`, replacing the old
 `ReactorSkipAotAnalysis` opt-out). Every reflecting entry point is *annotated* honestly rather
-than silenced: `ApiIndexGenerator.Generate` carries `[RequiresUnreferencedCode]` +
-`[RequiresDynamicCode]`, and each reflecting helper carries `[RequiresUnreferencedCode]`, so the
-requirement bubbles to callers and the analyzer keeps guarding against *new*, unintended
-reflection. The `Reactor.SignaturesGen` apphost acknowledges the resulting IL2026/IL3050 at its
-one call site via a justified `[UnconditionalSuppressMessage]`.
+than silenced: `ApiIndexGenerator.Generate` and each reflecting helper carry
+`[RequiresUnreferencedCode]`, so the requirement bubbles to callers and the analyzer keeps
+guarding against *new*, unintended reflection. (No `[RequiresDynamicCode]` — the generator does
+metadata discovery and reflection-invoke only, no runtime codegen.) The `Reactor.SignaturesGen`
+apphost acknowledges the resulting IL2026 at its one call site via a justified
+`[UnconditionalSuppressMessage]`.
 
-**A native single-file build does work** — with two caveats that the naïve SearchIndex recipe
-does not need:
+**A native single-file build does work** — with two caveats beyond a plain `dotnet publish`:
 
 ```pwsh
 dotnet publish tools/Reactor.SignaturesGen -r win-x64 -c Release -p:ReactorApiAot=true

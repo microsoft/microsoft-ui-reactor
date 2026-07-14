@@ -16,14 +16,14 @@ namespace Microsoft.UI.Reactor.SignaturesGen;
 internal static class Program
 {
     // This apphost's whole reason to exist is to invoke the reflection-based
-    // ApiIndexGenerator.Generate (annotated [RequiresUnreferencedCode]/[RequiresDynamicCode])
-    // at build time. It is never trimmed or AOT-published — the build only runs it as a plain
-    // apphost whose arch matches the host — so the IL2026/IL3050 from that call are expected and
-    // acknowledged here rather than blanket-disabling the analyzer for the project.
+    // ApiIndexGenerator.Generate (annotated [RequiresUnreferencedCode]) at build time. The
+    // normal build runs it as a plain, host-arch-matching apphost (not trimmed); it is only
+    // AOT-published via the opt-in ReactorApiAot proof (see the csproj), which roots the whole
+    // Reactor assembly. Either way the IL2026 from that call is expected and acknowledged here
+    // rather than blanket-disabling the analyzer for the project. (No IL3050: Generate does
+    // metadata reflection + reflection-invoke only, no runtime codegen.)
     [UnconditionalSuppressMessage("Trimming", "IL2026",
-        Justification = "Build-time-only apphost that intentionally drives ApiIndexGenerator's full-surface reflection over Reactor.dll; never trimmed or AOT-published.")]
-    [UnconditionalSuppressMessage("AOT", "IL3050",
-        Justification = "Build-time-only apphost that intentionally drives ApiIndexGenerator's full-surface reflection over Reactor.dll; never trimmed or AOT-published.")]
+        Justification = "Build-time-only apphost that intentionally drives ApiIndexGenerator's full-surface reflection over Reactor.dll; not trimmed, and only AOT-published via the opt-in ReactorApiAot proof that roots the assembly.")]
     private static int Main(string[] args)
     {
         if (args.Length < 1)
