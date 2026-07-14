@@ -114,34 +114,37 @@ changes for the lifetime of the component, which is why setter
 identity is stable across renders.
 
 ```csharp
-void Setter(T newValue)
+private Action<T> MakeStateSetter<T>(ValueHookState<T> h)
 {
-    var h = (ValueHookState<T>)_hooks[currentIndex];
-    bool changed;
-    if (h.ThreadSafe)
+    void Setter(T newValue)
     {
-        lock (h.Lock)
+        bool changed;
+        if (h.ThreadSafe)
         {
+            lock (h.Lock!)
+            {
+                changed = !EqualityComparer<T>.Default.Equals(h.Value, newValue);
+                if (changed) h.Value = newValue;
+            }
+            if (Diagnostics.ReactorEventSource.Log.IsEnabled(
+                    global::System.Diagnostics.Tracing.EventLevel.Verbose,
+                    Diagnostics.ReactorEventSource.Keywords.State))
+                Diagnostics.ReactorEventSource.Log.StateChange("UseState", typeof(T).Name, changed);
+            if (changed) _requestRerender?.Invoke();
+        }
+        else
+        {
+            if (MarshalIfOffUIThread("UseState", () => Setter(newValue))) return;
             changed = !EqualityComparer<T>.Default.Equals(h.Value, newValue);
             if (changed) h.Value = newValue;
+            if (Diagnostics.ReactorEventSource.Log.IsEnabled(
+                    global::System.Diagnostics.Tracing.EventLevel.Verbose,
+                    Diagnostics.ReactorEventSource.Keywords.State))
+                Diagnostics.ReactorEventSource.Log.StateChange("UseState", typeof(T).Name, changed);
+            if (changed) _requestRerender?.Invoke();
         }
-        if (Diagnostics.ReactorEventSource.Log.IsEnabled(
-                global::System.Diagnostics.Tracing.EventLevel.Verbose,
-                Diagnostics.ReactorEventSource.Keywords.State))
-            Diagnostics.ReactorEventSource.Log.StateChange("UseState", typeof(T).Name, changed);
-        if (changed) _requestRerender?.Invoke();
     }
-    else
-    {
-        if (MarshalIfOffUIThread("UseState", () => Setter(newValue))) return;
-        changed = !EqualityComparer<T>.Default.Equals(h.Value, newValue);
-        if (changed) h.Value = newValue;
-        if (Diagnostics.ReactorEventSource.Log.IsEnabled(
-                global::System.Diagnostics.Tracing.EventLevel.Verbose,
-                Diagnostics.ReactorEventSource.Keywords.State))
-            Diagnostics.ReactorEventSource.Log.StateChange("UseState", typeof(T).Name, changed);
-        if (changed) _requestRerender?.Invoke();
-    }
+    return Setter;
 }
 ```
 
@@ -169,25 +172,14 @@ Model](reactivity-model.md) page; the implementation lives here.
 ```csharp
 public void UseEffect(Action effect, params object[] dependencies)
 {
-    if (_hookIndex >= _hooks.Count)
-    {
-        _hooks.Add(new EffectHookState { Dependencies = null, Effect = effect });
-    }
-
-    if (_hooks[_hookIndex] is not EffectHookState hook)
-        throw new HookOrderException(
-            $"Hook at index {_hookIndex} is {_hooks[_hookIndex].GetType().Name}, expected EffectHookState. " +
-            "Hooks must be called in the same order every render.");
-    _hookIndex++;
-
+    var hook = AcquireEffectSlot();
+    // Snapshot the deps on store (SnapshotDeps): a caller can pass — and then
+    // reuse and mutate in place — the same array instance across renders, so the
+    // stored copy must be isolated or DepsEqual would alias prev/next and skip a
+    // real change (Issue #659 review #3). Only the deps-CHANGED path stores, so
+    // this adds no steady-state allocation.
     if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, dependencies))
-    {
-        hook.PendingCleanup = hook.Cleanup;
-        hook.Cleanup = null;
-        hook.Dependencies = dependencies.ToArray();
-        hook.Effect = effect;
-        hook.Pending = true;
-    }
+        ScheduleEffect(hook, effect, null, SnapshotDeps(dependencies));
 }
 ```
 
