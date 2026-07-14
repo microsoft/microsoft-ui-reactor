@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.UI.Reactor.SearchIndex;
@@ -50,22 +51,25 @@ public sealed class SearchIndexGeneratorTests
     public void Index_IsUpToDate()
     {
         var generated = Generate().Json;
+        var generatedBytes = Encoding.UTF8.GetBytes(generated); // UTF-8, no BOM (GetBytes emits no preamble)
 
         if (Environment.GetEnvironmentVariable("UPDATE_SEARCH_INDEX") == "1")
         {
-            File.WriteAllText(CommittedPath(), generated);
+            File.WriteAllBytes(CommittedPath(), generatedBytes);
             return;
         }
 
-        var committed = File.ReadAllText(CommittedPath());
-        if (committed != generated)
+        // Byte comparison (not File.ReadAllText, which would silently strip a stray BOM) — the
+        // committed file is fetched raw by the winui-search CLI, so a BOM is a real diff.
+        var committedBytes = File.ReadAllBytes(CommittedPath());
+        if (!generatedBytes.AsSpan().SequenceEqual(committedBytes))
         {
             throw new Xunit.Sdk.XunitException(
-                "samples/ReactorGallery/reactor-search-index.json is stale. Regenerate by running:\n" +
+                "samples/ReactorGallery/reactor-search-index.json is stale (content or BOM/encoding). Regenerate by running:\n" +
                 "  dotnet run --project tools/Reactor.SearchIndex\n" +
                 "  (or: $env:UPDATE_SEARCH_INDEX=1; dotnet test tests/Reactor.Tests " +
                 "--filter \"FullyQualifiedName~Tooling.SearchIndexGeneratorTests.Index_IsUpToDate\")\n" +
-                "First diff: " + FirstDiffPreview(committed, generated));
+                "First diff: " + FirstDiffPreview(File.ReadAllText(CommittedPath()), generated));
         }
     }
 

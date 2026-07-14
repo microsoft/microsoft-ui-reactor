@@ -2,6 +2,7 @@
 // exit-code / arg-validation / error-handling contract is unit-testable (SearchIndexCliTests
 // passes a StringWriter, so the tests never touch the real console).
 
+using System.Text;
 using System.Text.Json;
 
 namespace Microsoft.UI.Reactor.SearchIndex;
@@ -14,6 +15,10 @@ namespace Microsoft.UI.Reactor.SearchIndex;
 /// </summary>
 public static class SearchIndexCli
 {
+    // The index is a byte-stable artifact fetched raw by the winui-search CLI, so write it as
+    // UTF-8 without a BOM and compare bytes (not decoded text, which would hide a stray BOM).
+    static readonly Encoding Utf8NoBom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+
     public static int Run(string[] args) => Run(args, Console.Error);
 
     public static int Run(string[] args, TextWriter log)
@@ -50,10 +55,11 @@ public static class SearchIndexCli
             foreach (var s in result.Skipped)
                 log.WriteLine($"[search-index]   skip {s.Id} — {s.Reason}");
 
+            var generatedBytes = Utf8NoBom.GetBytes(result.Json);
             if (check)
             {
-                var current = File.Exists(outPath) ? File.ReadAllText(outPath) : "";
-                if (current == result.Json)
+                var currentBytes = File.Exists(outPath) ? File.ReadAllBytes(outPath) : Array.Empty<byte>();
+                if (generatedBytes.AsSpan().SequenceEqual(currentBytes))
                 {
                     log.WriteLine($"[search-index] up to date: {outPath}");
                     return 0;
@@ -62,7 +68,7 @@ public static class SearchIndexCli
                 return 1;
             }
 
-            File.WriteAllText(outPath, result.Json);
+            File.WriteAllText(outPath, result.Json, Utf8NoBom);
             log.WriteLine($"[search-index] wrote {outPath}");
             return 0;
         }
