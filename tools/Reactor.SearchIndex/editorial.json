@@ -1,0 +1,389 @@
+{
+  "acrylic": {
+    "keywords": ["frosted glass", "blur", "translucent", "material", "backdrop"],
+    "relatedControls": ["Theming"]
+  },
+  "animated-icon": {
+    "keywords": ["lottie", "vector animation", "state transition", "micro-interaction", "animated glyph"],
+    "relatedControls": ["AnimatedVisualPlayer", "Icons"]
+  },
+  "animated-visual-player": {
+    "keywords": ["lottie", "vector animation", "codegen", "playback", "composition"],
+    "relatedControls": ["AnimatedIcon", "MediaPlayerElement"]
+  },
+  "annotated-scroll-bar": {
+    "keywords": ["labelled scrollbar", "scroll annotations", "track markers", "minimap", "jump to section"],
+    "relatedControls": ["ScrollView"]
+  },
+  "auto-suggest-box": {
+    "keywords": ["autocomplete", "typeahead", "suggestions", "search box", "combobox input"],
+    "relatedControls": ["TextBox", "ComboBox"]
+  },
+  "border": {
+    "keywords": ["container", "frame", "outline", "rounded corners", "background wrapper"],
+    "relatedControls": ["Card"]
+  },
+  "breadcrumb-bar": {
+    "keywords": ["breadcrumbs", "navigation trail", "path bar", "hierarchy nav", "back navigation"],
+    "relatedControls": ["NavigationView"]
+  },
+  "button": {
+    "keywords": ["click", "command", "submit", "primary action", "accent"],
+    "relatedControls": ["RepeatButton", "ToggleButton", "HyperlinkButton", "SplitButton"]
+  },
+  "calendar-date-picker": {
+    "keywords": ["date input", "date dropdown", "pick a date", "calendar dropdown"],
+    "relatedControls": ["CalendarView", "DatePicker"]
+  },
+  "calendar-view": {
+    "keywords": ["calendar", "month view", "date selection", "schedule", "multi-date"],
+    "relatedControls": ["CalendarDatePicker", "DatePicker"]
+  },
+  "canvas": {
+    "keywords": ["absolute positioning", "free layout", "x y coordinates", "overlay positioning"],
+    "relatedControls": ["RelativePanel"]
+  },
+  "card": {
+    "keywords": ["surface", "tile", "elevated container", "content card", "panel"],
+    "relatedControls": ["Border", "Expander"]
+  },
+  "check-box": {
+    "keywords": ["tick", "boolean", "multi-select", "opt in", "tri-state"],
+    "relatedControls": ["RadioButton", "ToggleSwitch"]
+  },
+  "color": {
+    "keywords": ["theme colors", "brushes", "accent", "palette", "system colors"],
+    "relatedControls": ["ColorPicker", "Theming", "Typography"]
+  },
+  "color-picker": {
+    "keywords": ["color selection", "rgb", "hex", "hue", "eyedropper", "swatch"],
+    "relatedControls": ["Color"]
+  },
+  "combo-box": {
+    "keywords": ["dropdown", "select", "picker", "options list", "single select"],
+    "relatedControls": ["ListBox", "DropDownButton", "AutoSuggestBox"]
+  },
+  "command-bar": {
+    "keywords": ["toolbar", "app bar", "command buttons", "action bar", "overflow menu"],
+    "relatedControls": ["CommandBarFlyout", "MenuBar"]
+  },
+  "command-bar-flyout": {
+    "keywords": ["context menu", "quick commands", "selection menu", "contextual toolbar"],
+    "relatedControls": ["CommandBar", "Flyout", "MenuFlyout"]
+  },
+  "commands": {
+    "keywords": ["command binding", "icommand", "async execute", "can execute", "debounce"],
+    "relatedControls": ["Button"]
+  },
+  "content-dialog": {
+    "keywords": ["modal", "dialog box", "confirm", "alert", "prompt", "popup window"],
+    "relatedControls": ["Flyout", "TeachingTip", "Popup"]
+  },
+  "data-grid": {
+    "keywords": ["table", "spreadsheet", "rows and columns", "sortable", "virtualized grid", "inline edit"],
+    "relatedControls": ["ListView", "PropertyGrid", "ItemsView"],
+    "usings": ["Microsoft.UI.Reactor.Data", "Microsoft.UI.Reactor.Data.Providers", "Microsoft.UI.Reactor.Controls"]
+  },
+  "date-picker": {
+    "keywords": ["date input", "spinner", "pick a date", "calendar picker"],
+    "relatedControls": ["CalendarDatePicker", "TimePicker"]
+  },
+  "docking": {
+    "keywords": ["dock panes", "tearable", "floating windows", "rearrange layout", "tool windows", "ide layout"],
+    "relatedControls": ["TabView", "SplitView"],
+    "usings": ["Microsoft.UI.Reactor.Docking"]
+  },
+  "drop-down-button": {
+    "keywords": ["dropdown menu", "flyout button", "choices", "split options"],
+    "relatedControls": ["SplitButton", "MenuFlyout", "Button"]
+  },
+  "expander": {
+    "keywords": ["collapsible", "accordion", "show hide", "disclosure", "fold"],
+    "relatedControls": ["Card"]
+  },
+  "flex": {
+    "keywords": ["flexbox", "css layout", "flex row column", "justify align", "wrap", "responsive layout"],
+    "relatedControls": ["Grid", "StackPanel"],
+    "usings": ["Microsoft.UI.Reactor.Layout"]
+  },
+  "flip-view": {
+    "keywords": ["carousel", "image gallery", "swipe pages", "slideshow", "paged view"],
+    "relatedControls": ["PipsPager", "GridView"]
+  },
+  "flyout": {
+    "keywords": ["popup", "contextual", "attached popup", "lightweight dialog", "callout"],
+    "relatedControls": ["MenuFlyout", "CommandBarFlyout", "TeachingTip", "Popup"]
+  },
+  "frame": {
+    "keywords": ["page navigation", "navigate", "back forward", "content host", "routing"],
+    "relatedControls": ["NavigationView"]
+  },
+  "geometry": {
+    "keywords": ["corner radius", "rounding", "shape language", "control radius", "overlay radius"],
+    "relatedControls": ["Spacing", "Color", "Typography"]
+  },
+  "grid": {
+    "keywords": ["rows and columns", "layout grid", "cells", "table layout", "spanning"],
+    "relatedControls": ["StackPanel", "RelativePanel", "UniformGrid"]
+  },
+  "grid-view": {
+    "keywords": ["tile view", "thumbnail grid", "wrapping items", "gallery", "card grid"],
+    "relatedControls": ["ListView", "ItemsView", "FlipView"]
+  },
+  "hyperlink-button": {
+    "keywords": ["link", "hyperlink", "navigate url", "web link", "anchor"],
+    "relatedControls": ["Button"]
+  },
+  "icons": {
+    "keywords": ["glyph", "symbol icon", "font icon", "path icon", "vector icon"],
+    "relatedControls": ["AnimatedIcon", "Shapes"]
+  },
+  "image": {
+    "keywords": ["picture", "bitmap", "photo", "img", "asset", "uri source"],
+    "relatedControls": ["PersonPicture"]
+  },
+  "info-badge": {
+    "keywords": ["notification dot", "count badge", "status indicator", "unread count", "dot"],
+    "relatedControls": ["InfoBar"]
+  },
+  "info-bar": {
+    "keywords": ["notification bar", "banner", "inline message", "alert bar", "status message", "dismissible"],
+    "relatedControls": ["InfoBadge", "TeachingTip"]
+  },
+  "interspersed-grid": {
+    "keywords": ["proportional panels", "separators", "weighted layout", "split panels"],
+    "relatedControls": ["UniformGrid", "Grid"]
+  },
+  "items-repeater": {
+    "keywords": ["virtualized list", "custom layout", "data template", "repeater", "bind collection"],
+    "relatedControls": ["ItemsView", "ListView"]
+  },
+  "items-view": {
+    "keywords": ["collection view", "selectable items", "data list", "flexible items"],
+    "relatedControls": ["ListView", "GridView", "ItemsRepeater"]
+  },
+  "list-box": {
+    "keywords": ["inline list", "selectable list", "options", "multi-select list"],
+    "relatedControls": ["ComboBox", "ListView"]
+  },
+  "list-view": {
+    "keywords": ["scrolling list", "data list", "rows", "selection", "virtualized list"],
+    "relatedControls": ["GridView", "ItemsView", "ItemsRepeater", "ListBox"]
+  },
+  "map-control": {
+    "keywords": ["maps", "geolocation", "pan zoom", "markers", "interactive map"],
+    "sampleOverride": {
+      "header": "Interactive map",
+      "code": "MapControl(zoomLevel: 4)\n    .Height(320).Width(480)\n// Supply a Bing Maps token to load tiles:\n//   MapControl(mapServiceToken: mapKey, zoomLevel: 12)"
+    }
+  },
+  "markdown": {
+    "keywords": ["md", "rich text render", "commonmark", "formatted text"],
+    "relatedControls": ["RichTextBlock"]
+  },
+  "media-player-element": {
+    "keywords": ["video", "audio", "playback", "transport controls", "player"],
+    "relatedControls": ["AnimatedVisualPlayer"],
+    "sampleOverride": {
+      "header": "Video with transport controls",
+      "code": "MediaPlayerElement(\"https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4\")\n    .Height(280).Width(480)\n// Transport controls are enabled by default; AutoPlay is opt-in:\n//   .Set(mpe => mpe.AutoPlay = true)"
+    }
+  },
+  "menu-bar": {
+    "keywords": ["menus", "top menu", "file edit view", "application menu", "menu strip"],
+    "relatedControls": ["CommandBar", "MenuFlyout"]
+  },
+  "menu-flyout": {
+    "keywords": ["context menu", "right click menu", "dropdown menu", "command list"],
+    "relatedControls": ["Flyout", "CommandBarFlyout", "MenuBar"]
+  },
+  "navigation-view": {
+    "keywords": ["side navigation", "hamburger menu", "app shell", "nav pane", "left nav"],
+    "relatedControls": ["BreadcrumbBar", "TabView", "Pivot", "SplitView"]
+  },
+  "number-box": {
+    "keywords": ["numeric input", "spinner", "stepper", "number field", "increment decrement"],
+    "relatedControls": ["Slider", "TextBox"]
+  },
+  "parallax-view": {
+    "keywords": ["parallax", "depth scroll", "background shift", "scrolling effect"],
+    "relatedControls": ["ScrollView"]
+  },
+  "password-box": {
+    "keywords": ["password", "secure input", "masked text", "credentials", "hidden characters"],
+    "relatedControls": ["TextBox"]
+  },
+  "person-picture": {
+    "keywords": ["avatar", "profile picture", "contact photo", "initials", "user image"],
+    "relatedControls": ["Image"]
+  },
+  "pips-pager": {
+    "keywords": ["dots pager", "page dots", "carousel indicator", "pagination dots"],
+    "relatedControls": ["FlipView"]
+  },
+  "pivot": {
+    "keywords": ["tabs", "tabbed view", "sections", "swipe tabs", "headers"],
+    "relatedControls": ["TabView", "SelectorBar"]
+  },
+  "popup": {
+    "keywords": ["overlay", "floating content", "custom popup", "light-dismiss", "layer"],
+    "relatedControls": ["Flyout", "ContentDialog"]
+  },
+  "progress-bar": {
+    "keywords": ["loading bar", "progress indicator", "percent complete", "determinate", "linear progress"],
+    "relatedControls": ["ProgressRing"]
+  },
+  "progress-ring": {
+    "keywords": ["spinner", "loading spinner", "busy indicator", "circular progress", "activity"],
+    "relatedControls": ["ProgressBar"]
+  },
+  "property-grid": {
+    "keywords": ["property editor", "inspector", "reflection editor", "settings editor", "object properties"],
+    "relatedControls": ["DataGrid"],
+    "usings": ["Microsoft.UI.Reactor.Controls", "System.ComponentModel"]
+  },
+  "radio-button": {
+    "keywords": ["single choice", "option", "radio", "exclusive select", "one of"],
+    "relatedControls": ["RadioButtons", "CheckBox"]
+  },
+  "radio-buttons": {
+    "keywords": ["radio group", "single choice group", "option list", "exclusive options"],
+    "relatedControls": ["RadioButton"]
+  },
+  "rating-control": {
+    "keywords": ["star rating", "rate", "review stars", "score", "five stars"],
+    "relatedControls": ["Slider"]
+  },
+  "refresh-container": {
+    "keywords": ["pull to refresh", "swipe refresh", "reload", "pull down"],
+    "relatedControls": ["ScrollView", "ListView"]
+  },
+  "relative-panel": {
+    "keywords": ["relative layout", "align relative", "constraints", "anchor elements"],
+    "relatedControls": ["Grid", "Canvas"]
+  },
+  "repeat-button": {
+    "keywords": ["press and hold", "auto repeat", "hold to increment", "continuous click"],
+    "relatedControls": ["Button"]
+  },
+  "rich-edit-box": {
+    "keywords": ["rich text editor", "formatting", "rtf", "bold italic", "word processor"],
+    "relatedControls": ["TextBox", "RichTextBlock"]
+  },
+  "rich-text-block": {
+    "keywords": ["formatted text", "read-only rich text", "runs", "inline formatting", "styled text"],
+    "relatedControls": ["RichEditBox", "Markdown"]
+  },
+  "scroll-view": {
+    "keywords": ["scrollable", "scroll container", "overflow", "pan zoom", "viewport"],
+    "relatedControls": ["RefreshContainer", "AnnotatedScrollBar"]
+  },
+  "selector-bar": {
+    "keywords": ["segmented control", "view switcher", "mode toggle", "tab bar", "filter chips"],
+    "relatedControls": ["Pivot", "TabView"]
+  },
+  "semantic-zoom": {
+    "keywords": ["zoom in out", "grouped view", "jump list", "overview detail", "pinch zoom"],
+    "relatedControls": ["GridView", "ListView"]
+  },
+  "shapes": {
+    "keywords": ["rectangle ellipse line path", "vector shapes", "drawing", "primitives", "geometry shapes"],
+    "relatedControls": ["Icons"]
+  },
+  "slider": {
+    "keywords": ["range", "drag thumb", "volume", "seek", "value picker"],
+    "relatedControls": ["NumberBox", "RatingControl"]
+  },
+  "spacing": {
+    "keywords": ["margin padding", "gaps", "layout rhythm", "whitespace", "4px grid"],
+    "relatedControls": ["Geometry", "Typography"]
+  },
+  "split-button": {
+    "keywords": ["primary plus menu", "action with options", "dropdown action", "default action"],
+    "relatedControls": ["DropDownButton", "ToggleSplitButton", "Button"]
+  },
+  "split-view": {
+    "keywords": ["pane", "master detail", "collapsible sidebar", "navigation pane", "drawer"],
+    "relatedControls": ["NavigationView"],
+    "sampleOverride": {
+      "header": "Collapsible pane + content",
+      "code": "SplitView(\n    pane: VStack(8,\n        TextBlock(\"Pane\").Bold(),\n        TextBlock(\"Item 1\"),\n        TextBlock(\"Item 2\")\n    ).Padding(12),\n    content: VStack(8,\n        Button(isOpen ? \"Close Pane\" : \"Open Pane\", () => setIsOpen(!isOpen)),\n        TextBlock(\"Main content area\")\n    ).Padding(12)\n) with { IsPaneOpen = isOpen }\n.Set(sv => sv.DisplayMode = SplitViewDisplayMode.Inline)"
+    }
+  },
+  "stack-panel": {
+    "keywords": ["vertical stack", "horizontal stack", "vstack hstack", "linear layout", "stack children"],
+    "relatedControls": ["Grid", "Flex"]
+  },
+  "swipe-control": {
+    "keywords": ["swipe actions", "swipe to delete", "reveal commands", "gesture actions"],
+    "relatedControls": ["ListView"]
+  },
+  "tab-view": {
+    "keywords": ["tabs", "closable tabs", "browser tabs", "reorderable tabs", "document tabs"],
+    "relatedControls": ["Pivot", "SelectorBar"]
+  },
+  "teaching-tip": {
+    "keywords": ["coach mark", "callout", "feature highlight", "onboarding", "tip popup"],
+    "relatedControls": ["Flyout", "InfoBar", "ToolTip"]
+  },
+  "text-box": {
+    "keywords": ["text input", "textfield", "single line", "multiline", "form field"],
+    "relatedControls": ["RichEditBox", "AutoSuggestBox", "PasswordBox", "NumberBox"]
+  },
+  "theming": {
+    "keywords": ["light dark", "dark mode", "high contrast", "theme switch", "requested theme"],
+    "relatedControls": ["Color", "Acrylic"]
+  },
+  "time-picker": {
+    "keywords": ["time input", "pick a time", "clock spinner", "hour minute"],
+    "relatedControls": ["DatePicker"]
+  },
+  "title-bar": {
+    "keywords": ["window title", "caption bar", "custom titlebar", "window chrome", "draggable region"]
+  },
+  "toggle-button": {
+    "keywords": ["press state", "on off button", "sticky button", "toggle", "pressed"],
+    "relatedControls": ["ToggleSwitch", "ToggleSplitButton", "Button"]
+  },
+  "toggle-split-button": {
+    "keywords": ["toggle with menu", "on off plus options", "split toggle"],
+    "relatedControls": ["SplitButton", "ToggleButton"]
+  },
+  "toggle-switch": {
+    "keywords": ["switch", "on off", "boolean", "enable disable"],
+    "relatedControls": ["CheckBox", "ToggleButton"]
+  },
+  "tool-tip": {
+    "keywords": ["hover hint", "hover text", "help popup", "hint"],
+    "relatedControls": ["TeachingTip", "Flyout"]
+  },
+  "tree-view": {
+    "keywords": ["tree", "hierarchy", "expandable nodes", "folder tree", "nested list"],
+    "relatedControls": ["ListView"]
+  },
+  "type-ramp": {
+    "keywords": ["text styles", "font sizes", "title subtitle body", "heading", "typography ramp"],
+    "relatedControls": ["Typography", "RichTextBlock"],
+    "sampleOverride": {
+      "header": "Type ramp factories — Title / Subtitle / Body"
+    }
+  },
+  "typography": {
+    "keywords": ["text styles", "font hierarchy", "headings", "type scale", "text ramp"],
+    "relatedControls": ["Type ramp", "Spacing", "Color"]
+  },
+  "uniform-grid": {
+    "keywords": ["equal cells", "grid of equal size", "tiles", "matrix layout"],
+    "relatedControls": ["WrapGrid", "Grid"]
+  },
+  "viewbox": {
+    "keywords": ["scale to fit", "stretch content", "zoom fit", "proportional scaling"]
+  },
+  "web-view-2": {
+    "keywords": ["web view", "embedded browser", "html content", "edge webview", "browser control"]
+  },
+  "wrap-grid": {
+    "keywords": ["wrapping layout", "flow layout", "wrap items", "tag cloud", "reflow"],
+    "relatedControls": ["UniformGrid", "Grid"]
+  }
+}

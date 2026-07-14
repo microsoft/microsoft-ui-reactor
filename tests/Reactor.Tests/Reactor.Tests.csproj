@@ -62,6 +62,7 @@
     <ProjectReference Include="..\..\samples\apps\minesweeper\Minesweeper.csproj" />
     <ProjectReference Include="..\..\tools\Reactor.MurCheckGuardrail\Reactor.MurCheckGuardrail.csproj" />
     <ProjectReference Include="..\..\tools\Reactor.ApiIndex\Reactor.ApiIndex.csproj" />
+    <ProjectReference Include="..\..\tools\Reactor.SearchIndex\Reactor.SearchIndex.csproj" />
   </ItemGroup>
 
 </Project>
