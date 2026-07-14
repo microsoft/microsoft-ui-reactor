@@ -64,12 +64,18 @@ public sealed class SearchIndexGeneratorTests
         var committedBytes = File.ReadAllBytes(CommittedPath());
         if (!generatedBytes.AsSpan().SequenceEqual(committedBytes))
         {
+            var hasBom = committedBytes.Length >= 3 && committedBytes[0] == 0xEF && committedBytes[1] == 0xBB && committedBytes[2] == 0xBF;
+            // File.ReadAllText strips a BOM, so only use the text preview for genuine content
+            // drift; call out a BOM explicitly (it is what the byte-compare above catches).
+            var detail = hasBom
+                ? "The committed file has a UTF-8 BOM — it must be written without one."
+                : "First diff: " + FirstDiffPreview(File.ReadAllText(CommittedPath()), generated);
             throw new Xunit.Sdk.XunitException(
                 "samples/ReactorGallery/reactor-search-index.json is stale (content or BOM/encoding). Regenerate by running:\n" +
                 "  dotnet run --project tools/Reactor.SearchIndex\n" +
                 "  (or: $env:UPDATE_SEARCH_INDEX=1; dotnet test tests/Reactor.Tests " +
                 "--filter \"FullyQualifiedName~Tooling.SearchIndexGeneratorTests.Index_IsUpToDate\")\n" +
-                "First diff: " + FirstDiffPreview(File.ReadAllText(CommittedPath()), generated));
+                detail);
         }
     }
 

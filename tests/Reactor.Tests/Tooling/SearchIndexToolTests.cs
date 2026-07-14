@@ -40,11 +40,10 @@ sealed class MiniGallery : IDisposable
 
     public void Dispose()
     {
+        // best-effort temp cleanup (IOException also covers DirectoryNotFoundException)
         try { Directory.Delete(Root, recursive: true); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or DirectoryNotFoundException)
-        {
-            // best-effort temp cleanup
-        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
     }
 
     const string Registry = @"namespace WinUIGalleryReactor;
