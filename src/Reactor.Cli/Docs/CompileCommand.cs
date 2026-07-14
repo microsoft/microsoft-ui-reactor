@@ -658,8 +658,8 @@ internal static partial class CompileCommand
         DocTemplate template,
         Dictionary<string, SnippetExtractor.Snippet> allSnippets,
         Dictionary<string, ScreenshotInfo> allScreenshots,
-        string? topicId = null,
-        string? reactorVersion = null)
+        string? topicId,
+        string? reactorVersion)
     {
         var snippetRefs = ExtractSnippetRefs(template.Body);
         var resolvedSnippets = snippetRefs.Count(r => allSnippets.ContainsKey(r));

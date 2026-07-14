@@ -23,6 +23,11 @@ internal static partial class VersionSource
     [GeneratedRegex(@"<ReactorPublicVersion>\s*([^<]+?)\s*</ReactorPublicVersion>")]
     private static partial Regex ReactorPublicVersionElement();
 
+    // XML comments (possibly multi-line) — stripped before matching so a
+    // commented-out <ReactorPublicVersion> can't be read as the live property.
+    [GeneratedRegex(@"<!--.*?-->", RegexOptions.Singleline)]
+    private static partial Regex XmlComment();
+
     /// <summary>
     /// Reads <c>ReactorPublicVersion</c> from <c>&lt;repoRoot&gt;/Directory.Build.props</c>.
     /// Throws <see cref="DocPipelineException"/> if the file or the element is
@@ -48,8 +53,13 @@ internal static partial class VersionSource
     /// </summary>
     internal static string Parse(string propsContent, string sourcePath = PropsFileName)
     {
-        var match = ReactorPublicVersionElement().Match(propsContent);
-        if (!match.Success || string.IsNullOrWhiteSpace(match.Groups[1].Value))
+        // Ignore commented-out definitions, then take the LAST occurrence so the
+        // CLI reader mirrors MSBuild's last-write-wins evaluation of an
+        // unconditional property (it must not diverge from how the build itself
+        // resolves $(ReactorPublicVersion)).
+        var live = XmlComment().Replace(propsContent, string.Empty);
+        var matches = ReactorPublicVersionElement().Matches(live);
+        if (matches.Count == 0 || string.IsNullOrWhiteSpace(matches[^1].Groups[1].Value))
         {
             throw new DocPipelineException(
                 "REACTOR_DOC_VERSION_002",
@@ -58,6 +68,6 @@ internal static partial class VersionSource
                 "into docs (the {{reactorVersion}} token).");
         }
 
-        return match.Groups[1].Value.Trim();
+        return matches[^1].Groups[1].Value.Trim();
     }
 }

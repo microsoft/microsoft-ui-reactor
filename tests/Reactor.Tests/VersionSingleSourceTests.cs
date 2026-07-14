@@ -139,6 +139,11 @@ public sealed class VersionSingleSourceTests
         Assert.Contains(
             "git diff --exit-code -- docs/guide/getting-started.md docs/guide/packaging.md",
             step!, global::System.StringComparison.Ordinal);
+        // Non-vacuous: also require the failure path. Leaving the diff command in
+        // a comment/echo while making the step succeed (exit 0) would defeat the
+        // gate but keep the substring above — these assertions catch that.
+        Assert.Contains("if ($LASTEXITCODE -ne 0)", step!, global::System.StringComparison.Ordinal);
+        Assert.Contains("exit 1", step!, global::System.StringComparison.Ordinal);
     }
 
     // ── Guard 4: release-time tag-vs-property consistency guard ────────────
@@ -154,6 +159,13 @@ public sealed class VersionSingleSourceTests
         Assert.Contains("steps.version.outputs.is_tag == 'true'", step!, global::System.StringComparison.Ordinal);
         Assert.Contains("ReactorPublicVersion", step!, global::System.StringComparison.Ordinal);
         Assert.Contains("steps.version.outputs.version", step!, global::System.StringComparison.Ordinal);
+        // Non-vacuous: the guard must be gated on tag pushes via `if:` AND
+        // actually compare + fail on mismatch. Merely mentioning the token names
+        // in a Write-Host/comment (with the compare/exit removed) would satisfy
+        // the three Contains above but not these.
+        Assert.Contains("if: steps.version.outputs.is_tag == 'true'", step!, global::System.StringComparison.Ordinal);
+        Assert.Contains("-ne $tagVersion", step!, global::System.StringComparison.Ordinal);
+        Assert.Contains("exit 1", step!, global::System.StringComparison.Ordinal);
     }
 
     // ── helpers (modeled on TemplateMetadataTests) ─────────────────────────

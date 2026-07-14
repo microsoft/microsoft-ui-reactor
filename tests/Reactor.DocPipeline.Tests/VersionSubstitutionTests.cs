@@ -56,14 +56,51 @@ public class VersionSubstitutionTests
     [Fact]
     public void Assemble_leaves_token_untouched_when_version_is_null()
     {
-        // Opt-out path: incidental callers that pass no version must not blank
-        // out or partially rewrite the token.
+        // Opt-out path: a caller that deliberately passes null (e.g. structural
+        // tier-lint) must not blank out or partially rewrite the token. The
+        // parameter is required (no default), so this opt-out is always explicit.
         var body = $"pinned to `{DocAssembler.VersionToken}`";
 
         var output = DocAssembler.Assemble(
             body, NoSnippets, NoScreenshots, out _, out _, topicId: null, reactorVersion: null);
 
         Assert.Contains(DocAssembler.VersionToken, output);
+    }
+
+    [Fact]
+    public void AssembleForLint_substitutes_version_token()
+    {
+        // The lint assembly path must substitute exactly like the emit path;
+        // otherwise cross-link / tier lint would evaluate a raw {{reactorVersion}}
+        // token that never ships. Fails if AssembleForLint stops threading the
+        // version through to DocAssembler.Assemble.
+        var template = new DocTemplate { Body = $"See `{DocAssembler.VersionToken}` on NuGet." };
+
+        var (body, _, _) = CompileCommand.AssembleForLint(
+            template, NoSnippets, NoScreenshots, topicId: null, reactorVersion: "7.8.9");
+
+        Assert.Contains("`7.8.9`", body);
+        Assert.DoesNotContain(DocAssembler.VersionToken, body);
+    }
+
+    [Fact]
+    public void Assemble_substitutes_token_inside_an_expanded_snippet()
+    {
+        // Substitution runs AFTER snippet expansion, so a {{reactorVersion}} that
+        // lives inside an inserted snippet is resolved too. If substitution ran
+        // first (the old order), the token would survive in the output.
+        var code = $"<PackageReference Include=\"Microsoft.UI.Reactor\" Version=\"{DocAssembler.VersionToken}\" />";
+        var snippets = new Dictionary<string, SnippetExtractor.Snippet>
+        {
+            ["pkg/ref"] = new SnippetExtractor.Snippet("ref", "pkg/ref", code, "test.cs", 1),
+        };
+        var body = "```csharp snippet=\"pkg/ref\"\n```";
+
+        var output = DocAssembler.Assemble(
+            body, snippets, NoScreenshots, out _, out _, topicId: null, reactorVersion: "3.2.1");
+
+        Assert.Contains("Version=\"3.2.1\"", output);
+        Assert.DoesNotContain(DocAssembler.VersionToken, output);
     }
 
     [Fact]
@@ -114,6 +151,44 @@ public class VersionSubstitutionTests
         var ex = Assert.Throws<DocPipelineException>(
             () => VersionSource.Parse("<ReactorPublicVersion>   </ReactorPublicVersion>"));
         Assert.Equal("REACTOR_DOC_VERSION_002", ex.Code);
+    }
+
+    [Fact]
+    public void Parse_ignores_commented_out_element()
+    {
+        // A commented-out definition must not be picked up — otherwise a stale
+        // version left in an XML comment could silently drive the docs. The live
+        // (uncommented) value is the only one that counts.
+        const string props = """
+            <Project>
+              <PropertyGroup>
+                <!-- <ReactorPublicVersion>9.9.9-preview.99</ReactorPublicVersion> -->
+                <ReactorPublicVersion>0.1.0-preview.11</ReactorPublicVersion>
+              </PropertyGroup>
+            </Project>
+            """;
+
+        Assert.Equal("0.1.0-preview.11", VersionSource.Parse(props));
+    }
+
+    [Fact]
+    public void Parse_uses_last_definition_to_match_msbuild_last_wins()
+    {
+        // MSBuild honors the last assignment of a property, so when a props file
+        // defines the element twice, VersionSource must resolve to the same value
+        // MSBuild would — the last one, not the first.
+        const string props = """
+            <Project>
+              <PropertyGroup>
+                <ReactorPublicVersion>0.1.0-preview.10</ReactorPublicVersion>
+              </PropertyGroup>
+              <PropertyGroup>
+                <ReactorPublicVersion>0.1.0-preview.11</ReactorPublicVersion>
+              </PropertyGroup>
+            </Project>
+            """;
+
+        Assert.Equal("0.1.0-preview.11", VersionSource.Parse(props));
     }
 
     [Fact]

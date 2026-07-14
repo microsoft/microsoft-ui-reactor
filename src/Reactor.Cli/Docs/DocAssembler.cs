@@ -33,8 +33,8 @@ internal static partial class DocAssembler
         Dictionary<string, ScreenshotInfo> screenshots,
         out List<string> errors,
         out List<string> warnings,
-        string? topicId = null,
-        string? reactorVersion = null)
+        string? topicId,
+        string? reactorVersion)
     {
         var errs = new List<string>();
         var warns = new List<string>();
@@ -43,13 +43,6 @@ internal static partial class DocAssembler
         var depth = topicId is null ? 0 : topicId.Count(c => c == '/');
         var imagePrefix = depth == 0 ? "" : string.Concat(Enumerable.Repeat("../", depth));
         var output = body;
-
-        // Substitute the single-source version token before any other pass. The
-        // value comes from <ReactorPublicVersion> in Directory.Build.props (via
-        // VersionSource), so guide prose / PackageReference snippets never need a
-        // per-release hand edit. Null only when an incidental caller opts out.
-        if (reactorVersion is not null)
-            output = output.Replace(VersionToken, reactorVersion);
 
         // Replace snippet directives with extracted code
         output = SnippetDirective().Replace(output, match =>
@@ -98,6 +91,16 @@ internal static partial class DocAssembler
 
             return $"![{altText}]({imagePrefix}images/{topic}/{fileBase}.{format})";
         });
+
+        // Substitute the single-source version token LAST — after snippet and
+        // screenshot expansion — so a {{reactorVersion}} that appears inside an
+        // inserted snippet or screenshot alt-text is resolved too. The value
+        // comes from <ReactorPublicVersion> in Directory.Build.props (via
+        // VersionSource), so guide prose / PackageReference snippets never need a
+        // per-release hand edit. Callers pass null to opt out (e.g. structural
+        // tier-lint, which does not render the version token).
+        if (reactorVersion is not null)
+            output = output.Replace(VersionToken, reactorVersion);
 
         errors = errs;
         warnings = warns;

@@ -120,11 +120,16 @@ jobs:
         shell: pwsh
         run: |
           $props = Get-Content Directory.Build.props -Raw
-          if ($props -notmatch '<ReactorPublicVersion>\s*([^<]+?)\s*</ReactorPublicVersion>') {
+          # Ignore commented-out definitions and honor MSBuild last-write-wins
+          # (take the last occurrence) so a stale commented/duplicate element
+          # can't spoof this guard — mirrors VersionSource.Parse in the CLI.
+          $live = [regex]::Replace($props, '<!--.*?-->', '', 'Singleline')
+          $verMatches = [regex]::Matches($live, '<ReactorPublicVersion>\s*([^<]+?)\s*</ReactorPublicVersion>')
+          if ($verMatches.Count -eq 0) {
             Write-Error 'ReactorPublicVersion not found in Directory.Build.props.'
             exit 1
           }
-          $propVersion = $Matches[1].Trim()
+          $propVersion = $verMatches[$verMatches.Count - 1].Groups[1].Value.Trim()
           $tagVersion = '${{ steps.version.outputs.version }}'
           Write-Host "ReactorPublicVersion=$propVersion  tag version=$tagVersion"
           if ($propVersion -ne $tagVersion) {
