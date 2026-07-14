@@ -1,7 +1,8 @@
 # Reactor.MstatVerifier
 
 Build-time verifier used by CI to guard the devtools trimming / AOT-isolation story
-(spec-051). It has three modes, all invoked via `dotnet run` from
+(spec-051). It has three invocation modes (with `absence` and `presence` being the two
+directions of the same mstat check), all invoked via `dotnet run` from
 [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml):
 
 - `absence|presence <path-to.mstat> <path-to.exe>` — reads a NativeAOT `*.mstat` payload and
@@ -56,7 +57,7 @@ Two things worth knowing:
   trim/AOT warning, including new reflection in this tool's own code, still fails the native
   publish. Native link also needs the VS C++ tools (`vswhere.exe` / `link.exe`) on `PATH`.
 
-**Verdict:** native NativeAOT publish is **feasible and complete** — the ~3 MB self-contained
+**Verdict:** a full NativeAOT publish is **feasible and complete** — the ~3 MB self-contained
 exe produces output **byte-identical** to the JIT build across all three modes (`reactor-il`,
 `absence` / `presence`, `negative-resolution`) plus the no-args usage path. The gate exists
 purely as a reproducible proof; the everyday path is the plain host-arch `dotnet run` CI uses.

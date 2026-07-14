@@ -16,8 +16,7 @@
   <!--
     Opt-in NativeAOT proof gate (off by default): `-p:ReactorMstatAot=true`.
 
-        dotnet publish tools/Reactor.MstatVerifier/Reactor.MstatVerifier.csproj \
-          -c Release -r win-x64 -p:ReactorMstatAot=true
+        dotnet publish tools/Reactor.MstatVerifier/Reactor.MstatVerifier.csproj -c Release -r win-x64 -p:ReactorMstatAot=true
 
     Kept opt-in (not unconditional) so the normal build/run path CI uses
     (`dotnet run` on this project, `-c Release`, see ci.yml) is
