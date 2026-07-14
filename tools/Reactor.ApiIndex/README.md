@@ -41,7 +41,10 @@ dotnet publish tools/Reactor.SignaturesGen -r win-x64 -c Release -p:ReactorApiAo
   exe runs but emits an empty header-only skeleton (~1.7 KB) instead of the full ~315 KB index.**
   With the root, the ~30 MB native exe emits an index **byte-identical** to the committed file.
 - `IlcTreatWarningsAsErrors=false` is applied by the same gate; native linking also needs the VS
-  C++ tools (`vswhere.exe` / `link.exe`) on `PATH`.
+  C++ tools (`vswhere.exe` / `link.exe`) on `PATH`. This flag covers third-party ILC warnings
+  from the WinUI/CsWinRT dependency graph pulled in by `Reactor.dll` — **not** the generator's own
+  code, which stays warning-clean through the `[RequiresUnreferencedCode]` annotations above and is
+  independent of it.
 
 **Verdict:** trim/AOT-honest, and a native NativeAOT publish is *feasible and complete* via the
 opt-in gate above — but only because the generator is allowed to root the entire Reactor
