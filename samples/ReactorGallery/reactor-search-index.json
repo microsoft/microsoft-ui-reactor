@@ -331,8 +331,10 @@
         "tick",
         "boolean",
         "multi-select",
+        "select",
         "opt in",
-        "tri-state"
+        "tri-state",
+        "state"
       ],
       "relatedControls": [
         "RadioButton",
@@ -1104,6 +1106,7 @@
       "keywords": [
         "inline list",
         "selectable list",
+        "select",
         "options",
         "multi-select list"
       ],
@@ -1474,6 +1477,7 @@
         "floating content",
         "custom popup",
         "light-dismiss",
+        "dismiss",
         "layer"
       ],
       "relatedControls": [

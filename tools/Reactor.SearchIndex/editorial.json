@@ -48,7 +48,7 @@
     "relatedControls": ["Border", "Expander"]
   },
   "check-box": {
-    "keywords": ["tick", "boolean", "multi-select", "opt in", "tri-state"],
+    "keywords": ["tick", "boolean", "multi-select", "select", "opt in", "tri-state", "state"],
     "relatedControls": ["RadioButton", "ToggleSwitch"]
   },
   "color": {
@@ -163,7 +163,7 @@
     "relatedControls": ["ListView", "GridView", "ItemsRepeater"]
   },
   "list-box": {
-    "keywords": ["inline list", "selectable list", "options", "multi-select list"],
+    "keywords": ["inline list", "selectable list", "select", "options", "multi-select list"],
     "relatedControls": ["ComboBox", "ListView"]
   },
   "list-view": {
@@ -226,7 +226,7 @@
     "relatedControls": ["TabView", "SelectorBar"]
   },
   "popup": {
-    "keywords": ["overlay", "floating content", "custom popup", "light-dismiss", "layer"],
+    "keywords": ["overlay", "floating content", "custom popup", "light-dismiss", "dismiss", "layer"],
     "relatedControls": ["Flyout", "ContentDialog"]
   },
   "progress-bar": {
