@@ -113,27 +113,31 @@ Reactor spans a core framework and a set of higher-level features. Each area bel
 |---|---|---|
 | **Core reconciler** | Virtual element tree, keyed diffing, element pooling, render coalescing, skip-unchanged optimization | Preview |
 | **DSL & elements** | Factory methods covering WinUI controls, fluent modifier chains, attached properties | Preview |
-| **Hooks & state** | UseState, UseReducer, UseEffect, UseMemo, UseRef, UseObservable, UseCollection | Preview |
+| **Hooks & state** | UseState, UseReducer, UseEffect, UseMemo, UseRef, UseCallback, UseContext, UseObservable, UseCollection | Preview |
 | **Flex layout** | C# port of facebook/yoga with FlexPanel, 590 ported test fixtures | Preview |
 | **Commanding** | Command records bundling label, icon, shortcut, and action; 16 standard commands; focus-scoped accelerators | Preview |
 | **Charting (D3)** | Full D3 algorithm port plus declarative chart DSL — line, bar, area, pie, tree, force-directed graphs | Preview |
 | **Markdown** | Native md4c parser with `Markdown()` element builder | Preview |
 | **Navigation** | Type-safe declarative routing, GPU composition transitions, lifecycle guards, back-stack serialization | Draft |
-| **Accessibility** | `AutomationProperties` modifiers, WCAG 2.1 AA target, compile- and runtime-validation | Draft |
+| **Accessibility** | `AutomationProperties` modifiers (name, heading level, landmarks, live regions), WCAG 2.1 AA target, compile- and runtime-validation | Draft |
+| **Animation** | Compositor-layer transitions, keyframes, stagger, scroll-linked and connected animations | Draft |
+| **Theming & styling** | `ThemeRef` tokens, dark / light / high-contrast, style caching, per-control overrides | Draft |
+| **Lists & virtualization** | Virtualized `ListView`, `GridView`, `ItemsRepeater`, `LazyStack` with recycling | Draft |
+| **Input & gestures** | Pan / pinch / rotate / long-press gesture recognizers, drag-and-drop with typed data transfer, pointer and focus management | Draft |
 | **Docking & windows** | Visual Studio-style docking — tab tear-off, cross-window dock-in, floating panes, splitters, reserved document area, layout serialization and migration | Draft |
 | **WinForms interop** | Simple hosting of WinUI content inside WinForms apps | Draft |
-| **Shell integration** | Taskbar progress and overlays, jump lists, tray icons, thumbnail toolbars, layered-window hosting (opacity, no-activate, click-through) | Draft |
 | **DevTools & diagnostics** | In-process MCP server for AI agents, UIA tree inspection, layout-cost overlay, screenshot capture, structured log capture, ETW layout events | Draft |
-| **`mur` CLI & analyzers** | App scaffolding, doc pipeline, `mur find` sample catalogue, `mur check` did-you-mean linter, localization tooling, Roslyn analyzers (theming, pooling) | Draft |
-| **Theming & styling** | `ThemeRef` tokens, dark / light / high-contrast, style caching, per-control overrides | Early |
-| **Animation** | Compositor-layer transitions, keyframes, stagger, scroll-linked and connected animations | Early |
+| **`mur` CLI & analyzers** | App scaffolding, doc pipeline, `mur find` sample catalogue, `mur check` did-you-mean linter, localization tooling, 40+ Roslyn analyzers (hooks, commanding, accessibility, theming, pooling, forms) | Draft |
 | **Localization** | ICU message format, source generator, CLI tooling (extract, translate, validate), RTL/BiDi | Early |
-| **Lists & virtualization** | Virtualized `ListView`, `GridView`, `ItemsRepeater`, `LazyStack` with recycling | Early |
 | **Data system** | `DataGrid`, `PropertyGrid`, `FormField`, metadata model, async validation, inline editing | Early |
+| **Async resources** | `UseResource` / `UseInfiniteResource` / `UseMutation` — async value states, query caching, pagination, cancellation, optimistic updates | Early |
+| **Shell integration** | Taskbar progress and overlays, jump lists, tray icons, thumbnail toolbars, layered-window hosting (opacity, no-activate, click-through) | Early |
+| **Win2D canvas** | Optional `Reactor.Advanced` package — immediate-mode GPU drawing via `Win2DCanvas` / `Win2DAnimatedCanvas` / `Win2DVirtualCanvas` and draw-state hooks | Early |
+| **Control wrapper generator** | Source generator that turns WinUI controls into Reactor elements via `[GenerateReactorWrapper]` — auto factory methods, descriptors, two-way props | Early |
 | **Preview / hot reload** | `MetadataUpdateHandler` hot reload, CLI `--preview` flag, VS Code live preview | Early |
 | **Visual Studio embedded preview** | Experimental VSIX that reparents a live WinUI app into a Visual Studio tool window | Experimental / roughest |
 
-> Maturity labels reflect the breadth of testing and the likelihood of API churn, not feature completeness. *Preview* areas have selftest and e2e coverage and are the most stable. *Draft* areas work on the golden path but may have rough edges or partial AOT support. *Early* areas are usable but expect bigger shape changes as we iterate. The Visual Studio embedded preview is intentionally called out separately: in a repository of experiments, it is currently the roughest and most experimental surface.
+> Maturity labels reflect the breadth of testing and the likelihood of API churn, not feature completeness. *Preview* areas have the broadest unit, selftest, and e2e coverage and are the most stable — pure-managed subsystems (Flex, Markdown, Commanding) lean on exhaustive unit and selftest suites where end-to-end input isn't applicable. *Draft* areas work on the golden path but may have rough edges or partial AOT support. *Early* areas are usable but expect bigger shape changes as we iterate. The Visual Studio embedded preview is intentionally called out separately: in a repository of experiments, it is currently the roughest and most experimental surface.
 
 ---
 
