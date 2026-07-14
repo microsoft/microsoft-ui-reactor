@@ -127,7 +127,7 @@ Reactor spans a core framework and a set of higher-level features. Each area bel
 | **Docking & windows** | Visual Studio-style docking — tab tear-off, cross-window dock-in, floating panes, splitters, reserved document area, layout serialization and migration | Draft |
 | **WinForms interop** | Simple hosting of WinUI content inside WinForms apps | Draft |
 | **DevTools & diagnostics** | In-process MCP server for AI agents, UIA tree inspection, layout-cost overlay, screenshot capture, structured log capture, ETW layout events | Draft |
-| **`mur` CLI & analyzers** | App scaffolding, doc pipeline, `mur find` sample catalogue, `mur check` did-you-mean linter, localization tooling, 40+ Roslyn analyzers (hooks, commanding, accessibility, theming, pooling, forms) | Draft |
+| **`mur` CLI & analyzers** | App scaffolding, doc pipeline, `mur check` did-you-mean linter, localization tooling, install doctor/upgrade, 40+ Roslyn analyzers (hooks, commanding, accessibility, theming, pooling, forms) | Draft |
 | **Localization** | ICU message format, source generator, CLI tooling (extract, translate, validate), RTL/BiDi | Early |
 | **Data system** | `DataGrid`, `PropertyGrid`, `FormField`, metadata model, async validation, inline editing | Early |
 | **Async resources** | `UseResource` / `UseInfiniteResource` / `UseMutation` — async value states, query caching, pagination, cancellation, optimistic updates | Early |
