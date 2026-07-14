@@ -40,10 +40,19 @@ sealed class MiniGallery : IDisposable
 
     public void Dispose()
     {
-        // best-effort temp cleanup (IOException also covers DirectoryNotFoundException)
-        try { Directory.Delete(Root, recursive: true); }
-        catch (IOException) { }
-        catch (UnauthorizedAccessException) { }
+        // best-effort temp cleanup — trace (never throw) if the temp dir cannot be removed.
+        try
+        {
+            Directory.Delete(Root, recursive: true);
+        }
+        catch (IOException ex)
+        {
+            global::System.Diagnostics.Debug.WriteLine($"MiniGallery: temp cleanup failed for '{Root}': {ex}");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            global::System.Diagnostics.Debug.WriteLine($"MiniGallery: temp cleanup failed for '{Root}': {ex}");
+        }
     }
 
     const string Registry = @"namespace WinUIGalleryReactor;
