@@ -37,3 +37,22 @@ byte-equality with the committed file (the staleness gate that runs in CI `dotne
 `SearchIndexToolTests.cs` covers the editorial/skip/override/CLI edge cases.
 
 Curate `editorial.json`, never the generated JSON.
+
+## Trimming / NativeAOT
+
+The generator is trim- and NativeAOT-clean: JSON goes through the `System.Text.Json` source
+generator (`SearchIndexJsonContext` / `EditorialJsonContext`) and regexes through
+`[GeneratedRegex]`, so the IL2*/IL3* analyzer (`IsAotCompatible=true`) runs clean over our code.
+
+A native single-file build works:
+
+```pwsh
+dotnet publish tools/Reactor.SearchIndex -r win-x64 -c Release -p:PublishAot=true -p:IlcTreatWarningsAsErrors=false
+```
+
+…produces a ~12 MB native `Reactor.SearchIndex.exe` that emits a byte-identical index. The
+`IlcTreatWarningsAsErrors=false` downgrade is required only because the **Roslyn** dependency has
+trim-unsafe spots (e.g. `CommonCompiler.GetAssemblyLocation` → `Assembly.Location`, `IL3000`)
+that are unreachable at runtime for our syntax-only parsing — the native binary runs correctly.
+(Native linking also needs the VS C++ tools, i.e. `vswhere.exe`/`link.exe` on `PATH`.)
+

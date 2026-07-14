@@ -11,13 +11,15 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
+using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Microsoft.UI.Reactor.SearchIndex;
 
-public static class SearchIndexGenerator
+public static partial class SearchIndexGenerator
 {
     public const int SchemaVersion = 1;
     public const string Source = "reactor";
@@ -130,19 +132,24 @@ public static class SearchIndexGenerator
 
     // ── Serialization ──────────────────────────────────────────────────────
 
-    static readonly JsonSerializerOptions JsonOptions = new()
+    // Serialize through the System.Text.Json source generator (SearchIndexJsonContext) so the
+    // tool is trim / NativeAOT-safe. The context bakes camelCase / WhenWritingNull / WriteIndented;
+    // the encoder (UnsafeRelaxedJsonEscaping — keeps C# markup like => < > & "" readable) can't be
+    // set via the attribute, so it is layered on via a copied-options JsonTypeInfo.
+    static readonly JsonTypeInfo<IndexRoot> IndexRootTypeInfo = CreateIndexRootTypeInfo();
+
+    static JsonTypeInfo<IndexRoot> CreateIndexRootTypeInfo()
     {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-        // Relaxed escaping so C# markup in `code` (=> < > & "") stays human-readable;
-        // only " \ and control chars are escaped. Output is never embedded in HTML.
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-    };
+        var options = new JsonSerializerOptions(SearchIndexJsonContext.Default.Options)
+        {
+            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        };
+        return (JsonTypeInfo<IndexRoot>)options.GetTypeInfo(typeof(IndexRoot));
+    }
 
     static string Serialize(IndexRoot root)
     {
-        var json = JsonSerializer.Serialize(root, JsonOptions);
+        var json = JsonSerializer.Serialize(root, IndexRootTypeInfo);
         // Force LF structural newlines regardless of platform/runtime defaults. In-string
         // newlines are already the escaped 2-char "\\n", so this only touches indentation.
         json = json.Replace("\r\n", "\n").Replace("\r", "\n");
@@ -198,7 +205,7 @@ public static class SearchIndexGenerator
 
     static string Truncate(SyntaxNode node)
     {
-        var text = System.Text.RegularExpressions.Regex.Replace(node.ToString(), @"\s+", " ").Trim();
+        var text = WhitespaceRegex().Replace(node.ToString(), " ").Trim();
         return text.Length <= 120 ? text : text[..117] + "...";
     }
 
@@ -343,11 +350,13 @@ public static class SearchIndexGenerator
     // like <your-key>. Ellipses inside UI strings ("Type here...") are NOT matched, so those
     // snippets still qualify. Enforces the REAL-CODE-ONLY invariant: the first *complete*
     // card wins, and a control with no complete card needs an editorial sampleOverride.
-    static readonly System.Text.RegularExpressions.Regex PlaceholderPattern = new(
-        @",\s*\.\.\.|\.\.\.\s*\)|\(\s*\.\.\.|^\s*\.\.\.\s*$|\.\.\./|<your",
-        System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.Compiled);
+    [GeneratedRegex(@",\s*\.\.\.|\.\.\.\s*\)|\(\s*\.\.\.|^\s*\.\.\.\s*$|\.\.\./|<your", RegexOptions.Multiline)]
+    private static partial Regex PlaceholderRegex();
 
-    static bool HasPlaceholder(string code) => PlaceholderPattern.IsMatch(code);
+    static bool HasPlaceholder(string code) => PlaceholderRegex().IsMatch(code);
+
+    [GeneratedRegex(@"\s+")]
+    private static partial Regex WhitespaceRegex();
 
     // Resolves the representative sample: an editorial sampleOverride can replace the header,
     // the code, or both — or supply the whole sample when no page card qualifies. Returns null
@@ -379,7 +388,7 @@ public static class SearchIndexGenerator
         // "keywords": ["a", null]) so the body never Trims a null.
         foreach (var k in raw.Where(k => !string.IsNullOrWhiteSpace(k)))
         {
-            var norm = System.Text.RegularExpressions.Regex.Replace(k.Trim().ToLowerInvariant(), @"\s+", " ");
+            var norm = WhitespaceRegex().Replace(k.Trim().ToLowerInvariant(), " ");
             if (norm.Length > 0 && seen.Add(norm))
                 result.Add(norm);
         }
@@ -391,10 +400,9 @@ public static class SearchIndexGenerator
         if (string.IsNullOrWhiteSpace(editorialPath) || !File.Exists(editorialPath))
             return new Dictionary<string, EditorialEntry>(StringComparer.Ordinal);
 
-        var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true, ReadCommentHandling = JsonCommentHandling.Skip };
         try
         {
-            var parsed = JsonSerializer.Deserialize<Dictionary<string, EditorialEntry>>(File.ReadAllText(editorialPath), opts);
+            var parsed = JsonSerializer.Deserialize(File.ReadAllText(editorialPath), EditorialJsonContext.Default.DictionaryStringEditorialEntry);
             return parsed is null
                 ? new Dictionary<string, EditorialEntry>(StringComparer.Ordinal)
                 : new Dictionary<string, EditorialEntry>(parsed, StringComparer.Ordinal);
@@ -412,25 +420,6 @@ public static class SearchIndexGenerator
     sealed record RegistryEntry(string Id, string Name, string Description, string Category);
 
     sealed record ExtractedSample(string Header, string Code);
-
-    [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-    sealed class EditorialEntry
-    {
-        public List<string>? Keywords { get; set; }
-        public List<string>? RelatedControls { get; set; }
-        public List<string>? Usings { get; set; }
-        public string? ApiNamespace { get; set; }
-        public string? NugetPackage { get; set; }
-        public bool Exclude { get; set; }
-        public EditorialSampleOverride? SampleOverride { get; set; }
-    }
-
-    [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-    sealed class EditorialSampleOverride
-    {
-        public string? Header { get; set; }
-        public string? Code { get; set; }
-    }
 }
 
 // ── JSON output model (property order == emitted key order) ─────────────────
@@ -468,3 +457,42 @@ public sealed class Sample
 public sealed record SearchIndexResult(string Json, int ControlCount, IReadOnlyList<SkippedControl> Skipped);
 
 public sealed record SkippedControl(string Id, string Name, string Reason);
+
+// ── Editorial sidecar model (deserialized from editorial.json; internal to the tool) ────
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed class EditorialEntry
+{
+    public List<string>? Keywords { get; set; }
+    public List<string>? RelatedControls { get; set; }
+    public List<string>? Usings { get; set; }
+    public string? ApiNamespace { get; set; }
+    public string? NugetPackage { get; set; }
+    public bool Exclude { get; set; }
+    public EditorialSampleOverride? SampleOverride { get; set; }
+}
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+internal sealed class EditorialSampleOverride
+{
+    public string? Header { get; set; }
+    public string? Code { get; set; }
+}
+
+// ── System.Text.Json source-generation contexts (trim / NativeAOT-safe) ─────────────────
+
+// Output: camelCase keys, omit null optionals, indented. The relaxed encoder is layered on at
+// the use-site (SearchIndexGenerator.CreateIndexRootTypeInfo) since it has no attribute knob.
+[JsonSourceGenerationOptions(
+    WriteIndented = true,
+    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+[JsonSerializable(typeof(IndexRoot))]
+internal partial class SearchIndexJsonContext : JsonSerializerContext { }
+
+// Input: tolerate case + `//` comments; unmapped members rejected via the per-type attribute.
+[JsonSourceGenerationOptions(
+    PropertyNameCaseInsensitive = true,
+    ReadCommentHandling = JsonCommentHandling.Skip)]
+[JsonSerializable(typeof(Dictionary<string, EditorialEntry>))]
+internal partial class EditorialJsonContext : JsonSerializerContext { }
