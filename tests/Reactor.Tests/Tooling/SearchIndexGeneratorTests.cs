@@ -227,7 +227,11 @@ public sealed class SearchIndexGeneratorTests
             foreach (var k in c.Keywords)
             {
                 Assert.False(string.IsNullOrWhiteSpace(k), $"{c.Id} has a blank keyword");
-                Assert.Equal(k.ToLowerInvariant(), k); // lowercase
+                Assert.Equal(k.ToLowerInvariant(), k);           // lowercase
+                Assert.Equal(k.Trim(), k);                       // trimmed
+                Assert.DoesNotContain("  ", k);                  // internal whitespace collapsed
+                Assert.False(k.EndsWith('.'), $"{c.Id}: keyword '{k}' looks like a sentence");
+                Assert.InRange(k.Split(' ').Length, 1, 6);       // single token or short phrase
                 Assert.NotEqual(c.Name, k, StringComparer.OrdinalIgnoreCase);     // not the control name
                 Assert.NotEqual(c.Id, k, StringComparer.OrdinalIgnoreCase);
                 Assert.NotEqual(c.Category, k, StringComparer.OrdinalIgnoreCase); // not the category
@@ -247,6 +251,19 @@ public sealed class SearchIndexGeneratorTests
             Assert.False(string.IsNullOrWhiteSpace(h));
             Assert.NotEqual(c.Name, h, StringComparer.OrdinalIgnoreCase);
             Assert.NotEqual(c.Id, h, StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    // ── headers within one control's samples[] must be distinct (near-dupes collapse
+    //    into redundant scenarios). Moot at 1 sample/control today; a cheap future guard. ──
+
+    [Fact]
+    public void Samples_HaveDistinctHeadersWithinEachControl()
+    {
+        foreach (var c in Parse(Generate().Json).Controls)
+        {
+            var headers = c.Samples.Select(s => s.Header).ToList();
+            Assert.Equal(headers.Count, headers.Distinct(StringComparer.OrdinalIgnoreCase).Count());
         }
     }
 

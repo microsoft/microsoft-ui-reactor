@@ -77,7 +77,7 @@ public static class SearchIndexGenerator
                 continue;
             }
 
-            var keywords = NullIfEmpty(ed?.Keywords);
+            var keywords = NormalizeKeywords(ed?.Keywords);
             if (keywords is null)
                 missingKeywords.Add(reg.Id);
 
@@ -351,6 +351,24 @@ public static class SearchIndexGenerator
 
     static IReadOnlyList<string>? NullIfEmpty(IReadOnlyList<string>? list) =>
         list is { Count: > 0 } ? list : null;
+
+    // keywords feed a token-matched BM25 field: each must be a lowercased single token or
+    // short phrase. Trim, lowercase, collapse internal whitespace, and drop empties/dupes so
+    // the emitted form is canonical regardless of how editorial.json was hand-typed.
+    static IReadOnlyList<string>? NormalizeKeywords(IReadOnlyList<string>? raw)
+    {
+        if (raw is null) return null;
+
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var result = new List<string>();
+        foreach (var k in raw)
+        {
+            var norm = System.Text.RegularExpressions.Regex.Replace(k.Trim().ToLowerInvariant(), @"\s+", " ");
+            if (norm.Length > 0 && seen.Add(norm))
+                result.Add(norm);
+        }
+        return result.Count > 0 ? result : null;
+    }
 
     static IReadOnlyDictionary<string, EditorialEntry> LoadEditorial(string? editorialPath)
     {
