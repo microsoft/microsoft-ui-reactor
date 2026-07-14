@@ -169,7 +169,13 @@ public static class SearchIndexGenerator
         var list = new List<RegistryEntry>();
         foreach (var element in arrayInit.Expressions)
         {
-            if (ObjectCreationArgs(element) is not { } args || args.Count < 5) continue;
+            // Strict: every element of the `new ControlInfo[] { ... }` initializer must be a
+            // fully literal `new(title, desc, category, glyph, tag, ...)`. Throwing (rather
+            // than skipping) keeps the no-silent-drop guarantee if a future entry uses named
+            // args, a constant, or an interpolated string the parser can't read.
+            if (ObjectCreationArgs(element) is not { } args || args.Count < 5)
+                throw new InvalidOperationException(
+                    "ControlRegistry entry is not a `new(title, desc, category, glyph, tag, ...)` with >=5 args: " + Truncate(element));
 
             var title = TryGetStringLiteral(args[0].Expression);
             var description = TryGetStringLiteral(args[1].Expression);
@@ -177,7 +183,8 @@ public static class SearchIndexGenerator
             var tag = TryGetStringLiteral(args[4].Expression);
 
             if (title is null || description is null || category is null || string.IsNullOrEmpty(tag))
-                continue;
+                throw new InvalidOperationException(
+                    "ControlRegistry entry has a non-literal or empty title/description/category/tag: " + Truncate(element));
 
             list.Add(new RegistryEntry(tag, title, description, category));
         }
@@ -186,6 +193,12 @@ public static class SearchIndexGenerator
             throw new InvalidOperationException("ControlRegistry parse yielded no entries.");
 
         return list;
+    }
+
+    static string Truncate(SyntaxNode node)
+    {
+        var text = System.Text.RegularExpressions.Regex.Replace(node.ToString(), @"\s+", " ").Trim();
+        return text.Length <= 120 ? text : text[..117] + "...";
     }
 
     static SeparatedSyntaxList<ArgumentSyntax>? ObjectCreationArgs(ExpressionSyntax element) => element switch
@@ -376,10 +389,19 @@ public static class SearchIndexGenerator
             return new Dictionary<string, EditorialEntry>(StringComparer.Ordinal);
 
         var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true, ReadCommentHandling = JsonCommentHandling.Skip };
-        var parsed = JsonSerializer.Deserialize<Dictionary<string, EditorialEntry>>(File.ReadAllText(editorialPath), opts);
-        return parsed is null
-            ? new Dictionary<string, EditorialEntry>(StringComparer.Ordinal)
-            : new Dictionary<string, EditorialEntry>(parsed, StringComparer.Ordinal);
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<Dictionary<string, EditorialEntry>>(File.ReadAllText(editorialPath), opts);
+            return parsed is null
+                ? new Dictionary<string, EditorialEntry>(StringComparer.Ordinal)
+                : new Dictionary<string, EditorialEntry>(parsed, StringComparer.Ordinal);
+        }
+        catch (JsonException ex)
+        {
+            // A misspelled field (e.g. "keyword"/"sampleOveride") trips UnmappedMemberHandling
+            // and lands here — surface it as a clear, actionable error instead of a raw crash.
+            throw new InvalidOperationException($"editorial.json is invalid ({Path.GetFileName(editorialPath)}): {ex.Message}", ex);
+        }
     }
 
     // ── Internal parse models ──────────────────────────────────────────────
@@ -388,6 +410,7 @@ public static class SearchIndexGenerator
 
     sealed record ExtractedSample(string Header, string Code);
 
+    [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
     sealed class EditorialEntry
     {
         public List<string>? Keywords { get; set; }
@@ -399,6 +422,7 @@ public static class SearchIndexGenerator
         public EditorialSampleOverride? SampleOverride { get; set; }
     }
 
+    [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
     sealed class EditorialSampleOverride
     {
         public string? Header { get; set; }

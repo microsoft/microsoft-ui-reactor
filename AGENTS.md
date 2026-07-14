@@ -225,6 +225,13 @@ Hard-won specifics that repeatedly cost sessions time. Prefer these exact comman
 - A new public API surface has **two byte-identical index copies** —
   `skills/reactor.api.txt` and `plugins/reactor/skills/reactor-dsl/references/reactor.api.txt`
   — regenerate via `mur --regen-api`; keep them in sync.
+- The **ReactorGallery search index** (`samples/ReactorGallery/reactor-search-index.json`,
+  consumed by the external `winui-search` CLI) is generated from the gallery source +
+  `tools/Reactor.SearchIndex/editorial.json`. After adding/renaming a gallery control or
+  changing its first sample snippet, regenerate via
+  `dotnet run --project tools/Reactor.SearchIndex` (a `Reactor.Tests` gate byte-compares it,
+  so a stale index fails CI). Curate keywords/usings/overrides in `editorial.json`, never the
+  generated JSON.
 - A new common-element modifier touches every seam: the `ElementModifiers` field, skip
   equality, `Merge`, `ApplyModifiers`, and the fluent extension. Pair a `.HasValue` write
   with `fe.ClearValue(<DP>Property)` on unset unless intentionally matching a no-reset sibling.

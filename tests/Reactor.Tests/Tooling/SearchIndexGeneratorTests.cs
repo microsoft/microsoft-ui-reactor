@@ -26,16 +26,16 @@ public sealed class SearchIndexGeneratorTests
         var dir = AppContext.BaseDirectory;
         while (dir is not null)
         {
-            if (File.Exists(Path.Combine(dir, "Reactor.slnx")))
+            if (File.Exists(Path.Join(dir, "Reactor.slnx")))
                 return dir;
             dir = Path.GetDirectoryName(dir);
         }
         throw new DirectoryNotFoundException("Could not locate repo root (Reactor.slnx) from " + AppContext.BaseDirectory);
     }
 
-    static string GalleryDir() => Path.Combine(RepoRoot(), "samples", "ReactorGallery");
-    static string EditorialPath() => Path.Combine(RepoRoot(), "tools", "Reactor.SearchIndex", "editorial.json");
-    static string CommittedPath() => Path.Combine(GalleryDir(), "reactor-search-index.json");
+    static string GalleryDir() => Path.Join(RepoRoot(), "samples", "ReactorGallery");
+    static string EditorialPath() => Path.Join(RepoRoot(), "tools", "Reactor.SearchIndex", "editorial.json");
+    static string CommittedPath() => Path.Join(GalleryDir(), "reactor-search-index.json");
 
     static SearchIndexResult Generate() => SearchIndexGenerator.Generate(GalleryDir(), EditorialPath());
 
@@ -262,6 +262,10 @@ public sealed class SearchIndexGeneratorTests
     {
         foreach (var c in Parse(Generate().Json).Controls)
         {
+            // v1 contract: exactly one sample per control — non-vacuous, fails if the
+            // generator ever emits multiple samples without this guard being revisited...
+            Assert.Single(c.Samples);
+            // ...and whenever it does, their headers must stay distinct (no redundant scenarios).
             var headers = c.Samples.Select(s => s.Header).ToList();
             Assert.Equal(headers.Count, headers.Distinct(StringComparer.OrdinalIgnoreCase).Count());
         }
@@ -284,7 +288,7 @@ public sealed class SearchIndexGeneratorTests
     [Fact]
     public void OrphanEditorialKey_FailsGeneration()
     {
-        var tmp = Path.Combine(Path.GetTempPath(), $"reactor-editorial-orphan-{Guid.NewGuid():N}.json");
+        var tmp = Path.Join(Path.GetTempPath(), $"reactor-editorial-orphan-{Guid.NewGuid():N}.json");
         File.WriteAllText(tmp, "{ \"button\": { \"keywords\": [\"click\",\"submit\",\"accent\"] }, \"buton\": { \"keywords\": [\"x\",\"y\",\"z\"] } }");
         try
         {
