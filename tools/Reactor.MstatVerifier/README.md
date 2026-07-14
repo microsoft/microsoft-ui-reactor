@@ -52,10 +52,10 @@ Two things worth knowing:
   symbol reader by name via `Activator.CreateInstance` / `Type.GetType` / `Assembly.GetType`)
   trips `IL2072`/`IL2057`/`IL2026`. This tool always reads with the default `ReaderParameters`
   (`ReadSymbols=false`), so that code path is never reached at runtime. The gate demotes
-  **exactly those three codes** from error to warning for the ILC step (via
-  `WarningsNotAsErrors`), rather than a blanket `IlcTreatWarningsAsErrors=false` — so any *other*
-  trim/AOT warning, including new reflection in this tool's own code, still fails the native
-  publish. Native link also needs the VS C++ tools (`vswhere.exe` / `link.exe`) on `PATH`.
+  **exactly those three codes** from error to warning by adding them to `WarningsNotAsErrors`,
+  which the ILCompiler native-publish targets forward to the ilc `--nowarnaserr` switch — rather
+  than flipping the blanket `IlcTreatWarningsAsErrors=false`. So any *other* trim/AOT warning,
+  including new reflection in this tool's own code, still fails the native publish. Native link also needs the VS C++ tools (`vswhere.exe` / `link.exe`) on `PATH`.
 
 **Verdict:** a full NativeAOT publish is **feasible and complete** — the ~3 MB self-contained
 exe produces output **byte-identical** to the JIT build across all three modes (`reactor-il`,
