@@ -66,10 +66,10 @@ _hookIndex`. `BeginRender(requestRerender)` sets `_hookIndex = 0` and
 captures the UI thread ID; the component's `Render()` runs, hooks
 advance `_hookIndex` as they go, and after `Render()` returns the
 reconciler reads `_hooks` to know which effects to flush. There is
-one `RenderContext` per `Component` instance (and one per `Func(ctx
-=> …)` function-component invocation — function components get their
-own context per parent's render, with state preserved across that
-parent's re-renders via positional matching just like any other
+one `RenderContext` per `Component` instance (and one per
+`RenderEachTime(ctx => …)` function-component invocation — a function component gets its
+own context, created at mount and preserved across the parent's re-renders
+via positional matching, just like any other
 element).
 
 The slot-type check at the top of each hook is the runtime guard:
@@ -234,7 +234,7 @@ parent's re-render) marks the consuming component dirty.
 ```csharp snippet="source:src/Reactor/Core/Component.cs#render-loop"
 ```
 
-`Func(ctx => Render(ctx))` materializes as a function-component
+`Memo(ctx => Render(ctx))` materializes as a function-component
 element. The reconciler treats it like any other component — element
 record on the tree, mounted into a slot in the parent — but the
 "component instance" is an internal wrapper holding its own

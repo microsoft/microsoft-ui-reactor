@@ -306,7 +306,7 @@ class Counter : Component
 ### Function component (inline, small reusable pieces)
 
 ```csharp
-var toggle = Func(ctx =>
+var toggle = Memo(ctx =>
 {
     var (on, setOn) = ctx.UseState(false);
     return ToggleSwitch(on, setOn);

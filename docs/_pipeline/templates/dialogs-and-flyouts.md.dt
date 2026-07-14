@@ -232,7 +232,7 @@ content that isn't a menu — all of them are popups.
 
 | Fluent | Effect |
 |---|---|
-| `.IsLightDismissEnabled(bool)` | Close on outside click. Default `true`. |
+| `.IsLightDismissEnabled(bool enabled = true)` | Close on outside click. Off by default (matching WinUI); call `.IsLightDismissEnabled()` to enable. |
 | `.Offset(horizontal, vertical)` | Position relative to the popup's anchor point. |
 | `.Opened(Action)` | Fires after the popup is on screen. |
 | `.Closed(Action)` | Fires after the popup leaves the screen. |

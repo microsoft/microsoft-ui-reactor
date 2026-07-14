@@ -37,11 +37,11 @@ Doc apps inherit `Reactor.DevtoolsSupport=true` from `docs/_pipeline/apps/Direct
 | `UseContext<T>(ctx)` | `T` | Read a [context](context.md) value. |
 | `UsePersisted<T>(key, initial, scope)` | `(T, Action<T>)` | Survive re-mount via [LRU cache](persistence.md). |
 | `UseColorScheme()` | `ColorScheme` | Reactive light/dark/HighContrast. |
-| `UseAsync(factory, deps)` | `AsyncResource<T>` | [`async-resources`](async-resources.md). |
-| `UseFocusTrap()` | `FocusTrapHandle` | Trap Tab inside a sub-tree. |
-| `UseAnnounce()` | `Action<string>` | Push a screen-reader announcement. |
+| `UseResource(fetcher, cache, deps, opts?)` | `AsyncValue<T>` | [`async-resources`](async-resources.md). |
+| `UseFocusTrap(isActive)` | `FocusTrapHandle` | Trap Tab inside a sub-tree. |
+| `UseAnnounce()` | `AnnounceHandle` | Push a screen-reader announcement (via `.Announce(string)` method). |
 | `UseElementRef<T>()` | `ElementRef<T>` | Reference a realized element for focus, `TeachingTip.Target`, UIA relationships, or XYFocus. |
-| `UseDevtools()` | `DevtoolsApi` | [Dev-tooling](dev-tooling.md) hooks. |
+| `UseDevtools()` | `bool` | [Dev-tooling](dev-tooling.md) gate — true when devtools are enabled. |
 
 ```csharp
 class StateVignette : Component
@@ -108,9 +108,9 @@ Full coverage on [Controls](controls.md).
 | Group | Methods |
 |---|---|
 | Size | `.Width(n)` `.Height(n)` `.Size(w,h)` |
-| Spacing | `.Margin(n)` `.Padding(n)` `.HAlign(...)` `.VAlign(...)` |
+| Spacing | `.Margin(n)` `.Padding(n)` `.HAlign(...)` `.VAlign(...)` `.HorizontalContentAlignment(...)` `.VerticalContentAlignment(...)` |
 | Text | `.FontSize(n)` `.Bold()` `.SemiBold()` `.Opacity(n)` |
-| Color | `.Background(token)` `.Foreground(token)` `.WithBorder(token, thickness?)` |
+| Color | `.Background(token)` `.Foreground(token)` `.BorderBrush(token)` `.BorderThickness(...)` `.WithBorder(token, thickness?)` |
 | Shape | `.CornerRadius(n)` |
 | Behavior | `.IsEnabled(bool)` `.IsVisible(bool)` `.ToolTip(s)` |
 | Keying | `.WithKey(s)` |

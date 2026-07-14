@@ -11,9 +11,6 @@
     <DefineConstants>DISABLE_XAML_GENERATED_MAIN</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" />
-  </ItemGroup>
-  <ItemGroup>
     <ProjectReference Include="..\..\PerfBench.Shared\PerfBench.Shared.csproj" />
   </ItemGroup>
 </Project>

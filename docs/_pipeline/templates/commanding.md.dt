@@ -429,12 +429,15 @@ return VStack(0,
 ```csharp snippet="commanding/dont-create-in-render"
 ```
 
-Re-creating the `Command` record every frame creates a fresh
-`KeyboardAccelerator` and forces every consumer to re-render. The
-window's accelerator table grows without bound on rapid re-renders and
-the analyzer fires `REACTOR_PERF_FUNCREF` for the inline lambda
-identity. Wrap the construction in [`UseMemo`](hooks.md) with the
-correct dependencies, or hoist the command above the component.
+Re-creating the `Command` record every render allocates a fresh command
+(and its captured closures). Where a host rebuilds keyboard
+accelerators on reconcile it *clears and re-adds* them — a bounded rewire,
+not an unbounded leak — and a command bound to a button is diffed by
+*value*, so a fresh-but-equal command re-applies nothing. The avoidable
+cost is simply the per-render allocation, and the analyzer fires
+`REACTOR_PERF_FUNCREF` for the inline construction. Wrap it in
+[`UseMemo`](hooks.md) with the correct dependencies, or hoist the command
+above the component.
 
 ### Ignoring CanExecute changes
 

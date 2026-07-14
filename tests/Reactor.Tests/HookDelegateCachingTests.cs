@@ -135,7 +135,7 @@ public class HookDelegateCachingTests
     // ── threadSafe path retained ─────────────────────────────────────────
 
     [Fact]
-    public void ThreadSafe_State_Still_Serializes_Concurrent_Setters()
+    public async global::System.Threading.Tasks.Task ThreadSafe_State_Still_Serializes_Concurrent_Setters()
     {
         var ctx = new RenderContext();
         ctx.BeginRender(() => { });
@@ -150,7 +150,7 @@ public class HookDelegateCachingTests
                 for (int i = 0; i < perThread; i++)
                     set(v => v + 1);
             })).ToArray();
-        global::System.Threading.Tasks.Task.WaitAll(tasks);
+        await global::System.Threading.Tasks.Task.WhenAll(tasks);
 
         ctx.BeginRender(() => { });
         var (final, _) = ctx.UseReducer<int>(0, threadSafe: true);

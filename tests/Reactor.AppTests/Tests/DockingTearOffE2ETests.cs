@@ -179,7 +179,7 @@ public class DockingTearOffE2ETests : AppTestBase
     // [Retry] mops up the rare unattended-desktop input-injection flake: Win32 SendInput is
     // occasionally dropped before the Host window foregrounds on CI. A real regression still
     // fails every attempt. Removable once winappCli #562 (send-keys)/#498 (drag) ship native verbs.
-    [Retry(3)]
+    [E2eRetry(3)]
     [TestMethod]
     public void TearOff_E01_DragTabOutOfHost_OpensFloatingWindow()
     {
@@ -208,7 +208,7 @@ public class DockingTearOffE2ETests : AppTestBase
     /// both drags the host retains only C and there are two distinct
     /// floating windows.
     /// </summary>
-    [Retry(3)]
+    [E2eRetry(3)]
     [TestMethod]
     public void TearOff_E02_MultipleSequentialTearOffs()
     {
@@ -262,7 +262,7 @@ public class DockingTearOffE2ETests : AppTestBase
     /// back to the app-supplied content (carrying the typed value)
     /// when the floating window re-mounts the pane.
     /// </summary>
-    [Retry(3)]
+    [E2eRetry(3)]
     [TestMethod]
     public void TearOff_E03_TearOff_PreservesPaneState()
     {
@@ -295,7 +295,7 @@ public class DockingTearOffE2ETests : AppTestBase
     /// resets the fixture, tears off A again. All iterations must produce
     /// identical post-state.
     /// </summary>
-    [Retry(3)]
+    [E2eRetry(3)]
     [TestMethod]
     public void TearOff_E04_RepeatedTearOffsAreReliable()
     {

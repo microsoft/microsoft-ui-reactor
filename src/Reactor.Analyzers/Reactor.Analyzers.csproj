@@ -38,6 +38,12 @@
     <AdditionalFiles Include="AnalyzerReleases.Unshipped.md" />
   </ItemGroup>
 
+  <!-- The REACTOR_DYM_003 StringSimilarity port is internal; the parity test in
+       Reactor.Tests asserts it matches the CLI's copy byte-for-byte. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Reactor.Tests" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" PrivateAssets="all" />

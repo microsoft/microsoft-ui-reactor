@@ -43,10 +43,11 @@ public class PoolResetSetConsistencyTests
         new(StringComparer.Ordinal)
         {
             // Modifier is .IsVisible(bool); .Set(...) writes Visibility (enum).
-            // The codefix would need an enum→bool translation, so we exclude
-            // it from the auto-fix set. A future analyzer with a custom
-            // codefix could pick this up.
-            { "Visibility", "different signature (enum vs bool via .IsVisible)" },
+            // The codefix needs an enum→bool translation, so it stays out of the
+            // POOL_001 auto-fix set. It is instead handled by REACTOR_VIS_001 — a
+            // separate descriptor on PoolResetSetAnalyzer with its own
+            // SetVisibilityCodeFix — so it deliberately remains excluded here.
+            { "Visibility", "different signature (enum vs bool); handled by REACTOR_VIS_001 + SetVisibilityCodeFix" },
 
             // No exact-name modifier exists, and Reactor uses Tag internally
             // to attach its element record — user .Set writes here are wrong
@@ -275,13 +276,17 @@ class C
 
         return $@"
 using System;
+using Microsoft.UI.Reactor;
 
 #nullable enable
 
-public class FakeElement
+namespace Microsoft.UI.Reactor
 {{
-    {fields}
-    public FakeElement Set(Action<FakeElement> configure) {{ configure(this); return this; }}
+    public class FakeElement
+    {{
+        {fields}
+        public FakeElement Set(Action<FakeElement> configure) {{ configure(this); return this; }}
+    }}
 }}
 ";
     }

@@ -724,6 +724,7 @@ internal static class SelfTestFixtureRegistry
         "DataGrid_EditCellColumnPlacement",
         "DataGrid_RapidSelection",
         "DataGrid_ExternalStateUpdate",
+        "DataGrid_SelectionModeReactsToPropChange",
         "DataGrid_CellTypeFlipPreservesTrailingCells",
         "DataGrid_RowEditTemplatesAndEmptyState",
         "DataGrid_KeyboardAndPrivateRenderPaths",
@@ -1282,6 +1283,17 @@ internal static class SelfTestFixtureRegistry
         "SplitterCov_DragWithoutFlexParent_StillFiresEvent",
         "SplitterCov_AutomationPeer_ReportsThumbAndClassName",
 
+        // Supplemental docking native-control seam coverage
+        // (DockControlSeamCoverageFixtures.cs) — overlay disabled/hit-test/
+        // reveal/peer, splitter DiagnosticSink MOVE branch, tear-off
+        // XamlRoot-null abort + seam guards.
+        "SeamCov_Overlay_SetDisabledTargets_GuardsHoverAndConfirm",
+        "SeamCov_Overlay_HitTestPipeline_ResolvesTargetsAndConfirms",
+        "SeamCov_Overlay_PointerEnterExit_TogglesGroupReveal",
+        "SeamCov_Overlay_AutomationPeer_ReportsGroup",
+        "SeamCov_Splitter_DiagnosticSink_TracesDragLifecycle",
+        "SeamCov_TearOff_MoveWithoutXamlRoot_AbortsAndGuards",
+
         // Deterministic splitter matrix — 41 cases driving the new
         // BeginSimulatedDrag / ContinueSimulatedDrag / EndSimulatedDrag
         // injection API against a real FlexPanel + N panes + (N-1) splitters.
@@ -1500,6 +1512,27 @@ internal static class SelfTestFixtureRegistry
         "InitialOnly",
         "BrushHelperParse",
         "CrossAxisMeasureStaleness",
+        // Issue #845 — LV/GV Update clears Header/ItemContainerStyle to null
+        "Issue845_ListViewClearsHeaderAndStyle",
+        "Issue845_GridViewClearsHeaderAndStyle",
+
+        // Core reconciler / RenderContext / V1 lifecycle coverage
+        // (CoreReconcilerRenderCoverageFixtures).
+        "CoreRRC_OverlayFlyoutUpdate",
+        "CoreRRC_OverlayMenuFlyoutUpdate",
+        "CoreRRC_OverlayPopupUpdate",
+        "CoreRRC_OverlayCommandBarUpdate",
+        "CoreRRC_OverlayCommandBarFlyoutUpdate",
+        "CoreRRC_OverlayMenuBarUpdate",
+        "CoreRRC_CompositeFormFieldValidationUpdate",
+        "CoreRRC_CompositeValidationVisualizerStyles",
+        "CoreRRC_CompositeValidationRuleUpdate",
+        "CoreRRC_PreMountedFlipViewReconcile",
+        "CoreRRC_NavigationHostCacheEviction",
+        "CoreRRC_RenderContextReducers",
+        "CoreRRC_RenderContextThreadSafeState",
+        "CoreRRC_RenderContextWindowEnvHooks",
+        "CoreRRC_UntypedTreeViewReconcile",
     ];
 
     public static SelfTestFixtureBase? Create(string name, Harness harness) => name switch
@@ -2194,6 +2227,7 @@ internal static class SelfTestFixtureRegistry
         "DataGrid_EditCellColumnPlacement" => new DataGridEditFixtures.EditCellColumnPlacement(harness),
         "DataGrid_RapidSelection" => new DataGridEditFixtures.RapidSelection(harness),
         "DataGrid_ExternalStateUpdate" => new DataGridEditFixtures.ExternalStateUpdate(harness),
+        "DataGrid_SelectionModeReactsToPropChange" => new DataGridEditFixtures.SelectionModeReactsToPropChange(harness),
         "DataGrid_CellTypeFlipPreservesTrailingCells" => new DataGridEditFixtures.CellTypeFlipPreservesTrailingCells(harness),
         "DataGrid_RowEditTemplatesAndEmptyState" => new DataGridEditFixtures.RowEditTemplatesAndEmptyState(harness),
         "DataGrid_KeyboardAndPrivateRenderPaths" => new DataGridEditFixtures.KeyboardAndPrivateRenderPaths(harness),
@@ -2755,6 +2789,13 @@ internal static class SelfTestFixtureRegistry
         "SplitterCov_DragWithoutFlexParent_StillFiresEvent" => new NativeDockingCoverageSplitterFixtures.Splitter_DragWithoutFlexParent_StillFiresEvent(harness),
         "SplitterCov_AutomationPeer_ReportsThumbAndClassName" => new NativeDockingCoverageSplitterFixtures.Splitter_AutomationPeer_ReportsThumbAndClassName(harness),
 
+        "SeamCov_Overlay_SetDisabledTargets_GuardsHoverAndConfirm" => new OverlaySeamCoverageFixtures.Overlay_SetDisabledTargets_GuardsHoverAndConfirm(harness),
+        "SeamCov_Overlay_HitTestPipeline_ResolvesTargetsAndConfirms" => new OverlaySeamCoverageFixtures.Overlay_HitTestPipeline_ResolvesTargetsAndConfirms(harness),
+        "SeamCov_Overlay_PointerEnterExit_TogglesGroupReveal" => new OverlaySeamCoverageFixtures.Overlay_PointerEnterExit_TogglesGroupReveal(harness),
+        "SeamCov_Overlay_AutomationPeer_ReportsGroup" => new OverlaySeamCoverageFixtures.Overlay_AutomationPeer_ReportsGroup(harness),
+        "SeamCov_Splitter_DiagnosticSink_TracesDragLifecycle" => new SplitterSeamCoverageFixtures.Splitter_DiagnosticSink_TracesDragLifecycle(harness),
+        "SeamCov_TearOff_MoveWithoutXamlRoot_AbortsAndGuards" => new TearOffSeamCoverageFixtures.TearOff_MoveWithoutXamlRoot_AbortsAndGuards(harness),
+
         "SplitterMatrix_A01_TwoPaneH_DragForward" => new SplitterMatrixFixtures.A01_TwoPaneH_DragForward_LeadingTracksCursor(harness),
         "SplitterMatrix_A02_TwoPaneH_DragBackward" => new SplitterMatrixFixtures.A02_TwoPaneH_DragBackward_LeadingTracksCursor(harness),
         "SplitterMatrix_A03_TwoPaneV_DragDown" => new SplitterMatrixFixtures.A03_TwoPaneV_DragDown_TopTracksCursor(harness),
@@ -2950,6 +2991,25 @@ internal static class SelfTestFixtureRegistry
         "InitialOnly" => new InitialOnlyFixture.Execution(harness),
         "BrushHelperParse" => new BrushHelperParseFixture.Execution(harness),
         "CrossAxisMeasureStaleness" => new CrossAxisMeasureStalenessFixture(harness),
+        "Issue845_ListViewClearsHeaderAndStyle" => new Issue845ClearHeaderItemContainerStyleFixtures.ListViewClearsHeaderAndItemContainerStyle(harness),
+        "Issue845_GridViewClearsHeaderAndStyle" => new Issue845ClearHeaderItemContainerStyleFixtures.GridViewClearsHeaderAndItemContainerStyle(harness),
+
+        // Core reconciler / RenderContext / V1 lifecycle coverage.
+        "CoreRRC_OverlayFlyoutUpdate" => new CoreReconcilerRenderCoverageFixtures.OverlayFlyoutUpdate(harness),
+        "CoreRRC_OverlayMenuFlyoutUpdate" => new CoreReconcilerRenderCoverageFixtures.OverlayMenuFlyoutUpdate(harness),
+        "CoreRRC_OverlayPopupUpdate" => new CoreReconcilerRenderCoverageFixtures.OverlayPopupUpdate(harness),
+        "CoreRRC_OverlayCommandBarUpdate" => new CoreReconcilerRenderCoverageFixtures.OverlayCommandBarUpdate(harness),
+        "CoreRRC_OverlayCommandBarFlyoutUpdate" => new CoreReconcilerRenderCoverageFixtures.OverlayCommandBarFlyoutUpdate(harness),
+        "CoreRRC_OverlayMenuBarUpdate" => new CoreReconcilerRenderCoverageFixtures.OverlayMenuBarUpdate(harness),
+        "CoreRRC_CompositeFormFieldValidationUpdate" => new CoreReconcilerRenderCoverageFixtures.CompositeFormFieldValidationUpdate(harness),
+        "CoreRRC_CompositeValidationVisualizerStyles" => new CoreReconcilerRenderCoverageFixtures.CompositeValidationVisualizerStyles(harness),
+        "CoreRRC_CompositeValidationRuleUpdate" => new CoreReconcilerRenderCoverageFixtures.CompositeValidationRuleUpdate(harness),
+        "CoreRRC_PreMountedFlipViewReconcile" => new CoreReconcilerRenderCoverageFixtures.PreMountedFlipViewReconcile(harness),
+        "CoreRRC_NavigationHostCacheEviction" => new CoreReconcilerRenderCoverageFixtures.NavigationHostCacheEviction(harness),
+        "CoreRRC_RenderContextReducers" => new CoreReconcilerRenderCoverageFixtures.RenderContextReducers(harness),
+        "CoreRRC_RenderContextThreadSafeState" => new CoreReconcilerRenderCoverageFixtures.RenderContextThreadSafeState(harness),
+        "CoreRRC_RenderContextWindowEnvHooks" => new CoreReconcilerRenderCoverageFixtures.RenderContextWindowEnvHooks(harness),
+        "CoreRRC_UntypedTreeViewReconcile" => new CoreReconcilerRenderCoverageFixtures.UntypedTreeViewReconcile(harness),
 
         _ => null,
     };

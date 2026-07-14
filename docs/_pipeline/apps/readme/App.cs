@@ -61,7 +61,7 @@ class ReadmeShowcase : Component
             VStack(24,
                 TextBlock("Reactor Framework").FontSize(28).Bold(),
                 TextBlock("Declarative UI for native Windows apps"),
-                Func(ctx =>
+                RenderEachTime(ctx =>
                 {
                     var (name, setName) = ctx.UseState("World");
                     return VStack(8,
@@ -71,7 +71,7 @@ class ReadmeShowcase : Component
                             .Width(250)
                     );
                 }),
-                Func(ctx =>
+                RenderEachTime(ctx =>
                 {
                     var (n, setN) = ctx.UseState(0);
                     return HStack(8,

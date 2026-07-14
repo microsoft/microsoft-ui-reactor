@@ -19,8 +19,24 @@ public class DataGridState<T>
     /// </summary>
     public static int MaxClientFallbackPageSize { get; set; } = 100_000;
 
+    // Reactivity of ctor-captured values (issue #872 audit):
+    //  • _source    — captured once, but the DataGrid factory keys its component on the source
+    //                 (.WithKey($"dg-{typeof(T).Name}-{source.GetHashCode()}")), so a changed key
+    //                 (i.e. a source whose GetHashCode() differs) remounts the grid with a fresh
+    //                 state ⇒ effectively reactive via remount. (Two distinct sources that hash to
+    //                 the same value would not remount, but that is the general WithKey contract.)
+    //  • _selectionMode — reactive: reconciled from the prop each render via SetSelectionMode.
+    //  • _blockSize — captured once by design: it only sizes the initial DataPageCache; re-deriving
+    //                 it (from RowHeight) would rebuild the cache and discard already-loaded rows.
+    //  • _columns   — the visible grid (header/layout/cells) consumes the component's fresh columns
+    //                 arg each render, so what is on screen reacts to prop column changes. The
+    //                 internal _columns list below (and _columnIndexByName) additionally backs
+    //                 column reorder/hide/resize AND keyboard navigation + edit/commit column
+    //                 resolution; those internal paths are captured at construction and are
+    //                 intentionally NOT re-synced from prop column changes (reconciling them with
+    //                 user-driven column state is a separate concern beyond #872).
     private readonly IDataSource<T> _source;
-    private readonly SelectionMode _selectionMode;
+    private SelectionMode _selectionMode;
     private readonly int _blockSize;
 
     // ── Sort state ────────────────────────────────────────────────
@@ -60,6 +76,12 @@ public class DataGridState<T>
 
     /// <summary>Monotonically increasing version number, bumped on every selection change.</summary>
     public int SelectionVersion => _selectionVersion;
+
+    /// <summary>
+    /// The active selection mode. Reconciled from the <c>SelectionMode</c> prop each render via
+    /// <see cref="SetSelectionMode"/> (issue #872), so it stays in sync after the first mount.
+    /// </summary>
+    public SelectionMode SelectionMode => _selectionMode;
 
     /// <summary>Anchor key for shift-click range selection.</summary>
     public RowKey? AnchorKey { get; private set; }
@@ -106,6 +128,16 @@ public class DataGridState<T>
 
     /// <summary>Whether the entire row is in edit mode (vs single cell).</summary>
     public bool IsRowEditing => _isRowEditing;
+
+    /// <summary>
+    /// One-shot guard, set synchronously when Tab is pressed while a cell is being edited. An
+    /// editing-Tab moves real focus out of the single-tab-stop grid, which fires the grid's LostFocus
+    /// handler — but the editing-Tab flow (HandleKeyDown) itself commits the current cell and reopens
+    /// the editor on the next cell. Without this guard the LostFocus safety-net would commit a second
+    /// time and tear down that just-reopened editor. Consumed (cleared) synchronously by the next
+    /// LostFocus event handler, before it schedules its deferred commit check.
+    /// </summary>
+    internal bool SuppressNextLostFocusCommit { get; set; }
 
     /// <summary>Gets the pending row-edit value for a specific column, or null if not in row edit.</summary>
     public object? GetRowEditValue(string columnName)
@@ -643,6 +675,67 @@ public class DataGridState<T>
     }
 
     // ── Selection operations ─────────────────────────────────────
+
+    /// <summary>
+    /// Updates the selection mode in response to a <c>SelectionMode</c> prop change (issue #872).
+    /// When narrowing, trims the current selection so it stays valid for the new mode:
+    /// <list type="bullet">
+    /// <item><description><see cref="SelectionMode.None"/> — clears all selected keys and the anchor.</description></item>
+    /// <item><description><see cref="SelectionMode.Single"/> — keeps at most one key (prefers the
+    /// selection anchor, then the focused row, else any remaining key).</description></item>
+    /// </list>
+    /// Bumps <see cref="SelectionVersion"/> when the selected set actually changes, and raises
+    /// <see cref="StateChanged"/>. No-ops when the mode is unchanged. The component reconciles this
+    /// during render behind a <c>state.SelectionMode != el.SelectionMode</c> guard, so the deferred
+    /// re-render it schedules cannot loop.
+    /// </summary>
+    public void SetSelectionMode(SelectionMode mode)
+    {
+        if (_selectionMode == mode)
+            return;
+
+        _selectionMode = mode;
+
+        var selectionChanged = false;
+        if (mode == SelectionMode.None)
+        {
+            if (_selectedKeys.Count > 0)
+            {
+                _selectedKeys.Clear();
+                selectionChanged = true;
+            }
+            AnchorKey = null;
+        }
+        else if (mode == SelectionMode.Single && _selectedKeys.Count > 1)
+        {
+            // Narrowing Multiple -> Single: keep exactly one key. Prefer the selection anchor
+            // (the last row the user acted on), then the focused row, else any remaining key.
+            RowKey keep;
+            if (AnchorKey is { } anchor && _selectedKeys.Contains(anchor))
+                keep = anchor;
+            else if (FocusedKey is { } focused && _selectedKeys.Contains(focused))
+                keep = focused;
+            else
+            {
+                keep = default;
+                foreach (var k in _selectedKeys)
+                {
+                    keep = k;
+                    break;
+                }
+            }
+
+            _selectedKeys.Clear();
+            _selectedKeys.Add(keep);
+            AnchorKey = keep;
+            selectionChanged = true;
+        }
+
+        if (selectionChanged)
+            _selectionVersion++;
+
+        StateChanged?.Invoke();
+    }
 
     /// <summary>Handles a row click with optional modifier keys.</summary>
     public void HandleRowClick(RowKey key, bool ctrlKey = false, bool shiftKey = false, IReadOnlyList<RowKey>? visibleOrder = null)
@@ -1834,6 +1927,8 @@ public class DataGridState<T>
     // ── Client-side sort/filter fallback ─────────────────────────
 
 #pragma warning disable IL2090 // Generic type parameter flows through without DynamicallyAccessedMembers annotation
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2090",
+        Justification = "DataGrid client-side sort reflects over T's public properties by name. Reflection over T (AutoColumns / client sort+filter) is AOT-broken and skip-listed (docs/aot-support.md, issue #70); explicit Column<T,V>() definitions are the AOT path. UnconditionalSuppressMessage (not just #pragma) so ILC honors it at consumer publish.")]
     private static List<T> ApplyClientSort(List<T> items, List<SortDescriptor> sorts)
     {
         if (sorts.Count == 0 || items.Count == 0) return items;
@@ -1862,6 +1957,8 @@ public class DataGridState<T>
     }
 
 #pragma warning disable IL2090 // Generic type parameter flows through without DynamicallyAccessedMembers annotation
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2090",
+        Justification = "DataGrid client-side filter reflects over T's public properties by name. Reflection over T (AutoColumns / client sort+filter) is AOT-broken and skip-listed (docs/aot-support.md, issue #70); explicit Column<T,V>() definitions are the AOT path. UnconditionalSuppressMessage (not just #pragma) so ILC honors it at consumer publish.")]
     private static List<T> ApplyClientFilters(List<T> items, List<FilterDescriptor> filters)
     {
         if (filters.Count == 0 || items.Count == 0) return items;

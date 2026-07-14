@@ -1,8 +1,17 @@
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using ReactorComponent = Microsoft.UI.Reactor.Core.Component;
 
 namespace Microsoft.UI.Reactor.Interop.WinForms;
+
+// Design-time-only reflection: this TypeConverter powers the WinForms designer
+// Properties-grid dropdown by enumerating every loaded assembly for concrete
+// Reactor Component subclasses. It runs in the Visual Studio designer process
+// (full framework, never trimmed/AOT) — the designer serializes the chosen type
+// as `ComponentType = typeof(X)`, so the runtime/published path never invokes this
+// whole-assembly enumeration. The trim/AOT warnings are therefore not reachable in
+// a published app; suppressed per-method with this justification (issue #70).
 
 /// <summary>
 /// TypeConverter for the <see cref="XamlIslandControl.ComponentType"/> property.
@@ -19,6 +28,8 @@ internal class ReactorComponentTypeConverter : TypeConverter
     public override bool CanConvertTo(ITypeDescriptorContext? context, Type? destinationType)
         => destinationType == typeof(string) || base.CanConvertTo(context, destinationType);
 
+    [UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification = "Design-time-only assembly enumeration for the WinForms designer dropdown; never runs in a trimmed/AOT-published app (see file header).")]
     public override object? ConvertFrom(ITypeDescriptorContext? context, CultureInfo? culture, object value)
     {
         if (value is string name)
@@ -68,6 +79,8 @@ internal class ReactorComponentTypeConverter : TypeConverter
 
     public override bool GetStandardValuesExclusive(ITypeDescriptorContext? context) => false;
 
+    [UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification = "Design-time-only assembly enumeration for the WinForms designer dropdown; never runs in a trimmed/AOT-published app (see file header).")]
     public override StandardValuesCollection? GetStandardValues(ITypeDescriptorContext? context)
     {
         var types = new List<Type>();
@@ -88,6 +101,8 @@ internal class ReactorComponentTypeConverter : TypeConverter
         return new StandardValuesCollection(types);
     }
 
+    [UnconditionalSuppressMessage("Trimming", "IL2070",
+        Justification = "Design-time-only: t comes from designer assembly enumeration (see file header); GetConstructor is not reached in a trimmed/AOT-published app.")]
     private static bool IsValidComponentType(Type t)
         => t.IsClass
         && !t.IsAbstract

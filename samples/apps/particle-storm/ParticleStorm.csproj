@@ -52,10 +52,6 @@
   </Target>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\..\..\src\Reactor.Advanced\Reactor.Advanced.csproj" />
   </ItemGroup>
 

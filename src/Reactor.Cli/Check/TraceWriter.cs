@@ -53,7 +53,7 @@ internal sealed class TraceWriter : IDisposable
     public void Write(CheckCommand.Diag d)
     {
         var row = ToRow(d, projectRoot, mode);
-        var json = JsonSerializer.Serialize(row, JsonOpts);
+        var json = JsonSerializer.Serialize(row, CliJsonContext.Default.TraceRow);
         writer.WriteLine(json);
     }
 
@@ -78,7 +78,7 @@ internal sealed class TraceWriter : IDisposable
             kind: "command",
             argv: argv,
             mode: mode);
-        var json = JsonSerializer.Serialize(row, JsonOpts);
+        var json = JsonSerializer.Serialize(row, CliJsonContext.Default.CommandRow);
         writer.WriteLine(json);
     }
 
@@ -105,7 +105,7 @@ internal sealed class TraceWriter : IDisposable
             rule: ruleName,
             unresolved_target: unresolvedTarget,
             mode: mode);
-        var json = JsonSerializer.Serialize(row, JsonOpts);
+        var json = JsonSerializer.Serialize(row, CliJsonContext.Default.RuleSelfDisabledRow);
         writer.WriteLine(json);
     }
 
@@ -143,14 +143,9 @@ internal sealed class TraceWriter : IDisposable
             file: SanitizePath(file, projectRoot),
             line: line,
             mode: mode);
-        var json = JsonSerializer.Serialize(row, JsonOpts);
+        var json = JsonSerializer.Serialize(row, CliJsonContext.Default.RuleFiredRow);
         writer.WriteLine(json);
     }
-
-    static readonly JsonSerializerOptions JsonOpts = new()
-    {
-        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-    };
 
     internal static TraceRow ToRow(CheckCommand.Diag d, string projectRoot, string mode = DefaultMode)
     {

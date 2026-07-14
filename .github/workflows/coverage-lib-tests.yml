@@ -1,0 +1,42 @@
+# Fast, headless unit tests for CoverageLib.ps1 + Measure-Coverage.ps1 — the pure
+# cobertura parser / percent-format / delta / comment-renderer that backs the
+# automatic coverage comparison comment (coverage.yml). No build and no
+# instrumentation, so this runs on a cheap Linux runner in seconds and guards the
+# parsing + formatting + delta logic on every change under tests/coverage/ci/**.
+#
+# coverage.yml runs these same assertions before it spends ~10 min on the
+# instrumented measure; this standalone job gives PR authors fast feedback.
+name: Coverage lib tests
+
+on:
+  push:
+    paths:
+      - 'tests/coverage/ci/**'
+      - '.github/workflows/coverage-lib-tests.yml'
+  pull_request:
+    paths:
+      - 'tests/coverage/ci/**'
+      - '.github/workflows/coverage-lib-tests.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  coveragelib:
+    name: CoverageLib parser + delta math
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      # pwsh (PowerShell 7) is preinstalled on the GitHub-hosted Ubuntu runner.
+      # Each test script exits non-zero on any failed assertion.
+      - name: Run CoverageLib unit tests
+        shell: pwsh
+        run: ./tests/coverage/ci/CoverageLib.Tests.ps1
+
+      - name: Run Measure-Coverage unit tests
+        shell: pwsh
+        run: ./tests/coverage/ci/Measure-Coverage.Tests.ps1

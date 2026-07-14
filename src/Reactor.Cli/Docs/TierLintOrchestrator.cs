@@ -103,7 +103,11 @@ internal static class TierLintOrchestrator
         var findings = new List<TierLintFinding>();
         foreach (var (topicId, template) in templates)
         {
-            var (assembled, snipRes, ssRes) = CompileCommand.AssembleForLint(template, allSnippets, allScreenshots, topicId);
+            // Structural tier-lint checks minimums (snippet/screenshot counts,
+            // tier declarations), not rendered prose, so the {{reactorVersion}}
+            // token is inert here — opt out of version substitution explicitly.
+            var (assembled, snipRes, ssRes) = CompileCommand.AssembleForLint(
+                template, allSnippets, allScreenshots, topicId, reactorVersion: null);
             findings.AddRange(TierLint.Lint(template, assembled, snipRes, ssRes));
         }
 

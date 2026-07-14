@@ -1457,6 +1457,12 @@ public record ModifiedElement(Element Inner, ElementModifiers WrappedModifiers) 
 /// Created automatically by Component&lt;T&gt;() factory method.
 /// </summary>
 public record ComponentElement(
+    // The parameter annotation satisfies the positional-record parameter -> backing-field
+    // store that ILC's whole-program pass flags as IL2069; the property annotation keeps the
+    // parameterless ctor preserved for the Activator.CreateInstance fallback below. Both
+    // Component<T>() factories pass typeof(T) under a `new()` constraint, so callers already
+    // satisfy the requirement without a new warning.
+    [param: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
     [property: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
     Type ComponentType,
     object? Props = null) : Element
@@ -1834,6 +1840,16 @@ public record ElementModifiers
         get => Layout?.VerticalAlignment;
         init => Layout = Layout is null ? new LayoutModifiers { VerticalAlignment = value } : Layout with { VerticalAlignment = value };
     }
+    public HorizontalAlignment? HorizontalContentAlignment
+    {
+        get => Layout?.HorizontalContentAlignment;
+        init => Layout = Layout is null ? new LayoutModifiers { HorizontalContentAlignment = value } : Layout with { HorizontalContentAlignment = value };
+    }
+    public VerticalAlignment? VerticalContentAlignment
+    {
+        get => Layout?.VerticalContentAlignment;
+        init => Layout = Layout is null ? new LayoutModifiers { VerticalContentAlignment = value } : Layout with { VerticalContentAlignment = value };
+    }
     public double? Opacity
     {
         get => Visual?.Opacity;
@@ -2126,6 +2142,8 @@ public record LayoutModifiers
     public double? MaxHeight { get; init; }
     public HorizontalAlignment? HorizontalAlignment { get; init; }
     public VerticalAlignment? VerticalAlignment { get; init; }
+    public HorizontalAlignment? HorizontalContentAlignment { get; init; }
+    public VerticalAlignment? VerticalContentAlignment { get; init; }
     public bool? IsVisible { get; init; }
     public double? MarginInlineStart { get; init; }
     public double? MarginInlineEnd { get; init; }
@@ -2152,6 +2170,8 @@ public record LayoutModifiers
         MaxHeight = other.MaxHeight ?? MaxHeight,
         HorizontalAlignment = other.HorizontalAlignment ?? HorizontalAlignment,
         VerticalAlignment = other.VerticalAlignment ?? VerticalAlignment,
+        HorizontalContentAlignment = other.HorizontalContentAlignment ?? HorizontalContentAlignment,
+        VerticalContentAlignment = other.VerticalContentAlignment ?? VerticalContentAlignment,
         IsVisible = other.IsVisible ?? IsVisible,
         MarginInlineStart = other.MarginInlineStart ?? MarginInlineStart,
         MarginInlineEnd = other.MarginInlineEnd ?? MarginInlineEnd,
@@ -6382,7 +6402,8 @@ public partial record AnnotatedScrollBarElement;
 public record PopupElement(Element Child) : Element
 {
     public bool IsOpen { get; init; }
-    public bool IsLightDismissEnabled { get; init; } = true;
+    // Matches WinUI's Popup.IsLightDismissEnabled default (false); see #873.
+    public bool IsLightDismissEnabled { get; init; }
     public double HorizontalOffset { get; init; }
     public double VerticalOffset { get; init; }
     public Action? OnOpened { get; init; }

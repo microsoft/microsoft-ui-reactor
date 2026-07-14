@@ -228,8 +228,26 @@ public static class InputInjector
         KeyUp(vk);
     }
 
-    private static void KeyDown(ushort vk) => SendKey(vk, 0, 0);
-    private static void KeyUp(ushort vk) => SendKey(vk, 0, KEYEVENTF_KEYUP);
+    private static void KeyDown(ushort vk) => SendKey(vk, 0, ExtendedFlag(vk));
+    private static void KeyUp(ushort vk) => SendKey(vk, 0, KEYEVENTF_KEYUP | ExtendedFlag(vk));
+
+    // Navigation keys (arrows, Home, End, PageUp/PageDown, Insert, Delete) are "extended" keys:
+    // SendInput must set KEYEVENTF_EXTENDEDKEY for them, or a target can mis-handle them (e.g. treat
+    // an arrow as its numpad twin) or drop them — which would make the keyboard-nav E2E flaky across
+    // machines. Non-extended keys (letters, Tab, Enter, Space, numpad +/-, OEM +/-) return 0.
+    private static uint ExtendedFlag(ushort vk) => IsExtendedKey(vk) ? KEYEVENTF_EXTENDEDKEY : 0u;
+
+    private static bool IsExtendedKey(ushort vk) => vk is
+        0x21 or // PageUp
+        0x22 or // PageDown
+        0x23 or // End
+        0x24 or // Home
+        0x25 or // Left
+        0x26 or // Up
+        0x27 or // Right
+        0x28 or // Down
+        0x2D or // Insert
+        0x2E;   // Delete
 
     private static void SendKey(ushort vk, ushort scan, uint flags)
     {
@@ -336,6 +354,18 @@ public static class InputInjector
             for (int i = 1; i < screenPath.Count; i++)
             {
                 MoveTo(screenPath[i].X, screenPath[i].Y);
+                Thread.Sleep(60);
+            }
+
+            // Dwell at the release point with a few pulsed pointer-moves before button-up. A
+            // hover-armed WinUI drop target latches its accept-state from repeated pointer-move
+            // events, and the drag-over needs a beat to settle; without this the drop is
+            // occasionally not registered and the target count stays 0. Mirrors the pulsed dwell
+            // the docking tear-off/merge drag uses.
+            var release = screenPath[screenPath.Count - 1];
+            for (int pulse = 0; pulse < 4; pulse++)
+            {
+                MoveTo(release.X, release.Y);
                 Thread.Sleep(60);
             }
 
@@ -472,6 +502,58 @@ public static class InputInjector
         Thread.Sleep(40);
     }
 
+    // ─── Navigation / chord keys (for keyboard-navigation E2E) ───────────────
+
+    /// <summary>Press and release a virtual key (no modifiers).</summary>
+    public static void PressKey(ushort virtualKey) => PressVirtualKey(virtualKey);
+
+    /// <summary>Press a virtual key with optional Ctrl/Shift/Alt held for the duration.</summary>
+    public static void PressKeyWith(ushort virtualKey, bool ctrl = false, bool shift = false, bool alt = false)
+    {
+        bool ctrlDown = false, shiftDown = false, altDown = false;
+        bool pressSucceeded = false;
+        try
+        {
+            // Track each modifier the moment it latches so the finally releases exactly those that
+            // went down — even if a LATER modifier KeyDown, or the key press itself, throws a
+            // partial-SendInput. Pressing the modifiers outside the try would let an earlier one
+            // stay physically latched when a later KeyDown fails, contaminating the next test.
+            if (ctrl) { KeyDown(VK_CONTROL); ctrlDown = true; }
+            if (shift) { KeyDown(VK_SHIFT); shiftDown = true; }
+            if (alt) { KeyDown(VK_MENU); altDown = true; }
+            Thread.Sleep(10);
+            PressVirtualKey(virtualKey);
+            Thread.Sleep(10);
+            pressSucceeded = true;
+        }
+        finally
+        {
+            // Release EVERY modifier that latched, even if an individual KeyUp throws — SendInput can
+            // fail on key-up too, and a modifier left physically down would contaminate later tests.
+            // If the press itself failed we're already unwinding that exception, so swallow key-up
+            // failures (don't mask the original). If the press succeeded but a release failed, surface
+            // that failure after attempting all releases. Catch the specific WinAppException that
+            // SendInputChecked raises on a failed send (anything else is genuinely unexpected).
+            WinAppException? releaseFailure = null;
+            if (altDown) { try { KeyUp(VK_MENU); } catch (WinAppException ex) { releaseFailure ??= ex; } }
+            if (shiftDown) { try { KeyUp(VK_SHIFT); } catch (WinAppException ex) { releaseFailure ??= ex; } }
+            if (ctrlDown) { try { KeyUp(VK_CONTROL); } catch (WinAppException ex) { releaseFailure ??= ex; } }
+            if (pressSucceeded && releaseFailure is not null)
+                throw releaseFailure;
+        }
+    }
+
+    // Discrete virtual-key + chord presses for the keyboard-navigation E2E tests. These live
+    // alongside (not inside) the string-oriented TypeKeys path: TypeKeys releases held modifiers
+    // after each emitted character, so it can't express single chords like Ctrl+= or numpad Add,
+    // nor non-text keys like the arrows / Home / F1. Hence a small public Vk* table + PressKeyWith
+    // rather than more Keys/TypeKeys tokens. (The private VK_* consts in the P/Invoke section below
+    // serve the typing path.)
+    public const ushort VkLeft = 0x25, VkUp = 0x26, VkRight = 0x27, VkDown = 0x28;
+    public const ushort VkHome = 0x24, VkEnd = 0x23, VkEnter = 0x0D, VkSpace = 0x20, VkEscape = 0x1B;
+    public const ushort VkAdd = 0x6B, VkSubtract = 0x6D, VkOemPlus = 0xBB, VkOemMinus = 0xBD;
+    public const ushort VkF1 = 0x70, Vk0 = 0x30, VkL = 0x4C, VkS = 0x53, VkT = 0x54, VkOem2 = 0xBF;
+
     private static void MoveTo(int x, int y)
     {
         // Normalize to 0..65535 across the whole virtual desktop.
@@ -556,6 +638,7 @@ public static class InputInjector
 
     private const uint KEYEVENTF_KEYUP = 0x0002;
     private const uint KEYEVENTF_UNICODE = 0x0004;
+    private const uint KEYEVENTF_EXTENDEDKEY = 0x0001;
 
     private const uint MOUSEEVENTF_MOVE = 0x0001;
     private const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
@@ -568,6 +651,7 @@ public static class InputInjector
     private const ushort VK_RETURN = 0x0D;
     private const ushort VK_SHIFT = 0x10;
     private const ushort VK_CONTROL = 0x11;
+    private const ushort VK_MENU = 0x12;
     private const ushort VK_ESCAPE = 0x1B;
     private const ushort VK_SPACE = 0x20;
     private const ushort VK_END = 0x23;

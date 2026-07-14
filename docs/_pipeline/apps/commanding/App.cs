@@ -238,15 +238,14 @@ class AsyncWithProgressExample : Component
 // </snippet:async-with-progress>
 
 // <snippet:dont-create-in-render>
-// Don't: re-create the Command on every render — every surface that
-// holds the previous reference sees a fresh identity each frame, which
-// thrashes the WinUI keyboard-accelerator wiring and re-renders every
-// consumer. Lift to a memo or hoist out of Render().
+// Don't: re-create the Command on every render — each render allocates a
+// fresh command record (and its captured closures). Memoizing keeps a
+// stable instance across renders. Lift to a memo or hoist out of Render().
 class DontCreateInRender : Component
 {
     public override Element Render()
     {
-        // BAD — Command identity churns every render:
+        // BAD — a fresh Command (and closure) is allocated every render:
         // var save = new Command { Label = "Save", Execute = () => { } };
 
         // GOOD — UseMemo pins identity until deps change:

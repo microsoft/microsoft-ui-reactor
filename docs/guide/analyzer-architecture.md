@@ -45,6 +45,8 @@ public override void Initialize(AnalysisContext context)
     context.EnableConcurrentExecution();
     context.RegisterSyntaxNodeAction(AnalyzeInvocation, SyntaxKind.InvocationExpression);
     context.RegisterSyntaxNodeAction(AnalyzeSetterStaleRead, SyntaxKind.InvocationExpression);
+    context.RegisterSyntaxNodeAction(AnalyzeMutateThenSet, SyntaxKind.InvocationExpression);
+    context.RegisterSyntaxNodeAction(AnalyzeMemo, SyntaxKind.InvocationExpression);
 }
 
 private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
@@ -70,10 +72,14 @@ every invocation.
 > single call. Don't reach for it inside the syntax callback unless a
 > cheaper syntactic check has already filtered the node down to plausible
 > candidates. The `MissingWithKeyAnalyzer` is the extreme: it never calls
-> `GetSymbolInfo` at all — a substring check for `.WithKey(` in the
-> lambda body is enough because false positives only fire when the layout
-> container also turns out to be a Reactor factory, which the analyzer
-> then confirms by name list.
+> `GetSymbolInfo` at all. Its `REACTOR_DSL_001` arm decides with a substring
+> check for `.WithKey(` in the lambda body — false positives only fire when
+> the layout container also turns out to be a Reactor factory, which the
+> analyzer then confirms by name list. Its `REACTOR_DSL_002` arm (non-stable
+> keys) goes a step further but stays just as syntactic: it walks the key
+> expression and matches lambda parameter names and well-known per-render
+> calls (`Guid.NewGuid()`, `DateTime.Now`, …) by name, still without resolving
+> a single symbol.
 
 ## Diagnostic descriptors
 
@@ -131,41 +137,76 @@ via `.editorconfig`.
 
 | Id | Severity | Title | Source |
 |---|---|---|---|
+| `REACTOR_THEME_001` | Warning | Use ThemeRef instead of hard-coded color | `UseThemeRefAnalyzer.cs` |
+| `REACTOR_THEME_002` | Info | Consider lightweight styling for visual-state overrides | `UseLightweightStylingAnalyzer.cs` |
+| `REACTOR_THEME_003` | Info | RequestedTheme modifier available | `RequestedThemeSetAnalyzer.cs` |
+| `REACTOR_THEME_004` | Warning | Hard-coded Brush/Color object bypasses theme tokens | `UseThemeRefAnalyzer.cs` |
 | `REACTOR_HOOKS_001` | Warning | Hook called conditionally | `HookRulesAnalyzer.cs` |
 | `REACTOR_HOOKS_004` | Warning | Hook deps contains freshly allocated value | `HookRulesAnalyzer.cs` |
-| `REACTOR_HOOKS_005` | Warning | Hook called outside Render or a custom-hook method | `HookRulesAnalyzer.cs` |
-| `REACTOR_HOOKS_006` | Info | Resource fetcher looks non-idempotent | `HookRulesAnalyzer.cs` |
-| `REACTOR_HOOKS_007` | Warning | UseMemoCells builder captures variable not in deps | `UseMemoCellsAnalyzer.cs` |
-| `REACTOR_HOOKS_008` | Info | State variable read after its setter in the same synchronous handler | `HookRulesAnalyzer.cs` |
-| `REACTOR_HOOKS_009` | Warning | Command.DebounceMs set on a command bound without UseCommand | `CommandDebounceAnalyzer.cs` |
+| `REACTOR_HOOKS_005` | Warning | Hook called outside Render or custom-hook method | `HookRulesAnalyzer.cs` |
+| `REACTOR_HOOKS_006` | Info | UseResource fetcher looks non-idempotent (use UseMutation for writes) | `HookRulesAnalyzer.cs` |
+| `REACTOR_HOOKS_007` | Warning | Builder closure capture missing from dependencies | `UseMemoCellsAnalyzer.cs` |
+| `REACTOR_HOOKS_008` | Info | State variable read after its setter was called in the same synchronous handler (stale read) | `HookRulesAnalyzer.cs` |
+| `REACTOR_HOOKS_009` | Warning | Command.DebounceMs is inert unless the command is routed through UseCommand | `CommandDebounceAnalyzer.cs` |
+| `REACTOR_HOOKS_011` | Warning | Controlled input has a state-derived value but an inert change callback | `ControlledInputAnalyzer.cs` |
 | `REACTOR_A11Y_001` | Warning | Icon-only button needs an accessible name | `AccessibilityAnalyzers.cs` |
 | `REACTOR_A11Y_002` | Warning | Image needs alt text or AccessibilityHidden | `AccessibilityAnalyzers.cs` |
 | `REACTOR_A11Y_003` | Warning | Form field needs a label | `AccessibilityAnalyzers.cs` |
-| `REACTOR_THEME_001` | Warning | Use ThemeRef instead of hard-coded color | `UseThemeRefAnalyzer.cs` |
-| `REACTOR_THEME_002` | Warning | Prefer lightweight styling | `UseLightweightStylingAnalyzer.cs` |
-| `REACTOR_THEME_003` | Warning | RequestedTheme set on a non-root element | `RequestedThemeSetAnalyzer.cs` |
-| `REACTOR_REF_001` | Warning | ElementRef.Current assigned to a reference property instead of a reactive edge | `ReferenceCurrentReadAnalyzer.cs` |
+| `REACTOR_A11Y_004` | Warning | Clickable container (.OnTapped) is not keyboard-reachable; add .IsTabStop(true) | `AccessibilityAnalyzers.cs` |
+| `REACTOR_REF_001` | Warning | Use descriptor.Reference/binding.Reference instead of assigning ElementRef.Current to reference properties | `ReferenceCurrentReadAnalyzer.cs` |
 | `REACTOR_DSL_001` | Warning | Dynamic list item missing .WithKey | `MissingWithKeyAnalyzer.cs` |
+| `REACTOR_DSL_002` | Info | Non-stable .WithKey (index / Guid.NewGuid / DateTime.Now) | `MissingWithKeyAnalyzer.cs` |
+| `REACTOR_DSL_003` | Warning | Typed collection keySelector never keys by item (returns constant/null or ignores the item), forcing a keyed-diff bailout | `ConstantKeySelectorAnalyzer.cs` |
 | `REACTOR_DOCK_001` | Warning | OnLiveLayoutChanged feeds the live layout back into state | `OnLiveLayoutRoundTripAnalyzer.cs` |
 | `REACTOR_DOC_001` | Warning | Public API missing XML doc summary | `XmlDocSummaryAnalyzer.cs` |
-| `REACTOR_POOL_001` | Warning | `.Set` writes to a property that pool reset clears | `PoolResetSetAnalyzer.cs` |
-| `REACTOR0050` | Warning | Optional OneWay descriptor entry has no `dp:` ClearValue fallback | `OneWayClearValueAnalyzer.cs` |
+| `REACTOR_EVENT_001` | Warning | Event wired via .Set(+=/-=) re-subscribes every render; use a declarative On* modifier or .OnMountAdd/.OnUnmountAdd | `SetEventSubscriptionAnalyzer.cs` |
+| `REACTOR_POOL_001` | Warning | .Set assigns to a property reset on pool return; use the surviving Reactor modifier | `PoolResetSetAnalyzer.cs` |
+| `REACTOR_ITEMS_001` | Warning | .Set(ItemsSource=...) on a Reactor-owned collection | `SetOwnedItemsSourceAnalyzer.cs` |
+| `REACTOR_CTRL_001` | Warning | .Set(SelectedItem/SelectedValue) fights controlled SelectedIndex | `SetSelectedItemAnalyzer.cs` |
+| `REACTOR_VIS_001` | Warning | Imperative .Set(Visibility=...) instead of .IsVisible(...) | `PoolResetSetAnalyzer.cs` |
+| `REACTOR_WIN2D_001` | Error | Win2D canvas draws UseCanvasResources output without .UseSharedDevice() (fatal cross-device draw) | `Win2DSharedDeviceAnalyzer.cs` |
+| `REACTOR0050` | Warning | Optional<T> OneWay descriptor entries should provide dp: for ClearValue fallback | `OneWayClearValueAnalyzer.cs` |
+| `REACTOR_PERSIST_001` | Warning | 2-arg UsePersisted defaults to Application scope; specify scope | `UsePersistedScopeAnalyzer.cs` |
+| `REACTOR_DESC_001` | Warning | ControlRegistry.Register* lambda should be static (trim hygiene) | `StaticRegisterLambdaAnalyzer.cs` |
+| `REACTOR_STATE_001` | Warning | INotifyPropertyChanged on a Component is invisible to the render loop | `ComponentInpcAnalyzer.cs` |
+| `REACTOR_THREAD_002` | Warning | Blocking a Task (.Result/.Wait) in Render/effect | `BlockingTaskAnalyzer.cs` |
+| `REACTOR_OPT_001` | Info | Selection sentinel literal force-asserts instead of Optional<T>.Unset | `OptionalSentinelAnalyzer.cs` |
+| `REACTOR_CMD_001` | Info | Raw-init Command + own click callback both set (callback wins; command never runs) | `RawCommandCallbackAnalyzer.cs` |
+| `REACTOR_THREAD_001` | Warning | UI-thread-only mutator called on a background thread | `UIThreadAffinityAnalyzer.cs` |
+| `REACTOR_HOOKS_002` | Info | Hook after an early-return guard | `HookRulesAnalyzer.cs` |
+| `REACTOR_HOOKS_003` | Warning | async-void UseEffect body | `HookRulesAnalyzer.cs` |
+| `REACTOR_HOOKS_010` | Warning | Mutate-then-set reference state (same ref re-passed to setter) | `HookRulesAnalyzer.cs` |
+| `REACTOR_HOOKS_012` | Warning | Memo dependency lacks value equality | `HookRulesAnalyzer.cs` |
+| `REACTOR_HOOKS_013` | Warning | UseState/UsePersisted initial value allocated every render | `HookRulesAnalyzer.cs` |
+| `REACTOR_CTX_001` | Info | Context value re-allocated each render (reference-equality type) | `ContextProvideAnalyzer.cs` |
+| `REACTOR_GRID_001` | Warning | Declared Grid column/row that no child occupies (unused track) | `UnusedGridTrackAnalyzer.cs` |
+| `REACTOR_INPUT_001` | Warning | Ctrl/Alt chord on .OnKeyDown is focus-scoped; use a Command accelerator | `OnKeyDownChordAnalyzer.cs` |
+| `REACTOR_PERF_FUNCREF` | Info | Command constructed inline in the render path is re-allocated every render; wrap it in UseMemo | `MemoizeCommandAnalyzer.cs` |
+| `REACTOR_ANIM_002` | Info | Unstable .Keyframes trigger (DateTime.Now / Guid.NewGuid / per-render allocation) restarts the animation every render | `KeyframeTriggerAnalyzer.cs` |
+| `REACTOR_INPUT_002` | Warning | Unsafe TryGetFiles in .OnDrop returns UNC/reparse/virtual files; use TryGetSafeLocalFiles | `UnsafeDropFilesAnalyzer.cs` |
+| `REACTOR_NAV_001` | Warning | UseNavigation handle captured into a static field or property outlives the page and pins its dispatcher | `StaticNavigationHandleAnalyzer.cs` |
+| `REACTOR_DIALOG_001` | Warning | Imperative ContentDialog.ShowAsync escapes the render tree; use the controlled ContentDialog(...) element with IsOpen | `ImperativeContentDialogAnalyzer.cs` |
+| `REACTOR_MOD_001` | Info | Same atomic-replace placement modifier (.Grid/.Canvas/.RelativePanel/.Flex) applied twice in one chain; last-wins overwrite drops earlier args (ships a merge fix) | `DuplicateAtomicModifierAnalyzer.cs` |
+| `REACTOR_MEDIA_001` | Info | WebView2 is a direct child of an auto-layout stack (HStack/VStack/FlexRow/FlexColumn) without explicit .Width/.Height | `UnsizedWebViewInStackAnalyzer.cs` |
+| `REACTOR_ANIM_003` | Warning | async lambda to WithAnimation loses the ThreadStatic scope after await | `AnimationScopeAsyncAnalyzer.cs` |
+| `REACTOR_LIFECYCLE_002` | Warning | UseEffect(Action) allocates a timer/subscription/event with no returned cleanup | `EffectCleanupAnalyzer.cs` |
+| `REACTOR_MEMO_001` | Info | Modifiers on a keyed Memo(key,factory) wrapper opt the row out of the recycle cache | `MemoWrapperModifierAnalyzer.cs` |
+| `REACTOR_DYM_001` | Warning | Reactor property/field invoked like a method (e.g. `GridSize.Auto()`) | `NonInvocableMemberParensAnalyzer.cs` |
+| `REACTOR_DYM_002` | Warning | Invented `Theme.*Background` token (e.g. `Theme.AppBackground`); use `Theme.SolidBackground` (`Theme.LayerBackground` → `Theme.LayerFill`) | `ThemeBackgroundSuffixAnalyzer.cs` |
+| `REACTOR_DYM_003` | Warning | Mistyped Reactor factory name in call position (e.g. `Buton(...)`) | `FuzzyFactoryNameAnalyzer.cs` |
+| `REACTOR_DYM_004` | Warning | Reactor factory called with too few arguments (CS7036), single unique overload — suggests the parameter shape | `MissingFactoryArgumentAnalyzer.cs` |
+| `REACTOR_DYM_005` | Warning | String passed where a Reactor `Element` is expected (CS1503) — wrap it in a text factory | `StringForElementArgumentAnalyzer.cs` |
 
-`REACTOR_HOOKS_002` and `_003` are reserved for future control-flow /
-data-flow analyses (variable hook counts across early returns, async
-boundaries inside `UseEffect`). They have descriptor slots but no
-implementation today.
+`REACTOR_HOOKS_002` and `_003` were the reserved control-flow / data-flow slots
+(variable hook counts across early returns, async boundaries inside `UseEffect`);
+they now ship — `_002` flags a hook after a single-guard early return, `_003`
+flags an `async`-void `UseEffect` body (spec 060 §4.1).
 
 ## Symbol-grounded matching — the WithKey case
 
 ```csharp
-static void Analyze(SyntaxNodeAnalysisContext ctx)
+static void AnalyzeMissingKey(SyntaxNodeAnalysisContext ctx, InvocationExpressionSyntax inv)
 {
-    var inv = (InvocationExpressionSyntax)ctx.Node;
-
-    if (inv.Expression is not MemberAccessExpressionSyntax member) return;
-    if (member.Name.Identifier.ValueText != "Select") return;
-
     // Single lambda argument with an invocation body.
     if (inv.ArgumentList.Arguments.Count != 1) return;
     if (inv.ArgumentList.Arguments[0].Expression is not LambdaExpressionSyntax lambda) return;
@@ -363,6 +404,8 @@ public override void Initialize(AnalysisContext context)
     context.EnableConcurrentExecution();
     context.RegisterSyntaxNodeAction(AnalyzeInvocation, SyntaxKind.InvocationExpression);
     context.RegisterSyntaxNodeAction(AnalyzeSetterStaleRead, SyntaxKind.InvocationExpression);
+    context.RegisterSyntaxNodeAction(AnalyzeMutateThenSet, SyntaxKind.InvocationExpression);
+    context.RegisterSyntaxNodeAction(AnalyzeMemo, SyntaxKind.InvocationExpression);
 }
 
 private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)

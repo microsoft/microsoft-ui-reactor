@@ -13,6 +13,7 @@ class GalleryShell : Component
     {
         ["Basic Input"] = "\uE73A",
         ["Collections"] = "\uE8A9",
+        ["Data"] = "\uE7C3",
         ["Date and Time"] = "\uE787",
         ["Dialogs and Flyouts"] = "\uE8BD",
         ["Layout"] = "\uE8A1",
@@ -21,6 +22,7 @@ class GalleryShell : Component
         ["Navigation"] = "\uE8B0",
         ["Status and Info"] = "\uE946",
         ["Text"] = "\uE8D2",
+        ["Patterns"] = "\uE943",
         ["Styles"] = "\uE790",
     };
 
@@ -117,6 +119,8 @@ class GalleryShell : Component
 
             (TitleBar("Reactor WinUI Gallery") with
             {
+                Icon = new ImageIconData(new Uri(global::System.IO.Path.Combine(
+                    global::System.AppContext.BaseDirectory, "Assets", "GalleryIcon.ico"))),
                 Content = HStack(8,
                     AutoSuggestBox(searchQuery, setSearchQuery)
                         .Width(320)

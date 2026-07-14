@@ -225,7 +225,7 @@ class PseudoLocDemo : Component
             ToggleSwitch(pseudo, setPseudo,
                 header: "Enable pseudo-localization"),
             LocaleProvider("en-US",
-                Func(ctx =>
+                RenderEachTime(ctx =>
                 {
                     var intl = ctx.UseIntl();
                     var title = intl.Message(new MessageKey("App", "title"));

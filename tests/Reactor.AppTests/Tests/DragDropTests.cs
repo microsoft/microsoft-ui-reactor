@@ -29,7 +29,7 @@ public class DragDropTests : AppTestBase
     // [Retry] mops up the rare unattended-desktop input-injection flake: Win32 SendInput is
     // occasionally dropped before the Host window foregrounds on CI. A real regression still
     // fails every attempt. Removable once winappCli #562 (send-keys)/#498 (drag) ship native verbs.
-    [Retry(3)]
+    [E2eRetry(3)]
     [TestMethod]
     public void DragDrop_TypedReorder_MovesCard()
     {
@@ -60,7 +60,7 @@ public class DragDropTests : AppTestBase
     /// have the card (move-on-confirmation guarantees the source doesn't optimistically
     /// remove it, and WasCancelled → CompletedOperation = None).
     /// </summary>
-    [Retry(3)]
+    [E2eRetry(3)]
     [TestMethod]
     public void DragDrop_CancelledDrag_LeavesSourceIntact()
     {
@@ -87,7 +87,7 @@ public class DragDropTests : AppTestBase
     /// Text format round-trip — drag a control that writes text to the DataPackage
     /// onto a target that reads it via <c>TryGetText</c>.
     /// </summary>
-    [Retry(3)]
+    [E2eRetry(3)]
     [TestMethod]
     public void DragDrop_TextFormat_RoundTrip()
     {

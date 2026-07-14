@@ -26,20 +26,13 @@ internal static class DevtoolsLogsTool
                     "`source` (stdout|stderr|debug|event — Debug and Trace share one listener; event is the framework ETW provider), `level`. " +
                     "Event entries carry extra `eventName` and `eventId` fields. " +
                     "Pass `waitMs > 0` to long-poll. `dropped` reports entries evicted by ring overflow.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        since = new { type = "integer", description = "Return entries with seq >= since. Pass previous `nextSeq` to continue. Default 0 returns all." },
-                        tail = new { type = "integer", description = "Keep only the last N entries after filtering." },
-                        filter = new { type = "string", description = "Regex; falls back to substring match if invalid." },
-                        source = new { type = "string", description = "stdout | stderr | debug | event (Debug and Trace both surface as `debug`; `event` selects Microsoft-UI-Reactor ETW events)" },
-                        level = new { type = "string", description = "Exact level match (case-insensitive). For source=event the levels are Critical|Error|Warning|Info|Debug|Trace." },
-                        waitMs = new { type = "integer", description = "Max time to block waiting for new entries. 0 returns immediately." },
-                    },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    ("since", Schema.Int("Return entries with seq >= since. Pass previous `nextSeq` to continue. Default 0 returns all.")),
+                    ("tail", Schema.Int("Keep only the last N entries after filtering.")),
+                    ("filter", Schema.Str("Regex; falls back to substring match if invalid.")),
+                    ("source", Schema.Str("stdout | stderr | debug | event (Debug and Trace both surface as `debug`; `event` selects Microsoft-UI-Reactor ETW events)")),
+                    ("level", Schema.Str("Exact level match (case-insensitive). For source=event the levels are Critical|Error|Warning|Info|Debug|Trace.")),
+                    ("waitMs", Schema.Int("Max time to block waiting for new entries. 0 returns immediately.")))),
             @params => BuildPayload(getBuffer(), @params));
     }
 
@@ -54,7 +47,7 @@ internal static class DevtoolsLogsTool
             throw new McpToolException(
                 "Log capture is disabled (--devtools-logs off).",
                 JsonRpcErrorCodes.ToolExecution,
-                new { code = "logs-disabled" });
+                new McpErrorData("logs-disabled"));
 
         long since = DevtoolsTools.ReadLong(@params, "since") ?? 0;
         int? tail = DevtoolsTools.ReadInt(@params, "tail");
@@ -94,22 +87,36 @@ internal static class DevtoolsLogsTool
 
         var result = buf.Query(sinceSeq: since, tail: tail, filterRegex: filter, source: source, level: level);
 
-        return new
-        {
-            entries = result.Entries.Select(e => (object)new
-            {
-                seq = e.Seq,
-                ts = e.TimestampUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
-                source = e.Source.ToString().ToLowerInvariant(),
-                level = e.Level,
-                threadId = e.ThreadId,
-                text = e.Text,
-                eventName = e.EventName,
-                eventId = e.EventId,
-            }).ToArray(),
-            nextSeq = result.NextSeq,
-            dropped = result.Dropped,
-            capacityBytes = buf.CapacityBytes,
-        };
+        return new LogsResult(
+            Entries: result.Entries.Select(e => new LogEntryDto(
+                Seq: e.Seq,
+                Ts: e.TimestampUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+                Source: e.Source.ToString().ToLowerInvariant(),
+                Level: e.Level,
+                ThreadId: e.ThreadId,
+                Text: e.Text,
+                EventName: e.EventName,
+                EventId: e.EventId)).ToArray(),
+            NextSeq: result.NextSeq,
+            Dropped: result.Dropped,
+            CapacityBytes: buf.CapacityBytes);
     }
 }
+
+/// <summary>Result of the <c>logs</c> tool — a page of captured log entries plus paging cursors.</summary>
+internal sealed record LogsResult(
+    LogEntryDto[] Entries,
+    long NextSeq,
+    long Dropped,
+    long CapacityBytes);
+
+/// <summary>One captured log entry as shaped for the <c>logs</c> tool wire response.</summary>
+internal sealed record LogEntryDto(
+    long Seq,
+    string Ts,
+    string Source,
+    string? Level,
+    int ThreadId,
+    string Text,
+    string? EventName,
+    int? EventId);

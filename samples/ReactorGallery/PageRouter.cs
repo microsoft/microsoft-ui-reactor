@@ -28,6 +28,8 @@ static class PageRouter
         "text-box" => Component<ControlPages.BasicInput.TextBoxPage>(),
         "toggle-button" => Component<ControlPages.BasicInput.ToggleButtonPage>(),
         "toggle-switch" => Component<ControlPages.BasicInput.ToggleSwitchPage>(),
+        "radio-buttons" => Component<ControlPages.BasicInput.RadioButtonsPage>(),
+        "toggle-split-button" => Component<ControlPages.BasicInput.ToggleSplitButtonPage>(),
 
         // Collections
         "flip-view" => Component<FlipViewPage>(),
@@ -36,6 +38,10 @@ static class PageRouter
         "list-box" => Component<ListBoxPage>(),
         "list-view" => Component<ListViewPage>(),
         "tree-view" => Component<TreeViewPage>(),
+        "items-repeater" => Component<ControlPages.Collections.ItemsRepeaterPage>(),
+        "semantic-zoom" => Component<ControlPages.Collections.SemanticZoomPage>(),
+        "swipe-control" => Component<ControlPages.Collections.SwipeControlPage>(),
+        "refresh-container" => Component<ControlPages.Collections.RefreshContainerPage>(),
 
         // Date and Time
         "calendar-date-picker" => Component<ControlPages.DateAndTime.CalendarDatePickerPage>(),
@@ -49,6 +55,7 @@ static class PageRouter
         "flyout" => Component<ControlPages.DialogsAndFlyouts.FlyoutPage>(),
         "menu-flyout" => Component<ControlPages.DialogsAndFlyouts.MenuFlyoutPage>(),
         "teaching-tip" => Component<ControlPages.DialogsAndFlyouts.TeachingTipPage>(),
+        "popup" => Component<ControlPages.DialogsAndFlyouts.PopupPage>(),
 
         // Layout
         "border" => Component<BorderPage>(),
@@ -63,11 +70,22 @@ static class PageRouter
         "stack-panel" => Component<StackPanelPage>(),
         "viewbox" => Component<ViewboxPage>(),
         "wrap-grid" => Component<WrapGridPage>(),
+        "uniform-grid" => Component<ControlPages.Layout.UniformGridPage>(),
+        "interspersed-grid" => Component<ControlPages.Layout.InterspersedGridPage>(),
+        "annotated-scroll-bar" => Component<ControlPages.Layout.AnnotatedScrollBarPage>(),
+        "docking" => Component<ControlPages.Layout.DockingPage>(),
 
         // Media
         "image" => Component<ControlPages.Media.ImagePage>(),
         "person-picture" => Component<ControlPages.Media.PersonPicturePage>(),
         "web-view-2" => Component<ControlPages.Media.WebView2Page>(),
+        "media-player-element" => Component<ControlPages.Media.MediaPlayerElementPage>(),
+        "animated-visual-player" => Component<ControlPages.Media.AnimatedVisualPlayerPage>(),
+        "animated-icon" => Component<ControlPages.Media.AnimatedIconPage>(),
+        "map-control" => Component<ControlPages.Media.MapControlPage>(),
+        "parallax-view" => Component<ControlPages.Media.ParallaxViewPage>(),
+        "shapes" => Component<ControlPages.Media.ShapesPage>(),
+        "icons" => Component<ControlPages.Media.IconsPage>(),
 
         // Menus and Toolbars
         "command-bar" => Component<ControlPages.MenusAndToolbars.CommandBarPage>(),
@@ -81,6 +99,7 @@ static class PageRouter
         "pivot" => Component<ControlPages.Navigation.PivotPage>(),
         "tab-view" => Component<ControlPages.Navigation.TabViewPage>(),
         "title-bar" => Component<ControlPages.Navigation.TitleBarPage>(),
+        "pips-pager" => Component<ControlPages.Navigation.PipsPagerPage>(),
 
         // Status and Info
         "info-bar" => Component<ControlPages.StatusAndInfo.InfoBarPage>(),
@@ -94,6 +113,14 @@ static class PageRouter
         "rich-edit-box" => Component<RichEditBoxPage>(),
         "rich-text-block" => Component<RichTextBlockPage>(),
         "type-ramp" => Component<ControlPages.Text.TypeRampPage>(),
+        "markdown" => Component<ControlPages.Text.MarkdownPage>(),
+
+        // Data
+        "data-grid" => Component<ControlPages.Data.DataGridPage>(),
+        "property-grid" => Component<ControlPages.Data.PropertyGridPage>(),
+
+        // Patterns
+        "commands" => Component<ControlPages.Patterns.CommandsPage>(),
 
         // Styles
         "acrylic" => Component<ControlPages.Styles.AcrylicPage>(),

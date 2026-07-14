@@ -1,0 +1,347 @@
+# In-Build "Did You Mean" — Analyzer-Driven Suggestions
+
+## Status
+
+**Implemented (in part) — 2026-07-07.** Phase 1 (`REACTOR_DYM_001`) and Phase 2 (`REACTOR_DYM_002`)
+have shipped, along with the first fuzzy analyzer (`REACTOR_DYM_003`, the CS0103
+mistyped-factory-name case) and the argument-shape analyzers (`REACTOR_DYM_004`, CS7036 missing
+argument; `REACTOR_DYM_005`, the CS1503 string-for-Element case — see §7.2); the remaining fuzzy
+member-resolution phases and the shared match-engine extraction remain design-only. This spec
+is the design of record for bringing Reactor's "did you mean" suggestions — today reachable only
+through the `mur check` CLI — into a plain `dotnet build` and the IDE, for consumers of the
+`Microsoft.UI.Reactor` NuGet package.
+
+> **Process note.** The mechanism decision below was reached by an investigation that mined the
+> real eval corpus, ran empirical Roslyn spikes, and put the question to a panel of models
+> (GPT‑5.5, Gemini 3.1 Pro, GPT‑5.3‑Codex) twice — once as a design review of the original
+> output-driven proposal, once as an A/B/C judgment on the evidence. All three independently
+> recommended the analyzer path (Option A) at high confidence. The full investigation — a decision
+> memo, coverage matrix, spike findings, and cross-model review synthesis — was captured as
+> design-session working notes and is not checked into the repository.
+
+---
+
+## Table of Contents
+
+- [§1 Motivation](#1-motivation)
+- [§2 The mechanism decision](#2-the-mechanism-decision)
+- [§3 Evidence](#3-evidence)
+- [§4 Design](#4-design)
+- [§5 Phase 1 — `REACTOR_DYM_001` (shipped)](#5-phase-1--reactor_dym_001-shipped)
+- [§6 Phase 2 — `REACTOR_DYM_002` (shipped)](#6-phase-2--reactor_dym_002-shipped)
+- [§7 Later phases — the fuzzy cases](#7-later-phases--the-fuzzy-cases)
+- [§8 Risks and guardrails](#8-risks-and-guardrails)
+- [§9 Relationship to `mur check`](#9-relationship-to-mur-check)
+- [§10 Non-goals / superseded](#10-non-goals--superseded)
+
+---
+
+## §1 Motivation
+
+`mur check` (spec 038) augments C# compiler errors on Reactor types with one-line `→ try:`
+did-you-mean suggestions. It is **output-driven**: it runs `dotnet build`, parses the compiler's
+diagnostic output, and fuzzy-matches (Jaro-Winkler) against factory names / members / static
+members / vocabulary tables. It is powerful but reachable only through the separate `mur` global
+tool, so a developer who adds `Microsoft.UI.Reactor` as a `<PackageReference>` and runs a plain
+`dotnet build` gets none of it.
+
+Goal: deliver the same class of guidance automatically during a normal build and in the IDE.
+
+## §2 The mechanism decision
+
+Two mechanisms were considered:
+
+- **A — Analyzers.** A semantic-model `DiagnosticAnalyzer` surfaces did-you-mean during
+  `dotnet build` **and** the VS Error List; `CodeFixProvider`s registered on the compiler's CS
+  diagnostic IDs offer one-click fixes (the Roslynator pattern). `mur check` remains the
+  output-driven CLI for agents and the long tail.
+- **B — Output-driven in-build.** Ship a bundled tool + MSBuild targets that set Roslyn's SARIF
+  error log and post-process it, running the exact existing engine.
+
+**Decision: A.** A NuGet package **cannot** read and augment the compiler's own CS diagnostics
+in-process (confirmed: `DiagnosticSuppressor` can only *suppress* non-error diagnostics; source
+generators can't see sibling diagnostics; a package can't auto-register an MSBuild logger;
+BuildCheck can't see compiler diagnostics). The only automatic, package-shippable way to consume
+real CS output is post-build SARIF — the mechanism a three-model design review flagged as fragile
+(blast radius from `RunPostBuildEvent=Always` onto other packages' post-build hooks, stale-SARIF
+"ghost suggestions" on incremental builds, no Error List integration, default-on subprocess
+concerns). Option A avoids all of that, integrates natively, and matches universal industry
+practice (Roslynator, Meziantou, xUnit, NetAnalyzers, StyleCop are all semantic-model analyzers +
+IDE code-fixes; none parse build output).
+
+## §3 Evidence
+
+From the 2026-05-11 525-run corpus, the did-you-mean mistakes rank:
+
+| Rank | Mistake | CS code | ~events |
+|---|---|---|---|
+| 1 | `GridSize.Auto()` parens on a static property | **CS1955** | ~175 |
+| 2 | mistyped factory name | CS0103 | 63 |
+| 3 | `Theme.*` wrong suffix / raw key | CS0117 | 27 |
+| 4 | `.VerticalAlignment` / `.HorizontalAlignment` | CS1061 | ~22 |
+| 5 | `GridSize.Pixel/Fixed` → `Px` | CS0117 | 7 |
+| 6 | `Button.OnClick` → `onClick:`; `TextBlock.Style` → modifiers | CS1061/0117 | ~10 |
+| — | argument type/count mismatch | CS1503/CS7036 | rare (no corpus data) |
+
+An empirical Roslyn spike confirmed every high-frequency case is cleanly analyzer-detectable —
+including the #1 (CS1955): the invocation's symbol degrades in the error state, but the **receiver
+type still resolves**, so the member kind is re-derived from `type.GetMembers(name)`
+(property/field vs. method). None of the existing Reactor analyzers cover the did-you-mean
+direction, so this is additive, not duplicative.
+
+## §4 Design
+
+- A family of `REACTOR_DYM_*` **`DiagnosticAnalyzer`s** in `src/Reactor.Analyzers/`, shipped via
+  the existing `analyzers/dotnet/cs` packaging (no new package, no targets, no subprocess).
+- Paired **`CodeFixProvider`s** for one-click IDE fixes.
+- Each analyzer **binds to Reactor symbols** (gated to the `Microsoft.UI.Reactor` namespace) so it
+  never fires on unrelated consumer code — the same symbol-binding principle as the Tier-3
+  `mur check` rules (spec 038 §6).
+- **Shared match engine (later phases).** The fuzzy cases reuse one shared, Roslyn-only match
+  library (factory index + Jaro-Winkler + vocabulary set) consumed by **both** the analyzer and
+  `mur check`, so the two never diverge — the unanimous cross-model recommendation.
+
+## §5 Phase 1 — `REACTOR_DYM_001` (shipped)
+
+`NonInvocableMemberParensAnalyzer` + `NonInvocableMemberParensCodeFix` cover the **#1** corpus
+mistake: a Reactor property/field invoked like a method (e.g. `GridSize.Auto()`). It is purely
+**structural** — no fuzzy matching, no shared engine — which makes it the ideal, self-contained
+first increment.
+
+- **Detection.** On an `InvocationExpression` with zero arguments whose receiver is a member
+  access: report only when (a) the invocation did not bind (`GetSymbolInfo(...).Symbol == null`),
+  (b) the receiver type resolves and is under `Microsoft.UI.Reactor`, and (c) the named member is
+  a property/field with no method overload. Message: *"'GridSize.Auto' is a property, not a
+  method — remove the parentheses."*
+- **Severity: Warning.** The analyzer fires **only** when the invocation failed to bind, so it
+  always co-occurs with a compiler error (CS1955). That means Warning is safe under
+  `TreatWarningsAsErrors` (the build already fails) while still surfacing in a plain
+  `dotnet build` — meeting the "nicer errors in a plain build" goal.
+- **Fix.** `GridSize.Auto()` → `GridSize.Auto` (drop the parens), batch-fixable.
+- **Tests.** Positive (`GridSize.Auto()`), negatives (`Star()`/`Px(1)`/`Auto`, and a non-Reactor
+  `Widget.Thing()` to prove namespace gating), and the fix round-trip.
+
+## §6 Phase 2 — `REACTOR_DYM_002` (shipped)
+
+Phase 2 ships the **deterministic vocabulary** did-you-mean case that is still live against the
+current Reactor surface, as a dedicated non-fuzzy analyzer + one-click code fix mirroring an existing
+`mur check` Tier-3 rule (spec 038 §6). The fuzzy Jaro-Winkler typo matcher is deliberately **deferred**
+to a later phase — it carries a higher false-positive risk and needs the shared match engine (below).
+
+- **`REACTOR_DYM_002` — `ThemeBackgroundSuffixAnalyzer`** (+ `ThemeBackgroundSuffixCodeFix`). Corpus
+  mistake **#3** (`Theme.*` wrong suffix, CS0117, ~27 events): an English-plausible token such as
+  `Theme.AppBackground` that Reactor doesn't define. Any un-overridden `*Background` maps to
+  `Theme.SolidBackground`; the exact override `Theme.LayerBackground` → `Theme.LayerFill` matches the
+  CLI rule's run5 cross-trial refinement. Mirrors `ThemeBackgroundSuffixRule`; the target
+  `Microsoft.UI.Reactor.Core.Theme` genuinely lacks these tokens (it has `SolidBackground`/`LayerFill`
+  but no `AppBackground`/`LayerBackground`/…), so `Theme.AppBackground` still produces CS0117 on real
+  code — the analyzer is live, not dead.
+
+**Detection.** The analyzer registers a `SimpleMemberAccessExpression` action and fires only when
+(a) the access did not bind (`GetSymbolInfo(...).Symbol == null`), so it always co-occurs with the
+compiler's CS0117; (b) the receiver is *exactly* `Microsoft.UI.Reactor.Core.Theme` by symbol equality
+(a look-alike `Theme` in another namespace is ruled out); and (c) the chosen target still exists on the
+live `Theme` surface (resolved once per compilation via a `CompilationStart` action), so a future
+rename self-disables the rule rather than proposing a member that no longer compiles. As in Phase 1,
+firing only on the unbound shape keeps **Warning** severity safe under `TreatWarningsAsErrors` while
+still surfacing in a plain `dotnet build`.
+
+**Alignment case (#4) intentionally not shipped.** Corpus mistake #4 —
+`.VerticalAlignment(...)` / `.HorizontalAlignment(...)` (CS1061) — was **already fixed upstream in the
+DSL**: `Microsoft.UI.Reactor.ElementExtensions` now defines `.HorizontalAlignment(...)` and
+`.VerticalAlignment(...)` as real modifier aliases for `.HAlign(...)` / `.VAlign(...)` (added in commit
+`e38b57c2`, PR #319 — *"reduce reactor-dev agent build-attempt fix-loops"*). Those calls now **bind**,
+so no CS1061 occurs and there is nothing to augment; an in-build analyzer here would be dead code and
+could even mis-fire on a wrong-argument call to the real modifier (overload-resolution failure, not a
+missing member). The mirrored `mur check` `AlignmentShortcutRule` was obsolete for the same reason —
+its fixture stubs omit the aliases, masking it — and has since been **removed as dead code** (PR #831).
+
+**Shared-engine decision (deferred).** The analyzer keeps its small vocabulary map **local** rather
+than sharing the CLI's match engine. Extracting `StringSimilarity` / `FactoryIndex` out of
+`src/Reactor.Cli` now would churn `mur check` and its ~28 rule/suggester test files, and the
+`netstandard2.0` analyzer project cannot consume the `net8` `FrozenDictionary` APIs `FactoryIndex`
+relies on. To keep the two engines from silently diverging in the meantime, a cross-check parity test
+(`DidYouMeanAnalyzerParityTests`) drives the Tier-3 rule for every analyzer map entry and asserts both
+resolve the same target. The **full shared match-engine unification remains a follow-up** (§7) —
+required before the fuzzy phases, which must share one ranker with `mur check`.
+
+**Tests.** Positives (`AppBackground`/`WindowBackground` → `SolidBackground`, `LayerBackground` →
+`LayerFill` override), negatives (an existing `*Background` token that binds, a non-`Background` suffix,
+a look-alike `Theme` in another namespace, and the target-missing self-disable), the code-fix
+round-trips, and the parity cross-check.
+
+## §7 Later phases — the fuzzy cases
+
+Follow-up analyzers, each reusing the shared match engine and gated to Reactor symbols:
+
+1. **Unresolved member** (CS1061/CS0117 shapes) — receiver type resolves, member unresolved →
+   fuzzy-match against the receiver's members. The one deterministic vocabulary member still live in
+   this family — `Theme.AppBackground` → `Theme.SolidBackground` — shipped in Phase 2 (§6) as a
+   dedicated non-fuzzy analyzer; the remaining fuzzy members (`GridSize.Pixel` → `.Px`,
+   `TextBlock.Style` → modifier chain, `Button.OnClick` → `onClick:`) await the shared match engine.
+   *(The `.VerticalAlignment` / `.HorizontalAlignment` → `.VAlign` / `.HAlign` case that originally
+   motivated this shape is now resolved at the API level: `ElementExtensions` ships real long-form
+   `.HorizontalAlignment(...)` / `.VerticalAlignment(...)` aliases, so those calls bind and raise no
+   diagnostic. The corresponding `mur check` `AlignmentShortcutRule` has been removed as dead code —
+   see §6.)*
+2. **Unresolved name** (CS0103 shape) — fuzzy-match against the factory index.
+   **Shipped as `REACTOR_DYM_003` (`FuzzyFactoryNameAnalyzer` + `FuzzyFactoryNameCodeFix`) — see §7.1.**
+3. **Argument shape** (CS1503/CS7036) — `CandidateReason == OverloadResolutionFailure` +
+   `ClassifyConversion`; lower priority (rare in corpus). **Shipped as `REACTOR_DYM_004`
+   (`MissingFactoryArgumentAnalyzer`, CS7036) and `REACTOR_DYM_005`
+   (`StringForElementArgumentAnalyzer`, the CS1503 string-for-Element case) — see §7.2**, with a
+   deliberately narrow scope; the broader CS1503 type-mismatch surface is left uncovered by design.
+4. **`HelpLinkUri`** on `REACTOR_*` descriptors — endorsed by every reviewer; **deferred** until a
+   stable published-docs URL scheme exists (the package is not yet public — spec 022).
+5. **Shared match-engine extraction** — factor `StringSimilarity` + `FactoryIndex` + the vocabulary
+   tables out of `src/Reactor.Cli` into one Roslyn-only library consumed by **both** `mur check` and
+   the analyzers, replacing Phase 2's local maps + parity test. Blocked today by the `netstandard2.0`
+   analyzer target (no `net8` `FrozenDictionary`) and the blast radius across the CLI's ~28
+   rule/suggester test files; land it before the fuzzy phases so both engines share one ranker.
+
+Each phase lands with a perf check (IDE typing latency on a representative project) and a
+false-positive audit over `samples/`.
+
+### §7.1 `REACTOR_DYM_003` — mistyped factory name (CS0103, shipped)
+
+`FuzzyFactoryNameAnalyzer` covers the **#2** corpus mistake (~63 events): a mistyped Reactor factory
+name in call position (e.g. `Buton("x")` for `Button`, `Vstack(...)` for `VStack`). It is the first
+**fuzzy** analyzer, so **false-positive control is the design centre** ("a wrong suggestion is worse
+than no suggestion", spec 038 §1): precision is favoured over recall.
+
+- **Detection.** On an `InvocationExpression` whose callee is a **bare identifier** (`Foo(...)` — the
+  factory-call shape; member access `x.Foo()` is phase 1's CS1061/CS0117 territory), report only when
+  the name is genuinely unbound (`GetSymbolInfo(...).Symbol == null` **and** no `CandidateSymbols` —
+  i.e. the CS0103 shape, not an overload/accessibility failure).
+- **Live factory set.** Candidate names are enumerated once per compilation from the real
+  `Microsoft.UI.Reactor.Factories` type via `GetTypeByMetadataName` (public static ordinary methods,
+  deduped) — always current with the referenced package, and a no-op in non-Reactor projects. The
+  CLI's `FactoryIndex` is deliberately **not** reused: it depends on net8 `FrozenDictionary` APIs
+  unavailable in the netstandard2.0 analyzer.
+- **Similarity.** Jaro-Winkler, ported **verbatim** from the CLI's `StringSimilarity` into
+  `src/Reactor.Analyzers/StringSimilarity.cs` (the net10 CLI engine can't be referenced from the
+  netstandard2.0 analyzer). A parity unit test (`StringSimilarityParityTests`) asserts the two copies
+  return **bit-identical** scores across a battery of inputs, so the analyzer and `mur check` cannot
+  drift.
+- **False-positive gating (all must hold).** (a) unbound name; (b) bare-identifier call position;
+  (c) **PascalCase** first letter — excludes the dominant CS0103 false-positive shape, a typo'd
+  camelCase local/parameter; (d) length ≥ 4; (e) not itself an exact factory name (that's a missing
+  `using static`, a different fix); (f) the closest factory — searched **only among names within ±2
+  of the same length** — clears the threshold and is a **unique** best (a tie such as `Stack` between
+  `HStack`/`VStack` stays silent).
+- **Threshold: 0.88** (stricter than the CLI's CS0103 floor of 0.75, as an always-on analyzer
+  demands). Chosen from an empirical false-positive spike over the 156 live factory names, 40
+  realistic factory typos, and 66 realistic non-factory unknown identifiers (typo'd camelCase locals,
+  unrelated PascalCase types/methods, and short words that prefix long factories). Results:
+  0.75 with no extra gating → **41 false positives** (unusable always-on); the full gate at **0.88 /
+  length-Δ ≤ 2 / minLen ≥ 4 / PascalCase / tie-guard → 0 false positives at 40/40 recall**. The
+  firing positives cluster at ≥ 0.90 (`Vstack` → `VStack` = 0.900 is the floor); the closest
+  non-firing negative is `Compute` → `Component` at 0.871 — 0.88 sits in that valley. The **length-Δ
+  gate is the key lever**: it defeats the Jaro-Winkler common-prefix inflation that would otherwise
+  "correct" `List` → `ListBox`, `Text` → `TextBox`, `Command` → `CommandBar` (all 0.90+ but Δlen ≥ 3).
+- **Severity: Warning.** Fires only alongside the compiler's CS0103, so Warning is safe under
+  `TreatWarningsAsErrors` (the build already fails) while still surfacing in a plain `dotnet build`
+  and the IDE. Tunable via `.editorconfig`.
+- **Fix.** Renames the identifier to the suggested factory (`Buton("x")` → `Button("x")`),
+  batch-fixable; the suggestion travels via the diagnostic property bag so the fix never re-computes
+  similarity.
+- **Tests.** Positive (typo, wrong-case, nested-in-a-real-factory, message-arguments); the gating
+  negatives (valid calls, camelCase name, unrelated name, exact-name-missing-using, bound non-factory
+  method, member-access typo, short-prefix-of-long-factory, ambiguous tie, no-Reactor compilation);
+  the code-fix round-trip; and the `StringSimilarity` parity test.
+- **Scope note.** Generic-name callees (`Foo<int>(...)`) are intentionally out of scope for v1 to keep
+  the fix trivial and the gate tight; they can be added later if the corpus shows demand.
+
+### §7.2 `REACTOR_DYM_004` / `REACTOR_DYM_005` — argument shape (CS7036 / CS1503, shipped)
+
+The argument-shape case (item 3 above) is the **completeness** phase: CS1503/CS7036 are **rare** in the
+eval corpus — the 525-run tuning drop recorded **zero** CS1503 firings and only three no-match CS7036
+firings (`Thresholds.cs` calibration history), and the corpus stubs can't even reproduce these codes.
+So the value is marginal and the guiding rule — *"a wrong suggestion is worse than no suggestion"* (spec
+038 §1) — bites harder here than anywhere: overload resolution is genuinely complex (optional / named /
+`params` / generics / extension methods / accessibility), and `CandidateReason == OverloadResolutionFailure`
+is broad. The phase therefore ships **only the high-confidence slices** and documents what it deliberately
+does **not** cover.
+
+**False-positive spike (mandatory, ran first).** A throwaway Roslyn probe constructed realistic
+Reactor-shaped factories with overloads and measured — via `GetSymbolInfo` only, **not** compiler
+diagnostics — whether the intended detection fires **only** on the true shapes. Across **29 cases it was
+0 false positives**. Key findings that shaped the gating:
+
+- Every argument-shape non-binding failure reports `CandidateReason.OverloadResolutionFailure`; an
+  accessibility failure (even on `Factories`) reports `CandidateReason.Inaccessible`, and an unknown name
+  reports `None` — so the reason gate cleanly separates the argument-shape family from its neighbours.
+- A **unique** candidate (`CandidateSymbols.Length == 1`) is the decisive false-positive defence. It
+  silences every multi-overload factory — including the three-overload `Button()`, which was the
+  motivating example but is correctly **left silent**: with three overloads there is no single argument
+  shape to propose, so guessing one would be exactly the "wrong suggestion." Ambiguous calls surface as
+  multiple candidates too, and are likewise dropped.
+- Gating to Reactor's `Factories` type (by symbol equality) silences same-named APIs in other namespaces
+  **and** Reactor's own fluent-modifier extension methods (`ElementExtensions`).
+- Bailing when any argument is an **error type** silences cascading edit-in-progress errors; requiring
+  every *supplied* positional argument to implicitly convert cleanly separates "missing argument" (CS7036,
+  DYM_004) from "type mismatch" (CS1503, DYM_005), so a call that is *both* short an argument *and*
+  mismatched (`Grid("x")`) fires **neither**.
+
+**`REACTOR_DYM_004` — `MissingFactoryArgumentAnalyzer` (CS7036).** Fires when a call did not bind, failed
+overload resolution against a **unique** `Factories` candidate, uses only positional arguments, supplies
+**fewer** than the candidate's required (non-optional, non-`params`) parameter count, has no error-typed
+argument, and every supplied argument converts. Message lists the full parameter shape as named-argument
+hints (e.g. `ScrollViewer()` → *"did you mean 'ScrollViewer(child: <Element>)'?"*). This is the more
+tractable and valuable of the two slices.
+
+**`REACTOR_DYM_005` — `StringForElementArgumentAnalyzer` (CS1503).** Fires only on the one narrow,
+high-confidence special case the CLI's `SymbolSuggester` already encodes: a `string` supplied where an
+`Element` (or subtype) is expected — same unique-`Factories`-candidate gate, no `params` tail, and
+**exactly one** failing positional argument whose type is `string` and whose parameter is `Element`. It
+suggests wrapping the string in a text factory (`TextBlock` / `Heading` / `Caption`). A parity test
+(`DidYouMeanAnalyzerParityTests`) drives both engines on this shape so they cannot silently diverge.
+
+**No code fix, by design.** Both analyzers ship **message-only**. A CS7036 "add the arguments" fix would
+insert non-compiling placeholders (`child: <Element>`); a CS1503 `TextBlock(...)` wrap compiles only when a
+text factory is in scope (a bare `using static` vs. a qualified call needs different syntax). A fix that
+produces uncompilable code is worse than none, so neither ships one.
+
+**Deliberately not covered (and why).**
+
+- **The CLI's other CS1503 special case — `Action<T>` supplied where a parameterless `Action` is expected
+  — is omitted.** The spike showed it fires only when a *typed* `Action<T>` variable is passed, and **never**
+  for the far more common *lambda* shape (a lambda argument has no type to classify). That is poor coverage
+  for real code; the CLI's `SymbolSuggester` shares the same limitation (its heuristic keys off an
+  `'Action<…>'` substring in the diagnostic message, absent for lambdas), so nothing is lost in-build.
+- **General CS1503 type mismatches** (numeric, wrong-element-subtype, etc.) are not matched — only the
+  string-for-`Element` case. A general type-mismatch matcher was judged too broad to gate to ~zero false
+  positives given how varied real overload sets are.
+- **Multi-overload factories** (e.g. `Button`), **named-argument** calls, **`params`** calls,
+  **generic-inference** failures, and **extension-method** calls all fall outside the gates above and
+  degrade gracefully to the raw compiler error.
+
+**Severity: Warning.** Both fire only alongside the compiler's own CS7036 / CS1503, so Warning is safe under
+`TreatWarningsAsErrors` (the build already fails) while still surfacing the hint in a plain `dotnet build`
+and the IDE. Tunable via `.editorconfig`. The shared gating lives in one `ArgumentShapeGate` helper so the
+two analyzers can't drift.
+
+## §8 Risks and guardrails
+
+| Risk | Guardrail |
+|---|---|
+| False positives under cascading / partial-edit errors | Bail when the receiver type is unresolved or an error type; only fire when the invocation didn't bind; gate to Reactor symbols; (fuzzy phases) require high similarity thresholds. |
+| IDE typing latency | Use the provided `context.SemanticModel` (never `Compilation.GetSemanticModel`, RS1030); narrow syntax-node actions; cheap symbol pre-checks before any fuzzy match. |
+| Divergence between analyzer and `mur check` | Phase 2: local maps locked to the CLI Tier-3 rules by a cross-check parity test (`DidYouMeanAnalyzerParityTests`). Argument-shape phase (§7.2): the same test asserts `REACTOR_DYM_004`/`_005` and the CLI `SymbolSuggester` both fire on the representative CS7036 / CS1503 shapes. Fuzzy phases: one shared match library + shared fixtures (§7 item 5). |
+| Noise (a second diagnostic atop the CS error) | Concise message; `REACTOR_DYM_*` only ever accompanies a genuine compile error; consumers can tune severity via `.editorconfig`. |
+
+## §9 Relationship to `mur check`
+
+`mur check` stays the output-driven CLI: it reacts to the compiler's *actual* diagnostics, so it
+retains broader coverage (any CS code, the long tail) and its agent-tuned ranker/iteration modes.
+The analyzers cover the common cases natively in build + IDE. The two are complementary; the fuzzy
+phases share one match engine so behaviour cannot drift.
+
+## §10 Non-goals / superseded
+
+- **Superseded:** the earlier output-driven-in-build proposal (a `Reactor.Check` engine extraction,
+  a bundled tool packed under `tools/`, `ErrorLog` SARIF wiring, and a
+  `PostBuildEvent`/`RunPostBuildEvent=Always` trigger). Retained only as CLI (`mur check`).
+- **Non-goal:** exact parity with every `mur check` suggestion in-build. The analyzer is
+  pattern-driven; uncovered codes degrade gracefully to the raw compiler error (never worse than
+  today), with `mur check` available for full breadth.

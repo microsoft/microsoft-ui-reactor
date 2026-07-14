@@ -615,15 +615,14 @@ return VStack(0,
 ### Creating Commands inside render without memoization
 
 ```csharp
-// Don't: re-create the Command on every render — every surface that
-// holds the previous reference sees a fresh identity each frame, which
-// thrashes the WinUI keyboard-accelerator wiring and re-renders every
-// consumer. Lift to a memo or hoist out of Render().
+// Don't: re-create the Command on every render — each render allocates a
+// fresh command record (and its captured closures). Memoizing keeps a
+// stable instance across renders. Lift to a memo or hoist out of Render().
 class DontCreateInRender : Component
 {
     public override Element Render()
     {
-        // BAD — Command identity churns every render:
+        // BAD — a fresh Command (and closure) is allocated every render:
         // var save = new Command { Label = "Save", Execute = () => { } };
 
         // GOOD — UseMemo pins identity until deps change:
@@ -639,12 +638,15 @@ class DontCreateInRender : Component
 }
 ```
 
-Re-creating the `Command` record every frame creates a fresh
-`KeyboardAccelerator` and forces every consumer to re-render. The
-window's accelerator table grows without bound on rapid re-renders and
-the analyzer fires `REACTOR_PERF_FUNCREF` for the inline lambda
-identity. Wrap the construction in [`UseMemo`](hooks.md) with the
-correct dependencies, or hoist the command above the component.
+Re-creating the `Command` record every render allocates a fresh command
+(and its captured closures). Where a host rebuilds keyboard
+accelerators on reconcile it *clears and re-adds* them — a bounded rewire,
+not an unbounded leak — and a command bound to a button is diffed by
+*value*, so a fresh-but-equal command re-applies nothing. The avoidable
+cost is simply the per-render allocation, and the analyzer fires
+`REACTOR_PERF_FUNCREF` for the inline construction. Wrap it in
+[`UseMemo`](hooks.md) with the correct dependencies, or hoist the command
+above the component.
 
 ### Ignoring CanExecute changes
 

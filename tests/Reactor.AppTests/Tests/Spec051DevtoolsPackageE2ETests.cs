@@ -103,7 +103,7 @@ public sealed class Spec051DevtoolsPackageE2ETests
         if (!string.IsNullOrWhiteSpace(fromEnv))
         {
             if (File.Exists(fromEnv)) return fromEnv;
-            Assert.Inconclusive($"{envVar} points to a missing executable: {fromEnv}");
+            Assert.Fail($"{envVar} points to a missing executable: {fromEnv}");
         }
 
         if (string.Equals(Environment.GetEnvironmentVariable("REACTOR_SPEC051_DISCOVER_PUBLISHED"), "1", StringComparison.Ordinal))

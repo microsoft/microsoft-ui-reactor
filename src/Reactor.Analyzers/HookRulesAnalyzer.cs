@@ -36,11 +36,30 @@ namespace Microsoft.UI.Reactor.Analyzers;
 ///   inside helper lambdas / local functions that are invoked synchronously before the
 ///   next render are also flagged; truly deferred callbacks (event handlers) are exempt.
 ///   <see cref="DiagnosticSeverity.Info"/>.</description></item>
+/// <item><description><c>REACTOR_HOOKS_002</c> — a hook is called after a single-guard
+///   early <c>return</c> in the same block. On renders that take the guard, the hooks
+///   below it are skipped and the slot table desynchronizes. <see cref="DiagnosticSeverity.Info"/>
+///   (narrow single-guard shape only).</description></item>
+/// <item><description><c>REACTOR_HOOKS_003</c> — a <c>UseEffect</c> effect lambda carries
+///   the <c>async</c> modifier, so it compiles as <c>async void</c>: exceptions escape the
+///   flush pipeline, cleanup decouples from the <c>await</c>, and the setter can fire after
+///   unmount. There is no <c>Func&lt;Task&gt;</c> overload.</description></item>
+/// <item><description><c>REACTOR_HOOKS_010</c> — reference state is mutated in place and the
+///   <em>same instance</em> is passed back to its setter (<c>items.Add(x); setItems(items);</c>).
+///   The setter compares the new value to the stored one with <c>EqualityComparer&lt;T&gt;.Default</c>;
+///   the same instance compares equal (<c>x.Equals(x)</c>), so it returns early and no re-render is
+///   scheduled.</description></item>
+/// <item><description><c>REACTOR_HOOKS_012</c> — <c>Memo(builder, deps)</c> is given a
+///   freshly-allocated dependency whose type compares by reference, so the memo never hits
+///   its stable path (the <c>HOOKS_004</c> footgun on the <c>Memo</c> factory, which the
+///   <c>Use</c>-name fast path misses).</description></item>
+/// <item><description><c>REACTOR_HOOKS_013</c> — a <c>UseState</c>/<c>UsePersisted</c> initial
+///   value is a fresh allocation re-evaluated every render, but the hook only reads it on the
+///   first render.</description></item>
 /// </list>
 ///
-/// See <c>docs/specs/tasks/async-resources-implementation.md</c> §4.3 for the full
-/// rule catalog. <c>REACTOR_HOOKS_002</c> and <c>003</c> require control-flow /
-/// data-flow analysis and are tracked as follow-ups.
+/// See <c>docs/specs/tasks/async-resources-implementation.md</c> §4.3 and
+/// <c>docs/specs/060-analyzer-suite-expansion.md</c> §4.1 for the full rule catalog.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class HookRulesAnalyzer : DiagnosticAnalyzer
@@ -50,6 +69,11 @@ public sealed class HookRulesAnalyzer : DiagnosticAnalyzer
     public const string HookOutsideRenderId = "REACTOR_HOOKS_005";
     public const string NonIdempotentFetcherId = "REACTOR_HOOKS_006";
     public const string StaleStateReadId = "REACTOR_HOOKS_008";
+    public const string EarlyReturnGuardId = "REACTOR_HOOKS_002";
+    public const string AsyncEffectId = "REACTOR_HOOKS_003";
+    public const string MutateThenSetId = "REACTOR_HOOKS_010";
+    public const string MemoUnstableDepId = "REACTOR_HOOKS_012";
+    public const string EagerInitialValueId = "REACTOR_HOOKS_013";
 
     private static readonly DiagnosticDescriptor ConditionalHookRule = new(
         ConditionalHookId,
@@ -96,8 +120,55 @@ public sealed class HookRulesAnalyzer : DiagnosticAnalyzer
         isEnabledByDefault: true,
         description: "Hook setters (UseState/UsePersisted/UseReducer) do not mutate the local value in the current closure — they schedule a re-render. Reading the state variable later in the same synchronous handler (including helper lambdas and local functions invoked before the next render) returns the stale, pre-update value.");
 
+    private static readonly DiagnosticDescriptor EarlyReturnGuardRule = new(
+        EarlyReturnGuardId,
+        "Hook after an early-return guard",
+        "Hook '{0}' runs after an early-return guard in this block. On renders that take the guard's return, the hooks below it are skipped and the positional slot table desynchronizes. Call every hook unconditionally before any early return.",
+        "Reactor.Hooks",
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: true,
+        description: "Hook slots are positional. A single-guard early return (if (…) return; with no else) that precedes a hook makes that hook run only on renders that pass the guard, shifting the slot list and corrupting state — the same corruption HOOKS_001 guards, but the hook is not lexically inside the if. It fires when a hook follows one or more such guards in the same block; throws, switch-arm returns, and guards in an enclosing block are not covered.");
+
+    private static readonly DiagnosticDescriptor AsyncEffectRule = new(
+        AsyncEffectId,
+        "async-void UseEffect body",
+        "This UseEffect effect lambda is async, so it compiles as async void. Exceptions escape the flush pipeline, cleanup decouples from the await, and the setter can fire after unmount. Extract the async work into a Task-returning local and start it from a synchronous effect that cancels on cleanup.",
+        "Reactor.Hooks",
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "UseEffect only accepts Action / Func<Action> — there is no Func<Task> overload, so an async lambda binds as async void. Move the awaited work into a local async Task RunAsync(CancellationToken) and call it from UseEffect(() => { var cts = new CancellationTokenSource(); _ = RunAsync(cts.Token); return () => { cts.Cancel(); cts.Dispose(); }; }, deps).");
+
+    private static readonly DiagnosticDescriptor MutateThenSetRule = new(
+        MutateThenSetId,
+        "Mutate-then-set reference state",
+        "'{0}' is mutated in place and the same instance is passed back to '{1}'. The setter compares the new value to the stored one with EqualityComparer<T>.Default; the same instance compares equal (x.Equals(x) is true), so no re-render is scheduled. {2}.",
+        "Reactor.Hooks",
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "UseState/UsePersisted setters early-return when the new value equals the old. Mutating a reference-typed state value in place and passing that same instance back compares equal to the stored value (they are the same object), so no render is scheduled — regardless of whether the type has value semantics. Value types are copied and compared by value, so a mutated copy differs from the stored original and they are unaffected.");
+
+    private static readonly DiagnosticDescriptor MemoUnstableDepRule = new(
+        MemoUnstableDepId,
+        "Memo dependency lacks value equality",
+        "This Memo dependency is a freshly-allocated {0} whose type compares by reference. It compares unequal on every render, so the memo never hits its stable path and the subtree re-renders every frame. Hoist it to a stable value (UseMemo/field) or project it to a scalar key.",
+        "Reactor.Hooks",
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "MemoElement dependencies are compared with Equals. A freshly-allocated dependency whose type uses reference equality (an array, List<T>, Dictionary<,>, or a plain class) never matches its previous value, so the memo is defeated. This is the HOOKS_004 footgun on the Memo factory, which the Use-name fast path does not see. Records/tuples and other value-equality types are fine.");
+
+    private static readonly DiagnosticDescriptor EagerInitialValueRule = new(
+        EagerInitialValueId,
+        "UseState/UsePersisted initial value allocated every render",
+        "This initial value is a freshly-allocated {0} re-evaluated on every render, but the hook only reads it on the first render. Wrap it in UseMemo(() => …, []) so it is allocated once.",
+        "Reactor.Hooks",
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: "C# re-evaluates a UseState/UsePersisted initial-value argument on every render; the hook consults it only on the first. A fresh object/array/collection allocation there is steady garbage that scales with render frequency, not state changes. Wrap it in UseMemo(() => new …(), []) to allocate once.");
+
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
-        ImmutableArray.Create(ConditionalHookRule, UnstableDepsRule, HookOutsideRenderRule, NonIdempotentFetcherRule, StaleStateReadRule);
+        ImmutableArray.Create(
+            ConditionalHookRule, UnstableDepsRule, HookOutsideRenderRule, NonIdempotentFetcherRule, StaleStateReadRule,
+            EarlyReturnGuardRule, AsyncEffectRule, MutateThenSetRule, MemoUnstableDepRule, EagerInitialValueRule);
 
     // Hooks that take a `deps` params-array. Only these are candidates for
     // REACTOR_HOOKS_004. For params-arrays, we skip the check if the caller
@@ -148,6 +219,8 @@ public sealed class HookRulesAnalyzer : DiagnosticAnalyzer
         context.EnableConcurrentExecution();
         context.RegisterSyntaxNodeAction(AnalyzeInvocation, SyntaxKind.InvocationExpression);
         context.RegisterSyntaxNodeAction(AnalyzeSetterStaleRead, SyntaxKind.InvocationExpression);
+        context.RegisterSyntaxNodeAction(AnalyzeMutateThenSet, SyntaxKind.InvocationExpression);
+        context.RegisterSyntaxNodeAction(AnalyzeMemo, SyntaxKind.InvocationExpression);
     }
 
     private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
@@ -192,6 +265,27 @@ public sealed class HookRulesAnalyzer : DiagnosticAnalyzer
         if (FetcherHooks.Contains(methodName))
         {
             CheckFetcherArgument(context, invocation, methodName);
+        }
+
+        // REACTOR_HOOKS_002: a hook that follows a single-guard early return in the same block.
+        if (HasPrecedingEarlyReturnGuard(invocation))
+        {
+            context.ReportDiagnostic(Diagnostic.Create(
+                EarlyReturnGuardRule,
+                invocation.GetLocation(),
+                methodName));
+        }
+
+        // REACTOR_HOOKS_003: async-void UseEffect body.
+        if (methodName == "UseEffect")
+        {
+            CheckAsyncEffect(context, invocation);
+        }
+
+        // REACTOR_HOOKS_013: eager-allocated UseState/UsePersisted initial value.
+        if (methodName is "UseState" or "UsePersisted")
+        {
+            CheckEagerInitialValue(context, invocation, methodName);
         }
     }
 
@@ -448,7 +542,10 @@ public sealed class HookRulesAnalyzer : DiagnosticAnalyzer
             ImplicitObjectCreationExpressionSyntax => (true, "object"),
             ArrayCreationExpressionSyntax => (true, "array"),
             ImplicitArrayCreationExpressionSyntax => (true, "array"),
-            CollectionExpressionSyntax => (true, "collection"),
+            // An EMPTY collection expression `[]` is the idiomatic "run once" deps: it compares
+            // equal to last render's empty deps (length 0), so it is stable and must not flag.
+            // A non-empty `[a, b]` is a fresh reference each render and is the real footgun.
+            CollectionExpressionSyntax coll => (coll.Elements.Count > 0, "collection"),
             AnonymousObjectCreationExpressionSyntax => (true, "anonymous object"),
             SimpleLambdaExpressionSyntax => (true, "lambda"),
             ParenthesizedLambdaExpressionSyntax => (true, "lambda"),
@@ -903,4 +1000,362 @@ public sealed class HookRulesAnalyzer : DiagnosticAnalyzer
 
         return null;
     }
+
+    // ────────────────────────────────────────────────────────────
+    // REACTOR_HOOKS_002 — hook after a single-guard early return
+    // ────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// True when the statement containing this hook call is preceded, in the same block, by one or
+    /// more single-guard early returns: an <c>if (…) return …;</c> with no <c>else</c> whose body is
+    /// only a <c>return</c>. Narrow by design (spec §4.1 coverage bound): <c>throw</c>, switch-arm
+    /// returns, and guards in an enclosing block are not covered.
+    /// </summary>
+    private static bool HasPrecedingEarlyReturnGuard(InvocationExpressionSyntax invocation)
+    {
+        // Find the statement that contains this hook and is a direct child of a block, without
+        // crossing a lambda / local-function boundary (a hook there is a different concern that
+        // HOOKS_001 already covers).
+        StatementSyntax? hookStatement = null;
+        BlockSyntax? block = null;
+        for (var current = (SyntaxNode?)invocation; current is not null; current = current.Parent)
+        {
+            if (current is AnonymousFunctionExpressionSyntax or LocalFunctionStatementSyntax) break;
+            if (current is StatementSyntax statement && statement.Parent is BlockSyntax parentBlock)
+            {
+                hookStatement = statement;
+                block = parentBlock;
+                break;
+            }
+        }
+        if (hookStatement is null || block is null) return false;
+
+        int hookIndex = block.Statements.IndexOf(hookStatement);
+        if (hookIndex <= 0) return false;
+
+        for (int i = 0; i < hookIndex; i++)
+        {
+            if (IsSingleGuardEarlyReturn(block.Statements[i])) return true;
+        }
+        return false;
+    }
+
+    private static bool IsSingleGuardEarlyReturn(StatementSyntax statement)
+    {
+        if (statement is not IfStatementSyntax ifStatement) return false;
+        if (ifStatement.Else is not null) return false;
+        return ifStatement.Statement switch
+        {
+            ReturnStatementSyntax => true,
+            BlockSyntax block => block.Statements.Count == 1 && block.Statements[0] is ReturnStatementSyntax,
+            _ => false,
+        };
+    }
+
+    // ────────────────────────────────────────────────────────────
+    // REACTOR_HOOKS_003 — async-void UseEffect body
+    // ────────────────────────────────────────────────────────────
+
+    private static void CheckAsyncEffect(SyntaxNodeAnalysisContext context, InvocationExpressionSyntax invocation)
+    {
+        var args = invocation.ArgumentList.Arguments;
+        if (args.Count == 0) return;
+
+        // The effect is always arg 0 for every UseEffect overload (Action / Func<Action> + deps).
+        var first = UnwrapCasts(args[0].Expression);
+        var asyncKeyword = first switch
+        {
+            SimpleLambdaExpressionSyntax sl => sl.AsyncKeyword,
+            ParenthesizedLambdaExpressionSyntax pl => pl.AsyncKeyword,
+            AnonymousMethodExpressionSyntax am => am.AsyncKeyword,
+            _ => default,
+        };
+        if (!asyncKeyword.IsKind(SyntaxKind.AsyncKeyword)) return;
+
+        // Only async VOID is the bug. If the call bound to an overload whose effect parameter is a
+        // Task-returning delegate (e.g. a consumer-added UseEffect(Func<Task>)), the async lambda is
+        // awaited safely — don't fire. Reactor itself has no such overload, so the unresolved /
+        // Action / Func<Action> cases still fire.
+        if (context.SemanticModel.GetSymbolInfo(invocation).Symbol is IMethodSymbol { Parameters.Length: > 0 } symbol
+            && symbol.Parameters[0].Type is INamedTypeSymbol { DelegateInvokeMethod: { } invoke }
+            && IsTaskLike(invoke.ReturnType))
+        {
+            return;
+        }
+
+        context.ReportDiagnostic(Diagnostic.Create(AsyncEffectRule, first.GetLocation()));
+    }
+
+    private static bool IsTaskLike(ITypeSymbol type)
+    {
+        if (type.Name is not ("Task" or "ValueTask")) return false;
+        var ns = type.ContainingNamespace?.ToDisplayString();
+        return ns == "System.Threading.Tasks";
+    }
+
+    // ────────────────────────────────────────────────────────────
+    // REACTOR_HOOKS_013 — eager-allocated initial value
+    // ────────────────────────────────────────────────────────────
+
+    private static void CheckEagerInitialValue(SyntaxNodeAnalysisContext context, InvocationExpressionSyntax invocation, string methodName)
+    {
+        var model = context.SemanticModel;
+        var symbol = model.GetSymbolInfo(invocation).Symbol as IMethodSymbol;
+        var args = invocation.ArgumentList.Arguments;
+
+        // Bind by PARAMETER name, not position: the initial value is arg 0 for UseState<T>(T
+        // initialValue, …) but arg 1 for UsePersisted<T>(string key, T initialValue, …).
+        ExpressionSyntax? initExpr = null;
+        if (symbol is not null)
+        {
+            initExpr = FindArgumentForParameter(args, symbol.Parameters, "initialValue");
+        }
+        else if (args.All(static a => a.NameColon is null))
+        {
+            // Mid-compile fallback (symbol unresolved, positional call only).
+            int index = methodName == "UsePersisted" ? 1 : 0;
+            if (index < args.Count) initExpr = args[index].Expression;
+        }
+        if (initExpr is null) return;
+
+        var (unstable, kind) = AllocationAnalysis.ClassifyRestricted(initExpr);
+        if (!unstable) return;
+
+        // Only reference-type creations heap-allocate per render; a value type (new MyStruct(),
+        // a record-struct `with`) is a cheap stack value, so it is not the eager-allocation footgun.
+        var initType = model.GetTypeInfo(initExpr).Type ?? model.GetTypeInfo(initExpr).ConvertedType;
+        if (initType is not null && initType.IsValueType) return;
+
+        context.ReportDiagnostic(Diagnostic.Create(EagerInitialValueRule, initExpr.GetLocation(), kind));
+    }
+
+    private static ExpressionSyntax? FindArgumentForParameter(
+        SeparatedSyntaxList<ArgumentSyntax> args, ImmutableArray<IParameterSymbol> parameters, string parameterName)
+    {
+        for (int i = 0; i < args.Count; i++)
+        {
+            var arg = args[i];
+            IParameterSymbol? param = null;
+            if (arg.NameColon is not null)
+                param = parameters.FirstOrDefault(p => p.Name == arg.NameColon.Name.Identifier.Text);
+            else if (i < parameters.Length)
+                param = parameters[i];
+
+            if (param is not null && param.Name == parameterName)
+                return arg.Expression;
+        }
+        return null;
+    }
+
+    // ────────────────────────────────────────────────────────────
+    // REACTOR_HOOKS_010 — mutate-then-set reference state
+    // ────────────────────────────────────────────────────────────
+
+    // Void-returning collection mutators. An indexer set (x[i] = v) is handled separately.
+    private static readonly ImmutableHashSet<string> CollectionMutators =
+        ImmutableHashSet.Create("Add", "Remove", "Insert", "RemoveAt", "Clear", "Sort", "AddRange");
+
+    private static void AnalyzeMutateThenSet(SyntaxNodeAnalysisContext context)
+    {
+        var invocation = (InvocationExpressionSyntax)context.Node;
+
+        // setX(x): bare-identifier callee, exactly one plain identifier argument.
+        if (invocation.Expression is not IdentifierNameSyntax) return;
+        var args = invocation.ArgumentList.Arguments;
+        if (args.Count != 1 || args[0].NameColon is not null) return;
+        if (args[0].Expression is not IdentifierNameSyntax stateArg) return;
+
+        var model = context.SemanticModel;
+        if (model.GetSymbolInfo(invocation.Expression).Symbol is not ILocalSymbol setterSymbol) return;
+        if (!TryGetPairedStateSymbol(context, setterSymbol, out var stateSymbol) || stateSymbol is null) return;
+
+        // The argument must be the paired state local (setX(x), not setX(other)).
+        if (model.GetSymbolInfo(stateArg).Symbol is not { } argSymbol) return;
+        if (!SymbolEqualityComparer.Default.Equals(argSymbol, stateSymbol)) return;
+
+        // Only REFERENCE types exhibit the silent miss: the mutated-in-place value and the stored
+        // value are the same instance, so the setter's EqualityComparer<T>.Default comparison sees
+        // x.Equals(x) == true and returns early — this holds whether or not the type has value
+        // semantics. Value types are copied when passed to the setter, so the mutated copy differs
+        // from the stored original and re-renders correctly; skip them.
+        if (stateSymbol.Type.IsValueType) return;
+
+        if (FindBlockStatement(invocation, out var block) is not { } setterStatement || block is null) return;
+        int setterIndex = block.Statements.IndexOf(setterStatement);
+        if (setterIndex <= 0) return;
+
+        // Scan the statements before the setter, in document order. Bail on ANY reassignment of the
+        // local before the setter (a defensive copy / fresh value means the setter receives a new
+        // reference and re-renders correctly — spec §4.1 FP note). Otherwise report the first
+        // in-place mutator found.
+        SyntaxNode? mutatorNode = null;
+        bool isSingleArgAdd = false;
+        for (int i = 0; i < setterIndex; i++)
+        {
+            var statement = block.Statements[i];
+            if (ReassignsLocal(statement, stateSymbol, model)) return;
+            if (mutatorNode is null && TryGetCollectionMutator(statement, stateSymbol, model, out var node, out var singleArgAdd))
+            {
+                mutatorNode = node;
+                isSingleArgAdd = singleArgAdd;
+            }
+        }
+        if (mutatorNode is null) return;
+
+        var properties = ImmutableDictionary<string, string?>.Empty
+            .Add("canFix", isSingleArgAdd ? "true" : "false");
+        // The advice example is only accurate for the fixable single-arg .Add shape; other mutators
+        // (Clear/Remove/indexer set) get generic guidance so the message isn't misleading.
+        var advice = isSingleArgAdd
+            ? $"Pass a new value instead, e.g. {setterSymbol.Name}([.. {stateSymbol.Name}, item])"
+            : $"Pass a new value to {setterSymbol.Name} — a copy of '{stateSymbol.Name}' with the change applied — instead of mutating and re-passing the same instance";
+        context.ReportDiagnostic(Diagnostic.Create(
+            MutateThenSetRule,
+            invocation.GetLocation(),
+            additionalLocations: new[] { mutatorNode.GetLocation() },
+            properties: properties,
+            stateSymbol.Name,
+            setterSymbol.Name,
+            advice));
+    }
+
+    private static bool ReassignsLocal(StatementSyntax statement, ILocalSymbol local, SemanticModel model)
+    {
+        if (statement is not ExpressionStatementSyntax { Expression: AssignmentExpressionSyntax assign }) return false;
+        if (assign.Left is not IdentifierNameSyntax id) return false;
+        return model.GetSymbolInfo(id).Symbol is { } s && SymbolEqualityComparer.Default.Equals(s, local);
+    }
+
+    private static bool TryGetCollectionMutator(
+        StatementSyntax statement, ILocalSymbol local, SemanticModel model,
+        out SyntaxNode mutatorNode, out bool isSingleArgAdd)
+    {
+        mutatorNode = null!;
+        isSingleArgAdd = false;
+        if (statement is not ExpressionStatementSyntax expressionStatement) return false;
+
+        switch (expressionStatement.Expression)
+        {
+            // x.Add(v) / x.Remove(v) / x.Clear() / x.Sort() / …
+            case InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax memberAccess } call
+                when memberAccess.Expression is IdentifierNameSyntax receiver
+                    && CollectionMutators.Contains(memberAccess.Name.Identifier.Text)
+                    && IsSameLocal(receiver, local, model):
+                mutatorNode = call;
+                var addArgs = call.ArgumentList.Arguments;
+                isSingleArgAdd = memberAccess.Name.Identifier.Text == "Add"
+                    && addArgs.Count == 1
+                    && addArgs[0].NameColon is null
+                    && addArgs[0].RefKindKeyword.IsKind(SyntaxKind.None);
+                return true;
+
+            // x[i] = v  (indexer set) — a mutation, but no single-value fix.
+            case AssignmentExpressionSyntax { Left: ElementAccessExpressionSyntax elementAccess }
+                when elementAccess.Expression is IdentifierNameSyntax receiver && IsSameLocal(receiver, local, model):
+                mutatorNode = expressionStatement.Expression;
+                return true;
+        }
+        return false;
+    }
+
+    private static bool IsSameLocal(IdentifierNameSyntax id, ILocalSymbol local, SemanticModel model)
+        => model.GetSymbolInfo(id).Symbol is { } s && SymbolEqualityComparer.Default.Equals(s, local);
+
+    // ────────────────────────────────────────────────────────────
+    // REACTOR_HOOKS_012 — Memo dependency lacks value equality
+    // ────────────────────────────────────────────────────────────
+
+    private static void AnalyzeMemo(SyntaxNodeAnalysisContext context)
+    {
+        var invocation = (InvocationExpressionSyntax)context.Node;
+        if (GetInvokedMethodName(invocation) != "Memo") return;
+
+        var model = context.SemanticModel;
+        if (model.GetSymbolInfo(invocation).Symbol is not IMethodSymbol symbol) return;
+
+        // Anchor on the Reactor Factories.Memo(builder, params object?[] dependencies) overload.
+        // The keyed Memo<TKey>(TKey key, Func<Element> factory) has no params tail and is EXCLUDED
+        // — it is designed to take freshly-allocated tuple/record keys.
+        if (!IsReactorMemberSymbol(symbol)) return;
+        var parameters = symbol.Parameters;
+        if (parameters.Length == 0) return;
+        var last = parameters[parameters.Length - 1];
+        if (!last.IsParams || last.Name != "dependencies") return;
+
+        int fixedArity = parameters.Length - 1;
+        var args = invocation.ArgumentList.Arguments;
+
+        // A named `dependencies:` argument passes the whole params array by name
+        // (`Memo(render, dependencies: [dep])`). Unwrap its container element-wise, or check it as a
+        // single dep. (Positional handling continues below.)
+        var namedDeps = args.FirstOrDefault(a => a.NameColon?.Name.Identifier.Text == "dependencies");
+        if (namedDeps is not null)
+        {
+            if (ReferenceArrayDepElements(model, namedDeps.Expression) is { } namedElements)
+                foreach (var element in namedElements) CheckMemoDependency(context, element, model);
+            else
+                CheckMemoDependency(context, namedDeps.Expression, model);
+            return;
+        }
+
+        // When a single trailing arg IS the params container — an object?[]-shaped array/collection
+        // literal (`Memo(render, new object[] { a, b })` / `Memo(render, [a, b])`) — its ELEMENTS are
+        // the deps (compared element-wise by Equals at runtime, Reconciler DepsEqual), NOT one dep.
+        // Unwrap it and check each element, mirroring HOOKS_004's ReferenceArrayDepElements.
+        if (args.Count == fixedArity + 1 && args[fixedArity].NameColon is null
+            && ReferenceArrayDepElements(model, args[fixedArity].Expression) is { } containerElements)
+        {
+            foreach (var element in containerElements) CheckMemoDependency(context, element, model);
+            return;
+        }
+
+        for (int i = fixedArity; i < args.Count; i++)
+        {
+            if (args[i].NameColon is not null) continue;
+            CheckMemoDependency(context, args[i].Expression, model);
+        }
+    }
+
+    private static void CheckMemoDependency(SyntaxNodeAnalysisContext context, ExpressionSyntax expr, SemanticModel model)
+    {
+        // An explicit empty deps container — `Memo(render, [])` / `Memo(render, new object[0])` —
+        // is the idiomatic "render once" form (zero deps), not a freshly-allocated dependency, so
+        // it must not fire. (For UseState/UsePersisted/Provide an empty `[]` IS a real per-render
+        // value allocation, which is why this guard lives here and not in the shared classifier.)
+        if (IsEmptyDepsContainer(expr, model)) return;
+
+        var (unstable, kind) = AllocationAnalysis.ClassifyRestricted(expr);
+        if (!unstable) return;
+
+        // Restrict to reference types without value equality: a fresh record/tuple compares equal
+        // by value and does not defeat the memo, so it must not fire. Memo deps are diffed with
+        // object.Equals (Reconciler.DepsEqual), so a bare IEquatable<T> without an Equals(object)
+        // override does NOT count as value equality.
+        var type = model.GetTypeInfo(expr).Type ?? model.GetTypeInfo(expr).ConvertedType;
+        if (AllocationAnalysis.HasValueEquality(type, objectEqualsSemantics: true)) return;
+
+        context.ReportDiagnostic(Diagnostic.Create(MemoUnstableDepRule, expr.GetLocation(), kind));
+    }
+
+    private static bool IsEmptyDepsContainer(ExpressionSyntax expr, SemanticModel model)
+    {
+        expr = UnwrapCasts(expr);
+        return expr switch
+        {
+            CollectionExpressionSyntax coll => coll.Elements.Count == 0,
+            ImplicitArrayCreationExpressionSyntax impl => impl.Initializer.Expressions.Count == 0,
+            ArrayCreationExpressionSyntax arr =>
+                arr.Initializer is { } init
+                    ? init.Expressions.Count == 0
+                    : arr.Type.RankSpecifiers.Count > 0
+                        && arr.Type.RankSpecifiers[0].Sizes.Count == 1
+                        // A constant-folded zero size (literal `0`, or `const int Zero = 0`) is still
+                        // an empty deps container.
+                        && model.GetConstantValue(arr.Type.RankSpecifiers[0].Sizes[0]) is { HasValue: true, Value: 0 },
+            _ => false,
+        };
+    }
+
+    private static bool IsReactorMemberSymbol(ISymbol symbol)
+        => CommandDebounceAnalyzer.IsReactorNamespace(symbol.ContainingNamespace?.ToDisplayString());
 }

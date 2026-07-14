@@ -19,14 +19,12 @@ namespace Microsoft.UI.Reactor.Controls;
 public class PropertyGridComponent : Component<PropertyGridElement>
 {
     static ButtonElement BlankButton(Element content, Action onClick)
-        => Button(content, onClick).Set(b =>
-        {
-            b.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(
-                Microsoft.UI.Colors.Transparent);
-            b.BorderThickness = new Thickness(0);
-            b.Padding = new Thickness(0);
-            b.HorizontalContentAlignment = HorizontalAlignment.Stretch;
-        }).HAlign(HorizontalAlignment.Stretch);
+        => Button(content, onClick)
+            .Background("#00000000")
+            .BorderThickness(0)
+            .Padding(0)
+            .HorizontalContentAlignment(HorizontalAlignment.Stretch)
+            .HAlign(HorizontalAlignment.Stretch);
 
     [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "Object.GetType() does not carry DynamicallyAccessedMembers; PropertyGrid resolves types at runtime.")]
     public override Element Render()

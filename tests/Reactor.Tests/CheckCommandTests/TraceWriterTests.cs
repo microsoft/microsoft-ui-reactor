@@ -174,13 +174,13 @@ public class TraceWriterTests
         // the only behavioral effect they see.
         using var tmp = TempFile.Create();
         using (var w = TraceWriter.Open(tmp.Path, Path.GetFullPath("."), mode: "iteration"))
-            w.WriteRuleSelfDisabled("AlignmentShortcutRule", "Microsoft.UI.Reactor.ElementExtensions");
+            w.WriteRuleSelfDisabled("ThemeBackgroundSuffixRule", "Microsoft.UI.Reactor.Core.Theme");
 
         var line = File.ReadAllLines(tmp.Path).Single();
         using var doc = JsonDocument.Parse(line);
         Assert.Equal("rule_self_disabled", doc.RootElement.GetProperty("kind").GetString());
-        Assert.Equal("AlignmentShortcutRule", doc.RootElement.GetProperty("rule").GetString());
-        Assert.Equal("Microsoft.UI.Reactor.ElementExtensions",
+        Assert.Equal("ThemeBackgroundSuffixRule", doc.RootElement.GetProperty("rule").GetString());
+        Assert.Equal("Microsoft.UI.Reactor.Core.Theme",
             doc.RootElement.GetProperty("unresolved_target").GetString());
         Assert.Equal("iteration", doc.RootElement.GetProperty("mode").GetString());
         Assert.True(line.Length <= 2048, $"trace row was {line.Length} bytes — exceeds 2 KB cap.");

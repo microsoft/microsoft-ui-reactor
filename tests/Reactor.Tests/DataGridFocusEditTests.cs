@@ -483,6 +483,40 @@ public class DataGridFocusEditTests
         Assert.False(state.IsColumnInRowEdit(new RowKey("2"), "Name")); // wrong row
     }
 
+    // Regression for the editing-Tab guard's CELL-edit scope. DataGridComponent arms
+    // DataGridState<T>.SuppressNextLostFocusCommit only when `IsEditing && !IsRowEditing`; this pins
+    // that predicate at the state level. IsEditing is TRUE in BOTH cell- and row-edit (BeginRowEdit
+    // also sets _editingRowKey), so the !IsRowEditing clause is exactly what stops a row-edit Tab from
+    // suppressing the row's LostFocus commit (which must still run CommitRowEdit). The full end-to-end
+    // row-edit-Tab E2E is deferred to #853: on current main a row-edit Tab reaches HandleKeyDown's
+    // cell-commit path and throws (CommitEdit dereferences a null column name), so it cannot be
+    // exercised through the real input pipeline until that pre-existing defect is fixed.
+    [Fact]
+    public async Task EditingTabGuardPredicate_TrueInCellEdit_FalseInRowEdit()
+    {
+        var state = await CreateLoadedState();
+
+        // Cell edit (row 0, "Name" is editable): predicate true -> a Tab arms SuppressNextLostFocusCommit.
+        Assert.True(state.BeginEdit(0, 1));
+        Assert.True(state.IsEditing);
+        Assert.False(state.IsRowEditing);
+        Assert.True(state.IsEditing && !state.IsRowEditing,
+            "Cell edit must arm the editing-Tab guard (IsEditing && !IsRowEditing).");
+
+        state.CancelEdit();
+        Assert.False(state.IsEditing);
+        Assert.False(state.IsRowEditing);
+
+        // Row edit: IsEditing is ALSO true here, so the predicate must be FALSE via !IsRowEditing ->
+        // a Tab must NOT arm the guard, leaving the row's LostFocus CommitRowEdit free to commit.
+        Assert.True(state.BeginRowEdit(0));
+        Assert.True(state.IsEditing,
+            "Row edit also sets IsEditing (via _editingRowKey) — the reason the guard needs !IsRowEditing.");
+        Assert.True(state.IsRowEditing);
+        Assert.False(state.IsEditing && !state.IsRowEditing,
+            "Row edit must NOT arm the editing-Tab guard (the whole-row LostFocus commit must not be suppressed).");
+    }
+
     // ═══════════════════════════════════════════════════════════════
     // Async Commit Lifecycle
     // ═══════════════════════════════════════════════════════════════

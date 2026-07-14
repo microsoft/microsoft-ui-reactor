@@ -52,7 +52,7 @@ internal sealed class SelectorResolver
                     throw new McpToolException(
                         $"Node id '{ir.NodeId}' belongs to window '{idWindow}', but 'window' was set to '{explicitWindowId}'.",
                         JsonRpcErrorCodes.InvalidParams,
-                        new { code = "window-mismatch", idWindow, requested = explicitWindowId });
+                        new McpErrorData("window-mismatch", IdWindow: idWindow, Requested: explicitWindowId));
                 }
             }
 
@@ -62,17 +62,17 @@ internal sealed class SelectorResolver
                 NodeLookupStatus.Found => lookup.Element!,
                 NodeLookupStatus.Gone => throw new McpToolException(
                     $"Node '{ir.NodeId}' is gone.", JsonRpcErrorCodes.ToolExecution,
-                    new { code = "gone", id = ir.NodeId }),
+                    new McpErrorData("gone", Id: ir.NodeId)),
                 _ => throw new McpToolException(
                     $"Node '{ir.NodeId}' is unknown.", JsonRpcErrorCodes.ToolExecution,
-                    new { code = "unknown-selector", id = ir.NodeId }),
+                    new McpErrorData("unknown-selector", Id: ir.NodeId)),
             };
         }
 
         var window = ResolveWindow(explicitWindowId);
         var root = window.Content ?? throw new McpToolException(
             "Window has no content yet.", JsonRpcErrorCodes.ToolExecution,
-            new { code = "not-ready" });
+            new McpErrorData("not-ready"));
 
         return ir.Kind switch
         {
@@ -90,7 +90,7 @@ internal sealed class SelectorResolver
             SelectorKind.ReactorSource => throw new McpToolException(
                 "Reactor-source selectors require the source map (Phase 3).",
                 JsonRpcErrorCodes.ToolExecution,
-                new { code = "not-implemented" }),
+                new McpErrorData("not-implemented")),
             _ => throw new McpToolException("Unsupported selector.", JsonRpcErrorCodes.InvalidParams),
         };
     }
@@ -103,7 +103,7 @@ internal sealed class SelectorResolver
             return w ?? throw new McpToolException(
                 $"Window '{explicitWindowId}' not found.",
                 JsonRpcErrorCodes.ToolExecution,
-                new { code = "unknown-window" });
+                new McpErrorData("unknown-window"));
         }
 
         var @default = _windowRegistry.TryDefault(out var activeIds);
@@ -112,7 +112,7 @@ internal sealed class SelectorResolver
         throw new McpToolException(
             "Multiple windows are active — pass 'window'.",
             JsonRpcErrorCodes.InvalidParams,
-            new { code = "window-required", activeIds });
+            new McpErrorData("window-required", ActiveIds: activeIds.ToArray()));
     }
 
     private UIElement ResolveByPredicate(UIElement root, Func<UIElement, bool> predicate, bool pruneSubtreeOnMatch = false)
@@ -123,7 +123,7 @@ internal sealed class SelectorResolver
         if (matches.Count == 0)
             throw new McpToolException(
                 "Selector matched no elements.", JsonRpcErrorCodes.ToolExecution,
-                new { code = "unknown-selector" });
+                new McpErrorData("unknown-selector"));
 
         if (matches.Count > 1)
         {
@@ -131,7 +131,7 @@ internal sealed class SelectorResolver
             throw new McpToolException(
                 "Selector matched multiple elements.",
                 JsonRpcErrorCodes.ToolExecution,
-                new { code = "ambiguous-selector", candidates = candidateIds });
+                new McpErrorData("ambiguous-selector", Candidates: candidateIds));
         }
 
         return matches[0];
@@ -154,7 +154,7 @@ internal sealed class SelectorResolver
                 throw new McpToolException(
                     $"Type '{step.TypeName}' matched no elements.",
                     JsonRpcErrorCodes.ToolExecution,
-                    new { code = "unknown-selector" });
+                    new McpErrorData("unknown-selector"));
 
             if (step.Index is int idx)
             {
@@ -162,7 +162,7 @@ internal sealed class SelectorResolver
                     throw new McpToolException(
                         $"Type '{step.TypeName}' has {next.Count} matches; index {idx} out of range.",
                         JsonRpcErrorCodes.ToolExecution,
-                        new { code = "index-out-of-range", count = next.Count });
+                        new McpErrorData("index-out-of-range", Count: next.Count));
 
                 frontier = new[] { next[idx] };
             }
@@ -179,7 +179,7 @@ internal sealed class SelectorResolver
         throw new McpToolException(
             "Selector matched multiple elements.",
             JsonRpcErrorCodes.ToolExecution,
-            new { code = "ambiguous-selector", candidates = candidateIds });
+            new McpErrorData("ambiguous-selector", Candidates: candidateIds));
     }
 
     private static void Collect(

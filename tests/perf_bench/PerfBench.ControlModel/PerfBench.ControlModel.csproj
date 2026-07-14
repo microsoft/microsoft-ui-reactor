@@ -25,6 +25,8 @@
     <AssemblyName>PerfBench.ControlModel</AssemblyName>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- Perf benchmark harness — never trimmed/AOT-published; opt out of IL2*/IL3*. -->
+    <ReactorSkipAotAnalysis>true</ReactorSkipAotAnalysis>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
@@ -48,9 +50,6 @@
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(Platform)' != 'ARM64'">win-x64</RuntimeIdentifier>
   </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" />
-  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\PerfBench.Shared\PerfBench.Shared.csproj" />
     <ProjectReference Include="..\..\..\src\Reactor\Reactor.csproj" />

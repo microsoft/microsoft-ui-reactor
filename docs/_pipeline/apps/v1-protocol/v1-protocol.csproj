@@ -10,9 +10,6 @@
     <NoWarn>$(NoWarn);REACTOR_V1_PREVIEW</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" />
-  </ItemGroup>
-  <ItemGroup>
     <ProjectReference Include="..\..\..\..\src\Reactor\Reactor.csproj" />
   </ItemGroup>
 </Project>

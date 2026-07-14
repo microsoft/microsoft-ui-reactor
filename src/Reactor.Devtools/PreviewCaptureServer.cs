@@ -576,14 +576,10 @@ internal sealed class PreviewCaptureServer : IDisposable
         return tcs.Task.Result;
     }
 
-    // Reflection-based serialization, intentionally matching the devtools `references`
-    // MCP tool (DevtoolsMcpServer.JsonOpts carries the AOT-fallback resolver). The
-    // overlay payload is internal devtools diagnostics, not a hot-path or AOT-shipped
-    // contract, so a source-generated context is not warranted.
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Devtools overlay; reflection fallback matches the references MCP tool.")]
-    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Devtools overlay; reflection fallback matches the references MCP tool.")]
+    // Source-generated serialization — ReferenceGraphResult is registered in
+    // DevtoolsJsonContext, so the overlay payload is NativeAOT-safe.
     private static string SerializeReferenceGraph(ReferenceGraphResult graph)
-        => JsonSerializer.Serialize(graph, DevtoolsMcpServer.JsonOpts);
+        => JsonSerializer.Serialize(graph, DevtoolsJsonContext.Default.ReferenceGraphResult);
 
     private void HandleSwitchComponent(HttpListenerRequest request, HttpListenerResponse response)
     {

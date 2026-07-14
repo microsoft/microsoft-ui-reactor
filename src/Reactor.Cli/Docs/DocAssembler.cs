@@ -19,13 +19,22 @@ internal static partial class DocAssembler
     [GeneratedRegex(@"!\[([^\]]*)\]\(screenshot://([^)]+)\)")]
     private static partial Regex ScreenshotDirective();
 
+    /// <summary>
+    /// Compile-time token replaced with the single-source public package version
+    /// (<c>&lt;ReactorPublicVersion&gt;</c> in Directory.Build.props, resolved via
+    /// <see cref="VersionSource"/>). Authors write this in <c>.md.dt</c> prose /
+    /// snippets instead of a hardcoded <c>0.1.0-preview.N</c> literal.
+    /// </summary>
+    internal const string VersionToken = "{{reactorVersion}}";
+
     public static string Assemble(
         string body,
         Dictionary<string, SnippetExtractor.Snippet> snippets,
         Dictionary<string, ScreenshotInfo> screenshots,
         out List<string> errors,
         out List<string> warnings,
-        string? topicId = null)
+        string? topicId,
+        string? reactorVersion)
     {
         var errs = new List<string>();
         var warns = new List<string>();
@@ -82,6 +91,16 @@ internal static partial class DocAssembler
 
             return $"![{altText}]({imagePrefix}images/{topic}/{fileBase}.{format})";
         });
+
+        // Substitute the single-source version token LAST — after snippet and
+        // screenshot expansion — so a {{reactorVersion}} that appears inside an
+        // inserted snippet or screenshot alt-text is resolved too. The value
+        // comes from <ReactorPublicVersion> in Directory.Build.props (via
+        // VersionSource), so guide prose / PackageReference snippets never need a
+        // per-release hand edit. Callers pass null to opt out (e.g. structural
+        // tier-lint, which does not render the version token).
+        if (reactorVersion is not null)
+            output = output.Replace(VersionToken, reactorVersion);
 
         errors = errs;
         warnings = warns;

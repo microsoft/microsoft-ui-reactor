@@ -12,14 +12,13 @@
 // a non-default ruleset construct a registry via the Of() factory.
 
 using System.Collections.Immutable;
-using System.Reflection;
 using Microsoft.CodeAnalysis.CSharp;
 
 namespace Microsoft.UI.Reactor.Cli.Check.Rules;
 
 internal sealed class RuleRegistry
 {
-    static readonly Lazy<RuleRegistry> _default = new(() => Of(DiscoverFromAssembly(typeof(IRulePattern).Assembly)));
+    static readonly Lazy<RuleRegistry> _default = new(() => Of(BuiltInRules()));
 
     /// <summary>
     /// Registry built by reflecting over Reactor.Cli for IRulePattern
@@ -141,25 +140,22 @@ internal sealed class RuleRegistry
         return list;
     }
 
-    static IEnumerable<IRulePattern> DiscoverFromAssembly(Assembly asm)
-    {
-        Type[] types;
-        try { types = asm.GetTypes(); }
-        catch (ReflectionTypeLoadException ex) { types = ex.Types.Where(t => t is not null).ToArray()!; }
-
-        foreach (var t in types)
-        {
-            if (t is null) continue;
-            if (t.IsAbstract || t.IsInterface) continue;
-            if (!typeof(IRulePattern).IsAssignableFrom(t)) continue;
-            var ctor = t.GetConstructor(Type.EmptyTypes);
-            if (ctor is null) continue;
-            IRulePattern instance;
-            try { instance = (IRulePattern)ctor.Invoke(null); }
-            catch { continue; }
-            yield return instance;
-        }
-    }
+    // Explicit, AOT/trim-safe rule registration. Replaces the previous
+    // Assembly.GetTypes() reflection scan (RequiresUnreferencedCode / IL2026),
+    // which the trimmer can't reason about. Every IRulePattern in Check/Rules/
+    // must be listed here; the RuleRegistryCompletenessTests guardrail (in
+    // Reactor.Tests, where reflection is unrestricted) fails CI if one is added
+    // to the folder but forgotten here — preserving the spec 038 §6 promise that
+    // a dropped-in rule can't silently go missing.
+    static IEnumerable<IRulePattern> BuiltInRules() =>
+    [
+        new ButtonOnClickFactoryMoveRule(),
+        new GridSizeFactoryParensRule(),
+        new GridSizePxRenameRule(),
+        new TextBlockStyleHintRule(),
+        new ThemeBackgroundSuffixRule(),
+        new ThemeRawResourceKeyRule(),
+    ];
 }
 
 internal readonly record struct RuleHit(IRulePattern Rule, RuleSuggestion Suggestion);

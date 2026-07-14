@@ -2,6 +2,19 @@
 
 This runbook describes how to prepare and trigger a public Microsoft.UI.Reactor preview release.
 
+## Quick checklist (happy path)
+
+Releases are **tag-driven**, but pushing a tag only *starts* the pipelines — it does **not** publish to NuGet.org. The two steps people most often miss (the approval gate and the two-person rule) are called out below.
+
+1. **Pre-flight** — pick the next `v0.1.0-preview.N` and confirm the tag, GitHub release, and the four NuGet packages don't already exist (`git tag --list`, `gh release view`, NuGet.org).
+2. **Prep PR (bump one property + recompile docs)** — bump `<ReactorPublicVersion>` in the root `Directory.Build.props` to the version you're about to tag, run `mur docs compile --skip-screenshots --skip-diagrams`, and commit the regenerated `docs/guide` pages. That single property is the source of truth: the guide's `{{reactorVersion}}` token and the template's `MicrosoftUIReactorVersion` fallback both derive from it, and `README.md` is version-agnostic (no sweep needed). CI's docs freshness gate fails the PR if you bump the property without recompiling. Land a PR, merge to `main`.
+3. **Tag `main`** — `git checkout main && git pull`, then `git tag -a v<version> -m "Release <version>"` and `git push origin v<version>`. This starts the GitHub `Package` workflow and the OneBranch official pipeline.
+4. **Publish (gated)** — the tag push does **not** publish to NuGet.org. Approve the OneBranch `Production_PublishNuGet` stage, then verify the packages appear on NuGet.org.
+5. **Two-person rule** — the publish approver **must be a different person than whoever pushed the tag** (a self-approval is rejected by the compliance gate). Line up a second approver *before* you tag.
+6. **Smoke-test** — scaffold from the published template and restore against NuGet.org.
+
+Each step is expanded in the sections below.
+
 ## Internal nightly channel
 
 Reactor also has an internal nightly channel for signed pre-release packages on
@@ -26,15 +39,9 @@ the public NuGet.org approval gate below.
 
 Reactor versions are tag-driven. A tag named `v0.1.0-preview.3` makes MinVer resolve package version `0.1.0-preview.3` for that exact commit. The tag push starts the GitHub packaging workflow and the OneBranch official pipeline; the OneBranch NuGet publish stage is approval-gated.
 
-Prepare release content in a PR before tagging. Do not create the release tag first if templates or docs need to point at the new version; otherwise the release assets are built from a commit that still points at the previous version.
+Prepare release content in a PR before tagging. Do not create the release tag first if docs need to point at the new version; otherwise the release assets are built from a commit whose docs still name the previous version. (The template's framework reference is auto-stamped at pack time, so it no longer needs a pre-tag bump — see [Prepare the release PR](#prepare-the-release-pr).)
 
-Recommended order:
-
-1. Create a release-prep PR that updates docs and template defaults to the new version.
-2. Merge that PR to `main`.
-3. Tag the merged `main` commit.
-4. Push the tag to start the release workflows.
-5. Approve/publish the gated OneBranch NuGet release.
+See the [Quick checklist](#quick-checklist-happy-path) above for the actionable order.
 
 ## Choose the version
 
@@ -70,30 +77,44 @@ git pull origin main
 git switch -c release/$version
 ```
 
-Update versioned references that consumer-facing templates or docs should show. At minimum, check:
-
-```powershell
-rg "0\.1\.0-preview\.[0-9]+|MicrosoftUIReactorVersion|Microsoft\.UI\.Reactor" `
-  README.md `
-  tools/Templates `
-  docs/_pipeline/templates `
-  .github/workflows `
-  build/pipelines
-```
-
-The app template default lives in:
-
-```text
-tools/Templates/Microsoft.UI.Reactor.Templates.csproj
-```
-
-Set `MicrosoftUIReactorVersion` to the release version so locally installed templates and the release template package generate apps that reference the public package:
+Bump the **single source of truth** for the public package version — the
+`<ReactorPublicVersion>` property in the root `Directory.Build.props` — to the version you
+are about to tag:
 
 ```xml
-<MicrosoftUIReactorVersion Condition="'$(MicrosoftUIReactorVersion)' == ''">0.1.0-preview.3</MicrosoftUIReactorVersion>
+<ReactorPublicVersion>0.1.0-preview.N</ReactorPublicVersion>
 ```
 
-Update authored docs under `docs/_pipeline/templates/`, not generated `docs/guide/` files directly. Then regenerate the guide. Use a full compile for release-prep changes because some pages (for example `getting-started`) pull snippets from other topics:
+That one property feeds every version-bearing surface, so there is **no `rg` sweep and no
+per-file bump**:
+
+- **Guide docs** — `docs/_pipeline/templates/*.md.dt` reference the version through the
+  `{{reactorVersion}}` token, which `mur docs compile` substitutes from this property.
+- **Template fallback** — `tools/Templates/Microsoft.UI.Reactor.Templates.csproj` derives its
+  `MicrosoftUIReactorVersion` fallback default from `$(ReactorPublicVersion)`.
+- **README** — is deliberately version-agnostic (it names no version and links to NuGet /
+  Releases), so it needs no edit at all and `mur docs compile` never touches it.
+
+The template's framework reference is *also* stamped automatically for the published package:
+the release workflow's *Pack Templates* step passes `-p:MicrosoftUIReactorVersion=<resolved
+version>` (guarded by `TemplateMetadataTests`), so the published `ProjectTemplates` package
+always references the framework version shipped in the same run. `bootstrap.ps1` runs `mur
+pack-local --framework-version latest`, which resolves the newest published package from NuGet
+for local scaffolds. The `$(ReactorPublicVersion)`-derived value is therefore only a *fallback*
+(a bare `mur pack-local`, or when the `latest` lookup can't reach NuGet) — but keeping it
+current is free now, since you bump the one property anyway.
+
+Two guards keep the bump honest so it can't silently go stale:
+
+- **Docs freshness gate** (CI `docs-build` job) fails the PR if `<ReactorPublicVersion>`
+  changed but `docs/guide/{getting-started,packaging}.md` weren't recompiled.
+- **Tag-vs-property guard** (`release.yml`, tag pushes only) fails the release if
+  `<ReactorPublicVersion>` doesn't equal the MinVer-resolved tag version — so the tag, the
+  docs, and the stamped template pack are provably one version.
+
+Then regenerate the guide (authored docs live under `docs/_pipeline/templates/`; never edit
+generated `docs/guide/` files directly). Use a full compile for release-prep changes because
+some pages (for example `getting-started`) pull snippets from other topics:
 
 ```powershell
 mur docs compile --skip-screenshots --skip-diagrams
@@ -109,12 +130,15 @@ dotnet test tests/Reactor.Tests/Reactor.Tests.csproj `
   --filter FullyQualifiedName~TemplateMetadataTests
 ```
 
-Pack the template locally and inspect the generated default:
+Pack the template locally and inspect the generated default. Pass
+`-p:MicrosoftUIReactorVersion=$version` to mirror what the release workflow stamps, so the
+generated app references the version being released:
 
 ```powershell
 dotnet pack tools/Templates/Microsoft.UI.Reactor.Templates.csproj `
   --configuration Release `
   -p:Version=0.0.0-local `
+  -p:MicrosoftUIReactorVersion=$version `
   -p:Platform=AnyCPU `
   -o local-nupkgs
 ```

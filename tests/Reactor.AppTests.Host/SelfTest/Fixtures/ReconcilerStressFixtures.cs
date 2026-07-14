@@ -268,10 +268,7 @@ internal static class ReconcilerStressFixtures
             host.Mount(ctx =>
             {
                 // Outer func wraps an inner func — tests nested FuncElement reconciliation.
-                // Intentionally exercises the legacy Func() factory so this stress
-                // fixture still covers it until the obsolete overload is removed.
-#pragma warning disable CS0618
-                return Func(innerCtx =>
+                return RenderEachTime(innerCtx =>
                 {
                     var (count, setCount) = innerCtx.UseState(0);
                     return VStack(
@@ -279,7 +276,6 @@ internal static class ReconcilerStressFixtures
                         Button("FuncInc", () => setCount(count + 1))
                     );
                 });
-#pragma warning restore CS0618
             });
 
             await Harness.Render();

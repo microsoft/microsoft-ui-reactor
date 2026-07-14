@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
@@ -46,6 +47,7 @@ public class XamlIslandControl : SWF.Control
     private ReactorHostControl? _hostedReactorControl;
     private UIElement? _pendingContent;
     private Func<UIElement>? _contentFactory;
+    [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
     private Type? _componentType;
 
     /// <summary>
@@ -106,6 +108,7 @@ public class XamlIslandControl : SWF.Control
     [Description("The Reactor Component type to host. Creates a ReactorHostControl automatically at runtime.")]
     [TypeConverter(typeof(ReactorComponentTypeConverter))]
     [DefaultValue(null)]
+    [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
     public Type? ComponentType
     {
         get => _componentType;
@@ -179,7 +182,8 @@ public class XamlIslandControl : SWF.Control
         };
     }
 
-    private void MountComponentType(Type type)
+    private void MountComponentType(
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)] Type type)
     {
         if (_source is null) return;
         // SECURITY (TASK-079): drop any prior hosted control before mounting

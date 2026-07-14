@@ -50,10 +50,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" />
-  </ItemGroup>
-
-  <ItemGroup>
     <!-- Regular project reference — NOT InternalsVisibleTo. Reactor.dll's
          public surface alone must be sufficient. -->
     <ProjectReference Include="..\..\..\src\Reactor\Reactor.csproj" />

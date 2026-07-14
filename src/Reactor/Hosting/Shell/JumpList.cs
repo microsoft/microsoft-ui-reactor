@@ -269,6 +269,7 @@ public static class JumpList
     /// (e.g., <c>BeginList</c>, <c>CommitList</c>) are logged via
     /// <see cref="Core.Diagnostics.DiagnosticLog"/> but do not throw.
     /// </remarks>
+    [UIThreadOnly]
     public static async Task UpdateAsync(IEnumerable<JumpListItem> items)
     {
         ArgumentNullException.ThrowIfNull(items);

@@ -1,0 +1,158 @@
+# Privileged poster for the automatic build-metrics comment.
+#
+# The measure workflow (build-metrics.yml) builds untrusted PR code, so it runs
+# unprivileged and uploads ONLY the machine-readable sizes.json. This workflow
+# runs from the DEFAULT branch with a write token, executes NO PR code, checks out
+# TRUSTED default-branch code, validates the uploaded numbers against a fixed
+# target spec, RENDERS the comment itself (via the trusted BuildMetricsLib.ps1),
+# and posts/updates the sticky comment.
+#
+# Security:
+#   - The comment markdown is produced here from trusted code + a handful of
+#     validated integers (ConvertTo-SafeMeasurements drops unknown keys and any
+#     non-integer/negative byte value, and uses trusted labels) — the untrusted
+#     artifact can never inject markdown into a bot-authored comment.
+#   - The target PR is resolved from the TRUSTED github.event.workflow_run head SHA
+#     (via commits/{sha}/pulls), never from the artifact.
+name: Build metrics comment
+
+on:
+  workflow_run:
+    workflows: ["Build metrics"]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read          # download the triggering run's artifact
+  pull-requests: write   # resolve the PR + post/update the comment
+  issues: write          # PR conversation comments use the issues API
+
+jobs:
+  comment:
+    name: Post size-diff comment
+    runs-on: ubuntu-latest
+    # Only PR-originated measure runs produce a comment. A workflow_dispatch measure
+    # run has no PR to safely resolve from its head SHA, so skip the poster entirely
+    # (the numbers still live in that run's artifact).
+    if: github.event.workflow_run.event == 'pull_request'
+    steps:
+      # Trusted default-branch checkout — the source of the comment renderer.
+      # workflow_run always runs the default-branch version of this workflow, and
+      # this checkout (no ref) pulls the default branch, NEVER the PR's code.
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      # Pull just the size-data artifact from the triggering run. If the measure
+      # job never uploaded one (e.g. cancelled before upload), exit quietly.
+      - name: Download size data artifact
+        id: dl
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          set +e
+          gh run download "$RUN_ID" --repo "$GH_REPO" -n build-metrics-data -D artifact
+          if [ ! -f artifact/head.sizes.json ]; then
+            echo "No build-metrics-data artifact on run $RUN_ID; nothing to post."
+            echo "have_data=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "have_data=true" >> "$GITHUB_OUTPUT"
+
+      # Resolve the PR SOLELY from the trusted workflow_run head SHA — never from
+      # the (untrusted) artifact. One commits/{sha}/pulls call returns the PR object,
+      # from which we read the number + base sha. The job `if` already restricts
+      # this to pull_request-originated runs.
+      - name: Resolve target PR
+        id: pr
+        if: steps.dl.outputs.have_data == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          pr_json=$(gh api "repos/$GH_REPO/commits/$HEAD_SHA/pulls" \
+                 --jq "[.[] | select(.state==\"open\") | select(.head.sha==\"$HEAD_SHA\")][0]" 2>/dev/null || true)
+          pr=$(printf '%s' "$pr_json" | jq -r '.number // empty' 2>/dev/null || true)
+          basesha=$(printf '%s' "$pr_json" | jq -r '.base.sha // empty' 2>/dev/null || true)
+          if [ -z "$pr" ]; then
+            echo "No open PR for head $HEAD_SHA; nothing to post."
+            echo "number=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Target PR: #$pr"
+          # Validate the base SHA (40 hex chars); if the lookup returned null/empty,
+          # emit an empty value so the renderer shows "base branch" without a stray
+          # "(null)" in the header.
+          if ! printf '%s' "$basesha" | grep -Eq '^[0-9a-f]{40}$'; then
+            basesha=""
+          fi
+          echo "number=$pr" >> "$GITHUB_OUTPUT"
+          echo "base_sha=$basesha" >> "$GITHUB_OUTPUT"
+
+      # Render the comment from TRUSTED code + validated numbers. The untrusted
+      # sizes.json is passed through ConvertTo-SafeMeasurements, which keeps only
+      # known keys, uses trusted labels, and accepts only non-negative integer
+      # byte counts — so nothing from the artifact can inject markdown. The head
+      # SHA is the trusted workflow_run head (exactly what was measured); the base
+      # SHA comes from the same trusted commits/{sha}/pulls lookup.
+      - name: Render comment (trusted)
+        if: steps.dl.outputs.have_data == 'true' && steps.pr.outputs.number != ''
+        shell: pwsh
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          BASE_SHA: ${{ steps.pr.outputs.base_sha }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          . ./tests/build_metrics/ci/BuildMetricsLib.ps1
+          # The sizes.json are untrusted artifacts; a malformed file must not crash
+          # the poster (which would drop the comment entirely) — treat a parse
+          # failure as missing data so the failed/baseline-unavailable paths render.
+          function Read-SizesJson($path) {
+            if (-not (Test-Path $path)) { return $null }
+            try { return Get-Content $path -Raw | ConvertFrom-Json }
+            catch { Write-Host "Ignoring malformed ${path}: $($_.Exception.Message)"; return $null }
+          }
+          $headRaw = Read-SizesJson 'artifact/head.sizes.json'
+          $baseRaw = Read-SizesJson 'artifact/base.sizes.json'
+          $head = ConvertTo-SafeMeasurements $headRaw
+          $base = ConvertTo-SafeMeasurements $baseRaw
+          $headHasSizes = (@($head | Where-Object { $null -ne $_.Bytes }).Count -gt 0)
+          $baseHasSizes = (@($base | Where-Object { $null -ne $_.Bytes }).Count -gt 0)
+          if ($headHasSizes -and $baseHasSizes) {
+            $body = Format-BuildMetricsComment -BaseMeasurements $base -HeadMeasurements $head `
+              -HeadSha $env:HEAD_SHA -BaseSha $env:BASE_SHA -RunUrl $env:RUN_URL
+          } elseif ($headHasSizes) {
+            $body = Format-BuildMetricsComment -HeadMeasurements $head -BaselineUnavailable `
+              -HeadSha $env:HEAD_SHA -BaseSha $env:BASE_SHA -RunUrl $env:RUN_URL
+          } else {
+            $body = Format-BuildMetricsComment -Failed -HeadSha $env:HEAD_SHA -BaseSha $env:BASE_SHA -RunUrl $env:RUN_URL
+          }
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          Set-Content -LiteralPath out/comment.md -Value $body -Encoding UTF8
+          Write-Host "Rendered comment ($($body.Length) chars); headHasSizes=$headHasSizes baseHasSizes=$baseHasSizes"
+
+      - name: Post / update sticky comment
+        if: steps.dl.outputs.have_data == 'true' && steps.pr.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          marker='<!-- reactor-build-metrics -->'
+          file=out/comment.md
+          # --paginate emits per-page results, so select matching ids across ALL
+          # pages and take the first — never assign a multi-line value to $existing.
+          # Restrict to OUR bot's own comments so a PR author can't plant a
+          # marker-prefixed comment and have us PATCH (hijack) it.
+          existing=$(gh api "repos/$GH_REPO/issues/$PR_NUMBER/comments" --paginate \
+                       --jq ".[] | select(.user.login == \"github-actions[bot]\") | select(.body | startswith(\"$marker\")) | .id" | head -n1 || true)
+          if [ -n "$existing" ]; then
+            echo "Updating existing comment $existing"
+            gh api -X PATCH "repos/$GH_REPO/issues/comments/$existing" -F "body=@$file" >/dev/null
+          else
+            echo "Creating new sticky comment on #$PR_NUMBER"
+            gh api "repos/$GH_REPO/issues/$PR_NUMBER/comments" -F "body=@$file" >/dev/null
+          fi

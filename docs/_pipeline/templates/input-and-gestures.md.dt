@@ -479,8 +479,8 @@ If a parent needs to see the press before children consume it, use
 `.OnKeyDown` fires per element on focus — a `Ctrl+S` handler attached
 to a `TextBox` only fires while that field has focus. For app-wide
 accelerators (Save, Find, Run), use Reactor's
-[commanding](commanding.md) system: `new Command { ..., AccessKey =
-"S", AccessKeyModifiers = VirtualKeyModifiers.Control }` registers
+[commanding](commanding.md) system: `new Command { ..., Accelerator =
+Accelerator(VirtualKey.S, VirtualKeyModifiers.Control) }` registers
 the chord with the WinUI accelerator infrastructure, which routes
 through the window's `AccessKeyManager` regardless of focus. The
 analyzer `REACTOR_INPUT_001` flags Ctrl/Alt key combinations attached
@@ -491,10 +491,13 @@ via `.OnKeyDown` and suggests the `Command` rewrite.
 A `Border` with `.OnTapped(...)` is hit-testable for pointer events
 but is not in the keyboard tab order by default — pressing Tab skips
 right past it, which fails [accessibility](accessibility.md) (every
-interactive control must be keyboard-reachable). Add `.IsTabStop()`
-or set `.TabIndex(n)` to put the Border in the tab order, and pair
-it with `.OnKeyDown` for Enter/Space activation. The
-[`AccessibilityScanner`](accessibility.md) catches this as
+interactive control must be keyboard-reachable). Add `.IsTabStop(true)`
+to put the Border in the tab order — a plain `.TabIndex(n)` is not
+enough, because the reconciler applies `TabIndex` only to focusable
+`Control`s, not to a `Border` — and pair it with `.OnKeyDown` for
+Enter/Space activation. The Roslyn analyzer
+[`REACTOR_A11Y_004`](accessibility.md) flags this at build time, and the
+[`AccessibilityScanner`](accessibility.md) catches it at runtime as
 `A11Y_KEYBOARD_001`.
 
 ## Tips

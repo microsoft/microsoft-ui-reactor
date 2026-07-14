@@ -71,6 +71,61 @@ public class DeclarativeModifierTests
         Assert.Equal(16.0, el.Modifiers!.FontSize);
     }
 
+    [Fact]
+    public void ContentAlignment_Modifiers_Store_In_Layout_Bucket()
+    {
+        var el = Button("Go")
+            .HorizontalContentAlignment(HorizontalAlignment.Right)
+            .VerticalContentAlignment(VerticalAlignment.Bottom);
+
+        Assert.NotNull(el.Modifiers);
+        Assert.NotNull(el.Modifiers!.Layout);
+        Assert.Equal(HorizontalAlignment.Right, el.Modifiers.HorizontalContentAlignment);
+        Assert.Equal(VerticalAlignment.Bottom, el.Modifiers.VerticalContentAlignment);
+    }
+
+    [Fact]
+    public void BorderBrush_And_BorderThickness_Modifiers_Store_Independent_Surface()
+    {
+        var el = Button("Go")
+            .BorderBrush(Theme.CardStroke)
+            .BorderThickness(1, 2, 3, 4);
+
+        Assert.NotNull(el.Modifiers);
+        Assert.NotNull(el.Modifiers!.Visual);
+        Assert.True(el.ThemeBindings!.ContainsKey("BorderBrush"));
+        Assert.Equal(new Thickness(1, 2, 3, 4), el.Modifiers.BorderThickness);
+    }
+
+    [Fact]
+    public void ContentAlignment_ModifiersEqual_Tracks_Field_Changes()
+    {
+        var a = new ElementModifiers
+        {
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            VerticalContentAlignment = VerticalAlignment.Center,
+        };
+        var b = new ElementModifiers
+        {
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            VerticalContentAlignment = VerticalAlignment.Center,
+        };
+        var c = new ElementModifiers
+        {
+            HorizontalContentAlignment = HorizontalAlignment.Left,
+            VerticalContentAlignment = VerticalAlignment.Center,
+        };
+        var d = new ElementModifiers
+        {
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            VerticalContentAlignment = VerticalAlignment.Bottom,
+        };
+
+        Assert.True(Element.ModifiersEqual(a, b));
+        Assert.False(Element.ModifiersEqual(a, c));
+        Assert.False(Element.ModifiersEqual(a, d));
+    }
+
     // FontFamily_Merge_Overwrites moved to selfhost fixtures (WinUIActivationFixtures).
 
     // ════════════════════════════════════════════════════════════════

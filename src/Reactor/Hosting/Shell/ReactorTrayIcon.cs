@@ -44,6 +44,7 @@ public sealed class ReactorTrayIcon : IDisposable
     public TrayIconSpec Spec => _spec;
 
     /// <summary>The icon bitmap source. Mutating triggers a shell re-apply.</summary>
+    [UIThreadOnly]
     public WindowIcon Icon
     {
         get => _spec.Icon;
@@ -67,6 +68,7 @@ public sealed class ReactorTrayIcon : IDisposable
     }
 
     /// <summary>Tooltip text. Mutating triggers a shell re-apply.</summary>
+    [UIThreadOnly]
     public string Tooltip
     {
         get => _spec.Tooltip;
@@ -80,6 +82,7 @@ public sealed class ReactorTrayIcon : IDisposable
     }
 
     /// <summary>Whether the icon is currently shown. Mutating triggers a shell re-apply.</summary>
+    [UIThreadOnly]
     public bool IsVisible
     {
         get => _spec.IsVisible;
@@ -129,6 +132,7 @@ public sealed class ReactorTrayIcon : IDisposable
     /// <see cref="ReactorApp.OpenTrayIcon"/>; subsequent state changes flow
     /// through <see cref="Update"/> or the property setters.
     /// </summary>
+    [UIThreadOnly]
     internal void RegisterWithShell()
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(RegisterWithShell));
@@ -298,6 +302,7 @@ public sealed class ReactorTrayIcon : IDisposable
     /// presses Escape.
     /// (spec 036 §7.1, §11.4)
     /// </summary>
+    [UIThreadOnly]
     public void ShowFlyout(Element flyoutContent)
     {
         ArgumentNullException.ThrowIfNull(flyoutContent);
@@ -309,6 +314,7 @@ public sealed class ReactorTrayIcon : IDisposable
     }
 
     /// <summary>Dismiss the tray flyout. UI-thread only. Idempotent.</summary>
+    [UIThreadOnly]
     public void HideFlyout()
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(HideFlyout));
@@ -319,6 +325,7 @@ public sealed class ReactorTrayIcon : IDisposable
     /// Diff <paramref name="next"/> against the current spec and re-apply
     /// only changed fields. UI-thread only.
     /// </summary>
+    [UIThreadOnly]
     public void Update(TrayIconSpec next)
     {
         ArgumentNullException.ThrowIfNull(next);
@@ -345,9 +352,11 @@ public sealed class ReactorTrayIcon : IDisposable
     /// <summary>
     /// Remove the icon from the tray and dispose. UI-thread only. Idempotent.
     /// </summary>
+    [UIThreadOnly]
     public void Close() => Dispose();
 
     /// <inheritdoc />
+    [UIThreadOnly]
     public void Dispose()
     {
         if (_disposed) return;

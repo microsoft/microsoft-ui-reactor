@@ -22,7 +22,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" />
     <!-- A handful of Windows Community Toolkit control packages, each turned into
          first-class Reactor elements by Reactor.Wrappers.Generator (see WctControls.cs). -->
     <PackageReference Include="CommunityToolkit.WinUI.Controls.SettingsControls" />

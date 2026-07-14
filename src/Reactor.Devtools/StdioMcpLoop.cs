@@ -36,12 +36,10 @@ internal sealed class StdioMcpLoop : IDisposable
     /// so tests can exercise the request/response contract without spawning a
     /// background thread.
     /// </summary>
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "JSON serialization for stdio MCP response.")]
-    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "JSON serialization for stdio MCP response.")]
     public string ProcessLine(string line)
     {
         var response = _dispatcher.Dispatch(line);
-        return JsonSerializer.Serialize(response, DevtoolsMcpServer.JsonOpts);
+        return JsonSerializer.Serialize(response, DevtoolsJsonContext.Default.JsonRpcResponse);
     }
 
     /// <summary>Runs the read loop synchronously until stdin closes or cancellation fires.</summary>

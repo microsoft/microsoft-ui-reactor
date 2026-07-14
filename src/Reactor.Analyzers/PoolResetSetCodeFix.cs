@@ -45,7 +45,7 @@ public sealed class PoolResetSetCodeFix : CodeFixProvider
             var args = invocation.ArgumentList.Arguments;
             if (args.Count != 1) continue;
 
-            var assignment = PoolResetSetAnalyzer.TryGetLambdaAssignment(args[0].Expression);
+            var assignment = SetLambdaHelpers.TryGetLambdaAssignment(args[0].Expression);
             if (assignment is null) continue;
             if (assignment.Left is not MemberAccessExpressionSyntax leftAccess) continue;
 

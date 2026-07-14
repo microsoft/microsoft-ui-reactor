@@ -35,18 +35,11 @@ internal static class DevtoolsPropertyTools
             new McpToolDescriptor(
                 Name: "properties",
                 Description: "Read dependency properties on a UI element. Pass `name` to read a single property, or omit to enumerate all. Returns value, type, and whether the value is locally set.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        selector = new { type = "string", description = "Element selector." },
-                        name = new { type = "string", description = "Optional DP name (e.g. 'Width', 'Margin'). Omit to list all." },
-                        window = new { type = "string", description = "Window id (omit for default)." },
-                    },
-                    required = new[] { "selector" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "selector" },
+                    ("selector", Schema.Str("Element selector.")),
+                    ("name", Schema.Str("Optional DP name (e.g. 'Width', 'Margin'). Omit to list all.")),
+                    ("window", Schema.Str("Window id (omit for default).")))),
             (@params) => server.OnDispatcher(() =>
             {
                 var selector = RequiredString(@params, "selector");
@@ -61,23 +54,17 @@ internal static class DevtoolsPropertyTools
                     bool isLocal;
                     try { isLocal = !Equals(el.ReadLocalValue(dp), DependencyProperty.UnsetValue); }
                     catch { isLocal = false; }
-                    return new
-                    {
+                    return new PropertyResult(
                         name,
-                        value = FormatValue(value),
-                        valueType = value?.GetType().Name ?? "null",
-                        declaringType = field.DeclaringType?.Name,
-                        isLocal,
-                    };
+                        FormatValue(value),
+                        value?.GetType().Name ?? "null",
+                        field.DeclaringType?.Name,
+                        isLocal);
                 }
 
                 // Enumerate all DPs via reflection on the type hierarchy.
                 var props = EnumerateDependencyProperties(el);
-                return (object)new
-                {
-                    count = props.Count,
-                    properties = props,
-                };
+                return (object)new PropertiesResult(props.Count, props);
             }));
     }
 
@@ -89,19 +76,12 @@ internal static class DevtoolsPropertyTools
             new McpToolDescriptor(
                 Name: "setProperty",
                 Description: "Set a dependency property on a UI element. Value is parsed from string (supports Thickness, CornerRadius, Brush hex, enums, bool, double, int).",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        selector = new { type = "string", description = "Element selector." },
-                        name = new { type = "string", description = "DP name (e.g. 'Width', 'Margin', 'Background')." },
-                        value = new { type = "string", description = "Value as string (e.g. '10', '1,2,3,4', '#FF0000', 'Visible')." },
-                        window = new { type = "string", description = "Window id (omit for default)." },
-                    },
-                    required = new[] { "selector", "name", "value" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "selector", "name", "value" },
+                    ("selector", Schema.Str("Element selector.")),
+                    ("name", Schema.Str("DP name (e.g. 'Width', 'Margin', 'Background').")),
+                    ("value", Schema.Str("Value as string (e.g. '10', '1,2,3,4', '#FF0000', 'Visible').")),
+                    ("window", Schema.Str("Window id (omit for default).")))),
             (@params) => server.OnDispatcher(() =>
             {
                 var selector = RequiredString(@params, "selector");
@@ -120,12 +100,7 @@ internal static class DevtoolsPropertyTools
                 var parsed = ParseValue(raw, targetType);
                 el.SetValue(dp, parsed);
 
-                return new
-                {
-                    ok = true,
-                    name,
-                    newValue = FormatValue(el.GetValue(dp)),
-                };
+                return new SetPropertyResult(true, name, FormatValue(el.GetValue(dp)));
             }));
     }
 
@@ -137,18 +112,11 @@ internal static class DevtoolsPropertyTools
             new McpToolDescriptor(
                 Name: "resources",
                 Description: "Browse XAML resources. Walks the ResourceDictionary chain from element → ancestor elements → window → application (including MergedDictionaries and ThemeDictionaries). Filter by regex on key.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        selector = new { type = "string", description = "Element selector (optional — starts walk from this element's Resources)." },
-                        scope = new { type = "string", description = "'element', 'window', or 'app' (default 'app'). Controls how far up the chain to walk." },
-                        filter = new { type = "string", description = "Regex filter on resource key." },
-                        window = new { type = "string", description = "Window id (omit for default)." },
-                    },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    ("selector", Schema.Str("Element selector (optional — starts walk from this element's Resources).")),
+                    ("scope", Schema.Str("'element', 'window', or 'app' (default 'app'). Controls how far up the chain to walk.")),
+                    ("filter", Schema.Str("Regex filter on resource key.")),
+                    ("window", Schema.Str("Window id (omit for default).")))),
             (@params) => server.OnDispatcher(() =>
             {
                 var selector = DevtoolsTools.ReadString(@params, "selector");
@@ -171,7 +139,7 @@ internal static class DevtoolsPropertyTools
                     catch { throw new McpToolException($"Invalid regex: {filter}", JsonRpcErrorCodes.InvalidParams); }
                 }
 
-                var results = new List<object>();
+                var results = new List<ResourceEntry>();
 
                 // Resolve starting element if given.
                 FrameworkElement? startEl = null;
@@ -199,7 +167,7 @@ internal static class DevtoolsPropertyTools
                 if (scope is "app")
                     CollectResources(Application.Current.Resources, "app", filterRe, results);
 
-                return new { count = results.Count, resources = results };
+                return new ResourcesResult(results.Count, results);
             }));
     }
 
@@ -214,21 +182,14 @@ internal static class DevtoolsPropertyTools
                     "Scope is required ('element' | 'window' | 'application'). 'application' additionally " +
                     "requires confirmAppWide=true since it mutates Application.Current.Resources for the " +
                     "lifetime of the process.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        key = new { type = "string", description = "Resource key." },
-                        value = new { type = "string", description = "Value as string (same parsing as setProperty)." },
-                        scope = new { type = "string", description = "'element', 'window', or 'application' (no default — explicit choice required)." },
-                        selector = new { type = "string", description = "Element selector (required when scope is 'element')." },
-                        window = new { type = "string", description = "Window id (omit for default)." },
-                        confirmAppWide = new { type = "boolean", description = "Required to be true when scope is 'application'. Speed-bump against accidental process-wide mutation." },
-                    },
-                    required = new[] { "key", "value", "scope" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "key", "value", "scope" },
+                    ("key", Schema.Str("Resource key.")),
+                    ("value", Schema.Str("Value as string (same parsing as setProperty).")),
+                    ("scope", Schema.Str("'element', 'window', or 'application' (no default — explicit choice required).")),
+                    ("selector", Schema.Str("Element selector (required when scope is 'element').")),
+                    ("window", Schema.Str("Window id (omit for default).")),
+                    ("confirmAppWide", Schema.Bool("Required to be true when scope is 'application'. Speed-bump against accidental process-wide mutation.")))),
             (@params) => server.OnDispatcher(() =>
             {
                 var key = RequiredString(@params, "key");
@@ -250,7 +211,7 @@ internal static class DevtoolsPropertyTools
                             "scope='application' mutates Application.Current.Resources for the lifetime of the process. " +
                             "Pass confirmAppWide=true to opt in, or use 'element' / 'window' instead.",
                             JsonRpcErrorCodes.InvalidParams,
-                            new { code = "app-wide-confirmation-required" });
+                            new McpErrorData("app-wide-confirmation-required"));
                 }
                 var selector = DevtoolsTools.ReadString(@params, "selector");
                 var windowId = DevtoolsTools.ReadString(@params, "window");
@@ -295,7 +256,7 @@ internal static class DevtoolsPropertyTools
                 var parsed = ParseValue(raw, targetType);
                 dict[key] = parsed;
 
-                return new { ok = true, key, newValue = FormatValue(parsed), replaced = existedAtScope };
+                return new SetResourceResult(true, key, FormatValue(parsed), existedAtScope);
             }));
     }
 
@@ -307,17 +268,10 @@ internal static class DevtoolsPropertyTools
             new McpToolDescriptor(
                 Name: "styles",
                 Description: "Inspect the explicitly-assigned Style on a UI element: TargetType, Setters (property + value), and the BasedOn chain. Note: returns null when only a default/theme style is active — WinUI does not expose the resolved implicit style.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        selector = new { type = "string", description = "Element selector." },
-                        window = new { type = "string", description = "Window id (omit for default)." },
-                    },
-                    required = new[] { "selector" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "selector" },
+                    ("selector", Schema.Str("Element selector.")),
+                    ("window", Schema.Str("Window id (omit for default).")))),
             (@params) => server.OnDispatcher(() =>
             {
                 var selector = RequiredString(@params, "selector");
@@ -329,9 +283,9 @@ internal static class DevtoolsPropertyTools
 
                 var style = fe.Style;
                 if (style is null)
-                    return (object)new { hasStyle = false };
+                    return new StylesResult(false);
 
-                return (object)new { hasStyle = true, style = DescribeStyle(style) };
+                return new StylesResult(true, DescribeStyle(style));
             }));
     }
 
@@ -343,39 +297,30 @@ internal static class DevtoolsPropertyTools
             new McpToolDescriptor(
                 Name: "ancestors",
                 Description: "Walk the visual tree upward from the matched element to the root. Returns type, name, and automationId for each ancestor.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        selector = new { type = "string", description = "Element selector." },
-                        window = new { type = "string", description = "Window id (omit for default)." },
-                    },
-                    required = new[] { "selector" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "selector" },
+                    ("selector", Schema.Str("Element selector.")),
+                    ("window", Schema.Str("Window id (omit for default).")))),
             (@params) => server.OnDispatcher(() =>
             {
                 var selector = RequiredString(@params, "selector");
                 var windowId = DevtoolsTools.ReadString(@params, "window");
                 var el = resolver.Resolve(selector, windowId);
 
-                var chain = new List<object>();
+                var chain = new List<AncestorEntry>();
                 var current = VisualTreeHelper.GetParent(el);
                 while (current is not null)
                 {
                     var fe = current as FrameworkElement;
-                    chain.Add(new
-                    {
-                        type = current.GetType().Name,
-                        name = fe?.Name,
-                        automationId = fe is not null
+                    chain.Add(new AncestorEntry(
+                        current.GetType().Name,
+                        fe?.Name,
+                        fe is not null
                             ? Microsoft.UI.Xaml.Automation.AutomationProperties.GetAutomationId(fe)
-                            : null,
-                    });
+                            : null));
                     current = VisualTreeHelper.GetParent(current);
                 }
-                return new { count = chain.Count, ancestors = chain };
+                return new AncestorsResult(chain.Count, chain);
             }));
     }
 
@@ -455,10 +400,10 @@ internal static class DevtoolsPropertyTools
     /// <summary>Enumerate all public static DependencyProperty fields on the element's type chain.</summary>
     [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Devtools uses reflection to enumerate DependencyProperty fields.")]
     [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Devtools reflection for property enumeration.")]
-    private static List<object> EnumerateDependencyProperties(UIElement el)
+    private static List<PropertyResult> EnumerateDependencyProperties(UIElement el)
     {
         var seen = new HashSet<string>();
-        var results = new List<object>();
+        var results = new List<PropertyResult>();
 
         for (var type = el.GetType(); type is not null && type != typeof(object); type = type.BaseType)
         {
@@ -481,14 +426,12 @@ internal static class DevtoolsPropertyTools
                 try { isLocal = !Equals(el.ReadLocalValue(dp), DependencyProperty.UnsetValue); }
                 catch { }
 
-                results.Add(new
-                {
-                    name = propName,
-                    value = FormatValue(value),
-                    valueType = value?.GetType().Name ?? "null",
-                    declaringType = type.Name,
-                    isLocal,
-                });
+                results.Add(new PropertyResult(
+                    propName,
+                    FormatValue(value),
+                    value?.GetType().Name ?? "null",
+                    type.Name,
+                    isLocal));
             }
         }
 
@@ -647,7 +590,7 @@ internal static class DevtoolsPropertyTools
         catch { return false; }
     }
 
-    private static void CollectResources(ResourceDictionary dict, string scope, Regex? filter, List<object> results)
+    private static void CollectResources(ResourceDictionary dict, string scope, Regex? filter, List<ResourceEntry> results)
     {
         foreach (var key in dict.Keys)
         {
@@ -666,13 +609,11 @@ internal static class DevtoolsPropertyTools
             try { val = dict[key]; }
             catch { val = null; }
 
-            results.Add(new
-            {
-                key = keyStr,
-                valueType = val?.GetType().Name ?? "null",
-                value = FormatValue(val),
-                scope,
-            });
+            results.Add(new ResourceEntry(
+                keyStr,
+                val?.GetType().Name ?? "null",
+                FormatValue(val),
+                scope));
         }
 
         // Walk MergedDictionaries.
@@ -690,28 +631,57 @@ internal static class DevtoolsPropertyTools
         }
     }
 
-    private static object DescribeStyle(Style style)
+    private static StyleInfo DescribeStyle(Style style)
     {
-        var setters = new List<object>();
+        var setters = new List<StyleSetterInfo>();
         foreach (var setterBase in style.Setters)
         {
             if (setterBase is Setter setter)
             {
-                setters.Add(new
-                {
-                    property = setter.Property?.ToString() ?? "unknown",
-                    value = FormatValue(setter.Value),
-                    valueType = setter.Value?.GetType().Name ?? "null",
-                });
+                setters.Add(new StyleSetterInfo(
+                    setter.Property?.ToString() ?? "unknown",
+                    FormatValue(setter.Value),
+                    setter.Value?.GetType().Name ?? "null"));
             }
         }
 
-        return new
-        {
-            targetType = style.TargetType?.Name,
-            setterCount = setters.Count,
+        return new StyleInfo(
+            style.TargetType?.Name,
+            setters.Count,
             setters,
-            basedOn = style.BasedOn is not null ? DescribeStyle(style.BasedOn) : null,
-        };
+            style.BasedOn is not null ? DescribeStyle(style.BasedOn) : null);
     }
 }
+
+// -- DevtoolsPropertyTools result shapes -----------------------------------------
+// Every dynamic DP / resource / style value is reduced to a string by FormatValue,
+// so these are fully closed, source-generated records (registered in
+// DevtoolsJsonContext). The tool *logic* still introspects via reflection
+// (EnumerateDependencyProperties, DescribeStyle), which keeps the fixtures
+// AOT-skip-listed — but the serialized payloads no longer need the reflection
+// resolver fallback.
+internal sealed record PropertyResult(string Name, string? Value, string ValueType, string? DeclaringType, bool IsLocal);
+
+internal sealed record PropertiesResult(int Count, IReadOnlyList<PropertyResult> Properties);
+
+internal sealed record SetPropertyResult(bool Ok, string Name, string? NewValue) : IOkResult;
+
+internal sealed record ResourceEntry(string Key, string ValueType, string? Value, string Scope);
+
+internal sealed record ResourcesResult(int Count, IReadOnlyList<ResourceEntry> Resources);
+
+internal sealed record SetResourceResult(bool Ok, string Key, string? NewValue, bool Replaced) : IOkResult;
+
+internal sealed record StyleSetterInfo(string Property, string? Value, string ValueType);
+
+internal sealed record StyleInfo(
+    string? TargetType,
+    int SetterCount,
+    IReadOnlyList<StyleSetterInfo> Setters,
+    StyleInfo? BasedOn);
+
+internal sealed record StylesResult(bool HasStyle, StyleInfo? Style = null);
+
+internal sealed record AncestorEntry(string Type, string? Name, string? AutomationId);
+
+internal sealed record AncestorsResult(int Count, IReadOnlyList<AncestorEntry> Ancestors);

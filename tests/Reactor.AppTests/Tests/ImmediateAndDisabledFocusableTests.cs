@@ -43,7 +43,7 @@ public class ImmediateAndDisabledFocusableTests : AppTestBase
     // [Retry] mops up the rare unattended-desktop input-injection flake: Win32 SendInput is
     // occasionally dropped before the Host window foregrounds on CI. A real regression still
     // fails every attempt. Removable once winappCli #562 (send-keys)/#498 (drag) ship native verbs.
-    [Retry(3)]
+    [E2eRetry(3)]
     [TestMethod]
     public void Immediate_FiresOnEveryKeystroke_BeforeBlur()
     {
@@ -80,11 +80,18 @@ public class ImmediateAndDisabledFocusableTests : AppTestBase
     /// commit-on-blur input + true-disabled Submit removes the button from
     /// the tab order at the moment Tab navigation runs.
     /// </summary>
-    [Retry(3)]
+    [E2eRetry(3)]
     [TestMethod]
     public void DisabledFocusable_TabReachesSubmit_AfterTypingValidValue()
     {
         NavigateToFixtureFresh("Validation_ImmediateAndDisabledFocusable");
+
+        // Wait for the fixture's controls to be realized before driving input. Without this the
+        // first keystrokes race control realization and the age input is dropped entirely
+        // (observed: AgeDisplay stuck at 'Age: 0'), which then surfaces as a misleading downstream
+        // tab-focus flake. Mirrors the readiness wait the reliable Immediate_* sibling performs.
+        WaitForText("ValImmediate_AgeDisplay", "Age: 0");
+        WaitForText("ValImmediate_FormValid", "invalid");
 
         // Pre-fill email so only the age field can flip form validity.
         var email = FindById("ValImmediate_Email");
@@ -92,8 +99,23 @@ public class ImmediateAndDisabledFocusableTests : AppTestBase
         email.SendKeys("user@example.com");
 
         var age = FindById("ValImmediate_Age");
-        age.Click();
-        age.SendKeys("25");
+        // The age NumberBox's inner editor occasionally does not take focus from a single click
+        // (worse right after the email interaction), dropping the first keystroke so the display
+        // stays 'Age: 0'. Retry focus + first digit until it registers, clearing any partial
+        // between attempts so a borderline-late keystroke can't double-type into '22'.
+        bool firstDigitLanded = false;
+        for (int attempt = 0; attempt < 3 && !firstDigitLanded; attempt++)
+        {
+            age.Click();
+            if (attempt > 0)
+                age.Clear();
+            age.SendKeys("2");
+            firstDigitLanded = App.WaitForValue("ValImmediate_AgeDisplay", "Age: 2", contains: false, timeoutMs: 2000);
+        }
+        Assert.IsTrue(firstDigitLanded,
+            "Age NumberBox never accepted the first digit after click focus (3 attempts).");
+
+        age.SendKeys("5");
         WaitForText("ValImmediate_AgeDisplay", "Age: 25");
         WaitForText("ValImmediate_FormValid", "valid");
 
@@ -118,7 +140,7 @@ public class ImmediateAndDisabledFocusableTests : AppTestBase
     ///  2. Drop the user OnClick invocation when activated — the click
     ///     trampoline checks <c>IsDisabledFocusable</c> and returns early.
     /// </summary>
-    [Retry(3)]
+    [E2eRetry(3)]
     [TestMethod]
     public void DisabledFocusable_InvalidFormDropsInvokes()
     {

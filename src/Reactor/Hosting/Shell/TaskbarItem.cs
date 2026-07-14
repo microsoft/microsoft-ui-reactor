@@ -32,6 +32,7 @@ public sealed class TaskbarItem
     /// Shell thumbnail tooltip / description for the taskbar button. The property
     /// keeps the last value assigned; native application is best-effort.
     /// </summary>
+    [UIThreadOnly]
     public string? Description
     {
         get => _description;

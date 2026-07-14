@@ -104,6 +104,10 @@ internal static class WebViewCssMeasurement
     /// Read the bounding-client-rect of an element selected by CSS selector
     /// within the loaded page. Returns null if the selector matches nothing.
     /// </summary>
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026",
+        Justification = "WebView2 CSS-measurement selftest helper; serializes a string selector and reads back a string / double[]. WebView2 fixtures are AOT-skip-listed (SelfTestRunner.DefaultAotSkipPatterns).")]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("AOT", "IL3050",
+        Justification = "WebView2 CSS-measurement selftest helper; AOT-skip-listed (see IL2026 note).")]
     public static async Task<Box?> GetBoxAsync(WebView2 wv, string selector)
     {
         var literal = JsonSerializer.Serialize(selector);

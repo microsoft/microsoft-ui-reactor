@@ -19,7 +19,7 @@ will get better incremental reuse from [UseMemoCells](UseMemoCells.md) ([guide](
 or [UseMemoCellsByKey](UseMemoCellsByKey.md) ([guide](../../hooks.md)), both of which can
 short-circuit per-cell on value or key equality across length
 changes.
-
+<para>
 On the steady-state path (unchanged count) the returned array reuses
 the previous render's element instance for every index NOT named in
 <paramref name="changedIndices" />, and publishes a positional
@@ -32,6 +32,7 @@ and declare every change through a subsequent render's
 AGENTS.md "Never mutate"). Mutating an unchanged slot in place both
 corrupts the memo's view of the previous render and can cause the
 reconciler to skip the mutated cell.
+</para>
 
 ## Parameters
 

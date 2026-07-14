@@ -203,6 +203,14 @@ public class ElementModifiersCoverageTests
     // ════════════════════════════════════════════════════════════════
 
     [Fact]
+    public void Popup_IsLightDismissEnabled_DefaultsToFalse()
+    {
+        // Matches WinUI's Popup.IsLightDismissEnabled default (#873): a plain
+        // Popup must NOT light-dismiss unless the author opts in.
+        Assert.False(Popup(TextBlock("popup content")).IsLightDismissEnabled);
+    }
+
+    [Fact]
     public void Popup_IsLightDismissEnabled()
     {
         var el = new PopupElement(TextBlock("popup content"))

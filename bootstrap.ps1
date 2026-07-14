@@ -220,7 +220,9 @@ function Get-VsExtensionSkipReason {
 # output stays a standalone deployable.
 #
 # Net effect: the user needs the WindowsAppRuntime 2.0 install matching
-# our WindowsAppSDKVersion=2.1.3 to run most things in this repo.
+# our WindowsAppSDKVersion=2.1.3 to run most things in this repo. (Framework-
+# dependent projects reference the Microsoft.WindowsAppSDK.WinUI sub-package
+# rather than the full metapackage, but still bind that same machine-wide runtime.)
 #
 # So we prompt by default. `-InstallWinAppSdk` to force-install,
 # `-InstallWinAppSdk:$false` to skip the prompt non-interactively.
@@ -387,17 +389,24 @@ Write-Step 'Packing local Microsoft.UI.Reactor + ProjectTemplates (`mur pack-loc
 
 # Use the freshly-installed `mur` if available; otherwise call the source
 # project directly (works for -SkipMurInstall too).
+#
+# `--framework-version latest` stamps the newest *published* Microsoft.UI.Reactor
+# into the scaffolded `reactorapp` template's <PackageReference>, so `dotnet new
+# reactorapp` in this clone tracks the current release automatically instead of a
+# hand-maintained default. Best-effort: if NuGet is unreachable it falls back to
+# the template's built-in default. Pass `--MSUIReactorVersion 0.0.0-local` to a
+# scaffold to consume this local source build instead.
 $murResolved = Get-Command mur -ErrorAction SilentlyContinue
 if ($murResolved) {
     Write-Dbg "Using installed mur at $($murResolved.Source)"
-    & mur pack-local
+    & mur pack-local --framework-version latest
 } else {
     Write-Dbg "mur not on PATH; falling back to 'dotnet run' against Reactor.Cli source"
     & dotnet run --project (Join-Path $repoRoot 'src\Reactor.Cli\Reactor.Cli.csproj') `
         -c $Configuration `
         "-p:Platform=$hostArch" `
         --nologo `
-        -- pack-local
+        -- pack-local --framework-version latest
 }
 if ($LASTEXITCODE -ne 0) { Fail 'mur pack-local failed' }
 

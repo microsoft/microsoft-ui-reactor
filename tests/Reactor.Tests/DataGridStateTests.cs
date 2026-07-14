@@ -270,6 +270,156 @@ public class DataGridStateTests
         Assert.Equal(1, changes);
     }
 
+    // ── SetSelectionMode (issue #872 — reactive selection mode) ───
+
+    [Fact]
+    public void SelectionMode_Getter_Reflects_Constructor_Value()
+    {
+        Assert.Equal(SelectionMode.None,
+            new DataGridState<TestItem>(CreateSource(), CreateColumns(), SelectionMode.None).SelectionMode);
+        Assert.Equal(SelectionMode.Single,
+            new DataGridState<TestItem>(CreateSource(), CreateColumns(), SelectionMode.Single).SelectionMode);
+        Assert.Equal(SelectionMode.Multiple,
+            new DataGridState<TestItem>(CreateSource(), CreateColumns(), SelectionMode.Multiple).SelectionMode);
+    }
+
+    [Fact]
+    public void SetSelectionMode_Single_To_Multiple_Enables_CtrlMultiSelect()
+    {
+        var state = new DataGridState<TestItem>(CreateSource(), CreateColumns(), SelectionMode.Single);
+
+        // Baseline: in Single mode, ctrl-toggling two rows does NOT accumulate — it replaces.
+        // This makes the post-widen accumulation assertion meaningful rather than always-true.
+        state.HandleRowClick((RowKey)5, ctrlKey: true);
+        state.HandleRowClick((RowKey)10, ctrlKey: true);
+        Assert.Single(state.SelectedKeys);
+
+        var changes = 0;
+        state.StateChanged += () => changes++;
+        state.SetSelectionMode(SelectionMode.Multiple);
+
+        Assert.Equal(SelectionMode.Multiple, state.SelectionMode);
+        Assert.True(changes > 0); // a mode change raises StateChanged
+
+        // Now ctrl-toggling two distinct rows selects BOTH (multi-select is live).
+        state.ClearSelection();
+        state.HandleRowClick((RowKey)5, ctrlKey: true);
+        state.HandleRowClick((RowKey)10, ctrlKey: true);
+        Assert.Equal(2, state.SelectedKeys.Count);
+        Assert.Contains((RowKey)5, state.SelectedKeys);
+        Assert.Contains((RowKey)10, state.SelectedKeys);
+    }
+
+    [Fact]
+    public void SetSelectionMode_Single_To_Multiple_Preserves_Existing_Selection()
+    {
+        var state = new DataGridState<TestItem>(CreateSource(), CreateColumns(), SelectionMode.Single);
+        state.HandleRowClick((RowKey)5);
+        Assert.Single(state.SelectedKeys);
+
+        // Widening must not trim the current selection.
+        state.SetSelectionMode(SelectionMode.Multiple);
+        Assert.Contains((RowKey)5, state.SelectedKeys);
+    }
+
+    [Fact]
+    public void SetSelectionMode_Multiple_To_Single_Trims_To_Anchor()
+    {
+        var state = new DataGridState<TestItem>(CreateSource(), CreateColumns(), SelectionMode.Multiple);
+        state.HandleRowClick((RowKey)5);
+        state.HandleRowClick((RowKey)10, ctrlKey: true); // anchor becomes 10
+        Assert.Equal(2, state.SelectedKeys.Count);
+        var versionBefore = state.SelectionVersion;
+
+        state.SetSelectionMode(SelectionMode.Single);
+
+        Assert.Equal(SelectionMode.Single, state.SelectionMode);
+        Assert.Single(state.SelectedKeys);
+        Assert.Contains((RowKey)10, state.SelectedKeys); // the anchor is kept
+        Assert.True(state.SelectionVersion > versionBefore);
+    }
+
+    [Fact]
+    public void SetSelectionMode_Multiple_To_None_Clears_Selection_And_Anchor()
+    {
+        var state = new DataGridState<TestItem>(CreateSource(), CreateColumns(), SelectionMode.Multiple);
+        state.HandleRowClick((RowKey)5);
+        state.HandleRowClick((RowKey)10, ctrlKey: true);
+        var versionBefore = state.SelectionVersion;
+
+        state.SetSelectionMode(SelectionMode.None);
+
+        Assert.Equal(SelectionMode.None, state.SelectionMode);
+        Assert.Empty(state.SelectedKeys);
+        Assert.Null(state.AnchorKey);
+        Assert.True(state.SelectionVersion > versionBefore);
+
+        // None mode now ignores further clicks.
+        state.HandleRowClick((RowKey)7, ctrlKey: true);
+        Assert.Empty(state.SelectedKeys);
+    }
+
+    [Fact]
+    public void SetSelectionMode_Same_Mode_Is_NoOp()
+    {
+        var state = new DataGridState<TestItem>(CreateSource(), CreateColumns(), SelectionMode.Multiple);
+        state.HandleRowClick((RowKey)5);
+        state.HandleRowClick((RowKey)10, ctrlKey: true);
+        var versionBefore = state.SelectionVersion;
+        var changes = 0;
+        state.StateChanged += () => changes++;
+
+        state.SetSelectionMode(SelectionMode.Multiple);
+
+        Assert.Equal(0, changes);
+        Assert.Equal(versionBefore, state.SelectionVersion);
+        Assert.Equal(2, state.SelectedKeys.Count);
+    }
+
+    [Fact]
+    public void SetSelectionMode_Multiple_To_Single_Fallback_Keeps_One_When_Anchor_Not_Selected()
+    {
+        var state = new DataGridState<TestItem>(CreateSource(), CreateColumns(), SelectionMode.Multiple);
+        // Build a 2-key selection whose AnchorKey/FocusedKey are NOT in the set: click 5,
+        // ctrl-add 8, ctrl-add 10, then ctrl-remove 10 (anchor+focus stay on the now-deselected 10).
+        state.HandleRowClick((RowKey)5);
+        state.HandleRowClick((RowKey)8, ctrlKey: true);
+        state.HandleRowClick((RowKey)10, ctrlKey: true);
+        state.HandleRowClick((RowKey)10, ctrlKey: true);
+        Assert.Equal(2, state.SelectedKeys.Count);
+        Assert.DoesNotContain((RowKey)10, state.SelectedKeys);
+
+        state.SetSelectionMode(SelectionMode.Single);
+
+        // Neither anchor nor focus is a valid selected key, so the fallback keeps exactly one
+        // of the still-selected keys (and nothing outside the set).
+        Assert.Single(state.SelectedKeys);
+        Assert.True(state.IsSelected((RowKey)5) || state.IsSelected((RowKey)8));
+    }
+
+    [Fact]
+    public async Task SetSelectionMode_Multiple_To_Single_Prefers_FocusedKey_When_Anchor_Not_Selected()
+    {
+        var state = new DataGridState<TestItem>(CreateSource(20), CreateColumns(), SelectionMode.Multiple);
+        await state.LoadDataAsync(TestContext.Current.CancellationToken);
+
+        // sel = {5, 8}; AnchorKey ends on the deselected row 10, then move keyboard focus onto the
+        // still-selected row 5 so the anchor and focused keys diverge.
+        state.HandleRowClick((RowKey)5);
+        state.HandleRowClick((RowKey)8, ctrlKey: true);
+        state.HandleRowClick((RowKey)10, ctrlKey: true);
+        state.HandleRowClick((RowKey)10, ctrlKey: true); // deselect 10; anchor/focus remain on 10
+        state.SetFocus(5, 0);                             // FocusedKey -> row 5 (selected); anchor stays 10
+        Assert.Equal(2, state.SelectedKeys.Count);
+
+        state.SetSelectionMode(SelectionMode.Single);
+
+        // Anchor (10) is not selected, so the focused-and-selected key (5) is kept over the other.
+        Assert.Single(state.SelectedKeys);
+        Assert.True(state.IsSelected((RowKey)5));
+        Assert.False(state.IsSelected((RowKey)8));
+    }
+
     // ── Column operations ────────────────────────────────────────
 
     [Fact]

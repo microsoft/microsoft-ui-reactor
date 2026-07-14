@@ -25,7 +25,7 @@ public class DevtoolsLogsToolTests
         buf.Append(LogSource.Stderr, null, "line-2");
 
         var payload = DevtoolsLogsTool.BuildPayload(buf, null);
-        var json = JsonSerializer.Serialize(payload);
+        var json = JsonSerializer.Serialize(payload, DevtoolsMcpServer.JsonOpts);
         using var doc = JsonDocument.Parse(json);
         var entries = doc.RootElement.GetProperty("entries");
         Assert.Equal(2, entries.GetArrayLength());
@@ -43,7 +43,7 @@ public class DevtoolsLogsToolTests
 
         var args = JsonDocument.Parse("{\"source\":\"debug\"}").RootElement;
         var payload = DevtoolsLogsTool.BuildPayload(buf, args);
-        var json = JsonSerializer.Serialize(payload);
+        var json = JsonSerializer.Serialize(payload, DevtoolsMcpServer.JsonOpts);
         using var doc = JsonDocument.Parse(json);
         var entries = doc.RootElement.GetProperty("entries");
         Assert.Equal(1, entries.GetArrayLength());
@@ -73,7 +73,7 @@ public class DevtoolsLogsToolTests
 
         var args = JsonDocument.Parse("{\"source\":\"event\"}").RootElement;
         var payload = DevtoolsLogsTool.BuildPayload(buf, args);
-        var json = JsonSerializer.Serialize(payload);
+        var json = JsonSerializer.Serialize(payload, DevtoolsMcpServer.JsonOpts);
         using var doc = JsonDocument.Parse(json);
 
         var entries = doc.RootElement.GetProperty("entries");
@@ -95,7 +95,7 @@ public class DevtoolsLogsToolTests
 
         var args = JsonDocument.Parse("{\"source\":\"etw\"}").RootElement;
         var payload = DevtoolsLogsTool.BuildPayload(buf, args);
-        var json = JsonSerializer.Serialize(payload);
+        var json = JsonSerializer.Serialize(payload, DevtoolsMcpServer.JsonOpts);
         using var doc = JsonDocument.Parse(json);
         Assert.Equal(1, doc.RootElement.GetProperty("entries").GetArrayLength());
     }
@@ -108,7 +108,7 @@ public class DevtoolsLogsToolTests
         buf.Append(LogSource.Stdout, null, "b");
 
         var page1 = DevtoolsLogsTool.BuildPayload(buf, null);
-        using var doc1 = JsonDocument.Parse(JsonSerializer.Serialize(page1));
+        using var doc1 = JsonDocument.Parse(JsonSerializer.Serialize(page1, DevtoolsMcpServer.JsonOpts));
         long nextSeq = doc1.RootElement.GetProperty("nextSeq").GetInt64();
 
         buf.Append(LogSource.Stdout, null, "c");
@@ -116,7 +116,7 @@ public class DevtoolsLogsToolTests
         // Inclusive semantics: pass the previous response's nextSeq directly.
         var args = JsonDocument.Parse($"{{\"since\":{nextSeq}}}").RootElement;
         var page2 = DevtoolsLogsTool.BuildPayload(buf, args);
-        var json = JsonSerializer.Serialize(page2);
+        var json = JsonSerializer.Serialize(page2, DevtoolsMcpServer.JsonOpts);
         using var doc = JsonDocument.Parse(json);
         var entries = doc.RootElement.GetProperty("entries");
         Assert.Equal(1, entries.GetArrayLength());
@@ -132,7 +132,7 @@ public class DevtoolsLogsToolTests
         long huge = (long)int.MaxValue + 100L;
         var args = JsonDocument.Parse($"{{\"since\":{huge}}}").RootElement;
         var payload = DevtoolsLogsTool.BuildPayload(buf, args);
-        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(payload));
+        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(payload, DevtoolsMcpServer.JsonOpts));
         // No throw; empty entries; nextSeq is the buffer's _nextSeq (1).
         Assert.Equal(0, doc.RootElement.GetProperty("entries").GetArrayLength());
     }
@@ -145,7 +145,7 @@ public class DevtoolsLogsToolTests
 
         var args = JsonDocument.Parse("{\"source\":\"trace\"}").RootElement;
         var payload = DevtoolsLogsTool.BuildPayload(buf, args);
-        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(payload));
+        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(payload, DevtoolsMcpServer.JsonOpts));
         Assert.Equal(1, doc.RootElement.GetProperty("entries").GetArrayLength());
     }
 }
