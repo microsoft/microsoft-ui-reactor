@@ -25,8 +25,6 @@
     <AssemblyName>PerfBench.ControlModel</AssemblyName>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <!-- Perf benchmark harness — never trimmed/AOT-published; opt out of IL2*/IL3*. -->
-    <ReactorSkipAotAnalysis>true</ReactorSkipAotAnalysis>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
@@ -49,6 +47,55 @@
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(Platform)' == 'ARM64'">win-arm64</RuntimeIdentifier>
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and '$(Platform)' != 'ARM64'">win-x64</RuntimeIdentifier>
   </PropertyGroup>
+
+  <!--
+    Native-AOT publish (issue #70). This bench used to carry
+    <ReactorSkipAotAnalysis>true</ReactorSkipAotAnalysis>, which opted it OUT of the
+    repo-wide IL2*/IL3* trim/AOT analysis. That opt-out is gone: Directory.Build.targets
+    now turns on IsAotCompatible=true AND promotes the IL2*/IL3* codes to errors for this
+    net10 project, so it is kept honestly AOT-clean on every ordinary build (the
+    reflection JsonSerializer path in Variants/MeasurementResult.cs was moved onto a
+    System.Text.Json source-generated context to satisfy it).
+
+    This gate additionally enables a REAL native-AOT publish on demand. It follows the
+    repo-canonical PublishAotInternal opt-in convention (docs/aot-support.md; the same knob
+    the CI "AOT Selftests" / aot_trim_proof / hello-world-aot publish steps use) rather
+    than the StressPerf harnesses' unconditional <PublishAot>true</PublishAot>, so the
+    default build and the framework-dependent / -p:PerfCiSelfContained publish that
+    tests/stress_perf/ci/Run-PerfBenchmark.ps1 drives are completely unchanged. Publish:
+
+      dotnet publish tests\perf_bench\PerfBench.ControlModel\PerfBench.ControlModel.csproj `
+        -c Release -r win-x64 -p:Platform=x64 -p:PublishAotInternal=true `
+        -p:IlcTreatWarningsAsErrors=false
+
+    PublishAot is set INSIDE the csproj (never a global -p:PublishAot=true) so it can't
+    leak into the netstandard2.0 Roslyn analyzers/generators pulled in transitively and
+    trip NETSDK1207 — Directory.Build.targets also force-clears PublishAot for any
+    sub-net10 project for the same reason.
+  -->
+  <PropertyGroup Condition="'$(PublishAotInternal)' == 'true'">
+    <PublishAot>true</PublishAot>
+  </PropertyGroup>
+
+  <!--
+    WindowsAppSDK#6394 — an unpackaged (WindowsPackageType=None) WinUI 3 app published
+    with PublishAot=true generates $(AssemblyName).pri and the XAML .xbf files into the
+    intermediate output but never copies them into the publish directory (the MakePRI
+    stage is gated on AppxPackage=true). Without the .pri, Application.Current.Resources
+    loads empty and framework control styles / theme resources go missing at runtime.
+    Copy them verbatim per docs/aot-support.md — remove once #6394 ships a fix.
+  -->
+  <Target Name="_CopyWinUIResourcesForAot" AfterTargets="Publish"
+          Condition="'$(PublishAot)' == 'true' and '$(AppxPackage)' != 'true'">
+    <ItemGroup>
+      <_WinUIResourcesForAot Include="$(OutputPath)**\*.xbf" />
+      <_WinUIResourcesForAot Include="$(OutputPath)$(AssemblyName).pri"
+                             Condition="Exists('$(OutputPath)$(AssemblyName).pri')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_WinUIResourcesForAot)"
+          DestinationFiles="@(_WinUIResourcesForAot->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
 
   <ItemGroup>
     <ProjectReference Include="..\PerfBench.Shared\PerfBench.Shared.csproj" />

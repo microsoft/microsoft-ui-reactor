@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace PerfBench.ControlModel.Variants;
 
@@ -44,16 +45,28 @@ public sealed record MeasurementResult
 
     public string ToJsonLine()
     {
-        return JsonSerializer.Serialize(this, _options);
+        return JsonSerializer.Serialize(this, MeasurementJsonContext.Default.MeasurementResult);
     }
-
-    private static readonly JsonSerializerOptions _options = new()
-    {
-        WriteIndented = false,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() },
-    };
 }
+
+/// <summary>
+/// Source-generated (trim / native-AOT safe) JSON metadata for
+/// <see cref="MeasurementResult"/>. Replaces the reflection-based
+/// <c>JsonSerializer.Serialize(obj, JsonSerializerOptions)</c> + runtime
+/// <see cref="JsonStringEnumConverter"/> path (IL2026 / IL3050) so the bench can be
+/// native-AOT published. The options here reproduce the previous serializer's output
+/// exactly: <see cref="JsonSourceGenerationOptionsAttribute.UseStringEnumConverter"/>
+/// emits enums as their member names (as the untyped converter did), and
+/// <see cref="JsonKnownNamingPolicy.CamelCase"/> matches the former
+/// <c>PropertyNamingPolicy</c>, so the emitted JSON-Lines shape is unchanged for the
+/// §15.6 aggregator.
+/// </summary>
+[JsonSourceGenerationOptions(
+    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
+    UseStringEnumConverter = true,
+    WriteIndented = false)]
+[JsonSerializable(typeof(MeasurementResult))]
+internal sealed partial class MeasurementJsonContext : JsonSerializerContext;
 
 public static class Env
 {
