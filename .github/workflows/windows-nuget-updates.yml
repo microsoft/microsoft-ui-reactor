@@ -24,6 +24,9 @@
 #   then tries to open/refresh the PR, and if creating one is blocked it falls back
 #   to a tracking ISSUE (issue creation is NOT governed by the PR-creation policy)
 #   with a one-click "compare" link a maintainer uses to open the PR themselves.
+#   Once the bump lands (the maintainer opens & merges that PR, or a later run finds
+#   nothing left to update), the workflow closes the tracking issue automatically so
+#   it can't linger open with a now-empty compare link.
 #   The run's job summary always records the same bump table + link as a floor. An
 #   optional DEPS_BOT_TOKEN secret, if the org can provide one, upgrades this to a
 #   fully automatic PR.
@@ -249,6 +252,10 @@ jobs:
           # `git commit` fail the run under the native-command error preference.
           if ([string]::IsNullOrWhiteSpace((git diff --cached --name-only))) {
             Write-Host 'Directory.Packages.props already matches the default branch — nothing to publish.'
+            # The bump already landed (a maintainer opened & merged the PR from the
+            # tracking issue's link, or another run did). Close any stale tracking
+            # issue so it doesn't linger open with a now-empty compare link.
+            & ./.github/scripts/close-stale-nuget-issue.ps1
             exit 0
           }
           git commit -m 'deps: bump NuGet packages missed by (Linux) Dependabot'
@@ -388,6 +395,17 @@ jobs:
             Write-Host "Could not open/refresh a PR via Actions ($($_.Exception.Message))."
           }
 
+          if ($prOk) {
+            # A real PR now tracks this bump, so any earlier fallback tracking issue
+            # is redundant — close it (e.g. after the org grants DEPS_BOT_TOKEN, or an
+            # already-open PR is refreshed). Best-effort; never fail the run for this.
+            try {
+              & ./.github/scripts/close-stale-nuget-issue.ps1 -Reason 'this bump is now tracked by an open pull request.'
+            } catch {
+              Write-Host "Tracking-issue reconcile skipped: $($_.Exception.Message)"
+            }
+          }
+
           if (-not $prOk) {
             Write-Host 'Falling back to a tracking issue with a one-click PR link.'
             try {
@@ -398,3 +416,35 @@ jobs:
           }
 
           Remove-Item pr-body.md -ErrorAction SilentlyContinue
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 3 — reconcile the fallback tracking issue when there is nothing to open.
+  # `publish` only runs when detect found a change, so when a bump has already
+  # landed on the default branch (detect reports no change) an earlier tracking
+  # issue would otherwise stay OPEN forever — its bot branch deleted on merge and
+  # its compare link showing "no changes". This job closes that stale issue.
+  # ─────────────────────────────────────────────────────────────────────────────
+  reconcile:
+    needs: detect
+    if: needs.detect.outputs.changed != 'true' && !(github.event_name == 'workflow_dispatch' && github.event.inputs['dry-run'] == 'true')
+    runs-on: ubuntu-latest
+    permissions:
+      # Only the Issues API is needed to close the tracking issue.
+      issues: write
+    steps:
+      - name: Checkout (for the reconcile script only)
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          sparse-checkout: |
+            .github/scripts/close-stale-nuget-issue.ps1
+          sparse-checkout-cone-mode: false
+
+      - name: Close stale tracking issue
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.DEPS_BOT_TOKEN || github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          ./.github/scripts/close-stale-nuget-issue.ps1
