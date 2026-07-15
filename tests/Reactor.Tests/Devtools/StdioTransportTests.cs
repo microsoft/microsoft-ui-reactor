@@ -13,8 +13,6 @@ namespace Microsoft.UI.Reactor.Tests.Devtools;
 /// parity pass (running the Phase 2+3 self-host suite over stdio) lands
 /// with §4.7.
 /// </summary>
-[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: reflection-based System.Text.Json serialization of devtools/MCP dispatch payloads (no source-gen context; DevtoolsMcpServer.JsonOpts). Issue #70 documents this devtools JSON surface as RUC/RDC-by-design and not-yet-AOT-clean; the standard `dotnet test` path is JIT (never trimmed). Behaviour-neutral.")]
-[UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test-only: reflection-based System.Text.Json serialization of devtools/MCP payloads (see the IL2026 note). Standard test run is JIT, not AOT-compiled. Behaviour-neutral.")]
 public class StdioTransportTests
 {
     private static McpDispatcher BuildDispatcher()
@@ -111,6 +109,8 @@ public class StdioTransportTests
     }
 
     [Fact]
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: reflection-based System.Text.Json serialization of a devtools/MCP dispatch payload (no source-gen context; DevtoolsMcpServer.JsonOpts). Issue #70 documents this devtools JSON surface as RUC/RDC-by-design and not-yet-AOT-clean; standard `dotnet test` is JIT. Behaviour-neutral.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test-only: reflection-based System.Text.Json serialization of a devtools/MCP payload (see IL2026). JIT only, not AOT-compiled. Behaviour-neutral.")]
     public void ResponseShape_MatchesHttpTransport()
     {
         // Parity: an identical dispatcher fed the same request line through
@@ -148,6 +148,8 @@ public class StdioTransportTests
         """{"jsonrpc":"2.0","id":7,"method":"prompts/list"}""")]
     [InlineData("direct-name-invocation",
         """{"jsonrpc":"2.0","id":8,"method":"ping"}""")]
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: reflection-based System.Text.Json serialization of a devtools/MCP dispatch payload (no source-gen context; DevtoolsMcpServer.JsonOpts). Issue #70 documents this devtools JSON surface as RUC/RDC-by-design and not-yet-AOT-clean; standard `dotnet test` is JIT. Behaviour-neutral.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test-only: reflection-based System.Text.Json serialization of a devtools/MCP payload (see IL2026). JIT only, not AOT-compiled. Behaviour-neutral.")]
     public void StdioAndHttpResponses_ByteIdentical_ForEveryMethodClass(string label, string request)
     {
         _ = label; // documented in the InlineData; shown in test output on failure
@@ -160,6 +162,8 @@ public class StdioTransportTests
     }
 
     [Fact]
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: reflection-based System.Text.Json serialization of a devtools/MCP dispatch payload (no source-gen context; DevtoolsMcpServer.JsonOpts). Issue #70 documents this devtools JSON surface as RUC/RDC-by-design and not-yet-AOT-clean; standard `dotnet test` is JIT. Behaviour-neutral.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test-only: reflection-based System.Text.Json serialization of a devtools/MCP payload (see IL2026). JIT only, not AOT-compiled. Behaviour-neutral.")]
     public void StdioRun_FeedingMixedSequence_ProducesHttpIdenticalPerLine()
     {
         // A realistic agent session: initialize, list tools, call a tool,

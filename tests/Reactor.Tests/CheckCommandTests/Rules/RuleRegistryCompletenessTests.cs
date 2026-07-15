@@ -18,7 +18,7 @@ public class RuleRegistryCompletenessTests
 {
     [Fact]
     [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only completeness guard: enumerates all types in the CLI assembly (Assembly.GetTypes) to assert every concrete IRulePattern is registered — the full-surface scan trimming would prune. This host is never trimmed. Behaviour-neutral.")]
-    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2070", Justification = "Test-only completeness guard: probes each scanned rule type for a public parameterless constructor (Type.GetConstructor); the types are rooted by the surrounding GetTypes scan. JIT only. Behaviour-neutral.")]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2070",     Justification = "Test-only completeness guard: probes each rule type enumerated by the surrounding Assembly.GetTypes scan for a public parameterless constructor (Type.GetConstructor) — which trimming would prune. Intentional and JIT-only (this host is never trimmed); behaviour-neutral.")]
     public void Default_Registers_Every_Concrete_IRulePattern_In_The_Cli_Assembly()
     {
         var reflected = typeof(IRulePattern).Assembly

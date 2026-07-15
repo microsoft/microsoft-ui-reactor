@@ -16,38 +16,48 @@ analyzer **off** (see `Directory.Build.targets`). That is a blunt opt-out: it si
 call would slip in unnoticed.
 
 That opt-out is now removed and replaced with `IsAotCompatible=true`. The analyzer runs,
-promotes the curated IL codes to errors (per `Directory.Build.targets`), and every
-surfaced site — ~175 across ~43 files — is **annotated honestly per-site** rather than
-silenced wholesale. The analyzer therefore keeps guarding against *new*, unintended
-reflection in test code.
+promotes the curated IL codes to errors (per `Directory.Build.targets`), and the ~175
+surfaced IL2\*/IL3\* diagnostics are resolved honestly per-site — **92 justified
+`[UnconditionalSuppressMessage]` attributes added across 40 files** (two more were already
+present in `SanitizeUrlTests`, for 94 total), **plus two tests rewritten to drop an avoidable
+`dynamic` dependency (a fix, not a suppression)**. The analyzer therefore keeps guarding
+against *new*, unintended reflection in test code.
 
 ### How the reflection is annotated
 
-Every site carries a **`[UnconditionalSuppressMessage]`** with a per-site justification.
-`[UnconditionalSuppressMessage]` (not `#pragma warning disable`, which ILC ignores) is the
-form that survives a whole-program ILC pass, and it is **behaviour-neutral**: unlike a
-`[DynamicallyAccessedMembers]` annotation it neither preserves nor prunes members, so it
-cannot cause the runtime narrowing regression documented in issue #70 (comment 3, where a
+Almost every site carries a **`[UnconditionalSuppressMessage]`** with a per-site
+justification. `[UnconditionalSuppressMessage]` (not `#pragma warning disable`, which ILC
+ignores) is the form that survives a whole-program ILC pass, and it is **behaviour-neutral**:
+unlike a `[DynamicallyAccessedMembers]` annotation it neither preserves nor prunes members, so
+it cannot cause the runtime narrowing regression documented in issue #70 (comment 3, where a
 `[DynamicallyAccessedMembers]` on a test helper stripped collection-enumeration members and
-broke ~20 PropertyGrid selftests). **No product (core Reactor) type was touched** — all
-changes live inside this test project.
+broke ~20 PropertyGrid selftests). A suppression is therefore **not** a claim that the
+reflection is trim-safe — it documents that the reflection is intentional and that this host
+runs on the JIT (never trimmed). Where the reflection was *avoidable*, it was **fixed** rather
+than suppressed: the two `dynamic` chart-accessor tests (`AreaTests`/`LineTests`) now use a
+concrete `record struct` instead of `Create<dynamic>`, so no suppression is needed and the
+tests are genuinely AOT-clean. **No product (core Reactor) type was touched** — all changes
+live inside this test project.
 
 The suppressions fall into a small number of honest categories:
 
-| Category | IL code(s) | Why it is safe / intentional |
+| Category | IL code(s) | Why it is intentional (JIT-only; not claimed trim-safe) |
 |---|---|---|
 | **Devtools/MCP reflection-based JSON** (`JsonSerializer.Serialize`/`Deserialize` with `DevtoolsMcpServer.JsonOpts`, no source-gen context) | IL2026 + IL3050 | Intentionally exercises the devtools JSON surface that issue #70 documents as RUC/RDC-by-design and not-yet-AOT-clean. Run on JIT. |
-| **`dynamic` chart-accessor lambdas** (`Create<dynamic>(d => (double)d.X, …)`) | IL2026 + IL3050 | `dynamic` binds through Microsoft.CSharp's RuntimeBinder — inherently AOT-incompatible. Run on JIT only. |
-| **Generic reflection-based JSON** (tuning report, search-index round-trip into concrete records, anonymous-type serialize) | IL2026 + IL3050 | Reflection-based `System.Text.Json` on concrete types the test references; JIT only. |
-| **Assembly-wide contract/architecture scans** (`Assembly.GetTypes()` + member reflection: `CoreControlFamilyBoundaryTests`, `PublicApiSurfaceGuardTests`, `DescriptorSilentDropGuardTests`, `RuleRegistryCompletenessTests`, `AnalyzerPackagingTests`, the RegisterAllBuiltIns guard) | IL2026, IL2070, IL2067 | Enumerating the full type surface *is the point of the test* — exactly what trimming prunes. JIT only. |
-| **Member access on concrete runtime objects** (`obj.GetType().GetProperty/GetField/GetMethod`) | IL2075 | Reflects a known member on a type the test constructs (rooted), so it survives trimming. Behaviour-neutral (no DAM contract that could prune other members). |
-| **`Type`-parameter theory reflection** (`type.GetProperties()` over `typeof(...)`-rooted theory data) | IL2070, IL2067 | The `Type` flows from `typeof(...)` literals, rooted with their members. Suppression preferred over a DAM annotation (see the narrowing note above). |
+| **Generic reflection-based JSON** (tuning report, search-index round-trip into concrete records, anonymous-type serialize) | IL2026 + IL3050 | Reflection-based `System.Text.Json` without a source-gen context; JIT only. |
+| **Assembly-wide contract/architecture scans** (`Assembly.GetTypes()` + member reflection: `CoreControlFamilyBoundaryTests`, `PublicApiSurfaceGuardTests`, `DescriptorSilentDropGuardTests`, `RuleRegistryCompletenessTests`, `AnalyzerPackagingTests`, the RegisterAllBuiltIns guard) | IL2026, IL2070, IL2067 | Enumerating the full type surface *is the point of the test* — exactly what trimming would prune. JIT only. |
+| **Member access on concrete runtime objects** (`obj.GetType().GetProperty/GetField/GetMethod`) | IL2075 | Reflects a known member on a concrete object the test constructs. Intentional and JIT-only — **not** claimed trim-safe; behaviour-neutral (neither preserves nor prunes members). |
+| **`Type`-parameter theory reflection** (`type.GetProperties()` over `typeof(...)` theory data) | IL2070, IL2067 | The `Type` flows from `typeof(...)` literals in the theory data. JIT-only, not claimed trim-safe; suppression preferred over a DAM annotation on the parameter (see the narrowing note above). |
 | **`Assembly.Location`** (feed Roslyn `MetadataReference.CreateFromFile` / `PEReader` / doc-XML lookup) | IL3000 | Only affects single-file publish (Location is empty there); these Roslyn-compilation/metadata tests can't run single-file and the host is never single-file-published. |
 
-Where a whole test class is cohesively about one surface (e.g. the devtools/MCP JSON
-classes, `TypeRegistryUnmountTests`), the suppression is placed at class scope; otherwise it
-is placed on the individual method, helper, or field where the diagnostic fires, to avoid a
-broad blind spot (notably the large `MoreCoverageTests` grab-bags are annotated per-method).
+**Class-level vs method-level scope.** A suppression is placed at **class scope** only where
+the majority of the class's test methods exercise the one suppressed surface *and* the class
+is named/scoped for it (e.g. `DevtoolsSerializationTests`, `TreeSchemaTests`,
+`TypeRegistryUnmountTests`). Where the reflecting methods are a minority of the class (e.g.
+`ReferenceOverlayTests`, `DevtoolsFireToolTests`, `McpDispatchTests`, `StdioTransportTests`,
+and the large `MoreCoverageTests` grab-bags), the suppression is placed on the individual
+method, helper, or field where the diagnostic fires — so a future *different* unsafe
+reflection added elsewhere in the class is still caught.
 
 **Result:** `dotnet build tests/Reactor.Tests -p:Platform=x64 -p:SkipSignaturesGen=true`
 is warning/error-clean with the analyzer on, and all tests stay green:

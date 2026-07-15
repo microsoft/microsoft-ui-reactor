@@ -106,7 +106,7 @@ public class DescriptorSilentDropGuardTests
     private sealed record ManualProp(Mode Mode, Type Type);
     private sealed record ManualModel(Dictionary<string, ManualProp> Props, bool HasContent, string ContentKind);
 
-    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2070", Justification = "Test-only architecture/contract guard: reflects public instance properties of a concrete element type discovered by the surrounding Assembly.GetTypes scan (rooted); JIT only. Behaviour-neutral.")]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2070",     Justification = "Test-only architecture/contract guard: reflects public instance properties of an element type enumerated by the surrounding Assembly.GetTypes scan (which trimming would prune). Intentional and JIT-only (this host is never trimmed); behaviour-neutral.")]
     private static ManualModel ManualSurface(Type element)
     {
         var baseProps = typeof(Element).GetProperties().Select(p => p.Name).ToHashSet();

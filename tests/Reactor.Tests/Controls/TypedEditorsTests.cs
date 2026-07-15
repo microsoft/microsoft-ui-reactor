@@ -41,7 +41,7 @@ public class TypedEditorsTests
     [InlineData(typeof(global::System.TimeOnly))]
     [InlineData(typeof(global::System.Uri))]
     [InlineData(typeof(global::Windows.UI.Color))]
-    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2067", Justification = "Test-only: the Type values come from a [Theory] of concrete, typeof-rooted primitive types (int/string/etc.), whose public constructors/properties survive; passed to the DAM-annotated TypeRegistry.ResolveEditor. Behaviour-neutral suppression (preferred over widening the test's Type parameter with DAM, which per issue #70 can narrow preservation).")]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2067",     Justification = "Test-only: the Type values come from a [Theory] of concrete primitive types (int/string/etc.) passed to the DAM-annotated TypeRegistry.ResolveEditor. Intentional and JIT-only (this host is never trimmed) — not claimed trim-safe; behaviour-neutral suppression (preferred over widening the test's Type parameter with DAM, which per issue #70 can narrow preservation).")]
     public void Registry_Resolves_Editor_For_Primitive(Type type)
     {
         var r = new TypeRegistry();

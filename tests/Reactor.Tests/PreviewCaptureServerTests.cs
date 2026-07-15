@@ -184,7 +184,7 @@ public class PreviewCaptureServerTests
     // ══════════════════════════════════════════════════════════════
 
     [Fact]
-    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Test-only: reflects the Item1/Item2 fields of the concrete ValueTuple the invoked method returns (rooted); behaviour-neutral (no DAM contract that could prune members — avoiding the narrowing regression noted in issue #70). JIT only.")]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075",     Justification = "Test-only: reflects the Item1/Item2 fields of the concrete ValueTuple the invoked method returns. Intentional and JIT-only (this host is never trimmed) — not claimed trim-safe; behaviour-neutral (neither preserves nor prunes members, so it cannot cause the DAM-narrowing regression noted in issue #70).")]
     public void AcquireFreePortHolding_Returns_Bound_Loopback_Port()
     {
         var mi = ServerType.GetMethod("AcquireFreePortHolding",

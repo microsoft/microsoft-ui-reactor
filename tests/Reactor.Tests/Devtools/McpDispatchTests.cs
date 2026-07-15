@@ -11,8 +11,6 @@ namespace Microsoft.UI.Reactor.Tests.Devtools;
 /// endpoint + dispatcher marshalling are covered by the self-host MCP tests in
 /// Phase 2.17.
 /// </summary>
-[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: reflection-based System.Text.Json serialization/deserialization of devtools/MCP JSON-RPC payloads (no source-gen context; DevtoolsMcpServer.JsonOpts). Issue #70 documents this devtools JSON surface as RUC/RDC-by-design and not-yet-AOT-clean; the standard `dotnet test` path is JIT (never trimmed). Behaviour-neutral.")]
-[UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test-only: reflection-based System.Text.Json serialization/deserialization of devtools/MCP payloads (see the IL2026 note). Standard test run is JIT, not AOT-compiled. Behaviour-neutral.")]
 public class McpDispatchTests
 {
     private static McpToolRegistry BuildRegistry()
@@ -37,6 +35,8 @@ public class McpDispatchTests
     // the test exercises Serialize/Deserialize round-trips on the envelope.
 
     [Fact]
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: reflection-based System.Text.Json deserialization of a devtools/MCP JSON-RPC request (no source-gen context; DevtoolsMcpServer.JsonOpts). Issue #70 documents this devtools JSON surface as RUC/RDC-by-design and not-yet-AOT-clean; standard `dotnet test` is JIT. Behaviour-neutral.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test-only: reflection-based System.Text.Json deserialization of a devtools/MCP payload (see IL2026). JIT only, not AOT-compiled. Behaviour-neutral.")]
     public void Deserialize_RoundTripsRequest()
     {
         const string body = """
@@ -53,6 +53,8 @@ public class McpDispatchTests
     }
 
     [Fact]
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: reflection-based System.Text.Json serialization of a devtools/MCP response (no source-gen context; DevtoolsMcpServer.JsonOpts). Issue #70 documents this devtools JSON surface as RUC/RDC-by-design and not-yet-AOT-clean; standard `dotnet test` is JIT. Behaviour-neutral.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test-only: reflection-based System.Text.Json serialization of a devtools/MCP payload (see IL2026). JIT only, not AOT-compiled. Behaviour-neutral.")]
     public void Response_SerializesSuccess_WithoutErrorField()
     {
         var resp = new JsonRpcResponse
@@ -66,6 +68,8 @@ public class McpDispatchTests
     }
 
     [Fact]
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: reflection-based System.Text.Json serialization of a devtools/MCP response (no source-gen context; DevtoolsMcpServer.JsonOpts). Issue #70 documents this devtools JSON surface as RUC/RDC-by-design and not-yet-AOT-clean; standard `dotnet test` is JIT. Behaviour-neutral.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test-only: reflection-based System.Text.Json serialization of a devtools/MCP payload (see IL2026). JIT only, not AOT-compiled. Behaviour-neutral.")]
     public void Response_SerializesError_WithoutResultField()
     {
         var resp = new JsonRpcResponse
