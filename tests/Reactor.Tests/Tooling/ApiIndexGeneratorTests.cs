@@ -14,6 +14,7 @@ public sealed class ApiIndexGeneratorTests
 {
     static Assembly ReactorAssembly => typeof(Microsoft.UI.Reactor.Factories).Assembly;
 
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only api-index generator: reflects over the Reactor assembly's public surface (Assembly.GetTypes / member reflection) by design. This host is never trimmed. Behaviour-neutral.")]
     static string Generate() => ApiIndexGenerator.Generate(ReactorAssembly);
 
     static string RepoRoot()
