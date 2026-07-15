@@ -34,7 +34,7 @@ public class WindowsOpenAllowlistGateTests
     }
 
     [Fact]
-    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075",     Justification = "Test-only: reflects the Code/Available properties on the concrete structured-error payload the throw produces. Intentional and JIT-only (this host is never trimmed) — not claimed trim-safe; behaviour-neutral (neither preserves nor prunes members, so it cannot cause the DAM-narrowing regression noted in issue #70).")]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Test-only: reflects the Code/Available properties on the concrete structured-error payload the throw produces. Intentional and JIT-only (this host is never trimmed) — not claimed trim-safe; behaviour-neutral (neither preserves nor prunes members, so it cannot cause the DAM-narrowing regression noted in issue #70).")]
     public void Disallowed_Component_Throws_Unknown_Component()
     {
         var ex = Assert.Throws<McpToolException>(() =>

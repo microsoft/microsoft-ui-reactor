@@ -114,7 +114,7 @@ public class CardThemeResolutionSmokeTests
     /// class) and returns the first non-null string it finds. Returns null
     /// if no such field exists.
     /// </summary>
-    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075",     Justification = "Test-only: reflects instance fields of the concrete captured closure/delegate target the test produces. Intentional and JIT-only (this host is never trimmed) — not claimed trim-safe; behaviour-neutral (neither preserves nor prunes members, so it cannot cause the DAM-narrowing regression noted in issue #70).")]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Test-only: reflects instance fields of the concrete captured closure/delegate target the test produces. Intentional and JIT-only (this host is never trimmed) — not claimed trim-safe; behaviour-neutral (neither preserves nor prunes members, so it cannot cause the DAM-narrowing regression noted in issue #70).")]
     private static string? TryExtractCapturedString(global::System.Delegate d)
     {
         var target = d.Target;

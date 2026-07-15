@@ -27,7 +27,7 @@ public class DevtoolsDockingToolsTests : IDisposable
     }
 
     [Fact]
-    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075",     Justification = "Test-only: reflects public properties of the concrete docking-host payload record the tool returns. Intentional and JIT-only (this host is never trimmed) — not claimed trim-safe; behaviour-neutral (neither preserves nor prunes members, so it cannot cause the DAM-narrowing regression noted in issue #70).")]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Test-only: reflects public properties of the concrete docking-host payload record the tool returns. Intentional and JIT-only (this host is never trimmed) — not claimed trim-safe; behaviour-neutral (neither preserves nor prunes members, so it cannot cause the DAM-narrowing regression noted in issue #70).")]
     public void BuildListPayload_OneHost_IncludesIdAndPaneCount()
     {
         var manager = new DockManager
@@ -204,7 +204,7 @@ public class DevtoolsDockingToolsTests : IDisposable
         Assert.Contains("teleport", ex.Message);
     }
 
-    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075",     Justification = "Test-only helper: reflects the Hosts property on the concrete docking payload record the tool returns. Intentional and JIT-only (this host is never trimmed) — not claimed trim-safe; behaviour-neutral (neither preserves nor prunes members, so it cannot cause the DAM-narrowing regression noted in issue #70).")]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Test-only helper: reflects the Hosts property on the concrete docking payload record the tool returns. Intentional and JIT-only (this host is never trimmed) — not claimed trim-safe; behaviour-neutral (neither preserves nor prunes members, so it cannot cause the DAM-narrowing regression noted in issue #70).")]
     private static object[] HostsArray(object payload)
     {
         var prop = payload.GetType().GetProperty("Hosts")!;

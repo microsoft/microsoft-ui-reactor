@@ -11,8 +11,8 @@ namespace Microsoft.UI.Reactor.Tests;
 /// Uses the RegisterType API to verify unmount dispatch without creating
 /// real WinUI controls (which require a XAML Application context).
 /// </summary>
-    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075",     Justification = "Test-only: all sites reflect known members (HasUnmount property, Unmount method) on the concrete TypeRegistry instance the test constructs. Intentional and JIT-only (this host is never trimmed) — not claimed trim-safe; behaviour-neutral (neither preserves nor prunes members, so it cannot cause the DAM-narrowing regression noted in issue #70).")]
-    public class TypeRegistryUnmountTests
+[global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Test-only: all sites reflect known members (HasUnmount property, Unmount method) on the concrete TypeRegistry instance the test constructs. Intentional and JIT-only (this host is never trimmed) — not claimed trim-safe; behaviour-neutral (neither preserves nor prunes members, so it cannot cause the DAM-narrowing regression noted in issue #70).")]
+public class TypeRegistryUnmountTests
 {
     private record CustomCardElement(string Title) : Element;
 

@@ -31,7 +31,7 @@ public class AnalyzerPackagingTests
 {
     [Fact]
     [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only packaging guard: enumerates the analyzer assembly's types (Assembly.GetTypes) by design. This host is never trimmed. Behaviour-neutral.")]
-    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2067",     Justification = "Test-only packaging guard: instantiates DiagnosticAnalyzer types enumerated by the scan via Activator.CreateInstance; trimming could prune their constructors. Intentional and JIT-only (this host is never trimmed); behaviour-neutral.")]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2067", Justification = "Test-only packaging guard: instantiates DiagnosticAnalyzer types enumerated by the scan via Activator.CreateInstance; trimming could prune their constructors. Intentional and JIT-only (this host is never trimmed); behaviour-neutral.")]
     public void ShippedAnalyzerAssembly_DoesNotExport_DocCoverageRules()
     {
         // Pick any concrete analyzer that lives in the shipped assembly and
@@ -61,7 +61,7 @@ public class AnalyzerPackagingTests
 
     [Fact]
     [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only packaging guard: enumerates the analyzer assembly's types (Assembly.GetTypes) by design. This host is never trimmed. Behaviour-neutral.")]
-    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2067",     Justification = "Test-only packaging guard: instantiates DiagnosticAnalyzer types enumerated by the scan via Activator.CreateInstance; trimming could prune their constructors. Intentional and JIT-only (this host is never trimmed); behaviour-neutral.")]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2067", Justification = "Test-only packaging guard: instantiates DiagnosticAnalyzer types enumerated by the scan via Activator.CreateInstance; trimming could prune their constructors. Intentional and JIT-only (this host is never trimmed); behaviour-neutral.")]
     public void InternalAnalyzerAssembly_Hosts_DocCoverageRules()
     {
         // Symmetric companion: ensure REACTOR_DOC_001 still exists
