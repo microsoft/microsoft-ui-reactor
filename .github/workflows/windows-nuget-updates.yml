@@ -330,13 +330,36 @@ jobs:
               @draftArg
           }
           function Open-TrackingIssue {
-            # Find-or-update a single tracking issue with a one-click "open the PR" link.
+            # Find-or-create a single tracking issue with a one-click "open the PR"
+            # link, then prefill that link's PR body with "Closes #<this issue>" so
+            # merging the opened PR auto-closes this tracking issue. We resolve the
+            # issue number FIRST (find, else create a placeholder) because the number
+            # has to go into the compare link embedded in the issue's own body.
             $issueTitle = 'Windows NuGet updates ready to open'
+            $open = gh issue list --state open --search 'Windows NuGet updates ready to open in:title' --json number,title | ConvertFrom-Json
+            $match = $open | Where-Object { $_.title -eq $issueTitle } | Select-Object -First 1
+            if ($match) {
+              $issueNum = $match.number
+              Write-Host "Refreshing tracking issue #$issueNum."
+            } else {
+              # Create with a placeholder body; overwritten by the edit below once we
+              # can embed the self-referential "Closes #<num>" compare link.
+              $created = gh issue create --title $issueTitle --body 'Preparing the Windows NuGet update…' --label dependencies --label nuget
+              $issueNum = [regex]::Match(($created -join "`n"), '/issues/(\d+)').Groups[1].Value
+              if ([string]::IsNullOrWhiteSpace($issueNum)) { throw "Could not parse the new issue number from: $created" }
+              Write-Host "Opened tracking issue #$issueNum."
+            }
+
+            # Prefill the compare page so the maintainer's PR closes THIS issue on merge.
+            $prTitle = 'deps: Windows NuGet updates'
+            $prBody = "Automated NuGet updates for the Windows-only project graph.`n`nCloses #$issueNum"
+            $linkUrl = "$compareUrl&title=$([Uri]::EscapeDataString($prTitle))&body=$([Uri]::EscapeDataString($prBody))"
+
             $ib = [System.Collections.Generic.List[string]]::new()
             $ib.Add("The weekly Windows NuGet update pushed its bump to ``$env:PR_BRANCH``, but GitHub Actions can't open a pull request in this repo — so it needs a human to open it (one click).")
             $ib.Add('')
-            $ib.Add("### ▶ [Open the pull request]($compareUrl)")
-            $ib.Add("Opens a pre-filled PR from ``$env:PR_BRANCH`` into ``$env:DEFAULT_BRANCH`` — just click **Create pull request**.")
+            $ib.Add("### ▶ [Open the pull request]($linkUrl)")
+            $ib.Add("Opens a pre-filled PR from ``$env:PR_BRANCH`` into ``$env:DEFAULT_BRANCH`` (body already set to ``Closes #$issueNum``) — just click **Create pull request**. Merging it closes this issue automatically.")
             $ib.Add('')
             $ib.Add($buildLine)
             $ib.Add('')
@@ -345,14 +368,7 @@ jobs:
             $ib.Add("[Workflow run]($runUrl)")
             Set-Content -Path issue-body.md -Value $ib -Encoding utf8
 
-            $open = gh issue list --state open --search 'Windows NuGet updates ready to open in:title' --json number,title | ConvertFrom-Json
-            $match = $open | Where-Object { $_.title -eq $issueTitle } | Select-Object -First 1
-            if ($match) {
-              Write-Host "Refreshing tracking issue #$($match.number)."
-              gh issue edit $match.number --body-file issue-body.md
-            } else {
-              gh issue create --title $issueTitle --body-file issue-body.md --label dependencies --label nuget
-            }
+            gh issue edit $issueNum --body-file issue-body.md
             Remove-Item issue-body.md -ErrorAction SilentlyContinue
           }
 
