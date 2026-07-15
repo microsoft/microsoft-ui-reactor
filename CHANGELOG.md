@@ -247,6 +247,12 @@ Conventions for contributors:
   `OnDropDownClosed`; universal multi-select `OnSelectionChanged` on
   list/grid surfaces.
 
+- **Common content-alignment and border fluents (issue #774).** New
+  `.HorizontalContentAlignment(...)`, `.VerticalContentAlignment(...)`,
+  `.BorderBrush(...)`, and `.BorderThickness(...)` modifiers (with
+  `Thickness`-aware overloads) expose common layout/styling that previously
+  required a `.Set(...)` fallback, without adding control-specific wrappers.
+
 - **`mur check` — fast feedback with skill pointers (spec 038).** `mur
   check` is the build (same exit code as `dotnet build`) plus two
   enrichments: skill pointers for known `REACTOR_*` IDs and did-you-mean
@@ -263,6 +269,16 @@ Conventions for contributors:
   passthrough also supported. `--trace <path>` writes JSONL diagnostic
   rows; `MUR_TELEMETRY=1` opt-in logs per-suggestion telemetry locally.
   Validated end-to-end across multi-arm EC1/EC2/EC3 evals.
+
+- **Build-time guardrail analyzer suite (spec 060).** The analyzer package now
+  ships dozens of `REACTOR_*` diagnostics — the suite spans roughly 60 rules —
+  that catch Reactor-specific footguns at compile time across hooks, theming,
+  accessibility, keys/DSL, collections, controlled inputs, threading,
+  performance, docking, navigation, animation, and lifecycle. Examples:
+  `REACTOR_EVENT_001` (event wired via `.Set(+=)` re-subscribes every render —
+  #763), `REACTOR_POOL_001`, `REACTOR_ITEMS_001`, `REACTOR_CTRL_001`,
+  `REACTOR_THREAD_001` / `_002`, `REACTOR_STATE_001`, and the `REACTOR_DYM_*`
+  did-you-mean family. Several ship codefixes; all surface through `mur check`.
 
 - **Multi-window, tray, and shell integration (spec 036).** First-class
   `ReactorWindow` and `ReactorTrayIcon` as peers, with
@@ -287,6 +303,21 @@ Conventions for contributors:
   `REACTOR_HOOKS_007` analyzer + codefix. ReactorOptimized at 10% mutation
   reaches 17.1 Effective Refresh/s — within noise of DirectX (17.2) and
   WPF (17.9) on the stocks-grid bench.
+
+- **Typed-arity `UseEffect` / `UseMemo` / `UseCallback` overloads (issue #688).**
+  Re-introduces `d1` / `d2` / `d3` overloads for 1–3 value-typed dependencies,
+  avoiding the `params object[]` allocation and per-dep boxing on the
+  unchanged-deps render path while staying behaviorally identical to the `params`
+  form.
+- **Public echo-suppression extension point (issue #206).** Authors of custom
+  value controls can route a controlled write through the stable `WriteSuppressed`
+  primitive to suppress the WinUI change echo, instead of reaching into reconciler
+  internals — the same mechanism Reactor's built-in value controls use.
+- **Opt-in cross-container row memoization for virtualized lists (issue #327).**
+  Wrapping a realized row in a keyed `Memo(key, factory)` lets the reconciler
+  reuse the row's rendered subtree across container recycles when the key is
+  unchanged, cutting redundant per-row reconciliation on fast scroll (see the
+  `/perf` row-memoization leg, #764, for the measured win).
 
 - **XAML/WinUI interop response (spec 033).** New `GridSize` value type
   with `Auto` / `Star(weight)` / `Px(pixels)` smart constructors and
@@ -565,5 +596,28 @@ Conventions for contributors:
   a loud `InvalidOperationException` instead of corrupting state. On the UI thread
   behavior is unchanged. The `RenderContext` setter marshal and the navigation
   gate now share one `UIThreadMarshal.EnqueueOrThrow` implementation.
+
+- **`Popup` now matches the WinUI light-dismiss default (issue #873).**
+  `PopupElement.IsLightDismissEnabled` defaulted to `true`, inverting WinUI's
+  `false` default — a plain `Popup(child, isOpen)` dismissed on an outside click
+  unless the author passed `.IsLightDismissEnabled(false)`. The record default now
+  matches WinUI; opt in explicitly with `.IsLightDismissEnabled(true)`.
+- **DataGrid keeps the inline editor open when Tab moves to the next cell
+  (#851).** Tabbing while editing committed the current cell and advanced, but the
+  reopened editor was immediately torn down by the grid's deferred `LostFocus`
+  commit, so the grid appeared to drop out of edit mode. Editing-Tab now commits
+  and reopens the editor on the next cell (Excel-like).
+- **`ListView` / `GridView` updates can clear `Header` or `ItemContainerStyle`
+  back to `null` (issue #845).** Both handlers gated the assignment on the new
+  value being non-null, so a present→null transition left the stale header/style
+  in place. The update now applies the `null`.
+- **`ListView` / `GridView` `OnItemClick` no longer double-subscribes (issue
+  #779).** The native `ItemClick` event was wired on both mount and update but
+  never unsubscribed, so toggling `OnItemClick` present→null→present fired the
+  handler twice per click. It is now wired exactly once.
+- **`FontIconSource` no longer crashes on an unset font size (issue #854).**
+  Icon-source resolution faulted on a `NaN` size; it is now coerced safely. The
+  bug surfaced while adding a title-bar app-mark icon to the `dotnet new
+  reactorapp` template, which the template now ships.
 
 ### Security
