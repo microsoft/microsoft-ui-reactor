@@ -16,6 +16,7 @@ internal static class DescriptorOptionalHarness
     // NumberBox Optional<double> gate lives in
     // tests/Reactor.AppTests.Host/SelfTest/Fixtures/ControlledOptionalNumericFamilyFixture.cs
     // (NumberBoxScenario).
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Test-only harness: reflects a known property/field on the concrete descriptor/entry objects the test constructs (rooted); behaviour-neutral (no DAM contract that could prune other members — avoiding the narrowing regression noted in issue #70). JIT only.")]
     public static void AssertOptionalGate<TValue>(
         object descriptor,
         object unset,

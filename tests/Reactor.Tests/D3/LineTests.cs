@@ -1,5 +1,6 @@
 // Port of d3-shape/test/line-test.js
 
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.UI.Reactor.Charting.D3;
 using Xunit;
 
@@ -39,6 +40,8 @@ public class LineTests
     }
 
     [Fact]
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: the C# `dynamic` accessor lambdas bind through Microsoft.CSharp's RuntimeBinder (RequiresUnreferencedCode). `dynamic` is inherently reflection-based; this test runs on JIT (standard `dotnet test`), not an AOT publish. Behaviour-neutral.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test-only: the C# `dynamic` accessor lambdas require runtime code generation (Microsoft.CSharp RuntimeBinder), AOT-incompatible by nature. Exercised on JIT only. Behaviour-neutral.")]
     public void Line_CustomAccessors()
     {
         var data = new[]

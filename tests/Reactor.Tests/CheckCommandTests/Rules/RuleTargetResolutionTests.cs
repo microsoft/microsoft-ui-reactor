@@ -55,6 +55,7 @@ public class RuleTargetResolutionTests
     /// would see in production, so target resolution here is the
     /// authoritative gate.
     /// </summary>
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("SingleFile", "IL3000", Justification = "Test-only: reads loaded assemblies' on-disk Location to build a live Reactor Roslyn compilation (MetadataReference.CreateFromFile). IL3000 only affects single-file publish (Location is empty there) — already handled by the surrounding try/catch + skip; this host is not single-file-published. Behaviour-neutral.")]
     static CSharpCompilation BuildLiveReactorCompilation()
     {
         // Force Reactor.dll into the AppDomain BEFORE enumerating loaded

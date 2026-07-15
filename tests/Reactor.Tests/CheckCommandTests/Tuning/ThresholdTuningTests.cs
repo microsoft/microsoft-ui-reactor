@@ -83,6 +83,8 @@ public class ThresholdTuningTests
     }
 
     [Fact]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: reflection-based System.Text.Json serialization of an anonymous diagnostic record (no source-gen context). Standard `dotnet test` is JIT (never trimmed). Behaviour-neutral.")]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test-only: reflection-based System.Text.Json serialization of an anonymous type (see the IL2026 note). Run on JIT, not AOT-compiled. Behaviour-neutral.")]
     public void Run_against_inline_one_row_corpus_produces_report()
     {
         // A synthetic CS0103 typo fix the suggester should fire on. The

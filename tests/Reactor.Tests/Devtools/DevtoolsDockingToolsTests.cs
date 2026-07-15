@@ -27,6 +27,7 @@ public class DevtoolsDockingToolsTests : IDisposable
     }
 
     [Fact]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Test-only: reflects public properties of the concrete docking-host payload record the tool returns (rooted); behaviour-neutral (no DAM contract that could prune members — avoiding the narrowing regression noted in issue #70). JIT only.")]
     public void BuildListPayload_OneHost_IncludesIdAndPaneCount()
     {
         var manager = new DockManager
@@ -57,6 +58,8 @@ public class DevtoolsDockingToolsTests : IDisposable
     }
 
     [Fact]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: reflection-based System.Text.Json serialization of a devtools/MCP snapshot payload (no source-gen context). Issue #70 documents this devtools JSON surface as RUC/RDC-by-design and not-yet-AOT-clean; standard `dotnet test` is JIT. Behaviour-neutral.")]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test-only: reflection-based System.Text.Json serialization of a devtools/MCP payload (see IL2026). JIT only, not AOT-compiled. Behaviour-neutral.")]
     public void BuildSnapshotPayload_LiveHost_ReturnsTreeShape()
     {
         var manager = new DockManager
@@ -201,6 +204,7 @@ public class DevtoolsDockingToolsTests : IDisposable
         Assert.Contains("teleport", ex.Message);
     }
 
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Test-only helper: reflects the Hosts property on the concrete docking payload record the tool returns (rooted); behaviour-neutral (no DAM contract that could prune members — avoiding the narrowing regression noted in issue #70). JIT only.")]
     private static object[] HostsArray(object payload)
     {
         var prop = payload.GetType().GetProperty("Hosts")!;

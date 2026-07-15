@@ -10,6 +10,7 @@ namespace Microsoft.UI.Reactor.Tests.Localization;
 
 public class LocSourceGeneratorTests
 {
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("SingleFile", "IL3000", Justification = "Test-only: reads the core library's on-disk Location to feed a Roslyn compilation (MetadataReference.CreateFromFile). IL3000 only affects single-file publish (Location is empty there); this source-generator test can't run single-file and this host is not single-file-published. Behaviour-neutral.")]
     private static GeneratorDriverRunResult RunGenerator(
         params (string path, string content)[] reswFiles)
     {
@@ -237,6 +238,7 @@ public class LocSourceGeneratorTests
     }
 
     [Fact]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("SingleFile", "IL3000", Justification = "Test-only: reads the core library's on-disk Location to feed a Roslyn compilation (MetadataReference.CreateFromFile). IL3000 only affects single-file publish (Location is empty there); this source-generator test can't run single-file and this host is not single-file-published. Behaviour-neutral.")]
     public void NoReswFiles_NoOutput()
     {
         var compilation = CSharpCompilation.Create("TestAssembly",

@@ -30,6 +30,8 @@ namespace Microsoft.UI.Reactor.Tests.AnalyzerTests;
 public class AnalyzerPackagingTests
 {
     [Fact]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only packaging guard: enumerates the analyzer assembly's types (Assembly.GetTypes) by design. This host is never trimmed. Behaviour-neutral.")]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2067", Justification = "Test-only packaging guard: instantiates scanned DiagnosticAnalyzer types via Activator.CreateInstance; the concrete analyzer types have public parameterless constructors and are rooted by the scan. JIT only. Behaviour-neutral.")]
     public void ShippedAnalyzerAssembly_DoesNotExport_DocCoverageRules()
     {
         // Pick any concrete analyzer that lives in the shipped assembly and
@@ -58,6 +60,8 @@ public class AnalyzerPackagingTests
     }
 
     [Fact]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only packaging guard: enumerates the analyzer assembly's types (Assembly.GetTypes) by design. This host is never trimmed. Behaviour-neutral.")]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2067", Justification = "Test-only packaging guard: instantiates scanned DiagnosticAnalyzer types via Activator.CreateInstance; the concrete analyzer types have public parameterless constructors and are rooted by the scan. JIT only. Behaviour-neutral.")]
     public void InternalAnalyzerAssembly_Hosts_DocCoverageRules()
     {
         // Symmetric companion: ensure REACTOR_DOC_001 still exists

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using Microsoft.UI.Reactor.Hosting.Devtools;
 using Xunit;
@@ -10,6 +11,8 @@ namespace Microsoft.UI.Reactor.Tests.Devtools;
 /// instances and assert the serialization matches spec §9. Self-host tests
 /// (§3.11) cover end-to-end walking.
 /// </summary>
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: reflection-based System.Text.Json serialization of devtools/MCP payload objects (no source-gen context; DevtoolsMcpServer.JsonOpts). Issue #70 documents this devtools JSON surface as RUC/RDC-by-design and not-yet-AOT-clean; the standard `dotnet test` path is JIT (never trimmed). Behaviour-neutral.")]
+[UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test-only: reflection-based System.Text.Json serialization of devtools/MCP payloads (see the IL2026 note). Standard test run is JIT, not AOT-compiled. Behaviour-neutral.")]
 public class TreeFullViewTests
 {
     [Fact]

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using Microsoft.UI.Reactor.Hosting.Devtools;
 using Xunit;
@@ -8,6 +9,8 @@ namespace Microsoft.UI.Reactor.Tests.Devtools;
 /// Shape tests for the <c>logs</c> MCP tool handler. Exercises
 /// <see cref="DevtoolsLogsTool.BuildPayload"/> directly so these stay headless.
 /// </summary>
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: exercises the devtools MCP reflection-based JSON surface (JsonSerializer.Serialize over payload records with DevtoolsMcpServer.JsonOpts), which issue #70 documents as RUC/RDC-by-design and not-yet-AOT-clean. The standard `dotnet test` path is JIT (never trimmed); the secondary MTP-AOT investigation skip-lists this surface. Behaviour-neutral.")]
+[UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test-only: reflection-based JSON serialization of devtools payload records (see IL2026 note). Standard test run is JIT; not AOT-compiled. Behaviour-neutral.")]
 public class DevtoolsLogsToolTests
 {
     [Fact]

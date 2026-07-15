@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -108,6 +109,8 @@ class BetaPage
 public sealed class SearchIndexGeneratorEdgeTests
 {
     static readonly JsonSerializerOptions ReadOptions = new() { PropertyNameCaseInsensitive = true };
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: reflection-based System.Text.Json deserialization of the generated search index into the concrete IndexRoot record (no source-gen context). Standard `dotnet test` is JIT (never trimmed). Behaviour-neutral.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test-only: reflection-based System.Text.Json deserialization into IndexRoot (see the IL2026 note). Run on JIT, not AOT-compiled. Behaviour-neutral.")]
     static IndexRoot Parse(string json) => JsonSerializer.Deserialize<IndexRoot>(json, ReadOptions)!;
     static ControlEntry Find(IndexRoot root, string id) =>
         root.Controls.FirstOrDefault(c => c.Id == id) ?? throw new Xunit.Sdk.XunitException($"'{id}' missing");

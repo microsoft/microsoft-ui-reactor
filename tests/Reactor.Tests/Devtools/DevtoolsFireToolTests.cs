@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hosting.Devtools;
@@ -10,6 +11,8 @@ namespace Microsoft.UI.Reactor.Tests.Devtools;
 /// UI-dispatcher path needs a running Window and is exercised by the Phase 3
 /// self-host fixture.
 /// </summary>
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: reflection-based System.Text.Json serialization of a devtools/MCP error payload (no source-gen context; DevtoolsMcpServer.JsonOpts). Issue #70 documents this devtools JSON surface as RUC/RDC-by-design and not-yet-AOT-clean; the standard `dotnet test` path is JIT (never trimmed). Behaviour-neutral.")]
+[UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test-only: reflection-based System.Text.Json serialization of a devtools/MCP payload (see the IL2026 note). Standard test run is JIT, not AOT-compiled. Behaviour-neutral.")]
 public class DevtoolsFireToolTests
 {
     private sealed class TestComponent : Component

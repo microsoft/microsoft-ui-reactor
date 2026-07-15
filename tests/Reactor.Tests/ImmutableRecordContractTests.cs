@@ -37,6 +37,7 @@ public class ImmutableRecordContractTests
 
     [Theory]
     [MemberData(nameof(ImmutableRecordTypes))]
+    [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2070", Justification = "Test-only: the Type flows from typeof(...) literals in the theory data (TrayIconSpec/WindowSpec/Command/Command<>), rooted with their members; behaviour-neutral suppression (preferred over a DAM annotation on the parameter, which per issue #70 can narrow preservation and regress). JIT only.")]
     public void All_Public_Properties_Are_InitOnly(Type type)
     {
         var properties = type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
@@ -53,6 +54,7 @@ public class ImmutableRecordContractTests
 
     [Theory]
     [MemberData(nameof(ImmutableRecordTypes))]
+    [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2070", Justification = "Test-only: the Type flows from typeof(...) literals in the theory data (TrayIconSpec/WindowSpec/Command/Command<>), rooted with their members; behaviour-neutral suppression (preferred over a DAM annotation on the parameter, which per issue #70 can narrow preservation and regress). JIT only.")]
     public void Has_At_Least_One_Public_Property(Type type)
     {
         // Sanity check: ensure the test is actually verifying something.

@@ -7,11 +7,20 @@
     <RootNamespace>Microsoft.UI.Reactor.Tests</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <!-- Never trimmed/AOT-published, and many suites (CoreControlFamilyBoundaryTests
-         IL scan, PublicApiSurfaceGuardTests, ImmutableRecordContractTests, the
-         devtools/MCP fixtures) reflect over types by design. Opt out of the IL2*/IL3*
-         analyzer rather than annotate reflection that is the point of the test. -->
-    <ReactorSkipAotAnalysis>true</ReactorSkipAotAnalysis>
+    <!-- AOT-honest (issue #70): the IL2*/IL3* analyzer is ENABLED (IsAotCompatible) even
+         though this headless unit-test host is never trimmed/AOT-published in the normal
+         `dotnet test` path. Several suites (CoreControlFamilyBoundaryTests IL scan,
+         PublicApiSurfaceGuardTests, ImmutableRecordContractTests, the localization
+         generator / CLI / devtools-MCP / search-index fixtures) reflect over types by
+         design — those intentional reflection sites are *annotated* honestly with a
+         justified [UnconditionalSuppressMessage] per site (behaviour-neutral; preferred
+         over trim-semantic-changing [DynamicallyAccessedMembers], which per issue #70 can
+         narrow preservation and regress). Suppressions survive ILC (unlike #pragma), so
+         the analyzer keeps guarding against *new*, unintended reflection. See README.md
+         for the per-category rationale and the native-AOT-run verdict. -->
+    <IsAotCompatible>true</IsAotCompatible>
+    <!-- Show every individual trimmer warning instead of collapsing them into one. -->
+    <TrimmerSingleWarn>false</TrimmerSingleWarn>
     <UseWinUI>true</UseWinUI>
     <!-- Tests P/Invoke Microsoft.WindowsAppRuntime.dll from a ModuleInitializer
          (TestSetup.cs); bundle the runtime so the test host can locate it

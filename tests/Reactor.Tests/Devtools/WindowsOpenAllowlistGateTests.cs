@@ -34,6 +34,7 @@ public class WindowsOpenAllowlistGateTests
     }
 
     [Fact]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Test-only: reflects the Code/Available properties on the concrete structured-error payload the throw produces (rooted); behaviour-neutral (no DAM contract that could prune members — avoiding the narrowing regression noted in issue #70). JIT only.")]
     public void Disallowed_Component_Throws_Unknown_Component()
     {
         var ex = Assert.Throws<McpToolException>(() =>

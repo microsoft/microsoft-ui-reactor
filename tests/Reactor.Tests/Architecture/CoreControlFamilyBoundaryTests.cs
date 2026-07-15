@@ -86,6 +86,7 @@ public class CoreControlFamilyBoundaryTests
     /// argument, isolating this path from the direct-reference path.
     /// </summary>
     [Fact]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("SingleFile", "IL3000", Justification = "Test-only: reads the test assembly's on-disk Location to feed the IL/metadata scanner (PEReader). IL3000 only affects single-file publish (Location is empty there); this metadata-scanning test can't run single-file and this host is not single-file-published. Behaviour-neutral.")]
     public void Scanner_DetectsGenericInstantiationReferences_NotVacuous()
     {
         const string probeNs = "Microsoft.UI.Reactor.Tests.Architecture.GenericProbe";
@@ -97,6 +98,7 @@ public class CoreControlFamilyBoundaryTests
         Assert.Contains(violations, v => v.Contains("(IL generic)", StringComparison.Ordinal));
     }
 
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("SingleFile", "IL3000", Justification = "Test-only: reads Reactor.dll's on-disk Location to feed the IL/metadata scanner (PEReader) — the assertion below already fails loudly on an empty path. IL3000 only affects single-file publish; this metadata-scanning test can't run single-file and this host is not single-file-published. Behaviour-neutral.")]
     private (SortedSet<string> Violations, int ScannedTypes) Scan(
         string[] forbiddenPrefixes, string? assemblyPath = null, string[]? sourcePrefixes = null)
     {

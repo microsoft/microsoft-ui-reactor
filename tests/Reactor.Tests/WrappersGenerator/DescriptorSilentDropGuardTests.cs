@@ -36,6 +36,7 @@ public class DescriptorSilentDropGuardTests
     private enum Mode { OneWay, Controlled }
 
     [Fact]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only architecture/contract guard: enumerates all types in the Reactor assembly (Assembly.GetTypes) and reflects over their members by design — exactly the full-surface scan trimming would prune. This host is never trimmed; the analyzer-on state keeps guarding new reflection elsewhere. Behaviour-neutral.")]
     public void MigratedDescriptors_DoNotSilentlyDropUnsupportedTypeProps()
     {
         var failures = new List<string>();
@@ -105,6 +106,7 @@ public class DescriptorSilentDropGuardTests
     private sealed record ManualProp(Mode Mode, Type Type);
     private sealed record ManualModel(Dictionary<string, ManualProp> Props, bool HasContent, string ContentKind);
 
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2070", Justification = "Test-only architecture/contract guard: reflects public instance properties of a concrete element type discovered by the surrounding Assembly.GetTypes scan (rooted); JIT only. Behaviour-neutral.")]
     private static ManualModel ManualSurface(Type element)
     {
         var baseProps = typeof(Element).GetProperties().Select(p => p.Name).ToHashSet();

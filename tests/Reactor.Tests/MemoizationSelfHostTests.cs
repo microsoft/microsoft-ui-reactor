@@ -69,6 +69,7 @@ public class MemoizationSelfHostTests
     /// subclasses without re-implementing the dispatch path. Do not infer from this code
     /// that the product reconciler reflects on every reconcile — it does not.
     /// </remarks>
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Test-only: reflects the internal ShouldUpdate method on the concrete Component subtype the test constructs (rooted); behaviour-neutral (no DAM contract that could prune members — avoiding the narrowing regression noted in issue #70). JIT only.")]
     private static bool ShouldUpdateWithProps(Component component, object? oldProps, object? newProps)
     {
         var compType = component.GetType();
