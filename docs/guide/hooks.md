@@ -322,7 +322,7 @@ as the dependencies haven't changed. This matters when passing callbacks to
 memoized [child components](components.md).
 
 As with `UseEffect` and `UseMemo`, the typed-arity overloads
-`UseCallback(callback, a, b)` (1-3 deps) skip the `params object[]` allocation
+`UseCallback(callback, a, b)` (1–3 deps) skip the `params object[]` allocation
 and value-type boxing on the unchanged path.
 
 ## External Stores

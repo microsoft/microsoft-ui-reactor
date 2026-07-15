@@ -44,7 +44,7 @@
       a floating range like 0.1.* matches nothing and fails restore (NU1103) —
       pin a real version here and substitute it, never float.
     -->
-    <ReactorPublicVersion>0.1.0-preview.11</ReactorPublicVersion>
+    <ReactorPublicVersion>0.1.0-preview.12</ReactorPublicVersion>
   </PropertyGroup>
 
   <!--

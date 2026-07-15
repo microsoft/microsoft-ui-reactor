@@ -28,6 +28,20 @@ Conventions for contributors:
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.1.0-preview.12] — 2026-07-14
+
+### Added
+
 - **`UseExternalStore<TSnapshot>` hook — first-class subscribe/getSnapshot
   interop (issue #761).** Standardizes the external-store subscription bridge
   (subscribe to change notifications, read the latest snapshot during render)
