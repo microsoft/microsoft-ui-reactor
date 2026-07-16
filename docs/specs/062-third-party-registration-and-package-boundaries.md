@@ -2,7 +2,7 @@
 
 ## Status
 
-**Proposed — design v0.2 (2026-07-15). No code changes.** This is a design
+**Proposed — design v0.3 (2026-07-16). No code changes.** This is a design
 document responding to [issue #163](https://github.com/microsoft/microsoft-ui-reactor/issues/163)
 ("Simplify third-party control registration and package boundaries for custom
 element types"). It builds on the *already-shipped* extensibility stack — the V1
@@ -26,6 +26,25 @@ decision — [§12 Open questions](#12-open-questions) is the decision surface.
 > findings in: the package split is still the right direction, but **Phase 1 is a
 > decoupling-design task (a runtime-seam abstraction), not a file move.** The
 > affected sections (§4–§7) call out the specific coupling and the resolution.
+
+> **Implementation-readiness note (v0.3, 2026-07-16).** Before committing to build,
+> the four load-bearing assumptions were spiked directly against source. All the
+> visibility/citation claims **hold**. The spike also *sharpened* three design
+> points that would have cost implementation time:
+> - **§5.2 correction:** the adapter cannot be materialized "after `TryResolve`" —
+>   the registry is keyed by element type only, so `TControl` lives solely in the
+>   `Register<E,C>` closure, and rebuilding the adapter later needs `MakeGenericType`,
+>   which `ControlRegistry` forbids. The seam factory must run *inside* the generic
+>   `Register` frame (new **Q13**).
+> - **§5.1 breaking-change:** the `string → Element` implicit operator cannot follow
+>   `Element` into Abstractions without a reference cycle; it must be dropped or moved
+>   to the core DSL — a real (if small) source break (new **Q12**).
+> - **§5.1/§5.3 scope:** the carve-out cluster includes `UnmountContext` **and**
+>   `ReactorBinding<TElement>`, not just the two contexts.
+>
+> These are folded into §5 and §12. Net: the direction is sound and the seam is
+> small and enumerable (§5.3 table), so the design is **ready to implement**, with
+> Q9/Q12/Q13 as the Phase-1 spikes to settle first.
 
 ### North star
 
@@ -286,55 +305,122 @@ and resolving it — §5.1 (`Element` carve-out), §5.2 (`ControlRegistry` split
 
 ### §5.1 `Element` carve-out
 
-"Move the `Element` base to Abstractions" is a carve-out, not a file move (§4.1):
+"Move the `Element` base to Abstractions" is a carve-out, not a file move (§4.1).
+Grounding note: the whole element catalog lives in one 6865-line `Element.cs`, so
+this is also a physical file split (the base record + contracts move; every
+concrete built-in element record — `TextBlockElement` at `Element.cs:2616`, etc. —
+stays in core).
 
-- `Element`'s implicit `string → Factories.TextBlock` conversion (`Element.cs:342`)
-  pulls the built-in catalog. **Resolution:** drop the implicit conversion from the
-  Abstractions `Element` and re-add it as an extension/convenience in core (it is a
-  DSL nicety, not part of the authoring contract), or have it call a seam hook the
-  core populates.
+- **The base `Element` record itself is nearly clean.** Verified: it carries only
+  `Key`, `Modifiers` (`ElementModifiers`, `Element.cs:1768` — WinUI *value* types,
+  fine under the §4 WinUI floor), and the outer-margin shim. The one true runtime
+  coupling is the implicit `string → Factories.TextBlock` conversion (`Element.cs:342`).
+- **The implicit-conversion carve-out is a breaking-change decision, not a free move.**
+  A `string → Element` implicit operator **must be declared on `Element`** (the other
+  operand, `string`, is a sealed BCL type). Its body needs a *concrete built-in*
+  (`Factories.TextBlock` → `new TextBlockElement(...)`, `Element.cs:2616`) that stays
+  in core — so if `Element` moves to Abstractions and keeps the operator, we get an
+  **Abstractions → core reference cycle**. There is no in-place fix: the operator
+  must either be **dropped** (source-breaking — container factories like `VStack("hi")`
+  / `Grid("x")` rely on `string → Element` today) or the string-convenience must be
+  **relocated into the core DSL** as `params`-overloads on the container factories.
+  Recommendation: drop the implicit operator, add `string`-accepting convenience to
+  the core containers; document as a one-time DSL migration. (New open question Q12.)
 - `FuncElement`/`MemoElement` (`Element.cs:1510-1516`) depend on `RenderContext`
   (a core hooks-runtime type). **Resolution:** these are *composition primitives*,
-  not authoring contracts — leave them (and `ElementExtras`' animation/resource/
-  input conveniences) in **core**, and move only the pure `Element` record base +
-  the modifier/attribute contract to Abstractions.
-- Net: Abstractions gets the pure `Element` primitive and the handler/descriptor
-  contract; core keeps `Factories`, `RenderContext`, `FuncElement`/`MemoElement`,
-  and the composition sugar. The carve-out line is "does a *definer* of a custom
-  element need it?" — if not, it stays in core.
+  not authoring contracts — leave them (and the animation/resource/input
+  conveniences) in **core**, and move only the pure `Element` record base + the
+  modifier/attribute contract to Abstractions.
+- **The author-facing type cluster that holds a `Reconciler` field is larger than
+  just the contexts.** Verified: `MountContext` (`MountContext.cs:50`),
+  `UpdateContext` (`:128`), `UnmountContext` (`:166`) **and** `ReactorBinding<TElement>`
+  (`ReactorBindingT.cs`, constructed with `_reconciler` at `MountContext.cs:92`) all
+  store a `Reconciler`. All four must be re-typed against the §5.3 seam, not just the
+  two contexts the earlier draft named. `ReactorBinding<TElement>` is on the author
+  hot path (`ctx.BindFor(ctrl, el).WriteSuppressed(...)`), so it is a required
+  carve-out target.
+- Net: Abstractions gets the pure `Element` primitive, the handler/descriptor
+  contract, the three contexts, and `ReactorBinding<TElement>` (all seam-typed); core
+  keeps `Factories`, `RenderContext`, `FuncElement`/`MemoElement`, the concrete
+  element catalog, and the composition sugar. The carve-out line is "does a *definer*
+  of a custom element need it?" — if not, it stays in core.
 
 ### §5.2 `ControlRegistry` — split the stored shape from the dispatch adapter
 
 `ControlRegistry.Register<TElement,TControl>` currently wraps the handler factory
 in a `V1HandlerAdapter` implementing the **internal** `IV1HandlerEntry`, whose
-`Mount`/`Update` take a `Reconciler` (`V1HandlerRegistry.cs:30-40`,
-`ControlRegistry.cs:112-113`). Moving the registry as-is drags `Reconciler` into
-Abstractions. **Resolution (recommended):** split the two roles —
+`Mount`/`Update`/`Unmount` take a `Reconciler` *in their signatures*
+(`V1HandlerRegistry.cs:32,40,46`; adapter built at `ControlRegistry.cs:112-113`).
+Moving the registry as-is drags `Reconciler` into Abstractions.
 
-- **Abstractions** holds `ControlRegistry` storing a *neutral* public registration
-  record — e.g. `Type → ReactorRegistration` where `ReactorRegistration` captures
-  the handler factory + kind (value / decorator / base-derived) with **no**
-  `Reconciler` in its signature.
-- **Core** materializes the `IV1HandlerEntry` dispatch adapter from that neutral
-  record *after* `TryResolve`, keeping `IV1HandlerEntry`/`V1HandlerAdapter`/
-  `V1DecoratorHandlerAdapter` (which name `Reconciler`) in core.
+**Grounding correction (this changes the recommended mechanism).** The earlier
+draft said "core materializes the adapter *after* `TryResolve`." That is **not
+AOT-legal as written**: the registry dictionary is keyed by `typeof(TElement)`
+*only* (`ControlRegistry.cs:118`), so the closed `TControl` survives **solely inside
+the `Register<TElement,TControl>` generic-frame closure**. Rebuilding
+`V1HandlerAdapter<TElement,TControl>` at dispatch time — outside that frame — would
+require `Type.MakeGenericType`, which the registry **explicitly forbids**
+(`ControlRegistry.cs:38-43`, the AOT contract). The adapter *must* be constructed
+in the generic `Register` frame. So the split is:
 
-This keeps the public `Register`/`RegisterDecorator`/`RegisterForDerivedTypes`
-surface (and the first-wins/base-derived semantics of 048 §8) in Abstractions while
-the runtime-typed adapter stays in core.
+- **Abstractions** holds the public `Register`/`RegisterDecorator`/
+  `RegisterForDerivedTypes` surface and stores a **type-erased** `Func<object>`
+  entry keyed by element type. The adapter is still produced *inside* the generic
+  `Register<TElement,TControl>` frame (preserving static `TControl` visibility — no
+  `MakeGenericType`), via one of:
+  1. **Move `IV1HandlerEntry` + `V1HandlerAdapter` + `V1DecoratorHandlerAdapter`
+     into Abstractions, re-typed from `Reconciler` to the §5.3 seam.** Cleanest for
+     `Register` (its body is unchanged), but the adapters are *heavy* — they do child
+     -strategy dispatch, element-tag anchoring, and component-teardown against the
+     reconciler (`V1HandlerAdapter.cs:29-120`), so this pulls a lot of logic behind
+     the seam.
+  2. **Keep the adapters in core**, and have Abstractions' `Register<E,C>` call a
+     core-supplied generic factory seam (`IReactorRuntime.CreateEntry<E,C>(handler)`)
+     *from within* its own generic frame, storing the returned `Func<object>`. Keeps
+     the heavy adapter logic in core; the only new cost is one generic interface
+     method (statically instantiated per call site → AOT-legal, still no
+     `MakeGenericType`).
+- **Core** downcasts the stored `object` back to `IV1HandlerEntry` on the dispatch
+  path (`TryResolve` consumer). `TryResolve` itself (`ControlRegistry.cs:267`) must
+  then return the neutral `Func<object>`, not `Func<IV1HandlerEntry>`.
+
+Recommendation: **option 2** — it keeps the reconciler-coupled adapter logic in core
+and moves the minimum across the boundary. This is a Phase-1 spike (Q9/Q13). The
+public `Register` surface and the first-wins/base-derived semantics of 048 §8 stay
+intact either way.
 
 ### §5.3 Contexts, descriptors, `Reg` visibility, and the WinUI dependency
 
 - **Author contexts must stop exposing `Reconciler`.** `MountContext` exposes a
-  `Reconciler` escape hatch (`MountContext.cs:50-65`); `ControlDescriptor.OneWayBridged`
-  and `DescriptorHandler` use it. **Resolution:** replace the public `Reconciler`
-  member with the minimal **runtime-seam** the generated/hand-written code actually
-  needs — `MountChild`, `ReconcileChild`, `ApplySetters`, element-tag get/set,
-  `DetachReactorState`, a read-side suppress-check, lifecycle add, and
-  assembly-register (the union of §6's closure). Abstractions declares the seam
-  interface; core's `Reconciler` implements it (the seam's shape is **Q9**). Any
-  descriptor entry that genuinely needs the full `Reconciler` (rare) stays a
-  core-only API.
+  public `Reconciler` escape hatch (`MountContext.cs:64`; `UpdateContext.cs`-equiv
+  `:138`, `UnmountContext` `:174`); `ControlDescriptor.OneWayBridged` and
+  `DescriptorHandler` consume it. **Resolution:** replace the public `Reconciler`
+  member with the minimal **runtime-seam** the context surface + generated code
+  actually need. Grounded against source, the seam is small and enumerable — the
+  union of what `MountContext`/`UpdateContext`/`UnmountContext` delegate to the
+  reconciler plus what the generator emits:
+
+  | Seam member | Backing today | Used by |
+  |---|---|---|
+  | `Mount(Element, Action)` | `_reconciler.Mount` (`MountContext.cs:69`) | `MountChild` |
+  | `ReconcileV1Child(old,new,existing,rerender)` | `:79` | `ReconcileChild`, `[WrapElementSlot]` |
+  | `RentControl<T>(policy,factory)` | `:97` | `MountContext.RentControl` |
+  | `PushContextDisposable<T>` / `PushStaggerScopeDisposable` | `:102,:106` | context/stagger scopes |
+  | `ReturnControl<T>` | `UnmountContext` `:179` | unmount pooling |
+  | `SetElementTag` / `GetElementTag` / `DetachReactorState` | `Reconciler` `public static` `516/627/732` | generator (`1233,1243,1253,1313,1483,1498`) |
+  | `ApplySetters<T>` | `Reconciler` `public static 2647` (also `ctx.ApplySetters` `:84`) | generator (`1314,1328,1332`) |
+  | read-side echo check | `ChangeEchoSuppressor.ShouldSuppress` **internal** `68` | generator deferred path (`1497`) — the §6.2 gap |
+  | assembly-register | `ReactorApp.TryRegisterControlAssembly` `public static`, **Hosting** `282` | generator (`1716`) |
+  | lifecycle add | `ElementExtensions.OnMountAdd/OnUnmountAdd` `2470/2495` | generator (`1784,1786`) |
+
+  Notes that fell out of the spike: (a) `ApplySetters` is a **static** method, so it
+  is a static helper on the seam/Abstractions, not an instance member; (b) the
+  assembly-register member currently lives in **Hosting** (`ReactorApp`) — the seam
+  lets generated code name Abstractions instead of dragging hosting; (c) `BindFor`
+  constructs `ReactorBinding<TElement>`, so that type is part of the carve-out (§5.1),
+  not the seam. Abstractions declares the seam interface (`IReactorRuntime`, working
+  name); core's `Reconciler` implements it (shape is **Q9**). Any descriptor entry
+  that genuinely needs the full `Reconciler` (rare) stays a core-only API.
 - **`Reg`/`RegDecorator`/`RegBase` are `internal`** (`Reg.cs:66`), and 048 §8
   deliberately steers 3P authors to the *public* `ControlRegistry.Register`. Feature
   packages (§11) that want Pattern-B scale registration would need these.
@@ -343,6 +429,11 @@ the runtime-typed adapter stays in core.
   promote a supported *public* bulk/factory registration primitive. Recommendation:
   (a) — do not widen `Reg` to public; feature packages use the same generated
   Pattern-A shape a 3P library uses, which is the dogfooding point.
+- **The Abstractions NuGet declares its own `Microsoft.WindowsAppSDK.WinUI`
+  dependency and TFM rules.** External consumers do **not** inherit this repo's
+  `Directory.Build.targets` injection rule, so the package's `.nuspec`/csproj must
+  carry the `.WinUI` sub-package reference and the `net10.0-windows…` TFM explicitly
+  (mirroring how `Reactor.Advanced` is packaged).
 - **The Abstractions NuGet declares its own `Microsoft.WindowsAppSDK.WinUI`
   dependency and TFM rules.** External consumers do **not** inherit this repo's
   `Directory.Build.targets` injection rule, so the package's `.nuspec`/csproj must
@@ -441,6 +532,18 @@ change, not a rename.
 > Reactor core (tests, devtools) — *not* a true external library. So one generated
 > code path already fails the "public surface is sufficient" bar today; the §6.1
 > read-side-primitive work fixes it as a side effect.
+>
+> **Verified against source (2026-07-16).** The emit is literal — `WrapperGenerator.cs:1497`
+> writes `if (global::Microsoft.UI.Reactor.Core.ChangeEchoSuppressor.ShouldSuppress(__c)) return;`
+> and `ChangeEchoSuppressor` is `internal static` (`ChangeEchoSuppressor.cs:49`). The
+> IVT grants (`Reactor.csproj`) go only to `Reactor.Tests`, `Reactor.AppTests.Host`,
+> `Reactor.Fuzz`, `Reactor.Markdown.TestRenderer`, `Microsoft.UI.Reactor.Devtools`,
+> `PerfBench.*` — **not** `tests/external_proof`. So `tests/external_proof/Reactor.External.TestControl`
+> is the exact Phase-1 gate: add a **deferred** `[WrapControlled]` prop there and it
+> fails to compile *today*, proving the gap; the public read-side primitive (Q2/Q11)
+> is what makes it pass. Note the **non-deferred** `.Controlled` path is already clean
+> — echo suppression is encapsulated in the public descriptor entry
+> (`WrapperGenerator.cs:1584`, no internal reference).
 
 ### §6.3 Three candidate shapes (evaluate, then decide)
 
@@ -779,25 +882,34 @@ These are the decision surface for @azchohfi. Each states a recommendation but i
 | Q9 | **Runtime-seam design (§5.3).** What is the minimal interface Abstractions declares and core's `Reconciler` implements (child mount/reconcile, `ApplySetters`, tag get/set, detach, echo-suppress read, lifecycle-add, assembly-register)? Should `MountContext`/`UpdateContext` expose *it* instead of the concrete `Reconciler`? | Design a single `IReactorRuntime` (working name) seam; contexts expose the seam, not `Reconciler`. The load-bearing Phase-1 deliverable. |
 | Q10 | **Element carve-out (§5.1).** `Element` has an implicit `string → Factories.TextBlock` conversion and `FuncElement`/`MemoElement` depend on `RenderContext`. Which Element surface is the pure primitive that moves, and which convenience stays in core? | Move the pure `Element` primitive + handler/descriptor contract; keep `Factories`, `RenderContext`, `FuncElement`/`MemoElement`, and the implicit-conversion sugar in core. |
 | Q11 | **Deferred-controlled in Abstractions-only.** Generated deferred-controlled wrappers read the internal `ShouldSuppress`, so today they only compile under `InternalsVisibleTo`. Expose a public read-side primitive, route through `.Controlled`, or forbid the pattern in Abstractions-only libraries? | Expose a public read-side echo-suppress check on the seam (ties to Q2); `.Controlled` remains the higher-level path. |
+| Q12 | **`string → Element` implicit operator (§5.1).** It must be declared on `Element` but its body needs a core built-in (`TextBlockElement`) → Abstractions↔core cycle if `Element` moves. Drop it (source-breaks `VStack("hi")`-style DSL), or relocate the string convenience to core container factories? | Drop the operator; add `string`-accepting convenience to the core container factories; document as a one-time DSL migration. Confirm blast radius before Phase 1. |
+| Q13 | **Adapter materialization mechanism (§5.2).** Given `TControl` lives only in the `Register<E,C>` closure and `MakeGenericType` is forbidden, do we (1) move `IV1HandlerEntry`+adapters to Abstractions re-typed against the seam, or (2) keep adapters in core behind a generic `IReactorRuntime.CreateEntry<E,C>` factory invoked from the `Register` frame? | Option 2 — keeps the heavy reconciler-coupled adapter logic in core; only a type-erased `Func<object>` + one generic interface method cross the boundary. |
 
 ## §13 Phasing
 
 - **Phase 1 — Abstractions carve-out + runtime seam (the load-bearing phase).**
   This is a *decoupling design task, not a file move.* Create
   `Microsoft.UI.Reactor.Abstractions` and:
-  - Design the §5.3 runtime seam (Q9) — the minimal interface core's `Reconciler`
-    implements — and make `MountContext`/`UpdateContext` expose it instead of the
-    concrete `Reconciler`.
+  - Design the §5.3 runtime seam (Q9) — the small, enumerated interface (see the
+    §5.3 table) core's `Reconciler` implements — and make `MountContext`/
+    `UpdateContext`/`UnmountContext` **and `ReactorBinding<TElement>`** hold the seam
+    instead of the concrete `Reconciler`.
   - Re-point the wrapper generator's emit (§6.1) at that seam + public primitives;
     expose the public read-side echo-suppress check (Q2/Q11) so the deferred-controlled
     path compiles without `InternalsVisibleTo`.
   - Carve out the pure `Element` primitive + handler/descriptor/`PropEntry` contract
-    (Q10), leaving `Factories`/`RenderContext`/`FuncElement`/`MemoElement` in core.
-  - Split `ControlRegistry` into a neutral stored-registration shape (Abstractions)
-    vs. core's `V1HandlerAdapter` dispatch (§5.2), materialized after `TryResolve`.
-  - Gate: `tests/external_proof` compiles + registers against Abstractions only
-    (with no `InternalsVisibleTo` grant); the generator's full emitted closure
-    resolves against Abstractions; the AOT-proof harness stays green.
+    (Q10), leaving `Factories`/`RenderContext`/`FuncElement`/`MemoElement` in core;
+    resolve the `string → Element` implicit-operator cycle (Q12).
+  - Split `ControlRegistry` so the public `Register` surface + a type-erased
+    `Func<object>` store live in Abstractions while the reconciler-coupled adapter is
+    produced *inside* the generic `Register<E,C>` frame via the core factory seam
+    (§5.2 / Q13) — **not** rebuilt post-`TryResolve` (that would need the forbidden
+    `MakeGenericType`).
+  - Gate: `tests/external_proof/Reactor.External.TestControl` compiles + registers
+    against Abstractions only (it has **no** `InternalsVisibleTo` grant), **including
+    a deferred `[WrapControlled]` prop** (the exact case that fails to compile today,
+    per §6.2); the generator's full emitted closure resolves against Abstractions; the
+    AOT-proof harness (`tests/aot_trim_proof`) stays green.
 - **Phase 2 — `UseLibrary` + diagnostics.** Add `IReactorLibrary` /
   `IReactorLibraryBuilder` / `UseLibrary`; reframe `RegisterAllBuiltIns` as the
   built-in library; add the `[ReactorLibrary]` marker + enriched runtime throw +
