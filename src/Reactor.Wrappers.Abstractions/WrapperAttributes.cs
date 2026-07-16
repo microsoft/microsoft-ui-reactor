@@ -99,7 +99,7 @@ namespace Microsoft.UI.Reactor.Wrappers
         /// default synchronous value-diff <c>Controlled</c>. Required for controlled values whose change event is NOT a
         /// synchronous, exact-comparable round-trip — deferred / coercing string boxes such as
         /// <c>PasswordBox.Password</c>, <c>AutoSuggestBox.Text</c>, <c>RichEditBox</c>. The generated trampoline gates on
-        /// <c>ChangeEchoSuppressor.ShouldSuppress</c> and re-reads the control value. Single <see cref="ChangedEvent"/> only.</summary>
+        /// the public <c>ReactorBinding.ShouldSuppressEcho</c> primitive and re-reads the control value. Single <see cref="ChangedEvent"/> only.</summary>
         public bool Deferred { get; set; }
     }
 

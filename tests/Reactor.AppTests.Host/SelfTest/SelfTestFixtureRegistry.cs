@@ -1413,6 +1413,12 @@ internal static class SelfTestFixtureRegistry
         "Spec047ExternalProof_Marquee_PoolRent",
         "Spec047ExternalProof_Marquee_PoolResetContract",
 
+        // Spec 062 §14 — stable-ABI proof: an EXTERNAL (no-IVT) source-generated
+        // [WrapControlled(Deferred = true)] wrapper round-trips its two-way value
+        // through the suppress-counter echo channel via the PUBLIC
+        // ReactorBinding.ShouldSuppressEcho primitive.
+        "Spec062DeferredControlled_Echo",
+
         // Spec 058 §14 — source-generated wrapper parity smoke test.
         "ToggleSwitchWrapper_Parity",
         "SliderWrapper_Parity",
@@ -2905,6 +2911,9 @@ internal static class SelfTestFixtureRegistry
         "Spec047ExternalProof_Marquee_SetterChain" => new Spec047ExternalProofFixtures.MarqueeSetterChain(harness),
         "Spec047ExternalProof_Marquee_PoolRent" => new Spec047ExternalProofFixtures.MarqueePoolRentReturn(harness),
         "Spec047ExternalProof_Marquee_PoolResetContract" => new Spec047ExternalProofFixtures.MarqueePoolResetContract(harness),
+
+        // Spec 062 §14 — external no-IVT generated deferred-controlled echo proof.
+        "Spec062DeferredControlled_Echo" => new Spec062DeferredControlledFixtures.Echo(harness),
 
         // Spec 058 §14 — source-generated wrapper parity smoke test.
         "ToggleSwitchWrapper_Parity" => new ToggleSwitchWrapperParityFixture.Execution(harness),

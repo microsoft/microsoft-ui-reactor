@@ -45,4 +45,28 @@ public static class ReactorBinding
         ChangeEchoSuppressor.BeginSuppress(target);
         mutate(target);
     }
+
+    /// <summary>
+    /// Read-side counterpart of <see cref="WriteSuppressed(UIElement, Action)"/>.
+    /// Call as the first line of a change-event handler: returns <c>true</c> — and
+    /// consumes one suppression token — when the current fire is the
+    /// engine-synthesized echo of a prior <c>WriteSuppressed</c> write against
+    /// <paramref name="target"/>, so the handler should return early before
+    /// invoking the user's callback. Also honors the non-consuming
+    /// <c>ApplySetters</c> suppression scope. Returns <c>false</c> for a genuine
+    /// user interaction (no outstanding token/scope), for a target that is not a
+    /// <see cref="FrameworkElement"/>, or when the target carries no Reactor state.
+    ///
+    /// <para>This is the public primitive the wrapper generator emits for a
+    /// <c>[WrapControlled(Deferred = true)]</c> prop, so a deferred-controlled
+    /// generated wrapper compiles against Reactor's public surface alone (no
+    /// <c>InternalsVisibleTo</c>) — the read-side gap called out in spec 062 §14.
+    /// It maps to the counter/scope channel (paired with <c>WriteSuppressed</c>),
+    /// not the synchronous value-diff channel.</para>
+    /// </summary>
+    public static bool ShouldSuppressEcho(UIElement target)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        return ChangeEchoSuppressor.ShouldSuppress(target);
+    }
 }
