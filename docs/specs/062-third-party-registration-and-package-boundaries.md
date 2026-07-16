@@ -76,6 +76,7 @@ decision — [§12 Open questions](#12-open-questions) is the decision surface.
 - [§11 Migration — dogfooding with charting / data-grid / docking](#11-migration--dogfooding-with-charting--data-grid--docking)
 - [§12 Open questions](#12-open-questions)
 - [§13 Phasing](#13-phasing)
+- [§14 Cross-version library interop — stable ABI](#14-cross-version-library-interop--stable-abi)
 
 ---
 
@@ -144,6 +145,16 @@ non-starter.
 recipe (spec 047, `tests/external_proof`) and the `[GenerateReactorWrapper]`
 generator (spec 058) must keep working against the new, smaller dependency —
 ideally with a *smaller* reference footprint, never a larger one.
+
+**R7 — Cross-version library interop (stable ABI).** A control library built
+against `Reactor.Abstractions` version *N* must load and run, **without
+recompilation**, against a host that supplies a *different* core runtime version
+*M* ≥ *N* — the roll-forward/unification model of `Microsoft.Extensions.*.Abstractions`.
+Concretely: an app that transitively pulls `LibA` (built against Reactor *N*) and
+`LibB` (built against Reactor *M*) unifies to a **single** runtime, and both
+libraries' controls must mount, update, and echo correctly against it. This makes
+the Abstractions surface a **versioned, additive-only contract**, not just a
+smaller reference — see [§14](#14-cross-version-library-interop--stable-abi).
 
 ## §3 Current state — what 047 / 048 / 058 already deliver
 
@@ -884,6 +895,8 @@ These are the decision surface for @azchohfi. Each states a recommendation but i
 | Q11 | **Deferred-controlled in Abstractions-only.** Generated deferred-controlled wrappers read the internal `ShouldSuppress`, so today they only compile under `InternalsVisibleTo`. Expose a public read-side primitive, route through `.Controlled`, or forbid the pattern in Abstractions-only libraries? | Expose a public read-side echo-suppress check on the seam (ties to Q2); `.Controlled` remains the higher-level path. |
 | Q12 | **`string → Element` implicit operator (§5.1).** It must be declared on `Element` but its body needs a core built-in (`TextBlockElement`) → Abstractions↔core cycle if `Element` moves. Drop it (source-breaks `VStack("hi")`-style DSL), or relocate the string convenience to core container factories? | Drop the operator; add `string`-accepting convenience to the core container factories; document as a one-time DSL migration. Confirm blast radius before Phase 1. |
 | Q13 | **Adapter materialization mechanism (§5.2).** Given `TControl` lives only in the `Register<E,C>` closure and `MakeGenericType` is forbidden, do we (1) move `IV1HandlerEntry`+adapters to Abstractions re-typed against the seam, or (2) keep adapters in core behind a generic `IReactorRuntime.CreateEntry<E,C>` factory invoked from the `Register` frame? | Option 2 — keeps the heavy reconciler-coupled adapter logic in core; only a type-erased `Func<object>` + one generic interface method cross the boundary. |
+| Q14 | **Element/record ABI evolution policy (§14).** What is the committed compatibility contract for the base `Element` record and the descriptor authoring shapes once they are the ABI — additive-only members, no positional-param changes, DIM-only seam growth? Do we gate it with a public-API baseline test (`reactor.api.txt`-style) scoped to the Abstractions assembly? | Yes: freeze the Abstractions surface behind an API-baseline gate; additive-only; new seam behavior via default-interface-methods. |
+| Q15 | **WinUI-version compatibility bound (§14).** Since `Reactor.Abstractions` references the Windows App SDK, the R7 roll-forward guarantee is bounded by WinUI's own ABI across the versions in play. Do we pin a documented minimum Windows App SDK per Abstractions version, and test the interop harness across the supported WinUI range? | Document a per-Abstractions-version minimum WinUI; the interop-proof harness pins one WinUI; a broader matrix is CI follow-up. |
 
 ## §13 Phasing
 
@@ -922,3 +935,93 @@ These are the decision surface for @azchohfi. Each states a recommendation but i
 
 Phases 1–2 are the core of issue #163; Phase 3 is the dogfooding proof; Phase 4 is
 the convenience layer and can slip without blocking the rest.
+
+## §14 Cross-version library interop — stable ABI
+
+**Driver (R7).** The strongest reason to carve out `Reactor.Abstractions` is not
+trimming — it is letting a Reactor control library be *consumed by another Reactor
+library* without version-skew runtime failures. Today a control library
+`ProjectReference`s the whole of core `Reactor.dll` (see
+`tests/external_proof/Reactor.External.TestControl.csproj` line 55). So `LibA`
+binds to core *N*'s types and `LibB` to core *M*'s; when an app pulls both, NuGet
+unifies to **one** runtime, and whichever library did not match the surviving
+version can fail to bind at load time.
+
+**Scope: roll-forward unification, not side-by-side.** We target the
+`Microsoft.Extensions.*.Abstractions` model: one runtime per process, chosen by
+NuGet's highest-wins, and every library binary-compatible with it. True
+side-by-side (two core runtimes in separate `AssemblyLoadContext`s) is **out of
+scope** — `Element` records from one context are a different `Type` than the
+other's, so a shared reconciler cannot process both. Roll-forward is the tractable,
+common case and is what the split below enables.
+
+**Why this is feasible.** .NET assembly binding in the default load context is by
+type/member signature, not by exact strong-name version, and NuGet unifies to a
+single assembly. So *old generated code binds to a newer runtime* as long as every
+symbol it references is unchanged. The guarantee therefore reduces to a single
+discipline: **everything a library's compiled output references must live in
+`Reactor.Abstractions`, and that surface must evolve additive-only.**
+
+**The frozen ABI surface.** Grounded against the generator emit
+(`WrapperGenerator.cs`) and the reconciler's reads of a foreign element, the exact
+closure a control library binds to is enumerable:
+
+| ABI member (emitted/referenced) | Source today | Stability action |
+|---|---|---|
+| `Element` base + `Key`, `Modifiers` (`ElementModifiers`) | core `Element.cs` (reconciler reads `Reconciler.cs:597,609`) | move to Abstractions; freeze base members |
+| `Optional<T>` | core (`WrapperGenerator.cs:727,1140,1628`) | move to Abstractions |
+| `ControlDescriptor<E,C>` / `DescriptorHandler<E,C>` | core V1Protocol (`:1382,1383`) | move authoring shapes to Abstractions |
+| child strategies `SingleContent`/`Panel`/`ItemsHost`/element-slots | core V1Protocol (`:1384–1386,1426–1438`) | move to Abstractions |
+| `ControlRegistry.Register<E,C>` + stored entry (`IV1HandlerEntry`) | core (`:1717`) | public `Register` in Abstractions; adapter built in-frame (Q13) |
+| runtime seam: `GetElementTag`/`SetElementTag`/`DetachReactorState`/`ApplySetters` | core `Reconciler` **static** (`:1483,1498`, §5.3) | expose as Abstractions seam; **stop referencing concrete `Reconciler`** |
+| read-side echo check `ShouldSuppress` | core `ChangeEchoSuppressor` **internal** (`:1497`) | **public read-side primitive** (Q2/Q11) — hardest blocker |
+| `MountContext`/`UpdateContext`/`UnmountContext` + `ReactorBinding<T>` | core V1Protocol (§5.1/§5.3) | move to Abstractions over the seam |
+| `ElementExtensions` lifecycle add | core (`:1779`) | move/relocate to Abstractions |
+| `ReactorApp.TryRegisterControlAssembly` | core **Hosting** namespace (`:1716`) | relocate to an Abstractions/core seam — a control lib must not bind Hosting |
+
+**Two current violations** make cross-version binding impossible *today*, and both
+are already tracked: (1) the deferred-controlled trampoline emits the **internal**
+`ChangeEchoSuppressor.ShouldSuppress` (only compiles under `InternalsVisibleTo`;
+Q11); (2) generated code references the **concrete `Reconciler`** and
+Hosting's `ReactorApp`, so a library binds core directly rather than a stable
+subset. Closing both is the load-bearing Phase-1 work.
+
+**WinUI-coupling caveat.** `Reactor.Abstractions` is **not** pure-managed. The
+authoring shapes are generic over the control type (`ControlDescriptor<E, C> where
+C : FrameworkElement`), contexts hand out `FrameworkElement`, and the generator
+emits `Microsoft.UI.Xaml.FrameworkElement`/`UIElement` (`WrapperGenerator.cs:1376,
+1483`). So Abstractions references the Windows App SDK, and the R7 guarantee is
+bounded by **WinUI's own ABI stability** across the versions in play: it is "one
+Reactor runtime + one compatible Windows App SDK," not "any WinUI." This is the
+same constraint apps already accept (a process has one Windows App SDK), so it is a
+statement of the boundary, not a new limitation. (Contrast the existing
+`Reactor.Wrappers.Abstractions`, which holds only the compile-time authoring
+*attributes* and is genuinely WinUI-free — a different assembly from the runtime
+`Reactor.Abstractions` proposed here.)
+
+**Evolution discipline.**
+
+- *Additive-only.* Never remove or change the signature of an ABI member the
+  generator or a hand-authored handler could bind to. New seam behavior arrives as
+  new members (default-interface-methods on the seam interface; new static
+  overloads), never as edits to existing ones.
+- *Records stay evolvable.* The reconciler dispatches by element `Type` → registered
+  entry and reads only base `Element` members — it never reconstructs a derived
+  record positionally across the boundary. So a library's own element record shape
+  is private; only additive changes to the *base* `Element` are ABI-visible.
+- *Independent versioning.* `Reactor.Abstractions` gets its own slow SemVer; the
+  `Reactor.Wrappers` generator package version tracks the Abstractions surface it
+  emits against; core runtime churns freely as long as it keeps implementing the
+  Abstractions contract backward-compatibly. This is exactly the
+  `Microsoft.Extensions.*.Abstractions` playbook.
+
+**Regression gate — a real two-version interop harness.** Analogous to the existing
+AOT-proof harness, R7 needs an executable proof: build
+`Reactor.External.TestControl` against `Reactor.Abstractions` *N*, then load the
+**compiled DLL** (not a project reference) into a host running core *M* and assert
+mount / update / echo all succeed through the public surface only. A binary-drop
+test (reference the built assembly, not source) is the closest in-repo proxy for
+the "no recompilation" clause; a full two-NuGet-version matrix can follow in CI.
+
+New open questions **Q14** (Element/record ABI evolution policy) and **Q15**
+(WinUI-version compatibility bound) are added to §12.
