@@ -1,20 +1,24 @@
-# Fast, headless unit + integration tests for .github/scripts/apply-cpm-upgrades.ps1
-# — the surgical Central-Package-Management version editor behind the
-# windows-nuget-updates workflow. Pure PowerShell (no build, no dotnet), so it runs
-# on a cheap Linux runner in seconds and guards the SemVer comparison + tag-rewrite
-# logic on every change under the script or its tests. Exits non-zero on any failed
-# assertion.
+# Fast, headless unit + integration tests for the PowerShell helpers behind the
+# windows-nuget-updates workflow:
+#   - .github/scripts/apply-cpm-upgrades.ps1   (the surgical CPM version editor)
+#   - .github/scripts/close-stale-nuget-issue.ps1 (the tracking-issue reconciler)
+# Pure PowerShell (no build, no dotnet), so it runs on a cheap Linux runner in
+# seconds and guards the SemVer comparison + tag-rewrite logic and the find-or-close
+# reconcile logic on every change under those scripts or their tests. Exits non-zero
+# on any failed assertion.
 name: NuGet updates script tests
 
 on:
   push:
     paths:
       - '.github/scripts/apply-cpm-upgrades.ps1'
+      - '.github/scripts/close-stale-nuget-issue.ps1'
       - 'tests/nuget_updates/ci/**'
       - '.github/workflows/nuget-updates-lib-tests.yml'
   pull_request:
     paths:
       - '.github/scripts/apply-cpm-upgrades.ps1'
+      - '.github/scripts/close-stale-nuget-issue.ps1'
       - 'tests/nuget_updates/ci/**'
       - '.github/workflows/nuget-updates-lib-tests.yml'
 
@@ -32,7 +36,11 @@ jobs:
           persist-credentials: false
 
       # pwsh (PowerShell 7) is preinstalled on the GitHub-hosted Ubuntu runner.
-      # The test script exits non-zero on any failed assertion.
+      # Each test script exits non-zero on any failed assertion.
       - name: Run apply-cpm-upgrades tests
         shell: pwsh
         run: ./tests/nuget_updates/ci/ApplyCpmUpgrades.Tests.ps1
+
+      - name: Run close-stale-nuget-issue tests
+        shell: pwsh
+        run: ./tests/nuget_updates/ci/CloseStaleNuGetIssue.Tests.ps1
