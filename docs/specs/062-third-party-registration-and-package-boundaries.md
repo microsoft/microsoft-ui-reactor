@@ -445,11 +445,6 @@ intact either way.
   `Directory.Build.targets` injection rule, so the package's `.nuspec`/csproj must
   carry the `.WinUI` sub-package reference and the `net10.0-windows…` TFM explicitly
   (mirroring how `Reactor.Advanced` is packaged).
-- **The Abstractions NuGet declares its own `Microsoft.WindowsAppSDK.WinUI`
-  dependency and TFM rules.** External consumers do **not** inherit this repo's
-  `Directory.Build.targets` injection rule, so the package's `.nuspec`/csproj must
-  carry the `.WinUI` sub-package reference and the `net10.0-windows…` TFM explicitly
-  (mirroring how `Reactor.Advanced` is packaged).
 
 ## §6 Source generators, authoring attributes, and the Abstractions boundary
 
