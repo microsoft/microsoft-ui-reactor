@@ -1491,12 +1491,17 @@ public sealed class WrapperGenerator : IIncrementalGenerator
             // echoed change event is dropped), then re-read the live control value
             // and fire the user callback. Using the public primitive (not the
             // internal ChangeEchoSuppressor) keeps the emitted code compilable
-            // against Reactor's public surface alone — spec 062 §14.
+            // against Reactor's public surface alone — spec 062 §14. The trampoline
+            // null-guards the sender before the strict public call so a control that
+            // raises its change event with a null sender stays a no-op, preserving
+            // the pre-existing tolerant behavior of the internal read-side check
+            // (which returned false for null / non-FrameworkElement senders).
             foreach (var p in deferredProps)
             {
                 sb.AppendLine($"    private static readonly {p.ControlledDelegate} __{p.Name}ControlledTrampoline = static (s, _) =>");
                 sb.AppendLine("    {");
                 sb.AppendLine($"        var __c = ({controlFqn})s!;");
+                sb.AppendLine("        if (__c is null) return;");
                 sb.AppendLine("        if (global::Microsoft.UI.Reactor.Core.ReactorBinding.ShouldSuppressEcho(__c)) return;");
                 sb.AppendLine($"        ({Reconciler}.GetElementTag(__c) as {elementName})?.On{p.Name}Changed?.Invoke(__c.{p.ControlProp});");
                 sb.AppendLine("    };");

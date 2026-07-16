@@ -38,6 +38,13 @@ internal static class Spec062DeferredControlledFixtures
             int fireCount = 0;
             var host = H.CreateHost();
 
+            // No-Reactor-state path: a fresh, unmounted control carries no attached
+            // ReactorState and no pending suppress token, so the public read-side
+            // primitive must report false. This pins the false-return branch that the
+            // mounted round-trip below only exercises implicitly.
+            H.Check("Spec062_Deferred_FreshControlNotSuppressed",
+                ReactorBinding.ShouldSuppressEcho(new EchoTextBox()) == false);
+
             host.Mount(ctx =>
             {
                 var (text, setText) = ctx.UseState("a");

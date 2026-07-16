@@ -1,3 +1,6 @@
+using System.Linq;
+using System.Reflection;
+using System.Runtime.CompilerServices;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
 using Xunit;
@@ -55,5 +58,15 @@ public class ExternalEchoBoxWrapperSelftests
         // proof is vacuous. (typeof does not construct a WinUI object.)
         var asm = typeof(ExternalEchoTextBoxElement).Assembly.GetName().Name;
         Assert.Equal("Reactor.External.TestControl", asm);
+
+        // And pin the ABI contract itself: Reactor.dll must NOT grant this assembly
+        // InternalsVisibleTo. Without this guard the compile-proof could silently go
+        // vacuous — a future IVT grant would let the generator emit internal symbols
+        // again yet everything would still build green. ReactorBinding anchors the
+        // Reactor core assembly.
+        var reactorIvtTargets = typeof(ReactorBinding).Assembly
+            .GetCustomAttributes<InternalsVisibleToAttribute>()
+            .Select(a => a.AssemblyName.Split(',')[0].Trim());
+        Assert.DoesNotContain("Reactor.External.TestControl", reactorIvtTargets);
     }
 }
