@@ -98,6 +98,46 @@ jobs:
           COMMENT_ID: ${{ github.event.comment.id }}
         run: gh api "repos/$env:GH_REPO/issues/comments/$env:COMMENT_ID/reactions" -f content=eyes
 
+      # Capture the PR head SHA up front — as the trigger fires, before the minutes
+      # of .NET setup + PerfLib below — and pin everything downstream to it. The
+      # commit that actually gets built and run is therefore the one that existed
+      # when the trigger fired; "Resolve PR" re-verifies the fetched head still
+      # matches this SHA before building. For comment triggers, a head that
+      # post-dates the comment (i.e. the branch moved on after the trigger) is
+      # rejected, so re-issue `/perf` to benchmark the newer head.
+      - name: Pin PR head SHA
+        id: pin
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_PR: ${{ github.event.inputs.pr_number }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_CREATED_AT: ${{ github.event.comment.created_at }}
+        run: |
+          $pr = if ($env:EVENT_NAME -eq 'workflow_dispatch') { $env:DISPATCH_PR } else { $env:ISSUE_NUMBER }
+          if ($pr -notmatch '^\d+$') { throw "Could not resolve a valid PR number (got '$pr')." }
+          $headSha = (gh api "repos/$env:GH_REPO/pulls/$pr" --jq '.head.sha').Trim()
+          if ($headSha -notmatch '^[0-9a-f]{40}$') { throw "Could not resolve the PR head SHA (got '$headSha')." }
+          Write-Host "PR #$pr pinned at head $headSha"
+          # Comment trigger: only the trigger comment is authorized, so a head that
+          # was pushed after that comment was not what the author signed off on.
+          # Reject it (best-effort on the commit-date lookup; the pinned-SHA
+          # re-verification in "Resolve PR" is the hard guarantee either way).
+          if ($env:EVENT_NAME -eq 'issue_comment' -and $env:COMMENT_CREATED_AT) {
+            $commitDate = $null
+            try { $commitDate = (gh api "repos/$env:GH_REPO/commits/$headSha" --jq '.commit.committer.date').Trim() } catch { }
+            if ($commitDate) {
+              if ([datetimeoffset]::Parse($commitDate) -gt [datetimeoffset]::Parse($env:COMMENT_CREATED_AT)) {
+                throw "PR head $headSha (committed $commitDate) is newer than the /perf comment ($env:COMMENT_CREATED_AT); the branch advanced after the trigger. Re-issue /perf to benchmark the current head."
+              }
+            } else {
+              Write-Warning "Could not read the head commit date; relying on the pinned-SHA re-verification in 'Resolve PR'."
+            }
+          }
+          "pr_number=$pr"     | Out-File $env:GITHUB_OUTPUT -Append
+          "head_sha=$headSha" | Out-File $env:GITHUB_OUTPUT -Append
+
       # Trusted checkout: the default branch carries the perf scripts + the main
       # baseline. fetch-depth: 0 so we can resolve origin/main and PR head SHAs.
       - name: Checkout default branch (trusted scripts + main baseline)
@@ -119,35 +159,40 @@ jobs:
         shell: pwsh
         run: ./tests/stress_perf/ci/PerfLib.Tests.ps1
 
-      # Resolve the PR number + head SHA. PR head is fetched via refs/pull/N/head
-      # so forks work too. The PR head lives in its own worktree; the workspace
-      # root stays on the trusted main baseline. The PR number is validated to be
-      # digits-only (it reaches a shell) and event context is passed via env, so
-      # a crafted PR number / comment can't be injected into the script body.
+      # Resolve the PR worktree from the SHA pinned at trigger time. PR head is
+      # fetched via refs/pull/N/head so forks work too; the fetched head is then
+      # verified to still equal the pinned SHA (a branch that was force-pushed
+      # after the trigger is rejected here rather than silently built). The PR
+      # head lives in its own worktree; the workspace root stays on the trusted
+      # main baseline.
       - name: Resolve PR + create PR worktree
         id: resolve
         shell: pwsh
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          DISPATCH_PR: ${{ github.event.inputs.pr_number }}
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          PR_NUMBER: ${{ steps.pin.outputs.pr_number }}
+          PINNED_SHA: ${{ steps.pin.outputs.head_sha }}
         run: |
-          $pr = if ($env:EVENT_NAME -eq 'workflow_dispatch') { $env:DISPATCH_PR } else { $env:ISSUE_NUMBER }
+          $pr = $env:PR_NUMBER
+          $pinned = $env:PINNED_SHA
           if ($pr -notmatch '^\d+$') { throw "Could not resolve a valid PR number (got '$pr')." }
-          Write-Host "PR #$pr"
+          if ($pinned -notmatch '^[0-9a-f]{40}$') { throw "Missing pinned PR head SHA (got '$pinned')." }
+          Write-Host "PR #$pr pinned head $pinned"
           # Public repo: the PR head (incl. forks) fetches anonymously, so this
           # step needs no token — keeping it token-free shrinks the attack surface.
           git fetch --no-tags --force origin "pull/$pr/head" 2>&1 | Out-Host
-          $headSha = (git rev-parse FETCH_HEAD).Trim()
+          $fetched = (git rev-parse FETCH_HEAD).Trim()
+          if ($fetched -cne $pinned) {
+            throw "PR head changed after /perf was triggered (pinned $pinned, fetched $fetched). Re-issue /perf to benchmark the current head."
+          }
           $baseSha = (git rev-parse origin/main).Trim()
           $prTree  = Join-Path $env:RUNNER_TEMP 'pr-tree'
           if (Test-Path $prTree) { git worktree remove --force $prTree 2>&1 | Out-Host }
-          git worktree add --force --detach $prTree $headSha 2>&1 | Out-Host
+          git worktree add --force --detach $prTree $pinned 2>&1 | Out-Host
           "pr_number=$pr"     | Out-File $env:GITHUB_OUTPUT -Append
-          "head_sha=$headSha" | Out-File $env:GITHUB_OUTPUT -Append
+          "head_sha=$pinned"  | Out-File $env:GITHUB_OUTPUT -Append
           "base_sha=$baseSha" | Out-File $env:GITHUB_OUTPUT -Append
           "pr_tree=$prTree"   | Out-File $env:GITHUB_OUTPUT -Append
-          Write-Host "head=$headSha base=$baseSha tree=$prTree"
+          Write-Host "head=$pinned base=$baseSha tree=$prTree"
 
       # Clone the pinned windows-rs and flip its perf harness to self-contained so
       # the Rust column needs no machine-wide WinAppSDK runtime (mirrors the C#
@@ -205,8 +250,9 @@ jobs:
 
       # Build (self-contained, so no machine-wide WinApp runtime install — same
       # hermetic trick the WinUI selftests job uses) + run interleaved + render
-      # the sticky comment to perf-out/comment.md. continue-on-error so a flaky
-      # run still posts a comment (with a NOTE) instead of failing silently.
+      # the sticky comment to perf-out/comment.md. continue-on-error so a failed
+      # run still reaches the comment step (which posts a neutral fallback) instead
+      # of failing silently; only a successful run publishes the rendered result.
       # All context flows in via env (never interpolated into the script body).
       - name: Run perf benchmark (PR vs main)
         id: bench
@@ -241,7 +287,11 @@ jobs:
           retention-days: 14
 
       # Post or update-in-place the sticky comment (hidden marker lookup). Always
-      # runs; synthesizes a failure comment if the benchmark produced none.
+      # runs. Publishes perf-out/comment.md only when the benchmark step SUCCEEDED
+      # — that file is written by the trusted Run-PerfBenchmark.ps1 as the final
+      # action of a clean run. On any non-success (build/harness error, or a run
+      # that exited non-zero after leaving a comment.md on disk) it ignores what
+      # is on disk and posts a neutral, workflow-generated fallback instead.
       - name: Post / update sticky comment
         if: always()
         shell: pwsh
@@ -250,14 +300,15 @@ jobs:
           PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
           WORKSPACE: ${{ github.workspace }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          BENCH_OUTCOME: ${{ steps.bench.outcome }}
         run: |
           $marker = '<!-- reactor-perf-compare -->'
           $pr = $env:PR_NUMBER
           if (-not $pr) { Write-Host 'No PR number; nothing to comment on.'; exit 0 }
           $file = Join-Path $env:WORKSPACE 'perf-out/comment.md'
-          if (-not (Test-Path $file)) {
+          if ($env:BENCH_OUTCOME -ne 'success' -or -not (Test-Path $file)) {
             New-Item -ItemType Directory -Force -Path (Split-Path $file) | Out-Null
-            $body = "$marker`n## ⚡ Reactor perf comparison`n`n> [!CAUTION]`n> The perf benchmark did not produce results (build or harness launch failed). See the [run log]($env:RUN_URL) and the ``perf-logs`` artifact.`n"
+            $body = "$marker`n## ⚡ Reactor perf comparison`n`n> [!CAUTION]`n> The perf benchmark did not produce a result to publish (build or harness launch failed, or the run did not complete). See the [run log]($env:RUN_URL) and the ``perf-logs`` artifact.`n"
             Set-Content -LiteralPath $file -Value $body -Encoding UTF8
           }
           $existing = gh api "repos/$env:GH_REPO/issues/$pr/comments" --paginate --jq "[.[] | select(.body | startswith(""$marker""))][0].id"
