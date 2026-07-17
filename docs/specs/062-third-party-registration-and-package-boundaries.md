@@ -287,11 +287,32 @@ element, the bound surface is enumerable and, as of this change, entirely public
 | `ElementExtensions.OnMountAdd` / `OnUnmountAdd` | `Elements` |
 | `ReactorApp.TryRegisterControlAssembly` | `Hosting` |
 
-**What is *not* part of the binary freeze:** the app-facing DSL — the ~200 factory
-methods, ~600 fluent modifiers, and the hooks — is bound by the **recompiling app**,
-not by a shipped wrapper binary. It carries a softer, source-level add-only
-compatibility expectation (don't gratuitously break `Text("x").Bold()`), but it is
-not part of the versioned binary ABI a wrapper rolls forward against.
+The freeze is **transitive**: every type that appears in a frozen member's signature — its
+generic arguments and constraints, base/interface contracts, and the `Element`-boundary
+types a wrapper hands back or receives (`Element`, `Optional<T>`, the `ChildrenStrategy`
+records) — is part of the ABI closure and is preserved along with the member. A frozen
+signature is only as stable as the transitive types it names.
+
+**What is *not* part of the binary freeze — and the scope of the guarantee.** The
+roll-forward ABI guarantee is scoped to **control-wrapper / handler binaries**: a shipped
+wrapper's metadata references only the frozen seam above, so it rolls forward across a
+same-major runtime (§6.3 R7). The app-facing DSL — the ~200 factory methods, ~600 fluent
+modifiers, and the hooks — is deliberately **out** of that binary freeze: it is far too
+large and churny to pin as ABI, and freezing it would forfeit evolving overloads and adding
+parameters without a major bump. The DSL instead carries a *best-effort source*
+compatibility policy (don't gratuitously break `Text("x").Bold()`) — **not** a binary
+promise. Two consequences to state plainly:
+
+- **Source-compatible is not binary-compatible.** Adding an optional parameter or otherwise
+  changing an existing DSL signature is a source-level non-event but a **binary** break for
+  an already-compiled caller; adding a *new* overload is normally binary-additive yet can
+  still break *recompilation* through overload ambiguity or changed inference. "Source
+  add-only" is a weaker, different contract than the seam's binary freeze.
+- **A binary that binds the DSL is not covered.** Applications recompile, so they never hit
+  this. But a *compiled* Reactor component/library binary (§8) whose `Render()` calls
+  `Text()` / `.Bold()` / `UseState()` bakes hard references to the DSL, so it is **outside**
+  the roll-forward guarantee — it must recompile against a newer Reactor, exactly like an
+  app. The ABI band protects the wrapper seam, not arbitrary DSL consumers.
 
 ### §6.2 Governance — three pieces that do not exist yet
 
