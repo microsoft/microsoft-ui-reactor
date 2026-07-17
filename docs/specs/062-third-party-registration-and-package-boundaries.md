@@ -172,8 +172,9 @@ authoring ABI (§6), a leaner core with the heavy subsystems in `Reactor.Advance
 The core authoring types are structurally coupled to WinUI: `Element` and its
 subclasses reference `Microsoft.UI.Xaml`/`…Controls`/`…Media`, and
 `IElementHandler<TElement,TControl>` / `ControlDescriptor<TElement,TControl>`
-constrain `where TControl : UIElement` — a handler's whole purpose is to mount and
-patch a real WinUI control. So "define a custom element type" *inherently* names
+constrain `TControl` to a live WinUI control type (`IElementHandler` to `UIElement`,
+`ControlDescriptor` to `FrameworkElement, new()`) — a handler's whole purpose is to
+mount and patch a real WinUI control. So "define a custom element type" *inherently* names
 WinUI types; a wrapper transitively depends on WinUI no matter how Reactor is sliced.
 
 The smallest WinUI slice is the `Microsoft.WindowsAppSDK.WinUI` sub-package (Windows
@@ -260,7 +261,7 @@ element, the bound surface is enumerable and, as of this change, entirely public
 
 | Frozen ABI surface | Where |
 |---|---|
-| `Element` base + `Key` / `Modifiers` (`ElementModifiers` value types) | `Core/Element.cs` (reconciler reads only base members) |
+| `Element` base + `Key` / `Modifiers` (`ElementModifiers` records) | `Core/Element.cs` (reconciler reads only base members) |
 | `Optional<T>` | `Core` (emitted by generated init-props) |
 | `ControlDescriptor<E,C>` + its builder methods, including the hand-coding arms (`Imperative`, `HandCodedControlled`, `HandCodedEvent`) and the `ChildrenStrategy` taxonomy (`SingleContent` / `Panel` / `ItemsHost` / element-slots) | `Core/V1Protocol` |
 | `IElementHandler<E,C>` / `IDecoratorElementHandler<E>` / `DescriptorHandler<E,C>` | `Core/V1Protocol` |
@@ -423,7 +424,8 @@ public interface IReactorLibraryBuilder
 }
 ```
 
-**The app-facing call** folds into the existing `ReactorApp` startup surface:
+**The app-facing call** extends the `ReactorApp` startup surface (today
+`ReactorApp.Run(...)`) with a builder form:
 
 ```csharp
 ReactorApp.CreateBuilder()
