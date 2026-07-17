@@ -295,21 +295,36 @@ not part of the versioned binary ABI a wrapper rolls forward against.
 
 ### §6.2 Governance — three pieces that do not exist yet
 
-1. **A real API-compat gate.** Today `tests/Reactor.Tests/Tooling/ApiIndexGeneratorTests.Index_IsUpToDate`
-   only byte-compares the generated `reactor.api.txt` for *staleness* — regenerating
-   it makes the test pass, so it *blesses* breaking changes rather than blocking them.
-   Add an additive-only gate — `Microsoft.CodeAnalysis.PublicApiAnalyzers`
-   (`PublicAPI.Shipped.txt` / `.Unshipped.txt`) or `Microsoft.DotNet.ApiCompat`
-   against the last shipped `Reactor.dll` — scoped to the §6.1 seam, so removing or
-   changing a frozen member fails the build.
+Three complementary mechanisms, each a *different kind* of check: a build-time gate (1),
+a runtime test (2), and a load-time policy (3).
 
-2. **A binary-compat interop harness.** Additive signatures are necessary but not
-   sufficient — a wrapper depends on *behavior* (echo semantics, child reconcile,
-   registration timing, descriptor ordering). Analogous to the existing AOT-proof
-   harness, build `Reactor.External.TestControl` against an **older** Reactor, then
-   load the **compiled DLL** (a binary drop, not a project reference) into a host
-   running the HEAD runtime and assert mount / update / echo-suppress all succeed
-   through the public surface only. A two-NuGet-version matrix can follow in CI.
+1. **A real API-compat gate — a *build-time* check, not a test.** It runs during
+   compilation and fails the build before any test executes. Today
+   `tests/Reactor.Tests/Tooling/ApiIndexGeneratorTests.Index_IsUpToDate` *is* a test, and a
+   toothless one: it only byte-compares the generated `reactor.api.txt` for *staleness*, so
+   regenerating the file makes it green — it *blesses* breaking changes rather than blocking
+   them. Replace it with an additive-only gate scoped to the §6.1 seam:
+   - **`Microsoft.CodeAnalysis.PublicApiAnalyzers`** — a Roslyn analyzer over checked-in
+     `PublicAPI.Shipped.txt` (the frozen surface) + `PublicAPI.Unshipped.txt` (pending
+     adds). Removing or changing a shipped member raises `RS0017` at compile; adding public
+     API not listed raises `RS0016`, forcing a reviewable txt-file diff. Additive by
+     construction.
+   - **`Microsoft.DotNet.ApiCompat`** — diffs the just-built `Reactor.dll` against the
+     last-shipped baseline and fails on any binary-incompatible delta (the mechanism the
+     .NET runtime uses for its own ref assemblies).
+
+   Either way, removing or changing a frozen member is a red build, not a snapshot to bless.
+
+2. **A binary-compat interop harness — a *runtime* test the gate can't replace.**
+   Additive signatures are necessary but not sufficient: a wrapper also depends on
+   *behavior* (echo semantics, child reconcile, registration timing, descriptor ordering),
+   which no API diff can see. This is an integration test with one non-negotiable shape — it
+   loads a **pre-compiled DLL** (a binary drop, **not** a project reference; a project
+   reference recompiles against HEAD and hides the very break we are hunting). Analogous to
+   the existing AOT-proof harness, build `Reactor.External.TestControl` against an
+   **older** Reactor, then load that unchanged DLL into a host running the HEAD runtime and
+   assert mount / update / echo-suppress all succeed through the public surface only. A
+   two-NuGet-version matrix can follow in CI.
 
 3. **A loader / version policy.** Roll-forward works today partly by luck:
    `Reactor.dll` is **not strong-named** (no `SignAssembly`/key in `Reactor.csproj`)
@@ -345,11 +360,14 @@ not part of the versioned binary ABI a wrapper rolls forward against.
 
 ## §7 Track B — consolidate heavy subsystems into `Reactor.Advanced`
 
-Today only Win2D is extracted: `Reactor.Advanced` (`<Description>Advanced Reactor
-components — first inhabitant: Win2D canvas.</Description>`, with `charts` already in
-its `PackageTags`) is a one-way `ProjectReference` on core. Core still carries the
-heavy leaves — charting/D3, docking, markdown, and the data grid — which dominate the
-~3.5 MB `Reactor.dll`.
+Today only Win2D is extracted. `Reactor.Advanced` is its **own** NuGet package
+(`PackageId` `Microsoft.UI.Reactor.Advanced`; `<Description>… first inhabitant: Win2D
+canvas.</Description>`; `charts` already in its `PackageTags`) that **depends on** core —
+the in-repo one-way `ProjectReference` to `Reactor.csproj` becomes a package dependency at
+pack, so the direction is **Advanced → core**, never the reverse. An app opts in with a
+single `PackageReference` to `Microsoft.UI.Reactor.Advanced`; NuGet then transitively
+resolves core. Core still carries the heavy leaves — charting/D3, docking, markdown, and the
+data grid — which dominate the ~3.5 MB `Reactor.dll`.
 
 **Plan: move charting, docking, markdown, and the data grid into
 `Reactor.Advanced`.** This follows the colleague-endorsed "one advanced assembly, not
@@ -387,15 +405,50 @@ a dozen DLLs" shape and reuses Advanced's existing self-registering
   unaffected. A core-side compat shim is **not** an option: core is a one-way
   `ProjectReference` *target* of Advanced, so it cannot call back into the relocated
   implementation. These are minor, preview-window source breaks (§12 Q4).
+- **Namespaces stay put — the assemblies move, the namespaces do not.** As above, the
+  relocated types keep their existing names
+  (`Microsoft.UI.Reactor.Charting` / `.Docking` / `.Markdown`; the data grid's
+  `Microsoft.UI.Reactor.Controls` records) even though they now ship in `Reactor.Advanced`.
+  Rebranding them to `Microsoft.UI.Reactor.Advanced.*` would break every consumer's `using`
+  directives and type references for **no** compatibility benefit — the avoidable break §6.3
+  tells us not to make. (Win2D is `…Advanced.Win2D` only because it was *greenfield* in
+  Advanced and never had a core namespace to preserve.) One honest caveat: for an
+  already-*compiled* consumer the assembly move is a binary break regardless of namespace —
+  its metadata still names `…, Reactor` for a type now in `…, Reactor.Advanced` — and the
+  usual `[TypeForwardedTo]` softener is **unavailable**, because core is Advanced's one-way
+  dependency *target* and cannot reference it back without a cycle. Compiled consumers
+  therefore recompile (picking up the new assembly with zero code edits beyond the two
+  `using static` lines above), consistent with this being a deliberate, major-versioned move.
 - **Sequence:** charting + docking first (already decoupled, boundary-guarded, and
   source-clean), then markdown, then the data grid (the last two each carry the factory
   note above).
 
-**Win:** smaller default JIT ship size, a smaller core NuGet package, and a smaller
-core dependency for wrapper authors — with AOT already covered by #627's trimming
-inversion. Each move is gated on: no new `internal` cross-boundary reach that
-`InternalsVisibleTo` cannot cleanly express, `CoreControlFamilyBoundaryTests` and the
-AOT-proof harness stay green, and the subsystem's selftests/E2E still pass.
+**Who benefits — and who does not.** Because Advanced sits *on top of* core, moving the
+heavy leaves shrinks **core**, so the win is asymmetric:
+
+- **Core-only consumers win.** The common app that never touches
+  charting/docking/markdown/data-grid — and, per #163, the 3P wrapper author who references
+  only core to define a custom element — gets a ~1.6 MB-smaller download and a **narrower**
+  core surface in IntelliSense, the API index, and the frozen §6.1 ABI. That last point is a
+  direct Track A synergy: fewer controls in core is a smaller surface to keep stable.
+- **Advanced consumers see no reduction.** They opted into the heavy stuff and get core +
+  the leaves either way; the data grid's AOT/reflection caveats simply now sit behind an
+  explicit opt-in package instead of in everyone's core.
+
+**What this is _not_ — the spec should not oversell it.**
+
+- **AOT/trimmed apps already get it.** #627's trimming inversion drops unreferenced
+  charting/docking to ~0 in a NativeAOT / `PublishTrimmed` publish, so this is really a
+  **default-JIT** ship-size win, where the whole `Reactor.dll` ships regardless.
+- **The boundary is deliberately coarse.** Advanced is one grab-bag ("no dozen DLLs"), so an
+  app that wants only the data grid still pulls charting + docking + markdown. Fine-grained
+  "pay only for what you use" is what AOT trimming already delivers; the split does not try
+  to reproduce it. Not doing Track B at all — and relying solely on #627 — stays a
+  legitimate choice for AOT-first shops.
+
+Each move is gated on: no new `internal` cross-boundary reach that `InternalsVisibleTo`
+cannot cleanly express, `CoreControlFamilyBoundaryTests` and the AOT-proof harness stay
+green, and the subsystem's selftests/E2E still pass.
 
 ## §8 Library registration API — `UseLibrary`
 
