@@ -24,9 +24,10 @@ design, phased in §13.
 
 > A third-party control library adds Reactor support by wrapping its WinUI control,
 > and that **compiled wrapper keeps running against newer Reactor runtimes without
-> recompilation** — the roll-forward model teams expect from
-> `Microsoft.Extensions.*`. It gets that from a **stable, additive-only authoring
-> seam inside the one Reactor runtime** — *not* a separate abstractions package.
+> recompilation** — the binary roll-forward .NET already gives any additive,
+> signature-compatible NuGet dependency. It gets that from a **stable, additive-only
+> authoring seam inside the one Reactor runtime** — *not* a separate abstractions
+> package.
 > Reactor's own package stays lean by keeping heavy optional subsystems out of the
 > default reference. App developers get **one obvious registration call per
 > library**, and a missing registration fails **loudly and helpfully**, never as a
@@ -113,8 +114,9 @@ generator (spec 058) keep working, ideally with a smaller footprint, never large
 
 **R7 — Cross-version library interop (stable ABI).** A control library built against
 Reactor version *N* must load and run, **without recompilation**, against a host that
-supplies a *newer* runtime version *M* ≥ *N* — the roll-forward/unification model of
-`Microsoft.Extensions.*`. An app that transitively pulls `LibA` (built against *N*)
+supplies a *newer* runtime version *M* ≥ *N* — the NuGet single-version unification and
+assembly roll-forward that .NET applies to any additive-compatible dependency. An app
+that transitively pulls `LibA` (built against *N*)
 and `LibB` (built against *M*) unifies to a **single** runtime, and both libraries'
 controls must mount, update, and echo correctly against it.
 
@@ -302,9 +304,14 @@ not part of the versioned binary ABI a wrapper rolls forward against.
 
 ### §6.3 Evolution discipline
 
-- **Additive-only.** Never remove or change the signature of a §6.1 member. New seam
-  behavior arrives as new members (new overloads; default-interface-methods on the
-  handler/descriptor interfaces), never as edits to existing ones.
+- **Additive by default; break only when nothing simpler works.** New seam behavior
+  arrives as *new* members (new overloads; default-interface-methods on the
+  handler/descriptor interfaces), never as edits to existing ones — a §6.1 signature is
+  never removed or changed when an additive change would achieve the same result.
+  Reactor still reserves the right to break the seam, but only as a genuine last resort
+  when no compatible change exists; every such break is a deliberate, versioned,
+  release-noted exception — not routine churn (and, in preview, expected to grow rarer
+  as the API settles).
 - **Records stay evolvable.** The reconciler dispatches by element `Type` → registered
   entry and reads only base `Element` members; it never reconstructs a derived record
   positionally across the boundary. A library's own element record shape is therefore
