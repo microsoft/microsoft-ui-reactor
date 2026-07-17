@@ -116,12 +116,16 @@ recipe (spec 047, `tests/external_proof`) and the `[GenerateReactorWrapper]`
 generator (spec 058) keep working, ideally with a smaller footprint, never larger.
 
 **R7 — Cross-version library interop (stable ABI).** A control library built against
-Reactor version *N* must load and run, **without recompilation**, against a host that
-supplies a *newer* runtime version *M* ≥ *N* — the NuGet single-version unification and
-assembly roll-forward that .NET applies to any additive-compatible dependency. An app
-that transitively pulls `LibA` (built against *N*)
-and `LibB` (built against *M*) unifies to a **single** runtime, and both libraries'
-controls must mount, update, and echo correctly against it.
+Reactor version *N* loads and runs, **without recompilation**, against any host runtime
+*M* in the **same SemVer major** (*M* ≥ *N*) — the ABI compatibility band. Additive
+surface ships in **minor** releases (patch = compatible fixes only), and a compiled
+wrapper rolls forward across them because .NET binds a foreign assembly by type/member
+signature and NuGet resolves a **single** Reactor version into the graph. An app that
+transitively pulls `LibA` (built against *N*) and `LibB` (built against *M*, same major)
+unifies to that one runtime, and both libraries' controls must mount, update, and echo
+correctly against it. A deliberate break (§6.3) is confined to a **major** bump — the
+major number is the signal that the frozen surface may have moved. The binary guarantee
+begins at **1.0**; 0.x previews carry no durable ABI promise (Q3).
 
 ## §3 Current state — what 047 / 048 / 058 already deliver
 
@@ -301,7 +305,12 @@ not part of the versioned binary ABI a wrapper rolls forward against.
    and its assembly version tracks the package version, so default-`AssemblyLoadContext`
    unification lets an old wrapper bind a newer runtime. Make this a *decision*: pin an
    explicit assembly-version / strong-name policy and document that the guarantee holds
-   in the default load context with NuGet highest-wins unification. **Side-by-side**
+   in the default load context, where NuGet resolves a **single** Reactor version into the
+   graph. The same-major band is enforced at *restore*, not left to luck at load: a
+   generated library package declares a **bounded** Reactor dependency range — lower bound
+   its build version, upper bound the next major (e.g. `[1.2.0, 2.0.0)`) — so a graph that
+   mixes majors fails or warns during restore (NU1107/NU1608) instead of silently binding a
+   mismatched runtime and throwing `MissingMethodException` at mount time. **Side-by-side**
    (two runtimes in separate `AssemblyLoadContext`s) is **out of scope** — `Element`
    records from different contexts are different `Type`s a shared reconciler cannot
    process; custom/plugin ALCs break the guarantee by design.
@@ -313,7 +322,7 @@ not part of the versioned binary ABI a wrapper rolls forward against.
   handler/descriptor interfaces), never as edits to existing ones — a §6.1 signature is
   never removed or changed when an additive change would achieve the same result.
   Reactor still reserves the right to break the seam, but only as a genuine last resort
-  when no compatible change exists; every such break is a deliberate, versioned,
+  when no compatible change exists; every such break is a deliberate, **major-versioned**,
   release-noted exception — not routine churn (and, in preview, expected to grow rarer
   as the API settles).
 - **Records stay evolvable.** The reconciler dispatches by element `Type` → registered
