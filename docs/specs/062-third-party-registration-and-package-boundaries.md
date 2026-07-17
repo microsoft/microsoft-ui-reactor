@@ -293,26 +293,34 @@ types a wrapper hands back or receives (`Element`, `Optional<T>`, the `ChildrenS
 records) — is part of the ABI closure and is preserved along with the member. A frozen
 signature is only as stable as the transitive types it names.
 
-**What is *not* part of the binary freeze — and the scope of the guarantee.** The
-roll-forward ABI guarantee is scoped to **control-wrapper / handler binaries**: a shipped
-wrapper's metadata references only the frozen seam above, so it rolls forward across a
-same-major runtime (§6.3 R7). The app-facing DSL — the ~200 factory methods, ~600 fluent
-modifiers, and the hooks — is deliberately **out** of that binary freeze: it is far too
-large and churny to pin as ABI, and freezing it would forfeit evolving overloads and adding
-parameters without a major bump. The DSL instead carries a *best-effort source*
-compatibility policy (don't gratuitously break `Text("x").Bold()`) — **not** a binary
-promise. Two consequences to state plainly:
+**Two compatibility tiers — *prove* vs *promise*.** Every supported public API — the
+control-authoring seam **and** the app-facing DSL (~200 factory methods, ~600 fluent
+modifiers, and the hooks) — is a **within-major ABI**: it does not break within a SemVer
+major, so a compiled binary that binds any of it rolls forward across a same-major runtime
+(R7). The tiers differ in *how* that is assured, not in *whether* it holds:
 
-- **Source-compatible is not binary-compatible.** Adding an optional parameter or otherwise
-  changing an existing DSL signature is a source-level non-event but a **binary** break for
-  an already-compiled caller; adding a *new* overload is normally binary-additive yet can
-  still break *recompilation* through overload ambiguity or changed inference. "Source
-  add-only" is a weaker, different contract than the seam's binary freeze.
-- **A binary that binds the DSL is not covered.** Applications recompile, so they never hit
-  this. But a *compiled* Reactor component/library binary (§8) whose `Render()` calls
-  `Text()` / `.Bold()` / `UseState()` bakes hard references to the DSL, so it is **outside**
-  the roll-forward guarantee — it must recompile against a newer Reactor, exactly like an
-  app. The ABI band protects the wrapper seam, not arbitrary DSL consumers.
+- **Tier 1 — promised (the DSL and the rest of the public surface).** Kept within-major
+  stable by additive-only **discipline** + review + release notes. SemVer is a release
+  policy, not a CLR verifier, so the promise is only as real as the discipline behind it
+  (§6.3): add overloads; never mutate an existing signature — no changed or added optional
+  parameters or defaults (an added optional param looks source-compatible but is a **binary**
+  break), no `ref`/`in`/`out` or return-type edits, no reshaped record primary constructors,
+  no new abstract interface/base members. Pinning the DSL as a *gated* surface is
+  deliberately declined: it is large and evolving, and add-overload discipline already keeps
+  it within-major-safe without freezing ~800 members to a checked-in txt file.
+- **Tier 2 — proven (the §6.1 seam).** On top of the same within-major promise, the ~35
+  seam members are additionally *mechanically* guaranteed — the API-compat gate fails the
+  build on any change, and the interop harness proves an old wrapper binary still
+  mounts/updates/echo-suppresses on the HEAD runtime — and held to a stricter
+  last-resort-only posture even across majors. Tier 2 is stronger **evidence**; it does
+  **not** relax Tier 1's obligations. It proves the subset the whole third-party-control
+  ecosystem binds.
+
+The only honest residual is at a **major** bump: a deliberate break (§6.3) may require
+DSL-binding binaries (a component/library binary per §8, or an app) to recompile — that is
+what a major signals — while the seam is held even harder. Seam-first gating is a
+*prioritization*, not an exclusion: the API-compat gate can grow to cover more of Tier 1
+over time.
 
 ### §6.2 Governance — three pieces that do not exist yet
 
@@ -364,9 +372,10 @@ a runtime test (2), and a load-time policy (3).
 
 ### §6.3 Evolution discipline
 
-- **Additive by default; break only when nothing simpler works.** New seam behavior
-  arrives as *new* members (new overloads; default-interface-methods on the
-  handler/descriptor interfaces), never as edits to existing ones — a §6.1 signature is
+- **Additive by default; break only when nothing simpler works.** This governs the whole
+  supported public API within a major (Tier 1), and the §6.1 seam most strictly (Tier 2):
+  new behavior arrives as *new* members (new overloads; default-interface-methods on the
+  handler/descriptor interfaces), never as edits to existing ones — an existing signature is
   never removed or changed when an additive change would achieve the same result.
   Reactor still reserves the right to break the seam, but only as a genuine last resort
   when no compatible change exists; every such break is a deliberate, **major-versioned**,
@@ -376,8 +385,12 @@ a runtime test (2), and a load-time policy (3).
   entry and reads only base `Element` members; it never reconstructs a derived record
   positionally across the boundary. A library's own element record shape is therefore
   private — only additive changes to the *base* `Element` are ABI-visible.
-- **One versioning unit.** The core runtime churns freely as long as it keeps the
-  §6.1 seam additive; there is no separate contract assembly to keep in lockstep.
+- **One versioning unit — internals churn, public signatures do not.** There is no separate
+  contract assembly to keep in lockstep, and the runtime's *internal* implementation and
+  *behavioral* details may churn freely between releases — but that freedom stops at the
+  **public signature**. Within a major, public signatures do not change (Tier 1 by
+  discipline, Tier 2 by the gate); "churns freely" never licenses breaking a public API
+  within a major.
 
 ## §7 Track B — consolidate heavy subsystems into `Reactor.Advanced`
 
@@ -627,7 +640,7 @@ Both tracks preserve spec 048's reachability model (R5):
 | # | Question | Recommendation |
 |---|---|---|
 | Q1 | API-compat gate tool: `Microsoft.CodeAnalysis.PublicApiAnalyzers` (`PublicAPI.*.txt`) or `Microsoft.DotNet.ApiCompat` against the last shipped DLL? | PublicApiAnalyzers for the authoring seam (in-repo, incremental, IDE-visible); ApiCompat as a CI backstop. |
-| Q2 | Exact freeze boundary — is the *entire* §6.1 surface committed, or a named subset (e.g. is the full `MountContext` surface frozen, or only the members generated code + hand-authors actually bind)? | Freeze the members generated code and `external_proof` bind; mark the rest "public, not frozen." Settle with the interop harness. |
+| Q2 | Exact freeze boundary — is the *entire* §6.1 surface committed, or a named subset (e.g. is the full `MountContext` surface frozen, or only the members generated code + hand-authors actually bind)? | Freeze the members generated code and `external_proof` bind; mark the rest "public, Tier 1 — within-major by discipline, not in the Tier-2 gate." Settle with the interop harness. |
 | Q3 | Loader policy — strong-name + pin `AssemblyVersion` now, or stay unsigned/default-ALC and only *document* the roll-forward requirement? | Document now; revisit strong-naming when the API stabilizes past preview. |
 | Q4 | The data-grid **and markdown** `using static …Advanced.Factories` source break (§7) — acceptable in preview, or ship a type-forward / compat shim? | Accept in preview; call it out in release notes. A core-side compat shim isn't viable (core can't reference Advanced), so a `using static` is the honest fix. |
 | Q5 | `UseLibrary` granularity — one `UseX()` per library, or sub-modules for large subsystems? | One per library by default; sub-modules where trimming a sub-surface matters (charts). |
