@@ -297,7 +297,11 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
+          # Resolve from the event, not steps.resolve — a fetch/head-mismatch throw
+          # in "Resolve PR" leaves its outputs unset, and this always()-step must
+          # still be able to post the fallback comment (e.g. when /perf is rejected
+          # because the branch advanced after the trigger).
+          PR_NUMBER: ${{ github.event.issue.number || github.event.inputs.pr_number }}
           WORKSPACE: ${{ github.workspace }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           BENCH_OUTCOME: ${{ steps.bench.outcome }}
