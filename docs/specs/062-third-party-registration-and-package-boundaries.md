@@ -214,7 +214,7 @@ either order:
   by a real API-compat gate and a binary-compat interop harness. Delivers R1 / R7.
 - **Track B — consolidate heavy subsystems into `Reactor.Advanced` (§7).** Move
   charting, docking, markdown, and the data grid out of core into the existing
-  advanced assembly, keeping their namespaces. Delivers R4.
+  advanced assembly, largely keeping their namespaces (§7). Delivers R4.
 
 Registration ergonomics (`UseLibrary` + diagnostics, §8–§10) is a third, independent
 workstream that serves R2 / R3 and can interleave with either track.
@@ -334,20 +334,31 @@ a dozen DLLs" shape and reuses Advanced's existing self-registering
   Core/Hosting statically reference charting/docking). Core holds **zero hard type
   references** to these subsystems, so relocating them across an assembly boundary is
   a project-file move, not a rewrite.
-- **Namespaces stay put.** A namespace is not an assembly in C#, so charting, docking,
-  and markdown keep their existing namespaces when they move to the Advanced
-  *assembly* — a consumer adds only the `Reactor.Advanced` package reference, with
-  **no source change**.
-- **The data grid is the one exception.** Its factories are woven into the shared core
-  `Factories` partial (`src/Reactor/Controls/DataGrid/DataGridFactories.cs` and
-  `ColumnFactories.cs` are `public static partial class Factories` in namespace
-  `Microsoft.UI.Reactor`). A partial class cannot span assemblies, so in Advanced they
-  become `Microsoft.UI.Reactor.Advanced.Factories`, and a data-grid app author adds one
-  line: `using static Microsoft.UI.Reactor.Advanced.Factories;`. The element records
-  and column types keep their namespace, so `with`/record usage is unaffected. This is
-  a minor, preview-window source break (§12 Q4).
-- **Sequence:** charting + docking first (already decoupled and boundary-guarded),
-  then markdown, then the data grid (with the factory note above).
+- **Charting and docking move source-clean.** Their public authoring surface lives under
+  `Microsoft.UI.Reactor.Charting` / `Microsoft.UI.Reactor.Docking` — its own namespaces,
+  *not* the shared core `Factories` partial. A namespace is not an assembly in C#, so
+  moving the code to the Advanced *assembly* leaves every type's full name unchanged: a
+  consumer adds only the `Reactor.Advanced` package reference, with **no source change**.
+- **The data grid and markdown each take a one-line source break.** Both expose their DSL
+  *entry points* through the shared core `Factories` partial, which cannot span assemblies:
+    - the data grid — `DataGridFactories.cs` / `ColumnFactories.cs`
+      (`public static partial class Factories` in namespace `Microsoft.UI.Reactor`);
+    - markdown — the `Markdown(string)` / `Markdown(string, MarkdownOptions)` methods
+      embedded in the core `Dsl.cs` `Factories` partial (`src/Reactor/Elements/Dsl.cs:1825`),
+      which delegate to `MarkdownBuilder` in `Microsoft.UI.Reactor.Markdown`.
+
+  On the move those entry points become `Microsoft.UI.Reactor.Advanced.Factories`, so a
+  data-grid or markdown app author adds one line:
+  `using static Microsoft.UI.Reactor.Advanced.Factories;`. Everything else keeps its
+  namespace — the data-grid element/column records and the `MarkdownOptions` record (in
+  `Microsoft.UI.Reactor.Markdown`) are untouched, and both factories return the base
+  `Element`, so no derived record is named across the boundary and `with`/record usage is
+  unaffected. A core-side compat shim is **not** an option: core is a one-way
+  `ProjectReference` *target* of Advanced, so it cannot call back into the relocated
+  implementation. These are minor, preview-window source breaks (§12 Q4).
+- **Sequence:** charting + docking first (already decoupled, boundary-guarded, and
+  source-clean), then markdown, then the data grid (the last two each carry the factory
+  note above).
 
 **Win:** smaller default JIT ship size, a smaller core NuGet package, and a smaller
 core dependency for wrapper authors — with AOT already covered by #627's trimming
@@ -512,7 +523,7 @@ Both tracks preserve spec 048's reachability model (R5):
 | Q1 | API-compat gate tool: `Microsoft.CodeAnalysis.PublicApiAnalyzers` (`PublicAPI.*.txt`) or `Microsoft.DotNet.ApiCompat` against the last shipped DLL? | PublicApiAnalyzers for the authoring seam (in-repo, incremental, IDE-visible); ApiCompat as a CI backstop. |
 | Q2 | Exact freeze boundary — is the *entire* §6.1 surface committed, or a named subset (e.g. is the full `MountContext` surface frozen, or only the members generated code + hand-authors actually bind)? | Freeze the members generated code and `external_proof` bind; mark the rest "public, not frozen." Settle with the interop harness. |
 | Q3 | Loader policy — strong-name + pin `AssemblyVersion` now, or stay unsigned/default-ALC and only *document* the roll-forward requirement? | Document now; revisit strong-naming when the API stabilizes past preview. |
-| Q4 | The data-grid `using static …Advanced.Factories` source break (§7) — acceptable in preview, or ship a type-forward / compat shim? | Accept in preview; call it out in release notes. |
+| Q4 | The data-grid **and markdown** `using static …Advanced.Factories` source break (§7) — acceptable in preview, or ship a type-forward / compat shim? | Accept in preview; call it out in release notes. A core-side compat shim isn't viable (core can't reference Advanced), so a `using static` is the honest fix. |
 | Q5 | `UseLibrary` granularity — one `UseX()` per library, or sub-modules for large subsystems? | One per library by default; sub-modules where trimming a sub-surface matters (charts). |
 | Q6 | Should the wrapper attributes + generator ship as a standalone `Reactor.Wrappers` package, or stay bundled in core (status quo)? | Independent of both tracks; keep bundled unless a concrete author asks — revisit later. |
 | Q7 | Ship a `Microsoft.UI.Reactor.All` metapackage (core + Advanced) for a batteries-included reference? | Optional convenience; add if consumer feedback wants it. |
@@ -526,7 +537,7 @@ Both tracks preserve spec 048's reachability model (R5):
   API-compat gate (Q1/Q2). A2: build the binary-compat interop harness. A3: settle and
   document the loader/version policy (Q3).
 - **Track B — consolidate into Advanced.** B1: charting + docking → `Reactor.Advanced`.
-  B2: markdown. B3: data grid (with the §7 factory note, Q4).
+  B2: markdown (with the §7 factory note, Q4). B3: data grid (§7 factory note, Q4).
 - **Registration ergonomics — independent.** E1: `IReactorLibrary` / `UseLibrary` +
   built-ins/Advanced fold-in (§8). E2: `[ReactorLibrary]` marker + enriched throw +
   analyzer (§10). E3: opt-in `UseDiscoveredLibraries()` (§9).
