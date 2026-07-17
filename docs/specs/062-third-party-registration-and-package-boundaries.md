@@ -141,28 +141,39 @@ This spec is a *delta*, so it is worth being precise about what already exists.
   direct-record idiom; apps that want a small binary simply do not call it.
 
 - **Hand-authoring already works against the public surface only (047).**
-  `tests/external_proof/Reactor.External.TestControl` ships an element + control +
-  handler in a *separate assembly* with **no** `InternalsVisibleTo` — proving the
-  public V1 surface is sufficient.
+  `tests/external_proof/Reactor.External.TestControl` ships a hand-coded
+  `IElementHandler` control **and** a source-generated wrapper in a *separate assembly*
+  with **no** `InternalsVisibleTo`; it binds only the public V1 surface
+  (`MountContext` / `UpdateContext`, `ReactorBinding`, `ControlDescriptor`, the registry),
+  so the fact that it *compiles* is the empirical gate that the surface is
+  public-sufficient. It is a representative control, not an exhaustive exercise of every
+  frozen member — §6.1 enumerates the full public list.
 
 - **Generated authoring already works (058).** `[GenerateReactorWrapper]` on a
   partial record emits the init-props, child/items slots, `On{Event}` callbacks, the
-  `ControlDescriptor`, Pattern-A registration, and a factory. The generator is a
-  `netstandard2.0` Roslyn component that emits *strings* and binds attributes by
-  metadata name, so it references neither `Reactor.dll` nor its own attributes
-  assembly at build time.
+  `ControlDescriptor`, Pattern-A registration, and a factory. The generator *itself* is a
+  lean `netstandard2.0` Roslyn component that emits *strings* and binds attributes by
+  metadata name, so the *generator assembly* references neither `Reactor.dll` nor its own
+  attributes assembly. That decoupling stops at the generator, though: the strings it
+  emits are compiled **in the consumer** against Reactor's public runtime surface
+  (`ReactorBinding.ShouldSuppressEcho`, `Reconciler.GetElementTag`, `ControlDescriptor`,
+  …), so the *generated code* is tightly bound to that surface — which is exactly the ABI
+  §6 must freeze.
 
 - **The missing-handler failure already throws helpfully (048).**
   `Reconciler.ThrowNoHandlerRegistered` (`src/Reactor/Core/Reconciler.Mount.cs`)
   raises an `InvalidOperationException` naming the element type and listing concrete
   fixes.
 
-- **The last internal-symbol leak is closed (this change).**
-  `ReactorBinding.ShouldSuppressEcho(UIElement)` is now a **public** read-side echo
-  primitive, and the wrapper generator's deferred-controlled trampoline emits it
-  instead of the internal `ChangeEchoSuppressor.ShouldSuppress`. Every symbol the
-  generator bakes into external generated code is now public — the precondition for
-  Track A (§6).
+- **The last internal symbol the generated wrapper needed is now public (this
+  change).** `ReactorBinding.ShouldSuppressEcho(UIElement)` is now a **public** read-side
+  echo primitive, and the wrapper generator's deferred-controlled trampoline emits it
+  instead of the internal `ChangeEchoSuppressor.ShouldSuppress`. With that, every symbol
+  the generator bakes into external generated code is public — and every member the §6.1
+  seam enumerates is public (verified type-by-type), with `external_proof` compiling
+  IVT-free as the empirical gate. That is the precondition for Track A (§6). It is *not* a
+  claim that no Reactor internal could ever help a future hand-author — promoting a
+  not-yet-enumerated member is an additive §6.3 change, not a regression.
 
 What is **not** yet present, and is the subject of this spec: a *governed* stable
 authoring ABI (§6), a leaner core with the heavy subsystems in `Reactor.Advanced`
