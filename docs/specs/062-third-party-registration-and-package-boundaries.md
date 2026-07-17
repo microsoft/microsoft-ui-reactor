@@ -67,11 +67,14 @@ trim-safe, and spec 058 added a `[GenerateReactorWrapper]` source generator that
 emits the descriptor + registration + factory for a wrapped WinUI/WinRT control.
 Issue #163 raises four coupled frustrations that remain:
 
-1. **The dependency is heavy and version-locked.** To *define* one custom element a
-   library references the whole of `Reactor.dll`. Worse, because its compiled output
-   binds concrete runtime types, that output is locked to the exact version it built
-   against — it cannot roll forward to a newer runtime an app happens to pull in. Two
-   Reactor-enabled libraries built against different versions cannot compose.
+1. **The dependency is heavy, and forward-compatibility isn't guaranteed.** To *define*
+   one custom element a library references the whole of `Reactor.dll`. And because its
+   compiled output binds concrete runtime types across a seam with no stability
+   guarantee, nothing ensures that output keeps working against a newer runtime an app
+   happens to pull in — .NET *can* roll the binding forward, but only as long as every
+   bound symbol is still present and unchanged, which today nothing enforces. Two
+   Reactor-enabled libraries built against different versions may therefore fail to
+   compose.
 
 2. **Registration has no standard shape.** Registration happens per control (a
    factory touch, or a Pattern-A static constructor — spec 048 §6). There is no
