@@ -186,16 +186,21 @@ public class DataGridTests : AppTestBase
         {
             ClearEditor(editor);
 
-            if (commitWithEnter)
-            {
-                editor.SendKeys(value + Keys.Enter); // Enter commits + closes the editor; can't re-read it
-                return;
-            }
-
             editor.SendKeys(value);
             lastSeen = ReadEditorValueSettled(editor, value, timeoutMs: 1500);
             if (lastSeen is null || lastSeen == value)
+            {
+                // Commit only AFTER the typed value has settled into the editor. The native send-keys
+                // verb injects the text and any trailing key back-to-back, so a combined "value + Enter"
+                // can fire the commit before the TextBox's TextChanged/binding has captured the text —
+                // committing an empty value (observed as '[1:Alicia,]' on CI). Typing, settling, then
+                // pressing Enter as a separate send mirrors the old per-keystroke injector, which only
+                // pressed Enter after every character had propagated. (Once Enter commits, the editor
+                // closes and can no longer be read, so the settle read must happen before it.)
+                if (commitWithEnter)
+                    editor.SendKeys(Keys.Enter);
                 return; // confirmed correct, or unreadable (don't risk double-typing)
+            }
         }
 
         // Every attempt positively read a wrong value — fail loudly here (with the last value seen)
