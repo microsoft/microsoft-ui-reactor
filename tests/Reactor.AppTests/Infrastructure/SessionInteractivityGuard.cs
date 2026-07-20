@@ -198,15 +198,16 @@ public static partial class SessionInteractivityGuard
     /// no console — gets ERROR_ACCESS_DENIED from <c>GetCursorPos</c>/<c>SendInput</c>
     /// (the same UIPI boundary that makes winapp's own <c>click</c> verb fail here).
     /// WinAppDriver dodged this because it ships as a signed <c>uiAccess="true"</c>
-    /// binary; winapp 0.3.2 and this raw-SendInput fallback have no such privilege.
+    /// binary; winapp's native input verbs (<c>click</c>/<c>send-keys</c>/<c>drag</c>)
+    /// use raw SendInput under the hood and have no such privilege.
     /// </summary>
     public static bool CanInjectInput() => GetCursorPos(out _);
 
     /// <summary>
     /// Gate for the input-injection tests (real keystrokes / drag / tap). When the
-    /// process can't reach the input desktop, every <see cref="InputInjector"/> call
-    /// is silently swallowed (SendInput returns 0 / ACCESS_DENIED), which would surface
-    /// as a misleading assertion timeout. We mark those tests Inconclusive — not Failed —
+    /// process can't reach the input desktop, every native winapp <c>click</c>/<c>send-keys</c>/
+    /// <c>drag</c> call is silently swallowed (SendInput returns 0 / ACCESS_DENIED), which would
+    /// surface as a misleading assertion timeout. We mark those tests Inconclusive — not Failed —
     /// exactly like the locked-desktop guard, because the failure is environmental.
     /// On a real interactive desktop these tests execute normally.
     /// </summary>
@@ -222,8 +223,9 @@ public static partial class SessionInteractivityGuard
             "non-uiAccess process under UIPI — the same boundary that makes winapp's " +
             "click verb fail here. WinAppDriver bypassed it via its signed uiAccess " +
             "binary. Treating input-injection tests as Inconclusive (not Failed); they " +
-            "run on a real interactive desktop. Native winapp verbs (winappCli #562 " +
-            "send-keys, #498 drag) will remove this fallback entirely.");
+            "run on a real interactive desktop. The native winapp send-keys/drag verbs " +
+            "used here are themselves SendInput under the hood, so this environmental gate " +
+            "still applies.");
     }
 
     /// <summary>

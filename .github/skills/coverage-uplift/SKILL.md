@@ -90,8 +90,9 @@ that already exercises the path.
 - **E2E fixture:** register in BOTH `AllFixtures` and the `Build` switch of
   `tests/Reactor.AppTests.Host/FixtureRegistry.cs`. Use `Component<T>()` fixtures for
   stateful UI — raw `ctx.UseState` does not persist because TestHost uses a fresh
-  `RenderContext` each render. Add `[E2eRetry(3)]`, foreground with
-  `InputInjector.Foreground(HostHwnd)`, and assert against exact anti-stale values.
+  `RenderContext` each render. Add `[E2eRetry(3)]`, drive real input through the native
+  winapp verbs (`App.Click`, `App.SendKeys(..., viaSendInput: true)`, `App.Drag`), which
+  foreground the Host themselves, and assert against exact anti-stale values.
 
 Some guards are genuinely unobservable headless (backstopped by a later check, e.g. an
 empty-name guard followed by a null-property check; templated-FlipView item teardown has

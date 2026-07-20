@@ -7,8 +7,8 @@ namespace Microsoft.UI.Reactor.AppTests.Tests;
 /// E2E tests for DataGrid inline editing. Exercises click-to-edit, real keyboard input,
 /// cross-row commit, and same-row cell switching through the full WinUI accessibility
 /// pipeline. Cells are located + clicked via winapp ui; the inline editor TextBox has no
-/// stable AutomationId, so text is typed into the focused control with the Win32
-/// <see cref="InputInjector"/> fallback (winapp ui has no keyboard typing).
+/// stable AutomationId, so text is typed into the focused control through the native
+/// <c>winapp ui send-keys</c> verb.
 /// </summary>
 [TestClass]
 public class DataGridTests : AppTestBase
@@ -25,9 +25,9 @@ public class DataGridTests : AppTestBase
     /// press Enter to commit. Verifies the full editing pipeline through
     /// real mouse and keyboard input.
     /// </summary>
-    // [Retry] mops up the rare unattended-desktop input-injection flake: Win32 SendInput is
-    // occasionally dropped before the Host window foregrounds on CI. A real regression still
-    // fails every attempt. Removable once winappCli #562 (send-keys)/#498 (drag) ship native verbs.
+    // [E2eRetry] mops up the rare unattended-desktop input-injection flake: the native winapp
+    // send-keys/drag verbs are SendInput under the hood and are occasionally dropped before the Host
+    // foregrounds on CI. A real regression still fails every attempt; retained pending a few stable CI runs (#652).
     [E2eRetry(3)]
     [TestMethod]
     public void Interactive_DataGrid_ClickEditTabCommit()
@@ -93,8 +93,7 @@ public class DataGridTests : AppTestBase
         TypeIntoFocusedEditor("Alicia");
 
         // Editing-Tab: commits FirstName and should reopen the editor on the LastName cell.
-        InputInjector.Foreground(HostHwnd);
-        InputInjector.Tab();
+        App.SendKeys("tab", viaSendInput: true);
 
         // The inline editor must still be present (reopened on the next cell), not torn down by the
         // LostFocus safety-net.
@@ -141,8 +140,7 @@ public class DataGridTests : AppTestBase
         // Edit row-1 LastName (Smith -> Brown); Tab moves to Salary (read-only) so no editor reopens.
         TapCell("Smith");
         TypeIntoFocusedEditor("Brown");
-        InputInjector.Foreground(HostHwnd);
-        InputInjector.Tab();
+        App.SendKeys("tab", viaSendInput: true);
         WaitForTextContaining("EditLog", "[1:Alice,Brown]", timeoutMs: 5000);
 
         // Now edit a different row's cell, then move focus OUT of the grid by clicking the anchor
@@ -164,16 +162,14 @@ public class DataGridTests : AppTestBase
     /// </summary>
     private void TapCell(string name)
     {
-        var r = FindByName(name).Rect;
-        InputInjector.Foreground(HostHwnd);
-        InputInjector.Click(r.X + r.Width / 2, r.Y + r.Height / 2);
+        FindByName(name).Click();
     }
 
     /// <summary>
     /// Replace the contents of the inline editor that appears after a cell tap. The editor is a
     /// TextBox with no AutomationId, so we locate it by UIA control type, then clear + type through
-    /// <see cref="UiElement"/> (which foregrounds the host, focuses the editor via UIA SetFocus,
-    /// and injects real keystrokes — winapp ui has no keyboard typing).
+    /// <see cref="UiElement"/> (which focuses the editor via UIA SetFocus and injects real keystrokes
+    /// through the native <c>winapp ui send-keys</c> verb).
     /// </summary>
     private void TypeIntoFocusedEditor(string value, bool commitWithEnter = false)
     {

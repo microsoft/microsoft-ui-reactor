@@ -5,7 +5,7 @@ namespace Microsoft.UI.Reactor.AppTests.Infrastructure;
 /// Replaces <c>OpenQA.Selenium.Keys</c> now that Appium is gone. The values are
 /// private-use Unicode code points (the same convention WebDriver used) so they
 /// can be embedded inside an otherwise-literal SendKeys string and split back
-/// out by <see cref="InputInjector"/>.
+/// out into native <c>winapp ui send-keys</c> tokens by <see cref="UiElement.ToSendKeysTokens"/>.
 /// </summary>
 public static class Keys
 {

@@ -31,9 +31,9 @@ public class EventHandlerTests : AppTestBase
     /// from pointer input, not from the Invoke pattern, so this uses the SendInput
     /// fallback; <c>UiElement.Click()</c> now uses that same real pointer path.
     /// </summary>
-    // [Retry] mops up the rare unattended-desktop input-injection flake: Win32 SendInput is
-    // occasionally dropped before the Host window foregrounds on CI. A real regression still
-    // fails every attempt. Removable once winappCli #562 (send-keys)/#498 (drag) ship native verbs.
+    // [E2eRetry] mops up the rare unattended-desktop input-injection flake: the native winapp
+    // send-keys/drag verbs are SendInput under the hood and are occasionally dropped before the Host
+    // foregrounds on CI. A real regression still fails every attempt; retained pending a few stable CI runs (#652).
     [E2eRetry(3)]
     [TestMethod]
     public void Interactive_OnTapped_Updates_State()
@@ -42,14 +42,12 @@ public class EventHandlerTests : AppTestBase
 
         WaitForText("TapCount", "Tap count: 0");
 
-        var r1 = FindById("TapBtn").Rect;
-        InputInjector.Foreground(HostHwnd);
-        InputInjector.Click(r1.X + r1.Width / 2, r1.Y + r1.Height / 2);
+        var r1 = FindById("TapBtn");
+        r1.Click();
         WaitForText("TapCount", "Tap count: 1");
 
-        var r2 = FindById("TapBtn").Rect;
-        InputInjector.Foreground(HostHwnd);
-        InputInjector.Click(r2.X + r2.Width / 2, r2.Y + r2.Height / 2);
+        var r2 = FindById("TapBtn");
+        r2.Click();
         WaitForText("TapCount", "Tap count: 2");
     }
 

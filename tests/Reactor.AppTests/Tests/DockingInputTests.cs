@@ -16,8 +16,8 @@ namespace Microsoft.UI.Reactor.AppTests.Tests;
 /// <c>Reconciler.Update.UpdateTabView</c> +
 /// <c>Reconciler.Mount.TryUpdatePinHeaderInPlace</c>.
 ///
-/// Keyboard input + tab-header drags are synthesized via the Win32
-/// <see cref="InputInjector"/> fallback (winapp ui has no typing or drag verb).
+/// Keyboard input + tab-header drags are synthesized via the native
+/// <c>winapp ui send-keys</c> and <c>winapp ui drag</c> verbs.
 /// </summary>
 [TestClass]
 public class DockingInputTests : AppTestBase
@@ -57,8 +57,11 @@ public class DockingInputTests : AppTestBase
             ?? throw new WinAppException($"Target pane '{paneId}' not found pre-drag for drag-merge.");
         var drop = (X: headerRect.X + headerRect.Width / 2, Y: paneRect.Y + paneRect.Height / 2);
 
-        InputInjector.Foreground(HostHwnd);
-        InputInjector.DragTearOffMerge(grab, drop);
+        // Both endpoints are screen coordinates: the "from" tab caption is a volatile winapp slug
+        // and the drop point is computed, so pass explicit "x,y" points. The native drag crosses the
+        // tear-off threshold on the way, and --dwell-ms settles on the "to" pane's merge zone so the
+        // "Add as tab" overlay latches before release.
+        App.Drag($"{grab.X},{grab.Y}", $"{drop.X},{drop.Y}", dwellMs: 350);
     }
 
     /// <summary>
@@ -69,9 +72,9 @@ public class DockingInputTests : AppTestBase
     /// <see cref="WinUI.TabView"/> pin-header rebuild on every
     /// keystroke. Every character must land; focus must not bounce.
     /// </summary>
-    // [Retry] mops up the rare unattended-desktop input-injection flake: Win32 SendInput is
-    // occasionally dropped before the Host window foregrounds on CI. A real regression still
-    // fails every attempt. Removable once winappCli #562 (send-keys)/#498 (drag) ship native verbs.
+    // [E2eRetry] mops up the rare unattended-desktop input-injection flake: the native winapp
+    // send-keys/drag verbs are SendInput under the hood and are occasionally dropped before the Host
+    // foregrounds on CI. A real regression still fails every attempt; retained pending a few stable CI runs (#652).
     [E2eRetry(3)]
     [TestMethod]
     public void DockingInput_TypeAndTabAcrossPanes()

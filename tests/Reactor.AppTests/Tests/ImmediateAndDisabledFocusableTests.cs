@@ -40,9 +40,9 @@ public class ImmediateAndDisabledFocusableTests : AppTestBase
     /// when focus left the control — proven indirectly by observing the
     /// fire-count rise while focus is still inside the NumberBox.
     /// </summary>
-    // [Retry] mops up the rare unattended-desktop input-injection flake: Win32 SendInput is
-    // occasionally dropped before the Host window foregrounds on CI. A real regression still
-    // fails every attempt. Removable once winappCli #562 (send-keys)/#498 (drag) ship native verbs.
+    // [E2eRetry] mops up the rare unattended-desktop input-injection flake: the native winapp
+    // send-keys/drag verbs are SendInput under the hood and are occasionally dropped before the Host
+    // foregrounds on CI. A real regression still fails every attempt; retained pending a few stable CI runs (#652).
     [E2eRetry(3)]
     [TestMethod]
     public void Immediate_FiresOnEveryKeystroke_BeforeBlur()

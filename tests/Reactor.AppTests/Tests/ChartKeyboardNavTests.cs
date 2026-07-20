@@ -7,8 +7,9 @@ namespace Microsoft.UI.Reactor.AppTests.Tests;
 /// E2E coverage for <c>ChartKeyboardNavigator.HandleKeyDown</c> (and the
 /// <c>BuildFocusIndicator</c> overlay it triggers). Focuses an interactive chart's plot area
 /// through the real Windows UIA pipeline, then injects the full keyboard-navigation vocabulary
-/// with the Win32 <see cref="InputInjector"/> fallback (winapp ui has no keyboard typing / arrow
-/// keys). This reaches every top-level arm of the navigator's key switch (plus
+/// with the native <c>winapp ui send-keys</c> verb (<c>--via send-input</c>, so the navigator's
+/// modifier-state reads see real key state). This reaches every top-level arm of the navigator's
+/// key switch (plus
 /// <c>BuildFocusIndicator</c>) cross-process — though not the legend-focused Enter/Space/Esc
 /// sub-branches, which need a legend this fixture doesn't enable — something the in-process
 /// selftests cannot do, because the modifier-state reads
@@ -40,10 +41,10 @@ public class ChartKeyboardNavTests : AppTestBase
     /// arm; the legend-focused
     /// Enter/Space/Esc sub-branches need a legend the fixture doesn't enable.
     /// </summary>
-    // [E2eRetry] mops up the rare unattended-desktop input-injection flake (Win32 SendInput is
-    // occasionally dropped before the Host window foregrounds, or UIA SetFocus loses the race with
-    // the focus-overlay re-render). A real regression still fails every attempt. Removable once
-    // winappCli #562 (send-keys) ships native keyboard verbs.
+    // [E2eRetry] mops up the rare unattended-desktop input-injection flake (the native winapp
+    // send-keys verb is SendInput under the hood and is occasionally dropped before the Host window
+    // foregrounds, or UIA SetFocus loses the race with the focus-overlay re-render). A real regression
+    // still fails every attempt; retained pending a few stable CI runs on the native verbs (#652).
     [E2eRetry(3)]
     [TestMethod]
     public void Interactive_Chart_KeyboardVocabulary_DrivesHandleKeyDown()
@@ -115,7 +116,6 @@ public class ChartKeyboardNavTests : AppTestBase
         if (match is null)
             return false;
 
-        InputInjector.Foreground(HostHwnd);
         try
         {
             App.Focus(match.Selector);
@@ -125,9 +125,9 @@ public class ChartKeyboardNavTests : AppTestBase
             return false; // some builds reject SetFocus on a Canvas; caller falls back to a click
         }
 
-        // winapp's focus process may have briefly taken foreground; restore the Host so injected
-        // keys route to it (the Canvas remains the window's focused element across the restore).
-        InputInjector.Foreground(HostHwnd);
+        // The Canvas remains the window's focused element; the subsequent send-keys verb foregrounds
+        // the Host itself before injecting, so keys route to it even if winapp's focus process briefly
+        // took foreground.
         return true;
     }
 
@@ -143,12 +143,13 @@ public class ChartKeyboardNavTests : AppTestBase
         if (match is null)
             return false;
 
-        InputInjector.Foreground(HostHwnd);
         // Offset in from the left edge, vertically centered, so the click lands on the focusable
-        // plot Canvas rather than its outer axis margin.
+        // plot Canvas rather than its outer axis margin. The native click verb is center-only, so
+        // reproduce this exact off-center point with a zero-distance drag (a press + release in place
+        // is a click, and with no movement it never crosses the drag threshold).
         int x = match.X + Math.Max(12, match.Width / 4);
         int y = match.Y + match.Height / 2;
-        InputInjector.Click(x, y);
+        App.Drag($"{x},{y}", $"{x},{y}");
         return true;
     }
 
@@ -165,8 +166,7 @@ public class ChartKeyboardNavTests : AppTestBase
     /// <summary>Press Enter on the (hopefully) focused chart and report whether a point invoked.</summary>
     private bool PressEnterAndCheckInvoked()
     {
-        InputInjector.Foreground(HostHwnd);
-        InputInjector.PressKey(InputInjector.VkEnter);
+        App.SendKeys(VkChord(VkEnter), viaSendInput: true);
         return PollStatusContains("invoked:", timeoutMs: 900);
     }
 
@@ -184,51 +184,51 @@ public class ChartKeyboardNavTests : AppTestBase
         // ← / → / ↓ / ↑ : point + series navigation. The first arrow flips the navigator into its
         // focused state, so the following render builds the double-ring focus overlay
         // (BuildFocusIndicator).
-        PressOnChart(InputInjector.VkRight);
-        PressOnChart(InputInjector.VkLeft);
-        PressOnChart(InputInjector.VkDown);
-        PressOnChart(InputInjector.VkUp);
+        PressOnChart(VkRight);
+        PressOnChart(VkLeft);
+        PressOnChart(VkDown);
+        PressOnChart(VkUp);
         Thread.Sleep(40);
 
         // Home / End, plus Ctrl+Home / Ctrl+End (jump to first/last series+point).
-        PressOnChart(InputInjector.VkHome);
-        PressOnChart(InputInjector.VkEnd);
-        PressOnChart(InputInjector.VkHome, ctrl: true);
-        PressOnChart(InputInjector.VkEnd, ctrl: true);
+        PressOnChart(VkHome);
+        PressOnChart(VkEnd);
+        PressOnChart(VkHome, ctrl: true);
+        PressOnChart(VkEnd, ctrl: true);
         Thread.Sleep(40);
 
         // Zoom in / out (numpad +/-, Ctrl+= , Ctrl+-) and reset zoom (Ctrl+0).
-        PressOnChart(InputInjector.VkAdd);
-        PressOnChart(InputInjector.VkSubtract);
-        PressOnChart(InputInjector.VkOemPlus, ctrl: true);
-        PressOnChart(InputInjector.VkOemMinus, ctrl: true);
-        PressOnChart(InputInjector.Vk0, ctrl: true);
+        PressOnChart(VkAdd);
+        PressOnChart(VkSubtract);
+        PressOnChart(VkOemPlus, ctrl: true);
+        PressOnChart(VkOemMinus, ctrl: true);
+        PressOnChart(Vk0, ctrl: true);
         Thread.Sleep(40);
 
         // Legend focus (L), speak summary (S), alternate-view toggle (T, bubbles), help (F1), and
         // the Shift+? help chord (VK_OEM_2 191 in the shift branch → OnShowHelp).
-        PressOnChart(InputInjector.VkL);
-        PressOnChart(InputInjector.VkS);
-        PressOnChart(InputInjector.VkT);
-        PressOnChart(InputInjector.VkF1);
-        PressOnChart(InputInjector.VkOem2, shift: true);
+        PressOnChart(VkL);
+        PressOnChart(VkS);
+        PressOnChart(VkT);
+        PressOnChart(VkF1);
+        PressOnChart(VkOem2, shift: true);
         Thread.Sleep(40);
 
         // Shift+← / Shift+→ : brush selection.
-        PressOnChart(InputInjector.VkRight, shift: true);
-        PressOnChart(InputInjector.VkLeft, shift: true);
+        PressOnChart(VkRight, shift: true);
+        PressOnChart(VkLeft, shift: true);
         Thread.Sleep(40);
 
         // Alt+arrows : pan.
-        PressOnChart(InputInjector.VkLeft, alt: true);
-        PressOnChart(InputInjector.VkRight, alt: true);
-        PressOnChart(InputInjector.VkUp, alt: true);
-        PressOnChart(InputInjector.VkDown, alt: true);
+        PressOnChart(VkLeft, alt: true);
+        PressOnChart(VkRight, alt: true);
+        PressOnChart(VkUp, alt: true);
+        PressOnChart(VkDown, alt: true);
         Thread.Sleep(40);
 
         // Space : invoke the focused point again. Escape : deactivate the focus indicator.
-        PressOnChart(InputInjector.VkSpace);
-        PressOnChart(InputInjector.VkEscape);
+        PressOnChart(VkSpace);
+        PressOnChart(VkEscape);
     }
 
     /// <summary>
@@ -247,43 +247,43 @@ public class ChartKeyboardNavTests : AppTestBase
     private void AssertObservablePointArms()
     {
         // Home -> point 0, then Enter invokes: proves the Home and Enter arms.
-        PressOnChart(InputInjector.VkHome);
-        InvokeAndAssertFreshIndex(InputInjector.VkEnter, 0);
+        PressOnChart(VkHome);
+        InvokeAndAssertFreshIndex(VkEnter, 0);
 
         // Right x3 -> point 3: proves Right advances the focused point.
-        PressOnChart(InputInjector.VkRight);
-        PressOnChart(InputInjector.VkRight);
-        PressOnChart(InputInjector.VkRight);
-        InvokeAndAssertFreshIndex(InputInjector.VkEnter, 3);
+        PressOnChart(VkRight);
+        PressOnChart(VkRight);
+        PressOnChart(VkRight);
+        InvokeAndAssertFreshIndex(VkEnter, 3);
 
         // Left -> point 2: proves Left retreats the focused point.
-        PressOnChart(InputInjector.VkLeft);
-        InvokeAndAssertFreshIndex(InputInjector.VkEnter, 2);
+        PressOnChart(VkLeft);
+        InvokeAndAssertFreshIndex(VkEnter, 2);
 
         // End -> point 9 (last): proves End.
-        PressOnChart(InputInjector.VkEnd);
-        InvokeAndAssertFreshIndex(InputInjector.VkEnter, 9);
+        PressOnChart(VkEnd);
+        InvokeAndAssertFreshIndex(VkEnter, 9);
 
         // Ctrl+Home -> point 0 (first series, first point): proves Ctrl+Home.
-        PressOnChart(InputInjector.VkHome, ctrl: true);
-        InvokeAndAssertFreshIndex(InputInjector.VkEnter, 0);
+        PressOnChart(VkHome, ctrl: true);
+        InvokeAndAssertFreshIndex(VkEnter, 0);
 
         // Ctrl+End -> point 9 (last series, last point): proves Ctrl+End.
-        PressOnChart(InputInjector.VkEnd, ctrl: true);
-        InvokeAndAssertFreshIndex(InputInjector.VkEnter, 9);
+        PressOnChart(VkEnd, ctrl: true);
+        InvokeAndAssertFreshIndex(VkEnter, 9);
 
         // Home -> 0, then Space invokes: proves the Space invoke key (distinct from Enter).
-        PressOnChart(InputInjector.VkHome);
-        InvokeAndAssertFreshIndex(InputInjector.VkSpace, 0);
+        PressOnChart(VkHome);
+        InvokeAndAssertFreshIndex(VkSpace, 0);
 
         // Shift+Right moves PointIndex to brushEnd (0 -> 1); Space invokes: proves the Shift+Right
         // brush arm actually advances the focused point.
-        PressOnChart(InputInjector.VkRight, shift: true);
-        InvokeAndAssertFreshIndex(InputInjector.VkSpace, 1);
+        PressOnChart(VkRight, shift: true);
+        InvokeAndAssertFreshIndex(VkSpace, 1);
 
         // Shift+Left moves PointIndex back (1 -> 0); Space invokes: proves the Shift+Left brush arm.
-        PressOnChart(InputInjector.VkLeft, shift: true);
-        InvokeAndAssertFreshIndex(InputInjector.VkSpace, 0);
+        PressOnChart(VkLeft, shift: true);
+        InvokeAndAssertFreshIndex(VkSpace, 0);
     }
 
     /// <summary>
@@ -325,8 +325,29 @@ public class ChartKeyboardNavTests : AppTestBase
                     "the fixture may have failed to render or lost its AutomationName.");
             ClickChartToFocus(match);
         }
-        InputInjector.PressKeyWith(virtualKey, ctrl: ctrl, shift: shift, alt: alt);
+        App.SendKeys(VkChord(virtualKey, ctrl: ctrl, shift: shift, alt: alt), viaSendInput: true);
         Thread.Sleep(45);
+    }
+
+    // Virtual-key codes for the navigator vocabulary (migrated from the retired InputInjector, whose
+    // only consumer was this fixture). Each is emitted as a layout-independent `vk=0xNN` send-keys
+    // token so the chord is expressible regardless of the keyboard layout or friendly-name grammar.
+    private const ushort VkLeft = 0x25, VkUp = 0x26, VkRight = 0x27, VkDown = 0x28;
+    private const ushort VkHome = 0x24, VkEnd = 0x23, VkEnter = 0x0D, VkSpace = 0x20, VkEscape = 0x1B;
+    private const ushort VkAdd = 0x6B, VkSubtract = 0x6D, VkOemPlus = 0xBB, VkOemMinus = 0xBD;
+    private const ushort VkF1 = 0x70, Vk0 = 0x30, VkL = 0x4C, VkS = 0x53, VkT = 0x54, VkOem2 = 0xBF;
+
+    // Build a native send-keys chord for a virtual key with optional modifiers, e.g.
+    // VkChord(VkHome, ctrl: true) -> "ctrl+vk=0x24". The winapp key grammar accepts vk= as the main
+    // key of a modifier combo, so this expresses every navigator chord without needing friendly names.
+    private static string VkChord(ushort vk, bool ctrl = false, bool shift = false, bool alt = false)
+    {
+        var sb = new System.Text.StringBuilder();
+        if (ctrl) sb.Append("ctrl+");
+        if (shift) sb.Append("shift+");
+        if (alt) sb.Append("alt+");
+        sb.Append("vk=0x").Append(vk.ToString("X2"));
+        return sb.ToString();
     }
 
     // ─── Polling ──────────────────────────────────────────────────────────────

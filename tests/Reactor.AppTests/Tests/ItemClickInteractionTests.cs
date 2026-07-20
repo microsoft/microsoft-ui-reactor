@@ -75,14 +75,12 @@ public class ItemClickInteractionTests : AppTestBase
     }
 
     /// <summary>
-    /// Deliver a real Win32 pointer click to the center of the element's bounding rectangle.
-    /// A real click (not a UIA Invoke) is required: WinUI raises <c>ListView.ItemClick</c>
+    /// Deliver a real pointer click to the center of the element via the native <c>winapp ui click</c>
+    /// verb. A real click (not a UIA Invoke) is required: WinUI raises <c>ListView.ItemClick</c>
     /// from pointer input.
     /// </summary>
     private void RealClick(string automationId)
     {
-        var r = FindById(automationId).Rect;
-        InputInjector.Foreground(HostHwnd);
-        InputInjector.Click(r.X + r.Width / 2, r.Y + r.Height / 2);
+        FindById(automationId).Click();
     }
 }
