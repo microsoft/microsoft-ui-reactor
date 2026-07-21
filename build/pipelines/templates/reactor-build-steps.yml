@@ -27,7 +27,13 @@ parameters:
   - name: npmRegistry
     displayName: 'Internal npm registry (ADO feed) for transitive npm downloads.'
     type: string
-    default: 'https://github-private.pkgs.visualstudio.com/microsoft/_packaging/microsoft-ui-reactor/npm/registry/'
+    # Modern pkgs.dev.azure.com domain (org/project scoped), matching nuget.internal.config's
+    # feed. Equivalent to the legacy https://github-private.pkgs.visualstudio.com/microsoft/...
+    # form; the pkgs.dev.azure.com domain is Microsoft's preferred/required endpoint (agent
+    # firewall rules, reliability). The `microsoft-ui-reactor` feed proxies registry.npmjs.org
+    # via its npm upstream source, so transitive npm downloads (e.g. the GitHub.Copilot.SDK CLI)
+    # resolve internally with feed auth.
+    default: 'https://pkgs.dev.azure.com/github-private/microsoft/_packaging/microsoft-ui-reactor/npm/registry/'
   - name: version
     displayName: 'Explicit version; "auto" or blank => MinVer.'
     type: string
