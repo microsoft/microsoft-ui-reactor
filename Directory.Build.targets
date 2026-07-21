@@ -90,4 +90,11 @@
     <PackageReference Include="Microsoft.WindowsAppSDK.Runtime" Condition="'$(_ReactorWinAppSDKFrameworkDependentApp)' == 'true'" />
   </ItemGroup>
 
+  <!-- Make the GitHub.Copilot.SDK build-time CLI download resilient on offline /
+       restricted networks so `dotnet build` / `dotnet run` works for everyone; see
+       the target's own comment. Imported here (a late import) so $(CopilotCliVersion)
+       and the SDK's $(_CopilotPlatform)/$(_CopilotBinary) are already resolved. -->
+  <Import Project="$(MSBuildThisFileDirectory)build\Reactor.CopilotCli.targets"
+          Condition="Exists('$(MSBuildThisFileDirectory)build\Reactor.CopilotCli.targets')" />
+
 </Project>
