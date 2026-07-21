@@ -74,7 +74,10 @@ public sealed class CopilotSdkClient : IModelClient, IAsyncDisposable
     /// Returns <c>null</c> when the bundled CLI is present (let the SDK use it) or
     /// when nothing could be found (let the SDK throw its descriptive error).
     /// Order: bundled next to the app → <c>COPILOT_CLI_PATH</c> → a locally
-    /// installed Copilot CLI (GitHub CLI install, then <c>PATH</c>).
+    /// installed Copilot CLI in its well-known per-user location. We deliberately
+    /// do NOT probe <c>PATH</c> for <c>copilot.exe</c> — that would let any
+    /// unrelated (or malicious) binary earlier on <c>PATH</c> be launched. To use
+    /// a CLI in a non-standard location, set <c>COPILOT_CLI_PATH</c> explicitly.
     /// </summary>
     static string? ResolveCliPath()
     {
@@ -96,22 +99,12 @@ public sealed class CopilotSdkClient : IModelClient, IAsyncDisposable
 
     static IEnumerable<string> EnumerateInstalledCliPaths()
     {
-        // Standalone GitHub Copilot CLI install (winget / gh).
+        // Standalone GitHub Copilot CLI install (winget / gh), in its well-known
+        // per-user location. Intentionally a fixed, trusted path — never a PATH
+        // scan, so an unrelated copilot.exe on PATH can't be picked up and run.
         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         if (!string.IsNullOrEmpty(localAppData))
             yield return Path.Combine(localAppData, "GitHub CLI", "copilot", "copilot.exe");
-
-        // Anything named copilot.exe on PATH.
-        var path = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
-        foreach (var dir in path.Split(Path.PathSeparator))
-        {
-            if (string.IsNullOrWhiteSpace(dir))
-                continue;
-            string full;
-            try { full = Path.Combine(dir.Trim(), "copilot.exe"); }
-            catch { continue; }
-            yield return full;
-        }
     }
 
     public async Task<IModelConversation> StartConversationAsync(string systemPrompt, CancellationToken ct)

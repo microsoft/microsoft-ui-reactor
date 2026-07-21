@@ -85,8 +85,11 @@ hard-fails on a restricted network:
   acquires the CLI through that feed with `npm pack`, since Azure Artifacts feeds
   require auth that the SDK's raw download can't provide.
 - **Offline / no feed** — the build still succeeds *without* a bundled CLI (a
-  `REACTORCLI001` warning is emitted). Set `COPILOT_CLI_PATH` to a local
-  `copilot.exe` to run generation, or just rely on `gh auth`'s CLI at run time.
+  `REACTORCLI001` warning is emitted). To run generation you then need a Copilot
+  CLI binary available at run time: set `COPILOT_CLI_PATH` to a local `copilot.exe`
+  (or install the standalone Copilot CLI in its default per-user location). Note
+  `gh auth` only supplies Copilot credentials — it is not itself a runnable
+  `copilot.exe`.
 
 Type a prompt, click **Generate & Run**. The generated source streams into the
 right panel; the build + `wxc-exec` log streams below it. The widget window opens
