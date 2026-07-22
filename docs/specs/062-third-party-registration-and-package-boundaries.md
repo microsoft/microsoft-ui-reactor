@@ -102,14 +102,16 @@ it supersedes any notion of a separate "abstractions" reference (§4.2 / §5.1).
 **R2 — Registration is automatic; explicit only where lazy can't reach.** The common
 case needs *no* per-library call: a control self-registers when its element is first
 constructed (§3), and families register the same lazy way through a base-type entry.
-Explicit registration — via the existing public `ControlRegistry.Register*` at startup —
-is reserved for the two cases construction cannot trigger: a handler for an element the
-library does not construct (e.g. an override), and eager global init (e.g. a XAML resource
-dictionary). Reactor adds **no** bulk "register-the-whole-library" API — it would
-re-introduce the trim opt-out spec 048 removed (R5).
+Explicit registration — via the public `ControlRegistry.Register*` seam (for reusable
+libraries) or the per-host `Reconciler.RegisterType`/`RegisterHandler` (for app-local
+controls), both from app startup (§8) — is reserved for the two cases construction cannot
+trigger: a handler for an element the library does not construct (e.g. an override), and
+eager global init (e.g. a XAML resource dictionary). Reactor adds **no** bulk
+"register-the-whole-library" API — it would re-introduce the trim opt-out spec 048 removed
+(R5).
 
 **R3 — Loud, helpful failure.** A missing registration produces a clear diagnostic
-that names the missing library and suggests the fix — never a blank screen.
+that names the missing element type and how to register it — never a blank screen.
 
 **R4 — Leaner core.** The heavy optional subsystems (charting, data grid, docking,
 markdown) move out of the default core reference so every app — and every wrapper
@@ -230,9 +232,10 @@ against source:
   (`src/Reactor/Core/V1Protocol/MountContext.cs`) are `public readonly ref struct`s
   that each hold a `private readonly Reconciler _reconciler`, **expose it publicly**
   (`public Reconciler Reconciler => _reconciler;`, offered as an "escape hatch"), and
-  proxy roughly a dozen reconciler operations (`MountChild`, `ReconcileV1Child`,
+  proxy several reconciler operations (`MountChild`, `ReconcileChild`,
   `RentControl`, `PushContext`/stagger scopes, `ApplySetters`, …) on the per-mount,
-  allocation-free hot path.
+  allocation-free hot path (up to ~10 on `MountContext`, fewer on `UpdateContext` /
+  `UnmountContext`).
 - `ControlDescriptor` references `MountContext` (its `AfterChildrenMount` callback),
   and `OneWayBridgedSetter` takes a `Reconciler` directly.
 - The generator emits direct calls to `Reconciler.SetElementTag` / `GetElementTag` /
@@ -276,7 +279,7 @@ as small, independent clean-ups that can interleave with either track.
   drags the runtime along or inverts to a broad runtime interface that merely
   relocates the freeze. One runtime → one versioning unit is simpler and honest.
 - **A fan-out of per-feature packages** (`.Charting` / `.DataGrid` / `.Docking` /
-  `.Markdown`). Each assembly carries fixed load/metadata overhead; a dozen small
+  `.Markdown`). Each assembly carries fixed load/metadata overhead; several small
   DLLs cost more than they save for the common app. Track B consolidates into the one
   existing `Reactor.Advanced` assembly instead.
 - **Carving the built-in control catalog out of core behind a metapackage.** Large,
@@ -326,11 +329,12 @@ through the global `ControlRegistry.Register*` seam above, or via the generator 
 does). Keeping per-host registration unfrozen holds the seam to the minimum a rolled-forward
 binary actually binds.
 
-**Two compatibility tiers — *prove* vs *promise*.** Every supported public API — the
-control-authoring seam **and** the app-facing DSL (~200 factory methods, ~600 fluent
-modifiers, and the hooks) — is a **within-major ABI**: it does not break within a SemVer
-major, so a compiled binary that binds any of it rolls forward across a same-major runtime
-(R7). The tiers differ in *how* that is assured, not in *whether* it holds:
+**Two compatibility tiers — *prove* vs *promise*.** Under the R7 policy (a 1.0 commitment,
+not a preview guarantee — §2), every supported public API — the control-authoring seam
+**and** the app-facing DSL (~200 factory methods, ~600 fluent modifiers, and the hooks) — is
+treated as a **within-major ABI**: within a SemVer major it does not break, so a compiled
+binary that binds any of it rolls forward across a same-major runtime. The tiers differ in
+*how* that is assured, not in *whether* it holds:
 
 - **Tier 1 — promised (the DSL and the rest of the public surface).** Kept within-major
   stable by additive-only **discipline** + review + release notes. SemVer is a release
@@ -342,7 +346,9 @@ major, so a compiled binary that binds any of it rolls forward across a same-maj
   deliberately declined: it is large and evolving, and add-overload discipline already keeps
   it within-major-safe without freezing ~800 members to a checked-in txt file.
 - **Tier 2 — proven (the §6.1 seam).** On top of the same within-major promise, the ~35
-  seam members are additionally *mechanically* guaranteed — the API-compat gate fails the
+  seam members are additionally *mechanically* guaranteed (the exact gated boundary — the
+  whole §6.1 table vs the subset generated code + `external_proof` actually bind — is settled
+  in Q2) — the API-compat gate fails the
   build on any change, and the interop harness proves an old wrapper binary still
   mounts/updates/echo-suppresses on the HEAD runtime — and held to a stricter
   last-resort-only posture even across majors. Tier 2 is stronger **evidence**; it does
@@ -382,8 +388,9 @@ a runtime test (2), and a load-time policy (3).
    *behavior* (echo semantics, child reconcile, registration timing, descriptor ordering),
    which no API diff can see. This is an integration test with one non-negotiable shape — it
    loads a **pre-compiled DLL** (a binary drop, **not** a project reference; a project
-   reference recompiles against HEAD and hides the very break we are hunting). Analogous to
-   the existing AOT-proof harness, build `Reactor.External.TestControl` against an
+   reference recompiles against HEAD and hides the very break we are hunting). In the same
+   spirit as the existing AOT-proof harness (which inspects a shipped artifact rather than
+   recompiling from source), build `Reactor.External.TestControl` against an
    **older** Reactor, then load that unchanged DLL into a host running the HEAD runtime and
    assert mount / update / echo-suppress all succeed through the public surface only. A
    two-NuGet-version matrix can follow in CI.
@@ -397,7 +404,8 @@ a runtime test (2), and a load-time policy (3).
    graph. The same-major band is enforced at *restore*, not left to luck at load: a
    generated library package declares a **bounded** Reactor dependency range — lower bound
    its build version, upper bound the next major (e.g. `[1.2.0, 2.0.0)`) — so a graph that
-   mixes majors fails or warns during restore (NU1107/NU1608) instead of silently binding a
+   mixes majors fails or warns during restore (NU1107 conflict / NU1608 out-of-range /
+   NU1605 downgrade) instead of silently binding a
    mismatched runtime and throwing `MissingMethodException` at mount time. **Side-by-side**
    (two runtimes in separate `AssemblyLoadContext`s) is **out of scope** — `Element`
    records from different contexts are different `Type`s a shared reconciler cannot
@@ -521,8 +529,11 @@ green, and the subsystem's selftests/E2E still pass.
 
 **The common case needs no registration call.** A control self-registers the first time
 its element is constructed: a generated wrapper's Pattern-A cctor sits on the element
-record itself, and the built-in catalog / a base-derived family registers through the
-`Reg<>` / `RegBase<>` factory touch or a base-type static constructor (§3). Because a
+record itself; the built-in catalog self-registers from its factories (a `Reg<>` touch, or
+a generated element cctor for descriptor-backed built-ins), and a base-derived family
+through `RegBase<>` or an **explicit** base-type static constructor — explicit (not a
+`static`-field initializer) so the base type is not `beforefieldinit` and constructing a
+derived record is guaranteed to run it (§3). Because a
 Reactor app builds its element tree *before* it reconciles, construction always precedes
 dispatch — so there is nothing to "wire up" for the controls a library owns, and no
 MAUI-style `UseMyLibrary()` step.
@@ -549,13 +560,15 @@ app's existing `ReactorApp.Run(...)` startup delegate; pick by scope:
 - **Global, ABI-stable — `ControlRegistry.Register` / `RegisterDecorator` /
   `RegisterForDerivedTypes`.** Process-wide, part of the frozen §6.1 seam, so a *reusable or
   shipped* control library that registers this way rolls forward under R7. The handler
-  factory must be `static` (no captures; per-instance state lives in the `IElementHandler`
-  class). This is the path for library-level overrides and eager global init; a library that
+  factory should be `static` (the `StaticRegisterLambdaAnalyzer` warns otherwise) so it
+  captures nothing and is cached once; per-instance state lives in the `IElementHandler`
+  class. This is the path for library-level overrides and eager global init; a library that
   needs eager setup ships its own ordinary `public static void UseAcme()` over it.
 - **Per-host, ergonomic — `host.Reconciler.RegisterType(...)` / `RegisterHandler(...)`.**
-  Registers one host's reconciler with **inline** mount/update/unmount delegates (no
-  `IElementHandler` class) that **may capture** host-local state, and different hosts may
-  register different implementations for the same element type. This is the right tool for a
+  These register on one host's reconciler: `RegisterType` takes **inline** mount/update/unmount
+  delegates (no `IElementHandler` class needed) and `RegisterHandler` takes an `IElementHandler`
+  instance; either may **capture** host-local state, and different hosts may register
+  different implementations for the same element type. This is the right tool for a
   *bespoke, app-local* custom control — the shape Reactor's own `ResizeGrip` / docking
   natives and the Monaco / regedit samples use. It is deliberately **outside** the §6.1
   frozen seam: apps recompile against their target runtime, so they need no roll-forward
@@ -574,7 +587,7 @@ discovery scan — is the default.
 
 - **`[ModuleInitializer]` / assembly-load registration is a trimmer root.** It runs on
   first type-load and names every handler + control, so the trimmer can never prove it
-  dead and keeps the whole library. This defeats R5. (Spec 048 §3.4 deleted exactly
+  dead and keeps the whole library. This defeats R5. (Spec 048 §4 rejected exactly
   this shape.)
 - **Reflection-based assembly scanning** is AOT-hostile, startup-costly, and roots
   types the trimmer would otherwise drop.
@@ -590,22 +603,21 @@ zero-ceremony wiring without it.
 
 ## §10 Diagnostics
 
-Layer library-scoped diagnostics on top of 048's runtime throw (R3).
-
 Keep 048's runtime throw on an unregistered mount (R3), but — with lazy self-registration
 the norm — reframe *what it blames*. A "mounted but unregistered" element is now almost
 unreachable for generated wrappers (constructing the element self-registers it); it survives
 only for a factory-carried control constructed by raw `new` that bypassed the factory
 trigger, or a third-party override that was never registered.
 
-- **Reword the runtime throw** to point at those causes rather than a forgotten `UseX()`:
+- **Reword the runtime throw** to point at those causes rather than at a nonexistent
+  registration call:
   *"No handler registered for `FooElement`. Create it through its factory (built-in /
   Pattern-B controls self-register on the factory call), ensure its generated wrapper is
   referenced so its self-registration runs, register a third-party override at startup via
   `ControlRegistry.Register…`, or — for a bespoke app-local control — register it on the
   host's reconciler via `Reconciler.RegisterType`/`RegisterHandler` before first mount
   (§8)."* Reflection-light and AOT-safe: it names only `element.GetType()`.
-- **Keep the direct-record construction guardrail.** Warn when a *factory-registered* element
+- **Add a direct-record construction guardrail.** Warn when a *factory-registered* element
   record (a built-in / Pattern-B-style control, where the registration link lives on the
   factory) is constructed directly (`new FooElement(...)`) rather than via its factory — the
   most common cause of the throw above. It must **not** fire on generated wrappers (058),
@@ -616,8 +628,8 @@ trigger, or a third-party override that was never registered.
 Both tracks preserve spec 048's reachability model (R5):
 
 - **Track A is trim-neutral.** Stabilizing the seam in place adds no new roots — the
-  seam is already public and reached through the existing registration link
-  (factory → `Register` → handler → control). An API-compat gate is a build-time
+  seam is already public and reached through the existing registration links
+  (a factory or generated element cctor → `Register` → handler → control). An API-compat gate is a build-time
   analyzer, not a runtime root.
 - **Track B is trim-neutral.** #627 already inverted the core→feature dependencies so
   an app trims the subsystems it does not use; moving those subsystems into
@@ -645,13 +657,13 @@ Both tracks preserve spec 048's reachability model (R5):
 - **Increment 1 — done (this change).** Public `ReactorBinding.ShouldSuppressEcho`;
   generator repointed off the last internal symbol. The wrapper-bound surface is now
   fully public (§3).
-- **Track A — stable ABI in place.** A1: enumerate and lock the §6.1 seam behind the
+- **Track A — stabilize the ABI in place.** A1: enumerate and lock the §6.1 seam behind the
   API-compat gate (Q1/Q2). A2: build the binary-compat interop harness. A3: settle and
   document the loader/version policy (Q3).
 - **Track B — consolidate into Advanced.** B1: charting + docking → `Reactor.Advanced`.
   B2: markdown (with the §7 factory note, Q4). B3: data grid (§7 factory note, Q4).
 - **Registration clean-ups — independent, small.** E1: reword the R3 runtime throw and
-  keep the direct-record guardrail (§10). E2: document the §8 explicit-registration escape
+  add the direct-record guardrail (§10). E2: document the §8 explicit-registration escape
   hatch (overrides / eager init) against the existing `ControlRegistry.Register*`. No
   `IReactorLibrary`, marker, or discovery pass ships.
 
