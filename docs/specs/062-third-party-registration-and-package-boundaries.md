@@ -115,17 +115,31 @@ property: an app roots (and the trimmer keeps) only the controls it actually rea
 recipe (spec 047, `tests/external_proof`) and the `[GenerateReactorWrapper]`
 generator (spec 058) keep working, ideally with a smaller footprint, never larger.
 
-**R7 — Cross-version library interop (stable ABI).** A control library built against
-Reactor version *N* loads and runs, **without recompilation**, against any host runtime
-*M* in the **same SemVer major** (*M* ≥ *N*) — the ABI compatibility band. Additive
-surface ships in **minor** releases (patch = compatible fixes only), and a compiled
-wrapper rolls forward across them because .NET binds a foreign assembly by type/member
-signature and NuGet resolves a **single** Reactor version into the graph. An app that
-transitively pulls `LibA` (built against *N*) and `LibB` (built against *M*, same major)
-unifies to that one runtime, and both libraries' controls must mount, update, and echo
-correctly against it. A deliberate break (§6.3) is confined to a **major** bump — the
-major number is the signal that the frozen surface may have moved. The binary guarantee
-begins at **1.0**; 0.x previews carry no durable ABI promise (Q3).
+**R7 — Cross-version library interop (stable ABI).** *A 1.0 commitment the seam is
+evolved toward — not a property preview can rely on today.* The **target**: a control
+library built against Reactor version *N* loads and runs, **without recompilation**,
+against any host runtime *M* in the **same SemVer major** (*M* ≥ *N*) — the ABI
+compatibility band. Additive surface ships in **minor** releases (patch = compatible fixes
+only), so a compiled wrapper can roll forward: NuGet resolves a **single** Reactor version
+into the graph, the default load context binds that one assembly by **identity** first, and
+the wrapper's member references then resolve against it so long as every bound type/member
+signature is unchanged. An app that transitively pulls `LibA` (built against *N*) and `LibB`
+(built against *M*, same major) unifies to that one runtime, and both libraries' controls
+must mount, update, and echo correctly against it — the *M* ≥ *N* direction holding only
+when the resolved host version satisfies **every** wrapper's declared lower bound (via
+bounded dependency ranges — §6.2), since NuGet's nearest-wins resolution or a direct/override
+dependency can otherwise pick *M* < *N*. A deliberate break (§6.3) is confined to a
+**major** bump.
+
+**Status — intended, not yet enforced.** The current architecture *can permit* roll-forward
+today (the bound surface is public and the runtime loads in the default context), but that
+is **unvalidated and not guaranteed**: nothing proves the bound signatures stay preserved or
+that mount/update/echo behavior holds across releases. The API-compat gate, the interop
+harness, and the loader/version policy (§6.2) do not exist yet, and the loader policy is
+deliberately deferred (Q3). R7 therefore
+becomes a **durable guarantee at 1.0, once that machinery lands** — 0.x previews carry no
+ABI promise. Until then it is the requirement the seam is designed and evolved toward (§6),
+not a contract a preview consumer should build on.
 
 ## §3 Current state — what 047 / 048 / 058 already deliver
 
@@ -232,7 +246,8 @@ either order:
 
 - **Track A — a stable authoring ABI, in place (§6).** Treat the (now fully public)
   authoring seam as a versioned, additive-only contract in the one runtime, enforced
-  by a real API-compat gate and a binary-compat interop harness. Delivers R1 / R7.
+  — *once built* — by a real API-compat gate and a binary-compat interop harness. Delivers
+  R1 / R7 (which become a durable guarantee only when that machinery lands — §6.2 / R7).
 - **Track B — consolidate heavy subsystems into `Reactor.Advanced` (§7).** Move
   charting, docking, markdown, and the data grid out of core into the existing
   advanced assembly, largely keeping their namespaces (§7). Delivers R4.
@@ -266,8 +281,9 @@ The goal (R1/R7) is that a *compiled* wrapper binds a fixed subset of Reactor's
 public surface and keeps working against a newer runtime. .NET default-context
 assembly binding is by type/member signature and NuGet unifies to a single assembly,
 so *old generated code binds to a newer runtime as long as every symbol it references
-is unchanged*. The guarantee reduces to one discipline: **enumerate the surface a
-wrapper binds, and evolve it additive-only.**
+is unchanged*. Making that a *durable* guarantee (rather than the by-construction
+behavior it is today — R7 status) reduces to one discipline plus the governance to
+enforce it (§6.2): **enumerate the surface a wrapper binds, and evolve it additive-only.**
 
 ### §6.1 The seam to freeze
 
