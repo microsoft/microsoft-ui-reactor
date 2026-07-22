@@ -317,6 +317,15 @@ types a wrapper hands back or receives (`Element`, `Optional<T>`, the `ChildrenS
 records) — is part of the ABI closure and is preserved along with the member. A frozen
 signature is only as stable as the transitive types it names.
 
+**Deliberately *outside* the frozen seam:** the per-host explicit-registration API
+(`Reconciler.RegisterType` / `RegisterHandler`, §8) is public and useful for app-local
+bespoke controls, but it is **not** part of the R7-frozen surface. It is per-host and aimed
+at apps (which recompile against their target runtime) and framework-internal controls
+(`ResizeGrip`, docking); a *compiled* control library that must roll forward registers
+through the global `ControlRegistry.Register*` seam above, or via the generator (which
+does). Keeping per-host registration unfrozen holds the seam to the minimum a rolled-forward
+binary actually binds.
+
 **Two compatibility tiers — *prove* vs *promise*.** Every supported public API — the
 control-authoring seam **and** the app-facing DSL (~200 factory methods, ~600 fluent
 modifiers, and the hooks) — is a **within-major ABI**: it does not break within a SemVer
@@ -534,14 +543,28 @@ them:
    `Application.Current.Resources`. This is ordinary WinUI app-startup work, not Reactor
    control registration, and is often too late if deferred to a render pass.
 
-**The mechanism is what already exists — no new abstraction.** Both cases use the public
-`ControlRegistry.Register` / `RegisterDecorator` / `RegisterForDerivedTypes` (already part
-of the §6.1 seam) from the app's existing `ReactorApp.Run(...)` startup delegate. A library
-that needs eager setup ships its own ordinary `public static void UseAcme()` (or an
-extension method) built on those APIs and documents "call it at startup." Reactor
-deliberately does **not** standardize a per-library `IReactorLibrary` interface: that would
-add frozen ABI surface Track A works to *minimize*, in exchange for sugar over a one-line
-call an author can already write.
+**Two explicit-registration paths already exist — no new abstraction.** Both run from the
+app's existing `ReactorApp.Run(...)` startup delegate; pick by scope:
+
+- **Global, ABI-stable — `ControlRegistry.Register` / `RegisterDecorator` /
+  `RegisterForDerivedTypes`.** Process-wide, part of the frozen §6.1 seam, so a *reusable or
+  shipped* control library that registers this way rolls forward under R7. The handler
+  factory must be `static` (no captures; per-instance state lives in the `IElementHandler`
+  class). This is the path for library-level overrides and eager global init; a library that
+  needs eager setup ships its own ordinary `public static void UseAcme()` over it.
+- **Per-host, ergonomic — `host.Reconciler.RegisterType(...)` / `RegisterHandler(...)`.**
+  Registers one host's reconciler with **inline** mount/update/unmount delegates (no
+  `IElementHandler` class) that **may capture** host-local state, and different hosts may
+  register different implementations for the same element type. This is the right tool for a
+  *bespoke, app-local* custom control — the shape Reactor's own `ResizeGrip` / docking
+  natives and the Monaco / regedit samples use. It is deliberately **outside** the §6.1
+  frozen seam: apps recompile against their target runtime, so they need no roll-forward
+  promise — a control that must roll forward as a *compiled* dependency uses the global seam
+  (or the generator) instead.
+
+Reactor deliberately does **not** add a per-library `IReactorLibrary` interface on top of
+either path: that would add frozen ABI surface Track A works to *minimize*, in exchange for
+sugar over a one-line call an author can already write.
 
 ## §9 Self-registration vs. explicit registration
 
@@ -557,9 +580,10 @@ discovery scan — is the default.
   types the trimmer would otherwise drop.
 
 **Recommendation:** lazy self-registration is the norm — a control's code is rooted only
-when its element is constructed (§3). The *only* explicit registration is the narrow §8
-escape hatch (overrides and eager global init), written directly against the public
-`ControlRegistry.Register*` APIs. Reactor ships **no** marker-driven discovery pass
+when its element is constructed (§3). Explicit registration is the narrow §8 escape hatch,
+along one of two paths: the global `ControlRegistry.Register*` seam (library-level overrides
+/ eager init, R7-stable) or the per-host `Reconciler.RegisterType` / `RegisterHandler`
+(app-local bespoke controls, not frozen). Reactor ships **no** marker-driven discovery pass
 (`[assembly: ReactorLibrary]` / `UseDiscoveredLibraries()`): it would be either a trimmer
 root or a `[RequiresUnreferencedCode]` opt-out, and lazy registration already delivers
 zero-ceremony wiring without it.
@@ -577,9 +601,10 @@ trigger, or a third-party override that was never registered.
 - **Reword the runtime throw** to point at those causes rather than a forgotten `UseX()`:
   *"No handler registered for `FooElement`. Create it through its factory (built-in /
   Pattern-B controls self-register on the factory call), ensure its generated wrapper is
-  referenced so its self-registration runs, or — if this is a third-party override —
-  register it at startup via `ControlRegistry.Register…`."* Reflection-light and AOT-safe:
-  it names only `element.GetType()`.
+  referenced so its self-registration runs, register a third-party override at startup via
+  `ControlRegistry.Register…`, or — for a bespoke app-local control — register it on the
+  host's reconciler via `Reconciler.RegisterType`/`RegisterHandler` before first mount
+  (§8)."* Reflection-light and AOT-safe: it names only `element.GetType()`.
 - **Keep the direct-record construction guardrail.** Warn when a *factory-registered* element
   record (a built-in / Pattern-B-style control, where the registration link lives on the
   factory) is constructed directly (`new FooElement(...)`) rather than via its factory — the
@@ -599,8 +624,9 @@ Both tracks preserve spec 048's reachability model (R5):
   `Reactor.Advanced` changes the *assembly* they live in, not what roots them. The
   regression gates are `CoreControlFamilyBoundaryTests` (the IL boundary scan) and the
   AOT-proof harness (`tests/aot_trim_proof`), which must stay green through each move.
-- **Explicit registration stays lazy-friendly.** The §8 escape hatch calls the existing
-  `ControlRegistry.Register*` only for overrides / eager init; there is no bulk per-library
+- **Explicit registration stays lazy-friendly.** The §8 escape hatch — global
+  `ControlRegistry.Register*` for overrides / eager init, or per-host `Reconciler.RegisterType`
+  for app-local controls — registers only what the app names; there is no bulk per-library
   root and no discovery scan (§9), so an app still pays only for the controls it constructs.
 
 ## §12 Open questions
