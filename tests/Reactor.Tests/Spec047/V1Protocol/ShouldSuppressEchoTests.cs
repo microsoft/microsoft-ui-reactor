@@ -71,6 +71,8 @@ public class ShouldSuppressEchoTests
         var ps = ShouldSuppressEchoMethod.GetParameters();
         var p = Assert.Single(ps);
         Assert.Equal(typeof(UIElement), p.ParameterType);
-        Assert.Equal("target", p.Name);
+        // Parameter *name* is deliberately not asserted: it is not part of the CLR
+        // binary contract (renaming it doesn't break external generated wrappers) —
+        // only the arity and parameter type are ABI-load-bearing here.
     }
 }

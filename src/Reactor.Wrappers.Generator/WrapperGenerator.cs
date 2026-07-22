@@ -1491,12 +1491,13 @@ public sealed class WrapperGenerator : IIncrementalGenerator
             // echoed change event is dropped), then re-read the live control value
             // and fire the user callback. Using the public primitive (not the
             // internal ChangeEchoSuppressor) keeps the emitted code compilable
-            // against Reactor's public surface alone — spec 062 §14. The trampoline
-            // uses an `as`-cast and null-guards the sender before the strict public
-            // call so a control that raises its change event with a null or
-            // unexpected-type sender stays a no-op, preserving the pre-existing
-            // tolerant behavior of the internal read-side check (which returned
-            // false for null / non-FrameworkElement senders).
+            // against Reactor's public surface alone — spec 062 §14. The public
+            // primitive is strict (it throws on a null argument), so the trampoline
+            // defends the sender itself: an `as`-cast plus null-check make it a no-op
+            // for a null or unexpected-type sender. This *restores* the tolerance the
+            // internal read-side check had (it returned false for null /
+            // non-FrameworkElement senders) — the earlier direct cast would instead
+            // have thrown on such a sender before reaching the suppression check.
             foreach (var p in deferredProps)
             {
                 sb.AppendLine($"    private static readonly {p.ControlledDelegate} __{p.Name}ControlledTrampoline = static (s, _) =>");
