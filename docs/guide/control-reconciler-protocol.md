@@ -534,8 +534,8 @@ suppresses that echo with a per-control counter:
 | `binding.WriteSuppressed(mutate)` | Inside `Update` when writing a controlled prop | Increments the suppress counter, runs the mutate, decrements |
 | `ReactorBinding.ShouldSuppressEcho(fe)` | Inside an event trampoline | Drains a pending suppress count and returns true; trampoline short-circuits |
 
-The trampolines `ReactorBinding.OnCustomEvent<TArgs>` generates call
-`ShouldSuppressEcho` on entry — every controlled prop in every built-in
+The trampolines that `ReactorBinding.OnCustomEvent<TArgs>` generates drain
+the suppress counter on entry — every controlled prop in every built-in
 handler is echo-safe without the handler author having to think
 about it. Hand-authored trampolines (the ones that bypass
 `OnCustomEvent` for performance) follow the same shape; see

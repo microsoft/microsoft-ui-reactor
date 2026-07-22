@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using System.Reflection;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Xaml;
@@ -45,7 +44,10 @@ public class ShouldSuppressEchoTests
     private static MethodInfo ShouldSuppressEchoMethod =>
         typeof(ReactorBinding).GetMethod(
             nameof(ReactorBinding.ShouldSuppressEcho),
-            BindingFlags.Public | BindingFlags.Static)
+            BindingFlags.Public | BindingFlags.Static,
+            binder: null,
+            types: new[] { typeof(UIElement) },
+            modifiers: null)
         ?? throw new InvalidOperationException(
             "ReactorBinding.ShouldSuppressEcho(UIElement) must remain a public static method (spec 062 §14 frozen ABI).");
 
