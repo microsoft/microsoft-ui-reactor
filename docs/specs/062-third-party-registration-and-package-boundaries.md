@@ -12,8 +12,8 @@ wrapper source generator ([spec 058](058-control-wrapper-generator.md)) — and 
 packaging/distribution model ([spec 022](022-packaging-and-distribution.md)). It
 settles the *delta* those specs did not cover: keeping a third-party control
 library's **compiled output runnable across Reactor versions**, **slimming Reactor's
-monolithic package**, and giving apps a **standard one-call-per-library registration
-convention**.
+monolithic package**, and confirming apps need **no per-library registration
+ceremony** — controls self-register when first used.
 
 One small enabling change ships alongside this spec:
 `ReactorBinding.ShouldSuppressEcho` is now public (§3), closing the last internal
@@ -29,9 +29,9 @@ design, phased in §13.
 > authoring seam inside the one Reactor runtime** — *not* a separate abstractions
 > package.
 > Reactor's own package stays lean by keeping heavy optional subsystems out of the
-> default reference. App developers get **one obvious registration call per
-> library**, and a missing registration fails **loudly and helpfully**, never as a
-> blank screen.
+> default reference. App developers need **no registration ceremony** — a control
+> self-registers the first time its element is built — and the rare genuine miss fails
+> **loudly and helpfully**, never as a blank screen.
 
 ---
 
@@ -50,7 +50,7 @@ design, phased in §13.
   - [§6.2 Governance — three pieces that do not exist yet](#62-governance--three-pieces-that-do-not-exist-yet)
   - [§6.3 Evolution discipline](#63-evolution-discipline)
 - [§7 Track B — consolidate heavy subsystems into `Reactor.Advanced`](#7-track-b--consolidate-heavy-subsystems-into-reactoradvanced)
-- [§8 Library registration API — `UseLibrary`](#8-library-registration-api--uselibrary)
+- [§8 Explicit registration — the narrow escape hatch](#8-explicit-registration--the-narrow-escape-hatch)
 - [§9 Self-registration vs. explicit registration](#9-self-registration-vs-explicit-registration)
 - [§10 Diagnostics](#10-diagnostics)
 - [§11 Trimming and AOT](#11-trimming-and-aot)
@@ -76,10 +76,12 @@ Issue #163 raises four coupled frustrations that remain:
    Reactor-enabled libraries built against different versions may therefore fail to
    compose.
 
-2. **Registration has no standard shape.** Registration happens per control (a
-   factory touch, or a Pattern-A static constructor — spec 048 §6). There is no
-   single "wire up everything this library needs" entry point analogous to .NET
-   MAUI's `builder.UseSkiaSharp()`.
+2. **Registration is per control, with no library-level convention.** Registration
+   happens per control (a factory touch, or a Pattern-A static constructor — spec 048
+   §6). Some authors expect a single MAUI-style `builder.UseSkiaSharp()` to "wire up the
+   library." Reactor's lazy self-registration means there is usually **nothing** to wire
+   up (§8) — but the expectation, and the two cases lazy genuinely can't cover (handler
+   overrides, eager global init), deserve an explicit answer.
 
 3. **Missing registration can still fail quietly.** Spec 048 made the reconciler
    throw an actionable exception on an unregistered element, but only when that
@@ -97,9 +99,14 @@ Issue #163 raises four coupled frustrations that remain:
 runtime without recompilation (see R7 / §6). This is the load-bearing requirement;
 it supersedes any notion of a separate "abstractions" reference (§4.2 / §5.1).
 
-**R2 — Standard registration convention.** One explicit, conventional call per
-library (`builder.UseMyLibrary()` or equivalent) that centralizes that library's
-element/handler registration and initialization.
+**R2 — Registration is automatic; explicit only where lazy can't reach.** The common
+case needs *no* per-library call: a control self-registers when its element is first
+constructed (§3), and families register the same lazy way through a base-type entry.
+Explicit registration — via the existing public `ControlRegistry.Register*` at startup —
+is reserved for the two cases construction cannot trigger: a handler for an element the
+library does not construct (e.g. an override), and eager global init (e.g. a XAML resource
+dictionary). Reactor adds **no** bulk "register-the-whole-library" API — it would
+re-introduce the trim opt-out spec 048 removed (R5).
 
 **R3 — Loud, helpful failure.** A missing registration produces a clear diagnostic
 that names the missing library and suggests the fix — never a blank screen.
@@ -191,8 +198,8 @@ This spec is a *delta*, so it is worth being precise about what already exists.
 
 What is **not** yet present, and is the subject of this spec: a *governed* stable
 authoring ABI (§6), a leaner core with the heavy subsystems in `Reactor.Advanced`
-(§7), a library-level `UseLibrary` convention (§8), and library-scoped diagnostics
-(§10).
+(§7), and — where lazy self-registration cannot reach — a narrow explicit-registration
+escape hatch (§8) plus reframed diagnostics (§10).
 
 ## §4 Two hard constraints that shape the design
 
@@ -252,8 +259,9 @@ either order:
   charting, docking, markdown, and the data grid out of core into the existing
   advanced assembly, largely keeping their namespaces (§7). Delivers R4.
 
-Registration ergonomics (`UseLibrary` + diagnostics, §8–§10) is a third, independent
-workstream that serves R2 / R3 and can interleave with either track.
+Registration needs no track of its own: lazy self-registration already satisfies R2
+(§8), leaving only a narrow explicit escape hatch and the reframed R3 diagnostic (§10)
+as small, independent clean-ups that can interleave with either track.
 
 ### §5.1 Rejected alternatives
 
@@ -500,101 +508,46 @@ Each move is gated on: no new `internal` cross-boundary reach that `InternalsVis
 cannot cleanly express, `CoreControlFamilyBoundaryTests` and the AOT-proof harness stay
 green, and the subsystem's selftests/E2E still pass.
 
-## §8 Library registration API — `UseLibrary`
+## §8 Explicit registration — the narrow escape hatch
 
-Give Reactor a MAUI-style, one-call-per-library registration convention (R2).
+**The common case needs no registration call.** A control self-registers the first time
+its element is constructed: a generated wrapper's Pattern-A cctor sits on the element
+record itself, and the built-in catalog / a base-derived family registers through the
+`Reg<>` / `RegBase<>` factory touch or a base-type static constructor (§3). Because a
+Reactor app builds its element tree *before* it reconciles, construction always precedes
+dispatch — so there is nothing to "wire up" for the controls a library owns, and no
+MAUI-style `UseMyLibrary()` step.
 
-**What `UseLibrary` is for — and what it is not.** Per-control factory
-self-registration (spec 048 / Pattern A) *remains the trim-safe default*: touching a
-generated factory registers *that one control*, rooting nothing else. `UseLibrary` is
-scoped to what per-control registration cannot do:
+An earlier draft proposed exactly such a bulk `UseLibrary<T>()` / `IReactorLibrary`
+convention (R2). It is **dropped**: rooting a library's whole `Register` body is the same
+trim opt-out spec 048 deliberately removed (R5), and it merely duplicates the registration
+that constructing the element already performs.
 
-1. **Library-level initialization** that is not per control (metadata provider
-   registration, resource dictionaries, one-time setup).
-2. **Base-derived registrations** (`RegisterForDerivedTypes`) that intentionally cover
-   a family in one entry.
-3. **The direct-record idiom against *factory-carried* registration** — some registrations
-   live on a *factory*, not the element record: the built-in catalog (Pattern B, a `Reg<>`
-   static-field initializer in the `Factories` partial) and any library that follows that
-   shape. For those, an app that builds records directly (`new ButtonElement(...)`) instead
-   of via the factory bypasses registration and needs a bulk opt-in — `UseLibrary`, like
-   `RegisterAllBuiltIns()`, is that documented trim opt-out, not the default path.
-   *Generated wrappers (058) do **not** need this*: their Pattern-A registration static
-   constructor is emitted **on the element record itself** (`partial record {Elem}` +
-   `static {Elem}()`), so `new FooElement(...)` triggers the type initializer and
-   self-registers — identically to calling the factory.
-4. **A discoverability + diagnostics anchor** (§10) the analyzer and runtime throw can
-   point at.
+**Two cases genuinely need an explicit call**, because no element construction triggers
+them:
 
-**The contract:**
+1. **A handler for an element the library does not construct** — e.g. a library that
+   registers an *override* handler for the built-in `ButtonElement`. Constructing a
+   `ButtonElement` runs the *owner's* cctor, never the override's, so the override must
+   register at startup, before that element is first used (registration is first-wins).
+2. **Eager global initialization** — e.g. merging a XAML `ResourceDictionary` into
+   `Application.Current.Resources`. This is ordinary WinUI app-startup work, not Reactor
+   control registration, and is often too late if deferred to a render pass.
 
-```csharp
-namespace Microsoft.UI.Reactor;
-
-/// <summary>One place a Reactor-enabled library wires up everything it needs:
-/// element/handler registration, generated metadata, initialization.</summary>
-public interface IReactorLibrary
-{
-    void Register(IReactorLibraryBuilder builder);
-}
-```
-
-`IReactorLibraryBuilder` is a thin façade over `ControlRegistry` (plus future
-per-library init hooks) so a library never touches the registry directly:
-
-```csharp
-public interface IReactorLibraryBuilder
-{
-    IReactorLibraryBuilder Register<TElement, TControl>(Func<IElementHandler<TElement, TControl>> handler)
-        where TElement : Element where TControl : UIElement;
-    IReactorLibraryBuilder RegisterDecorator<TElement>(Func<IDecoratorElementHandler<TElement>> handler)
-        where TElement : Element;
-    // …RegisterForDerivedTypes, and future init hooks…
-}
-```
-
-**The app-facing call** extends the `ReactorApp` startup surface (today
-`ReactorApp.Run(...)`) with a builder form:
-
-```csharp
-ReactorApp.CreateBuilder()
-    .UseLibrary<MyControls.MyControlsLibrary>()   // one call per library
-    .UseLibrary(new AcmeCharts.AcmeChartsLibrary(options))
-    .Run(App);
-```
-
-`UseLibrary<T>()` news up `T` and calls `Register`; the instance overload supports
-libraries needing construction options. A library ships a friendly extension so app
-authors get the MAUI feel:
-
-```csharp
-namespace MyControls;
-public static class MyControlsRegistration
-{
-    public static IReactorAppBuilder UseMyControls(this IReactorAppBuilder b)
-        => b.UseLibrary<MyControlsLibrary>();
-}
-```
-
-**Built-ins and Advanced fold into the same shape.** `ReactorApp.RegisterAllBuiltIns()`
-*is* the built-in library's `Register` body; reframe it as `UseLibrary<BuiltInControlsLibrary>()`
-(the old method stays as a compatibility shim). Each consolidated Advanced subsystem
-(§7) ships its own `UseCharting()` / `UseDataGrid()` / `UseDocking()` /
-`UseMarkdown()` extension over the same interface — dogfooding the third-party model
-with Reactor's own components.
-
-**Trim note.** `UseLibrary<T>()` names `T`, whose `Register` body names whatever it
-registers — so it roots exactly that surface, the *same trim opt-out shape* as
-`RegisterAllBuiltIns()`. Libraries should keep their per-control factories
-self-registering so an app that never calls `UseLibrary` still pays only for the
-controls it touches (R5). A large subsystem may expose finer modules
-(`UseChartsCore()` / `UseChartsInteractive()`) so an app roots only the sub-surface it
-needs.
+**The mechanism is what already exists — no new abstraction.** Both cases use the public
+`ControlRegistry.Register` / `RegisterDecorator` / `RegisterForDerivedTypes` (already part
+of the §6.1 seam) from the app's existing `ReactorApp.Run(...)` startup delegate. A library
+that needs eager setup ships its own ordinary `public static void UseAcme()` (or an
+extension method) built on those APIs and documents "call it at startup." Reactor
+deliberately does **not** standardize a per-library `IReactorLibrary` interface: that would
+add frozen ABI surface Track A works to *minimize*, in exchange for sugar over a one-line
+call an author can already write.
 
 ## §9 Self-registration vs. explicit registration
 
 Spec 048 already analyzed and rejected the *unconditional-eager* forms for the
-built-in catalog; that analysis carries over.
+built-in catalog; that analysis carries over and is why lazy self-registration — not a
+discovery scan — is the default.
 
 - **`[ModuleInitializer]` / assembly-load registration is a trimmer root.** It runs on
   first type-load and names every handler + control, so the trimmer can never prove it
@@ -603,44 +556,34 @@ built-in catalog; that analysis carries over.
 - **Reflection-based assembly scanning** is AOT-hostile, startup-costly, and roots
   types the trimmer would otherwise drop.
 
-**Recommendation:** keep *explicit* registration the norm — the trim-safe default is
-per-control factory self-registration; `UseLibrary` (§8) is the bulk / direct-record
-opt-in. Layer *optional* discovery on top for teams that value zero ceremony over
-binary size:
-
-1. **`[assembly: ReactorLibrary(typeof(MyControlsLibrary))]`** — a *marker*, not an
-   eager root. It registers nothing at load time; it exists so diagnostics (§10) can
-   point at the exact `UseX()` a developer forgot, and so an explicitly opted-in
-   discovery pass can find libraries.
-2. **`ReactorApp…UseDiscoveredLibraries()`** — an explicit opt-out of the trim story
-   (mirrors `RegisterAllBuiltIns()`): an ordinary, removable method that scans
-   `[assembly: ReactorLibrary]` markers and registers each. It (and any marker scan)
-   is annotated `[RequiresUnreferencedCode]` so the trim/AOT analyzers — hard errors in
-   this repo — flag it at the call site.
+**Recommendation:** lazy self-registration is the norm — a control's code is rooted only
+when its element is constructed (§3). The *only* explicit registration is the narrow §8
+escape hatch (overrides and eager global init), written directly against the public
+`ControlRegistry.Register*` APIs. Reactor ships **no** marker-driven discovery pass
+(`[assembly: ReactorLibrary]` / `UseDiscoveredLibraries()`): it would be either a trimmer
+root or a `[RequiresUnreferencedCode]` opt-out, and lazy registration already delivers
+zero-ceremony wiring without it.
 
 ## §10 Diagnostics
 
 Layer library-scoped diagnostics on top of 048's runtime throw (R3).
 
-- **Enrich the runtime throw.** When the unregistered element's *assembly* carries
-  `[assembly: ReactorLibrary(typeof(X))]`, name the specific missing call — e.g.
-  *"`MarqueeElement` is defined in `MyControls`, which declares a Reactor library but
-  was never registered. Call `builder.UseMyControls()` at startup."* Keep this
-  reflection-light and AOT-safe: read the marker off the already-loaded
-  `element.GetType().Assembly` custom-attribute (no scan, no extra assembly load) and
-  fall back to the generic message if the attribute was trimmed.
-- **Add a build-time analyzer / `mur check` rule.** Flag a project that references a
-  `[ReactorLibrary]` library but never calls the corresponding `UseX()` /
-  `UseLibrary<>()`. Scope it to a high-confidence heuristic (a direct `UseX()` call
-  somewhere in the compilation) with a suppression — "never registered anywhere" is a
-  whole-program question the analyzer can only approximate. The R3 diagnostic must
-  **not** force an unconditional `UseLibrary` call (that would push every app into
-  rooting whole libraries, §8); it fires only when an element is actually used via the
-  direct-record idiom with no registration in reach.
-- **Direct-record construction guardrail.** Warn when a *factory-registered* element record
-  (a built-in / Pattern-B-style control, where the registration link lives on the factory) is
-  constructed directly (`new FooElement(...)`) rather than via its factory, mirroring the
-  runtime message's most common cause. It must **not** fire on generated wrappers (058),
+Keep 048's runtime throw on an unregistered mount (R3), but — with lazy self-registration
+the norm — reframe *what it blames*. A "mounted but unregistered" element is now almost
+unreachable for generated wrappers (constructing the element self-registers it); it survives
+only for a factory-carried control constructed by raw `new` that bypassed the factory
+trigger, or a third-party override that was never registered.
+
+- **Reword the runtime throw** to point at those causes rather than a forgotten `UseX()`:
+  *"No handler registered for `FooElement`. Create it through its factory (built-in /
+  Pattern-B controls self-register on the factory call), ensure its generated wrapper is
+  referenced so its self-registration runs, or — if this is a third-party override —
+  register it at startup via `ControlRegistry.Register…`."* Reflection-light and AOT-safe:
+  it names only `element.GetType()`.
+- **Keep the direct-record construction guardrail.** Warn when a *factory-registered* element
+  record (a built-in / Pattern-B-style control, where the registration link lives on the
+  factory) is constructed directly (`new FooElement(...)`) rather than via its factory — the
+  most common cause of the throw above. It must **not** fire on generated wrappers (058),
   whose element-rooted Pattern-A cctor makes direct construction self-registering and safe.
 
 ## §11 Trimming and AOT
@@ -656,8 +599,9 @@ Both tracks preserve spec 048's reachability model (R5):
   `Reactor.Advanced` changes the *assembly* they live in, not what roots them. The
   regression gates are `CoreControlFamilyBoundaryTests` (the IL boundary scan) and the
   AOT-proof harness (`tests/aot_trim_proof`), which must stay green through each move.
-- **`UseLibrary` roots per-library**, a documented opt-out identical to
-  `RegisterAllBuiltIns()`; self-registration discovery (§9) is opt-in only.
+- **Explicit registration stays lazy-friendly.** The §8 escape hatch calls the existing
+  `ControlRegistry.Register*` only for overrides / eager init; there is no bulk per-library
+  root and no discovery scan (§9), so an app still pays only for the controls it constructs.
 
 ## §12 Open questions
 
@@ -667,9 +611,8 @@ Both tracks preserve spec 048's reachability model (R5):
 | Q2 | Exact freeze boundary — is the *entire* §6.1 surface committed, or a named subset (e.g. is the full `MountContext` surface frozen, or only the members generated code + hand-authors actually bind)? | Freeze the members generated code and `external_proof` bind; mark the rest "public, Tier 1 — within-major by discipline, not in the Tier-2 gate." Settle with the interop harness. |
 | Q3 | Loader policy — strong-name + pin `AssemblyVersion` now, or stay unsigned/default-ALC and only *document* the roll-forward requirement? | Document now; revisit strong-naming when the API stabilizes past preview. |
 | Q4 | The data-grid **and markdown** `using static …Advanced.Factories` source break (§7) — acceptable in preview, or ship a type-forward / compat shim? | Accept in preview; call it out in release notes. A core-side compat shim isn't viable (core can't reference Advanced), so a `using static` is the honest fix. |
-| Q5 | `UseLibrary` granularity — one `UseX()` per library, or sub-modules for large subsystems? | One per library by default; sub-modules where trimming a sub-surface matters (charts). |
-| Q6 | Should the wrapper attributes + generator ship as a standalone `Reactor.Wrappers` package, or stay bundled in core (status quo)? | Independent of both tracks; keep bundled unless a concrete author asks — revisit later. |
-| Q7 | Ship a `Microsoft.UI.Reactor.All` metapackage (core + Advanced) for a batteries-included reference? | Optional convenience; add if consumer feedback wants it. |
+| Q5 | Should the wrapper attributes + generator ship as a standalone `Reactor.Wrappers` package, or stay bundled in core (status quo)? | Independent of both tracks; keep bundled unless a concrete author asks — revisit later. |
+| Q6 | Ship a `Microsoft.UI.Reactor.All` metapackage (core + Advanced) for a batteries-included reference? | Optional convenience; add if consumer feedback wants it. |
 
 ## §13 Phasing
 
@@ -681,9 +624,10 @@ Both tracks preserve spec 048's reachability model (R5):
   document the loader/version policy (Q3).
 - **Track B — consolidate into Advanced.** B1: charting + docking → `Reactor.Advanced`.
   B2: markdown (with the §7 factory note, Q4). B3: data grid (§7 factory note, Q4).
-- **Registration ergonomics — independent.** E1: `IReactorLibrary` / `UseLibrary` +
-  built-ins/Advanced fold-in (§8). E2: `[ReactorLibrary]` marker + enriched throw +
-  analyzer (§10). E3: opt-in `UseDiscoveredLibraries()` (§9).
+- **Registration clean-ups — independent, small.** E1: reword the R3 runtime throw and
+  keep the direct-record guardrail (§10). E2: document the §8 explicit-registration escape
+  hatch (overrides / eager init) against the existing `ControlRegistry.Register*`. No
+  `IReactorLibrary`, marker, or discovery pass ships.
 
-Tracks A and B share no dependency and can land in either order; the ergonomics
-workstream can interleave with either.
+Tracks A and B share no dependency and can land in either order; the registration
+clean-ups can interleave with either.
