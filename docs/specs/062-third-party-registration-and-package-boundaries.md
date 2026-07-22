@@ -513,10 +513,16 @@ scoped to what per-control registration cannot do:
    registration, resource dictionaries, one-time setup).
 2. **Base-derived registrations** (`RegisterForDerivedTypes`) that intentionally cover
    a family in one entry.
-3. **The direct-record idiom opt-in** — an app that builds element records directly
-   (`new FooElement(...)`) instead of via factories needs *something* to register;
-   `UseLibrary` is that opt-in, and — like `RegisterAllBuiltIns()` — it is explicitly
-   a documented bulk trim opt-out, not the default path.
+3. **The direct-record idiom against *factory-carried* registration** — some registrations
+   live on a *factory*, not the element record: the built-in catalog (Pattern B, a `Reg<>`
+   static-field initializer in the `Factories` partial) and any library that follows that
+   shape. For those, an app that builds records directly (`new ButtonElement(...)`) instead
+   of via the factory bypasses registration and needs a bulk opt-in — `UseLibrary`, like
+   `RegisterAllBuiltIns()`, is that documented trim opt-out, not the default path.
+   *Generated wrappers (058) do **not** need this*: their Pattern-A registration static
+   constructor is emitted **on the element record itself** (`partial record {Elem}` +
+   `static {Elem}()`), so `new FooElement(...)` triggers the type initializer and
+   self-registers — identically to calling the factory.
 4. **A discoverability + diagnostics anchor** (§10) the analyzer and runtime throw can
    point at.
 
@@ -631,9 +637,11 @@ Layer library-scoped diagnostics on top of 048's runtime throw (R3).
   **not** force an unconditional `UseLibrary` call (that would push every app into
   rooting whole libraries, §8); it fires only when an element is actually used via the
   direct-record idiom with no registration in reach.
-- **Direct-record construction guardrail.** Warn when an element record from a
-  `[ReactorLibrary]` assembly is constructed directly (`new FooElement(...)`) rather
-  than via its factory, mirroring the runtime message's most common cause.
+- **Direct-record construction guardrail.** Warn when a *factory-registered* element record
+  (a built-in / Pattern-B-style control, where the registration link lives on the factory) is
+  constructed directly (`new FooElement(...)`) rather than via its factory, mirroring the
+  runtime message's most common cause. It must **not** fire on generated wrappers (058),
+  whose element-rooted Pattern-A cctor makes direct construction self-registering and safe.
 
 ## §11 Trimming and AOT
 
