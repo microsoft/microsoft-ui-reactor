@@ -43,7 +43,7 @@ internal static class Spec062DeferredControlledFixtures
             // primitive must report false. This pins the false-return branch that the
             // mounted round-trip below only exercises implicitly.
             H.Check("Spec062_Deferred_FreshControlNotSuppressed",
-                ReactorBinding.ShouldSuppressEcho(new EchoTextBox()) == false);
+                !ReactorBinding.ShouldSuppressEcho(new EchoTextBox()));
 
             host.Mount(ctx =>
             {
