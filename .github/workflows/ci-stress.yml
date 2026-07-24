@@ -327,7 +327,7 @@ jobs:
       # winapp ui drives the cross-process UIA automation. The action adds winapp to PATH,
       # which WinAppUi.ResolveWinAppExe() picks up via its PATH fallback (mirrors ci.yml).
       - name: Setup winapp CLI
-        uses: microsoft/setup-WinAppCli@cc8ea9a08b3ee3db43d5aa6bddda4a0e87d800f7 # v0.1
+        uses: microsoft/setup-WinAppCli@b93bbddc1f7abc061ca0d3a8119e3a0c7dd71495 # v0.2
 
       # Build the E2E test project once (Debug/x64 — the path TestSession.FindHostExe expects).
       # The ProjectReference pulls in Reactor.AppTests.Host, so the Host is built too.

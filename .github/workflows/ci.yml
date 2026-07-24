@@ -174,7 +174,7 @@ jobs:
       # WinAppDriver/Appium). The action downloads it and adds it to PATH, which
       # WinAppUi.ResolveWinAppExe() picks up via its PATH fallback.
       - name: Setup winapp CLI
-        uses: microsoft/setup-WinAppCli@cc8ea9a08b3ee3db43d5aa6bddda4a0e87d800f7 # v0.1
+        uses: microsoft/setup-WinAppCli@b93bbddc1f7abc061ca0d3a8119e3a0c7dd71495 # v0.2
 
       # The E2E suite launches Reactor.AppTests.Host.exe and drives it cross-process.
       # The Host is a ProjectReference of the test project, so building the test
