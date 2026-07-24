@@ -220,10 +220,12 @@ internal static class CodeHighlighter
             {
                 int s = i;
                 while (i < n && char.IsDigit(src[i])) i++;
-                // A trailing letter/underscore means the digits are part of a
-                // larger token (e.g. 0xFF, 200f) — not a standalone number.
-                bool wordBoundary = i >= n || !(char.IsLetter(src[i]) || src[i] == '_');
-                Emit(src.Substring(s, i - s), wordBoundary ? Kind.Number : Kind.Default);
+                // Require a word boundary on BOTH sides (mirrors \b[0-9]+\b): a
+                // letter/digit/underscore on either edge means the digits belong
+                // to a larger token (e.g. 0xFF, 200f, 1_000) and are not colored.
+                bool leadingBoundary = s == 0 || !(char.IsLetterOrDigit(src[s - 1]) || src[s - 1] == '_');
+                bool trailingBoundary = i >= n || !(char.IsLetterOrDigit(src[i]) || src[i] == '_');
+                Emit(src.Substring(s, i - s), leadingBoundary && trailingBoundary ? Kind.Number : Kind.Default);
                 continue;
             }
 

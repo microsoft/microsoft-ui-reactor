@@ -109,6 +109,11 @@ internal sealed class SourceCodeView : Component<string>
             Application.Current?.RequestedTheme == ApplicationTheme.Dark,
             threadSafe: true);
 
+        // Border is poolable, and the pool's cleanup does not remove WinUI event
+        // subscriptions — so the ActualThemeChanged handler attached on mount must
+        // be detached on unmount (below) or it would leak across rent/return.
+        var themeHandlerRef = UseRef<global::Windows.Foundation.TypedEventHandler<FrameworkElement, object>?>(null);
+
         var palette = isDark ? CodeHighlighter.Dark : CodeHighlighter.Light;
 
         var codeParagraphs = CodeHighlighter.Highlight(sourceCode, palette, out int lineCount);
@@ -158,7 +163,18 @@ internal sealed class SourceCodeView : Component<string>
             .OnMount(el =>
             {
                 setIsDark(ResolveIsDark(el));
-                el.ActualThemeChanged += (sender, _) => setIsDark(ResolveIsDark((FrameworkElement)sender));
+                var handler = new global::Windows.Foundation.TypedEventHandler<FrameworkElement, object>(
+                    (sender, _) => setIsDark(ResolveIsDark((FrameworkElement)sender)));
+                themeHandlerRef.Current = handler;
+                el.ActualThemeChanged += handler;
+            })
+            .OnUnmount(el =>
+            {
+                if (themeHandlerRef.Current is not null)
+                {
+                    el.ActualThemeChanged -= themeHandlerRef.Current;
+                    themeHandlerRef.Current = null;
+                }
             });
 
         return Grid(
