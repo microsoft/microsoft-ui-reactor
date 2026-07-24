@@ -153,16 +153,12 @@ internal static class CodeHighlighter
     // Cache one brush per color string. The palette uses a small fixed set of
     // colors, so a highlighted panel reuses ~7 brushes instead of allocating a
     // new SolidColorBrush per token (which .Foreground(string) / BrushHelper.Parse
-    // would do). Only touched on the UI thread during Render.
-    static readonly Dictionary<string, Microsoft.UI.Xaml.Media.SolidColorBrush> BrushCache = new();
+    // would do). ConcurrentDictionary keeps the shared static cache safe even
+    // though it is only expected to be touched on the UI thread during Render.
+    static readonly global::System.Collections.Concurrent.ConcurrentDictionary<string, Microsoft.UI.Xaml.Media.SolidColorBrush> BrushCache = new();
 
     static Microsoft.UI.Xaml.Media.SolidColorBrush BrushFor(string hex)
-    {
-        if (BrushCache.TryGetValue(hex, out var brush)) return brush;
-        brush = new Microsoft.UI.Xaml.Media.SolidColorBrush(ParseHexColor(hex));
-        BrushCache[hex] = brush;
-        return brush;
-    }
+        => BrushCache.GetOrAdd(hex, static h => new Microsoft.UI.Xaml.Media.SolidColorBrush(ParseHexColor(h)));
 
     static global::Windows.UI.Color ParseHexColor(string hex)
     {

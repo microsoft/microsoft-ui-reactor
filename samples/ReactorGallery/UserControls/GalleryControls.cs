@@ -84,6 +84,8 @@ internal sealed class SourceCodeView : Component<string>
     // Resolve the effective theme by walking up the visual tree for the nearest
     // explicit RequestedTheme. This is reliable during reconcile, unlike
     // FrameworkElement.ActualTheme which can lag a synchronous update pass.
+    // Mirrors src/Reactor/Core/Theme.cs GetEffectiveThemeName: RequestedTheme
+    // override → the element's own ActualTheme → the app theme.
     static bool ResolveIsDark(FrameworkElement? start)
     {
         var cur = start;
@@ -93,6 +95,8 @@ internal sealed class SourceCodeView : Component<string>
                 return cur.RequestedTheme == ElementTheme.Dark;
             cur = VisualTreeHelper.GetParent(cur) as FrameworkElement;
         }
+        if (start is not null && start.ActualTheme != ElementTheme.Default)
+            return start.ActualTheme == ElementTheme.Dark;
         return Application.Current?.RequestedTheme == ApplicationTheme.Dark;
     }
 
