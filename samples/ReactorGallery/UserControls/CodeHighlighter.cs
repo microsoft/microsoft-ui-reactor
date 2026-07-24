@@ -152,7 +152,10 @@ internal static class CodeHighlighter
 
     static List<List<Tok>> Tokenize(string src)
     {
-        src = src.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\t", "    ");
+        // Normalize line endings only. Tabs are preserved verbatim so the
+        // rendered/selectable text matches the original source (and the Copy
+        // button); they are treated as whitespace by the lexer below.
+        src = src.Replace("\r\n", "\n").Replace("\r", "\n");
 
         var lines = new List<List<Tok>>();
         var current = new List<Tok>();
@@ -173,10 +176,10 @@ internal static class CodeHighlighter
 
             if (c == '\n') { i++; NewLine(); continue; }
 
-            if (c == ' ')
+            if (c == ' ' || c == '\t')
             {
                 int s = i;
-                while (i < n && src[i] == ' ') i++;
+                while (i < n && (src[i] == ' ' || src[i] == '\t')) i++;
                 Emit(src.Substring(s, i - s), Kind.Whitespace);
                 continue;
             }
