@@ -113,7 +113,7 @@ internal static class CodeHighlighter
                     // Whitespace is invisible, so it inherits the block foreground.
                     inlines[t] = tk.Kind == Kind.Whitespace
                         ? Run(tk.Text)
-                        : Run(tk.Text).Foreground(ColorFor(tk.Kind, palette));
+                        : Run(tk.Text).Foreground(BrushFor(ColorFor(tk.Kind, palette)));
                 }
             }
             paragraphs[li] = Paragraph(inlines);
@@ -136,7 +136,7 @@ internal static class CodeHighlighter
             string num = (i + 1)
                 .ToString(global::System.Globalization.CultureInfo.InvariantCulture)
                 .PadLeft(width);
-            paragraphs[i] = Paragraph(Run(num).Foreground(palette.LineNumber));
+            paragraphs[i] = Paragraph(Run(num).Foreground(BrushFor(palette.LineNumber)));
         }
         return paragraphs;
     }
@@ -149,6 +149,32 @@ internal static class CodeHighlighter
         Kind.Number  => p.Number,
         _            => p.PlainText,
     };
+
+    // Cache one brush per color string. The palette uses a small fixed set of
+    // colors, so a highlighted panel reuses ~7 brushes instead of allocating a
+    // new SolidColorBrush per token (which .Foreground(string) / BrushHelper.Parse
+    // would do). Only touched on the UI thread during Render.
+    static readonly Dictionary<string, Microsoft.UI.Xaml.Media.SolidColorBrush> BrushCache = new();
+
+    static Microsoft.UI.Xaml.Media.SolidColorBrush BrushFor(string hex)
+    {
+        if (BrushCache.TryGetValue(hex, out var brush)) return brush;
+        brush = new Microsoft.UI.Xaml.Media.SolidColorBrush(ParseHexColor(hex));
+        BrushCache[hex] = brush;
+        return brush;
+    }
+
+    static global::Windows.UI.Color ParseHexColor(string hex)
+    {
+        hex = hex.TrimStart('#');
+        byte a = 0xFF;
+        int o = 0;
+        if (hex.Length == 8) { a = Convert.ToByte(hex.Substring(0, 2), 16); o = 2; }
+        byte r = Convert.ToByte(hex.Substring(o, 2), 16);
+        byte g = Convert.ToByte(hex.Substring(o + 2, 2), 16);
+        byte b = Convert.ToByte(hex.Substring(o + 4, 2), 16);
+        return global::Windows.UI.Color.FromArgb(a, r, g, b);
+    }
 
     static List<List<Tok>> Tokenize(string src)
     {
