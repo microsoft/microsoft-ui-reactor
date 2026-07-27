@@ -47,7 +47,7 @@
          (PrivateAssets=all) — never shipped in the `mur` tool output. Version tracks
          YamlDotNet's major (18.x). -->
     <PackageVersion Include="Vecc.YamlDotNet.Analyzers.StaticGenerator" Version="18.1.0" />
-    <PackageVersion Include="GitHub.Copilot.SDK" Version="1.0.7" />
+    <PackageVersion Include="GitHub.Copilot.SDK" Version="1.0.8" />
     <PackageVersion Include="MessagePack" Version="2.5.301" />
   </ItemGroup>
 
