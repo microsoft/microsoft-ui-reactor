@@ -407,8 +407,9 @@ and the `.CompactPaneLength(px)` / `.OpenPaneLength(px)` /
 `.CompactModeThresholdWidth(px)` / `.ExpandedModeThresholdWidth(px)` metrics.
 
 > The fluents drop the `Is` prefix that the underlying properties carry
-> (`.BackButtonVisible(false)` sets `IsBackButtonVisible`) — a C# extension
-> method cannot share its name with a property on the same type.
+> (`.BackButtonVisible(false)` sets `IsBackButtonVisible`), matching the
+> `TitleBar` fluents of the same name. Both elements control the same chrome,
+> so the call reads identically whichever one owns it.
 
 > The four pane metrics default to `double.NaN`, which means *Reactor never
 > writes the property* and the control keeps its own default. That sentinel is
