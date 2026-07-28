@@ -244,12 +244,13 @@ public sealed record WindowSpec
     /// </summary>
     public void Validate()
     {
-        // NaN must be rejected too, so the NaN-aware comparison is spelled out
-        // rather than written as !(w > 0).
-        if (Width is { } w && (w <= 0 || double.IsNaN(w)))
-            throw new ArgumentException("WindowSpec.Width must be positive when set.", nameof(Width));
-        if (Height is { } h && (h <= 0 || double.IsNaN(h)))
-            throw new ArgumentException("WindowSpec.Height must be positive when set.", nameof(Height));
+        // Non-finite values must be rejected too (NaN and ±Infinity both reach
+        // the DIP→pixel conversion and produce a garbage int), so the check is
+        // spelled out rather than written as !(w > 0).
+        if (Width is { } w && (w <= 0 || !double.IsFinite(w)))
+            throw new ArgumentException("WindowSpec.Width must be positive and finite when set.", nameof(Width));
+        if (Height is { } h && (h <= 0 || !double.IsFinite(h)))
+            throw new ArgumentException("WindowSpec.Height must be positive and finite when set.", nameof(Height));
 
         if (MinWidth is { } minW && !(minW > 0))
             throw new ArgumentException("WindowSpec.MinWidth must be positive when set.", nameof(MinWidth));

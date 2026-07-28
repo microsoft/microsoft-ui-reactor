@@ -927,7 +927,8 @@ public sealed class ReactorWindow : IDisposable
     /// Builds the physical-pixel size a spec asks for, or returns false when the
     /// spec declares neither axis — the "let the OS size the window" default.
     /// A half-specified spec keeps the current (OS-chosen) extent on the other
-    /// axis. (spec 036 §4.1 / §5.1)
+    /// axis, and is also skipped when that extent is not yet a real positive
+    /// value. (spec 036 §4.1 / §5.1)
     /// </summary>
     private bool TryBuildSpecSize(WindowSpec spec, out global::Windows.Graphics.SizeInt32 size)
     {
@@ -948,6 +949,13 @@ public sealed class ReactorWindow : IDisposable
                 DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.TryBuildSpecSize", ex);
                 return false;
             }
+
+            // A non-positive current extent means there is no real OS extent to
+            // preserve yet. Resizing would drive that axis to 0, which is worse
+            // than leaving the window at whatever the OS gave it — skip, and let
+            // the first-DPI re-apply try again once the extent is real.
+            if ((spec.Width is null && currentWidth <= 0) || (spec.Height is null && currentHeight <= 0))
+                return false;
         }
 
         size = new global::Windows.Graphics.SizeInt32(

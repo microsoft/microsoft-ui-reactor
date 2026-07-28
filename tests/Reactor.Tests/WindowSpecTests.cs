@@ -54,10 +54,14 @@ public class WindowSpecTests
     }
 
     [Fact]
-    public void Validate_Rejects_NaN_Sizes()
+    public void Validate_Rejects_NonFinite_Sizes()
     {
         Assert.Throws<ArgumentException>(() => new WindowSpec { Width = double.NaN }.Validate());
         Assert.Throws<ArgumentException>(() => new WindowSpec { Height = double.NaN }.Validate());
+        Assert.Throws<ArgumentException>(() => new WindowSpec { Width = double.PositiveInfinity }.Validate());
+        Assert.Throws<ArgumentException>(() => new WindowSpec { Height = double.PositiveInfinity }.Validate());
+        Assert.Throws<ArgumentException>(() => new WindowSpec { Width = double.NegativeInfinity }.Validate());
+        Assert.Throws<ArgumentException>(() => new WindowSpec { Height = double.NegativeInfinity }.Validate());
     }
 
     // Spec 036 §4.1 — a null Width/Height means "let the OS choose the initial
