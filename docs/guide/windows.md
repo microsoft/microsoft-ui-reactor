@@ -264,6 +264,32 @@ yourself is still supported, but it throws `ERROR_INVALID_STATE` on a window tha
 not content-extended — which is what makes the imperative path fragile from an
 effect body.
 
+#### Migrating from the imperative workaround
+
+Earlier code — including the Windows App SDK `reactor-navview` template — re-posted
+the assignment onto the dispatcher queue:
+
+```csharp
+// Don't do this any more.
+var window = UseWindow();
+UseEffect(() =>
+{
+    if (window is not { } win) return;
+    win.NativeWindow?.DispatcherQueue.TryEnqueue(() =>
+        win.AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall);
+});
+```
+
+Delete the whole effect and declare `.Tall()` instead.
+
+The dispatcher hop was based on a misdiagnosis (issue #917). `TitleBar(...)`'s
+`ExtendsContentIntoTitleBar` inference never clobbered `PreferredHeightOption` —
+measured on a live window, a direct write from an effect body produces geometry
+identical to the hopped write. What the original report actually hit was the caption
+moving while the WinUI title-bar control stayed at 32 DIP, which reads back as `Tall`
+but looks like nothing happened. Delaying the write never fixed that; pairing the two
+heights does, and that is what `.Tall()` applies.
+
 Caveats:
 
 - Setting `ExtendsContentIntoTitleBar = false` while still rendering a `TitleBar(...)`
