@@ -995,11 +995,22 @@ public sealed class ReactorWindow : IDisposable
                     // leaves that axis to the OS).
                     if (_spec.Embed is null && !_userResized && !_firstDpiApplied)
                     {
-                        _firstDpiApplied = true;
                         try
                         {
                             if (TryBuildSpecSize(_spec, out var dpiSize))
+                            {
+                                // Latch only once the size really lands. If
+                                // TryBuildSpecSize declined because the extent to
+                                // preserve wasn't real yet, staying unlatched lets
+                                // a later DPI report apply the declared axis.
+                                _firstDpiApplied = true;
                                 _appWindow.Resize(dpiSize);
+                            }
+                            else if (_spec.Width is null && _spec.Height is null)
+                            {
+                                // Nothing to apply, ever — stop re-checking.
+                                _firstDpiApplied = true;
+                            }
                         }
                         catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
                         {
