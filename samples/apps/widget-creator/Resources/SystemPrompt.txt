@@ -131,7 +131,8 @@ static class WidgetSelfTest
 ```
 
 ## Reactor API you may use (this is the CORE surface — do not invent members)
-- Entry: `ReactorApp.Run<App>("Title", width: W, height: H);`
+- Entry: `ReactorApp.Run<App>("Title", width: W, height: H);` — width/height are
+  optional DIPs; omit them to let the OS pick the initial window size.
 - Startup: call `CrashReporter.Install();` immediately before `ReactorApp.Run<App>(...)`.
 - Component: `class App : Component { public override Element Render() => ErrorBoundary(Component<WidgetBody>(), CrashReporter.ReportAndExit); }`,
   then put the actual widget UI in `class WidgetBody : Component { ... }`.

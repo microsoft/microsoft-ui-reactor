@@ -115,7 +115,7 @@ Memo(ctx => TextBlock($"Hi, {name}"), name)    // re-render when deps change
 
 `Component` skips parent-triggered re-renders by default. `Component<TProps>` skips when `Equals(oldProps, newProps)`.
 
-**App entry point.** `ReactorApp.Run<MyRoot>("Title", width: W, height: H)` against a component class (the scaffolded form). For a tiny demo without a class, the inline form: `ReactorApp.Run("Title", ctx => { var (m, setM) = ctx.UseState("hi"); return TextBlock(m); })`.
+**App entry point.** `ReactorApp.Run<MyRoot>("Title", width: W, height: H)` against a component class (the scaffolded form). `width`/`height` are optional DIPs — omit them to let the OS choose the initial window size. For a tiny demo without a class, the inline form: `ReactorApp.Run("Title", ctx => { var (m, setM) = ctx.UseState("hi"); return TextBlock(m); })`.
 
 ## Hooks
 

@@ -759,7 +759,8 @@ public static partial class ReactorApp
     /// <summary>
     /// Emit one stderr <c>[reactor]</c> info-line per process the first time
     /// any <c>Run</c> overload is invoked, describing the DIP-vs-pixel size
-    /// behavior change. (spec 036 §12.1) The Phase-2 layer adds the actual
+    /// behavior change (spec 036 §12.1) and the dropped 1024×768 size default
+    /// (spec 036 §12.2a). The Phase-2 layer adds the actual
     /// DIP→pixel conversion; the message is wired now so the diagnostic
     /// surface lands in the same release.
     /// </summary>
@@ -767,8 +768,10 @@ public static partial class ReactorApp
     {
         if (Interlocked.CompareExchange(ref _dipBehaviorChangeNoticeEmitted, 1, 0) != 0) return;
         Console.Error.WriteLine(
-            "[reactor] WindowSpec.Width / Height and ReactorApp.Run<T>(width, height) are now DIPs. " +
-            "On a 100% display this is unchanged; on 200% the window is twice as large in physical pixels. (spec 036 §12.1)");
+            "[reactor] WindowSpec.Width / Height and ReactorApp.Run<T>(width, height) are now DIPs, " +
+            "and both are optional. On a 100% display an explicit size is unchanged; on 200% the window " +
+            "is twice as large in physical pixels. Omitting width/height now lets the OS choose the " +
+            "initial size — pass width: 1024, height: 768 to keep the old default extent. (spec 036 §12.1 / §12.2a)");
     }
 
     /// <summary>

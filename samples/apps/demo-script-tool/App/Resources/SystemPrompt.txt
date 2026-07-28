@@ -96,6 +96,7 @@ Reactor essentials you may need:
 - Effects: `ctx.UseEffect(() => { /* mount */ return () => { /* cleanup */ }; }, deps)`.
 - App entry: `ReactorApp.Run("Title", ctx => element);` for inline, or
   `ReactorApp.Run<MyComponent>("Title", width: 1200, height: 800);`.
+  width/height are optional — omit them to let the OS size the window.
 
 When a demo introduces "WinUI 3 / XAML developers to Reactor", the goal
 is to show a Reactor app that matches what they would have written in

@@ -1017,9 +1017,18 @@ ReactorApp.Run<App>("Title", 1024, 768)             same call site
 
 `width` / `height` on both `Run` overloads became `double?` with a `null`
 default, and `WindowSpec.Width` / `Height` followed. Call sites that pass
-sizes explicitly are unaffected. Call sites that relied on the implicit
-1024 × 768 now open at the OS-chosen size instead; apps that want the old
-extent state it: `ReactorApp.Run<App>("Title", 1024, 768)`.
+sizes explicitly keep compiling unchanged. Call sites that relied on the
+implicit 1024 × 768 now open at the OS-chosen size instead; apps that want
+the old extent state it: `ReactorApp.Run<App>("Title", 1024, 768)`.
+
+This is source-compatible but **binary-breaking**: `double` → `double?`
+changes the signatures of both `Run` overloads, the `WindowSpec.Width` /
+`Height` accessors, and the `ReactorDevtoolsBootRequest` constructor /
+`Deconstruct`. Already-compiled consumers must recompile. We accept the
+break rather than ship `double` compat overloads — Reactor is pre-1.0, the
+package makes no ABI promise yet, and §12.1 already sets the precedent of
+taking a deliberate break here rather than carrying a shim. Release notes
+flag it alongside the DIP change.
 
 ### 12.3 Configure callback
 
