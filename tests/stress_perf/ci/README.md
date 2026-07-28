@@ -188,11 +188,16 @@ git worktree remove ../main
    self-contained csproj block), `Run-PerfBenchmark.ps1` overlays the harness
    `.csproj` from the trusted baseline over the PR tree's copy before building
    (compare mode only), restoring it afterwards — see below.
-3. It checks out the default branch (trusted perf scripts + the `main` baseline),
-   sets up .NET 10, fetches the PR head via `refs/pull/N/head` into a worktree
-   (so forks work), then runs `Run-PerfBenchmark.ps1` in compare mode.
+3. It captures the PR **head SHA up front** (as the trigger fires), checks out the
+   default branch (trusted perf scripts + the `main` baseline), sets up .NET 10,
+   fetches the PR head via `refs/pull/N/head` into a worktree (so forks work) and
+   **re-verifies the fetched head still equals the pinned SHA** before building, so
+   the commit that gets benchmarked is the one that existed at trigger time. It
+   then runs `Run-PerfBenchmark.ps1` in compare mode.
 4. It posts — or **updates in place** on re-runs, via the hidden
-   `<!-- reactor-perf-compare -->` marker — one sticky comment.
+   `<!-- reactor-perf-compare -->` marker — one sticky comment. The rendered
+   comparison is published only when the benchmark run succeeds; otherwise the
+   step posts a neutral, workflow-generated fallback pointing at the logs.
 
 In compare mode the PR tree supplies everything it normally would — `src/Reactor/`
 (the code under measurement) **and** the harness/workload sources under
@@ -206,7 +211,8 @@ change is still compiled in via the harness's relative `ProjectReference`. (A PR
 that deliberately edits the harness *sources* still has those changes measured —
 only the project file comes from baseline.) The perf scripts and the `main`
 baseline also come from the trusted default branch. The `author_association` gate
-is the security control, because the job has a write token.
+is the primary security control, because the job has a write token; the head SHA
+is additionally pinned to the trigger-time commit and re-verified before building.
 
 ### The comment
 

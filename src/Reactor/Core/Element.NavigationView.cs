@@ -10,6 +10,7 @@ namespace Microsoft.UI.Reactor.Core;
 
 // Spec 058 §15 (P5.23) — NavigationView's bespoke surface: 5 NamedSlots, the MenuItems +
 // SelectedTag menu reconciler (.Imperative), and the SelectionChanged/BackRequested events.
+// Issue #916 added an IsPaneOpen DP observation behind OnPaneOpenChanged.
 // IsPaneOpen/PaneDisplayMode/IsBackEnabled/IsSettingsVisible/PaneTitle auto-map (in Element.cs).
 // All reproduced verbatim from the deleted NavigationViewDescriptor.
 public partial record NavigationViewElement
@@ -26,6 +27,25 @@ public partial record NavigationViewElement
     private static readonly TypedEventHandler<WinUI.NavigationView, WinUI.NavigationViewBackRequestedEventArgs>
         __BackRequestedTrampoline = (s, _) =>
             (Reconciler.GetElementTag(s) as NavigationViewElement)?.OnBackRequested?.Invoke();
+
+    // Issue #916 — the pane can open/close without the app asking (light dismiss, adaptive
+    // display-mode changes). Without a notification a controlled IsPaneOpen drifts out of sync
+    // and the next toggle writes a value the control already holds. We observe the IsPaneOpen
+    // DP rather than the PaneOpening/PaneClosing pair, because the DP is precisely what the
+    // reconciler diffs against: the reported bool can never disagree with the control (a
+    // cancelled PaneClosing still leaves the DP at the requested value, so an event-sourced
+    // callback would hand the app a value the next diff then treats as a no-op write). It also
+    // beats PaneOpened/PaneClosed, which only arrive once the pane transition finishes.
+    //
+    // A programmatic write echoes the app's own value straight back (a no-op setState). Like
+    // every trampoline here, the echo of a write performed during Update runs before the new
+    // element is tagged, so it dispatches through the previous render's callback.
+    private static readonly DependencyPropertyChangedCallback __IsPaneOpenObserver = (d, _) =>
+    {
+        if (d is not WinUI.NavigationView control) return;
+        (Reconciler.GetElementTag(control) as NavigationViewElement)?
+            .OnPaneOpenChanged?.Invoke(control.IsPaneOpen);
+    };
 
     private static partial Desc.ControlDescriptor<NavigationViewElement, WinUI.NavigationView> Customize(
         Desc.ControlDescriptor<NavigationViewElement, WinUI.NavigationView> d)
@@ -101,7 +121,14 @@ public partial record NavigationViewElement
                 callbackPresent:  static e => e.OnBackRequested,
                 trampoline:       __BackRequestedTrampoline,
                 slotIsNull:       static p => p.BackRequestedTrampoline is null,
-                setSlot:          static (p, h) => p.BackRequestedTrampoline = h);
+                setSlot:          static (p, h) => p.BackRequestedTrampoline = h)
+            .Immediate<V1.NavigationViewEventPayload>(
+                callbackGate:      static e => e.OnPaneOpenChanged,
+                observeProperty:   WinUI.NavigationView.IsPaneOpenProperty,
+                observeCallback:   __IsPaneOpenObserver,
+                observeSlotIsNull: static p => p.IsPaneOpenObserver is null,
+                setObserveSlot:    static (p, cb) => p.IsPaneOpenObserver = cb,
+                loadedHook:        null);
     }
 
     private static void ApplyMenuAndSelection(WinUI.NavigationView control, NavigationViewElement? oldElement, NavigationViewElement element)

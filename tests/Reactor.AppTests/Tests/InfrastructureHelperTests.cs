@@ -49,29 +49,41 @@ public sealed class InfrastructureHelperTests
     }
 
     [TestMethod]
-    public void InputInjector_NormalizeAbsoluteCoordinates_HandlesVirtualScreenOriginAndBounds()
+    public void SendKeysTokens_LiteralText_BecomesEscapedTextToken()
     {
-        Assert.AreEqual((0, 0), InputInjector.NormalizeAbsoluteCoordinates(-1920, -100, -1920, -100, 3840, 2160));
-        Assert.AreEqual((65535, 65535), InputInjector.NormalizeAbsoluteCoordinates(1919, 2059, -1920, -100, 3840, 2160));
-        Assert.AreEqual((0, 65535), InputInjector.NormalizeAbsoluteCoordinates(-5000, 5000, -1920, -100, 3840, 2160));
+        Assert.AreEqual("text=hello", UiElement.ToSendKeysTokens("hello"));
+        // Spaces inside a literal run must be escaped so the whitespace tokenizer keeps the run intact.
+        Assert.AreEqual(@"text=hi\sthere", UiElement.ToSendKeysTokens("hi there"));
+        // A literal backslash is doubled so it survives the text= escape decoder.
+        Assert.AreEqual(@"text=a\\b", UiElement.ToSendKeysTokens(@"a\b"));
     }
 
     [TestMethod]
-    public void InputInjector_DragPath_ClearsThresholdBeforeTarget()
+    public void SendKeysTokens_Sentinels_BecomeNamedKeys()
     {
-        CollectionAssert.AreEqual(
-            new[] { (10, 20), (18, 20), (26, 20), (100, 200) },
-            InputInjector.DragPath(10, 20, 100, 200).ToArray());
+        Assert.AreEqual("tab", UiElement.ToSendKeysTokens(Keys.Tab));
+        Assert.AreEqual("enter", UiElement.ToSendKeysTokens(Keys.Enter));
+        Assert.AreEqual("space", UiElement.ToSendKeysTokens(Keys.Space));
+        // A literal run flushes before the following sentinel -> two whitespace-separated tokens.
+        Assert.AreEqual("text=42 enter", UiElement.ToSendKeysTokens("42" + Keys.Enter));
     }
 
     [TestMethod]
-    public void InputInjector_KeyTokens_DistinguishModifiersFromPressKeys()
+    public void SendKeysTokens_ModifierSentinel_BindsToNextKeyAsChord()
     {
-        Assert.IsTrue(InputInjector.TryMapKeyToken(Keys.Shift[0], out _, out var isShiftModifier));
-        Assert.IsTrue(isShiftModifier);
+        // Control sentinel + 'a' -> a single "ctrl+a" chord (mirrors the old per-keystroke modifier hold).
+        Assert.AreEqual("ctrl+a", UiElement.ToSendKeysTokens(Keys.Control + "a"));
+    }
 
-        Assert.IsTrue(InputInjector.TryMapKeyToken(Keys.Tab[0], out _, out var isTabModifier));
-        Assert.IsFalse(isTabModifier);
+    [TestMethod]
+    public void SendKeysTokens_DanglingModifier_BecomesBareVkTap()
+    {
+        // A modifier sentinel with no following key can't chord; it must NOT vanish. It becomes a bare
+        // vk= tap (VK_CONTROL 0x11 / VK_SHIFT 0x10), matching the old InputInjector's press+release.
+        Assert.AreEqual("vk=0x11", UiElement.ToSendKeysTokens(Keys.Control));
+        Assert.AreEqual("vk=0x10", UiElement.ToSendKeysTokens(Keys.Shift));
+        // A preceding literal run still flushes to its own text= token before the dangling-modifier tap.
+        Assert.AreEqual("text=x vk=0x11", UiElement.ToSendKeysTokens("x" + Keys.Control));
     }
 
     private static void AssertThrowsWinAppException(Action action)

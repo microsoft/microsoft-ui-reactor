@@ -1,0 +1,2503 @@
+{
+  "schemaVersion": 1,
+  "source": "reactor",
+  "generatedFrom": "microsoft/microsoft-ui-reactor",
+  "controls": [
+    {
+      "id": "acrylic",
+      "name": "Acrylic",
+      "category": "Styles",
+      "description": "A translucent material brush that creates a frosted glass effect.",
+      "keywords": [
+        "frosted glass",
+        "blur",
+        "translucent",
+        "material",
+        "backdrop"
+      ],
+      "relatedControls": [
+        "Theming"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "acrylic",
+      "samples": [
+        {
+          "header": "Acrylic Brush",
+          "language": "csharp",
+          "code": "AcrylicBrush(\n    global::Windows.UI.Color.FromArgb(255, 100, 100, 200),\n    tintOpacity: 0.8)"
+        }
+      ]
+    },
+    {
+      "id": "animated-icon",
+      "name": "AnimatedIcon",
+      "category": "Media",
+      "description": "An icon that transitions between states with a vector animation.",
+      "keywords": [
+        "lottie",
+        "vector animation",
+        "state transition",
+        "micro-interaction",
+        "animated glyph"
+      ],
+      "relatedControls": [
+        "AnimatedVisualPlayer",
+        "Icons"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "animated-icon",
+      "samples": [
+        {
+          "header": "Built-in animated icons",
+          "language": "csharp",
+          "code": "AnimatedIcon(new AnimatedChevronDownSmallVisualSource()).Size(32, 32)\n// AnimatedIcon plays its transition when the host raises a state change\n// (e.g. an Expander toggling). Supply your own IRichAnimatedVisualSource\n// for custom motion."
+        }
+      ]
+    },
+    {
+      "id": "animated-visual-player",
+      "name": "AnimatedVisualPlayer",
+      "category": "Media",
+      "description": "Plays vector (Lottie/codegen) animations.",
+      "keywords": [
+        "lottie",
+        "vector animation",
+        "codegen",
+        "playback",
+        "composition"
+      ],
+      "relatedControls": [
+        "AnimatedIcon",
+        "MediaPlayerElement"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "animated-visual-player",
+      "samples": [
+        {
+          "header": "Looping animation",
+          "language": "csharp",
+          "code": "AnimatedVisualPlayer().Size(64, 64).OnMount(el =>\n{\n    var p = (AnimatedVisualPlayer)el;                 // OnMount runs once — .Set re-applies on every update\n    p.Source = new AnimatedGlobalNavigationButtonVisualSource();\n    _ = p.PlayAsync(0, 1, loop: true);\n})\n// Point Source at your own IAnimatedVisualSource (e.g. a LottieVisualSource\n// or a codegen class produced by the Lottie/Windows toolchain)."
+        }
+      ]
+    },
+    {
+      "id": "annotated-scroll-bar",
+      "name": "AnnotatedScrollBar",
+      "category": "Layout",
+      "description": "A scrollbar that shows labelled annotations along its track.",
+      "keywords": [
+        "labelled scrollbar",
+        "scroll annotations",
+        "track markers",
+        "minimap",
+        "jump to section"
+      ],
+      "relatedControls": [
+        "ScrollView"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "annotated-scroll-bar",
+      "samples": [
+        {
+          "header": "Standalone control surface",
+          "language": "csharp",
+          "code": "Border(AnnotatedScrollBar().Height(300).Width(40))\n    .Padding(12)\n    .Background(Theme.CardBackground)\n    .WithBorder(Theme.DividerStroke)"
+        }
+      ]
+    },
+    {
+      "id": "auto-suggest-box",
+      "name": "AutoSuggestBox",
+      "category": "Text",
+      "description": "A text input that shows suggestions as the user types.",
+      "keywords": [
+        "autocomplete",
+        "typeahead",
+        "suggestions",
+        "search box",
+        "combobox input"
+      ],
+      "relatedControls": [
+        "TextBox",
+        "ComboBox"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "auto-suggest-box",
+      "samples": [
+        {
+          "header": "Basic AutoSuggestBox",
+          "language": "csharp",
+          "code": "var (query, setQuery) = UseState(\"\");\nAutoSuggestBox(query, setQuery)"
+        }
+      ]
+    },
+    {
+      "id": "border",
+      "name": "Border",
+      "category": "Layout",
+      "description": "A container that draws a border around its child element.",
+      "keywords": [
+        "container",
+        "frame",
+        "outline",
+        "rounded corners",
+        "background wrapper"
+      ],
+      "relatedControls": [
+        "Card"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "border",
+      "samples": [
+        {
+          "header": "Basic Border",
+          "language": "csharp",
+          "code": "Border(TextBlock(\"Content\").Padding(16))\n    .WithBorder(Theme.CardStroke)\n    .CornerRadius(8)\n    .Background(Theme.SubtleFill)"
+        }
+      ]
+    },
+    {
+      "id": "breadcrumb-bar",
+      "name": "BreadcrumbBar",
+      "category": "Navigation",
+      "description": "A trail of links showing the user's navigation path.",
+      "keywords": [
+        "breadcrumbs",
+        "navigation trail",
+        "path bar",
+        "hierarchy nav",
+        "back navigation"
+      ],
+      "relatedControls": [
+        "NavigationView"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "breadcrumb-bar",
+      "samples": [
+        {
+          "header": "Basic BreadcrumbBar",
+          "language": "csharp",
+          "code": "BreadcrumbBar(\n    new[] { Breadcrumb(\"Home\"), Breadcrumb(\"Docs\"), Breadcrumb(\"Reports\") },\n    item => setClicked(item.Label))"
+        }
+      ]
+    },
+    {
+      "id": "button",
+      "name": "Button",
+      "category": "Basic Input",
+      "description": "A button that responds to user clicks.",
+      "keywords": [
+        "click",
+        "command",
+        "submit",
+        "primary action",
+        "accent"
+      ],
+      "relatedControls": [
+        "RepeatButton",
+        "ToggleButton",
+        "HyperlinkButton",
+        "SplitButton"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "button",
+      "samples": [
+        {
+          "header": "Basic Button — .Click(handler)",
+          "language": "csharp",
+          "code": "Button(\"Save\").Click(() => setOutput(\"Saved!\"))"
+        }
+      ]
+    },
+    {
+      "id": "calendar-date-picker",
+      "name": "CalendarDatePicker",
+      "category": "Date and Time",
+      "description": "A drop-down control that lets a user pick a date from a calendar.",
+      "keywords": [
+        "date input",
+        "date dropdown",
+        "pick a date",
+        "calendar dropdown"
+      ],
+      "relatedControls": [
+        "CalendarView",
+        "DatePicker"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "calendar-date-picker",
+      "samples": [
+        {
+          "header": "Basic CalendarDatePicker",
+          "language": "csharp",
+          "code": "CalendarDatePicker(date, d => setDate(d))"
+        }
+      ]
+    },
+    {
+      "id": "calendar-view",
+      "name": "CalendarView",
+      "category": "Date and Time",
+      "description": "A calendar display that lets a user select a date.",
+      "keywords": [
+        "calendar",
+        "month view",
+        "date selection",
+        "schedule",
+        "multi-date"
+      ],
+      "relatedControls": [
+        "CalendarDatePicker",
+        "DatePicker"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "calendar-view",
+      "samples": [
+        {
+          "header": "Basic CalendarView",
+          "language": "csharp",
+          "code": "CalendarView()"
+        }
+      ]
+    },
+    {
+      "id": "canvas",
+      "name": "Canvas",
+      "category": "Layout",
+      "description": "A layout panel that supports absolute positioning of child elements.",
+      "keywords": [
+        "absolute positioning",
+        "free layout",
+        "x y coordinates",
+        "overlay positioning"
+      ],
+      "relatedControls": [
+        "RelativePanel"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "canvas",
+      "samples": [
+        {
+          "header": "Absolute Positioning",
+          "language": "csharp",
+          "code": "Canvas(\n    Rectangle().Size(80, 80).Background(\"#FF6B6B\").Canvas(left: 10, top: 10),\n    Rectangle().Size(80, 80).Background(\"#4ECDC4\").Canvas(left: 60, top: 50)\n)"
+        }
+      ]
+    },
+    {
+      "id": "card",
+      "name": "Card",
+      "category": "Layout",
+      "description": "A theme-aware preset Border with the WinUI card brushes, corner radius, and padding.",
+      "keywords": [
+        "surface",
+        "tile",
+        "elevated container",
+        "content card",
+        "panel"
+      ],
+      "relatedControls": [
+        "Border",
+        "Expander"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "card",
+      "samples": [
+        {
+          "header": "Override defaults via chained fluents",
+          "language": "csharp",
+          "code": "Card(child).Padding(24).CornerRadius(16)"
+        }
+      ]
+    },
+    {
+      "id": "check-box",
+      "name": "CheckBox",
+      "category": "Basic Input",
+      "description": "A control that a user can select or clear.",
+      "keywords": [
+        "tick",
+        "boolean",
+        "multi-select",
+        "select",
+        "opt in",
+        "tri-state",
+        "state"
+      ],
+      "relatedControls": [
+        "RadioButton",
+        "ToggleSwitch"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "check-box",
+      "samples": [
+        {
+          "header": "Two-State CheckBox",
+          "language": "csharp",
+          "code": "CheckBox(isChecked, v => setIsChecked(v), \"I agree to the terms\")"
+        }
+      ]
+    },
+    {
+      "id": "color",
+      "name": "Color",
+      "category": "Design",
+      "description": "Guidance on using the WinUI color system and theme resources.",
+      "keywords": [
+        "theme colors",
+        "brushes",
+        "accent",
+        "palette",
+        "system colors"
+      ],
+      "relatedControls": [
+        "ColorPicker",
+        "Theming",
+        "Typography"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "color",
+      "samples": [
+        {
+          "header": "Applying Theme Colors",
+          "language": "csharp",
+          "code": "// Foreground\nTextBlock(\"Accent text\").Foreground(Theme.Accent)\nTextBlock(\"Primary\").Foreground(Theme.PrimaryText)\nTextBlock(\"Secondary\").Foreground(Theme.SecondaryText)\nTextBlock(\"Hyperlink\").Foreground(Theme.AccentText)\n\n// Background\nBorder(content)\n    .Background(Theme.CardBackground)\n    .WithBorder(Theme.CardStroke)\n    .CornerRadius(6)\n\nBorder(content)\n    .Background(Theme.Accent)  // accent-filled button\n\n// Border & Stroke\nBorder(content)\n    .WithBorder(Theme.ControlStroke)\n\nBorder(VStack()).Height(1)\n    .Background(Theme.DividerStroke)  // horizontal divider\n\n// System Signal\nBorder(HStack(icon, message))\n    .Background(Theme.SystemSuccessBackground)"
+        }
+      ]
+    },
+    {
+      "id": "color-picker",
+      "name": "ColorPicker",
+      "category": "Basic Input",
+      "description": "A control that lets a user pick a color.",
+      "keywords": [
+        "color selection",
+        "rgb",
+        "hex",
+        "hue",
+        "eyedropper",
+        "swatch"
+      ],
+      "relatedControls": [
+        "Color"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "color-picker",
+      "samples": [
+        {
+          "header": "Basic ColorPicker",
+          "language": "csharp",
+          "code": "ColorPicker(color, c => setColor(c))"
+        }
+      ]
+    },
+    {
+      "id": "combo-box",
+      "name": "ComboBox",
+      "category": "Basic Input",
+      "description": "A drop-down list of items a user can select from.",
+      "keywords": [
+        "dropdown",
+        "select",
+        "picker",
+        "options list",
+        "single select"
+      ],
+      "relatedControls": [
+        "ListBox",
+        "DropDownButton",
+        "AutoSuggestBox"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "combo-box",
+      "samples": [
+        {
+          "header": "Basic ComboBox",
+          "language": "csharp",
+          "code": "ComboBox(colors, selectedIndex, i => setSelectedIndex(i))"
+        }
+      ]
+    },
+    {
+      "id": "command-bar",
+      "name": "CommandBar",
+      "category": "Menus and Toolbars",
+      "description": "A toolbar for exposing app commands and actions.",
+      "keywords": [
+        "toolbar",
+        "app bar",
+        "command buttons",
+        "action bar",
+        "overflow menu"
+      ],
+      "relatedControls": [
+        "CommandBarFlyout",
+        "MenuBar"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "command-bar",
+      "samples": [
+        {
+          "header": "Primary Commands",
+          "language": "csharp",
+          "code": "CommandBar(primaryCommands: new AppBarItemBase[] {\n    AppBarButton(\"Add\", () => setAction(\"Add\"), icon: \"Add\"),\n    AppBarButton(\"Edit\", () => setAction(\"Edit\"), icon: \"Edit\"),\n    AppBarSeparator(),\n    AppBarButton(\"Delete\", () => setAction(\"Delete\"), icon: \"Delete\"),\n})"
+        }
+      ]
+    },
+    {
+      "id": "command-bar-flyout",
+      "name": "CommandBarFlyout",
+      "category": "Dialogs and Flyouts",
+      "description": "A flyout that provides quick access to common commands.",
+      "keywords": [
+        "context menu",
+        "quick commands",
+        "selection menu",
+        "contextual toolbar"
+      ],
+      "relatedControls": [
+        "CommandBar",
+        "Flyout",
+        "MenuFlyout"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "command-bar-flyout",
+      "samples": [
+        {
+          "header": "Basic CommandBarFlyout",
+          "language": "csharp",
+          "code": "CommandBarFlyout(\n    Button(\"Show Commands\"),\n    primaryCommands: new AppBarItemBase[] {\n        AppBarButton(\"Cut\", () => {}, icon: \"Cut\"),\n        AppBarButton(\"Copy\", () => {}, icon: \"Copy\"),\n        AppBarButton(\"Paste\", () => {}, icon: \"Paste\"),\n    })"
+        }
+      ]
+    },
+    {
+      "id": "commands",
+      "name": "Commands",
+      "category": "Patterns",
+      "description": "Declarative Command binding with async IsExecuting tracking and debounce.",
+      "keywords": [
+        "command binding",
+        "icommand",
+        "async execute",
+        "can execute",
+        "debounce"
+      ],
+      "relatedControls": [
+        "Button"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "commands",
+      "samples": [
+        {
+          "header": "Sync command",
+          "language": "csharp",
+          "code": "var increment = new Command { Label = \"Increment\", Execute = () => setCount(count + 1) };\nButton(increment)   // Label + Execute + IsEnabled all flow from the Command"
+        }
+      ]
+    },
+    {
+      "id": "content-dialog",
+      "name": "ContentDialog",
+      "category": "Dialogs and Flyouts",
+      "description": "A modal dialog box that displays content and action buttons.",
+      "keywords": [
+        "modal",
+        "dialog box",
+        "confirm",
+        "alert",
+        "prompt",
+        "popup window"
+      ],
+      "relatedControls": [
+        "Flyout",
+        "TeachingTip",
+        "Popup"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "content-dialog",
+      "samples": [
+        {
+          "header": "Basic Dialog",
+          "language": "csharp",
+          "code": "Button(\"Show Dialog\", () => setShow(true)),\nContentDialog(\"Welcome\", TextBlock(\"Thank you!\"), \"OK\") with {\n    IsOpen = show,\n    OnClosed = _ => setShow(false),\n}"
+        }
+      ]
+    },
+    {
+      "id": "data-grid",
+      "name": "DataGrid",
+      "category": "Data",
+      "description": "A virtualized data grid with sortable columns, selection, and inline editing.",
+      "keywords": [
+        "table",
+        "spreadsheet",
+        "rows and columns",
+        "sortable",
+        "virtualized grid",
+        "inline edit",
+        "select"
+      ],
+      "relatedControls": [
+        "ListView",
+        "PropertyGrid",
+        "ItemsView"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "usings": [
+        "Microsoft.UI.Reactor.Data",
+        "Microsoft.UI.Reactor.Data.Providers",
+        "Microsoft.UI.Reactor.Controls"
+      ],
+      "galleryRoute": "data-grid",
+      "samples": [
+        {
+          "header": "Columns, sorting & selection",
+          "language": "csharp",
+          "code": "// Memoize the source so the grid isn't remounted on every render\n// (DataGrid keys off source.GetHashCode()).\nvar source = UseMemo(() => new ListDataSource<Product>(products, p => (RowKey)p.Id));\n\nDataGrid(\n    source: source,\n    columns: new FieldDescriptor[]\n    {\n        Column<Product>(\"Name\", p => p.Name, displayName: \"Product\", width: 200),\n        Column<Product>(\"Price\", p => p.Price, format: \"C2\", width: 100),\n        Column<Product>(\"InStock\", p => p.InStock, displayName: \"In stock\", width: 90),\n    },\n    selectionMode: SelectionMode.Single,\n    onSelectionChanged: keys => setSelectedCount(keys.Count),\n    rowHeight: 36)\n// Click a header to sort. Columns can be reordered and resized by dragging."
+        }
+      ]
+    },
+    {
+      "id": "date-picker",
+      "name": "DatePicker",
+      "category": "Date and Time",
+      "description": "A control that lets a user pick a date using spinners.",
+      "keywords": [
+        "date input",
+        "spinner",
+        "pick a date",
+        "calendar picker"
+      ],
+      "relatedControls": [
+        "CalendarDatePicker",
+        "TimePicker"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "date-picker",
+      "samples": [
+        {
+          "header": "Basic DatePicker",
+          "language": "csharp",
+          "code": "DatePicker(date, d => setDate(d))"
+        }
+      ]
+    },
+    {
+      "id": "docking",
+      "name": "Docking",
+      "category": "Layout",
+      "description": "Dockable, tearable, and floatable panes with drag-to-rearrange layout.",
+      "keywords": [
+        "dock panes",
+        "tearable",
+        "floating windows",
+        "rearrange layout",
+        "tool windows",
+        "ide layout"
+      ],
+      "relatedControls": [
+        "TabView",
+        "SplitView"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "usings": [
+        "Microsoft.UI.Reactor.Docking"
+      ],
+      "galleryRoute": "docking",
+      "samples": [
+        {
+          "header": "Two-pane list / detail",
+          "language": "csharp",
+          "code": "new DockManager\n{\n    Layout = new DockSplit(Orientation.Horizontal,\n    [\n        new DockTabGroup([ new DockableContent(\n            Title: \"Items\", Content: ListBox(Items, selected, setSelected), Key: \"items\", CanClose: true) ], Width: 200),\n        new DockTabGroup([ new DockableContent(\n            Title: \"Detail\", Content: detailView, Key: \"detail\", CanClose: true) ]),\n    ]),\n}.WithKey($\"dock-{layoutKey}\").Height(360)\n// Re-key the DockManager to reset the user's drag-modified layout."
+        }
+      ]
+    },
+    {
+      "id": "drop-down-button",
+      "name": "DropDownButton",
+      "category": "Basic Input",
+      "description": "A button that displays a flyout of choices when clicked.",
+      "keywords": [
+        "dropdown menu",
+        "flyout button",
+        "choices",
+        "split options"
+      ],
+      "relatedControls": [
+        "SplitButton",
+        "MenuFlyout",
+        "Button"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "drop-down-button",
+      "samples": [
+        {
+          "header": "DropDownButton with MenuItems",
+          "language": "csharp",
+          "code": "DropDownButton(\"Choose\", MenuItems(\n    MenuItem(\"Option A\", () => setSelected(\"Option A\")),\n    MenuItem(\"Option B\", () => setSelected(\"Option B\")),\n    MenuItem(\"Option C\", () => setSelected(\"Option C\"))))"
+        }
+      ]
+    },
+    {
+      "id": "expander",
+      "name": "Expander",
+      "category": "Layout",
+      "description": "A container that expands and collapses to show or hide content.",
+      "keywords": [
+        "collapsible",
+        "accordion",
+        "show hide",
+        "disclosure",
+        "fold"
+      ],
+      "relatedControls": [
+        "Card"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "expander",
+      "samples": [
+        {
+          "header": "Direction Control",
+          "language": "csharp",
+          "code": "Expander(\"Header\", content, true)\n    .Direction(ExpandDirection.Up)"
+        }
+      ]
+    },
+    {
+      "id": "flex",
+      "name": "Flex",
+      "category": "Layout",
+      "description": "A flexible layout container inspired by CSS flexbox.",
+      "keywords": [
+        "flexbox",
+        "css layout",
+        "flex row column",
+        "justify align",
+        "wrap",
+        "responsive layout"
+      ],
+      "relatedControls": [
+        "Grid",
+        "StackPanel"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "usings": [
+        "Microsoft.UI.Reactor.Layout"
+      ],
+      "galleryRoute": "flex",
+      "samples": [
+        {
+          "header": "Interactive Flex Container",
+          "language": "csharp",
+          "code": "new FlexElement(children)\n{\n    Direction = FlexDirection.Row,\n    JustifyContent = FlexJustify.SpaceBetween,\n    AlignItems = FlexAlign.Center,\n    Wrap = FlexWrap.Wrap,\n}"
+        }
+      ]
+    },
+    {
+      "id": "flip-view",
+      "name": "FlipView",
+      "category": "Collections",
+      "description": "A control that presents one item at a time with flipping navigation.",
+      "keywords": [
+        "carousel",
+        "image gallery",
+        "swipe pages",
+        "slideshow",
+        "paged view"
+      ],
+      "relatedControls": [
+        "PipsPager",
+        "GridView"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "flip-view",
+      "samples": [
+        {
+          "header": "Basic FlipView",
+          "language": "csharp",
+          "code": "FlipView(\n    Border(TextBlock(\"Item 1\")).Background(\"#FF4444\").Size(300, 200),\n    Border(TextBlock(\"Item 2\")).Background(\"#44AA44\").Size(300, 200)\n)"
+        }
+      ]
+    },
+    {
+      "id": "flyout",
+      "name": "Flyout",
+      "category": "Dialogs and Flyouts",
+      "description": "A lightweight popup that shows contextual information.",
+      "keywords": [
+        "popup",
+        "contextual",
+        "attached popup",
+        "lightweight dialog",
+        "callout"
+      ],
+      "relatedControls": [
+        "MenuFlyout",
+        "CommandBarFlyout",
+        "TeachingTip",
+        "Popup"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "flyout",
+      "samples": [
+        {
+          "header": "Basic Flyout",
+          "language": "csharp",
+          "code": "Flyout(\n    Button(\"Show Flyout\"),\n    TextBlock(\"This is flyout content!\").Padding(8))"
+        }
+      ]
+    },
+    {
+      "id": "frame",
+      "name": "Frame",
+      "category": "Navigation",
+      "description": "A container that hosts Page navigation, raising .Navigated / .Navigating / .NavigationFailed.",
+      "keywords": [
+        "page navigation",
+        "navigate",
+        "back forward",
+        "content host",
+        "routing"
+      ],
+      "relatedControls": [
+        "NavigationView"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "frame",
+      "samples": [
+        {
+          "header": "Live demo",
+          "language": "csharp",
+          "code": "Frame(target)\n    .Navigating(t => log.Add(\"Navigating \" + t.Name))\n    .Navigated(t => log.Add(\"Navigated \"  + t.Name))\n    .NavigationFailed((t, ex) => log.Add($\"Failed {t.Name}: {ex.Message}\"))"
+        }
+      ]
+    },
+    {
+      "id": "geometry",
+      "name": "Geometry",
+      "category": "Design",
+      "description": "Corner radius resources for consistent rounding on controls and overlays.",
+      "keywords": [
+        "corner radius",
+        "rounding",
+        "shape language",
+        "control radius",
+        "overlay radius"
+      ],
+      "relatedControls": [
+        "Spacing",
+        "Color",
+        "Typography"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "geometry",
+      "samples": [
+        {
+          "header": "Corner Radius Resources",
+          "language": "csharp",
+          "code": "// Resolve at render time\nvar controlRadius = ThemeResource.CornerRadius(\"ControlCornerRadius\");\nvar overlayRadius = ThemeResource.CornerRadius(\"OverlayCornerRadius\");\n\n// Apply to elements\nBorder(content).CornerRadius(controlRadius.TopLeft)\nBorder(dialog).CornerRadius(overlayRadius.TopLeft)"
+        }
+      ]
+    },
+    {
+      "id": "grid",
+      "name": "Grid",
+      "category": "Layout",
+      "description": "A layout panel that arranges children in rows and columns.",
+      "keywords": [
+        "rows and columns",
+        "layout grid",
+        "cells",
+        "table layout",
+        "spanning"
+      ],
+      "relatedControls": [
+        "StackPanel",
+        "RelativePanel",
+        "UniformGrid"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "grid",
+      "samples": [
+        {
+          "header": "Column & Row Spanning",
+          "language": "csharp",
+          "code": "Border(TextBlock(\"Header\")).Grid(row: 0, column: 0, columnSpan: 3)\nBorder(TextBlock(\"Center\")).Grid(row: 1, column: 1, columnSpan: 2)"
+        }
+      ]
+    },
+    {
+      "id": "grid-view",
+      "name": "GridView",
+      "category": "Collections",
+      "description": "A control that displays items in a horizontally wrapping grid.",
+      "keywords": [
+        "tile view",
+        "thumbnail grid",
+        "wrapping items",
+        "gallery",
+        "card grid",
+        "select"
+      ],
+      "relatedControls": [
+        "ListView",
+        "ItemsView",
+        "FlipView"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "grid-view",
+      "samples": [
+        {
+          "header": "Basic GridView",
+          "language": "csharp",
+          "code": "GridView(\n    items.Select(i =>\n        Border(TextBlock($\"Item {i}\")).Size(100, 100)\n    ).ToArray()\n).SelectionMode(ListViewSelectionMode.Multiple)"
+        }
+      ]
+    },
+    {
+      "id": "hyperlink-button",
+      "name": "HyperlinkButton",
+      "category": "Basic Input",
+      "description": "A button that appears as a hyperlink and navigates to a URI.",
+      "keywords": [
+        "link",
+        "hyperlink",
+        "navigate url",
+        "web link",
+        "anchor"
+      ],
+      "relatedControls": [
+        "Button"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "hyperlink-button",
+      "samples": [
+        {
+          "header": "Navigate to URI",
+          "language": "csharp",
+          "code": "HyperlinkButton(\"Go to Microsoft\", new Uri(\"https://www.microsoft.com\"))"
+        }
+      ]
+    },
+    {
+      "id": "icons",
+      "name": "Icons",
+      "category": "Media",
+      "description": "Standalone icon elements from Symbol, Font glyph, or Path sources.",
+      "keywords": [
+        "glyph",
+        "symbol icon",
+        "font icon",
+        "path icon",
+        "vector icon"
+      ],
+      "relatedControls": [
+        "AnimatedIcon",
+        "Shapes"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "icons",
+      "samples": [
+        {
+          "header": "Symbol icons",
+          "language": "csharp",
+          "code": "Icon(Symbol.Home)\nIcon(Symbol.Save)\nIcon(Symbol.Delete)\nIcon(Symbol.Setting)"
+        }
+      ]
+    },
+    {
+      "id": "image",
+      "name": "Image",
+      "category": "Media",
+      "description": "A control that displays an image from a file or URI.",
+      "keywords": [
+        "picture",
+        "bitmap",
+        "photo",
+        "img",
+        "asset",
+        "uri source"
+      ],
+      "relatedControls": [
+        "PersonPicture"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "image",
+      "samples": [
+        {
+          "header": "Image from URI",
+          "language": "csharp",
+          "code": "Image(\"ms-appx:///Assets/Square150x150Logo.scale-200.png\")\n    .Width(300).Height(300)"
+        }
+      ]
+    },
+    {
+      "id": "info-badge",
+      "name": "InfoBadge",
+      "category": "Status and Info",
+      "description": "A small indicator that conveys status on another element.",
+      "keywords": [
+        "notification dot",
+        "count badge",
+        "status indicator",
+        "unread count",
+        "dot"
+      ],
+      "relatedControls": [
+        "InfoBar"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "info-badge",
+      "samples": [
+        {
+          "header": "Numeric Badge",
+          "language": "csharp",
+          "code": "InfoBadge(count)  // numeric badge\nInfoBadge(42)"
+        }
+      ]
+    },
+    {
+      "id": "info-bar",
+      "name": "InfoBar",
+      "category": "Status and Info",
+      "description": "A dismissible bar for displaying essential app-level messages.",
+      "keywords": [
+        "notification bar",
+        "banner",
+        "inline message",
+        "alert bar",
+        "status message",
+        "dismissible"
+      ],
+      "relatedControls": [
+        "InfoBadge",
+        "TeachingTip"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "info-bar",
+      "samples": [
+        {
+          "header": "Severity fluents",
+          "language": "csharp",
+          "code": "InfoBar(\"Success\", \"Completed!\").Success().IsClosable(false)\nInfoBar(\"Warning\", \"Review...\").Warning().IsClosable(false)\nInfoBar(\"Error\",   \"Failed!\"  ).Error()  .IsClosable(false)\nInfoBar(\"Info\",    \"FYI…\"     ).Informational().IsClosable(false)"
+        }
+      ]
+    },
+    {
+      "id": "interspersed-grid",
+      "name": "InterspersedGrid",
+      "category": "Layout",
+      "description": "A grid that places proportionally sized panels with separators between them.",
+      "keywords": [
+        "proportional panels",
+        "separators",
+        "weighted layout",
+        "split panels"
+      ],
+      "relatedControls": [
+        "UniformGrid",
+        "Grid"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "interspersed-grid",
+      "samples": [
+        {
+          "header": "Horizontal proportions",
+          "language": "csharp",
+          "code": "InterspersedGrid(\n    Orientation.Horizontal,\n    new Element[] { panelA, panelB, panelC },\n    new[] { 1.0, 2.0, 1.0 },\n    8,\n    i => Border(Empty()).Width(2).Background(Theme.DividerStroke))\n    .Height(160)"
+        }
+      ]
+    },
+    {
+      "id": "items-repeater",
+      "name": "ItemsRepeater",
+      "category": "Collections",
+      "description": "A lightweight, data-driven panel for laying out custom collections.",
+      "keywords": [
+        "virtualized list",
+        "custom layout",
+        "data template",
+        "repeater",
+        "bind collection"
+      ],
+      "relatedControls": [
+        "ItemsView",
+        "ListView"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "items-repeater",
+      "samples": [
+        {
+          "header": "Scrollable repeated rows",
+          "language": "csharp",
+          "code": "ScrollView(\n    ItemsRepeater(items, s => s, (s, i) =>\n        Border(TextBlock($\"{i + 1}. {s}\"))\n            .Padding(8)\n            .Margin(0, 0, 0, 4)\n            .Background(Theme.SubtleFill)\n            .CornerRadius(4))\n).Height(260)"
+        }
+      ]
+    },
+    {
+      "id": "items-view",
+      "name": "ItemsView",
+      "category": "Collections",
+      "description": "A flexible control for displaying collections of data items.",
+      "keywords": [
+        "collection view",
+        "selectable items",
+        "select",
+        "data list",
+        "flexible items"
+      ],
+      "relatedControls": [
+        "ListView",
+        "GridView",
+        "ItemsRepeater"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "items-view",
+      "samples": [
+        {
+          "header": "Basic ItemsView",
+          "language": "csharp",
+          "code": "ItemsView(\n    products,\n    p => p.Name,\n    (p, i) => Border(VStack(\n        TextBlock(p.Name).Bold(),\n        TextBlock($\"${p.Price:F2}\")\n    ))\n)"
+        }
+      ]
+    },
+    {
+      "id": "list-box",
+      "name": "ListBox",
+      "category": "Collections",
+      "description": "A list of selectable items presented inline.",
+      "keywords": [
+        "inline list",
+        "selectable list",
+        "select",
+        "options",
+        "multi-select list"
+      ],
+      "relatedControls": [
+        "ComboBox",
+        "ListView"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "list-box",
+      "samples": [
+        {
+          "header": "Basic ListBox",
+          "language": "csharp",
+          "code": "var (selected, setSelected) = UseState(0);\nListBox(fruits, selected, setSelected)"
+        }
+      ]
+    },
+    {
+      "id": "list-view",
+      "name": "ListView",
+      "category": "Collections",
+      "description": "A control that displays items in a vertical scrolling list.",
+      "keywords": [
+        "scrolling list",
+        "data list",
+        "rows",
+        "selection",
+        "select",
+        "virtualized list"
+      ],
+      "relatedControls": [
+        "GridView",
+        "ItemsView",
+        "ItemsRepeater",
+        "ListBox"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "list-view",
+      "samples": [
+        {
+          "header": "Data-Driven ListView",
+          "language": "csharp",
+          "code": "ListView(\n    items, s => s,\n    (s, i) => HStack(8,\n        Border(TextBlock($\"{i + 1}\")).Size(28, 28),\n        TextBlock(s)\n    )\n)"
+        }
+      ]
+    },
+    {
+      "id": "map-control",
+      "name": "MapControl",
+      "category": "Media",
+      "description": "Displays an interactive, pannable, zoomable map.",
+      "keywords": [
+        "maps",
+        "geolocation",
+        "pan zoom",
+        "markers",
+        "interactive map"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "map-control",
+      "samples": [
+        {
+          "header": "Interactive map",
+          "language": "csharp",
+          "code": "MapControl(zoomLevel: 4)\n    .Height(320).Width(480)\n// Supply a Bing Maps token to load tiles:\n//   MapControl(mapServiceToken: mapKey, zoomLevel: 12)"
+        }
+      ]
+    },
+    {
+      "id": "markdown",
+      "name": "Markdown",
+      "category": "Text",
+      "description": "Renders a Markdown string as a Reactor element tree.",
+      "keywords": [
+        "md",
+        "rich text render",
+        "commonmark",
+        "formatted text"
+      ],
+      "relatedControls": [
+        "RichTextBlock"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "markdown",
+      "samples": [
+        {
+          "header": "Formatted markdown",
+          "language": "csharp",
+          "code": "var markdown = @\"# Markdown sample\n\nMarkdown renders **bold** text, *italic* text, and `inline code`.\n\n- Create declarative UI\n- Compose reusable components\n- Keep samples readable\";\n\nBorder(Markdown(markdown))\n    .Padding(16)\n    .Background(Theme.SubtleFill)\n    .CornerRadius(8)"
+        }
+      ]
+    },
+    {
+      "id": "media-player-element",
+      "name": "MediaPlayerElement",
+      "category": "Media",
+      "description": "Embeds audio and video playback with built-in transport controls.",
+      "keywords": [
+        "video",
+        "audio",
+        "playback",
+        "transport controls",
+        "player"
+      ],
+      "relatedControls": [
+        "AnimatedVisualPlayer"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "media-player-element",
+      "samples": [
+        {
+          "header": "Video with transport controls",
+          "language": "csharp",
+          "code": "MediaPlayerElement(\"https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4\")\n    .Height(280).Width(480)\n// Transport controls are enabled by default; AutoPlay is opt-in:\n//   .Set(mpe => mpe.AutoPlay = true)"
+        }
+      ]
+    },
+    {
+      "id": "menu-bar",
+      "name": "MenuBar",
+      "category": "Menus and Toolbars",
+      "description": "A horizontal bar that hosts a set of drop-down menus.",
+      "keywords": [
+        "menus",
+        "top menu",
+        "file edit view",
+        "application menu",
+        "menu strip"
+      ],
+      "relatedControls": [
+        "CommandBar",
+        "MenuFlyout"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "menu-bar",
+      "samples": [
+        {
+          "header": "File/Edit/View Menus",
+          "language": "csharp",
+          "code": "MenuBar(\n    Menu(\"File\",\n        MenuItem(\"New\", () => {}, icon: \"Page2\"),\n        MenuItem(\"Open\", () => {}, icon: \"OpenFile\"),\n        MenuSeparator(),\n        MenuItem(\"Save\", () => {}, icon: \"Save\")),\n    Menu(\"Edit\",\n        MenuItem(\"Undo\", () => {}, icon: \"Undo\"),\n        MenuItem(\"Cut\", () => {}),\n        MenuItem(\"Copy\", () => {})))"
+        }
+      ]
+    },
+    {
+      "id": "menu-flyout",
+      "name": "MenuFlyout",
+      "category": "Dialogs and Flyouts",
+      "description": "A flyout that displays a list of menu commands.",
+      "keywords": [
+        "context menu",
+        "right click menu",
+        "dropdown menu",
+        "command list"
+      ],
+      "relatedControls": [
+        "Flyout",
+        "CommandBarFlyout",
+        "MenuBar"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "menu-flyout",
+      "samples": [
+        {
+          "header": "Basic MenuFlyout",
+          "language": "csharp",
+          "code": "MenuFlyout(\n    Button(\"Open Menu\"),\n    MenuItem(\"Cut\", () => {}, icon: \"Cut\"),\n    MenuItem(\"Copy\", () => {}, icon: \"Copy\"),\n    MenuItem(\"Paste\", () => {}, icon: \"Paste\"))"
+        }
+      ]
+    },
+    {
+      "id": "navigation-view",
+      "name": "NavigationView",
+      "category": "Navigation",
+      "description": "A side or top navigation pane for app-level navigation.",
+      "keywords": [
+        "side navigation",
+        "hamburger menu",
+        "app shell",
+        "nav pane",
+        "left nav"
+      ],
+      "relatedControls": [
+        "BreadcrumbBar",
+        "TabView",
+        "Pivot",
+        "SplitView"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "navigation-view",
+      "samples": [
+        {
+          "header": "Left-Pane NavigationView",
+          "language": "csharp",
+          "code": "NavigationView(items, content: TextBlock(\"Selected: ...\"))\nwith {\n    SelectedTag = tag,\n    OnSelectedTagChanged = t => setTag(t),\n    PaneTitle = \"Nav Demo\",\n}"
+        }
+      ]
+    },
+    {
+      "id": "number-box",
+      "name": "NumberBox",
+      "category": "Basic Input",
+      "description": "A text control for entering numeric values with validation.",
+      "keywords": [
+        "numeric input",
+        "spinner",
+        "stepper",
+        "number field",
+        "increment decrement"
+      ],
+      "relatedControls": [
+        "Slider",
+        "TextBox"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "number-box",
+      "samples": [
+        {
+          "header": "Basic NumberBox",
+          "language": "csharp",
+          "code": "NumberBox(value, v => setValue(v), \"Enter a number\")"
+        }
+      ]
+    },
+    {
+      "id": "parallax-view",
+      "name": "ParallaxView",
+      "category": "Media",
+      "description": "Shifts a background layer as content scrolls for a depth effect.",
+      "keywords": [
+        "parallax",
+        "depth scroll",
+        "background shift",
+        "scrolling effect"
+      ],
+      "relatedControls": [
+        "ScrollView"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "parallax-view",
+      "samples": [
+        {
+          "header": "Background parallax behind a scrolling list",
+          "language": "csharp",
+          "code": "var (scroller, setScroller) = UseState<UIElement?>(null);\n\n// `background` must be TALLER than the viewport and have visible vertical\n// structure (bands/image) — a solid colour has nothing to visibly shift.\nvar parallax = ParallaxView(background, verticalShift: 150);\nif (scroller is not null) parallax = parallax.Source(scroller);\n\nGrid(columns: [GridSize.Star()], rows: [GridSize.Star()],\n    parallax.Grid(row: 0, column: 0),\n    ListView(rows)\n        .Set(lv => lv.Background = null)          // transparent → background shows through\n        .OnMount(el => setScroller((UIElement)el)) // bind the scroller\n        .Grid(row: 0, column: 0))"
+        }
+      ]
+    },
+    {
+      "id": "password-box",
+      "name": "PasswordBox",
+      "category": "Basic Input",
+      "description": "A text input that conceals typed characters for secure entry.",
+      "keywords": [
+        "password",
+        "secure input",
+        "masked text",
+        "credentials",
+        "hidden characters"
+      ],
+      "relatedControls": [
+        "TextBox"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "password-box",
+      "samples": [
+        {
+          "header": "Basic PasswordBox",
+          "language": "csharp",
+          "code": "PasswordBox(password, p => setPassword(p), \"Enter password\")"
+        }
+      ]
+    },
+    {
+      "id": "person-picture",
+      "name": "PersonPicture",
+      "category": "Media",
+      "description": "A control that displays a circular avatar for a person.",
+      "keywords": [
+        "avatar",
+        "profile picture",
+        "contact photo",
+        "initials",
+        "user image"
+      ],
+      "relatedControls": [
+        "Image"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "person-picture",
+      "samples": [
+        {
+          "header": "Display Name",
+          "language": "csharp",
+          "code": "PersonPicture().DisplayName(\"Jane Doe\").Width(64).Height(64)"
+        }
+      ]
+    },
+    {
+      "id": "pips-pager",
+      "name": "PipsPager",
+      "category": "Navigation",
+      "description": "A pager that represents pages as a row of selectable dots.",
+      "keywords": [
+        "dots pager",
+        "page dots",
+        "carousel indicator",
+        "pagination dots"
+      ],
+      "relatedControls": [
+        "FlipView"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "pips-pager",
+      "samples": [
+        {
+          "header": "Five-page pager",
+          "language": "csharp",
+          "code": "PipsPager(5, pageIndex, index => setPageIndex(index))\nTextBlock($\"Page {pageIndex + 1} of 5\")\nBorder(TextBlock(pageMessages.ElementAt(pageIndex)).Center())"
+        }
+      ]
+    },
+    {
+      "id": "pivot",
+      "name": "Pivot",
+      "category": "Navigation",
+      "description": "A tabbed interface for switching between content sections.",
+      "keywords": [
+        "tabs",
+        "tabbed view",
+        "sections",
+        "swipe tabs",
+        "headers"
+      ],
+      "relatedControls": [
+        "TabView",
+        "SelectorBar"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "pivot",
+      "samples": [
+        {
+          "header": "Basic Pivot",
+          "language": "csharp",
+          "code": "Pivot(\n    PivotItem(\"All\", TextBlock(\"All items\")),\n    PivotItem(\"Recent\", TextBlock(\"Recent items\")),\n    PivotItem(\"Favorites\", TextBlock(\"Favorite items\")))"
+        }
+      ]
+    },
+    {
+      "id": "popup",
+      "name": "Popup",
+      "category": "Dialogs and Flyouts",
+      "description": "A lightweight overlay that displays arbitrary content over the UI.",
+      "keywords": [
+        "overlay",
+        "floating content",
+        "custom popup",
+        "light-dismiss",
+        "dismiss",
+        "layer"
+      ],
+      "relatedControls": [
+        "Flyout",
+        "ContentDialog"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "popup",
+      "samples": [
+        {
+          "header": "Light-dismiss popup",
+          "language": "csharp",
+          "code": "Button(\"Show popup\", () => setOpen(true))\n\nPopup(\n    Border(VStack(8,\n        TextBlock(\"Hello from a Popup\").SemiBold(),\n        Button(\"Close\", () => setOpen(false))))\n        .Padding(16)\n        .Background(Theme.CardBackground)\n        .WithBorder(Theme.DividerStroke)\n        .CornerRadius(8),\n    open,\n    () => setOpen(false))\n    .IsLightDismissEnabled()"
+        }
+      ]
+    },
+    {
+      "id": "progress-bar",
+      "name": "ProgressBar",
+      "category": "Status and Info",
+      "description": "A horizontal bar that shows progress of an operation.",
+      "keywords": [
+        "loading bar",
+        "progress indicator",
+        "percent complete",
+        "determinate",
+        "linear progress"
+      ],
+      "relatedControls": [
+        "ProgressRing"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "progress-bar",
+      "samples": [
+        {
+          "header": "Determinate ProgressBar",
+          "language": "csharp",
+          "code": "Progress(value).Width(300)"
+        }
+      ]
+    },
+    {
+      "id": "progress-ring",
+      "name": "ProgressRing",
+      "category": "Status and Info",
+      "description": "A circular indicator that shows ongoing progress.",
+      "keywords": [
+        "spinner",
+        "loading spinner",
+        "busy indicator",
+        "circular progress",
+        "activity"
+      ],
+      "relatedControls": [
+        "ProgressBar"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "progress-ring",
+      "samples": [
+        {
+          "header": "Determinate ProgressRing",
+          "language": "csharp",
+          "code": "ProgressRing(value).Width(60).Height(60)"
+        }
+      ]
+    },
+    {
+      "id": "property-grid",
+      "name": "PropertyGrid",
+      "category": "Data",
+      "description": "A reflection-driven editor for an object's properties.",
+      "keywords": [
+        "property editor",
+        "inspector",
+        "reflection editor",
+        "settings editor",
+        "object properties"
+      ],
+      "relatedControls": [
+        "DataGrid"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "usings": [
+        "Microsoft.UI.Reactor.Controls",
+        "System.ComponentModel"
+      ],
+      "galleryRoute": "property-grid",
+      "samples": [
+        {
+          "header": "Reflection-based editor",
+          "language": "csharp",
+          "code": "class Settings : INotifyPropertyChanged\n{\n    [PropertyCategory(\"Appearance\")] public string Name { get; set; }\n    [PropertyCategory(\"Transform\")] [PropertyDisplayName(\"X Position\")] public double X { get; set; }\n    [PropertyReadOnly] public string Id { get; }\n}\n\nvar settings = UseRef(new Settings());\nUseObservable(settings.Current);              // re-render on INPC changes\nvar registry = UseMemo(() => new TypeRegistry());\nPropertyGrid(settings.Current, registry)"
+        }
+      ]
+    },
+    {
+      "id": "radio-button",
+      "name": "RadioButton",
+      "category": "Basic Input",
+      "description": "A button that allows a user to select one option from a group.",
+      "keywords": [
+        "single choice",
+        "option",
+        "radio",
+        "exclusive select",
+        "one of"
+      ],
+      "relatedControls": [
+        "RadioButtons",
+        "CheckBox"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "radio-button",
+      "samples": [
+        {
+          "header": "RadioButtons Group",
+          "language": "csharp",
+          "code": "RadioButtons(options, groupIndex, i => setGroupIndex(i))"
+        }
+      ]
+    },
+    {
+      "id": "radio-buttons",
+      "name": "RadioButtons",
+      "category": "Basic Input",
+      "description": "A group of radio buttons where a user selects a single option.",
+      "keywords": [
+        "radio group",
+        "single choice group",
+        "option list",
+        "exclusive options"
+      ],
+      "relatedControls": [
+        "RadioButton"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "radio-buttons",
+      "samples": [
+        {
+          "header": "Choose a size",
+          "language": "csharp",
+          "code": "var sizes = new[] { \"Small\", \"Medium\", \"Large\" };\n\nRadioButtons(sizes, sizeIndex, index => setSizeIndex(index))\nTextBlock($\"Selected size: {sizes.ElementAt(sizeIndex)}\")"
+        }
+      ]
+    },
+    {
+      "id": "rating-control",
+      "name": "RatingControl",
+      "category": "Basic Input",
+      "description": "A control that lets users provide a star rating.",
+      "keywords": [
+        "star rating",
+        "rate",
+        "review stars",
+        "score",
+        "five stars"
+      ],
+      "relatedControls": [
+        "Slider"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "rating-control",
+      "samples": [
+        {
+          "header": "Basic RatingControl",
+          "language": "csharp",
+          "code": "RatingControl(rating, v => setRating(v))"
+        }
+      ]
+    },
+    {
+      "id": "refresh-container",
+      "name": "RefreshContainer",
+      "category": "Collections",
+      "description": "A pull-to-refresh container for scrollable content.",
+      "keywords": [
+        "pull to refresh",
+        "swipe refresh",
+        "reload",
+        "pull down"
+      ],
+      "relatedControls": [
+        "ScrollView",
+        "ListView"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "refresh-container",
+      "samples": [
+        {
+          "header": "Pull to refresh list",
+          "language": "csharp",
+          "code": "var (items, setItems) = UseState(initialItems);\n\nRefreshContainer(\n    ListView(items.Select(i => (Element)TextBlock(i).Padding(8)).ToArray())\n        .Height(240),\n    () => setItems(new[] { $\"Refreshed {DateTime.Now:T}\" }\n        .Concat(items)\n        .ToList()))"
+        }
+      ]
+    },
+    {
+      "id": "relative-panel",
+      "name": "RelativePanel",
+      "category": "Layout",
+      "description": "A panel that positions children relative to each other.",
+      "keywords": [
+        "relative layout",
+        "align relative",
+        "constraints",
+        "anchor elements"
+      ],
+      "relatedControls": [
+        "Grid",
+        "Canvas"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "relative-panel",
+      "samples": [
+        {
+          "header": "Basic RelativePanel",
+          "language": "csharp",
+          "code": "RelativePanel(\n    Border(\"Top-Left\").RelativePanel(name: \"topLeft\",\n        alignLeftWithPanel: true, alignTopWithPanel: true),\n    Border(\"Right\").RelativePanel(name: \"r\", rightOf: \"topLeft\")\n)"
+        }
+      ]
+    },
+    {
+      "id": "repeat-button",
+      "name": "RepeatButton",
+      "category": "Basic Input",
+      "description": "A button that raises click events repeatedly while pressed.",
+      "keywords": [
+        "press and hold",
+        "auto repeat",
+        "hold to increment",
+        "continuous click"
+      ],
+      "relatedControls": [
+        "Button"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "repeat-button",
+      "samples": [
+        {
+          "header": "Incrementing Counter",
+          "language": "csharp",
+          "code": "HStack(8,\n    RepeatButton(\"-\", () => setCount(count - 1)),\n    TextBlock($\"{count}\"),\n    RepeatButton(\"+\", () => setCount(count + 1)))"
+        }
+      ]
+    },
+    {
+      "id": "rich-edit-box",
+      "name": "RichEditBox",
+      "category": "Text",
+      "description": "A rich text editing control with formatting support.",
+      "keywords": [
+        "rich text editor",
+        "formatting",
+        "rtf",
+        "bold italic",
+        "word processor"
+      ],
+      "relatedControls": [
+        "TextBox",
+        "RichTextBlock"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "rich-edit-box",
+      "samples": [
+        {
+          "header": "Basic RichEditBox",
+          "language": "csharp",
+          "code": "var (text, setText) = UseState(\"Type here...\");\nRichEditBox(text, setText).Width(400).Height(150)"
+        }
+      ]
+    },
+    {
+      "id": "rich-text-block",
+      "name": "RichTextBlock",
+      "category": "Text",
+      "description": "A control that displays formatted read-only rich text.",
+      "keywords": [
+        "formatted text",
+        "read-only rich text",
+        "runs",
+        "inline formatting",
+        "styled text"
+      ],
+      "relatedControls": [
+        "RichEditBox",
+        "Markdown"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "rich-text-block",
+      "samples": [
+        {
+          "header": "Basic RichTextBlock",
+          "language": "csharp",
+          "code": "RichTextBlock(\"This is a simple rich text block...\")"
+        }
+      ]
+    },
+    {
+      "id": "scroll-view",
+      "name": "ScrollView",
+      "category": "Layout",
+      "description": "A scrollable container for content that exceeds available space.",
+      "keywords": [
+        "scrollable",
+        "scroll container",
+        "overflow",
+        "pan zoom",
+        "viewport"
+      ],
+      "relatedControls": [
+        "RefreshContainer",
+        "AnnotatedScrollBar"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "scroll-view",
+      "samples": [
+        {
+          "header": "Vertical ScrollView (modern)",
+          "language": "csharp",
+          "code": "ScrollView(\n    VStack(4, items.Select(i =>\n        Border(TextBlock($\"Item {i}\")).Padding(8)\n    ).ToArray())\n)"
+        }
+      ]
+    },
+    {
+      "id": "selector-bar",
+      "name": "SelectorBar",
+      "category": "Menus and Toolbars",
+      "description": "A bar that lets users switch between different views or modes.",
+      "keywords": [
+        "segmented control",
+        "view switcher",
+        "mode toggle",
+        "tab bar",
+        "filter chips"
+      ],
+      "relatedControls": [
+        "Pivot",
+        "TabView"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "selector-bar",
+      "samples": [
+        {
+          "header": "Basic SelectorBar",
+          "language": "csharp",
+          "code": "SelectorBar(\n    new[] {\n        SelectorBarItem(\"Recent\", icon: \"Clock\"),\n        SelectorBarItem(\"Shared\", icon: \"People\"),\n        SelectorBarItem(\"Favorites\", icon: \"Favorite\"),\n    },\n    selectedIndex: idx,\n    onSelectedIndexChanged: i => setIdx(i))"
+        }
+      ]
+    },
+    {
+      "id": "semantic-zoom",
+      "name": "SemanticZoom",
+      "category": "Collections",
+      "description": "A control that switches between a zoomed-in and zoomed-out view of data.",
+      "keywords": [
+        "zoom in out",
+        "grouped view",
+        "jump list",
+        "overview detail",
+        "pinch zoom"
+      ],
+      "relatedControls": [
+        "GridView",
+        "ListView"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "semantic-zoom",
+      "samples": [
+        {
+          "header": "Grid and group views",
+          "language": "csharp",
+          "code": "SemanticZoom(\n    GridView(items.Select(item =>\n        Border(TextBlock(item).Center()).Padding(12)).ToArray()),\n    ListView(groups.Select(group =>\n        Border(TextBlock(group).SemiBold()).Padding(12)).ToArray())\n).Height(300)"
+        }
+      ]
+    },
+    {
+      "id": "shapes",
+      "name": "Shapes",
+      "category": "Media",
+      "description": "Rectangle, Ellipse, Line, and Path vector primitives.",
+      "keywords": [
+        "rectangle ellipse line path",
+        "vector shapes",
+        "drawing",
+        "primitives",
+        "geometry shapes"
+      ],
+      "relatedControls": [
+        "Icons"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "shapes",
+      "samples": [
+        {
+          "header": "Filled shapes",
+          "language": "csharp",
+          "code": "Rectangle().Width(80).Height(56).Fill(accentBrush)\nEllipse().Width(72).Height(56).Fill(purpleBrush)\nRectangle().Width(80).Height(56).Fill(greenBrush)\n    .Set(r => { r.RadiusX = 14; r.RadiusY = 14; })   // shapes round via RadiusX/Y, not .CornerRadius"
+        }
+      ]
+    },
+    {
+      "id": "slider",
+      "name": "Slider",
+      "category": "Basic Input",
+      "description": "A control that lets the user select from a range of values by moving a thumb.",
+      "keywords": [
+        "range",
+        "drag thumb",
+        "volume",
+        "seek",
+        "value picker"
+      ],
+      "relatedControls": [
+        "NumberBox",
+        "RatingControl"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "slider",
+      "samples": [
+        {
+          "header": "Basic Slider",
+          "language": "csharp",
+          "code": "Slider(value, 0, 100, v => setValue(v)).Header(\"Volume\")"
+        }
+      ]
+    },
+    {
+      "id": "spacing",
+      "name": "Spacing",
+      "category": "Design",
+      "description": "Margin, padding, and stack spacing for consistent layout rhythm.",
+      "keywords": [
+        "margin padding",
+        "gaps",
+        "layout rhythm",
+        "whitespace",
+        "4px grid"
+      ],
+      "relatedControls": [
+        "Geometry",
+        "Typography"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "spacing",
+      "samples": [
+        {
+          "header": "Margin vs Padding",
+          "language": "csharp",
+          "code": "// Margin — works on ALL elements\nTextBlock(\"Hello\").Margin(8)\nVStack(children).Margin(16)\nBorder(child).Margin(12)\n\n// Padding — only on Border and Control (Button, TextBox, etc.)\nBorder(child).Padding(16)    // ✓ works\nButton(\"Go\").Padding(12)    // ✓ works\n\n// VStack/HStack don't support Padding — wrap in Border instead:\nBorder(\n    VStack(8, items)\n).Padding(16)  // ✓ padding applied to the Border"
+        }
+      ]
+    },
+    {
+      "id": "split-button",
+      "name": "SplitButton",
+      "category": "Basic Input",
+      "description": "A button with two parts: a primary action and a flyout menu.",
+      "keywords": [
+        "primary plus menu",
+        "action with options",
+        "dropdown action",
+        "default action"
+      ],
+      "relatedControls": [
+        "DropDownButton",
+        "ToggleSplitButton",
+        "Button"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "split-button",
+      "samples": [
+        {
+          "header": "Basic SplitButton",
+          "language": "csharp",
+          "code": "SplitButton(\"Send\", () => setLastAction(\"Send clicked\"), MenuItems(\n    MenuItem(\"Send now\", () => setLastAction(\"Send now\")),\n    MenuItem(\"Schedule\", () => setLastAction(\"Schedule\"))))"
+        }
+      ]
+    },
+    {
+      "id": "split-view",
+      "name": "SplitView",
+      "category": "Layout",
+      "description": "A container with a collapsible pane and a content area.",
+      "keywords": [
+        "pane",
+        "master detail",
+        "collapsible sidebar",
+        "navigation pane",
+        "drawer"
+      ],
+      "relatedControls": [
+        "NavigationView"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "split-view",
+      "samples": [
+        {
+          "header": "Collapsible pane + content",
+          "language": "csharp",
+          "code": "SplitView(\n    pane: VStack(8,\n        TextBlock(\"Pane\").Bold(),\n        TextBlock(\"Item 1\"),\n        TextBlock(\"Item 2\")\n    ).Padding(12),\n    content: VStack(8,\n        Button(isOpen ? \"Close Pane\" : \"Open Pane\", () => setIsOpen(!isOpen)),\n        TextBlock(\"Main content area\")\n    ).Padding(12)\n) with { IsPaneOpen = isOpen }\n.Set(sv => sv.DisplayMode = SplitViewDisplayMode.Inline)"
+        }
+      ]
+    },
+    {
+      "id": "stack-panel",
+      "name": "StackPanel",
+      "category": "Layout",
+      "description": "A panel that arranges children in a single horizontal or vertical line.",
+      "keywords": [
+        "vertical stack",
+        "horizontal stack",
+        "vstack hstack",
+        "linear layout",
+        "stack children"
+      ],
+      "relatedControls": [
+        "Grid",
+        "Flex"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "stack-panel",
+      "samples": [
+        {
+          "header": "VStack (Vertical)",
+          "language": "csharp",
+          "code": "VStack(8,\n    Box(\"A\"), Box(\"B\"), Box(\"C\"), Box(\"D\")\n)"
+        }
+      ]
+    },
+    {
+      "id": "swipe-control",
+      "name": "SwipeControl",
+      "category": "Collections",
+      "description": "A container that reveals swipe commands on its content.",
+      "keywords": [
+        "swipe actions",
+        "swipe to delete",
+        "reveal commands",
+        "gesture actions"
+      ],
+      "relatedControls": [
+        "ListView"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "swipe-control",
+      "samples": [
+        {
+          "header": "Left and right actions",
+          "language": "csharp",
+          "code": "SwipeControl(\n    Border(TextBlock(\"Swipe me left or right\"))\n        .Padding(16)\n        .Background(Theme.CardBackground),\n    leftItems: new[] { new SwipeItemData(\"Archive\", () => { }) },\n    rightItems: new[] { new SwipeItemData(\"Delete\", () => { }) })"
+        }
+      ]
+    },
+    {
+      "id": "tab-view",
+      "name": "TabView",
+      "category": "Navigation",
+      "description": "A control that displays a set of closable, rearrangeable tabs.",
+      "keywords": [
+        "tabs",
+        "closable tabs",
+        "browser tabs",
+        "reorderable tabs",
+        "document tabs"
+      ],
+      "relatedControls": [
+        "Pivot",
+        "SelectorBar"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "tab-view",
+      "samples": [
+        {
+          "header": "Basic TabView",
+          "language": "csharp",
+          "code": "TabView(\n    Tab(\"Home\", TextBlock(\"Home content\")),\n    Tab(\"Document\", TextBlock(\"Document content\")),\n    Tab(\"Settings\", TextBlock(\"Settings content\"))\n) with { SelectedIndex = idx, OnSelectedIndexChanged = i => setIdx(i) }"
+        }
+      ]
+    },
+    {
+      "id": "teaching-tip",
+      "name": "TeachingTip",
+      "category": "Dialogs and Flyouts",
+      "description": "A notification flyout for guiding users through features.",
+      "keywords": [
+        "coach mark",
+        "callout",
+        "feature highlight",
+        "onboarding",
+        "tip popup"
+      ],
+      "relatedControls": [
+        "Flyout",
+        "InfoBar",
+        "ToolTip"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "teaching-tip",
+      "samples": [
+        {
+          "header": "Basic TeachingTip",
+          "language": "csharp",
+          "code": "Button(\"Show Tip\", () => setShow(true)),\nTeachingTip(\"Welcome!\", \"Helpful guidance text.\") with {\n    IsOpen = show,\n    OnClosed = () => setShow(false),\n}"
+        }
+      ]
+    },
+    {
+      "id": "text-box",
+      "name": "TextBox",
+      "category": "Basic Input",
+      "description": "A single-line or multi-line plain text input field.",
+      "keywords": [
+        "text input",
+        "textfield",
+        "single line",
+        "multiline",
+        "form field"
+      ],
+      "relatedControls": [
+        "RichEditBox",
+        "AutoSuggestBox",
+        "PasswordBox",
+        "NumberBox"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "text-box",
+      "samples": [
+        {
+          "header": "Basic TextBox",
+          "language": "csharp",
+          "code": "TextBox(text, v => setText(v), \"Type here...\")"
+        }
+      ]
+    },
+    {
+      "id": "theming",
+      "name": "Theming",
+      "category": "Design",
+      "description": "Guidance on applying light, dark, and high-contrast themes.",
+      "keywords": [
+        "light dark",
+        "dark mode",
+        "high contrast",
+        "theme switch",
+        "requested theme"
+      ],
+      "relatedControls": [
+        "Color",
+        "Acrylic"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "theming",
+      "samples": [
+        {
+          "header": "Light / Dark Toggle",
+          "language": "csharp",
+          "code": "var (isDark, setIsDark) = UseState(false);\nBorder(content)\n    .Set(b => b.RequestedTheme = isDark\n        ? ElementTheme.Dark : ElementTheme.Light)\n    .Background(Theme.SolidBackground)"
+        }
+      ]
+    },
+    {
+      "id": "time-picker",
+      "name": "TimePicker",
+      "category": "Date and Time",
+      "description": "A control that lets a user pick a time using spinners.",
+      "keywords": [
+        "time input",
+        "pick a time",
+        "clock spinner",
+        "hour minute"
+      ],
+      "relatedControls": [
+        "DatePicker"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "time-picker",
+      "samples": [
+        {
+          "header": "Basic TimePicker",
+          "language": "csharp",
+          "code": "TimePicker(time, t => setTime(t))"
+        }
+      ]
+    },
+    {
+      "id": "title-bar",
+      "name": "TitleBar",
+      "category": "Navigation",
+      "description": "A customizable title bar for the application window.",
+      "keywords": [
+        "window title",
+        "caption bar",
+        "custom titlebar",
+        "window chrome",
+        "draggable region"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "title-bar",
+      "samples": [
+        {
+          "header": "Basic TitleBar",
+          "language": "csharp",
+          "code": "TitleBar(\"My Application\")"
+        }
+      ]
+    },
+    {
+      "id": "toggle-button",
+      "name": "ToggleButton",
+      "category": "Basic Input",
+      "description": "A button that can be toggled between two states.",
+      "keywords": [
+        "press state",
+        "on off button",
+        "sticky button",
+        "toggle",
+        "pressed"
+      ],
+      "relatedControls": [
+        "ToggleSwitch",
+        "ToggleSplitButton",
+        "Button"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "toggle-button",
+      "samples": [
+        {
+          "header": "Basic ToggleButton",
+          "language": "csharp",
+          "code": "ToggleButton(\"Mute\", isChecked, v => setIsChecked(v))"
+        }
+      ]
+    },
+    {
+      "id": "toggle-split-button",
+      "name": "ToggleSplitButton",
+      "category": "Basic Input",
+      "description": "A split button whose primary part toggles on and off.",
+      "keywords": [
+        "toggle with menu",
+        "on off plus options",
+        "split toggle"
+      ],
+      "relatedControls": [
+        "SplitButton",
+        "ToggleButton"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "toggle-split-button",
+      "samples": [
+        {
+          "header": "Bullets toggle",
+          "language": "csharp",
+          "code": "ToggleSplitButton(\"Bullets\", bulletsOn, value => setBulletsOn(value))\n\nTextBlock(bulletsOn ? \"Bullets are on\" : \"Bullets are off\")"
+        }
+      ]
+    },
+    {
+      "id": "toggle-switch",
+      "name": "ToggleSwitch",
+      "category": "Basic Input",
+      "description": "A switch that toggles between two mutually exclusive states.",
+      "keywords": [
+        "switch",
+        "on off",
+        "boolean",
+        "enable disable"
+      ],
+      "relatedControls": [
+        "CheckBox",
+        "ToggleButton"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "toggle-switch",
+      "samples": [
+        {
+          "header": "Basic ToggleSwitch",
+          "language": "csharp",
+          "code": "ToggleSwitch(isOn, v => setIsOn(v))"
+        }
+      ]
+    },
+    {
+      "id": "tool-tip",
+      "name": "ToolTip",
+      "category": "Status and Info",
+      "description": "A popup that displays helpful text when hovering over an element.",
+      "keywords": [
+        "hover hint",
+        "hover text",
+        "help popup",
+        "hint"
+      ],
+      "relatedControls": [
+        "TeachingTip",
+        "Flyout"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "tool-tip",
+      "samples": [
+        {
+          "header": "Text ToolTip",
+          "language": "csharp",
+          "code": "Button(\"Hover Me\").ToolTip(\"This is a simple tooltip\")\nButton(\"Save\").ToolTip(\"Save document (Ctrl+S)\")"
+        }
+      ]
+    },
+    {
+      "id": "tree-view",
+      "name": "TreeView",
+      "category": "Collections",
+      "description": "A hierarchical list with expanding and collapsing nodes.",
+      "keywords": [
+        "tree",
+        "hierarchy",
+        "expandable nodes",
+        "folder tree",
+        "nested list"
+      ],
+      "relatedControls": [
+        "ListView"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "tree-view",
+      "samples": [
+        {
+          "header": "Deeply Nested TreeView",
+          "language": "csharp",
+          "code": "TreeView(\n    TreeNode(\"Root\",\n        TreeNode(\"Level 1A\",\n            TreeNode(\"Level 2A\",\n                TreeNode(\"Level 3A\"))))\n)"
+        }
+      ]
+    },
+    {
+      "id": "type-ramp",
+      "name": "Type ramp",
+      "category": "Text",
+      "description": "WinUI 3 type ramp factories — Title, Subtitle, Body, BodyStrong, BodyLarge.",
+      "keywords": [
+        "text styles",
+        "font sizes",
+        "title subtitle body",
+        "heading",
+        "typography ramp"
+      ],
+      "relatedControls": [
+        "Typography",
+        "RichTextBlock"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "type-ramp",
+      "samples": [
+        {
+          "header": "Type ramp factories — Title / Subtitle / Body",
+          "language": "csharp",
+          "code": "Title(\"Title — 28px Semibold\")\nSubtitle(\"Subtitle — 20px Semibold\")\nBodyLarge(\"BodyLarge — 18px regular\")\nBodyStrong(\"BodyStrong — 14px Semibold\")\nBody(\"Body — 14px regular body text\")"
+        }
+      ]
+    },
+    {
+      "id": "typography",
+      "name": "Typography",
+      "category": "Design",
+      "description": "Guidance on typographic styles, font ramps, and text hierarchy.",
+      "keywords": [
+        "text styles",
+        "font hierarchy",
+        "headings",
+        "type scale",
+        "text ramp"
+      ],
+      "relatedControls": [
+        "Type ramp",
+        "Spacing",
+        "Color"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "typography",
+      "samples": [
+        {
+          "header": "Text Hierarchy Helpers",
+          "language": "csharp",
+          "code": "Heading(\"Heading\")       // 28px Bold\nSubHeading(\"SubHeading\") // 20px SemiBold\nTextBlock(\"Body Text\")        // 14px Normal\nCaption(\"Caption\")       // 12px Normal"
+        }
+      ]
+    },
+    {
+      "id": "uniform-grid",
+      "name": "UniformGrid",
+      "category": "Layout",
+      "description": "A panel that arranges children in evenly sized cells.",
+      "keywords": [
+        "equal cells",
+        "grid of equal size",
+        "tiles",
+        "matrix layout"
+      ],
+      "relatedControls": [
+        "WrapGrid",
+        "Grid"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "uniform-grid",
+      "samples": [
+        {
+          "header": "Horizontal fill",
+          "language": "csharp",
+          "code": "UniformGrid(\n    Orientation.Horizontal,\n    Enumerable.Range(1, 9).Select(i =>\n        Border(TextBlock($\"{i}\").Center().Foreground(\"#FFFFFF\"))\n            .Background(Theme.Accent)\n            .Size(60, 60)\n            .Margin(4)\n            .CornerRadius(4)).ToArray())"
+        }
+      ]
+    },
+    {
+      "id": "viewbox",
+      "name": "Viewbox",
+      "category": "Layout",
+      "description": "A container that scales its child to fill available space.",
+      "keywords": [
+        "scale to fit",
+        "stretch content",
+        "zoom fit",
+        "proportional scaling"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "viewbox",
+      "samples": [
+        {
+          "header": "Scaling Content",
+          "language": "csharp",
+          "code": "Viewbox(\n    VStack(4, TextBlock(\"Hello\").Bold(), TextBlock(\"Scaled\"))\n)"
+        }
+      ]
+    },
+    {
+      "id": "web-view-2",
+      "name": "WebView2",
+      "category": "Media",
+      "description": "A control that hosts web content using the Edge rendering engine.",
+      "keywords": [
+        "web view",
+        "embedded browser",
+        "html content",
+        "edge webview",
+        "browser control"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "web-view-2",
+      "samples": [
+        {
+          "header": "Load URL",
+          "language": "csharp",
+          "code": "WebView2(new Uri(\"https://learn.microsoft.com\"))\n    .Width(600).Height(400)"
+        }
+      ]
+    },
+    {
+      "id": "wrap-grid",
+      "name": "WrapGrid",
+      "category": "Layout",
+      "description": "A grid that wraps items to the next row or column automatically.",
+      "keywords": [
+        "wrapping layout",
+        "flow layout",
+        "wrap items",
+        "tag cloud",
+        "reflow"
+      ],
+      "relatedControls": [
+        "UniformGrid",
+        "Grid"
+      ],
+      "apiNamespace": "Microsoft.UI.Reactor",
+      "nugetPackage": "Microsoft.UI.Reactor",
+      "galleryRoute": "wrap-grid",
+      "samples": [
+        {
+          "header": "Basic WrapGrid",
+          "language": "csharp",
+          "code": "WrapGrid(\n    items.Select(i =>\n        Border(TextBlock($\"{i}\")).Size(70, 70).Margin(4)\n    ).ToArray()\n)"
+        }
+      ]
+    }
+  ]
+}

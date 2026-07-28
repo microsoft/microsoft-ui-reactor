@@ -7,6 +7,8 @@ namespace Microsoft.UI.Reactor.Tests.D3;
 
 public class LineTests
 {
+    private readonly record struct Pt(double X, double Y);
+
     [Fact]
     public void Line_Default_GeneratesPath()
     {
@@ -43,11 +45,11 @@ public class LineTests
     {
         var data = new[]
         {
-            new { X = 0.0, Y = 1.0 },
-            new { X = 2.0, Y = 3.0 },
-            new { X = 4.0, Y = 5.0 },
+            new Pt(0.0, 1.0),
+            new Pt(2.0, 3.0),
+            new Pt(4.0, 5.0),
         };
-        var l = LineGenerator.Create<dynamic>(d => (double)d.X, d => (double)d.Y);
+        var l = LineGenerator.Create<Pt>(d => d.X, d => d.Y);
         Assert.Equal("M0,1L2,3L4,5", l.Generate(data));
     }
 

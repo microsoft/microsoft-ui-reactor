@@ -5,8 +5,8 @@ namespace Microsoft.UI.Reactor.AppTests.Infrastructure;
 /// <summary>
 /// Base class for WinForms interop E2E tests. Provides helpers for element lookup, waiting,
 /// focus verification, and Tab testing. Drives the WinForms host through
-/// <see cref="WinAppUi"/> (winapp ui), with Win32 <see cref="InputInjector"/> for the
-/// real keystrokes (Tab/Shift+Tab/typing) winapp can't synthesize.
+/// <see cref="WinAppUi"/> (winapp ui), including the native <c>send-keys</c> verb for the
+/// real keystrokes (Tab/Shift+Tab/typing).
 /// </summary>
 public class WinFormsTestBase
 {
@@ -89,23 +89,15 @@ public class WinFormsTestBase
     }
 
     /// <summary>
-    /// Sends a Tab key press to the currently focused element. Foregrounds the host first so
-    /// the injected keystroke routes to it.
+    /// Sends a Tab key press to the currently focused element. The native send-keys verb
+    /// foregrounds the host first so the injected keystroke routes to it.
     /// </summary>
-    protected void SendTab()
-    {
-        InputInjector.Foreground(HostHwnd);
-        InputInjector.Tab();
-    }
+    protected void SendTab() => App.SendKeys("tab", viaSendInput: true);
 
     /// <summary>
     /// Sends a Shift+Tab key press to the currently focused element.
     /// </summary>
-    protected void SendShiftTab()
-    {
-        InputInjector.Foreground(HostHwnd);
-        InputInjector.ShiftTab();
-    }
+    protected void SendShiftTab() => App.SendKeys("shift+tab", viaSendInput: true);
 
     /// <summary>
     /// Clicks an element by AccessibilityId first, falling back to Name.

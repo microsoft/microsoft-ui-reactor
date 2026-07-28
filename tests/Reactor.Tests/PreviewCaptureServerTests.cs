@@ -30,6 +30,7 @@ public class PreviewCaptureServerTests
         | DynamicallyAccessedMemberTypes.NonPublicConstructors
         | DynamicallyAccessedMemberTypes.NonPublicMethods
         | DynamicallyAccessedMemberTypes.NonPublicFields)]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: the [DynamicallyAccessedMembers] annotation on this test field preserves non-public members of the concrete PreviewCaptureServer under test for reflective invoke; some of those members are themselves [RequiresUnreferencedCode], which surfaces IL2026 here. Preserving them is exactly the intent; the test drives them via reflection on JIT only (never trimmed). Behaviour-neutral.")]
     private static readonly Type ServerType = typeof(PreviewCaptureServer);
 
     // ══════════════════════════════════════════════════════════════
@@ -183,6 +184,7 @@ public class PreviewCaptureServerTests
     // ══════════════════════════════════════════════════════════════
 
     [Fact]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Test-only: reflects the Item1/Item2 fields of the concrete ValueTuple the invoked method returns. Intentional and JIT-only (this host is never trimmed) — not claimed trim-safe; behaviour-neutral (neither preserves nor prunes members, so it cannot cause the DAM-narrowing regression noted in issue #70).")]
     public void AcquireFreePortHolding_Returns_Bound_Loopback_Port()
     {
         var mi = ServerType.GetMethod("AcquireFreePortHolding",

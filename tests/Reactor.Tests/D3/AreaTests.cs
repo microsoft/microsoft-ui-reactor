@@ -7,6 +7,8 @@ namespace Microsoft.UI.Reactor.Tests.D3;
 
 public class AreaTests
 {
+    private readonly record struct Pt(double X, double Y);
+
     [Fact]
     public void Area_Default_GeneratesPath()
     {
@@ -20,11 +22,11 @@ public class AreaTests
     {
         var data = new[]
         {
-            new { X = 0.0, Y = 5.0 },
-            new { X = 10.0, Y = 15.0 },
-            new { X = 20.0, Y = 10.0 },
+            new Pt(0.0, 5.0),
+            new Pt(10.0, 15.0),
+            new Pt(20.0, 10.0),
         };
-        var a = AreaGenerator.Create<dynamic>(d => (double)d.X, d => (double)d.Y);
+        var a = AreaGenerator.Create<Pt>(d => d.X, d => d.Y);
         Assert.Equal("M0,5L10,15L20,10L20,0L10,0L0,0Z", a.Generate(data));
     }
 

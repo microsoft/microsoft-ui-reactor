@@ -175,6 +175,8 @@ git worktree remove ../perf-main
 - This skill is the **local** equivalent of the `/perf` PR workflow
   (`.github/workflows/perf-compare.yml`); both use the same scripts and render
   the same comparison. Use this before pushing; use `/perf` for the
-  reviewer-visible comment on the PR.
+  reviewer-visible comment on the PR. The workflow publishes that rendered
+  comparison only when the benchmark run completes successfully; on a failed or
+  incomplete run it posts a neutral fallback comment linking the run log instead.
 - It is unrelated to the **startup** perf harness under `tests/startup_perf/`
   (ETW/WPR TTFP/TTI measurement) — do not invoke that here.

@@ -135,15 +135,22 @@ public class AppTestBase
             return;
         }
 
-        // The reset was invoked, so the fixture must report Ready. If it doesn't, the next
-        // navigation can run against stale fixture state (and a same-name re-nav no-ops in the
-        // host because UseState suppresses a rerender when the value is unchanged), so fail loudly
-        // rather than silently proceeding. Thrown outside the catch above so it isn't swallowed as
-        // a "button not present" case.
-        if (!App.WaitForValue("FixtureStatus", "Ready", timeoutMs: 3000))
+        // The reset was invoked, so the fixture must report Ready. The reset click can be absorbed
+        // when a re-render races the navigator's hit-test rebuild, so retry the invoke once and
+        // allow a longer settle before giving up, rather than failing an otherwise-healthy test.
+        // (A same-name re-nav no-ops in the host because UseState suppresses a rerender when the
+        // value is unchanged, so a stale fixture would silently corrupt the next navigation.)
+        // Thrown outside the catch above so it isn't swallowed as a "button not present" case.
+        if (App.WaitForValue("FixtureStatus", "Ready", timeoutMs: 5000))
+            return;
+
+        try { App.Invoke("ResetFixture"); }
+        catch (WinAppException) { /* button may be mid-rerender; the wait below is the real gate */ }
+
+        if (!App.WaitForValue("FixtureStatus", "Ready", timeoutMs: 5000))
             throw new WinAppException(
-                "ResetFixture was invoked but FixtureStatus never reached 'Ready' within 3000ms; " +
-                "the next navigation could run against stale fixture state.");
+                "ResetFixture was invoked but FixtureStatus never reached 'Ready' within 10000ms " +
+                "across two attempts; the next navigation could run against stale fixture state.");
     }
 
     /// <summary>

@@ -89,17 +89,42 @@ public static partial class SessionInteractivityGuard
         if (IsTruthy(Environment.GetEnvironmentVariable("E2E_SKIP_LOCK_GUARD")))
             return;
 
+        // A loaded CI runner can momentarily report a non-Active state (a WTS connect-state blip,
+        // or the input desktop not yet resolving to "Default") even though it is genuinely
+        // interactive. Re-probe until we get a definitive Active read or the window elapses, so a
+        // transient blip doesn't wrongly reclassify a real input-injection E2E as Inconclusive
+        // (which the CI gate then fails). Track whether ANY probe in the window saw a definite
+        // lock/disconnect, so a single transient Unknown reading can't flip a genuinely locked
+        // session to a pass — that would reopen the silent-skip hole the gate exists to close.
         var state = GetState();
-        // Unknown means the OS gave us an unexpected error from the desktop
-        // probe — don't fabricate a verdict. Let the test run; if winapp
-        // really can't drive input, the post-failure recheck will catch
-        // a definite Locked/Disconnected on the second look.
-        if (state == SessionInteractivity.Active || state == SessionInteractivity.Unknown)
+        // Remember the most recent DEFINITE non-interactive reading, so if the window ends on a
+        // trailing Unknown we still report the actionable Locked/Disconnected signal (and still fail).
+        SessionInteractivity? lockedState =
+            state is SessionInteractivity.Locked or SessionInteractivity.Disconnected ? state : null;
+        for (int attempt = 0; attempt < 4 && state != SessionInteractivity.Active; attempt++)
+        {
+            Thread.Sleep(500);
+            state = GetState();
+            if (state is SessionInteractivity.Locked or SessionInteractivity.Disconnected)
+                lockedState = state;
+        }
+
+        if (state == SessionInteractivity.Active)
             return;
 
-        WriteMarker(state, operation);
+        // Unknown means the OS gave us an unexpected error from the desktop probe — don't fabricate a
+        // verdict AND let the test run, UNLESS a probe already saw a definite lock/disconnect this
+        // window (then the session is genuinely non-interactive and must surface as Inconclusive).
+        // Pure-Unknown proceeds; if winapp really can't drive input, the post-failure recheck catches
+        // a definite Locked/Disconnected on the second look.
+        if (state == SessionInteractivity.Unknown && lockedState is null)
+            return;
+
+        // Prefer the definite locked/disconnected signal over a trailing Unknown reading.
+        var verdict = lockedState ?? state;
+        WriteMarker(verdict, operation);
         Assert.Inconclusive(
-            $"Cannot perform '{operation}': workstation is {state}. " +
+            $"Cannot perform '{operation}': workstation is {verdict}. " +
             "UI automation needs an active interactive desktop — locked screen, " +
             "idle/sleep lock, or RDP disconnect makes every winapp click " +
             "fail with a generic error. Treating these as Inconclusive " +
@@ -173,15 +198,16 @@ public static partial class SessionInteractivityGuard
     /// no console — gets ERROR_ACCESS_DENIED from <c>GetCursorPos</c>/<c>SendInput</c>
     /// (the same UIPI boundary that makes winapp's own <c>click</c> verb fail here).
     /// WinAppDriver dodged this because it ships as a signed <c>uiAccess="true"</c>
-    /// binary; winapp 0.3.2 and this raw-SendInput fallback have no such privilege.
+    /// binary; winapp's native input verbs (<c>click</c>/<c>send-keys</c>/<c>drag</c>)
+    /// use raw SendInput under the hood and have no such privilege.
     /// </summary>
     public static bool CanInjectInput() => GetCursorPos(out _);
 
     /// <summary>
     /// Gate for the input-injection tests (real keystrokes / drag / tap). When the
-    /// process can't reach the input desktop, every <see cref="InputInjector"/> call
-    /// is silently swallowed (SendInput returns 0 / ACCESS_DENIED), which would surface
-    /// as a misleading assertion timeout. We mark those tests Inconclusive — not Failed —
+    /// process can't reach the input desktop, every native winapp <c>click</c>/<c>send-keys</c>/
+    /// <c>drag</c> call is silently swallowed (SendInput returns 0 / ACCESS_DENIED), which would
+    /// surface as a misleading assertion timeout. We mark those tests Inconclusive — not Failed —
     /// exactly like the locked-desktop guard, because the failure is environmental.
     /// On a real interactive desktop these tests execute normally.
     /// </summary>
@@ -197,8 +223,9 @@ public static partial class SessionInteractivityGuard
             "non-uiAccess process under UIPI — the same boundary that makes winapp's " +
             "click verb fail here. WinAppDriver bypassed it via its signed uiAccess " +
             "binary. Treating input-injection tests as Inconclusive (not Failed); they " +
-            "run on a real interactive desktop. Native winapp verbs (winappCli #562 " +
-            "send-keys, #498 drag) will remove this fallback entirely.");
+            "run on a real interactive desktop. The native winapp send-keys/drag verbs " +
+            "used here are themselves SendInput under the hood, so this environmental gate " +
+            "still applies.");
     }
 
     /// <summary>

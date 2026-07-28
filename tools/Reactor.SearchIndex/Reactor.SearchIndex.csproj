@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Plain net10.0 (no -windows / UseWinUI): the generator only parses gallery
+         *source* with Roslyn and emits JSON. It never references Reactor or loads a
+         WinUI type, so it stays fully headless and cross-platform. -->
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Microsoft.UI.Reactor.SearchIndex</RootNamespace>
+    <AssemblyName>Reactor.SearchIndex</AssemblyName>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- Trim / NativeAOT-clean: JSON goes through the System.Text.Json source generator and
+         regexes through [GeneratedRegex], so this tool no longer opts out of AOT analysis.
+         Removing ReactorSkipAotAnalysis lets Directory.Build.targets turn on IsAotCompatible
+         (and promote IL2*/IL3* to errors) for net10+, so the analyzer runs clean over our code.
+         A native single-file build works too:
+             dotnet publish -r <rid> -c Release -p:PublishAot=true -p:IlcTreatWarningsAsErrors=false
+         yields a ~12 MB native generator that emits a byte-identical index. The ILC-warning
+         downgrade is required only because the Roslyn dependency has trim-unsafe spots
+         (e.g. CommonCompiler.GetAssemblyLocation → Assembly.Location, IL3000) that are
+         unreachable at runtime for our syntax-only parsing. -->
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+  </ItemGroup>
+
+</Project>

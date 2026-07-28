@@ -223,11 +223,6 @@ public class FactoryWithExpressionTests
     [Fact] public void Grid_Typed_WithExpr_Sets_Key()
         => Assert.Equal("k", (Grid(new[] { GridSize.Auto }, new[] { GridSize.Auto }) with { Key = "k" }).Key);
 
-#pragma warning disable CS0618 // deprecated overload — still exercise the with-mutation path
-    [Fact] public void Grid_StringTracks_WithExpr_Sets_Key()
-        => Assert.Equal("k", (Grid(new[] { "Auto" }, new[] { "Auto" }) with { Key = "k" }).Key);
-#pragma warning restore CS0618
-
     [Fact] public void InterspersedGrid_WithExpr_Sets_Key()
         => Assert.Equal("k", (InterspersedGrid(
                 Orientation.Horizontal,

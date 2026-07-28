@@ -10,6 +10,7 @@
 // has no plausible right answer; we expect those to score as "did not match",
 // which feeds the false-positive rate at threshold T.
 
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -242,6 +243,8 @@ internal static class SuggesterTuner
     /// <summary>
     /// Serialize the report to JSON for inspection/checkin.
     /// </summary>
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-tuning helper: reflection-based System.Text.Json serialization of the tuning report (no source-gen context). Diagnostic tooling run on JIT only; not part of any AOT publish. Behaviour-neutral.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test-tuning helper: reflection-based System.Text.Json serialization (see the IL2026 note). Run on JIT, not AOT-compiled. Behaviour-neutral.")]
     public static string SerializeReport(TuningReport report)
         => JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true });
 }

@@ -23,7 +23,12 @@ internal static class DataGridFixtures
     {
         public override Element Render()
         {
-            var (lastEdit, setLastEdit) = UseState("none");
+            // Accumulate every onRowChanged into an append-only log instead of overwriting a
+            // single "last edit". A cross-row commit-tap can fire a spurious unchanged commit whose
+            // async status write races the real one; an append-only log (functional UseReducer
+            // update applied in enqueue order on the UI thread) lets a test deterministically assert
+            // that a specific edit callback fired, regardless of which async write lands last.
+            var (editLog, appendEdit) = UseReducer("");
 
             // Capture UI-thread dispatcher so onRowChanged (which runs on a threadpool
             // thread via HandleAsyncCommit's Task.Run) can safely update component state.
@@ -47,7 +52,7 @@ internal static class DataGridFixtures
             };
 
             return VStack(8,
-                TextBlock($"Last edit: {lastEdit}").AutomationId("EditStatus"),
+                TextBlock($"Edits:{editLog}").AutomationId("EditLog"),
                 DataGrid(
                     source: source,
                     columns: columns,
@@ -55,16 +60,20 @@ internal static class DataGridFixtures
                     editMode: EditMode.Cell,
                     onRowChanged: (key, item) =>
                     {
-                        // Dispatch to UI thread — this callback runs on a threadpool
-                        // thread from HandleAsyncCommit's Task.Run.
+                        // Dispatch to UI thread — this callback runs on a threadpool thread from
+                        // HandleAsyncCommit's Task.Run. The functional update composes append-only,
+                        // so concurrent commits accumulate instead of clobbering each other.
                         dq?.TryEnqueue(() =>
                         {
-                            setLastEdit($"{key.Value}:{item.FirstName},{item.LastName}");
+                            appendEdit(prev => prev + $"[{key.Value}:{item.FirstName},{item.LastName}]");
                         });
                         return Task.CompletedTask;
                     },
                     rowHeight: 36
-                ).AutomationId("EditableGrid")
+                ).AutomationId("EditableGrid"),
+                // Focusable target OUTSIDE the grid, so an E2E can move focus off the grid and
+                // exercise the "focus left the grid" LostFocus commit path.
+                Button("blur anchor", () => { }).AutomationId("BlurAnchor")
             );
         }
     }

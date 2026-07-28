@@ -18,6 +18,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 if (args.Length == 0) { PrintUsage(); return 0; }
 
@@ -69,7 +70,7 @@ foreach (var path in ExpandGlobs(inputs))
         Row? row;
         try
         {
-            row = JsonSerializer.Deserialize<Row>(line, JsonStatics.JsonOpts);
+            row = JsonSerializer.Deserialize(line, AggregatorJsonContext.Default.Row);
         }
         catch (Exception ex)
         {
@@ -315,16 +316,14 @@ static void AppendCell(StringBuilder sb, IGrouping<(string, string, string), Row
     sb.Append("| ").Append(mean.ToString(format, CultureInfo.InvariantCulture)).Append(' ');
 }
 
-internal static class JsonStatics
+// Source-generated (reflection-free / NativeAOT-safe) metadata for the Row DTO
+// this build-time aggregator reads from JSON-Lines. Case-insensitive matching
+// mirrors the previous hand-rolled options; the numeric Variant tag is handled
+// by [JsonConverter(typeof(VariantConverter))] on the property below.
+[JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
+[JsonSerializable(typeof(Row))]
+internal partial class AggregatorJsonContext : JsonSerializerContext
 {
-    public static readonly JsonSerializerOptions JsonOpts = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        Converters =
-        {
-            new VariantConverter(),
-        },
-    };
 }
 
 internal sealed class VariantConverter : System.Text.Json.Serialization.JsonConverter<string>
@@ -348,7 +347,7 @@ internal sealed class VariantConverter : System.Text.Json.Serialization.JsonConv
 internal sealed record Row(
     string BenchId,
     string BenchName,
-    string Variant,
+    [property: JsonConverter(typeof(VariantConverter))] string Variant,
     int Iterations,
     int Repetition,
     double TotalMs,

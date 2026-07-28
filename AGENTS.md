@@ -48,8 +48,8 @@ Component.Render() → Element tree (records)
 ### Reconciler is split across partial classes
 
 - `Reconciler.cs` — orchestration, child reconciliation, unmount, helpers
-- `Reconciler.Mount.cs` — `MountXxx()` handler per control type
-- `Reconciler.Update.cs` — `UpdateXxx()` handler per control type
+- `Reconciler.Mount.cs` — mount dispatch + composition-primitive handlers (controls mount via their registered `ControlDescriptor`/`IElementHandler`)
+- `Reconciler.Update.cs` — update dispatch + composition-primitive handlers (controls update via the same registered descriptors/handlers)
 
 ### Hooks follow React rules
 
@@ -107,7 +107,7 @@ The legacy Element-record + `MountXxx`/`UpdateXxx` dispatch-switch path is gone.
 3. **Register** it in `RegisterV1BuiltInHandlers`.
 4. **Selftest fixture** in `tests/Reactor.AppTests.Host/SelfTest/Fixtures/`.
 
-See [`docs/guide/extensibility-preview.md`](docs/guide/extensibility-preview.md) for the authoring-shape decision tree (prop/engine shapes, children strategies, echo handling, pooling).
+See [`docs/guide/extending-reactor-controls.md`](docs/guide/extending-reactor-controls.md) for the authoring-shape decision tree (prop/engine shapes, children strategies, echo handling, pooling).
 
 Optionally: a factory method in `src/Reactor/Elements/Dsl.cs`, fluent modifiers in `ElementExtensions.cs`, and unit tests in `Reactor.Tests/`.
 
@@ -164,3 +164,87 @@ docs/
   specs/                  Numbered design specs
   reference/              API and subsystem reference
 ```
+
+## Field notes (gotchas from past sessions)
+
+Hard-won specifics that repeatedly cost sessions time. Prefer these exact commands.
+
+### Building & running tests
+
+- **Pass `-p:Platform=x64` for any WinUI app/test project build.** AnyCPU builds of
+  `Reactor.AppTests`, `Reactor.AppTests.Host`, etc. fail with *"WindowsAppSDKSelfContained
+  requires a supported Windows architecture"*. (`dotnet build Reactor.slnx` handles the
+  solution defaults; single app/test projects usually do not.)
+- **Add `-p:SkipSignaturesGen=true` to local `tests/Reactor.Tests` builds** to avoid the
+  XAML-markup/SignaturesGen race: `CSC error CS2012: Cannot open '...\obj\...\intermediatexaml\Reactor.dll' ... used by another process`. If it still races under
+  parallel WinUI builds, prebuild `src/Reactor` alone first, then add `-m:1`
+  `-nodereuse:false` and `$env:MSBUILDDISABLENODEREUSE='1'`. (`-p:CI=true` also skips it.)
+- **Fast selftest loop** (TAP `ok`/`not ok`): `dotnet run --project tests/Reactor.AppTests.Host --no-build -c Debug -p:Platform=x64 -- --self-test --filter "<Prefix>"`.
+- **Headless unit tests cannot construct any `Microsoft.UI.Xaml` object** — control, brush,
+  geometry, `BitmapImage`, or **`AutomationPeer`-derived** type — you get a `COMException`.
+  Test only pure-managed logic + WinRT value structs/enums; push anything live to a
+  selftest. Internal seams are fair game: `InternalsVisibleTo("Reactor.Tests")` is set, so
+  prefer an internal tokenizer/parser (e.g. `PathDataParser.ParseTokens(pathData)`)
+  over a public method that builds WinUI objects.
+- In the `Microsoft.UI.Reactor.*.Tests` namespaces, `Microsoft.UI.System` shadows `System`
+  — use `global::System.IO.Path`, `global::System.IO.File`, etc.
+- **E2E input needs an interactive desktop.** `SendInput`/`GetCursorPos` returning
+  `ACCESS_DENIED (err 5)` means your session can't inject input — validate the fixture over
+  UIA (`winapp ui ... --json -w <hwnd>`) and rely on the CI *"E2E Tests (winapp ui)"* job.
+  For stateful E2E/selftest UI use `Component<T>()` fixtures; raw `ctx.UseState` doesn't
+  persist (TestHost renders with a fresh `RenderContext`).
+
+### Writing tests that actually prove something
+
+- **Every assertion must fail if its target code is deleted / no-op'd / returns default.**
+  Bare non-null, "no throw" on a `void`, and always-emitted shape markers are vacuous.
+  Use throw-position/arity, differential-isolation (`Assert.NotEqual` between two variants
+  differing only by the setter), structural counts, reflection `DeclaringType`, or
+  corrupt-then-recompute oracles. **Copilot review does not catch vacuous assertions** —
+  run the `.github/skills/pr-review/` multi-model dimension (different model family, high
+  reasoning) on the *final* commit and fix every finding.
+- **Fixture registration is two-place.** Selftest: add to `AllFixtures` **and** the
+  `Create()` switch in `tests/Reactor.AppTests.Host/SelfTest/SelfTestFixtureRegistry.cs`.
+  E2E: add to `AllFixtures` **and** the `Build` switch in
+  `tests/Reactor.AppTests.Host/FixtureRegistry.cs`.
+- **Coverage** starts from `tools/coverage/run-coverage.ps1` (`-UnitOnly`, `-SkipBuild`);
+  output `coverage/merged.cobertura.xml`. The script **aborts before the merge step on any
+  test failure** — if a known flake trips it (`CenterOnCurrent_UsesCursorMonitor`,
+  `PersistPlacement_FallbackWhenEmpty`, `PersistenceEtwBridgeTests.JsonFileStore_*`), merge
+  the legs manually with `dotnet-coverage merge coverage\unit.cobertura.xml coverage\selftest.cobertura.xml --output coverage\merged.cobertura.xml --output-format cobertura`.
+
+### Analyzers, CLI checks, docs & public API
+
+- `src/Reactor.Analyzers` targets **`netstandard2.0`** — no `FrozenDictionary`/net8+ APIs,
+  and you **cannot reference `src/Reactor.Cli`**; copy shared logic and add parity tests.
+  Every new `REACTOR_*` id needs a row in `src/Reactor.Analyzers/AnalyzerReleases.Unshipped.md`
+  (else `RS2008`). `mur check` rules are reflection-discovered in `RuleRegistry.cs` — add or
+  remove a rule *file*, don't hand-edit a list.
+- Docs are generated (see above): compile only the topic you touched and revert unrelated
+  snippet churn.
+- A new public API surface has **two byte-identical index copies** —
+  `skills/reactor.api.txt` and `plugins/reactor/skills/reactor-dsl/references/reactor.api.txt`
+  — regenerate via `mur --regen-api`; keep them in sync.
+- The **ReactorGallery search index** (`samples/ReactorGallery/reactor-search-index.json`,
+  consumed by the external `winui-search` CLI) is generated from the gallery source +
+  `tools/Reactor.SearchIndex/editorial.json`. After adding/renaming a gallery control or
+  changing its first sample snippet, regenerate via
+  `dotnet run --project tools/Reactor.SearchIndex` (a `Reactor.Tests` gate byte-compares it,
+  so a stale index fails CI). Curate keywords/usings/overrides in `editorial.json`, never the
+  generated JSON.
+- A new common-element modifier touches every seam: the `ElementModifiers` field, skip
+  equality, `Merge`, `ApplyModifiers`, and the fluent extension. Pair a `.HasValue` write
+  with `fe.ClearValue(<DP>Property)` on unset unless intentionally matching a no-reset sibling.
+
+### Environment
+
+- Work in a clean worktree, not `main`: `git worktree add -b <branch> <path> origin/main`.
+- Don't build under deep or OneDrive-synced paths — WinUI can fail with `MSB3073`/`PRI210`;
+  prefer a short local path (e.g. `C:\src\`).
+
+### Repo skills (`.github/skills/`)
+
+Contributor-facing orchestration skills — read the `SKILL.md` and drive it with your own
+tools: `pr-review` (multi-dimensional branch review), `perf-compare` (stress-harness delta
+vs `main`), `coverage-uplift` (non-vacuous coverage across tiers), `analyzer-dym`
+(did-you-mean / `mur check` authoring). Not shipped to end users.

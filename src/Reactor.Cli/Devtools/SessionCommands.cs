@@ -79,7 +79,6 @@ internal static class SessionCommands
             // JSON output: don't echo the bearer token. JSON itself escapes
             // control characters, but the token would round-trip plaintext to
             // anyone reading the output.
-            var opts = new JsonSerializerOptions { DefaultIgnoreCondition = global::System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
             foreach (var e in rows)
             {
                 var redacted = new LockfileEntry
@@ -94,7 +93,7 @@ internal static class SessionCommands
                     StartedAt = e.StartedAt,
                     Token = string.IsNullOrEmpty(e.Token) ? "" : "***",
                 };
-                Console.WriteLine(JsonSerializer.Serialize(redacted, opts));
+                Console.WriteLine(JsonSerializer.Serialize(redacted, CliJsonContext.Default.LockfileEntry));
             }
         }
         return (int)DevtoolsCliExit.Success;

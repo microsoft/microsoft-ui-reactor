@@ -3,12 +3,28 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <!-- WindowsAppSDK targets (pulled in transitively via the Reactor reference)
+         reject AnyCPU, and Reactor.slnx maps this project's solution platforms to
+         x64/ARM64. Declare those concrete platforms (mirrors src/Reactor.Cli) so
+         the configs the solution references actually exist. Without this, opening
+         Reactor.slnx reports a project-configuration-not-found error for this
+         project. It is only ever built with an explicit -p:Platform (never AnyCPU). -->
+    <Platforms>x64;ARM64</Platforms>
     <RootNamespace>Microsoft.UI.Reactor.SignaturesGen</RootNamespace>
     <AssemblyName>Reactor.SignaturesGen</AssemblyName>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
+    <!-- Reflection-only build tool: it loads Reactor.dll to emit reactor.api.txt
+         and never creates a WinUI window, so it does not need the Windows App SDK
+         runtime. Suppress the auto-generated bootstrap initializer, which otherwise
+         runs at startup and throws DllNotFoundException for the native
+         Microsoft.WindowsAppRuntime.Bootstrap.dll shim (that RID-specific native
+         asset is not staged by a RID-less `dotnet build`, so the exec of this tool
+         during build — e.g. bootstrap.ps1 on a host-arch-matching machine — would
+         crash). -->
+    <WindowsAppSdkBootstrapInitialize>false</WindowsAppSdkBootstrapInitialize>
     <IsPackable>false</IsPackable>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
@@ -18,6 +34,26 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Reactor\Reactor.csproj" />
     <ProjectReference Include="..\Reactor.ApiIndex\Reactor.ApiIndex.csproj" />
+  </ItemGroup>
+
+  <!-- Opt-in NativeAOT proof (off by default; the normal build runs this as a plain
+       apphost). Reproduce with:
+           dotnet publish tools/Reactor.SignaturesGen -r win-x64 -c Release -p:ReactorApiAot=true
+       Notes that make it actually work (see tools/Reactor.ApiIndex/README.md):
+         • PublishAot is set *inside* the csproj (gated on ReactorApiAot) rather than passed as a
+           global -p:PublishAot=true, so it does NOT leak into the netstandard2.0
+           analyzer/generator ProjectReferences in Reactor's graph (those reject AOT — NETSDK1207).
+         • TrimmerRootAssembly roots the entire Reactor surface; the generator reflects over exactly
+           what the trimmer would otherwise remove, so without this the native exe emits an empty
+           header-only skeleton (~1.7 KB) instead of the full ~315 KB index.
+         • Native linking needs the VS C++ tools (vswhere.exe / link.exe) on PATH.
+       Verified: the resulting native exe emits an index byte-identical to the committed file. -->
+  <PropertyGroup Condition="'$(ReactorApiAot)' == 'true'">
+    <PublishAot>true</PublishAot>
+    <IlcTreatWarningsAsErrors>false</IlcTreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(ReactorApiAot)' == 'true'">
+    <TrimmerRootAssembly Include="Reactor" />
   </ItemGroup>
 
   <!-- After build, run the generator with the repo root as argv[0] so the file

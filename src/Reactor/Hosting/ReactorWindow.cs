@@ -1772,6 +1772,7 @@ public sealed class ReactorWindow : IDisposable
     /// <summary>
     /// Show and focus the window. UI-thread only. No-op after disposal.
     /// </summary>
+    [UIThreadOnly]
     public void Activate()
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(Activate));
@@ -1783,6 +1784,7 @@ public sealed class ReactorWindow : IDisposable
     /// <summary>
     /// Hide the window without closing. UI-thread only. No-op after disposal.
     /// </summary>
+    [UIThreadOnly]
     public void Hide()
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(Hide));
@@ -1796,6 +1798,7 @@ public sealed class ReactorWindow : IDisposable
     /// <summary>
     /// Show a previously hidden window. UI-thread only. No-op after disposal.
     /// </summary>
+    [UIThreadOnly]
     public void Show()
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(Show));
@@ -1812,6 +1815,7 @@ public sealed class ReactorWindow : IDisposable
     /// <see cref="WindowClosingEventArgs.Cancel"/> the close aborts.
     /// Idempotent — a second call after disposal is a no-op.
     /// </summary>
+    [UIThreadOnly]
     public void Close()
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(Close));
@@ -1849,6 +1853,7 @@ public sealed class ReactorWindow : IDisposable
     }
 
     /// <summary>Force-save the current window placement when placement persistence is enabled.</summary>
+    [UIThreadOnly]
     public void SavePlacement()
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(SavePlacement));
@@ -1860,6 +1865,7 @@ public sealed class ReactorWindow : IDisposable
     /// Diff <paramref name="next"/> against the current spec and apply only the
     /// fields that changed. UI-thread only.
     /// </summary>
+    [UIThreadOnly]
     public void Update(WindowSpec next)
     {
         ArgumentNullException.ThrowIfNull(next);
@@ -1897,6 +1903,7 @@ public sealed class ReactorWindow : IDisposable
     }
 
     /// <summary>Resize to <paramref name="width"/> x <paramref name="height"/> DIPs. UI-thread only.</summary>
+    [UIThreadOnly]
     public void SetSize(double width, double height)
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(SetSize));
@@ -1925,6 +1932,7 @@ public sealed class ReactorWindow : IDisposable
     /// move in two steps — <c>SetPosition</c> onto the target monitor, then
     /// adjust within it. (spec 036 §5.2)
     /// </remarks>
+    [UIThreadOnly]
     public void SetPosition(double x, double y)
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(SetPosition));
@@ -1939,6 +1947,7 @@ public sealed class ReactorWindow : IDisposable
     }
 
     /// <summary>Set or clear the width/height aspect lock used during interactive resize.</summary>
+    [UIThreadOnly]
     public void SetAspectRatio(double? ratio)
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(SetAspectRatio));
@@ -2010,6 +2019,7 @@ public sealed class ReactorWindow : IDisposable
     /// is no Aero Snap during the drag — acceptable for the small floating
     /// windows (command palettes, tool palettes) that need IsMovableByBackground.
     /// </remarks>
+    [UIThreadOnly]
     public void BeginDragMove()
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(BeginDragMove));
@@ -2089,6 +2099,7 @@ public sealed class ReactorWindow : IDisposable
         return null;
     }
 
+    [UIThreadOnly]
     internal IDisposable RegisterAspectRatioOverride(double? ratio)
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(RegisterAspectRatioOverride));
@@ -2143,6 +2154,7 @@ public sealed class ReactorWindow : IDisposable
     /// extended style; values below 1.0 install it and call
     /// <c>SetLayeredWindowAttributes</c>. UI-thread only. No-op after disposal.
     /// </summary>
+    [UIThreadOnly]
     public void SetOpacity(double opacity)
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(SetOpacity));
@@ -2199,6 +2211,7 @@ public sealed class ReactorWindow : IDisposable
     /// activation (matches VS tool-window / drag-preview behavior).
     /// UI-thread only. No-op after disposal.
     /// </summary>
+    [UIThreadOnly]
     public void SetNoActivate(bool noActivate)
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(SetNoActivate));
@@ -2229,6 +2242,7 @@ public sealed class ReactorWindow : IDisposable
     /// currently layered. Call <see cref="SetOpacity"/> with a value &lt; 1.0
     /// first.
     /// </exception>
+    [UIThreadOnly]
     public void SetIgnorePointerInput(bool ignore)
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(SetIgnorePointerInput));
@@ -2396,6 +2410,7 @@ public sealed class ReactorWindow : IDisposable
     }
 
     /// <summary>Center on the window's current monitor. UI-thread only.</summary>
+    [UIThreadOnly]
     public void CenterOnScreen()
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(CenterOnScreen));
@@ -2423,6 +2438,7 @@ public sealed class ReactorWindow : IDisposable
     /// Thrown when more than seven buttons are supplied or when ids are
     /// duplicated.
     /// </exception>
+    [UIThreadOnly]
     public void SetThumbnailToolbar(IReadOnlyList<ThumbnailToolbarButton> buttons)
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(SetThumbnailToolbar));
@@ -2443,6 +2459,7 @@ public sealed class ReactorWindow : IDisposable
     /// safe to call before <see cref="SetThumbnailToolbar"/> has been called.
     /// (spec 036 §11.5)
     /// </summary>
+    [UIThreadOnly]
     public void ClearThumbnailToolbar()
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(ClearThumbnailToolbar));
@@ -2452,6 +2469,7 @@ public sealed class ReactorWindow : IDisposable
     }
 
     /// <summary>Mount a new component root. UI-thread only.</summary>
+    [UIThreadOnly]
     public void Mount(Component root)
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(Mount));
@@ -2461,6 +2479,7 @@ public sealed class ReactorWindow : IDisposable
     }
 
     /// <summary>Mount a new render-function root. UI-thread only.</summary>
+    [UIThreadOnly]
     public void Mount(Func<RenderContext, Element> render)
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(Mount));

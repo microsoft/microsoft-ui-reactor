@@ -441,7 +441,13 @@ internal sealed class TitleBarEventPayload
     public global::Windows.Foundation.TypedEventHandler<Microsoft.UI.Xaml.Controls.TitleBar, object>? PaneToggleRequestedTrampoline;
 }
 
-/// <summary>Spec 047 §14 Phase 3 deferred controls — NavigationView event payload.</summary>
+/// <summary>Spec 047 §14 Phase 3 deferred controls — NavigationView event payload.
+/// <para>Issue #916 — <c>IsPaneOpenObserver</c> is the <c>.Immediate</c> entry's
+/// <c>IsPaneOpen</c> DP-changed callback, which invokes <c>OnPaneOpenChanged</c>
+/// with the control's current value. Observing the DP (rather than the
+/// <c>PaneOpening</c>/<c>PaneClosing</c> pair <c>SplitViewEventPayload</c> uses)
+/// keeps the reported value identical to the property the reconciler diffs
+/// against, including when a pane close is cancelled.</para></summary>
 internal sealed class NavigationViewEventPayload
 {
     public global::Windows.Foundation.TypedEventHandler<
@@ -450,6 +456,7 @@ internal sealed class NavigationViewEventPayload
     public global::Windows.Foundation.TypedEventHandler<
         Microsoft.UI.Xaml.Controls.NavigationView,
         Microsoft.UI.Xaml.Controls.NavigationViewBackRequestedEventArgs>? BackRequestedTrampoline;
+    public Microsoft.UI.Xaml.DependencyPropertyChangedCallback? IsPaneOpenObserver;
 }
 
 /// <summary>

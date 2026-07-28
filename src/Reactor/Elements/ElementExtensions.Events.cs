@@ -212,6 +212,15 @@ public static partial class ElementExtensions
     public static NavigationViewElement BackRequested(this NavigationViewElement el, Action? handler) =>
         el with { OnBackRequested = handler };
 
+    /// <summary>
+    /// Wires the pane-open-state-changed handler. Fires for pane changes the app never
+    /// requested (light dismiss, adaptive display-mode changes) as well as the echo of a
+    /// programmatic <c>IsPaneOpen</c> write — feed the value back into the state that drives
+    /// <c>IsPaneOpen</c> to keep controlled pane state in sync. Passing <c>null</c> clears.
+    /// </summary>
+    public static NavigationViewElement PaneOpenChanged(this NavigationViewElement el, Action<bool>? handler) =>
+        el with { OnPaneOpenChanged = handler };
+
     /// <summary>Wires the back-requested handler. Passing <c>null</c> clears.</summary>
     public static TitleBarElement BackRequested(this TitleBarElement el, Action? handler) =>
         el with { OnBackRequested = handler };

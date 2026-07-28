@@ -1,4 +1,6 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.UI.Reactor.Charting.D3;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hosting.Devtools;
@@ -104,8 +106,8 @@ public class MoreCoverageTests2
     private static McpDispatcher BuildPingDispatcher()
     {
         var reg = new McpToolRegistry();
-        reg.Register(new McpToolDescriptor("ping", "", new { type = "object" }),
-            _ => new { ok = true });
+        reg.Register(new McpToolDescriptor("ping", "", new SchemaNode("object")),
+            _ => new JsonObject { ["ok"] = true });
         return new McpDispatcher(reg);
     }
 
@@ -160,7 +162,7 @@ public class MoreCoverageTests2
     public void McpDispatcher_DirectMethodInvocation_ReachesHandler()
     {
         var reg = new McpToolRegistry();
-        reg.Register(new McpToolDescriptor("pong", "", new { }), _ => new { ok = true });
+        reg.Register(new McpToolDescriptor("pong", "", new SchemaNode("object")), _ => new JsonObject { ["ok"] = true });
         var d = new McpDispatcher(reg);
 
         // Not "tools/call" — the dispatcher should fall into HandleDirect.
@@ -188,6 +190,8 @@ public class MoreCoverageTests2
     }
 
     [Fact]
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: reflection-based System.Text.Json serialization of a devtools/MCP dispatch result (DevtoolsMcpServer.JsonOpts, no source-gen context). Issue #70 documents this devtools JSON surface as RUC/RDC-by-design and not-yet-AOT-clean; standard `dotnet test` is JIT. Behaviour-neutral.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test-only: reflection-based System.Text.Json serialization of a devtools/MCP result (see IL2026). JIT only, not AOT-compiled. Behaviour-neutral.")]
     public void McpDispatcher_Initialize_NonObjectParams_PinsBaseline()
     {
         var d = new McpDispatcher(new McpToolRegistry());

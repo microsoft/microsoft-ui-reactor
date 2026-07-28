@@ -67,7 +67,7 @@ body:
     id: appsdk
     attributes:
       label: Windows App SDK version
-      description: The `Microsoft.WindowsAppSDK` package version your project resolved.
+      description: The Windows App SDK version your project resolved (from any `Microsoft.WindowsAppSDK*` package).
 
   - type: textarea
     id: logs

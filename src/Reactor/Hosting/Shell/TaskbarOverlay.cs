@@ -34,6 +34,7 @@ public sealed class TaskbarOverlay
     }
 
     /// <summary>The current overlay icon. Null clears.</summary>
+    [UIThreadOnly]
     public WindowIcon? Icon
     {
         get => _icon;
@@ -50,6 +51,7 @@ public sealed class TaskbarOverlay
     /// <c>SetOverlayIcon(pszDescription)</c> — required for assistive tech to
     /// announce the overlay. (spec 036 §0.6)
     /// </summary>
+    [UIThreadOnly]
     public string? AccessibleDescription
     {
         get => _accessibleDescription;

@@ -33,6 +33,7 @@ lifecycle methods.
 | [UseCallback](reference/hooks/UseCallback.md) | `Action` | Stable delegate identity across renders. |
 | [UseContext](reference/hooks/UseContext.md) | `T` | Read the ambient [Context](context.md) value. |
 | [UseObservable](reference/hooks/UseObservable.md) | `T` | Re-render when a tracked `INotifyPropertyChanged` source raises a change. |
+| [UseExternalStore](reference/hooks/UseExternalStore.md) | `TSnapshot` | Bridge subscribe/getSnapshot stores into Reactor and re-render only when the snapshot changes. |
 | [UseResource](reference/hooks/UseResource.md) | `AsyncValue<T>` | Cached async read (see [Async Resources](async-resources.md)). |
 | [UsePersisted](reference/hooks/UsePersisted.md) | `(T, Action<T>)` | `UseState` that survives app launches (see [Persistence](persistence.md)). |
 
@@ -323,6 +324,56 @@ memoized [child components](components.md).
 As with `UseEffect` and `UseMemo`, the typed-arity overloads
 `UseCallback(callback, a, b)` (1–3 deps) skip the `params object[]` allocation
 and value-type boxing on the unchanged path.
+
+## External Stores
+
+Some state lives outside Reactor but still has a clean subscription shape:
+subscribe to notifications, then ask for the latest snapshot. For that class of
+store, `UseExternalStore` removes the usual `UseEffect` plus `UseReducer`
+boilerplate:
+
+```csharp
+public sealed class SessionStore
+{
+    public event Action? Changed;
+    public SessionSnapshot Snapshot => _snapshot;
+
+    public Action Subscribe(Action onChanged)
+    {
+        Changed += onChanged;
+        return () => Changed -= onChanged;
+    }
+}
+
+public override Element Render()
+{
+    var snapshot = UseExternalStore(
+        _store.Subscribe,
+        () => _store.Snapshot);
+
+    return TextBlock(snapshot.Title);
+}
+```
+
+`UseExternalStore` reads the snapshot during render, subscribes in an effect,
+and only queues a re-render when a notification produces a different snapshot.
+Pass a custom comparer when the snapshot type needs value semantics different
+from `EqualityComparer<T>.Default`.
+
+Two stability rules keep this hook well-behaved — the same guidance React gives
+for `useSyncExternalStore`:
+
+- **`subscribe` must be a stable delegate.** It is the effect dependency that
+  decides whether the subscription is torn down and re-established, so pass a
+  method group (`_store.Subscribe`) or a `UseCallback`-memoized delegate. A fresh
+  capturing lambda (`onChanged => _store.Subscribe(onChanged)`) is a new delegate
+  every render and forces an unsubscribe/resubscribe on each one.
+- **`getSnapshot` must return a cached value.** It should only change identity
+  when the underlying data changes. Returning a fresh, never-equal value on every
+  call (`() => items.ToArray()`) alongside an unstable `subscribe` can spin —
+  re-render re-runs the effect, the immediate re-check sees a "change", and that
+  forces another render. Memoize the snapshot or return a value the comparer
+  treats as equal when nothing changed.
 
 ## Updating State From Background Work
 

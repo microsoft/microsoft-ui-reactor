@@ -463,6 +463,8 @@ internal static class HostingCoverageFixtures
 
     internal class PreviewCaptureServerEndpoints(Harness h) : SelfTestFixtureBase(h)
     {
+        [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026",
+            Justification = "PreviewCaptureServer is a devtools subsystem gated by Reactor.DevtoolsSupport; this fixture is AOT-skip-listed (SelfTestRunner.DefaultAotSkipPatterns).")]
         public override async Task RunAsync()
         {
             string? current = "Counter";

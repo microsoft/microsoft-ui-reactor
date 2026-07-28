@@ -34,6 +34,7 @@ public class RichTextBlockDescriptorTests
             && type.GenericTypeArguments[2] == typeof(Thickness);
     }
 
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Test-only: reflects a known non-public field on the concrete object the test constructs. Intentional and JIT-only (this host is never trimmed) — not claimed trim-safe; behaviour-neutral (neither preserves nor prunes members, so it cannot cause the DAM-narrowing regression noted in issue #70).")]
     private static T GetPrivateField<T>(object owner, string name)
     {
         var field = owner.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic);

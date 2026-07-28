@@ -1,0 +1,4 @@
+# The search index is a byte-for-byte generated artifact gated by
+# SearchIndexGeneratorTests. Pin it to LF so the equality gate is deterministic on
+# every OS/checkout regardless of core.autocrlf.
+reactor-search-index.json text eol=lf

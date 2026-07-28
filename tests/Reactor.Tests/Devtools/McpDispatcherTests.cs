@@ -1,4 +1,6 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.UI.Reactor.Hosting.Devtools;
 using Xunit;
 
@@ -9,20 +11,22 @@ namespace Microsoft.UI.Reactor.Tests.Devtools;
 /// Uses a purely in-memory tool registry so the dispatcher is exercised end-to-end
 /// without needing a running WinUI window or HTTP listener.
 /// </summary>
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: reflection-based System.Text.Json serialization of devtools/MCP payload objects (no source-gen context; DevtoolsMcpServer.JsonOpts). Issue #70 documents this devtools JSON surface as RUC/RDC-by-design and not-yet-AOT-clean; the standard `dotnet test` path is JIT (never trimmed). Behaviour-neutral.")]
+[UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test-only: reflection-based System.Text.Json serialization of devtools/MCP payloads (see the IL2026 note). Standard test run is JIT, not AOT-compiled. Behaviour-neutral.")]
 public class McpDispatcherTests
 {
     private static McpDispatcher BuildDispatcher(out McpToolRegistry reg)
     {
         reg = new McpToolRegistry();
         reg.Register(
-            new McpToolDescriptor("echo", "Echo the input text back.", new { type = "object" }),
-            @params => new { echoed = DevtoolsTools.ReadString(@params, "text") });
+            new McpToolDescriptor("echo", "Echo the input text back.", new SchemaNode("object")),
+            @params => new JsonObject { ["echoed"] = DevtoolsTools.ReadString(@params, "text") });
         reg.Register(
-            new McpToolDescriptor("badparam", "Always complains about params.", new { type = "object" }),
+            new McpToolDescriptor("badparam", "Always complains about params.", new SchemaNode("object")),
             _ => throw new McpToolException(
                 "required",
                 JsonRpcErrorCodes.InvalidParams,
-                new { code = "missing-field", field = "name" }));
+                new JsonObject { ["code"] = "missing-field", ["field"] = "name" }));
         var captured = reg;
         return new McpDispatcher(captured);
     }

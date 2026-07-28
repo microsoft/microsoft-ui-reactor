@@ -334,8 +334,9 @@ internal static class ModifierEventFixtures
                 var (phase, setPhase) = ctx.UseState(0);
                 var brush = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Red);
 
-                var controlMods = phase == 0
-                    ? new ElementModifiers
+                var controlMods = phase switch
+                {
+                    0 => new ElementModifiers
                     {
                         RequestedTheme = ElementTheme.Dark,
                         Margin = new Thickness(3, 4, 5, 6),
@@ -348,6 +349,8 @@ internal static class ModifierEventFixtures
                         MaxHeight = 90,
                         HorizontalAlignment = HorizontalAlignment.Right,
                         VerticalAlignment = VerticalAlignment.Bottom,
+                        HorizontalContentAlignment = HorizontalAlignment.Right,
+                        VerticalContentAlignment = VerticalAlignment.Bottom,
                         Opacity = 0.5,
                         IsVisible = false,
                         ToolTip = "clear-me",
@@ -369,8 +372,14 @@ internal static class ModifierEventFixtures
                         FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas"),
                         FontSize = 22,
                         FontWeight = new global::Windows.UI.Text.FontWeight(700),
-                    }
-                    : new ElementModifiers();
+                    },
+                    1 => new ElementModifiers
+                    {
+                        HorizontalContentAlignment = HorizontalAlignment.Left,
+                        VerticalContentAlignment = VerticalAlignment.Top,
+                    },
+                    _ => new ElementModifiers(),
+                };
 
                 var borderMods = phase == 0
                     ? new ElementModifiers
@@ -386,7 +395,7 @@ internal static class ModifierEventFixtures
                     : new ElementModifiers();
 
                 return VStack(
-                    Button("ClearModifierPhase", () => setPhase(1)),
+                    Button("ClearModifierPhase", () => setPhase(phase + 1)),
                     Button("ClearTarget") with { Modifiers = controlMods },
                     Border(TextBlock("ClearBorderChild")) with { Modifiers = borderMods });
             });
@@ -395,6 +404,24 @@ internal static class ModifierEventFixtures
             var initial = H.FindButton("ClearTarget");
             H.Check("ModifierClear_InitialCollapsed",
                 initial is not null && initial.Visibility == Visibility.Collapsed);
+            if (initial is not null)
+            {
+                H.Check("ModifierClear_ContentAlignmentInitial",
+                    initial.HorizontalContentAlignment == HorizontalAlignment.Right
+                    && initial.VerticalContentAlignment == VerticalAlignment.Bottom);
+            }
+
+            H.ClickButton("ClearModifierPhase");
+            await Harness.Render();
+
+            var updated = H.FindButton("ClearTarget");
+            H.Check("ModifierClear_ContentAlignmentUpdated", updated is not null);
+            if (updated is not null)
+            {
+                H.Check("ModifierClear_ContentAlignmentUpdatedValues",
+                    updated.HorizontalContentAlignment == HorizontalAlignment.Left
+                    && updated.VerticalContentAlignment == VerticalAlignment.Top);
+            }
 
             H.ClickButton("ClearModifierPhase");
             await Harness.Render();
@@ -412,6 +439,11 @@ internal static class ModifierEventFixtures
                 H.Check("ModifierClear_AlignmentCleared",
                     button.HorizontalAlignment == HorizontalAlignment.Stretch
                     && button.VerticalAlignment == VerticalAlignment.Stretch);
+                H.Check("ModifierClear_ContentAlignmentCleared",
+                    button.ReadLocalValue(Control.HorizontalContentAlignmentProperty) == DependencyProperty.UnsetValue
+                    && button.ReadLocalValue(Control.VerticalContentAlignmentProperty) == DependencyProperty.UnsetValue
+                    && button.HorizontalContentAlignment == HorizontalAlignment.Center
+                    && button.VerticalContentAlignment == VerticalAlignment.Center);
                 H.Check("ModifierClear_VisibleEnabled",
                     button.Visibility == Visibility.Visible && button.IsEnabled);
                 H.Check("ModifierClear_TooltipCleared",

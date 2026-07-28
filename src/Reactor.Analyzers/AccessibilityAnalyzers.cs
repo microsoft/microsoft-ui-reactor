@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using Microsoft.CodeAnalysis;
@@ -256,4 +257,198 @@ public sealed class FormFieldLabelAnalyzer : DiagnosticAnalyzer
         }
         return false;
     }
+}
+
+/// <summary>
+/// REACTOR_A11Y_004: Clickable containers need keyboard focus.
+/// Detects a non-focusable container factory (<c>Border</c>, <c>Grid</c>, <c>Canvas</c>,
+/// <c>Rectangle</c>, <c>Ellipse</c>, <c>VStack</c>, <c>HStack</c>) carrying an actionable
+/// <c>.OnTapped(...)</c> handler but no <c>.IsTabStop(true)</c> in the fluent chain. Such an
+/// element is mouse/touch-hittable but skipped by Tab, so keyboard users can never reach it.
+/// </summary>
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class ClickableContainerKeyboardAnalyzer : DiagnosticAnalyzer
+{
+    public const string DiagnosticId = "REACTOR_A11Y_004";
+
+    private static readonly LocalizableString Title =
+        "Clickable container is not keyboard-focusable";
+    private static readonly LocalizableString MessageFormat =
+        "Clickable container has .OnTapped but is not keyboard-reachable; add .IsTabStop(true) " +
+        "(and pair with .OnKeyDown for Enter/Space activation)";
+    private static readonly LocalizableString Description =
+        "A non-focusable container (Border, Grid, Canvas, Rectangle, Ellipse, VStack, HStack) with " +
+        "a tap handler is hit-testable for pointer input but not in the keyboard tab order, so " +
+        "keyboard users cannot reach it. Add .IsTabStop(true) to put it in the tab order, and pair " +
+        "it with .OnKeyDown for Enter/Space activation.";
+
+    private static readonly DiagnosticDescriptor Rule = new(
+        DiagnosticId,
+        Title,
+        MessageFormat,
+        "Microsoft.UI.Reactor.Accessibility",
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true,
+        description: Description);
+
+    /// <summary>
+    /// Bare factory methods that produce a non-focusable WinUI container or shape. None of the
+    /// backing types (Border → FrameworkElement, Grid/Canvas/StackPanel → Panel,
+    /// Rectangle/Ellipse → Shape) derive from <c>Control</c>, so none is a tab stop by default —
+    /// a tap handler on any of them is unreachable from the keyboard. Focus-bearing controls
+    /// (Button, ScrollView, …) are deliberately excluded: they are already in the tab order.
+    /// </summary>
+    private static readonly ImmutableHashSet<string> NonFocusableContainerFactories =
+        ImmutableHashSet.Create(
+            "Border", "Grid", "Canvas", "Rectangle", "Ellipse", "VStack", "HStack");
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
+        ImmutableArray.Create(Rule);
+
+    public override void Initialize(AnalysisContext context)
+    {
+        context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
+        context.EnableConcurrentExecution();
+        context.RegisterSyntaxNodeAction(AnalyzeInvocation, SyntaxKind.InvocationExpression);
+    }
+
+    private static void AnalyzeInvocation(SyntaxNodeAnalysisContext context)
+    {
+        var invocation = (InvocationExpressionSyntax)context.Node;
+
+        // Match a bare factory call — Border(...), Grid(...), etc. — as an IdentifierNameSyntax,
+        // never a member access. That keeps the attached-layout modifier `.Grid(row:.., column:..)`
+        // (always invoked on a receiver) out of the gate.
+        if (invocation.Expression is not IdentifierNameSyntax identifier)
+            return;
+        if (!NonFocusableContainerFactories.Contains(identifier.Identifier.Text))
+            return;
+
+        var hasActionableTap = false;
+        var hasFocusAffordance = false;
+
+        // Inspect only the fluent chain applied directly to this factory result
+        // (Border(x).A(..).OnTapped(..).B(..)); never ascend past the point where the chain
+        // result is passed as an argument, so modifiers on an enclosing element are not
+        // mis-attributed to this container.
+        //
+        // Suppress only when the chain enables the one affordance that actually makes these
+        // non-Control containers keyboard-reachable: `.IsTabStop(true)` (the reconciler applies
+        // IsTabStop to any FrameworkElement). `.TabIndex(n)` is a no-op here — the reconciler applies
+        // it only to Controls — and `.OnKeyDown` does not add the element to the tab order, so
+        // neither suppresses; `.IsTabStop(false)` explicitly opts out and must not suppress either.
+        foreach (var modifier in EnumerateChainModifiers(invocation))
+        {
+            var name = modifier.MemberAccess.Name.Identifier.Text;
+            if (name == "IsTabStop")
+            {
+                // Attached modifiers are last-wins, so a trailing .IsTabStop(false) overrides an
+                // earlier .IsTabStop(true): the chain suppresses only if the final value enables it.
+                hasFocusAffordance = !IsExplicitlyFalse(modifier.Invocation);
+            }
+            else if (name == "OnTapped" && !IsPureHandledSwallow(modifier.Invocation))
+            {
+                hasActionableTap = true;
+            }
+        }
+
+        if (hasActionableTap && !hasFocusAffordance)
+        {
+            context.ReportDiagnostic(Diagnostic.Create(Rule, invocation.GetLocation()));
+        }
+    }
+
+    /// <summary>
+    /// Yields each <c>receiver.Member(args)</c> invocation in the fluent chain applied to
+    /// <paramref name="factory"/>, walking outward. Only genuine method-chain links
+    /// (<c>factory.M(..).M2(..)</c>) are followed; enumeration stops as soon as the chain result
+    /// becomes an argument or another expression's operand.
+    /// </summary>
+    private static IEnumerable<(MemberAccessExpressionSyntax MemberAccess, InvocationExpressionSyntax Invocation)>
+        EnumerateChainModifiers(InvocationExpressionSyntax factory)
+    {
+        SyntaxNode current = factory;
+        while (current.Parent is MemberAccessExpressionSyntax memberAccess
+            && memberAccess.Expression == current
+            && memberAccess.Parent is InvocationExpressionSyntax outer
+            && outer.Expression == memberAccess)
+        {
+            yield return (memberAccess, outer);
+            current = outer;
+        }
+    }
+
+    /// <summary>
+    /// True when the call passes an explicit <c>false</c> as its first argument — e.g.
+    /// <c>.IsTabStop(false)</c>, which turns the affordance OFF. Such a call must NOT suppress the
+    /// diagnostic: it leaves the container out of the tab order, so it is still unreachable.
+    /// <c>.IsTabStop()</c> (argument omitted, defaults to <c>true</c>) and <c>.IsTabStop(true)</c>
+    /// both enable it and so do suppress.
+    /// </summary>
+    private static bool IsExplicitlyFalse(InvocationExpressionSyntax invocation)
+    {
+        var args = invocation.ArgumentList.Arguments;
+        return args.Count >= 1 && args[0].Expression.IsKind(SyntaxKind.FalseLiteralExpression);
+    }
+
+    /// <summary>
+    /// True when the tap handler does nothing but mark the event handled
+    /// (<c>(_, e) =&gt; e.Handled = true</c>, or a block whose sole statement is that assignment).
+    /// Such a handler is a pointer-event sink — e.g. a modal backdrop that blocks clicks reaching
+    /// the content beneath — not an actionable command, so there is nothing to make
+    /// keyboard-reachable. The assignment target must be the handler's own event-args parameter, so
+    /// an unrelated <c>somethingElse.Handled = true</c> does not falsely suppress.
+    /// </summary>
+    private static bool IsPureHandledSwallow(InvocationExpressionSyntax onTapped)
+    {
+        var args = onTapped.ArgumentList.Arguments;
+        if (args.Count != 1)
+            return false;
+
+        // The tap handler is Action<object, TappedRoutedEventArgs>; the event-args parameter (the
+        // one carrying .Handled) is the last lambda parameter.
+        IReadOnlyList<ParameterSyntax> parameters;
+        CSharpSyntaxNode? body;
+        switch (args[0].Expression)
+        {
+            case ParenthesizedLambdaExpressionSyntax p:
+                parameters = p.ParameterList.Parameters;
+                body = p.Body;
+                break;
+            case SimpleLambdaExpressionSyntax s:
+                parameters = new[] { s.Parameter };
+                body = s.Body;
+                break;
+            default:
+                return false;
+        }
+
+        if (parameters.Count == 0 || body is null)
+            return false;
+
+        // A discard `_` can't be dereferenced, so it can't be the swallow shape.
+        var eventArgsName = parameters[parameters.Count - 1].Identifier.Text;
+        if (eventArgsName is "_" or "")
+            return false;
+
+        return body switch
+        {
+            AssignmentExpressionSyntax assign => IsHandledTrue(assign, eventArgsName),
+            BlockSyntax block when block.Statements.Count == 1
+                && block.Statements[0] is ExpressionStatementSyntax { Expression: AssignmentExpressionSyntax a }
+                => IsHandledTrue(a, eventArgsName),
+            _ => false,
+        };
+    }
+
+    /// <summary>True for <c>&lt;eventArgsName&gt;.Handled = true</c>.</summary>
+    private static bool IsHandledTrue(AssignmentExpressionSyntax assign, string eventArgsName) =>
+        assign.IsKind(SyntaxKind.SimpleAssignmentExpression)
+        && assign.Left is MemberAccessExpressionSyntax
+        {
+            Expression: IdentifierNameSyntax receiver,
+            Name.Identifier.Text: "Handled"
+        }
+        && receiver.Identifier.Text == eventArgsName
+        && assign.Right.IsKind(SyntaxKind.TrueLiteralExpression);
 }

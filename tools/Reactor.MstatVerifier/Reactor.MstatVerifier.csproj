@@ -6,6 +6,45 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <!-- The IL2*/IL3* analyzer is enabled by default (IsAotCompatible in
+         Directory.Build.targets); this tool's own code stays fully analyzed and
+         warning-clean. Reads assembly metadata via Mono.Cecil with the default
+         ReaderParameters (ReadSymbols=false), so no runtime reflection over managed
+         types of its own — see the ReactorMstatAot gate below for the NativeAOT story. -->
+  </PropertyGroup>
+
+  <!--
+    Opt-in NativeAOT proof gate (off by default): `-p:ReactorMstatAot=true`.
+
+        dotnet publish tools/Reactor.MstatVerifier/Reactor.MstatVerifier.csproj -c Release -r win-x64 -p:ReactorMstatAot=true
+
+    Kept opt-in (not unconditional) so the normal build/run path CI uses
+    (`dotnet run` on this project, `-c Release`, see ci.yml) is
+    byte-identical and RID-free — an always-on <PublishAot> would make a plain,
+    RID-less `dotnet publish` of this project fail with "PublishAot requires a
+    RuntimeIdentifier". PublishAot is set INSIDE the csproj rather than forced as a
+    global property, so the opt-in stays self-contained: Directory.Build.targets
+    already forces PublishAot=false on the repo's non-net10 (netstandard2.0)
+    analyzer/generator projects to stop a global PublishAot leaking into that graph
+    (NETSDK1207). This tool references none of them, so scoping it here is purely
+    tidy, not required.
+
+    Mono.Cecil's dynamic PDB/MDB symbol-provider discovery
+    (Mono.Cecil.Cil.SymbolProvider.GetReaderProvider/GetSymbolType, which use
+    Activator.CreateInstance / Type.GetType / Assembly.GetType to locate a symbol
+    reader by name) trips IL2072/IL2057/IL2026 under ILC. This tool always reads
+    with the default ReaderParameters (ReadSymbols=false), so that path is never
+    reached at runtime; the warnings are third-party and unexercised. Demote
+    exactly those three codes from error to warning by listing them in
+    WarningsNotAsErrors, which the ILCompiler native-publish targets forward to
+    the ilc nowarnaserr switch (see Microsoft.NETCore.Native.targets) - rather
+    than flipping the blanket IlcTreatWarningsAsErrors=false. Every other trim/AOT
+    code (including any new reflection in this tool's own code) therefore still
+    fails the native publish.
+  -->
+  <PropertyGroup Condition="'$(ReactorMstatAot)' == 'true'">
+    <PublishAot>true</PublishAot>
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);IL2026;IL2057;IL2072</WarningsNotAsErrors>
   </PropertyGroup>
 
   <ItemGroup>

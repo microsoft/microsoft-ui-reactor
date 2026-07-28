@@ -9,9 +9,9 @@ namespace Microsoft.UI.Reactor.AppTests.Infrastructure;
 /// <see cref="Clear"/>, <see cref="Text"/>, <see cref="GetAttribute"/>, <see cref="Rect"/>)
 /// so existing test bodies keep their shape.
 ///
-/// Reads/actions go through <see cref="WinAppUi"/>; keystroke input goes through
-/// <see cref="InputInjector"/>; UIA properties winapp can't surface fall back to
-/// <see cref="UiaPropertyReader"/>.
+/// Reads/actions go through <see cref="WinAppUi"/>; keystroke input goes through the native
+/// <c>winapp ui send-keys</c> verb (<c>--via send-input</c> for a real per-character KeyDown);
+/// UIA properties winapp can't surface fall back to <see cref="UiaPropertyReader"/>.
 /// </summary>
 public sealed class UiElement
 {
@@ -38,12 +38,7 @@ public sealed class UiElement
     }
 
     /// <summary>Perform a real pointer click at the element center.</summary>
-    public void Click()
-    {
-        var rect = Rect;
-        InputInjector.Foreground(_hwnd == 0 ? _app.HostHwnd : _hwnd);
-        InputInjector.Click(rect.X + rect.Width / 2, rect.Y + rect.Height / 2);
-    }
+    public void Click() => _app.Click(Selector, hwnd: _hwnd == 0 ? null : _hwnd);
 
     /// <summary>Activate the element via UIA invoke/toggle/selection patterns.</summary>
     public void Invoke() => _app.Invoke(Selector, _hwnd);
@@ -86,13 +81,16 @@ public sealed class UiElement
     }
 
     /// <summary>
-    /// Type into the element. Foregrounds the host window, focuses this element via UIA,
-    /// then injects the keystrokes with <see cref="InputInjector"/> (winapp has no typing).
+    /// Type into the element. Focuses this element via UIA (best-effort — a control that rejects
+    /// SetFocus still receives the keys through the foreground focus), then injects the keystrokes
+    /// through the native <c>winapp ui send-keys</c> verb with <c>--via send-input</c> so
+    /// keystroke-observing handlers see a real per-character KeyDown.
     /// </summary>
     public void SendKeys(string keys)
     {
-        InputInjector.Foreground(_hwnd == 0 ? _app.HostHwnd : _hwnd);
         TryFocus();
+
+        var tokens = ToSendKeysTokens(keys);
 
         // UIA SetFocus select-alls the control's existing text. When two SUCCESSIVE SendKeys
         // calls target the SAME already-focused field, the second call's re-focus re-selects
@@ -111,15 +109,14 @@ public sealed class UiElement
         // RangeValuePattern, which winapp get-value cannot read, so a value-based guard is
         // unreliable for exactly the NumberBox case this protects.
         //
-        // TODO: once winappCli #562 (native send-keys) ships, the focus/echo handling moves
-        // into winapp and this collapse step can be dropped with the SendInput fallback.
-        if (ContainsTypedText(keys))
-        {
-            if (RememberTextSendAndWasRepeat(Selector))
-                InputInjector.CollapseSelectionToEnd();
-        }
+        // Gate on an actual literal-text run — a `text=` token, the only token kind a typed run
+        // produces — NOT on "the payload contains a non-sentinel char". The latter also matches the
+        // letter in a Ctrl+<letter> chord, which would wrongly prepend End and collapse the very
+        // selection a chord such as Ctrl+C is meant to act on.
+        if (tokens.Contains("text=") && RememberTextSendAndWasRepeat(Selector))
+            tokens = "end " + tokens;
 
-        InputInjector.TypeKeys(keys);
+        _app.SendKeys(tokens, viaSendInput: true, hwnd: _hwnd == 0 ? null : _hwnd);
     }
 
     // Selector of the most recent literal-text SendKeys, used to detect consecutive sends into
@@ -141,17 +138,11 @@ public sealed class UiElement
         return repeat;
     }
 
-    // True when the payload contains at least one literal character to type (as opposed to
-    // only Keys.* sentinels, which live in the Unicode Private Use Area, e.g. Tab = '\ue004').
-    private static bool ContainsTypedText(string keys) =>
-        keys.Any(ch => ch < '\ue000' || ch > '\ue0ff');
-
-    /// <summary>Clear the editable control (select-all + delete via injected keys).</summary>
+    /// <summary>Clear the editable control (select-all + delete via native send-keys).</summary>
     public void Clear()
     {
-        InputInjector.Foreground(_hwnd == 0 ? _app.HostHwnd : _hwnd);
         TryFocus();
-        InputInjector.ClearViaKeyboard();
+        _app.SendKeys("ctrl+a delete", viaSendInput: true, hwnd: _hwnd == 0 ? null : _hwnd);
     }
 
     /// <summary>Move keyboard focus to this element via UIA SetFocus.</summary>
@@ -161,5 +152,126 @@ public sealed class UiElement
     {
         try { _app.Focus(Selector, _hwnd); }
         catch (WinAppException) { /* some elements reject SetFocus; typing still targets the foreground focus */ }
+    }
+
+    // Translate a UiElement.SendKeys payload — literal text interleaved with Keys.* Private-Use-Area
+    // sentinels — into the winapp send-keys token grammar. Literal runs become a single `text=<escaped>`
+    // token (whitespace/backslash escaped so the tokenizer keeps the run intact); Tab/Enter/Space/Esc/
+    // Backspace/Delete sentinels become the matching named key; a Shift/Ctrl sentinel binds to the next
+    // single key as a modifier chord, mirroring the old per-keystroke InputInjector.TypeKeys (which held
+    // a modifier for exactly the following character). Internal for direct unit testing.
+    internal static string ToSendKeysTokens(string keys)
+    {
+        var tokens = new List<string>();
+        var literal = new System.Text.StringBuilder();
+        var mods = new List<string>();
+
+        void FlushLiteral()
+        {
+            if (literal.Length == 0) return;
+            tokens.Add("text=" + EscapeTextToken(literal.ToString()));
+            literal.Clear();
+        }
+
+        foreach (var ch in keys)
+        {
+            if (TryModifierName(ch, out var mod))
+            {
+                FlushLiteral();
+                mods.Add(mod);
+                continue;
+            }
+
+            if (TryNamedKey(ch, out var named))
+            {
+                FlushLiteral();
+                tokens.Add(Chord(mods, named));
+                mods.Clear();
+                continue;
+            }
+
+            // Literal character: a pending modifier binds to just this one char (Ctrl+A), then releases.
+            if (mods.Count > 0)
+            {
+                FlushLiteral();
+                tokens.Add(Chord(mods, ch.ToString()));
+                mods.Clear();
+            }
+            else
+            {
+                literal.Append(ch);
+            }
+        }
+
+        FlushLiteral();
+
+        // A modifier sentinel with no following key (dangling at the end of the payload) can't form a
+        // chord. Emit it as a bare virtual-key tap (vk=) — matching the old InputInjector, whose
+        // finally-block pressed and released a held modifier that never bound to a character — rather
+        // than silently dropping it. mods is only non-empty here when the literal buffer is already
+        // empty, because adding a modifier always flushes the pending literal first.
+        foreach (var mod in mods)
+            tokens.Add(ModifierVkToken(mod));
+
+        return string.Join(' ', tokens);
+    }
+
+    private static string Chord(List<string> mods, string key) =>
+        mods.Count == 0 ? key : string.Join('+', mods) + "+" + key;
+
+    // Bare virtual-key token for a dangling modifier (VK_SHIFT 0x10 / VK_CONTROL 0x11), used to
+    // press+release a modifier sentinel that had no following key to chord with.
+    private static string ModifierVkToken(string modifier) => modifier switch
+    {
+        "shift" => "vk=0x10",
+        "ctrl" => "vk=0x11",
+        _ => throw new global::System.ArgumentOutOfRangeException(nameof(modifier), modifier, "Unknown modifier."),
+    };
+
+    private static bool TryModifierName(char ch, out string name)
+    {
+        name = ch switch
+        {
+            '\ue008' => "shift",   // Keys.Shift
+            '\ue009' => "ctrl",    // Keys.Control
+            _ => "",
+        };
+        return name.Length != 0;
+    }
+
+    private static bool TryNamedKey(char ch, out string name)
+    {
+        name = ch switch
+        {
+            '\ue004' => "tab",             // Keys.Tab
+            '\ue006' or '\ue007' => "enter", // Keys.Return / Keys.Enter
+            '\ue00d' => "space",           // Keys.Space
+            '\ue00c' => "esc",             // Keys.Escape
+            '\ue003' => "backspace",       // Keys.Backspace
+            '\ue017' => "delete",          // Keys.Delete
+            _ => "",
+        };
+        return name.Length != 0;
+    }
+
+    // Escape a literal run for a `text=` token. The send-keys tokenizer splits on whitespace, so spaces,
+    // tabs and newlines inside the run must be backslash-escaped (\s \t \n \r) to survive tokenizing, and
+    // a literal backslash doubled so it isn't read as an escape.
+    private static string EscapeTextToken(string text)
+    {
+        var sb = new System.Text.StringBuilder(text.Length);
+        foreach (var ch in text)
+        {
+            switch (ch)
+            {
+                case '\\': sb.Append("\\\\"); break;
+                case ' ': sb.Append("\\s"); break;
+                case '\t': sb.Append("\\t"); break;
+                case '\n': sb.Append("\\n"); break;
+                case '\r': sb.Append("\\r"); break;
+                default: sb.Append(ch); break;
+            }
+        }
+        return sb.ToString();
     }
 }

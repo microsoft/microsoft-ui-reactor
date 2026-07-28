@@ -406,10 +406,12 @@ NavigationViewElement.AutoSuggestBox(AutoSuggestBoxElement box) → NavigationVi
 NavigationViewElement.BackRequested(Action handler) → NavigationViewElement
 NavigationViewElement.CompactModeThresholdWidth(double width) → NavigationViewElement
 NavigationViewElement.ExpandedModeThresholdWidth(double width) → NavigationViewElement
+NavigationViewElement.IsPaneOpen(bool isPaneOpen, Action<bool> onPaneOpenChanged) → NavigationViewElement
 NavigationViewElement.OpenPaneLength(double length) → NavigationViewElement
 NavigationViewElement.PaneCustomContent(Element content) → NavigationViewElement
 NavigationViewElement.PaneDisplayMode(NavigationViewPaneDisplayMode mode) → NavigationViewElement
 NavigationViewElement.PaneFooter(Element footer) → NavigationViewElement
+NavigationViewElement.PaneOpenChanged(Action<bool> handler) → NavigationViewElement
 NavigationViewElement.PaneTitle(string title) → NavigationViewElement
 NavigationViewElement.SelectedTagChanged(Action<string> handler) → NavigationViewElement
 NavigationViewElement.Set(Action<NavigationView> configure) → NavigationViewElement
@@ -549,6 +551,7 @@ SplitButtonElement.AccentButton() → SplitButtonElement
 SplitButtonElement.Click(Action handler) → SplitButtonElement
 SplitButtonElement.Set(Action<SplitButton> configure) → SplitButtonElement
 SplitButtonElement.SubtleButton() → SplitButtonElement
+SplitViewElement.IsPaneOpen(bool isPaneOpen, Action<bool> onPaneOpenChanged) → SplitViewElement
 SplitViewElement.LightDismissOverlayMode(LightDismissOverlayMode mode) → SplitViewElement
 SplitViewElement.PaneBackground(Brush brush) → SplitViewElement
 SplitViewElement.PaneBackground(ThemeRef theme) → SplitViewElement
@@ -570,7 +573,14 @@ T.Backdrop<T>(Func<SystemBackdrop> factory) → T
 T.Background<T>(Brush brush) → T
 T.Background<T>(ThemeRef theme) → T
 T.Background<T>(string color) → T
+T.BorderBrush<T>(Brush brush) → T
+T.BorderBrush<T>(ThemeRef theme) → T
+T.BorderBrush<T>(string color) → T
 T.BorderInlineStart<T>(Thickness thickness) → T
+T.BorderThickness<T>(Thickness thickness) → T
+T.BorderThickness<T>(double horizontal, double vertical) → T
+T.BorderThickness<T>(double left = 0, double top = 0, double right = 0, double bottom = 0) → T
+T.BorderThickness<T>(double thickness) → T
 T.Canvas<T>(double left = 0, double top = 0) → T
 T.Canvas<T>(double left, double top, double anchorX, double anchorY) → T
 T.Center<T>() → T
@@ -604,6 +614,7 @@ T.Height<T>(double height) → T
 T.HelpText<T>(string text) → T
 T.HierarchyLevel<T>(int level) → T
 T.HorizontalAlignment<T>(HorizontalAlignment alignment) → T
+T.HorizontalContentAlignment<T>(HorizontalAlignment alignment) → T
 T.Immediate<T>() → T
 T.InteractionStates<T>(Func<InteractionStatesBuilder, InteractionStatesBuilder> configure, Curve curve = null) → T
 T.IsDragRegion<T>(bool? isDragRegion = true) → T
@@ -711,6 +722,7 @@ T.Validate<T>(string fieldName, object value, IValidator[] validators) → T
 T.ValidateAsync<T>(string fieldName, IAsyncValidator[] asyncValidators) → T
 T.ValidateAsync<T>(string fieldName, object value, IAsyncValidator[] asyncValidators) → T
 T.VerticalAlignment<T>(VerticalAlignment alignment) → T
+T.VerticalContentAlignment<T>(VerticalAlignment alignment) → T
 T.Width<T>(double width) → T
 T.WithBorder<T>(Brush brush, double thickness = 1) → T
 T.WithBorder<T>(ThemeRef theme, double thickness = 1) → T
@@ -890,6 +902,7 @@ RenderContext.UseEffect<T1>(Action effect, T1 d1) → void
 RenderContext.UseEffect<T1>(Func<Action> effectWithCleanup, T1 d1) → void
 RenderContext.UseElementFocus(FocusState state = FocusState.Programmatic) → ValueTuple<ElementRef, Action>
 RenderContext.UseElementRef<T>() → ElementRef<T>
+RenderContext.UseExternalStore<TSnapshot>(Func<Action, Action> subscribe, Func<TSnapshot> getSnapshot, IEqualityComparer<TSnapshot> comparer = null) → TSnapshot
 RenderContext.UseFilePickerAsync(FilePickerOptions options) → Task<StorageFile>
 RenderContext.UseFocus() → FocusManager
 RenderContext.UseFocusTrap(bool isActive) → FocusTrapHandle
@@ -2085,6 +2098,7 @@ InfiniteResource<T> HookResource { get; }
 RowKey? AnchorKey { get; }
 RowKey? EditingRowKey { get; }
 RowKey? FocusedKey { get; }
+SelectionMode SelectionMode { get; }
 ValidationContext EditValidation { get; }
 bool HasPendingCommits { get; }
 bool HasValidationErrors { get; }
@@ -2155,6 +2169,7 @@ SetFilter(FilterDescriptor filter) → void
 SetFocus(int rowIndex, int colIndex) → void
 SetHookResource(InfiniteResource<T> resource) → void
 SetSearchQuery(string query) → void
+SetSelectionMode(SelectionMode mode) → void
 ShowColumn(string columnName) → void
 ToggleColumnVisibility(string columnName) → void
 ToggleRowExpansion(RowKey key) → void
@@ -2963,6 +2978,7 @@ ElementTheme? RequestedTheme { get; init; }
 FontFamily FontFamily { get; init; }
 FontWeight? FontWeight { get; init; }
 HorizontalAlignment? HorizontalAlignment { get; init; }
+HorizontalAlignment? HorizontalContentAlignment { get; init; }
 LayoutModifiers Layout { get; init; }
 LongPressGestureConfig LongPress { get; init; }
 PanGestureConfig Pan { get; init; }
@@ -2976,6 +2992,7 @@ Vector3? CenterPoint { get; init; }
 Vector3? Scale { get; init; }
 Vector3? Translation { get; init; }
 VerticalAlignment? VerticalAlignment { get; init; }
+VerticalAlignment? VerticalContentAlignment { get; init; }
 VisualModifiers Visual { get; init; }
 XYFocusKeyboardNavigationMode? XYFocusKeyboardNavigation { get; init; }
 bool? IsDragRegion { get; init; }
@@ -4109,10 +4126,12 @@ ToString() → string
 new()
 ElementTheme? RequestedTheme { get; init; }
 HorizontalAlignment? HorizontalAlignment { get; init; }
+HorizontalAlignment? HorizontalContentAlignment { get; init; }
 Thickness? BorderInlineStart { get; init; }
 Thickness? Margin { get; init; }
 Thickness? Padding { get; init; }
 VerticalAlignment? VerticalAlignment { get; init; }
+VerticalAlignment? VerticalContentAlignment { get; init; }
 bool? IsVisible { get; init; }
 double? Height { get; init; }
 double? MarginInlineEnd { get; init; }
@@ -4735,6 +4754,7 @@ ToString() → string
 ### record NavigationViewElement
 new(NavigationViewItemData[] MenuItems, Element Content = null)
 Action OnBackRequested { get; init; }
+Action<bool> OnPaneOpenChanged { get; init; }
 Action<string> OnSelectedTagChanged { get; init; }
 AutoSuggestBoxElement AutoSuggestBox { get; init; }
 Element Content { get; init; }
@@ -5748,6 +5768,7 @@ UseEffect<T1, T2>(Action effect, T1 d1, T2 d2) → void
 UseEffect<T1, T2>(Func<Action> effectWithCleanup, T1 d1, T2 d2) → void
 UseEffect<T1>(Action effect, T1 d1) → void
 UseEffect<T1>(Func<Action> effectWithCleanup, T1 d1) → void
+UseExternalStore<TSnapshot>(Func<Action, Action> subscribe, Func<TSnapshot> getSnapshot, IEqualityComparer<TSnapshot> comparer = null) → TSnapshot
 UseFilePickerAsync(FilePickerOptions options) → Task<StorageFile>
 UseFolderPickerAsync(FolderPickerOptions options) → Task<StorageFolder>
 UseHighContrast() → bool
@@ -7102,6 +7123,9 @@ RegisterCellRenderer<T>(Func<object, Element> renderer) → TypeRegistry
 RegisterFormatter<T>(Func<object, string> formatter) → TypeRegistry
 Resolve(Type type) → TypeMetadata
 ResolveEditor(Type type, EditorTier tier) → Func<object, Action<object>, Element>
+
+### class UIThreadOnlyAttribute
+new()
 
 ### record ValidationAttached
 new(string FieldName, IValidator[] Validators, IAsyncValidator[] AsyncValidators)

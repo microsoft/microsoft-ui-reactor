@@ -211,6 +211,12 @@ public abstract class Component
     protected T UseObservable<T>(T source) where T : global::System.ComponentModel.INotifyPropertyChanged
         => Context.UseObservable(source);
 
+    protected TSnapshot UseExternalStore<TSnapshot>(
+        Func<Action, Action> subscribe,
+        Func<TSnapshot> getSnapshot,
+        IEqualityComparer<TSnapshot>? comparer = null)
+        => Context.UseExternalStore(subscribe, getSnapshot, comparer);
+
     protected TProp UseObservableProperty<T, TProp>(T source, Func<T, TProp> selector, string propertyName)
         where T : global::System.ComponentModel.INotifyPropertyChanged
         => Context.UseObservableProperty(source, selector, propertyName);

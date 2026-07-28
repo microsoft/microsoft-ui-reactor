@@ -15,6 +15,7 @@
 // All reflection lives here, in tooling — never in the shipping Reactor library
 // (which treats trimming/AOT warnings as errors).
 
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Text;
 
@@ -22,8 +23,24 @@ namespace Microsoft.UI.Reactor.ApiIndex;
 
 public static class ApiIndexGenerator
 {
+    // Every entry point below reflects over the whole public surface of the built
+    // Reactor.dll (GetExportedTypes / GetMembers / GetType-by-name) to emit reactor.api.txt.
+    // The tool's entire purpose is to enumerate exactly what the trimmer would remove, so it is
+    // inherently trim-unsafe: under trimming the metadata it reads gets pruned. It is a
+    // build-time-only generator (never shipped); a native NativeAOT publish is possible only via
+    // the opt-in ReactorApiAot proof that roots the whole Reactor assembly — see
+    // Reactor.ApiIndex.csproj / README.md. The requirement is surfaced honestly via
+    // [RequiresUnreferencedCode] rather than silenced, so the IL2*/IL3* analyzer still guards
+    // against *new*, unintended reflection. (No [RequiresDynamicCode]: this is metadata
+    // discovery + reflection-invoke only — no runtime codegen — as the successful rooted AOT
+    // publish confirms.)
+    const string ReflectionJustification =
+        "Reflects over the entire public surface of the built Reactor.dll to emit reactor.api.txt; " +
+        "enumerates exactly what the trimmer would remove. Build-time-only generator — not AOT-published except via the opt-in ReactorApiAot proof.";
+
     // Single source of truth for the index text. Program.cs (the apphost) and the
     // ApiIndexGeneratorTests (in-process, ARM64-safe) both call this.
+    [RequiresUnreferencedCode(ReflectionJustification)]
     public static string Generate(Assembly asm)
     {
         var sb = new StringBuilder();
@@ -51,6 +68,7 @@ public static class ApiIndexGenerator
 
     // -----------------------------------------------------------------------
 
+    [RequiresUnreferencedCode(ReflectionJustification)]
     static void EmitFactories(Assembly asm, StringBuilder sb)
     {
         var factories = asm.GetType("Microsoft.UI.Reactor.Factories");
@@ -72,6 +90,7 @@ public static class ApiIndexGenerator
         sb.AppendLine();
     }
 
+    [RequiresUnreferencedCode(ReflectionJustification)]
     static void EmitModifiers(Assembly asm, StringBuilder sb)
     {
         sb.AppendLine("## Modifiers (extension methods on Element)");
@@ -95,6 +114,7 @@ public static class ApiIndexGenerator
         sb.AppendLine();
     }
 
+    [RequiresUnreferencedCode(ReflectionJustification)]
     static void EmitReferenceBuilders(Assembly asm, StringBuilder sb)
     {
         sb.AppendLine("## Reference builders (custom controls)");
@@ -122,6 +142,7 @@ public static class ApiIndexGenerator
         sb.AppendLine();
     }
 
+    [RequiresUnreferencedCode(ReflectionJustification)]
     static void EmitHooks(Assembly asm, StringBuilder sb)
     {
         sb.AppendLine("## Hooks (RenderContext / Component)");
@@ -157,6 +178,7 @@ public static class ApiIndexGenerator
         sb.AppendLine();
     }
 
+    [RequiresUnreferencedCode(ReflectionJustification)]
     static void EmitTheme(Assembly asm, StringBuilder sb)
     {
         sb.AppendLine("## Theme tokens (Microsoft.UI.Reactor.Core.Theme)");
@@ -197,6 +219,7 @@ public static class ApiIndexGenerator
         sb.AppendLine();
     }
 
+    [RequiresUnreferencedCode(ReflectionJustification)]
     static void EmitEnums(Assembly asm, StringBuilder sb)
     {
         sb.AppendLine("## Enums (public, under Microsoft.UI.Reactor.*)");
@@ -223,6 +246,7 @@ public static class ApiIndexGenerator
     //  zero hits in reactor.api.txt.
     // -----------------------------------------------------------------------
 
+    [RequiresUnreferencedCode(ReflectionJustification)]
     static void EmitPublicTypes(Assembly asm, StringBuilder sb)
     {
         sb.AppendLine("## Public types (ctors / properties / methods / events)");
@@ -324,6 +348,7 @@ public static class ApiIndexGenerator
         return true;
     }
 
+    [RequiresUnreferencedCode(ReflectionJustification)]
     static string KindOf(Type t)
     {
         if (t.IsInterface) return "interface";
@@ -362,6 +387,7 @@ public static class ApiIndexGenerator
     static bool IsObsolete(MemberInfo m) =>
         m.IsDefined(typeof(ObsoleteAttribute), inherit: false);
 
+    [RequiresUnreferencedCode(ReflectionJustification)]
     static bool IsEnumMemberObsolete(Type enumType, string name)
     {
         var field = enumType.GetField(name, BindingFlags.Public | BindingFlags.Static);

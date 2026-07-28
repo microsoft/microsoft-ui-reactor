@@ -56,6 +56,9 @@ public class PublicApiSurfaceGuardTests
     };
 
     [Fact]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only public-API surface guard: enumerates all types in the Reactor assembly (Assembly.GetTypes) by design — the full-surface scan trimming would prune. This host is never trimmed. Behaviour-neutral.")]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2070", Justification = "Test-only public-API surface guard: reflects public static methods of extension-holder types enumerated by the surrounding Assembly.GetTypes scan (which trimming would prune). Intentional and JIT-only (this host is never trimmed); behaviour-neutral.")]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Test-only public-API surface guard: reflects public instance properties of element-record types enumerated by the surrounding Assembly.GetTypes scan (which trimming would prune). Intentional and JIT-only (this host is never trimmed); behaviour-neutral.")]
     public void EveryCallbackPropertyHasMatchingFluent()
     {
         var reactor = typeof(Element).Assembly;

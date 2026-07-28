@@ -13,8 +13,10 @@ non-poolable types, and parent-state corner cases.
 
 ## Renting on mount
 
-Every `MountXxx` handler in `Reconciler.Mount.cs` follows the same
-shape: try the pool first, allocate fresh on miss.
+The standard descriptor-backed control mount path follows the same
+shape: try the pool first, allocate fresh on miss. Composition-primitive
+handlers in `Reconciler.Mount.cs` allocate their structural wrappers
+directly.
 
 ```csharp
 public FrameworkElement? TryRent(Type type)

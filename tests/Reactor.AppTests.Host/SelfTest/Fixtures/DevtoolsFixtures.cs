@@ -2,6 +2,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.AppTests.Host.SelfTest;
 using Microsoft.UI.Reactor.Core;
@@ -72,16 +73,10 @@ internal static class DevtoolsFixtures
             _client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{Server.Port}/") };
         }
 
-        public async Task<JsonElement> CallAsync(string method, object? args = null)
+        public async Task<JsonElement> CallAsync(string method, CallArgs? args = null)
         {
-            var envelope = new
-            {
-                jsonrpc = "2.0",
-                id = 1,
-                method = "tools/call",
-                @params = new { name = method, arguments = args },
-            };
-            var body = JsonSerializer.Serialize(envelope, DevtoolsMcpServer.JsonOpts);
+            var envelope = new McpCallEnvelope("2.0", 1, "tools/call", new McpCallParams(method, args));
+            var body = JsonSerializer.Serialize(envelope, DevtoolsFixtureJsonContext.Default.McpCallEnvelope);
             var req = new HttpRequestMessage(HttpMethod.Post, "mcp")
             {
                 Content = new StringContent(body, Encoding.UTF8),
@@ -221,7 +216,7 @@ internal static class DevtoolsFixtures
             await Harness.Render();
 
             using var mcp = new McpHarness(H.Window, () => root, nameof(DevtoolsFixtureRoot));
-            var resp = await mcp.CallAsync("tree", new { });
+            var resp = await mcp.CallAsync("tree", new CallArgs());
             var result = Result(resp) ?? throw new Exception("missing result");
 
             H.Check("Devtools_Tree_SchemaPinned",
@@ -250,7 +245,7 @@ internal static class DevtoolsFixtures
             await Harness.Render();
 
             using var mcp = new McpHarness(H.Window, () => root, nameof(DevtoolsFixtureRoot));
-            var resp = await mcp.CallAsync("tree", new { view = "full" });
+            var resp = await mcp.CallAsync("tree", new CallArgs { View = "full" });
             var result = Result(resp) ?? throw new Exception("missing result");
 
             var nodes = result.GetProperty("nodes").EnumerateArray().ToArray();
@@ -273,7 +268,7 @@ internal static class DevtoolsFixtures
             await Harness.Render();
 
             using var mcp = new McpHarness(H.Window, () => root, nameof(DevtoolsFixtureRoot));
-            var resp = await mcp.CallAsync("tree", new { selector = "#btn-increment" });
+            var resp = await mcp.CallAsync("tree", new CallArgs { Selector = "#btn-increment" });
             var result = Result(resp) ?? throw new Exception("missing result");
 
             var nodes = result.GetProperty("nodes").EnumerateArray().ToArray();
@@ -294,7 +289,7 @@ internal static class DevtoolsFixtures
             H.Check("Devtools_Click_InitialCount", H.FindText("count:0") is not null);
 
             using var mcp = new McpHarness(H.Window, () => root, nameof(DevtoolsFixtureRoot));
-            var resp = await mcp.CallAsync("click", new { selector = "#btn-increment" });
+            var resp = await mcp.CallAsync("click", new CallArgs { Selector = "#btn-increment" });
             var result = Result(resp) ?? throw new Exception("missing result");
 
             H.Check("Devtools_Click_ViaInvoke",
@@ -313,7 +308,7 @@ internal static class DevtoolsFixtures
             await Harness.Render();
 
             using var mcp = new McpHarness(H.Window, () => root, nameof(DevtoolsFixtureRoot));
-            var resp = await mcp.CallAsync("type", new { selector = "#txt-input", text = "hello", clear = true });
+            var resp = await mcp.CallAsync("type", new CallArgs { Selector = "#txt-input", Text = "hello", Clear = true });
             var result = Result(resp) ?? throw new Exception("missing result");
 
             H.Check("Devtools_Type_Ok", result.GetProperty("ok").GetBoolean());
@@ -323,7 +318,7 @@ internal static class DevtoolsFixtures
             H.Check("Devtools_Type_TextApplied", tb is not null && tb.Text == "hello");
 
             // Append (clear false) should concatenate.
-            await mcp.CallAsync("type", new { selector = "#txt-input", text = "-world" });
+            await mcp.CallAsync("type", new CallArgs { Selector = "#txt-input", Text = "-world" });
             await Harness.Render();
             tb = H.FindControl<TextBox>(x => AutomationProperties.GetAutomationId(x) == "txt-input");
             H.Check("Devtools_Type_Appends", tb is not null && tb.Text == "hello-world");
@@ -338,7 +333,7 @@ internal static class DevtoolsFixtures
             await Harness.Render();
 
             using var mcp = new McpHarness(H.Window, () => root, nameof(DevtoolsFixtureRoot));
-            var resp = await mcp.CallAsync("focus", new { selector = "#btn-increment" });
+            var resp = await mcp.CallAsync("focus", new CallArgs { Selector = "#btn-increment" });
             var result = Result(resp) ?? throw new Exception("missing result");
 
             // WinUI may decline focus if the control isn't yet visible to the
@@ -359,16 +354,12 @@ internal static class DevtoolsFixtures
             using var mcp = new McpHarness(H.Window, () => root, nameof(DevtoolsFixtureRoot));
 
             // Click the delayed button; it bumps count by 10 after ~120ms.
-            _ = await mcp.CallAsync("click", new { selector = "#btn-delayed" });
+            _ = await mcp.CallAsync("click", new CallArgs { Selector = "#btn-delayed" });
 
-            var resp = await mcp.CallAsync("waitFor", new
+            var resp = await mcp.CallAsync("waitFor", new CallArgs
             {
-                predicate = new
-                {
-                    selector = "#count-label",
-                    textEquals = "count:10",
-                },
-                timeoutMs = 2000,
+                Predicate = new WaitPredicate("#count-label", "count:10"),
+                TimeoutMs = 2000,
             });
             var result = Result(resp) ?? throw new Exception("missing result");
 
@@ -388,14 +379,10 @@ internal static class DevtoolsFixtures
 
             using var mcp = new McpHarness(H.Window, () => root, nameof(DevtoolsFixtureRoot));
             // Predicate can never become true (count starts at 0, no mutation scheduled).
-            var resp = await mcp.CallAsync("waitFor", new
+            var resp = await mcp.CallAsync("waitFor", new CallArgs
             {
-                predicate = new
-                {
-                    selector = "#count-label",
-                    textEquals = "count:999",
-                },
-                timeoutMs = 150,
+                Predicate = new WaitPredicate("#count-label", "count:999"),
+                TimeoutMs = 150,
             });
             var result = Result(resp) ?? throw new Exception("missing result");
 
@@ -414,7 +401,7 @@ internal static class DevtoolsFixtures
             await Harness.Render();
 
             using var mcp = new McpHarness(H.Window, () => root, nameof(DevtoolsFixtureRoot));
-            var resp = await mcp.CallAsync("toggle", new { selector = "#chk-accept" });
+            var resp = await mcp.CallAsync("toggle", new CallArgs { Selector = "#chk-accept" });
             var result = Result(resp) ?? throw new Exception("missing result");
 
             H.Check("Devtools_Toggle_Ok", result.GetProperty("ok").GetBoolean());
@@ -422,7 +409,7 @@ internal static class DevtoolsFixtures
                 result.GetProperty("state").GetString() == "on");
 
             // Second toggle flips back off.
-            resp = await mcp.CallAsync("toggle", new { selector = "#chk-accept" });
+            resp = await mcp.CallAsync("toggle", new CallArgs { Selector = "#chk-accept" });
             result = Result(resp) ?? throw new Exception("missing result");
             H.Check("Devtools_Toggle_StateOff",
                 result.GetProperty("state").GetString() == "off");
@@ -437,7 +424,7 @@ internal static class DevtoolsFixtures
             await Harness.Render();
 
             using var mcp = new McpHarness(H.Window, () => root, nameof(DevtoolsFixtureRoot));
-            var resp = await mcp.CallAsync("invoke", new { selector = "#btn-increment" });
+            var resp = await mcp.CallAsync("invoke", new CallArgs { Selector = "#btn-increment" });
             var result = Result(resp) ?? throw new Exception("missing result");
 
             H.Check("Devtools_Invoke_Ok", result.GetProperty("ok").GetBoolean());
@@ -445,7 +432,7 @@ internal static class DevtoolsFixtures
             H.Check("Devtools_Invoke_HandlerFired", H.FindText("count:1") is not null);
 
             // Calling invoke on a non-invokable element (the textbox) returns a structured error.
-            resp = await mcp.CallAsync("invoke", new { selector = "#txt-input" });
+            resp = await mcp.CallAsync("invoke", new CallArgs { Selector = "#txt-input" });
             var err = Error(resp) ?? throw new Exception("expected error envelope");
             H.Check("Devtools_Invoke_NoPatternError",
                 err.TryGetProperty("data", out var data) &&
@@ -477,7 +464,7 @@ internal static class DevtoolsFixtures
                 firstHook.GetProperty("value").GetInt32() == 0);
 
             // Mutate via click, re-read, observe new value.
-            _ = await mcp.CallAsync("click", new { selector = "#btn-increment" });
+            _ = await mcp.CallAsync("click", new CallArgs { Selector = "#btn-increment" });
             await Harness.Render();
             resp = await mcp.CallAsync("state");
             result = Result(resp) ?? throw new Exception("missing result");
@@ -495,7 +482,7 @@ internal static class DevtoolsFixtures
             await Harness.Render();
 
             using var mcp = new McpHarness(H.Window, () => root, nameof(DevtoolsFixtureRoot));
-            var resp = await mcp.CallAsync("screenshot", new { });
+            var resp = await mcp.CallAsync("screenshot", new CallArgs());
             var result = Result(resp);
             if (result is null)
             {
@@ -556,10 +543,10 @@ internal static class DevtoolsFixtures
             await Harness.Render(50);
 
             using var mcp = new McpHarness(H.Window, () => root, nameof(ScrollAndSelectRoot));
-            var resp = await mcp.CallAsync("select", new
+            var resp = await mcp.CallAsync("select", new CallArgs
             {
-                selector = "#lv-items",
-                itemSelector = "#item-beta",
+                Selector = "#lv-items",
+                ItemSelector = "#item-beta",
             });
             var result = Result(resp) ?? throw new Exception("missing result");
 
@@ -586,10 +573,10 @@ internal static class DevtoolsFixtures
             // "to" path — should scroll a far row into view. The selftest window
             // may be sized such that all rows already fit; in that case the
             // ScrollItem call is a no-op but still returns ok.
-            var resp = await mcp.CallAsync("scroll", new
+            var resp = await mcp.CallAsync("scroll", new CallArgs
             {
-                selector = "#sv-items",
-                to = "#row-40",
+                Selector = "#sv-items",
+                To = "#row-40",
             });
             var result = Result(resp);
             // Some hosts expose ScrollItem only when the container actually
@@ -610,10 +597,10 @@ internal static class DevtoolsFixtures
 
             // "by" path — shift vertical by some percent. Again the container
             // may not be scrollable in this layout; accept no-pattern.
-            resp = await mcp.CallAsync("scroll", new
+            resp = await mcp.CallAsync("scroll", new CallArgs
             {
-                selector = "#sv-items",
-                by = new { horizontal = 0.0, vertical = 10.0 },
+                Selector = "#sv-items",
+                By = new ScrollByArg(0.0, 10.0),
             });
             result = Result(resp);
             if (result is not null)
@@ -718,7 +705,7 @@ internal static class DevtoolsFixtures
             await Harness.Render();
 
             using var mcp = new McpHarness(H.Window, () => root, nameof(DevtoolsFixtureRoot));
-            var resp = await mcp.CallAsync("click", new { selector = "#does-not-exist" });
+            var resp = await mcp.CallAsync("click", new CallArgs { Selector = "#does-not-exist" });
             var err = Error(resp) ?? throw new Exception("expected error envelope");
 
             H.Check("Devtools_Error_HasCode",
@@ -744,7 +731,7 @@ internal static class DevtoolsFixtures
             await Harness.Render();
 
             using var mcp = new McpHarness(H.Window, () => root, nameof(DevtoolsFixtureRoot));
-            var resp = await mcp.CallAsync("click", new { selector = "[name='Increment']" });
+            var resp = await mcp.CallAsync("click", new CallArgs { Selector = "[name='Increment']" });
             var result = Result(resp) ?? throw new Exception("expected result; got " + resp);
 
             H.Check("Devtools_NameSelector_ClickOk", result.GetProperty("ok").GetBoolean());
@@ -786,7 +773,7 @@ internal static class DevtoolsFixtures
             await Harness.Render();
 
             using var mcp = new McpHarness(H.Window, () => root, nameof(TwoTextBoxesRoot));
-            var resp = await mcp.CallAsync("tree", new { });
+            var resp = await mcp.CallAsync("tree", new CallArgs());
             var result = Result(resp) ?? throw new Exception("missing result");
 
             var ids = result.GetProperty("nodes").EnumerateArray()
@@ -813,10 +800,10 @@ internal static class DevtoolsFixtures
             await Harness.Render();
 
             using var mcp = new McpHarness(H.Window, () => root, nameof(DevtoolsFixtureRoot));
-            var resp = await mcp.CallAsync("fire", new
+            var resp = await mcp.CallAsync("fire", new CallArgs
             {
-                component = nameof(DevtoolsFixtureRoot),
-                @event = "Render",
+                Component = nameof(DevtoolsFixtureRoot),
+                Event = "Render",
             });
             var err = Error(resp) ?? throw new Exception("expected error envelope");
             H.Check("Devtools_Fire_BlocksRender",
@@ -846,10 +833,10 @@ internal static class DevtoolsFixtures
             using var logger = new DevtoolsLogger(tempDir, pid: Environment.ProcessId, DevtoolsLogLevel.Call);
             using var mcp = new McpHarness(H.Window, () => root, nameof(DevtoolsFixtureRoot), logger: logger);
 
-            var resp = await mcp.CallAsync("waitFor", new
+            var resp = await mcp.CallAsync("waitFor", new CallArgs
             {
-                predicate = new { selector = "#count-label", textEquals = "count:999" },
-                timeoutMs = 120,
+                Predicate = new WaitPredicate("#count-label", "count:999"),
+                TimeoutMs = 120,
             });
             var result = Result(resp) ?? throw new Exception("missing result");
             H.Check("Devtools_WaitForLog_ReturnsSoftFail", !result.GetProperty("ok").GetBoolean());
@@ -912,18 +899,18 @@ internal static class DevtoolsFixtures
                 switchComponent: DoSwitch);
 
             // First walk: populate the registry with ids for the initial tree.
-            var firstTree = await mcp.CallAsync("tree", new { });
+            var firstTree = await mcp.CallAsync("tree", new CallArgs());
             var firstNodes = Result(firstTree)!.Value.GetProperty("nodes").EnumerateArray().ToArray();
             H.Check("Devtools_SwitchIds_FirstTreeNonEmpty", firstNodes.Length > 0);
             var firstId = firstNodes[0].GetProperty("id").GetString()!;
 
             // Swap component.
-            var switchResp = await mcp.CallAsync("switchComponent", new { name = nameof(AltRoot) });
+            var switchResp = await mcp.CallAsync("switchComponent", new CallArgs { Name = nameof(AltRoot) });
             H.Check("Devtools_SwitchIds_SwitchOk", Result(switchResp)!.Value.GetProperty("ok").GetBoolean());
             await Harness.Render();
 
             // Old id should now resolve as "gone", not silently reach a live element.
-            var staleResp = await mcp.CallAsync("click", new { selector = firstId });
+            var staleResp = await mcp.CallAsync("click", new CallArgs { Selector = firstId });
             var err = Error(staleResp) ?? throw new Exception("expected error envelope after invalidation");
             H.Check("Devtools_SwitchIds_OldIdGone",
                 err.TryGetProperty("data", out var data) &&
@@ -973,10 +960,10 @@ internal static class DevtoolsFixtures
             await Harness.Render();
 
             using var mcp = new McpHarness(H.Window, () => root, nameof(FireFixtureRoot));
-            var resp = await mcp.CallAsync("fire", new
+            var resp = await mcp.CallAsync("fire", new CallArgs
             {
-                component = nameof(FireFixtureRoot),
-                @event = "BumpCount",
+                Component = nameof(FireFixtureRoot),
+                Event = "BumpCount",
             });
             var result = Result(resp) ?? throw new Exception("missing result; got " + resp);
 
@@ -992,10 +979,10 @@ internal static class DevtoolsFixtures
             // Unknown event name on the root component returns a structured
             // error (code: unknown-event). Covered in unit tests too but worth
             // pinning in the self-host path so serialization round-trips.
-            var errResp = await mcp.CallAsync("fire", new
+            var errResp = await mcp.CallAsync("fire", new CallArgs
             {
-                component = nameof(FireFixtureRoot),
-                @event = "NoSuchHandler",
+                Component = nameof(FireFixtureRoot),
+                Event = "NoSuchHandler",
             });
             var err = Error(errResp) ?? throw new Exception("expected error envelope");
             H.Check("Devtools_Fire_UnknownEvent",
@@ -1079,19 +1066,19 @@ internal static class DevtoolsFixtures
 
             using var mcp = new McpHarness(H.Window, () => null, nameof(PropertyToolsRoot));
 
-            var allProps = Result(await mcp.CallAsync("properties", new { selector = "#prop-button" }))
+            var allProps = Result(await mcp.CallAsync("properties", new CallArgs { Selector = "#prop-button" }))
                 ?? throw new Exception("missing properties result");
             H.Check("Devtools_Props_Enumerates",
                 allProps.GetProperty("count").GetInt32() >= 0
                 && allProps.GetProperty("properties").ValueKind == JsonValueKind.Array);
 
-            var attachedPropResp = await mcp.CallAsync("properties", new { selector = "#prop-button", name = "Grid.Row" });
+            var attachedPropResp = await mcp.CallAsync("properties", new CallArgs { Selector = "#prop-button", Name = "Grid.Row" });
             H.Check("Devtools_Props_ReadAttached",
                 Result(attachedPropResp) is { } attachedProp
                     ? attachedProp.GetProperty("name").GetString() == "Grid.Row"
                     : Error(attachedPropResp) is not null);
 
-            var setAttachedResp = await mcp.CallAsync("setProperty", new { selector = "#prop-button", name = "Grid.Row", value = "2" });
+            var setAttachedResp = await mcp.CallAsync("setProperty", new CallArgs { Selector = "#prop-button", Name = "Grid.Row", Value = "2" });
             H.Check("Devtools_SetProp_Attached",
                 Result(setAttachedResp) is { } setAttached
                     ? setAttached.GetProperty("ok").GetBoolean()
@@ -1099,7 +1086,7 @@ internal static class DevtoolsFixtures
 
             H.Check("Devtools_PropButton_Found", button is not null);
 
-            var resources = Result(await mcp.CallAsync("resources", new { selector = "#prop-button", scope = "element", filter = "Devtools" }))
+            var resources = Result(await mcp.CallAsync("resources", new CallArgs { Selector = "#prop-button", Scope = "element", Filter = "Devtools" }))
                 ?? throw new Exception("missing resources result");
             var resourceKeys = resources.GetProperty("resources").EnumerateArray()
                 .Select(r => r.GetProperty("key").GetString())
@@ -1109,31 +1096,31 @@ internal static class DevtoolsFixtures
                 && resourceKeys.Contains("DevtoolsMergedThickness")
                 && resourceKeys.Contains("DevtoolsThemeCorner"));
 
-            var setElementResource = Result(await mcp.CallAsync("setResource", new
+            var setElementResource = Result(await mcp.CallAsync("setResource", new CallArgs
             {
-                selector = "#prop-button",
-                scope = "element",
-                key = "DevtoolsSetElementThickness",
-                value = "6,7",
+                Selector = "#prop-button",
+                Scope = "element",
+                Key = "DevtoolsSetElementThickness",
+                Value = "6,7",
             })) ?? throw new Exception("missing setResource element result");
             H.Check("Devtools_SetResource_Element", setElementResource.GetProperty("ok").GetBoolean());
 
-            var setWindowResource = Result(await mcp.CallAsync("setResource", new
+            var setWindowResource = Result(await mcp.CallAsync("setResource", new CallArgs
             {
-                selector = "#prop-button",
-                scope = "window",
-                key = "DevtoolsSetWindowBrush",
-                value = "#11223344",
+                Selector = "#prop-button",
+                Scope = "window",
+                Key = "DevtoolsSetWindowBrush",
+                Value = "#11223344",
             })) ?? throw new Exception("missing setResource window result");
             H.Check("Devtools_SetResource_Window", setWindowResource.GetProperty("ok").GetBoolean());
 
             var appKey = "DevtoolsSetAppResource_" + Guid.NewGuid().ToString("N");
-            var setAppResourceResp = await mcp.CallAsync("setResource", new
+            var setAppResourceResp = await mcp.CallAsync("setResource", new CallArgs
             {
-                scope = "application",
-                key = appKey,
-                value = "app-value",
-                confirmAppWide = true,
+                Scope = "application",
+                Key = appKey,
+                Value = "app-value",
+                ConfirmAppWide = true,
             });
             H.Check("Devtools_SetResource_App",
                 Result(setAppResourceResp) is { } setAppResource
@@ -1141,7 +1128,7 @@ internal static class DevtoolsFixtures
                     : Error(setAppResourceResp) is not null);
             Application.Current.Resources.Remove(appKey);
 
-            var styles = Result(await mcp.CallAsync("styles", new { selector = "#prop-button" }))
+            var styles = Result(await mcp.CallAsync("styles", new CallArgs { Selector = "#prop-button" }))
                 ?? throw new Exception("missing styles result");
             H.Check("Devtools_Styles_DescribesSetters",
                 styles.GetProperty("hasStyle").GetBoolean()
@@ -1149,7 +1136,7 @@ internal static class DevtoolsFixtures
                 && styles.GetProperty("style").TryGetProperty("basedOn", out var basedOn)
                 && basedOn.ValueKind == JsonValueKind.Object);
 
-            var ancestors = Result(await mcp.CallAsync("ancestors", new { selector = "#prop-button" }))
+            var ancestors = Result(await mcp.CallAsync("ancestors", new CallArgs { Selector = "#prop-button" }))
                 ?? throw new Exception("missing ancestors result");
             H.Check("Devtools_Ancestors_WalksTree",
                 ancestors.GetProperty("count").GetInt32() > 0
@@ -1242,7 +1229,7 @@ internal static class DevtoolsFixtures
             {
                 ["ReflectTheme"] = new CornerRadius(4),
             });
-            var resources = new List<object>();
+            var resources = new List<ResourceEntry>();
             Invoke(
                 "CollectResources",
                 dict,
@@ -1284,19 +1271,12 @@ internal static class DevtoolsFixtures
 
             using var mcp = new McpHarness(H.Window, () => root, nameof(DevtoolsFixtureRoot));
 
-            var envelope = new
-            {
-                jsonrpc = "2.0",
-                id = 1,
-                method = "initialize",
-                @params = new
-                {
-                    protocolVersion = "2024-11-05",
-                    capabilities = new { },
-                    clientInfo = new { name = "reactor-selftest", version = "1.0" },
-                },
-            };
-            var body = JsonSerializer.Serialize(envelope, DevtoolsMcpServer.JsonOpts);
+            var envelope = new McpInitializeEnvelope("2.0", 1, "initialize",
+                new McpInitializeParams(
+                    "2024-11-05",
+                    new McpEmptyObject(),
+                    new McpClientInfo("reactor-selftest", "1.0")));
+            var body = JsonSerializer.Serialize(envelope, DevtoolsFixtureJsonContext.Default.McpInitializeEnvelope);
             using var client = new HttpClient { BaseAddress = new Uri($"http://127.0.0.1:{mcp.Server.Port}/") };
             using var req = new HttpRequestMessage(HttpMethod.Post, "mcp")
             { Content = new StringContent(body, Encoding.UTF8, "application/json") };
@@ -1330,8 +1310,12 @@ internal static class DevtoolsFixtures
                 H.Window,
                 projectIdentifier: projectId);
             server.Tools.Register(
-                new McpToolDescriptor("selftest.echo", "Echoes a value", new { type = "object" }),
-                args => new { ok = true, value = args is { } a && a.TryGetProperty("value", out var value) ? value.GetString() : null });
+                new McpToolDescriptor("selftest.echo", "Echoes a value", new SchemaNode("object")),
+                args => new global::System.Text.Json.Nodes.JsonObject
+                {
+                    ["ok"] = true,
+                    ["value"] = args is { } a && a.TryGetProperty("value", out var value) ? value.GetString() : null,
+                });
             server.Start();
             server.AnnounceReady();
 
@@ -1393,16 +1377,13 @@ internal static class DevtoolsFixtures
             using var large = await client.SendAsync(largeReq);
             H.Check("Devtools_McpLarge413", large.StatusCode == global::System.Net.HttpStatusCode.RequestEntityTooLarge);
 
-            var envelope = new
-            {
-                jsonrpc = "2.0",
-                id = 1,
-                method = "tools/call",
-                @params = new { name = "selftest.echo", arguments = new { value = "pong" } },
-            };
+            var envelope = new McpCallEnvelope("2.0", 1, "tools/call",
+                new McpCallParams("selftest.echo", new CallArgs { Value = "pong" }));
             using var validReq = new HttpRequestMessage(HttpMethod.Post, "mcp")
             {
-                Content = new StringContent(JsonSerializer.Serialize(envelope, DevtoolsMcpServer.JsonOpts), Encoding.UTF8, "application/json"),
+                Content = new StringContent(
+                    JsonSerializer.Serialize(envelope, DevtoolsFixtureJsonContext.Default.McpCallEnvelope),
+                    Encoding.UTF8, "application/json"),
             };
             validReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", server.AuthToken);
             using var valid = await client.SendAsync(validReq);
@@ -1436,3 +1417,61 @@ internal static class DevtoolsFixtures
         }
     }
 }
+
+// JSON-RPC request + tool-argument types for McpHarness.CallAsync. Named (not
+// anonymous) so serialization goes through the System.Text.Json source generator
+// and stays NativeAOT/trim-safe. CamelCase + WhenWritingNull match the previous
+// DevtoolsMcpServer.JsonOpts serialization byte-for-byte.
+internal sealed record McpCallEnvelope(string Jsonrpc, int Id, string Method, McpCallParams Params);
+
+internal sealed record McpCallParams(string Name, CallArgs? Arguments);
+
+/// <summary>
+/// The union of every argument any devtools tool call in these fixtures sends.
+/// All members are nullable and omitted when null, so each call site sets only
+/// the fields the tool it targets needs — the source-generated equivalent of the
+/// previous per-call anonymous <c>arguments</c> objects.
+/// </summary>
+internal sealed record CallArgs
+{
+    public string? Selector { get; init; }
+    public string? ItemSelector { get; init; }
+    public string? Text { get; init; }
+    public bool? Clear { get; init; }
+    public string? View { get; init; }
+    public string? Name { get; init; }
+    public string? Value { get; init; }
+    public string? Scope { get; init; }
+    public string? Filter { get; init; }
+    public string? Key { get; init; }
+    public bool? ConfirmAppWide { get; init; }
+    public string? To { get; init; }
+    public ScrollByArg? By { get; init; }
+    public string? Component { get; init; }
+    public string? Event { get; init; }
+    public WaitPredicate? Predicate { get; init; }
+    public int? TimeoutMs { get; init; }
+}
+
+/// <summary>Relative scroll delta for the <c>scroll</c> tool's <c>by</c> argument.</summary>
+internal sealed record ScrollByArg(double Horizontal, double Vertical);
+
+/// <summary>Predicate for the <c>waitFor</c> tool: wait until <c>Selector</c>'s text equals <c>TextEquals</c>.</summary>
+internal sealed record WaitPredicate(string Selector, string TextEquals);
+
+/// <summary>The <c>initialize</c> JSON-RPC request the standard-MCP-handshake fixture sends.</summary>
+internal sealed record McpInitializeEnvelope(string Jsonrpc, int Id, string Method, McpInitializeParams Params);
+
+internal sealed record McpInitializeParams(string ProtocolVersion, McpEmptyObject Capabilities, McpClientInfo ClientInfo);
+
+internal sealed record McpClientInfo(string Name, string Version);
+
+/// <summary>An empty JSON object (<c>{}</c>) — e.g. <c>capabilities</c>.</summary>
+internal sealed record McpEmptyObject;
+
+[JsonSourceGenerationOptions(
+    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+[JsonSerializable(typeof(McpCallEnvelope))]
+[JsonSerializable(typeof(McpInitializeEnvelope))]
+internal partial class DevtoolsFixtureJsonContext : JsonSerializerContext;

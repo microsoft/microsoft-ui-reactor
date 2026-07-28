@@ -52,34 +52,37 @@ setter detects the off-thread call and queues itself back onto the
 captured dispatcher:
 
 ```csharp
-void Setter(T newValue)
+private Action<T> MakeStateSetter<T>(ValueHookState<T> h)
 {
-    var h = (ValueHookState<T>)_hooks[currentIndex];
-    bool changed;
-    if (h.ThreadSafe)
+    void Setter(T newValue)
     {
-        lock (h.Lock)
+        bool changed;
+        if (h.ThreadSafe)
         {
+            lock (h.Lock!)
+            {
+                changed = !EqualityComparer<T>.Default.Equals(h.Value, newValue);
+                if (changed) h.Value = newValue;
+            }
+            if (Diagnostics.ReactorEventSource.Log.IsEnabled(
+                    global::System.Diagnostics.Tracing.EventLevel.Verbose,
+                    Diagnostics.ReactorEventSource.Keywords.State))
+                Diagnostics.ReactorEventSource.Log.StateChange("UseState", typeof(T).Name, changed);
+            if (changed) _requestRerender?.Invoke();
+        }
+        else
+        {
+            if (MarshalIfOffUIThread("UseState", () => Setter(newValue))) return;
             changed = !EqualityComparer<T>.Default.Equals(h.Value, newValue);
             if (changed) h.Value = newValue;
+            if (Diagnostics.ReactorEventSource.Log.IsEnabled(
+                    global::System.Diagnostics.Tracing.EventLevel.Verbose,
+                    Diagnostics.ReactorEventSource.Keywords.State))
+                Diagnostics.ReactorEventSource.Log.StateChange("UseState", typeof(T).Name, changed);
+            if (changed) _requestRerender?.Invoke();
         }
-        if (Diagnostics.ReactorEventSource.Log.IsEnabled(
-                global::System.Diagnostics.Tracing.EventLevel.Verbose,
-                Diagnostics.ReactorEventSource.Keywords.State))
-            Diagnostics.ReactorEventSource.Log.StateChange("UseState", typeof(T).Name, changed);
-        if (changed) _requestRerender?.Invoke();
     }
-    else
-    {
-        if (MarshalIfOffUIThread("UseState", () => Setter(newValue))) return;
-        changed = !EqualityComparer<T>.Default.Equals(h.Value, newValue);
-        if (changed) h.Value = newValue;
-        if (Diagnostics.ReactorEventSource.Log.IsEnabled(
-                global::System.Diagnostics.Tracing.EventLevel.Verbose,
-                Diagnostics.ReactorEventSource.Keywords.State))
-            Diagnostics.ReactorEventSource.Log.StateChange("UseState", typeof(T).Name, changed);
-        if (changed) _requestRerender?.Invoke();
-    }
+    return Setter;
 }
 ```
 

@@ -148,6 +148,7 @@ public class NamingAlignmentGuardTests
         return text.Length > 0;
     }
 
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("SingleFile", "IL3000", Justification = "Test-only: reads Reactor.dll's on-disk Location to locate the doc-XML emitted alongside it — the assertion below already fails loudly on an empty path. IL3000 only affects single-file publish; this host is not single-file-published. Behaviour-neutral.")]
     private static XDocument LoadDocXml()
     {
         // The doc XML is emitted alongside Reactor.dll by GenerateDocumentationFile.

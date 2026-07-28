@@ -29,6 +29,7 @@ public sealed class TaskbarProgress
     }
 
     /// <summary>Last-applied progress state. (spec 036 §11.1)</summary>
+    [UIThreadOnly]
     public TaskbarProgressState State
     {
         get => _state;
@@ -46,6 +47,7 @@ public sealed class TaskbarProgress
     /// or <see cref="TaskbarProgressState.None"/>. Out-of-range values throw
     /// <see cref="ArgumentOutOfRangeException"/>.
     /// </summary>
+    [UIThreadOnly]
     public double Value
     {
         get => _value;
@@ -69,6 +71,7 @@ public sealed class TaskbarProgress
     }
 
     /// <summary>Shorthand for <c>State = None</c> + <c>Value = 0</c>.</summary>
+    [UIThreadOnly]
     public void Clear()
     {
         ThreadAffinity.ThrowIfNotOnUIThread(nameof(Clear));

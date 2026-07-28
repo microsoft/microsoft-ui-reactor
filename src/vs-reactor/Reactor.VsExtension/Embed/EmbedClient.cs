@@ -270,7 +270,9 @@ namespace Microsoft.UI.Reactor.VsExtension.Embed
 
         private async Task<HttpResponseMessage> PostJsonAsync(string relativeUri, object payload, CancellationToken ct)
         {
+#pragma warning disable VSTHRD103 // JsonSerializer.Serialize is CPU-bound and returns a string; SerializeAsync only targets streams, so awaiting it here would be a pessimization.
             var json = JsonSerializer.Serialize(payload, JsonOptions);
+#pragma warning restore VSTHRD103
             using (var content = new StringContent(json, Encoding.UTF8, "application/json"))
             {
                 return await _http.PostAsync(relativeUri, content, ct).ConfigureAwait(false);

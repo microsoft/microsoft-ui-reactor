@@ -26,7 +26,7 @@ This project has adopted the [Microsoft Open Source Code of Conduct](https://ope
 - Windows App SDK 2.0 — restored automatically from NuGet, no manual install required
 - Visual Studio 2022 (17.8+) or VS Code with C# Dev Kit
 
-> **Package version:** All projects reference `Microsoft.WindowsAppSDK` **2.0.1** (public NuGet). The version is centralized in `Directory.Build.props` — update it there to change the version for every project at once.
+> **Windows App SDK packages:** The right package is injected centrally by `Directory.Build.targets` based on each project's shape: framework-dependent **libraries** (including the shipped `Microsoft.UI.Reactor`) reference the lean `Microsoft.WindowsAppSDK.WinUI` sub-package; framework-dependent **apps** additionally reference `Microsoft.WindowsAppSDK.Runtime`; **self-contained / MSIX** projects keep the full `Microsoft.WindowsAppSDK` metapackage (it bundles the runtime + DWriteCore redist). The metapackage's AI/ML/Widgets/DWrite slices are otherwise unused. Versions are pinned in `Directory.Build.props` (`WindowsAppSDKWinUIVersion` and `WindowsAppSDKVersion`) — update them there to change the version for every project at once.
 
 > **Clone to a short path (Windows):** Clone into a short root directory such as
 > `C:\src\` (for example `C:\src\microsoft-ui-reactor`) rather than a deeply
@@ -142,7 +142,7 @@ tests/
   stress_perf/                    Performance benchmarks
 samples/
   Reactor.TestApp/                Interactive control showcase / demo app
-  apps/                           Sample apps (wordpuzzle, ductfiles, regedit, etc.)
+  apps/                           Sample apps (wordpuzzle, regedit, minesweeper, chat, netpulse, etc.)
   TodoApp/                        Todo app sample
 ```
 

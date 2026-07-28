@@ -46,13 +46,10 @@ internal static class DevtoolsUiaTools
             new McpToolDescriptor(
                 Name: "invoke",
                 Description: "Calls IInvokeProvider.Invoke directly; errors if the element does not expose the pattern.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new { selector = new { type = "string" }, window = new { type = "string" } },
-                    required = new[] { "selector" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "selector" },
+                    ("selector", Schema.Str()),
+                    ("window", Schema.Str()))),
             @params => server.OnDispatcher(() =>
             {
                 var el = resolver.Resolve(RequiredString(@params, "selector"), DevtoolsTools.ReadString(@params, "window"));
@@ -60,12 +57,12 @@ internal static class DevtoolsUiaTools
                 if (peer?.GetPattern(PatternInterface.Invoke) is IInvokeProvider invoke)
                 {
                     invoke.Invoke();
-                    return new { ok = true };
+                    return new OkResult(Ok: true);
                 }
                 throw new McpToolException(
                     "Element does not expose the Invoke pattern.",
                     JsonRpcErrorCodes.ToolExecution,
-                    new { code = "no-pattern", pattern = "Invoke" });
+                    new McpErrorData("no-pattern", Pattern: "Invoke"));
             }));
     }
 
@@ -75,13 +72,10 @@ internal static class DevtoolsUiaTools
             new McpToolDescriptor(
                 Name: "toggle",
                 Description: "Calls IToggleProvider.Toggle; returns the resulting state.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new { selector = new { type = "string" }, window = new { type = "string" } },
-                    required = new[] { "selector" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "selector" },
+                    ("selector", Schema.Str()),
+                    ("window", Schema.Str()))),
             @params => server.OnDispatcher(() =>
             {
                 var el = resolver.Resolve(RequiredString(@params, "selector"), DevtoolsTools.ReadString(@params, "window"));
@@ -95,12 +89,12 @@ internal static class DevtoolsUiaTools
                         global::Microsoft.UI.Xaml.Automation.ToggleState.Off => "off",
                         _ => "indeterminate",
                     };
-                    return new { ok = true, state };
+                    return new OkStateResult(Ok: true, State: state);
                 }
                 throw new McpToolException(
                     "Element does not expose the Toggle pattern.",
                     JsonRpcErrorCodes.ToolExecution,
-                    new { code = "no-pattern", pattern = "Toggle" });
+                    new McpErrorData("no-pattern", Pattern: "Toggle"));
             }));
     }
 
@@ -113,18 +107,11 @@ internal static class DevtoolsUiaTools
                     "Calls ISelectionItemProvider.Select on the item matched by itemSelector. When the container is " +
                     "a closed ComboBox (or other ExpandCollapse surface), it is expanded automatically before the " +
                     "item is resolved so the popup's items materialize.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        selector = new { type = "string", description = "Container selector (ListView, ComboBox, etc.)." },
-                        itemSelector = new { type = "string", description = "Selector of the descendant item to select." },
-                        window = new { type = "string" },
-                    },
-                    required = new[] { "selector", "itemSelector" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "selector", "itemSelector" },
+                    ("selector", Schema.Str("Container selector (ListView, ComboBox, etc.).")),
+                    ("itemSelector", Schema.Str("Selector of the descendant item to select.")),
+                    ("window", Schema.Str()))),
             @params => server.OnDispatcher(() =>
             {
                 var windowId = DevtoolsTools.ReadString(@params, "window");
@@ -155,7 +142,7 @@ internal static class DevtoolsUiaTools
                 if (selectorItem is not null)
                 {
                     selectorItem.IsSelected = true;
-                    return new { ok = true, selected = selectorItem.IsSelected };
+                    return new OkSelectedResult(Ok: true, Selected: selectorItem.IsSelected);
                 }
 
                 // Non-Selector containers (custom selectables) may still route
@@ -165,13 +152,13 @@ internal static class DevtoolsUiaTools
                 if (peer?.GetPattern(PatternInterface.SelectionItem) is ISelectionItemProvider sel)
                 {
                     sel.Select();
-                    return new { ok = true, selected = sel.IsSelected };
+                    return new OkSelectedResult(Ok: true, Selected: sel.IsSelected);
                 }
 
                 throw new McpToolException(
                     "No SelectorItem ancestor and no element exposing the SelectionItem UIA pattern (walked up from resolved element to window root).",
                     JsonRpcErrorCodes.ToolExecution,
-                    new { code = "no-pattern", pattern = "SelectionItem" });
+                    new McpErrorData("no-pattern", Pattern: "SelectionItem"));
             }));
     }
 
@@ -246,13 +233,10 @@ internal static class DevtoolsUiaTools
                     "Opens an ExpandCollapse-aware element (ComboBox popup, TreeViewItem, MenuFlyoutItem, Expander). " +
                     "Errors with `no-pattern` when the element doesn't expose IExpandCollapseProvider. Returns the " +
                     "new state.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new { selector = new { type = "string" }, window = new { type = "string" } },
-                    required = new[] { "selector" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "selector" },
+                    ("selector", Schema.Str()),
+                    ("window", Schema.Str()))),
             @params => server.OnDispatcher(() =>
             {
                 var el = resolver.Resolve(RequiredString(@params, "selector"), DevtoolsTools.ReadString(@params, "window"));
@@ -260,12 +244,12 @@ internal static class DevtoolsUiaTools
                 if (peer?.GetPattern(PatternInterface.ExpandCollapse) is IExpandCollapseProvider ec)
                 {
                     ec.Expand();
-                    return new { ok = true, state = FormatExpandState(ec.ExpandCollapseState) };
+                    return new OkStateResult(Ok: true, State: FormatExpandState(ec.ExpandCollapseState));
                 }
                 throw new McpToolException(
                     "Element does not expose the ExpandCollapse pattern.",
                     JsonRpcErrorCodes.ToolExecution,
-                    new { code = "no-pattern", pattern = "ExpandCollapse" });
+                    new McpErrorData("no-pattern", Pattern: "ExpandCollapse"));
             }));
 
         server.Tools.Register(
@@ -274,13 +258,10 @@ internal static class DevtoolsUiaTools
                 Description:
                     "Closes an ExpandCollapse-aware element (ComboBox popup, TreeViewItem, Expander). Errors with " +
                     "`no-pattern` when the element doesn't expose IExpandCollapseProvider.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new { selector = new { type = "string" }, window = new { type = "string" } },
-                    required = new[] { "selector" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "selector" },
+                    ("selector", Schema.Str()),
+                    ("window", Schema.Str()))),
             @params => server.OnDispatcher(() =>
             {
                 var el = resolver.Resolve(RequiredString(@params, "selector"), DevtoolsTools.ReadString(@params, "window"));
@@ -288,12 +269,12 @@ internal static class DevtoolsUiaTools
                 if (peer?.GetPattern(PatternInterface.ExpandCollapse) is IExpandCollapseProvider ec)
                 {
                     ec.Collapse();
-                    return new { ok = true, state = FormatExpandState(ec.ExpandCollapseState) };
+                    return new OkStateResult(Ok: true, State: FormatExpandState(ec.ExpandCollapseState));
                 }
                 throw new McpToolException(
                     "Element does not expose the ExpandCollapse pattern.",
                     JsonRpcErrorCodes.ToolExecution,
-                    new { code = "no-pattern", pattern = "ExpandCollapse" });
+                    new McpErrorData("no-pattern", Pattern: "ExpandCollapse"));
             }));
     }
 
@@ -316,28 +297,15 @@ internal static class DevtoolsUiaTools
                     "which uses IScrollItemProvider.ScrollIntoView. The response carries both `scrollPercent` and " +
                     "`scrollOffsetPx` (resolved from the underlying ScrollViewer when available); an axis that isn't " +
                     "scrollable reports null rather than the UIA -1 sentinel.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        selector = new { type = "string" },
-                        by = new
-                        {
-                            type = "object",
-                            description = "Percentage deltas (0–100) added to the current scroll percent, clamped to [0, 100].",
-                            properties = new
-                            {
-                                horizontal = new { type = "number", description = "Percent delta (0–100)." },
-                                vertical = new { type = "number", description = "Percent delta (0–100)." },
-                            },
-                        },
-                        to = new { type = "string", description = "Descendant selector to scroll into view (takes precedence over `by`)." },
-                        window = new { type = "string" },
-                    },
-                    required = new[] { "selector" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "selector" },
+                    ("selector", Schema.Str()),
+                    ("by", Schema.Obj(
+                        "Percentage deltas (0–100) added to the current scroll percent, clamped to [0, 100].",
+                        ("horizontal", Schema.Num("Percent delta (0–100).")),
+                        ("vertical", Schema.Num("Percent delta (0–100).")))),
+                    ("to", Schema.Str("Descendant selector to scroll into view (takes precedence over `by`).")),
+                    ("window", Schema.Str()))),
             @params => server.OnDispatcher<object>(() =>
             {
                 var windowId = DevtoolsTools.ReadString(@params, "window");
@@ -352,12 +320,12 @@ internal static class DevtoolsUiaTools
                     if (itemPeer?.GetPattern(PatternInterface.ScrollItem) is IScrollItemProvider scrollItem)
                     {
                         scrollItem.ScrollIntoView();
-                        return new { ok = true };
+                        return new OkResult(Ok: true);
                     }
                     throw new McpToolException(
                         "Target does not expose the ScrollItem pattern.",
                         JsonRpcErrorCodes.ToolExecution,
-                        new { code = "no-pattern", pattern = "ScrollItem" });
+                        new McpErrorData("no-pattern", Pattern: "ScrollItem"));
                 }
 
                 // By-offset on the container's Scroll pattern.
@@ -400,12 +368,12 @@ internal static class DevtoolsUiaTools
                             throw new McpToolException(
                                 "Container's horizontal axis is not scrollable (HorizontallyScrollable=false).",
                                 JsonRpcErrorCodes.ToolExecution,
-                                new { code = "not-scrollable", axis = "horizontal" });
+                                new McpErrorData("not-scrollable", Axis: "horizontal"));
                         if (vertRequested && vertCur == NoScroll)
                             throw new McpToolException(
                                 "Container's vertical axis is not scrollable (VerticallyScrollable=false).",
                                 JsonRpcErrorCodes.ToolExecution,
-                                new { code = "not-scrollable", axis = "vertical" });
+                                new McpErrorData("not-scrollable", Axis: "vertical"));
 
                         // If an axis wasn't requested but is unavailable, pass
                         // NoScroll through so SetScrollPercent treats it as
@@ -441,19 +409,17 @@ internal static class DevtoolsUiaTools
                         scrollableHeight = sv.ScrollableHeight;
                     }
 
-                    return new
-                    {
-                        ok = true,
-                        scrollPercent = new { horizontal = horizPctOut, vertical = vertPctOut },
-                        scrollOffsetPx = new { horizontal = horizPxOut, vertical = vertPxOut },
-                        scrollableSizePx = new { width = scrollableWidth, height = scrollableHeight },
-                    };
+                    return new ScrollResult(
+                        Ok: true,
+                        ScrollPercent: new ScrollAxis(horizPctOut, vertPctOut),
+                        ScrollOffsetPx: new ScrollAxis(horizPxOut, vertPxOut),
+                        ScrollableSizePx: new ScrollableSize(scrollableWidth, scrollableHeight));
                 }
 
                 throw new McpToolException(
                     "Container does not expose the Scroll pattern.",
                     JsonRpcErrorCodes.ToolExecution,
-                    new { code = "no-pattern", pattern = "Scroll" });
+                    new McpErrorData("no-pattern", Pattern: "Scroll"));
             }));
     }
 
@@ -475,18 +441,11 @@ internal static class DevtoolsUiaTools
             new McpToolDescriptor(
                 Name: "screenshot",
                 Description: "Captures a PNG of the window (or a selector-scoped region). Base64-encoded result.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        selector = new { type = "string", description = "Optional region to crop to." },
-                        window = new { type = "string" },
-                        waitIdle = new { type = "boolean", description = "Force a layout pass before capture (default true)." },
-                        includeChrome = new { type = "boolean", description = "Include the non-client titlebar frame (default false)." },
-                    },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    ("selector", Schema.Str("Optional region to crop to.")),
+                    ("window", Schema.Str()),
+                    ("waitIdle", Schema.Bool("Force a layout pass before capture (default true).")),
+                    ("includeChrome", Schema.Bool("Include the non-client titlebar frame (default false).")))),
             @params =>
             {
                 // SECURITY (TASK-015): serialize captures and enforce a 100ms
@@ -543,17 +502,9 @@ internal static class DevtoolsUiaTools
         }
 
         var capture = ScreenshotCapture.CaptureWindow(w, includeChrome, crop);
-        return new
-        {
-            png = Convert.ToBase64String(capture.Png),
-            bounds = new
-            {
-                x = capture.X,
-                y = capture.Y,
-                width = capture.Width,
-                height = capture.Height,
-            },
-        };
+        return new ScreenshotResult(
+            Convert.ToBase64String(capture.Png),
+            new ScreenshotBounds(capture.X, capture.Y, capture.Width, capture.Height));
     }
 
     // -- tree --------------------------------------------------------------------
@@ -567,18 +518,11 @@ internal static class DevtoolsUiaTools
                     "Walks the visual tree and returns a flat array of nodes. view=full adds layout/context/visual " +
                     "fields for layout debugging. `includeReactorSource` is reserved for Phase 3 — setting it to " +
                     "true currently returns a not-implemented error instead of silently no-opping.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        selector = new { type = "string", description = "Optional scope; if omitted, walks the whole window." },
-                        window = new { type = "string" },
-                        view = new { type = "string", @enum = new[] { "summary", "full" } },
-                        includeReactorSource = new { type = "boolean", description = "Reserved; lands with the Phase 3 source map. Setting true is a hard error today." },
-                    },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    ("selector", Schema.Str("Optional scope; if omitted, walks the whole window.")),
+                    ("window", Schema.Str()),
+                    ("view", Schema.Str(oneOf: new[] { "summary", "full" })),
+                    ("includeReactorSource", Schema.Bool("Reserved; lands with the Phase 3 source map. Setting true is a hard error today.")))),
             @params => server.OnDispatcher(() =>
             {
                 var selector = DevtoolsTools.ReadString(@params, "selector");
@@ -589,7 +533,7 @@ internal static class DevtoolsUiaTools
                     throw new McpToolException(
                         "includeReactorSource requires the Phase 3 source map.",
                         JsonRpcErrorCodes.ToolExecution,
-                        new { code = "not-implemented", flag = "includeReactorSource", phase = 3 });
+                        new McpErrorData("not-implemented", Flag: "includeReactorSource", Phase: 3));
                 var view = string.Equals(viewStr, "full", StringComparison.OrdinalIgnoreCase)
                     ? TreeView.Full
                     : TreeView.Summary;
@@ -626,16 +570,9 @@ internal static class DevtoolsUiaTools
                     "resolved} plus diagnostics for cycles and unresolved (perpetually-null) references. " +
                     "Node ids match the `tree` tool. Cycles are a supported topology and are reported " +
                     "informationally, not as errors.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        selector = new { type = "string", description = "Optional scope; if omitted, walks the whole window." },
-                        window = new { type = "string" },
-                    },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    ("selector", Schema.Str("Optional scope; if omitted, walks the whole window.")),
+                    ("window", Schema.Str()))),
             @params => server.OnDispatcher(() =>
             {
                 var selector = DevtoolsTools.ReadString(@params, "selector");
@@ -664,17 +601,10 @@ internal static class DevtoolsUiaTools
             new McpToolDescriptor(
                 Name: "click",
                 Description: "Clicks the element matching the selector. Prefers IInvokeProvider, falls back to Toggle → SelectionItem → pointer.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        selector = new { type = "string" },
-                        window = new { type = "string" },
-                    },
-                    required = new[] { "selector" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "selector" },
+                    ("selector", Schema.Str()),
+                    ("window", Schema.Str()))),
             @params => server.OnDispatcher(() =>
             {
                 var selector = RequiredString(@params, "selector");
@@ -684,28 +614,28 @@ internal static class DevtoolsUiaTools
                     ?? throw new McpToolException(
                         "Element has no automation peer.",
                         JsonRpcErrorCodes.ToolExecution,
-                        new { code = "no-peer" });
+                        new McpErrorData("no-peer"));
 
                 if (peer.GetPattern(PatternInterface.Invoke) is IInvokeProvider invoke)
                 {
                     invoke.Invoke();
-                    return new { ok = true, via = "invoke" };
+                    return new OkViaResult(Ok: true, Via: "invoke");
                 }
                 if (peer.GetPattern(PatternInterface.Toggle) is IToggleProvider toggle)
                 {
                     toggle.Toggle();
-                    return new { ok = true, via = "toggle" };
+                    return new OkViaResult(Ok: true, Via: "toggle");
                 }
                 if (peer.GetPattern(PatternInterface.SelectionItem) is ISelectionItemProvider sel)
                 {
                     sel.Select();
-                    return new { ok = true, via = "selection" };
+                    return new OkViaResult(Ok: true, Via: "selection");
                 }
 
                 throw new McpToolException(
                     "No UIA pattern available to click this element.",
                     JsonRpcErrorCodes.ToolExecution,
-                    new { code = "no-pattern" });
+                    new McpErrorData("no-pattern"));
             }));
     }
 
@@ -717,19 +647,12 @@ internal static class DevtoolsUiaTools
             new McpToolDescriptor(
                 Name: "type",
                 Description: "Sets text on a value-bearing control. Clears first when clear=true.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        selector = new { type = "string" },
-                        text = new { type = "string" },
-                        clear = new { type = "boolean" },
-                        window = new { type = "string" },
-                    },
-                    required = new[] { "selector", "text" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "selector", "text" },
+                    ("selector", Schema.Str()),
+                    ("text", Schema.Str()),
+                    ("clear", Schema.Bool()),
+                    ("window", Schema.Str()))),
             @params => server.OnDispatcher(() =>
             {
                 var selector = RequiredString(@params, "selector");
@@ -742,7 +665,7 @@ internal static class DevtoolsUiaTools
                 if (el is TextBox tb)
                 {
                     tb.Text = clear ? text : tb.Text + text;
-                    return new { ok = true, via = "value" };
+                    return new OkViaResult(Ok: true, Via: "value");
                 }
 
                 var peer = FrameworkElementAutomationPeer.CreatePeerForElement(el);
@@ -750,13 +673,13 @@ internal static class DevtoolsUiaTools
                 {
                     var current = value.Value ?? string.Empty;
                     value.SetValue(clear ? text : current + text);
-                    return new { ok = true, via = "value" };
+                    return new OkViaResult(Ok: true, Via: "value");
                 }
 
                 throw new McpToolException(
                     "Element does not expose a value pattern.",
                     JsonRpcErrorCodes.ToolExecution,
-                    new { code = "no-pattern" });
+                    new McpErrorData("no-pattern"));
             }));
     }
 
@@ -768,17 +691,10 @@ internal static class DevtoolsUiaTools
             new McpToolDescriptor(
                 Name: "focus",
                 Description: "Programmatically focuses the selected element.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        selector = new { type = "string" },
-                        window = new { type = "string" },
-                    },
-                    required = new[] { "selector" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "selector" },
+                    ("selector", Schema.Str()),
+                    ("window", Schema.Str()))),
             @params => server.OnDispatcher(() =>
             {
                 var selector = RequiredString(@params, "selector");
@@ -786,7 +702,7 @@ internal static class DevtoolsUiaTools
                 var el = resolver.Resolve(selector, windowId);
                 bool focused = false;
                 if (el is Control ctl) focused = ctl.Focus(FocusState.Programmatic);
-                return new { ok = focused };
+                return new OkResult(Ok: focused);
             }));
     }
 
@@ -798,29 +714,17 @@ internal static class DevtoolsUiaTools
             new McpToolDescriptor(
                 Name: "waitFor",
                 Description: "Polls a predicate against the live tree until it matches or times out.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        predicate = new
-                        {
-                            type = "object",
-                            properties = new
-                            {
-                                selector = new { type = "string" },
-                                textEquals = new { type = "string" },
-                                textMatches = new { type = "string" },
-                                visible = new { type = "boolean" },
-                                count = new { type = "integer" },
-                            },
-                        },
-                        timeoutMs = new { type = "integer" },
-                        window = new { type = "string" },
-                    },
-                    required = new[] { "predicate" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "predicate" },
+                    ("predicate", Schema.Obj(
+                        null,
+                        ("selector", Schema.Str()),
+                        ("textEquals", Schema.Str()),
+                        ("textMatches", Schema.Str()),
+                        ("visible", Schema.Bool()),
+                        ("count", Schema.Int()))),
+                    ("timeoutMs", Schema.Int()),
+                    ("window", Schema.Str()))),
             @params =>
             {
                 if (@params is not { } p || p.ValueKind != JsonValueKind.Object)
@@ -843,23 +747,19 @@ internal static class DevtoolsUiaTools
                 {
                     var observed = server.OnDispatcher(() => WaitForPredicate.Evaluate(pred, resolver, windowId));
                     if (observed.Satisfied)
-                        return new { ok = true, elapsedMs = sw.ElapsedMilliseconds };
+                        return new WaitForResult(Ok: true, ElapsedMs: sw.ElapsedMilliseconds);
                     Thread.Sleep(50);
                 }
 
                 var final = server.OnDispatcher(() => WaitForPredicate.Evaluate(pred, resolver, windowId));
-                return new
-                {
-                    ok = false,
-                    reason = "timeout",
-                    elapsedMs = sw.ElapsedMilliseconds,
-                    observed = new
-                    {
-                        count = final.Count,
-                        text = final.Text,
-                        visible = final.Visible,
-                    },
-                };
+                return new WaitForResult(
+                    Ok: false,
+                    ElapsedMs: sw.ElapsedMilliseconds,
+                    Reason: "timeout",
+                    Observed: new WaitObserved(
+                        Count: final.Count,
+                        Text: final.Text,
+                        Visible: final.Visible));
             });
     }
 
@@ -877,14 +777,14 @@ internal static class DevtoolsUiaTools
             var w = windows.Resolve(explicitWindowId!);
             return w ?? throw new McpToolException(
                 $"Window '{explicitWindowId}' not found.", JsonRpcErrorCodes.ToolExecution,
-                new { code = "unknown-window" });
+                new McpErrorData("unknown-window"));
         }
         var @default = windows.TryDefault(out var activeIds);
         if (@default is not null) return @default;
         throw new McpToolException(
             "Multiple windows are active — pass 'window'.",
             JsonRpcErrorCodes.InvalidParams,
-            new { code = "window-required", activeIds });
+            new McpErrorData("window-required", ActiveIds: activeIds.ToArray()));
     }
 
     private static string WindowIdFor(WindowRegistry windows, Window w)
@@ -973,14 +873,8 @@ internal sealed record WaitForPredicate(
         }
     }
 
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "JSON serialization to inspect MCP tool exception payload.")]
-    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "JSON serialization to inspect MCP tool exception payload.")]
     private static bool IsUnknownSelector(McpToolException ex)
-    {
-        if (ex.Payload is null) return false;
-        var json = JsonSerializer.Serialize(ex.Payload, DevtoolsMcpServer.JsonOpts);
-        return json.Contains("unknown-selector");
-    }
+        => ex.Payload is McpErrorData { Code: "unknown-selector" };
 
     private static string? ExtractText(UIElement element) => element switch
     {
@@ -991,3 +885,14 @@ internal sealed record WaitForPredicate(
         _ => null,
     };
 }
+
+/// <summary>
+/// Result of the <c>screenshot</c> tool — a base64 PNG plus the captured bounds.
+/// A named (not anonymous) record registered in <see cref="DevtoolsJsonContext"/>
+/// so the JSON-RPC response's <c>object Result</c> resolves through the source
+/// generator and serializes under NativeAOT instead of the reflection fallback.
+/// </summary>
+internal sealed record ScreenshotResult(string Png, ScreenshotBounds Bounds);
+
+/// <summary>Captured region (physical pixels) reported by the <c>screenshot</c> tool.</summary>
+internal sealed record ScreenshotBounds(int X, int Y, int Width, int Height);

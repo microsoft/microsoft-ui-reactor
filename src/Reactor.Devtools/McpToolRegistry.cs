@@ -9,7 +9,7 @@ namespace Microsoft.UI.Reactor.Hosting.Devtools;
 internal sealed record McpToolDescriptor(
     string Name,
     string Description,
-    object InputSchema);
+    SchemaNode InputSchema);
 
 /// <summary>
 /// A tool handler receives the raw <c>params</c> element from the JSON-RPC call and

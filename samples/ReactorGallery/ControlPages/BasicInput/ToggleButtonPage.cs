@@ -13,6 +13,7 @@ class ToggleButtonPage: Component
     {
         var (isChecked, setIsChecked) = UseState(false);
         var (isChecked2, setIsChecked2) = UseState(true);
+        var (triState, setTriState) = UseState<bool?>(null);
 
         return ScrollView(VStack(16,
             PageHeader("ToggleButton", "A button that can be toggled between two states."),
@@ -31,6 +32,14 @@ ToggleButton(""Mute"", isChecked, v => setIsChecked(v))
                     TextBlock(isChecked2 ? "Feature is enabled" : "Feature is disabled").Foreground(Theme.SecondaryText)),
                 sourceCode: @"
 ToggleButton(isChecked2 ? ""ON"" : ""OFF"", isChecked2, v => setIsChecked2(v))
+"),
+
+            SampleCard("Three-State ToggleButton",
+                    VStack(8,
+                        ThreeStateToggleButton("Review", triState, v => setTriState(v)),
+                        TextBlock($"State: {(triState == null ? "Indeterminate" : triState.ToString())}").Foreground(Theme.SecondaryText)),
+                    sourceCode: @"
+ThreeStateToggleButton(""Review"", triState, v => setTriState(v))
 ")
         ).Margin(36, 24, 36, 36));
     }

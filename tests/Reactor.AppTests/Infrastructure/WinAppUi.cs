@@ -384,7 +384,7 @@ public sealed class WinAppUi
     {
         // winapp's click verb is real SendInput under the hood — it fails with
         // ACCESS_DENIED off the interactive input desktop (non-uiAccess / disconnected
-        // session). Surface that as Inconclusive (not Failed), matching InputInjector.
+        // session). Surface that as Inconclusive (not Failed) via the interactivity guard.
         SessionInteractivityGuard.EnsureInputInjectable($"click '{selector}'");
 
         var extra = new List<string> { selector };
@@ -393,6 +393,57 @@ public sealed class WinAppUi
         var r = Run(15000, Args("click", hwnd ?? HostHwnd, extra.ToArray()));
         if (r.ExitCode != 0)
             throw new WinAppException($"winapp ui click '{selector}' failed: {r.StdErr.Trim()} {r.StdOut.Trim()}");
+    }
+
+    /// <summary>
+    /// Synthesize keyboard input through the native <c>winapp ui send-keys</c> verb. <paramref name="keys"/>
+    /// uses winapp's token grammar: named keys (<c>tab</c>, <c>enter</c>, <c>home</c>, <c>f1</c>), modifier
+    /// combos (<c>ctrl+a</c>, <c>shift+tab</c>), raw virtual keys (<c>vk=0x6B</c>), and <c>text=</c> literals.
+    /// With <paramref name="viaSendInput"/> the OS-wide send-input transport raises a real per-character
+    /// KeyDown (required by keystroke-observing handlers); the default post-message transport only raises
+    /// TextChanged. <paramref name="target"/>, when set, is focused (UIA SetFocus) before the keys are sent.
+    /// </summary>
+    public void SendKeys(string keys, bool viaSendInput = false, string? target = null, long? hwnd = null)
+    {
+        // send-input routes OS-wide and fails with ACCESS_DENIED off the interactive input desktop, just
+        // like the click verb — surface that as Inconclusive (not Failed). post-message posts
+        // straight to the window's message queue and needs no interactive desktop, so only guard send-input.
+        if (viaSendInput)
+            SessionInteractivityGuard.EnsureInputInjectable($"send-keys '{keys}'");
+
+        var extra = new List<string> { keys };
+        if (viaSendInput) { extra.Add("--via"); extra.Add("send-input"); }
+        if (!string.IsNullOrEmpty(target)) { extra.Add("--target"); extra.Add(target); }
+        var r = Run(15000, Args("send-keys", hwnd ?? HostHwnd, extra.ToArray()));
+        if (r.ExitCode != 0)
+            throw new WinAppException($"winapp ui send-keys '{keys}' failed: {r.StdErr.Trim()} {r.StdOut.Trim()}");
+    }
+
+    /// <summary>
+    /// Drag from one point to another through the native <c>winapp ui drag</c> verb. <paramref name="from"/>
+    /// and <paramref name="to"/> are each an element selector (drags from/to the element's center) or
+    /// <c>"x,y"</c> screen coordinates in the same space <see cref="GetBounds"/> / <c>UiElement.Rect</c>
+    /// report. The CLI interpolates the motion internally (crossing WinUI's 4-DIP drag threshold) and
+    /// re-resolves element endpoints after foregrounding. <paramref name="holdMs"/> presses and holds the
+    /// button before moving — with <c>from == to</c> (no movement) this is a press-and-hold / long-press;
+    /// <paramref name="dwellMs"/> settles on the destination before releasing so hover-armed drop targets /
+    /// merge overlays can latch.
+    /// </summary>
+    public void Drag(string from, string to, int holdMs = 0, int dwellMs = 0, bool rightButton = false,
+        long? hwnd = null)
+    {
+        // Native drag is real SendInput mouse input — ACCESS_DENIED off the interactive desktop, as click.
+        SessionInteractivityGuard.EnsureInputInjectable($"drag '{from}' -> '{to}'");
+
+        var extra = new List<string> { from, to };
+        if (rightButton) extra.Add("--right");
+        if (holdMs > 0) { extra.Add("--hold-ms"); extra.Add(holdMs.ToString(CultureInfo.InvariantCulture)); }
+        if (dwellMs > 0) { extra.Add("--dwell-ms"); extra.Add(dwellMs.ToString(CultureInfo.InvariantCulture)); }
+        // Give the process budget for the hold + dwell it will spend inside the drag on top of the base
+        // stabilize/interpolate work, so a long-press/merge dwell can't trip the process timeout.
+        var r = Run(15000 + holdMs + dwellMs, Args("drag", hwnd ?? HostHwnd, extra.ToArray()));
+        if (r.ExitCode != 0)
+            throw new WinAppException($"winapp ui drag '{from}' -> '{to}' failed: {r.StdErr.Trim()} {r.StdOut.Trim()}");
     }
 
     /// <summary>Set a value via UIA ValuePattern (TextBox/ComboBox/Slider).</summary>

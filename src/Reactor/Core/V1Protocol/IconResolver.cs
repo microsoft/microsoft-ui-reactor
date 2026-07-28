@@ -76,12 +76,7 @@ internal static class IconResolver
     {
         null => null,
         SymbolIconData sym => ResolveIconSource(sym.Symbol),
-        FontIconData fi => new WinUI.FontIconSource
-        {
-            Glyph = fi.Glyph,
-            FontFamily = fi.FontFamily is null ? null! : WinRTCache.GetFontFamily(fi.FontFamily),
-            FontSize = fi.FontSize ?? double.NaN,
-        },
+        FontIconData fi => CreateFontIconSource(fi),
         BitmapIconData bi => new WinUI.BitmapIconSource { UriSource = bi.Source, ShowAsMonochrome = bi.ShowAsMonochrome },
         PathIconData pi => CreatePathIconSource(pi),
         ImageIconData ii => new WinUI.ImageIconSource
@@ -109,6 +104,19 @@ internal static class IconResolver
         if (fi.FontFamily is not null) icon.FontFamily = WinRTCache.GetFontFamily(fi.FontFamily);
         if (fi.FontSize.HasValue) icon.FontSize = fi.FontSize.Value;
         return icon;
+    }
+
+    // Mirror of CreateFontIcon for the IconSource slot (TitleBar, TabView, etc.).
+    // FontFamily / FontSize are only assigned when specified: a FontIconSource
+    // with FontSize = double.NaN (or a null FontFamily) is rejected by
+    // TitleBar.set_IconSource with E_INVALIDARG ("Value does not fall within the
+    // expected range"), so leave them at their control defaults when unset.
+    internal static WinUI.FontIconSource CreateFontIconSource(FontIconData fi)
+    {
+        var src = new WinUI.FontIconSource { Glyph = fi.Glyph };
+        if (fi.FontFamily is not null) src.FontFamily = WinRTCache.GetFontFamily(fi.FontFamily);
+        if (fi.FontSize.HasValue) src.FontSize = fi.FontSize.Value;
+        return src;
     }
 
     internal static WinUI.PathIcon CreatePathIcon(PathIconData pi)

@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Threading.Tasks;
 using Microsoft.UI.Reactor.Core;
 using Xunit;
 
@@ -11,6 +12,54 @@ namespace Microsoft.UI.Reactor.Tests;
 /// </summary>
 public class ObservableHookTests
 {
+    private sealed class ExternalStore<T>
+    {
+        private T _snapshot;
+
+        public ExternalStore(T initialSnapshot)
+        {
+            _snapshot = initialSnapshot;
+        }
+
+        public event Action? Changed;
+
+        public T Snapshot => _snapshot;
+
+        public void SetSnapshot(T value, bool notify = true)
+        {
+            _snapshot = value;
+            if (notify)
+                Changed?.Invoke();
+        }
+
+        public Action Subscribe(Action onChanged)
+        {
+            SubscribeCount++;
+            Changed += onChanged;
+            return () =>
+            {
+                UnsubscribeCount++;
+                Changed -= onChanged;
+            };
+        }
+
+        public int SubscribeCount { get; private set; }
+
+        public int UnsubscribeCount { get; private set; }
+
+        public Action SubscribeAndChange(Action onChanged, T nextSnapshot)
+        {
+            SubscribeCount++;
+            Changed += onChanged;
+            _snapshot = nextSnapshot;
+            return () =>
+            {
+                UnsubscribeCount++;
+                Changed -= onChanged;
+            };
+        }
+    }
+
     private class NotifyModel : INotifyPropertyChanged
     {
         private string _name = "";
@@ -45,6 +94,246 @@ public class ObservableHookTests
 
         public void RaiseAllPropertiesChanged()
             => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(null));
+    }
+
+    // ── UseExternalStore ──────────────────────────────────────────
+
+    [Fact]
+    public void UseExternalStore_Returns_Current_Snapshot()
+    {
+        var ctx = new RenderContext();
+        var store = new ExternalStore<string>("Alice");
+
+        ctx.BeginRender(() => { });
+        var result = ctx.UseExternalStore(store.Subscribe, () => store.Snapshot);
+        ctx.FlushEffects();
+
+        Assert.Equal("Alice", result);
+    }
+
+    [Fact]
+    public void UseExternalStore_Triggers_Rerender_When_Snapshot_Changes()
+    {
+        var ctx = new RenderContext();
+        var store = new ExternalStore<string>("Alice");
+        int rerenderCount = 0;
+
+        ctx.BeginRender(() => rerenderCount++);
+        ctx.UseExternalStore(store.Subscribe, () => store.Snapshot);
+        ctx.FlushEffects();
+
+        ctx.BeginRender(() => rerenderCount++);
+        ctx.UseExternalStore(store.Subscribe, () => store.Snapshot);
+        ctx.FlushEffects();
+
+        store.SetSnapshot("Bob");
+
+        Assert.Equal(1, rerenderCount);
+    }
+
+    [Fact]
+    public void UseExternalStore_Does_Not_Rerender_When_Snapshot_Is_Equal()
+    {
+        var ctx = new RenderContext();
+        var store = new ExternalStore<string>("Alice");
+        int rerenderCount = 0;
+
+        ctx.BeginRender(() => rerenderCount++);
+        ctx.UseExternalStore(store.Subscribe, () => store.Snapshot);
+        ctx.FlushEffects();
+
+        ctx.BeginRender(() => rerenderCount++);
+        ctx.UseExternalStore(store.Subscribe, () => store.Snapshot);
+        ctx.FlushEffects();
+
+        store.SetSnapshot("Alice");
+
+        Assert.Equal(0, rerenderCount);
+    }
+
+    [Fact]
+    public void UseExternalStore_Cleanup_Unsubscribes()
+    {
+        var ctx = new RenderContext();
+        var store = new ExternalStore<string>("Alice");
+        int rerenderCount = 0;
+
+        ctx.BeginRender(() => rerenderCount++);
+        ctx.UseExternalStore(store.Subscribe, () => store.Snapshot);
+        ctx.FlushEffects();
+
+        ctx.RunCleanups();
+        store.SetSnapshot("Bob");
+
+        Assert.Equal(0, rerenderCount);
+    }
+
+    [Fact]
+    public void UseExternalStore_Uses_Custom_Comparer()
+    {
+        var ctx = new RenderContext();
+        var store = new ExternalStore<string>("Alice");
+        int rerenderCount = 0;
+
+        ctx.BeginRender(() => rerenderCount++);
+        ctx.UseExternalStore(store.Subscribe, () => store.Snapshot, StringComparer.OrdinalIgnoreCase);
+        ctx.FlushEffects();
+
+        ctx.BeginRender(() => rerenderCount++);
+        ctx.UseExternalStore(store.Subscribe, () => store.Snapshot, StringComparer.OrdinalIgnoreCase);
+        ctx.FlushEffects();
+
+        store.SetSnapshot("alice");
+
+        Assert.Equal(0, rerenderCount);
+    }
+
+    [Fact]
+    public void UseExternalStore_Source_Changes_Between_Renders_Resubscribes()
+    {
+        var ctx = new RenderContext();
+        var store1 = new ExternalStore<string>("First");
+        var store2 = new ExternalStore<string>("Second");
+        int rerenderCount = 0;
+
+        ctx.BeginRender(() => rerenderCount++);
+        ctx.UseExternalStore(store1.Subscribe, () => store1.Snapshot);
+        ctx.FlushEffects();
+
+        ctx.BeginRender(() => rerenderCount++);
+        ctx.UseExternalStore(store2.Subscribe, () => store2.Snapshot);
+        ctx.FlushEffects();
+
+        store1.SetSnapshot("Changed");
+        Assert.Equal(0, rerenderCount);
+
+        store2.SetSnapshot("Updated");
+        Assert.Equal(1, rerenderCount);
+    }
+
+    [Fact]
+    public void UseExternalStore_Returns_Updated_Snapshot_On_Next_Render()
+    {
+        var ctx = new RenderContext();
+        var store = new ExternalStore<string>("Alice");
+
+        ctx.BeginRender(() => { });
+        var first = ctx.UseExternalStore(store.Subscribe, () => store.Snapshot);
+        ctx.FlushEffects();
+
+        store.SetSnapshot("Bob");
+
+        ctx.BeginRender(() => { });
+        var second = ctx.UseExternalStore(store.Subscribe, () => store.Snapshot);
+        ctx.FlushEffects();
+
+        Assert.Equal("Alice", first);
+        Assert.Equal("Bob", second);
+    }
+
+    [Fact]
+    public void UseExternalStore_Rechecks_Snapshot_After_Subscribe()
+    {
+        var ctx = new RenderContext();
+        var store = new ExternalStore<string>("Alice");
+        int rerenderCount = 0;
+
+        ctx.BeginRender(() => rerenderCount++);
+        var first = ctx.UseExternalStore(
+            onChanged => store.SubscribeAndChange(onChanged, "Bob"),
+            () => store.Snapshot);
+        ctx.FlushEffects();
+
+        ctx.BeginRender(() => rerenderCount++);
+        var second = ctx.UseExternalStore(
+            onChanged => store.Subscribe(onChanged),
+            () => store.Snapshot);
+        ctx.FlushEffects();
+
+        Assert.Equal("Alice", first);
+        Assert.Equal(1, rerenderCount);
+        Assert.Equal("Bob", second);
+    }
+
+    [Fact]
+    public void UseExternalStore_Custom_Comparer_Reports_Difference_Rerenders_Once()
+    {
+        var ctx = new RenderContext();
+        var store = new ExternalStore<string>("Alice");
+        int rerenderCount = 0;
+
+        // Ordinal (case-sensitive) comparer: "Alice" -> "Bob" is a real difference.
+        ctx.BeginRender(() => rerenderCount++);
+        ctx.UseExternalStore(store.Subscribe, () => store.Snapshot, StringComparer.Ordinal);
+        ctx.FlushEffects();
+
+        ctx.BeginRender(() => rerenderCount++);
+        ctx.UseExternalStore(store.Subscribe, () => store.Snapshot, StringComparer.Ordinal);
+        ctx.FlushEffects();
+
+        store.SetSnapshot("Bob");
+
+        Assert.Equal(1, rerenderCount);
+    }
+
+    [Fact]
+    public async Task UseExternalStore_Change_Raised_Off_Thread_Rerenders_Once()
+    {
+        var ctx = new RenderContext();
+        var store = new ExternalStore<string>("Alice");
+        int rerenderCount = 0;
+
+        ctx.BeginRender(() => rerenderCount++);
+        ctx.UseExternalStore(store.Subscribe, () => store.Snapshot);
+        ctx.FlushEffects();
+
+        ctx.BeginRender(() => rerenderCount++);
+        ctx.UseExternalStore(store.Subscribe, () => store.Snapshot);
+        ctx.FlushEffects();
+
+        // The threadSafe reducer + Gate lock exist for exactly this path:
+        // a change notification raised from a non-render thread.
+        await Task.Run(() => store.SetSnapshot("Bob"), TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, rerenderCount);
+    }
+
+    [Fact]
+    public void UseExternalStore_Stable_Subscribe_Does_Not_Resubscribe_Across_Renders()
+    {
+        var ctx = new RenderContext();
+        var store = new ExternalStore<string>("Alice");
+
+        // Same method-group delegate identity across renders => no teardown/resubscribe.
+        ctx.BeginRender(() => { });
+        ctx.UseExternalStore(store.Subscribe, () => store.Snapshot);
+        ctx.FlushEffects();
+
+        ctx.BeginRender(() => { });
+        ctx.UseExternalStore(store.Subscribe, () => store.Snapshot);
+        ctx.FlushEffects();
+
+        ctx.BeginRender(() => { });
+        ctx.UseExternalStore(store.Subscribe, () => store.Snapshot);
+        ctx.FlushEffects();
+
+        Assert.Equal(1, store.SubscribeCount);
+        Assert.Equal(0, store.UnsubscribeCount);
+    }
+
+    [Fact]
+    public void UseExternalStore_Null_Arguments_Throw()
+    {
+        var ctx = new RenderContext();
+
+        ctx.BeginRender(() => { });
+        Assert.Throws<ArgumentNullException>(
+            () => ctx.UseExternalStore<string>(null!, () => "Alice"));
+
+        var ctx2 = new RenderContext();
+        ctx2.BeginRender(() => { });
+        Assert.Throws<ArgumentNullException>(
+            () => ctx2.UseExternalStore<string>(_ => () => { }, null!));
     }
 
     // ── UseObservable ──────────────────────────────────────────────

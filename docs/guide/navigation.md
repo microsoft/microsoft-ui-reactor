@@ -91,7 +91,7 @@ Here is what each piece does:
 | `UseNavigationLifecycle(...)` | hook | Page-side `onNavigatedTo` / `onNavigatingFrom` / `onNavigatedFrom`. The `from` callback receives a context with `.Cancel()`. |
 | `UseSystemBackButton(nav, window)` | hook | Wire the title-bar / hardware Back button to `nav.GoBack`. |
 | `NavigationHost(nav, routeMap)` | element | Renders the current route. Set `Transition`, `CacheMode`, `CacheSize`. |
-| `NavigationView(items, content)` | element | Sidebar shell. Use `.SelectedTagChanged(handler)` for selection events. |
+| `NavigationView(items, content)` | element | Sidebar shell. Use `.SelectedTagChanged(handler)` for selection events and `.IsPaneOpen(value, handler)` to drive the pane from state. |
 | `TabView(tabs)` | element | Parallel workspaces; tabs keep their own state. |
 | `BreadcrumbBar(items)` | element | Trail of ancestor routes for drill-down nav. |
 | `Frame(...)` | element | Raw WinUI Frame for XAML-page interop; `.Navigating`, `.Navigated`, `.NavigationFailed`. |
@@ -624,6 +624,80 @@ class SelectedTagChangedDemo : Component
 
 `SelectedTagChanged` receives the tag string (or `null` if no item is
 selected). Passing `null` to the fluent clears any previously-set handler.
+
+## NavigationView.PaneOpenChanged
+
+`IsPaneOpen` is controlled state, so it needs a matching change notification:
+`NavigationView` opens and closes its own pane in response to things your app
+never sees — a light dismiss tap in the content area, or an adaptive
+display-mode change as the window is resized. Wire `.PaneOpenChanged(handler)`
+and feed the value straight back into the state that drives `IsPaneOpen`:
+
+```csharp
+class PaneOpenChangedDemo : Component
+{
+    public override Element Render()
+    {
+        var (isPaneOpen, setIsPaneOpen) = UseState(true);
+
+        return (NavigationView(
+            [
+                NavItem("Home", icon: "Home", tag: "Home"),
+                NavItem("Settings", icon: "Setting", tag: "Settings")
+            ],
+            content: VStack(12,
+                Heading("Pane state"),
+                TextBlock(isPaneOpen ? "Pane is open" : "Pane is closed").Opacity(0.6),
+                Button(isPaneOpen ? "Close pane" : "Open pane",
+                    () => setIsPaneOpen(!isPaneOpen))
+            ).Padding(24)
+        ) with
+        {
+            IsPaneOpen = isPaneOpen,
+        })
+        // Light dismiss and adaptive display-mode changes move the pane without
+        // asking the app — push the new state back so the toggle stays truthful.
+        .PaneOpenChanged(setIsPaneOpen)
+        .Height(320);
+    }
+}
+```
+
+Without it the component state keeps the stale value, so the next toggle
+writes a value the control is already at and appears to do nothing — the pane
+takes two clicks to reopen. The callback also fires as the echo of your own
+`IsPaneOpen` write, which is a harmless no-op state update. Passing `null`
+clears the handler.
+
+Because the two always belong together, there is a paired overload that sets
+the state and wires the handler in one call — reach for it whenever the pane
+is driven from state:
+
+```csharp
+class ControlledPaneDemo : Component
+{
+    public override Element Render()
+    {
+        var (isPaneOpen, setIsPaneOpen) = UseState(true);
+
+        return NavigationView(
+            [
+                NavItem("Home", icon: "Home", tag: "Home"),
+                NavItem("Settings", icon: "Setting", tag: "Settings")
+            ],
+            content: Button(isPaneOpen ? "Close pane" : "Open pane",
+                () => setIsPaneOpen(!isPaneOpen)).Padding(24)
+        )
+        // One call sets the pane state and wires the change handler, so the two
+        // cannot drift apart.
+        .IsPaneOpen(isPaneOpen, setIsPaneOpen)
+        .Height(320);
+    }
+}
+```
+
+`SplitView` exposes the same `.PaneOpenChanged(handler)` and
+`.IsPaneOpen(value, handler)` pair.
 
 ## Navigation Diagnostics
 

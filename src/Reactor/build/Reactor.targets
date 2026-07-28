@@ -1,5 +1,30 @@
 <Project>
   <ItemGroup>
+    <!--
+      ReactorApplication.InitializeComponent loads XAML resources from these
+      sidecar assets. ProjectReference consumers get them from the library
+      output automatically, but PackageReference publish only copies assemblies
+      unless the package target explicitly marks these files for output/publish.
+    -->
+    <None Include="$(MSBuildThisFileDirectory)..\lib\**\Reactor.pri"
+          Link="Reactor.pri"
+          TargetPath="Reactor.pri"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest"
+          Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)..\lib\**\Reactor\Hosting\ReactorApplication.xaml"
+          Link="Reactor\Hosting\ReactorApplication.xaml"
+          TargetPath="Reactor\Hosting\ReactorApplication.xaml"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest"
+          Visible="false" />
+    <None Include="$(MSBuildThisFileDirectory)..\lib\**\Reactor\Hosting\ReactorApplication.xbf"
+          Link="Reactor\Hosting\ReactorApplication.xbf"
+          TargetPath="Reactor\Hosting\ReactorApplication.xbf"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest"
+          Visible="false" />
+
     <!-- Default: devtools subsystem is trimmed out of AOT publishes.
          Apps that need devtools override by adding their own
          <RuntimeHostConfigurationOption Include="Reactor.DevtoolsSupport"

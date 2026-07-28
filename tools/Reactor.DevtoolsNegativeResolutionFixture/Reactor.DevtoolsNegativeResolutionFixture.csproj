@@ -1,5 +1,18 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!--
+    NEGATIVE-COMPILATION FIXTURE — DO NOT make this project compile or
+    AOT-publishable. Its contract (asserted by the devtools-trim-mstat CI job via
+    Reactor.MstatVerifier 'negative-resolution') is that `dotnet build` FAILS with
+    CS0246/CS0234, proving Microsoft.UI.Reactor.Hosting.Devtools implementation
+    types are unreachable without the Microsoft.UI.Reactor.Devtools package
+    (spec 051 / issue #497). It is therefore intentionally excluded from the
+    repo-wide NativeAOT effort (issue #70): a project that cannot compile can never
+    reach ILC. See README.md. ReactorSkipAotAnalysis opts it out of the AOT
+    analyzer, matching the Directory.Build.targets carve-out for by-design
+    contract-guard fixtures.
+  -->
+
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
@@ -9,10 +22,10 @@
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
     <IsPackable>false</IsPackable>
+    <ReactorSkipAotAnalysis>true</ReactorSkipAotAnalysis>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" />
     <ProjectReference Include="..\..\src\Reactor\Reactor.csproj" />
   </ItemGroup>
 

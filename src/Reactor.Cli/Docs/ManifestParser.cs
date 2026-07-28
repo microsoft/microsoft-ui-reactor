@@ -61,7 +61,7 @@ internal class SnippetSettings
 
 internal static class ManifestParser
 {
-    private static readonly IDeserializer Deserializer = new DeserializerBuilder()
+    private static readonly IDeserializer Deserializer = new StaticDeserializerBuilder(new YamlStaticContext())
         .WithNamingConvention(HyphenatedNamingConvention.Instance)
         .IgnoreUnmatchedProperties()
         .Build();

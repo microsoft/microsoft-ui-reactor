@@ -80,13 +80,20 @@ internal sealed class GridViewHandler : IElementHandler<GridViewElement, WinUI.G
                 h(g.SelectedItems.OfType<int>().ToList());
             }
         };
-        if (gv.OnItemClick is not null)
-            gridView.ItemClick += (s, args) =>
-            {
-                var g = (WinUI.GridView)s!;
-                if (args.ClickedItem is int idx)
-                    (Reconciler.GetElementTag(g) as GridViewElement)?.OnItemClick?.Invoke(idx);
-            };
+        // Issue #779 — subscribe unconditionally (mirrors SelectionChanged above)
+        // so a later record-with that attaches OnItemClick is picked up without a
+        // second subscription. The trampoline no-ops when the current element's
+        // OnItemClick is null, and IsItemClickEnabled (set on mount + every update)
+        // gates whether WinUI raises ItemClick at all — so exactly one subscription
+        // for the control's lifetime fires the callback once per click across any
+        // toggle sequence. A conditional mount + Update-time re-subscribe (the old
+        // shape) leaked a second live handler on present→null→present.
+        gridView.ItemClick += (s, args) =>
+        {
+            var g = (WinUI.GridView)s!;
+            if (args.ClickedItem is int idx)
+                (Reconciler.GetElementTag(g) as GridViewElement)?.OnItemClick?.Invoke(idx);
+        };
 
         gridView.ItemsSource = Enumerable.Range(0, gv.Items.Length).ToList();
 
@@ -115,10 +122,16 @@ internal sealed class GridViewHandler : IElementHandler<GridViewElement, WinUI.G
     {
         gv.SelectionMode = n.SelectionMode;
         gv.IsItemClickEnabled = n.OnItemClick is not null;
-        if (n.Header is not null) gv.Header = n.Header;
+        // Issue #845 — gate on CHANGE, not non-null presence, so a present→null
+        // transition clears the property on the control. Header/ItemContainerStyle
+        // raise no WinUI events (unlike SelectedIndex), so no echo-suppression is
+        // needed and a plain reference-change gate is correct. WinUI accepts null
+        // for both (Header=null removes the header; ItemContainerStyle=null resets
+        // to the default container style).
+        if (!ReferenceEquals(o.Header, n.Header)) gv.Header = n.Header;
         if (gv.IncrementalLoadingTrigger != n.IncrementalLoadingTrigger)
             gv.IncrementalLoadingTrigger = n.IncrementalLoadingTrigger;
-        if (!ReferenceEquals(o.ItemContainerStyle, n.ItemContainerStyle) && n.ItemContainerStyle is not null)
+        if (!ReferenceEquals(o.ItemContainerStyle, n.ItemContainerStyle))
             gv.ItemContainerStyle = n.ItemContainerStyle;
 
         // Issue #495 / #464 — rebuild ItemsSource on Items-array change so
@@ -144,16 +157,12 @@ internal sealed class GridViewHandler : IElementHandler<GridViewElement, WinUI.G
 
         Reconciler.SetElementTag(gv, n);
 
-        // SelectionChanged is wired unconditionally in Mount (see comment in
-        // ListViewHandler.Update). Tag refresh suffices to pick up a later-attached
-        // OnSelectedIndexChanged / OnSelectionChanged.
-        if (o.OnItemClick is null && n.OnItemClick is not null)
-            gv.ItemClick += (s, args) =>
-            {
-                var g = (WinUI.GridView)s!;
-                if (args.ClickedItem is int idx)
-                    (Reconciler.GetElementTag(g) as GridViewElement)?.OnItemClick?.Invoke(idx);
-            };
+        // SelectionChanged and ItemClick are both wired unconditionally in Mount
+        // (see comment in ListViewHandler.Update). Tag refresh suffices to pick up a
+        // later-attached OnSelectedIndexChanged / OnSelectionChanged / OnItemClick.
+        // Re-subscribing ItemClick on a null→present transition here would leak a
+        // second live handler (never removed on present→null), so a single click
+        // would fire the callback twice (issue #779).
 
         // Issue #464 — wrap the SelectedIndex write so the deferred
         // SelectionChanged GridView fires after the property set doesn't echo

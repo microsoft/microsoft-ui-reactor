@@ -1458,6 +1458,12 @@ public record ModifiedElement(Element Inner, ElementModifiers WrappedModifiers) 
 /// Created automatically by Component&lt;T&gt;() factory method.
 /// </summary>
 public record ComponentElement(
+    // The parameter annotation satisfies the positional-record parameter -> backing-field
+    // store that ILC's whole-program pass flags as IL2069; the property annotation keeps the
+    // parameterless ctor preserved for the Activator.CreateInstance fallback below. Both
+    // Component<T>() factories pass typeof(T) under a `new()` constraint, so callers already
+    // satisfy the requirement without a new warning.
+    [param: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
     [property: DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
     Type ComponentType,
     object? Props = null) : Element
@@ -1835,6 +1841,16 @@ public record ElementModifiers
         get => Layout?.VerticalAlignment;
         init => Layout = Layout is null ? new LayoutModifiers { VerticalAlignment = value } : Layout with { VerticalAlignment = value };
     }
+    public HorizontalAlignment? HorizontalContentAlignment
+    {
+        get => Layout?.HorizontalContentAlignment;
+        init => Layout = Layout is null ? new LayoutModifiers { HorizontalContentAlignment = value } : Layout with { HorizontalContentAlignment = value };
+    }
+    public VerticalAlignment? VerticalContentAlignment
+    {
+        get => Layout?.VerticalContentAlignment;
+        init => Layout = Layout is null ? new LayoutModifiers { VerticalContentAlignment = value } : Layout with { VerticalContentAlignment = value };
+    }
     public double? Opacity
     {
         get => Visual?.Opacity;
@@ -2129,6 +2145,8 @@ public record LayoutModifiers
     public double? MaxHeight { get; init; }
     public HorizontalAlignment? HorizontalAlignment { get; init; }
     public VerticalAlignment? VerticalAlignment { get; init; }
+    public HorizontalAlignment? HorizontalContentAlignment { get; init; }
+    public VerticalAlignment? VerticalContentAlignment { get; init; }
     public bool? IsVisible { get; init; }
     public double? MarginInlineStart { get; init; }
     public double? MarginInlineEnd { get; init; }
@@ -2155,6 +2173,8 @@ public record LayoutModifiers
         MaxHeight = other.MaxHeight ?? MaxHeight,
         HorizontalAlignment = other.HorizontalAlignment ?? HorizontalAlignment,
         VerticalAlignment = other.VerticalAlignment ?? VerticalAlignment,
+        HorizontalContentAlignment = other.HorizontalContentAlignment ?? HorizontalContentAlignment,
+        VerticalContentAlignment = other.VerticalContentAlignment ?? VerticalContentAlignment,
         IsVisible = other.IsVisible ?? IsVisible,
         MarginInlineStart = other.MarginInlineStart ?? MarginInlineStart,
         MarginInlineEnd = other.MarginInlineEnd ?? MarginInlineEnd,
@@ -4557,7 +4577,9 @@ public record NavigationHostElement(
 // auto-map. The 5 NamedSlots (Header/AutoSuggestBox/PaneFooter/PaneCustomContent/Content), the
 // MenuItems+SelectedTag menu reconciler (.Imperative), the 3 NaN-sentinel pane widths, and the
 // SelectionChanged/BackRequested events are bespoke — in Element.NavigationView.cs. BackRequested
-// is Excluded (auto-surfaces). Replaces NavigationViewDescriptor.
+// is Excluded (auto-surfaces). Issue #916 — an IsPaneOpen DP observation
+// (OnPaneOpenChanged) is bespoke too, so IsPaneOpen can be used as controlled state.
+// Replaces NavigationViewDescriptor.
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.NavigationView), Exclude = new[] { "BackRequested" })]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("MenuItems")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("SelectedTag")]
@@ -4577,6 +4599,14 @@ public partial record NavigationViewElement(
     public string? SelectedTag { get; init; }
     public Action<string?>? OnSelectedTagChanged { get; init; }
     public bool IsPaneOpen { get; init; } = true;
+    /// <summary>
+    /// Fires whenever the realized control's <c>IsPaneOpen</c> changes — including changes the
+    /// app never requested (light dismiss, adaptive display-mode changes on resize) and the
+    /// echo of a programmatic <see cref="IsPaneOpen"/> write. Feed the value back into the
+    /// state that drives <see cref="IsPaneOpen"/> to keep controlled pane state in sync
+    /// (issue #916). Same shape as <c>SplitViewElement.OnPaneOpenChanged</c>.
+    /// </summary>
+    public Action<bool>? OnPaneOpenChanged { get; init; }
     public NavigationViewPaneDisplayMode PaneDisplayMode { get; init; } = NavigationViewPaneDisplayMode.Auto;
     public bool IsBackEnabled { get; init; }
     public Action? OnBackRequested { get; init; }
@@ -4596,7 +4626,8 @@ public partial record NavigationViewElement(
     /// <summary>Window width at which the pane auto-expands. <c>NaN</c> uses the WinUI default (1008).</summary>
     public double ExpandedModeThresholdWidth { get; init; } = double.NaN;
     internal Action<WinUI.NavigationView>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnSelectedTagChanged is not null || OnBackRequested is not null;
+    internal override bool HasCallbacks =>
+        OnSelectedTagChanged is not null || OnBackRequested is not null || OnPaneOpenChanged is not null;
 }
 
 // Spec 058 §15 (P5.23) — Title/Subtitle/IsBackButtonVisible/IsBackButtonEnabled/
@@ -6385,7 +6416,8 @@ public partial record AnnotatedScrollBarElement;
 public record PopupElement(Element Child) : Element
 {
     public bool IsOpen { get; init; }
-    public bool IsLightDismissEnabled { get; init; } = true;
+    // Matches WinUI's Popup.IsLightDismissEnabled default (false); see #873.
+    public bool IsLightDismissEnabled { get; init; }
     public double HorizontalOffset { get; init; }
     public double VerticalOffset { get; init; }
     public Action? OnOpened { get; init; }

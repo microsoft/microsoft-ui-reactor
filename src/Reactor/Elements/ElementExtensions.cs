@@ -131,6 +131,12 @@ public static partial class ElementExtensions
     public static T VerticalAlignment<T>(this T el, Microsoft.UI.Xaml.VerticalAlignment alignment) where T : Element =>
         ModifyLayout(el, new LayoutModifiers { VerticalAlignment = alignment });
 
+    public static T HorizontalContentAlignment<T>(this T el, Microsoft.UI.Xaml.HorizontalAlignment alignment) where T : Element =>
+        ModifyLayout(el, new LayoutModifiers { HorizontalContentAlignment = alignment });
+
+    public static T VerticalContentAlignment<T>(this T el, Microsoft.UI.Xaml.VerticalAlignment alignment) where T : Element =>
+        ModifyLayout(el, new LayoutModifiers { VerticalContentAlignment = alignment });
+
     public static T Center<T>(this T el) where T : Element =>
         ModifyLayout(el, new LayoutModifiers
         {
@@ -1152,6 +1158,27 @@ public static partial class ElementExtensions
 
     // ── Border brush/thickness (on Control and Border) ─────────────
 
+    public static T BorderBrush<T>(this T el, string color) where T : Element =>
+        ModifyVisual(el, new VisualModifiers { BorderBrush = BrushHelper.Parse(color) });
+
+    public static T BorderBrush<T>(this T el, Brush brush) where T : Element =>
+        ModifyVisual(el, new VisualModifiers { BorderBrush = brush });
+
+    public static T BorderBrush<T>(this T el, ThemeRef theme) where T : Element =>
+        ModifyTheme(el, "BorderBrush", theme);
+
+    public static T BorderThickness<T>(this T el, double thickness) where T : Element =>
+        ModifyVisual(el, new VisualModifiers { BorderThickness = new Thickness(thickness) });
+
+    public static T BorderThickness<T>(this T el, double horizontal, double vertical) where T : Element =>
+        ModifyVisual(el, new VisualModifiers { BorderThickness = new Thickness(horizontal, vertical, horizontal, vertical) });
+
+    public static T BorderThickness<T>(this T el, double left = 0.0, double top = 0.0, double right = 0.0, double bottom = 0.0) where T : Element =>
+        ModifyVisual(el, new VisualModifiers { BorderThickness = new Thickness(left, top, right, bottom) });
+
+    public static T BorderThickness<T>(this T el, Thickness thickness) where T : Element =>
+        ModifyVisual(el, new VisualModifiers { BorderThickness = thickness });
+
     /// <summary>
     /// Sets the border from a color string (named color or #RRGGBB / #AARRGGBB).
     /// Returns a fresh, caller-independent brush per call (see
@@ -1560,6 +1587,21 @@ public static partial class ElementExtensions
     public static SplitViewElement LightDismissOverlayMode(this SplitViewElement el, LightDismissOverlayMode mode) =>
         el with { LightDismissOverlayMode = mode };
 
+    /// <summary>
+    /// Controlled pane state: sets <c>IsPaneOpen</c> and wires the matching change
+    /// handler in one call. The handler is required because the control closes its own
+    /// pane (a light dismiss tap in <c>Overlay</c>/<c>CompactOverlay</c> mode) — driving
+    /// <c>IsPaneOpen</c> from state without feeding those changes back leaves the
+    /// state stale, so the next toggle writes a value the control already holds and
+    /// appears to do nothing (issue #916). Use the <c>IsPaneOpen</c> initializer
+    /// directly only for a pane whose state the app never changes.
+    /// </summary>
+    public static SplitViewElement IsPaneOpen(
+        this SplitViewElement el,
+        bool isPaneOpen,
+        Action<bool> onPaneOpenChanged) =>
+        el with { IsPaneOpen = isPaneOpen, OnPaneOpenChanged = onPaneOpenChanged };
+
     // ── ListView / GridView (spec §8 — incremental loading + container style) ──
 
     /// <summary>Style applied to each generated <c>ListViewItem</c> container.</summary>
@@ -1679,6 +1721,21 @@ public static partial class ElementExtensions
     /// <summary>Sets the width of the pane when expanded.</summary>
     public static NavigationViewElement OpenPaneLength(this NavigationViewElement el, double length) =>
         el with { OpenPaneLength = length };
+
+    /// <summary>
+    /// Controlled pane state: sets <c>IsPaneOpen</c> and wires the matching change
+    /// handler in one call. The handler is required because the control opens and
+    /// closes its own pane (light dismiss, adaptive display-mode changes on resize) —
+    /// driving <c>IsPaneOpen</c> from state without feeding those changes back leaves
+    /// the state stale, so the next toggle writes a value the control already holds
+    /// and appears to do nothing (issue #916). Use the <c>IsPaneOpen</c> initializer
+    /// directly only for a pane whose state the app never changes.
+    /// </summary>
+    public static NavigationViewElement IsPaneOpen(
+        this NavigationViewElement el,
+        bool isPaneOpen,
+        Action<bool> onPaneOpenChanged) =>
+        el with { IsPaneOpen = isPaneOpen, OnPaneOpenChanged = onPaneOpenChanged };
 
     /// <summary>Sets the window width below which the pane collapses to compact mode.</summary>
     public static NavigationViewElement CompactModeThresholdWidth(this NavigationViewElement el, double width) =>

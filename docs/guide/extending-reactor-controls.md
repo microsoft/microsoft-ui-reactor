@@ -595,8 +595,8 @@ Writing
 without the `static` modifier compiles, but allocates a closure object
 per `Register` call *and* defeats the trimmer's ability to drop the
 handler/control chain when the factory holder is unreachable. The
-compiler will accept either shape; reviewers and analyzers are your
-only guard. (Issue #486 tracks adding the analyzer.) Always write
+compiler will accept either shape; the `REACTOR_DESC_001` analyzer
+(`StaticRegisterLambdaAnalyzer`) is your guard. Always write
 `static () => new MyHandler()`.
 
 **Bypassing the factory with `new MyElement(...)`.** The whole reason

@@ -18,6 +18,8 @@ before push.
 |-------|---------|
 | [`pr-review/`](pr-review/SKILL.md) | Multi-dimensional review of a PR / feature branch diff (security, correctness, API & DSL ergonomics, alternative solutions, test coverage, docs & samples sync, packaging/agent-kit impact, multi-model cross-check). Reports findings to stdout; does not apply fixes. |
 | [`perf-compare/`](perf-compare/SKILL.md) | Benchmark the `StressPerf.ReactorOptimized` data-grid harness on the current branch vs a clean `main` worktree (interleaved, same machine) and report a direction-aware delta for the four headline metrics. The local equivalent of commenting `/perf` on a PR. Reports to stdout; does not apply fixes. |
+| [`coverage-uplift/`](coverage-uplift/SKILL.md) | Raise test coverage with non-vacuous tests: baseline via `tools/coverage`, classify each gap into the right tier (headless unit / selftest / E2E), write narrowly-scoped tests whose assertions fail if the target code is deleted, mutation-check the oracles, and cross-check with the pr-review multi-model dimension. Adds tests. |
+| [`analyzer-dym/`](analyzer-dym/SKILL.md) | Author or remove Reactor "did-you-mean" / diagnostic analyzers and their `mur check` mirrors under the `netstandard2.0` analyzer constraints: FP-spike first, add the `AnalyzerReleases.Unshipped.md` row, keep CLI parity, sync generated docs. Applies changes. |
 
 ## Conventions
 

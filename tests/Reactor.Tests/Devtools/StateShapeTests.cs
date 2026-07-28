@@ -1,5 +1,7 @@
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hosting.Devtools;
 using Xunit;
@@ -13,6 +15,8 @@ namespace Microsoft.UI.Reactor.Tests.Devtools;
 /// End-to-end hook-table reads need a rendered component and live in the
 /// self-host fixture (§3.11).
 /// </summary>
+[UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: reflection-based System.Text.Json serialization of devtools/MCP state-shape payload objects (no source-gen context; some via DevtoolsMcpServer.JsonOpts). Issue #70 documents this devtools JSON surface as RUC/RDC-by-design and not-yet-AOT-clean; the standard `dotnet test` path is JIT (never trimmed). Behaviour-neutral.")]
+[UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test-only: reflection-based System.Text.Json serialization of devtools/MCP state-shape payloads (see the IL2026 note). Standard test run is JIT, not AOT-compiled. Behaviour-neutral.")]
 public class StateShapeTests
 {
     [Theory]
@@ -24,7 +28,8 @@ public class StateShapeTests
     public void PrimitivesPassThroughUnchanged(object primitive)
     {
         var shaped = DevtoolsStateTool.ShapeValue(primitive);
-        Assert.Equal(primitive, shaped);
+        // Primitives shape to a JSON literal that round-trips to the same value.
+        Assert.Equal(JsonSerializer.Serialize(primitive), shaped!.ToJsonString());
     }
 
     [Fact]
@@ -37,7 +42,7 @@ public class StateShapeTests
     public void EnumRendersAsString()
     {
         var shaped = DevtoolsStateTool.ShapeValue(SampleEnum.Second);
-        Assert.Equal("Second", shaped);
+        Assert.Equal("Second", shaped!.GetValue<string>());
     }
 
     [Fact]
@@ -46,15 +51,15 @@ public class StateShapeTests
         var person = new Person { Name = "Kim", Age = 40, Secret = "do-not-leak" };
         var shaped = DevtoolsStateTool.ShapeValue(person);
 
-        var dict = Assert.IsAssignableFrom<IReadOnlyDictionary<string, object?>>(shaped);
-        Assert.Contains("$type", dict.Keys);
-        Assert.Contains("$shape", dict.Keys);
+        var obj = Assert.IsType<JsonObject>(shaped);
+        Assert.True(obj.ContainsKey("$type"));
+        Assert.True(obj.ContainsKey("$shape"));
 
-        var json = JsonSerializer.Serialize(shaped, DevtoolsMcpServer.JsonOpts);
+        var json = shaped!.ToJsonString();
         // Type name is present — agents can reason about it.
         Assert.Contains("Person", json);
-        // Property names are present as shape metadata (dictionary keys
-        // bypass the class property-naming policy, so they stay as authored).
+        // Property names are present as shape metadata (object keys are authored
+        // verbatim, bypassing any property-naming policy).
         Assert.Contains("\"Name\":\"String\"", json);
         Assert.Contains("\"Age\":\"Int32\"", json);
         // Actual values never leak — the string "Kim" and "do-not-leak" must be absent.
@@ -73,8 +78,8 @@ public class StateShapeTests
         };
         var shaped = DevtoolsStateTool.ShapeValue(list);
 
-        Assert.IsAssignableFrom<IReadOnlyDictionary<string, object?>>(shaped);
-        var json = JsonSerializer.Serialize(shaped, DevtoolsMcpServer.JsonOpts);
+        Assert.IsType<JsonObject>(shaped);
+        var json = shaped!.ToJsonString();
 
         Assert.Contains("List", json);
         Assert.Contains("\"kind\":\"collection\"", json);

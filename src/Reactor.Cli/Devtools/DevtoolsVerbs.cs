@@ -3,6 +3,9 @@ using System.Text.Json;
 
 namespace Microsoft.UI.Reactor.Cli.Devtools;
 
+/// <summary>Screenshot metadata echoed to stderr when the PNG bytes go to stdout.</summary>
+internal sealed record ScreenshotMeta(JsonElement? width, JsonElement? height, JsonElement? bounds);
+
 /// <summary>
 /// One method per <c>mur devtools &lt;verb&gt;</c>. Each verb parses its argv,
 /// builds a JSON <c>arguments</c> object for the target MCP tool, and delegates
@@ -123,13 +126,43 @@ internal static class DevtoolsVerbs
         return doc.RootElement.Clone();
     }
 
-    private static JsonElement ArgsFromDict(Dictionary<string, object?> fields)
+    internal static JsonElement ArgsFromDict(Dictionary<string, object?> fields)
     {
-        var filtered = fields.Where(kv => kv.Value is not null).ToDictionary(kv => kv.Key, kv => kv.Value);
-        var json = JsonSerializer.Serialize(filtered);
-        using var doc = JsonDocument.Parse(json);
+        // Build the args object as a JsonNode tree (reflection-free / AOT-safe)
+        // rather than serializing a Dictionary<string, object?> with the
+        // reflection-based serializer. Values are CLI-derived primitives plus the
+        // occasional nested object (see `scroll --by` and `wait`'s `predicate`).
+        var obj = DictToJsonObject(fields);
+        using var doc = JsonDocument.Parse(obj.ToJsonString());
         return doc.RootElement.Clone();
     }
+
+    private static global::System.Text.Json.Nodes.JsonObject DictToJsonObject(
+        global::System.Collections.Generic.IDictionary<string, object?> fields)
+    {
+        var obj = new global::System.Text.Json.Nodes.JsonObject();
+        foreach (var (key, value) in fields)
+        {
+            if (value is null) continue;
+            obj[key] = ToJsonNode(value);
+        }
+        return obj;
+    }
+
+    private static global::System.Text.Json.Nodes.JsonNode? ToJsonNode(object value) => value switch
+    {
+        global::System.Text.Json.Nodes.JsonNode node => node,
+        string s => global::System.Text.Json.Nodes.JsonValue.Create(s),
+        bool b => global::System.Text.Json.Nodes.JsonValue.Create(b),
+        int i => global::System.Text.Json.Nodes.JsonValue.Create(i),
+        long l => global::System.Text.Json.Nodes.JsonValue.Create(l),
+        double d => global::System.Text.Json.Nodes.JsonValue.Create(d),
+        JsonElement je => global::System.Text.Json.Nodes.JsonNode.Parse(je.GetRawText()),
+        // Nested object (e.g. `wait`'s `predicate` is a Dictionary<string, object?>).
+        // Recurse so it serializes as a JSON object, not its stringified type name.
+        global::System.Collections.Generic.IDictionary<string, object?> dict => DictToJsonObject(dict),
+        _ => global::System.Text.Json.Nodes.JsonValue.Create(value.ToString()),
+    };
 
     // -- Verb implementations ------------------------------------------------
 
@@ -225,10 +258,11 @@ internal static class DevtoolsVerbs
                         // Binary stream on stdout — must not also print the
                         // JSON envelope, or it'd corrupt the PNG. Metadata
                         // still goes to stderr for humans.
-                        var meta = new { width = result.TryGetProperty("width", out var w) ? (object?)w : null,
-                                         height = result.TryGetProperty("height", out var h) ? (object?)h : null,
-                                         bounds = result.TryGetProperty("bounds", out var b) ? (object?)b : null };
-                        Console.Error.WriteLine(JsonSerializer.Serialize(meta));
+                        var meta = new ScreenshotMeta(
+                            width: result.TryGetProperty("width", out var w) ? w : null,
+                            height: result.TryGetProperty("height", out var h) ? h : null,
+                            bounds: result.TryGetProperty("bounds", out var b) ? b : null);
+                        Console.Error.WriteLine(JsonSerializer.Serialize(meta, CliJsonContext.Default.ScreenshotMeta));
                         return (int)DevtoolsCliExit.Success;
                     }
                     if (!IsSafeOutPath(outPath))
@@ -325,7 +359,7 @@ internal static class DevtoolsVerbs
                 || !double.TryParse(parts[0].Trim(), global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture, out var h)
                 || !double.TryParse(parts[1].Trim(), global::System.Globalization.NumberStyles.Float, global::System.Globalization.CultureInfo.InvariantCulture, out var v))
                 return UsageError("--by must be H%,V% (percent deltas 0-100)");
-            fields["by"] = new { horizontal = h, vertical = v };
+            fields["by"] = new global::System.Text.Json.Nodes.JsonObject { ["horizontal"] = h, ["vertical"] = v };
         }
         if (to is not null) fields["to"] = to;
         return EmitResult(client.InvokeTool("scroll", ArgsFromDict(fields)), shared);
@@ -715,20 +749,29 @@ internal static class DevtoolsVerbs
 
     private static int EmitResult(JsonDocument doc, SharedFlags shared)
     {
-        var opts = new JsonSerializerOptions { WriteIndented = shared.Pretty };
         if (HasError(doc))
         {
             var err = doc.RootElement.GetProperty("error");
             var msg = err.TryGetProperty("message", out var m) ? (m.GetString() ?? "tool error") : "tool error";
             Console.Error.WriteLine($"[mur devtools] {msg}");
-            Console.WriteLine(JsonSerializer.Serialize(doc.RootElement, opts));
+            Console.WriteLine(WriteElement(doc.RootElement, shared.Pretty));
             return (int)DevtoolsCliExit.ToolError;
         }
         if (doc.RootElement.TryGetProperty("result", out var result))
-            Console.WriteLine(JsonSerializer.Serialize(result, opts));
+            Console.WriteLine(WriteElement(result, shared.Pretty));
         else
-            Console.WriteLine(JsonSerializer.Serialize(doc.RootElement, opts));
+            Console.WriteLine(WriteElement(doc.RootElement, shared.Pretty));
         return (int)DevtoolsCliExit.Success;
+    }
+
+    // Reflection-free / AOT-safe rendering of an opaque JsonElement (the MCP tool
+    // result is arbitrary server JSON, so there is no compile-time type to source-gen).
+    internal static string WriteElement(JsonElement element, bool indented)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = indented }))
+            element.WriteTo(writer);
+        return global::System.Text.Encoding.UTF8.GetString(stream.ToArray());
     }
 
     private static int UsageError(string msg)

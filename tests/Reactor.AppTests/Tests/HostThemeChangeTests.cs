@@ -37,7 +37,7 @@ public class HostThemeChangeTests : AppTestBase
     /// (color flips), and toggling back must return it to the original theme's brush.
     /// </summary>
     // [Retry] mops up rare unattended-desktop UIA read flakes; a real regression fails every attempt.
-    [Retry(3)]
+    [E2eRetry(3)]
     [TestMethod]
     public void HostThemeChange_ReResolvesConcreteResourceOverride()
     {

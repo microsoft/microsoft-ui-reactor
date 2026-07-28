@@ -313,6 +313,7 @@ public sealed class UnregisteredHandlerAndRegisterAllBuiltInsTests
     private static readonly HashSet<Type> KnownGeneratorBackedNotInBulkCatalog = new();
 
     [Fact]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only registration guard: enumerates all types in the Reactor assembly (Assembly.GetTypes) to assert every generator-backed built-in is registered — the full-surface scan trimming would prune. This host is never trimmed. Behaviour-neutral.")]
     public void Every_Generator_Backed_BuiltIn_Is_Registered_By_RegisterAllBuiltIns()
     {
         var snapshot = BuiltInHandlerBootstrap.RegisteredBuiltInElementTypes.ToHashSet();

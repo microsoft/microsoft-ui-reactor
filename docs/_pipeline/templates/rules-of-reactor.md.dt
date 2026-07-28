@@ -37,15 +37,15 @@ The five core rules:
 
 | Rule | Analyzer | Page |
 |---|---|---|
-| Hook order is stable | `REACTOR_HOOKS_001` | [Hooks](hooks.md) |
+| Hook order is stable | `REACTOR_HOOKS_001`, `REACTOR_HOOKS_002` | [Hooks](hooks.md) |
 | Hooks called from Render only | `REACTOR_HOOKS_005` | [Hooks](hooks.md) |
 | Deps are stable | `REACTOR_HOOKS_004` | [Hooks](hooks.md) |
 | Debounced commands need UseCommand | `REACTOR_HOOKS_009` | [Commanding](commanding.md) |
 | Render is pure | *(convention)* | [Components](components.md) |
-| Lists need keys | *(convention)* | [Collections](collections.md) |
-| Theme tokens not literals | `REACTOR_THEME_001` | [Theming Tokens](theming-tokens.md) |
+| Lists need stable keys | `REACTOR_DSL_001..003` | [Collections](collections.md) |
+| Theme tokens not literals | `REACTOR_THEME_001`, `REACTOR_THEME_004` | [Theming Tokens](theming-tokens.md) |
 | Lightweight styling | `REACTOR_THEME_002` | [Styling](styling.md) |
-| Accessible names | `REACTOR_A11Y_001..003` | [Accessibility](accessibility.md) |
+| Accessible names | `REACTOR_A11Y_001..004` | [Accessibility](accessibility.md) |
 
 Each rule below covers one row in the index with the before / after
 shape and the analyzer's catch.
@@ -62,6 +62,7 @@ in the same order, every time. No `if`, no `for`, no `try/catch`
 around a hook call, no early return.
 
 **Analyzer:** `REACTOR_HOOKS_001` (conditional hook call),
+`REACTOR_HOOKS_002` (hook after an early-return guard), and
 `REACTOR_HOOKS_005` (hook called outside a `Render()` override or a
 `Use*` helper).
 
@@ -120,6 +121,10 @@ the right state to the right row.
 **The rule:** every element produced inside a list-like construct gets
 a `.WithKey(stableId)` whose value persists across re-renders. The id
 must be the record's primary key, not the array index.
+
+**Analyzer:** `REACTOR_DSL_001` (dynamic list item missing `.WithKey`),
+`REACTOR_DSL_002` (non-stable `.WithKey`), and
+`REACTOR_DSL_003` (typed collection `keySelector` never keys by item).
 
 Before:
 
@@ -184,7 +189,8 @@ theme-invariant (a brand mark, a print preview) — and leave a comment
 saying so.
 
 **Analyzer:** `REACTOR_THEME_001` (hard-coded color string on a
-theme-aware modifier).
+theme-aware modifier) and `REACTOR_THEME_004` (hard-coded
+`Brush`/`Color` object bypasses theme tokens).
 
 ```csharp
 // Don't:
@@ -202,20 +208,20 @@ Full coverage on [Theming Tokens](theming-tokens.md).
 
 | Rule | Analyzer | Where the page lives |
 |---|---|---|
-| Hook order is stable | `REACTOR_HOOKS_001` | [Hooks](hooks.md) |
+| Hook order is stable | `REACTOR_HOOKS_001`, `REACTOR_HOOKS_002` | [Hooks](hooks.md) |
 | Hooks called from `Render` only | `REACTOR_HOOKS_005` | [Hooks](hooks.md) |
 | Deps must be stable | `REACTOR_HOOKS_004` | [Hooks](hooks.md) |
 | UseResource fetcher is idempotent | `REACTOR_HOOKS_006` | [Async Resources](async-resources.md) |
 | UseMemoCells builder must close over deps | `REACTOR_HOOKS_007` | [Hooks](hooks.md) |
 | Debounced commands routed through UseCommand | `REACTOR_HOOKS_009` | [Commanding](commanding.md) |
 | Render must be pure | *(convention — no analyzer)* | [Components](components.md), [Effects](effects.md) |
-| Lists need keys | *(convention — no analyzer)* | [Collections](collections.md), [Reconciliation](reconciliation.md) |
-| Theme-aware modifiers want a token | `REACTOR_THEME_001` | [Theming Tokens](theming-tokens.md) |
+| Lists need stable keys | `REACTOR_DSL_001..003` | [Collections](collections.md), [Reconciliation](reconciliation.md) |
+| Theme-aware modifiers want a token | `REACTOR_THEME_001`, `REACTOR_THEME_004` | [Theming Tokens](theming-tokens.md) |
 | Lightweight styling, not implicit resources | `REACTOR_THEME_002` | [Styling](styling.md) |
 | `RequestedTheme` is a render input, not a setter | `REACTOR_THEME_003` | [Styling](styling.md) |
 | XML docs on public APIs | `REACTOR_DOC_001` | (framework code) |
 | `<see cref="..."/>` resolves | `CS1574` | (framework code) |
-| Accessible name on interactive elements | `REACTOR_A11Y_001..003` | [Accessibility](accessibility.md) |
+| Accessible name on interactive elements | `REACTOR_A11Y_001..004` | [Accessibility](accessibility.md) |
 
 ## Tips
 
@@ -241,4 +247,4 @@ list sizes and devastating at scale).
 - **[Reconciliation](reconciliation.md)** — Why keys matter at the
   reconciler level.
 - **[Theming Tokens](theming-tokens.md)** — Token catalog for rule 5.
-- **[Accessibility](accessibility.md)** — The A11Y_001..003 rules.
+- **[Accessibility](accessibility.md)** — The A11Y_001..004 rules.

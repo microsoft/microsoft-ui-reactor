@@ -209,8 +209,17 @@ public readonly ref struct MountContext
     /// (possibly null for <c>EmptyElement</c>).</summary>
     public UIElement? MountChild(Element child) => _reconciler.Mount(child, _requestRerender);
 
-    /// <summary>Apply a setter array to the control. Equivalent to the public
-    /// <see cref="Reconciler.ApplySetters{T}(Action{T}[], T)"/> helper; provided
+    /// <summary>Reconcile a secondary element slot (mount / update-in-place / unmount)
+    /// against an already-mounted control, preserving descendant component state across
+    /// re-renders. <paramref name="existing"/> is the control currently in the slot (or
+    /// <c>null</c>). Returns the control to assign back into the slot. Public counterpart
+    /// to the engine-internal child reconcile, so external wrappers (not just built-in
+    /// descriptors) can host stateful secondary element slots — see
+    /// <c>[WrapElementSlot]</c>.</summary>
+    public UIElement? ReconcileChild(Element? oldChild, Element? newChild, UIElement? existing)
+        => _reconciler.ReconcileV1Child(oldChild, newChild, existing, _requestRerender);
+
+    /// <summary>The <see cref="Reconciler.ApplySetters{T}(Action{T}[], T)"/> helper; provided
     /// on the context for symmetry with handler-authored mount bodies.</summary>
     public void ApplySetters<T>(Action<T>[] setters, T control) where T : class
         => Reconciler.ApplySetters(setters, control);
@@ -523,10 +532,10 @@ suppresses that echo with a per-control counter:
 | Method | When to call | Effect |
 |---|---|---|
 | `binding.WriteSuppressed(mutate)` | Inside `Update` when writing a controlled prop | Increments the suppress counter, runs the mutate, decrements |
-| `ChangeEchoSuppressor.ShouldSuppress(fe)` | Inside an event trampoline | Drains a pending suppress count and returns true; trampoline short-circuits |
+| `ReactorBinding.ShouldSuppressEcho(fe)` | Inside an event trampoline | Drains a pending suppress count and returns true; trampoline short-circuits |
 
-The trampolines `ReactorBinding.OnCustomEvent<TArgs>` generates call
-`ShouldSuppress` on entry — every controlled prop in every built-in
+The trampolines that `ReactorBinding.OnCustomEvent<TArgs>` generates drain
+the suppress counter on entry — every controlled prop in every built-in
 handler is echo-safe without the handler author having to think
 about it. Hand-authored trampolines (the ones that bypass
 `OnCustomEvent` for performance) follow the same shape; see

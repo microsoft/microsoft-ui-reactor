@@ -65,10 +65,10 @@ _hookIndex`. `BeginRender(requestRerender)` sets `_hookIndex = 0` and
 captures the UI thread ID; the component's `Render()` runs, hooks
 advance `_hookIndex` as they go, and after `Render()` returns the
 reconciler reads `_hooks` to know which effects to flush. There is
-one `RenderContext` per `Component` instance (and one per `Func(ctx
-=> …)` function-component invocation — function components get their
-own context per parent's render, with state preserved across that
-parent's re-renders via positional matching just like any other
+one `RenderContext` per `Component` instance (and one per
+`RenderEachTime(ctx => …)` function-component invocation — a function component gets its
+own context, created at mount and preserved across the parent's re-renders
+via positional matching, just like any other
 element).
 
 The slot-type check at the top of each hook is the runtime guard:
@@ -114,34 +114,37 @@ changes for the lifetime of the component, which is why setter
 identity is stable across renders.
 
 ```csharp
-void Setter(T newValue)
+private Action<T> MakeStateSetter<T>(ValueHookState<T> h)
 {
-    var h = (ValueHookState<T>)_hooks[currentIndex];
-    bool changed;
-    if (h.ThreadSafe)
+    void Setter(T newValue)
     {
-        lock (h.Lock)
+        bool changed;
+        if (h.ThreadSafe)
         {
+            lock (h.Lock!)
+            {
+                changed = !EqualityComparer<T>.Default.Equals(h.Value, newValue);
+                if (changed) h.Value = newValue;
+            }
+            if (Diagnostics.ReactorEventSource.Log.IsEnabled(
+                    global::System.Diagnostics.Tracing.EventLevel.Verbose,
+                    Diagnostics.ReactorEventSource.Keywords.State))
+                Diagnostics.ReactorEventSource.Log.StateChange("UseState", typeof(T).Name, changed);
+            if (changed) _requestRerender?.Invoke();
+        }
+        else
+        {
+            if (MarshalIfOffUIThread("UseState", () => Setter(newValue))) return;
             changed = !EqualityComparer<T>.Default.Equals(h.Value, newValue);
             if (changed) h.Value = newValue;
+            if (Diagnostics.ReactorEventSource.Log.IsEnabled(
+                    global::System.Diagnostics.Tracing.EventLevel.Verbose,
+                    Diagnostics.ReactorEventSource.Keywords.State))
+                Diagnostics.ReactorEventSource.Log.StateChange("UseState", typeof(T).Name, changed);
+            if (changed) _requestRerender?.Invoke();
         }
-        if (Diagnostics.ReactorEventSource.Log.IsEnabled(
-                global::System.Diagnostics.Tracing.EventLevel.Verbose,
-                Diagnostics.ReactorEventSource.Keywords.State))
-            Diagnostics.ReactorEventSource.Log.StateChange("UseState", typeof(T).Name, changed);
-        if (changed) _requestRerender?.Invoke();
     }
-    else
-    {
-        if (MarshalIfOffUIThread("UseState", () => Setter(newValue))) return;
-        changed = !EqualityComparer<T>.Default.Equals(h.Value, newValue);
-        if (changed) h.Value = newValue;
-        if (Diagnostics.ReactorEventSource.Log.IsEnabled(
-                global::System.Diagnostics.Tracing.EventLevel.Verbose,
-                Diagnostics.ReactorEventSource.Keywords.State))
-            Diagnostics.ReactorEventSource.Log.StateChange("UseState", typeof(T).Name, changed);
-        if (changed) _requestRerender?.Invoke();
-    }
+    return Setter;
 }
 ```
 
@@ -169,25 +172,14 @@ Model](reactivity-model.md) page; the implementation lives here.
 ```csharp
 public void UseEffect(Action effect, params object[] dependencies)
 {
-    if (_hookIndex >= _hooks.Count)
-    {
-        _hooks.Add(new EffectHookState { Dependencies = null, Effect = effect });
-    }
-
-    if (_hooks[_hookIndex] is not EffectHookState hook)
-        throw new HookOrderException(
-            $"Hook at index {_hookIndex} is {_hooks[_hookIndex].GetType().Name}, expected EffectHookState. " +
-            "Hooks must be called in the same order every render.");
-    _hookIndex++;
-
+    var hook = AcquireEffectSlot();
+    // Snapshot the deps on store (SnapshotDeps): a caller can pass — and then
+    // reuse and mutate in place — the same array instance across renders, so the
+    // stored copy must be isolated or DepsEqual would alias prev/next and skip a
+    // real change (Issue #659 review #3). Only the deps-CHANGED path stores, so
+    // this adds no steady-state allocation.
     if (hook.Dependencies is null || !DepsEqual(hook.Dependencies, dependencies))
-    {
-        hook.PendingCleanup = hook.Cleanup;
-        hook.Cleanup = null;
-        hook.Dependencies = dependencies.ToArray();
-        hook.Effect = effect;
-        hook.Pending = true;
-    }
+        ScheduleEffect(hook, effect, null, SnapshotDeps(dependencies));
 }
 ```
 
@@ -273,7 +265,7 @@ If you find yourself wanting `UseRef` to trigger re-renders, you
 probably want `UseState` instead. `UseRef`'s value is an escape hatch
 for state that shouldn't drive UI.
 
-## UseObservable, UseResource, UseContext
+## UseObservable, UseExternalStore, UseResource, UseContext
 
 ```csharp
 public sealed class PendingScope
@@ -299,6 +291,13 @@ public sealed class PendingScope
 `INotifyPropertyChanged` source. Internally it builds an effect that
 attaches `PropertyChanged += ...` and stores the latest value in a
 local `UseState`. Cleanup unsubscribes.
+
+`UseExternalStore<TSnapshot>` follows the same ownership model for non-INPC
+stores that expose `subscribe` plus `getSnapshot`. The hook reads the snapshot
+during render, keeps the latest getter and comparer in a stable ref-backed cell,
+and installs one effect-owned subscription. Each change notification re-reads
+the snapshot and only schedules a re-render when the comparer reports a real
+change.
 
 `UseResource<T>` (and `UseInfiniteResource`, `UseMutation`) walks a
 fuller slot shape — a `ResourceHookState<T>` carrying the cache key,
@@ -339,7 +338,7 @@ public abstract class Component
     protected internal virtual bool ShouldUpdate() => false;
 ```
 
-`Func(ctx => Render(ctx))` materializes as a function-component
+`Memo(ctx => Render(ctx))` materializes as a function-component
 element. The reconciler treats it like any other component — element
 record on the tree, mounted into a slot in the parent — but the
 "component instance" is an internal wrapper holding its own

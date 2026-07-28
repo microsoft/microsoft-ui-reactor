@@ -1486,15 +1486,25 @@ public sealed class WrapperGenerator : IIncrementalGenerator
                 sb.AppendLine();
             }
             // Deferred (suppress-counter) controlled trampolines: gate on the
-            // ChangeEchoSuppressor (a programmatic Update write begins a suppress
-            // token via WriteSuppressed, so its echoed change event is dropped),
-            // then re-read the live control value and fire the user callback.
+            // public ReactorBinding.ShouldSuppressEcho primitive (a programmatic
+            // Update write begins a suppress token via WriteSuppressed, so its
+            // echoed change event is dropped), then re-read the live control value
+            // and fire the user callback. Using the public primitive (not the
+            // internal ChangeEchoSuppressor) keeps the emitted code compilable
+            // against Reactor's public surface alone — spec 062 §14. The public
+            // primitive is strict (it throws on a null argument), so the trampoline
+            // defends the sender itself: an `as`-cast plus null-check make it a no-op
+            // for a null or unexpected-type sender. This *restores* the tolerance the
+            // internal read-side check had (it returned false for null /
+            // non-FrameworkElement senders) — the earlier direct cast would instead
+            // have thrown on such a sender before reaching the suppression check.
             foreach (var p in deferredProps)
             {
                 sb.AppendLine($"    private static readonly {p.ControlledDelegate} __{p.Name}ControlledTrampoline = static (s, _) =>");
                 sb.AppendLine("    {");
-                sb.AppendLine($"        var __c = ({controlFqn})s!;");
-                sb.AppendLine("        if (global::Microsoft.UI.Reactor.Core.ChangeEchoSuppressor.ShouldSuppress(__c)) return;");
+                sb.AppendLine($"        var __c = s as {controlFqn};");
+                sb.AppendLine("        if (__c is null) return;");
+                sb.AppendLine("        if (global::Microsoft.UI.Reactor.Core.ReactorBinding.ShouldSuppressEcho(__c)) return;");
                 sb.AppendLine($"        ({Reconciler}.GetElementTag(__c) as {elementName})?.On{p.Name}Changed?.Invoke(__c.{p.ControlProp});");
                 sb.AppendLine("    };");
                 sb.AppendLine();
@@ -1566,8 +1576,9 @@ public sealed class WrapperGenerator : IIncrementalGenerator
             if (p.Controlled && p.Deferred)
             {
                 // Deferred (suppress-counter) two-way via HandCodedControlled: the
-                // generated trampoline (above) gates on ChangeEchoSuppressor and
-                // re-reads the control value. The set is wrapped in WriteSuppressed
+                // generated trampoline (above) gates on the public
+                // ReactorBinding.ShouldSuppressEcho primitive and re-reads the
+                // control value. The set is wrapped in WriteSuppressed
                 // by the entry, so a programmatic Update write doesn't echo back.
                 sb.AppendLine($"        .HandCodedControlled<__EventPayload, {p.ValueType}, {p.ControlledDelegate}>(");
                 sb.AppendLine($"            get:         static e => e.{p.Name},");

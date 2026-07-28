@@ -110,7 +110,7 @@ mur check <path>
    │
    │   Tier 3 — induced + vocabulary rules   (SHIPPED in part, Phase 3)
    │             Small symbol-bound rewriters. Six rules live today
-   │             (three Class-A induced + three Class-B vocabulary).
+   │             (four Class-A induced + two Class-B vocabulary).
    │             Rules can cover diagnostic codes Tier-2 doesn't
    │             (e.g. CS1955). Rules WIN over Tier-2 when both match.
    │
@@ -168,16 +168,16 @@ Each rule is a small file under `src/Reactor.Cli/Check/Rules/`, registered into 
 
 Each rule passes a six-bar **Validation Gate** before merge (frequency, cross-agent reproducibility, positive fixtures, negative counter-examples, independent reviewer signoff, kill-switch). The gate exists because a bad rule is worse than no rule — it contaminates every downstream agent session. Class-B (vocabulary-translation) rules waive bar #1 (frequency) — their justification is the documented prior-framework citation rather than a corpus cluster. The audit at `docs/specs/tasks/038-tuning-reports/2026-05-11-cross-agent-audit.md` is where bar #2 (cross-agent) gets formally cleared per cluster.
 
-**Six rules shipped to date** (three Class-A induced + three Class-B vocabulary):
+**Six rules shipped to date** (four Class-A induced + two Class-B vocabulary):
 
 | Rule | Class | Code(s) | Receiver | What it suggests | Cross-agent events |
 |---|---|---|---|---|---|
 | `ThemeBackgroundSuffixRule` | B (also clears A) | CS0117 | `Theme` | `Theme.SolidBackground` for any `Theme.<X>Background` miss | 27 |
-| `AlignmentShortcutRule` | B | CS1061 | Reactor `*Element` | `.HAlign(...)` / `.VAlign(...)` for the WinUI alignment property names | 22 |
 | `ButtonOnClickFactoryMoveRule` | B | CS1061 | `ButtonElement` | `Button(..., onClick: ...)` factory move, with explicit anti-pattern call-out on `.OnTapped` | gpt-5.5 only; vocab-justified |
 | `GridSizeFactoryParensRule` | A | CS1955 | `GridSize` | drop the parens (`GridSize.Auto`); **first cross-tier rule** (CS1955 outside Tier-2 codes) | **146** |
 | `GridSizePxRenameRule` | A | CS0117 | `GridSize` | `GridSize.Px(...)` for `Pixel`/`Pixels`/`Fixed` legacy names | 9 |
 | `TextBlockStyleHintRule` | A | CS1061 / CS0117 | `TextBlockElement` | fluent text helpers (`.FontSize`, `.SemiBold`, …); Reactor has no `Style` member | 5 across both `.Style(...)` and `with { Style = ... }` shapes |
+| `ThemeRawResourceKeyRule` | A | CS0117 | `Theme` | real `Theme.*` aliases (`Theme.LayerFill`, `Theme.Accent`, …) for WinUI `<X>FillColor<Y>` ThemeResource key names | run5 opus-4.7 only; bar #2 partial |
 
 ### Suggest-gate carve-out for Tier-3 rules
 
@@ -299,7 +299,7 @@ Per-code thresholds live in `Thresholds.cs`:
 
 The 525-run report (`docs/specs/tasks/038-tuning-reports/2026-05-11-525run.md`) walks through every per-code firing in the corpus. Two findings drove the original Phase-1 configuration, and both have now had Phase-3 rules authored against them:
 
-1. **JaroWinkler can't bridge "WinUI name → Reactor shortcut" pairs.** The agent's typical CS1061 mistake against Reactor types isn't a typo — it's a WinUI-style API name (`.VerticalAlignment`, `.Style`) whose correct Reactor replacement (`.VAlign`, fluent helpers) is too far in edit-distance for JaroWinkler to find. Similarity for `VerticalAlignment` ↔ `VAlign` is ~0.55, well below the 0.70 floor. The suggester then picks the second-closest member (`TextAlignment`) and emits a wrong answer at high confidence. **Diagnosis: this is Tier-3 rule territory, not a threshold-tuning problem.** Now addressed by `AlignmentShortcutRule` (Class-B, vocab-justified) and `TextBlockStyleHintRule` (Class-A, cross-agent STRONG after fix_kind collapse).
+1. **JaroWinkler can't bridge "WinUI name → Reactor shortcut" pairs.** The agent's typical CS1061 mistake against Reactor types isn't a typo — it's a WinUI-style API name (`.VerticalAlignment`, `.Style`) whose correct Reactor replacement (`.VAlign`, fluent helpers) is too far in edit-distance for JaroWinkler to find. Similarity for `VerticalAlignment` ↔ `VAlign` is ~0.55, well below the 0.70 floor. The suggester then picks the second-closest member (`TextAlignment`) and emits a wrong answer at high confidence. **Diagnosis: this is Tier-3 rule territory, not a threshold-tuning problem.** The `.Style` case is now addressed by `TextBlockStyleHintRule` (Class-A, cross-agent STRONG after fix_kind collapse); the `.VerticalAlignment` / `.HorizontalAlignment` case is now handled at the API level instead — `ElementExtensions` ships real long-form `.HorizontalAlignment(...)` / `.VerticalAlignment(...)` aliases, so those calls bind and never raise CS1061 (the former `AlignmentShortcutRule` was retired as dead code).
 
 2. **CS0117 / `Theme.<X>Background` shows the same shape.** Agents write `Theme.AppBackground` (non-existent); Tier-2 picks `Theme.Background` or `Theme.CardBackground` (closest real); correct answer is `Theme.SolidBackground` (sibling with different stem). Now addressed by `ThemeBackgroundSuffixRule` (originally Class-B, promoted to Class-A by the cross-agent audit: 27 events combined across both corpora).
 
@@ -503,7 +503,7 @@ Branch: `eval/spec-038-ec3-2026-05-11` at commit `2b7090f`. Six rules + the two 
 - `RuleSymbolResolver.cs` — `ResolveType(string)`, `ResolveMethod(INamedTypeSymbol, string)`, `ResolveMember(INamedTypeSymbol, string)`. Cached via `ConditionalWeakTable<CSharpCompilation, _>` so two callers with the same compilation reference share caches; per-compilation resolver identity is test-locked.
 - CLI: `--disable-rule <Name>` (repeatable), `--list-rules` (prints name/provenance/status table; short-circuits before `dotnet build` runs). Unknown `--disable-rule` names warn instead of error.
 
-**The six rules** — see the table in §3 for the full inventory. Three Class-A (induced from the cross-corpus audit) + three Class-B (vocabulary-translation, structurally justified). All six bind through `RuleSymbolResolver`; no string-matching.
+**The six rules** — see the table in §3 for the full inventory. Four Class-A (induced from the cross-corpus audit) + two Class-B (vocabulary-translation, structurally justified). All six bind through `RuleSymbolResolver`; no string-matching.
 
 **Two critical correctness fixes** (both blocked any real-world rule firing prior; surfaced by end-to-end smoke testing during Phase 3):
 

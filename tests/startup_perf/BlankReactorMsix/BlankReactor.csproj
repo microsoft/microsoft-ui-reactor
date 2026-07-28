@@ -112,10 +112,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" />
-  </ItemGroup>
-
-  <ItemGroup>
     <Compile Include="..\Common\BenchmarkTracing.cs" Link="Common\BenchmarkTracing.cs" />
     <Compile Include="..\Common\BlankPerfMetrics.cs" Link="Common\BlankPerfMetrics.cs" />
   </ItemGroup>

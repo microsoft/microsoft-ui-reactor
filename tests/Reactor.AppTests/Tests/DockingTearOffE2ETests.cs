@@ -14,8 +14,8 @@ namespace Microsoft.UI.Reactor.AppTests.Tests;
 /// routing, WinUI pointer capture, Z-order ordering between source +
 /// preview windows — are caught here).
 ///
-/// Real mouse drags are synthesized with the Win32 <see cref="InputInjector"/>
-/// fallback (winapp ui has no drag verb). Cross-window reads (e.g. a pane's
+/// Real mouse drags are synthesized with the native <c>winapp ui drag</c> verb.
+/// Cross-window reads (e.g. a pane's
 /// state mirror after it has been torn off into a floating window) enumerate
 /// every Host-process window via <see cref="WinAppUi.ListWindows"/> and query
 /// each by HWND — replacing the former Appium Desktop-rooted session.
@@ -151,19 +151,15 @@ public class DockingTearOffE2ETests : AppTestBase
     }
 
     /// <summary>
-    /// Drive a real mouse drag from a tab header center to a target center. The cursor follows
-    /// a multi-step path so WinUI's 4-DIP drag threshold fires (a single teleport can jump the
-    /// cursor past the strip before the threshold check runs) and the overlay hover handlers
-    /// see continuous motion. All scenarios here are "source-stays-visible" dock→float drops.
+    /// Drive a real mouse drag from a tab header center to a target center. The native drag verb
+    /// interpolates the cursor path so WinUI's 4-DIP drag threshold fires (a single teleport can jump
+    /// the cursor past the strip before the threshold check runs) and the overlay hover handlers see
+    /// continuous motion; --dwell-ms settles on the drop zone before release. All scenarios here are
+    /// "source-stays-visible" dock→float drops.
     /// </summary>
     private void DragFromTo((int X, int Y) from, (int X, int Y) to)
     {
-        InputInjector.Foreground(HostHwnd);
-        InputInjector.Drag(new[]
-        {
-            from, (from.X + 8, from.Y), (from.X + 16, from.Y),
-            ((from.X + to.X) / 2, (from.Y + to.Y) / 2), to,
-        });
+        App.Drag($"{from.X},{from.Y}", $"{to.X},{to.Y}", dwellMs: 300);
         // Cursor-poll Finalize + host re-render are async — settle.
         Thread.Sleep(500);
     }
@@ -176,10 +172,10 @@ public class DockingTearOffE2ETests : AppTestBase
     /// host must retain B + C, and the floating-window-count event surface
     /// must show 1 window open.
     /// </summary>
-    // [Retry] mops up the rare unattended-desktop input-injection flake: Win32 SendInput is
-    // occasionally dropped before the Host window foregrounds on CI. A real regression still
-    // fails every attempt. Removable once winappCli #562 (send-keys)/#498 (drag) ship native verbs.
-    [Retry(3)]
+    // [E2eRetry] mops up the rare unattended-desktop input-injection flake: the native winapp
+    // send-keys/drag verbs are SendInput under the hood and are occasionally dropped before the Host
+    // foregrounds on CI. A real regression still fails every attempt; retained pending a few stable CI runs (#652).
+    [E2eRetry(3)]
     [TestMethod]
     public void TearOff_E01_DragTabOutOfHost_OpensFloatingWindow()
     {
@@ -208,7 +204,7 @@ public class DockingTearOffE2ETests : AppTestBase
     /// both drags the host retains only C and there are two distinct
     /// floating windows.
     /// </summary>
-    [Retry(3)]
+    [E2eRetry(3)]
     [TestMethod]
     public void TearOff_E02_MultipleSequentialTearOffs()
     {
@@ -262,7 +258,7 @@ public class DockingTearOffE2ETests : AppTestBase
     /// back to the app-supplied content (carrying the typed value)
     /// when the floating window re-mounts the pane.
     /// </summary>
-    [Retry(3)]
+    [E2eRetry(3)]
     [TestMethod]
     public void TearOff_E03_TearOff_PreservesPaneState()
     {
@@ -295,7 +291,7 @@ public class DockingTearOffE2ETests : AppTestBase
     /// resets the fixture, tears off A again. All iterations must produce
     /// identical post-state.
     /// </summary>
-    [Retry(3)]
+    [E2eRetry(3)]
     [TestMethod]
     public void TearOff_E04_RepeatedTearOffsAreReliable()
     {

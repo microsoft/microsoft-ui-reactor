@@ -406,6 +406,60 @@ class SelectedTagChangedDemo : Component
 }
 // </snippet:nav-selected-tag-changed>
 
+// <snippet:nav-pane-open-changed>
+class PaneOpenChangedDemo : Component
+{
+    public override Element Render()
+    {
+        var (isPaneOpen, setIsPaneOpen) = UseState(true);
+
+        return (NavigationView(
+            [
+                NavItem("Home", icon: "Home", tag: "Home"),
+                NavItem("Settings", icon: "Setting", tag: "Settings")
+            ],
+            content: VStack(12,
+                Heading("Pane state"),
+                TextBlock(isPaneOpen ? "Pane is open" : "Pane is closed").Opacity(0.6),
+                Button(isPaneOpen ? "Close pane" : "Open pane",
+                    () => setIsPaneOpen(!isPaneOpen))
+            ).Padding(24)
+        ) with
+        {
+            IsPaneOpen = isPaneOpen,
+        })
+        // Light dismiss and adaptive display-mode changes move the pane without
+        // asking the app — push the new state back so the toggle stays truthful.
+        .PaneOpenChanged(setIsPaneOpen)
+        .Height(320);
+    }
+}
+// </snippet:nav-pane-open-changed>
+
+// <snippet:nav-pane-controlled>
+class ControlledPaneDemo : Component
+{
+    public override Element Render()
+    {
+        var (isPaneOpen, setIsPaneOpen) = UseState(true);
+
+        return NavigationView(
+            [
+                NavItem("Home", icon: "Home", tag: "Home"),
+                NavItem("Settings", icon: "Setting", tag: "Settings")
+            ],
+            content: Button(isPaneOpen ? "Close pane" : "Open pane",
+                () => setIsPaneOpen(!isPaneOpen)).Padding(24)
+        )
+        // One call sets the pane state and wires the change handler, so the two
+        // cannot drift apart.
+        .IsPaneOpen(isPaneOpen, setIsPaneOpen)
+        .Height(320);
+    }
+}
+// </snippet:nav-pane-controlled>
+
+
 // <snippet:frame-events>
 class FrameEventsDemo : Component
 {
@@ -445,7 +499,9 @@ class NavigationApp : Component
                 Component<PageCachingDemo>(),
                 Component<TabNavDemo>(),
                 Component<FrameEventsDemo>(),
-                Component<SelectedTagChangedDemo>()
+                Component<SelectedTagChangedDemo>(),
+                Component<PaneOpenChangedDemo>(),
+                Component<ControlledPaneDemo>()
             ).Padding(24)
         );
     }

@@ -193,10 +193,9 @@ with their own hook state:
   and can amplify render storms. Pick this only when you've decided you
   *need* the always-re-render behavior.
 
-> The older `Func(ctx => ...)` factory still works but is soft-deprecated
-> (`CS0618`) — replace it with `Memo(ctx => ...)` for the common case or
-> `RenderEachTime(ctx => ...)` when you specifically want the always-re-render
-> shape.
+> The former `Func(ctx => ...)` factory was removed in this release. Replace it
+> with `Memo(ctx => ...)` for the common case or `RenderEachTime(ctx => ...)`
+> when you specifically want the always-re-render shape.
 
 You can also use a function component as the app root:
 

@@ -1,0 +1,42 @@
+# Fast, headless unit tests for BuildMetricsLib.ps1 — the pure byte-format /
+# delta / comment-renderer that backs the automatic build-metrics comment
+# (build-metrics.yml). No build and no external test framework, so this runs on a
+# cheap Linux runner in seconds and guards the formatting + delta logic on every
+# change under tests/build_metrics/ci/**.
+#
+# build-metrics.yml runs these same assertions before it spends ~10 min packing;
+# this standalone job gives PR authors fast feedback without a full measure run.
+name: Build metrics lib tests
+
+on:
+  push:
+    paths:
+      - 'tests/build_metrics/ci/**'
+      - '.github/workflows/build-metrics-lib-tests.yml'
+  pull_request:
+    paths:
+      - 'tests/build_metrics/ci/**'
+      - '.github/workflows/build-metrics-lib-tests.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  buildmetricslib:
+    name: BuildMetricsLib format + delta math
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # pwsh (PowerShell 7) is preinstalled on the GitHub-hosted Ubuntu runner.
+      # Each test script exits non-zero on any failed assertion.
+      - name: Run BuildMetricsLib unit tests
+        shell: pwsh
+        run: ./tests/build_metrics/ci/BuildMetricsLib.Tests.ps1
+
+      - name: Run Measure-BuildMetrics unit tests
+        shell: pwsh
+        run: ./tests/build_metrics/ci/Measure-BuildMetrics.Tests.ps1

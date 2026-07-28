@@ -634,8 +634,8 @@ Apply with `.FocusTrap(handle)` modifier on a container element.
 
 `GridSize` value type with helpers: `GridSize.Auto`, `GridSize.Star(weight = 1)`,
 `GridSize.Px(pixels)`. Example: `Grid([GridSize.Auto, GridSize.Star()], [GridSize.Px(40)], …)`.
-The legacy string-form overload (`Grid(["Auto", "1*"], …)`) is soft-deprecated
-(`CS0618`) — prefer the typed helpers (spec 033 §1).
+The former string-form overload (`Grid(["Auto", "1*"], …)`) was removed — use the
+typed helpers exclusively (spec 033 §1).
 
 **Collections:** `ListView<T>(items, keySelector, viewBuilder)`,
 `LazyVStack<T>(items, keySelector, viewBuilder)`,
@@ -704,8 +704,8 @@ and returns its result, no node, no hook scope, no memoization (spec 033 §5),
 
 **Function components:** `Memo(ctx => …)` for the common render-once-plus-state
 case (no deps); `Memo(ctx => …, deps)` to also re-render when any dep changes;
-`RenderEachTime(ctx => …)` for the explicit always-re-render shape. The legacy
-`Func(ctx => …)` factory is soft-deprecated (`CS0618`) — replace with `Memo`
+`RenderEachTime(ctx => …)` for the explicit always-re-render shape. The former
+`Func(ctx => …)` factory was removed in this release — use `Memo`
 (common case) or `RenderEachTime` (always-re-render case) (spec 033 §4).
 
 ### Common Modifiers (chainable on any Element)

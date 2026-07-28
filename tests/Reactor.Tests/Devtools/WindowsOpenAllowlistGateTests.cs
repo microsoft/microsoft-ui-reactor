@@ -34,6 +34,7 @@ public class WindowsOpenAllowlistGateTests
     }
 
     [Fact]
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Test-only: reflects the Code/Available properties on the concrete structured-error payload the throw produces. Intentional and JIT-only (this host is never trimmed) — not claimed trim-safe; behaviour-neutral (neither preserves nor prunes members, so it cannot cause the DAM-narrowing regression noted in issue #70).")]
     public void Disallowed_Component_Throws_Unknown_Component()
     {
         var ex = Assert.Throws<McpToolException>(() =>
@@ -41,12 +42,12 @@ public class WindowsOpenAllowlistGateTests
         Assert.Equal(JsonRpcErrorCodes.ToolExecution, ex.Code);
         Assert.NotNull(ex.Payload);
 
-        // The payload shape (`{ code = "unknown-component", available = [...] }`)
+        // The payload shape (`McpErrorData { Code = "unknown-component", Available = [...] }`)
         // is what agents rely on to recover; lock it in via reflection so the
-        // anonymous-type contract doesn't drift unnoticed.
+        // record contract doesn't drift unnoticed.
         var payloadType = ex.Payload!.GetType();
-        var codeProp = payloadType.GetProperty("code");
-        var availProp = payloadType.GetProperty("available");
+        var codeProp = payloadType.GetProperty("Code");
+        var availProp = payloadType.GetProperty("Available");
         Assert.NotNull(codeProp);
         Assert.NotNull(availProp);
         Assert.Equal("unknown-component", codeProp!.GetValue(ex.Payload));

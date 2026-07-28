@@ -53,4 +53,30 @@ internal static class D3Fixtures
                 .ToElement()
                 .AutomationId("PieChartCanvas")
         );
+
+    // ── Interactive chart keyboard navigation (E2E) ─────────────────────────
+    // Wraps an interactive LineChart in ChartKeyboardNavigator via .Interactive().
+    // Uses a Component so setStatus (fired from the chart's OnPointInvoke) persists
+    // across renders and updates the status TextBlock — the Host builds each fixture
+    // with a fresh RenderContext per render, so a raw ctx.UseState would not re-render.
+    internal class ChartKeyboardNavComponent : Component
+    {
+        public override Element Render()
+        {
+            var (status, setStatus) = UseState("none");
+            return VStack(
+                TextBlock($"KbdStatus: {status}").AutomationId("ChartKbd_E2E_Status"),
+                Charts.LineChart(SampleLine, d => d.X, d => d.Y)
+                    .Width(600).Height(400)
+                    .ShowAxes(true)
+                    .Title("Keyboard Nav Chart")
+                    .Interactive()
+                    .OnPointInvoke((d, i) => setStatus($"invoked:{i}"))
+                    .ToElement()
+            );
+        }
+    }
+
+    internal static Element ChartKeyboardNav(RenderContext ctx) =>
+        Component<ChartKeyboardNavComponent>();
 }

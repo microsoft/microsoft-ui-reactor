@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json.Nodes;
 using System.Text.Json;
 using Microsoft.UI.Reactor.Hosting.Devtools;
 using Xunit;
@@ -149,10 +150,10 @@ public class LoggingTests : IDisposable
         using var logger = new DevtoolsLogger(_tempDir, pid: 1006, DevtoolsLogLevel.Call);
         var reg = new McpToolRegistry();
         reg.Register(
-            new McpToolDescriptor("ping", "", new { type = "object" }),
-            _ => new { ok = true });
+            new McpToolDescriptor("ping", "", new SchemaNode("object")),
+            _ => new JsonObject { ["ok"] = true });
         reg.Register(
-            new McpToolDescriptor("explode", "", new { type = "object" }),
+            new McpToolDescriptor("explode", "", new SchemaNode("object")),
             _ => throw new McpToolException("boom", JsonRpcErrorCodes.ToolExecution));
 
         var dispatcher = new McpDispatcher(reg, logger);

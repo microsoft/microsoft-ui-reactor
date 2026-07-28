@@ -115,8 +115,8 @@ Grid(
 - `GridSize.Auto` — sizes to content
 - `GridSize.Px(200)` — fixed 200px
 
-The legacy string-form overload (`Grid(["Auto", "*"], …)`) still compiles but
-is soft-deprecated (`CS0618`).
+The former string-form overload (`Grid(["Auto", "*"], …)`) was removed — use the
+typed `GridSize` helpers.
 
 ### Flex (CSS Flexbox)
 

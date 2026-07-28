@@ -82,7 +82,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="System.Drawing.Common" />
     <PackageReference Include="MessageFormat" />
@@ -191,6 +190,15 @@
          consuming projects (build/<PackageId>.targets). The source file keeps
          the short name for the repo's own Directory.Build.props import. -->
     <None Include="build\Reactor.targets" Pack="true" PackagePath="build\Microsoft.UI.Reactor.targets" Visible="false" />
+    <!-- WinUI LoadComponent needs the compiled XBF sidecar at runtime for
+         ReactorApplication.xaml. SDK pack includes the XAML but not the XBF by
+         default, so PackageReference consumers otherwise crash in native XAML
+         when controls such as TitleBar realize. -->
+    <None Include="$(OutputPath)Reactor\Hosting\ReactorApplication.xbf"
+          Pack="true"
+          PackagePath="lib\$(TargetFramework)\Reactor\Hosting\"
+          Visible="false"
+          Condition="Exists('$(OutputPath)Reactor\Hosting\ReactorApplication.xbf')" />
     <!-- Agent kit packed into the NuGet at `agentkit/`: SKILL.md, every
          skills/*.md sub-skill, the recipes folder, and the generated
          signatures index. Mirrors the source-tree layout. Discoverable from

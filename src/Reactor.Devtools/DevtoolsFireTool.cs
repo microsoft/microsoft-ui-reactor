@@ -39,18 +39,11 @@ internal static class DevtoolsFireTool
                     "per spec §11 'Automation verbs'. Use fire only when no UIA peer reaches the behavior " +
                     "(custom gestures, awaited async paths, unit-of-work handlers). " +
                     "Responses carry `via: \"reactor-event-injection\"` so traces make the shortcut visible.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        component = new { type = "string" },
-                        @event = new { type = "string" },
-                        args = new { type = "array", description = "Optional positional args for the handler." },
-                    },
-                    required = new[] { "component", "event" },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    new[] { "component", "event" },
+                    ("component", Schema.Str()),
+                    ("event", Schema.Str()),
+                    ("args", Schema.Arr("Optional positional args for the handler.")))),
             @params => server.OnDispatcher(() =>
             {
                 var componentName = DevtoolsTools.ReadString(@params, "component")
@@ -69,10 +62,10 @@ internal static class DevtoolsFireTool
                     throw new McpToolException(
                         $"Handler '{eventName}' threw: {ex.InnerException?.Message ?? ex.Message}",
                         JsonRpcErrorCodes.ToolExecution,
-                        new { code = "handler-threw" });
+                        new McpErrorData("handler-threw"));
                 }
 
-                return new { ok = true, via = "reactor-event-injection" };
+                return new FireOkResult(Ok: true, Via: "reactor-event-injection");
             }));
     }
 
@@ -89,13 +82,13 @@ internal static class DevtoolsFireTool
             throw new McpToolException(
                 "No root component is mounted.",
                 JsonRpcErrorCodes.ToolExecution,
-                new { code = "not-ready" });
+                new McpErrorData("not-ready"));
 
         var instance = FindComponent(root, componentName)
             ?? throw new McpToolException(
                 $"Component '{componentName}' is not the root (child-component search not implemented in v1).",
                 JsonRpcErrorCodes.ToolExecution,
-                new { code = "unknown-component", available = new[] { root.GetType().Name } });
+                new McpErrorData("unknown-component", Available: new[] { root.GetType().Name }));
 
         var handler = FindHandler(instance, eventName);
         if (handler is null)
@@ -107,16 +100,14 @@ internal static class DevtoolsFireTool
             throw new McpToolException(
                 $"Component '{componentName}' has no named handler '{eventName}'.",
                 JsonRpcErrorCodes.ToolExecution,
-                new
-                {
-                    code = "unknown-event",
-                    component = componentName,
-                    @event = eventName,
-                    reachableMethods = reachable,
-                    hint = "fire resolves by reflection against declared methods on the Component class. " +
-                           "Inline-lambda handlers (the common pattern in demos) are NOT reachable — " +
-                           "turn the handler into a method to make it callable.",
-                });
+                new McpErrorData(
+                    "unknown-event",
+                    Component: componentName,
+                    Event: eventName,
+                    ReachableMethods: reachable,
+                    Hint: "fire resolves by reflection against declared methods on the Component class. " +
+                          "Inline-lambda handlers (the common pattern in demos) are NOT reachable — " +
+                          "turn the handler into a method to make it callable."));
         }
 
         return (instance, handler);
@@ -156,7 +147,7 @@ internal static class DevtoolsFireTool
             throw new McpToolException(
                 $"Method '{eventName}' is a framework lifecycle / render entry point; fire it via UIA patterns instead.",
                 JsonRpcErrorCodes.ToolExecution,
-                new { code = "forbidden-method", @event = eventName });
+                new McpErrorData("forbidden-method", Event: eventName));
 
         var type = instance.GetType();
         // Prefer an exact-cased public or internal instance method; fall back to
@@ -214,3 +205,6 @@ internal static class DevtoolsFireTool
         _ => el.GetRawText(),
     };
 }
+
+/// <summary>Result of the <c>fire</c> tool — the event-injection acknowledgement.</summary>
+internal sealed record FireOkResult(bool Ok, string Via) : IOkResult;

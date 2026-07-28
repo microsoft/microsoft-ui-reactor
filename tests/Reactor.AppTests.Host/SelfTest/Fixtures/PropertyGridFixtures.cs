@@ -334,6 +334,8 @@ internal static class PropertyGridFixtures
         return registry;
     }
 
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2067",
+        Justification = "Selftest fixture assigns typeof(...) literals (incl. collection types) to FieldDescriptor.FieldType. Kept as a suppression rather than a [DynamicallyAccessedMembers] annotation on purpose: annotating the parameter narrows the trimmer's preservation to PublicProperties|PublicConstructors and trims the collection enumeration members the array-editor fixtures need at runtime. PropertyGrid auto-discovery is AOT-skip-listed; the explicit-field array-editor path runs and must keep its conservative preservation.")]
     private static FieldDescriptor Field(
         string name,
         Type fieldType,

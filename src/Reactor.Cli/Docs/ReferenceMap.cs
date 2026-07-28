@@ -110,7 +110,7 @@ internal sealed class ReferenceMap
 
     public static ReferenceMap Parse(string yaml)
     {
-        var deserializer = new DeserializerBuilder()
+        var deserializer = new StaticDeserializerBuilder(new YamlStaticContext())
             .WithNamingConvention(HyphenatedNamingConvention.Instance)
             .IgnoreUnmatchedProperties()
             .Build();
@@ -222,20 +222,20 @@ internal sealed class ReferenceMap
 
     // ── YAML shape ────────────────────────────────────────────────────────
 
-    private sealed class FileShape
+    internal sealed class FileShape
     {
         public List<DefaultEntry>? Defaults { get; set; }
         public List<OverrideEntry>? Overrides { get; set; }
     }
 
-    private sealed class DefaultEntry
+    internal sealed class DefaultEntry
     {
         public string? Match { get; set; }
         public string? Category { get; set; }
         public List<string>? GuidePages { get; set; }
     }
 
-    private sealed class OverrideEntry
+    internal sealed class OverrideEntry
     {
         public string? Cref { get; set; }
         public string? Match { get; set; }

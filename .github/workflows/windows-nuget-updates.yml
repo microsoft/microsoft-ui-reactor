@@ -1,0 +1,466 @@
+# Weekly NuGet updates for packages that GitHub-hosted Dependabot can't reach.
+#
+# Why this exists:
+#   Dependabot runs every version-update job on Linux and cannot restore this
+#   repo's Windows-only project graph — the WinUI / WindowsAppSDK apps on
+#   net*-windows TFMs, but ALSO plain net10.0 projects such as src/Reactor.Cli
+#   that Dependabot's Linux evaluation still fails on. With Central Package
+#   Management, Dependabot only bumps a <PackageVersion> when it can see a
+#   successfully-evaluated project that references it — so packages referenced
+#   ONLY by those projects (e.g. GitHub.Copilot.SDK, YamlDotNet) never get a
+#   Dependabot PR. This workflow runs the same detection on a windows-latest
+#   runner, where the restore succeeds, and opens a PR editing
+#   Directory.Packages.props.
+#
+#   Keep the Linux ecosystems (github-actions, npm, and the Linux-restorable
+#   NuGet packages) on Dependabot — this only backfills the Windows-host gap. The
+#   two may occasionally both propose the same bump; whichever lands first wins
+#   and the other becomes a no-op.
+#
+# Opening the PR (and what happens when Actions can't):
+#   Many orgs (and Microsoft policy) disable "Allow GitHub Actions to create and
+#   approve pull requests", and a PAT/App token may not be available. The publish
+#   job therefore ALWAYS pushes the bump branch (that needs no special permission),
+#   then tries to open/refresh the PR, and if creating one is blocked it falls back
+#   to a tracking ISSUE (issue creation is NOT governed by the PR-creation policy)
+#   with a one-click "compare" link a maintainer uses to open the PR themselves.
+#   Once the bump lands (the maintainer opens & merges that PR, or a later run finds
+#   nothing left to update), the workflow closes the tracking issue automatically so
+#   it can't linger open with a now-empty compare link.
+#   The run's job summary always records the same bump table + link as a floor. An
+#   optional DEPS_BOT_TOKEN secret, if the org can provide one, upgrades this to a
+#   fully automatic PR.
+#
+# CI on the opened PR:
+#   A PR opened with the default GITHUB_TOKEN does NOT trigger the pull_request CI
+#   workflow (GitHub blocks token-created events from starting further workflows).
+#   Rather than require a PAT/App token, the `detect` job validates the bump itself
+#   by building the whole solution, and the PR opens as a DRAFT if that build
+#   fails. To run the full CI suite (tests/selftests) on a GITHUB_TOKEN-authored PR,
+#   a maintainer kicks it with Close -> Reopen (fires the `reopened` event ci.yml
+#   listens for) or by pushing any commit. (A PR authored via DEPS_BOT_TOKEN triggers
+#   pull_request CI normally, so this step isn't needed then.)
+#
+# Security — two jobs, credentials isolated from the untrusted build:
+#   `detect` restores and BUILDS the freshly-upgraded (therefore not-yet-trusted)
+#   dependency graph, whose packages can run MSBuild targets during restore/build.
+#   It runs with `contents: read` only, no write token, and
+#   `persist-credentials: false`, so a malicious package target has no credential
+#   to steal and cannot push. It hands the trusted, PRE-build patched
+#   Directory.Packages.props (plus the build result) to `publish` as job outputs.
+#   `publish` holds the write token but does a CLEAN checkout and never restores or
+#   builds the upgraded packages — it only writes our own patched file, commits,
+#   pushes, and opens the PR (or the tracking issue).
+
+name: Windows NuGet updates
+
+on:
+  schedule:
+    # Mondays 06:17 UTC — weekly, matching the Dependabot cadence.
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: 'Detect and patch Directory.Packages.props but do not open a PR'
+        type: boolean
+        default: false
+
+concurrency:
+  group: windows-nuget-updates
+  cancel-in-progress: false
+
+env:
+  # Pin the tool for reproducible runs.
+  DOTNET_OUTDATED_VERSION: '4.8.1'
+  # Dedicated bot branch; force-pushed each run so the PR always shows exactly
+  # one commit on top of the default branch.
+  PR_BRANCH: bot/windows-nuget-updates
+  # Package ids to hold back (exact, case-insensitive; comma separated). Seeded
+  # with MessagePack because its 3.x major was intentionally declined in #580 —
+  # remove it here to let this workflow propose that major again.
+  IGNORE_PACKAGES: 'MessagePack'
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 1 — detect + build-validate the bump WITHOUT any write credential.
+  # Read-only token, no persisted credentials: the untrusted package build here
+  # has nothing to steal and cannot push.
+  # ─────────────────────────────────────────────────────────────────────────────
+  detect:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    outputs:
+      changed: ${{ steps.apply.outputs.changed }}
+      build_ok: ${{ steps.validate.outputs.build_ok }}
+      summary_b64: ${{ steps.apply.outputs.summary_b64 }}
+      props_b64: ${{ steps.capture.outputs.props_b64 }}
+      logtail_b64: ${{ steps.validate.outputs.logtail_b64 }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Always operate on the default branch, even for a manual
+          # workflow_dispatch launched from another branch.
+          ref: ${{ github.event.repository.default_branch }}
+          # No write token, and do NOT persist any credential in .git/config: this
+          # job builds the freshly-upgraded (untrusted) packages, whose MSBuild
+          # targets run during restore/build.
+          persist-credentials: false
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install dotnet-outdated
+        shell: pwsh
+        run: |
+          dotnet tool install --global dotnet-outdated-tool --version $env:DOTNET_OUTDATED_VERSION
+          # Ensure the global tools directory is on PATH for later steps.
+          "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+      - name: Detect outdated central packages
+        shell: pwsh
+        run: |
+          # Windows restore of the full graph (incl. WinUI / WindowsAppSDK).
+          # --ignore-failed-sources tolerates the repo's `reactor-local` feed,
+          #   which does not exist on a fresh checkout.
+          # --exclude is a case-insensitive SUBSTRING filter (dotnet-outdated
+          #   matches packages whose id does NOT contain the string), so
+          #   `WindowsAppSDK` covers Microsoft.WindowsAppSDK / .WinUI / .Runtime and
+          #   `Win2D` covers Microsoft.Graphics.Win2D. Those are pinned via MSBuild
+          #   properties in Directory.Build.props and must not be rewritten here
+          #   (kept in sync with the ignore list in .github/dependabot.yml). As a
+          #   backstop, apply-cpm-upgrades.ps1 also skips any $(...) property pin.
+          # -pre Auto: only offer pre-releases when the current pin is a pre-release
+          #   (same behavior as Dependabot). CI=true (set by Actions) skips the
+          #   CLI's build-time SignaturesGen/copilot download targets.
+          dotnet-outdated Reactor.slnx `
+            --ignore-failed-sources `
+            --exclude WindowsAppSDK `
+            --exclude Win2D `
+            -pre Auto `
+            --output outdated.json --output-format json
+
+      - name: Apply upgrades to Directory.Packages.props
+        id: apply
+        shell: pwsh
+        run: |
+          ./.github/scripts/apply-cpm-upgrades.ps1 `
+            -ReportPath outdated.json `
+            -PropsPath Directory.Packages.props `
+            -IgnorePackages "$env:IGNORE_PACKAGES" `
+            -GitHubOutput $env:GITHUB_OUTPUT
+
+      - name: Capture patched props (trusted, before the untrusted build)
+        id: capture
+        if: steps.apply.outputs.changed == 'true'
+        shell: pwsh
+        run: |
+          # Snapshot the trusted, script-patched file NOW — before the build step
+          # runs any package-supplied MSBuild targets — and hand it to `publish` as
+          # a job output, so publish never has to trust post-build workspace state.
+          $b64 = [Convert]::ToBase64String([System.IO.File]::ReadAllBytes('Directory.Packages.props'))
+          "props_b64=$b64" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Validate the bump (build the solution)
+        id: validate
+        if: steps.apply.outputs.changed == 'true'
+        shell: pwsh
+        run: |
+          # Token-free CI gate. A PR opened with the default GITHUB_TOKEN does NOT
+          # trigger the pull_request CI workflow, so validate the bump here. Build
+          # the WHOLE solution: the packages this workflow uniquely covers (e.g.
+          # GitHub.Copilot.SDK, YamlDotNet) live in src/Reactor.Cli, which the unit
+          # tests don't exercise — only a full compile catches breakage there.
+          # CI=true (set by Actions) skips the CLI's SignaturesGen/copilot targets.
+          # This build runs WITHOUT any write credential (see the checkout above).
+          dotnet build Reactor.slnx --nologo -v:m 2>&1 | Tee-Object -FilePath build.log
+          $ok = ($LASTEXITCODE -eq 0)
+          "build_ok=$($ok.ToString().ToLowerInvariant())" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          # Hand the log tail to `publish` for the draft PR body (base64, single line).
+          $tail = (Get-Content build.log -Tail 40) -join "`n"
+          $enc = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($tail))
+          "logtail_b64=$enc" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          if ($ok) {
+            "✅ Solution build passed for the proposed bump." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          } else {
+            Write-Host "::warning::Solution build FAILED for the proposed bump — the PR will open as a draft."
+            "❌ Solution build FAILED for the proposed bump." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
+          # Never fail this step: we still want to open a (draft) PR on build failure.
+          exit 0
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 2 — open/update the PR with the write token, on a CLEAN checkout. This job
+  # never restores or builds the upgraded packages, so the token is only ever
+  # exposed to our own trusted git/gh operations.
+  # ─────────────────────────────────────────────────────────────────────────────
+  publish:
+    needs: detect
+    if: needs.detect.outputs.changed == 'true' && !(github.event_name == 'workflow_dispatch' && github.event.inputs['dry-run'] == 'true')
+    runs-on: windows-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      # Labels are managed through the Issues API, so applying them via
+      # `gh pr create --label` / `gh pr edit` needs issues: write.
+      issues: write
+    steps:
+      - name: Checkout (clean tree, write token — no untrusted build runs here)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          # Optional: a DEPS_BOT_TOKEN secret (a PAT or GitHub App token the org can
+          # provide) lets this workflow open the PR automatically even when the org
+          # blocks GitHub Actions from creating PRs (otherwise the publish job falls
+          # back to a tracking issue), and makes the opened PR trigger the normal
+          # pull_request CI. Not required — falls back to the built-in GITHUB_TOKEN.
+          token: ${{ secrets.DEPS_BOT_TOKEN || github.token }}
+
+      - name: Open or update pull request
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.DEPS_BOT_TOKEN || github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          SUMMARY_B64: ${{ needs.detect.outputs.summary_b64 }}
+          PROPS_B64: ${{ needs.detect.outputs.props_b64 }}
+          BUILD_OK: ${{ needs.detect.outputs.build_ok }}
+          LOGTAIL_B64: ${{ needs.detect.outputs.logtail_b64 }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # Make native command (git/gh) non-zero exits terminate the step, so a
+          # failed `git push` can't be masked by a later successful gh/cleanup.
+          $PSNativeCommandUseErrorActionPreference = $true
+          $buildOk = ($env:BUILD_OK -eq 'true')
+
+          if ([string]::IsNullOrEmpty($env:PROPS_B64)) { throw 'props_b64 output missing from detect job' }
+
+          # Write the trusted, PRE-build patched file from the detect job over the
+          # clean checkout. This job never restores/builds the upgraded packages.
+          $bytes = [Convert]::FromBase64String($env:PROPS_B64)
+          [System.IO.File]::WriteAllBytes((Join-Path (Get-Location) 'Directory.Packages.props'), $bytes)
+
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git checkout -B $env:PR_BRANCH
+          git add Directory.Packages.props
+          # The default branch can advance between the detect and publish jobs (e.g.
+          # another run or a maintainer lands the same bump). If it now already carries
+          # this change there is nothing staged — no-op cleanly rather than letting
+          # `git commit` fail the run under the native-command error preference.
+          if ([string]::IsNullOrWhiteSpace((git diff --cached --name-only))) {
+            Write-Host 'Directory.Packages.props already matches the default branch — nothing to publish.'
+            # The bump already landed (a maintainer opened & merged the PR from the
+            # tracking issue's link, or another run did). Close any stale tracking
+            # issue so it doesn't linger open with a now-empty compare link.
+            & ./.github/scripts/close-stale-nuget-issue.ps1
+            exit 0
+          }
+          git commit -m 'deps: bump NuGet packages missed by (Linux) Dependabot'
+          git push --force origin $env:PR_BRANCH
+
+          $summary = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:SUMMARY_B64))
+          $runUrl = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+          $status = if ($buildOk) {
+            '✅ **Validated:** `dotnet build Reactor.slnx` passed on windows-latest.'
+          } else {
+            '❌ **Build failed** for this bump on windows-latest — opened as a **draft** (log tail below).'
+          }
+
+          # Build the body as a list (Set-Content writes one line per element).
+          # Avoid PowerShell here-strings: their closing "@ cannot be indented,
+          # which is impossible inside an indented YAML run block.
+          $lines = [System.Collections.Generic.List[string]]::new()
+          $lines.Add('Automated NuGet updates for the **Windows-only project graph** that GitHub-hosted (Linux) Dependabot cannot restore.')
+          $lines.Add('')
+          $lines.Add($summary)
+          $lines.Add('---')
+          $lines.Add($status)
+          $lines.Add('')
+          $lines.Add('Detected + built on `windows-latest` with no write token; this PR was opened from a separate clean checkout.')
+          $lines.Add('Windows App SDK / Win2D stay pinned via `Directory.Build.props` (excluded here).')
+          $lines.Add('Hold packages back via the `IGNORE_PACKAGES` env in `.github/workflows/windows-nuget-updates.yml`.')
+          $lines.Add('')
+          $lines.Add('> Full CI does not auto-run on token-authored PRs. A maintainer can trigger it by **Close → Reopen** (or by pushing any commit).')
+          $lines.Add('')
+          $lines.Add("[Workflow run]($runUrl)")
+          if (-not $buildOk -and -not [string]::IsNullOrEmpty($env:LOGTAIL_B64)) {
+            $tail = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:LOGTAIL_B64))
+            $lines.Add('')
+            $lines.Add('<details><summary>Build log (last 40 lines)</summary>')
+            $lines.Add('')
+            $lines.Add('```')
+            foreach ($t in ($tail -split "`n")) { $lines.Add($t) }
+            $lines.Add('```')
+            $lines.Add('</details>')
+          }
+          Set-Content -Path pr-body.md -Value $lines -Encoding utf8
+
+          # ── Open/refresh the PR, or fall back to a tracking issue ──────────────
+          # This repo may not permit GitHub Actions to CREATE pull requests. When a
+          # DEPS_BOT_TOKEN (PAT/App token) is available the create path just works;
+          # without one, refreshing an already-open PR is still allowed, so try the
+          # PR path first and — if creating a new one is blocked — fall back to a
+          # tracking ISSUE (issue creation is NOT governed by the PR-creation policy)
+          # carrying a one-click compare link a maintainer uses to open the PR. The
+          # job summary always records the same link as a guaranteed floor.
+          $compareUrl = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/compare/$($env:DEFAULT_BRANCH)...$($env:PR_BRANCH)?expand=1"
+          $buildLine = if ($buildOk) { '✅ Build validated: `dotnet build Reactor.slnx` passed on windows-latest.' } else { '❌ Build FAILED on windows-latest — review before opening.' }
+
+          function Sync-Body([string]$num) {
+            gh pr edit $num --body-file pr-body.md
+            # Best-effort draft-state sync; don't fail the run if gh balks.
+            try {
+              if ($buildOk) { gh pr ready $num } else { gh pr ready $num --undo }
+            } catch {
+              Write-Host "Draft-state toggle skipped: $($_.Exception.Message)"
+            }
+          }
+          function New-Pr {
+            $draftArg = @(); if (-not $buildOk) { $draftArg = @('--draft') }
+            gh pr create `
+              --base $env:DEFAULT_BRANCH `
+              --head $env:PR_BRANCH `
+              --title 'deps: Windows NuGet updates' `
+              --body-file pr-body.md `
+              --label dependencies `
+              --label nuget `
+              @draftArg
+          }
+          function Open-TrackingIssue {
+            # Find-or-create a single tracking issue with a one-click "open the PR"
+            # link, then prefill that link's PR body with "Closes #<this issue>" so
+            # merging the opened PR auto-closes this tracking issue. We resolve the
+            # issue number FIRST (find, else create a placeholder) because the number
+            # has to go into the compare link embedded in the issue's own body.
+            $issueTitle = 'Windows NuGet updates ready to open'
+            $open = gh issue list --state open --search 'Windows NuGet updates ready to open in:title' --json number,title | ConvertFrom-Json
+            $match = $open | Where-Object { $_.title -eq $issueTitle } | Select-Object -First 1
+            if ($match) {
+              $issueNum = $match.number
+              Write-Host "Refreshing tracking issue #$issueNum."
+            } else {
+              # Create with a placeholder body; overwritten by the edit below once we
+              # can embed the self-referential "Closes #<num>" compare link.
+              $created = gh issue create --title $issueTitle --body 'Preparing the Windows NuGet update…' --label dependencies --label nuget
+              $issueNum = [regex]::Match(($created -join "`n"), '/issues/(\d+)').Groups[1].Value
+              if ([string]::IsNullOrWhiteSpace($issueNum)) { throw "Could not parse the new issue number from: $created" }
+              Write-Host "Opened tracking issue #$issueNum."
+            }
+
+            # Prefill the compare page so the maintainer's PR closes THIS issue on merge.
+            $prTitle = 'deps: Windows NuGet updates'
+            $prBody = "Automated NuGet updates for the Windows-only project graph.`n`nCloses #$issueNum"
+            $linkUrl = "$compareUrl&title=$([Uri]::EscapeDataString($prTitle))&body=$([Uri]::EscapeDataString($prBody))"
+
+            $ib = [System.Collections.Generic.List[string]]::new()
+            $ib.Add("The weekly Windows NuGet update pushed its bump to ``$env:PR_BRANCH``, but GitHub Actions can't open a pull request in this repo — so it needs a human to open it (one click).")
+            $ib.Add('')
+            $ib.Add("### ▶ [Open the pull request]($linkUrl)")
+            $ib.Add("Opens a pre-filled PR from ``$env:PR_BRANCH`` into ``$env:DEFAULT_BRANCH`` (body already set to ``Closes #$issueNum``) — just click **Create pull request**. Merging it closes this issue automatically.")
+            $ib.Add('')
+            $ib.Add($buildLine)
+            $ib.Add('')
+            $ib.Add($summary)
+            $ib.Add('')
+            $ib.Add("[Workflow run]($runUrl)")
+            Set-Content -Path issue-body.md -Value $ib -Encoding utf8
+
+            gh issue edit $issueNum --body-file issue-body.md
+            Remove-Item issue-body.md -ErrorAction SilentlyContinue
+          }
+
+          # Guaranteed floor: record the bump + one-click link in the run's job summary,
+          # so the info survives even if both the PR and issue paths are blocked.
+          @("## Windows NuGet updates", '', $buildLine, '', $summary, '', "**[Open the pull request]($compareUrl)**") |
+            Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+          $prior = gh pr list --head $env:PR_BRANCH --state all --json number,state --jq 'sort_by(.number) | last'
+          $priorNum = $null; $priorState = $null
+          if (-not [string]::IsNullOrWhiteSpace($prior) -and $prior.Trim() -ne 'null') {
+            $p = $prior | ConvertFrom-Json
+            $priorNum = $p.number; $priorState = $p.state
+          }
+
+          # GitHub only rejects a NEW PR when an OPEN one already exists for the same
+          # head+base; merged/closed do not block a fresh PR. Reuse an open PR, reopen
+          # a closed one, else create — and if creating is blocked, use the issue.
+          $prOk = $false
+          try {
+            if ($priorState -eq 'OPEN') {
+              Write-Host "Refreshing open PR #$priorNum (branch force-pushed)."
+              Sync-Body $priorNum
+            } elseif ($priorState -eq 'CLOSED') {
+              # Reopen the closed (unmerged) PR; if reopening fails, create a fresh
+              # one before giving up to the issue fallback.
+              try {
+                gh pr reopen $priorNum
+                Write-Host "Reopened previously-closed PR #$priorNum."
+                Sync-Body $priorNum
+              } catch {
+                Write-Host "Reopen failed ($($_.Exception.Message)); creating a fresh PR instead."
+                New-Pr
+              }
+            } else {
+              New-Pr
+            }
+            $prOk = $true
+          } catch {
+            Write-Host "Could not open/refresh a PR via Actions ($($_.Exception.Message))."
+          }
+
+          if ($prOk) {
+            # A real PR now tracks this bump, so any earlier fallback tracking issue
+            # is redundant — close it (e.g. after the org grants DEPS_BOT_TOKEN, or an
+            # already-open PR is refreshed). Best-effort; never fail the run for this.
+            try {
+              & ./.github/scripts/close-stale-nuget-issue.ps1 -Reason 'this bump is now tracked by an open pull request.'
+            } catch {
+              Write-Host "Tracking-issue reconcile skipped: $($_.Exception.Message)"
+            }
+          }
+
+          if (-not $prOk) {
+            Write-Host 'Falling back to a tracking issue with a one-click PR link.'
+            try {
+              Open-TrackingIssue
+            } catch {
+              Write-Host "::warning::Could not open a PR or a tracking issue ($($_.Exception.Message)). The bump is pushed to $env:PR_BRANCH; open it here: $compareUrl"
+            }
+          }
+
+          Remove-Item pr-body.md -ErrorAction SilentlyContinue
+
+  # ─────────────────────────────────────────────────────────────────────────────
+  # Job 3 — reconcile the fallback tracking issue when there is nothing to open.
+  # `publish` only runs when detect found a change, so when a bump has already
+  # landed on the default branch (detect reports no change) an earlier tracking
+  # issue would otherwise stay OPEN forever — its bot branch deleted on merge and
+  # its compare link showing "no changes". This job closes that stale issue.
+  # ─────────────────────────────────────────────────────────────────────────────
+  reconcile:
+    needs: detect
+    if: needs.detect.outputs.changed != 'true' && !(github.event_name == 'workflow_dispatch' && github.event.inputs['dry-run'] == 'true')
+    runs-on: ubuntu-latest
+    permissions:
+      # Only the Issues API is needed to close the tracking issue.
+      issues: write
+    steps:
+      - name: Checkout (for the reconcile script only)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          sparse-checkout: |
+            .github/scripts/close-stale-nuget-issue.ps1
+          sparse-checkout-cone-mode: false
+
+      - name: Close stale tracking issue
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.DEPS_BOT_TOKEN || github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          ./.github/scripts/close-stale-nuget-issue.ps1

@@ -71,11 +71,11 @@ internal sealed class ThumbnailToolbarState
                     iId = (uint)i,
                     iBitmap = 0,
                     hIcon = hIcon,
-                    szTip = Truncate(b.Tooltip, 259),
                     dwFlags = (b.IsEnabled ? ThumbButtonFlags.Enabled : ThumbButtonFlags.Disabled)
                               | (b.IsVisible ? 0 : ThumbButtonFlags.Hidden)
                               | (b.DismissOnClick ? ThumbButtonFlags.DismissOnClick : 0),
                 };
+                native[i].SetTip(Truncate(b.Tooltip, 259));
             }
             else
             {
@@ -83,9 +83,9 @@ internal sealed class ThumbnailToolbarState
                 {
                     dwMask = ThumbButtonMask.THBF_FLAGS,
                     iId = (uint)i,
-                    szTip = string.Empty,
                     dwFlags = ThumbButtonFlags.Hidden | ThumbButtonFlags.NonInteractive,
                 };
+                // szTip left zero-filled (empty, NUL-terminated) by default.
             }
         }
 

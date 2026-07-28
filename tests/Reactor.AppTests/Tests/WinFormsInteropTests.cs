@@ -63,10 +63,10 @@ public class WinFormsInteropTests : WinFormsTestBase
             "Counter should initialize to 0");
     }
 
-    // [Retry] mops up the rare unattended-desktop input-injection flake: Win32 SendInput is
-    // occasionally dropped before the Host window foregrounds on CI. A real regression still
-    // fails every attempt. Removable once winappCli #562 (send-keys)/#498 (drag) ship native verbs.
-    [Retry(3)]
+    // [E2eRetry] mops up the rare unattended-desktop input-injection flake: the native winapp
+    // send-keys/drag verbs are SendInput under the hood and are occasionally dropped before the Host
+    // foregrounds on CI. A real regression still fails every attempt; retained pending a few stable CI runs (#652).
+    [E2eRetry(3)]
     [TestMethod]
     public void Interop_Rendering_ButtonClickUpdatesState()
     {
@@ -82,7 +82,7 @@ public class WinFormsInteropTests : WinFormsTestBase
         WaitForText("Reactor_CountDisplay", "Count: 2");
     }
 
-    [Retry(3)]
+    [E2eRetry(3)]
     [TestMethod]
     public void Interop_Rendering_TextInputWorks()
     {
@@ -127,7 +127,7 @@ public class WinFormsInteropTests : WinFormsTestBase
         "WF_TextBox3",       // bottomBar child 0
     ];
 
-    [Retry(3)]
+    [E2eRetry(3)]
     [TestMethod]
     public void Interop_Tab_ForwardCycle_TwoFullLoops()
     {
@@ -149,7 +149,7 @@ public class WinFormsInteropTests : WinFormsTestBase
         }
     }
 
-    [Retry(3)]
+    [E2eRetry(3)]
     [TestMethod]
     public void Interop_Tab_BackwardCycle_TwoFullLoops()
     {

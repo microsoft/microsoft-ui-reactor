@@ -86,6 +86,7 @@ public class MemoizationPropagationTests
     // it can validate ShouldUpdate(TProps?, TProps?) against arbitrary Component<TProps>
     // subclasses without re-implementing the dispatch path. Do not infer from this code
     // that the product reconciler reflects on every reconcile — it does not.
+    [global::System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Test-only: reflects the internal ShouldUpdate method on the concrete Component subtype the test constructs. Intentional and JIT-only (this host is never trimmed) — not claimed trim-safe; behaviour-neutral (neither preserves nor prunes members, so it cannot cause the DAM-narrowing regression noted in issue #70).")]
     private static bool ShouldUpdateWithProps(Component component, object? oldProps, object? newProps)
     {
         var compType = component.GetType();

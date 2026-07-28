@@ -19,7 +19,7 @@ jobs:
       docs-templates: ${{ steps.filter.outputs.docs-templates }}
       devtools-trim: ${{ steps.filter.outputs.devtools-trim }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -70,7 +70,7 @@ jobs:
           else
             echo "docs-templates=false" >> "$GITHUB_OUTPUT"
           fi
-          if echo "$files" | grep -qE '^(src/Reactor/Hosting/|src/Reactor\.Devtools/|tools/Reactor\.MstatVerifier/|samples/apps/hello-world-aot/|samples/apps/hello-world-aot-devtools-on/)'; then
+          if echo "$files" | grep -qE '^(src/Reactor/Hosting/|src/Reactor\.Devtools/|tools/Reactor\.MstatVerifier/|tools/Reactor\.DevtoolsNegativeResolutionFixture/|samples/apps/hello-world-aot/|samples/apps/hello-world-aot-devtools-on/)'; then
             echo "devtools-trim=true" >> "$GITHUB_OUTPUT"
           else
             echo "devtools-trim=false" >> "$GITHUB_OUTPUT"
@@ -82,10 +82,10 @@ jobs:
     if: needs.changes.outputs.non-md == 'true'
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
 
@@ -94,10 +94,28 @@ jobs:
           dotnet restore tests/Reactor.Tests/Reactor.Tests.csproj -p:Platform=x64
           dotnet restore tests/Reactor.Advanced.Tests/Reactor.Advanced.Tests.csproj -p:Platform=x64
 
-      - name: Test
-        run: |
-          dotnet test tests/Reactor.Tests/Reactor.Tests.csproj --no-restore -p:Platform=x64 --logger "console;verbosity=normal" --blame-hang-timeout 180s --blame-hang-dump-type none
-          dotnet test tests/Reactor.Advanced.Tests/Reactor.Advanced.Tests.csproj --no-restore -p:Platform=x64 --logger "console;verbosity=normal" --blame-hang-timeout 180s --blame-hang-dump-type none
+      - name: Test (Reactor.Tests)
+        # SkipSignaturesGen / SkipReactorApiGen disable the on-build regeneration of
+        # skills/reactor.api.txt. Without them, building Reactor.Tests regenerates the
+        # committed index in place (host arch == target arch on the x64 runner), so
+        # Tooling.ApiIndexGeneratorTests.Index_IsUpToDate compares the freshly-written
+        # file against itself and passes even when the checked-in index is stale. That
+        # is exactly how a stale index reached main (only the internal nightly, which
+        # gates the regen via -p:CI=true, caught it). Gating the regen off here makes
+        # Index_IsUpToDate verify the committed copies against the live surface in PR CI.
+        #
+        # Kept as its own step (rather than chained with Reactor.Advanced.Tests in one
+        # `run:` block) so a non-zero exit here fails the job. PowerShell surfaces only
+        # the last command's exit code, so a chained failure would be masked whenever a
+        # later command succeeds — that hid 14 Devtools failures from PR CI once.
+        run: dotnet test tests/Reactor.Tests/Reactor.Tests.csproj --no-restore -p:Platform=x64 -p:SkipSignaturesGen=true -p:SkipReactorApiGen=true --logger "console;verbosity=normal" --blame-hang-timeout 180s --blame-hang-dump-type none
+
+      - name: Test (Reactor.Advanced.Tests)
+        # !cancelled() so this still runs when Reactor.Tests failed above — we want
+        # the full failure picture from one CI run, not one-failure-at-a-time. The
+        # job still fails because the Reactor.Tests step's non-zero exit stands.
+        if: ${{ !cancelled() }}
+        run: dotnet test tests/Reactor.Advanced.Tests/Reactor.Advanced.Tests.csproj --no-restore -p:Platform=x64 --logger "console;verbosity=normal" --blame-hang-timeout 180s --blame-hang-dump-type none
 
   integration-tests:
     name: Integration Tests
@@ -106,10 +124,10 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
 
@@ -125,10 +143,10 @@ jobs:
     if: needs.changes.outputs.non-md == 'true'
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
 
@@ -145,10 +163,10 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
 
@@ -156,7 +174,7 @@ jobs:
       # WinAppDriver/Appium). The action downloads it and adds it to PATH, which
       # WinAppUi.ResolveWinAppExe() picks up via its PATH fallback.
       - name: Setup winapp CLI
-        uses: microsoft/setup-WinAppCli@cc8ea9a08b3ee3db43d5aa6bddda4a0e87d800f7 # v0.1
+        uses: microsoft/setup-WinAppCli@b93bbddc1f7abc061ca0d3a8119e3a0c7dd71495 # v0.2
 
       # The E2E suite launches Reactor.AppTests.Host.exe and drives it cross-process.
       # The Host is a ProjectReference of the test project, so building the test
@@ -198,10 +216,10 @@ jobs:
     if: needs.changes.outputs.non-md == 'true'
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
 
@@ -227,10 +245,10 @@ jobs:
     if: needs.changes.outputs.non-md == 'true'
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
 
@@ -248,10 +266,10 @@ jobs:
     if: needs.changes.outputs.non-md == 'true'
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
 
@@ -340,10 +358,10 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
 
@@ -394,10 +412,10 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
 
@@ -479,10 +497,10 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
 
@@ -559,10 +577,10 @@ jobs:
     if: needs.changes.outputs.docs-templates == 'true'
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
 
@@ -584,17 +602,42 @@ jobs:
     if: needs.changes.outputs.non-md == 'true'
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
 
       - name: Compile docs
         run: dotnet run --project src/Reactor.Cli -- docs compile --no-screenshots --ci
 
-      - uses: actions/setup-python@v6
+      # Docs version freshness gate. The compile above substitutes the
+      # {{reactorVersion}} token — whose single source is <ReactorPublicVersion>
+      # in Directory.Build.props — into the guide pages that name the package
+      # version. If a PR bumps that property (or edits these templates) without
+      # recompiling, the committed output goes stale; fail here with a clear fix
+      # instead of shipping docs that disagree with the source of truth.
+      #
+      # Scoped to the two version-bearing pages (getting-started, packaging)
+      # rather than all of docs/guide: other committed guide pages currently
+      # carry pre-existing compile drift unrelated to versioning, which a
+      # whole-tree diff would false-fail on. Widen once that drift is
+      # reconciled separately.
+      - name: Verify docs version substitution is committed
+        shell: pwsh
+        run: |
+          # git diff --exit-code returns non-zero when the tree differs; opt out
+          # of native-command error mapping so we surface the actionable message
+          # below instead of a bare PowerShell terminating error.
+          $PSNativeCommandUseErrorActionPreference = $false
+          git diff --exit-code -- docs/guide/getting-started.md docs/guide/packaging.md
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error 'docs/guide is out of date with the doc templates and/or ReactorPublicVersion. Run: dotnet run --project src/Reactor.Cli -- docs compile --no-screenshots  then commit the regenerated docs/guide pages (the {{reactorVersion}} token is substituted from <ReactorPublicVersion> in Directory.Build.props).'
+            exit 1
+          }
+
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
           cache: pip

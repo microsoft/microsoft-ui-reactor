@@ -38,11 +38,39 @@ public static class ReactorBinding
     /// Typed overload — saves a cast at the call site for the common case
     /// where the handler already has a strongly-typed control reference.
     /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="target"/> or <paramref name="mutate"/> is <see langword="null"/>.</exception>
     public static void WriteSuppressed<T>(T target, Action<T> mutate) where T : UIElement
     {
         ArgumentNullException.ThrowIfNull(target);
         ArgumentNullException.ThrowIfNull(mutate);
         ChangeEchoSuppressor.BeginSuppress(target);
         mutate(target);
+    }
+
+    /// <summary>
+    /// Read-side counterpart of <see cref="WriteSuppressed(UIElement, Action)"/>.
+    /// Call as the first line of a change-event handler: returns <c>true</c> when
+    /// the current fire is the engine-synthesized echo of a prior
+    /// <c>WriteSuppressed</c> write against <paramref name="target"/> —
+    /// <b>consuming one suppression token</b> on that counter-based path — so the
+    /// handler should return early before invoking the user's callback. It also
+    /// returns <c>true</c> <i>without</i> consuming a token while inside the
+    /// non-consuming <c>ApplySetters</c> suppression scope. Returns <c>false</c>
+    /// for a genuine user interaction (no outstanding token/scope), for a target
+    /// that is not a <see cref="FrameworkElement"/>, or when the target carries no
+    /// Reactor state.
+    ///
+    /// <para>This is the public primitive the wrapper generator emits for a
+    /// <c>[WrapControlled(Deferred = true)]</c> prop, so a deferred-controlled
+    /// generated wrapper compiles against Reactor's public surface alone (no
+    /// <c>InternalsVisibleTo</c>) — the read-side gap called out in spec 062 §14.
+    /// It maps to the counter/scope channel (paired with <c>WriteSuppressed</c>),
+    /// not the synchronous value-diff channel.</para>
+    /// </summary>
+    /// <exception cref="ArgumentNullException"><paramref name="target"/> is <see langword="null"/>.</exception>
+    public static bool ShouldSuppressEcho(UIElement target)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        return ChangeEchoSuppressor.ShouldSuppress(target);
     }
 }

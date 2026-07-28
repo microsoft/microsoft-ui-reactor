@@ -6,8 +6,8 @@ namespace Microsoft.UI.Reactor.AppTests.Tests;
 
 /// <summary>
 /// E2E tests for spec 027 Tier 6 drag-and-drop. Real mouse drags are synthesized via the
-/// Win32 <see cref="InputInjector"/> fallback (winapp ui has no drag verb) across the host
-/// fixtures declared in <c>DragDropE2EFixtures.cs</c>.
+/// native <c>winapp ui drag</c> verb across the host fixtures declared in
+/// <c>DragDropE2EFixtures.cs</c>.
 /// </summary>
 [TestClass]
 public class DragDropTests : AppTestBase
@@ -26,10 +26,10 @@ public class DragDropTests : AppTestBase
     /// <c>.OnDrop&lt;_, CardPayload&gt;</c> target. Relies on the move-on-confirmation
     /// contract: the source only removes the card after <c>DropCompleted</c> reports Move.
     /// </summary>
-    // [Retry] mops up the rare unattended-desktop input-injection flake: Win32 SendInput is
-    // occasionally dropped before the Host window foregrounds on CI. A real regression still
-    // fails every attempt. Removable once winappCli #562 (send-keys)/#498 (drag) ship native verbs.
-    [Retry(3)]
+    // [E2eRetry] mops up the rare unattended-desktop input-injection flake: the native winapp
+    // send-keys/drag verbs are SendInput under the hood and are occasionally dropped before the Host
+    // foregrounds on CI. A real regression still fails every attempt; retained pending a few stable CI runs (#652).
+    [E2eRetry(3)]
     [TestMethod]
     public void DragDrop_TypedReorder_MovesCard()
     {
@@ -38,17 +38,10 @@ public class DragDropTests : AppTestBase
         WaitForText("Col_Todo_Count", "Count:1");
         WaitForText("Col_Done_Count", "Count:0");
 
-        var c = Center(FindById("Card_c1").Rect);
-        var d = Center(FindById("Col_Done").Rect);
-
-        // Intermediate moves force WinUI to observe continuous pointer motion beyond its
-        // drag-detection threshold; a single jump is too abrupt and the drag never starts.
-        InputInjector.Foreground(HostHwnd);
-        InputInjector.Drag(new[]
-        {
-            c, (c.X + 8, c.Y), (c.X + 16, c.Y), (c.X + 36, c.Y),
-            ((c.X + d.X) / 2, (c.Y + d.Y) / 2), d,
-        });
+        // The native drag verb interpolates the motion internally (crossing WinUI's drag-detection
+        // threshold) and re-resolves both element endpoints; --dwell-ms settles on the Done column so
+        // its hover-armed drop target latches before the button releases.
+        App.Drag("Card_c1", "Col_Done", dwellMs: 350);
 
         // After a successful Move the source column should shrink and the target grow.
         WaitForText("Col_Done_Count", "Count:1", timeoutMs: 6000);
@@ -60,7 +53,7 @@ public class DragDropTests : AppTestBase
     /// have the card (move-on-confirmation guarantees the source doesn't optimistically
     /// remove it, and WasCancelled → CompletedOperation = None).
     /// </summary>
-    [Retry(3)]
+    [E2eRetry(3)]
     [TestMethod]
     public void DragDrop_CancelledDrag_LeavesSourceIntact()
     {
@@ -70,13 +63,9 @@ public class DragDropTests : AppTestBase
 
         var c = Center(FindById("Card_c1").Rect);
 
-        // Drag into empty space and release — no target accepts, drop is cancelled.
-        InputInjector.Foreground(HostHwnd);
-        InputInjector.Drag(new[]
-        {
-            c, (c.X + 8, c.Y), (c.X + 16, c.Y), (c.X + 200, c.Y),
-            (c.X + 400, c.Y), (c.X + 400, c.Y - 200), (c.X + 400, c.Y - 400),
-        });
+        // Drag into empty space well outside any column and release — no target accepts, so the
+        // drop is cancelled. The destination is a screen coordinate (no element lives there).
+        App.Drag("Card_c1", $"{c.X + 400},{c.Y - 400}", dwellMs: 200);
 
         // Source still has the card.
         WaitForText("Col_Todo_Count", "Count:1");
@@ -87,7 +76,7 @@ public class DragDropTests : AppTestBase
     /// Text format round-trip — drag a control that writes text to the DataPackage
     /// onto a target that reads it via <c>TryGetText</c>.
     /// </summary>
-    [Retry(3)]
+    [E2eRetry(3)]
     [TestMethod]
     public void DragDrop_TextFormat_RoundTrip()
     {
@@ -95,15 +84,7 @@ public class DragDropTests : AppTestBase
 
         WaitForText("TextDropResult", "Dropped: (none)");
 
-        var s = Center(FindById("TextDragSource").Rect);
-        var t = Center(FindById("TextDropZone").Rect);
-
-        InputInjector.Foreground(HostHwnd);
-        InputInjector.Drag(new[]
-        {
-            s, (s.X + 8, s.Y), (s.X + 16, s.Y), (s.X + 36, s.Y),
-            ((s.X + t.X) / 2, (s.Y + t.Y) / 2), t,
-        });
+        App.Drag("TextDragSource", "TextDropZone", dwellMs: 350);
 
         WaitForText("TextDropResult", "Dropped: dragged-text", timeoutMs: 6000);
     }

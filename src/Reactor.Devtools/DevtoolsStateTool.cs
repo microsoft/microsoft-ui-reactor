@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.UI.Reactor.Core;
 
 namespace Microsoft.UI.Reactor.Hosting.Devtools;
@@ -23,15 +24,8 @@ internal static class DevtoolsStateTool
             new McpToolDescriptor(
                 Name: "state",
                 Description: "Reads reactive state from the root component's hook table. Primitives return as JSON; complex objects return as { $type, $shape }.",
-                InputSchema: new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        selector = new { type = "string", description = "Reserved — v1 always inspects the root component." },
-                    },
-                    additionalProperties = false,
-                }),
+                InputSchema: Schema.Root(
+                    ("selector", Schema.Str("Reserved — v1 always inspects the root component.")))),
             @params => server.OnDispatcher<object>(() => BuildPayload(rootComponent())));
     }
 
@@ -46,7 +40,7 @@ internal static class DevtoolsStateTool
             throw new McpToolException(
                 "No root component is mounted.",
                 JsonRpcErrorCodes.ToolExecution,
-                new { code = "not-ready" });
+                new McpErrorData("not-ready"));
 
         var ctx = GetContext(root);
         var snapshots = ctx.SnapshotHooks();
@@ -56,21 +50,19 @@ internal static class DevtoolsStateTool
         // agent to resolve it separately.
         var instanceId = $"r:main/{componentName}.root";
 
-        var hooks = snapshots.Select(s => new
-        {
-            component = componentName,
-            instanceId,
-            hook = s.Hook,
-            index = s.Index,
-            valueType = s.ValueType?.FullName ?? s.ValueType?.Name,
-            value = ShapeValue(s.Value),
+        var hooks = snapshots.Select(s => new HookSnapshot(
+            Component: componentName,
+            InstanceId: instanceId,
+            Hook: s.Hook,
+            Index: s.Index,
+            ValueType: s.ValueType?.FullName ?? s.ValueType?.Name,
             // Q3 (spec 049 §3.6): true when this cell's value was migrated by
             // the most recent hot-reload state-migration pass, so a devtools
             // client can visually flag preserved-across-edit state.
-            migrated = s.Migrated,
-        }).ToArray();
+            Value: ShapeValue(s.Value),
+            Migrated: s.Migrated)).ToArray();
 
-        return new { hooks };
+        return new StateResult(hooks);
     }
 
     /// <summary>
@@ -95,34 +87,50 @@ internal static class DevtoolsStateTool
     /// </summary>
     [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Devtools state tool uses reflection to inspect hook values.")]
     [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Devtools state tool uses reflection to inspect hook values.")]
-    internal static object? ShapeValue(object? value)
+    internal static JsonNode? ShapeValue(object? value)
     {
         if (value is null) return null;
 
-        // Primitives + string + decimal ship as literals.
-        if (value is string or bool or byte or sbyte or short or ushort or int or uint or long or ulong or float or double or decimal)
-            return value;
+        // Primitives + string + decimal ship as JSON literals.
+        switch (value)
+        {
+            case string s: return JsonValue.Create(s);
+            case bool b: return JsonValue.Create(b);
+            case byte v: return JsonValue.Create(v);
+            case sbyte v: return JsonValue.Create(v);
+            case short v: return JsonValue.Create(v);
+            case ushort v: return JsonValue.Create(v);
+            case int v: return JsonValue.Create(v);
+            case uint v: return JsonValue.Create(v);
+            case long v: return JsonValue.Create(v);
+            case ulong v: return JsonValue.Create(v);
+            case float v: return JsonValue.Create(v);
+            case double v: return JsonValue.Create(v);
+            case decimal v: return JsonValue.Create(v);
+        }
 
         // Enums present as their string form — easier to read than the raw int.
-        if (value.GetType().IsEnum) return value.ToString();
+        if (value.GetType().IsEnum) return JsonValue.Create(value.ToString());
 
         // Collections: emit the count only. A full dump is a privacy/serialization
         // pit per §12. Enumerating an arbitrary IEnumerable to count items is
-        // unsafe — lazy sequences can be expensive, infinite, or have
-        // observable side effects. We only report count when the source
-        // advertises it via ICollection / IReadOnlyCollection / ICollection<T>;
-        // otherwise we ship `count: null` so agents know the shape without us
+        // unsafe — lazy sequences can be expensive, infinite, or have observable
+        // side effects. We only read a count when the source advertises one via
+        // ICollection / IReadOnlyCollection / ICollection<T>; otherwise `count` is
+        // reported as null (present, but null) so agents know the shape without us
         // forcing enumeration.
-        if (value is IEnumerable enumerable and not string)
+        if (value is IEnumerable and not string)
         {
             int? count = TryReadCollectionCount(value);
-            var collectionShape = new Dictionary<string, object?>
+            // Match the previous Dictionary<string,object?> wire: `count` is always
+            // present, as a JSON number or explicit null (WhenWritingNull does not
+            // apply to dictionary/JsonObject values, only to object properties).
+            var collectionShape = new JsonObject
             {
                 ["kind"] = "collection",
-                ["count"] = count,
+                ["count"] = count is int c ? JsonValue.Create(c) : null,
             };
-            _ = enumerable; // keep the pattern-match binding live for readability
-            return new Dictionary<string, object?>
+            return new JsonObject
             {
                 ["$type"] = value.GetType().FullName ?? value.GetType().Name,
                 ["$shape"] = collectionShape,
@@ -136,12 +144,12 @@ internal static class DevtoolsStateTool
         var props = type.GetProperties(
             global::System.Reflection.BindingFlags.Instance |
             global::System.Reflection.BindingFlags.Public);
-        var shape = new Dictionary<string, object?>();
+        var shape = new JsonObject();
         foreach (var p in props)
         {
             shape[p.Name] = p.PropertyType.Name;
         }
-        return new Dictionary<string, object?>
+        return new JsonObject
         {
             ["$type"] = type.FullName ?? type.Name,
             ["$shape"] = shape,
@@ -169,3 +177,24 @@ internal static class DevtoolsStateTool
         return null;
     }
 }
+
+/// <summary>Result of the <c>state</c> tool — the root component's hook snapshots.</summary>
+internal sealed record StateResult(HookSnapshot[] Hooks);
+
+/// <summary>
+/// One hook cell from the root component's hook table. <see cref="Value"/> is a
+/// shaped value as a <see cref="JsonNode"/> (a primitive/string literal, or a
+/// <c>{ $type, $shape }</c> object for complex values — see
+/// <see cref="DevtoolsStateTool.ShapeValue"/>). Emitting a <c>JsonNode</c> (rather
+/// than a raw <c>object</c>/<c>Dictionary</c>) lets <see cref="StateResult"/>
+/// serialize through the source generator; the tool's <em>introspection</em> still
+/// uses reflection, so its selftest fixture stays AOT-skip-listed.
+/// </summary>
+internal sealed record HookSnapshot(
+    string Component,
+    string InstanceId,
+    string Hook,
+    int Index,
+    string? ValueType,
+    JsonNode? Value,
+    bool Migrated);

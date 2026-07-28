@@ -9,12 +9,15 @@
     <WindowsPackageType>None</WindowsPackageType>
     <RootNamespace>WinUIGalleryReactor</RootNamespace>
     <AssemblyName>ReactorGallery</AssemblyName>
+    <!-- Override the default WinUI.ico (from samples/Directory.Build.props) with the
+         WinUI Gallery logo, sourced from microsoft/WinUI-Gallery. -->
+    <ApplicationIcon>Assets\GalleryIcon.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" />
     <ProjectReference Include="..\..\src\Reactor\Reactor.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="Assets\ControlImages\**" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\GalleryIcon.ico" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

@@ -1,6 +1,7 @@
 using System.Threading.Tasks;
 using Microsoft.UI.Reactor;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Hooks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -59,7 +60,136 @@ internal sealed class CopyToClipboardButton : Component<string>
                     // than crash the gallery. Anything else propagates.
                 }
             })
-            .SubtleButton();
+            // Overlay chip that adapts to the current theme (matches the WinUI
+            // Gallery's copy button, which sits on top of the code surface).
+            .FontSize(12)
+            .Foreground(Theme.PrimaryText)
+            .Background(Theme.Ref("ControlOnImageFillColorDefaultBrush"))
+            .CornerRadius(4)
+            .Padding(10, 4, 10, 4);
+    }
+}
+
+/// <summary>
+/// The collapsible "Source code" panel body: a rounded, theme-aware editor
+/// surface with C# syntax highlighting (matching the WinUI Gallery / ColorCode
+/// coloring rules), a line-number gutter, and an overlay copy button. Rendered
+/// as a Component so it can react to <see cref="FrameworkElement.ActualThemeChanged"/>
+/// and swap between the Light and Dark ColorCode palettes when the app theme toggles.
+/// </summary>
+internal sealed class SourceCodeView : Component<string>
+{
+    const double MaxPanelHeight = 420;
+
+    // Resolve the effective theme by walking up the visual tree for the nearest
+    // explicit RequestedTheme. This is reliable during reconcile, unlike
+    // FrameworkElement.ActualTheme which can lag a synchronous update pass.
+    // Mirrors src/Reactor/Core/Theme.cs GetEffectiveThemeName: RequestedTheme
+    // override → the element's own ActualTheme → the app theme.
+    static bool ResolveIsDark(FrameworkElement? start)
+    {
+        var cur = start;
+        while (cur is not null)
+        {
+            if (cur.RequestedTheme != ElementTheme.Default)
+                return cur.RequestedTheme == ElementTheme.Dark;
+            cur = VisualTreeHelper.GetParent(cur) as FrameworkElement;
+        }
+        if (start is not null && start.ActualTheme != ElementTheme.Default)
+            return start.ActualTheme == ElementTheme.Dark;
+        return Application.Current?.RequestedTheme == ApplicationTheme.Dark;
+    }
+
+    public override Element Render()
+    {
+        var sourceCode = Props;
+
+        // The gallery toggles theme via a per-element RequestedTheme, so resolve
+        // the effective theme from the *connected* panel (via OnMount / the
+        // ActualThemeChanged sender) and re-render on change. Reading a stored ref
+        // or ActualTheme during reconcile is unreliable; walking up RequestedTheme
+        // from the live element is what ThemeRef itself does.
+        var (isDark, setIsDark) = UseState(
+            Application.Current?.RequestedTheme == ApplicationTheme.Dark,
+            threadSafe: true);
+
+        // Border is poolable, and the pool's cleanup does not remove WinUI event
+        // subscriptions — so the ActualThemeChanged handler attached on mount must
+        // be detached on unmount (below) or it would leak across rent/return.
+        var themeHandlerRef = UseRef<global::Windows.Foundation.TypedEventHandler<FrameworkElement, object>?>(null);
+
+        var palette = isDark ? CodeHighlighter.Dark : CodeHighlighter.Light;
+
+        var codeParagraphs = CodeHighlighter.Highlight(sourceCode, palette, out int lineCount);
+        var gutterParagraphs = CodeHighlighter.Gutter(lineCount, palette);
+
+        var code = (RichTextBlock(codeParagraphs) with
+            {
+                IsTextSelectionEnabled = true,
+                TextWrapping = TextWrapping.NoWrap,
+                FontSize = CodeHighlighter.CodeFontSize,
+                LineHeight = CodeHighlighter.CodeLineHeight,
+                LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
+            })
+            .FontFamily(CodeHighlighter.CodeFontFamily)
+            .Padding(16, 12, 20, 12);
+
+        var gutter = Border(
+                (RichTextBlock(gutterParagraphs) with
+                {
+                    TextWrapping = TextWrapping.NoWrap,
+                    FontSize = CodeHighlighter.CodeFontSize,
+                    LineHeight = CodeHighlighter.CodeLineHeight,
+                    LineStackingStrategy = LineStackingStrategy.BlockLineHeight,
+                })
+                .FontFamily(CodeHighlighter.CodeFontFamily))
+            .Background(palette.GutterBackground)
+            .Padding(14, 12, 12, 12);
+
+        // Fixed gutter | horizontally scrollable code. A single Auto row keeps
+        // both columns the same height so their rows line up.
+        var body = Grid(
+            columns: [GridSize.Auto, GridSize.Star()], rows: [GridSize.Auto],
+            gutter.Grid(row: 0, column: 0),
+            (ScrollView(code) with { ContentOrientation = ScrollingContentOrientation.Horizontal })
+                .Grid(row: 0, column: 1)
+        );
+
+        // Size to content, capped so long snippets scroll instead of pushing the page.
+        double panelHeight = global::System.Math.Min(lineCount * CodeHighlighter.CodeLineHeight + 24, MaxPanelHeight);
+
+        var panel = Border(
+                (ScrollView(body) with { ContentOrientation = ScrollingContentOrientation.Vertical })
+                    .Height(panelHeight))
+            .Background(palette.Background)
+            .WithBorder(Theme.CardStroke)
+            .CornerRadius(6)
+            .OnMount(el =>
+            {
+                setIsDark(ResolveIsDark(el));
+                var handler = new global::Windows.Foundation.TypedEventHandler<FrameworkElement, object>(
+                    (sender, _) => setIsDark(ResolveIsDark((FrameworkElement)sender)));
+                themeHandlerRef.Current = handler;
+                el.ActualThemeChanged += handler;
+            })
+            .OnUnmount(el =>
+            {
+                if (themeHandlerRef.Current is not null)
+                {
+                    el.ActualThemeChanged -= themeHandlerRef.Current;
+                    themeHandlerRef.Current = null;
+                }
+            });
+
+        return Grid(
+            columns: [GridSize.Star()], rows: [GridSize.Star()],
+            panel.Grid(row: 0, column: 0),
+            Component<CopyToClipboardButton, string>(sourceCode)
+                .HAlign(HorizontalAlignment.Right)
+                .VAlign(VerticalAlignment.Top)
+                .Margin(0, 8, 12, 0)
+                .Grid(row: 0, column: 0)
+        );
     }
 }
 
@@ -206,30 +336,7 @@ public static class GalleryControls
 
         children.Add(
             Expander("Source code",
-                Grid(
-                    columns: [GridSize.Star()], rows: [GridSize.Star()],
-                    (ScrollView(
-                        TextBlock(sourceCode.Trim())
-                            .FontFamily("Consolas, 'Cascadia Code', monospace")
-                            .FontSize(13)
-                            .Padding(12)
-                            .Set(tb =>
-                            {
-                                tb.IsTextSelectionEnabled = true;
-                                tb.TextWrapping = TextWrapping.NoWrap;
-                            })
-                    ) with { ContentOrientation = Microsoft.UI.Xaml.Controls.ScrollingContentOrientation.Both })
-                    .Height(200)
-                    .Background(Theme.SubtleFill)
-                    .Grid(row: 0, column: 0),
-
-                    Component<CopyToClipboardButton, string>(sourceCode.Trim())
-                        .HAlign(HorizontalAlignment.Right)
-                        .VAlign(VerticalAlignment.Top)
-                        .Margin(0, 8, 12, 0)
-                        .Grid(row: 0, column: 0)
-                )
-            )
+                Component<SourceCodeView, string>(sourceCode.Trim()))
             .OnMount(el =>
             {
                 var exp = (Expander)el;

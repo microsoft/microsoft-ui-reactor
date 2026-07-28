@@ -20,6 +20,7 @@ public class PoolResetSetAnalyzerTests
     private const string Stubs = @"
 using System;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Reactor;
 
 namespace Microsoft.UI.Xaml
 {
@@ -31,6 +32,10 @@ namespace Microsoft.UI.Xaml
         public Thickness(double l, double t, double r, double b) {}
     }
 }
+
+namespace Microsoft.UI.Reactor
+{
+using Microsoft.UI.Xaml;
 
 public class FakeElement
 {
@@ -65,6 +70,7 @@ public static class FakeElementExtensions
     public static FakeElement Margin(this FakeElement el, double l, double t, double r, double b) => el;
     public static FakeElement HorizontalAlignment(this FakeElement el, HorizontalAlignment a) => el;
     public static FakeElement VerticalAlignment(this FakeElement el, VerticalAlignment a) => el;
+}
 }
 ";
 
@@ -222,6 +228,54 @@ class C
         {
             TestCode = before,
             FixedCode = after,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task No_Diagnostic_When_Assigning_A_Captured_Objects_Property()
+    {
+        // The trapped property is set on a *captured* object, not the .Set lambda
+        // parameter, so the pooled-control modifier rewrite would not apply — must not fire.
+        var source = Stubs + @"
+class C
+{
+    void M(FakeElement other)
+    {
+        var el = new FakeElement();
+        el.Set(fe => other.MaxHeight = 260);
+    }
+}";
+
+        await new CSharpAnalyzerTest<PoolResetSetAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task No_Diagnostic_For_NonReactor_Set_Helper()
+    {
+        // A '.Set' that isn't a Reactor DSL setter (different namespace) must not fire even
+        // for a trapped property — the '.Margin(...)' etc. modifiers only exist for Reactor
+        // elements, so the fix would not compile.
+        var source = Stubs + @"
+class C
+{
+    void M(RawThing r)
+    {
+        r.Set(x => x.MaxHeight = 260);
+    }
+}
+
+public class RawThing
+{
+    public double MaxHeight;
+    public RawThing Set(System.Action<RawThing> configure) { configure(this); return this; }
+}";
+
+        await new CSharpAnalyzerTest<PoolResetSetAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
         }.RunAsync(TestContext.Current.CancellationToken);
     }
 

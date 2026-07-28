@@ -1,4 +1,6 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.UI.Reactor.Controls;
 using Microsoft.UI.Reactor.Core;
 using Microsoft.UI.Reactor.Hosting.Devtools;
@@ -131,9 +133,9 @@ public class MoreCoverageTests
     public void McpToolRegistry_Register_DuplicateName_Throws()
     {
         var reg = new McpToolRegistry();
-        reg.Register(new McpToolDescriptor("dup", "", new { }), _ => null);
+        reg.Register(new McpToolDescriptor("dup", "", new SchemaNode("object")), _ => null);
         Assert.Throws<InvalidOperationException>(() =>
-            reg.Register(new McpToolDescriptor("dup", "", new { }), _ => null));
+            reg.Register(new McpToolDescriptor("dup", "", new SchemaNode("object")), _ => null));
     }
 
     [Fact]
@@ -150,9 +152,9 @@ public class MoreCoverageTests
     public void McpToolRegistry_List_PreservesRegistrationOrder()
     {
         var reg = new McpToolRegistry();
-        reg.Register(new McpToolDescriptor("a", "", new { }), _ => null);
-        reg.Register(new McpToolDescriptor("b", "", new { }), _ => null);
-        reg.Register(new McpToolDescriptor("c", "", new { }), _ => null);
+        reg.Register(new McpToolDescriptor("a", "", new SchemaNode("object")), _ => null);
+        reg.Register(new McpToolDescriptor("b", "", new SchemaNode("object")), _ => null);
+        reg.Register(new McpToolDescriptor("c", "", new SchemaNode("object")), _ => null);
 
         var names = reg.List().Select(d => d.Name).ToArray();
         Assert.Equal(new[] { "a", "b", "c" }, names);
@@ -187,12 +189,12 @@ public class MoreCoverageTests
     private static McpDispatcher BuildDispatcherWithTools()
     {
         var reg = new McpToolRegistry();
-        reg.Register(new McpToolDescriptor("kaboom", "", new { }),
+        reg.Register(new McpToolDescriptor("kaboom", "", new SchemaNode("object")),
             _ => throw new InvalidOperationException("generic failure"));
-        reg.Register(new McpToolDescriptor("softfail", "", new { }),
-            _ => new { ok = false, reason = "no-op" });
-        reg.Register(new McpToolDescriptor("ping", "", new { }),
-            _ => new { ok = true });
+        reg.Register(new McpToolDescriptor("softfail", "", new SchemaNode("object")),
+            _ => new JsonObject { ["ok"] = false, ["reason"] = "no-op" });
+        reg.Register(new McpToolDescriptor("ping", "", new SchemaNode("object")),
+            _ => new JsonObject { ["ok"] = true });
         return new McpDispatcher(reg);
     }
 
@@ -207,6 +209,8 @@ public class MoreCoverageTests
     }
 
     [Fact]
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: reflection-based System.Text.Json serialization of a devtools/MCP dispatch result (DevtoolsMcpServer.JsonOpts, no source-gen context). Issue #70 documents this devtools JSON surface as RUC/RDC-by-design and not-yet-AOT-clean; standard `dotnet test` is JIT. Behaviour-neutral.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test-only: reflection-based System.Text.Json serialization of a devtools/MCP result (see IL2026). JIT only, not AOT-compiled. Behaviour-neutral.")]
     public void McpDispatcher_Initialize_EchoesKnownProtocolVersion_2024()
     {
         var reg = new McpToolRegistry();
@@ -221,6 +225,8 @@ public class MoreCoverageTests
     }
 
     [Fact]
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: reflection-based System.Text.Json serialization of a devtools/MCP dispatch result (DevtoolsMcpServer.JsonOpts, no source-gen context). Issue #70 documents this devtools JSON surface as RUC/RDC-by-design and not-yet-AOT-clean; standard `dotnet test` is JIT. Behaviour-neutral.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test-only: reflection-based System.Text.Json serialization of a devtools/MCP result (see IL2026). JIT only, not AOT-compiled. Behaviour-neutral.")]
     public void McpDispatcher_Initialize_EchoesKnownProtocolVersion_2025()
     {
         var d = new McpDispatcher(new McpToolRegistry());
@@ -231,6 +237,8 @@ public class MoreCoverageTests
     }
 
     [Fact]
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: reflection-based System.Text.Json serialization of a devtools/MCP dispatch result (DevtoolsMcpServer.JsonOpts, no source-gen context). Issue #70 documents this devtools JSON surface as RUC/RDC-by-design and not-yet-AOT-clean; standard `dotnet test` is JIT. Behaviour-neutral.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test-only: reflection-based System.Text.Json serialization of a devtools/MCP result (see IL2026). JIT only, not AOT-compiled. Behaviour-neutral.")]
     public void McpDispatcher_Initialize_UnknownVersion_PinsBaseline()
     {
         var d = new McpDispatcher(new McpToolRegistry());
@@ -241,6 +249,8 @@ public class MoreCoverageTests
     }
 
     [Fact]
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: reflection-based System.Text.Json serialization of a devtools/MCP dispatch result (DevtoolsMcpServer.JsonOpts, no source-gen context). Issue #70 documents this devtools JSON surface as RUC/RDC-by-design and not-yet-AOT-clean; standard `dotnet test` is JIT. Behaviour-neutral.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test-only: reflection-based System.Text.Json serialization of a devtools/MCP result (see IL2026). JIT only, not AOT-compiled. Behaviour-neutral.")]
     public void McpDispatcher_Initialize_NoParams_PinsBaseline()
     {
         var d = new McpDispatcher(new McpToolRegistry());
@@ -269,6 +279,8 @@ public class MoreCoverageTests
     }
 
     [Fact]
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: reflection-based System.Text.Json serialization of a devtools/MCP dispatch result (DevtoolsMcpServer.JsonOpts, no source-gen context). Issue #70 documents this devtools JSON surface as RUC/RDC-by-design and not-yet-AOT-clean; standard `dotnet test` is JIT. Behaviour-neutral.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test-only: reflection-based System.Text.Json serialization of a devtools/MCP result (see IL2026). JIT only, not AOT-compiled. Behaviour-neutral.")]
     public void McpDispatcher_ResourcesList_ReturnsEmptyInventory()
     {
         var d = new McpDispatcher(new McpToolRegistry());
@@ -278,6 +290,8 @@ public class MoreCoverageTests
     }
 
     [Fact]
+    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Test-only: reflection-based System.Text.Json serialization of a devtools/MCP dispatch result (DevtoolsMcpServer.JsonOpts, no source-gen context). Issue #70 documents this devtools JSON surface as RUC/RDC-by-design and not-yet-AOT-clean; standard `dotnet test` is JIT. Behaviour-neutral.")]
+    [UnconditionalSuppressMessage("AOT", "IL3050", Justification = "Test-only: reflection-based System.Text.Json serialization of a devtools/MCP result (see IL2026). JIT only, not AOT-compiled. Behaviour-neutral.")]
     public void McpDispatcher_PromptsList_ReturnsEmptyInventory()
     {
         var d = new McpDispatcher(new McpToolRegistry());
@@ -312,8 +326,8 @@ public class MoreCoverageTests
         {
             using var logger = new DevtoolsLogger(tempDir, pid: 2001, DevtoolsLogLevel.Call);
             var reg = new McpToolRegistry();
-            reg.Register(new McpToolDescriptor("softfail", "", new { }),
-                _ => new { ok = false });
+            reg.Register(new McpToolDescriptor("softfail", "", new SchemaNode("object")),
+                _ => new JsonObject { ["ok"] = false });
             var d = new McpDispatcher(reg, logger);
 
             var resp = d.Dispatch(
@@ -339,7 +353,7 @@ public class MoreCoverageTests
         {
             using var logger = new DevtoolsLogger(tempDir, pid: 2002, DevtoolsLogLevel.Call);
             var reg = new McpToolRegistry();
-            reg.Register(new McpToolDescriptor("kaboom", "", new { }),
+            reg.Register(new McpToolDescriptor("kaboom", "", new SchemaNode("object")),
                 _ => throw new InvalidOperationException("boom"));
             var d = new McpDispatcher(reg, logger);
 

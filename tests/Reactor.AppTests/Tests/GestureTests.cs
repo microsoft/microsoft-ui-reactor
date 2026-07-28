@@ -8,9 +8,9 @@ namespace Microsoft.UI.Reactor.AppTests.Tests;
 /// (mouse drag, right-click, double-click, mouse hold) against the host
 /// fixtures declared in <c>GestureE2EFixtures.cs</c>.
 ///
-/// winapp ui has no drag and no press-hold, so the pan + long-press gestures
-/// use the Win32 <see cref="InputInjector"/> fallback; double/right click use
-/// winapp's native click verbs.
+/// The pan gesture uses the native <c>winapp ui drag</c> verb; the long-press uses the same
+/// verb with <c>--hold-ms</c> (press-and-hold in place); double/right click use winapp's
+/// native click verbs.
 /// </summary>
 [TestClass]
 public class GestureTests : AppTestBase
@@ -25,10 +25,10 @@ public class GestureTests : AppTestBase
     /// .OnPan: mouse-drag a Border and verify the pan callback reports
     /// Began → Changed → Ended and cumulative translation is non-zero.
     /// </summary>
-    // [Retry] mops up the rare unattended-desktop input-injection flake: Win32 SendInput is
-    // occasionally dropped before the Host window foregrounds on CI. A real regression still
-    // fails every attempt. Removable once winappCli #562 (send-keys)/#498 (drag) ship native verbs.
-    [Retry(3)]
+    // [E2eRetry] mops up the rare unattended-desktop input-injection flake: the native winapp
+    // send-keys/drag verbs are SendInput under the hood and are occasionally dropped before the Host
+    // foregrounds on CI. A real regression still fails every attempt; retained pending a few stable CI runs (#652).
+    [E2eRetry(3)]
     [TestMethod]
     public void Interactive_OnPan_Drag_ReportsTranslationAndPhase()
     {
@@ -37,10 +37,11 @@ public class GestureTests : AppTestBase
         WaitForText("PanPhase", "phase=idle");
 
         var r = FindById("PanTarget").Rect;
-        InputInjector.Foreground(HostHwnd);
-        InputInjector.Drag(InputInjector.DragPath(
-            r.X + r.Width / 2, r.Y + r.Height / 2,
-            r.X + r.Width / 2 + 60, r.Y + r.Height / 2 + 40));
+        var fromX = r.X + r.Width / 2;
+        var fromY = r.Y + r.Height / 2;
+        // Native drag from the target's center to an offset destination; the CLI interpolates the
+        // motion so WinUI observes continuous pointer movement across its manipulation threshold.
+        App.Drag("PanTarget", $"{fromX + 60},{fromY + 40}");
 
         // Either Ended (best case) or Changed (if WinUI swallowed the last frame) is acceptable;
         // the important part is that the reconciler wired the manipulation events correctly.
@@ -58,7 +59,7 @@ public class GestureTests : AppTestBase
     /// <summary>
     /// .OnDoubleTap: double-click a Button and verify the count increments.
     /// </summary>
-    [Retry(3)]
+    [E2eRetry(3)]
     [TestMethod]
     public void Interactive_OnDoubleTap_FiresOnDoubleClick()
     {
@@ -66,7 +67,6 @@ public class GestureTests : AppTestBase
 
         WaitForText("DoubleTapCount", "Doubletap count: 0");
 
-        InputInjector.Foreground(HostHwnd);
         App.Click("DoubleTapTarget", doubleClick: true);
 
         WaitForText("DoubleTapCount", "Doubletap count: 1");
@@ -75,7 +75,7 @@ public class GestureTests : AppTestBase
     /// <summary>
     /// .OnRightTapped: right-click a Button and verify the count increments.
     /// </summary>
-    [Retry(3)]
+    [E2eRetry(3)]
     [TestMethod]
     public void Interactive_OnRightTapped_FiresOnContextClick()
     {
@@ -83,7 +83,6 @@ public class GestureTests : AppTestBase
 
         WaitForText("RightTapCount", "Righttap count: 0");
 
-        InputInjector.Foreground(HostHwnd);
         App.Click("RightTapTarget", rightClick: true);
 
         WaitForText("RightTapCount", "Righttap count: 1");
@@ -93,7 +92,7 @@ public class GestureTests : AppTestBase
     /// .OnLongPress: press-and-hold and verify the long-press callback fires.
     /// Uses mouse emulation (default-off in production; opted in by the fixture).
     /// </summary>
-    [Retry(3)]
+    [E2eRetry(3)]
     [TestMethod]
     public void Interactive_OnLongPress_FiresAfterHold()
     {
@@ -101,9 +100,9 @@ public class GestureTests : AppTestBase
 
         WaitForText("LongPressCount", "Longpress count: 0");
 
-        var r = FindById("LongPressTarget").Rect;
-        InputInjector.Foreground(HostHwnd);
-        InputInjector.PressHoldRelease(r.X + r.Width / 2, r.Y + r.Height / 2, holdMs: 600);
+        // from == to (no movement) with --hold-ms presses and holds the button in place, then
+        // releases — a press-and-hold / long-press at the target's center.
+        App.Drag("LongPressTarget", "LongPressTarget", holdMs: 600);
 
         WaitForText("LongPressCount", "Longpress count: 1", timeoutMs: 6000);
     }

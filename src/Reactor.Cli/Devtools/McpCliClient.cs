@@ -1,8 +1,15 @@
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 
 namespace Microsoft.UI.Reactor.Cli.Devtools;
+
+/// <summary>JSON-RPC request envelope for a <c>tools/call</c> (name + arguments).</summary>
+internal sealed record ToolCallParams(string name, JsonElement arguments);
+internal sealed record ToolCallRequest(string jsonrpc, int id, string method, ToolCallParams @params);
+/// <summary>JSON-RPC request envelope for a bare method with opaque params.</summary>
+internal sealed record MethodRequest(string jsonrpc, int id, string method, JsonElement? @params);
 
 /// <summary>
 /// Thin JSON-RPC client for the devtools MCP endpoint. One
@@ -38,38 +45,23 @@ internal sealed class McpCliClient : IDisposable
         // `JsonDocument.Parse("{}").RootElement` directly would leave the
         // element tied to a document the GC is free to reclaim.
         using var emptyDoc = JsonDocument.Parse("{}");
-        var payload = new
-        {
-            jsonrpc = "2.0",
-            id = 1,
-            method = "tools/call",
-            @params = new
-            {
-                name = toolName,
-                arguments = arguments ?? emptyDoc.RootElement.Clone(),
-            },
-        };
-        return Post(payload);
+        var payload = new ToolCallRequest(
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            @params: new ToolCallParams(toolName, arguments ?? emptyDoc.RootElement.Clone()));
+        return Post(payload, CliJsonContext.Default.ToolCallRequest);
     }
 
     public JsonDocument InvokeMethod(string method, JsonElement? @params)
     {
-        var payload = new
-        {
-            jsonrpc = "2.0",
-            id = 1,
-            method,
-            @params = @params,
-        };
-        return Post(payload);
+        var payload = new MethodRequest(jsonrpc: "2.0", id: 1, method: method, @params: @params);
+        return Post(payload, CliJsonContext.Default.MethodRequest);
     }
 
-    private JsonDocument Post(object payload)
+    private JsonDocument Post<T>(T payload, JsonTypeInfo<T> typeInfo)
     {
-        var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions
-        {
-            DefaultIgnoreCondition = global::System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
-        });
+        var json = JsonSerializer.Serialize(payload, typeInfo);
         var content = new StringContent(json, Encoding.UTF8, "application/json");
         var resp = _http.PostAsync(_endpoint, content).GetAwaiter().GetResult();
         var body = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();

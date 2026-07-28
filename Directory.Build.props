@@ -18,8 +18,53 @@
   -->
   <PropertyGroup>
     <WindowsAppSDKVersion>2.1.3</WindowsAppSDKVersion>
+    <!--
+      Windows App SDK 2.0 split the monolithic Microsoft.WindowsAppSDK metapackage
+      into independently-versioned sub-packages. Framework-dependent projects
+      reference only Microsoft.WindowsAppSDK.WinUI (see the injection rule in
+      Directory.Build.targets); the WinUI sub-package tracks its own version, which
+      currently trails the aggregate metapackage version (2.1.0 vs 2.1.3).
+    -->
+    <WindowsAppSDKWinUIVersion>2.1.0</WindowsAppSDKWinUIVersion>
     <Win2DVersion>1.4.0</Win2DVersion>
     <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
+
+    <!--
+      Single source of truth for the current PUBLIC Microsoft.UI.Reactor package
+      version. This is the ONE literal to bump at release time (see
+      docs/contributing/release-runbook.md). Two consumers read it:
+        1. tools/Templates/Microsoft.UI.Reactor.Templates.csproj — the
+           MicrosoftUIReactorVersion fallback default derives from it via
+           $(ReactorPublicVersion), so a scaffolded app's fallback framework
+           reference and the docs can never disagree.
+        2. `mur docs compile` (VersionSource.ReadPublicVersion) substitutes it
+           for the {{reactorVersion}} token in docs/_pipeline/templates/*.md.dt,
+           so guide prose needs no per-release hand edits.
+      Keep it a real PUBLISHED public version. Every release is a prerelease, so
+      a floating range like 0.1.* matches nothing and fails restore (NU1103) —
+      pin a real version here and substitute it, never float.
+    -->
+    <ReactorPublicVersion>0.1.0-preview.12</ReactorPublicVersion>
+  </PropertyGroup>
+
+  <!--
+    Release builds treat warnings as errors, globally, for every project in the
+    repo. The CI PR-gate and the official release/pack pipeline both build with
+    `-c Release` (see .github/workflows/ci.yml + release.yml), so this makes any
+    compiler / analyzer / NuGet-restore warning a hard build break there while
+    keeping Debug (the inner developer loop) warning-tolerant for fast iteration.
+
+    Scoped to Configuration=Release only, and set in Directory.Build.props (an
+    early import) so an individual csproj can still opt out or add codes via the
+    usual TreatWarningsAsErrors / WarningsNotAsErrors / NoWarn knobs after this.
+    NuGet honors TreatWarningsAsErrors during restore, so a Release-configured
+    restore escalates NU-prefixed warnings too. Note the CI/release pipelines
+    restore separately (`dotnet restore` without `-c Release`) and then build with
+    `no-restore`, so NU-prefixed restore warnings only hard-fail on a combined
+    Release restore+build — keep package versions aligned (Directory.Packages.props).
+  -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 
   <!--
