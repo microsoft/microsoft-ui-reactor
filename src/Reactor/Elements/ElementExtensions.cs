@@ -1824,39 +1824,49 @@ public static partial class ElementExtensions
     /// Auto-syncs this NavigationView with a NavigationHandle: sets <c>SelectedTag</c>
     /// from the current route, wires <c>OnSelectedTagChanged</c> to navigate,
     /// <c>OnBackRequested</c> to <c>GoBack</c>, and <c>IsBackEnabled</c> to <c>CanGoBack</c>.
-    /// The built-in settings item participates too: selecting it routes through
-    /// <paramref name="tagToRoute"/> with <see cref="NavigationViewElement.SettingsTag"/>,
-    /// so map that tag to your settings route (or leave it unmapped to ignore settings).
+    /// <para>
+    /// The built-in settings item is opt-in: pass <paramref name="settingsRoute"/> to make
+    /// selecting it navigate. It is a separate parameter rather than a
+    /// <see cref="NavigationViewElement.SettingsTag"/> lookup through
+    /// <paramref name="tagToRoute"/> because that delegate must return a route for every
+    /// string it is handed — callers typically throw on an unrecognized tag — so there is
+    /// no way for it to decline. Left null, settings selection does not navigate.
+    /// </para>
+    /// <para>
+    /// To show the settings item as selected while its route is current, return
+    /// <see cref="NavigationViewElement.SettingsTag"/> from <paramref name="routeToTag"/>.
+    /// </para>
     /// </summary>
     /// <param name="el">The NavigationView element to configure.</param>
     /// <param name="nav">The navigation handle obtained from <c>UseNavigation</c>.</param>
-    /// <param name="routeToTag">Maps a route to its NavigationViewItem tag. Return null for routes without a corresponding menu item.</param>
-    /// <param name="tagToRoute">Maps a NavigationViewItem tag back to a route for <c>OnSelectedTagChanged</c>. Also called with <see cref="NavigationViewElement.SettingsTag"/> when the built-in settings item is selected.</param>
+    /// <param name="routeToTag">Maps a route to its NavigationViewItem tag. Return null for routes without a corresponding menu item, or <see cref="NavigationViewElement.SettingsTag"/> for the built-in settings item.</param>
+    /// <param name="tagToRoute">Maps a NavigationViewItem tag back to a route for <c>OnSelectedTagChanged</c>. Never called with <see cref="NavigationViewElement.SettingsTag"/>.</param>
+    /// <param name="settingsRoute">Route to navigate to when the built-in settings item is selected. Null (the default) leaves settings selection unrouted.</param>
     public static NavigationViewElement WithNavigation<TRoute>(
         this NavigationViewElement el,
         Navigation.NavigationHandle<TRoute> nav,
         Func<TRoute, string?> routeToTag,
-        Func<string, TRoute> tagToRoute) where TRoute : notnull
+        Func<string, TRoute> tagToRoute,
+        Func<TRoute>? settingsRoute = null) where TRoute : notnull
     => el with
     {
         SelectedTag = routeToTag(nav.CurrentRoute),
         IsBackEnabled = nav.CanGoBack,
         OnSelectedTagChanged = tag =>
         {
-            if (tag is not null)
-                NavigateToTag(nav, tagToRoute, tag);
+            if (tag is not null && tag != NavigationViewElement.SettingsTag)
+                NavigateTo(nav, tagToRoute(tag));
         },
-        OnSettingsSelected = () =>
-            NavigateToTag(nav, tagToRoute, NavigationViewElement.SettingsTag),
+        OnSettingsSelected = settingsRoute is null
+            ? null
+            : () => NavigateTo(nav, settingsRoute()),
         OnBackRequested = () => nav.GoBack(),
     };
 
-    private static void NavigateToTag<TRoute>(
+    private static void NavigateTo<TRoute>(
         Navigation.NavigationHandle<TRoute> nav,
-        Func<string, TRoute> tagToRoute,
-        string tag) where TRoute : notnull
+        TRoute route) where TRoute : notnull
     {
-        var route = tagToRoute(tag);
         if (!EqualityComparer<TRoute>.Default.Equals(route, nav.CurrentRoute))
             nav.Navigate(route);
     }

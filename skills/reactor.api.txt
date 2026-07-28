@@ -433,7 +433,7 @@ NavigationViewElement.Set(Action<NavigationView> configure) → NavigationViewEl
 NavigationViewElement.SettingsSelected(Action handler) → NavigationViewElement
 NavigationViewElement.ShoulderNavigation(NavigationViewShoulderNavigationEnabled mode) → NavigationViewElement
 NavigationViewElement.TitleBarAutoPadding(bool enabled = true) → NavigationViewElement
-NavigationViewElement.WithNavigation<TRoute>(NavigationHandle<TRoute> nav, Func<TRoute, string> routeToTag, Func<string, TRoute> tagToRoute) → NavigationViewElement
+NavigationViewElement.WithNavigation<TRoute>(NavigationHandle<TRoute> nav, Func<TRoute, string> routeToTag, Func<string, TRoute> tagToRoute, Func<TRoute> settingsRoute = null) → NavigationViewElement
 NumberBoxElement.AcceptsExpression(bool accepts = true) → NumberBoxElement
 NumberBoxElement.Description(string description) → NumberBoxElement
 NumberBoxElement.Focus(FocusManager fm, string fieldName, bool autoFocus = false) → NumberBoxElement

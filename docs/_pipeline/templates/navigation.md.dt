@@ -365,15 +365,17 @@ is driven from state:
 `SelectedTagChanged` only fires when the selection actually moves. To react to
 every activation — including the user re-picking the item that is already
 selected — use `.ItemInvoked(handler)`. Hierarchical items report their own
-expand/collapse through `.ItemExpanding()` / `.ItemCollapsed()`, and the
-adaptive layout reports its `Minimal`/`Compact`/`Expanded` switches through
-`.DisplayModeChanged()`:
+expand/collapse through `.ItemExpanding(handler)` /
+`.ItemCollapsed(handler)`, and the adaptive layout reports its
+`Minimal`/`Compact`/`Expanded` switches through
+`.DisplayModeChanged(handler)`:
 
 ```csharp snippet="navigation/nav-item-events"
 ```
 
-All four receive the item's tag (`DisplayModeChanged` receives the new
-`NavigationViewDisplayMode`), and all four clear when passed `null`.
+`ItemInvoked`, `ItemExpanding` and `ItemCollapsed` receive the item's tag;
+`DisplayModeChanged` receives the new `NavigationViewDisplayMode`. All four
+clear when passed `null`.
 
 ## NavigationView footer, settings and pane metrics
 
@@ -386,18 +388,25 @@ built-in settings item has no tag of its own, so
 ```csharp snippet="navigation/nav-footer-and-settings"
 ```
 
+If you drive the whole view with `.WithNavigation(nav, routeToTag, tagToRoute)`,
+settings routing is opt-in through its fourth argument:
+`.WithNavigation(nav, routeToTag, tagToRoute, () => Route.Settings)`. It is a
+separate argument rather than a `SettingsTag` lookup through `tagToRoute`
+because that delegate has to return a route for every string it is handed —
+most implementations throw on an unrecognized tag — so it has no way to decline.
+
 The rest of the control's chrome is declarative too:
-`.BackButtonVisible()` and `.PaneToggleButtonVisible()` — what you reach for
-when a `TitleBar` already owns that chrome — plus `.PaneVisible()`,
-`.AlwaysShowHeader()`, `.TitleBarAutoPadding()`,
-`.SelectionFollowsFocus()`, `.OverflowLabelMode()`,
-`.ShoulderNavigation()`, the `PaneHeader` and `ContentOverlay` slots,
-and the `.CompactPaneLength()` / `.OpenPaneLength()` /
-`.CompactModeThresholdWidth()` / `.ExpandedModeThresholdWidth()` metrics.
+`.BackButtonVisible(visible)` and `.PaneToggleButtonVisible(visible)` — what you
+reach for when a `TitleBar` already owns that chrome — plus
+`.PaneVisible(visible)`, `.AlwaysShowHeader()`, `.TitleBarAutoPadding()`,
+`.SelectionFollowsFocus()`, `.OverflowLabelMode(mode)`,
+`.ShoulderNavigation(mode)`, the `PaneHeader` and `ContentOverlay` slots,
+and the `.CompactPaneLength(px)` / `.OpenPaneLength(px)` /
+`.CompactModeThresholdWidth(px)` / `.ExpandedModeThresholdWidth(px)` metrics.
 
 > The fluents drop the `Is` prefix that the underlying properties carry
-> (`.BackButtonVisible()` sets `IsBackButtonVisible`) — a C# extension method
-> cannot share its name with a property on the same type.
+> (`.BackButtonVisible(false)` sets `IsBackButtonVisible`) — a C# extension
+> method cannot share its name with a property on the same type.
 
 > The four pane metrics default to `double.NaN`, which means *Reactor never
 > writes the property* and the control keeps its own default. That sentinel is

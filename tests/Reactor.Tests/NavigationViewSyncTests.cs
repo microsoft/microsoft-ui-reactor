@@ -155,6 +155,78 @@ public class NavigationViewSyncTests
     }
 
     // ════════════════════════════════════════════════════════════════
+    //  NavigationView.WithNavigation — the built-in settings item
+    // ════════════════════════════════════════════════════════════════
+
+    // TagToRoute throws on tags it does not know, which is the normal shape for
+    // that delegate (it must return a non-null TRoute for every string). So
+    // WithNavigation must never hand it the SettingsTag sentinel: doing so
+    // crashed every existing caller the moment the user picked settings.
+    [Fact]
+    public void WithNavigation_Without_SettingsRoute_Does_Not_Wire_Settings()
+    {
+        var stack = new NavigationStack<Route>(new Home());
+        var nav = new NavigationHandle<Route>(stack);
+
+        var el = NavigationView([NavItem("Home", tag: "home")])
+            .WithNavigation(nav, RouteToTag, TagToRoute);
+
+        Assert.Null(el.OnSettingsSelected);
+        // The tag path must not route the sentinel either.
+        el.OnSelectedTagChanged!(NavigationViewElement.SettingsTag);
+        Assert.IsType<Home>(nav.CurrentRoute);
+    }
+
+    [Fact]
+    public void WithNavigation_With_SettingsRoute_Navigates_On_Settings_Selected()
+    {
+        var stack = new NavigationStack<Route>(new Home());
+        var nav = new NavigationHandle<Route>(stack);
+
+        var el = NavigationView([NavItem("Home", tag: "home")])
+            .WithNavigation(nav, RouteToTag, TagToRoute, () => new Settings());
+
+        Assert.NotNull(el.OnSettingsSelected);
+        el.OnSettingsSelected!();
+
+        Assert.IsType<Settings>(nav.CurrentRoute);
+    }
+
+    [Fact]
+    public void WithNavigation_SettingsRoute_Skips_Navigation_When_Route_Unchanged()
+    {
+        var stack = new NavigationStack<Route>(new Settings());
+        var nav = new NavigationHandle<Route>(stack);
+
+        int navigatedCount = 0;
+        nav.Navigated += _ => navigatedCount++;
+
+        var el = NavigationView([NavItem("Home", tag: "home")])
+            .WithNavigation(nav, RouteToTag, TagToRoute, () => new Settings());
+
+        el.OnSettingsSelected!();
+
+        Assert.Equal(0, navigatedCount);
+    }
+
+    // Returning SettingsTag from routeToTag is how the settings item shows as
+    // selected; SelectedTag must carry the sentinel through untouched.
+    [Fact]
+    public void WithNavigation_SelectedTag_Can_Be_The_Settings_Sentinel()
+    {
+        var stack = new NavigationStack<Route>(new Settings());
+        var nav = new NavigationHandle<Route>(stack);
+
+        var el = NavigationView([NavItem("Home", tag: "home")])
+            .WithNavigation(
+                nav,
+                r => r is Settings ? NavigationViewElement.SettingsTag : RouteToTag(r),
+                TagToRoute);
+
+        Assert.Equal(NavigationViewElement.SettingsTag, el.SelectedTag);
+    }
+
+    // ════════════════════════════════════════════════════════════════
     //  NavigationView.WithNavigation — OnBackRequested
     // ════════════════════════════════════════════════════════════════
 
