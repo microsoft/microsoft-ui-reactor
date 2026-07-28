@@ -4612,6 +4612,10 @@ public partial record NavigationViewElement(
     /// An author item carrying this tag still wins: selection searches
     /// <see cref="MenuItems"/> and <see cref="FooterMenuItems"/> before falling back to
     /// the settings item, so the sentinel can never shadow real content.
+    /// <para>Reserved, so do not use it as an ordinary item tag. Selection would work, but
+    /// <c>WithNavigation</c> skips it when mapping a tag back to a route — it routes the
+    /// sentinel through its own <c>settingsRoute</c> parameter instead — so such an item
+    /// would select without navigating.</para>
     /// </summary>
     public const string SettingsTag = "__reactor.navigationview.settings__";
 

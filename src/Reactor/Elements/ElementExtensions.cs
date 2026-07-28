@@ -1840,7 +1840,7 @@ public static partial class ElementExtensions
     /// <param name="el">The NavigationView element to configure.</param>
     /// <param name="nav">The navigation handle obtained from <c>UseNavigation</c>.</param>
     /// <param name="routeToTag">Maps a route to its NavigationViewItem tag. Return null for routes without a corresponding menu item, or <see cref="NavigationViewElement.SettingsTag"/> for the built-in settings item.</param>
-    /// <param name="tagToRoute">Maps a NavigationViewItem tag back to a route for <c>OnSelectedTagChanged</c>. Never called with <see cref="NavigationViewElement.SettingsTag"/>.</param>
+    /// <param name="tagToRoute">Maps a NavigationViewItem tag back to a route for <c>OnSelectedTagChanged</c>. Never called with <see cref="NavigationViewElement.SettingsTag"/> — that value is reserved and routed via <paramref name="settingsRoute"/> instead, so an ordinary item must not carry it or it will select without navigating.</param>
     /// <param name="settingsRoute">Route to navigate to when the built-in settings item is selected. Null (the default) leaves settings selection unrouted.</param>
     public static NavigationViewElement WithNavigation<TRoute>(
         this NavigationViewElement el,
