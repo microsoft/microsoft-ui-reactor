@@ -106,15 +106,17 @@ internal static class TabViewFillContentAreaFixtures
     }
 
     /// <summary>
-    /// An explicit <c>.VAlign(…)</c> wins over the opt-in, on mount AND on every subsequent
-    /// re-render. <c>Center</c> is deliberately chosen because it is neither WinUI's style
-    /// default (<c>Top</c>) nor the value the opt-in writes (<c>Stretch</c>), so each check
-    /// fails if either the modifier or the opt-in misbehaves.
+    /// An explicit <c>.VAlign(…)</c> wins over the opt-in, on mount AND across every
+    /// subsequent transition of the opt-in. <c>Center</c> is deliberately chosen because it
+    /// is neither WinUI's style default (<c>Top</c>) nor the value the opt-in resolves to
+    /// (<c>Stretch</c>), so each check fails if either the modifier or the opt-in misbehaves.
     ///
-    /// <para>The re-render phases are the real oracle: <c>ApplyModifiers</c> only re-writes
-    /// the alignment when the modifier <em>changed</em>, so an opt-in that wrote
-    /// unconditionally would clobber an unchanged explicit alignment on the second render,
-    /// and the on→off release would clobber it on the third.</para>
+    /// <para>The transition phases are the real oracle. <c>ApplyModifiers</c> only re-writes
+    /// the alignment when the modifier <em>changed</em>, and it is skipped here on every
+    /// re-render because the author's <c>Center</c> never changes. So if the opt-in did not
+    /// stand down, the off→on edge would overwrite <c>Center</c> with <c>Stretch</c> and the
+    /// on→off edge would <c>ClearValue</c> it away to the style's <c>Top</c> — with nothing
+    /// left to restore it.</para>
     /// </summary>
     internal class ExplicitAlignmentWins(Harness h) : SelfTestFixtureBase(h)
     {
@@ -128,8 +130,9 @@ internal static class TabViewFillContentAreaFixtures
                     () => phase,
                     () => set(phase + 1),
                     // Phase 0/1: opt-in ON with an explicit alignment, unchanged across the
-                    // re-render. Phase 2: opt-in flipped OFF, alignment still unchanged.
-                    static (p, tab) => p <= 1
+                    // re-render. Phase 2: opt-in flipped OFF. Phase 3: opt-in flipped back
+                    // ON. The explicit alignment is identical in all four phases.
+                    static (p, tab) => p <= 1 || p >= 3
                         ? tab.FillContentArea().VAlign(VerticalAlignment.Center)
                         : tab.VAlign(VerticalAlignment.Center));
             });
@@ -159,6 +162,15 @@ internal static class TabViewFillContentAreaFixtures
             await Harness.Render();
             H.Check("TabViewFill_ExplicitSurvivesOptOut",
                 tabView.VerticalAlignment == VerticalAlignment.Center);
+
+            // Phase 3 — opt-in turned back on, alignment still unchanged. This is the edge
+            // where an unguarded opt-in would newly resolve to Stretch and overwrite Center.
+            H.ClickButton("Advance");
+            await Harness.Render();
+            H.Check("TabViewFill_ExplicitSurvivesOptIn",
+                tabView.VerticalAlignment == VerticalAlignment.Center);
+            H.Check("TabViewFill_ExplicitBodyStillContentSizedAfterOptIn",
+                Body(H)!.ActualHeight < FilledBodyFloor);
         }
     }
 }

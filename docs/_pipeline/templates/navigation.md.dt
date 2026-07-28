@@ -265,8 +265,8 @@ Reactor keeps that WinUI default. Opt in to a full-height tab body with
 
 ```csharp
 TabView([
-    Tab("Editor", Border(Text("Editor")).Background(Colors.CornflowerBlue)),
-    Tab("Preview", Text("Preview")),
+    Tab("Editor", Border(TextBlock("Editor")).Background(Theme.CardBackground)),
+    Tab("Preview", TextBlock("Preview")),
 ]).FillContentArea()
 ```
 

@@ -1920,7 +1920,8 @@ public static partial class ElementExtensions
     /// <remarks>
     /// WinUI's default TabView style sets <c>VerticalAlignment="Top"</c> on the control, so
     /// by default the tab body is sized to its content and a tab child with its own
-    /// background paints only a band. See <see cref="TabViewElement.FillContentArea"/>.
+    /// background paints only a band. An explicit <c>.VAlign(…)</c> on the TabView element
+    /// always wins over this opt-in. See <see cref="TabViewElement.FillContentArea"/>.
     /// </remarks>
     public static TabViewElement FillContentArea(this TabViewElement el, bool fill = true) =>
         el with { FillContentArea = fill };
