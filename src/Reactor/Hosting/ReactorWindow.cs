@@ -1653,9 +1653,12 @@ public sealed class ReactorWindow : IDisposable
         {
             // Runs after every render via the post-modifier hook; skip the DP
             // write (and the layout invalidation it triggers) when the control
-            // already carries the height Reactor owns. (issue #917 review)
+            // already carries the height Reactor owns. Compared with a
+            // sub-pixel tolerance rather than == because Height is a double DP
+            // (and is NaN while unset, which correctly falls through to the
+            // write since every NaN comparison is false). (issue #917 review)
             if (_titleBarControlHeightOwned
-                && control.Height == TitleBarElement.TallTitleBarControlHeight)
+                && Math.Abs(control.Height - TitleBarElement.TallTitleBarControlHeight) < HeightEpsilon)
                 return;
             control.Height = TitleBarElement.TallTitleBarControlHeight;
             _titleBarControlHeightOwned = true;
@@ -1666,6 +1669,9 @@ public sealed class ReactorWindow : IDisposable
             _titleBarControlHeightOwned = false;
         }
     }
+
+    /// <summary>Sub-pixel tolerance for comparing DIP heights. (issue #917)</summary>
+    private const double HeightEpsilon = 0.01;
 
     /// <summary>
     /// Make a mounted WinUI <c>TitleBar</c> control safe to tear down, before
