@@ -93,7 +93,7 @@ Full coverage on [Controls](controls.md).
 | Text | `.FontSize(n)` `.Bold()` `.SemiBold()` `.Opacity(n)` |
 | Color | `.Background(token)` `.Foreground(token)` `.BorderBrush(token)` `.BorderThickness(...)` `.WithBorder(token, thickness?)` |
 | Shape | `.CornerRadius(n)` |
-| Behavior | `.IsEnabled(bool)` `.IsVisible(bool)` `.ToolTip(s)` |
+| Behavior | `.IsEnabled(bool)` `.IsVisible(bool)` `.IsHitTestVisible(bool)` `.ToolTip(s)` |
 | Keying | `.WithKey(s)` |
 | Flex | `.Flex(grow?, shrink?, basis?)` |
 | Themed | `.RequestedTheme(ElementTheme)` `.Backdrop(BackdropKind)` |

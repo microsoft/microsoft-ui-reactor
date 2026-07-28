@@ -19,6 +19,7 @@ etc.) when you attach a handler, so you never need to set those manually.
 | API | Purpose |
 |-----|---------|
 | `.OnPointerEntered/Exited/Pressed/Released/Moved` | Pointer events |
+| `.IsHitTestVisible(bool)` | Opt an element + its subtree out of hit-testing |
 | `.OnTapped()` / `.OnDoubleTapped()` / `.OnRightTapped()` | Tap events |
 | `.OnKeyDown()` / `.OnKeyUp()` | Keyboard events |
 | `.OnPan(...)` | Pan gesture (drag with inertia) |
@@ -47,6 +48,20 @@ Events: `OnPointerEntered`, `OnPointerExited`, `OnPointerPressed`,
 `OnPointerReleased`, `OnPointerMoved`, `OnPointerCanceled`.
 
 The `(s, e)` signature gives you the sender and `PointerRoutedEventArgs`.
+
+### Opting out of hit-testing
+
+`.IsHitTestVisible(false)` sets `UIElement.IsHitTestVisible` — the element
+**and its subtree** stop being pointer targets, so decorative or overlay
+layers let pointer events pass through to whatever is underneath.
+
+```csharp
+Border(overlayGlow).IsHitTestVisible(false)
+```
+
+Unlike `.IsEnabled(false)`, it does not grey the control out or block focus —
+reach for `.IsEnabled(false)` when you want a disabled affordance, and
+`.IsHitTestVisible(false)` when you only want clicks to fall through.
 
 ## 2. Tap events
 
