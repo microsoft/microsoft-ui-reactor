@@ -47,6 +47,25 @@ internal static class TitleBarHeightFixtures
         public override Element Render() => VStack(TextBlock("body"));
     }
 
+    /// <summary>
+    /// A tall TitleBar whose explicit <c>.Height(...)</c> can be dropped at
+    /// runtime, so the post-modifier fallback can be observed.
+    /// </summary>
+    private sealed class ToggleExplicitHeightComponent : Component
+    {
+        public Microsoft.UI.Xaml.Controls.TitleBar? Bar;
+        public Action<bool>? SetExplicit;
+
+        public override Element Render()
+        {
+            var (useExplicit, set) = UseState(true);
+            SetExplicit = set;
+            var bar = TitleBar("Height").Tall();
+            if (useExplicit) bar = bar.Height(64);
+            return VStack(bar.Set(b => Bar = b), TextBlock("body"));
+        }
+    }
+
     private static async Task<ReactorWindow> OpenAndSettle(WindowSpec spec, Func<Component> root)
     {
         var win = ReactorApp.OpenWindow(spec, root);
@@ -223,6 +242,96 @@ internal static class TitleBarHeightFixtures
                 H.Check("TitleBarHeight_NotExtended_NoThrow_NoApply",
                     !win.NativeWindow.ExtendsContentIntoTitleBar
                     && win.AppWindow.TitleBar.PreferredHeightOption == TitleBarHeightOption.Standard);
+
+                // The declaration must be RETAINED, not dropped: flipping the
+                // window into the content-extended mode re-applies it. Without
+                // the deferred-apply path this stays Standard, so the check is
+                // not satisfiable by a no-op implementation.
+                win.Update(Spec("Not extended") with
+                {
+                    ExtendsContentIntoTitleBar = true,
+                    TitleBarHeight = WindowTitleBarHeight.Tall,
+                });
+                await Harness.Render(150);
+                Report("nowExtended", win, null);
+                H.Check("TitleBarHeight_ReAppliedOnceExtended",
+                    win.AppWindow.TitleBar.Height == TallCaption);
+            }
+            finally { await CloseAndSettle(win); }
+        }
+    }
+
+    /// <summary>
+    /// A <c>WindowSpec.TitleBarHeight</c> change delivered through
+    /// <c>Update</c> — with no element re-render in between — must move BOTH
+    /// halves. The control is only reachable from the window, so dropping the
+    /// window-side control sync leaves a 48 px caption over a 32 px control.
+    /// </summary>
+    internal class TitleBarHeightSpecUpdateResizesControl(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+
+            var spec = Spec("Spec update");
+            var comp = new TitleBarComponent(static e => e);
+            var win = await OpenAndSettle(spec, () => comp);
+            try
+            {
+                Report("beforeSpecUpdate", win, comp.Bar);
+                var beforeControl = comp.Bar?.ActualHeight ?? -1;
+
+                win.Update(spec with { TitleBarHeight = WindowTitleBarHeight.Tall });
+                await Harness.Render(150);
+                Report("afterSpecUpdate", win, comp.Bar);
+
+                H.Check("TitleBarHeight_SpecUpdate_RaisesCaption",
+                    win.AppWindow.TitleBar.Height == TallCaption);
+                H.Check("TitleBarHeight_SpecUpdate_RaisesControl",
+                    Math.Abs(beforeControl - StandardCaption) < 0.5
+                    && comp.Bar is { } bar && Math.Abs(bar.ActualHeight - TallCaption) < 0.5);
+
+                win.Update(spec with { TitleBarHeight = WindowTitleBarHeight.Standard });
+                await Harness.Render(150);
+                Report("afterSpecStandard", win, comp.Bar);
+                H.Check("TitleBarHeight_SpecUpdate_LowersControlAgain",
+                    win.AppWindow.TitleBar.Height == StandardCaption
+                    && comp.Bar is { } bar2 && Math.Abs(bar2.ActualHeight - StandardCaption) < 0.5);
+            }
+            finally { await CloseAndSettle(win); }
+        }
+    }
+
+    /// <summary>
+    /// Removing an explicit <c>.Height(...)</c> from a still-tall TitleBar must
+    /// fall back to the height implied by <c>.Tall()</c>, not to auto. The
+    /// reconciler clears a removed Height modifier <em>after</em> the element's
+    /// imperative entry runs, so this only holds if the caption-derived height
+    /// is re-applied post-modifiers.
+    /// </summary>
+    internal class TitleBarHeightRemoveExplicitHeight(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+
+            var comp = new ToggleExplicitHeightComponent();
+            var win = await OpenAndSettle(Spec("Drop explicit height"), () => comp);
+            try
+            {
+                Report("withExplicit64", win, comp.Bar);
+                var withExplicit = comp.Bar?.ActualHeight ?? -1;
+
+                comp.SetExplicit?.Invoke(false);
+                await win.Host.WaitForIdleAsync();
+                await Harness.Render(150);
+                Report("explicitRemoved", win, comp.Bar);
+
+                H.Check("TitleBarHeight_RemoveExplicitHeight_FallsBackToTall",
+                    Math.Abs(withExplicit - 64) < 0.5
+                    && comp.Bar is { } bar
+                    && Math.Abs(bar.ActualHeight - TallCaption) < 0.5
+                    && win.AppWindow.TitleBar.Height == TallCaption);
             }
             finally { await CloseAndSettle(win); }
         }

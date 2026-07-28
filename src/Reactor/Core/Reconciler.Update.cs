@@ -241,6 +241,12 @@ public sealed partial class Reconciler
         if (target is FrameworkElement dragFe)
             ApplyDragAttached(dragFe, newEl.GetAttached<DragAttached>());
 
+        // Re-apply the TitleBar's caption-derived height after modifiers so
+        // removing an explicit .Height(...) from a still-tall TitleBar falls
+        // back to the implied tall height rather than to auto. (issue #917)
+        if (newEl is TitleBarElement tbEl && target is WinUI.TitleBar tbCtl)
+            TitleBarElement.SyncControlHeightAfterModifiers(tbCtl, tbEl);
+
         // Re-apply the caption-derived default after modifiers have run so a
         // label change ("+ 1" → "+ 2") updates UIA Name when the author never
         // set an explicit name. No-ops when the author did.

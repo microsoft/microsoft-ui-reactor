@@ -132,6 +132,14 @@ public sealed class ReactorWindow : IDisposable
     private WindowTitleBarHeight? _specTitleBarHeight;
     private WindowTitleBarHeight? _elementTitleBarHeight;
     private WindowTitleBarHeight? _appliedTitleBarHeight;
+    // The height Reactor last actually wrote to the caption (Standard when the
+    // declaration was removed, or when the window is not content-extended and
+    // the write was skipped). The mounted TitleBar control is sized to *this*,
+    // not to the declaration, so the two halves never disagree.
+    private WindowTitleBarHeight? _effectiveTitleBarHeight;
+    private WeakReference<FrameworkElement>? _titleBarControl;
+    private bool _titleBarControlExplicitHeight;
+    private bool _titleBarControlHeightOwned;
     private RECT _lastSizingRect;
     private readonly object _aspectRatioOverrideLock = new();
     private AspectRatioOverride[] _aspectRatioOverrides = global::System.Array.Empty<AspectRatioOverride>();
@@ -1467,18 +1475,26 @@ public sealed class ReactorWindow : IDisposable
 
     /// <summary>
     /// Records the caption height declared by the mounted <c>TitleBar(...)</c>
-    /// element, applies it, and returns the height that actually won — the
-    /// element's declaration or, when the spec declares one, the spec's. Called
-    /// from the TitleBar element's mount/update path immediately after the
-    /// <c>ExtendsContentIntoTitleBar</c> inference, which is the earliest point
-    /// the native setter is legal. The return value lets the element size its
-    /// control to match the caption Reactor actually applied. (issue #917)
+    /// element together with the control that declared it, and applies both
+    /// halves. Called from the TitleBar element's mount/update path immediately
+    /// after the <c>ExtendsContentIntoTitleBar</c> inference, which is the
+    /// earliest point the native setter is legal. (issue #917)
     /// </summary>
-    internal WindowTitleBarHeight? SetElementTitleBarHeight(WindowTitleBarHeight? height)
+    /// <param name="height">The element's <c>HeightOption</c>, or <c>null</c>.</param>
+    /// <param name="control">The mounted WinUI <c>TitleBar</c> control.</param>
+    /// <param name="controlHasExplicitHeight">
+    /// <c>true</c> when the element carries an explicit <c>.Height(...)</c>
+    /// modifier, which owns the control's height outright.
+    /// </param>
+    internal void SetElementTitleBarHeight(
+        WindowTitleBarHeight? height,
+        FrameworkElement? control,
+        bool controlHasExplicitHeight)
     {
         _elementTitleBarHeight = height;
+        _titleBarControl = control is null ? null : new WeakReference<FrameworkElement>(control);
+        _titleBarControlExplicitHeight = controlHasExplicitHeight;
         ApplyTitleBarHeight(warnWhenNotExtended: height is not null);
-        return _specTitleBarHeight ?? _elementTitleBarHeight;
     }
 
     /// <summary>
@@ -1525,6 +1541,9 @@ public sealed class ReactorWindow : IDisposable
                     "ReactorWindow.TitleBarHeight",
                     "TitleBarHeight requires a content-extended window; set WindowSpec.ExtendsContentIntoTitleBar = true "
                     + "or render a TitleBar(...) element. The height option was not applied.");
+            // The caption stayed Standard, so the control must not go tall either.
+            _effectiveTitleBarHeight = WindowTitleBarHeight.Standard;
+            SyncTitleBarControlHeight();
             return;
         }
 
@@ -1537,10 +1556,47 @@ public sealed class ReactorWindow : IDisposable
                 _ => TitleBarHeightOption.Standard,
             };
             _appliedTitleBarHeight = _specTitleBarHeight ?? _elementTitleBarHeight;
+            _effectiveTitleBarHeight = resolved;
         }
         catch (COMException ex)
         {
             DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.TitleBarHeight.set", ex);
+        }
+
+        SyncTitleBarControlHeight();
+    }
+
+    /// <summary>
+    /// Sizes the mounted WinUI <c>TitleBar</c> control to the caption height
+    /// Reactor actually applied. (issue #917)
+    /// <para>
+    /// The control does <b>not</b> track <c>AppWindow.TitleBar.PreferredHeightOption</c>
+    /// — a tall caption over a 32 DIP control leaves the two visibly disagreeing —
+    /// so Reactor pairs the two. An explicit <c>.Height(...)</c> on the element
+    /// owns the control outright and is never touched, and Reactor only clears a
+    /// height it set itself.
+    /// </para>
+    /// <para>
+    /// Also called by the reconciler <em>after</em> inline modifiers have run
+    /// (see <c>TitleBarElement.SyncControlHeightAfterModifiers</c>), so removing
+    /// an explicit <c>.Height(...)</c> from a still-tall TitleBar falls back to
+    /// the implied tall height rather than to auto.
+    /// </para>
+    /// </summary>
+    internal void SyncTitleBarControlHeight()
+    {
+        if (_titleBarControlExplicitHeight) return;
+        if (_titleBarControl is null || !_titleBarControl.TryGetTarget(out var control)) return;
+
+        if (_effectiveTitleBarHeight == WindowTitleBarHeight.Tall)
+        {
+            control.Height = TitleBarElement.TallTitleBarControlHeight;
+            _titleBarControlHeightOwned = true;
+        }
+        else if (_titleBarControlHeightOwned)
+        {
+            control.ClearValue(FrameworkElement.HeightProperty);
+            _titleBarControlHeightOwned = false;
         }
     }
 

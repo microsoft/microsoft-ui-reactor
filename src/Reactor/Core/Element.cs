@@ -4762,33 +4762,53 @@ public partial record TitleBarElement(
     /// Applies <see cref="HeightOption"/>. (issue #917)
     /// <para>
     /// Two halves, because the platform splits them: the window's system caption
-    /// (via <c>AppWindow.TitleBar.PreferredHeightOption</c>, forwarded to the
-    /// owning <c>ReactorWindow</c>) and the WinUI <c>TitleBar</c> control's own
-    /// height, which does <b>not</b> track the caption — a tall caption over a
-    /// 32 DIP control leaves the two visibly disagreeing. Runs after the
-    /// <c>ExtendsContentIntoTitleBar</c> flip above because the native caption
-    /// setter throws <c>ERROR_INVALID_STATE</c> on a non-extended window.
+    /// (via <c>AppWindow.TitleBar.PreferredHeightOption</c>) and the WinUI
+    /// <c>TitleBar</c> control's own height, which does <b>not</b> track the
+    /// caption — a tall caption over a 32 DIP control leaves the two visibly
+    /// disagreeing. Both are owned by the <c>ReactorWindow</c>, which resolves
+    /// spec-over-element precedence so the control is sized to the caption
+    /// Reactor actually applied and not to a declaration the spec overrode.
+    /// Runs after the <c>ExtendsContentIntoTitleBar</c> flip above because the
+    /// native caption setter throws <c>ERROR_INVALID_STATE</c> on a
+    /// non-extended window.
     /// </para>
     /// <para>
-    /// An explicit <c>.Height(...)</c> on the element wins: it is skipped here
-    /// and written by <c>ApplyModifiers</c>, which runs after this entry.
+    /// An explicit <c>.Height(...)</c> on the element wins: the window is told
+    /// to leave the control alone and <c>ApplyModifiers</c>, which runs after
+    /// this entry, writes the author's value.
     /// </para>
     /// </summary>
     private static void ApplyTitleBarHeightOption(WinUI.TitleBar titleBar, TitleBarElement element)
     {
+        var explicitHeight = element.Modifiers?.Height is not null;
         var window = global::Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow;
-        // The window resolves spec-over-element precedence, so the control is
-        // sized to the caption Reactor actually applied — not to a declaration
-        // the spec overrode.
-        var resolved = window is not null
-            ? window.SetElementTitleBarHeight(element.HeightOption)
-            : element.HeightOption;
+        if (window is not null)
+        {
+            window.SetElementTitleBarHeight(element.HeightOption, titleBar, explicitHeight);
+            return;
+        }
 
+        // Hosted without an owning ReactorWindow (bare ReactorHost): there is no
+        // caption to size against, so honour the element's own declaration.
+        if (!explicitHeight)
+            titleBar.Height = element.HeightOption == WindowTitleBarHeight.Tall
+                ? TallTitleBarControlHeight
+                : double.NaN;
+    }
+
+    /// <summary>
+    /// Re-applies the caption-derived control height after the reconciler has
+    /// run inline modifiers, so removing an explicit <c>.Height(...)</c> from a
+    /// still-tall <c>TitleBar(...)</c> falls back to the implied tall height
+    /// rather than to auto. No-ops when the author owns the height. (issue #917)
+    /// </summary>
+    internal static void SyncControlHeightAfterModifiers(WinUI.TitleBar titleBar, TitleBarElement element)
+    {
         if (element.Modifiers?.Height is not null) return;
-
-        titleBar.Height = resolved == WindowTitleBarHeight.Tall
-            ? TallTitleBarControlHeight
-            : double.NaN;
+        var window = global::Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow;
+        if (window is not null) window.SyncTitleBarControlHeight();
+        else if (element.HeightOption == WindowTitleBarHeight.Tall)
+            titleBar.Height = TallTitleBarControlHeight;
     }
 
     /// <summary>

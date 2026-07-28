@@ -142,6 +142,12 @@ public sealed partial class Reconciler
         if (control is FrameworkElement dragFe)
             ApplyDragAttached(dragFe, element.GetAttached<DragAttached>());
 
+        // Re-apply the TitleBar's caption-derived height after modifiers so a
+        // .Tall() without an explicit .Height(...) still sizes the control.
+        // (issue #917)
+        if (element is TitleBarElement tbEl && control is WinUI.TitleBar tbCtl)
+            TitleBarElement.SyncControlHeightAfterModifiers(tbCtl, tbEl);
+
         // After modifiers + setters have had a chance to set an explicit
         // AutomationName, fall back to the control's visible caption so UIA
         // clients that read AutomationProperties.Name directly don't see an

@@ -282,7 +282,8 @@ Caveats:
 - `BackdropKind.Transparent` falls back to no backdrop when the referenced Windows
   App SDK does not expose a transparent backdrop type.
 - `TitleBarHeight` / `.Tall()` require a content-extended window. On a window that
-  never extends, Reactor warns and skips the write rather than throwing.
+  never extends, Reactor warns and skips the write rather than throwing — and
+  re-applies the declared height automatically if the window later extends.
 
 ## Taskbar integration
 

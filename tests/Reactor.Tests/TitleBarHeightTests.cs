@@ -72,8 +72,14 @@ public class TitleBarHeightTests
         // .Tall() must not pre-bake a Height modifier: the control height is
         // applied at mount so an explicit .Height(...) can still win, and so a
         // WindowSpec override can suppress it.
-        Assert.Null(TitleBar("t").Tall().Modifiers?.Height);
-        Assert.Equal(64d, TitleBar("t").Tall().Height(64).Modifiers?.Height);
+        var tall = TitleBar("t").Tall();
+        // Guard against the vacuous reading of the asserts below: they must be
+        // observing a .Tall() that actually declared something.
+        Assert.Equal(WindowTitleBarHeight.Tall, tall.HeightOption);
+        Assert.Null(tall.Modifiers?.Height);
+        Assert.Equal(64d, tall.Height(64).Modifiers?.Height);
+        // ...and the explicit height must not disturb the declaration.
+        Assert.Equal(WindowTitleBarHeight.Tall, tall.Height(64).HeightOption);
     }
 
     [Fact]
@@ -83,6 +89,49 @@ public class TitleBarHeightTests
             "TallTitleBarControlHeight", BindingFlags.NonPublic | BindingFlags.Static);
         Assert.NotNull(field);
         Assert.Equal(48d, (double)field!.GetRawConstantValue()!);
+    }
+
+    [Fact]
+    public void ControlHeightWiring_IsPresentOnBothOwners()
+    {
+        // The control height has two writers that must both exist for the
+        // feature to work end to end: the window (so a WindowSpec-only update
+        // resizes an already-mounted control) and the post-modifier reconciler
+        // hook (so removing an explicit .Height(...) falls back to the implied
+        // tall height instead of auto). Deleting either regresses a shipped
+        // behaviour without breaking compilation elsewhere, so pin both.
+        var sync = typeof(ReactorWindow).GetMethod(
+            "SyncTitleBarControlHeight", BindingFlags.NonPublic | BindingFlags.Instance)
+            ?? typeof(ReactorWindow).GetMethod(
+                "SyncTitleBarControlHeight", BindingFlags.Public | BindingFlags.Instance);
+        Assert.NotNull(sync);
+        Assert.Equal(typeof(ReactorWindow), sync!.DeclaringType);
+        Assert.Empty(sync.GetParameters());
+
+        var postModifiers = typeof(TitleBarElement).GetMethod(
+            "SyncControlHeightAfterModifiers",
+            BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static);
+        Assert.NotNull(postModifiers);
+        Assert.Equal(2, postModifiers!.GetParameters().Length);
+        Assert.Equal(
+            typeof(TitleBarElement), postModifiers.GetParameters()[1].ParameterType);
+    }
+
+    [Fact]
+    public void SetElementTitleBarHeight_TakesTheControlAndItsExplicitHeightFlag()
+    {
+        // The window owns the control's height, so it must be handed the
+        // control and told whether the author's .Height(...) owns it. A
+        // regression to the earlier "element sizes its own control" shape
+        // drops these parameters and silently reintroduces the spec-update gap.
+        var setter = typeof(ReactorWindow).GetMethod(
+            "SetElementTitleBarHeight",
+            BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Instance);
+        Assert.NotNull(setter);
+        var parameters = setter!.GetParameters();
+        Assert.Equal(3, parameters.Length);
+        Assert.Equal(typeof(WindowTitleBarHeight?), parameters[0].ParameterType);
+        Assert.Equal(typeof(bool), parameters[2].ParameterType);
     }
 
     [Theory]
