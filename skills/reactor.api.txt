@@ -745,6 +745,7 @@ TabViewElement.AllowDropTabs(bool allow = true) → TabViewElement
 TabViewElement.CanDragTabs(bool canDrag = true) → TabViewElement
 TabViewElement.CanReorderTabs(bool canReorder = true) → TabViewElement
 TabViewElement.CloseButtonOverlayMode(TabViewCloseButtonOverlayMode mode) → TabViewElement
+TabViewElement.FillContentArea(bool fill = true) → TabViewElement
 TabViewElement.IsAddTabButtonVisible(bool visible = true) → TabViewElement
 TabViewElement.SelectedIndexChanged(Action<int> handler) → TabViewElement
 TabViewElement.Set(Action<TabView> configure) → TabViewElement
@@ -6526,6 +6527,7 @@ TabViewWidthMode TabWidthMode { get; init; }
 bool AllowDropTabs { get; init; }
 bool CanDragTabs { get; init; }
 bool CanReorderTabs { get; init; }
+bool FillContentArea { get; init; }
 bool IsAddTabButtonVisible { get; init; }
 Deconstruct(ref TabViewItemData[] Tabs) → void
 Equals(Element other) → bool

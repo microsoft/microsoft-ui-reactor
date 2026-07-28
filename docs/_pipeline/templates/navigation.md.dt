@@ -252,6 +252,33 @@ own content independently:
 Unlike stack-based navigation, tabs keep all their content alive simultaneously.
 Use tabs when users need to switch freely between parallel workspaces.
 
+### Filling the tab content area
+
+WinUI's `DefaultTabViewStyle` ships `VerticalAlignment="Top"` on the `TabView`
+control itself. A top-aligned control is arranged at its *desired* height, so
+the `*` content row in the control template never receives any leftover space
+and the tab body collapses to the natural height of the selected tab's content.
+A tab child with a background paints only a band behind its own text.
+
+Reactor keeps that WinUI default. Opt in to a full-height tab body with
+`FillContentArea`:
+
+```csharp
+TabView([
+    Tab("Editor", Border(Text("Editor")).Background(Colors.CornflowerBlue)),
+    Tab("Preview", Text("Preview")),
+]).FillContentArea()
+```
+
+The init property is available for record-construction syntax too:
+
+```csharp
+TabView([...]) with { FillContentArea = true }
+```
+
+An explicit `.VAlign(...)` on the `TabView` element always wins over the opt-in,
+so you can still pin a tab strip to the top of a tall container.
+
 ## State Serialization
 
 `NavigationHandle` can capture and restore the full navigation state —

@@ -28,6 +28,17 @@ Conventions for contributors:
 
 ### Added
 
+- **`TabView.FillContentArea` — opt-in full-height tab body (issue #914).**
+  WinUI's `DefaultTabViewStyle` sets `VerticalAlignment="Top"` on the `TabView`
+  control itself, so the `*` content row in its template never receives leftover
+  space and tab content collapses to its natural height instead of filling the
+  tab body. Reactor keeps the WinUI default; set
+  `TabView([...]) with { FillContentArea = true }` or call `.FillContentArea()`
+  to stretch the control so its content area fills the available space. An
+  explicit `.VAlign(...)` on the `TabView` element still wins. Apps working
+  around this with `UseWindowSize()` + `.MinHeight(...)` (including the Windows
+  App SDK `reactor-tabview` template) can drop that workaround.
+
 - **`NavigationView` pane-open change notification (issue #916).**
   `NavigationViewElement.OnPaneOpenChanged` plus the `.PaneOpenChanged(handler)`
   and paired `.IsPaneOpen(value, handler)` fluents report every `IsPaneOpen`

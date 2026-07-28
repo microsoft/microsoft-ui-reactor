@@ -353,6 +353,8 @@ internal static class SelfTestFixtureRegistry
         "ControlUpdate2_RichEditBox",
         "ControlUpdate2_AutoSuggestBox",
         "WrapElementSlot_TabStripHeaderMountUpdateRemove",
+        "TabViewFill_ToggleFillContentArea",
+        "TabViewFill_ExplicitAlignmentWins",
         // Modifier and event handler tests
         "ModifierEvent_EventHandlers",
         "ModifierEvent_Brushes",
@@ -1877,6 +1879,8 @@ internal static class SelfTestFixtureRegistry
         "ControlUpdate2_RichEditBox" => new ControlUpdateFixtures2.RichEditBoxUpdate(harness),
         "ControlUpdate2_AutoSuggestBox" => new ControlUpdateFixtures2.AutoSuggestBoxUpdate(harness),
         "WrapElementSlot_TabStripHeaderMountUpdateRemove" => new WrapElementSlotFixtures.TabStripHeaderMountUpdateRemove(harness),
+        "TabViewFill_ToggleFillContentArea" => new TabViewFillContentAreaFixtures.ToggleFillContentArea(harness),
+        "TabViewFill_ExplicitAlignmentWins" => new TabViewFillContentAreaFixtures.ExplicitAlignmentWins(harness),
         // Modifier and event handler tests
         "ModifierEvent_EventHandlers" => new ModifierEventFixtures.EventHandlerModifiers(harness),
         "ModifierEvent_Brushes" => new ModifierEventFixtures.BrushModifiers(harness),

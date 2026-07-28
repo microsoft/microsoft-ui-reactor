@@ -1913,6 +1913,18 @@ public static partial class ElementExtensions
     public static TabViewElement TabStripFooter(this TabViewElement el, Element footer) =>
         el with { TabStripFooter = footer };
 
+    /// <summary>
+    /// Makes the tab content area fill the space the parent gives the TabView, instead of
+    /// collapsing to the content's own height (issue #914).
+    /// </summary>
+    /// <remarks>
+    /// WinUI's default TabView style sets <c>VerticalAlignment="Top"</c> on the control, so
+    /// by default the tab body is sized to its content and a tab child with its own
+    /// background paints only a band. See <see cref="TabViewElement.FillContentArea"/>.
+    /// </remarks>
+    public static TabViewElement FillContentArea(this TabViewElement el, bool fill = true) =>
+        el with { FillContentArea = fill };
+
     /// <inheritdoc cref="IsAddTabButtonVisible"/>
     [Obsolete("Use IsAddTabButtonVisible() — aligns with WinUI naming (see #268).")]
     public static TabViewElement IsAddButtonVisible(this TabViewElement el, bool visible = true) =>

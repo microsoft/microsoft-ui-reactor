@@ -902,6 +902,7 @@ public abstract record Element
             (TabViewElement ta, TabViewElement tb) =>
                 ta.SelectedIndex == tb.SelectedIndex
                 && ta.IsAddTabButtonVisible == tb.IsAddTabButtonVisible
+                && ta.FillContentArea == tb.FillContentArea
                 && SettersEqual(ta.Setters, tb.Setters),
 
             (TreeViewElement ta, TreeViewElement tb) =>
@@ -4776,6 +4777,22 @@ public partial record TabViewElement(
     public Element? TabStripHeader { get; init; }
     /// <summary>Element rendered at the trailing edge of the tab strip.</summary>
     public Element? TabStripFooter { get; init; }
+    /// <summary>
+    /// Opt in to having the tab content area fill the space the TabView is given
+    /// by its parent (issue #914).
+    /// </summary>
+    /// <remarks>
+    /// WinUI's <c>DefaultTabViewStyle</c> ships
+    /// <c>&lt;Setter Property="VerticalAlignment" Value="Top" /&gt;</c>, so a TabView is
+    /// arranged at its <em>desired</em> height and the <c>*</c> content row in its template
+    /// never receives any leftover space — tab content is sized to content and the rest of
+    /// the tab body stays unpainted. Setting this to <c>true</c> writes
+    /// <see cref="Microsoft.UI.Xaml.VerticalAlignment.Stretch"/> on the control, which is
+    /// what the XAML TabView templates do by hand. An explicit <c>.VAlign(…)</c> on this
+    /// element always wins over the opt-in.
+    /// <para>Defaults to <c>false</c> so the WinUI style default is preserved.</para>
+    /// </remarks>
+    public bool FillContentArea { get; init; }
     /// <summary>
     /// Fires when the user starts dragging a tab. <c>tabIndex</c> is the index
     /// of the dragged tab in <see cref="Tabs"/>. Used by spec 045 §2.4 docking

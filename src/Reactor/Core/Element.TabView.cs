@@ -54,6 +54,38 @@ public partial record TabViewElement
             el.OnTabDragCompleted(idx, wasOutside);
         };
 
+    /// <summary>
+    /// Issue #914 — WinUI's <c>DefaultTabViewStyle</c> sets
+    /// <c>VerticalAlignment="Top"</c> on the TabView itself, so the control is arranged at
+    /// its desired height and the <c>*</c> content row of its template never receives the
+    /// leftover space: tab content collapses to its own height and the rest of the tab body
+    /// stays unpainted. Opting in via <see cref="TabViewElement.FillContentArea"/> writes
+    /// <c>Stretch</c> on the control, which is what the XAML TabView templates do by hand.
+    ///
+    /// <para>An explicit <c>.VAlign(…)</c> always wins, so the opt-in stands down entirely
+    /// when one is present. Deferring to <c>ApplyModifiers</c> (which runs after the
+    /// descriptor entries) is NOT enough: it only re-writes the alignment when the modifier
+    /// *changed*, so an unchanged explicit alignment would be clobbered by this write on
+    /// every subsequent re-render.</para>
+    ///
+    /// <para>Turning the opt-in back off releases the local value so WinUI's style default
+    /// (<c>Top</c>) applies again; the control is not pooled, so mount always starts from
+    /// the style value and only the on→off transition needs the release.</para>
+    /// </summary>
+    private static void ApplyFillContentArea(WinUI.TabView control, TabViewElement element, TabViewElement? old)
+    {
+        if (WritesFill(element)) control.VerticalAlignment = VerticalAlignment.Stretch;
+        else if (old is not null && WritesFill(old) && element.Modifiers?.Layout?.VerticalAlignment is null)
+            control.ClearValue(FrameworkElement.VerticalAlignmentProperty);
+    }
+
+    /// <summary>
+    /// True when the opt-in owns the control's vertical alignment: it is on and the author
+    /// did not pin the alignment themselves.
+    /// </summary>
+    private static bool WritesFill(TabViewElement element)
+        => element.FillContentArea && element.Modifiers?.Layout?.VerticalAlignment is null;
+
     private static partial Desc.ControlDescriptor<TabViewElement, WinUI.TabView> Customize(
         Desc.ControlDescriptor<TabViewElement, WinUI.TabView> d)
     {
@@ -102,6 +134,9 @@ public partial record TabViewElement
         // dedicated control property therefore ride the imperative bridge (see
         // docs/guide/extensibility-preview.md — secondary-slot decision).
         return d
+            .ImperativeBridged(
+                mount:  static (ctx, c, e) => ApplyFillContentArea(c, e, old: null),
+                update: static (ctx, c, o, n) => ApplyFillContentArea(c, n, o))
             .HandCodedControlled<V1.TabViewEventPayload, int, WinUI.SelectionChangedEventHandler>(
                 get:         static e => e.SelectedIndex,
                 set:         static (c, v) => c.SelectedIndex = v,

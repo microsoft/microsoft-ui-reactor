@@ -607,6 +607,7 @@ public class OwnPropsEqualTests
     [Theory]
     [InlineData("selectedIndex")]
     [InlineData("addBtn")]
+    [InlineData("fillContentArea")]
     public void TabViewElement_DifferingProp_NotEqual(string which)
     {
         var tabs = new[] { new TabViewItemData("h", new EmptyElement()) };
@@ -615,6 +616,7 @@ public class OwnPropsEqualTests
         {
             "selectedIndex" => a with { SelectedIndex = 1 },
             "addBtn" => a with { IsAddTabButtonVisible = true },
+            "fillContentArea" => a with { FillContentArea = true },
             _ => throw new global::System.InvalidOperationException(),
         };
         Assert.False(Element.OwnPropsEqual(a, b));
