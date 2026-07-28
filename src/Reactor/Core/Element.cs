@@ -4653,6 +4653,21 @@ public partial record TitleBarElement(
     /// interactive controls are still auto-excluded from the drag region). See spec 059.
     /// </summary>
     public bool AutoRefreshDragRegions { get; init; }
+    /// <summary>
+    /// System caption height for the hosting window. <c>Tall</c> is the standard
+    /// layout when the title bar hosts navigation chrome (back button / pane
+    /// toggle) and is the direct analogue of the XAML NavigationView template's
+    /// <c>AppWindow.TitleBar.PreferredHeightOption = Tall</c> plus its
+    /// <c>&lt;RowDefinition Height="48" /&gt;</c>. (issue #917)
+    /// </summary>
+    /// <remarks>
+    /// Sets <b>both</b> halves: the native caption height and the control's own
+    /// height (the WinUI <c>TitleBar</c> control does not follow the caption, so
+    /// setting only one leaves the caption and the title bar disagreeing). An
+    /// explicit <c>.Height(...)</c> on this element still wins over the implied
+    /// 48 DIP. <see cref="WindowSpec.TitleBarHeight"/>, when set, wins over this.
+    /// </remarks>
+    public WindowTitleBarHeight? HeightOption { get; init; }
     public Element? Content { get; init; }
     public Element? RightHeader { get; init; }
     /// <summary>
@@ -4700,8 +4715,8 @@ public partial record TitleBarElement(
                 get: static e => e.Icon,
                 set: static (c, v) => c.IconSource = global::Microsoft.UI.Reactor.Core.V1Protocol.IconResolver.ResolveIconSource(v))
             .Imperative(
-                mount: static (c, _) => RegisterWindowTitleBar(c),
-                update: static (_, _, _) => { })
+                mount: static (c, e) => RegisterWindowTitleBar(c, e),
+                update: static (c, _, e) => ApplyTitleBarHeightOption(c, e))
             .HandCodedEvent<global::Microsoft.UI.Reactor.Core.V1Protocol.TitleBarEventPayload,
                 global::Windows.Foundation.TypedEventHandler<WinUI.TitleBar, object>>(
                 subscribe:        static (c, h) => c.BackRequested += h,
@@ -4721,7 +4736,7 @@ public partial record TitleBarElement(
     // Issue #511 / PR #455 regression: ExtendsContentIntoTitleBar must flip BEFORE the WinUI
     // TitleBar's own Loaded handler runs UpdatePaddingsForCaptionButtons(); apply synchronously
     // in the Imperative mount (mirrors the legacy MountTitleBar path).
-    private static void RegisterWindowTitleBar(WinUI.TitleBar titleBar)
+    private static void RegisterWindowTitleBar(WinUI.TitleBar titleBar, TitleBarElement element)
     {
         if (global::Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal is { } host)
         {
@@ -4739,7 +4754,49 @@ public partial record TitleBarElement(
                 host.Window.ExtendsContentIntoTitleBar = true;
             host.Window.SetTitleBar(titleBar);
         }
+
+        ApplyTitleBarHeightOption(titleBar, element);
     }
+
+    /// <summary>
+    /// Applies <see cref="HeightOption"/>. (issue #917)
+    /// <para>
+    /// Two halves, because the platform splits them: the window's system caption
+    /// (via <c>AppWindow.TitleBar.PreferredHeightOption</c>, forwarded to the
+    /// owning <c>ReactorWindow</c>) and the WinUI <c>TitleBar</c> control's own
+    /// height, which does <b>not</b> track the caption — a tall caption over a
+    /// 32 DIP control leaves the two visibly disagreeing. Runs after the
+    /// <c>ExtendsContentIntoTitleBar</c> flip above because the native caption
+    /// setter throws <c>ERROR_INVALID_STATE</c> on a non-extended window.
+    /// </para>
+    /// <para>
+    /// An explicit <c>.Height(...)</c> on the element wins: it is skipped here
+    /// and written by <c>ApplyModifiers</c>, which runs after this entry.
+    /// </para>
+    /// </summary>
+    private static void ApplyTitleBarHeightOption(WinUI.TitleBar titleBar, TitleBarElement element)
+    {
+        var window = global::Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow;
+        // The window resolves spec-over-element precedence, so the control is
+        // sized to the caption Reactor actually applied — not to a declaration
+        // the spec overrode.
+        var resolved = window is not null
+            ? window.SetElementTitleBarHeight(element.HeightOption)
+            : element.HeightOption;
+
+        if (element.Modifiers?.Height is not null) return;
+
+        titleBar.Height = resolved == WindowTitleBarHeight.Tall
+            ? TallTitleBarControlHeight
+            : double.NaN;
+    }
+
+    /// <summary>
+    /// Control height paired with <see cref="WindowTitleBarHeight.Tall"/> — the
+    /// same 48 DIP the XAML NavigationView template hard-codes as
+    /// <c>&lt;RowDefinition Height="48" /&gt;</c>.
+    /// </summary>
+    internal const double TallTitleBarControlHeight = 48;
 }
 
 // Spec 058 §15 (P5.25) — IsAddTabButtonVisible/TabWidthMode/CloseButtonOverlayMode/CanDragTabs/

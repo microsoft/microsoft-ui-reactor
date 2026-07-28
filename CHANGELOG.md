@@ -36,6 +36,17 @@ Conventions for contributors:
   overload. `ControlDescriptor.Immediate` now accepts a `null` `loadedHook` for
   DP observations that have no template part to walk.
 
+- **Declarative title-bar height (issue #917).** `WindowSpec.TitleBarHeight` and
+  `TitleBar(...).Tall()` / `.HeightOption(WindowTitleBarHeight)` ask for the tall
+  (48 DIP) caption used whenever the title bar hosts navigation chrome. Sets both
+  the system caption (`AppWindow.TitleBar.PreferredHeightOption`) and the WinUI
+  title-bar control's own height — the control does not follow the caption, so
+  raising one alone leaves them disagreeing. Applied after Reactor's own
+  content-extension flip, so there is no ordering hazard and the native setter
+  cannot throw `ERROR_INVALID_STATE`. An explicit `.Height(...)` wins over the
+  implied 48, and an explicit `WindowSpec.TitleBarHeight` wins over the element's
+  declaration.
+
 ### Changed
 
 ### Deprecated
@@ -50,6 +61,12 @@ Conventions for contributors:
   left the app's state stale — the next toggle wrote a value the control already
   held and the pane appeared to need two clicks. Wire `.IsPaneOpen(value,
   handler)` (or `.PaneOpenChanged(handler)`) to keep the two in sync.
+
+- **Window updates no longer drop a `TitleBar(...)` element's content-extension
+  inference (issue #917).** `ReactorWindow.Update` wrote
+  `ExtendsContentIntoTitleBar = false` whenever the spec left it unset, silently
+  undoing the inference behind a still-mounted title-bar control; an unset spec
+  value now preserves it.
 
 ### Security
 

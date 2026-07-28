@@ -11,6 +11,25 @@ public enum WindowEmbedStyle
 public sealed record EmbedRequest(WindowEmbedStyle Style, int HostPid, bool InitialVisibility);
 
 /// <summary>
+/// Caption height for a window whose content extends into the title bar.
+/// Mirrors <c>Microsoft.UI.Windowing.TitleBarHeightOption</c>.
+/// </summary>
+/// <remarks>
+/// The native option only sizes the <b>system caption</b> (caption buttons, drag
+/// region, insets). The WinUI <c>TitleBar</c> control does not follow it — see
+/// <c>TitleBarElement.HeightOption</c>, which sizes both.
+/// </remarks>
+public enum WindowTitleBarHeight
+{
+    /// <summary>Standard 32 DIP caption.</summary>
+    Standard,
+    /// <summary>Tall 48 DIP caption — the layout used when the title bar hosts navigation chrome.</summary>
+    Tall,
+    /// <summary>No caption area at all.</summary>
+    Collapsed,
+}
+
+/// <summary>
 /// Immutable (init-only) declarative description of a top-level Reactor window. Hand to
 /// <see cref="ReactorApp.OpenWindow(WindowSpec, Func{Component}, Action{Microsoft.UI.Reactor.Hosting.ReactorHost})"/>
 /// to open a window; hand to <see cref="ReactorWindow.Update"/> to diff
@@ -137,6 +156,25 @@ public sealed record WindowSpec
     /// shape across this type change; restart after editing this field during HR.
     /// </summary>
     public bool? ExtendsContentIntoTitleBar { get; init; }
+
+    /// <summary>
+    /// System caption height. <c>null</c> (the default) leaves the platform
+    /// default alone; a mounted <c>TitleBar(...)</c> element's
+    /// <c>HeightOption</c> then applies instead, if it declares one.
+    /// </summary>
+    /// <remarks>
+    /// <para>Requires a content-extended window — the native
+    /// <c>AppWindow.TitleBar.PreferredHeightOption</c> setter throws
+    /// <c>ERROR_INVALID_STATE</c> otherwise. Reactor applies the value only once
+    /// the window is content-extended (including the deferred flip a
+    /// <c>TitleBar(...)</c> element performs at mount) and warns instead of
+    /// throwing when the window never extends.</para>
+    /// <para>This sizes the <b>system caption</b> only. A mounted WinUI
+    /// <c>TitleBar</c> control does not follow it, which is why
+    /// <c>TitleBar(...).Tall()</c> — which sizes both — is the preferred spelling
+    /// when the window renders a <c>TitleBar(...)</c> element. (issue #917)</para>
+    /// </remarks>
+    public WindowTitleBarHeight? TitleBarHeight { get; init; }
 
     /// <summary>Optional declarative backdrop. Seeds the per-host modifier.</summary>
     public BackdropChoice? Backdrop { get; init; }

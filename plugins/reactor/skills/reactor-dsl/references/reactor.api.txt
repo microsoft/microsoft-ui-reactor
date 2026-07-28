@@ -816,6 +816,7 @@ TitleBarElement.BackButtonEnabled(bool enabled) → TitleBarElement
 TitleBarElement.BackButtonVisible(bool visible) → TitleBarElement
 TitleBarElement.BackRequested(Action handler) → TitleBarElement
 TitleBarElement.Content(Element content) → TitleBarElement
+TitleBarElement.HeightOption(WindowTitleBarHeight height) → TitleBarElement
 TitleBarElement.Icon(IconData icon) → TitleBarElement
 TitleBarElement.Icon(string imageUri) → TitleBarElement
 TitleBarElement.PaneToggleButtonVisible(bool visible) → TitleBarElement
@@ -823,6 +824,7 @@ TitleBarElement.PaneToggleRequested(Action handler) → TitleBarElement
 TitleBarElement.RightHeader(Element rightHeader) → TitleBarElement
 TitleBarElement.Set(Action<TitleBar> configure) → TitleBarElement
 TitleBarElement.Subtitle(string subtitle) → TitleBarElement
+TitleBarElement.Tall(bool tall = true) → TitleBarElement
 TitleBarElement.WithNavigation<TRoute>(NavigationHandle<TRoute> nav) → TitleBarElement
 ToggleButtonElement.CheckedState(bool? state) → ToggleButtonElement
 ToggleButtonElement.CheckedStateChanged(Action<bool?> handler) → ToggleButtonElement
@@ -1070,6 +1072,7 @@ WindowSizeToContent { Manual, Width, Height, WidthAndHeight }
 WindowStartPosition { Default, CenterOnPrimary, CenterOnOwner, Manual, CenterOnCurrent }
 WindowState { Normal, Minimized, Maximized, FullScreen, CompactOverlay }
 WindowStyle { Default, None, ToolWindow }
+WindowTitleBarHeight { Standard, Tall, Collapsed }
 
 ## Public types (ctors / properties / methods / events)
 # Every public type not already covered above. Members alphabetized within
@@ -6892,6 +6895,7 @@ Action OnPaneToggleRequested { get; init; }
 Element Content { get; init; }
 Element RightHeader { get; init; }
 IconData Icon { get; init; }
+WindowTitleBarHeight? HeightOption { get; init; }
 bool AutoRefreshDragRegions { get; init; }
 bool IsBackButtonEnabled { get; init; }
 bool IsBackButtonVisible { get; init; }
@@ -7338,6 +7342,7 @@ WindowSizeToContent SizeToContent { get; init; }
 WindowStartPosition PersistenceFallback { get; init; }
 WindowStartPosition StartPosition { get; init; }
 WindowStyle Style { get; init; }
+WindowTitleBarHeight? TitleBarHeight { get; init; }
 bool ActivateOnOpen { get; init; }
 bool IgnorePointerInput { get; init; }
 bool IsMaximizable { get; init; }

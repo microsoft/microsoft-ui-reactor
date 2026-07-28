@@ -120,6 +120,25 @@ spec value is `null`. Explicit `true` or `false` wins.
 > path) so it is safe. Prefer omitting `TitleBar(...)` when you want the system
 > title bar.
 
+### Tall title bar
+
+```csharp
+TitleBar("My App").WithNavigation(nav).PaneToggleButtonVisible(true).Tall();
+new WindowSpec { ExtendsContentIntoTitleBar = true, TitleBarHeight = WindowTitleBarHeight.Tall };
+```
+
+`.Tall()` / `.HeightOption(WindowTitleBarHeight)` (`Standard` / `Tall` /
+`Collapsed`) is the layout for a title bar hosting a back button or pane toggle.
+It sets both the system caption (`AppWindow.TitleBar.PreferredHeightOption`) and
+the WinUI title-bar control's own height — the control does not follow the
+caption, so setting one alone leaves them disagreeing. An explicit `.Height(...)`
+wins over the implied 48; `WindowSpec.TitleBarHeight` wins over the element.
+
+> Requires a content-extended window — the native setter throws
+> `ERROR_INVALID_STATE` otherwise. Reactor applies it after its own
+> content-extension flip and warns instead of throwing, so prefer this over
+> setting `PreferredHeightOption` from a `UseEffect`.
+
 ### Custom title-bar content and drag regions
 
 `TitleBar(...)` accepts custom `Content`. Interactive controls are excluded from

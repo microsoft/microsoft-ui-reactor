@@ -1835,6 +1835,28 @@ public static partial class ElementExtensions
     public static TitleBarElement Set(this TitleBarElement el, Action<WinUI.TitleBar> configure) =>
         el with { Setters = [.. el.Setters, configure] };
 
+    /// <summary>
+    /// Sets the system caption height for the hosting window. (issue #917)
+    /// </summary>
+    /// <remarks>
+    /// Applies both halves — the native caption
+    /// (<c>AppWindow.TitleBar.PreferredHeightOption</c>) and, for
+    /// <see cref="WindowTitleBarHeight.Tall"/>, the control's own 48 DIP height,
+    /// which the WinUI <c>TitleBar</c> control does not derive from the caption.
+    /// An explicit <c>.Height(...)</c> on this element still wins.
+    /// <see cref="WindowSpec.TitleBarHeight"/>, when set, wins over this.
+    /// </remarks>
+    public static TitleBarElement HeightOption(this TitleBarElement el, WindowTitleBarHeight height) =>
+        el with { HeightOption = height };
+
+    /// <summary>
+    /// Shorthand for <c>.HeightOption(WindowTitleBarHeight.Tall)</c> — the
+    /// standard layout when the title bar hosts navigation chrome (back button /
+    /// pane toggle). Pass <c>false</c> to force the standard caption. (issue #917)
+    /// </summary>
+    public static TitleBarElement Tall(this TitleBarElement el, bool tall = true) =>
+        el with { HeightOption = tall ? WindowTitleBarHeight.Tall : WindowTitleBarHeight.Standard };
+
     // ── ExpanderElement sugar ───────────────────────────────────────
 
     public static ExpanderElement Direction(this ExpanderElement el, ExpandDirection dir) =>
