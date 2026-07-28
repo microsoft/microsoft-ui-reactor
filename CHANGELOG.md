@@ -28,6 +28,14 @@ Conventions for contributors:
 
 ### Added
 
+- **`NavigationView` pane-open change notification (issue #916).**
+  `NavigationViewElement.OnPaneOpenChanged` plus the `.PaneOpenChanged(handler)`
+  and paired `.IsPaneOpen(value, handler)` fluents report every `IsPaneOpen`
+  change on the realized control, so pane state can be driven from component
+  state. `SplitViewElement` gains the matching `.IsPaneOpen(value, handler)`
+  overload. `ControlDescriptor.Immediate` now accepts a `null` `loadedHook` for
+  DP observations that have no template part to walk.
+
 ### Changed
 
 ### Deprecated
@@ -35,6 +43,13 @@ Conventions for contributors:
 ### Removed
 
 ### Fixed
+
+- **`NavigationView` pane state no longer desyncs when the control moves its own
+  pane (issue #916).** `IsPaneOpen` could be written but had no change
+  notification, so a light dismiss or an adaptive display-mode change on resize
+  left the app's state stale — the next toggle wrote a value the control already
+  held and the pane appeared to need two clicks. Wire `.IsPaneOpen(value,
+  handler)` (or `.PaneOpenChanged(handler)`) to keep the two in sync.
 
 ### Security
 

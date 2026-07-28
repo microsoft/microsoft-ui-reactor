@@ -9,8 +9,8 @@ namespace Microsoft.UI.Reactor.Tests.Elements;
 /// Issue #916 — <c>NavigationViewElement.IsPaneOpen</c> could be written but never
 /// reported back, so a controlled pane state desynced whenever the control opened or
 /// closed the pane itself (light dismiss, adaptive display-mode changes). These cover the
-/// record-level half of the fix; the live event wiring is proved by the
-/// <c>NavigationViewPaneOpenChanged*</c> selftest fixtures.
+/// record-level half of the fix; the live wiring — the callback actually firing when the
+/// realized control moves its pane — is proved by the <c>NavPane_*</c> selftest fixtures.
 /// </summary>
 public class NavigationViewPaneOpenChangedTests
 {
@@ -52,31 +52,27 @@ public class NavigationViewPaneOpenChangedTests
     }
 
     [Fact]
-    public void Callback_Value_Feeds_Back_Into_A_Controlled_IsPaneOpen()
+    public void IsPaneOpen_Pair_Sets_Both_State_And_Handler()
     {
-        // Models the issue's repro without WinUI. Each `with { IsPaneOpen = state }` is one
-        // render; the reconciler only writes the DP when consecutive elements differ, so the
-        // oracle is the sign of that diff after the control closed its own pane.
-        bool state = true;
-        var render1 = EmptyNav() with { IsPaneOpen = state };
+        // The paired overload exists so the two halves can't drift apart — issue #916 is
+        // exactly what happens when IsPaneOpen is set without the companion handler.
+        Action<bool> handler = _ => { };
 
-        // ── With the fix: the control's close is pushed back into state.
-        var wired = render1.PaneOpenChanged(open => state = open);
-        wired.OnPaneOpenChanged!(false);                       // light dismiss closed the pane
-        Assert.False(state);
-        var render2 = wired with { IsPaneOpen = state };
-        state = !state;                                        // one title-bar toggle click
-        var render3 = render2 with { IsPaneOpen = state };
-        Assert.False(render2.IsPaneOpen);
-        Assert.True(render3.IsPaneOpen);                       // false → true: the pane reopens
+        var closed = EmptyNav().IsPaneOpen(false, handler);
+        Assert.False(closed.IsPaneOpen);
+        Assert.Same(handler, closed.OnPaneOpenChanged);
+        Assert.True(closed.HasCallbacks);
 
-        // ── Pre-fix control: no callback, so state never learns about the close and the
-        // single toggle writes the value the control is already at.
-        bool stale = true;
-        var staleRender1 = EmptyNav() with { IsPaneOpen = stale };
-        stale = !stale;                                        // same single toggle click
-        var staleRender2 = staleRender1 with { IsPaneOpen = stale };
-        Assert.False(staleRender2.IsPaneOpen);                 // true → false: pane stays closed
-        Assert.NotEqual(staleRender2.IsPaneOpen, render3.IsPaneOpen);
+        // Both halves track the argument independently (a pair that ignored either
+        // argument, or aliased one to the other, fails here).
+        Assert.True(EmptyNav().IsPaneOpen(true, handler).IsPaneOpen);
+        Assert.NotEqual(
+            EmptyNav().IsPaneOpen(true, handler).IsPaneOpen,
+            EmptyNav().IsPaneOpen(false, handler).IsPaneOpen);
+
+        // Same shape on SplitView, so authors can move between the two controls.
+        var split = SplitView().IsPaneOpen(false, handler);
+        Assert.False(split.IsPaneOpen);
+        Assert.Same(handler, split.OnPaneOpenChanged);
     }
 }

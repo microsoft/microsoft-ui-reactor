@@ -436,6 +436,29 @@ class PaneOpenChangedDemo : Component
 }
 // </snippet:nav-pane-open-changed>
 
+// <snippet:nav-pane-controlled>
+class ControlledPaneDemo : Component
+{
+    public override Element Render()
+    {
+        var (isPaneOpen, setIsPaneOpen) = UseState(true);
+
+        return NavigationView(
+            [
+                NavItem("Home", icon: "Home", tag: "Home"),
+                NavItem("Settings", icon: "Setting", tag: "Settings")
+            ],
+            content: Button(isPaneOpen ? "Close pane" : "Open pane",
+                () => setIsPaneOpen(!isPaneOpen)).Padding(24)
+        )
+        // One call sets the pane state and wires the change handler, so the two
+        // cannot drift apart.
+        .IsPaneOpen(isPaneOpen, setIsPaneOpen)
+        .Height(320);
+    }
+}
+// </snippet:nav-pane-controlled>
+
 
 // <snippet:frame-events>
 class FrameEventsDemo : Component
@@ -477,7 +500,8 @@ class NavigationApp : Component
                 Component<TabNavDemo>(),
                 Component<FrameEventsDemo>(),
                 Component<SelectedTagChangedDemo>(),
-                Component<PaneOpenChangedDemo>()
+                Component<PaneOpenChangedDemo>(),
+                Component<ControlledPaneDemo>()
             ).Padding(24)
         );
     }

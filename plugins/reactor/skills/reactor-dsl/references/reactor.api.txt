@@ -406,6 +406,7 @@ NavigationViewElement.AutoSuggestBox(AutoSuggestBoxElement box) → NavigationVi
 NavigationViewElement.BackRequested(Action handler) → NavigationViewElement
 NavigationViewElement.CompactModeThresholdWidth(double width) → NavigationViewElement
 NavigationViewElement.ExpandedModeThresholdWidth(double width) → NavigationViewElement
+NavigationViewElement.IsPaneOpen(bool isPaneOpen, Action<bool> onPaneOpenChanged) → NavigationViewElement
 NavigationViewElement.OpenPaneLength(double length) → NavigationViewElement
 NavigationViewElement.PaneCustomContent(Element content) → NavigationViewElement
 NavigationViewElement.PaneDisplayMode(NavigationViewPaneDisplayMode mode) → NavigationViewElement
@@ -550,6 +551,7 @@ SplitButtonElement.AccentButton() → SplitButtonElement
 SplitButtonElement.Click(Action handler) → SplitButtonElement
 SplitButtonElement.Set(Action<SplitButton> configure) → SplitButtonElement
 SplitButtonElement.SubtleButton() → SplitButtonElement
+SplitViewElement.IsPaneOpen(bool isPaneOpen, Action<bool> onPaneOpenChanged) → SplitViewElement
 SplitViewElement.LightDismissOverlayMode(LightDismissOverlayMode mode) → SplitViewElement
 SplitViewElement.PaneBackground(Brush brush) → SplitViewElement
 SplitViewElement.PaneBackground(ThemeRef theme) → SplitViewElement

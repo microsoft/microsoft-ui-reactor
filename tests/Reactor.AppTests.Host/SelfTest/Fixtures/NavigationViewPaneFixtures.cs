@@ -128,16 +128,96 @@ internal static class NavigationViewPaneFixtures
             var nv = H.FindControl<NavigationView>(n => n.Name == ControlName);
             H.Check("NavPaneCancel_Mounted", nv is not null);
 
-            if (nv is not null) nv.PaneClosing += (_, args) => args.Cancel = true;
+            bool closingSeen = false;
+            if (nv is not null) nv.PaneClosing += (_, args) => { closingSeen = true; args.Cancel = true; };
 
             last = null;
             if (nv is not null) nv.IsPaneOpen = false;
             await Harness.Render();
 
-            // Whatever the control settles on, the app was told the same thing — so the next
-            // render's diff (element vs control) can never be a no-op write.
+            // The cancellation path really ran (without this the fixture would pass
+            // identically with the Cancel handler removed)...
+            H.Check("NavPaneCancel_ClosingCancelled", closingSeen);
+            // ...and whatever the control settled on, the app was told the same thing — so
+            // the next render's diff (element vs control) can never be a no-op write.
             H.Check("NavPaneCancel_CallbackFired", last is not null);
-            H.Check("NavPaneCancel_AgreesWithControl", last == nv?.IsPaneOpen);
+            H.Check("NavPaneCancel_AgreesWithControl", nv is not null && last == nv.IsPaneOpen);
+        }
+    }
+
+    /// <summary>
+    /// The handler can be wired and cleared across renders. Covers the live
+    /// <c>null → callback</c> and <c>callback → null</c> transitions: the observer must
+    /// start reporting when a handler appears, and a cleared handler must never be
+    /// invoked afterwards (the element pointer the trampoline resolves has to keep up).
+    /// </summary>
+    internal class HandlerTransitionsAcrossRenders(Harness h) : SelfTestFixtureBase(h)
+    {
+        internal static int Count;
+        internal static bool? Last;
+        private const string PhaseButton = "NextPhase";
+
+        public override async Task RunAsync()
+        {
+            Count = 0; Last = null;
+
+            var host = H.CreateHost();
+            host.Mount(_ => Component<HandlerPhaseComponent>());
+            await Harness.Render();
+
+            var nv = H.FindControl<NavigationView>(n => n.Name == ControlName);
+            H.Check("NavPaneXition_Mounted", nv is not null);
+
+            // Phase 0 — no handler wired.
+            if (nv is not null) nv.IsPaneOpen = false;
+            await Harness.Render();
+            H.Check("NavPaneXition_NoHandlerDpMoved", nv?.IsPaneOpen == false);
+            H.Check("NavPaneXition_NoHandlerNoCallback", Count == 0);
+
+            // Phase 1 — handler wired on a later render, not at mount.
+            H.ClickButton(PhaseButton);
+            await Harness.Render();
+            if (nv is not null) nv.IsPaneOpen = true;
+            await Harness.Render();
+            H.Check("NavPaneXition_LateHandlerFires", Count == 1);
+            H.Check("NavPaneXition_LateHandlerPayload", Last == true);
+
+            // Phase 2 — handler cleared; the stale delegate must not be invoked.
+            H.ClickButton(PhaseButton);
+            await Harness.Render();
+            if (nv is not null) nv.IsPaneOpen = false;
+            await Harness.Render();
+            // The DP really moved, so "no callback" means silence, not a missing change.
+            H.Check("NavPaneXition_ClearedPhaseDpMoved", nv?.IsPaneOpen == false);
+            H.Check("NavPaneXition_ClearedHandlerSilent", Count == 1);
+            H.Check("NavPaneXition_ClearedHandlerPayloadUnchanged", Last == true);
+        }
+    }
+
+    private sealed class HandlerPhaseComponent : Component
+    {
+        public override Element Render()
+        {
+            var (phase, setPhase) = UseState(0);
+
+            Action<bool>? handler = phase == 1
+                ? open =>
+                {
+                    HandlerTransitionsAcrossRenders.Count++;
+                    HandlerTransitionsAcrossRenders.Last = open;
+                }
+                : null;
+
+            return VStack(
+                Button("NextPhase", () => setPhase(phase + 1)),
+                (NavigationView([NavItem("Home", tag: "home")], TextBlock("pane body")) with
+                {
+                    PaneDisplayMode = NavigationViewPaneDisplayMode.Left,
+                    IsSettingsVisible = false,
+                })
+                .PaneOpenChanged(handler)
+                .Set(n => n.Name = ControlName)
+            );
         }
     }
 

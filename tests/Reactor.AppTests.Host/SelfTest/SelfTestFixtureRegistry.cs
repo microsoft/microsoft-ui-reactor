@@ -970,6 +970,7 @@ internal static class SelfTestFixtureRegistry
         "NavPane_OpenChangedFires",
         "NavPane_ControlledResync",
         "NavPane_CancelledClose",
+        "NavPane_HandlerTransitions",
 
         // Value-change / toggle event wiring (Tier 2 gap closure)
         "ValueEvt_CheckBox",
@@ -2500,6 +2501,7 @@ internal static class SelfTestFixtureRegistry
         "NavPane_OpenChangedFires" => new NavigationViewPaneFixtures.PaneOpenChangedFires(harness),
         "NavPane_ControlledResync" => new NavigationViewPaneFixtures.ControlledPaneResyncsAfterControlDrivenClose(harness),
         "NavPane_CancelledClose" => new NavigationViewPaneFixtures.CancelledCloseKeepsCallbackInSyncWithControl(harness),
+        "NavPane_HandlerTransitions" => new NavigationViewPaneFixtures.HandlerTransitionsAcrossRenders(harness),
 
         // Value-change / toggle event wiring
         "ValueEvt_CheckBox" => new ValueChangeEventFixtures.CheckBoxToggleFires(harness),
