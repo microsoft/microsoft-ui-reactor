@@ -73,6 +73,17 @@ Conventions for contributors:
 
 ### Changed
 
+- **`WithNavigation` gained an optional `settingsRoute` parameter (binary-breaking,
+  issue #915).** The extension now takes an optional fifth argument used to route
+  the built-in settings item; passing nothing keeps the previous behaviour.
+  Source-compatible — existing call sites compile unchanged — but optional
+  arguments are baked in at the call site, so binaries compiled against
+  `v0.1.0-preview.9`–`.12` resolve the old four-parameter signature and would need
+  a recompile rather than a drop-in DLL swap. No back-compat overload was added:
+  the project is pre-1.0 and explicitly reserves the right to change the public
+  surface between releases, and a permanent duplicate overload is a worse public
+  shape than one optional argument.
+
 ### Deprecated
 
 ### Removed
