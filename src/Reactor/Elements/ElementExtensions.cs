@@ -1589,8 +1589,8 @@ public static partial class ElementExtensions
 
     /// <summary>
     /// Controlled pane state: sets <c>IsPaneOpen</c> and wires the matching change
-    /// handler in one call. The handler is required because the control opens and
-    /// closes its own pane (light dismiss, adaptive display-mode changes) — driving
+    /// handler in one call. The handler is required because the control closes its own
+    /// pane (a light dismiss tap in <c>Overlay</c>/<c>CompactOverlay</c> mode) — driving
     /// <c>IsPaneOpen</c> from state without feeding those changes back leaves the
     /// state stale, so the next toggle writes a value the control already holds and
     /// appears to do nothing (issue #916). Use the <c>IsPaneOpen</c> initializer

@@ -153,71 +153,54 @@ internal static class NavigationViewPaneFixtures
     /// </summary>
     internal class HandlerTransitionsAcrossRenders(Harness h) : SelfTestFixtureBase(h)
     {
-        internal static int Count;
-        internal static bool? Last;
-        private const string PhaseButton = "NextPhase";
-
         public override async Task RunAsync()
         {
-            Count = 0; Last = null;
+            int count = 0;
+            bool? last = null;
 
-            var host = H.CreateHost();
-            host.Mount(_ => Component<HandlerPhaseComponent>());
-            await Harness.Render();
-
-            var nv = H.FindControl<NavigationView>(n => n.Name == ControlName);
-            H.Check("NavPaneXition_Mounted", nv is not null);
-
-            // Phase 0 — no handler wired.
-            if (nv is not null) nv.IsPaneOpen = false;
-            await Harness.Render();
-            H.Check("NavPaneXition_NoHandlerDpMoved", nv?.IsPaneOpen == false);
-            H.Check("NavPaneXition_NoHandlerNoCallback", Count == 0);
-
-            // Phase 1 — handler wired on a later render, not at mount.
-            H.ClickButton(PhaseButton);
-            await Harness.Render();
-            if (nv is not null) nv.IsPaneOpen = true;
-            await Harness.Render();
-            H.Check("NavPaneXition_LateHandlerFires", Count == 1);
-            H.Check("NavPaneXition_LateHandlerPayload", Last == true);
-
-            // Phase 2 — handler cleared; the stale delegate must not be invoked.
-            H.ClickButton(PhaseButton);
-            await Harness.Render();
-            if (nv is not null) nv.IsPaneOpen = false;
-            await Harness.Render();
-            // The DP really moved, so "no callback" means silence, not a missing change.
-            H.Check("NavPaneXition_ClearedPhaseDpMoved", nv?.IsPaneOpen == false);
-            H.Check("NavPaneXition_ClearedHandlerSilent", Count == 1);
-            H.Check("NavPaneXition_ClearedHandlerPayloadUnchanged", Last == true);
-        }
-    }
-
-    private sealed class HandlerPhaseComponent : Component
-    {
-        public override Element Render()
-        {
-            var (phase, setPhase) = UseState(0);
-
-            Action<bool>? handler = phase == 1
-                ? open =>
-                {
-                    HandlerTransitionsAcrossRenders.Count++;
-                    HandlerTransitionsAcrossRenders.Last = open;
-                }
-                : null;
-
-            return VStack(
-                Button("NextPhase", () => setPhase(phase + 1)),
+            static Element Build(Action<bool>? handler) =>
                 (NavigationView([NavItem("Home", tag: "home")], TextBlock("pane body")) with
                 {
                     PaneDisplayMode = NavigationViewPaneDisplayMode.Left,
                     IsSettingsVisible = false,
                 })
                 .PaneOpenChanged(handler)
-                .Set(n => n.Name = ControlName)
-            );
+                .Set(n => n.Name = ControlName);
+
+            // Phase 0 — mounted with no handler wired.
+            var host = H.CreateHost();
+            host.Mount(_ => Build(null));
+            await Harness.Render();
+
+            var nv = H.FindControl<NavigationView>(n => n.Name == ControlName);
+            H.Check("NavPaneXition_Mounted", nv is not null);
+
+            if (nv is not null) nv.IsPaneOpen = false;
+            await Harness.Render();
+            H.Check("NavPaneXition_NoHandlerDpMoved", nv?.IsPaneOpen == false);
+            H.Check("NavPaneXition_NoHandlerNoCallback", count == 0);
+
+            // Phase 1 — the handler appears on a later render, not at mount. Re-mounting the
+            // same shape re-renders in place, so this is the update path.
+            host.Mount(_ => Build(open => { count++; last = open; }));
+            await Harness.Render();
+            H.Check("NavPaneXition_SameControlReused",
+                ReferenceEquals(nv, H.FindControl<NavigationView>(n => n.Name == ControlName)));
+
+            if (nv is not null) nv.IsPaneOpen = true;
+            await Harness.Render();
+            H.Check("NavPaneXition_LateHandlerFires", count == 1);
+            H.Check("NavPaneXition_LateHandlerPayload", last == true);
+
+            // Phase 2 — handler cleared; the stale delegate must not be invoked.
+            host.Mount(_ => Build(null));
+            await Harness.Render();
+            if (nv is not null) nv.IsPaneOpen = false;
+            await Harness.Render();
+            // The DP really moved, so "no callback" means silence, not a missing change.
+            H.Check("NavPaneXition_ClearedPhaseDpMoved", nv?.IsPaneOpen == false);
+            H.Check("NavPaneXition_ClearedHandlerSilent", count == 1);
+            H.Check("NavPaneXition_ClearedHandlerPayloadUnchanged", last == true);
         }
     }
 
