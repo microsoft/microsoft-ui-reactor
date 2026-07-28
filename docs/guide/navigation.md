@@ -777,7 +777,9 @@ clear when passed `null`.
 exactly like `MenuItems` — `SelectedTag` searches both collections. The
 built-in settings item has no tag of its own, so
 `NavigationViewElement.SettingsTag` is the sentinel that selects it, and
-`.SettingsSelected(handler)` fires when the user picks it:
+`.SettingsSelected(handler)` fires whenever the settings item *becomes
+selected* — whether the user picks it or you set `SelectedTag` to the
+sentinel yourself:
 
 ```csharp
 class NavFooterSettingsDemo : Component

@@ -212,7 +212,11 @@ public static partial class ElementExtensions
     public static NavigationViewElement BackRequested(this NavigationViewElement el, Action? handler) =>
         el with { OnBackRequested = handler };
 
-    /// <summary>Wires the settings-selected handler. Passing <c>null</c> clears.</summary>
+    /// <summary>
+    /// Wires the settings-selected handler, raised when the built-in settings item becomes
+    /// selected — by the user, or by setting <c>SelectedTag</c> to
+    /// <see cref="NavigationViewElement.SettingsTag"/>. Passing <c>null</c> clears.
+    /// </summary>
     public static NavigationViewElement SettingsSelected(this NavigationViewElement el, Action? handler) =>
         el with { OnSettingsSelected = handler };
 
