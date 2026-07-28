@@ -244,22 +244,25 @@ public sealed record WindowSpec
     /// </summary>
     public void Validate()
     {
-        // Non-finite values must be rejected too (NaN and ±Infinity both reach
-        // the DIP→pixel conversion and produce a garbage int), so the check is
-        // spelled out rather than written as !(w > 0).
+        // Every DIP size below reaches DipToPhysicalScalar / DipToPxScalar,
+        // where a non-finite double casts to a garbage int — +Infinity on
+        // MaxWidth, for instance, lands in ptMaxTrackSize as int.MinValue and
+        // makes the window unresizable. `null` is the way to say "unset" /
+        // "unbounded", so non-finite values are rejected on every axis. The
+        // comparison is spelled out rather than written as !(x > 0).
         if (Width is { } w && (w <= 0 || !double.IsFinite(w)))
             throw new ArgumentException("WindowSpec.Width must be positive and finite when set.", nameof(Width));
         if (Height is { } h && (h <= 0 || !double.IsFinite(h)))
             throw new ArgumentException("WindowSpec.Height must be positive and finite when set.", nameof(Height));
 
-        if (MinWidth is { } minW && !(minW > 0))
-            throw new ArgumentException("WindowSpec.MinWidth must be positive when set.", nameof(MinWidth));
-        if (MinHeight is { } minH && !(minH > 0))
-            throw new ArgumentException("WindowSpec.MinHeight must be positive when set.", nameof(MinHeight));
-        if (MaxWidth is { } maxW && !(maxW > 0))
-            throw new ArgumentException("WindowSpec.MaxWidth must be positive when set.", nameof(MaxWidth));
-        if (MaxHeight is { } maxH && !(maxH > 0))
-            throw new ArgumentException("WindowSpec.MaxHeight must be positive when set.", nameof(MaxHeight));
+        if (MinWidth is { } minW && (minW <= 0 || !double.IsFinite(minW)))
+            throw new ArgumentException("WindowSpec.MinWidth must be positive and finite when set.", nameof(MinWidth));
+        if (MinHeight is { } minH && (minH <= 0 || !double.IsFinite(minH)))
+            throw new ArgumentException("WindowSpec.MinHeight must be positive and finite when set.", nameof(MinHeight));
+        if (MaxWidth is { } maxW && (maxW <= 0 || !double.IsFinite(maxW)))
+            throw new ArgumentException("WindowSpec.MaxWidth must be positive and finite when set (use null for unbounded).", nameof(MaxWidth));
+        if (MaxHeight is { } maxH && (maxH <= 0 || !double.IsFinite(maxH)))
+            throw new ArgumentException("WindowSpec.MaxHeight must be positive and finite when set (use null for unbounded).", nameof(MaxHeight));
 
         if (MinWidth is { } a && MaxWidth is { } b && a > b)
             throw new ArgumentException(

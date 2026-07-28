@@ -64,6 +64,21 @@ public class WindowSpecTests
         Assert.Throws<ArgumentException>(() => new WindowSpec { Height = double.NegativeInfinity }.Validate());
     }
 
+    // Min*/Max* land in ptMinTrackSize / ptMaxTrackSize via the same DIP→pixel
+    // cast, where +Infinity becomes int.MinValue and pins the window. `null`
+    // is the way to express "unbounded", so non-finite values are rejected.
+    [Fact]
+    public void Validate_Rejects_NonFinite_MinMax()
+    {
+        Assert.Throws<ArgumentException>(() => new WindowSpec { MinWidth = double.NaN }.Validate());
+        Assert.Throws<ArgumentException>(() => new WindowSpec { MinHeight = double.PositiveInfinity }.Validate());
+        Assert.Throws<ArgumentException>(() => new WindowSpec { MaxWidth = double.PositiveInfinity }.Validate());
+        Assert.Throws<ArgumentException>(() => new WindowSpec { MaxHeight = double.NaN }.Validate());
+
+        // Unbounded stays expressible.
+        new WindowSpec { MinWidth = 200, MaxWidth = null }.Validate();
+    }
+
     // Spec 036 §4.1 — a null Width/Height means "let the OS choose the initial
     // extent"; it must not be treated as an invalid (non-positive) size, and it
     // must survive a `with` round-trip independently per axis.
