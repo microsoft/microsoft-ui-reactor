@@ -100,6 +100,47 @@ internal static class NavigationViewPaneFixtures
         }
     }
 
+    /// <summary>
+    /// <c>PaneClosing</c> is cancellable, and WinUI leaves <c>IsPaneOpen</c> at the requested
+    /// value when a close is cancelled. Reporting off the event would hand the app a bool the
+    /// control's own property disagrees with; observing the DP guarantees element state and
+    /// control state stay identical — which is exactly what the reconciler diffs against.
+    /// </summary>
+    internal class CancelledCloseKeepsCallbackInSyncWithControl(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            bool? last = null;
+
+            var host = H.CreateHost();
+            host.Mount(_ =>
+                (NavigationView([NavItem("Home", tag: "home")], TextBlock("pane body")) with
+                {
+                    IsPaneOpen = true,
+                    PaneDisplayMode = NavigationViewPaneDisplayMode.Left,
+                    IsSettingsVisible = false,
+                })
+                .PaneOpenChanged(open => last = open)
+                .Set(n => n.Name = ControlName));
+
+            await Harness.Render();
+
+            var nv = H.FindControl<NavigationView>(n => n.Name == ControlName);
+            H.Check("NavPaneCancel_Mounted", nv is not null);
+
+            if (nv is not null) nv.PaneClosing += (_, args) => args.Cancel = true;
+
+            last = null;
+            if (nv is not null) nv.IsPaneOpen = false;
+            await Harness.Render();
+
+            // Whatever the control settles on, the app was told the same thing — so the next
+            // render's diff (element vs control) can never be a no-op write.
+            H.Check("NavPaneCancel_CallbackFired", last is not null);
+            H.Check("NavPaneCancel_AgreesWithControl", last == nv?.IsPaneOpen);
+        }
+    }
+
     private sealed class PaneSyncComponent : Component
     {
         public override Element Render()

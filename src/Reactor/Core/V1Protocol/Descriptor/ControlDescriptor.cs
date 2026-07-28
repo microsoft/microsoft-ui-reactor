@@ -406,14 +406,16 @@ public sealed class ControlDescriptor<TElement, TControl>
     /// trampoline" pattern. The control's primary DP round-trip stays on a
     /// sibling <c>.HandCodedControlled</c> entry. See
     /// <see cref="ImmediatePropEntry{TElement,TControl,TPayload}"/> for the
-    /// shape contract (NumberBox is the canonical proof point).</summary>
+    /// shape contract (NumberBox is the canonical proof point). Pass
+    /// <paramref name="loadedHook"/> as <c>null</c> when the DP observation is
+    /// the whole subscription and there is no template part to walk.</summary>
     public ControlDescriptor<TElement, TControl> Immediate<TPayload>(
         Func<TElement, Delegate?> callbackGate,
         Microsoft.UI.Xaml.DependencyProperty observeProperty,
         Microsoft.UI.Xaml.DependencyPropertyChangedCallback observeCallback,
         Func<TPayload, bool> observeSlotIsNull,
         Action<TPayload, Microsoft.UI.Xaml.DependencyPropertyChangedCallback> setObserveSlot,
-        Microsoft.UI.Xaml.RoutedEventHandler loadedHook)
+        Microsoft.UI.Xaml.RoutedEventHandler? loadedHook)
         where TPayload : class, new()
     {
         _properties.Add(new ImmediatePropEntry<TElement, TControl, TPayload>(

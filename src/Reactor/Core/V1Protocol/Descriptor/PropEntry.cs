@@ -1088,7 +1088,7 @@ internal sealed class ImmediatePropEntry<TElement, TControl, TPayload> : PropEnt
     private readonly Microsoft.UI.Xaml.DependencyPropertyChangedCallback _observeCallback;
     private readonly Func<TPayload, bool> _observeSlotIsNull;
     private readonly Action<TPayload, Microsoft.UI.Xaml.DependencyPropertyChangedCallback> _setObserveSlot;
-    private readonly Microsoft.UI.Xaml.RoutedEventHandler _loadedHook;
+    private readonly Microsoft.UI.Xaml.RoutedEventHandler? _loadedHook;
 
     public ImmediatePropEntry(
         Func<TElement, Delegate?> callbackGate,
@@ -1096,7 +1096,7 @@ internal sealed class ImmediatePropEntry<TElement, TControl, TPayload> : PropEnt
         Microsoft.UI.Xaml.DependencyPropertyChangedCallback observeCallback,
         Func<TPayload, bool> observeSlotIsNull,
         Action<TPayload, Microsoft.UI.Xaml.DependencyPropertyChangedCallback> setObserveSlot,
-        Microsoft.UI.Xaml.RoutedEventHandler loadedHook)
+        Microsoft.UI.Xaml.RoutedEventHandler? loadedHook)
     {
         _callbackGate = callbackGate;
         _observeProperty = observeProperty;
@@ -1121,8 +1121,11 @@ internal sealed class ImmediatePropEntry<TElement, TControl, TPayload> : PropEnt
         ctrl.RegisterPropertyChangedCallback(_observeProperty, _observeCallback);
         // Loaded fires on each attach; the author's hook is responsible for
         // its own idempotency (typically by flipping a flag on the payload
-        // and self-unsubscribing). The entry doesn't track that.
-        ctrl.Loaded += _loadedHook;
+        // and self-unsubscribing). The entry doesn't track that. A null hook
+        // means the DP observation is the whole subscription (issue #916 —
+        // NavigationView.IsPaneOpen has no inner template part to walk).
+        if (_loadedHook is not null)
+            ctrl.Loaded += _loadedHook;
     }
 }
 

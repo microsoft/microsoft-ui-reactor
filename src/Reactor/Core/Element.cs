@@ -4574,8 +4574,8 @@ public record NavigationHostElement(
 // auto-map. The 5 NamedSlots (Header/AutoSuggestBox/PaneFooter/PaneCustomContent/Content), the
 // MenuItems+SelectedTag menu reconciler (.Imperative), the 3 NaN-sentinel pane widths, and the
 // SelectionChanged/BackRequested events are bespoke — in Element.NavigationView.cs. BackRequested
-// is Excluded (auto-surfaces). Issue #916 — the twin PaneOpening/PaneClosing events
-// (OnPaneOpenChanged) are bespoke too, so IsPaneOpen can be used as controlled state.
+// is Excluded (auto-surfaces). Issue #916 — an IsPaneOpen DP observation
+// (OnPaneOpenChanged) is bespoke too, so IsPaneOpen can be used as controlled state.
 // Replaces NavigationViewDescriptor.
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.NavigationView), Exclude = new[] { "BackRequested" })]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("MenuItems")]
@@ -4597,11 +4597,11 @@ public partial record NavigationViewElement(
     public Action<string?>? OnSelectedTagChanged { get; init; }
     public bool IsPaneOpen { get; init; } = true;
     /// <summary>
-    /// Fires whenever the realized pane opens or closes — including changes the app never
-    /// requested (light dismiss, adaptive display-mode changes on resize) and the echo of a
-    /// programmatic <see cref="IsPaneOpen"/> write. Feed the value back into the state that
-    /// drives <see cref="IsPaneOpen"/> to keep controlled pane state in sync (issue #916).
-    /// Mirrors <c>SplitViewElement.OnPaneOpenChanged</c>.
+    /// Fires whenever the realized control's <c>IsPaneOpen</c> changes — including changes the
+    /// app never requested (light dismiss, adaptive display-mode changes on resize) and the
+    /// echo of a programmatic <see cref="IsPaneOpen"/> write. Feed the value back into the
+    /// state that drives <see cref="IsPaneOpen"/> to keep controlled pane state in sync
+    /// (issue #916). Same shape as <c>SplitViewElement.OnPaneOpenChanged</c>.
     /// </summary>
     public Action<bool>? OnPaneOpenChanged { get; init; }
     public NavigationViewPaneDisplayMode PaneDisplayMode { get; init; } = NavigationViewPaneDisplayMode.Auto;

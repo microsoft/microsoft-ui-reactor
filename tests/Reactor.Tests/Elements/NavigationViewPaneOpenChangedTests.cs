@@ -26,6 +26,14 @@ public class NavigationViewPaneOpenChangedTests
         Assert.False(EmptyNav().HasCallbacks);
         Assert.True(EmptyNav().PaneOpenChanged(_ => { }).HasCallbacks);
         Assert.False(EmptyNav().PaneOpenChanged(_ => { }).PaneOpenChanged(null).HasCallbacks);
+
+        // …and the sibling callbacks must stay in the disjunct: clearing only the pane
+        // callback while SelectedTagChanged/BackRequested are still wired must keep
+        // HasCallbacks true (fails if the disjunct is narrowed to OnPaneOpenChanged alone).
+        var siblings = EmptyNav().SelectedTagChanged(_ => { }).BackRequested(() => { });
+        Assert.True(siblings.PaneOpenChanged(_ => { }).PaneOpenChanged(null).HasCallbacks);
+        Assert.True(EmptyNav().SelectedTagChanged(_ => { }).HasCallbacks);
+        Assert.True(EmptyNav().BackRequested(() => { }).HasCallbacks);
     }
 
     [Fact]
