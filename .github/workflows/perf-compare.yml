@@ -141,7 +141,7 @@ jobs:
       # Trusted checkout: the default branch carries the perf scripts + the main
       # baseline. fetch-depth: 0 so we can resolve origin/main and PR head SHAs.
       - name: Checkout default branch (trusted scripts + main baseline)
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           # PR-authored harness code runs later in this job; don't leave a usable
