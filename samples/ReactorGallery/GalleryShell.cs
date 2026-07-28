@@ -168,20 +168,15 @@ class GalleryShell : Component
                 },
                 IsBackEnabled = false,
                 IsSettingsVisible = true,
-            })
-            .Set(nv =>
-            {
-                nv.IsPaneToggleButtonVisible = false;
-                nv.IsBackButtonVisible = NavigationViewBackButtonVisible.Collapsed;
-                nv.SelectionChanged += (s, args) =>
+                IsBackButtonVisible = NavigationViewBackButtonVisible.Collapsed,
+                IsPaneToggleButtonVisible = false,
+                OnSettingsSelected = () =>
                 {
-                    if (args.IsSettingsSelected)
-                    {
-                        setSearchQuery("");
-                        setPrevTag(selectedTag);
-                        setSelectedTag("settings");
-                    }
-                };
+                    setSearchQuery("");
+                    setPrevTag(selectedTag);
+                    setSelectedTag("settings");
+                },
+                OnPaneOpenChanged = setIsPaneOpen,
             })
             .Grid(row: 1)
         );

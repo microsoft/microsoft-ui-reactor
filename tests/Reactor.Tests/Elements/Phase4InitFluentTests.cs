@@ -285,8 +285,192 @@ public class Phase4InitFluentTests
         Assert.Equal(1200, el.ExpandedModeThresholdWidth);
     }
 
-    // ── 4.6 TitleBar ──────────────────────────────────────────────────
+    // Issue #915 — the back / pane-toggle chrome must be expressible declaratively
+    // so callers don't have to downcast in .OnMount/.Set.
 
+    [Fact]
+    public void NavigationView_ChromeVisibility_DefaultsMatchWinUI()
+    {
+        var el = EmptyNav();
+        Assert.Equal(NavigationViewBackButtonVisible.Auto, el.IsBackButtonVisible);
+        Assert.True(el.IsPaneToggleButtonVisible);
+    }
+
+    [Fact]
+    public void NavigationView_BackButtonVisible_Sets()
+    {
+        Assert.Equal(
+            NavigationViewBackButtonVisible.Collapsed,
+            EmptyNav().BackButtonVisible(NavigationViewBackButtonVisible.Collapsed).IsBackButtonVisible);
+        Assert.Equal(
+            NavigationViewBackButtonVisible.Visible,
+            EmptyNav().BackButtonVisible(NavigationViewBackButtonVisible.Visible).IsBackButtonVisible);
+    }
+
+    [Fact]
+    public void NavigationView_BackButtonVisible_BoolOverload_MapsBothDirections()
+    {
+        Assert.Equal(
+            NavigationViewBackButtonVisible.Visible,
+            EmptyNav().BackButtonVisible(true).IsBackButtonVisible);
+        Assert.Equal(
+            NavigationViewBackButtonVisible.Collapsed,
+            EmptyNav().BackButtonVisible(false).IsBackButtonVisible);
+    }
+
+    [Fact]
+    public void NavigationView_PaneToggleButtonVisible_Sets()
+    {
+        Assert.False(EmptyNav().PaneToggleButtonVisible(false).IsPaneToggleButtonVisible);
+        // Seed the non-default value through the record so the `true` arm fails
+        // if the fluent is a no-op (the record default is already `true`).
+        var hidden = EmptyNav() with { IsPaneToggleButtonVisible = false };
+        Assert.True(hidden.PaneToggleButtonVisible(true).IsPaneToggleButtonVisible);
+    }
+
+    [Fact]
+    public void NavigationView_ChromeFluents_PreserveEachOther()
+    {
+        // PaneTitle first: the chrome fluents must carry it through, so the
+        // PaneTitle assertion is only satisfied by the `with`-expression copy.
+        var el = EmptyNav()
+            .PaneTitle("Nav")
+            .BackButtonVisible(NavigationViewBackButtonVisible.Collapsed)
+            .PaneToggleButtonVisible(false);
+
+        Assert.Equal(NavigationViewBackButtonVisible.Collapsed, el.IsBackButtonVisible);
+        Assert.False(el.IsPaneToggleButtonVisible);
+        Assert.Equal("Nav", el.PaneTitle);
+    }
+
+    // Follow-up to #915 — the rest of the NavigationView surface, so nothing on a
+    // NavigationView needs `.Set(nv => …)` to reach the realized control.
+
+    [Fact]
+    public void NavigationView_NewProps_DefaultsMatchWinUI()
+    {
+        var el = EmptyNav();
+        Assert.True(el.IsPaneVisible);
+        Assert.True(el.AlwaysShowHeader);
+        Assert.True(el.IsTitleBarAutoPaddingEnabled);
+        Assert.Equal(NavigationViewSelectionFollowsFocus.Disabled, el.SelectionFollowsFocus);
+        Assert.Equal(NavigationViewOverflowLabelMode.MoreLabel, el.OverflowLabelMode);
+        Assert.Equal(NavigationViewShoulderNavigationEnabled.Never, el.ShoulderNavigationEnabled);
+        Assert.True(double.IsNaN(el.CompactPaneLength));
+        Assert.Empty(el.FooterMenuItems);
+    }
+
+    [Fact]
+    public void NavigationView_BoolFluents_SetBothDirections()
+    {
+        // Each record default is `true`, so the `true` arm is seeded from an explicitly
+        // `false` record — otherwise it would pass with the fluent stubbed out.
+        Assert.False(EmptyNav().PaneVisible(false).IsPaneVisible);
+        Assert.True((EmptyNav() with { IsPaneVisible = false }).PaneVisible().IsPaneVisible);
+
+        Assert.False(EmptyNav().AlwaysShowHeader(false).AlwaysShowHeader);
+        Assert.True((EmptyNav() with { AlwaysShowHeader = false }).AlwaysShowHeader().AlwaysShowHeader);
+
+        Assert.False(EmptyNav().TitleBarAutoPadding(false).IsTitleBarAutoPaddingEnabled);
+        Assert.True((EmptyNav() with { IsTitleBarAutoPaddingEnabled = false }).TitleBarAutoPadding().IsTitleBarAutoPaddingEnabled);
+    }
+
+    [Fact]
+    public void NavigationView_SelectionFollowsFocus_MapsBothDirections()
+    {
+        Assert.Equal(
+            NavigationViewSelectionFollowsFocus.Enabled,
+            EmptyNav().SelectionFollowsFocus().SelectionFollowsFocus);
+        Assert.Equal(
+            NavigationViewSelectionFollowsFocus.Disabled,
+            (EmptyNav() with { SelectionFollowsFocus = NavigationViewSelectionFollowsFocus.Enabled })
+                .SelectionFollowsFocus(false).SelectionFollowsFocus);
+    }
+
+    [Fact]
+    public void NavigationView_EnumAndMetricFluents_Set()
+    {
+        Assert.Equal(
+            NavigationViewOverflowLabelMode.NoLabel,
+            EmptyNav().OverflowLabelMode(NavigationViewOverflowLabelMode.NoLabel).OverflowLabelMode);
+        Assert.Equal(
+            NavigationViewShoulderNavigationEnabled.Always,
+            EmptyNav().ShoulderNavigation(NavigationViewShoulderNavigationEnabled.Always).ShoulderNavigationEnabled);
+        Assert.Equal(72, EmptyNav().CompactPaneLength(72).CompactPaneLength);
+    }
+
+    [Fact]
+    public void NavigationView_PaneHeaderAndContentOverlay_Set()
+    {
+        var header = TextBlock("Pane header");
+        var overlay = TextBlock("Overlay");
+        var el = EmptyNav().PaneHeader(header).ContentOverlay(overlay);
+        Assert.Same(header, el.PaneHeader);
+        Assert.Same(overlay, el.ContentOverlay);
+    }
+
+    [Fact]
+    public void NavigationView_FooterMenuItems_Sets()
+    {
+        var settings = new NavigationViewItemData("Settings", Tag: "settings");
+        var about = new NavigationViewItemData("About", Tag: "about");
+        var el = EmptyNav().FooterMenuItems(settings, about);
+        Assert.Equal(new[] { settings, about }, el.FooterMenuItems);
+        // The primary menu must stay untouched — the two collections are separate slots.
+        Assert.Empty(el.MenuItems);
+    }
+
+    [Fact]
+    public void NavigationView_EventSlots_AreDistinct()
+    {
+        string? invoked = null, expanding = null, collapsed = null;
+        bool? paneOpen = null;
+        var settingsHits = 0;
+        NavigationViewDisplayMode? displayMode = null;
+
+        var el = EmptyNav() with
+        {
+            OnSettingsSelected = () => settingsHits++,
+            OnItemInvoked = t => invoked = t,
+            OnPaneOpenChanged = v => paneOpen = v,
+            OnDisplayModeChanged = m => displayMode = m,
+            OnItemExpanding = t => expanding = t,
+            OnItemCollapsed = t => collapsed = t,
+        };
+
+        el.OnSettingsSelected!();
+        el.OnItemInvoked!("home");
+        el.OnPaneOpenChanged!(false);
+        el.OnDisplayModeChanged!(NavigationViewDisplayMode.Compact);
+        el.OnItemExpanding!("parent");
+        el.OnItemCollapsed!("child");
+
+        // Distinct sink per callback: two slots sharing one delegate field would
+        // leave at least one sink untouched.
+        Assert.Equal(1, settingsHits);
+        Assert.Equal("home", invoked);
+        Assert.False(paneOpen);
+        Assert.Equal(NavigationViewDisplayMode.Compact, displayMode);
+        Assert.Equal("parent", expanding);
+        Assert.Equal("child", collapsed);
+    }
+
+    [Fact]
+    public void NavigationView_HasCallbacks_TracksEveryEventSlot()
+    {
+        Assert.False(EmptyNav().HasCallbacks);
+
+        // Every new callback must flip HasCallbacks on its own, or the reconciler
+        // skips event subscription for elements that only use that one callback.
+        Assert.True((EmptyNav() with { OnSettingsSelected = () => { } }).HasCallbacks);
+        Assert.True((EmptyNav() with { OnItemInvoked = _ => { } }).HasCallbacks);
+        Assert.True((EmptyNav() with { OnPaneOpenChanged = _ => { } }).HasCallbacks);
+        Assert.True((EmptyNav() with { OnDisplayModeChanged = _ => { } }).HasCallbacks);
+        Assert.True((EmptyNav() with { OnItemExpanding = _ => { } }).HasCallbacks);
+        Assert.True((EmptyNav() with { OnItemCollapsed = _ => { } }).HasCallbacks);
+    }
+
+    // ── 4.6 TitleBar ──────────────────────────────────────────────────
     [Fact]
     public void TitleBar_BackButtonVisible_Sets()
     {

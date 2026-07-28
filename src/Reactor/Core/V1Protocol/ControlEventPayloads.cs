@@ -457,6 +457,18 @@ internal sealed class NavigationViewEventPayload
         Microsoft.UI.Xaml.Controls.NavigationView,
         Microsoft.UI.Xaml.Controls.NavigationViewBackRequestedEventArgs>? BackRequestedTrampoline;
     public Microsoft.UI.Xaml.DependencyPropertyChangedCallback? IsPaneOpenObserver;
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.NavigationView,
+        Microsoft.UI.Xaml.Controls.NavigationViewItemInvokedEventArgs>? ItemInvokedTrampoline;
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.NavigationView,
+        Microsoft.UI.Xaml.Controls.NavigationViewDisplayModeChangedEventArgs>? DisplayModeChangedTrampoline;
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.NavigationView,
+        Microsoft.UI.Xaml.Controls.NavigationViewItemExpandingEventArgs>? ExpandingTrampoline;
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.NavigationView,
+        Microsoft.UI.Xaml.Controls.NavigationViewItemCollapsedEventArgs>? CollapsedTrampoline;
 }
 
 /// <summary>

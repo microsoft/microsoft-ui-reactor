@@ -4571,22 +4571,32 @@ public record NavigationHostElement(
     public int CacheSize { get; init; } = 10;
 }
 
-// Spec 058 §15 (P5.23) — IsPaneOpen/PaneDisplayMode/IsBackEnabled/IsSettingsVisible/PaneTitle
-// auto-map. The 5 NamedSlots (Header/AutoSuggestBox/PaneFooter/PaneCustomContent/Content), the
-// MenuItems+SelectedTag menu reconciler (.Imperative), the 3 NaN-sentinel pane widths, and the
-// SelectionChanged/BackRequested events are bespoke — in Element.NavigationView.cs. BackRequested
-// is Excluded (auto-surfaces). Issue #916 — an IsPaneOpen DP observation
-// (OnPaneOpenChanged) is bespoke too, so IsPaneOpen can be used as controlled state.
-// Replaces NavigationViewDescriptor.
-[global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.NavigationView), Exclude = new[] { "BackRequested" })]
+// Spec 058 §15 (P5.23) — IsPaneOpen/PaneDisplayMode/IsBackEnabled/IsBackButtonVisible/
+// IsPaneToggleButtonVisible/IsPaneVisible/IsSettingsVisible/AlwaysShowHeader/
+// IsTitleBarAutoPaddingEnabled/SelectionFollowsFocus/OverflowLabelMode/
+// ShoulderNavigationEnabled/PaneTitle auto-map. The 7 NamedSlots (Header/AutoSuggestBox/
+// PaneHeader/PaneFooter/PaneCustomContent/ContentOverlay/Content), the
+// MenuItems+FooterMenuItems+SelectedTag menu reconciler (.Imperative), the 4 NaN-sentinel pane
+// metrics, the IsPaneOpen DP observation behind OnPaneOpenChanged (issue #916, so IsPaneOpen can
+// be used as controlled state), and the SelectionChanged/BackRequested/ItemInvoked/
+// DisplayModeChanged/Expanding/Collapsed events are bespoke — in Element.NavigationView.cs.
+// Every event is Excluded or named off-convention so the generator leaves it alone: all
+// NavigationView events must share the single V1.NavigationViewEventPayload, because a control
+// holds exactly one event-payload box (Reconciler.GetOrCreateControlEventPayload). Replaces
+// NavigationViewDescriptor.
+[global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.NavigationView), Exclude = new[] { "BackRequested", "ItemInvoked", "DisplayModeChanged" })]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("MenuItems")]
+[global::Microsoft.UI.Reactor.Wrappers.WrapManual("FooterMenuItems")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("SelectedTag")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Header")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("AutoSuggestBox")]
+[global::Microsoft.UI.Reactor.Wrappers.WrapManual("PaneHeader")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("PaneFooter")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("PaneCustomContent")]
+[global::Microsoft.UI.Reactor.Wrappers.WrapManual("ContentOverlay")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("Content")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("OpenPaneLength")]
+[global::Microsoft.UI.Reactor.Wrappers.WrapManual("CompactPaneLength")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("CompactModeThresholdWidth")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("ExpandedModeThresholdWidth")]
 public partial record NavigationViewElement(
@@ -4594,8 +4604,31 @@ public partial record NavigationViewElement(
     Element? Content = null
 ) : Element
 {
+    /// <summary>
+    /// Well-known <see cref="SelectedTag"/> value that selects NavigationView's built-in
+    /// settings item — the only menu entry NavigationView creates itself, so it has no
+    /// <see cref="NavigationViewItemData"/> and cannot be addressed by an author-chosen tag.
+    /// Also the tag reported to <see cref="OnItemInvoked"/> when settings is invoked.
+    /// An author item carrying this tag still wins: selection searches
+    /// <see cref="MenuItems"/> and <see cref="FooterMenuItems"/> before falling back to
+    /// the settings item, so the sentinel can never shadow real content.
+    /// </summary>
+    public const string SettingsTag = "__reactor.navigationview.settings__";
+
     public string? SelectedTag { get; init; }
     public Action<string?>? OnSelectedTagChanged { get; init; }
+    /// <summary>
+    /// Raised when NavigationView's built-in settings item is selected. Distinguishes the
+    /// settings item from "nothing selected" — <see cref="OnSelectedTagChanged"/> reports
+    /// <c>null</c> for both.
+    /// </summary>
+    public Action? OnSettingsSelected { get; init; }
+    /// <summary>
+    /// Raised when a menu item is invoked (clicked / activated), including re-invoking the
+    /// already-selected item, which <see cref="OnSelectedTagChanged"/> does not report.
+    /// Carries the item's tag, or <see cref="SettingsTag"/> for the settings item.
+    /// </summary>
+    public Action<string?>? OnItemInvoked { get; init; }
     public bool IsPaneOpen { get; init; } = true;
     /// <summary>
     /// Fires whenever the realized control's <c>IsPaneOpen</c> changes — including changes the
@@ -4606,26 +4639,88 @@ public partial record NavigationViewElement(
     /// </summary>
     public Action<bool>? OnPaneOpenChanged { get; init; }
     public NavigationViewPaneDisplayMode PaneDisplayMode { get; init; } = NavigationViewPaneDisplayMode.Auto;
+    /// <summary>Raised when NavigationView switches between Minimal/Compact/Expanded in response to its width.</summary>
+    public Action<NavigationViewDisplayMode>? OnDisplayModeChanged { get; init; }
     public bool IsBackEnabled { get; init; }
+    /// <summary>
+    /// Visibility of NavigationView's built-in back button. Mirrors
+    /// <c>NavigationView.IsBackButtonVisible</c>. Set to
+    /// <see cref="NavigationViewBackButtonVisible.Collapsed"/> when a
+    /// <see cref="TitleBarElement"/> owns the back button instead.
+    /// </summary>
+    public NavigationViewBackButtonVisible IsBackButtonVisible { get; init; } = NavigationViewBackButtonVisible.Auto;
+    /// <summary>
+    /// Whether NavigationView's built-in pane-toggle ("hamburger") button is shown.
+    /// Mirrors <c>NavigationView.IsPaneToggleButtonVisible</c>. Set to <c>false</c>
+    /// when a <see cref="TitleBarElement"/> owns the pane-toggle button instead.
+    /// </summary>
+    public bool IsPaneToggleButtonVisible { get; init; } = true;
+    /// <summary>Whether the pane is shown at all. <c>false</c> hides the whole pane, leaving only the content area.</summary>
+    public bool IsPaneVisible { get; init; } = true;
     public Action? OnBackRequested { get; init; }
     public Element? Header { get; init; }
+    /// <summary>Whether <see cref="Header"/> stays visible in Minimal/Compact display modes.</summary>
+    public bool AlwaysShowHeader { get; init; } = true;
+    /// <summary>Whether NavigationView reserves top padding for the window's title bar.</summary>
+    public bool IsTitleBarAutoPaddingEnabled { get; init; } = true;
+    /// <summary>Whether moving keyboard focus between menu items also changes the selection.</summary>
+    public NavigationViewSelectionFollowsFocus SelectionFollowsFocus { get; init; } = NavigationViewSelectionFollowsFocus.Disabled;
+    /// <summary>Whether the Top pane's overflow button shows a "More" label or only the chevron.</summary>
+    public NavigationViewOverflowLabelMode OverflowLabelMode { get; init; } = NavigationViewOverflowLabelMode.MoreLabel;
+    /// <summary>Whether gamepad shoulder buttons cycle the selection.</summary>
+    public NavigationViewShoulderNavigationEnabled ShoulderNavigationEnabled { get; init; } = NavigationViewShoulderNavigationEnabled.Never;
     public bool IsSettingsVisible { get; init; } = true;
     public string? PaneTitle { get; init; }
     /// <summary>AutoSuggestBox rendered at the top of the pane. Mirrors <c>NavigationView.AutoSuggestBox</c>.</summary>
     public AutoSuggestBoxElement? AutoSuggestBox { get; init; }
+    /// <summary>Element rendered at the top of the pane, above the menu items and below the pane title.</summary>
+    public Element? PaneHeader { get; init; }
     /// <summary>Element rendered at the bottom of the pane, below all menu items.</summary>
     public Element? PaneFooter { get; init; }
     /// <summary>Custom element rendered between the AutoSuggestBox and the menu items.</summary>
     public Element? PaneCustomContent { get; init; }
-    /// <summary>Width of the pane when expanded. <c>NaN</c> uses the WinUI default (320).</summary>
+    /// <summary>Element overlaid on top of <see cref="Content"/>, e.g. a persistent player or status bar.</summary>
+    public Element? ContentOverlay { get; init; }
+    /// <summary>Menu items pinned to the bottom of the pane, below <see cref="PaneFooter"/>'s divider. Share the <see cref="SelectedTag"/> namespace with <see cref="MenuItems"/>.</summary>
+    public NavigationViewItemData[] FooterMenuItems { get; init; } = [];
+    /// <summary>Raised when a hierarchical menu item is expanded. Carries the item's tag.</summary>
+    public Action<string?>? OnItemExpanding { get; init; }
+    /// <summary>Raised when a hierarchical menu item is collapsed. Carries the item's tag.</summary>
+    public Action<string?>? OnItemCollapsed { get; init; }
+    /// <summary>
+    /// Width of the pane when expanded. <c>NaN</c> (the default) means Reactor never writes
+    /// this property, leaving the WinUI default of 320. Sticky: changing an explicit value
+    /// back to <c>NaN</c> skips the write rather than restoring 320.
+    /// </summary>
     public double OpenPaneLength { get; init; } = double.NaN;
-    /// <summary>Window width below which the pane collapses to compact mode. <c>NaN</c> uses the WinUI default (640).</summary>
+    /// <summary>
+    /// Width of the pane when compact. <c>NaN</c> (the default) means Reactor never writes
+    /// this property, leaving the WinUI default of 48. Sticky: changing an explicit value
+    /// back to <c>NaN</c> skips the write rather than restoring 48.
+    /// </summary>
+    public double CompactPaneLength { get; init; } = double.NaN;
+    /// <summary>
+    /// Window width below which the pane collapses to compact mode. <c>NaN</c> (the default)
+    /// means Reactor never writes this property, leaving the WinUI default of 640. Sticky:
+    /// changing an explicit value back to <c>NaN</c> skips the write rather than restoring 640.
+    /// </summary>
     public double CompactModeThresholdWidth { get; init; } = double.NaN;
-    /// <summary>Window width at which the pane auto-expands. <c>NaN</c> uses the WinUI default (1008).</summary>
+    /// <summary>
+    /// Window width at which the pane auto-expands. <c>NaN</c> (the default) means Reactor
+    /// never writes this property, leaving the WinUI default of 1008. Sticky: changing an
+    /// explicit value back to <c>NaN</c> skips the write rather than restoring 1008.
+    /// </summary>
     public double ExpandedModeThresholdWidth { get; init; } = double.NaN;
     internal Action<WinUI.NavigationView>[] Setters { get; init; } = [];
     internal override bool HasCallbacks =>
-        OnSelectedTagChanged is not null || OnBackRequested is not null || OnPaneOpenChanged is not null;
+        OnSelectedTagChanged is not null
+        || OnBackRequested is not null
+        || OnSettingsSelected is not null
+        || OnItemInvoked is not null
+        || OnPaneOpenChanged is not null
+        || OnDisplayModeChanged is not null
+        || OnItemExpanding is not null
+        || OnItemCollapsed is not null;
 }
 
 // Spec 058 §15 (P5.23) — Title/Subtitle/IsBackButtonVisible/IsBackButtonEnabled/

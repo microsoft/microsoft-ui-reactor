@@ -203,11 +203,8 @@ class AppShell : Component
                     IsBackEnabled = false,
                     IsPaneOpen = false,
                     PaneDisplayMode = Microsoft.UI.Xaml.Controls.NavigationViewPaneDisplayMode.LeftCompact,
-                }).OnMount(fe =>
-                {
-                    var nv = (Microsoft.UI.Xaml.Controls.NavigationView)fe;
-                    nv.IsBackButtonVisible = Microsoft.UI.Xaml.Controls.NavigationViewBackButtonVisible.Collapsed;
-                    nv.IsPaneToggleButtonVisible = false;
+                    IsBackButtonVisible = Microsoft.UI.Xaml.Controls.NavigationViewBackButtonVisible.Collapsed,
+                    IsPaneToggleButtonVisible = false,
                 }).Flex(grow:1),
 
                 DiagnosticsPanel(diagLog, nav)

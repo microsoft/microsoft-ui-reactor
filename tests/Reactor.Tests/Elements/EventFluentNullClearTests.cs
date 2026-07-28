@@ -495,6 +495,59 @@ public class EventFluentNullClearTests
     }
 
     [Fact]
+    public void NavigationView_SettingsSelected_NullClears()
+    {
+        var el = NavigationView(Array.Empty<NavigationViewItemData>()).SettingsSelected(Sentinel);
+        Assert.Same(Sentinel, el.OnSettingsSelected);
+        Assert.Null(el.SettingsSelected(null).OnSettingsSelected);
+    }
+
+    [Fact]
+    public void NavigationView_ItemInvoked_NullClears()
+    {
+        Action<string?> h = _ => { };
+        var el = NavigationView(Array.Empty<NavigationViewItemData>()).ItemInvoked(h);
+        Assert.Same(h, el.OnItemInvoked);
+        Assert.Null(el.ItemInvoked(null).OnItemInvoked);
+    }
+
+    [Fact]
+    public void NavigationView_PaneOpenChanged_NullClears()
+    {
+        Action<bool> h = _ => { };
+        var el = NavigationView(Array.Empty<NavigationViewItemData>()).PaneOpenChanged(h);
+        Assert.Same(h, el.OnPaneOpenChanged);
+        Assert.Null(el.PaneOpenChanged(null).OnPaneOpenChanged);
+    }
+
+    [Fact]
+    public void NavigationView_DisplayModeChanged_NullClears()
+    {
+        Action<NavigationViewDisplayMode> h = _ => { };
+        var el = NavigationView(Array.Empty<NavigationViewItemData>()).DisplayModeChanged(h);
+        Assert.Same(h, el.OnDisplayModeChanged);
+        Assert.Null(el.DisplayModeChanged(null).OnDisplayModeChanged);
+    }
+
+    [Fact]
+    public void NavigationView_ItemExpanding_NullClears()
+    {
+        Action<string?> h = _ => { };
+        var el = NavigationView(Array.Empty<NavigationViewItemData>()).ItemExpanding(h);
+        Assert.Same(h, el.OnItemExpanding);
+        Assert.Null(el.ItemExpanding(null).OnItemExpanding);
+    }
+
+    [Fact]
+    public void NavigationView_ItemCollapsed_NullClears()
+    {
+        Action<string?> h = _ => { };
+        var el = NavigationView(Array.Empty<NavigationViewItemData>()).ItemCollapsed(h);
+        Assert.Same(h, el.OnItemCollapsed);
+        Assert.Null(el.ItemCollapsed(null).OnItemCollapsed);
+    }
+
+    [Fact]
     public void TitleBar_BackRequested_NullClears()
     {
         var el = TitleBar("x").BackRequested(Sentinel);

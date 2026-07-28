@@ -402,19 +402,36 @@ MediaPlayerElementElement.MediaOpened(Action handler) → MediaPlayerElementElem
 MediaPlayerElementElement.Set(Action<MediaPlayerElement> configure) → MediaPlayerElementElement
 MenuBarElement.Set(Action<MenuBar> configure) → MenuBarElement
 MenuFlyoutElement.Set(Action<MenuFlyout> configure) → MenuFlyoutElement
+NavigationViewElement.AlwaysShowHeader(bool alwaysShow = true) → NavigationViewElement
 NavigationViewElement.AutoSuggestBox(AutoSuggestBoxElement box) → NavigationViewElement
+NavigationViewElement.BackButtonVisible(NavigationViewBackButtonVisible visible) → NavigationViewElement
+NavigationViewElement.BackButtonVisible(bool visible) → NavigationViewElement
 NavigationViewElement.BackRequested(Action handler) → NavigationViewElement
 NavigationViewElement.CompactModeThresholdWidth(double width) → NavigationViewElement
+NavigationViewElement.CompactPaneLength(double length) → NavigationViewElement
+NavigationViewElement.ContentOverlay(Element overlay) → NavigationViewElement
+NavigationViewElement.DisplayModeChanged(Action<NavigationViewDisplayMode> handler) → NavigationViewElement
 NavigationViewElement.ExpandedModeThresholdWidth(double width) → NavigationViewElement
-NavigationViewElement.IsPaneOpen(bool isPaneOpen, Action<bool> onPaneOpenChanged) → NavigationViewElement
+NavigationViewElement.FooterMenuItems(NavigationViewItemData[] items) → NavigationViewElement
+NavigationViewElement.ItemCollapsed(Action<string> handler) → NavigationViewElement
+NavigationViewElement.ItemExpanding(Action<string> handler) → NavigationViewElement
+NavigationViewElement.ItemInvoked(Action<string> handler) → NavigationViewElement
 NavigationViewElement.OpenPaneLength(double length) → NavigationViewElement
+NavigationViewElement.OverflowLabelMode(NavigationViewOverflowLabelMode mode) → NavigationViewElement
 NavigationViewElement.PaneCustomContent(Element content) → NavigationViewElement
 NavigationViewElement.PaneDisplayMode(NavigationViewPaneDisplayMode mode) → NavigationViewElement
 NavigationViewElement.PaneFooter(Element footer) → NavigationViewElement
+NavigationViewElement.PaneHeader(Element header) → NavigationViewElement
 NavigationViewElement.PaneOpenChanged(Action<bool> handler) → NavigationViewElement
 NavigationViewElement.PaneTitle(string title) → NavigationViewElement
+NavigationViewElement.PaneToggleButtonVisible(bool visible) → NavigationViewElement
+NavigationViewElement.PaneVisible(bool visible = true) → NavigationViewElement
 NavigationViewElement.SelectedTagChanged(Action<string> handler) → NavigationViewElement
+NavigationViewElement.SelectionFollowsFocus(bool follows = true) → NavigationViewElement
 NavigationViewElement.Set(Action<NavigationView> configure) → NavigationViewElement
+NavigationViewElement.SettingsSelected(Action handler) → NavigationViewElement
+NavigationViewElement.ShoulderNavigation(NavigationViewShoulderNavigationEnabled mode) → NavigationViewElement
+NavigationViewElement.TitleBarAutoPadding(bool enabled = true) → NavigationViewElement
 NavigationViewElement.WithNavigation<TRoute>(NavigationHandle<TRoute> nav, Func<TRoute, string> routeToTag, Func<string, TRoute> tagToRoute) → NavigationViewElement
 NumberBoxElement.AcceptsExpression(bool accepts = true) → NumberBoxElement
 NumberBoxElement.Description(string description) → NumberBoxElement
@@ -551,7 +568,6 @@ SplitButtonElement.AccentButton() → SplitButtonElement
 SplitButtonElement.Click(Action handler) → SplitButtonElement
 SplitButtonElement.Set(Action<SplitButton> configure) → SplitButtonElement
 SplitButtonElement.SubtleButton() → SplitButtonElement
-SplitViewElement.IsPaneOpen(bool isPaneOpen, Action<bool> onPaneOpenChanged) → SplitViewElement
 SplitViewElement.LightDismissOverlayMode(LightDismissOverlayMode mode) → SplitViewElement
 SplitViewElement.PaneBackground(Brush brush) → SplitViewElement
 SplitViewElement.PaneBackground(ThemeRef theme) → SplitViewElement
@@ -4756,19 +4772,36 @@ ToString() → string
 ### record NavigationViewElement
 new(NavigationViewItemData[] MenuItems, Element Content = null)
 Action OnBackRequested { get; init; }
+Action OnSettingsSelected { get; init; }
+Action<NavigationViewDisplayMode> OnDisplayModeChanged { get; init; }
 Action<bool> OnPaneOpenChanged { get; init; }
+Action<string> OnItemCollapsed { get; init; }
+Action<string> OnItemExpanding { get; init; }
+Action<string> OnItemInvoked { get; init; }
 Action<string> OnSelectedTagChanged { get; init; }
 AutoSuggestBoxElement AutoSuggestBox { get; init; }
 Element Content { get; init; }
+Element ContentOverlay { get; init; }
 Element Header { get; init; }
 Element PaneCustomContent { get; init; }
 Element PaneFooter { get; init; }
+Element PaneHeader { get; init; }
+NavigationViewBackButtonVisible IsBackButtonVisible { get; init; }
+NavigationViewItemData[] FooterMenuItems { get; init; }
 NavigationViewItemData[] MenuItems { get; init; }
+NavigationViewOverflowLabelMode OverflowLabelMode { get; init; }
 NavigationViewPaneDisplayMode PaneDisplayMode { get; init; }
+NavigationViewSelectionFollowsFocus SelectionFollowsFocus { get; init; }
+NavigationViewShoulderNavigationEnabled ShoulderNavigationEnabled { get; init; }
+bool AlwaysShowHeader { get; init; }
 bool IsBackEnabled { get; init; }
 bool IsPaneOpen { get; init; }
+bool IsPaneToggleButtonVisible { get; init; }
+bool IsPaneVisible { get; init; }
 bool IsSettingsVisible { get; init; }
+bool IsTitleBarAutoPaddingEnabled { get; init; }
 double CompactModeThresholdWidth { get; init; }
+double CompactPaneLength { get; init; }
 double ExpandedModeThresholdWidth { get; init; }
 double OpenPaneLength { get; init; }
 string PaneTitle { get; init; }

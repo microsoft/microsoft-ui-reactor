@@ -212,6 +212,18 @@ public static partial class ElementExtensions
     public static NavigationViewElement BackRequested(this NavigationViewElement el, Action? handler) =>
         el with { OnBackRequested = handler };
 
+    /// <summary>Wires the settings-selected handler. Passing <c>null</c> clears.</summary>
+    public static NavigationViewElement SettingsSelected(this NavigationViewElement el, Action? handler) =>
+        el with { OnSettingsSelected = handler };
+
+    /// <summary>
+    /// Wires the item-invoked handler, which also fires when the already-selected item is
+    /// re-invoked. Receives the item's tag, or <see cref="NavigationViewElement.SettingsTag"/>
+    /// for the settings item. Passing <c>null</c> clears.
+    /// </summary>
+    public static NavigationViewElement ItemInvoked(this NavigationViewElement el, Action<string?>? handler) =>
+        el with { OnItemInvoked = handler };
+
     /// <summary>
     /// Wires the pane-open-state-changed handler. Fires for pane changes the app never
     /// requested (light dismiss, adaptive display-mode changes) as well as the echo of a
@@ -220,6 +232,19 @@ public static partial class ElementExtensions
     /// </summary>
     public static NavigationViewElement PaneOpenChanged(this NavigationViewElement el, Action<bool>? handler) =>
         el with { OnPaneOpenChanged = handler };
+
+    /// <summary>Wires the display-mode-changed handler. Passing <c>null</c> clears.</summary>
+    public static NavigationViewElement DisplayModeChanged(this NavigationViewElement el, Action<NavigationViewDisplayMode>? handler) =>
+        el with { OnDisplayModeChanged = handler };
+
+    /// <summary>Wires the hierarchical item-expanding handler. Passing <c>null</c> clears.</summary>
+    public static NavigationViewElement ItemExpanding(this NavigationViewElement el, Action<string?>? handler) =>
+        el with { OnItemExpanding = handler };
+
+    /// <summary>Wires the hierarchical item-collapsed handler. Passing <c>null</c> clears.</summary>
+    public static NavigationViewElement ItemCollapsed(this NavigationViewElement el, Action<string?>? handler) =>
+        el with { OnItemCollapsed = handler };
+
 
     /// <summary>Wires the back-requested handler. Passing <c>null</c> clears.</summary>
     public static TitleBarElement BackRequested(this TitleBarElement el, Action? handler) =>
