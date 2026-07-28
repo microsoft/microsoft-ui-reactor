@@ -459,6 +459,65 @@ class ControlledPaneDemo : Component
 }
 // </snippet:nav-pane-controlled>
 
+// <snippet:nav-item-events>
+class NavItemEventsDemo : Component
+{
+    public override Element Render()
+    {
+        var (log, setLog) = UseState("(nothing yet)");
+
+        return NavigationView(
+            [
+                NavItem("Library", icon: "Library", tag: "Library") with
+                {
+                    Children = [NavItem("Albums", tag: "Albums")]
+                },
+                NavItem("Home", icon: "Home", tag: "Home")
+            ],
+            content: TextBlock(log).Padding(24)
+        )
+        // Fires for every activation, including re-picking the current item —
+        // SelectedTagChanged stays quiet in that case. The settings item reports
+        // NavigationViewElement.SettingsTag.
+        .ItemInvoked(tag => setLog($"invoked {tag}"))
+        // Hierarchical items report their own expand/collapse.
+        .ItemExpanding(tag => setLog($"expanding {tag}"))
+        .ItemCollapsed(tag => setLog($"collapsed {tag}"))
+        // Raised when the adaptive layout switches between Minimal/Compact/Expanded.
+        .DisplayModeChanged(mode => setLog($"display mode {mode}"))
+        .Height(320);
+    }
+}
+// </snippet:nav-item-events>
+
+// <snippet:nav-footer-and-settings>
+class NavFooterSettingsDemo : Component
+{
+    public override Element Render()
+    {
+        var (selected, setSelected) = UseState("Home");
+
+        return (NavigationView(
+            [NavItem("Home", icon: "Home", tag: "Home")],
+            content: TextBlock($"Selected: {selected}").Padding(24)
+        ) with
+        {
+            // Pinned to the bottom of the pane, reconciled exactly like MenuItems.
+            FooterMenuItems = [NavItem("About", icon: "Help", tag: "About")],
+            SelectedTag = selected,
+            // The sentinel selects the built-in settings item, which has no tag
+            // of its own.
+            OnSettingsSelected = () => setSelected(NavigationViewElement.SettingsTag),
+            PaneHeader = TextBlock("My app").Bold(),
+        })
+        .SelectedTagChanged(tag => setSelected(tag ?? "Home"))
+        .CompactPaneLength(52)
+        .BackButtonVisible(false)
+        .Height(320);
+    }
+}
+// </snippet:nav-footer-and-settings>
+
 
 // <snippet:frame-events>
 class FrameEventsDemo : Component
@@ -501,7 +560,9 @@ class NavigationApp : Component
                 Component<FrameEventsDemo>(),
                 Component<SelectedTagChangedDemo>(),
                 Component<PaneOpenChangedDemo>(),
-                Component<ControlledPaneDemo>()
+                Component<ControlledPaneDemo>(),
+                Component<NavItemEventsDemo>(),
+                Component<NavFooterSettingsDemo>()
             ).Padding(24)
         );
     }

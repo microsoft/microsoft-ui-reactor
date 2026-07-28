@@ -544,15 +544,13 @@ internal static class ReconcilerBigCoverageFixtures
     // ════════════════════════════════════════════════════════════════════
     //  7d. Follow-up to #915 — FooterMenuItems reconcile, SelectedTag across
     //      both menu collections + the SettingsTag sentinel, and the event
-    //      wiring for all 8 NavigationView events.
-    //      The event assertion reads the per-control V1 payload box rather
-    //      than firing the events: NavigationView does not raise
-    //      PaneOpened/PaneClosed/ItemInvoked in the selftest host (verified —
-    //      even a directly-attached PaneClosed handler never fires there), so
-    //      a firing test would be vacuous. The payload is a real oracle: a
-    //      missing .HandCodedEvent entry leaves its trampoline slot null, and
-    //      the callback-free NavigationView in the same tree is the negative
-    //      control proving the slots aren't filled unconditionally.
+    //      wiring for every NavigationView event.
+    //      This fixture is the *wiring* oracle: it reads the per-control V1
+    //      payload box, so a missing .HandCodedEvent/.Immediate entry leaves
+    //      its slot null, and the callback-free NavigationView in the same
+    //      tree is the negative control proving the slots aren't filled
+    //      unconditionally. The complementary *firing* oracles live in 7e
+    //      (and, for the pane, NavigationViewPaneFixtures).
     // ════════════════════════════════════════════════════════════════════
     internal class NavViewFooterAndEvents(Harness h) : SelfTestFixtureBase(h)
     {
@@ -626,8 +624,7 @@ internal static class ReconcilerBigCoverageFixtures
             H.Check("NVEvents_DisplayModeChanged", wired?.DisplayModeChangedTrampoline is not null);
             H.Check("NVEvents_Expanding", wired?.ExpandingTrampoline is not null);
             H.Check("NVEvents_Collapsed", wired?.CollapsedTrampoline is not null);
-            H.Check("NVEvents_PaneOpened", wired?.PaneOpenedTrampoline is not null);
-            H.Check("NVEvents_PaneClosed", wired?.PaneClosedTrampoline is not null);
+            H.Check("NVEvents_IsPaneOpenObserved", wired?.IsPaneOpenObserver is not null);
 
             // Negative control — no callbacks declared, so nothing may be subscribed.
             var bareBox = bare is null ? null : Reconciler.TryGetControlEventPayload<NavigationViewEventPayload>(bare);
@@ -640,8 +637,7 @@ internal static class ReconcilerBigCoverageFixtures
                     && bareBox.DisplayModeChangedTrampoline is null
                     && bareBox.ExpandingTrampoline is null
                     && bareBox.CollapsedTrampoline is null
-                    && bareBox.PaneOpenedTrampoline is null
-                    && bareBox.PaneClosedTrampoline is null));
+                    && bareBox.IsPaneOpenObserver is null));
 
             H.Check("NVEvents_SettingsNotFiredBeforePhase1", settingsHits == 0 && nullTagHits == 0);
 
@@ -656,7 +652,8 @@ internal static class ReconcilerBigCoverageFixtures
                 wired is not null
                 && afterUpdate is not null
                 && ReferenceEquals(afterUpdate, wired)
-                && ReferenceEquals(afterUpdate.PaneOpenedTrampoline, wired.PaneOpenedTrampoline));
+                && ReferenceEquals(afterUpdate.ItemInvokedTrampoline, wired.ItemInvokedTrampoline)
+                && ReferenceEquals(afterUpdate.IsPaneOpenObserver, wired.IsPaneOpenObserver));
             // Firing oracle: the phase flip moves selection to the settings item exactly once.
             // A second subscription (payload eviction / re-wire per reconcile) would double it.
             H.Check("NVEvents_SettingsSelectedFiredOnce", settingsHits == 1);
@@ -672,6 +669,122 @@ internal static class ReconcilerBigCoverageFixtures
             H.Check(
                 "NVFooter_Phase1_SettingsTagSelectsSettingsItem",
                 nv is not null && nv.SettingsItem is not null && ReferenceEquals(nv.SelectedItem, nv.SettingsItem));
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  7e. Follow-up to #915 — FIRING oracles for the hand-coded events.
+    //      7d proves the trampolines are installed; this proves they are
+    //      installed on the right control event and unpack the right payload
+    //      field. Each event is driven the way WinUI actually raises it:
+    //      ItemInvoked through the item's automation peer (the same
+    //      IInvokeProvider a click goes through), Expanding/Collapsed by
+    //      toggling IsExpanded on a hierarchical parent, and
+    //      DisplayModeChanged by flipping PaneDisplayMode so the adaptive
+    //      layout recomputes. Deleting any one .HandCodedEvent entry, or
+    //      swapping which args field a trampoline reads, fails a check here.
+    // ════════════════════════════════════════════════════════════════════
+    internal class NavViewEventFiring(Harness h) : SelfTestFixtureBase(h)
+    {
+        private const string NvName = "nvEventFiring";
+
+        public override async Task RunAsync()
+        {
+            var invoked = new List<string?>();
+            var expanded = new List<string?>();
+            var collapsed = new List<string?>();
+            var displayModes = new List<NavigationViewDisplayMode>();
+
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (minimal, setMinimal) = ctx.UseState(false);
+                return VStack(
+                    Button("NVFireCollapse", () => setMinimal(true)),
+                    (new NavigationViewElement(
+                        [
+                            NavItem("Parent", tag: "parent") with
+                            {
+                                Children = [NavItem("Child", tag: "child")],
+                            },
+                            NavItem("Leaf", tag: "leaf"),
+                        ],
+                        TextBlock("nv-fire-body"))
+                    {
+                        IsSettingsVisible = false,
+                        PaneDisplayMode = minimal
+                            ? NavigationViewPaneDisplayMode.LeftMinimal
+                            : NavigationViewPaneDisplayMode.Left,
+                        OnItemInvoked = t => invoked.Add(t),
+                        OnItemExpanding = t => expanded.Add(t),
+                        OnItemCollapsed = t => collapsed.Add(t),
+                        OnDisplayModeChanged = m => displayModes.Add(m),
+                    })
+                    .Set(n => n.Name = NvName));
+            });
+
+            await Harness.Render(200);
+
+            var nv = H.FindControl<WinXC.NavigationView>(n => n.Name == NvName);
+            H.Check("NVFire_Mounted", nv is not null);
+
+            // ── ItemInvoked ── drive the real invoke path (automation peer),
+            // not SelectedItem, which would only raise SelectionChanged.
+            var leaf = nv?.MenuItems.OfType<WinXC.NavigationViewItem>()
+                .FirstOrDefault(i => (i.Tag as string) == "leaf");
+            H.Check("NVFire_LeafRealized", leaf is not null);
+            if (leaf is not null)
+            {
+                var peer = Microsoft.UI.Xaml.Automation.Peers.FrameworkElementAutomationPeer
+                    .CreatePeerForElement(leaf);
+                var invokeProvider = peer?.GetPattern(
+                    Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)
+                    as Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider;
+                var selectProvider = peer?.GetPattern(
+                    Microsoft.UI.Xaml.Automation.Peers.PatternInterface.SelectionItem)
+                    as Microsoft.UI.Xaml.Automation.Provider.ISelectionItemProvider;
+                // NavigationViewItem exposes exactly one of these depending on the
+                // pane mode; asserting we found one keeps the drive step honest
+                // rather than silently no-op'ing into a vacuous pass below.
+                H.Check("NVFire_LeafHasInvokePattern", invokeProvider is not null || selectProvider is not null);
+                invokeProvider?.Invoke();
+                selectProvider?.Select();
+                await Harness.Render(200);
+            }
+            // The tag must come from InvokedItemContainer.Tag — an empty list means the
+            // event never reached the trampoline, and a wrong tag means it read the
+            // wrong args field.
+            H.Check("NVFire_ItemInvokedFired", invoked.Count >= 1);
+            H.Check("NVFire_ItemInvokedTag", invoked.Contains("leaf"));
+
+            // ── Expanding / Collapsed ── a hierarchical parent raises these when
+            // its IsExpanded flips.
+            var parent = nv?.MenuItems.OfType<WinXC.NavigationViewItem>()
+                .FirstOrDefault(i => (i.Tag as string) == "parent");
+            H.Check("NVFire_ParentRealized", parent is not null && parent.MenuItems.Count == 1);
+            if (parent is not null)
+            {
+                parent.IsExpanded = true;
+                await Harness.Render(200);
+                parent.IsExpanded = false;
+                await Harness.Render(200);
+            }
+            H.Check("NVFire_ExpandingFired", expanded.Contains("parent"));
+            H.Check("NVFire_CollapsedFired", collapsed.Contains("parent"));
+
+            // ── DisplayModeChanged ── flipping PaneDisplayMode through the element
+            // (not the control) also proves the update path keeps the subscription.
+            displayModes.Clear();
+            H.ClickButton("NVFireCollapse");
+            await Harness.Render(200);
+            nv = H.FindControl<WinXC.NavigationView>(n => n.Name == NvName);
+            H.Check("NVFire_DisplayModeIsMinimal", nv?.DisplayMode == NavigationViewDisplayMode.Minimal);
+            H.Check("NVFire_DisplayModeChangedFired", displayModes.Count >= 1);
+            // The payload must be the control's new mode, not a default-valued enum.
+            H.Check(
+                "NVFire_DisplayModeChangedPayload",
+                displayModes.Count >= 1 && displayModes[^1] == NavigationViewDisplayMode.Minimal
+                && nv is not null && displayModes[^1] == nv.DisplayMode);
         }
     }
 

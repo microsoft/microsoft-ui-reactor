@@ -512,15 +512,6 @@ public class EventFluentNullClearTests
     }
 
     [Fact]
-    public void NavigationView_PaneOpenChanged_NullClears()
-    {
-        Action<bool> h = _ => { };
-        var el = NavigationView(Array.Empty<NavigationViewItemData>()).PaneOpenChanged(h);
-        Assert.Same(h, el.OnPaneOpenChanged);
-        Assert.Null(el.PaneOpenChanged(null).OnPaneOpenChanged);
-    }
-
-    [Fact]
     public void NavigationView_DisplayModeChanged_NullClears()
     {
         Action<NavigationViewDisplayMode> h = _ => { };

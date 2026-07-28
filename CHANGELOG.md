@@ -58,6 +58,19 @@ Conventions for contributors:
   implied 48, and an explicit `WindowSpec.TitleBarHeight` wins over the element's
   declaration.
 
+- **`NavigationView` declarative surface completed (issue #915).** The element
+  now covers the control without escape hatches: `IsBackButtonVisible`,
+  `IsPaneToggleButtonVisible`, `IsPaneVisible`, `AlwaysShowHeader`,
+  `IsTitleBarAutoPaddingEnabled`, `SelectionFollowsFocus`, `OverflowLabelMode`,
+  `ShoulderNavigationEnabled` and `CompactPaneLength`; the `PaneHeader` and
+  `ContentOverlay` slots; a `FooterMenuItems` list reconciled like `MenuItems`;
+  and the `OnSettingsSelected`, `OnItemInvoked`, `OnDisplayModeChanged`,
+  `OnItemExpanding` and `OnItemCollapsed` callbacks with matching
+  `.SettingsSelected()` / `.ItemInvoked()` / `.DisplayModeChanged()` /
+  `.ItemExpanding()` / `.ItemCollapsed()` fluents. A new
+  `NavigationViewElement.SettingsTag` sentinel lets `SelectedTag` select the
+  built-in settings item, and `.WithNavigation()` now routes it.
+
 ### Changed
 
 ### Deprecated
@@ -78,6 +91,12 @@ Conventions for contributors:
   `ExtendsContentIntoTitleBar = false` whenever the spec left it unset, silently
   undoing the inference behind a still-mounted title-bar control; an unset spec
   value now preserves it.
+
+- **`NavigationView` no longer needs `.Set()` for its chrome (issue #915).**
+  `IsBackButtonVisible` and `IsPaneToggleButtonVisible` had no declarative
+  mapping, so hiding the back button or the hamburger — the usual setup when a
+  `TitleBar` already owns that chrome — forced an imperative
+  `.Set(nv => ...)` escape hatch that the reconciler could not diff.
 
 ### Security
 

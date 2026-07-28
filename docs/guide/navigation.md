@@ -726,6 +726,104 @@ class ControlledPaneDemo : Component
 `SplitView` exposes the same `.PaneOpenChanged(handler)` and
 `.IsPaneOpen(value, handler)` pair.
 
+## NavigationView.ItemInvoked and the hierarchy events
+
+`SelectedTagChanged` only fires when the selection actually moves. To react to
+every activation — including the user re-picking the item that is already
+selected — use `.ItemInvoked(handler)`. Hierarchical items report their own
+expand/collapse through `.ItemExpanding()` / `.ItemCollapsed()`, and the
+adaptive layout reports its `Minimal`/`Compact`/`Expanded` switches through
+`.DisplayModeChanged()`:
+
+```csharp
+class NavItemEventsDemo : Component
+{
+    public override Element Render()
+    {
+        var (log, setLog) = UseState("(nothing yet)");
+
+        return NavigationView(
+            [
+                NavItem("Library", icon: "Library", tag: "Library") with
+                {
+                    Children = [NavItem("Albums", tag: "Albums")]
+                },
+                NavItem("Home", icon: "Home", tag: "Home")
+            ],
+            content: TextBlock(log).Padding(24)
+        )
+        // Fires for every activation, including re-picking the current item —
+        // SelectedTagChanged stays quiet in that case. The settings item reports
+        // NavigationViewElement.SettingsTag.
+        .ItemInvoked(tag => setLog($"invoked {tag}"))
+        // Hierarchical items report their own expand/collapse.
+        .ItemExpanding(tag => setLog($"expanding {tag}"))
+        .ItemCollapsed(tag => setLog($"collapsed {tag}"))
+        // Raised when the adaptive layout switches between Minimal/Compact/Expanded.
+        .DisplayModeChanged(mode => setLog($"display mode {mode}"))
+        .Height(320);
+    }
+}
+```
+
+All four receive the item's tag (`DisplayModeChanged` receives the new
+`NavigationViewDisplayMode`), and all four clear when passed `null`.
+
+## NavigationView footer, settings and pane metrics
+
+`FooterMenuItems` pins items to the bottom of the pane and is reconciled
+exactly like `MenuItems` — `SelectedTag` searches both collections. The
+built-in settings item has no tag of its own, so
+`NavigationViewElement.SettingsTag` is the sentinel that selects it, and
+`.SettingsSelected(handler)` fires when the user picks it:
+
+```csharp
+class NavFooterSettingsDemo : Component
+{
+    public override Element Render()
+    {
+        var (selected, setSelected) = UseState("Home");
+
+        return (NavigationView(
+            [NavItem("Home", icon: "Home", tag: "Home")],
+            content: TextBlock($"Selected: {selected}").Padding(24)
+        ) with
+        {
+            // Pinned to the bottom of the pane, reconciled exactly like MenuItems.
+            FooterMenuItems = [NavItem("About", icon: "Help", tag: "About")],
+            SelectedTag = selected,
+            // The sentinel selects the built-in settings item, which has no tag
+            // of its own.
+            OnSettingsSelected = () => setSelected(NavigationViewElement.SettingsTag),
+            PaneHeader = TextBlock("My app").Bold(),
+        })
+        .SelectedTagChanged(tag => setSelected(tag ?? "Home"))
+        .CompactPaneLength(52)
+        .BackButtonVisible(false)
+        .Height(320);
+    }
+}
+```
+
+The rest of the control's chrome is declarative too:
+`.BackButtonVisible()` and `.PaneToggleButtonVisible()` — what you reach for
+when a `TitleBar` already owns that chrome — plus `.PaneVisible()`,
+`.AlwaysShowHeader()`, `.TitleBarAutoPadding()`,
+`.SelectionFollowsFocus()`, `.OverflowLabelMode()`,
+`.ShoulderNavigation()`, the `PaneHeader` and `ContentOverlay` slots,
+and the `.CompactPaneLength()` / `.OpenPaneLength()` /
+`.CompactModeThresholdWidth()` / `.ExpandedModeThresholdWidth()` metrics.
+
+> The fluents drop the `Is` prefix that the underlying properties carry
+> (`.BackButtonVisible()` sets `IsBackButtonVisible`) — a C# extension method
+> cannot share its name with a property on the same type.
+
+> The four pane metrics default to `double.NaN`, which means *Reactor never
+> writes the property* and the control keeps its own default. That sentinel is
+> sticky: setting an explicit value and later putting `NaN` back skips the
+> write rather than restoring the WinUI default. Drive the metric to the value
+> you want instead of clearing it.
+
 ## Navigation Diagnostics
 
 `NavigationDiagnostics` exposes static events for debugging and telemetry.
