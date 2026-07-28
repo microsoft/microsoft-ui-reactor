@@ -122,8 +122,18 @@ public sealed class ReactorWindow : IDisposable
     // mounted and flip the window back into the content-extended mode just before
     // the native close (see PrepareTitleBarForClose) so the control tears down
     // via its safe path while the HWND/AppWindow are still alive.
+    //
+    // NOTE: _titleBarControlPresent is an "ever mounted" latch and is deliberately
+    // never cleared — teardown safety wants the conservative answer, since a
+    // control that was mounted at any point may still be mid-teardown. Anything
+    // that needs "is one mounted right now" must use _titleBarControlMounted.
     private bool _titleBarControlPresent;
     private bool _titleBarTeardownPrepared;
+    // Current mount state, cleared on TitleBar unmount. Drives the
+    // ExtendsContentIntoTitleBar inference, which must be withdrawable: a window
+    // that merely *used to* host a TitleBar should not stay content-extended
+    // forever on a spec that leaves the flag unset. (issue #917)
+    private bool _titleBarControlMounted;
 
     // Issue #917 — declarative caption height. The spec value wins; a mounted
     // TitleBar(...) element supplies the fallback. _appliedTitleBarHeight tracks
@@ -563,9 +573,12 @@ public sealed class ReactorWindow : IDisposable
             // sets content-extension at mount. Re-applying chrome on Update must
             // preserve that inference — writing the raw default here would
             // silently drop the window out of content-extended mode behind a
-            // still-mounted TitleBar control. (issue #917; inference contract
-            // documented on WindowSpec.ExtendsContentIntoTitleBar)
-            try { _window.ExtendsContentIntoTitleBar = spec.ExtendsContentIntoTitleBar ?? _titleBarControlPresent; }
+            // still-mounted TitleBar control. Keyed on the *current* mount state,
+            // so the inference is withdrawn once the element goes away rather
+            // than latching the window into content-extended mode for its
+            // lifetime. (issue #917; inference contract documented on
+            // WindowSpec.ExtendsContentIntoTitleBar)
+            try { _window.ExtendsContentIntoTitleBar = spec.ExtendsContentIntoTitleBar ?? _titleBarControlMounted; }
             catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
             {
                 DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.ExtendsContentIntoTitleBar.set", ex);
@@ -1471,7 +1484,34 @@ public sealed class ReactorWindow : IDisposable
     /// deliberately skips <c>SetTitleBar</c>. Drives
     /// <see cref="PrepareTitleBarForClose"/>. (issue #537)
     /// </summary>
-    internal void MarkTitleBarControlPresent() => _titleBarControlPresent = true;
+    internal void MarkTitleBarControlPresent()
+    {
+        _titleBarControlPresent = true;
+        _titleBarControlMounted = true;
+    }
+
+    /// <summary>
+    /// Records that the window's <c>TitleBar</c> control has been unmounted:
+    /// withdraws the <c>ExtendsContentIntoTitleBar</c> inference and the
+    /// element's caption-height contribution, so a window that merely used to
+    /// host a TitleBar is not left content-extended and tall forever.
+    /// (issue #917)
+    /// <para>
+    /// Deliberately does <b>not</b> clear <see cref="_titleBarControlPresent"/>:
+    /// that latch drives close-time teardown safety (issue #537), where the
+    /// conservative "a control was mounted at some point" answer is the correct
+    /// one.
+    /// </para>
+    /// </summary>
+    internal void ClearTitleBarControl()
+    {
+        _titleBarControlMounted = false;
+        _titleBarControl = null;
+        _titleBarControlExplicitHeight = false;
+        _titleBarControlHeightOwned = false;
+        _elementTitleBarHeight = null;
+        ApplyTitleBarHeight(warnWhenNotExtended: false);
+    }
 
     /// <summary>
     /// Records the caption height declared by the mounted <c>TitleBar(...)</c>
@@ -1491,6 +1531,20 @@ public sealed class ReactorWindow : IDisposable
         FrameworkElement? control,
         bool controlHasExplicitHeight)
     {
+        // The element's Imperative entry runs on every render of the TitleBar,
+        // but the native caption write is a COM call and the control write can
+        // invalidate layout. Skip both when nothing that feeds them changed.
+        // (issue #917 review)
+        var sameControl = control is null
+            ? _titleBarControl is null
+            : _titleBarControl is not null
+              && _titleBarControl.TryGetTarget(out var existing)
+              && ReferenceEquals(existing, control);
+        if (sameControl
+            && _elementTitleBarHeight == height
+            && _titleBarControlExplicitHeight == controlHasExplicitHeight)
+            return;
+
         _elementTitleBarHeight = height;
         _titleBarControl = control is null ? null : new WeakReference<FrameworkElement>(control);
         _titleBarControlExplicitHeight = controlHasExplicitHeight;
@@ -1539,8 +1593,15 @@ public sealed class ReactorWindow : IDisposable
                 DiagnosticLog.Warning(
                     LogCategory.Hosting,
                     "ReactorWindow.TitleBarHeight",
-                    "TitleBarHeight requires a content-extended window; set WindowSpec.ExtendsContentIntoTitleBar = true "
-                    + "or render a TitleBar(...) element. The height option was not applied.");
+                    _titleBarControlMounted
+                        // A TitleBar is already rendered, so "render one" is not the
+                        // remedy — the spec is forcing the window out of the mode the
+                        // native setter requires. (issue #917 review)
+                        ? "TitleBarHeight requires a content-extended window, but WindowSpec.ExtendsContentIntoTitleBar "
+                          + "is explicitly false. Remove it (a TitleBar(...) element infers true) or set it to true. "
+                          + "The height option was not applied."
+                        : "TitleBarHeight requires a content-extended window; set WindowSpec.ExtendsContentIntoTitleBar = true "
+                          + "or render a TitleBar(...) element. The height option was not applied.");
             // The caption stayed Standard, so the control must not go tall either.
             _effectiveTitleBarHeight = WindowTitleBarHeight.Standard;
             SyncTitleBarControlHeight();
@@ -1590,6 +1651,12 @@ public sealed class ReactorWindow : IDisposable
 
         if (_effectiveTitleBarHeight == WindowTitleBarHeight.Tall)
         {
+            // Runs after every render via the post-modifier hook; skip the DP
+            // write (and the layout invalidation it triggers) when the control
+            // already carries the height Reactor owns. (issue #917 review)
+            if (_titleBarControlHeightOwned
+                && control.Height == TitleBarElement.TallTitleBarControlHeight)
+                return;
             control.Height = TitleBarElement.TallTitleBarControlHeight;
             _titleBarControlHeightOwned = true;
         }

@@ -2052,6 +2052,14 @@ public sealed partial class Reconciler : IDisposable
             onUnmount(umFe);
         }
 
+        // Issue #917 — a TitleBar going away withdraws both its
+        // ExtendsContentIntoTitleBar inference and its caption-height
+        // contribution from the owning window, so a window that merely used to
+        // host one is not left content-extended and tall for its lifetime.
+        if (control is WinUI.TitleBar
+            && global::Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow is { } titleBarWindow)
+            titleBarWindow.ClearTitleBarControl();
+
         if (_componentNodes.TryGetValue(control, out var node))
         {
             Diagnostics.ReactorEventSource.Log.ComponentUnmount(
@@ -2382,6 +2390,13 @@ public sealed partial class Reconciler : IDisposable
             _onUnmountActions.Remove(umFe);
             onUnmount(umFe);
         }
+
+        // Issue #917 — mirrors UnmountRecursive: a TitleBar reached through the
+        // pooling traversal (nested in a poolable container) must also withdraw
+        // its inference and caption-height contribution.
+        if (control is WinUI.TitleBar
+            && global::Microsoft.UI.Reactor.ReactorApp.ActiveHostInternal?.OwningWindow is { } pooledTitleBarWindow)
+            pooledTitleBarWindow.ClearTitleBarControl();
 
         // Run cleanup logic (component teardown, etc.)
         if (_componentNodes.TryGetValue(control, out var node))

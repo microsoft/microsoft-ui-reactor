@@ -25,8 +25,17 @@ namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 /// </summary>
 internal static class TitleBarHeightFixtures
 {
-    private const int StandardCaption = 32;
-    private const int TallCaption = 48;
+    // DIP constants. AppWindowTitleBar.Height reports PHYSICAL PIXELS, so every
+    // caption assertion converts through the window's DipScale — hard-coding 32/48
+    // px would break above 100% scaling, and worse, a Standard caption at 150%
+    // measures 48 px and would false-pass a hard-coded Tall check. The WinUI
+    // TitleBar control's ActualHeight is already in DIPs and needs no conversion.
+    private const int StandardCaptionDip = 32;
+    private const int TallCaptionDip = 48;
+
+    /// <summary>Expected physical caption height for a DIP height on this window.</summary>
+    private static int CaptionPx(ReactorWindow win, int dip) =>
+        (int)Math.Round(dip * win.DipScale, MidpointRounding.AwayFromZero);
 
     private static void EnsureUIDispatcher()
     {
@@ -66,6 +75,24 @@ internal static class TitleBarHeightFixtures
         }
     }
 
+    /// <summary>
+    /// A tall TitleBar that can be removed from the tree at runtime, so the
+    /// unmount withdrawal can be observed.
+    /// </summary>
+    private sealed class ToggleTitleBarComponent : Component
+    {
+        public Action<bool>? SetVisible;
+
+        public override Element Render()
+        {
+            var (visible, set) = UseState(true);
+            SetVisible = set;
+            return visible
+                ? VStack(TitleBar("Removable").Tall(), TextBlock("body"))
+                : VStack(TextBlock("body"));
+        }
+    }
+
     private static async Task<ReactorWindow> OpenAndSettle(WindowSpec spec, Func<Component> root)
     {
         var win = ReactorApp.OpenWindow(spec, root);
@@ -79,19 +106,22 @@ internal static class TitleBarHeightFixtures
         foreach (var win in windows)
         {
             if (win is null) continue;
+            // Best-effort teardown, matching the house pattern in
+            // Phase4WindowingFixtures: a window may already be closing or
+            // disposed, and a failure here must not mask the fixture's own
+            // assertion result.
             try { win.Close(); } catch { }
         }
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
         await Task.Delay(100);
     }
 
-    private static WindowSpec Spec(string title) =>
-        new() { Title = title, Width = 420, Height = 260 };
-
     private static void Report(string label, ReactorWindow win, Microsoft.UI.Xaml.Controls.TitleBar? bar) =>
         Console.WriteLine(
-            $"# {label}: caption={win.AppWindow.TitleBar.Height} control={bar?.ActualHeight.ToString("0.##") ?? "<null>"}");
+            $"# {label}: caption={win.AppWindow.TitleBar.Height}px (scale={win.DipScale:0.##}) "
+            + $"control={bar?.ActualHeight.ToString("0.##") ?? "<null>"}dip");
+
+    private static WindowSpec Spec(string title) =>
+        new() { Title = title, Width = 420, Height = 260 };
 
     /// <summary>
     /// <c>TitleBar(...).Tall()</c> raises BOTH the system caption and the
@@ -116,7 +146,8 @@ internal static class TitleBarHeightFixtures
                 baseCaption = winPlain.AppWindow.TitleBar.Height;
                 baseControl = plain.Bar?.ActualHeight ?? -1;
                 H.Check("TitleBarHeight_StandardBaseline",
-                    baseCaption == StandardCaption && Math.Abs(baseControl - StandardCaption) < 0.5);
+                    baseCaption == CaptionPx(winPlain, StandardCaptionDip)
+                    && Math.Abs(baseControl - StandardCaptionDip) < 0.5);
             }
             finally { await CloseAndSettle(winPlain); }
 
@@ -126,14 +157,14 @@ internal static class TitleBarHeightFixtures
             {
                 Report("tall", winTall, tall.Bar);
                 H.Check("TitleBarHeight_ElementTall_RaisesCaption",
-                    winTall.AppWindow.TitleBar.Height == TallCaption
+                    winTall.AppWindow.TitleBar.Height == CaptionPx(winTall, TallCaptionDip)
                     && winTall.AppWindow.TitleBar.Height != baseCaption);
                 // The WinUI TitleBar control does not derive its height from the
-                // caption — a tall caption over a 32 px control is the bug this
+                // caption — a tall caption over a 32 DIP control is the bug this
                 // half of the feature exists to prevent.
                 H.Check("TitleBarHeight_ElementTall_RaisesControl",
                     tall.Bar is { } bar
-                    && Math.Abs(bar.ActualHeight - TallCaption) < 0.5
+                    && Math.Abs(bar.ActualHeight - TallCaptionDip) < 0.5
                     && Math.Abs(bar.ActualHeight - baseControl) > 0.5);
             }
             finally { await CloseAndSettle(winTall); }
@@ -160,9 +191,9 @@ internal static class TitleBarHeightFixtures
             {
                 Report("specTall", win, comp.Bar);
                 H.Check("TitleBarHeight_SpecTall_RaisesCaption",
-                    win.AppWindow.TitleBar.Height == TallCaption);
+                    win.AppWindow.TitleBar.Height == CaptionPx(win, TallCaptionDip));
                 H.Check("TitleBarHeight_SpecTall_RaisesControl",
-                    comp.Bar is { } bar && Math.Abs(bar.ActualHeight - TallCaption) < 0.5);
+                    comp.Bar is { } bar && Math.Abs(bar.ActualHeight - TallCaptionDip) < 0.5);
             }
             finally { await CloseAndSettle(win); }
 
@@ -174,8 +205,8 @@ internal static class TitleBarHeightFixtures
             {
                 Report("specWins", winOverride, overridden.Bar);
                 H.Check("TitleBarHeight_SpecWinsOverElement",
-                    winOverride.AppWindow.TitleBar.Height == StandardCaption
-                    && overridden.Bar is { } bar && Math.Abs(bar.ActualHeight - StandardCaption) < 0.5);
+                    winOverride.AppWindow.TitleBar.Height == CaptionPx(winOverride, StandardCaptionDip)
+                    && overridden.Bar is { } bar && Math.Abs(bar.ActualHeight - StandardCaptionDip) < 0.5);
             }
             finally { await CloseAndSettle(winOverride); }
         }
@@ -197,7 +228,7 @@ internal static class TitleBarHeightFixtures
             {
                 Report("tallPlusExplicit64", win, comp.Bar);
                 H.Check("TitleBarHeight_ExplicitHeightWins",
-                    win.AppWindow.TitleBar.Height == TallCaption
+                    win.AppWindow.TitleBar.Height == CaptionPx(win, TallCaptionDip)
                     && comp.Bar is { } bar && Math.Abs(bar.ActualHeight - 64) < 0.5);
             }
             finally { await CloseAndSettle(win); }
@@ -255,7 +286,7 @@ internal static class TitleBarHeightFixtures
                 await Harness.Render(150);
                 Report("nowExtended", win, null);
                 H.Check("TitleBarHeight_ReAppliedOnceExtended",
-                    win.AppWindow.TitleBar.Height == TallCaption);
+                    win.AppWindow.TitleBar.Height == CaptionPx(win, TallCaptionDip));
             }
             finally { await CloseAndSettle(win); }
         }
@@ -286,17 +317,17 @@ internal static class TitleBarHeightFixtures
                 Report("afterSpecUpdate", win, comp.Bar);
 
                 H.Check("TitleBarHeight_SpecUpdate_RaisesCaption",
-                    win.AppWindow.TitleBar.Height == TallCaption);
+                    win.AppWindow.TitleBar.Height == CaptionPx(win, TallCaptionDip));
                 H.Check("TitleBarHeight_SpecUpdate_RaisesControl",
-                    Math.Abs(beforeControl - StandardCaption) < 0.5
-                    && comp.Bar is { } bar && Math.Abs(bar.ActualHeight - TallCaption) < 0.5);
+                    Math.Abs(beforeControl - StandardCaptionDip) < 0.5
+                    && comp.Bar is { } bar && Math.Abs(bar.ActualHeight - TallCaptionDip) < 0.5);
 
                 win.Update(spec with { TitleBarHeight = WindowTitleBarHeight.Standard });
                 await Harness.Render(150);
                 Report("afterSpecStandard", win, comp.Bar);
                 H.Check("TitleBarHeight_SpecUpdate_LowersControlAgain",
-                    win.AppWindow.TitleBar.Height == StandardCaption
-                    && comp.Bar is { } bar2 && Math.Abs(bar2.ActualHeight - StandardCaption) < 0.5);
+                    win.AppWindow.TitleBar.Height == CaptionPx(win, StandardCaptionDip)
+                    && comp.Bar is { } bar2 && Math.Abs(bar2.ActualHeight - StandardCaptionDip) < 0.5);
             }
             finally { await CloseAndSettle(win); }
         }
@@ -330,8 +361,8 @@ internal static class TitleBarHeightFixtures
                 H.Check("TitleBarHeight_RemoveExplicitHeight_FallsBackToTall",
                     Math.Abs(withExplicit - 64) < 0.5
                     && comp.Bar is { } bar
-                    && Math.Abs(bar.ActualHeight - TallCaption) < 0.5
-                    && win.AppWindow.TitleBar.Height == TallCaption);
+                    && Math.Abs(bar.ActualHeight - TallCaptionDip) < 0.5
+                    && win.AppWindow.TitleBar.Height == CaptionPx(win, TallCaptionDip));
             }
             finally { await CloseAndSettle(win); }
         }
@@ -360,7 +391,51 @@ internal static class TitleBarHeightFixtures
                 Report("afterUpdate", win, comp.Bar);
 
                 H.Check("TitleBarHeight_UpdateResetsToStandard",
-                    applied == TallCaption && win.AppWindow.TitleBar.Height == StandardCaption);
+                    applied == CaptionPx(win, TallCaptionDip)
+                    && win.AppWindow.TitleBar.Height == CaptionPx(win, StandardCaptionDip));
+            }
+            finally { await CloseAndSettle(win); }
+        }
+    }
+
+    /// <summary>
+    /// Unmounting the <c>TitleBar</c> withdraws both of its contributions: the
+    /// caption returns to Standard, and the <c>ExtendsContentIntoTitleBar</c>
+    /// inference is no longer asserted on a later spec update that leaves the
+    /// flag unset. Without the unmount hook the "ever mounted" latch would keep
+    /// the window content-extended and tall for its remaining lifetime.
+    /// </summary>
+    internal class TitleBarHeightUnmountWithdraws(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+
+            var comp = new ToggleTitleBarComponent();
+            var spec = Spec("Unmount withdraws");
+            var win = await OpenAndSettle(spec, () => comp);
+            try
+            {
+                Report("titleBarMounted", win, null);
+                var mountedCaption = win.AppWindow.TitleBar.Height;
+                var mountedExtended = win.NativeWindow.ExtendsContentIntoTitleBar;
+
+                comp.SetVisible?.Invoke(false);
+                await win.Host.WaitForIdleAsync();
+                await Harness.Render(150);
+                Report("titleBarUnmounted", win, null);
+
+                H.Check("TitleBarHeight_Unmount_ResetsCaption",
+                    mountedCaption == CaptionPx(win, TallCaptionDip)
+                    && win.AppWindow.TitleBar.Height == CaptionPx(win, StandardCaptionDip));
+
+                // A spec update that leaves ExtendsContentIntoTitleBar unset must
+                // now infer false — the element that justified the inference is
+                // gone. This is the half the "ever mounted" latch got wrong.
+                win.Update(spec with { Title = "Unmount withdraws 2" });
+                await Harness.Render(150);
+                H.Check("TitleBarHeight_Unmount_WithdrawsExtendInference",
+                    mountedExtended && !win.NativeWindow.ExtendsContentIntoTitleBar);
             }
             finally { await CloseAndSettle(win); }
         }
