@@ -427,6 +427,14 @@ internal static class ReconcilerBigCoverageFixtures
     // ════════════════════════════════════════════════════════════════════
     internal class NavViewSurfaceProps(Harness h) : SelfTestFixtureBase(h)
     {
+        // CodeQL flags exact == / != on doubles. These values are literals written
+        // and read back with no arithmetic in between, so exact comparison is
+        // correct — but a tolerance says the same thing without the alert. NaN
+        // falls out of Approx as false, which is exactly what the sentinel checks
+        // below want ("the WinUI default is not the value we wrote").
+        private static bool Approx(double a, double b) =>
+            global::System.Math.Abs(a - b) < 0.0001;
+
         public override async Task RunAsync()
         {
             var bare = new WinXC.NavigationView();
@@ -491,7 +499,7 @@ internal static class ReconcilerBigCoverageFixtures
             // 72 is not the WinUI default, so this fails if the NaN-sentinel entry is dropped.
             H.Check(
                 "NVSurface_Phase0_CompactPaneLength",
-                nv is not null && nv.CompactPaneLength == 72 && sentinelDefaults != 72);
+                nv is not null && Approx(nv.CompactPaneLength, 72) && !Approx(sentinelDefaults, 72));
             H.Check(
                 "NVSurface_Phase0_PaneHeader",
                 nv?.PaneHeader is TextBlock ph && (string)ph.Text == "pane-header-0");
@@ -516,7 +524,7 @@ internal static class ReconcilerBigCoverageFixtures
                 nv is not null && nv.ShoulderNavigationEnabled == WinXC.NavigationViewShoulderNavigationEnabled.Never);
             H.Check(
                 "NVSurface_Phase1_CompactPaneLength",
-                nv is not null && nv.CompactPaneLength == 96);
+                nv is not null && Approx(nv.CompactPaneLength, 96));
             H.Check(
                 "NVSurface_Phase1_PaneHeaderSwapped",
                 nv?.PaneHeader is TextBlock ph1 && (string)ph1.Text == "pane-header-1");
@@ -532,7 +540,7 @@ internal static class ReconcilerBigCoverageFixtures
             nv = H.FindControl<WinXC.NavigationView>(_ => true);
             H.Check(
                 "NVSurface_Phase2_NaNIsStickyNotReset",
-                nv is not null && nv.CompactPaneLength == 96 && sentinelDefaults != 96);
+                nv is not null && Approx(nv.CompactPaneLength, 96) && !Approx(sentinelDefaults, 96));
             // The other props must still track phase 2, proving the render happened
             // and the NaN check above isn't reading a stale pre-click tree.
             H.Check(
@@ -647,13 +655,24 @@ internal static class ReconcilerBigCoverageFixtures
             // Re-subscribing on every reconcile would replace the slot delegates; the
             // guard means the trampolines are the *same* instances after an update.
             var afterUpdate = nv is null ? null : Reconciler.TryGetControlEventPayload<NavigationViewEventPayload>(nv);
+            // Delegates are reference types, so identity is the right comparison here —
+            // object.Equals would compare target+method and pass even if the slot were
+            // replaced with a fresh delegate over the same static trampoline, which is
+            // exactly the re-subscription bug this guards. The object? locals make the
+            // reference-typing explicit for the analyzer.
+            object? invokedBefore = wired?.ItemInvokedTrampoline;
+            object? invokedAfter = afterUpdate?.ItemInvokedTrampoline;
+            object? observerBefore = wired?.IsPaneOpenObserver;
+            object? observerAfter = afterUpdate?.IsPaneOpenObserver;
             H.Check(
                 "NVEvents_SubscribedOnce",
                 wired is not null
                 && afterUpdate is not null
                 && ReferenceEquals(afterUpdate, wired)
-                && ReferenceEquals(afterUpdate.ItemInvokedTrampoline, wired.ItemInvokedTrampoline)
-                && ReferenceEquals(afterUpdate.IsPaneOpenObserver, wired.IsPaneOpenObserver));
+                && invokedBefore is not null
+                && ReferenceEquals(invokedAfter, invokedBefore)
+                && observerBefore is not null
+                && ReferenceEquals(observerAfter, observerBefore));
             // Firing oracle: the phase flip moves selection to the settings item exactly once.
             // A second subscription (payload eviction / re-wire per reconcile) would double it.
             H.Check("NVEvents_SettingsSelectedFiredOnce", settingsHits == 1);
