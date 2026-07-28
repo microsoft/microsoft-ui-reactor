@@ -652,29 +652,37 @@ internal static class ReconcilerBigCoverageFixtures
             H.ClickButton("NVFooterPhase");
             await Harness.Render();
             nv = H.FindControl<WinXC.NavigationView>(c => (string?)c.PaneTitle == "nv-wired");
-            // Re-subscribing on every reconcile would replace the slot delegates; the
-            // guard means the trampolines are the *same* instances after an update.
+            // Eviction guard. All seven NavigationView events share ONE payload type on
+            // purpose: Reconciler keeps a single ControlEventStateBox per control keyed by
+            // HandlerType, so a second payload type would evict this one on every reconcile.
+            // If that regressed, the post-update lookup returns a different (freshly built)
+            // box, so both the identity check and the all-slots-wired check below fail.
+            //
+            // Deliberately NOT asserted here: slot *identity*. Each HandCodedEvent entry
+            // caches one trampoline delegate and re-writes that same instance, so the slot
+            // references are stable even when the reconciler re-subscribes — an identity
+            // comparison would be vacuous. The genuine re-subscription oracle is the
+            // double-fire counters below (verified: forcing slotIsNull => true fails
+            // NVEvents_SettingsSelectedFiredOnce, and leaves this check passing).
             var afterUpdate = nv is null ? null : Reconciler.TryGetControlEventPayload<NavigationViewEventPayload>(nv);
-            // Delegates are reference types, so identity is the right comparison here —
-            // object.Equals would compare target+method and pass even if the slot were
-            // replaced with a fresh delegate over the same static trampoline, which is
-            // exactly the re-subscription bug this guards. The object? locals make the
-            // reference-typing explicit for the analyzer.
-            object? invokedBefore = wired?.ItemInvokedTrampoline;
-            object? invokedAfter = afterUpdate?.ItemInvokedTrampoline;
-            object? observerBefore = wired?.IsPaneOpenObserver;
-            object? observerAfter = afterUpdate?.IsPaneOpenObserver;
             H.Check(
-                "NVEvents_SubscribedOnce",
-                wired is not null
-                && afterUpdate is not null
-                && ReferenceEquals(afterUpdate, wired)
-                && invokedBefore is not null
-                && ReferenceEquals(invokedAfter, invokedBefore)
-                && observerBefore is not null
-                && ReferenceEquals(observerAfter, observerBefore));
-            // Firing oracle: the phase flip moves selection to the settings item exactly once.
-            // A second subscription (payload eviction / re-wire per reconcile) would double it.
+                "NVEvents_PayloadSurvivesUpdate",
+                wired is not null && afterUpdate is not null && ReferenceEquals(afterUpdate, wired));
+            H.Check(
+                "NVEvents_AllSlotsStillWiredAfterUpdate",
+                afterUpdate is not null
+                && afterUpdate.SelectionChangedTrampoline is not null
+                && afterUpdate.BackRequestedTrampoline is not null
+                && afterUpdate.ItemInvokedTrampoline is not null
+                && afterUpdate.DisplayModeChangedTrampoline is not null
+                && afterUpdate.ExpandingTrampoline is not null
+                && afterUpdate.CollapsedTrampoline is not null
+                && afterUpdate.IsPaneOpenObserver is not null);
+            // THE re-subscription oracle. The phase flip moves selection to the settings
+            // item exactly once, so a handler subscribed twice reports two hits. Verified
+            // by mutation: forcing the SelectionChanged entry's slotIsNull to always return
+            // true (i.e. re-subscribe on every reconcile) makes this check — and the tag
+            // check below — fail, while every structural check above still passes.
             H.Check("NVEvents_SettingsSelectedFiredOnce", settingsHits == 1);
             // Settings selection must ALSO still report null to OnSelectedTagChanged — the
             // pre-existing contract, which OnSettingsSelected augments rather than replaces.
