@@ -1,5 +1,6 @@
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Reactor.Core;
+using Microsoft.UI.Reactor.Core.Diagnostics;
 using Microsoft.UI.Windowing;
 using static Microsoft.UI.Reactor.Factories;
 
@@ -103,14 +104,21 @@ internal static class TitleBarHeightFixtures
 
     private static async Task CloseAndSettle(params ReactorWindow?[] windows)
     {
-        foreach (var win in windows)
+        foreach (var win in windows.Where(w => w is not null))
         {
-            if (win is null) continue;
             // Best-effort teardown, matching the house pattern in
-            // Phase4WindowingFixtures: a window may already be closing or
-            // disposed, and a failure here must not mask the fixture's own
-            // assertion result.
-            try { win.Close(); } catch { }
+            // Phase4WindowingFixtures: a window may already be closing,
+            // disposed, or mid-native-teardown (the WinUI TitleBar control
+            // throws teardown-reentry COMExceptions — issue #537). Anything
+            // escaping here would replace a real assertion result with a
+            // teardown error. Reported to the diagnostic sink rather than
+            // Console, which would interleave with the TAP stream.
+            try { win!.Close(); }
+            catch (Exception ex)
+            {
+                DiagnosticLog.SwallowedError(
+                    LogCategory.Hosting, "SelfTest.TitleBarHeight.CloseAndSettle", ex);
+            }
         }
         await Task.Delay(100);
     }
