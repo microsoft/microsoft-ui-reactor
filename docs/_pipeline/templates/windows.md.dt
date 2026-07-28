@@ -58,7 +58,10 @@ Caveats:
 
 ## Sizing & resizing
 
-Initial `Width` / `Height` are DIPs. Runtime size is controlled by `SetSize`,
+Initial `Width` / `Height` are DIPs, and both are optional — leave them unset
+(the default) to let the OS choose the initial window size, exactly as a plain
+XAML `Window` does. Setting only one axis applies that axis and leaves the other
+to the OS. Runtime size is controlled by `SetSize`,
 chrome resize policy by `ResizeMode`, interactive aspect locks by `AspectRatio`,
 and content-driven sizing by `SizeToContent`.
 
@@ -87,7 +90,8 @@ Caveats:
 - `AspectRatio` rejects `ResizeMode.NoResize`; no drag means no constraint to apply.
 - `AspectRatio` and `SizeToContent` are mutually exclusive layout drivers.
 - `SizeToContent` runs after layout, so the first frame can briefly use the
-  initial `Width` / `Height`; maximized windows ignore it and log a warning.
+  initial `Width` / `Height` (or the OS-chosen size when they are unset);
+  maximized windows ignore it and log a warning.
 - Min/max fields (`MinWidth`, `MaxHeight`, etc.) win over content and aspect sizing.
 
 ## Movement & placement

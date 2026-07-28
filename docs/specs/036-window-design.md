@@ -231,8 +231,8 @@ namespace Microsoft.UI.Reactor;
 
 public sealed record WindowSpec(
     string Title = "Reactor App",
-    double Width = 1024,                                          // DIPs
-    double Height = 768,                                          // DIPs
+    double? Width = null,                                          // DIPs; null = OS default
+    double? Height = null,                                         // DIPs; null = OS default
     double? MinWidth = null,
     double? MinHeight = null,
     double? MaxWidth = null,
@@ -257,6 +257,16 @@ public sealed record WindowSpec(
 All sizes / positions are DIPs. The record is immutable; `Update(spec)`
 on `ReactorWindow` diffs old vs. new and applies only the changed
 fields, in the same spirit as the reconciler.
+
+> **On the absent size default.** `Width` / `Height` are `double?` and
+> default to `null`, meaning *"don't call `AppWindow.Resize` at all"* — the
+> window opens at whatever size Windows picks for a new top-level window,
+> exactly like a plain XAML `Window`. Reactor originally inherited a
+> hardcoded 1024 × 768 from the pre-036 `Run<TRoot>` signature; that number
+> was never a design decision, and baking it in meant every app that didn't
+> care about size still fought the shell's own placement heuristics. Setting
+> one axis and leaving the other `null` applies the requested axis and keeps
+> the OS extent on the other.
 
 > **On `double` vs `float`.** DIPs are floating-point — the question is
 > single vs. double precision. We use `double` to match the rest of the
@@ -322,8 +332,8 @@ public static partial class ReactorApp
     // Implemented as: Run(ctx => ctx.OpenWindow(spec, () => new TRoot()));
     public static void Run<TRoot>(
         string title = "Reactor App",
-        double width = 1024,
-        double height = 768,
+        double? width = null,
+        double? height = null,
         bool fullScreen = false,
         bool devtools = false,
         Action<ReactorHost>? configure = null) where TRoot : Component, new();
@@ -1002,6 +1012,14 @@ Old (today):                                        New (no source change):
 ReactorApp.Run<App>("Title", 1024, 768)             same call site
                                                     width=1024, height=768 are now DIPs
 ```
+
+### 12.2a Dropping the size defaults
+
+`width` / `height` on both `Run` overloads became `double?` with a `null`
+default, and `WindowSpec.Width` / `Height` followed. Call sites that pass
+sizes explicitly are unaffected. Call sites that relied on the implicit
+1024 × 768 now open at the OS-chosen size instead; apps that want the old
+extent state it: `ReactorApp.Run<App>("Title", 1024, 768)`.
 
 ### 12.3 Configure callback
 

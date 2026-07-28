@@ -712,4 +712,62 @@ internal static class WindowModelFixtures
             }
         }
     }
+
+    /// <summary>
+    /// Spec 036 §4.1 — <see cref="WindowSpec.Width"/> / <see cref="WindowSpec.Height"/>
+    /// default to null, meaning "let the OS size the window". The oracle is a bare
+    /// WinUI <c>Window</c> that nobody resizes: a null-size Reactor window must land
+    /// on exactly that extent, while an explicitly sized spec must not. The
+    /// half-specified case proves the per-axis fallback (requested width, OS height).
+    /// </summary>
+    internal class WindowDefaultSizeDefersToOs(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            EnsureUIDispatcher();
+
+            // OS baseline — a plain WinUI window Reactor never touches.
+            var baseline = new Window();
+            var osSize = baseline.AppWindow.Size;
+
+            ReactorWindow? unsized = null, sized = null, widthOnly = null;
+            try
+            {
+                unsized = await OpenAndSettle(
+                    new WindowSpec { Title = "OS Default Size" },
+                    () => new StubComponent());
+                sized = await OpenAndSettle(
+                    new WindowSpec { Title = "Explicit Size", Width = 420, Height = 260 },
+                    () => new StubComponent());
+                widthOnly = await OpenAndSettle(
+                    new WindowSpec { Title = "Width Only", Width = 420 },
+                    () => new StubComponent());
+                await Harness.Render();
+
+                var unsizedSize = unsized.AppWindow.Size;
+                var sizedSize = sized.AppWindow.Size;
+                var widthOnlySize = widthOnly.AppWindow.Size;
+
+                H.Check("WindowSize_NullSpec_MatchesOsDefault",
+                    unsizedSize.Width == osSize.Width && unsizedSize.Height == osSize.Height);
+
+                // Differential isolation: if the resize path were skipped for
+                // *every* spec, this check fails.
+                H.Check("WindowSize_ExplicitSpec_OverridesOsDefault",
+                    sizedSize.Width != osSize.Width || sizedSize.Height != osSize.Height);
+
+                H.Check("WindowSize_WidthOnly_AppliesWidth",
+                    widthOnlySize.Width == sizedSize.Width);
+                H.Check("WindowSize_WidthOnly_KeepsOsHeight",
+                    widthOnlySize.Height == osSize.Height);
+            }
+            finally
+            {
+                if (unsized is not null) await CloseAndSettle(unsized);
+                if (sized is not null) await CloseAndSettle(sized);
+                if (widthOnly is not null) await CloseAndSettle(widthOnly);
+                try { baseline.Close(); } catch { }
+            }
+        }
+    }
 }

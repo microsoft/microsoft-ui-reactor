@@ -551,11 +551,14 @@ public sealed class ReactorWindow : IDisposable
         }
 
         // Sizing — DIP -> physical at the current per-window DPI. (spec 036 §5.1)
-        if (spec.Embed is null && isInitial && spec.Presenter == PresenterKind.Overlapped)
+        // A null Width/Height means "let the OS pick": we skip Resize entirely
+        // on that axis so the window keeps the extent Windows chose at creation.
+        if (spec.Embed is null && isInitial && spec.Presenter == PresenterKind.Overlapped
+            && TryBuildSpecSize(spec, out var initialSize))
         {
             try
             {
-                _appWindow.Resize(DipToPhysicalSize(spec.Width, spec.Height));
+                _appWindow.Resize(initialSize);
             }
             catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
             {
@@ -919,6 +922,39 @@ public sealed class ReactorWindow : IDisposable
             DipToPhysicalScalar(heightDip));
     }
 
+    /// <summary>
+    /// Builds the physical-pixel size a spec asks for, or returns false when the
+    /// spec declares neither axis — the "let the OS size the window" default.
+    /// A half-specified spec keeps the current (OS-chosen) extent on the other
+    /// axis. (spec 036 §4.1 / §5.1)
+    /// </summary>
+    private bool TryBuildSpecSize(WindowSpec spec, out global::Windows.Graphics.SizeInt32 size)
+    {
+        size = default;
+        if (spec.Width is null && spec.Height is null) return false;
+
+        int currentWidth = 0, currentHeight = 0;
+        if (spec.Width is null || spec.Height is null)
+        {
+            try
+            {
+                var current = _appWindow.Size;
+                currentWidth = current.Width;
+                currentHeight = current.Height;
+            }
+            catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
+            {
+                DiagnosticLog.SwallowedError(LogCategory.Hosting, "ReactorWindow.TryBuildSpecSize", ex);
+                return false;
+            }
+        }
+
+        size = new global::Windows.Graphics.SizeInt32(
+            spec.Width is { } w ? DipToPhysicalScalar(w) : currentWidth,
+            spec.Height is { } h ? DipToPhysicalScalar(h) : currentHeight);
+        return true;
+    }
+
     private global::Windows.Graphics.PointInt32 DipToPhysicalPoint(double xDip, double yDip)
     {
         var dpi = Dpi == 0 ? 96 : Dpi;
@@ -945,13 +981,16 @@ public sealed class ReactorWindow : IDisposable
 
                     // First DPI report after window creation: re-apply spec
                     // sizing against the now-known per-window DPI, but only if
-                    // the user hasn't already resized the window manually.
+                    // the user hasn't already resized the window manually and
+                    // the spec actually declares a size (a null Width/Height
+                    // leaves that axis to the OS).
                     if (_spec.Embed is null && !_userResized && !_firstDpiApplied)
                     {
                         _firstDpiApplied = true;
                         try
                         {
-                            _appWindow.Resize(DipToPhysicalSize(_spec.Width, _spec.Height));
+                            if (TryBuildSpecSize(_spec, out var dpiSize))
+                                _appWindow.Resize(dpiSize);
                         }
                         catch (COMException ex) when (HResults.IsTeardownReentry(ex.HResult))
                         {

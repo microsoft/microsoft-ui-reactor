@@ -5,8 +5,8 @@ namespace Microsoft.UI.Reactor.Hosting.Devtools;
 public sealed record ReactorDevtoolsBootRequest(
     DevtoolsCliOptions Options,
     string Title,
-    double Width,
-    double Height,
+    double? Width,
+    double? Height,
     bool FullScreen,
     Type? HostRoot,
     Func<Component>? HostRootFactory,

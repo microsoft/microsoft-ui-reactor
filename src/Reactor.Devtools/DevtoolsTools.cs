@@ -390,8 +390,8 @@ internal static class DevtoolsTools
                     new[] { "component" },
                     ("component", Schema.Str("Component class name (allowlisted).")),
                     ("title", Schema.Str()),
-                    ("width", Schema.Num("Initial DIP width (default 1024).")),
-                    ("height", Schema.Num("Initial DIP height (default 768).")),
+                    ("width", Schema.Num("Initial DIP width. Omit to let the OS choose.")),
+                    ("height", Schema.Num("Initial DIP height. Omit to let the OS choose.")),
                     ("key", Schema.Str("Optional WindowKey for FindWindow lookup.")))),
             @params =>
             {
@@ -418,8 +418,8 @@ internal static class DevtoolsTools
                 var spec = new WindowSpec
                 {
                     Title = titleArg ?? component,
-                    Width = widthArg ?? 1024,
-                    Height = heightArg ?? 768,
+                    Width = widthArg,
+                    Height = heightArg,
                     Key = string.IsNullOrEmpty(keyArg) ? (WindowKey?)null : WindowKey.Of(keyArg!),
                 };
                 try { spec.Validate(); }

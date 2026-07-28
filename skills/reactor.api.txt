@@ -5524,17 +5524,17 @@ ReferenceList<TTarget>(Func<TElement, IReadOnlyList<ElementRef<TTarget>>> get, A
 WriteSuppressed(Action mutate) → void
 
 ### record ReactorDevtoolsBootRequest
-new(DevtoolsCliOptions Options, string Title, double Width, double Height, bool FullScreen, Type HostRoot, Func<Component> HostRootFactory, Func<RenderContext, Element> RootRenderFunc, Action<ReactorHost> Configure)
+new(DevtoolsCliOptions Options, string Title, double? Width, double? Height, bool FullScreen, Type HostRoot, Func<Component> HostRootFactory, Func<RenderContext, Element> RootRenderFunc, Action<ReactorHost> Configure)
 Action<ReactorHost> Configure { get; init; }
 DevtoolsCliOptions Options { get; init; }
 Func<Component> HostRootFactory { get; init; }
 Func<RenderContext, Element> RootRenderFunc { get; init; }
 Type HostRoot { get; init; }
 bool FullScreen { get; init; }
-double Height { get; init; }
-double Width { get; init; }
+double? Height { get; init; }
+double? Width { get; init; }
 string Title { get; init; }
-Deconstruct(ref DevtoolsCliOptions Options, ref string Title, ref double Width, ref double Height, ref bool FullScreen, ref Type HostRoot, ref Func<Component> HostRootFactory, ref Func<RenderContext, Element> RootRenderFunc, ref Action<ReactorHost> Configure) → void
+Deconstruct(ref DevtoolsCliOptions Options, ref string Title, ref double? Width, ref double? Height, ref bool FullScreen, ref Type HostRoot, ref Func<Component> HostRootFactory, ref Func<RenderContext, Element> RootRenderFunc, ref Action<ReactorHost> Configure) → void
 Equals(ReactorDevtoolsBootRequest other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
@@ -7344,14 +7344,14 @@ bool PersistPlacement { get; init; }
 bool ShowInSwitcher { get; init; }
 bool ShowInTaskbar { get; init; }
 bool? ExtendsContentIntoTitleBar { get; init; }
-double Height { get; init; }
 double Opacity { get; init; }
-double Width { get; init; }
 double? AspectRatio { get; init; }
+double? Height { get; init; }
 double? MaxHeight { get; init; }
 double? MaxWidth { get; init; }
 double? MinHeight { get; init; }
 double? MinWidth { get; init; }
+double? Width { get; init; }
 string PersistenceId { get; init; }
 string Title { get; init; }
 Equals(WindowSpec other) → bool

@@ -20,7 +20,8 @@ public sealed record EmbedRequest(WindowEmbedStyle Style, int HostPid, bool Init
 /// <para>All sizes and positions are <b>DIPs</b> (device-independent pixels) —
 /// no Win32 / no <c>SizeInt32</c> in user code. (spec 036 §4.1)</para>
 /// <para>Validation runs in the primary constructor: <c>Width</c>/<c>Height</c>
-/// must be positive, max ≥ min when both are set, and
+/// must be positive <i>when set</i> (<c>null</c> defers the initial extent to
+/// the OS), max ≥ min when both are set, and
 /// <see cref="ManualPosition"/> is required iff
 /// <see cref="StartPosition"/> is <see cref="WindowStartPosition.Manual"/>.</para>
 /// </remarks>
@@ -29,11 +30,20 @@ public sealed record WindowSpec
     /// <summary>Window caption text. Defaults to <c>"Reactor App"</c>.</summary>
     public string Title { get; init; } = "Reactor App";
 
-    /// <summary>Initial DIP width. Must be positive.</summary>
-    public double Width { get; init; } = 1024;
+    /// <summary>
+    /// Initial DIP width. Must be positive when set. <c>null</c> (the default)
+    /// leaves the initial width to the OS — Reactor never calls
+    /// <c>AppWindow.Resize</c> on that axis, so the window opens at the size
+    /// Windows picks for a new top-level window (the same behavior a plain
+    /// XAML <c>Window</c> gets).
+    /// </summary>
+    public double? Width { get; init; }
 
-    /// <summary>Initial DIP height. Must be positive.</summary>
-    public double Height { get; init; } = 768;
+    /// <summary>
+    /// Initial DIP height. Must be positive when set. <c>null</c> (the default)
+    /// leaves the initial height to the OS. See <see cref="Width"/>.
+    /// </summary>
+    public double? Height { get; init; }
 
     /// <summary>Optional minimum DIP width.</summary>
     public double? MinWidth { get; init; }
@@ -82,7 +92,8 @@ public sealed record WindowSpec
 
     /// <summary>
     /// Content-driven sizing mode. Size changes are applied after the first layout pass,
-    /// so apps may see one frame at the initial Width/Height before content settles.
+    /// so apps may see one frame at the initial Width/Height (or the OS-chosen size when
+    /// those are null) before content settles.
     /// </summary>
     public WindowSizeToContent SizeToContent { get; init; } = WindowSizeToContent.Manual;
 
@@ -228,10 +239,10 @@ public sealed record WindowSpec
     /// </summary>
     public void Validate()
     {
-        if (!(Width > 0))
-            throw new ArgumentException("WindowSpec.Width must be positive.", nameof(Width));
-        if (!(Height > 0))
-            throw new ArgumentException("WindowSpec.Height must be positive.", nameof(Height));
+        if (Width is { } w && !(w > 0))
+            throw new ArgumentException("WindowSpec.Width must be positive when set.", nameof(Width));
+        if (Height is { } h && !(h > 0))
+            throw new ArgumentException("WindowSpec.Height must be positive when set.", nameof(Height));
 
         if (MinWidth is { } minW && !(minW > 0))
             throw new ArgumentException("WindowSpec.MinWidth must be positive when set.", nameof(MinWidth));

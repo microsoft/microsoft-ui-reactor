@@ -102,7 +102,7 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
     }
 
     [RequiresUnreferencedCode("Devtools component discovery uses Assembly.GetTypes().")]
-    private static bool RunScreenshotSubverb(DevtoolsCliOptions options, double width, double height, Action<ReactorHost>? configure, Type? hostRoot = null)
+    private static bool RunScreenshotSubverb(DevtoolsCliOptions options, double? width, double? height, Action<ReactorHost>? configure, Type? hostRoot = null)
     {
         if (string.IsNullOrEmpty(options.ScreenshotOutputPath))
         {
@@ -181,7 +181,7 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
     }
 
     [RequiresUnreferencedCode("Devtools component discovery uses Assembly.GetTypes() and Activator.CreateInstance.")]
-    private bool RunRunSubverb(DevtoolsCliOptions options, string title, double width, double height, bool fullScreen, Action<ReactorHost>? configure, Type? hostRoot = null, Func<Component>? hostRootFactory = null)
+    private bool RunRunSubverb(DevtoolsCliOptions options, string title, double? width, double? height, bool fullScreen, Action<ReactorHost>? configure, Type? hostRoot = null, Func<Component>? hostRootFactory = null)
     {
         string? componentName = options.ComponentName;
         Type? componentType = null;
@@ -397,7 +397,7 @@ internal sealed class DevtoolsHost : IReactorDevtoolsHost
     }
 
 
-    internal static WindowSpec BuildEmbedWindowSpec(DevtoolsCliOptions options, string baseTitle, double width, double height)
+    internal static WindowSpec BuildEmbedWindowSpec(DevtoolsCliOptions options, string baseTitle, double? width, double? height)
     {
         if (!options.EmbedRequested || options.EmbedHostPid is not { } hostPid)
             throw new ArgumentException("Embed options must include --embed and --embed-host-pid.", nameof(options));

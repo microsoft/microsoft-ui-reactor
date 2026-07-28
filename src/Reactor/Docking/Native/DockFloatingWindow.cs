@@ -154,7 +154,7 @@ public static class DockFloatingWindow
             excludeFromShutdownPolicy: true);
         windowHolder[0] = window;
         DockFloatingTracker.Register(window);
-        DockFloatingTracker.RegisterEntry(window, pane, spec.Width, spec.Height);
+        DockFloatingTracker.RegisterEntry(window, pane, spec.Width ?? width, spec.Height ?? height);
         if (manager is not null) DockFloatingTracker.RegisterFor(manager, window);
         // Spec 045 §2.6 — fire OnFloatingWindowCreated so apps can
         // observe the new top-level for telemetry / persistence /

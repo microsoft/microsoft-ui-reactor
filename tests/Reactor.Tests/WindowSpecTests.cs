@@ -14,8 +14,8 @@ public class WindowSpecTests
     {
         var spec = new WindowSpec();
         Assert.Equal("Reactor App", spec.Title);
-        Assert.Equal(1024, spec.Width);
-        Assert.Equal(768, spec.Height);
+        Assert.Null(spec.Width);
+        Assert.Null(spec.Height);
         Assert.Equal(WindowStartPosition.Default, spec.StartPosition);
         Assert.Equal(PresenterKind.Overlapped, spec.Presenter);
         Assert.Equal(WindowResizeMode.CanResize, spec.ResizeMode);
@@ -51,6 +51,33 @@ public class WindowSpecTests
         var spec = new WindowSpec { Width = 100, Height = -1 };
         var ex = Assert.Throws<ArgumentException>(() => spec.Validate());
         Assert.Contains("Height", ex.Message, StringComparison.Ordinal);
+    }
+
+    // Spec 036 §4.1 — a null Width/Height means "let the OS choose the initial
+    // extent"; it must not be treated as an invalid (non-positive) size, and it
+    // must survive a `with` round-trip independently per axis.
+    [Fact]
+    public void Validate_Accepts_Null_Sizes()
+    {
+        new WindowSpec { Width = null, Height = null }.Validate();
+        new WindowSpec { Width = 640, Height = null }.Validate();
+        new WindowSpec { Width = null, Height = 480 }.Validate();
+    }
+
+    [Fact]
+    public void Explicit_Sizes_Are_Preserved_Per_Axis()
+    {
+        var widthOnly = new WindowSpec { Width = 640 };
+        Assert.Equal(640, widthOnly.Width);
+        Assert.Null(widthOnly.Height);
+
+        var both = widthOnly with { Height = 480 };
+        Assert.Equal(640, both.Width);
+        Assert.Equal(480, both.Height);
+
+        var cleared = both with { Width = null };
+        Assert.Null(cleared.Width);
+        Assert.Equal(480, cleared.Height);
     }
 
     [Fact]
