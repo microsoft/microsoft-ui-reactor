@@ -4574,7 +4574,9 @@ public record NavigationHostElement(
 // auto-map. The 5 NamedSlots (Header/AutoSuggestBox/PaneFooter/PaneCustomContent/Content), the
 // MenuItems+SelectedTag menu reconciler (.Imperative), the 3 NaN-sentinel pane widths, and the
 // SelectionChanged/BackRequested events are bespoke — in Element.NavigationView.cs. BackRequested
-// is Excluded (auto-surfaces). Replaces NavigationViewDescriptor.
+// is Excluded (auto-surfaces). Issue #916 — the twin PaneOpening/PaneClosing events
+// (OnPaneOpenChanged) are bespoke too, so IsPaneOpen can be used as controlled state.
+// Replaces NavigationViewDescriptor.
 [global::Microsoft.UI.Reactor.Wrappers.GenerateReactorDescriptor(typeof(WinUI.NavigationView), Exclude = new[] { "BackRequested" })]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("MenuItems")]
 [global::Microsoft.UI.Reactor.Wrappers.WrapManual("SelectedTag")]
@@ -4594,6 +4596,14 @@ public partial record NavigationViewElement(
     public string? SelectedTag { get; init; }
     public Action<string?>? OnSelectedTagChanged { get; init; }
     public bool IsPaneOpen { get; init; } = true;
+    /// <summary>
+    /// Fires whenever the realized pane opens or closes — including changes the app never
+    /// requested (light dismiss, adaptive display-mode changes on resize) and the echo of a
+    /// programmatic <see cref="IsPaneOpen"/> write. Feed the value back into the state that
+    /// drives <see cref="IsPaneOpen"/> to keep controlled pane state in sync (issue #916).
+    /// Mirrors <c>SplitViewElement.OnPaneOpenChanged</c>.
+    /// </summary>
+    public Action<bool>? OnPaneOpenChanged { get; init; }
     public NavigationViewPaneDisplayMode PaneDisplayMode { get; init; } = NavigationViewPaneDisplayMode.Auto;
     public bool IsBackEnabled { get; init; }
     public Action? OnBackRequested { get; init; }
@@ -4613,7 +4623,8 @@ public partial record NavigationViewElement(
     /// <summary>Window width at which the pane auto-expands. <c>NaN</c> uses the WinUI default (1008).</summary>
     public double ExpandedModeThresholdWidth { get; init; } = double.NaN;
     internal Action<WinUI.NavigationView>[] Setters { get; init; } = [];
-    internal override bool HasCallbacks => OnSelectedTagChanged is not null || OnBackRequested is not null;
+    internal override bool HasCallbacks =>
+        OnSelectedTagChanged is not null || OnBackRequested is not null || OnPaneOpenChanged is not null;
 }
 
 // Spec 058 §15 (P5.23) — Title/Subtitle/IsBackButtonVisible/IsBackButtonEnabled/

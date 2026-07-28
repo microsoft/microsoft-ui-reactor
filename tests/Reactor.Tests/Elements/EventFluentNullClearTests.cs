@@ -483,6 +483,17 @@ public class EventFluentNullClearTests
         Assert.Null(el.BackRequested(null).OnBackRequested);
     }
 
+    // Issue #916 — NavigationView pane state must round-trip so a controlled
+    // IsPaneOpen can follow light dismiss / adaptive display-mode changes.
+    [Fact]
+    public void NavigationView_PaneOpenChanged_NullClears()
+    {
+        var el = NavigationView(Array.Empty<NavigationViewItemData>()).PaneOpenChanged(SentinelBool);
+        Assert.Same(SentinelBool, el.OnPaneOpenChanged);
+        Assert.Null(el.PaneOpenChanged(null).OnPaneOpenChanged);
+        Assert.Same(SentinelBool, el.PaneOpenChanged(null).PaneOpenChanged(SentinelBool).OnPaneOpenChanged);
+    }
+
     [Fact]
     public void TitleBar_BackRequested_NullClears()
     {

@@ -44,6 +44,7 @@
 "MediaPlayerElementElement","OnMediaFailed","Action<string>?","?",".\src\Reactor\Core\Element.cs"
 "MediaPlayerElementElement","OnMediaOpened","Action?","?",".\src\Reactor\Core\Element.cs"
 "NavigationViewElement","OnBackRequested","Action?","§7.2",".\src\Reactor\Core\Element.cs"
+"NavigationViewElement","OnPaneOpenChanged","Action<bool>?","§7.2",".\src\Reactor\Core\Element.cs"
 "NavigationViewElement","OnSelectedTagChanged","Action<string?>?","§7.2",".\src\Reactor\Core\Element.cs"
 "NumberBoxElement","OnValueChanged","Action<double>?","§0.1",".\src\Reactor\Core\Element.cs"
 "PasswordBoxElement","OnPasswordChanged","Action<string>?","§3.2",".\src\Reactor\Core\Element.cs"

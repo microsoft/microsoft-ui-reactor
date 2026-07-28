@@ -441,7 +441,13 @@ internal sealed class TitleBarEventPayload
     public global::Windows.Foundation.TypedEventHandler<Microsoft.UI.Xaml.Controls.TitleBar, object>? PaneToggleRequestedTrampoline;
 }
 
-/// <summary>Spec 047 §14 Phase 3 deferred controls — NavigationView event payload.</summary>
+/// <summary>Spec 047 §14 Phase 3 deferred controls — NavigationView event payload.
+/// <para>Issue #916 — <c>PaneOpening</c> / <c>PaneClosing</c> are fire-only
+/// <c>.HandCodedEvent</c> trampolines (mirrors <see cref="SplitViewEventPayload"/>);
+/// both invoke <c>OnPaneOpenChanged</c> with the corresponding bool. The
+/// <c>…ing</c> pair is used rather than <c>PaneOpened</c>/<c>PaneClosed</c>
+/// so the app sees the new state immediately instead of after the pane
+/// transition finishes.</para></summary>
 internal sealed class NavigationViewEventPayload
 {
     public global::Windows.Foundation.TypedEventHandler<
@@ -450,6 +456,11 @@ internal sealed class NavigationViewEventPayload
     public global::Windows.Foundation.TypedEventHandler<
         Microsoft.UI.Xaml.Controls.NavigationView,
         Microsoft.UI.Xaml.Controls.NavigationViewBackRequestedEventArgs>? BackRequestedTrampoline;
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.NavigationView, object>? PaneOpeningTrampoline;
+    public global::Windows.Foundation.TypedEventHandler<
+        Microsoft.UI.Xaml.Controls.NavigationView,
+        Microsoft.UI.Xaml.Controls.NavigationViewPaneClosingEventArgs>? PaneClosingTrampoline;
 }
 
 /// <summary>

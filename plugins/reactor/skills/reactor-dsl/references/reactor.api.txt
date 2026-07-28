@@ -410,6 +410,7 @@ NavigationViewElement.OpenPaneLength(double length) → NavigationViewElement
 NavigationViewElement.PaneCustomContent(Element content) → NavigationViewElement
 NavigationViewElement.PaneDisplayMode(NavigationViewPaneDisplayMode mode) → NavigationViewElement
 NavigationViewElement.PaneFooter(Element footer) → NavigationViewElement
+NavigationViewElement.PaneOpenChanged(Action<bool> handler) → NavigationViewElement
 NavigationViewElement.PaneTitle(string title) → NavigationViewElement
 NavigationViewElement.SelectedTagChanged(Action<string> handler) → NavigationViewElement
 NavigationViewElement.Set(Action<NavigationView> configure) → NavigationViewElement
@@ -4749,6 +4750,7 @@ ToString() → string
 ### record NavigationViewElement
 new(NavigationViewItemData[] MenuItems, Element Content = null)
 Action OnBackRequested { get; init; }
+Action<bool> OnPaneOpenChanged { get; init; }
 Action<string> OnSelectedTagChanged { get; init; }
 AutoSuggestBoxElement AutoSuggestBox { get; init; }
 Element Content { get; init; }

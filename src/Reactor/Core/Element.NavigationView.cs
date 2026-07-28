@@ -10,6 +10,7 @@ namespace Microsoft.UI.Reactor.Core;
 
 // Spec 058 §15 (P5.23) — NavigationView's bespoke surface: 5 NamedSlots, the MenuItems +
 // SelectedTag menu reconciler (.Imperative), and the SelectionChanged/BackRequested events.
+// Issue #916 added the PaneOpening/PaneClosing pair behind OnPaneOpenChanged.
 // IsPaneOpen/PaneDisplayMode/IsBackEnabled/IsSettingsVisible/PaneTitle auto-map (in Element.cs).
 // All reproduced verbatim from the deleted NavigationViewDescriptor.
 public partial record NavigationViewElement
@@ -26,6 +27,20 @@ public partial record NavigationViewElement
     private static readonly TypedEventHandler<WinUI.NavigationView, WinUI.NavigationViewBackRequestedEventArgs>
         __BackRequestedTrampoline = (s, _) =>
             (Reconciler.GetElementTag(s) as NavigationViewElement)?.OnBackRequested?.Invoke();
+
+    // Issue #916 — the pane can open/close without the app asking (light dismiss, adaptive
+    // display-mode changes). Without these, a controlled IsPaneOpen drifts out of sync and the
+    // next toggle writes a value the control already holds. PaneOpening/PaneClosing (not the
+    // …ed pair) so the app learns the new state immediately: PaneClosed only fires once the
+    // close transition finishes, which would leave a toggle pressed mid-animation stale.
+    // Mirrors SplitViewElement's twin trampolines.
+    private static readonly TypedEventHandler<WinUI.NavigationView, object>
+        __PaneOpeningTrampoline = (s, _) =>
+            (Reconciler.GetElementTag(s) as NavigationViewElement)?.OnPaneOpenChanged?.Invoke(true);
+
+    private static readonly TypedEventHandler<WinUI.NavigationView, WinUI.NavigationViewPaneClosingEventArgs>
+        __PaneClosingTrampoline = (s, _) =>
+            (Reconciler.GetElementTag(s) as NavigationViewElement)?.OnPaneOpenChanged?.Invoke(false);
 
     private static partial Desc.ControlDescriptor<NavigationViewElement, WinUI.NavigationView> Customize(
         Desc.ControlDescriptor<NavigationViewElement, WinUI.NavigationView> d)
@@ -101,7 +116,21 @@ public partial record NavigationViewElement
                 callbackPresent:  static e => e.OnBackRequested,
                 trampoline:       __BackRequestedTrampoline,
                 slotIsNull:       static p => p.BackRequestedTrampoline is null,
-                setSlot:          static (p, h) => p.BackRequestedTrampoline = h);
+                setSlot:          static (p, h) => p.BackRequestedTrampoline = h)
+            .HandCodedEvent<V1.NavigationViewEventPayload,
+                TypedEventHandler<WinUI.NavigationView, object>>(
+                subscribe:        static (c, h) => c.PaneOpening += h,
+                callbackPresent:  static e => e.OnPaneOpenChanged,
+                trampoline:       __PaneOpeningTrampoline,
+                slotIsNull:       static p => p.PaneOpeningTrampoline is null,
+                setSlot:          static (p, h) => p.PaneOpeningTrampoline = h)
+            .HandCodedEvent<V1.NavigationViewEventPayload,
+                TypedEventHandler<WinUI.NavigationView, WinUI.NavigationViewPaneClosingEventArgs>>(
+                subscribe:        static (c, h) => c.PaneClosing += h,
+                callbackPresent:  static e => e.OnPaneOpenChanged,
+                trampoline:       __PaneClosingTrampoline,
+                slotIsNull:       static p => p.PaneClosingTrampoline is null,
+                setSlot:          static (p, h) => p.PaneClosingTrampoline = h);
     }
 
     private static void ApplyMenuAndSelection(WinUI.NavigationView control, NavigationViewElement? oldElement, NavigationViewElement element)
