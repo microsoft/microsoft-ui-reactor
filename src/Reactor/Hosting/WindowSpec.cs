@@ -20,7 +20,8 @@ public sealed record EmbedRequest(WindowEmbedStyle Style, int HostPid, bool Init
 /// <para>All sizes and positions are <b>DIPs</b> (device-independent pixels) —
 /// no Win32 / no <c>SizeInt32</c> in user code. (spec 036 §4.1)</para>
 /// <para><see cref="Validate"/> enforces the cross-field invariants and is
-/// called by the hosting layer (<c>ReactorWindow.Apply</c>) before the spec is
+/// called by the hosting layer (the <see cref="ReactorWindow"/> constructor and
+/// <see cref="ReactorWindow.Update"/>) before the spec is
 /// used; tests may call it directly. It requires <c>Width</c>/<c>Height</c> to
 /// be positive <i>when set</i> (<c>null</c> defers the initial extent to
 /// the OS), max ≥ min when both are set, and
@@ -231,12 +232,14 @@ public sealed record WindowSpec
     {
         // Empty - validation deferred until field setters complete in the
         // record's init phase. The Validate() method is called explicitly
-        // by the hosting layer (ReactorWindow.Apply) before use.
+        // by the hosting layer (the ReactorWindow constructor and
+        // ReactorWindow.Update) before use.
     }
 
     /// <summary>
     /// Throws <see cref="ArgumentException"/> when any cross-field invariant is
-    /// violated. Called by <see cref="ReactorWindow"/> before the spec is
+    /// violated. Called by <see cref="ReactorWindow"/> (constructor and
+    /// <see cref="ReactorWindow.Update"/>) before the spec is
     /// applied; tests may also call this directly to verify a spec.
     /// </summary>
     public void Validate()
