@@ -551,8 +551,9 @@ public sealed class ReactorWindow : IDisposable
         }
 
         // Sizing — DIP -> physical at the current per-window DPI. (spec 036 §5.1)
-        // A null Width/Height means "let the OS pick": we skip Resize entirely
-        // on that axis so the window keeps the extent Windows chose at creation.
+        // Reactor only overrides the axes the spec declares: with both null it
+        // makes no Resize call at all, and with one set it resizes once, passing
+        // the current (OS-chosen) extent through on the other axis.
         if (spec.Embed is null && isInitial && spec.Presenter == PresenterKind.Overlapped
             && TryBuildSpecSize(spec, out var initialSize))
         {

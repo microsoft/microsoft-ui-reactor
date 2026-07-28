@@ -726,9 +726,19 @@ internal static class WindowModelFixtures
         {
             EnsureUIDispatcher();
 
-            // OS baseline — a plain WinUI window Reactor never touches.
+            // OS baseline — a plain WinUI window Reactor never touches. It is
+            // activated and allowed to settle first so it goes through the same
+            // show path as the Reactor windows below (which activate by default
+            // via WindowSpec.ActivateOnOpen); reading AppWindow.Size on a window
+            // that was never shown could return a pre-show placeholder extent.
             var baseline = new Window();
+            baseline.Activate();
+            await Harness.Render(50);
             var osSize = baseline.AppWindow.Size;
+
+            // Guards the oracle itself: if the baseline reported 0x0, every
+            // comparison below would be comparing garbage.
+            H.Check("WindowSize_OsBaseline_IsRealExtent", osSize.Width > 0 && osSize.Height > 0);
 
             ReactorWindow? unsized = null, sized = null, widthOnly = null;
             try
@@ -766,7 +776,18 @@ internal static class WindowModelFixtures
                 if (unsized is not null) await CloseAndSettle(unsized);
                 if (sized is not null) await CloseAndSettle(sized);
                 if (widthOnly is not null) await CloseAndSettle(widthOnly);
-                try { baseline.Close(); } catch { }
+                try
+                {
+                    baseline.Close();
+                }
+                catch (COMException ex)
+                {
+                    // Teardown-only. Swallowed so a failed close on the throwaway
+                    // oracle window can't mask the real fixture result, but logged
+                    // so it is not silent.
+                    global::System.Diagnostics.Debug.WriteLine(
+                        $"[selftest] WindowDefaultSizeDefersToOs baseline close failed: {ex}");
+                }
             }
         }
     }

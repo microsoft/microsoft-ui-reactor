@@ -53,6 +53,13 @@ public class WindowSpecTests
         Assert.Contains("Height", ex.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Validate_Rejects_NaN_Sizes()
+    {
+        Assert.Throws<ArgumentException>(() => new WindowSpec { Width = double.NaN }.Validate());
+        Assert.Throws<ArgumentException>(() => new WindowSpec { Height = double.NaN }.Validate());
+    }
+
     // Spec 036 §4.1 — a null Width/Height means "let the OS choose the initial
     // extent"; it must not be treated as an invalid (non-positive) size, and it
     // must survive a `with` round-trip independently per axis.

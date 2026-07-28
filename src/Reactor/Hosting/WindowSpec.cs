@@ -19,10 +19,12 @@ public sealed record EmbedRequest(WindowEmbedStyle Style, int HostPid, bool Init
 /// <remarks>
 /// <para>All sizes and positions are <b>DIPs</b> (device-independent pixels) —
 /// no Win32 / no <c>SizeInt32</c> in user code. (spec 036 §4.1)</para>
-/// <para>Validation runs in the primary constructor: <c>Width</c>/<c>Height</c>
-/// must be positive <i>when set</i> (<c>null</c> defers the initial extent to
+/// <para><see cref="Validate"/> enforces the cross-field invariants and is
+/// called by the hosting layer (<c>ReactorWindow.Apply</c>) before the spec is
+/// used; tests may call it directly. It requires <c>Width</c>/<c>Height</c> to
+/// be positive <i>when set</i> (<c>null</c> defers the initial extent to
 /// the OS), max ≥ min when both are set, and
-/// <see cref="ManualPosition"/> is required iff
+/// <see cref="ManualPosition"/> iff
 /// <see cref="StartPosition"/> is <see cref="WindowStartPosition.Manual"/>.</para>
 /// </remarks>
 public sealed record WindowSpec
@@ -32,10 +34,10 @@ public sealed record WindowSpec
 
     /// <summary>
     /// Initial DIP width. Must be positive when set. <c>null</c> (the default)
-    /// leaves the initial width to the OS — Reactor never calls
-    /// <c>AppWindow.Resize</c> on that axis, so the window opens at the size
-    /// Windows picks for a new top-level window (the same behavior a plain
-    /// XAML <c>Window</c> gets).
+    /// leaves the initial width to the OS — Reactor does not override that
+    /// axis, so the window keeps the width Windows picks for a new top-level
+    /// window (the same behavior a plain XAML <c>Window</c> gets). When both
+    /// axes are <c>null</c> no <c>AppWindow.Resize</c> call is made at all.
     /// </summary>
     public double? Width { get; init; }
 
@@ -239,9 +241,11 @@ public sealed record WindowSpec
     /// </summary>
     public void Validate()
     {
-        if (Width is { } w && !(w > 0))
+        // NaN must be rejected too, so the NaN-aware comparison is spelled out
+        // rather than written as !(w > 0).
+        if (Width is { } w && (w <= 0 || double.IsNaN(w)))
             throw new ArgumentException("WindowSpec.Width must be positive when set.", nameof(Width));
-        if (Height is { } h && !(h > 0))
+        if (Height is { } h && (h <= 0 || double.IsNaN(h)))
             throw new ArgumentException("WindowSpec.Height must be positive when set.", nameof(Height));
 
         if (MinWidth is { } minW && !(minW > 0))
