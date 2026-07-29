@@ -51,8 +51,12 @@ public static class ApiIndexGenerator
         sb.AppendLine("#             AfterBuild target rewrites this file).");
         sb.AppendLine("# Format: one symbol per line. No prose. Alphabetized within each section.");
         sb.AppendLine("# Sections: Factories, Modifiers, Reference builders, Hooks, Theme, Enums, Public types.");
-        sb.AppendLine("# Public types now ARE covered — ctors/properties/methods/events on every");
-        sb.AppendLine("# public type (e.g. WindowSpec.Opacity, ReactorWindow.SetPosition).");
+        sb.AppendLine("# Public types covers ctors/properties/methods/events on every public type,");
+        sb.AppendLine("# including public *static* classes — so process-wide entry points such as");
+        sb.AppendLine("# ControlRegistry.Register and ReactorApp.Run are listed there, alongside");
+        sb.AppendLine("# instance members like WindowSpec.Opacity and ReactorWindow.SetPosition.");
+        sb.AppendLine("# Extension methods are listed under Modifiers/Hooks in the fluent form you");
+        sb.AppendLine("# call them, not again under their declaring static class.");
         sb.AppendLine();
 
         EmitFactories(asm, sb);
@@ -312,6 +316,7 @@ public static class ApiIndexGenerator
             // Properties (instance + static), excluding indexers.
             var props = t.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly)
                 .Where(p => p.GetIndexParameters().Length == 0)
+                .Where(p => !IsThemeToken(t, p))
                 .Where(p => !IsObsolete(p))
                 .Select(FormatProperty)
                 .Where(s => s is not null)
@@ -320,8 +325,12 @@ public static class ApiIndexGenerator
 
             // Public DeclaredOnly methods — instance AND static (symmetric with the
             // property query). `IsSpecialName` filters operator overloads / accessors.
+            // Extension methods are skipped: they can only live on a static class, and
+            // the `## Modifiers` / `## Hooks` sections already emit them in the form an
+            // author actually calls (`.Margin(...)` rather than `Margin(Element, ...)`).
             var methods = t.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly)
                 .Where(m => !m.IsSpecialName)
+                .Where(m => !IsExtensionMethod(m))
                 .Where(m => !m.Name.Contains('<') && !m.Name.Contains('>'))
                 .Where(m => !IsObsolete(m))
                 .Select(FormatMethod);
@@ -341,12 +350,20 @@ public static class ApiIndexGenerator
     {
         if (t.FullName == "Microsoft.UI.Reactor.Factories") return false;
         if (t.IsEnum) return false;
-        if (t.IsClass && t.IsAbstract && t.IsSealed) return false;     // static class
         if (typeof(Delegate).IsAssignableFrom(t)) return false;
         if (t.Name.Contains('<') || t.Name.Contains('>')) return false; // compiler-generated
         if (IsObsolete(t)) return false;
         return true;
     }
+
+    // The `## Theme tokens` section already lists every ThemeRef on Theme, with its
+    // resolved resource key. Re-emitting them as ordinary static properties here would
+    // duplicate that whole block with strictly less information.
+    static bool IsThemeToken(Type t, PropertyInfo p) =>
+        t.FullName == "Microsoft.UI.Reactor.Core.Theme" && p.PropertyType.Name == "ThemeRef";
+
+    static bool IsExtensionMethod(MethodInfo m) =>
+        m.IsDefined(typeof(global::System.Runtime.CompilerServices.ExtensionAttribute), false);
 
     [RequiresUnreferencedCode(ReflectionJustification)]
     static string KindOf(Type t)
@@ -356,6 +373,7 @@ public static class ApiIndexGenerator
         if (t.GetMethod("<Clone>$", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance) is not null)
             return "record";
         if (t.IsValueType) return "struct";
+        if (t.IsClass && t.IsAbstract && t.IsSealed) return "static class";
         return "class";
     }
 

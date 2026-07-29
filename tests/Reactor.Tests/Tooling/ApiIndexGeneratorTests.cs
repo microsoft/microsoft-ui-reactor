@@ -95,6 +95,72 @@ public sealed class ApiIndexGeneratorTests
     }
 
     [Fact]
+    public void PublicTypes_Surfaces_ControlRegistry_Registration_Entry_Points()
+    {
+        // ControlRegistry is a public *static* class, and static classes used to be
+        // excluded from the index wholesale — so the frozen registration seam (and the
+        // API the unregistered-mount throw tells you to call) returned zero hits.
+        var block = TypeBlock(Generate(), "ControlRegistry");
+
+        Assert.Contains("Register<TElement, TControl>(", block);
+        Assert.Contains("RegisterDecorator<TElement>(", block);
+        Assert.Contains("RegisterForDerivedTypes<TBase, TControl>(", block);
+        Assert.Contains("RegisterDecoratorForDerivedTypes<TBase>(", block);
+    }
+
+    [Fact]
+    public void PublicTypes_Surfaces_ReactorApp_Entry_Points()
+    {
+        var block = TypeBlock(Generate(), "ReactorApp");
+
+        Assert.Contains("RegisterAllBuiltIns() → void", block);
+        Assert.Contains("Run(Action<ReactorAppContext> startup) → void", block);
+    }
+
+    [Fact]
+    public void PublicTypes_Does_Not_Duplicate_Theme_Tokens()
+    {
+        // Theme is a static class, so it now reaches Public types — but its ThemeRef
+        // tokens have their own dedicated section that also resolves each resource key.
+        // Emitting them twice would add ~36 strictly-less-informative lines.
+        var output = Generate();
+        var split = output.IndexOf("## Public types", StringComparison.Ordinal);
+        Assert.True(split > 0, "## Public types not found");
+
+        var beforePublicTypes = output[..split];
+        var publicTypes = output[split..];
+
+        Assert.Contains("Theme.SolidBackground", beforePublicTypes);
+        Assert.DoesNotContain("SolidBackground", publicTypes);
+
+        // The non-token member of Theme is still surfaced, so the type isn't just skipped.
+        Assert.Contains("Ref(string resourceKey) → ThemeRef", TypeBlock(output, "Theme"));
+    }
+
+    [Fact]
+    public void PublicTypes_Does_Not_Duplicate_Element_Modifier_Extensions()
+    {
+        // Extension methods can only live on a static class. Now that static classes are
+        // indexed, an unfiltered pass would emit every modifier a second time — byte
+        // identical, since both paths run through FormatMethod.
+        var output = Generate();
+        const string modifier = "T.Margin<T>(double horizontal, double vertical) → T";
+
+        Assert.Equal(1, CountOccurrences(output, modifier));
+    }
+
+    static int CountOccurrences(string haystack, string needle)
+    {
+        var n = 0;
+        for (var i = haystack.IndexOf(needle, StringComparison.Ordinal); i >= 0;
+             i = haystack.IndexOf(needle, i + needle.Length, StringComparison.Ordinal))
+        {
+            n++;
+        }
+        return n;
+    }
+
+    [Fact]
     public void Index_IsUpToDate()
     {
         var generated = Generate();

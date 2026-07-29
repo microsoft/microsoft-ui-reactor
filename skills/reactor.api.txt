@@ -4,8 +4,12 @@
 #             AfterBuild target rewrites this file).
 # Format: one symbol per line. No prose. Alphabetized within each section.
 # Sections: Factories, Modifiers, Reference builders, Hooks, Theme, Enums, Public types.
-# Public types now ARE covered — ctors/properties/methods/events on every
-# public type (e.g. WindowSpec.Opacity, ReactorWindow.SetPosition).
+# Public types covers ctors/properties/methods/events on every public type,
+# including public *static* classes — so process-wide entry points such as
+# ControlRegistry.Register and ReactorApp.Run are listed there, alongside
+# instance members like WindowSpec.Opacity and ReactorWindow.SetPosition.
+# Extension methods are listed under Modifiers/Hooks in the fluent form you
+# call them, not again under their declaring static class.
 
 ## Factories
 # All in `Microsoft.UI.Reactor.Factories` — `using static Microsoft.UI.Reactor.Factories;`
@@ -1105,6 +1109,10 @@ GetHashCode() → int
 Merge(AccessibilityModifiers other) → AccessibilityModifiers
 ToString() → string
 
+### static class AccessibilityScanner
+ExportJson(List<A11yDiagnostic> diagnostics, string filePath) → void
+Scan(Element root) → List<A11yDiagnostic>
+
 ### record AnimatedIconElement
 new()
 IconSource FallbackIconSource { get; init; }
@@ -1133,6 +1141,16 @@ Equals(AnimationConfig other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
+
+### static class AnimationScope
+Curve Current { get; }
+bool HasScope { get; }
+WithAnimation(Curve curve, Action action) → void
+WithAnimationAsync(Curve curve, Action action) → Task
+
+### static class Animations
+Animate(AnimationKind kind, Action action) → void
+Animate<T>(AnimationKind kind, Func<T> func) → T
 
 ### record AnnotatedScrollBarElement
 new()
@@ -1297,6 +1315,9 @@ Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
 
+### static class AutoSuggestDsl
+AutoSuggest<T>(T selected, Action<T> onSelected = null, Func<string, CancellationToken, Task<IReadOnlyList<T>>> search = null, Func<T, string> displayText = null, string placeholderText = null, int debounceMs = 300, Func<T, Element> template = null) → AutoSuggestElement<T>
+
 ### record AutoSuggestElement<T>
 new(T Selected, Action<T> OnSelected = null, Func<string, CancellationToken, Task<IReadOnlyList<T>>> Search = null, Func<T, string> DisplayText = null, string PlaceholderText = null)
 Action<T> OnSelected { get; init; }
@@ -1370,6 +1391,9 @@ Equals(BreadcrumbBarItemData other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
+
+### static class BrushHelper
+Parse(string color) → SolidColorBrush
 
 ### record ButtonElement
 new(string Label, Action OnClick = null)
@@ -1487,6 +1511,17 @@ Equals(Element other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
+
+### static class CellRenderers
+CheckMark() → Func<object, Element>
+ColorSwatch() → Func<object, Element>
+Date(string format = "d") → Func<object, Element>
+Enum() → Func<object, Element>
+Hyperlink(string displayTextFormat = null) → Func<object, Element>
+Number(string format = null) → Func<object, Element>
+Text(string format = null) → Func<object, Element>
+Time(string format = "t") → Func<object, Element>
+ToggleIndicator() → Func<object, Element>
 
 ### record CheckBoxElement
 new(Optional<bool?> IsChecked = null, Action<bool> OnIsCheckedChanged = null, string Label = null)
@@ -1648,6 +1683,10 @@ Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
 
+### static class CommandInterop
+FromCommand(ICommand command, string label, IconData icon = null, string description = null, KeyboardAcceleratorData accelerator = null, object parameter = null) → Command
+FromCommand<T>(ICommand command, string label, IconData icon = null, string description = null, KeyboardAcceleratorData accelerator = null) → Command<T>
+
 ### class Component
 Render() → Element
 
@@ -1673,6 +1712,10 @@ Equals(ComponentElement<TProps> other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
+
+### static class CompositorProvider
+Compositor Current { get; set; }
+EnsureCompositor(UIElement element) → Compositor
 
 ### record ConnectedTransition
 string AnimationKey { get; init; }
@@ -1742,6 +1785,12 @@ OneWayConditional<TValue>(Func<TElement, TValue> get, Action<TControl, TValue> s
 Reference(Func<TElement, ElementRef> get, Action<TControl, FrameworkElement> set) → ControlDescriptor<TElement, TControl>
 Reference<TTarget>(Func<TElement, ElementRef<TTarget>> get, Action<TControl, TTarget> set) → ControlDescriptor<TElement, TControl>
 ReferenceList<TTarget>(Func<TElement, IReadOnlyList<ElementRef<TTarget>>> get, Action<TControl, IReadOnlyList<TTarget>> apply) → ControlDescriptor<TElement, TControl>
+
+### static class ControlRegistry
+Register<TElement, TControl>(Func<IElementHandler<TElement, TControl>> handlerFactory) → void
+RegisterDecorator<TElement>(Func<IDecoratorElementHandler<TElement>> handlerFactory) → void
+RegisterDecoratorForDerivedTypes<TBase>(Func<IDecoratorElementHandler<TBase>> handlerFactory) → void
+RegisterForDerivedTypes<TBase, TControl>(Func<IElementHandler<TBase, TControl>> handlerFactory) → void
 
 ### record Curve
 Ease(int durationMs, Easing easing = null) → Curve
@@ -1959,6 +2008,9 @@ Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
 
+### static class DragOperationNegotiation
+Negotiate(DragOperations source, DragOperations target) → DragOperations
+
 ### record DragSourceConfig
 new(Func<DragData> GetData)
 Action<DragEndContext> OnEnd { get; init; }
@@ -2044,6 +2096,28 @@ Equals(Easing other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
+
+### static class Editors
+CheckBox() → Func<object, Action<object>, Element>
+Color() → Func<object, Action<object>, Element>
+ColorCompact() → Func<object, Action<object>, Element>
+Combo<TValue>(IReadOnlyList<TValue> choices) → Func<object, Action<object>, Element>
+Date() → Func<object, Action<object>, Element>
+DateOffset() → Func<object, Action<object>, Element>
+DateOnly() → Func<object, Action<object>, Element>
+Decimal(Decimal? min = null, Decimal? max = null) → Func<object, Action<object>, Element>
+Double(double? min = null, double? max = null) → Func<object, Action<object>, Element>
+EnumCombo(Type enumType) → Func<object, Action<object>, Element>
+Float(float? min = null, float? max = null) → Func<object, Action<object>, Element>
+Int(int? min = null, int? max = null) → Func<object, Action<object>, Element>
+Long(long? min = null, long? max = null) → Func<object, Action<object>, Element>
+Number(Type numberType, double? min = null, double? max = null, double smallChange = 1) → Func<object, Action<object>, Element>
+Text(string placeholderText = null, int? maxLength = null) → Func<object, Action<object>, Element>
+TimeOfDay() → Func<object, Action<object>, Element>
+TimeOnlyEditor() → Func<object, Action<object>, Element>
+TimeSpanEditor() → Func<object, Action<object>, Element>
+Toggle(string onContent = null, string offContent = null) → Func<object, Action<object>, Element>
+Uri() → Func<object, Action<object>, Element>
 
 ### record Element
 AnimationConfig AnimationConfig { get; init; }
@@ -2259,6 +2333,15 @@ Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
 
+### static class ErrorBubbling
+FilterMessages(IReadOnlyList<ValidationMessage> messages, Severity? severityFilter) → ValueTuple<IReadOnlyList<ValidationMessage>, IReadOnlyList<ValidationMessage>>
+HighestSeverity(IReadOnlyList<ValidationMessage> messages) → Severity?
+ShouldDisplay(IReadOnlyList<ValidationMessage> messages, ShowWhen showWhen, ValidationContext ctx = null, bool submitAttempted = false) → bool
+
+### static class ErrorStyling
+GetBrushKey(Severity severity) → string
+ShouldShowErrors(ValidationContext ctx, string fieldName, ShowWhen showWhen, bool submitAttempted = false) → bool
+
 ### record ErrorStylingAttached
 new(Func<Element, Element> OnErrorTransform = null, Func<Element, Element> OnWarningTransform = null)
 Func<Element, Element> OnErrorTransform { get; init; }
@@ -2464,7 +2547,7 @@ Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
 
-### class FocusManager
+### class FocusManager (in Microsoft.UI.Reactor.Hooks)
 new()
 IReadOnlyList<string> Fields { get; }
 Clear() → void
@@ -2477,6 +2560,10 @@ IsLastField(string fieldName) → bool
 Register(string fieldName) → void
 SetControl(string fieldName, Control control) → void
 SetSubmitHandler(Action handler) → void
+
+### static class FocusManager (in Microsoft.UI.Reactor.Input)
+Focus(ElementRef target, FocusState state = FocusState.Programmatic) → bool
+FocusAsync(ElementRef target, FocusState state = FocusState.Programmatic) → Task<bool>
 
 ### class FocusRevalidationService
 new(QueryCache cache)
@@ -2514,6 +2601,10 @@ Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
 
+### static class FormFieldDsl
+FormField(Element content, string label = null, bool required = false, string description = null, string fieldName = null, ShowWhen showWhen = ShowWhen.WhenTouched) → FormFieldElement
+FormField(FieldDescriptor field, object value, Action<object> onChange, TypeRegistry registry = null) → FormFieldElement
+
 ### record FormFieldElement
 new(Element Content, string Label = null, bool Required = false, string Description = null)
 Element Content { get; init; }
@@ -2528,6 +2619,13 @@ Equals(FormFieldElement other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
+
+### static class FormFieldHelpers
+DetectFieldName(Element content) → string
+GetAutomationName(string label) → string
+GetDescriptionOrError(ValidationContext ctx, string fieldName, string description, ShowWhen showWhen, bool submitAttempted = false) → ValueTuple<string, bool>
+GetDisplayLabel(string label, bool required) → string
+ResolveFieldName(string explicitFieldName, Element content) → string
 
 ### struct FormatResult
 new(string Output, int CursorPos)
@@ -3014,6 +3112,13 @@ DefaultPath() → string
 TryRead(string id, ref Byte[] data) → bool
 Write(string id, Byte[] data) → void
 
+### static class JumpList
+bool ShowFrequent { get; set; }
+bool ShowRecent { get; set; }
+string AppUserModelId { get; set; }
+ClearAsync() → Task
+UpdateAsync(IEnumerable<JumpListItem> items) → Task
+
 ### record JumpListItem
 new(string Title, string Arguments, JumpListItemKind Kind = JumpListItemKind.Task, string Description = null, WindowIcon Icon = null, string GroupCategory = null)
 JumpListItemKind Kind { get; init; }
@@ -3381,6 +3486,9 @@ IsLiteral(int position) → bool
 NextInputPosition(int position) → int
 PreviousInputPosition(int position) → int
 
+### static class MaskedTextBoxDsl
+MaskedTextBox(string value, Action<string> onChanged = null, string mask = null, string header = null, Char placeholder = _) → MaskedTextBoxElement
+
 ### record MaskedTextBoxElement
 new(string Value, Action<string> OnChanged = null, string Mask = null, string Header = null, Char Placeholder = _)
 Action<string> OnChanged { get; init; }
@@ -3618,6 +3726,17 @@ object From { get; }
 object To { get; }
 string Reason { get; init; }
 
+### static class NavigationDiagnostics
+event EventHandler<CacheDiagnosticEvent> CacheEviction
+event EventHandler<CacheDiagnosticEvent> CacheHit
+event EventHandler<CacheDiagnosticEvent> CacheMiss
+event EventHandler<DeepLinkDiagnosticEvent> DeepLinkResolved
+event EventHandler<NavigationDiagnosticEvent> NavigationCancelled
+event EventHandler<NavigationDiagnosticEvent> NavigationCompleted
+event EventHandler<NavigationDiagnosticEvent> NavigationRequested
+event EventHandler<TransitionDiagnosticEvent> TransitionCompleted
+event EventHandler<TransitionDiagnosticEvent> TransitionStarted
+
 ### record NavigationEventArgs<TRoute>
 new(TRoute Route, TRoute PreviousRoute, NavigationMode Mode, NavigateOptions Options = null)
 NavigateOptions Options { get; init; }
@@ -3827,6 +3946,11 @@ Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
 
+### static class PageHelper
+Mount<TComponent, TProps>(Page page, NavigationEventArgs e) → ReactorHostControl
+Mount<TComponent>(Page page, NavigationEventArgs e) → ReactorHostControl
+Unmount(ref ReactorHostControl host) → void
+
 ### struct PanGesture
 new(Point Translation, Point Delta, Point Velocity, Point Position, Point StartPosition, GesturePhase Phase, bool IsInertial)
 GesturePhase Phase { get; init; }
@@ -3901,6 +4025,9 @@ Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
 
+### static class PathDataParser
+Parse(string pathData) → Geometry
+
 ### record PathElement
 new()
 Brush Fill { get; init; }
@@ -3936,6 +4063,9 @@ ToString() → string
 ### class PendingComponent
 new()
 Render() → Element
+
+### static class PendingFactory
+Pending(Element fallback, Element child) → Element
 
 ### record PendingProps
 new(Element Fallback, Element Child)
@@ -4122,6 +4252,12 @@ Type EditorType { get; }
 new()
 Render() → Element
 
+### static class PropertyGridDefaults
+ArrayItemTemplate(int index, string summary, bool isExpanded, Action<bool> onExpandedChanged, Action onMoveUp, Action onMoveDown, Action onRemove) → Element
+ArrayToolbarTemplate(string propertyName, int count, Func<Task> onAdd) → Element
+PropertyLabelTemplate(FieldDescriptor descriptor, int indentLevel) → Element
+PropertyRowTemplate(FieldDescriptor descriptor, Element label, Element editor, int indentLevel) → Element
+
 ### record PropertyGridElement
 Action<object> OnRootChanged { get; init; }
 ArrayItemTemplate ArrayItemTemplate { get; init; }
@@ -4148,6 +4284,10 @@ int Order { get; }
 
 ### class PropertyReadOnlyAttribute
 new()
+
+### static class PseudoLocalizer
+MissingKeyMarker(MessageKey key) → string
+Transform(string input) → string
 
 ### class QueryCache
 new()
@@ -4223,6 +4363,33 @@ Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
 
+### static class ReactorApp
+DispatcherQueue UIDispatcher { get; }
+ILogger AppLogger { get; set; }
+IReadOnlyList<ReactorTrayIcon> TrayIcons { get; }
+IReadOnlyList<ReactorWindow> Windows { get; }
+IWindowPersistenceStore WindowPersistenceStore { get; set; }
+ReactorWindow PrimaryWindow { get; }
+ShutdownPolicy ShutdownPolicy { get; set; }
+bool DevtoolsEnabled { get; }
+Exit(int exitCode = 0) → void
+FindTrayIcon(WindowKey key) → ReactorTrayIcon
+FindWindow(WindowKey key) → ReactorWindow
+OpenTrayIcon(TrayIconSpec spec) → ReactorTrayIcon
+OpenWindow(WindowSpec spec, Func<Component> root, Action<ReactorHost> configure = null) → ReactorWindow
+OpenWindow(WindowSpec spec, Func<RenderContext, Element> render, Action<ReactorHost> configure = null) → ReactorWindow
+RegisterAllBuiltIns() → void
+RegisterControlAssembly(Assembly assembly) → void
+RegisterControlAssembly(IXamlMetadataProvider provider) → void
+Run(Action<ReactorAppContext> startup) → void
+Run(string title, Func<RenderContext, Element> rootRender, double? width = null, double? height = null, bool fullScreen = false, Action<ReactorHost> configure = null) → void
+Run<TRoot>(string title = "Reactor App", double? width = null, double? height = null, bool fullScreen = false, Action<ReactorHost> configure = null) → void
+TryRegisterControlAssembly(Assembly assembly) → bool
+event EventHandler<ReactorTrayIcon> TrayIconClosed
+event EventHandler<ReactorTrayIcon> TrayIconOpened
+event EventHandler<ReactorWindow> WindowClosed
+event EventHandler<ReactorWindow> WindowOpened
+
 ### class ReactorAppContext
 LaunchActivation LaunchActivation { get; }
 
@@ -4235,6 +4402,11 @@ GetXamlType(Type type) → IXamlType
 GetXamlType(string fullName) → IXamlType
 GetXmlnsDefinitions() → XmlnsDefinition[]
 InitializeComponent() → void
+
+### static class ReactorBinding
+ShouldSuppressEcho(UIElement target) → bool
+WriteSuppressed(UIElement target, Action mutate) → void
+WriteSuppressed<T>(T target, Action<T> mutate) → void
 
 ### struct ReactorBinding<TElement>
 FrameworkElement Control { get; }
@@ -4275,6 +4447,19 @@ Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
 
+### static class ReactorDevtoolsBootstrap
+Register(IReactorDevtoolsHost host) → void
+
+### static class ReactorDiagnostics
+IReadOnlyList<KeyedListDiagnostic> RecentKeyedListWarnings { get; }
+ClearRecentKeyedListWarnings() → void
+
+### static class ReactorDisplay
+DisplayInfo Primary { get; }
+IReadOnlyList<DisplayInfo> Displays { get; }
+NearestTo(double dipX, double dipY) → DisplayInfo
+event EventHandler DisplayLayoutChanged
+
 ### struct ReactorEvent
 new(int EventId, string EventName, EventLevel Level, EventKeywords Keywords, DateTime TimestampUtc, int ThreadId, IReadOnlyList<object> Payload, IReadOnlyList<string> PayloadNames)
 DateTime TimestampUtc { get; init; }
@@ -4290,6 +4475,12 @@ Equals(ReactorEvent other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
+
+### static class ReactorFeatureFlags
+bool FocusRevalidation { get; set; }
+bool HighlightReconcileChanges { get; set; }
+bool UseHookBasedPaging { get; set; }
+bool WarnLayoutFootguns { get; set; }
 
 ### class ReactorHost
 new(Window window, ILogger logger = null)
@@ -4315,6 +4506,9 @@ ref RenderStats Stats { get; }
 Dispose() → void
 Mount(Component component) → void
 Mount(Func<RenderContext, Element> renderFunc) → void
+
+### static class ReactorTrace
+Subscribe(Action<ReactorEvent> onEvent, EventLevel level = EventLevel.Verbose, EventKeywords keywords = EventKeywords.All) → IDisposable
 
 ### class ReactorTrayIcon
 TrayIconSpec Spec { get; }
@@ -4425,6 +4619,10 @@ ToString() → string
 ### class Ref<T>
 new(T initial)
 T Current { get; set; }
+
+### static class ReflectionTypeMetadataProvider
+CreateDescriptor(PropertyInfo property, int defaultOrder) → FieldDescriptor
+CreateMetadata(Type type) → TypeMetadata
 
 ### record RefreshContainerElement
 new(Element Content)
@@ -4781,6 +4979,9 @@ Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
 
+### static class RtlHelper
+IsRtlLocale(string locale) → bool
+
 ### record ScaleTransition
 new(float From)
 float From { get; init; }
@@ -5085,6 +5286,40 @@ Equals(StaggerConfig other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
+
+### static class StandardCommand
+Backward(Action execute, bool canExecute = true) → Command
+Backward(Func<Task> executeAsync, bool canExecute = true) → Command
+Close(Action execute, bool canExecute = true) → Command
+Close(Func<Task> executeAsync, bool canExecute = true) → Command
+Copy(Action execute, bool canExecute = true) → Command
+Copy(Func<Task> executeAsync, bool canExecute = true) → Command
+Cut(Action execute, bool canExecute = true) → Command
+Cut(Func<Task> executeAsync, bool canExecute = true) → Command
+Delete(Action execute, bool canExecute = true) → Command
+Delete(Func<Task> executeAsync, bool canExecute = true) → Command
+Forward(Action execute, bool canExecute = true) → Command
+Forward(Func<Task> executeAsync, bool canExecute = true) → Command
+Open(Action execute, bool canExecute = true) → Command
+Open(Func<Task> executeAsync, bool canExecute = true) → Command
+Paste(Action execute, bool canExecute = true) → Command
+Paste(Func<Task> executeAsync, bool canExecute = true) → Command
+Pause(Action execute, bool canExecute = true) → Command
+Pause(Func<Task> executeAsync, bool canExecute = true) → Command
+Play(Action execute, bool canExecute = true) → Command
+Play(Func<Task> executeAsync, bool canExecute = true) → Command
+Redo(Action execute, bool canExecute = true) → Command
+Redo(Func<Task> executeAsync, bool canExecute = true) → Command
+Save(Action execute, bool canExecute = true) → Command
+Save(Func<Task> executeAsync, bool canExecute = true) → Command
+SelectAll(Action execute, bool canExecute = true) → Command
+SelectAll(Func<Task> executeAsync, bool canExecute = true) → Command
+Share(Action execute, bool canExecute = true) → Command
+Share(Func<Task> executeAsync, bool canExecute = true) → Command
+Stop(Action execute, bool canExecute = true) → Command
+Stop(Func<Task> executeAsync, bool canExecute = true) → Command
+Undo(Action execute, bool canExecute = true) → Command
+Undo(Func<Task> executeAsync, bool canExecute = true) → Command
 
 ### record SuppressTransition
 new()
@@ -5464,6 +5699,9 @@ Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
 
+### static class Theme
+Ref(string resourceKey) → ThemeRef
+
 ### struct ThemeRef
 new(string ResourceKey)
 string ResourceKey { get; init; }
@@ -5473,6 +5711,13 @@ Equals(object obj) → bool
 GetHashCode() → int
 Resolve(string resourceKey, bool isDark) → Brush
 ToString() → string
+
+### static class ThemeResource
+Brush(string key) → Brush
+CornerRadius(string key) → CornerRadius
+Double(string key) → double
+Get<T>(string key, T defaultValue = null) → T
+Thickness(string key) → Thickness
 
 ### record ThemeTransitions
 new()
@@ -5678,8 +5923,24 @@ RegisterFormatter<T>(Func<object, string> formatter) → TypeRegistry
 Resolve(Type type) → TypeMetadata
 ResolveEditor(Type type, EditorTier tier) → Func<object, Action<object>, Element>
 
+### static class TypedElementRef
+Create<T>() → ElementRef<T>
+
 ### class UIThreadOnlyAttribute
 new()
+
+### static class Validate
+Email(string message = null) → IValidator
+EqualTo<T>(T otherValue, string message = null) → IValidator
+Match(string regex, string message = null) → IValidator
+MaxLength(int n, string message = null) → IValidator
+MinLength(int n, string message = null) → IValidator
+Must<T>(Func<T, bool> predicate, string message) → IValidator
+MustAsync<T>(Func<T, Task<bool>> predicate, string message) → IAsyncValidator
+MustBeTrue(string message = null) → IValidator
+Range(double min, double max, string message = null) → IValidator
+Required(string message = null) → IValidator
+Url(string message = null) → IValidator
 
 ### record ValidationAttached
 new(string FieldName, IValidator[] Validators, IAsyncValidator[] AsyncValidators)
@@ -5734,6 +5995,16 @@ Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
 
+### static class ValidationReconciler
+EvaluateRules(ValidationContext ctx, ValidationRuleElement[] rules) → void
+ValidateAttached(ValidationContext ctx, ValidationAttached attached, object value) → void
+ValidateField(ValidationContext ctx, string fieldName, object value, IValidator[] validators) → void
+ValidateFieldAsync(ValidationContext ctx, string fieldName, object value, IAsyncValidator[] asyncValidators, CancellationToken cancellationToken = null) → Task
+
+### static class ValidationRuleDsl
+ValidationRule(Func<bool> predicate, string message, string field, Severity severity = Severity.Error) → ValidationRuleElement
+ValidationRuleAsync(Func<Task<bool>> asyncPredicate, string message, string field, Severity severity = Severity.Error) → ValidationRuleElement
+
 ### record ValidationRuleElement
 new(string Field, Func<bool> Predicate, string Message, Severity Severity = Severity.Error)
 Func<Task<bool>> AsyncPredicate { get; init; }
@@ -5747,6 +6018,10 @@ Equals(ValidationRuleElement other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
+
+### static class ValidationVisualizerDsl
+ValidationVisualizer(Func<IReadOnlyList<ValidationMessage>, Element> render, Element content, Severity? severityFilter = null, ShowWhen showWhen = ShowWhen.Always) → ValidationVisualizerElement
+ValidationVisualizer(VisualizerStyle style, Element content, string title = null, Severity? severityFilter = null, ShowWhen showWhen = ShowWhen.Always) → ValidationVisualizerElement
 
 ### record ValidationVisualizerElement
 new(VisualizerStyle Style, Element Content)
@@ -5957,6 +6232,9 @@ Equals(XamlHostElement other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
+
+### static class XamlInterop
+Register(Reconciler reconciler) → void
 
 ### class XamlMetaDataProvider
 new()
