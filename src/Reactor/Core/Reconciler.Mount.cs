@@ -296,25 +296,47 @@ public sealed partial class Reconciler
     /// </summary>
     private static string FriendlyTypeName(Type type)
     {
-        var name = type.Name;
-        var tick = name.IndexOf('`');
-        if (tick >= 0) name = name.Substring(0, tick);
+        var sb = new global::System.Text.StringBuilder();
+        var args = type.GetGenericArguments();
+        AppendFriendlyTypeName(sb, type, args, args.Length);
+        return sb.ToString();
+    }
 
-        if (type.IsGenericType)
+    /// <remarks>
+    /// <paramref name="args"/> is the flat generic-argument list of the type being printed,
+    /// which for a nested type is the whole chain outermost-first — so
+    /// <c>Outer&lt;int&gt;.Inner&lt;string&gt;</c> reports <c>[int, string]</c> on the inner
+    /// type. Each level therefore renders only <c>args[start..end]</c>: the declaring chain
+    /// consumes its own prefix, and the arguments are not duplicated onto the nested name.
+    /// </remarks>
+    private static void AppendFriendlyTypeName(
+        global::System.Text.StringBuilder sb, Type type, Type[] args, int end)
+    {
+        var declaring = type.IsNested ? type.DeclaringType : null;
+        var start = declaring is { IsGenericType: true }
+            ? declaring.GetGenericArguments().Length
+            : 0;
+
+        if (declaring is not null)
         {
-            var args = type.GetGenericArguments();
-            var sb = new global::System.Text.StringBuilder(name).Append('<');
-            for (int i = 0; i < args.Length; i++)
-            {
-                if (i > 0) sb.Append(", ");
-                sb.Append(FriendlyTypeName(args[i]));
-            }
-            name = sb.Append('>').ToString();
+            AppendFriendlyTypeName(sb, declaring, args, start);
+            sb.Append('.');
         }
 
-        return type.IsNested && type.DeclaringType is { } declaring
-            ? FriendlyTypeName(declaring) + "." + name
-            : name;
+        var name = type.Name;
+        var tick = name.IndexOf('`');
+        sb.Append(tick >= 0 ? name.Substring(0, tick) : name);
+
+        if (end <= start) return;
+
+        sb.Append('<');
+        for (int i = start; i < end; i++)
+        {
+            if (i > start) sb.Append(", ");
+            var nested = args[i].GetGenericArguments();
+            AppendFriendlyTypeName(sb, args[i], nested, nested.Length);
+        }
+        sb.Append('>');
     }
 
     // Spec 047 §14 Phase 3-final Batch B — widened to internal static so

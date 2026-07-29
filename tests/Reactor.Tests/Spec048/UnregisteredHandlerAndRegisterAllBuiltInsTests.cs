@@ -84,6 +84,27 @@ public sealed class UnregisteredHandlerAndRegisterAllBuiltInsTests
             ex.Message);
     }
 
+    private static class GenericHolder<TOuter>
+    {
+        internal sealed record NestedProbeElement<TInner>(TOuter A, TInner B) : Element;
+    }
+
+    [Fact]
+    public void Nested_Inside_A_Generic_Type_Does_Not_Duplicate_The_Outer_Type_Arguments()
+    {
+        var reconciler = new Reconciler();
+
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => reconciler.Mount(new GenericHolder<int>.NestedProbeElement<string>(1, "x"), NoOp));
+
+        // Reflection reports the generic arguments of a nested type as the whole chain
+        // flattened outermost-first, so a naive render repeats the outer arguments on the
+        // inner name (`GenericHolder<Int32>.NestedProbeElement<Int32, String>`) — which is
+        // not the type and does not compile.
+        Assert.Contains("GenericHolder<Int32>.NestedProbeElement<String>", ex.Message);
+        Assert.DoesNotContain("NestedProbeElement<Int32, String>", ex.Message);
+    }
+
     [Fact]
     public void Mount_Of_EmptyElement_Does_Not_Throw()
     {
