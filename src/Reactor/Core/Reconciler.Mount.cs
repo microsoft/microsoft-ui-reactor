@@ -225,52 +225,52 @@ public sealed partial class Reconciler
     /// Reactor bugs to diagnose.
     /// </summary>
     /// <remarks>
-    /// The most common cause (after spec-048 §3.4 deletes
-    /// <c>RegisterV1BuiltInHandlers</c>) is that the caller bypassed the
-    /// factory method (e.g. <c>Factories.TextBlock(...)</c>) and constructed
-    /// the element record directly (<c>new TextBlockElement(...)</c>). The
-    /// factory body contains the <c>Reg&lt;TElement, TControl, THandler&gt;.Done</c>
-    /// touch that registers the handler on first call; direct-record
-    /// construction skips that touch. See issue
+    /// Spec 062 §10 — with lazy self-registration the norm, this is reframed around
+    /// what actually causes it rather than around a registration call most apps never
+    /// make. A "mounted but unregistered" element is nearly unreachable for generated
+    /// wrappers (spec 058: constructing the element self-registers it); it survives for
+    /// a factory-carried control constructed by raw <c>new</c> that bypassed the factory
+    /// trigger, a wrapper assembly that is referenced but never touched, or a
+    /// third-party override that was never registered. See issue
     /// <see href="https://github.com/microsoft/microsoft-ui-reactor/issues/486"/>
-    /// for the full discussion of the trade-off.
+    /// for the original trade-off discussion.
     /// </remarks>
     [global::System.Diagnostics.CodeAnalysis.DoesNotReturn]
     private static UIElement? ThrowNoHandlerRegistered(Element element)
     {
-        var elementTypeName = element.GetType().FullName ?? element.GetType().Name;
+        // Reflection-light and AOT-safe by construction: the message names only
+        // element.GetType(), never a member walk or an assembly scan.
+        var elementType = element.GetType();
+        var elementTypeName = elementType.FullName ?? elementType.Name;
         throw new InvalidOperationException(
-            $"No handler is registered for element type '{elementTypeName}'. " +
-            "The reconciler tried all four dispatch arms (per-host _v1Handlers, " +
-            "per-host _typeRegistry, global ControlRegistry, and the composition-" +
-            "primitive switch) and none of them knew how to mount this element.\n\n" +
-            "Most common cause: the element record was constructed directly " +
-            $"(e.g. `new {element.GetType().Name}(...)`) instead of through its " +
-            "factory method. Factory methods carry the registration touch (a " +
-            "`_ = Reg<TElement, TControl, THandler>.Done;` statement) that " +
-            "registers the handler on first call; bypassing the factory skips " +
-            "that touch.\n\n" +
-            "Fixes:\n" +
-            $"  (1) Call the factory method at least once before mounting (e.g. " +
-            "`Factories.TextBlock(\"\")` for built-ins) so the handler registers, " +
-            "then continue using the direct-record idiom for the hot path.\n" +
-            "  (2) Opt into the whole built-in catalog at startup with " +
-            "`Microsoft.UI.Reactor.ReactorApp.RegisterAllBuiltIns()` (spec-048 " +
-            "§3.4 option A) so every built-in element record mounts regardless " +
-            "of how it was constructed.\n" +
-            "  (3) Register the handler explicitly up front. For a control-backed " +
-            "element with its own WinUI control, use " +
+            $"No handler is registered for element type '{elementTypeName}', so the " +
+            "reconciler does not know how to mount it.\n\n" +
+            "Registration is lazy: an element becomes mountable as a side effect of " +
+            "the code that introduces it. One of these is missing:\n\n" +
+            $"  (1) Create it through its factory. Built-in and Pattern-B controls " +
+            $"self-register on the factory call, so `new {elementType.Name}(...)` on " +
+            "its own never registers anything. Call the factory (e.g. " +
+            "`Factories.TextBlock(\"\")`) at least once, then the direct-record idiom " +
+            "is safe for the hot path.\n" +
+            "  (2) If it comes from a [GenerateReactorWrapper] library, make sure that " +
+            "assembly is actually referenced and reached — its generated element " +
+            "carries the self-registration, so an unreferenced or fully-trimmed " +
+            "wrapper never runs it.\n" +
+            "  (3) To register a third-party control or override a built-in handler " +
+            "globally at startup, use " +
             $"`Microsoft.UI.Reactor.Core.V1Protocol.ControlRegistry.Register" +
-            $"<{element.GetType().Name}, TControl>(static () => new YourHandler())`; " +
-            "for a decorator-backed element (one that wraps/forwards to a child " +
-            "rather than owning a leaf control) use " +
-            $"`Microsoft.UI.Reactor.Core.V1Protocol.ControlRegistry.RegisterDecorator" +
-            $"<{element.GetType().Name}>(static () => new YourDecoratorHandler())`.\n" +
-            "  (4) For custom controls authored by your project, follow the " +
-            "Pattern A factory-as-registration recipe in " +
-            "docs/guide/extending-reactor-controls.md.\n\n" +
-            "See https://github.com/microsoft/microsoft-ui-reactor/issues/486 " +
-            "for background.");
+            $"<{elementType.Name}, TControl>(static () => new YourHandler())` — or " +
+            $"`ControlRegistry.RegisterDecorator<{elementType.Name}>(...)` for a " +
+            "decorator-backed element that wraps a child instead of owning a leaf " +
+            "control.\n" +
+            "  (4) For a bespoke app-local control, register it on the host's " +
+            $"reconciler before first mount: `reconciler.RegisterHandler<{elementType.Name}, " +
+            "TControl>(new YourHandler())` (or `RegisterType`).\n" +
+            "  (5) As a blunt opt-in for the whole built-in catalog, call " +
+            "`Microsoft.UI.Reactor.ReactorApp.RegisterAllBuiltIns()` at startup — this " +
+            "makes every built-in element record mountable regardless of how it was " +
+            "constructed, at the cost of rooting the catalog for the trimmer.\n\n" +
+            "Authoring guide: docs/guide/extending-reactor-controls.md");
     }
 
     // Spec 047 §14 Phase 3-final Batch B — widened to internal static so

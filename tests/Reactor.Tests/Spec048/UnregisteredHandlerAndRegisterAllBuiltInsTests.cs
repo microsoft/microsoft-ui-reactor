@@ -45,6 +45,17 @@ public sealed class UnregisteredHandlerAndRegisterAllBuiltInsTests
         Assert.Contains("factory", ex.Message);
         Assert.Contains("RegisterAllBuiltIns", ex.Message);
         Assert.Contains("ControlRegistry.Register", ex.Message);
+
+        // Spec 062 §10 — with lazy self-registration the norm, the message must also
+        // name the two causes that 048's wording left out, or it sends an author
+        // hunting for a registration call they were never supposed to write.
+        Assert.Contains("GenerateReactorWrapper", ex.Message);   // referenced-but-unreached wrapper (058)
+        Assert.Contains("RegisterHandler", ex.Message);          // per-host, app-local bespoke control (§8)
+
+        // …and must NOT lead with the reconciler's internal dispatch-arm mechanics,
+        // which name private fields an app author cannot act on.
+        Assert.DoesNotContain("_v1Handlers", ex.Message);
+        Assert.DoesNotContain("_typeRegistry", ex.Message);
     }
 
     [Fact]
