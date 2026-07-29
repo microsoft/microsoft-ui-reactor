@@ -260,9 +260,9 @@ public sealed partial class Reconciler
             "carries the self-registration, so an unreferenced or fully-trimmed " +
             "wrapper never runs it.\n" +
             "  (3) To register a third-party control or override a built-in handler " +
-            "globally at startup, use " +
-            $"`Microsoft.UI.Reactor.Core.V1Protocol.ControlRegistry.Register" +
-            $"<{elementType.Name}, TControl>(static () => new YourHandler())` — or " +
+            "globally at startup, use (in Microsoft.UI.Reactor.Core.V1Protocol) " +
+            $"`ControlRegistry.Register<{elementType.Name}, TControl>(static () => " +
+            "new YourHandler())` — or " +
             $"`ControlRegistry.RegisterDecorator<{elementType.Name}>(static () => new " +
             "YourDecoratorHandler())` for a " +
             "decorator-backed element that wraps a child instead of owning a leaf " +
