@@ -639,11 +639,12 @@ trigger, or a third-party override that was never registered.
     `RegisterAllBuiltIns()`" is not a proof either — the call may be unreachable, may run
     after the first mount, or (as in this repo's own tests) may only be safe because it is
     a `[ModuleInitializer]`.
-  - **No discriminator survives contact.** `StaticConstructors.IsEmpty` distinguishes the
-    element-rooted cctor today only by accident: any ordinary static field initializer on
-    an element record also emits a `.cctor`, silently disabling the rule. The honest
-    discriminator would be explicit metadata naming the canonical factory, which does not
-    exist yet.
+  - **No discriminator survives contact.** The only structural signal available to an
+    analyzer is whether the element type declares a static constructor (Roslyn's
+    `INamedTypeSymbol.StaticConstructors`), and that distinguishes the element-rooted
+    cctor today only by accident: any ordinary static field initializer on an element
+    record also emits a `.cctor`, silently disabling the rule. The honest discriminator
+    would be explicit metadata naming the canonical factory, which does not exist yet.
   - **Zero demonstrated true positives.** Of ~1,450 direct-construction sites in the repo,
     every one is either the framework's own test suite (safe — the tests register the full
     catalog from a `[ModuleInitializer]`), an app-local bespoke element (the supported §8

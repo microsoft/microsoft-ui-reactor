@@ -425,12 +425,17 @@ ControlRegistry.Register<ButtonElement, Microsoft.UI.Xaml.Controls.Button>(
     static () => new MyButtonHandler());
 ```
 
-`Register` takes a handler **factory**, not an instance, so the handler
-is constructed lazily and once. The `static` on the lambda is the same
-mandate as Step 6 — a capturing lambda allocates a closure and blunts
-the trimmer, and `REACTOR_DESC_001` flags it. The sibling entry points
-are `RegisterDecorator<TElement>` for decorator elements and
-`RegisterForDerivedTypes<TBase, TControl>` for a whole element family.
+`Register` takes a handler **factory**, not an instance. The registration
+itself is process-wide, but the factory runs lazily *per reconciler* —
+each host that mounts the element builds its own handler instance and
+caches it — so a handler must not assume it is a process-wide singleton.
+The `static` on the lambda is the same mandate as Step 6 — a capturing
+lambda allocates a closure and blunts the trimmer, and
+`REACTOR_DESC_001` flags it. The sibling entry points are
+`RegisterDecorator<TElement>` for decorator elements, and
+`RegisterForDerivedTypes<TBase, TControl>` /
+`RegisterDecoratorForDerivedTypes<TBase>` to cover a whole element
+family through its base type.
 
 **Per-host.** Registers on one host's reconciler, from the `configure`
 callback that runs before the first render:
