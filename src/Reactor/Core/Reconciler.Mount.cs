@@ -227,14 +227,18 @@ public sealed partial class Reconciler
     /// <remarks>
     /// Spec 062 §10 — with lazy self-registration the norm, this is reframed around
     /// what actually causes it rather than around a registration call most apps never
-    /// make. A "mounted but unregistered" element is nearly unreachable for generated
-    /// wrappers (spec 058: constructing the element self-registers it); it survives for
-    /// a factory-carried control constructed by raw <c>new</c> that bypassed the factory
-    /// trigger, a wrapper assembly that is referenced but never touched, a third-party
-    /// override that was never registered, or a bespoke app-local element that was never
+    /// make. It survives for a factory-carried control constructed by raw <c>new</c>
+    /// that bypassed the factory trigger, a third-party control or handler override
+    /// that was never registered, or a bespoke app-local element that was never
     /// registered on the host's reconciler via
     /// <see cref="Reconciler.RegisterHandler{TElement,TControl}"/> /
-    /// <see cref="Reconciler.RegisterType{TElement,TControl}"/> (§8). See issue
+    /// <see cref="Reconciler.RegisterType{TElement,TControl}"/> (§8).
+    /// <para>A <c>[GenerateReactorWrapper]</c> element is deliberately NOT listed as a
+    /// cause: the generator emits a static constructor on the element type that calls
+    /// <c>ControlRegistry.Register</c> (spec 058), and constructing an instance runs it —
+    /// so by the time there is an instance to mount, registration has already happened.
+    /// Listing it would send a wrapper author chasing a cause that cannot produce this.</para>
+    /// See issue
     /// <see href="https://github.com/microsoft/microsoft-ui-reactor/issues/486"/>
     /// for the original trade-off discussion.
     /// </remarks>
@@ -242,39 +246,68 @@ public sealed partial class Reconciler
     private static UIElement? ThrowNoHandlerRegistered(Element element)
     {
         // Reflection-light and AOT-safe by construction: the message names only
-        // element.GetType(), never a member walk or an assembly scan.
+        // element.GetType() (plus its generic arguments), never a member walk or an
+        // assembly scan.
         var elementType = element.GetType();
-        var elementTypeName = elementType.FullName ?? elementType.Name;
+        var friendlyName = FriendlyTypeName(elementType);
+        // FullName is the precise identifier (and keeps `Outer+Inner` nesting), but for a
+        // closed generic it is an assembly-qualified monster —
+        // `Foo`1[[System.Int32, System.Private.CoreLib, Version=…]]` — so generics use the
+        // readable C# form instead. Non-generic output is unchanged.
+        var elementTypeName = elementType.IsGenericType
+            ? (string.IsNullOrEmpty(elementType.Namespace)
+                ? friendlyName
+                : elementType.Namespace + "." + friendlyName)
+            : (elementType.FullName ?? elementType.Name);
         throw new InvalidOperationException(
             $"No handler is registered for element type '{elementTypeName}', so the " +
             "reconciler does not know how to mount it.\n\n" +
             "Registration is lazy: an element becomes mountable as a side effect of " +
             "the code that introduces it. One of these is missing:\n\n" +
-            $"  (1) Create it through its factory. Built-in and Pattern-B controls " +
-            $"self-register on the factory call, so `new {elementType.Name}(...)` on " +
-            "its own never registers anything. Call the factory (e.g. " +
+            $"  (1) Create it through its factory. Built-in and factory-registered " +
+            $"controls self-register on the factory call, so `new {friendlyName}(...)` " +
+            "on its own never registers anything. Call the factory (e.g. " +
             "`Factories.TextBlock(\"\")`) at least once, then the direct-record idiom " +
             "is safe for the hot path.\n" +
-            "  (2) If it comes from a [GenerateReactorWrapper] library, make sure that " +
-            "assembly is actually referenced and reached — its generated element " +
-            "carries the self-registration, so an unreferenced or fully-trimmed " +
-            "wrapper never runs it.\n" +
-            "  (3) To register a third-party control or override a built-in handler " +
+            "  (2) To register a third-party control or override a built-in handler " +
             "globally at startup, use (in Microsoft.UI.Reactor.Core.V1Protocol) " +
-            $"`ControlRegistry.Register<{elementType.Name}, TControl>(static () => " +
+            $"`ControlRegistry.Register<{friendlyName}, TControl>(static () => " +
             "new YourHandler())` — or " +
-            $"`ControlRegistry.RegisterDecorator<{elementType.Name}>(static () => new " +
+            $"`ControlRegistry.RegisterDecorator<{friendlyName}>(static () => new " +
             "YourDecoratorHandler())` for a " +
             "decorator-backed element that wraps a child instead of owning a leaf " +
             "control.\n" +
-            "  (4) For a bespoke app-local control, register it on the host's " +
-            $"reconciler before first mount: `reconciler.RegisterHandler<{elementType.Name}, " +
+            "  (3) For a bespoke app-local control, register it on the host's " +
+            $"reconciler before first mount: `reconciler.RegisterHandler<{friendlyName}, " +
             "TControl>(new YourHandler())` (or `RegisterType`).\n" +
-            "  (5) As a blunt opt-in for the whole built-in catalog, call " +
+            "  (4) As a blunt opt-in for the whole built-in catalog, call " +
             "`Microsoft.UI.Reactor.ReactorApp.RegisterAllBuiltIns()` at startup — this " +
             "makes every built-in element record mountable regardless of how it was " +
             "constructed, at the cost of rooting the catalog for the trimmer.\n\n" +
             "Authoring guide: docs/guide/extending-reactor-controls.md");
+    }
+
+    /// <summary>
+    /// Formats a type for a copy-pasteable C# snippet: <c>DataGridElement`1</c> — the raw
+    /// metadata name — becomes <c>DataGridElement&lt;T&gt;</c>. Reflection-light (name +
+    /// generic arguments only), so it stays AOT- and trim-safe.
+    /// </summary>
+    private static string FriendlyTypeName(Type type)
+    {
+        if (!type.IsGenericType) return type.Name;
+
+        var name = type.Name;
+        var tick = name.IndexOf('`');
+        if (tick >= 0) name = name.Substring(0, tick);
+
+        var args = type.GetGenericArguments();
+        var sb = new global::System.Text.StringBuilder(name).Append('<');
+        for (int i = 0; i < args.Length; i++)
+        {
+            if (i > 0) sb.Append(", ");
+            sb.Append(FriendlyTypeName(args[i]));
+        }
+        return sb.Append('>').ToString();
     }
 
     // Spec 047 §14 Phase 3-final Batch B — widened to internal static so
