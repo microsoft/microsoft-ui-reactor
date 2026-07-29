@@ -289,25 +289,32 @@ public sealed partial class Reconciler
 
     /// <summary>
     /// Formats a type for a copy-pasteable C# snippet: <c>DataGridElement`1</c> — the raw
-    /// metadata name — becomes <c>DataGridElement&lt;T&gt;</c>. Reflection-light (name +
-    /// generic arguments only), so it stays AOT- and trim-safe.
+    /// metadata name — becomes <c>DataGridElement&lt;T&gt;</c>, and a nested type keeps its
+    /// declaring chain in C# form (<c>Outer.Inner&lt;T&gt;</c>) so the name stays
+    /// unambiguous. Reflection-light (name, generic arguments, declaring type), so it stays
+    /// AOT- and trim-safe.
     /// </summary>
     private static string FriendlyTypeName(Type type)
     {
-        if (!type.IsGenericType) return type.Name;
-
         var name = type.Name;
         var tick = name.IndexOf('`');
         if (tick >= 0) name = name.Substring(0, tick);
 
-        var args = type.GetGenericArguments();
-        var sb = new global::System.Text.StringBuilder(name).Append('<');
-        for (int i = 0; i < args.Length; i++)
+        if (type.IsGenericType)
         {
-            if (i > 0) sb.Append(", ");
-            sb.Append(FriendlyTypeName(args[i]));
+            var args = type.GetGenericArguments();
+            var sb = new global::System.Text.StringBuilder(name).Append('<');
+            for (int i = 0; i < args.Length; i++)
+            {
+                if (i > 0) sb.Append(", ");
+                sb.Append(FriendlyTypeName(args[i]));
+            }
+            name = sb.Append('>').ToString();
         }
-        return sb.Append('>').ToString();
+
+        return type.IsNested && type.DeclaringType is { } declaring
+            ? FriendlyTypeName(declaring) + "." + name
+            : name;
     }
 
     // Spec 047 §14 Phase 3-final Batch B — widened to internal static so

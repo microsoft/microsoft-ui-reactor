@@ -76,6 +76,12 @@ public sealed class UnregisteredHandlerAndRegisterAllBuiltInsTests
         // render as C# (`Foo<Int32>`), never as the raw metadata name (``Foo`1``).
         Assert.Contains("UnregisteredGenericProbeElement<Int32>", ex.Message);
         Assert.DoesNotContain("UnregisteredGenericProbeElement`1", ex.Message);
+
+        // A nested type must keep its declaring chain, or the printed name is ambiguous
+        // (and the snippet still wouldn't compile).
+        Assert.Contains(
+            nameof(UnregisteredHandlerAndRegisterAllBuiltInsTests) + ".UnregisteredGenericProbeElement<Int32>",
+            ex.Message);
     }
 
     [Fact]
