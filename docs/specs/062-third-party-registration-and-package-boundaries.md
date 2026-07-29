@@ -617,15 +617,16 @@ trigger, or a third-party override that was never registered.
   `ControlRegistry.Register…`, or — for a bespoke app-local control — register it on the
   host's reconciler via `Reconciler.RegisterType`/`RegisterHandler` before first mount
   (§8)."* Reflection-light and AOT-safe: it names only `element.GetType()`.
-- **Add a direct-record construction guardrail.** Warn when a *factory-registered* element
-  record (a built-in / Pattern-B-style control, where the registration link lives on the
-  factory) is constructed directly (`new FooElement(...)`) rather than via its factory — the
-  most common cause of the throw above. It must **not** fire on generated wrappers (058),
+- **A direct-record construction guardrail — proposed, then dropped.** The original
+  proposal was to warn when a *factory-registered* element record (a built-in /
+  Pattern-B-style control, where the registration link lives on the factory) is
+  constructed directly (`new FooElement(...)`) rather than via its factory — the most
+  common cause of the throw above — while **not** firing on generated wrappers (058),
   whose element-rooted Pattern-A cctor makes direct construction self-registering and safe.
 
-  **Status: shipped as the reworded throw only (E1a). The analyzer (E1b) is NOT being
-  built — deferred on evidence.** A false-positive spike over the whole repo found the
-  rule is not implementable at warning severity:
+  **Status: not being built (E1b).** Only the reworded throw above shipped (E1a). A
+  false-positive spike over the whole repo found the analyzer is not implementable at
+  warning severity:
 
   - **It would contradict a documented supported idiom.** `advanced.md` teaches the direct
     record initializer as a deliberate allocation optimization ("use only when the
