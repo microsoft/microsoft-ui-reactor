@@ -400,8 +400,10 @@ construction triggers them:
    *override* for a built-in. Constructing a `ButtonElement` runs the
    *owner's* registration, never yours, and registration is
    **first-wins**: whoever gets there first keeps the entry and later
-   calls are silently dropped. So an override has to register at
-   startup, before that element is first mounted.
+   calls are silently dropped. Register at startup, before the first
+   render builds a tree containing that element — the built-in claims
+   the entry on the factory call that *constructs* it, so waiting until
+   just before the first mount is already too late.
 2. **Eager global initialization** — for example merging a XAML
    `ResourceDictionary` into `Application.Current.Resources`. That is
    ordinary WinUI startup work rather than control registration, and
