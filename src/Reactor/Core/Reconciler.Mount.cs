@@ -230,8 +230,11 @@ public sealed partial class Reconciler
     /// make. A "mounted but unregistered" element is nearly unreachable for generated
     /// wrappers (spec 058: constructing the element self-registers it); it survives for
     /// a factory-carried control constructed by raw <c>new</c> that bypassed the factory
-    /// trigger, a wrapper assembly that is referenced but never touched, or a
-    /// third-party override that was never registered. See issue
+    /// trigger, a wrapper assembly that is referenced but never touched, a third-party
+    /// override that was never registered, or a bespoke app-local element that was never
+    /// registered on the host's reconciler via
+    /// <see cref="Reconciler.RegisterHandler{TElement,TControl}"/> /
+    /// <see cref="Reconciler.RegisterType{TElement,TControl}"/> (§8). See issue
     /// <see href="https://github.com/microsoft/microsoft-ui-reactor/issues/486"/>
     /// for the original trade-off discussion.
     /// </remarks>
@@ -260,7 +263,8 @@ public sealed partial class Reconciler
             "globally at startup, use " +
             $"`Microsoft.UI.Reactor.Core.V1Protocol.ControlRegistry.Register" +
             $"<{elementType.Name}, TControl>(static () => new YourHandler())` — or " +
-            $"`ControlRegistry.RegisterDecorator<{elementType.Name}>(...)` for a " +
+            $"`ControlRegistry.RegisterDecorator<{elementType.Name}>(static () => new " +
+            "YourDecoratorHandler())` for a " +
             "decorator-backed element that wraps a child instead of owning a leaf " +
             "control.\n" +
             "  (4) For a bespoke app-local control, register it on the host's " +
