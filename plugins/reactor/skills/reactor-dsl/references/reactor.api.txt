@@ -884,7 +884,7 @@ RenderContext.UseDataSource<T>(IDataSource<T> source, DataRequest request, Infin
 RenderContext.UseDataSource<T>(IDataSource<T> source, DataRequest request, QueryCache cache, InfiniteResourceOptions options = null, IHookDispatcher dispatcher = null) → InfiniteResource<T>
 RenderContext.UseDevtools() → bool
 RenderContext.UseDisplays() → IReadOnlyList<DisplayInfo>
-RenderContext.UseDpi() → UInt32
+RenderContext.UseDpi() → uint
 RenderContext.UseEffect(Action effect, object[] dependencies) → void
 RenderContext.UseEffect(Func<Action> effectWithCleanup, object[] dependencies) → void
 RenderContext.UseEffect<T1, T2, T3>(Action effect, T1 d1, T2 d2, T3 d3) → void
@@ -1934,9 +1934,9 @@ ToString() → string
 ### record DisplayInfo
 Rect BoundsDip { get; init; }
 Rect WorkAreaDip { get; init; }
-UInt32 Dpi { get; init; }
 bool IsPrimary { get; init; }
 string Id { get; init; }
+uint Dpi { get; init; }
 Equals(DisplayInfo other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
@@ -2105,7 +2105,7 @@ Combo<TValue>(IReadOnlyList<TValue> choices) → Func<object, Action<object>, El
 Date() → Func<object, Action<object>, Element>
 DateOffset() → Func<object, Action<object>, Element>
 DateOnly() → Func<object, Action<object>, Element>
-Decimal(Decimal? min = null, Decimal? max = null) → Func<object, Action<object>, Element>
+Decimal(decimal? min = null, decimal? max = null) → Func<object, Action<object>, Element>
 Double(double? min = null, double? max = null) → Func<object, Action<object>, Element>
 EnumCombo(Type enumType) → Func<object, Action<object>, Element>
 Float(float? min = null, float? max = null) → Func<object, Action<object>, Element>
@@ -2824,8 +2824,8 @@ GetString(string locale, string ns, string key) → string
 Validate(object value, string field) → ValidationMessage
 
 ### interface IWindowPersistenceStore
-TryRead(string id, ref Byte[] data) → bool
-Write(string id, Byte[] data) → void
+TryRead(string id, ref byte[] data) → bool
+Write(string id, byte[] data) → void
 
 ### record IconData
 Equals(IconData other) → bool
@@ -3109,8 +3109,8 @@ new()
 new(string path)
 string Path { get; }
 DefaultPath() → string
-TryRead(string id, ref Byte[] data) → bool
-Write(string id, Byte[] data) → void
+TryRead(string id, ref byte[] data) → bool
+Write(string id, byte[] data) → void
 
 ### static class JumpList
 bool ShowFrequent { get; set; }
@@ -3479,26 +3479,26 @@ ToString() → string
 new(string mask)
 int Length { get; }
 string Mask { get; }
-Apply(string input, Char placeholder = _) → string
-GetRawValue(string formatted, Char placeholder = _) → string
-IsComplete(string formatted, Char placeholder = _) → bool
+Apply(string input, char placeholder = '_') → string
+GetRawValue(string formatted, char placeholder = '_') → string
+IsComplete(string formatted, char placeholder = '_') → bool
 IsLiteral(int position) → bool
 NextInputPosition(int position) → int
 PreviousInputPosition(int position) → int
 
 ### static class MaskedTextBoxDsl
-MaskedTextBox(string value, Action<string> onChanged = null, string mask = null, string header = null, Char placeholder = _) → MaskedTextBoxElement
+MaskedTextBox(string value, Action<string> onChanged = null, string mask = null, string header = null, char placeholder = '_') → MaskedTextBoxElement
 
 ### record MaskedTextBoxElement
-new(string Value, Action<string> OnChanged = null, string Mask = null, string Header = null, Char Placeholder = _)
+new(string Value, Action<string> OnChanged = null, string Mask = null, string Header = null, char Placeholder = '_')
 Action<string> OnChanged { get; init; }
-Char Placeholder { get; init; }
 bool IsComplete { get; }
+char Placeholder { get; init; }
 string Header { get; init; }
 string Mask { get; init; }
 string RawValue { get; }
 string Value { get; init; }
-Deconstruct(ref string Value, ref Action<string> OnChanged, ref string Mask, ref string Header, ref Char Placeholder) → void
+Deconstruct(ref string Value, ref Action<string> OnChanged, ref string Mask, ref string Header, ref char Placeholder) → void
 Equals(Element other) → bool
 Equals(MaskedTextBoxElement other) → bool
 Equals(object obj) → bool
@@ -3932,8 +3932,8 @@ ToString() → string
 ### class PackagedSettingsStore
 new()
 IsAvailable() → bool
-TryRead(string id, ref Byte[] data) → bool
-Write(string id, Byte[] data) → void
+TryRead(string id, ref byte[] data) → bool
+Write(string id, byte[] data) → void
 
 ### record Page<TItem, TCursor>
 new(IReadOnlyList<TItem> Items, TCursor NextCursor, int? TotalCount = null)
@@ -4532,7 +4532,6 @@ ReactorHost Host { get; }
 TaskbarItem TaskbarItem { get; }
 TaskbarOverlay Overlay { get; }
 TaskbarProgress Progress { get; }
-UInt32 Dpi { get; }
 ValueTuple<double, double> Position { get; }
 Window NativeWindow { get; }
 WindowKey? Key { get; }
@@ -4543,6 +4542,7 @@ bool IsActive { get; }
 bool IsVisible { get; }
 double DipScale { get; }
 string Id { get; }
+uint Dpi { get; }
 Activate() → void
 BeginDragMove() → void
 CenterOnScreen() → void
@@ -4565,12 +4565,12 @@ Update(WindowSpec next) → void
 event EventHandler Activated
 event EventHandler Closed
 event EventHandler Deactivated
-event EventHandler<UInt32> DpiChanged
 event EventHandler<WindowClosingEventArgs> Closing
 event EventHandler<WindowDipPositionChangedEventArgs> PositionChanged
 event EventHandler<WindowDipSizeChangedEventArgs> SizeChanged
 event EventHandler<WindowState> StateChanged
 event EventHandler<WindowZOrderChangedEventArgs> ZOrderChanged
+event EventHandler<uint> DpiChanged
 
 ### class Reconciler
 new(ILogger logger = null)
@@ -4686,7 +4686,7 @@ UseCommand(Command command) → Command
 UseCommand<T>(Command<T> command) → Command<T>
 UseContext<T>(Context<T> context) → T
 UseDisplays() → IReadOnlyList<DisplayInfo>
-UseDpi() → UInt32
+UseDpi() → uint
 UseEffect(Action effect, object[] dependencies) → void
 UseEffect(Func<Action> effectWithCleanup, object[] dependencies) → void
 UseEffect<T1, T2, T3>(Action effect, T1 d1, T2 d2, T3 d3) → void

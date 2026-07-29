@@ -493,9 +493,23 @@ public static class ApiIndexGenerator
         if (v is null) return "null";
         if (v is bool b) return b ? "true" : "false";
         if (v is string s) return "\"" + s + "\"";
+        // A char default has to carry its quotes and escapes, or the signature is not
+        // pasteable C# (`placeholder = _` instead of `placeholder = '_'`).
+        if (v is char c) return "'" + EscapeChar(c) + "'";
         if (t.IsEnum) return t.Name + "." + v;
         return v.ToString() ?? "?";
     }
+
+    static string EscapeChar(char c) => c switch
+    {
+        '\'' => "\\'",
+        '\\' => "\\\\",
+        '\0' => "\\0",
+        '\n' => "\\n",
+        '\r' => "\\r",
+        '\t' => "\\t",
+        _ => c.ToString(),
+    };
 
     // Compact type display: drop System.* / WinUI namespaces, keep generics.
     static string Short(Type t)
@@ -520,10 +534,18 @@ public static class ApiIndexGenerator
             "Void" => "void",
             "Boolean" => "bool",
             "String" => "string",
+            "Char" => "char",
+            "Byte" => "byte",
+            "SByte" => "sbyte",
+            "Int16" => "short",
+            "UInt16" => "ushort",
             "Int32" => "int",
+            "UInt32" => "uint",
             "Int64" => "long",
+            "UInt64" => "ulong",
             "Double" => "double",
             "Single" => "float",
+            "Decimal" => "decimal",
             "Object" => "object",
             _ => t.Name,
         };

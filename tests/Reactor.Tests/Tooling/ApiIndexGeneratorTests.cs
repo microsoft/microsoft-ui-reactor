@@ -161,6 +161,18 @@ public sealed class ApiIndexGeneratorTests
     }
 
     [Fact]
+    public void Signatures_Render_Char_Defaults_As_Pasteable_CSharp()
+    {
+        // The index exists to be copy-pasted, so a char parameter has to render as the
+        // C# keyword with a quoted default — `char placeholder = '_'`, never the raw
+        // metadata form `Char placeholder = _`, which does not compile.
+        var output = Generate();
+
+        Assert.Contains("char placeholder = '_'", output);
+        Assert.DoesNotContain("Char placeholder = _", output);
+    }
+
+    [Fact]
     public void Index_IsUpToDate()
     {
         var generated = Generate();
