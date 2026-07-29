@@ -623,6 +623,37 @@ trigger, or a third-party override that was never registered.
   most common cause of the throw above. It must **not** fire on generated wrappers (058),
   whose element-rooted Pattern-A cctor makes direct construction self-registering and safe.
 
+  **Status: shipped as the reworded throw only (E1a). The analyzer (E1b) is NOT being
+  built — deferred on evidence.** A false-positive spike over the whole repo found the
+  rule is not implementable at warning severity:
+
+  - **It would contradict a documented supported idiom.** `advanced.md` teaches the direct
+    record initializer as a deliberate allocation optimization ("use only when the
+    allocation cost shows up in profiles") and then lists the three ways to guarantee
+    registration. A warning would flag documented-correct code, and would break any
+    consumer building with `TreatWarningsAsErrors`.
+  - **The property is whole-program, ordered and cross-assembly.** Registration is
+    process-global and first-wins, so `new TextBlockElement(...)` is only wrong when *no*
+    `TextBlockElement` factory runs anywhere first. A per-compilation analyzer cannot
+    decide that. Collecting sites and gating on "this compilation also calls
+    `RegisterAllBuiltIns()`" is not a proof either — the call may be unreachable, may run
+    after the first mount, or (as in this repo's own tests) may only be safe because it is
+    a `[ModuleInitializer]`.
+  - **No discriminator survives contact.** `StaticConstructors.IsEmpty` distinguishes the
+    element-rooted cctor today only by accident: any ordinary static field initializer on
+    an element record also emits a `.cctor`, silently disabling the rule. The honest
+    discriminator would be explicit metadata naming the canonical factory, which does not
+    exist yet.
+  - **Zero demonstrated true positives.** Of ~1,450 direct-construction sites in the repo,
+    every one is either the framework's own test suite (safe — the tests register the full
+    catalog from a `[ModuleInitializer]`), an app-local bespoke element (the supported §8
+    shape), or text inside a documentation string literal. Real app code has none.
+
+  The reworded runtime throw already names this cause first and prints the pasteable
+  remediation, which is the proportionate fix. Revisit only if explicit
+  registration-intent metadata lands, and then as an **Info**-severity suggestion with a
+  code fix — never a warning.
+
 ## §11 Trimming and AOT
 
 Both tracks preserve spec 048's reachability model (R5):
@@ -660,12 +691,15 @@ Both tracks preserve spec 048's reachability model (R5):
 - **Track A — stabilize the ABI in place.** A1: enumerate and lock the §6.1 seam behind the
   API-compat gate (Q1/Q2). A2: build the binary-compat interop harness. A3: settle and
   document the loader/version policy (Q3).
-- **Track B — consolidate into Advanced.** B1: charting + docking → `Reactor.Advanced`.
+- **Track B — consolidate into Advanced. Done.** B1: charting + docking → `Reactor.Advanced`.
   B2: markdown (with the §7 factory note, Q4). B3: data grid (§7 factory note, Q4).
-- **Registration clean-ups — independent, small.** E1: reword the R3 runtime throw and
-  add the direct-record guardrail (§10). E2: document the §8 explicit-registration escape
-  hatch (overrides / eager init) against the existing `ControlRegistry.Register*`. No
-  `IReactorLibrary`, marker, or discovery pass ships.
+- **Registration clean-ups — independent, small. Done.** E1a: the R3 runtime throw is
+  reworded around what actually causes it (§10). E1b — the direct-record guardrail
+  analyzer — is **deferred on evidence**; see §10 for the false-positive spike and why it
+  cannot ship at warning severity. E2: the §8 explicit-registration escape hatch
+  (overrides / eager init, and the global-vs-per-host choice) is documented in the
+  *Extending Reactor with Native Controls* guide. No `IReactorLibrary`, marker, or
+  discovery pass ships.
 
 Tracks A and B share no dependency and can land in either order; the registration
 clean-ups can interleave with either.
