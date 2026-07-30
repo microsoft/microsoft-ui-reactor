@@ -193,8 +193,11 @@ public sealed class ApiIndexGeneratorTests
 
     // Reads the declaring source so the test fails loudly if these extensions are ever
     // renamed or moved, rather than silently passing against a stale expectation.
+    // Path.Join rather than Path.Combine: Combine discards everything before a segment
+    // that looks rooted, which is a silent-wrong-path hazard even when the segments are
+    // constants (CodeQL flags it).
     static string SourceOfRichTextExtensions() =>
-        File.ReadAllText(Path.Combine(RepoRoot(), "src", "Reactor", "Elements", "ElementExtensions.cs"));
+        File.ReadAllText(Path.Join(RepoRoot(), "src", "Reactor", "Elements", "ElementExtensions.cs"));
 
     // Lines strictly between `start` and the next `## ` heading (or `end` when given).
     static IEnumerable<string> SectionLines(string output, string start, string? end)
