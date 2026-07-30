@@ -130,14 +130,19 @@ public sealed class ApiIndexGeneratorTests
         var split = output.IndexOf("## Public types", StringComparison.Ordinal);
         Assert.True(split > 0, "## Public types not found");
 
-        var beforePublicTypes = output[..split];
-        var publicTypes = output[split..];
+        // The tokens must still be in their own section.
+        Assert.Contains("Theme.SolidBackground", output[..split]);
 
-        Assert.Contains("Theme.SolidBackground", beforePublicTypes);
-        Assert.DoesNotContain("SolidBackground", publicTypes);
+        // Scoped to the Theme block rather than all of ## Public types: a bare
+        // DoesNotContain("SolidBackground") over the whole section would break the day
+        // any unrelated public member happens to contain that substring.
+        var themeBlock = TypeBlock(output, "Theme");
+        Assert.DoesNotMatch(
+            new global::System.Text.RegularExpressions.Regex(@"ThemeRef \w+ \{ get;"),
+            themeBlock);
 
         // The non-token member of Theme is still surfaced, so the type isn't just skipped.
-        Assert.Contains("Ref(string resourceKey) → ThemeRef", TypeBlock(output, "Theme"));
+        Assert.Contains("Ref(string resourceKey) → ThemeRef", themeBlock);
     }
 
     [Fact]
