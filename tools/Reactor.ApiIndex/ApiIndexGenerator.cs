@@ -16,6 +16,7 @@
 // (which treats trimming/AOT warnings as errors).
 
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Reflection;
 using System.Text;
 
@@ -55,8 +56,9 @@ public static class ApiIndexGenerator
         sb.AppendLine("# including public *static* classes — so process-wide entry points such as");
         sb.AppendLine("# ControlRegistry.Register and ReactorApp.Run are listed there, alongside");
         sb.AppendLine("# instance members like WindowSpec.Opacity and ReactorWindow.SetPosition.");
-        sb.AppendLine("# Extension methods are listed under Modifiers/Hooks in the fluent form you");
-        sb.AppendLine("# call them, not again under their declaring static class.");
+        sb.AppendLine("# Extension methods with an Element receiver are listed under Modifiers, and");
+        sb.AppendLine("# RenderContext/Component ones under Hooks, in the fluent form you call them;");
+        sb.AppendLine("# any other extension is listed under its declaring class.");
         sb.AppendLine();
 
         EmitFactories(asm, sb);
@@ -190,12 +192,12 @@ public static class ApiIndexGenerator
         sb.AppendLine("# Each token resolves to the WinUI resource key shown in the comment.");
         sb.AppendLine();
 
-        var theme = asm.GetType("Microsoft.UI.Reactor.Core.Theme");
+        var theme = asm.GetType(ThemeTypeFullName);
         if (theme is null) { sb.AppendLine(); return; }
 
         var properties = theme
             .GetProperties(BindingFlags.Public | BindingFlags.Static)
-            .Where(p => p.PropertyType.Name == "ThemeRef")
+            .Where(IsThemeRefProperty)
             .Where(p => !IsObsolete(p))
             .OrderBy(p => p.Name, StringComparer.Ordinal);
 
@@ -325,12 +327,15 @@ public static class ApiIndexGenerator
 
             // Public DeclaredOnly methods — instance AND static (symmetric with the
             // property query). `IsSpecialName` filters operator overloads / accessors.
-            // Extension methods are skipped: they can only live on a static class, and
-            // the `## Modifiers` / `## Hooks` sections already emit them in the form an
-            // author actually calls (`.Margin(...)` rather than `Margin(Element, ...)`).
+            // Extension methods are skipped ONLY when an earlier section already owns
+            // them: `## Modifiers` emits the Element-receiver ones and `## Hooks` the
+            // RenderContext/Component ones, both in the fluent form an author actually
+            // calls. An extension owned by neither (e.g. the RichTextParagraph /
+            // RichTextRun / RichTextHyperlink builders, whose receiver is not an Element)
+            // must still be listed here, or it appears nowhere in the index at all.
             var methods = t.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly)
                 .Where(m => !m.IsSpecialName)
-                .Where(m => !IsExtensionMethod(m))
+                .Where(m => !IsOwnedByEarlierSection(m))
                 .Where(m => !m.Name.Contains('<') && !m.Name.Contains('>'))
                 .Where(m => !IsObsolete(m))
                 .Select(FormatMethod);
@@ -360,10 +365,24 @@ public static class ApiIndexGenerator
     // resolved resource key. Re-emitting them as ordinary static properties here would
     // duplicate that whole block with strictly less information.
     static bool IsThemeToken(Type t, PropertyInfo p) =>
-        t.FullName == "Microsoft.UI.Reactor.Core.Theme" && p.PropertyType.Name == "ThemeRef";
+        IsThemeType(t) && IsThemeRefProperty(p);
+
+    // Shared by EmitTheme and the Public-types skip above so the two cannot disagree
+    // about what a theme token is.
+    const string ThemeTypeFullName = "Microsoft.UI.Reactor.Core.Theme";
+
+    static bool IsThemeType(Type t) => t.FullName == ThemeTypeFullName;
+
+    static bool IsThemeRefProperty(PropertyInfo p) => p.PropertyType.Name == "ThemeRef";
 
     static bool IsExtensionMethod(MethodInfo m) =>
         m.IsDefined(typeof(global::System.Runtime.CompilerServices.ExtensionAttribute), false);
+
+    // True only for extension methods a specialized section already emits: `## Modifiers`
+    // (Element receivers) and `## Hooks` (RenderContext / Component receivers). Any other
+    // extension is owned by nobody, so `## Public types` must keep it.
+    static bool IsOwnedByEarlierSection(MethodInfo m) =>
+        IsExtensionMethod(m) && (IsElementExtension(m) || IsHookExtension(m));
 
     [RequiresUnreferencedCode(ReflectionJustification)]
     static string KindOf(Type t)
@@ -490,24 +509,56 @@ public static class ApiIndexGenerator
 
     static string FormatDefault(object? v, Type t)
     {
-        if (v is null) return "null";
+        // Reflection reports `= default` on a non-nullable value type or a generic
+        // parameter as a *null* constant. Emitting `null` there is not merely imprecise,
+        // it does not compile — `CancellationToken ct = null` is a type error.
+        if (v is null)
+        {
+            return t.IsGenericParameter || (t.IsValueType && Nullable.GetUnderlyingType(t) is null)
+                ? "default"
+                : "null";
+        }
+
         if (v is bool b) return b ? "true" : "false";
         if (v is string s) return "\"" + s + "\"";
         // A char default has to carry its quotes and escapes, or the signature is not
         // pasteable C# (`placeholder = _` instead of `placeholder = '_'`).
         if (v is char c) return "'" + EscapeChar(c) + "'";
         if (t.IsEnum) return t.Name + "." + v;
-        return v.ToString() ?? "?";
+        return FormatNumeric(v);
     }
+
+    // Numeric literals must be culture-invariant and carry the suffix their type needs.
+    // Without the invariant culture a comma-decimal machine regenerates `0.6` as `0,6`,
+    // which silently corrupts a file that is committed twice and byte-compared by CI;
+    // without the suffix `float x = 0.6` is not valid C#.
+    static string FormatNumeric(object v) => v switch
+    {
+        float f => f.ToString("R", CultureInfo.InvariantCulture) + "f",
+        double d => d.ToString("R", CultureInfo.InvariantCulture),
+        decimal m => m.ToString(CultureInfo.InvariantCulture) + "m",
+        uint u => u.ToString(CultureInfo.InvariantCulture) + "u",
+        long l => l.ToString(CultureInfo.InvariantCulture) + "L",
+        ulong ul => ul.ToString(CultureInfo.InvariantCulture) + "UL",
+        IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture),
+        _ => v.ToString() ?? "?",
+    };
 
     static string EscapeChar(char c) => c switch
     {
         '\'' => "\\'",
         '\\' => "\\\\",
         '\0' => "\\0",
+        '\a' => "\\a",
+        '\b' => "\\b",
+        '\f' => "\\f",
         '\n' => "\\n",
         '\r' => "\\r",
         '\t' => "\\t",
+        '\v' => "\\v",
+        // Anything else non-printable (control chars, lone surrogates) has no literal
+        // spelling, so escape it numerically rather than emitting a raw byte.
+        _ when char.IsControl(c) || char.IsSurrogate(c) => "\\u" + ((int)c).ToString("x4", CultureInfo.InvariantCulture),
         _ => c.ToString(),
     };
 

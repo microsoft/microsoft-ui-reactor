@@ -8,8 +8,9 @@
 # including public *static* classes — so process-wide entry points such as
 # ControlRegistry.Register and ReactorApp.Run are listed there, alongside
 # instance members like WindowSpec.Opacity and ReactorWindow.SetPosition.
-# Extension methods are listed under Modifiers/Hooks in the fluent form you
-# call them, not again under their declaring static class.
+# Extension methods with an Element receiver are listed under Modifiers, and
+# RenderContext/Component ones under Hooks, in the fluent form you call them;
+# any other extension is listed under its declaring class.
 
 ## Factories
 # All in `Microsoft.UI.Reactor.Factories` — `using static Microsoft.UI.Reactor.Factories;`
@@ -23,7 +24,7 @@ AppBarButton(Command command) → AppBarButtonData
 AppBarButton(string label, Action onClick = null, string icon = null) → AppBarButtonData
 AppBarSeparator() → AppBarSeparatorData
 AppBarToggleButton(string label, bool isChecked = false, Action<bool> onIsCheckedChanged = null, string icon = null) → AppBarToggleButtonData
-AutoSuggestBox(Optional<string> text = null, Action<string> onTextChanged = null, Action<string> onQuerySubmitted = null) → AutoSuggestBoxElement
+AutoSuggestBox(Optional<string> text = default, Action<string> onTextChanged = null, Action<string> onQuerySubmitted = null) → AutoSuggestBoxElement
 BitmapIcon(Uri source, bool showAsMonochrome = true) → BitmapIconData
 Body(string content) → TextBlockElement
 BodyLarge(string content) → TextBlockElement
@@ -34,15 +35,15 @@ BreadcrumbBar(BreadcrumbBarItemData[] items, Action<BreadcrumbBarItemData> onIte
 Button(Command command) → ButtonElement
 Button(Element content, Action onClick = null) → ButtonElement
 Button(string label, Action onClick = null) → ButtonElement
-CalendarDatePicker(Optional<DateTimeOffset?> date = null, Action<DateTimeOffset?> onDateChanged = null) → CalendarDatePickerElement
+CalendarDatePicker(Optional<DateTimeOffset?> date = default, Action<DateTimeOffset?> onDateChanged = null) → CalendarDatePickerElement
 CalendarView() → CalendarViewElement
 Canvas(Element[] children) → CanvasElement
 Caption(string content) → TextBlockElement
 Card(Element child) → BorderElement
-CheckBox(Optional<bool?> isChecked = null, Action<bool> onIsCheckedChanged = null, string label = null) → CheckBoxElement
-ColorPicker(Optional<Color> color = null, Action<Color> onColorChanged = null) → ColorPickerElement
+CheckBox(Optional<bool?> isChecked = default, Action<bool> onIsCheckedChanged = null, string label = null) → CheckBoxElement
+ColorPicker(Optional<Color> color = default, Action<Color> onColorChanged = null) → ColorPickerElement
 ComboBox(Element[] itemElements, Optional<int> selectedIndex, Action<int> onSelectedIndexChanged) → ComboBoxElement
-ComboBox(string[] items, Optional<int> selectedIndex = null, Action<int> onSelectedIndexChanged = null) → ComboBoxElement
+ComboBox(string[] items, Optional<int> selectedIndex = default, Action<int> onSelectedIndexChanged = null) → ComboBoxElement
 CommandBar(AppBarItemBase[] primaryCommands = null, AppBarItemBase[] secondaryCommands = null) → CommandBarElement
 CommandBarFlyout(Element target, AppBarItemBase[] primaryCommands = null, AppBarItemBase[] secondaryCommands = null) → CommandBarFlyoutElement
 CommandHost(Command[] commands, Element child) → CommandHostElement
@@ -50,14 +51,14 @@ Component<T, TProps>(TProps props) → ComponentElement<TProps>
 Component<T>() → ComponentElement
 ContentDialog(string title, Element content, string primaryButtonText = "OK") → ContentDialogElement
 ContentFlyout(Element content, FlyoutPlacementMode placement = FlyoutPlacementMode.Auto) → ContentFlyoutElement
-DatePicker(Optional<DateTimeOffset> date = null, Action<DateTimeOffset> onDateChanged = null) → DatePickerElement
+DatePicker(Optional<DateTimeOffset> date = default, Action<DateTimeOffset> onDateChanged = null) → DatePickerElement
 DevtoolsMenu(Func<IEnumerable<MenuFlyoutItemBase>> items = null, string glyph = "⚡", string toolTip = "Devtools", string automationId = null) → Element
 DropDownButton(string label, Element flyout = null) → DropDownButtonElement
 Ellipse() → EllipseElement
 Empty() → Element
 ErrorBoundary(Element child, Element fallback) → ErrorBoundaryElement
 ErrorBoundary(Element child, Func<Exception, Element> fallback) → ErrorBoundaryElement
-Expander(string header, Element content, Optional<bool> isExpanded = null, Action<bool> onIsExpandedChanged = null) → ExpanderElement
+Expander(string header, Element content, Optional<bool> isExpanded = default, Action<bool> onIsExpandedChanged = null) → ExpanderElement
 Expr(Func<Element> render) → Element
 Flex(Element[] children) → FlexElement
 Flex(FlexDirection direction, Element[] children) → FlexElement
@@ -108,7 +109,7 @@ LazyHStack<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, 
 LazyVStack<T>(IReadOnlyList<T> items, Func<T, int, Element> viewBuilder) → LazyVStackElement<T>
 LazyVStack<T>(IReadOnlyList<T> items, Func<T, string> keySelector, Func<T, int, Element> viewBuilder) → LazyVStackElement<T>
 Line(double x1, double y1, double x2, double y2) → LineElement
-ListBox(string[] items, Optional<int> selectedIndex = null, Action<int> onSelectedIndexChanged = null) → ListBoxElement
+ListBox(string[] items, Optional<int> selectedIndex = default, Action<int> onSelectedIndexChanged = null) → ListBoxElement
 ListView(Element[] items) → ListViewElement
 ListView(Optional<int> selectedIndex, Action<int> onSelectedIndexChanged = null, Element[] items) → ListViewElement
 ListView(int? selectedIndex, Action<int> onSelectedIndexChanged = null, Element[] items) → ListViewElement
@@ -133,14 +134,14 @@ NavItem(string content, string icon = null, string tag = null) → NavigationVie
 NavItemHeader(string content) → NavigationViewItemData
 NavigationHost<TRoute>(NavigationHandle<TRoute> nav, Func<TRoute, Element> routeMap) → NavigationHostElement
 NavigationView(NavigationViewItemData[] menuItems, Element content = null) → NavigationViewElement
-NumberBox(Optional<double> value = null, Action<double> onValueChanged = null, string header = null) → NumberBoxElement
+NumberBox(Optional<double> value = default, Action<double> onValueChanged = null, string header = null) → NumberBoxElement
 Paragraph(RichTextInline[] inlines) → RichTextParagraph
 ParallaxView(Element child, double verticalShift = 0, double horizontalShift = 0) → ParallaxViewElement
-PasswordBox(Optional<string> password = null, Action<string> onPasswordChanged = null, string placeholderText = null) → PasswordBoxElement
+PasswordBox(Optional<string> password = default, Action<string> onPasswordChanged = null, string placeholderText = null) → PasswordBoxElement
 Path2D() → PathElement
 PathIcon(string data) → PathIconData
 PersonPicture() → PersonPictureElement
-PipsPager(int numberOfPages, Optional<int> selectedPageIndex = null, Action<int> onSelectedPageIndexChanged = null) → PipsPagerElement
+PipsPager(int numberOfPages, Optional<int> selectedPageIndex = default, Action<int> onSelectedPageIndexChanged = null) → PipsPagerElement
 Pivot(Optional<int> selectedIndex, Action<int> onSelectedIndexChanged = null, PivotItemData[] items) → PivotElement
 Pivot(PivotItemData[] items) → PivotElement
 Pivot(int? selectedIndex, Action<int> onSelectedIndexChanged = null, PivotItemData[] items) → PivotElement
@@ -151,26 +152,26 @@ ProgressIndeterminate() → ProgressElement
 ProgressRing() → ProgressRingElement
 ProgressRing(double value) → ProgressRingElement
 PropertyGrid(object target, TypeRegistry registry, Action<object> onRootChanged = null) → ComponentElement<PropertyGridElement>
-RadioButton(string label, Optional<bool> isChecked = null, Action<bool> onIsCheckedChanged = null, string groupName = null) → RadioButtonElement
-RadioButtons(string[] items, Optional<int> selectedIndex = null, Action<int> onSelectedIndexChanged = null) → RadioButtonsElement
+RadioButton(string label, Optional<bool> isChecked = default, Action<bool> onIsCheckedChanged = null, string groupName = null) → RadioButtonElement
+RadioButtons(string[] items, Optional<int> selectedIndex = default, Action<int> onSelectedIndexChanged = null) → RadioButtonsElement
 RadioMenuItem(string text, string groupName, bool isChecked = false, Action onClick = null, string icon = null) → RadioMenuFlyoutItemData
-RatingControl(Optional<double> value = null, Action<double> onValueChanged = null) → RatingControlElement
+RatingControl(Optional<double> value = default, Action<double> onValueChanged = null) → RatingControlElement
 Rectangle() → RectangleElement
 RefreshContainer(Element content, Action onRefreshRequested = null) → RefreshContainerElement
 RelativePanel(Element[] children) → RelativePanelElement
 RenderEachTime(Func<RenderContext, Element> render) → FuncElement
 RepeatButton(Command command) → RepeatButtonElement
 RepeatButton(string label, Action onClick = null) → RepeatButtonElement
-RichEditBox(Optional<string> text = null, Action<string> onTextChanged = null) → RichEditBoxElement
+RichEditBox(Optional<string> text = default, Action<string> onTextChanged = null) → RichEditBoxElement
 RichTextBlock(RichTextParagraph[] paragraphs) → RichTextBlockElement
 RichTextBlock(string text) → RichTextBlockElement
 Run(string text) → RichTextRun
 ScrollView(Element child) → ScrollViewElement
 ScrollViewer(Element child) → ScrollViewerElement
-SelectorBar(SelectorBarItemData[] items, Optional<int> selectedIndex = null, Action<int> onSelectedIndexChanged = null) → SelectorBarElement
+SelectorBar(SelectorBarItemData[] items, Optional<int> selectedIndex = default, Action<int> onSelectedIndexChanged = null) → SelectorBarElement
 SelectorBarItem(string text, string icon = null) → SelectorBarItemData
 SemanticZoom(Element zoomedInView, Element zoomedOutView) → SemanticZoomElement
-Slider(Optional<double> value = null, double min = 0, double max = 100, Action<double> onValueChanged = null) → SliderElement
+Slider(Optional<double> value = default, double min = 0, double max = 100, Action<double> onValueChanged = null) → SliderElement
 SplitButton(Command command, Element flyout = null) → SplitButtonElement
 SplitButton(string label, Action onClick = null, Element flyout = null) → SplitButtonElement
 SplitView(Element pane = null, Element content = null) → SplitViewElement
@@ -184,21 +185,21 @@ TabView(TabViewItemData[] tabs) → TabViewElement
 TabView(int? selectedIndex, Action<int> onSelectedIndexChanged = null, TabViewItemData[] tabs) → TabViewElement
 TeachingTip(string title, string subtitle = null, ElementRef target = null) → TeachingTipElement
 TextBlock(string content) → TextBlockElement
-TextBox(Optional<string> value = null, Action<string> onChanged = null, string placeholderText = null, string header = null) → TextBoxElement
+TextBox(Optional<string> value = default, Action<string> onChanged = null, string placeholderText = null, string header = null) → TextBoxElement
 Thick(double horizontal, double vertical) → Thickness
 Thick(double left, double top, double right, double bottom) → Thickness
 Thick(double uniform) → Thickness
-ThreeStateCheckBox(Optional<bool?> checkedState = null, Action<bool?> onCheckedStateChanged = null, string label = null) → CheckBoxElement
+ThreeStateCheckBox(Optional<bool?> checkedState = default, Action<bool?> onCheckedStateChanged = null, string label = null) → CheckBoxElement
 ThreeStateToggleButton(string label, bool? checkedState = null, Action<bool?> onCheckedStateChanged = null) → ToggleButtonElement
-TimePicker(Optional<TimeSpan> time = null, Action<TimeSpan> onTimeChanged = null) → TimePickerElement
+TimePicker(Optional<TimeSpan> time = default, Action<TimeSpan> onTimeChanged = null) → TimePickerElement
 Title(string content) → TextBlockElement
 TitleBar(string title) → TitleBarElement
 ToggleButton(Command command, bool isChecked = false) → ToggleButtonElement
 ToggleButton(string label, bool isChecked = false, Action<bool> onIsCheckedChanged = null) → ToggleButtonElement
 ToggleMenuItem(string text, bool isChecked = false, Action<bool> onIsCheckedChanged = null, string icon = null) → ToggleMenuFlyoutItemData
-ToggleSplitButton(Command command, Optional<bool> isChecked = null, Element flyout = null) → ToggleSplitButtonElement
-ToggleSplitButton(string label, Optional<bool> isChecked = null, Action<bool> onIsCheckedChanged = null, Element flyout = null) → ToggleSplitButtonElement
-ToggleSwitch(Optional<bool> isOn = null, Action<bool> onIsOnChanged = null, string onContent = null, string offContent = null, string header = null) → ToggleSwitchElement
+ToggleSplitButton(Command command, Optional<bool> isChecked = default, Element flyout = null) → ToggleSplitButtonElement
+ToggleSplitButton(string label, Optional<bool> isChecked = default, Action<bool> onIsCheckedChanged = null, Element flyout = null) → ToggleSplitButtonElement
+ToggleSwitch(Optional<bool> isOn = default, Action<bool> onIsOnChanged = null, string onContent = null, string offContent = null, string header = null) → ToggleSwitchElement
 TreeNode(string content, TreeViewNodeData[] children) → TreeViewNodeData
 TreeView(TreeViewNodeData[] nodes) → TreeViewElement
 TreeView<T>(IReadOnlyList<T> items, Func<T, IReadOnlyList<T>> childrenSelector, Func<T, Element> viewBuilder) → TemplatedTreeViewElement<T>
@@ -703,7 +704,7 @@ T.Semantics<T>(string role = null, string value = null, double? rangeMin = null,
 T.ShowErrors<T>(ShowWhen showWhen = ShowWhen.Always) → ValidationVisualizerElement
 T.Size<T>(double width, double height) → T
 T.SoundMode<T>(ElementSoundMode mode) → T
-T.SpringLayoutAnimation<T>(float dampingRatio = 0.6, float period = 0.08) → T
+T.SpringLayoutAnimation<T>(float dampingRatio = 0.6f, float period = 0.08f) → T
 T.Stagger<T>(TimeSpan delay, Curve curve = null) → T
 T.TabIndex<T>(int index) → T
 T.TabNavigation<T>(KeyboardNavigationMode mode) → T
@@ -840,7 +841,7 @@ TreeViewElement.Expanding(Action<TreeViewNodeData> handler) → TreeViewElement
 TreeViewElement.ItemInvoked(Action<TreeViewNodeData> handler) → TreeViewElement
 TreeViewElement.Set(Action<TreeView> configure) → TreeViewElement
 ValidationRuleElement.Evaluate(ValidationContext ctx) → void
-ValidationRuleElement.EvaluateAsync(ValidationContext ctx, CancellationToken cancellationToken = null) → Task
+ValidationRuleElement.EvaluateAsync(ValidationContext ctx, CancellationToken cancellationToken = default) → Task
 ViewboxElement.Set(Action<Viewbox> configure) → ViewboxElement
 ViewboxElement.Stretch(Stretch stretch) → ViewboxElement
 ViewboxElement.StretchDirection(StretchDirection direction) → ViewboxElement
@@ -929,7 +930,7 @@ RenderContext.UsePersisted<T>(string key, T initialValue, PersistedScope scope) 
 RenderContext.UseReducedMotion() → bool
 RenderContext.UseReducer<T>(T initialValue, bool threadSafe = false) → ValueTuple<T, Action<Func<T, T>>>
 RenderContext.UseReducer<TState, TAction>(Func<TState, TAction, TState> reducer, TState initialValue, bool threadSafe = false) → ValueTuple<TState, Action<TAction>>
-RenderContext.UseRef<T>(T initialValue = null) → Ref<T>
+RenderContext.UseRef<T>(T initialValue = default) → Ref<T>
 RenderContext.UseResource<T>(Func<CancellationToken, Task<T>> fetcher, QueryCache cache, object[] deps, ResourceOptions options = null, IHookDispatcher dispatcher = null) → AsyncValue<T>
 RenderContext.UseResource<T>(Func<CancellationToken, Task<T>> fetcher, object[] deps, ResourceOptions options = null, IHookDispatcher dispatcher = null) → AsyncValue<T>
 RenderContext.UseState<T>(T initialValue, bool threadSafe = false) → ValueTuple<T, Action<T>>
@@ -1298,7 +1299,7 @@ GetHashCode() → int
 ToString() → string
 
 ### record AutoSuggestBoxElement
-new(Optional<string> Text = null, Action<string> OnTextChanged = null, Action<string> OnQuerySubmitted = null, Action<string> OnSuggestionChosen = null)
+new(Optional<string> Text = default, Action<string> OnTextChanged = null, Action<string> OnQuerySubmitted = null, Action<string> OnSuggestionChosen = null)
 Action<string> OnQuerySubmitted { get; init; }
 Action<string> OnSuggestionChosen { get; init; }
 Action<string> OnTextChanged { get; init; }
@@ -1440,7 +1441,7 @@ GetHashCode() → int
 ToString() → string
 
 ### record CalendarDatePickerElement
-new(Optional<DateTimeOffset?> Date = null, Action<DateTimeOffset?> OnDateChanged = null)
+new(Optional<DateTimeOffset?> Date = default, Action<DateTimeOffset?> OnDateChanged = null)
 Action<DateTimeOffset?> OnDateChanged { get; init; }
 DateTimeOffset? MaxDate { get; init; }
 DateTimeOffset? MinDate { get; init; }
@@ -1524,7 +1525,7 @@ Time(string format = "t") → Func<object, Element>
 ToggleIndicator() → Func<object, Element>
 
 ### record CheckBoxElement
-new(Optional<bool?> IsChecked = null, Action<bool> OnIsCheckedChanged = null, string Label = null)
+new(Optional<bool?> IsChecked = default, Action<bool> OnIsCheckedChanged = null, string Label = null)
 Action<bool> OnIsCheckedChanged { get; init; }
 Action<bool?> OnCheckedStateChanged { get; init; }
 Optional<bool?> IsChecked { get; init; }
@@ -1545,7 +1546,7 @@ GetHashCode() → int
 ToString() → string
 
 ### record ColorPickerElement
-new(Optional<Color> Color = null, Action<Color> OnColorChanged = null)
+new(Optional<Color> Color = default, Action<Color> OnColorChanged = null)
 Action<Color> OnColorChanged { get; init; }
 ColorSpectrumShape ColorSpectrumShape { get; init; }
 Optional<Color> Color { get; init; }
@@ -1590,7 +1591,7 @@ GetHashCode() → int
 ToString() → string
 
 ### record ComboBoxElement
-new(string[] Items, Optional<int> SelectedIndex = null, Action<int> OnSelectedIndexChanged = null)
+new(string[] Items, Optional<int> SelectedIndex = default, Action<int> OnSelectedIndexChanged = null)
 Action OnDropDownClosed { get; init; }
 Action OnDropDownOpened { get; init; }
 Action<int> OnSelectedIndexChanged { get; init; }
@@ -1713,6 +1714,11 @@ Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
 
+### static class ComponentUseMemoCellsExtensions
+Component.UseMemoCells<T>(IReadOnlyList<T> items, Func<T, int, Element> builder, object[] dependencies) → Element[]
+Component.UseMemoCellsByIndex<T>(IReadOnlyList<T> items, IReadOnlyList<int> changedIndices, Func<T, int, Element> builder, object[] dependencies) → Element[]
+Component.UseMemoCellsByKey<T, TKey>(IReadOnlyList<T> items, Func<T, TKey> keySelector, Func<T, int, Element> builder, object[] dependencies) → Element[]
+
 ### static class CompositorProvider
 Compositor Current { get; set; }
 EnsureCompositor(UIElement element) → Compositor
@@ -1793,12 +1799,12 @@ RegisterDecoratorForDerivedTypes<TBase>(Func<IDecoratorElementHandler<TBase>> ha
 RegisterForDerivedTypes<TBase, TControl>(Func<IElementHandler<TBase, TControl>> handlerFactory) → void
 
 ### record Curve
-Ease(int durationMs, Easing easing = null) → Curve
+Ease(int durationMs, Easing easing = default) → Curve
 Equals(Curve other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
 Linear(int durationMs) → Curve
-Spring(float dampingRatio = 0.8, float period = 0.05) → Curve
+Spring(float dampingRatio = 0.8f, float period = 0.05f) → Curve
 ToString() → string
 
 ### record DataPage<T>
@@ -1820,7 +1826,7 @@ int CachedBlockCount { get; }
 int MaxBlocks { get; }
 int? TotalCount { get; }
 GetBlock(int blockIndex) → CacheBlock<T>
-GetBlockAsync(int blockIndex, CancellationToken cancellationToken = null) → ValueTask<CacheBlock<T>>
+GetBlockAsync(int blockIndex, CancellationToken cancellationToken = default) → ValueTask<CacheBlock<T>>
 GetBlockStatus(int blockIndex) → BlockStatus
 GetItem(int rowIndex) → T
 Invalidate() → void
@@ -1848,7 +1854,7 @@ new()
 DateStyle Style { get; init; }
 
 ### record DatePickerElement
-new(Optional<DateTimeOffset> Date = null, Action<DateTimeOffset> OnDateChanged = null)
+new(Optional<DateTimeOffset> Date = default, Action<DateTimeOffset> OnDateChanged = null)
 Action<DateTimeOffset> OnDateChanged { get; init; }
 DateTimeOffset? MaxYear { get; init; }
 DateTimeOffset? MinYear { get; init; }
@@ -1955,13 +1961,13 @@ ToString() → string
 new()
 IReadOnlyCollection<string> AvailableFormats { get; }
 int OriginProcessId { get; }
-GetBitmapAsync(CancellationToken cancellationToken = null) → Task<RandomAccessStreamReference>
-GetCustomFormatAsync<T>(string formatId, CancellationToken cancellationToken = null) → Task<T>
-GetFilesAsync(CancellationToken cancellationToken = null) → Task<IReadOnlyList<IStorageItem>>
-GetHtmlAsync(CancellationToken cancellationToken = null) → Task<string>
-GetRtfAsync(CancellationToken cancellationToken = null) → Task<string>
-GetTextAsync(CancellationToken cancellationToken = null) → Task<string>
-GetUriAsync(CancellationToken cancellationToken = null) → Task<Uri>
+GetBitmapAsync(CancellationToken cancellationToken = default) → Task<RandomAccessStreamReference>
+GetCustomFormatAsync<T>(string formatId, CancellationToken cancellationToken = default) → Task<T>
+GetFilesAsync(CancellationToken cancellationToken = default) → Task<IReadOnlyList<IStorageItem>>
+GetHtmlAsync(CancellationToken cancellationToken = default) → Task<string>
+GetRtfAsync(CancellationToken cancellationToken = default) → Task<string>
+GetTextAsync(CancellationToken cancellationToken = default) → Task<string>
+GetUriAsync(CancellationToken cancellationToken = default) → Task<Uri>
 HasFormat(string formatId) → bool
 Text(string text) → DragData
 TryGetBitmap(ref RandomAccessStreamReference value) → bool
@@ -2143,6 +2149,54 @@ Equals(Element other) → bool
 Equals(object obj) → bool
 GetHashCode() → int
 ToString() → string
+
+### static class ElementExtensions
+AppBarButtonData.Command(Command command) → AppBarButtonData
+RichTextHyperlink.CharacterSpacing(int spacing) → RichTextHyperlink
+RichTextHyperlink.FontFamily(string family) → RichTextHyperlink
+RichTextHyperlink.FontSize(double size) → RichTextHyperlink
+RichTextHyperlink.FontStretch(FontStretch stretch) → RichTextHyperlink
+RichTextHyperlink.FontStyle(FontStyle style) → RichTextHyperlink
+RichTextHyperlink.FontWeight(FontWeight weight) → RichTextHyperlink
+RichTextHyperlink.Foreground(Brush brush) → RichTextHyperlink
+RichTextHyperlink.Foreground(string color) → RichTextHyperlink
+RichTextHyperlink.IsTabStop(bool isTabStop = true) → RichTextHyperlink
+RichTextHyperlink.IsTextScaleFactorEnabled(bool enabled = true) → RichTextHyperlink
+RichTextHyperlink.Language(string language) → RichTextHyperlink
+RichTextHyperlink.TabIndex(int tabIndex) → RichTextHyperlink
+RichTextHyperlink.TextDecorations(TextDecorations decorations) → RichTextHyperlink
+RichTextHyperlink.UnderlineStyle(UnderlineStyle style) → RichTextHyperlink
+RichTextParagraph.CharacterSpacing(int spacing) → RichTextParagraph
+RichTextParagraph.FontFamily(string family) → RichTextParagraph
+RichTextParagraph.FontSize(double size) → RichTextParagraph
+RichTextParagraph.FontStretch(FontStretch stretch) → RichTextParagraph
+RichTextParagraph.FontStyle(FontStyle style) → RichTextParagraph
+RichTextParagraph.FontWeight(FontWeight weight) → RichTextParagraph
+RichTextParagraph.Foreground(Brush brush) → RichTextParagraph
+RichTextParagraph.Foreground(string color) → RichTextParagraph
+RichTextParagraph.HorizontalTextAlignment(TextAlignment alignment) → RichTextParagraph
+RichTextParagraph.IsTextScaleFactorEnabled(bool enabled = true) → RichTextParagraph
+RichTextParagraph.Language(string language) → RichTextParagraph
+RichTextParagraph.LineHeight(double height) → RichTextParagraph
+RichTextParagraph.LineStackingStrategy(LineStackingStrategy strategy) → RichTextParagraph
+RichTextParagraph.Margin(double horizontal, double vertical) → RichTextParagraph
+RichTextParagraph.Margin(double left = 0, double top = 0, double right = 0, double bottom = 0) → RichTextParagraph
+RichTextParagraph.Margin(double uniform) → RichTextParagraph
+RichTextParagraph.TextAlignment(TextAlignment alignment) → RichTextParagraph
+RichTextParagraph.TextDecorations(TextDecorations decorations) → RichTextParagraph
+RichTextParagraph.TextIndent(double indent) → RichTextParagraph
+RichTextRun.CharacterSpacing(int spacing) → RichTextRun
+RichTextRun.FlowDirection(FlowDirection direction) → RichTextRun
+RichTextRun.FontFamily(string family) → RichTextRun
+RichTextRun.FontSize(double size) → RichTextRun
+RichTextRun.FontStretch(FontStretch stretch) → RichTextRun
+RichTextRun.FontStyle(FontStyle style) → RichTextRun
+RichTextRun.FontWeight(FontWeight weight) → RichTextRun
+RichTextRun.Foreground(Brush brush) → RichTextRun
+RichTextRun.Foreground(string color) → RichTextRun
+RichTextRun.IsTextScaleFactorEnabled(bool enabled = true) → RichTextRun
+RichTextRun.Language(string language) → RichTextRun
+RichTextRun.TextDecorations(TextDecorations decorations) → RichTextRun
 
 ### record ElementExtras
 new()
@@ -2353,7 +2407,7 @@ GetHashCode() → int
 ToString() → string
 
 ### record ExpanderElement
-new(string Header, Element Content, Optional<bool> IsExpanded = null, Action<bool> OnIsExpandedChanged = null)
+new(string Header, Element Content, Optional<bool> IsExpanded = default, Action<bool> OnIsExpandedChanged = null)
 Action<bool> OnIsExpandedChanged { get; init; }
 Element Content { get; init; }
 Element HeaderTemplate { get; init; }
@@ -2760,11 +2814,11 @@ GetHashCode() → int
 ToString() → string
 
 ### interface IAsyncValidator
-ValidateAsync(object value, string field, CancellationToken cancellationToken = null) → Task<ValidationMessage>
+ValidateAsync(object value, string field, CancellationToken cancellationToken = default) → Task<ValidationMessage>
 
 ### interface IDataSource<T>
 DataSourceCapabilities Capabilities { get; }
-GetPageAsync(DataRequest request, CancellationToken cancellationToken = null) → Task<DataPage<T>>
+GetPageAsync(DataRequest request, CancellationToken cancellationToken = default) → Task<DataPage<T>>
 GetRowKey(T item) → RowKey
 
 ### interface IDecoratorElementHandler<TElement>
@@ -2789,16 +2843,16 @@ int ItemCount { get; }
 BuildItemView(int index) → Element
 
 ### interface IKeyedDataSource<T>
-GetByKeyAsync(RowKey key, CancellationToken cancellationToken = null) → Task<T>
-GetByKeysAsync(IEnumerable<RowKey> keys, CancellationToken cancellationToken = null) → Task<IReadOnlyList<T>>
+GetByKeyAsync(RowKey key, CancellationToken cancellationToken = default) → Task<T>
+GetByKeysAsync(IEnumerable<RowKey> keys, CancellationToken cancellationToken = default) → Task<IReadOnlyList<T>>
 
 ### interface IKeyedItemSource
 GetKeyAt(int index) → string
 
 ### interface IMutableDataSource<T>
-CreateAsync(T item, CancellationToken cancellationToken = null) → Task<T>
-DeleteAsync(RowKey key, CancellationToken cancellationToken = null) → Task
-UpdateAsync(RowKey key, T item, CancellationToken cancellationToken = null) → Task<T>
+CreateAsync(T item, CancellationToken cancellationToken = default) → Task<T>
+DeleteAsync(RowKey key, CancellationToken cancellationToken = default) → Task
+UpdateAsync(RowKey key, T item, CancellationToken cancellationToken = default) → Task<T>
 
 ### interface IObservableDataSource<T>
 event EventHandler DataChanged
@@ -3364,11 +3418,11 @@ ToString() → string
 ### class ListDataSource<T>
 new(IEnumerable<T> items, Func<T, RowKey> getRowKey)
 DataSourceCapabilities Capabilities { get; }
-CreateAsync(T item, CancellationToken cancellationToken = null) → Task<T>
-DeleteAsync(RowKey key, CancellationToken cancellationToken = null) → Task
-GetPageAsync(DataRequest request, CancellationToken cancellationToken = null) → Task<DataPage<T>>
+CreateAsync(T item, CancellationToken cancellationToken = default) → Task<T>
+DeleteAsync(RowKey key, CancellationToken cancellationToken = default) → Task
+GetPageAsync(DataRequest request, CancellationToken cancellationToken = default) → Task<DataPage<T>>
 GetRowKey(T item) → RowKey
-UpdateAsync(RowKey key, T item, CancellationToken cancellationToken = null) → Task<T>
+UpdateAsync(RowKey key, T item, CancellationToken cancellationToken = default) → Task<T>
 
 ### record ListViewElement
 new(Element[] Items)
@@ -3799,7 +3853,7 @@ Equals(object obj) → bool
 Fade(TimeSpan? duration = null) → NavigationTransition
 GetHashCode() → int
 Slide(SlideDirection direction = SlideDirection.FromRight, TimeSpan? duration = null, CompositionEasingFunction easing = null, float? distance = null) → NavigationTransition
-Spring(float dampingRatio = 0.6, float period = 0.08, SlideDirection direction = SlideDirection.FromRight) → NavigationTransition
+Spring(float dampingRatio = 0.6f, float period = 0.08f, SlideDirection direction = SlideDirection.FromRight) → NavigationTransition
 ToString() → string
 
 ### record NavigationViewElement
@@ -3878,7 +3932,7 @@ new()
 new()
 
 ### record NumberBoxElement
-new(Optional<double> Value = null, Action<double> OnValueChanged = null, string Header = null)
+new(Optional<double> Value = default, Action<double> OnValueChanged = null, string Header = null)
 Action<double> OnValueChanged { get; init; }
 INumberFormatter2 NumberFormatter { get; init; }
 NumberBoxSpinButtonPlacementMode SpinButtonPlacement { get; init; }
@@ -4010,7 +4064,7 @@ GetHashCode() → int
 ToString() → string
 
 ### record PasswordBoxElement
-new(Optional<string> Password = null, Action<string> OnPasswordChanged = null, string PlaceholderText = null)
+new(Optional<string> Password = default, Action<string> OnPasswordChanged = null, string PlaceholderText = null)
 Action<string> OnPasswordChanged { get; init; }
 Optional<string> Password { get; init; }
 PasswordRevealMode PasswordRevealMode { get; init; }
@@ -4307,7 +4361,7 @@ Unsubscribe(string key) → int
 event Action<string> EntryChanged
 
 ### record RadioButtonElement
-new(string Label, Optional<bool> IsChecked = null, Action<bool> OnIsCheckedChanged = null, string GroupName = null)
+new(string Label, Optional<bool> IsChecked = default, Action<bool> OnIsCheckedChanged = null, string GroupName = null)
 Action<bool> OnIsCheckedChanged { get; init; }
 Optional<bool> IsChecked { get; init; }
 string GroupName { get; init; }
@@ -4320,7 +4374,7 @@ GetHashCode() → int
 ToString() → string
 
 ### record RadioButtonsElement
-new(string[] Items, Optional<int> SelectedIndex = null, Action<int> OnSelectedIndexChanged = null)
+new(string[] Items, Optional<int> SelectedIndex = default, Action<int> OnSelectedIndexChanged = null)
 Action<int> OnSelectedIndexChanged { get; init; }
 Optional<int> SelectedIndex { get; init; }
 string Header { get; init; }
@@ -4348,7 +4402,7 @@ GetHashCode() → int
 ToString() → string
 
 ### record RatingControlElement
-new(Optional<double> Value = null, Action<double> OnValueChanged = null)
+new(Optional<double> Value = default, Action<double> OnValueChanged = null)
 Action<double> OnValueChanged { get; init; }
 Optional<double> Value { get; init; }
 bool IsReadOnly { get; init; }
@@ -4720,7 +4774,7 @@ UsePersisted<T>(string key, T initialValue, PersistedScope scope) → ValueTuple
 UseReducedMotion() → bool
 UseReducer<T>(T initialValue, bool threadSafe = false) → ValueTuple<T, Action<Func<T, T>>>
 UseReducer<TState, TAction>(Func<TState, TAction, TState> reducer, TState initialValue, bool threadSafe = false) → ValueTuple<TState, Action<TAction>>
-UseRef<T>(T initialValue = null) → Ref<T>
+UseRef<T>(T initialValue = default) → Ref<T>
 UseState<T>(T initialValue, bool threadSafe = false) → ValueTuple<T, Action<T>>
 UseSystemBackButton<TRoute>(NavigationHandle<TRoute> nav, Window window) → void
 UseTrayIcon(TrayIconSpec spec) → ReactorTrayIcon
@@ -4796,7 +4850,7 @@ new(string defaultLocale = "en-US", string stringsBasePath = null)
 GetString(string locale, string ns, string key) → string
 
 ### record RichEditBoxElement
-new(Optional<string> Text = null)
+new(Optional<string> Text = default)
 Action<string> OnTextChanged { get; init; }
 Optional<string> Text { get; init; }
 SolidColorBrush SelectionHighlightColor { get; init; }
@@ -4964,10 +5018,10 @@ ToString() → string
 
 ### class RouteArgs
 Get<T>(string name) → T
-GetOrDefault<T>(string name, T defaultValue = null) → T
+GetOrDefault<T>(string name, T defaultValue = default) → T
 GetString(string name) → string
 GetWildcard() → string
-Query<T>(string name, T defaultValue = null) → T
+Query<T>(string name, T defaultValue = default) → T
 QueryString(string name) → string
 
 ### struct RowKey
@@ -5181,7 +5235,7 @@ GetHashCode() → int
 ToString() → string
 
 ### record SliderElement
-new(Optional<double> Value = null, double Min = 0, double Max = 100, Action<double> OnValueChanged = null)
+new(Optional<double> Value = default, double Min = 0, double Max = 100, Action<double> OnValueChanged = null)
 Action<double> OnValueChanged { get; init; }
 Optional<double> Value { get; init; }
 Orientation Orientation { get; init; }
@@ -5676,7 +5730,7 @@ GetHashCode() → int
 ToString() → string
 
 ### record TextBoxElement
-new(Optional<string> Value = null, Action<string> OnChanged = null, string PlaceholderText = null)
+new(Optional<string> Value = default, Action<string> OnChanged = null, string PlaceholderText = null)
 Action<string, int, int> OnSelectionChanged { get; init; }
 Action<string> OnChanged { get; init; }
 CharacterCasing CharacterCasing { get; init; }
@@ -5716,7 +5770,7 @@ ToString() → string
 Brush(string key) → Brush
 CornerRadius(string key) → CornerRadius
 Double(string key) → double
-Get<T>(string key, T defaultValue = null) → T
+Get<T>(string key, T defaultValue = default) → T
 Thickness(string key) → Thickness
 
 ### record ThemeTransitions
@@ -5744,7 +5798,7 @@ GetHashCode() → int
 ToString() → string
 
 ### record TimePickerElement
-new(Optional<TimeSpan> Time = null, Action<TimeSpan> OnTimeChanged = null)
+new(Optional<TimeSpan> Time = default, Action<TimeSpan> OnTimeChanged = null)
 Action<TimeSpan> OnTimeChanged { get; init; }
 Optional<TimeSpan> Time { get; init; }
 int ClockIdentifier { get; init; }
@@ -5809,7 +5863,7 @@ GetHashCode() → int
 ToString() → string
 
 ### record ToggleSplitButtonElement
-new(string Label, Optional<bool> IsChecked = null, Action<bool> OnIsCheckedChanged = null, Element Flyout = null)
+new(string Label, Optional<bool> IsChecked = default, Action<bool> OnIsCheckedChanged = null, Element Flyout = null)
 Action<bool> OnIsCheckedChanged { get; init; }
 Command Command { get; init; }
 Element Flyout { get; init; }
@@ -5823,7 +5877,7 @@ GetHashCode() → int
 ToString() → string
 
 ### record ToggleSwitchElement
-new(Optional<bool> IsOn = null, Action<bool> OnIsOnChanged = null, string OnContent = null, string OffContent = null)
+new(Optional<bool> IsOn = default, Action<bool> OnIsOnChanged = null, string OnContent = null, string OffContent = null)
 Action<bool> OnIsOnChanged { get; init; }
 Optional<bool> IsOn { get; init; }
 string Header { get; init; }
@@ -5842,7 +5896,7 @@ Equals(Transition other) → bool
 Equals(object obj) → bool
 Exit(Transition exit) → Transition
 GetHashCode() → int
-Scale(float from = 0.85) → Transition
+Scale(float from = 0.85f) → Transition
 Slide(Edge edge = Edge.Bottom) → Transition
 ToString() → string
 
@@ -5929,6 +5983,21 @@ Create<T>() → ElementRef<T>
 ### class UIThreadOnlyAttribute
 new()
 
+### static class UseAnnounceExtensions
+Component.UseAnnounce() → AnnounceHandle
+
+### static class UseElementFocusExtensions
+Component.UseElementFocus(FocusState state = FocusState.Programmatic) → ValueTuple<ElementRef, Action>
+
+### static class UseElementRefExtensions
+Component.UseElementRef<T>() → ElementRef<T>
+
+### static class UseFocusExtensions
+Component.UseFocus() → FocusManager
+
+### static class UseFocusTrapExtensions
+Component.UseFocusTrap(bool isActive) → FocusTrapHandle
+
 ### static class Validate
 Email(string message = null) → IValidator
 EqualTo<T>(T otherValue, string message = null) → IValidator
@@ -5941,6 +6010,10 @@ MustBeTrue(string message = null) → IValidator
 Range(double min, double max, string message = null) → IValidator
 Required(string message = null) → IValidator
 Url(string message = null) → IValidator
+
+### static class ValidateExtensions
+ValidationAttached.RunAsyncValidators(object value, CancellationToken cancellationToken = default) → Task<IReadOnlyList<ValidationMessage>>
+ValidationAttached.RunValidators(object value) → IReadOnlyList<ValidationMessage>
 
 ### record ValidationAttached
 new(string FieldName, IValidator[] Validators, IAsyncValidator[] AsyncValidators)
@@ -5983,6 +6056,10 @@ Reset(string field) → object
 ResetAll() → IReadOnlyDictionary<string, object>
 SetInitialValue(string field, object value) → void
 
+### static class ValidationContextComponentExtensions
+Component.UseChildValidationContext() → ValueTuple<ValidationContext, ValidationContext>
+Component.UseValidationContext() → ValidationContext
+
 ### record ValidationMessage
 new(string Field, string Text, Severity Severity = Severity.Error, string Code = null)
 Severity Severity { get; init; }
@@ -5999,7 +6076,7 @@ ToString() → string
 EvaluateRules(ValidationContext ctx, ValidationRuleElement[] rules) → void
 ValidateAttached(ValidationContext ctx, ValidationAttached attached, object value) → void
 ValidateField(ValidationContext ctx, string fieldName, object value, IValidator[] validators) → void
-ValidateFieldAsync(ValidationContext ctx, string fieldName, object value, IAsyncValidator[] asyncValidators, CancellationToken cancellationToken = null) → Task
+ValidateFieldAsync(ValidationContext ctx, string fieldName, object value, IAsyncValidator[] asyncValidators, CancellationToken cancellationToken = default) → Task
 
 ### static class ValidationRuleDsl
 ValidationRule(Func<bool> predicate, string message, string field, Severity severity = Severity.Error) → ValidationRuleElement

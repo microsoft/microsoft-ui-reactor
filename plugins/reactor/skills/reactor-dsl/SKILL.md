@@ -5,11 +5,19 @@ description: "Pointer to the full Reactor API signatures index (`references/reac
 
 ## What this skill carries
 
-The full alphabetized signatures index — every public factory, modifier, hook, theme token, and enum — lives at:
+The full alphabetized signatures index lives at:
 
 ```
-references/reactor.api.txt    (~12K tokens, ~650 lines)
+references/reactor.api.txt    (~70K tokens, ~6.3K lines)
 ```
+
+It covers every public factory, modifier, hook, theme token and enum, plus a
+`## Public types` section carrying the constructors, properties, methods and
+events of every other public type — including public **static** classes, so
+process-wide entry points such as `ControlRegistry.Register` and
+`ReactorApp.Run` are listed there too.
+
+It is large: grep it for the symbol you need rather than reading it end to end.
 
 It is the source of truth for the public API surface, regenerated from `Reactor.dll` by `mur --regen-api`.
 
