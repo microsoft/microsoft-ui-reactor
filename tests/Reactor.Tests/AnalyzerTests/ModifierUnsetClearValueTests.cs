@@ -187,7 +187,6 @@ public class ModifierUnsetClearValueTests
     [Fact]
     public void Every_Diff_Guarded_Modifier_Has_An_Unset_Arm()
     {
-        var scanned = new List<string>();
         var missing = new List<string>();
 
         foreach (var (method, bag, oldBag, minArms) in ScannedMethods)
@@ -197,7 +196,6 @@ public class ModifierUnsetClearValueTests
             foreach (var modifier in ReadDiffGuardedModifiers(method, bag, oldBag))
             {
                 found++;
-                scanned.Add($"{method}.{modifier}");
                 if (!unset.Contains(modifier)) missing.Add($"{method}.{modifier}");
             }
 
@@ -231,6 +229,159 @@ public class ModifierUnsetClearValueTests
             "These MissingUnsetArmExceptions entries no longer describe a missing unset arm — " +
             "either the arm was added (delete the entry) or the modifier was renamed/removed " +
             $"(update it): [{string.Join(", ", stale)}]");
+    }
+
+    /// <summary>
+    /// Every control type a modifier is <em>written</em> to must also be a control type it is
+    /// <em>cleared</em> on.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Every_Diff_Guarded_Modifier_Has_An_Unset_Arm"/> asks a per-<em>property</em>
+    /// question, so it is satisfied the moment a property has any reset at all. Several arms
+    /// are not a single write but an <c>if (fe is WinUI.X) … else if (fe is WinUI.Y) …</c>
+    /// type-dispatch chain, and those chains get widened one control type at a time — #970
+    /// added <c>TextBlock</c> to <c>Padding</c>, #1003 adds <c>Grid</c>/<c>RelativePanel</c> to
+    /// <c>Padding</c> and <c>Grid</c>/<c>StackPanel</c>/<c>RelativePanel</c> to
+    /// <c>CornerRadius</c>. Widening only the write half leaves a control type that can have
+    /// the property set and never released: the #986 bug again, one type down, and invisible
+    /// to a property-level scan because the property's reset still exists for its original
+    /// types.
+    /// <para>
+    /// That asymmetry is also the standing merge hazard on this file. The two halves live in
+    /// different hunks, so a rebase can auto-merge the widened write while the widened clear
+    /// conflicts — resolving that conflict in favour of either side alone reinstates the bug
+    /// while the arm a reviewer reads first still looks correct. This test is the tripwire:
+    /// it fails on the merge result, naming the property and the orphaned type.
+    /// </para>
+    /// <para>
+    /// Verified by mutation — deleting a single <c>else if (fe is WinUI.T …) …ClearValue(…)</c>
+    /// branch while leaving its write branch in place reddens this test and nothing else.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void Every_Type_Gated_Write_Has_A_Matching_Type_Gated_Clear()
+    {
+        var writes = new Dictionary<string, SortedSet<string>>(StringComparer.Ordinal);
+        var clears = new Dictionary<string, SortedSet<string>>(StringComparer.Ordinal);
+
+        foreach (var (method, _, _, _) in ScannedMethods)
+        {
+            foreach (var ifStatement in ReadIfStatements(method))
+            {
+                if (!TryReadTypeGate(ifStatement, out var typeName, out var variable)) continue;
+
+                // The gate's own branch only. An `else if` chain nests the next gate inside
+                // this one's Else clause, so including the else would attribute every later
+                // control type's writes to the first type in the chain and mask the exact
+                // asymmetry this test looks for.
+                var branch = ifStatement.Statement;
+
+                foreach (var property in ReadWrittenProperties(branch, variable))
+                    Add(writes, property, typeName);
+
+                foreach (var property in ReadClearedProperties(branch, variable))
+                    Add(clears, property, typeName);
+            }
+        }
+
+        // Non-vacuity floor. A matcher that stopped recognizing the `fe is WinUI.T v` gate
+        // would collect nothing, find no asymmetry and pass — the failure mode this test
+        // exists to prevent. There are 14 type-gated write pairs today.
+        var pairs = writes.Sum(entry => entry.Value.Count);
+
+        Assert.True(
+            pairs >= 10,
+            $"Only {pairs} type-gated modifier write(s) were read out of the reconciler " +
+            "(expected at least 10). The `if (fe is WinUI.T v) v.Prop = …` shape has probably " +
+            "changed, which would make this test pass without checking anything. Properties " +
+            $"seen: [{string.Join(", ", writes.Keys)}]");
+
+        var offenders = new List<string>();
+
+        foreach (var (property, writtenTypes) in writes)
+        {
+            // A property with no type-gated clear at all is a missing *arm*, which is
+            // Every_Diff_Guarded_Modifier_Has_An_Unset_Arm's question — and several properties
+            // legitimately clear through an ungated `fe.ClearValue(…)`. Only an arm that
+            // already dispatches on type is asked to dispatch over the same set of types.
+            if (!clears.TryGetValue(property, out var clearedTypes)) continue;
+
+            foreach (var type in writtenTypes.Except(clearedTypes))
+                offenders.Add($"{property} on {type}");
+        }
+
+        Assert.True(
+            offenders.Count == 0,
+            "These control types can have a modifier written but never released — the write " +
+            "half of a type-dispatch chain was widened without the clear half, so the value " +
+            "stays pinned on that control type forever (issue #986): " +
+            $"[{string.Join(", ", offenders)}]. Add the matching " +
+            "`else if (fe is WinUI.<Type> v) v.ClearValue(WinUI.<Type>.<Prop>Property);` " +
+            "branch to the unset arm. If you reached this after resolving a Reconciler.cs " +
+            "merge conflict, the conflict resolution dropped the clear branch — reapply it " +
+            "rather than deleting the write.");
+    }
+
+    /// <summary>
+    /// The <c>fe is WinUI.T v</c> shape used to gate a modifier write on the control type.
+    /// </summary>
+    private static bool TryReadTypeGate(
+        IfStatementSyntax ifStatement,
+        out string typeName,
+        out string variable)
+    {
+        typeName = "";
+        variable = "";
+
+        if (ifStatement.Condition is not IsPatternExpressionSyntax pattern) return false;
+        if (pattern.Expression is not IdentifierNameSyntax { Identifier.Text: "fe" }) return false;
+        if (pattern.Pattern is not DeclarationPatternSyntax declaration) return false;
+        if (declaration.Designation is not SingleVariableDesignationSyntax designation) return false;
+
+        var qualified = declaration.Type.ToString();
+        typeName = qualified[(qualified.LastIndexOf('.') + 1)..];
+        variable = designation.Identifier.Text;
+        return typeName.Length > 0;
+    }
+
+    /// <summary>Properties assigned through <c>variable.Prop = …</c> inside the branch.</summary>
+    private static IEnumerable<string> ReadWrittenProperties(SyntaxNode branch, string variable) =>
+        branch.DescendantNodesAndSelf()
+            .OfType<AssignmentExpressionSyntax>()
+            .Select(assignment => assignment.Left)
+            .OfType<MemberAccessExpressionSyntax>()
+            .Where(access => access.Expression is IdentifierNameSyntax id
+                             && id.Identifier.Text == variable)
+            .Select(access => access.Name.Identifier.Text);
+
+    /// <summary>
+    /// Properties released through <c>variable.ClearValue(WinUI.T.PropProperty)</c> inside the
+    /// branch, named by the modifier rather than the DP field so they key the same as the
+    /// writes.
+    /// </summary>
+    private static IEnumerable<string> ReadClearedProperties(SyntaxNode branch, string variable) =>
+        branch.DescendantNodesAndSelf()
+            .OfType<InvocationExpressionSyntax>()
+            .Where(invocation => invocation.Expression is MemberAccessExpressionSyntax access
+                                 && access.Name.Identifier.Text == "ClearValue"
+                                 && access.Expression is IdentifierNameSyntax id
+                                 && id.Identifier.Text == variable)
+            .SelectMany(invocation => invocation.ArgumentList.Arguments)
+            .Select(argument => argument.Expression)
+            .OfType<MemberAccessExpressionSyntax>()
+            .Select(access => access.Name.Identifier.Text)
+            .Where(name => name.EndsWith("Property", StringComparison.Ordinal))
+            .Select(name => name[..^"Property".Length]);
+
+    private static void Add(Dictionary<string, SortedSet<string>> map, string key, string value)
+    {
+        if (!map.TryGetValue(key, out var set))
+        {
+            set = new SortedSet<string>(StringComparer.Ordinal);
+            map[key] = set;
+        }
+
+        set.Add(value);
     }
 
     /// <summary>

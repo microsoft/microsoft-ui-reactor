@@ -4263,57 +4263,57 @@ public sealed partial class Reconciler : IDisposable
     {
         if (a is null && oldA is null) return;
 
-        if (a?.HelpText is not null && a.HelpText != oldA?.HelpText)
+        if (a is not null && a.HelpText is not null && a.HelpText != oldA?.HelpText)
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetHelpText(fe, a.HelpText);
         else if (a?.HelpText is null && oldA?.HelpText is not null)
             fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.HelpTextProperty);
 
-        if (a?.FullDescription is not null && a.FullDescription != oldA?.FullDescription)
+        if (a is not null && a.FullDescription is not null && a.FullDescription != oldA?.FullDescription)
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetFullDescription(fe, a.FullDescription);
         else if (a?.FullDescription is null && oldA?.FullDescription is not null)
             fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.FullDescriptionProperty);
 
-        if (a?.LandmarkType.HasValue == true && a.LandmarkType != oldA?.LandmarkType)
+        if (a is not null && a.LandmarkType.HasValue && a.LandmarkType != oldA?.LandmarkType)
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetLandmarkType(fe, a.LandmarkType.Value);
         else if (a?.LandmarkType.HasValue != true && oldA?.LandmarkType.HasValue == true)
             fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.LandmarkTypeProperty);
 
-        if (a?.AccessibilityView.HasValue == true && a.AccessibilityView != oldA?.AccessibilityView)
+        if (a is not null && a.AccessibilityView.HasValue && a.AccessibilityView != oldA?.AccessibilityView)
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetAccessibilityView(fe, a.AccessibilityView.Value);
         else if (a?.AccessibilityView.HasValue != true && oldA?.AccessibilityView.HasValue == true)
             fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.AccessibilityViewProperty);
 
-        if (a?.IsRequiredForForm.HasValue == true && a.IsRequiredForForm != oldA?.IsRequiredForForm)
+        if (a is not null && a.IsRequiredForForm.HasValue && a.IsRequiredForForm != oldA?.IsRequiredForForm)
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetIsRequiredForForm(fe, a.IsRequiredForForm.Value);
         else if (a?.IsRequiredForForm.HasValue != true && oldA?.IsRequiredForForm.HasValue == true)
             fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.IsRequiredForFormProperty);
 
-        if (a?.LiveSetting.HasValue == true && a.LiveSetting != oldA?.LiveSetting)
+        if (a is not null && a.LiveSetting.HasValue && a.LiveSetting != oldA?.LiveSetting)
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetLiveSetting(fe, a.LiveSetting.Value);
         else if (a?.LiveSetting.HasValue != true && oldA?.LiveSetting.HasValue == true)
             fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.LiveSettingProperty);
 
-        if (a?.PositionInSet.HasValue == true && a.PositionInSet != oldA?.PositionInSet)
+        if (a is not null && a.PositionInSet.HasValue && a.PositionInSet != oldA?.PositionInSet)
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetPositionInSet(fe, a.PositionInSet.Value);
         else if (a?.PositionInSet.HasValue != true && oldA?.PositionInSet.HasValue == true)
             fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.PositionInSetProperty);
 
-        if (a?.SizeOfSet.HasValue == true && a.SizeOfSet != oldA?.SizeOfSet)
+        if (a is not null && a.SizeOfSet.HasValue && a.SizeOfSet != oldA?.SizeOfSet)
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetSizeOfSet(fe, a.SizeOfSet.Value);
         else if (a?.SizeOfSet.HasValue != true && oldA?.SizeOfSet.HasValue == true)
             fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.SizeOfSetProperty);
 
-        if (a?.Level.HasValue == true && a.Level != oldA?.Level)
+        if (a is not null && a.Level.HasValue && a.Level != oldA?.Level)
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetLevel(fe, a.Level.Value);
         else if (a?.Level.HasValue != true && oldA?.Level.HasValue == true)
             fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.LevelProperty);
 
-        if (a?.ItemStatus is not null && a.ItemStatus != oldA?.ItemStatus)
+        if (a is not null && a.ItemStatus is not null && a.ItemStatus != oldA?.ItemStatus)
             Microsoft.UI.Xaml.Automation.AutomationProperties.SetItemStatus(fe, a.ItemStatus);
         else if (a?.ItemStatus is null && oldA?.ItemStatus is not null)
             fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.ItemStatusProperty);
 
-        if (a?.TabFocusNavigation.HasValue == true && a.TabFocusNavigation != oldA?.TabFocusNavigation)
+        if (a is not null && a.TabFocusNavigation.HasValue && a.TabFocusNavigation != oldA?.TabFocusNavigation)
             fe.TabFocusNavigation = a.TabFocusNavigation.Value;
         else if (a?.TabFocusNavigation.HasValue != true && oldA?.TabFocusNavigation.HasValue == true)
             fe.ClearValue(UIElement.TabFocusNavigationProperty);
@@ -4321,7 +4321,7 @@ public sealed partial class Reconciler : IDisposable
         // LabeledBy — resolve AutomationId string to the target element in the visual tree.
         // During mount the element may not be in the visual tree yet (XamlRoot is null),
         // so defer resolution to the Loaded event if needed.
-        if (a?.LabeledBy is not null && a.LabeledBy != oldA?.LabeledBy)
+        if (a is not null && a.LabeledBy is not null && a.LabeledBy != oldA?.LabeledBy)
         {
             var target = FindByAutomationId(fe, a.LabeledBy);
             if (target is not null)
