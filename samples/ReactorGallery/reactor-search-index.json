@@ -47,12 +47,15 @@
       ],
       "apiNamespace": "Microsoft.UI.Reactor",
       "nugetPackage": "Microsoft.UI.Reactor",
+      "usings": [
+        "Microsoft.UI.Xaml.Controls.AnimatedVisuals"
+      ],
       "galleryRoute": "animated-icon",
       "samples": [
         {
-          "header": "Built-in animated icons",
+          "header": "Play a state transition",
           "language": "csharp",
-          "code": "AnimatedIcon(new AnimatedChevronDownSmallVisualSource()).Size(32, 32)\n// AnimatedIcon plays its transition when the host raises a state change\n// (e.g. an Expander toggling). Supply your own IRichAnimatedVisualSource\n// for custom motion."
+          "code": "// using XamlAnimatedIcon = Microsoft.UI.Xaml.Controls.AnimatedIcon;\n//   `using static Factories` shadows the WinUI type with the AnimatedIcon factory method.\nvar settings = UseMemo(() => new AnimatedSettingsVisualSource());\nvar (stateIdx, setStateIdx) = UseState(0);\nvar state = new[] { \"Normal\", \"PointerOver\", \"Pressed\" }[stateIdx];\n\nAnimatedIcon(settings).Size(32, 32)\n    .Set(icon => XamlAnimatedIcon.SetState(icon, state))\n// Each write of State plays the \"<from>To<to>\" marker segment — that transition\n// IS the animation. UseMemo the source: Source is reference-compared, so a fresh\n// instance per render rebuilds the visual and cancels the transition.\n// Check the source's Markers before wiring a state to it: assets built for other\n// states leave \"<from>To<to>\" missing or zero-length, and then nothing moves.\n// Pass a FallbackIconSource for machines that cannot play Lottie visuals."
         }
       ]
     },

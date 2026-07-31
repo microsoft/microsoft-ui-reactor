@@ -12,7 +12,7 @@ namespace Microsoft.UI.Reactor.Tests.Tooling;
 
 /// <summary>
 /// Source lint for the ReactorGallery sample pages. The gallery is the reference app, so a
-/// card that silently renders nothing teaches the wrong pattern — and the three mistakes
+/// card that silently renders nothing teaches the wrong pattern — and the four mistakes
 /// guarded here are all statically detectable and all shipped at least once:
 ///
 /// <list type="bullet">
@@ -22,7 +22,10 @@ namespace Microsoft.UI.Reactor.Tests.Tooling;
 /// Panel / Control / Border and therefore drops, rendering an invisible shape;</item>
 /// <item>an <c>ms-appx:///</c> asset that either does not exist, is never copied to the
 /// output folder, or is composed at runtime so it cannot be checked — all of which render a
-/// blank image with no error of any kind.</item>
+/// blank image with no error of any kind;</item>
+/// <item>an <c>AnimatedIcon</c> whose <c>State</c> is never written (or only ever written to a
+/// constant), which renders a still frame because writing state is the only way the control
+/// animates.</item>
 /// </list>
 ///
 /// Roslyn parses the page sources directly — no gallery build, no WinUI objects, so this
@@ -282,6 +285,256 @@ public sealed class GallerySampleLintTests
         Assert.True(inspectedShapeChains > 0,
             "no shape fluent chains were inspected — the lint would pass vacuously.");
         Assert.True(offenders.Count == 0, string.Join("\n", offenders));
+    }
+
+    // ── AnimatedIcon must actually be driven ─────────────────────────────────
+
+    /// <summary>
+    /// An <c>AnimatedIcon</c> whose <c>State</c> is never written is a still picture. The control
+    /// has no <c>Play()</c> and no <c>IsPlaying</c>: writing <c>AnimatedIcon.State</c> is the only
+    /// thing that plays the <c>"{from}To{to}"</c> marker segment, so an icon nobody writes state to
+    /// renders the first frame forever, with no error of any kind — the same silent-nothing
+    /// signature as the invisible shape and the blank image above. That shipped as issue #983,
+    /// where the gallery page promised "transitions between states with a vector animation" and
+    /// rendered three static decorations.
+    ///
+    /// Writing a *constant* state is the same bug wearing a hat: the page performs one write at
+    /// mount and can never move off it, so there is still no transition to see. "Not a literal" is
+    /// too weak a proxy for that — an unrelated <c>SetState</c> elsewhere on the page, or a state
+    /// read from a fixed array slot, both slip through. So the lint requires the write to sit
+    /// inside the icon's own <c>.Set(...)</c> chain and to carry a value derived from component
+    /// state, which is the only thing that can change after mount.
+    ///
+    /// Known limitation: WinUI also drives <c>State</c> automatically for an AnimatedIcon hosted
+    /// inside a state-owning parent (NavigationViewItem, Expander, AutoSuggestBox). No gallery page
+    /// does that today. If one ever does, teach this lint that shape rather than deleting it —
+    /// failing loudly is the point, so the decision gets made deliberately.
+    /// </summary>
+    [Fact]
+    public void AnimatedIcons_HaveTheirStateDriven()
+    {
+        var offenders = new List<string>();
+        var inspectedAnimatedIcons = 0;
+
+        foreach (var (path, root) in Pages())
+        {
+            // `sourceCode:` snippets are string literals, so Roslyn never sees them as
+            // invocations — this counts only icons the page really renders.
+            var icons = root.DescendantNodes().OfType<InvocationExpressionSyntax>()
+                .Where(i => InvokedName(i) == "AnimatedIcon").ToList();
+            if (icons.Count == 0) continue;
+            inspectedAnimatedIcons += icons.Count;
+
+            var reactive = ReactiveNames(root);
+
+            foreach (var icon in icons)
+            {
+                // The state write must belong to THIS icon's fluent chain. Scanning the whole
+                // page for any `SetState` would let one driven icon vouch for a static sibling —
+                // which is most of what shipped in #983.
+                var chain = EnclosingChain(icon);
+                var writes = chain.DescendantNodes().OfType<InvocationExpressionSyntax>()
+                    .Where(i => InvokedName(i) == "SetState" && i.ArgumentList.Arguments.Count >= 2)
+                    .ToList();
+
+                if (writes.Count == 0)
+                {
+                    offenders.Add($"{Where(path, icon)}: this AnimatedIcon(...) never writes AnimatedIcon.State — " +
+                                  "there is no Play(), so it renders one frame forever (issue #983).");
+                    continue;
+                }
+
+                if (!writes.Any(w => MentionsAny(w.ArgumentList.Arguments[1].Expression, reactive)))
+                {
+                    offenders.Add($"{Where(path, writes[0])}: the state written here is not derived from component " +
+                                  "state, so it cannot change after mount — a transition needs two states, not one.");
+                }
+            }
+        }
+
+        Assert.True(inspectedAnimatedIcons > 0,
+            "no AnimatedIcon(...) calls were inspected — the lint would pass vacuously.");
+        Assert.True(offenders.Count == 0, string.Join("\n", offenders));
+    }
+
+    /// <summary>
+    /// The outermost fluent chain / argument expression the invocation participates in, so a
+    /// `.Set(...)` hung off `AnimatedIcon(src).Size(32, 32)` is still attributed to that icon.
+    /// </summary>
+    static SyntaxNode EnclosingChain(InvocationExpressionSyntax invocation)
+    {
+        SyntaxNode current = invocation;
+        while (current.Parent is MemberAccessExpressionSyntax or InvocationExpressionSyntax
+               or PostfixUnaryExpressionSyntax or ParenthesizedExpressionSyntax)
+        {
+            current = current.Parent;
+        }
+        return current;
+    }
+
+    /// <summary>
+    /// Names that can change after mount: everything bound by a <c>UseState</c> destructuring,
+    /// plus the transitive closure of locals derived from them. <c>var state = States[stateIdx];</c>
+    /// makes <c>state</c> reactive because <c>stateIdx</c> is; a plain <c>var s = "Normal";</c>
+    /// never enters the set.
+    /// </summary>
+    static HashSet<string> ReactiveNames(SyntaxNode root)
+    {
+        var reactive = new HashSet<string>(global::System.StringComparer.Ordinal);
+
+        foreach (var designation in root.DescendantNodes().OfType<ParenthesizedVariableDesignationSyntax>())
+        {
+            if (designation.Parent is not DeclarationExpressionSyntax decl
+                || decl.Parent is not AssignmentExpressionSyntax assignment
+                || assignment.Right is not InvocationExpressionSyntax init
+                || InvokedName(init) is not ("UseState" or "UseReducer")) continue;
+
+            foreach (var name in designation.Variables.OfType<SingleVariableDesignationSyntax>())
+                reactive.Add(name.Identifier.Text);
+        }
+
+        // Fixed point: a local derived from a reactive name is itself reactive. The gallery's
+        // `var state = States[stateIdx];` needs exactly one round, but chains are cheap.
+        var declarators = root.DescendantNodes().OfType<VariableDeclaratorSyntax>()
+            .Where(d => d.Initializer is not null).ToList();
+
+        bool grew;
+        do
+        {
+            grew = false;
+            foreach (var declarator in declarators)
+            {
+                if (reactive.Contains(declarator.Identifier.Text)) continue;
+                if (!MentionsAny(declarator.Initializer!.Value, reactive)) continue;
+                reactive.Add(declarator.Identifier.Text);
+                grew = true;
+            }
+        } while (grew);
+
+        return reactive;
+    }
+
+    static bool MentionsAny(ExpressionSyntax expression, HashSet<string> names) =>
+        expression.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>()
+            .Any(id => names.Contains(id.Identifier.Text));
+
+    /// <summary>
+    /// The states and visual sources <c>AnimatedIconStateFixtures.BuiltInSourceMarkers</c> proves
+    /// actually animate. That selftest reads each source's real <c>Markers</c> and asserts every
+    /// ordered pair of these states spans a non-zero timeline segment — something this headless
+    /// lint cannot do, because constructing a WinUI visual source needs a live XAML thread.
+    ///
+    /// The two halves have to be kept honest about each other, so this lint pins the page to what
+    /// the selftest has actually checked. It matters: not every built-in source animates on these
+    /// states. <c>AnimatedChevronDownSmallVisualSource</c>'s <c>NormalToPointerOver</c> segment is
+    /// <c>[0..0]</c> — a chevron looks the same hovered — so a page that swapped an icon to it
+    /// would go half-static with every other test still green. That is exactly the #983 failure
+    /// mode re-entering through the back door.
+    /// </summary>
+    static readonly HashSet<string> ProvenAnimatingSources = new(global::System.StringComparer.Ordinal)
+    {
+        "AnimatedSettingsVisualSource",
+        "AnimatedFindVisualSource",
+        "AnimatedGlobalNavigationButtonVisualSource",
+    };
+
+    static readonly HashSet<string> ProvenStates = new(global::System.StringComparer.Ordinal)
+    {
+        "Normal", "PointerOver", "Pressed",
+    };
+
+    [Fact]
+    public void AnimatedIcons_UseSourcesAndStatesTheSelfTestProves()
+    {
+        const string Fixture = "tests/Reactor.AppTests.Host/SelfTest/Fixtures/AnimatedIconStateFixtures.cs";
+        var offenders = new List<string>();
+        var inspectedSources = 0;
+        var inspectedStates = 0;
+
+        foreach (var (path, root) in Pages())
+        {
+            var icons = root.DescendantNodes().OfType<InvocationExpressionSyntax>()
+                .Where(i => InvokedName(i) == "AnimatedIcon").ToList();
+            if (icons.Count == 0) continue;
+
+            foreach (var creation in root.DescendantNodes().OfType<ObjectCreationExpressionSyntax>())
+            {
+                var typeName = creation.Type switch
+                {
+                    IdentifierNameSyntax id => id.Identifier.Text,
+                    QualifiedNameSyntax q => q.Right.Identifier.Text,
+                    _ => null,
+                };
+                if (typeName is null || !typeName.EndsWith("VisualSource", global::System.StringComparison.Ordinal)) continue;
+                inspectedSources++;
+
+                if (!ProvenAnimatingSources.Contains(typeName))
+                {
+                    offenders.Add($"{Where(path, creation)}: {typeName} is not covered by BuiltInSourceMarkers, so " +
+                                  $"nothing proves it animates between {string.Join("/", ProvenStates)}. Add it to that " +
+                                  $"fixture in {Fixture} and to ProvenAnimatingSources here — a source with a zero-length " +
+                                  "segment renders a still frame and no test would notice.");
+                }
+            }
+
+            foreach (var write in root.DescendantNodes().OfType<InvocationExpressionSyntax>()
+                         .Where(i => InvokedName(i) == "SetState" && i.ArgumentList.Arguments.Count >= 2))
+            {
+                foreach (var literal in StateLiteralsReaching(root, write.ArgumentList.Arguments[1].Expression))
+                {
+                    inspectedStates++;
+                    if (!ProvenStates.Contains(literal))
+                    {
+                        offenders.Add($"{Where(path, write)}: writes the state \"{literal}\", which BuiltInSourceMarkers " +
+                                      $"does not check for a marker segment. Add it to GalleryStates in {Fixture} and to " +
+                                      "ProvenStates here — an unknown state name makes AnimatedIcon hard-cut silently.");
+                    }
+                }
+            }
+        }
+
+        Assert.True(inspectedSources > 0, "no *VisualSource constructions were inspected — the lint would pass vacuously.");
+        Assert.True(inspectedStates > 0, "no state literals were traced to a SetState call — the lint would pass vacuously.");
+        Assert.True(offenders.Count == 0, string.Join("\n", offenders));
+    }
+
+    /// <summary>
+    /// The string literals that can reach a <c>SetState</c> argument, by walking back through the
+    /// locals it names. <c>state</c> resolves through <c>var state = States[stateIdx];</c> to the
+    /// <c>States</c> array's elements; <c>menuState</c> resolves through its conditional directly.
+    /// Literals elsewhere on the page — a button caption's <c>open ? "Close" : "Menu"</c> — are
+    /// never reached, because nothing in the state expression's dataflow names them.
+    /// </summary>
+    static IEnumerable<string> StateLiteralsReaching(SyntaxNode root, ExpressionSyntax stateExpression)
+    {
+        var declarators = root.DescendantNodes().OfType<VariableDeclaratorSyntax>()
+            .Where(d => d.Initializer is not null)
+            .GroupBy(d => d.Identifier.Text, global::System.StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First().Initializer!.Value, global::System.StringComparer.Ordinal);
+
+        var seen = new HashSet<string>(global::System.StringComparer.Ordinal);
+        var literals = new List<string>();
+        var pending = new Queue<ExpressionSyntax>();
+        pending.Enqueue(stateExpression);
+
+        while (pending.Count > 0)
+        {
+            var expression = pending.Dequeue();
+
+            foreach (var literal in expression.DescendantNodesAndSelf().OfType<LiteralExpressionSyntax>())
+            {
+                if (literal.Token.Value is string text) literals.Add(text);
+            }
+
+            foreach (var id in expression.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>())
+            {
+                var name = id.Identifier.Text;
+                if (!seen.Add(name)) continue;
+                if (declarators.TryGetValue(name, out var initializer)) pending.Enqueue(initializer);
+            }
+        }
+
+        return literals;
     }
 
     // ── ms-appx assets must exist AND be copied to the output folder ─────────
