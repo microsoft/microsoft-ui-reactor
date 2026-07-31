@@ -41,7 +41,10 @@ class AnimatedIconPage : Component
         var menuNav = UseMemo(() => new AnimatedGlobalNavigationButtonVisualSource());
 
         var (stateIdx, setStateIdx) = UseState(0);
-        var state = States[stateIdx];
+        // A controlled ComboBox surfaces WinUI's -1 ("nothing selected") straight through
+        // the SelectionChanged trampoline, so clamp rather than indexing the raw value —
+        // an out-of-range read here would throw inside Render.
+        var state = States[Math.Clamp(stateIdx, 0, States.Length - 1)];
 
         var (hovering, setHovering) = UseState(false);
         // UseReducer, not UseState: the click handler derives the next value from the
@@ -74,8 +77,11 @@ class AnimatedIconPage : Component
 // using XamlAnimatedIcon = Microsoft.UI.Xaml.Controls.AnimatedIcon;
 //   `using static Factories` shadows the WinUI type with the AnimatedIcon factory method.
 var settings = UseMemo(() => new AnimatedSettingsVisualSource());
+var states = new[] { ""Normal"", ""PointerOver"", ""Pressed"" };
 var (stateIdx, setStateIdx) = UseState(0);
-var state = new[] { ""Normal"", ""PointerOver"", ""Pressed"" }[stateIdx];
+// A controlled ComboBox surfaces WinUI's -1 (""nothing selected"") straight through,
+// so clamp rather than indexing the raw value — an out-of-range read throws in Render.
+var state = states[Math.Clamp(stateIdx, 0, states.Length - 1)];
 
 AnimatedIcon(settings).Size(32, 32)
     .Set(icon => XamlAnimatedIcon.SetState(icon, state))

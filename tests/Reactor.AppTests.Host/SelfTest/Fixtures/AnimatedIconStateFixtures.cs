@@ -50,7 +50,8 @@ internal static class AnimatedIconStateFixtures
             // PointerOverToNormal segments both sit at [0..0] (a chevron looks the same
             // hovered), so it is a free fixed point: if this reads as "animated", the
             // duration oracle is broken; if the gallery's three read as "static", the
-            // gallery regressed. The pair fails in opposite directions.
+            // gallery regressed. The pair fails in opposite directions. Both directions
+            // are asserted below, so the comment and the check claim the same thing.
             CheckStaticPair("ChevronDownSmall", new AnimatedChevronDownSmallVisualSource());
             return Task.CompletedTask;
         }
@@ -60,26 +61,33 @@ internal static class AnimatedIconStateFixtures
             var markers = source.Markers;
             H.Check($"AnimIconMarkers_{label}_HoverPairIsZeroLength", () =>
             {
-                if (!markers.TryGetValue("NormalToPointerOver_Start", out var start)
-                    || !markers.TryGetValue("NormalToPointerOver_End", out var end))
+                // Both directions, not just NormalToPointerOver: the check is named for the
+                // hover *pair* and the comment above claims both sit at [0..0], so asserting
+                // one direction would let the other animate while the control still passed.
+                var offenders = new global::System.Collections.Generic.List<string>();
+                foreach (var transition in new[] { "NormalToPointerOver", "PointerOverToNormal" })
                 {
-                    throw new global::System.InvalidOperationException(
-                        $"expected the marker pair to exist; present [{string.Join(", ", markers.Keys)}]");
+                    if (!markers.TryGetValue($"{transition}_Start", out var start)
+                        || !markers.TryGetValue($"{transition}_End", out var end))
+                    {
+                        throw new global::System.InvalidOperationException(
+                            $"expected {transition} markers to exist; present [{string.Join(", ", markers.Keys)}]");
+                    }
+
+                    // Require exact equality, not `end <= start`: an inverted pair
+                    // (end < start) is a broken marker map, not a valid zero-length
+                    // segment, and must not be able to satisfy the negative control.
+                    if (end != start)
+                    {
+                        offenders.Add($"{transition}=[{start:0.####}..{end:0.####}]"
+                            + (end < start ? " (inverted — broken marker map)" : string.Empty));
+                    }
                 }
 
-                // Require exact equality, not `end <= start`: an inverted pair
-                // (end < start) is a broken marker map, not a valid zero-length
-                // segment, and must not be able to satisfy the negative control.
-                if (end != start)
-                {
-                    throw new global::System.InvalidOperationException(
-                        $"expected a zero-length control segment, got [{start:0.####}..{end:0.####}] — "
-                        + (end < start
-                            ? "the pair is inverted, so the marker map is broken"
-                            : "the duration oracle's negative control no longer holds"));
-                }
-
-                return true;
+                if (offenders.Count == 0) return true;
+                throw new global::System.InvalidOperationException(
+                    $"expected zero-length control segments, got [{string.Join(", ", offenders)}] — "
+                    + "the duration oracle's negative control no longer holds");
             });
         }
 
