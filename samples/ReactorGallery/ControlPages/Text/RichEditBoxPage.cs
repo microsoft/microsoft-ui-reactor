@@ -36,7 +36,7 @@ class RichEditBoxPage : Component
                     """
                     var (countedText, setCountedText) = UseState("Type here...");
                     RichEditBox(countedText, setCountedText).Width(400).Height(120)
-                    Text($"Characters: {countedText.Length}")
+                    TextBlock($"Characters: {countedText.Length}")
                     """)
             ).Margin(36, 24, 36, 36)
         );
