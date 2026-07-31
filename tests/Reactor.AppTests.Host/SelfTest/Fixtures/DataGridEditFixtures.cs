@@ -1004,6 +1004,16 @@ internal static class DataGridEditFixtures
                 {
                     Editor = (value, _) => TextBlock(value?.ToString() ?? ""),
                 },
+
+                // A focusable root that is NOT a Control. TextBlock derives from FrameworkElement,
+                // and enabling text selection puts it in the tab order — so this is focusable while
+                // failing an `is Control` test. Gating TryFocusEditor on Control (as it originally
+                // was) declines this silently and focus never moves.
+                baseColumns[3] with
+                {
+                    Editor = (value, _) => TextBlock(value?.ToString() ?? "")
+                        .Set(tb => tb.IsTextSelectionEnabled = true),
+                },
             };
 
             var state = new DataGridState<TestProduct>(
@@ -1088,6 +1098,24 @@ internal static class DataGridEditFixtures
             // a neighbouring editor, or cleared to null.
             H.Check($"CustomEditorFocus_NonFocusableEditorLeavesFocusPut (focused='{Focused()?.GetType().Name ?? "null"}')",
                 ReferenceEquals(Focused(), anchor));
+
+            state.CancelEdit();
+            await Harness.Render();
+
+            // ── Focusable root that is not a Control ────────────────────────────────────
+            anchor.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            await Harness.WaitFor(() => ReferenceEquals(Focused(), anchor));
+
+            state.BeginEdit(1, 3); // row 1, Price — the selectable-TextBlock editor
+            await Harness.WaitFor(() => Focused() is Microsoft.UI.Xaml.Controls.TextBlock);
+
+            var selectable = Focused() as Microsoft.UI.Xaml.Controls.TextBlock;
+            // Naming TextBlock is the whole point: every other focus check in this file lands on a
+            // Control, so all of them pass whether TryFocusEditor accepts UIElement or only Control.
+            // This one fails against the Control-gated version, which is what makes it worth having.
+            H.Check($"CustomEditorFocus_FocusesANonControlRoot (focused='{Focused()?.GetType().Name ?? "null"}', text='{selectable?.Text}')",
+                selectable is not null && selectable.Text == "15"
+                && Focused() is not Microsoft.UI.Xaml.Controls.Control);
 
             state.CancelEdit();
             await Harness.Render();

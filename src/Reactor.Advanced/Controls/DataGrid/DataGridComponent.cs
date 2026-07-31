@@ -1079,12 +1079,15 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
     /// </summary>
     internal static bool TryFocusEditor(FrameworkElement fe)
     {
-        // A custom col.Editor can return a composite (a Grid wrapping a TextBox + a glyph)
-        // whose ROOT is not focusable, so a plain Control.Focus would silently return false.
-        if (fe is Microsoft.UI.Xaml.Controls.Control control && control.Focus(FocusState.Programmatic))
+        // UIElement.Focus, not Control.Focus: a custom col.Editor may hand back a focusable
+        // non-Control root (a RichTextBlock with text selection on, or any UIElement with
+        // IsTabStop set), which a Control-typed check would silently decline to focus.
+        if (fe.Focus(FocusState.Programmatic))
             return true;
 
-        if (Microsoft.UI.Xaml.Input.FocusManager.FindFirstFocusableElement(fe) is Microsoft.UI.Xaml.Controls.Control inner)
+        // A composite editor (a Grid wrapping a TextBox + a glyph) has a non-focusable ROOT,
+        // so reach for the first focusable thing inside it — again without narrowing to Control.
+        if (Microsoft.UI.Xaml.Input.FocusManager.FindFirstFocusableElement(fe) is Microsoft.UI.Xaml.UIElement inner)
             return inner.Focus(FocusState.Programmatic);
 
         return false;
