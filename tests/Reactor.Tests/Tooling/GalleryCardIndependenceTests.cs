@@ -46,9 +46,16 @@ namespace Microsoft.UI.Reactor.Tests.Tooling;
 /// only one ever renders. No gallery page builds a card conditionally; if one ever does, the
 /// fix is to give each branch its own slot, which is what the reader would expect anyway.</para>
 ///
-/// <para>Note that lambda-parameter shadowing is <em>not</em> on this list. A lambda parameter
-/// cannot reuse the name of a local in an enclosing scope (CS0136), and every slot is a local
-/// of <c>Render</c>, so in code that compiles a shadowed name cannot exist to be misattributed.
+/// <para>Lambda-parameter shadowing is not on this list, but the reason is narrower than it
+/// first looks and only the narrow version holds. Inside the member that declares the slot, a
+/// lambda parameter cannot reuse the name (CS0136), so in code that compiles no shadowed name
+/// exists to be misattributed. That argument stops at the member boundary: CS0136 says nothing
+/// about a lambda parameter in a <em>sibling</em> method, which compiles happily and — since
+/// this scan walks the file, not the <c>Render</c> node — would be read as a reference to the
+/// slot. What rules that out is not CS0136 but scope: attribution requires a reference to sit
+/// in the same member that declares the slot (see <see cref="DeclaringMember"/>). Pinned by
+/// <see cref="ALambdaParameterInAnotherMethod_DoesNotCountAsAReference"/>, which reported
+/// <c>(value, setValue): Basic | Extras</c> against a correct page before that bound existed.
 /// </para>
 ///
 /// <para>Roslyn parses the page sources directly — no gallery build, no WinUI objects — so this
@@ -105,9 +112,9 @@ public sealed class GalleryCardIndependenceTests
     /// Discards are skipped — they bind nothing and so can never be referenced from a card.
     /// Returned in source order, which is what <c>DescendantNodes</c> pre-order already gives.
     /// </summary>
-    internal static IReadOnlyList<(IReadOnlyList<string> Names, int Line)> StateSlots(SyntaxNode pageRoot)
+    internal static IReadOnlyList<(IReadOnlyList<string> Names, int Line, SyntaxNode? Scope)> StateSlots(SyntaxNode pageRoot)
     {
-        var slots = new List<(IReadOnlyList<string> Names, int Line)>();
+        var slots = new List<(IReadOnlyList<string> Names, int Line, SyntaxNode? Scope)>();
 
         foreach (var node in pageRoot.DescendantNodes())
         {
@@ -134,11 +141,23 @@ public sealed class GalleryCardIndependenceTests
 
             if (names is null || names.Count == 0) continue;
 
-            slots.Add((names, node.GetLocation().GetLineSpan().StartLinePosition.Line + 1));
+            slots.Add((names, node.GetLocation().GetLineSpan().StartLinePosition.Line + 1, DeclaringMember(node)));
         }
 
         return slots;
     }
+
+    /// <summary>
+    /// The member whose body a node sits in — the scope a local declared there can be read from.
+    ///
+    /// <para>This is what bounds a slot's reach. A slot is a local, and a local is invisible
+    /// outside the member that declares it, so an identifier in a <em>different</em> member
+    /// spelling the same name is a different symbol by the language rules rather than by
+    /// guesswork. Without this bound the scan is file-wide and a lambda parameter, loop
+    /// variable, or local in a sibling method silently reads as a reference to the slot.</para>
+    /// </summary>
+    static SyntaxNode? DeclaringMember(SyntaxNode node) =>
+        node.Ancestors().FirstOrDefault(a => a is MemberDeclarationSyntax or LocalFunctionStatementSyntax);
 
     // ── attributing a reference to a card ────────────────────────────────────
 
@@ -221,6 +240,10 @@ public sealed class GalleryCardIndependenceTests
             if (ambiguous.Contains(name)) continue;
             if (!slotOfName.TryGetValue(name, out var index)) continue;
             if (IsNameOfOperand(reference)) continue;
+
+            // A slot is a local: only code in the member that declares it can read it. The same
+            // name in another member is another symbol, so it must not reach this slot.
+            if (DeclaringMember(reference) != slots[index].Scope) continue;
 
             var card = OwningCard(reference, cards);
             if (card is null) continue;
@@ -432,6 +455,50 @@ public sealed class GalleryCardIndependenceTests
         """)]
     public void IndependentPages_AreNotReported(string label, string body) =>
         AssertFindings(label, body);
+
+    /// <summary>
+    /// A lambda parameter in a <em>different method</em> that reuses a slot's name. CS0136 does
+    /// not reach across member bodies, so unlike the in-<c>Render</c> case this compiles — and
+    /// the scan walks the whole file, so before <see cref="DeclaringMember"/> bounded
+    /// attribution this reported <c>(value, setValue): Basic | Extras</c> against a page whose
+    /// two cards share nothing. This lint has no allowlist, so that false positive is a blocked
+    /// tree, which makes it the more expensive direction to be wrong in.
+    ///
+    /// <para>Written against a hand-built page rather than <see cref="Page"/>, which only ever
+    /// emits one method. Asserted on the finding <em>list</em> rather than a count so a
+    /// regression names the card it wrongly convicted.</para>
+    /// </summary>
+    [Fact]
+    public void ALambdaParameterInAnotherMethod_DoesNotCountAsAReference()
+    {
+        var scan = ScanSource("""
+            namespace Gallery;
+
+            class __Page : Component
+            {
+                public override Element Render()
+                {
+                    var (value, setValue) = UseState(0.0);
+
+                    return VStack(
+                        SampleCard("Basic", NumberBox(value, v => setValue(v)), sourceCode: @"x"),
+                        Extras());
+                }
+
+                static Element Extras() =>
+                    SampleCard("Extras",
+                        TextBlock(string.Join(",", Labels.Select(value => value.Trim()))),
+                        sourceCode: @"x");
+            }
+            """);
+
+        Assert.Equal([], scan.Findings.Select(f => f.Signature()));
+
+        // …and the page really was scanned, so the silence above is a verdict rather than a
+        // parse that found nothing to look at.
+        Assert.Equal(2, scan.Cards);
+        Assert.Equal(1, scan.Slots);
+    }
 
     /// <summary>
     /// Coupling across more than two cards is reported once, listing every card involved — the
