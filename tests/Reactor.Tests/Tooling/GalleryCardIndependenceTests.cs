@@ -125,19 +125,23 @@ public sealed class GalleryCardIndependenceTests
                 && assignment.Left is DeclarationExpressionSyntax { Designation: ParenthesizedVariableDesignationSyntax designation }
                 && IsStateHook(assignment.Right))
             {
-                // Discards are dropped structurally, not by the length filter: Roslyn parses `_`
-                // in a deconstruction as DiscardDesignationSyntax, which this OfType excludes.
+                // Discards carry no name a card can read, so they never bind a slot. The two
+                // spellings need different exclusions and only one is structural: Roslyn parses
+                // `_` in a deconstruction as DiscardDesignationSyntax, which this OfType drops —
+                // but `var _ = UseState(...)` below parses as an ordinary declarator named `_`,
+                // which nothing about its shape distinguishes from a real local.
                 names = designation.Variables
                     .OfType<SingleVariableDesignationSyntax>()
                     .Select(v => v.Identifier.Text)
-                    .Where(n => n.Length > 0)
+                    .Where(n => !IsDiscard(n))
                     .ToList();
             }
             else if (node is VariableDeclaratorSyntax { Initializer: { } initializer } declarator
                 && IsStateHook(initializer.Value))
             {
-                names = [declarator.Identifier.Text];
+                names = IsDiscard(declarator.Identifier.Text) ? [] : [declarator.Identifier.Text];
             }
+
 
             if (names is null || names.Count == 0) continue;
 
@@ -146,6 +150,14 @@ public sealed class GalleryCardIndependenceTests
 
         return slots;
     }
+
+    /// <summary>
+    /// A name that binds nothing readable. Covers the empty identifier a malformed parse can
+    /// produce as well as <c>_</c>, which is the one name C# exempts from the duplicate-name
+    /// rule — so unlike every other slot name it can legally appear twice in one scope, and a
+    /// name-keyed scan must not treat the two as the same slot.
+    /// </summary>
+    static bool IsDiscard(string name) => name.Length == 0 || name == "_";
 
     /// <summary>
     /// The member whose body a node sits in — the scope a local declared there can be read from.
@@ -497,6 +509,49 @@ public sealed class GalleryCardIndependenceTests
         // …and the page really was scanned, so the silence above is a verdict rather than a
         // parse that found nothing to look at.
         Assert.Equal(2, scan.Cards);
+        Assert.Equal(1, scan.Slots);
+    }
+
+    /// <summary>
+    /// Two cards that each discard the value half of their own slot. <c>_</c> is the one name
+    /// the CS0136 argument in the class comment does not cover — discards are exempt from the
+    /// duplicate-name rule, so two <c>_</c> designations in one scope are legal and a name-keyed
+    /// scan could see "the same slot" on both cards. These cards are independent.
+    /// </summary>
+    [Fact]
+    public void TwoCardsEachDiscardingTheirOwnSlot_AreNotReported() =>
+        AssertFindings("two independent discarded slots", """
+                    var (_, setA) = UseState(0);
+                    var (_, setB) = UseState(0);
+
+                    return VStack(
+                        SampleCard("A", Button("a", () => setA(1)), sourceCode: @"x"),
+                        SampleCard("B", Button("b", () => setB(1)), sourceCode: @"x"));
+            """);
+
+    /// <summary>
+    /// The whole-tuple spelling, <c>var _ = UseState(...)</c>. Roslyn parses this as an ordinary
+    /// <see cref="VariableDeclaratorSyntax"/> named <c>_</c>, <em>not</em> as a
+    /// <c>DiscardDesignationSyntax</c> — so the structural exclusion that covers the
+    /// deconstruction branch does not reach this one. A discard cannot be read, so a slot bound
+    /// only to <c>_</c> can never couple two cards and must not enter the slot list under either
+    /// spelling.
+    /// </summary>
+    [Fact]
+    public void AWholeTupleDiscard_IsNotASlot()
+    {
+        var scan = ScanSource(Page("""
+                    var _ = UseState(0);
+                    var (kept, setKept) = UseState(0);
+
+                    return VStack(
+                        SampleCard("A", Button("a", () => setKept(1)), sourceCode: @"x"),
+                        SampleCard("B", TextBlock($"{kept}"), sourceCode: @"x"));
+            """));
+
+        // `kept` is genuinely shared, so the page has exactly one finding — and the discard
+        // contributes neither a slot of its own nor a second signature.
+        Assert.Equal(["(kept, setKept): A | B"], scan.Findings.Select(f => f.Signature()));
         Assert.Equal(1, scan.Slots);
     }
 
