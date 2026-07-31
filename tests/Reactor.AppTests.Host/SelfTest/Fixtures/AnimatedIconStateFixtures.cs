@@ -36,6 +36,18 @@ internal static class AnimatedIconStateFixtures
     /// that possibility: a pair is <see cref="Animated"/> above the band, <see cref="ZeroLength"/>
     /// inside it, and <em>neither</em> below it or when unreadable — so an inverted pair (a broken
     /// marker map) and a NaN pair fail both checks rather than quietly satisfying one of them.
+    /// <para>
+    /// The band value is sized against the measured data, not picked generically. Markers are
+    /// normalised progress in [0, 1] (never frames or seconds), and the four sources below are
+    /// strongly bimodal: every animated segment measures ≥ 0.075 (shortest is Settings' hover and
+    /// press pairs at 0.075; Find/GlobalNav are 0.1125), while the negative control's hover pair
+    /// measures exactly [0..0] in <em>both</em> directions. 1e-6 therefore sits ~75,000× below the
+    /// shortest real segment and strictly above the static side, so it cannot absorb a real
+    /// animation into "zero-length" — the failure that would let the negative control pass while
+    /// being wrong. Any band strictly inside (0, 0.075) discriminates identically; the exact value
+    /// is deliberately not load-bearing. Verified by mutation: raising it to 0.2 reddens the three
+    /// duration oracles, and pointing the negative control at an animated source reddens it.
+    /// </para>
     /// </summary>
     const double MinDuration = 1e-6;
 
