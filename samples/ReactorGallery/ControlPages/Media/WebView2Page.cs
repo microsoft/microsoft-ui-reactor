@@ -12,6 +12,7 @@ class WebView2Page : Component
     public override Element Render()
     {
         var (url, setUrl) = UseState("https://learn.microsoft.com/windows/apps/");
+        var (presetUrl, setPresetUrl) = UseState("https://learn.microsoft.com/windows/apps/");
 
         return ScrollView(
             VStack(16,
@@ -29,13 +30,13 @@ class WebView2Page : Component
                 SampleCard("WebView2 with Preset URLs",
                     VStack(8,
                         HStack(8,
-                            Button("Microsoft Learn", () => setUrl("https://learn.microsoft.com")),
-                            Button("Bing", () => setUrl("https://www.bing.com"))
+                            Button("Microsoft Learn", () => setPresetUrl("https://learn.microsoft.com")),
+                            Button("Bing", () => setPresetUrl("https://www.bing.com"))
                         ),
-                        WebView2(new Uri(url)).Width(600).Height(300)
+                        WebView2(new Uri(presetUrl)).Width(600).Height(300)
                     ),
-                    @"Button(""Learn"", () => setUrl(""https://learn.microsoft.com""))
-WebView2(new Uri(url)).Width(600).Height(300)")
+                    @"Button(""Learn"", () => setPresetUrl(""https://learn.microsoft.com""))
+WebView2(new Uri(presetUrl)).Width(600).Height(300)")
             ).Margin(36, 24, 36, 36)
         );
     }

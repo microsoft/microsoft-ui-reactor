@@ -12,6 +12,7 @@ class NavigationViewPage : Component
     public override Element Render()
     {
         var (selectedTag, setSelectedTag) = UseState("page1");
+        var (topTag, setTopTag) = UseState("page1");
         var (paneMode, setPaneMode) = UseState(0);
 
         var items = new[]
@@ -62,16 +63,16 @@ with {
 
                 SampleCard("Top-Mode NavigationView",
                     (NavigationView(items,
-                        content: TextBlock($"Content area for: {selectedTag}")
+                        content: TextBlock($"Content area for: {topTag}")
                             .Foreground(Theme.PrimaryText).Padding(16))
                     with
                     {
-                        SelectedTag = selectedTag,
-                        OnSelectedTagChanged = tag => { if (tag != null) setSelectedTag(tag); },
+                        SelectedTag = topTag,
+                        OnSelectedTagChanged = tag => { if (tag != null) setTopTag(tag); },
                         PaneDisplayMode = NavigationViewPaneDisplayMode.Top,
                         IsSettingsVisible = false,
                     }).Height(200),
-                    @"NavigationView(items, content: TextBlock($""Content area for: {selectedTag}"")) with {
+                    @"NavigationView(items, content: TextBlock($""Content area for: {topTag}"")) with {
     PaneDisplayMode = NavigationViewPaneDisplayMode.Top
 }")
             ).Margin(36, 24, 36, 36)

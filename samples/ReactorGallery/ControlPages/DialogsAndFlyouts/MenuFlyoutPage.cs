@@ -12,6 +12,7 @@ class MenuFlyoutPage : Component
     public override Element Render()
     {
         var (lastAction, setLastAction) = UseState("(none)");
+        var (formatAction, setFormatAction) = UseState("(none)");
 
         return ScrollView(
             VStack(16,
@@ -34,15 +35,18 @@ class MenuFlyoutPage : Component
     MenuItem(""Paste"", () => {}, icon: ""Paste""))"),
 
                 SampleCard("MenuFlyout with Separators and SubItems",
-                    MenuFlyout(
-                        Button("Format"),
-                        MenuItem("Bold", () => setLastAction("Bold")),
-                        MenuItem("Italic", () => setLastAction("Italic")),
-                        MenuSeparator(),
-                        MenuSubItem("Font Size",
-                            MenuItem("Small", () => setLastAction("Small")),
-                            MenuItem("Medium", () => setLastAction("Medium")),
-                            MenuItem("Large", () => setLastAction("Large")))),
+                    VStack(8,
+                        MenuFlyout(
+                            Button("Format"),
+                            MenuItem("Bold", () => setFormatAction("Bold")),
+                            MenuItem("Italic", () => setFormatAction("Italic")),
+                            MenuSeparator(),
+                            MenuSubItem("Font Size",
+                                MenuItem("Small", () => setFormatAction("Small")),
+                                MenuItem("Medium", () => setFormatAction("Medium")),
+                                MenuItem("Large", () => setFormatAction("Large")))),
+                        TextBlock($"Last action: {formatAction}").Foreground(Theme.SecondaryText)
+                    ),
                     @"MenuFlyout(
     Button(""Format""),
     MenuItem(""Bold"", () => {}),

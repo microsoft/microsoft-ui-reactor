@@ -12,6 +12,7 @@ class NumberBoxPage: Component
     public override Element Render()
     {
         var (value, setValue) = UseState(0.0);
+        var (spinValue, setSpinValue) = UseState(0.0);
         var (rangeValue, setRangeValue) = UseState(50.0);
 
         return ScrollView(VStack(16,
@@ -26,9 +27,9 @@ NumberBox(value, v => setValue(v), ""Enter a number"")
 "),
 
             SampleCard("NumberBox with Spin Buttons",
-                NumberBox(value, v => setValue(v), "Quantity").SpinButtons(),
+                NumberBox(spinValue, v => setSpinValue(v), "Quantity").SpinButtons(),
                 sourceCode: @"
-NumberBox(value, v => setValue(v), ""Quantity"").SpinButtons()
+NumberBox(spinValue, v => setSpinValue(v), ""Quantity"").SpinButtons()
 "),
 
             SampleCard("NumberBox with Range",

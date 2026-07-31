@@ -12,6 +12,7 @@ class MenuBarPage : Component
     public override Element Render()
     {
         var (lastAction, setLastAction) = UseState("(none)");
+        var (formatAction, setFormatAction) = UseState("(none)");
 
         return ScrollView(
             VStack(16,
@@ -52,16 +53,19 @@ class MenuBarPage : Component
         MenuItem(""Copy"", () => {})))"),
 
                 SampleCard("Nested SubMenus",
-                    MenuBar(
-                        Menu("Format",
-                            MenuSubItem("Text Size",
-                                MenuItem("Small", () => setLastAction("Small")),
-                                MenuItem("Medium", () => setLastAction("Medium")),
-                                MenuItem("Large", () => setLastAction("Large"))),
-                            MenuSubItem("Alignment",
-                                MenuItem("Left", () => setLastAction("Left")),
-                                MenuItem("Center", () => setLastAction("Center")),
-                                MenuItem("Right", () => setLastAction("Right"))))
+                    VStack(8,
+                        MenuBar(
+                            Menu("Format",
+                                MenuSubItem("Text Size",
+                                    MenuItem("Small", () => setFormatAction("Small")),
+                                    MenuItem("Medium", () => setFormatAction("Medium")),
+                                    MenuItem("Large", () => setFormatAction("Large"))),
+                                MenuSubItem("Alignment",
+                                    MenuItem("Left", () => setFormatAction("Left")),
+                                    MenuItem("Center", () => setFormatAction("Center")),
+                                    MenuItem("Right", () => setFormatAction("Right"))))
+                        ),
+                        TextBlock($"Last action: {formatAction}").Foreground(Theme.SecondaryText)
                     ),
                     @"Menu(""Format"",
     MenuSubItem(""Text Size"",

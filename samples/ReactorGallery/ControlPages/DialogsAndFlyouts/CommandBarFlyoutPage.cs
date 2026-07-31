@@ -12,6 +12,7 @@ class CommandBarFlyoutPage : Component
     public override Element Render()
     {
         var (lastAction, setLastAction) = UseState("(none)");
+        var (secondaryAction, setSecondaryAction) = UseState("(none)");
 
         return ScrollView(
             VStack(16,
@@ -39,17 +40,20 @@ class CommandBarFlyoutPage : Component
     })"),
 
                 SampleCard("CommandBarFlyout with Secondary",
-                    CommandBarFlyout(
-                        Button("More Options"),
-                        primaryCommands: new AppBarItemBase[]
-                        {
-                            AppBarButton("Share", () => setLastAction("Share"), icon: "Share"),
-                        },
-                        secondaryCommands: new AppBarItemBase[]
-                        {
-                            AppBarButton("Select All", () => setLastAction("Select All")),
-                            AppBarButton("Print", () => setLastAction("Print")),
-                        }),
+                    VStack(8,
+                        CommandBarFlyout(
+                            Button("More Options"),
+                            primaryCommands: new AppBarItemBase[]
+                            {
+                                AppBarButton("Share", () => setSecondaryAction("Share"), icon: "Share"),
+                            },
+                            secondaryCommands: new AppBarItemBase[]
+                            {
+                                AppBarButton("Select All", () => setSecondaryAction("Select All")),
+                                AppBarButton("Print", () => setSecondaryAction("Print")),
+                            }),
+                        TextBlock($"Last action: {secondaryAction}").Foreground(Theme.SecondaryText)
+                    ),
                     @"CommandBarFlyout(
     Button(""More Options""),
     primaryCommands: new[] { AppBarButton(""Share"", ...) },

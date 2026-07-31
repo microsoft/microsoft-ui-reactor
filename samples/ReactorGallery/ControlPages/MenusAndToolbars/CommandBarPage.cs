@@ -12,6 +12,7 @@ class CommandBarPage : Component
     public override Element Render()
     {
         var (lastAction, setLastAction) = UseState("(none)");
+        var (secondaryAction, setSecondaryAction) = UseState("(none)");
         var (isBold, setIsBold) = UseState(false);
 
         return ScrollView(
@@ -39,17 +40,20 @@ class CommandBarPage : Component
 })"),
 
                 SampleCard("Primary and Secondary Commands",
-                    CommandBar(
-                        primaryCommands: new AppBarItemBase[]
-                        {
-                            AppBarButton("Share", () => setLastAction("Share"), icon: "Share"),
-                            AppBarToggleButton("Bold", isBold, b => setIsBold(b), icon: "Bold"),
-                        },
-                        secondaryCommands: new AppBarItemBase[]
-                        {
-                            AppBarButton("Copy", () => setLastAction("Copy")),
-                            AppBarButton("Paste", () => setLastAction("Paste")),
-                        }),
+                    VStack(8,
+                        CommandBar(
+                            primaryCommands: new AppBarItemBase[]
+                            {
+                                AppBarButton("Share", () => setSecondaryAction("Share"), icon: "Share"),
+                                AppBarToggleButton("Bold", isBold, b => setIsBold(b), icon: "Bold"),
+                            },
+                            secondaryCommands: new AppBarItemBase[]
+                            {
+                                AppBarButton("Copy", () => setSecondaryAction("Copy")),
+                                AppBarButton("Paste", () => setSecondaryAction("Paste")),
+                            }),
+                        TextBlock($"Last action: {secondaryAction}").Foreground(Theme.SecondaryText)
+                    ),
                     @"CommandBar(
     primaryCommands: new AppBarItemBase[] {
         AppBarButton(""Share"", () => {}, icon: ""Share""),

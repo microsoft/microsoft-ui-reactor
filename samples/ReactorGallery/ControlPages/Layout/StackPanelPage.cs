@@ -40,7 +40,7 @@ class StackPanelPage : Component
                     )),
 
                 SampleCard("HStack (Horizontal)",
-                    HStack(spacing,
+                    HStack(8,
                         ColorBox("#9B59B6", "1"),
                         ColorBox("#1ABC9C", "2"),
                         ColorBox("#E67E22", "3"),
