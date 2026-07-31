@@ -449,31 +449,75 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         // navigation and marks the event as handled BEFORE normal KeyDown handlers
         // fire. Without handledEventsToo, Tab never reaches the DataGrid when the
         // user presses Tab inside an editing TextBox.
+        //
+        // OnMount can run more than once for the SAME FrameworkElement: ElementPool recycles
+        // grid roots, so a remount (fixture navigation, a keyed replacement) hands back a
+        // control that still carries the previous mount's handler. AddHandler does not
+        // de-duplicate, so the naive version left N handlers attached after N mounts and every
+        // key was processed N times. That is invisible for the idempotent arms (Escape cancels
+        // an already-cancelled edit) and silently wrong for the stateful ones — row-mode Tab
+        // stepped the cursor once per attached handler, so with two editable columns a single
+        // Tab went first → last → wrapped back to first and focus never appeared to move.
+        // Re-wire rather than skip: a recycled control's stale closure captures the PREVIOUS
+        // grid's state, so keeping it would drive the wrong state machine.
         grid = grid
             .IsTabStop(true)
-            .OnMount(fe =>
-            {
-                fe.AddHandler(
-                    UIElement.KeyDownEvent,
-                    new Microsoft.UI.Xaml.Input.KeyEventHandler((sender, e) =>
-                    {
-                        var currentEl = elRef.Current;
-                        if (ShouldHandleKey(state, currentEl, e.Key))
-                        {
-                            e.Handled = true;
-                            var capturedKey = e.Key;
-                            if (ShouldClaimNextLostFocus(state, capturedKey))
-                                state.SuppressNextLostFocusCommit = true;
-                            Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() =>
-                            {
-                                HandleKeyDown(state, currentEl, capturedKey);
-                            });
-                        }
-                    }),
-                    true); // handledEventsToo — receive Tab even after FocusManager handles it
-            });
+            .OnMount(fe => WireGridKeyDown(fe, state, elRef));
 
         return grid;
+    }
+
+    /// <summary>
+    /// One-shot KeyDown wiring per grid-root control, so a recycled/remounted root does not
+    /// accumulate handlers. Mirrors the keyed-table pattern <c>DockTabTearOff</c> uses, and the
+    /// <c>ConditionalWeakTable</c> convention AGENTS.md documents for poolable event wiring.
+    /// </summary>
+    private sealed class KeyDownWiring
+    {
+        public Microsoft.UI.Xaml.Input.KeyEventHandler? Handler;
+    }
+
+    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<FrameworkElement, KeyDownWiring> s_keyDownWiring = new();
+
+    /// <summary>
+    /// Attach the grid root's KeyDown handler, replacing any handler a previous mount of the same
+    /// control left behind. Returns <c>true</c> when a stale handler was displaced.
+    /// </summary>
+    /// <remarks>
+    /// This is the production wiring path — <c>OnMount</c> calls exactly this — so a test that
+    /// drives it is testing the real thing rather than a copy that can drift.
+    /// </remarks>
+    internal static bool WireGridKeyDown(
+        FrameworkElement fe, DataGridState<T> state, Ref<DataGridElement<T>> elRef)
+    {
+        var wiring = s_keyDownWiring.GetOrCreateValue(fe);
+        var displaced = wiring.Handler is not null;
+        if (wiring.Handler is not null)
+            fe.RemoveHandler(UIElement.KeyDownEvent, wiring.Handler);
+
+        var handler = new Microsoft.UI.Xaml.Input.KeyEventHandler((sender, e) =>
+            {
+                var currentEl = elRef.Current;
+                if (ShouldHandleKey(state, currentEl, e.Key))
+                {
+                    e.Handled = true;
+                    var capturedKey = e.Key;
+                    if (ShouldClaimNextLostFocus(state, capturedKey))
+                        state.SuppressNextLostFocusCommit = true;
+                    Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() =>
+                    {
+                        HandleKeyDown(state, currentEl, capturedKey);
+                    });
+                }
+            });
+
+        wiring.Handler = handler;
+        fe.AddHandler(
+            UIElement.KeyDownEvent,
+            handler,
+            true); // handledEventsToo — receive Tab even after FocusManager handles it
+
+        return displaced;
     }
 
     // ── Data rows ────────────────────────────────────────────────────

@@ -1007,6 +1007,31 @@ internal static class DataGridEditFixtures
 
             state.CancelRowEdit();
             await Harness.Render();
+
+            // ── Grid-root KeyDown wiring is one-shot per control ────────────────────────
+            // OnMount can run more than once for the SAME FrameworkElement (ElementPool recycles
+            // grid roots across remounts), and AddHandler does not de-duplicate. Every extra
+            // handler processes every key again, which for row-mode Tab means an extra cursor
+            // step: with two editable columns a single Tab went first → last → wrapped back to
+            // first, so real focus appeared never to move. This drives the production wiring path
+            // itself, so it cannot drift from what OnMount does.
+            var wireTarget = new Microsoft.UI.Xaml.Controls.Border();
+            var wireRef = new Ref<DataGridElement<TestProduct>>(el);
+
+            var displacedOnFirstWire = DataGridComponent<TestProduct>.WireGridKeyDown(wireTarget, state, wireRef);
+            var displacedOnSecondWire = DataGridComponent<TestProduct>.WireGridKeyDown(wireTarget, state, wireRef);
+
+            // Differential, and it fails in both directions: an unguarded AddHandler displaces
+            // nothing on either call (false, false) and leaves two live handlers; a guard that
+            // skipped re-wiring instead of replacing would leave the FIRST mount's stale closure
+            // driving a recycled control's previous state.
+            H.Check($"EditorFocus_GridKeyDownWiring_IsOneShotPerControl (first={displacedOnFirstWire}, second={displacedOnSecondWire})",
+                !displacedOnFirstWire && displacedOnSecondWire);
+
+            // A different control must get its own wiring, not inherit the first one's.
+            var otherTarget = new Microsoft.UI.Xaml.Controls.Border();
+            H.Check("EditorFocus_GridKeyDownWiring_IsPerControl",
+                !DataGridComponent<TestProduct>.WireGridKeyDown(otherTarget, state, wireRef));
         }
     }
 

@@ -159,13 +159,19 @@ public class DataGridTests : AppTestBase
     /// wrapping from the last one back to the first — instead of walking out of the grid and
     /// tripping the LostFocus blur-commit.
     ///
-    /// <para>Behavioral oracle, because winapp cannot tell us which of the row's several open
-    /// editors has focus: type into the editor focus lands in and read back which COLUMN changed.
-    /// Start a row edit on row 1 (focus lands in FirstName), Tab once (→ LastName) and type
-    /// "Smythe", Tab again — the wrap — and type "Alicia", then Enter to commit the row. Only a
-    /// correct wrap produces <c>[1:Alicia,Smythe]</c>: if Tab left the grid, the blur-commit lands
-    /// <c>[1:Alice,Smythe]</c> first and "Alicia" goes nowhere; if focus never moved, "Alicia"
-    /// overwrites LastName and the log reads <c>[1:Alice,Alicia]</c>.</para>
+    /// <para>Two independent oracles. First, a DIRECT one: each editable column carries a stable
+    /// AutomationId, so <see cref="WaitForFocus"/> asserts the destination of every Tab against
+    /// live UIA focus rather than inferring it after the fact. Three editable columns make
+    /// direction expressible — forward from FirstName is MiddleName, backward is LastName, and a
+    /// double-step is LastName — so a direction-inverting or double-firing regression fails here.
+    /// The wrap itself (Tab from LastName → FirstName) cannot be produced by native tab order,
+    /// which walks on to Save, so that check is specific to #976's focus seam.</para>
+    ///
+    /// <para>Second, a BEHAVIORAL one that survives even if focus reporting were broken: type
+    /// "Smythe" into LastName and "Alicia" into FirstName after the wrap, then Enter. Only a
+    /// correct wrap produces <c>[1:Alicia,Marie,Smythe]</c> — MiddleName is never typed into, so
+    /// it must still read its seed value, and if Tab had left the grid the blur-commit would land
+    /// an earlier entry first.</para>
     /// </summary>
     [E2eRetry(3)]
     [TestMethod]
@@ -177,14 +183,20 @@ public class DataGridTests : AppTestBase
 
         BeginRowEditOnFirstRow();
 
-        // Focus is in the FirstName editor. Tab → LastName, replace "Smith" with "Smythe".
+        // Focus starts in FirstName. Step forward through every editable column, asserting the
+        // DESTINATION of each move. Three editable columns make direction expressible: forward
+        // from FirstName is MiddleName, backward is LastName, and a double-step is LastName too.
         WaitForFocus("RowEdit_FirstName", "row edit start");
         App.SendKeys(Keys.Tab, viaSendInput: true);
-        WaitForFocus("RowEdit_LastName", "Tab from FirstName");
+        WaitForFocus("RowEdit_MiddleName", "Tab from FirstName");
+        App.SendKeys(Keys.Tab, viaSendInput: true);
+        WaitForFocus("RowEdit_LastName", "Tab from MiddleName");
         ReplaceFocusedEditorText("Smythe");
 
         // Tab again. LastName is the LAST editable column, so this is the wrap: focus must return
         // to the FirstName editor rather than continuing on to Save/Cancel and out of the grid.
+        // Native tab order cannot produce this — it walks on to Save — so this check is the one
+        // that is specific to #976's focus seam.
         App.SendKeys(Keys.Tab, viaSendInput: true);
         WaitForFocus("RowEdit_FirstName", "Tab from LastName (the wrap)");
         ReplaceFocusedEditorText("Alicia");
@@ -196,7 +208,7 @@ public class DataGridTests : AppTestBase
 
         App.SendKeys(Keys.Enter, viaSendInput: true);
 
-        WaitForTextContaining("RowEditLog", "[1:Alicia,Smythe]", timeoutMs: 5000);
+        WaitForTextContaining("RowEditLog", "[1:Alicia,Marie,Smythe]", timeoutMs: 5000);
     }
 
     /// <summary>
@@ -208,10 +220,11 @@ public class DataGridTests : AppTestBase
     ///
     /// <para>The oracle has to have teeth in BOTH directions, which is why the value typed after
     /// the Tab matters. Asserting only on the FirstName edit would pass with suppression removed
-    /// entirely: that Tab would blur-commit <c>[1:Alicia,Smith]</c> on the spot and the final
-    /// assertion would happily match it. Editing LastName after the Tab can only happen if the row
-    /// is STILL in edit mode, so <c>[1:Alicia,Smythe]</c> proves the Tab did not commit — and its
-    /// arrival at all proves the flag did not leak and swallow the anchor's blur-commit.</para>
+    /// entirely: that Tab would blur-commit <c>[1:Alicia,Marie,Smith]</c> on the spot and the final
+    /// assertion would happily match it. Editing MiddleName after the Tab can only happen if the
+    /// row is STILL in edit mode, so <c>[1:Alicia,Quinn,Smith]</c> proves the Tab did not commit —
+    /// and its arrival at all proves the flag did not leak and swallow the anchor's
+    /// blur-commit.</para>
     /// </summary>
     [E2eRetry(3)]
     [TestMethod]
@@ -223,13 +236,13 @@ public class DataGridTests : AppTestBase
 
         BeginRowEditOnFirstRow();
 
-        // Type into FirstName, Tab (arms the guard), then type into LastName — only reachable if
+        // Type into FirstName, Tab (arms the guard), then type into MiddleName — only reachable if
         // the Tab moved focus without committing.
         WaitForFocus("RowEdit_FirstName", "row edit start");
         ReplaceFocusedEditorText("Alicia");
         App.SendKeys(Keys.Tab, viaSendInput: true);
-        WaitForFocus("RowEdit_LastName", "Tab from FirstName");
-        ReplaceFocusedEditorText("Smythe");
+        WaitForFocus("RowEdit_MiddleName", "Tab from FirstName");
+        ReplaceFocusedEditorText("Quinn");
 
         // Nothing may have committed yet.
         var logSoFar = FindById("RowEditLog").Text ?? "";
@@ -240,7 +253,7 @@ public class DataGridTests : AppTestBase
         // one-shot flag was consumed by the Tab's own LostFocus and must not still be armed.
         Element("RowEditBlurAnchor").Click();
 
-        WaitForTextContaining("RowEditLog", "[1:Alicia,Smythe]", timeoutMs: 5000);
+        WaitForTextContaining("RowEditLog", "[1:Alicia,Quinn,Smith]", timeoutMs: 5000);
 
         // Exactly one commit: a leaked-and-then-recovered flag, or a Tab that committed and then
         // re-committed on blur, both show up as a second entry.
