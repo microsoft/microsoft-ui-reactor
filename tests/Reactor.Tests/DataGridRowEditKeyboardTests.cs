@@ -213,9 +213,13 @@ public class DataGridRowEditKeyboardTests
         // column lands in _rowEditValues even though the row renders no editor for it. Tab must
         // not park focus on a cell the user cannot see.
         state.HideColumn("Name");
-        state.SetFocus(0, IdCol);
         Assert.True(state.BeginRowEdit(0));
         Assert.True(state.GetRowEditValue("Name") is not null);
+
+        // Park the cursor on the read-only Id column AFTER BeginRowEdit: since #976 BeginRowEdit
+        // moves the cursor to whichever column it gives real focus to (here Score, the only visible
+        // editor), and starting the traversal there would make "landed on Score" vacuously true.
+        state.SetFocus(0, IdCol);
 
         Key(state, el, VirtualKey.Tab);
 
@@ -261,8 +265,11 @@ public class DataGridRowEditKeyboardTests
         // position where forward and backward traversal disagree — from anywhere else the two
         // directions ping-pong between the same two columns, so a test that started elsewhere
         // would pass even if this method walked forward.
-        state.SetFocus(0, IdCol);
+        //
+        // The cursor is parked AFTER BeginRowEdit: since #976 BeginRowEdit moves the cursor onto
+        // the column it gives real focus to (here Name), which would collapse that disagreement.
         Assert.True(state.BeginRowEdit(0));
+        state.SetFocus(0, IdCol);
 
         // Backward off column 0 wraps to the LAST editable column, not the first.
         Assert.True(state.FocusPrevRowEditColumn());
@@ -276,15 +283,22 @@ public class DataGridRowEditKeyboardTests
 
         // Differential isolation: same grid, same start, only the direction differs.
         var forward = await LoadedState();
-        forward.SetFocus(0, IdCol);
         Assert.True(forward.BeginRowEdit(0));
+        forward.SetFocus(0, IdCol);
         Assert.True(forward.FocusNextRowEditColumn());
         Assert.Equal(NameCol, forward.FocusedColIndex);
         Assert.NotEqual(ScoreCol, forward.FocusedColIndex);
     }
 
+    /// <summary>
+    /// Issue #976. A row with only ONE visible editable column wraps Tab straight back to the
+    /// column it started on, so there is no logical cursor move — but the render is still
+    /// mandatory. By the time this runs, native Tab has already pushed real keyboard focus off the
+    /// editor onto Save/Cancel, and only a render runs the hook that pulls it back. Skipping the
+    /// notification as a "redundant re-render" optimisation makes Tab silently escape the row.
+    /// </summary>
     [Fact]
-    public async Task RowEditTab_OnSingleEditableColumn_DoesNotRaiseARedundantStateChanged()
+    public async Task RowEditTab_OnSingleEditableColumn_StillArmsAndNotifiesSoFocusIsReclaimed()
     {
         var state = await LoadedState();
 
@@ -295,19 +309,41 @@ public class DataGridRowEditKeyboardTests
 
         var renders = 0;
         state.StateChanged += () => renders++;
+        var versionBefore = state.FocusRequestVersion;
 
-        // Tab has a valid target (Name), it just happens to be the current one — report success
-        // without asking the grid to re-render for a move that didn't move.
         Assert.True(state.FocusNextRowEditColumn());
-        Assert.Equal(NameCol, state.FocusedColIndex);
-        Assert.Equal(0, renders);
 
-        // Differential isolation: give it somewhere to go and the notification comes back.
-        state.ShowColumn("Score");
-        renders = 0;
+        // The cursor genuinely did NOT move — this really is the no-move path, so the render below
+        // cannot be attributed to SetFocus.
+        Assert.Equal(NameCol, state.FocusedColIndex);
+
+        // A fresh request was armed for the column Tab landed on...
+        Assert.True(state.FocusRequestVersion > versionBefore);
+        Assert.True(state.TryConsumeEditorFocusRequest(new RowKey("1"), "Name"));
+
+        // ...and a render was raised to consume it.
+        Assert.Equal(1, renders);
+    }
+
+    /// <summary>
+    /// Companion to the test above: when the cursor DOES move, the notification must come from
+    /// <c>SetFocus</c> exactly once — not once from SetFocus plus a second explicit one.
+    /// </summary>
+    [Fact]
+    public async Task RowEditTab_AcrossTwoEditableColumns_NotifiesExactlyOnce()
+    {
+        var state = await LoadedState();
+
+        state.SetFocus(0, NameCol);
+        Assert.True(state.BeginRowEdit(0));
+
+        var renders = 0;
+        state.StateChanged += () => renders++;
+
         Assert.True(state.FocusNextRowEditColumn());
         Assert.Equal(ScoreCol, state.FocusedColIndex);
         Assert.Equal(1, renders);
+        Assert.True(state.TryConsumeEditorFocusRequest(new RowKey("1"), "Score"));
     }
 
     [Fact]

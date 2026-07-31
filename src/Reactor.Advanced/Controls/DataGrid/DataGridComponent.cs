@@ -990,11 +990,40 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         {
             // One-shot: the first hook to run claims it, so a later re-render of the same
             // still-armed tree can't yank focus back out from under the user.
-            if (state.TryConsumeEditorFocusRequest(rowKey, columnName))
-                ScheduleFocus(fe);
+            if (!state.TryConsumeEditorFocusRequest(rowKey, columnName)) return;
+
+            // Stamp the generation the claim belongs to. The actual Focus() is deferred, and
+            // between now and then the edit can end or a newer request can supersede this one;
+            // ScheduleFocus re-checks both against this stamp before touching XAML.
+            ScheduleFocus(fe, state, rowKey, columnName, state.FocusRequestVersion);
         }
 
         return editor.OnMountAdd(Arm).OnUpdateAdd(Arm);
+    }
+
+    /// <summary>
+    /// Whether a claimed-but-not-yet-applied focus request is still the one the grid wants
+    /// honoured. Pure state predicate, so it is testable without a live control.
+    /// </summary>
+    /// <remarks>
+    /// Guards the window between claiming a request and the deferred <c>Focus()</c> landing:
+    ///   • A newer request superseded this one (row-mode Tab pressed again before the tick ran).
+    ///     Focusing the older cell would fight the newer one and land on whichever tick is last.
+    ///   • The edit that armed the request already ended — commit, cancel, or a blur-commit.
+    ///     Focusing now would yank the caret back onto a control the user has moved away from,
+    ///     and <c>ElementPool</c> may already have recycled that control into a different row.
+    /// </remarks>
+    internal static bool IsFocusRequestStillCurrent(
+        DataGridState<T> state, RowKey rowKey, string columnName, int version)
+    {
+        if (state.FocusRequestVersion != version) return false;
+        if (state.EditingRowKey is not { } editingKey || !editingKey.Equals(rowKey)) return false;
+
+        // Row mode keeps every editable cell of the row open, so the row key is the whole
+        // identity. Cell mode has exactly one open editor, so the column must match too.
+        return state.IsRowEditing
+               || (state.IsEditing
+                   && string.Equals(state.EditingColumnName, columnName, StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -1009,8 +1038,12 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
     ///   • dispatcher — even once loaded, the focus move has to land after WinUI's own Tab
     ///     focus navigation, which has already run by the time our handledEventsToo KeyDown
     ///     handler fires.
+    ///
+    /// Both deferrals re-check <see cref="IsFocusRequestStillCurrent"/> at the moment they run,
+    /// because either one can outlive the edit that armed the request.
     /// </remarks>
-    private static void ScheduleFocus(FrameworkElement fe)
+    private static void ScheduleFocus(
+        FrameworkElement fe, DataGridState<T> state, RowKey rowKey, string columnName, int version)
     {
         if (fe.IsLoaded)
         {
@@ -1028,9 +1061,15 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
 
         void Enqueue()
         {
+            void Apply()
+            {
+                if (IsFocusRequestStillCurrent(state, rowKey, columnName, version))
+                    TryFocusEditor(fe);
+            }
+
             var queue = fe.DispatcherQueue ?? Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
-            if (queue is null) { TryFocusEditor(fe); return; }
-            queue.TryEnqueue(() => TryFocusEditor(fe));
+            if (queue is null) { Apply(); return; }
+            queue.TryEnqueue(Apply);
         }
     }
 

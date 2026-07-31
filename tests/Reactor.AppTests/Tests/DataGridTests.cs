@@ -202,6 +202,13 @@ public class DataGridTests : AppTestBase
     /// flag is one-shot, so it must be consumed by the Tab's own LostFocus — if it leaks it
     /// silently swallows the NEXT legitimate blur-commit and the edit is lost. Same bug class as
     /// <see cref="Interactive_DataGrid_EditingTabToReadOnly_DoesNotSuppressNextCommit"/>.
+    ///
+    /// <para>The oracle has to have teeth in BOTH directions, which is why the value typed after
+    /// the Tab matters. Asserting only on the FirstName edit would pass with suppression removed
+    /// entirely: that Tab would blur-commit <c>[1:Alicia,Smith]</c> on the spot and the final
+    /// assertion would happily match it. Editing LastName after the Tab can only happen if the row
+    /// is STILL in edit mode, so <c>[1:Alicia,Smythe]</c> proves the Tab did not commit — and its
+    /// arrival at all proves the flag did not leak and swallow the anchor's blur-commit.</para>
     /// </summary>
     [E2eRetry(3)]
     [TestMethod]
@@ -213,13 +220,28 @@ public class DataGridTests : AppTestBase
 
         BeginRowEditOnFirstRow();
 
-        // Type into FirstName, then Tab (arms the guard), then leave the grid entirely. The row
-        // must still commit through the LostFocus path.
+        // Type into FirstName, Tab (arms the guard), then type into LastName — only reachable if
+        // the Tab moved focus without committing.
         ReplaceFocusedEditorText("Alicia");
         App.SendKeys(Keys.Tab, viaSendInput: true);
+        ReplaceFocusedEditorText("Smythe");
+
+        // Nothing may have committed yet.
+        var logSoFar = FindById("RowEditLog").Text ?? "";
+        Assert.IsFalse(logSoFar.Contains('['),
+            $"Row-mode Tab must not commit the row; RowEditLog was '{logSoFar}'.");
+
+        // Now leave the grid entirely. The row must still commit through the LostFocus path — the
+        // one-shot flag was consumed by the Tab's own LostFocus and must not still be armed.
         Element("RowEditBlurAnchor").Click();
 
-        WaitForTextContaining("RowEditLog", "[1:Alicia,Smith]", timeoutMs: 5000);
+        WaitForTextContaining("RowEditLog", "[1:Alicia,Smythe]", timeoutMs: 5000);
+
+        // Exactly one commit: a leaked-and-then-recovered flag, or a Tab that committed and then
+        // re-committed on blur, both show up as a second entry.
+        var log = FindById("RowEditLog").Text ?? "";
+        Assert.AreEqual(1, log.Count(c => c == '['),
+            $"Expected exactly one row commit; RowEditLog was '{log}'.");
     }
 
     /// <summary>

@@ -961,4 +961,128 @@ internal static class DataGridEditFixtures
             await Harness.Render();
         }
     }
+
+    /// <summary>
+    /// Issue #976. Everything in <see cref="EditorRealFocus"/> goes through the happy path: the
+    /// built-in editor root IS a focusable <c>Control</c>. A custom <c>col.Editor</c> need not be —
+    /// it can hand back a composite whose root is a bare <c>Panel</c>, or something with no
+    /// focusable content at all. Those are <c>TryFocusEditor</c>'s other two arms, and they are
+    /// unreachable from the built-in editors, so this fixture supplies real custom editors.
+    /// </summary>
+    internal class EditorFocusCustomEditors(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var source = CreateSource(4);
+            var registry = new TypeRegistry();
+
+            var baseColumns = CreateEditableColumns();
+            var columns = new FieldDescriptor[]
+            {
+                baseColumns[0], // Id — read-only
+
+                // Composite: the ROOT is a StackPanel, which is not a Control at all, so
+                // Control.Focus can't even be attempted. Focus can only land via
+                // FindFirstFocusableElement reaching the TextBox inside.
+                baseColumns[1] with
+                {
+                    Editor = (value, set) => HStack(
+                        TextBlock("#"),
+                        TextBox(value?.ToString() ?? "", s => set(s))),
+                },
+
+                // No focusable content anywhere in the subtree.
+                baseColumns[2] with
+                {
+                    Editor = (value, _) => TextBlock(value?.ToString() ?? ""),
+                },
+            };
+
+            var state = new DataGridState<TestProduct>(
+                source, columns, Microsoft.UI.Reactor.Controls.SelectionMode.Single);
+            await state.LoadDataAsync();
+
+            var el = new DataGridElement<TestProduct>
+            {
+                Source = source,
+                Columns = columns,
+                Editable = true,
+                SelectionMode = Microsoft.UI.Reactor.Controls.SelectionMode.Single,
+                EditMode = EditMode.Cell,
+                RowHeight = 36,
+            };
+
+            var anchorRef = new Microsoft.UI.Reactor.Input.ElementRef();
+
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (_, bump) = ctx.UseReducer(0);
+                ctx.UseEffect(() =>
+                {
+                    void OnChanged() => bump(v => v + 1);
+                    state.StateChanged += OnChanged;
+                    return () => state.StateChanged -= OnChanged;
+                }, global::System.Array.Empty<object>());
+
+                var rows = Enumerable.Range(0, 3)
+                    .Select(i => DataGridComponent<TestProduct>.BuildRowForTests(i, state, columns, el, registry))
+                    .ToArray();
+
+                return VStack([Button("anchor", () => { }).Ref(anchorRef), .. rows]);
+            });
+
+            await Harness.Render(300);
+
+            var anchor = anchorRef.Current as Microsoft.UI.Xaml.Controls.Button;
+            if (anchor is null) { H.Check("CustomEditorFocus_AnchorMounted", false); return; }
+
+            var xamlRoot = anchor.XamlRoot;
+            if (xamlRoot is null) { H.Check("CustomEditorFocus_XamlRootAvailable", false); return; }
+
+            object? Focused() => Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(xamlRoot);
+
+            // Same positive control as EditorRealFocus: prove the window can REPORT focus before
+            // asserting anything about it, or every check below passes vacuously against null.
+            anchor.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            await Harness.Render();
+            var probe = Focused();
+            if (!ReferenceEquals(probe, anchor))
+            {
+                H.Skip("CustomEditorFocus_PositiveControl",
+                    $"window cannot report focus (GetFocusedElement returned '{probe?.GetType().Name ?? "null"}' " +
+                    "right after focusing a Button) — real-focus checks are not observable here");
+                return;
+            }
+            H.Check("CustomEditorFocus_PositiveControl", true);
+
+            // ── Composite editor: focus reaches INSIDE it ───────────────────────────────
+            state.BeginEdit(1, 1); // row 1, Name — the composite editor
+            await Harness.WaitFor(() => Focused() is Microsoft.UI.Xaml.Controls.TextBox);
+
+            var composed = Focused() as Microsoft.UI.Xaml.Controls.TextBox;
+            H.Check($"CustomEditorFocus_ReachesIntoAComposite (focused='{Focused()?.GetType().Name ?? "null"}', text='{composed?.Text}')",
+                composed is not null && composed.Text == "Product 1");
+
+            state.CancelEdit();
+            await Harness.Render();
+
+            // ── Nothing focusable: report failure, steal nothing ────────────────────────
+            anchor.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            await Harness.WaitFor(() => ReferenceEquals(Focused(), anchor));
+            H.Check("CustomEditorFocus_BaselineOnAnchor", ReferenceEquals(Focused(), anchor));
+
+            state.BeginEdit(1, 2); // row 1, Category — the TextBlock-only editor
+            await Harness.Render(200);
+
+            // The request was armed and honoured; XAML simply had nothing to give focus to. The
+            // point is that this is a quiet no-op: focus must not be dumped on the grid root, on
+            // a neighbouring editor, or cleared to null.
+            H.Check($"CustomEditorFocus_NonFocusableEditorLeavesFocusPut (focused='{Focused()?.GetType().Name ?? "null"}')",
+                ReferenceEquals(Focused(), anchor));
+
+            state.CancelEdit();
+            await Harness.Render();
+        }
+    }
 }

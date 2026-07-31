@@ -35,7 +35,14 @@ public class DataGridEditorFocusTests
         ];
 
         public Task<DataPage<TestItem>> GetPageAsync(DataRequest request, CancellationToken ct = default)
-            => Task.FromResult(new DataPage<TestItem>(_items, TotalCount: _items.Count));
+        {
+            // Honour the sort so a test can actually make the rows change places. The direction
+            // doesn't matter — only that index N stops naming the same row.
+            var items = request.Sort is { Count: > 0 }
+                ? Enumerable.Reverse(_items).ToList()
+                : _items;
+            return Task.FromResult(new DataPage<TestItem>(items, TotalCount: items.Count));
+        }
 
         public RowKey GetRowKey(TestItem item) => new(item.Id.ToString());
         public DataSourceCapabilities Capabilities => DataSourceCapabilities.None;
@@ -239,18 +246,28 @@ public class DataGridEditorFocusTests
     }
 
     [Fact]
-    public async Task BeginRowEdit_FallsBackToTheFirstEditor_WhenTheCursorColumnHasNone()
+    public async Task BeginRowEdit_MovesTheCursorToTheFallbackEditor_WhenTheCursorColumnHasNone()
     {
         var state = await LoadedState();
 
         // "Id" is read-only, so it renders no editor. Focus has to fall back to the first column
-        // that does — but the cursor was set deliberately by the caller, so it is left alone.
+        // that does — and the cursor must follow it there.
+        //
+        // Leaving the cursor on Id (as the first cut of #976 did) reintroduces the dead-keystroke
+        // bug in a subtler form: real focus is on Name(1) while the cursor still says Id(0), so the
+        // first Tab traverses 0 → 1 and lands on the column focus is ALREADY on. The invariant is
+        // that after BeginRowEdit the cursor names exactly the column that got real focus.
         state.SetFocus(1, 0);
         Assert.True(state.BeginRowEdit(1));
 
-        Assert.Equal(0, state.FocusedColIndex);
-        Assert.True(state.HasEditorFocusRequest(Row(1), "Name"));
+        Assert.Equal(1, state.FocusedColIndex);
+        Assert.NotEqual(0, state.FocusedColIndex);
+        Assert.True(state.HasEditorFocusRequest(Row(1), Columns[state.FocusedColIndex].Name));
         Assert.False(state.HasEditorFocusRequest(Row(1), "Id"));
+
+        // ...and the first Tab therefore actually moves.
+        Assert.True(state.FocusNextRowEditColumn());
+        Assert.Equal(2, state.FocusedColIndex);
     }
 
     [Fact]
@@ -527,5 +544,157 @@ public class DataGridEditorFocusTests
 
         state.CancelEdit();
         Assert.Equal(armed, state.FocusRequestVersion);
+    }
+
+    // ── The deferred-focus staleness guard ──────────────────────────
+    //
+    // A claimed request is applied on a LATER dispatcher tick, so the edit that armed it can end,
+    // or a newer request can supersede it, before the Focus() call lands. IsFocusRequestStillCurrent
+    // is the gate; it is a pure state predicate, so it is testable here rather than one tier up.
+
+    [Fact]
+    public async Task IsFocusRequestStillCurrent_IsTrueForTheLiveRequest()
+    {
+        var state = await LoadedState();
+        Assert.True(state.BeginEdit(1, ScoreCol));
+        Assert.True(state.TryConsumeEditorFocusRequest(Row(1), "Score"));
+
+        // Consuming deliberately does NOT advance the version, so the claim a hook took stays
+        // valid across the deferral.
+        Assert.True(DataGridComponent<TestItem>.IsFocusRequestStillCurrent(
+            state, Row(1), "Score", state.FocusRequestVersion));
+    }
+
+    [Fact]
+    public async Task IsFocusRequestStillCurrent_IsFalseOnceANewerRequestSupersedesIt()
+    {
+        var state = await LoadedState();
+        Assert.True(state.BeginEdit(1, ScoreCol));
+        var claimed = state.FocusRequestVersion;
+        Assert.True(state.TryConsumeEditorFocusRequest(Row(1), "Score"));
+
+        // Row-mode Tab pressed again before the first tick ran. Honouring the older claim now
+        // would fight the newer one and land on whichever dispatcher tick happens to run last.
+        state.CancelEdit();
+        Assert.True(state.BeginEdit(1, NotesCol));
+
+        Assert.False(DataGridComponent<TestItem>.IsFocusRequestStillCurrent(
+            state, Row(1), "Score", claimed));
+
+        // Differential: the NEW claim, taken at the new version, is still current.
+        Assert.True(DataGridComponent<TestItem>.IsFocusRequestStillCurrent(
+            state, Row(1), "Notes", state.FocusRequestVersion));
+    }
+
+    [Fact]
+    public async Task IsFocusRequestStillCurrent_IsFalseWhenRowModeReArmsBeforeTheTickRuns()
+    {
+        var state = await LoadedState();
+        Assert.True(state.BeginRowEdit(1));
+        var claimed = state.FocusRequestVersion;
+
+        // Establishes the differential: nothing about the row, the mode, or the column changes
+        // across the FocusNextRowEditColumn below, so the flip from true to false can ONLY be the
+        // version check talking.
+        Assert.True(DataGridComponent<TestItem>.IsFocusRequestStillCurrent(
+            state, Row(1), "Name", claimed));
+
+        // Tab pressed a second time before the first claim's dispatcher tick ran.
+        Assert.True(state.FocusNextRowEditColumn());
+
+        // Honouring the older claim now would drag focus back to the cell the user just left, and
+        // which of the two ticks wins would come down to dispatcher ordering.
+        Assert.False(DataGridComponent<TestItem>.IsFocusRequestStillCurrent(
+            state, Row(1), "Name", claimed));
+
+        // The newer claim, taken at the newer version, is the one that must land.
+        Assert.True(DataGridComponent<TestItem>.IsFocusRequestStillCurrent(
+            state, Row(1), "Name", state.FocusRequestVersion));
+    }
+
+    [Theory]
+    [InlineData(true)]  // commit
+    [InlineData(false)] // cancel
+    public async Task IsFocusRequestStillCurrent_IsFalseOnceTheCellEditEnded(bool commit)
+    {
+        var state = await LoadedState();
+        Assert.True(state.BeginEdit(1, ScoreCol));
+        var claimed = state.FocusRequestVersion;
+        Assert.True(state.TryConsumeEditorFocusRequest(Row(1), "Score"));
+        Assert.True(DataGridComponent<TestItem>.IsFocusRequestStillCurrent(
+            state, Row(1), "Score", claimed));
+
+        // The edit ends between the claim and the deferred tick — Enter, Esc, or a blur-commit.
+        // Focusing now would yank the caret back onto a control the user has left, and the pool
+        // may already have recycled that control into a different row.
+        if (commit) state.CommitEdit(); else state.CancelEdit();
+
+        Assert.False(DataGridComponent<TestItem>.IsFocusRequestStillCurrent(
+            state, Row(1), "Score", claimed));
+    }
+
+    [Fact]
+    public async Task IsFocusRequestStillCurrent_IsFalseForADifferentRowOrColumn()
+    {
+        var state = await LoadedState();
+        Assert.True(state.BeginEdit(1, ScoreCol));
+        var claimed = state.FocusRequestVersion;
+
+        Assert.False(DataGridComponent<TestItem>.IsFocusRequestStillCurrent(
+            state, Row(2), "Score", claimed));
+        Assert.False(DataGridComponent<TestItem>.IsFocusRequestStillCurrent(
+            state, Row(1), "Notes", claimed));
+    }
+
+    [Fact]
+    public async Task IsFocusRequestStillCurrent_IgnoresTheColumnInRowMode()
+    {
+        var state = await LoadedState();
+        Assert.True(state.BeginRowEdit(1));
+        var claimed = state.FocusRequestVersion;
+
+        // Row mode keeps EVERY editable cell of the row open at once, so the row key is the whole
+        // identity — a cell-mode-style column match would reject the Tab target and silently drop
+        // every focus move after the first.
+        Assert.True(DataGridComponent<TestItem>.IsFocusRequestStillCurrent(
+            state, Row(1), "Notes", claimed));
+        Assert.False(DataGridComponent<TestItem>.IsFocusRequestStillCurrent(
+            state, Row(2), "Notes", claimed));
+
+        state.CancelRowEdit();
+        Assert.False(DataGridComponent<TestItem>.IsFocusRequestStillCurrent(
+            state, Row(1), "Notes", claimed));
+    }
+
+    // ── Row-key keying survives reordering ──────────────────────────
+
+    [Fact]
+    public async Task FocusRequest_TracksTheRowKey_NotTheRowIndex()
+    {
+        var state = await LoadedState();
+
+        var armedKey = new RowKey("3"); // Carol
+        const int armedIndex = 2;
+
+        Assert.Equal(armedIndex, state.GetRowIndex(armedKey)); // premise
+        Assert.True(state.BeginEdit(armedIndex, ScoreCol));
+        Assert.True(state.HasEditorFocusRequest(armedKey, "Score"));
+
+        // Reorder the rows.
+        state.ToggleSort("Score");
+        await state.LoadDataAsync(TestContext.Current.CancellationToken);
+
+        // The armed row must genuinely have moved, or everything below is vacuously true.
+        Assert.NotEqual(armedIndex, state.GetRowIndex(armedKey));
+
+        // Whoever slid into the armed INDEX is exactly who an index-keyed request would now be
+        // pointing at — the wrong row's editor. Keyed on the row KEY, the request still names Carol.
+        var occupant = state.GetItemAt(armedIndex);
+        Assert.NotNull(occupant);
+        var occupantKey = new RowKey(occupant!.Id.ToString());
+        Assert.NotEqual(armedKey, occupantKey);
+
+        Assert.True(state.HasEditorFocusRequest(armedKey, "Score"));
+        Assert.False(state.HasEditorFocusRequest(occupantKey, "Score"));
     }
 }

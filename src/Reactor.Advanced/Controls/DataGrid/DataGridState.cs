@@ -1530,18 +1530,26 @@ public class DataGridState<T>
             var name = _columns[idx].Name;
             if (_rowEditValues.ContainsKey(name) && IsColumnVisible(name))
             {
-                // A row with only one visible editable column wraps straight back to where we
-                // started. SetFocus always raises StateChanged, so calling it here would re-render
-                // the whole grid for a move that didn't move. Still report success — there IS a
-                // valid target column, Tab just had nowhere else to go.
-                if (idx != _focusedColIndex)
-                    SetFocus(_focusedRowIndex, idx);
-
-                // Arm unconditionally, INCLUDING the single-column no-move case above: native Tab
-                // has already pushed keyboard focus off this editor (onto Save/Cancel, or out of
-                // the grid entirely), so even "stay put" needs a request to pull focus back. (#976)
+                // Arm BEFORE any notification. StateChanged can re-render synchronously, and the
+                // render is what runs the hook that honours the request — arming afterwards would
+                // let that render go by with nothing pending and the focus move would be lost.
                 if (_editingRowKey is { } editingKey)
                     RequestEditorFocus(editingKey, name);
+
+                if (idx != _focusedColIndex)
+                {
+                    SetFocus(_focusedRowIndex, idx); // raises StateChanged
+                }
+                else
+                {
+                    // A row with only one visible editable column wraps straight back to where we
+                    // started, so there is no logical move for SetFocus to make. The render is
+                    // still required: native Tab has ALREADY pushed keyboard focus off this editor
+                    // onto Save/Cancel (or out of the grid), and RequestEditorFocus deliberately
+                    // doesn't notify, so without this the request would sit armed forever and Tab
+                    // would silently escape the row. (#976)
+                    StateChanged?.Invoke();
+                }
 
                 return true;
             }
@@ -1810,12 +1818,12 @@ public class DataGridState<T>
         // _columns, not `values`, whose Dictionary order is not the column order, and skipping
         // hidden columns, which are in `values` without a rendered editor.
         //
-        // When the fallback is used AND the cursor had no column at all, park the cursor on the
-        // focused column. Before #976 it was left at -1 so MoveRowEditFocus's "no prior focus"
-        // origin made the first Tab land on the first editable column — harmless while focus was
-        // logical-only, but now that the column really is focused that first Tab would move the
-        // cursor onto the column focus is already on and the keystroke would visibly do nothing.
-        // A cursor the caller deliberately set is left alone.
+        // The cursor is then parked on whatever column actually got focus, so the logical cursor
+        // and real focus always agree once a row edit starts. That invariant is what makes the
+        // first Tab do something: MoveRowEditFocus traverses from _focusedColIndex, so any
+        // disagreement makes the first keystroke merely close the gap and visibly do nothing.
+        // Before #976 the cursor was left at -1 (or on a read-only/hidden column) and focus was
+        // logical-only, so the dead keystroke was invisible; now it is not.
         var focusTarget = -1;
         if (_focusedColIndex >= 0 && _focusedColIndex < _columns.Count)
         {
@@ -1832,14 +1840,17 @@ public class DataGridState<T>
                 if (values.ContainsKey(col.Name) && IsColumnVisible(col.Name))
                 {
                     focusTarget = i;
-                    if (_focusedColIndex < 0) _focusedColIndex = i;
                     break;
                 }
             }
         }
 
+        // No visible editor in the row: arm nothing and leave the cursor where the caller put it.
         if (focusTarget >= 0)
+        {
+            _focusedColIndex = focusTarget;
             RequestEditorFocus(rowKey, _columns[focusTarget].Name);
+        }
 
         // Set up row-level validation
         _editValidation = new ValidationContext();

@@ -125,6 +125,31 @@ Conventions for contributors:
 
 ### Fixed
 
+- **DataGrid cell and row editors now take real keyboard focus (issue #976,
+  spec 017 §6.7–§6.8).** Every focus API on `DataGridState<T>` moved a purely
+  *logical* cell cursor and raised `StateChanged`; nothing ever called XAML
+  `Focus(...)`. So opening an editor — Enter, F2, click-to-edit, or a row's Edit
+  button — left the caret wherever it already was, and the user had to click or
+  Tab into the editor before typing. In `EditMode.Row` it was worse: Tab moved
+  the logical cursor while native focus kept walking on into the row's
+  Save/Cancel buttons and then out of the grid entirely, and leaving the grid
+  fires the deferred blur-commit — so Tab silently committed the row instead of
+  cycling its editors. `BeginEdit`, `BeginRowEdit`, and the row-edit Tab
+  traversal now arm a one-shot focus request keyed by `(RowKey, columnName)`,
+  which the renderer honours by moving real focus into that editor once it is
+  loaded. **Behaviour change:** in `EditMode.Row`, Tab now wraps from the last
+  editor back to the first rather than reaching Save/Cancel; those stay
+  reachable by pointer, and <kbd>Enter</kbd> / <kbd>Esc</kbd> are their keyboard
+  equivalents.
+
+- **Reconciler no longer swallows an element's `OnUpdateAction` (issue #976).**
+  `Element.ModifiersEqual` — the shallow-skip gate — did not compare
+  `OnUpdateAction`, and `ShallowEquals` does not compare callbacks, so an
+  element whose only change was *gaining* an update hook compared equal to its
+  predecessor, took the skip path, and the hook never ran. Both-null still
+  compares equal and a cached delegate still compares equal by reference, so the
+  skip rate is unchanged for everything else.
+
 - **Unsetting a common modifier no longer permanently overrides the control's
   style (issue #952).** `Reconciler.ApplyModifiers` reset a dropped modifier by
   *assigning* the dependency property's default value (`fe.Margin =
