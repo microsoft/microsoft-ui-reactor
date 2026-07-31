@@ -183,6 +183,12 @@ every pending cell at once, <kbd>Esc</kbd> (or Cancel) discards them all, and
 <kbd>Tab</kbd> moves through the row's editable cells and its Save/Cancel buttons
 — read-only columns are skipped — without committing anything.
 
+<kbd>Shift</kbd>+<kbd>Tab</kbd> is the mirror of <kbd>Tab</kbd> everywhere it
+applies: it moves the focused cell backward when you are just navigating, and in
+either edit mode it does exactly what <kbd>Tab</kbd> does — commit the cell in
+`EditMode.Cell`, commit nothing in `EditMode.Row` — only walking to the previous
+editable cell instead of the next one.
+
 Editing supports validation — attach validators via `Column<T>().Validate()`.
 The `onRowChanged` callback fires after a successful commit, receiving the
 `RowKey` and updated item. For mutable classes, the grid updates in place;

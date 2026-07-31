@@ -683,11 +683,18 @@ internal static class DataGridEditFixtures
                 componentType.GetMethod(name, global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.Static)!
                     .Invoke(null, args);
 
-            bool Should(global::Windows.System.VirtualKey key) =>
-                (bool)Invoke("ShouldHandleKey", state, el, key)!;
+            // Typed seams rather than reflection-by-name. ShouldHandleKey / HandleKeyDown take a
+            // KeyChord now (#987), and a GetMethod("HandleKeyDown", …) lookup keyed on the old
+            // signature returns null with no compile-time signal — the fixture would die with an
+            // NRE the next time those signatures move. The render helpers below have no seam, so
+            // they keep using Invoke.
+            bool Should(global::Windows.System.VirtualKey key, bool shift = false) =>
+                DataGridComponent<TestProduct>.ShouldHandleKeyForTests(
+                    state, el, new KeyChord(key, Shift: shift, Ctrl: false));
 
-            void Key(global::Windows.System.VirtualKey key) =>
-                Invoke("HandleKeyDown", state, el, key);
+            void Key(global::Windows.System.VirtualKey key, bool shift = false) =>
+                DataGridComponent<TestProduct>.HandleKeyDownForTests(
+                    state, el, new KeyChord(key, Shift: shift, Ctrl: false));
 
             H.Check("DataGrid_KeyReflect_ShouldHandleNavigation",
                 Should(global::Windows.System.VirtualKey.Down)
@@ -698,12 +705,33 @@ internal static class DataGridEditFixtures
                 && Should(global::Windows.System.VirtualKey.F2)
                 && !Should(global::Windows.System.VirtualKey.A));
 
+            // Shift+Tab must still be CLAIMED — gating the claim on the modifier would hand the
+            // chord straight back to FocusManager and the grid would never see it (#987).
+            H.Check("DataGrid_KeyReflect_ShouldHandleShiftTab",
+                Should(global::Windows.System.VirtualKey.Tab, shift: true));
+
             Key(global::Windows.System.VirtualKey.Down);
             Key(global::Windows.System.VirtualKey.Right);
             Key(global::Windows.System.VirtualKey.Home);
             Key(global::Windows.System.VirtualKey.End);
             Key(global::Windows.System.VirtualKey.Tab);
             H.Check("DataGrid_KeyReflect_FocusMoved", state.FocusedRowIndex >= 0 && state.FocusedColIndex >= 0);
+
+            // Navigation-mode Shift+Tab walks BACKWARD (#987). Start on column 0 of row 1, where the
+            // two directions land in different ROWS as well as different columns: backward wraps to
+            // the END of the previous row, which no forward step can ever produce. Asserted as a
+            // differential against plain Tab from the identical start, so a dispatch that silently
+            // drops the modifier fails here rather than agreeing by coincidence.
+            state.SetFocus(1, 0);
+            Key(global::Windows.System.VirtualKey.Tab, shift: true);
+            var shiftTabNav = (state.FocusedRowIndex, state.FocusedColIndex);
+            state.SetFocus(1, 0);
+            Key(global::Windows.System.VirtualKey.Tab);
+            var plainTabNav = (state.FocusedRowIndex, state.FocusedColIndex);
+            H.Check($"DataGrid_KeyReflect_NavShiftTabGoesBackward (shift={shiftTabNav}, plain={plainTabNav})",
+                shiftTabNav == (0, columns.Count - 1)
+                && plainTabNav == (1, 1)
+                && shiftTabNav != plainTabNav);
 
             Key(global::Windows.System.VirtualKey.Space);
             H.Check("DataGrid_KeyReflect_SpaceSelected", state.SelectedKeys.Count > 0);
@@ -733,6 +761,34 @@ internal static class DataGridEditFixtures
             await Task.Delay(50);
             H.Check("DataGrid_KeyReflect_TabMovesAndReopens", state.IsEditing && committed >= 2);
 
+            // Cell-edit Shift+Tab commits exactly what Tab commits and lands on the OTHER side
+            // (#987). Both legs start on Category (col 2): backward reopens on Name (col 1),
+            // forward on Price (col 3). The commit oracle is the persisted item, which CommitEdit
+            // writes synchronously — not the async OnRowChanged counter.
+            state.CancelEdit();
+            state.SetFocus(0, 2);
+            state.BeginEdit(0, 2);
+            state.UpdateEditingValue("Shift tab category");
+            Key(global::Windows.System.VirtualKey.Tab, shift: true);
+            var shiftTabEdit = (state.FocusedRowIndex, state.FocusedColIndex);
+            var shiftTabReopened = state.IsEditing;
+            var shiftTabCommitted = state.GetItemAt(0)?.Category;
+
+            state.CancelEdit();
+            state.SetFocus(0, 2);
+            state.BeginEdit(0, 2);
+            state.UpdateEditingValue("Plain tab category");
+            Key(global::Windows.System.VirtualKey.Tab);
+            var plainTabEdit = (state.FocusedRowIndex, state.FocusedColIndex);
+
+            H.Check($"DataGrid_KeyReflect_CellShiftTabCommitted (category='{shiftTabCommitted}')",
+                shiftTabCommitted == "Shift tab category");
+            H.Check($"DataGrid_KeyReflect_CellShiftTabMovesBackward (shift={shiftTabEdit}, plain={plainTabEdit})",
+                shiftTabEdit == (0, 1)
+                && plainTabEdit == (0, 3)
+                && shiftTabEdit != plainTabEdit);
+            H.Check("DataGrid_KeyReflect_CellShiftTabReopensEditor", shiftTabReopened);
+
             // ── Row mode (#853) ─────────────────────────────────────────────────────
             // IsEditing is TRUE during a row edit too (BeginRowEdit sets _editingRowKey while
             // leaving _editingColumnName null), so before the fix these keys fell into the
@@ -755,7 +811,7 @@ internal static class DataGridEditFixtures
             state.UpdateRowEditValue("Price", 42.0);
 
             DataGridComponent<TestProduct>.HandleKeyDownForTests(
-                state, rowEl, global::Windows.System.VirtualKey.Tab);
+                state, rowEl, new KeyChord(global::Windows.System.VirtualKey.Tab, Shift: false, Ctrl: false));
             await Task.Delay(50);
 
             // Tab cycles the row's editors and must NOT commit — the pending values and the
@@ -770,10 +826,25 @@ internal static class DataGridEditFixtures
             H.Check("DataGrid_KeyReflect_RowEditTabDidNotCommit",
                 state.GetItemAt(2)?.Name == "Product 2" && rowCommitted == 0);
 
+            // Shift+Tab walks the same editable ring the other way, with the same never-commit
+            // guarantee (#987). Focus sits on Category (col 2) after the Tab above, so backward is
+            // Name (col 1) while forward would be Price (col 3) — the two directions are
+            // distinguishable from here, and the plain-Tab landing above is the differential.
+            DataGridComponent<TestProduct>.HandleKeyDownForTests(
+                state, rowEl, new KeyChord(global::Windows.System.VirtualKey.Tab, Shift: true, Ctrl: false));
+            await Task.Delay(50);
+            H.Check($"DataGrid_KeyReflect_RowEditShiftTabMovesBackward (col={state.FocusedColIndex}, row={state.FocusedRowIndex})",
+                state.FocusedColIndex == 1 && state.FocusedRowIndex == 2);
+            H.Check("DataGrid_KeyReflect_RowEditShiftTabDidNotCommit",
+                state.IsRowEditing
+                && (state.GetRowEditValue("Name") as string) == "Row edited"
+                && state.GetItemAt(2)?.Name == "Product 2"
+                && rowCommitted == 0);
+
             // Enter runs the ROW commit — both pending columns land, which a single-cell
             // commit could never do.
             DataGridComponent<TestProduct>.HandleKeyDownForTests(
-                state, rowEl, global::Windows.System.VirtualKey.Enter);
+                state, rowEl, new KeyChord(global::Windows.System.VirtualKey.Enter, Shift: false, Ctrl: false));
             await Task.Delay(50);
             H.Check("DataGrid_KeyReflect_RowEditEnterCommitsWholeRow",
                 state.GetItemAt(2)?.Name == "Row edited" && state.GetItemAt(2)?.Price == 42.0);

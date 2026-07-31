@@ -1403,9 +1403,8 @@ public class DataGridState<T>
     /// when no row edit is active, or when no visible column in the row has an editor.
     /// </summary>
     /// <remarks>
-    /// The grid's own KeyDown handler cannot call this today — it forwards only the raw key with no
-    /// modifier state, so it never sees Shift+Tab. That gap is tracked in #987; until it closes, this
-    /// is public for the same reason <see cref="FocusPrevCell"/> is: app authors driving custom
+    /// This is what the grid's own KeyDown handler runs for Shift+Tab during a row edit (#987). It
+    /// is also public for the same reason <see cref="FocusPrevCell"/> is: app authors driving custom
     /// keyboard handling need both directions. The logical-cursor caveat on
     /// <see cref="FocusNextRowEditColumn"/> applies here too.
     /// </remarks>
@@ -1661,6 +1660,18 @@ public class DataGridState<T>
     {
         var result = CommitEdit();
         FocusNextCell();
+        return result;
+    }
+
+    /// <summary>
+    /// Commit the current edit and move focus to the PREVIOUS cell — the Shift+Tab counterpart of
+    /// <see cref="CommitAndMoveNext"/>, committing exactly what that would and differing only in
+    /// where the cursor lands (issue #987). Starts editing if the previous cell is editable.
+    /// </summary>
+    public (RowKey Key, T NewItem)? CommitAndMovePrev()
+    {
+        var result = CommitEdit();
+        FocusPrevCell();
         return result;
     }
 

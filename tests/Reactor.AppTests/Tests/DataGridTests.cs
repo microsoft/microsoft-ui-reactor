@@ -122,6 +122,62 @@ public class DataGridTests : AppTestBase
     }
 
     /// <summary>
+    /// Regression for issue #987: the grid's KeyDown pipeline captured only the raw
+    /// <c>VirtualKey</c> and deferred dispatch through <c>DispatcherQueue.TryEnqueue</c>, so the
+    /// modifier state never reached the handler and <c>Shift+Tab</c> was indistinguishable from
+    /// <c>Tab</c> — an editing Shift+Tab moved FORWARD. This is the only tier that exercises the
+    /// real synchronous modifier read and the mounted handler wiring; the headless tests construct
+    /// the chord themselves and cannot see either.
+    ///
+    /// <para>The oracle is the direction, not the commit: both directions commit the LastName edit
+    /// identically, so the EditLog right after the chord cannot tell them apart. What differs is
+    /// where the editor reopens — backward lands on FirstName (editable, editor reopens), forward
+    /// lands on Salary (read-only, NO editor at all). Typing into the reopened editor and
+    /// committing therefore produces <c>[1:Alicia,Smythe]</c> only if the move went backward; the
+    /// forward bug cannot get that far, because there is no editor to type into.</para>
+    /// </summary>
+    [E2eRetry(3)]
+    [TestMethod]
+    public void Interactive_DataGrid_EditingShiftTab_ReopensEditorOnPreviousCell()
+    {
+        NavigateToFixtureFresh("DataGrid_EditableGrid");
+        WaitForText("EditLog", "Edits:");
+        Assert.IsNotNull(WaitForName("Alice"), "'Alice' (row 1 FirstName, the PREVIOUS cell) should be visible");
+        Assert.IsNotNull(WaitForName("Smith"), "'Smith' (row 1 LastName) should be visible");
+
+        // Edit row-1 LastName (Smith -> Smythe); type a new value but do NOT commit.
+        TapCell("Smith");
+        TypeIntoFocusedEditor("Smythe");
+
+        // Editing Shift+Tab: commits LastName and must reopen the editor on the PREVIOUS cell
+        // (FirstName). Forward would land on read-only Salary and reopen nothing.
+        App.SendKeys("shift+tab", viaSendInput: true);
+
+        UiElement? editor = null;
+        try { editor = WaitForEditor(timeoutMs: 4000); }
+        catch (WinAppException ex)
+        {
+            Assert.Fail("Inline editor did not reopen after the editing Shift+Tab. The chord most likely moved " +
+                        "FORWARD onto the read-only Salary column — i.e. the modifier was dropped between the " +
+                        "routed handler and the deferred dispatch (#987). " + ex.Message);
+        }
+
+        Assert.IsNotNull(editor, "Inline editor should have reopened on the previous cell after the editing Shift+Tab.");
+
+        // The LastName commit from the chord must have landed, with FirstName untouched.
+        WaitForTextContaining("EditLog", "[1:Alice,Smythe]", timeoutMs: 5000);
+
+        // Unconditional proof the editor reopened on FirstName and not somewhere else: type into it
+        // and commit. Editing FirstName commits row 1 as [1:Alicia,Smythe], preserving the LastName
+        // just committed above. Had the editor reopened on LastName, this would read
+        // [1:Alice,Alicia] and the wait would time out.
+        TypeIntoFocusedEditor("Alicia", commitWithEnter: true);
+        WaitForTextContaining("EditLog", "[1:Alicia,Smythe]", timeoutMs: 5000);
+        Assert.IsNotNull(WaitForName("Alicia"), "Edited FirstName 'Alicia' should be visible after commit.");
+        Assert.IsNotNull(WaitForName("Smythe"), "'Smythe' should still be visible after the second commit.");
+    }
+
+    /// <summary>
     /// Regression for the SuppressNextLostFocusCommit guard's one-shot lifetime: an editing-Tab into a
     /// NON-editable next cell reopens no editor (IsEditing ends false), so the guard must still be
     /// consumed — otherwise it lingers on the persistent state and silently suppresses the NEXT

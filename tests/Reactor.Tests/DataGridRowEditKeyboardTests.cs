@@ -93,7 +93,12 @@ public class DataGridRowEditKeyboardTests
     };
 
     private static void Key(DataGridState<TestItem> state, DataGridElement<TestItem> el, VirtualKey key)
-        => DataGridComponent<TestItem>.HandleKeyDownForTests(state, el, key);
+        => DataGridComponent<TestItem>.HandleKeyDownForTests(
+            state, el, new KeyChord(key, Shift: false, Ctrl: false));
+
+    private static bool Should(DataGridState<TestItem> state, DataGridElement<TestItem> el, VirtualKey key)
+        => DataGridComponent<TestItem>.ShouldHandleKeyForTests(
+            state, el, new KeyChord(key, Shift: false, Ctrl: false));
 
     // Same shape as Columns, except Name carries a Required validator so a blank pending value
     // makes CommitRowEdit() bail out and leave the row open.
@@ -512,14 +517,14 @@ public class DataGridRowEditKeyboardTests
         var el = Grid(EditMode.Row);
         Assert.True(state.BeginRowEdit(0));
 
-        Assert.True(DataGridComponent<TestItem>.ShouldHandleKeyForTests(state, el, VirtualKey.Enter));
-        Assert.True(DataGridComponent<TestItem>.ShouldHandleKeyForTests(state, el, VirtualKey.Escape));
-        Assert.True(DataGridComponent<TestItem>.ShouldHandleKeyForTests(state, el, VirtualKey.Tab));
+        Assert.True(Should(state, el, VirtualKey.Enter));
+        Assert.True(Should(state, el, VirtualKey.Escape));
+        Assert.True(Should(state, el, VirtualKey.Tab));
 
         // Arrows/Home/End must reach the focused editor for in-text caret movement.
-        Assert.False(DataGridComponent<TestItem>.ShouldHandleKeyForTests(state, el, VirtualKey.Down));
-        Assert.False(DataGridComponent<TestItem>.ShouldHandleKeyForTests(state, el, VirtualKey.Left));
-        Assert.False(DataGridComponent<TestItem>.ShouldHandleKeyForTests(state, el, VirtualKey.Home));
-        Assert.False(DataGridComponent<TestItem>.ShouldHandleKeyForTests(state, el, VirtualKey.F2));
+        Assert.False(Should(state, el, VirtualKey.Down));
+        Assert.False(Should(state, el, VirtualKey.Left));
+        Assert.False(Should(state, el, VirtualKey.Home));
+        Assert.False(Should(state, el, VirtualKey.F2));
     }
 }
