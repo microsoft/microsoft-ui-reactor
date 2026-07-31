@@ -767,7 +767,7 @@ internal static class DataGridEditFixtures
             // writes synchronously — not the async OnRowChanged counter.
             state.CancelEdit();
             state.SetFocus(0, 2);
-            state.BeginEdit(0, 2);
+            var shiftTabBegan = state.BeginEdit(0, 2);
             state.UpdateEditingValue("Shift tab category");
             Key(global::Windows.System.VirtualKey.Tab, shift: true);
             var shiftTabEdit = (state.FocusedRowIndex, state.FocusedColIndex);
@@ -776,11 +776,17 @@ internal static class DataGridEditFixtures
 
             state.CancelEdit();
             state.SetFocus(0, 2);
-            state.BeginEdit(0, 2);
+            var plainTabBegan = state.BeginEdit(0, 2);
             state.UpdateEditingValue("Plain tab category");
             Key(global::Windows.System.VirtualKey.Tab);
             var plainTabEdit = (state.FocusedRowIndex, state.FocusedColIndex);
 
+            // Both legs must actually have been EDITING when the chord arrived. Without this, a
+            // failed BeginEdit would route the leg through the navigation arm, which lands on the
+            // same columns — the differential below would still read (0,1)/(0,3) while proving
+            // nothing about the cell-edit arms.
+            H.Check($"DataGrid_KeyReflect_CellShiftTabLegsWereEditing (shift={shiftTabBegan}, plain={plainTabBegan})",
+                shiftTabBegan && plainTabBegan);
             H.Check($"DataGrid_KeyReflect_CellShiftTabCommitted (category='{shiftTabCommitted}')",
                 shiftTabCommitted == "Shift tab category");
             H.Check($"DataGrid_KeyReflect_CellShiftTabMovesBackward (shift={shiftTabEdit}, plain={plainTabEdit})",
@@ -827,19 +833,33 @@ internal static class DataGridEditFixtures
                 state.GetItemAt(2)?.Name == "Product 2" && rowCommitted == 0);
 
             // Shift+Tab walks the same editable ring the other way, with the same never-commit
-            // guarantee (#987). Focus sits on Category (col 2) after the Tab above, so backward is
-            // Name (col 1) while forward would be Price (col 3) — the two directions are
-            // distinguishable from here, and the plain-Tab landing above is the differential.
+            // guarantee (#987). Both legs below start from Category (col 2) — the one column where
+            // the ring's two directions land on different columns (Name col 1 vs Price col 3), so
+            // the pair is a true differential rather than two unrelated moves.
             DataGridComponent<TestProduct>.HandleKeyDownForTests(
                 state, rowEl, new KeyChord(global::Windows.System.VirtualKey.Tab, Shift: true, Ctrl: false));
             await Task.Delay(50);
-            H.Check($"DataGrid_KeyReflect_RowEditShiftTabMovesBackward (col={state.FocusedColIndex}, row={state.FocusedRowIndex})",
-                state.FocusedColIndex == 1 && state.FocusedRowIndex == 2);
+            var rowShiftLanding = (state.FocusedRowIndex, state.FocusedColIndex);
+            var rowShiftKeptEditing = state.IsRowEditing;
+            var rowShiftPendingName = state.GetRowEditValue("Name") as string;
+            var rowShiftPersistedName = state.GetItemAt(2)?.Name;
+            var rowShiftCommitCount = rowCommitted;
+
+            state.SetFocus(2, 2); // same start as the shifted leg
+            DataGridComponent<TestProduct>.HandleKeyDownForTests(
+                state, rowEl, new KeyChord(global::Windows.System.VirtualKey.Tab, Shift: false, Ctrl: false));
+            await Task.Delay(50);
+            var rowPlainLanding = (state.FocusedRowIndex, state.FocusedColIndex);
+
+            H.Check($"DataGrid_KeyReflect_RowEditShiftTabMovesBackward (shift={rowShiftLanding}, plain={rowPlainLanding})",
+                rowShiftLanding == (2, 1)
+                && rowPlainLanding == (2, 3)
+                && rowShiftLanding != rowPlainLanding);
             H.Check("DataGrid_KeyReflect_RowEditShiftTabDidNotCommit",
-                state.IsRowEditing
-                && (state.GetRowEditValue("Name") as string) == "Row edited"
-                && state.GetItemAt(2)?.Name == "Product 2"
-                && rowCommitted == 0);
+                rowShiftKeptEditing
+                && rowShiftPendingName == "Row edited"
+                && rowShiftPersistedName == "Product 2"
+                && rowShiftCommitCount == 0);
 
             // Enter runs the ROW commit — both pending columns land, which a single-cell
             // commit could never do.

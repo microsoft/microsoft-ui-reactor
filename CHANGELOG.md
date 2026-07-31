@@ -125,6 +125,18 @@ Conventions for contributors:
 
 ### Fixed
 
+- **`DataGrid<T>`'s <kbd>Shift</kbd>+<kbd>Tab</kbd> now moves focus backward
+  (issue #987).** The grid's routed `KeyDown` handler captured only the raw
+  `VirtualKey` and then deferred dispatch through
+  `DispatcherQueue.TryEnqueue`, so the modifier state was gone by the time the
+  key was handled — `Shift+Tab` was indistinguishable from `Tab` and moved
+  focus *forward* in all three modes (navigation, `EditMode.Cell`, and
+  `EditMode.Row`). The handler now snapshots the modifiers synchronously,
+  before the deferral, into an immutable `KeyChord` that is threaded through
+  the dispatch, and each of the three Tab sites gained a backward arm. Cell
+  edits commit exactly what `Tab` commits and reopen on the previous cell; row
+  edits walk the editable ring backward and still commit nothing.
+
 - **Unsetting a common modifier no longer permanently overrides the control's
   style (issue #952).** `Reconciler.ApplyModifiers` reset a dropped modifier by
   *assigning* the dependency property's default value (`fe.Margin =

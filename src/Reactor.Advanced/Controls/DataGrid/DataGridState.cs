@@ -1655,7 +1655,11 @@ public class DataGridState<T>
         StateChanged?.Invoke();
     }
 
-    /// <summary>Commit the current edit and move focus to the next cell. Starts editing if the next cell is editable.</summary>
+    /// <summary>
+    /// Commit the current edit and move focus to the next cell. Focus lands on the next cell whether
+    /// or not it is editable; reopening an editor there is the caller's job (see
+    /// <c>DataGridComponent&lt;T&gt;</c>'s Tab handling), not this method's.
+    /// </summary>
     public (RowKey Key, T NewItem)? CommitAndMoveNext()
     {
         var result = CommitEdit();
@@ -1666,7 +1670,8 @@ public class DataGridState<T>
     /// <summary>
     /// Commit the current edit and move focus to the PREVIOUS cell — the Shift+Tab counterpart of
     /// <see cref="CommitAndMoveNext"/>, committing exactly what that would and differing only in
-    /// where the cursor lands (issue #987). Starts editing if the previous cell is editable.
+    /// where the cursor lands (issue #987). Like its twin it lands on the previous cell whether or
+    /// not that cell is editable, and leaves reopening an editor to the caller.
     /// </summary>
     public (RowKey Key, T NewItem)? CommitAndMovePrev()
     {

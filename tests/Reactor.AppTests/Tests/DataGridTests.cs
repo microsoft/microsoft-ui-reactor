@@ -153,16 +153,17 @@ public class DataGridTests : AppTestBase
         // (FirstName). Forward would land on read-only Salary and reopen nothing.
         App.SendKeys("shift+tab", viaSendInput: true);
 
-        UiElement? editor = null;
-        try { editor = WaitForEditor(timeoutMs: 4000); }
+        // Fast-fail diagnostic, NOT an oracle: this can legitimately observe the OUTGOING LastName
+        // editor before it is torn down, so its success proves nothing about direction. It is here
+        // so the buggy case (no editor anywhere, because the chord moved forward onto the read-only
+        // Salary column) reports that cause instead of timing out on the commit wait below.
+        try { WaitForEditor(timeoutMs: 4000); }
         catch (WinAppException ex)
         {
             Assert.Fail("Inline editor did not reopen after the editing Shift+Tab. The chord most likely moved " +
                         "FORWARD onto the read-only Salary column — i.e. the modifier was dropped between the " +
                         "routed handler and the deferred dispatch (#987). " + ex.Message);
         }
-
-        Assert.IsNotNull(editor, "Inline editor should have reopened on the previous cell after the editing Shift+Tab.");
 
         // The LastName commit from the chord must have landed, with FirstName untouched.
         WaitForTextContaining("EditLog", "[1:Alice,Smythe]", timeoutMs: 5000);
@@ -202,6 +203,42 @@ public class DataGridTests : AppTestBase
         // Now edit a different row's cell, then move focus OUT of the grid by clicking the anchor
         // button. That fires the grid's "focus left the grid" LostFocus commit — the exact path the
         // guard suppresses. If the guard leaked from the Tab-into-read-only above, 'Bobby' is lost.
+        Assert.IsNotNull(WaitForName("Bob"), "'Bob' (row 2 FirstName) should be visible");
+        TapCell("Bob");
+        TypeIntoFocusedEditor("Bobby");
+        Element("BlurAnchor").Click(); // focus leaves the grid -> blur-commit through LostFocus
+
+        WaitForTextContaining("EditLog", "[2:Bobby,Jones]", timeoutMs: 5000);
+    }
+
+    /// <summary>
+    /// The backward twin of <see cref="Interactive_DataGrid_EditingTabToReadOnly_DoesNotSuppressNextCommit"/>.
+    /// The <c>SuppressNextLostFocusCommit</c> guard is armed on the Tab KEY, deliberately without
+    /// looking at the direction (#987), so Shift+Tab arms it exactly like Tab — and must therefore
+    /// consume it exactly like Tab when the cell it lands on has no editor. Here: edit row-1
+    /// FirstName (its PREVIOUS tab-order cell, Id, is read-only), press Shift+Tab, then edit a
+    /// different row's cell and move focus off the grid. That second edit must commit — if the
+    /// guard leaked, it silently swallows the focus-out commit and 'Bobby' is lost.
+    /// </summary>
+    [E2eRetry(3)]
+    [TestMethod]
+    public void Interactive_DataGrid_EditingShiftTabToReadOnly_DoesNotSuppressNextCommit()
+    {
+        NavigateToFixtureFresh("DataGrid_EditableGrid");
+        WaitForText("EditLog", "Edits:");
+        Assert.IsNotNull(WaitForName("Alice"), "'Alice' (row 1 FirstName) should be visible");
+
+        // Edit row-1 FirstName (Alice -> Alicia); Shift+Tab moves BACKWARD to Id (read-only), so no
+        // editor reopens. The commit itself still has to land.
+        TapCell("Alice");
+        TypeIntoFocusedEditor("Alicia");
+        App.SendKeys("shift+tab", viaSendInput: true);
+        WaitForTextContaining("EditLog", "[1:Alicia,Smith]", timeoutMs: 5000);
+
+        // Now edit a different row's cell and move focus OUT of the grid by clicking the anchor
+        // button, firing the grid's "focus left the grid" LostFocus commit — the exact path the
+        // guard suppresses. If the guard leaked from the Shift+Tab-into-read-only above, this
+        // second edit is discarded and the wait below times out.
         Assert.IsNotNull(WaitForName("Bob"), "'Bob' (row 2 FirstName) should be visible");
         TapCell("Bob");
         TypeIntoFocusedEditor("Bobby");

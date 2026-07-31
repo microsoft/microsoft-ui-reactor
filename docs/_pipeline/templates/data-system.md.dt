@@ -185,9 +185,12 @@ every pending cell at once, <kbd>Esc</kbd> (or Cancel) discards them all, and
 
 <kbd>Shift</kbd>+<kbd>Tab</kbd> is the mirror of <kbd>Tab</kbd> everywhere it
 applies: it moves the focused cell backward when you are just navigating, and in
-either edit mode it does exactly what <kbd>Tab</kbd> does — commit the cell in
-`EditMode.Cell`, commit nothing in `EditMode.Row` — only walking to the previous
-editable cell instead of the next one.
+either edit mode it commits exactly what <kbd>Tab</kbd> commits — the cell in
+`EditMode.Cell`, nothing in `EditMode.Row` — differing only in which way it
+walks. It mirrors <kbd>Tab</kbd>'s reach as well as its direction: in
+`EditMode.Cell` it steps to the previous cell whether or not that cell is
+editable, reopening an editor only when it is, while in `EditMode.Row` it stays
+inside the row and skips read-only columns.
 
 Editing supports validation — attach validators via `Column<T>().Validate()`.
 The `onRowChanged` callback fires after a successful commit, receiving the

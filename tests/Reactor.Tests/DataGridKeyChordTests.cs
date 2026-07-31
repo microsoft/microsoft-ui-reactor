@@ -162,16 +162,22 @@ public class DataGridKeyChordTests
     }
 
     [Fact]
-    public async Task NavigationShiftTab_AtTheVeryFirstCell_DoesNotMove()
+    public async Task NavigationShiftTab_StopsAtTheVeryFirstCellWithoutWrapping()
     {
         var el = Grid(EditMode.Cell);
         var state = await LoadedState();
-        state.SetFocus(0, IdCol);
+        state.SetFocus(0, NameCol);
 
+        // Walk INTO the boundary first. This leg is what keeps the boundary assertion below from
+        // being vacuous: an arm that silently did nothing for Shift+Tab would leave focus on Name
+        // and fail here, whereas starting at (0,0) and asserting "still at (0,0)" would pass.
         Tab(state, el, shift: true);
+        Assert.Equal((0, IdCol), Focus(state));
 
-        // FocusPrevCell() reports false and stays put at (0,0), mirroring FocusNextCell() at the
-        // last cell. Forward from here would move, so this also fails if the arm ignores Shift.
+        // Now at the very first cell, FocusPrevCell() reports false and focus stays put — it must
+        // not wrap around to the last cell. Forward from here would move on to Name, so this
+        // still fails if the arm ignores Shift.
+        Tab(state, el, shift: true);
         Assert.Equal((0, IdCol), Focus(state));
     }
 
