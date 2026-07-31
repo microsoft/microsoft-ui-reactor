@@ -44,7 +44,12 @@ class AnimatedIconPage : Component
         var state = States[stateIdx];
 
         var (hovering, setHovering) = UseState(false);
-        var (open, setOpen) = UseState(false);
+        // UseReducer, not UseState: the click handler derives the next value from the
+        // current one. RequestRender enqueues on the dispatcher and coalesces, so two
+        // clicks can run against the same closure before a render replaces it, and
+        // setOpen(!open) would write the same value twice and drop a toggle. The
+        // functional updater reads the live hook value instead of a captured local.
+        var (open, setOpen) = UseReducer(false);
         var menuState = open ? "Pressed" : hovering ? "PointerOver" : "Normal";
 
         return ScrollView(VStack(16,
@@ -92,7 +97,7 @@ AnimatedIcon(settings).Size(32, 32)
                             AnimatedIcon(menuNav).Size(20, 20)
                                 .Set(icon => XamlAnimatedIcon.SetState(icon, menuState)),
                             TextBlock(open ? "Close" : "Menu")),
-                        () => setOpen(!open))
+                        () => setOpen(o => !o))
                         .OnPointerEntered((_, _) => setHovering(true))
                         .OnPointerExited((_, _) => setHovering(false)),
                     Caption($"Icon state: {menuState}").Foreground(Theme.SecondaryText),
@@ -108,7 +113,10 @@ AnimatedIcon(settings).Size(32, 32)
                 sourceCode: @"
 var menuNav = UseMemo(() => new AnimatedGlobalNavigationButtonVisualSource());
 var (hovering, setHovering) = UseState(false);
-var (open, setOpen) = UseState(false);
+// UseReducer's functional updater reads the live value; setOpen(!open) would use the
+// captured local, and RequestRender coalesces, so two clicks against one closure would
+// write the same value twice and drop a toggle.
+var (open, setOpen) = UseReducer(false);
 var menuState = open ? ""Pressed"" : hovering ? ""PointerOver"" : ""Normal"";
 
 Button(
@@ -116,7 +124,7 @@ Button(
         AnimatedIcon(menuNav).Size(20, 20)
             .Set(icon => XamlAnimatedIcon.SetState(icon, menuState)),
         TextBlock(open ? ""Close"" : ""Menu"")),
-    () => setOpen(!open))
+    () => setOpen(o => !o))
     .OnPointerEntered((_, _) => setHovering(true))
     .OnPointerExited((_, _) => setHovering(false))
 // XamlAnimatedIcon is a `using` alias for Microsoft.UI.Xaml.Controls.AnimatedIcon —

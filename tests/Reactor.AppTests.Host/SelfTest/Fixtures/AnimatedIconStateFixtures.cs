@@ -67,11 +67,16 @@ internal static class AnimatedIconStateFixtures
                         $"expected the marker pair to exist; present [{string.Join(", ", markers.Keys)}]");
                 }
 
-                if (end > start)
+                // Require exact equality, not `end <= start`: an inverted pair
+                // (end < start) is a broken marker map, not a valid zero-length
+                // segment, and must not be able to satisfy the negative control.
+                if (end != start)
                 {
                     throw new global::System.InvalidOperationException(
                         $"expected a zero-length control segment, got [{start:0.####}..{end:0.####}] — "
-                        + "the duration oracle's negative control no longer holds");
+                        + (end < start
+                            ? "the pair is inverted, so the marker map is broken"
+                            : "the duration oracle's negative control no longer holds"));
                 }
 
                 return true;
