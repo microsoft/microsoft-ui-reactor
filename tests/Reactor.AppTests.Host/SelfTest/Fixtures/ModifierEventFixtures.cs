@@ -5,6 +5,8 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using static Microsoft.UI.Reactor.Factories;
+using AP = Microsoft.UI.Xaml.Automation.AutomationProperties;
+using APeers = Microsoft.UI.Xaml.Automation.Peers;
 
 namespace Microsoft.UI.Reactor.AppTests.Host.SelfTest.Fixtures;
 
@@ -662,6 +664,32 @@ internal static class ModifierEventFixtures
                 H.Check("ModifierClear_BorderCleared",
                     button.ReadLocalValue(Control.BorderThicknessProperty) == DependencyProperty.UnsetValue
                     && button.ReadLocalValue(Control.CornerRadiusProperty) == DependencyProperty.UnsetValue);
+
+                // Issue #986 — these five were written on phase 0 above and had no unset
+                // arm at all, so before the fix they stayed pinned on the control through
+                // every later render. They were already in the phase-0 bag before this
+                // change and simply never asserted on, which is why the gap was invisible
+                // here. Each check reads the same DP its set arm writes, so a reset that
+                // targeted a *different* identifier (Control.IsTabStopProperty vs
+                // UIElement.IsTabStopProperty, for instance) would still fail.
+                H.Check("ModifierClear_IsTabStopCleared",
+                    button.ReadLocalValue(UIElement.IsTabStopProperty) == DependencyProperty.UnsetValue
+                    && button.IsTabStop);
+                H.Check("ModifierClear_TabIndexCleared",
+                    button.ReadLocalValue(Control.TabIndexProperty) == DependencyProperty.UnsetValue
+                    && button.TabIndex != 7);
+                H.Check("ModifierClear_XYFocusKeyboardNavigationCleared",
+                    button.ReadLocalValue(UIElement.XYFocusKeyboardNavigationProperty) == DependencyProperty.UnsetValue
+                    && button.XYFocusKeyboardNavigation
+                       == Microsoft.UI.Xaml.Input.XYFocusKeyboardNavigationMode.Auto);
+                H.Check("ModifierClear_ElementSoundModeCleared",
+                    button.ReadLocalValue(Control.ElementSoundModeProperty) == DependencyProperty.UnsetValue
+                    && button.ElementSoundMode == ElementSoundMode.Default);
+                H.Check("ModifierClear_HeadingLevelCleared",
+                    button.ReadLocalValue(Microsoft.UI.Xaml.Automation.AutomationProperties.HeadingLevelProperty)
+                        == DependencyProperty.UnsetValue
+                    && Microsoft.UI.Xaml.Automation.AutomationProperties.GetHeadingLevel(button)
+                       == Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.None);
             }
 
             var border = H.FindControl<Border>(b => b.Child is TextBlock tb && tb.Text == "ClearBorderChild");
@@ -1240,6 +1268,145 @@ internal static class ModifierEventFixtures
                 inlineOnly is not null
                 && inlineOnly.ReadLocalValue(Microsoft.UI.Xaml.Controls.Border.BorderThicknessProperty)
                     == DependencyProperty.UnsetValue);
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════
+    //  Issue #986, accessibility half — ApplyAccessibilityModifiers opened
+    //  with `if (a is null) return;` while its caller invokes it whenever
+    //  EITHER bag is non-null. So the one transition it most needed to
+    //  handle — the whole Accessibility sub-record dropped this render —
+    //  returned immediately and released nothing. Ten of its eleven
+    //  properties additionally had no per-property unset arm even when the
+    //  bag survived.
+    //
+    //  Both mechanisms are covered here, in that order: phase 1 keeps the
+    //  bag and drops every property but one, phase 2 drops the bag itself.
+    //  Phase 0 asserts the values actually landed first — every release
+    //  check below reads UnsetValue on a property that was never written,
+    //  so without the phase-0 check the whole fixture would pass against a
+    //  reconciler that ignored the bag entirely.
+    // ════════════════════════════════════════════════════════════════════
+
+    internal class AccessibilityModifierClearResets(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var host = H.CreateHost();
+
+            host.Mount(ctx =>
+            {
+                var (phase, setPhase) = ctx.UseState(0);
+
+                var mods = phase switch
+                {
+                    0 => new ElementModifiers
+                    {
+                        Accessibility = new AccessibilityModifiers
+                        {
+                            HelpText = "a11y-help",
+                            FullDescription = "a11y-full",
+                            LandmarkType = APeers.AutomationLandmarkType.Navigation,
+                            AccessibilityView = APeers.AccessibilityView.Raw,
+                            IsRequiredForForm = true,
+                            LiveSetting = APeers.AutomationLiveSetting.Assertive,
+                            PositionInSet = 3,
+                            SizeOfSet = 9,
+                            Level = 4,
+                            ItemStatus = "a11y-status",
+                            TabFocusNavigation = Microsoft.UI.Xaml.Input.KeyboardNavigationMode.Cycle,
+                        },
+                    },
+                    // Bag survives, one property kept: isolates the per-property arms from
+                    // the whole-bag path below, so a fix that only handled `a is null`
+                    // still fails here.
+                    1 => new ElementModifiers
+                    {
+                        Accessibility = new AccessibilityModifiers { HelpText = "a11y-help" },
+                    },
+                    // Sub-record gone entirely — the transition the early return swallowed.
+                    _ => new ElementModifiers(),
+                };
+
+                return VStack(
+                    Button("A11yClearPhase", () => setPhase(phase + 1)),
+                    Button("A11yClearTarget") with { Modifiers = mods });
+            });
+
+            // "Released" and "never written" both read UnsetValue, so this discriminates
+            // only in combination with the phase-0 applied check below.
+            static bool Released(FrameworkElement fe, DependencyProperty dp) =>
+                fe.ReadLocalValue(dp) == DependencyProperty.UnsetValue;
+
+            static bool NonHelpTextPropertiesReleased(FrameworkElement fe) =>
+                Released(fe, AP.FullDescriptionProperty)
+                && Released(fe, AP.LandmarkTypeProperty)
+                && Released(fe, AP.AccessibilityViewProperty)
+                && Released(fe, AP.IsRequiredForFormProperty)
+                && Released(fe, AP.LiveSettingProperty)
+                && Released(fe, AP.PositionInSetProperty)
+                && Released(fe, AP.SizeOfSetProperty)
+                && Released(fe, AP.LevelProperty)
+                && Released(fe, AP.ItemStatusProperty)
+                && Released(fe, UIElement.TabFocusNavigationProperty);
+
+            await Harness.Render();
+            var applied = H.FindButton("A11yClearTarget");
+            H.Check("A11yClear_Phase0_Present", applied is not null);
+            if (applied is not null)
+            {
+                H.Check("A11yClear_Phase0_Applied",
+                    AP.GetHelpText(applied) == "a11y-help"
+                    && AP.GetFullDescription(applied) == "a11y-full"
+                    && AP.GetLandmarkType(applied) == APeers.AutomationLandmarkType.Navigation
+                    && AP.GetAccessibilityView(applied) == APeers.AccessibilityView.Raw
+                    && AP.GetIsRequiredForForm(applied)
+                    && AP.GetLiveSetting(applied) == APeers.AutomationLiveSetting.Assertive
+                    && AP.GetPositionInSet(applied) == 3
+                    && AP.GetSizeOfSet(applied) == 9
+                    && AP.GetLevel(applied) == 4
+                    && AP.GetItemStatus(applied) == "a11y-status"
+                    && applied.TabFocusNavigation == Microsoft.UI.Xaml.Input.KeyboardNavigationMode.Cycle);
+            }
+
+            H.ClickButton("A11yClearPhase");
+            await Harness.Render();
+
+            var partial = H.FindButton("A11yClearTarget");
+            H.Check("A11yClear_Phase1_Present", partial is not null);
+            if (partial is not null)
+            {
+                H.Check("A11yClear_Phase1_KeptPropertySurvives",
+                    AP.GetHelpText(partial) == "a11y-help");
+                H.Check("A11yClear_Phase1_DroppedPropertiesReleased",
+                    NonHelpTextPropertiesReleased(partial));
+            }
+
+            H.ClickButton("A11yClearPhase");
+            await Harness.Render();
+
+            var dropped = H.FindButton("A11yClearTarget");
+            H.Check("A11yClear_Phase2_Present", dropped is not null);
+            if (dropped is not null)
+            {
+                H.Check("A11yClear_Phase2_WholeBagReleased",
+                    Released(dropped, AP.HelpTextProperty)
+                    && NonHelpTextPropertiesReleased(dropped));
+                // Effective-value spot check: on a Button these DPs have no style setter, so
+                // this cannot replace the local-value reads above — it only rules out a reset
+                // that released the local value while leaving the property reading the
+                // previous render's value some other way. Split per-property so a failure
+                // names the property instead of just "one of four".
+                H.Check("A11yClear_Phase2_HelpTextDefaulted",
+                    AP.GetHelpText(dropped) != "a11y-help");
+                H.Check("A11yClear_Phase2_ItemStatusDefaulted",
+                    AP.GetItemStatus(dropped) != "a11y-status");
+                H.Check("A11yClear_Phase2_PositionInSetDefaulted",
+                    AP.GetPositionInSet(dropped) != 3);
+                H.Check("A11yClear_Phase2_TabFocusNavigationDefaulted",
+                    dropped.TabFocusNavigation
+                    != Microsoft.UI.Xaml.Input.KeyboardNavigationMode.Cycle);
+            }
         }
     }
 }

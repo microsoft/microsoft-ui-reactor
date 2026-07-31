@@ -414,6 +414,7 @@ internal static class SelfTestFixtureRegistry
         "ModifierEvent_PoolClearValueControl",
         "ModifierEvent_InlineMarginCarryForward",
         "ModifierEvent_InlineDropRestoresPhysical",
+        "ModifierEvent_AccessibilityClearResets",
         // Rare control mount + update tests
         "RareControl_ColorPicker",
         "RareControl_TeachingTip",
@@ -2033,6 +2034,7 @@ internal static class SelfTestFixtureRegistry
         "ModifierEvent_PoolClearValueControl" => new ModifierEventFixtures.ModifierPoolClearValueControl(harness),
         "ModifierEvent_InlineMarginCarryForward" => new ModifierEventFixtures.ModifierInlineMarginCarryForward(harness),
         "ModifierEvent_InlineDropRestoresPhysical" => new ModifierEventFixtures.ModifierInlineDropRestoresPhysical(harness),
+        "ModifierEvent_AccessibilityClearResets" => new ModifierEventFixtures.AccessibilityModifierClearResets(harness),
         // Rare control tests
         "RareControl_ColorPicker" => new RareControlFixtures.ColorPickerMountUpdate(harness),
         "RareControl_TeachingTip" => new RareControlFixtures.TeachingTipMount(harness),

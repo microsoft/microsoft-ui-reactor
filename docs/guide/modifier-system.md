@@ -114,6 +114,14 @@ would pin it permanently rather than hand the property back to the
 style. Render a themed `Button` with `.Padding(24)` and then without
 `.Padding()` and you get the *themed* padding back, not `0`.
 
+> **Caveat:** The four transform modifiers are the current exception. `.Scale()`,
+> `.Rotation()`, `.Translation()` and `.CenterPoint()` write through the
+> element's composition visual rather than through the XAML property
+> system, so `ClearValue` has nothing to release and dropping one leaves
+> the last value on the element. Until that is fixed, reset them by writing
+> the identity value explicitly — `.Scale(1f)`, `.Rotation(0f)`,
+> `.Translation(0f, 0f, 0f)` — rather than by omitting the call.
+
 Reference modifiers are the exception to "just write this value" in the
 implementation, but not in the authoring model. `.Ref(cell)` binds the
 current element into an `ElementRef` cell; reference-property modifiers
