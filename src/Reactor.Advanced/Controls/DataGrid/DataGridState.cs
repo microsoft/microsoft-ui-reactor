@@ -1491,13 +1491,8 @@ public class DataGridState<T>
     {
         if (!_isRowEditing || _rowEditValues is null) return false;
 
-        foreach (var col in _columns)
-        {
-            if (_rowEditValues.ContainsKey(col.Name) && IsColumnVisible(col.Name))
-                return true;
-        }
-
-        return false;
+        var values = _rowEditValues;
+        return _columns.Any(col => values.ContainsKey(col.Name) && IsColumnVisible(col.Name));
     }
 
     /// <summary>
