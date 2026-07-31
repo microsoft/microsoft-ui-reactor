@@ -326,6 +326,7 @@ public sealed class GallerySampleLintTests
             inspectedAnimatedIcons += icons.Count;
 
             var reactive = ReactiveNames(root);
+            var receivers = AnimatedIconReceivers(root);
 
             foreach (var icon in icons)
             {
@@ -334,7 +335,7 @@ public sealed class GallerySampleLintTests
                 // which is most of what shipped in #983.
                 var chain = EnclosingChain(icon);
                 var writes = chain.DescendantNodes().OfType<InvocationExpressionSyntax>()
-                    .Where(i => InvokedName(i) == "SetState" && i.ArgumentList.Arguments.Count >= 2)
+                    .Where(i => IsAnimatedIconStateWrite(i, receivers))
                     .ToList();
 
                 if (writes.Count == 0)
@@ -479,8 +480,9 @@ public sealed class GallerySampleLintTests
                 }
             }
 
+            var receivers = AnimatedIconReceivers(root);
             foreach (var write in root.DescendantNodes().OfType<InvocationExpressionSyntax>()
-                         .Where(i => InvokedName(i) == "SetState" && i.ArgumentList.Arguments.Count >= 2))
+                         .Where(i => IsAnimatedIconStateWrite(i, receivers)))
             {
                 foreach (var literal in StateLiteralsReaching(root, write.ArgumentList.Arguments[1].Expression))
                 {
@@ -499,6 +501,50 @@ public sealed class GallerySampleLintTests
         Assert.True(inspectedStates > 0, "no state literals were traced to a SetState call — the lint would pass vacuously.");
         Assert.True(offenders.Count == 0, string.Join("\n", offenders));
     }
+
+    /// <summary>
+    /// The receiver names that denote <c>Microsoft.UI.Xaml.Controls.AnimatedIcon</c> in this file:
+    /// the type's own simple name, plus any alias <c>using</c> aimed at it.
+    /// </summary>
+    /// <remarks>
+    /// The alias arm is not hypothetical. <c>using static Factories</c> shadows the type name with
+    /// the DSL's <c>AnimatedIcon(...)</c> factory method, so a page that writes state has to reach
+    /// the attached-property helper through an alias — matching only the bare type name would find
+    /// zero state writes on the very page this lint exists to check. Matching only the bare
+    /// *method* name has the opposite failure: any unrelated <c>SetState</c> in a <c>.Set(...)</c>
+    /// lambda would vouch for an icon that never animates, which is issue #983 with extra steps.
+    /// Resolving the receiver is what makes the check mean what its name says.
+    /// </remarks>
+    static HashSet<string> AnimatedIconReceivers(SyntaxNode root)
+    {
+        var receivers = new HashSet<string>(global::System.StringComparer.Ordinal) { "AnimatedIcon" };
+        foreach (var alias in root.DescendantNodesAndSelf().OfType<UsingDirectiveSyntax>()
+                     .Where(u => u.Alias is not null && u.Name is not null
+                                 && LastSegment(u.Name.ToString()) == "AnimatedIcon"))
+        {
+            receivers.Add(alias.Alias!.Name.Identifier.Text);
+        }
+
+        return receivers;
+    }
+
+    /// <summary>The final dotted segment of a possibly-qualified name — <c>A.B.C</c> becomes <c>C</c>.</summary>
+    static string LastSegment(string qualified)
+    {
+        var cut = qualified.LastIndexOf('.');
+        return cut < 0 ? qualified : qualified[(cut + 1)..];
+    }
+
+    /// <summary>
+    /// True when the invocation is the <c>AnimatedIcon.SetState(icon, state)</c> attached-property
+    /// write — the call that *is* the animation, since AnimatedIcon has no Play() — as opposed to
+    /// any other method that happens to be named <c>SetState</c>.
+    /// </summary>
+    static bool IsAnimatedIconStateWrite(InvocationExpressionSyntax invocation, HashSet<string> receivers) =>
+        invocation.ArgumentList.Arguments.Count >= 2
+        && invocation.Expression is MemberAccessExpressionSyntax access
+        && access.Name.Identifier.Text == "SetState"
+        && receivers.Contains(LastSegment(access.Expression.ToString()));
 
     /// <summary>
     /// The string literals that can reach a <c>SetState</c> argument, by walking back through the
