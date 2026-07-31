@@ -36,7 +36,7 @@ class TimePickerPage : Component
                         )
                     ),
                     @"TimePicker(presetTime, t => setPresetTime(t))
-Button(""Noon"", () => setPresetTime(new TimeSpan(12, 0, 0)))")
+Button(""Set to Noon"", () => setPresetTime(new TimeSpan(12, 0, 0)))")
             ).Margin(36, 24, 36, 36)
         );
     }

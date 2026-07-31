@@ -35,7 +35,7 @@ class CalendarDatePickerPage : Component
                             .Foreground(Theme.SecondaryText)
                     ),
                     @"CalendarDatePicker(clearableDate, d => setClearableDate(d))
-Button(""Clear"", () => setClearableDate(null))")
+Button(""Clear Date"", () => setClearableDate(null))")
             ).Margin(36, 24, 36, 36)
         );
     }

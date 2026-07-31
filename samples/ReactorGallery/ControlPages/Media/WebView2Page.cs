@@ -35,7 +35,7 @@ class WebView2Page : Component
                         ),
                         WebView2(new Uri(presetUrl)).Width(600).Height(300)
                     ),
-                    @"Button(""Learn"", () => setPresetUrl(""https://learn.microsoft.com""))
+                    @"Button(""Microsoft Learn"", () => setPresetUrl(""https://learn.microsoft.com""))
 WebView2(new Uri(presetUrl)).Width(600).Height(300)")
             ).Margin(36, 24, 36, 36)
         );

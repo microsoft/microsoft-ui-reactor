@@ -12,7 +12,7 @@ class CommandBarPage : Component
     public override Element Render()
     {
         var (lastAction, setLastAction) = UseState("(none)");
-        var (secondaryAction, setSecondaryAction) = UseState("(none)");
+        var (commandAction, setCommandAction) = UseState("(none)");
         var (isBold, setIsBold) = UseState(false);
 
         return ScrollView(
@@ -44,15 +44,15 @@ class CommandBarPage : Component
                         CommandBar(
                             primaryCommands: new AppBarItemBase[]
                             {
-                                AppBarButton("Share", () => setSecondaryAction("Share"), icon: "Share"),
+                                AppBarButton("Share", () => setCommandAction("Share"), icon: "Share"),
                                 AppBarToggleButton("Bold", isBold, b => setIsBold(b), icon: "Bold"),
                             },
                             secondaryCommands: new AppBarItemBase[]
                             {
-                                AppBarButton("Copy", () => setSecondaryAction("Copy")),
-                                AppBarButton("Paste", () => setSecondaryAction("Paste")),
+                                AppBarButton("Copy", () => setCommandAction("Copy")),
+                                AppBarButton("Paste", () => setCommandAction("Paste")),
                             }),
-                        TextBlock($"Last action: {secondaryAction}").Foreground(Theme.SecondaryText)
+                        TextBlock($"Last action: {commandAction}").Foreground(Theme.SecondaryText)
                     ),
                     @"CommandBar(
     primaryCommands: new AppBarItemBase[] {

@@ -73,7 +73,7 @@ public sealed class GalleryCardIndependenceTests
             $"the {Slot} state slot is wired into {Cards.Count} sample cards — " +
             string.Join(", ", Cards.Select(c => $"\"{c}\"")) + ". " +
             "Each card is an independent demonstration, so driving one silently moves the others. " +
-            "Give every card its own UseState.";
+            "Give every card its own state hook.";
     }
 
     internal sealed record PageScan(IReadOnlyList<Finding> Findings, int Cards, int Slots);
