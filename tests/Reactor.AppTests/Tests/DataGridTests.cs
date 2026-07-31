@@ -257,8 +257,11 @@ public class DataGridTests : AppTestBase
             if (buttons.Count > 0)
             {
                 var first = buttons[0];
-                Element(!string.IsNullOrEmpty(first.AutomationId) ? first.AutomationId! : first.Selector,
-                        first.AutomationId).Click();
+                // Normalize a missing AutomationId to null rather than "": UiElement.GetAttribute
+                // branches on `AutomationId != null`, so an empty-but-non-null id would send it
+                // down the read-by-automation-id path with an empty id.
+                var id = string.IsNullOrEmpty(first.AutomationId) ? null : first.AutomationId;
+                Element(id ?? first.Selector, id).Click();
                 // Save/Cancel only exist while the row is being edited, so their arrival is proof
                 // the row edit actually started before we start pressing Tab.
                 Assert.IsNotNull(WaitForName("Save"), "Row edit did not start — no 'Save' button appeared.");
