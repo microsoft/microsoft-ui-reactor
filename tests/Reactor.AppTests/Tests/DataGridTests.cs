@@ -155,6 +155,120 @@ public class DataGridTests : AppTestBase
     }
 
     /// <summary>
+    /// Issue #976: in ROW edit mode, Tab must cycle real keyboard focus among the row's editors —
+    /// wrapping from the last one back to the first — instead of walking out of the grid and
+    /// tripping the LostFocus blur-commit.
+    ///
+    /// <para>Behavioral oracle, because winapp cannot tell us which of the row's several open
+    /// editors has focus: type into the editor focus lands in and read back which COLUMN changed.
+    /// Start a row edit on row 1 (focus lands in FirstName), Tab once (→ LastName) and type
+    /// "Smythe", Tab again — the wrap — and type "Alicia", then Enter to commit the row. Only a
+    /// correct wrap produces <c>[1:Alicia,Smythe]</c>: if Tab left the grid, the blur-commit lands
+    /// <c>[1:Alice,Smythe]</c> first and "Alicia" goes nowhere; if focus never moved, "Alicia"
+    /// overwrites LastName and the log reads <c>[1:Alice,Alicia]</c>.</para>
+    /// </summary>
+    [E2eRetry(3)]
+    [TestMethod]
+    public void Interactive_DataGrid_RowEditTab_WrapsToFirstEditorWithoutCommitting()
+    {
+        NavigateToFixtureFresh("DataGrid_RowEditGrid");
+        WaitForText("RowEditLog", "Edits:");
+        Assert.IsNotNull(WaitForName("Alice"), "'Alice' (row 1 FirstName) should be visible");
+
+        BeginRowEditOnFirstRow();
+
+        // Focus is in the FirstName editor. Tab → LastName, replace "Smith" with "Smythe".
+        App.SendKeys(Keys.Tab, viaSendInput: true);
+        ReplaceFocusedEditorText("Smythe");
+
+        // Tab again. LastName is the LAST editable column, so this is the wrap: focus must return
+        // to the FirstName editor rather than continuing on to Save/Cancel and out of the grid.
+        App.SendKeys(Keys.Tab, viaSendInput: true);
+        ReplaceFocusedEditorText("Alicia");
+
+        // Nothing may have committed yet — the wrap must not have tripped a blur-commit.
+        var logSoFar = FindById("RowEditLog").Text ?? "";
+        Assert.IsFalse(logSoFar.Contains('['),
+            $"Row-mode Tab must not commit the row; RowEditLog was '{logSoFar}'.");
+
+        App.SendKeys(Keys.Enter, viaSendInput: true);
+
+        WaitForTextContaining("RowEditLog", "[1:Alicia,Smythe]", timeoutMs: 5000);
+    }
+
+    /// <summary>
+    /// Issue #976, companion to the wrap test: the row-mode Tab arms
+    /// <c>SuppressNextLostFocusCommit</c> so the wrap's focus-out doesn't blur-commit the row. That
+    /// flag is one-shot, so it must be consumed by the Tab's own LostFocus — if it leaks it
+    /// silently swallows the NEXT legitimate blur-commit and the edit is lost. Same bug class as
+    /// <see cref="Interactive_DataGrid_EditingTabToReadOnly_DoesNotSuppressNextCommit"/>.
+    /// </summary>
+    [E2eRetry(3)]
+    [TestMethod]
+    public void Interactive_DataGrid_RowEditTab_DoesNotSuppressNextCommit()
+    {
+        NavigateToFixtureFresh("DataGrid_RowEditGrid");
+        WaitForText("RowEditLog", "Edits:");
+        Assert.IsNotNull(WaitForName("Alice"), "'Alice' (row 1 FirstName) should be visible");
+
+        BeginRowEditOnFirstRow();
+
+        // Type into FirstName, then Tab (arms the guard), then leave the grid entirely. The row
+        // must still commit through the LostFocus path.
+        ReplaceFocusedEditorText("Alicia");
+        App.SendKeys(Keys.Tab, viaSendInput: true);
+        Element("RowEditBlurAnchor").Click();
+
+        WaitForTextContaining("RowEditLog", "[1:Alicia,Smith]", timeoutMs: 5000);
+    }
+
+    /// <summary>
+    /// Click the first row's "Edit" button to enter row-edit mode and wait until its editors are
+    /// realized. Row mode has one Edit button per row and they share a name, so take the topmost.
+    /// </summary>
+    private void BeginRowEditOnFirstRow()
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(5000);
+        while (DateTime.UtcNow < deadline)
+        {
+            var buttons = App.Search("Edit").Where(m => m.Name == "Edit").ToList();
+            if (buttons.Count > 0)
+            {
+                var first = buttons[0];
+                Element(!string.IsNullOrEmpty(first.AutomationId) ? first.AutomationId! : first.Selector,
+                        first.AutomationId).Click();
+                // Save/Cancel only exist while the row is being edited, so their arrival is proof
+                // the row edit actually started before we start pressing Tab.
+                Assert.IsNotNull(WaitForName("Save"), "Row edit did not start — no 'Save' button appeared.");
+                _ = WaitForEditor();
+                return;
+            }
+            Thread.Sleep(100);
+        }
+
+        Assert.Fail("Row-mode 'Edit' button never appeared.");
+    }
+
+    /// <summary>
+    /// Replace the contents of whatever editor currently holds real keyboard focus, WITHOUT
+    /// locating it first. Row mode keeps every editable cell open at once, so
+    /// <see cref="WaitForEditor"/>'s "first Edit control" would always resolve to the same editor
+    /// and silently defeat the point of the test — the whole question is where focus is. Select-all
+    /// + delete then typing goes to the focused control, whichever it is.
+    ///
+    /// <para>Both payloads are in winapp's send-keys token grammar (<c>ctrl+a</c>, <c>delete</c>,
+    /// <c>text=</c>), NOT the Win32 <c>SendKeys.SendWait</c> <c>^a</c> shorthand — the CLI rejects
+    /// the latter. <c>ctrl+a delete</c> mirrors <see cref="UiElement.Clear"/>, and the literal is
+    /// escaped through <see cref="UiElement.ToSendKeysTokens"/> so the tokenizer keeps it intact.</para>
+    /// </summary>
+    private void ReplaceFocusedEditorText(string value)
+    {
+        App.SendKeys("ctrl+a delete", viaSendInput: true);
+        App.SendKeys(UiElement.ToSendKeysTokens(value), viaSendInput: true);
+        Thread.Sleep(150); // let TextChanged propagate into the pending row values before the next key
+    }
+
+    /// <summary>
     /// Tap a DataGrid cell by its visible text to enter/commit cell edit. The cells are
     /// display-only TextBlocks (no InvokePattern), and a WinUI <c>Tapped</c> only fires on an
     /// ACTIVE window, so winapp's UIA invoke/click can't drive them. We foreground the host and

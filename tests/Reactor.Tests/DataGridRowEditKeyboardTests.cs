@@ -175,19 +175,21 @@ public class DataGridRowEditKeyboardTests
     }
 
     [Fact]
-    public async Task RowEditTab_WithNoPriorColumnFocus_LandsOnFirstEditableColumn()
+    public async Task RowEditTab_WithNoPriorColumnFocus_LandsOnTheColumnAfterTheFirstEditable()
     {
         var state = await LoadedState();
         var el = Grid(EditMode.Row);
 
-        // BeginRowEdit sets only the focused ROW, so the column index is still -1 here — the
-        // shape you get when the row edit starts from the row's Edit button.
+        // Started from the row's Edit button — no prior column focus. Since #976 BeginRowEdit puts
+        // REAL focus on the row's first visible editor, so it parks the logical cursor there too;
+        // leaving it at -1 would make this first Tab move the cursor onto the column focus is
+        // already on and the keystroke would visibly do nothing.
         Assert.True(state.BeginRowEdit(1));
-        Assert.Equal(-1, state.FocusedColIndex);
+        Assert.Equal(NameCol, state.FocusedColIndex);
 
         Key(state, el, VirtualKey.Tab);
 
-        Assert.Equal(NameCol, state.FocusedColIndex);
+        Assert.Equal(ScoreCol, state.FocusedColIndex);
         Assert.Equal(1, state.FocusedRowIndex);
     }
 
@@ -309,25 +311,22 @@ public class DataGridRowEditKeyboardTests
     }
 
     [Fact]
-    public async Task FocusPrevRowEditColumn_WithNoPriorColumnFocus_LandsOnLastEditableColumn()
+    public async Task FocusPrevRowEditColumn_FromTheFirstEditableColumn_WrapsToTheLastEditableColumn()
     {
         var state = await LoadedState();
 
-        // BeginRowEdit from the Edit button leaves FocusedColIndex at -1. Forward from there lands
-        // on the FIRST editable column, so backward has to land on the LAST one. A traversal that
-        // just plugs -1 into the modulo starts at colCount - 2 and can never reach the last column.
+        // Started from the Edit button — no prior column focus. Since #976 BeginRowEdit focuses the
+        // row's first visible editor and parks the cursor there, so this is backward-off-the-first
+        // -editable-column. It must wrap to the LAST editable column rather than stalling on Name
+        // or walking onto the read-only Id column.
         Assert.True(state.BeginRowEdit(0));
-        Assert.Equal(-1, state.FocusedColIndex);
+        Assert.Equal(NameCol, state.FocusedColIndex);
 
         Assert.True(state.FocusPrevRowEditColumn());
         Assert.Equal(ScoreCol, state.FocusedColIndex);
-
-        // Differential isolation against the forward direction from the same -1 start.
-        var forward = await LoadedState();
-        Assert.True(forward.BeginRowEdit(0));
-        Assert.Equal(-1, forward.FocusedColIndex);
-        Assert.True(forward.FocusNextRowEditColumn());
-        Assert.Equal(NameCol, forward.FocusedColIndex);
+        Assert.NotEqual(NameCol, state.FocusedColIndex);
+        Assert.NotEqual(IdCol, state.FocusedColIndex);
+        Assert.Equal(0, state.FocusedRowIndex);
     }
 
     [Fact]

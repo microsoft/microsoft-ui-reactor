@@ -462,14 +462,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                         {
                             e.Handled = true;
                             var capturedKey = e.Key;
-                            // A cell editing-Tab moves real focus out of the single-tab-stop grid, which fires
-                            // the grid's LostFocus commit. But the editing-Tab path (HandleKeyDown) itself
-                            // commits the current cell and reopens the editor on the next cell, so the LostFocus
-                            // safety-net must NOT also commit — that would tear down the just-reopened editor.
-                            // Claim that one focus-out here, synchronously (before either handler defers), so the
-                            // guard is robust to dispatcher ordering. Cell edit only: in row-edit mode IsEditing
-                            // is also true, but the LostFocus there commits the whole ROW and must not be suppressed.
-                            if (capturedKey == VirtualKey.Tab && state.IsEditing && !state.IsRowEditing)
+                            if (ShouldClaimNextLostFocus(state, capturedKey))
                                 state.SuppressNextLostFocusCommit = true;
                             Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() =>
                             {
@@ -652,11 +645,13 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
             Element cellContent;
             if (isCellEditing)
             {
-                cellContent = RenderEditingCell(col, state, registry);
+                cellContent = WithEditorFocusRequest(
+                    RenderEditingCell(col, state, registry), state, rowKey, col.Name);
             }
             else if (isColInRowEdit)
             {
-                cellContent = RenderRowEditingCell(col, state, registry);
+                cellContent = WithEditorFocusRequest(
+                    RenderRowEditingCell(col, state, registry), state, rowKey, col.Name);
             }
             else if (!isPlaceholder && el.CellTemplate is not null)
             {
@@ -937,6 +932,123 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
             return editor(currentValue!, v => state.UpdateRowEditValue(colName, v)).Padding(2);
 
         return TextBox(currentValue?.ToString() ?? "", s => state.UpdateRowEditValue(colName, s)).Padding(2);
+    }
+
+    // ── Editor focus (#976) ─────────────────────────────────────────
+
+    /// <summary>
+    /// Whether this key press is about to move focus off an editor in a way the grid's
+    /// <c>LostFocus</c> safety-net would misread as "the user left, commit" — i.e. whether the
+    /// KeyDown handler should claim that one focus-out via
+    /// <see cref="DataGridState{T}.SuppressNextLostFocusCommit"/>.
+    /// </summary>
+    /// <remarks>
+    /// Called SYNCHRONOUSLY from the KeyDown handler, before either handler defers, so the guard
+    /// is robust to dispatcher ordering.
+    ///
+    /// <para><b>Cell edit</b> — Tab moves real focus out of the single-tab-stop grid. The editing-Tab
+    /// path (<c>HandleKeyDown</c>) already commits the current cell and reopens the editor on the
+    /// next one, so a second commit from LostFocus would tear that editor straight back down.</para>
+    ///
+    /// <para><b>Row edit (#976)</b> — same claim, different reason. Native Tab has already walked
+    /// focus onto Save/Cancel or out of the grid, and LostFocus enqueues its "is focus still inside
+    /// the grid?" check BEFORE our focus request is enqueued, so it would see focus outside and
+    /// commit the whole row — exactly the symptom #976 fixes. Gated on
+    /// <see cref="DataGridState{T}.HasRowEditFocusTarget"/> so we only claim a focus-out we are
+    /// actually going to cancel out by pulling focus back; claiming one when no editor will be
+    /// focused leaves the one-shot flag armed to swallow a later legitimate blur-commit (the bug
+    /// class <c>Interactive_DataGrid_EditingTabToReadOnly_DoesNotSuppressNextCommit</c> covers).</para>
+    /// </remarks>
+    internal static bool ShouldClaimNextLostFocus(DataGridState<T> state, VirtualKey key)
+    {
+        if (key != VirtualKey.Tab || !state.IsEditing) return false;
+        return !state.IsRowEditing || state.HasRowEditFocusTarget();
+    }
+
+    /// <summary>
+    /// Attach a real-XAML-focus request to an editor cell, if the state has one armed for
+    /// exactly this cell. Cells with no pending request are returned untouched, so they keep
+    /// byte-identical modifiers and stay on the reconciler's shallow-skip path.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately not <c>ElementRef</c> + <c>FocusManager.Focus</c>. One ref shared across the
+    /// row and rebound from cell A to cell B is reconcile-ORDER dependent: the reconciler clears
+    /// the old cell's ref and sets the new cell's ref in child order, so moving focus *backward*
+    /// sets B then clears A and the ref ends up null. A hook attached to the specific cell that
+    /// should receive focus has no such ordering hazard.
+    ///
+    /// Both hooks are needed because the reconciler runs exactly one of them per reconcile:
+    /// OnMount only when <c>oldM is null</c> (cell-mode edit — the cell flips TextBlock → editor),
+    /// OnUpdate only when it isn't (row-mode Tab between two already-mounted editors).
+    /// </remarks>
+    private static Element WithEditorFocusRequest(
+        Element editor, DataGridState<T> state, RowKey rowKey, string columnName)
+    {
+        if (!state.HasEditorFocusRequest(rowKey, columnName)) return editor;
+
+        void Arm(FrameworkElement fe)
+        {
+            // One-shot: the first hook to run claims it, so a later re-render of the same
+            // still-armed tree can't yank focus back out from under the user.
+            if (state.TryConsumeEditorFocusRequest(rowKey, columnName))
+                ScheduleFocus(fe);
+        }
+
+        return editor.OnMountAdd(Arm).OnUpdateAdd(Arm);
+    }
+
+    /// <summary>
+    /// Focus <paramref name="fe"/> once it can actually take focus.
+    /// </summary>
+    /// <remarks>
+    /// Two deferrals, for two different reasons:
+    ///   • <c>Loaded</c> — on mount, ApplyModifiers runs BEFORE the control is parented, and
+    ///     Focus on an unparented control fails. Also covers a virtualized row realized on a
+    ///     later dispatcher wave. The handler removes itself so a recycled control can't
+    ///     re-focus on a later Loaded.
+    ///   • dispatcher — even once loaded, the focus move has to land after WinUI's own Tab
+    ///     focus navigation, which has already run by the time our handledEventsToo KeyDown
+    ///     handler fires.
+    /// </remarks>
+    private static void ScheduleFocus(FrameworkElement fe)
+    {
+        if (fe.IsLoaded)
+        {
+            Enqueue();
+            return;
+        }
+
+        void OnLoaded(object s, RoutedEventArgs e)
+        {
+            fe.Loaded -= OnLoaded;
+            Enqueue();
+        }
+
+        fe.Loaded += OnLoaded;
+
+        void Enqueue()
+        {
+            var queue = fe.DispatcherQueue ?? Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+            if (queue is null) { TryFocusEditor(fe); return; }
+            queue.TryEnqueue(() => TryFocusEditor(fe));
+        }
+    }
+
+    /// <summary>
+    /// Move real keyboard focus into an editor. Returns whether focus was taken, so the
+    /// selftests can tell "we asked and XAML refused" from "we never asked".
+    /// </summary>
+    internal static bool TryFocusEditor(FrameworkElement fe)
+    {
+        // A custom col.Editor can return a composite (a Grid wrapping a TextBox + a glyph)
+        // whose ROOT is not focusable, so a plain Control.Focus would silently return false.
+        if (fe is Microsoft.UI.Xaml.Controls.Control control && control.Focus(FocusState.Programmatic))
+            return true;
+
+        if (Microsoft.UI.Xaml.Input.FocusManager.FindFirstFocusableElement(fe) is Microsoft.UI.Xaml.Controls.Control inner)
+            return inner.Focus(FocusState.Programmatic);
+
+        return false;
     }
 
     // ── Header rendering ────────────────────────────────────────────

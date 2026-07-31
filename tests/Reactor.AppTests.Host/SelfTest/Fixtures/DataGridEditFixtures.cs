@@ -794,4 +794,171 @@ internal static class DataGridEditFixtures
                 && error is Element);
         }
     }
+
+    /// <summary>
+    /// Issue #976: opening an editor must move REAL XAML keyboard focus into it, and row-mode Tab
+    /// must cycle that focus between the row's editors instead of walking out of the grid.
+    ///
+    /// <para>Before the fix, <see cref="DataGridState{T}"/>'s focus APIs moved a purely logical cell
+    /// cursor and nothing ever called <c>Focus(...)</c>. Every check below would then observe focus
+    /// still sitting on the baseline element no matter which editor was open.</para>
+    ///
+    /// <para>This is a selftest rather than an E2E because a selftest runs in a real WinUI window and
+    /// can read <c>FocusManager.GetFocusedElement(xamlRoot)</c> directly — E2E is reserved for the
+    /// physical keystroke path. Rows are built through <c>BuildRowForTests</c>, the same seam
+    /// <c>RenderDataRows</c> uses, so the real <c>RenderRow</c> editing arms (and therefore the real
+    /// <c>WithEditorFocusRequest</c> / <c>ScheduleFocus</c> / <c>TryFocusEditor</c> chain) are what
+    /// is under test — not a fixture-local re-implementation of them.</para>
+    /// </summary>
+    internal class EditorRealFocus(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            var source = CreateSource(8);
+            var columns = CreateEditableColumns();
+            var registry = new TypeRegistry();
+            var state = new DataGridState<TestProduct>(
+                source, columns, Microsoft.UI.Reactor.Controls.SelectionMode.Single);
+            await state.LoadDataAsync();
+
+            var el = new DataGridElement<TestProduct>
+            {
+                Source = source,
+                Columns = columns,
+                Editable = true,
+                SelectionMode = Microsoft.UI.Reactor.Controls.SelectionMode.Single,
+                EditMode = EditMode.Row,
+                RowHeight = 36,
+            };
+
+            // A plain focusable control OUTSIDE the grid rows. Doubles as the positive control for
+            // the focus instrument and as the "focus is not in an editor" baseline, so that every
+            // later assertion is a real transition rather than something already true.
+            var anchorRef = new Microsoft.UI.Reactor.Input.ElementRef();
+
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var (_, bump) = ctx.UseReducer(0);
+                ctx.UseEffect(() =>
+                {
+                    void OnChanged() => bump(v => v + 1);
+                    state.StateChanged += OnChanged;
+                    return () => state.StateChanged -= OnChanged;
+                }, global::System.Array.Empty<object>());
+
+                var rows = Enumerable.Range(0, 4)
+                    .Select(i => DataGridComponent<TestProduct>.BuildRowForTests(i, state, columns, el, registry))
+                    .ToArray();
+
+                return VStack(
+                    [Button("anchor", () => { }).Ref(anchorRef), .. rows]);
+            });
+
+            await Harness.Render(300);
+
+            H.Check("EditorFocus_RowsRendered", H.FindTextContaining("Product 1") is not null);
+
+            var anchor = anchorRef.Current as Microsoft.UI.Xaml.Controls.Button;
+            if (anchor is null) { H.Check("EditorFocus_AnchorMounted", false); return; }
+
+            var xamlRoot = anchor.XamlRoot;
+            if (xamlRoot is null) { H.Check("EditorFocus_XamlRootAvailable", false); return; }
+
+            object? Focused() => Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(xamlRoot);
+
+            // ── Positive control ────────────────────────────────────────────────────────
+            // Every check below reads GetFocusedElement. If this window cannot REPORT focus
+            // (unactivated / non-interactive session) that call returns null forever, and an
+            // assertion phrased as "the focused element is no longer the anchor" would pass
+            // vacuously against a completely broken implementation. So prove the instrument
+            // works first — focus a known element and read it back — and SKIP loudly, logging
+            // the probed value, rather than assert against nothing.
+            anchor.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            await Harness.Render();
+            var probe = Focused();
+            if (!ReferenceEquals(probe, anchor))
+            {
+                H.Skip("EditorFocus_PositiveControl",
+                    $"window cannot report focus (GetFocusedElement returned '{probe?.GetType().Name ?? "null"}' " +
+                    "right after focusing a Button) — real-focus checks are not observable here");
+                return;
+            }
+            H.Check("EditorFocus_PositiveControl", true);
+
+            // ── Row edit focuses the row's FIRST editor ─────────────────────────────────
+            // Column 0 (Id) is not editable, so the first editor is the Name cell — and its Text
+            // says which column actually received focus without needing an AutomationId.
+            state.BeginRowEdit(1);
+            await Harness.WaitFor(() => Focused() is Microsoft.UI.Xaml.Controls.TextBox);
+
+            var firstEditor = Focused() as Microsoft.UI.Xaml.Controls.TextBox;
+            H.Check($"EditorFocus_RowEdit_FocusLeftTheAnchor (focused='{Focused()?.GetType().Name ?? "null"}')",
+                firstEditor is not null && !ReferenceEquals(Focused(), anchor));
+            H.Check($"EditorFocus_RowEdit_FocusesFirstEditor (text='{firstEditor?.Text}')",
+                firstEditor?.Text == "Product 1");
+
+            // ── Tab moves focus to the NEXT editor ──────────────────────────────────────
+            DataGridComponent<TestProduct>.HandleKeyDownForTests(
+                state, el, global::Windows.System.VirtualKey.Tab);
+            await Harness.WaitFor(() => Focused() is Microsoft.UI.Xaml.Controls.TextBox tb
+                                        && !ReferenceEquals(tb, firstEditor));
+
+            var secondEditor = Focused() as Microsoft.UI.Xaml.Controls.TextBox;
+            // Differential: "a TextBox is focused" would pass against a total no-op, because the
+            // first editor is already a focused TextBox at this point.
+            H.Check($"EditorFocus_RowEditTab_MovedToADifferentEditor (text='{secondEditor?.Text}')",
+                secondEditor is not null && !ReferenceEquals(secondEditor, firstEditor));
+            // Row 1 → Category "B". Naming the expected value catches a Tab that skipped a column
+            // or landed on a different row.
+            H.Check($"EditorFocus_RowEditTab_LandsOnTheNextColumn (text='{secondEditor?.Text}')",
+                secondEditor?.Text == "B");
+            H.Check("EditorFocus_RowEditTab_KeepsRowInEditMode",
+                state.IsRowEditing && state.EditingRowKey is not null);
+
+            // ── Tab wraps from the last editor back to the first ────────────────────────
+            // Editable columns are Name, Category, Price; focus is on Category, so two more Tabs
+            // pass through Price and wrap. Save/Cancel are deliberately skipped — Enter and Esc
+            // are their keyboard equivalents.
+            DataGridComponent<TestProduct>.HandleKeyDownForTests(
+                state, el, global::Windows.System.VirtualKey.Tab);
+            await Harness.WaitFor(() => !ReferenceEquals(Focused(), secondEditor));
+            var priceEditor = Focused() as Microsoft.UI.Xaml.Controls.TextBox;
+            H.Check($"EditorFocus_RowEditTab_ReachesLastEditor (text='{priceEditor?.Text}', col={state.FocusedColIndex})",
+                priceEditor is not null && state.FocusedColIndex == 3);
+
+            DataGridComponent<TestProduct>.HandleKeyDownForTests(
+                state, el, global::Windows.System.VirtualKey.Tab);
+            await Harness.WaitFor(() => Focused() is Microsoft.UI.Xaml.Controls.TextBox tb
+                                        && tb.Text == "Product 1");
+
+            var wrapped = Focused() as Microsoft.UI.Xaml.Controls.TextBox;
+            // "Product 1" is the Name cell of row 1 and nothing else in the tree, so this pins the
+            // wrap to a specific column; the reference check rules out "focus never left Price".
+            H.Check($"EditorFocus_RowEditTab_WrapsToFirstEditor (text='{wrapped?.Text}', col={state.FocusedColIndex})",
+                wrapped?.Text == "Product 1" && !ReferenceEquals(wrapped, priceEditor)
+                && state.FocusedColIndex == 1);
+            H.Check("EditorFocus_RowEditTab_WrapDidNotCommit",
+                state.IsRowEditing && state.GetItemAt(1)?.Name == "Product 1");
+
+            state.CancelRowEdit();
+            await Harness.Render();
+
+            // ── Cell edit focuses its editor too ────────────────────────────────────────
+            // Re-baseline onto the anchor so "an editor is focused" is a real transition.
+            anchor.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            await Harness.WaitFor(() => ReferenceEquals(Focused(), anchor));
+            H.Check("EditorFocus_CellEdit_BaselineOnAnchor", ReferenceEquals(Focused(), anchor));
+
+            state.BeginEdit(3, 1); // row 3, Name
+            await Harness.WaitFor(() => Focused() is Microsoft.UI.Xaml.Controls.TextBox);
+
+            var cellEditor = Focused() as Microsoft.UI.Xaml.Controls.TextBox;
+            H.Check($"EditorFocus_CellEdit_FocusesEditor (text='{cellEditor?.Text}')",
+                cellEditor is not null && cellEditor.Text == "Product 3");
+
+            state.CancelEdit();
+            await Harness.Render();
+        }
+    }
 }

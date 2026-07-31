@@ -180,8 +180,15 @@ Keyboard behavior differs by mode. In `EditMode.Cell`, <kbd>Tab</kbd> commits th
 current cell and opens the editor on the next one. In `EditMode.Row`, the row is
 the unit of work: <kbd>Enter</kbd> (or the Save button, or clicking away) commits
 every pending cell at once, <kbd>Esc</kbd> (or Cancel) discards them all, and
-<kbd>Tab</kbd> moves through the row's editable cells and its Save/Cancel buttons
-— read-only columns are skipped — without committing anything.
+<kbd>Tab</kbd> cycles keyboard focus through the row's editable cells — read-only
+columns are skipped, and past the last one it wraps back to the first — without
+committing anything. Save and Cancel are not part of that <kbd>Tab</kbd> cycle;
+<kbd>Enter</kbd> and <kbd>Esc</kbd> are their keyboard equivalents.
+
+Opening an editor moves real keyboard focus into it, so you can start typing
+immediately: in `EditMode.Cell` that is the cell you opened, and in `EditMode.Row`
+it is the cell the focus ring was already on, or the row's first editable cell when
+the edit started from the row's Edit button.
 
 Editing supports validation — attach validators via `Column<T>().Validate()`.
 The `onRowChanged` callback fires after a successful commit, receiving the
