@@ -308,4 +308,61 @@ public class DataGridKeyChordTests
                 $"Tab must be claimed in {name} mode");
         }
     }
+
+    [Fact]
+    public async Task ShouldHandleKey_IsModifierBlind_SoTheCaptureGateCannotDropChords()
+    {
+        // DataGridComponent's KeyDown handler settles the claim from KeyChord.Unmodified(e.Key) and
+        // probes the real keyboard only once the key is claimed, so the grid never touches modifier
+        // state for keys it does not own. That gate is sound ONLY while the claim ignores modifiers.
+        //
+        // If a future arm makes ShouldHandleKey modifier-dependent — Ctrl+Home / Ctrl+End, spec 017
+        // §6.8 — this test fails, and the fix is to move the KeyChord.Capture() call back ABOVE the
+        // ShouldHandleKey() gate in OnMount. Without this test that change would compile, pass every
+        // direction test, and silently reintroduce #987 for the new chord: the claim would be
+        // decided against modifiers that were never read, so the grid would decline the chord and
+        // hand it back to FocusManager.
+        var navigation = await LoadedState();
+        var cellEdit = await LoadedState();
+        var rowEdit = await LoadedState();
+
+        Assert.True(cellEdit.BeginEdit(0, NameCol));
+        Assert.True(rowEdit.BeginRowEdit(0));
+
+        VirtualKey[] keys =
+        [
+            VirtualKey.Tab, VirtualKey.Enter, VirtualKey.Escape, VirtualKey.Home, VirtualKey.End,
+            VirtualKey.Up, VirtualKey.Down, VirtualKey.Left, VirtualKey.Right, VirtualKey.Space,
+            VirtualKey.F2, VirtualKey.A,
+        ];
+
+        var claimedAny = false;
+
+        foreach (var (name, state, el) in new (string, DataGridState<TestItem>, DataGridElement<TestItem>)[]
+        {
+            ("navigation", navigation, Grid(EditMode.Cell)),
+            ("cell edit", cellEdit, Grid(EditMode.Cell)),
+            ("row edit", rowEdit, Grid(EditMode.Row)),
+        })
+        {
+            foreach (var key in keys)
+            {
+                var bare = DataGridComponent<TestItem>.ShouldHandleKeyForTests(
+                    state, el, KeyChord.Unmodified(key));
+                claimedAny |= bare;
+
+                foreach (var (shift, ctrl) in new[] { (true, false), (false, true), (true, true) })
+                {
+                    Assert.Equal(
+                        bare,
+                        DataGridComponent<TestItem>.ShouldHandleKeyForTests(
+                            state, el, new KeyChord(key, Shift: shift, Ctrl: ctrl)));
+                }
+            }
+        }
+
+        // Guards the guard: if ShouldHandleKey ever returned false for everything, every comparison
+        // above would trivially agree and this test would pass while proving nothing.
+        Assert.True(claimedAny, "ShouldHandleKey claimed no key at all — the equality checks above are vacuous.");
+    }
 }

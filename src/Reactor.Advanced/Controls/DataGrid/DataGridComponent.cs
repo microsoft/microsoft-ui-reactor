@@ -458,15 +458,22 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                     new Microsoft.UI.Xaml.Input.KeyEventHandler((sender, e) =>
                     {
                         var currentEl = elRef.Current;
-                        // Snapshot the key AND its modifiers here, before anything else — this is the
-                        // only moment the two are known to agree. KeyRoutedEventArgs carries no modifier
-                        // state, so it has to come from the live keyboard, and dispatch below is deferred:
-                        // reading Shift inside HandleKeyDown would sample the keyboard a frame or more
-                        // later and race the user releasing it, making Shift+Tab intermittently wrong. (#987)
-                        var chord = KeyChord.Capture(e.Key);
-                        if (ShouldHandleKey(state, currentEl, chord))
+                        // Settle the claim FIRST, from a chord with no modifiers. ShouldHandleKey is
+                        // modifier-blind by contract (see its remarks), so the answer is the same either
+                        // way — and deciding it here means the keyboard is probed only for the handful of
+                        // keys the grid owns, never for ordinary typing, which reaches this
+                        // handledEventsToo handler too. DataGridKeyChordTests.ShouldHandleKey_IsModifierBlind
+                        // enforces that contract, so this gate cannot start silently dropping chords.
+                        if (ShouldHandleKey(state, currentEl, KeyChord.Unmodified(e.Key)))
                         {
                             e.Handled = true;
+                            // Snapshot the key AND its modifiers here, before anything else defers — this is
+                            // the only moment the two are known to agree. KeyRoutedEventArgs carries no
+                            // modifier state, so it has to come from the live keyboard, and dispatch below is
+                            // deferred: reading Shift inside HandleKeyDown would sample the keyboard a frame
+                            // or more later and race the user releasing it, making Shift+Tab intermittently
+                            // wrong. (#987)
+                            var chord = KeyChord.Capture(e.Key);
                             // A cell editing-Tab moves real focus out of the single-tab-stop grid, which fires
                             // the grid's LostFocus commit. But the editing-Tab path (HandleKeyDown) itself
                             // commits the current cell and reopens the editor on the next cell, so the LostFocus
@@ -1354,6 +1361,12 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         // forward). Gating a claim on a modifier here would hand that chord back to FocusManager and
         // the grid would never see it. The chord is threaded through so a future modifier-dependent
         // arm (Ctrl+Home / Ctrl+End, spec 017 §6.8) can be claimed and handled in step. (#987)
+        //
+        // That blindness is load-bearing, not incidental: the KeyDown handler in OnMount settles this
+        // claim from KeyChord.Unmodified(e.Key) and only probes the real keyboard once the key is
+        // claimed, so the grid does no modifier work for keys it does not own. Making this
+        // modifier-dependent therefore ALSO requires moving KeyChord.Capture() back above that gate.
+        // DataGridKeyChordTests.ShouldHandleKey_IsModifierBlind fails if this drifts.
         if (state.IsEditing)
         {
             return chord.Key is VirtualKey.Enter or VirtualKey.Escape or VirtualKey.Tab;

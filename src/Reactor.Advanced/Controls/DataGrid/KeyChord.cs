@@ -36,6 +36,18 @@ internal readonly record struct KeyChord(VirtualKey Key, bool Shift, bool Ctrl)
     internal static KeyChord Capture(VirtualKey key) => Capture(key, IsDownNow);
 
     /// <summary>
+    /// A chord for <paramref name="key"/> with no modifiers, built WITHOUT touching the keyboard.
+    /// </summary>
+    /// <remarks>
+    /// This is not a cheap stand-in for <see cref="Capture(VirtualKey)"/> — it reports no modifiers
+    /// whether or not any are held. Use it only where the answer provably cannot depend on modifier
+    /// state: the grid's KeyDown handler settles its modifier-blind claim
+    /// (<c>DataGridComponent&lt;T&gt;.ShouldHandleKey</c>) with one of these, so that the keyboard is
+    /// probed only for keys the grid actually owns and never for ordinary typing into an editor.
+    /// </remarks>
+    internal static KeyChord Unmodified(VirtualKey key) => new(key, Shift: false, Ctrl: false);
+
+    /// <summary>
     /// <see cref="Capture(VirtualKey)"/> with the modifier probe injected, so the mapping from
     /// probe answers to <see cref="Shift"/> / <see cref="Ctrl"/> is testable headlessly — the real
     /// probe is a WinRT call that a headless run cannot make.
