@@ -599,6 +599,29 @@ internal static class ModifierEventFixtures
                 H.Check("ModifierClear_ContentAlignmentInitial",
                     initial.HorizontalContentAlignment == HorizontalAlignment.Right
                     && initial.VerticalContentAlignment == VerticalAlignment.Bottom);
+
+                // Issue #986 — load-bearing for the five ModifierClear_*Cleared checks
+                // below. Those read ReadLocalValue(dp) == UnsetValue, which a property
+                // that was NEVER written also satisfies, so without this the release
+                // checks would pass against a reconciler whose *set* arms were deleted.
+                // Assert both that a local value exists and that the effective value is
+                // the deliberately non-default one the phase-0 bag asked for.
+                H.Check("ModifierClear_Tier1Applied_IsTabStop",
+                    initial.ReadLocalValue(UIElement.IsTabStopProperty) != DependencyProperty.UnsetValue
+                    && initial.IsTabStop == false);
+                H.Check("ModifierClear_Tier1Applied_TabIndex",
+                    initial.ReadLocalValue(Control.TabIndexProperty) != DependencyProperty.UnsetValue
+                    && initial.TabIndex == 7);
+                H.Check("ModifierClear_Tier1Applied_XYFocusKeyboardNavigation",
+                    initial.ReadLocalValue(UIElement.XYFocusKeyboardNavigationProperty) != DependencyProperty.UnsetValue
+                    && initial.XYFocusKeyboardNavigation
+                       == Microsoft.UI.Xaml.Input.XYFocusKeyboardNavigationMode.Enabled);
+                H.Check("ModifierClear_Tier1Applied_ElementSoundMode",
+                    initial.ReadLocalValue(Control.ElementSoundModeProperty) != DependencyProperty.UnsetValue
+                    && initial.ElementSoundMode == ElementSoundMode.Off);
+                H.Check("ModifierClear_Tier1Applied_HeadingLevel",
+                    initial.ReadLocalValue(AP.HeadingLevelProperty) != DependencyProperty.UnsetValue
+                    && AP.GetHeadingLevel(initial) == APeers.AutomationHeadingLevel.Level2);
             }
 
             H.ClickButton("ClearModifierPhase");
@@ -672,24 +695,28 @@ internal static class ModifierEventFixtures
                 // here. Each check reads the same DP its set arm writes, so a reset that
                 // targeted a *different* identifier (Control.IsTabStopProperty vs
                 // UIElement.IsTabStopProperty, for instance) would still fail.
+                // The `ModifierClear_Tier1Applied_*` checks above prove the phase-0 write
+                // landed, so "released" is distinguishable from "never written".
+                // The companion effective-value clause compares against the phase-0 value
+                // rather than a guessed WinUI default: a default that a style happens to
+                // supply is not knowable from here, and guessing it once already produced
+                // a false failure in this suite.
                 H.Check("ModifierClear_IsTabStopCleared",
                     button.ReadLocalValue(UIElement.IsTabStopProperty) == DependencyProperty.UnsetValue
-                    && button.IsTabStop);
+                    && button.IsTabStop != false);
                 H.Check("ModifierClear_TabIndexCleared",
                     button.ReadLocalValue(Control.TabIndexProperty) == DependencyProperty.UnsetValue
                     && button.TabIndex != 7);
                 H.Check("ModifierClear_XYFocusKeyboardNavigationCleared",
                     button.ReadLocalValue(UIElement.XYFocusKeyboardNavigationProperty) == DependencyProperty.UnsetValue
                     && button.XYFocusKeyboardNavigation
-                       == Microsoft.UI.Xaml.Input.XYFocusKeyboardNavigationMode.Auto);
+                       != Microsoft.UI.Xaml.Input.XYFocusKeyboardNavigationMode.Enabled);
                 H.Check("ModifierClear_ElementSoundModeCleared",
                     button.ReadLocalValue(Control.ElementSoundModeProperty) == DependencyProperty.UnsetValue
-                    && button.ElementSoundMode == ElementSoundMode.Default);
+                    && button.ElementSoundMode != ElementSoundMode.Off);
                 H.Check("ModifierClear_HeadingLevelCleared",
-                    button.ReadLocalValue(Microsoft.UI.Xaml.Automation.AutomationProperties.HeadingLevelProperty)
-                        == DependencyProperty.UnsetValue
-                    && Microsoft.UI.Xaml.Automation.AutomationProperties.GetHeadingLevel(button)
-                       == Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.None);
+                    button.ReadLocalValue(AP.HeadingLevelProperty) == DependencyProperty.UnsetValue
+                    && AP.GetHeadingLevel(button) != APeers.AutomationHeadingLevel.Level2);
             }
 
             var border = H.FindControl<Border>(b => b.Child is TextBlock tb && tb.Text == "ClearBorderChild");
@@ -1315,6 +1342,7 @@ internal static class ModifierEventFixtures
                             Level = 4,
                             ItemStatus = "a11y-status",
                             TabFocusNavigation = Microsoft.UI.Xaml.Input.KeyboardNavigationMode.Cycle,
+                            LabeledBy = "a11y-label-target",
                         },
                     },
                     // Bag survives, one property kept: isolates the per-property arms from
@@ -1330,6 +1358,10 @@ internal static class ModifierEventFixtures
 
                 return VStack(
                     Button("A11yClearPhase", () => setPhase(phase + 1)),
+                    TextBlock("A11yLabelSource") with
+                    {
+                        Modifiers = new ElementModifiers { AutomationId = "a11y-label-target" },
+                    },
                     Button("A11yClearTarget") with { Modifiers = mods });
             });
 
@@ -1337,6 +1369,12 @@ internal static class ModifierEventFixtures
             // only in combination with the phase-0 applied check below.
             static bool Released(FrameworkElement fe, DependencyProperty dp) =>
                 fe.ReadLocalValue(dp) == DependencyProperty.UnsetValue;
+
+            // The element LabeledBy is expected to resolve to. Re-read each time rather
+            // than captured once: a null here would make the ReferenceEquals below
+            // trivially satisfiable against another null, so it is asserted non-null.
+            TextBlock? labelSource() =>
+                H.FindControl<TextBlock>(t => t.Text == "A11yLabelSource");
 
             static bool NonHelpTextPropertiesReleased(FrameworkElement fe) =>
                 Released(fe, AP.FullDescriptionProperty)
@@ -1367,6 +1405,16 @@ internal static class ModifierEventFixtures
                     && AP.GetLevel(applied) == 4
                     && AP.GetItemStatus(applied) == "a11y-status"
                     && applied.TabFocusNavigation == Microsoft.UI.Xaml.Input.KeyboardNavigationMode.Cycle);
+
+                // LabeledBy resolves an AutomationId against the visual tree, which can fail
+                // during mount and get deferred to Loaded — an eventual condition, false at
+                // t=0 and converging, which is the one shape WaitFor is sound for. Load-
+                // bearing for A11yClear_Phase1_LabeledByReleased below in the same way
+                // Phase0_Applied is for the rest.
+                var resolved = await Harness.WaitFor(() =>
+                    ReferenceEquals(AP.GetLabeledBy(applied), labelSource()));
+                H.Check("A11yClear_Phase0_LabeledByResolved",
+                    resolved && labelSource() is not null);
             }
 
             H.ClickButton("A11yClearPhase");
@@ -1380,6 +1428,16 @@ internal static class ModifierEventFixtures
                     AP.GetHelpText(partial) == "a11y-help");
                 H.Check("A11yClear_Phase1_DroppedPropertiesReleased",
                     NonHelpTextPropertiesReleased(partial));
+                // LabeledBy already had an unset arm before issue #986; what is new is that
+                // the arm now also cancels a still-parked deferred resolution, so a dropped
+                // label cannot be re-applied by a Loaded handler from an earlier render.
+                // The race itself is not driven here — the harness cannot hold Loaded open
+                // across a re-render — so the guard is pinned structurally instead, by
+                // ModifierUnsetClearValueTests.Deferred_LabeledBy_Rechecks_Pending_Request.
+                H.Check("A11yClear_Phase1_LabeledByReleased",
+                    Released(partial, AP.LabeledByProperty));
+                H.Check("A11yClear_Phase1_LabeledByEffectiveNull",
+                    AP.GetLabeledBy(partial) is null);
             }
 
             H.ClickButton("A11yClearPhase");

@@ -41,19 +41,34 @@ public class ModifierUnsetClearValueTests
     /// the transition it needed to handle, so dropping the whole accessibility sub-record
     /// released nothing.
     /// </summary>
-    private static readonly (string Method, string Bag, string OldBag)[] ScannedMethods =
+    private static readonly (string Method, string Bag, string OldBag, int MinArms)[] ScannedMethods =
     [
-        ("ApplyModifiers", "m", "oldM"),
-        ("ApplyAccessibilityModifiers", "a", "oldA"),
+        // MinArms is a per-method non-vacuity floor, deliberately close to the real count
+        // (37 and 12 at the time of writing). A single total floor is not enough: if the
+        // matcher stopped recognizing ApplyAccessibilityModifiers entirely, ApplyModifiers
+        // alone would still clear a global threshold and the a11y half would go unchecked
+        // in silence — which is exactly the half issue #986 found broken.
+        ("ApplyModifiers", "m", "oldM", 32),
+        ("ApplyAccessibilityModifiers", "a", "oldA", 10),
     ];
 
     /// <summary>
-    /// Statements in an unset arm that are legitimately not <c>ClearValue</c> calls, keyed
-    /// by the assignment target as written. Empty on purpose — every unset arm in
-    /// <c>ApplyModifiers</c> can and does clear its dependency property. An entry here is a
-    /// claim that a property has no DP to clear; add one only with a reason.
+    /// Assignments inside an unset arm that are legitimately not <c>ClearValue</c> calls, keyed
+    /// by the assignment target's trailing identifier. An entry is a claim that the target is
+    /// not a dependency property at all — reconciler bookkeeping that happens to live inside the
+    /// arm — so the #952 precedence argument does not apply to it. Add one only with a reason;
+    /// anything that <em>is</em> a DP must go through <c>ClearValue</c>.
     /// </summary>
-    private static readonly Dictionary<string, string> ApplyModifiersAssignmentExceptions = new(StringComparer.Ordinal);
+    private static readonly Dictionary<string, string> ApplyModifiersAssignmentExceptions =
+        new(StringComparer.Ordinal)
+        {
+            ["PendingLabeledBy"] =
+                "ReactorState.PendingLabeledBy is a plain field, not a dependency property. The " +
+                "LabeledBy unset arm nulls it to retire a still-parked deferred resolution so a " +
+                "Loaded handler from an earlier render cannot re-apply the label the user just " +
+                "dropped (issue #986). There is no DP here to clear, and the DP that does exist " +
+                "(LabeledByProperty) is cleared in the same arm.",
+        };
 
     /// <summary>
     /// Diff-guarded modifiers that deliberately have <em>no</em> unset arm, keyed
@@ -175,25 +190,27 @@ public class ModifierUnsetClearValueTests
         var scanned = new List<string>();
         var missing = new List<string>();
 
-        foreach (var (method, bag, oldBag) in ScannedMethods)
+        foreach (var (method, bag, oldBag, minArms) in ScannedMethods)
         {
             var unset = ReadUnsetModifierNames(method, bag, oldBag);
+            var found = 0;
             foreach (var modifier in ReadDiffGuardedModifiers(method, bag, oldBag))
             {
+                found++;
                 scanned.Add($"{method}.{modifier}");
                 if (!unset.Contains(modifier)) missing.Add($"{method}.{modifier}");
             }
-        }
 
-        // Same non-vacuity floor as the arm scan above: a matcher that stops recognizing the
-        // set-arm shape would report zero missing arms and pass, which is the failure mode
-        // this whole test exists to prevent.
-        Assert.True(
-            scanned.Count >= 30,
-            $"Only {scanned.Count} diff-guarded modifier(s) were read out of " +
-            $"[{string.Join(", ", ScannedMethods.Select(entry => entry.Method))}]. The set-arm shape " +
-            "('m.X.HasValue && m.X != oldM?.X') has probably changed, which would make this test " +
-            "pass without checking anything.");
+            // Per-method non-vacuity floor: a matcher that stops recognizing the set-arm
+            // shape in one method would report zero missing arms for it and pass, which is
+            // the failure mode this whole test exists to prevent.
+            Assert.True(
+                found >= minArms,
+                $"Only {found} diff-guarded modifier(s) were read out of {method} (expected at " +
+                $"least {minArms}). The set-arm shape ('{bag}.X.HasValue && {bag}.X != " +
+                $"{oldBag}?.X') has probably changed, which would make this test pass without " +
+                "checking anything.");
+        }
 
         var offenders = missing.Where(entry => !MissingUnsetArmExceptions.ContainsKey(entry)).ToList();
 
@@ -214,6 +231,92 @@ public class ModifierUnsetClearValueTests
             "These MissingUnsetArmExceptions entries no longer describe a missing unset arm — " +
             "either the arm was added (delete the entry) or the modifier was renamed/removed " +
             $"(update it): [{string.Join(", ", stale)}]");
+    }
+
+    /// <summary>
+    /// The deferred <c>LabeledBy</c> resolution must re-check that its request is still the
+    /// current one before writing.
+    /// </summary>
+    /// <remarks>
+    /// <c>ApplyAccessibilityModifiers</c> cannot resolve a <c>LabeledBy</c> AutomationId until
+    /// the element is in the visual tree, so an unresolved request parks a <c>Loaded</c>
+    /// handler that outlives the render which created it. If that handler writes
+    /// unconditionally, this sequence re-pins a label the user dropped: render A requests a
+    /// not-yet-present id and parks the handler; render B drops the modifier and the unset arm
+    /// clears the property; the element then loads and the stale handler resolves the *old* id
+    /// and sets it again — permanently, since no later render will clear a property whose
+    /// modifier is already absent. That defeats the reset arm for exactly the property the arm
+    /// exists to release (issue #986).
+    /// <para>
+    /// Pinned structurally rather than behaviourally because driving it needs <c>Loaded</c>
+    /// held open across a re-render, which the selftest harness cannot do — a fixture that
+    /// merely dropped the modifier and re-rendered would pass whether or not the guard is
+    /// present, which is the vacuous shape this repo rejects. The reachable half (drop
+    /// releases the property) is covered by
+    /// <c>ModifierEvent_AccessibilityClearResets</c>' <c>A11yClear_Phase1_LabeledByReleased</c>.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void Deferred_LabeledBy_Rechecks_Pending_Request()
+    {
+        // The LabeledBy set/unset pair: the only if-statement in the method whose condition
+        // names LabeledBy and which has an else. Located through the syntax tree rather than
+        // by text search so a match cannot be satisfied by an enclosing statement's text.
+        var labeledBy = ReadIfStatements("ApplyAccessibilityModifiers")
+            .Where(statement => statement.Condition.ToString().Contains("LabeledBy", StringComparison.Ordinal))
+            .FirstOrDefault(statement => statement.Else is not null);
+
+        Assert.True(
+            labeledBy is not null,
+            "No `if (... LabeledBy ...) { } else { }` pair found in ApplyAccessibilityModifiers. " +
+            "If LabeledBy stopped deferring resolution this test is obsolete — delete it; if it " +
+            "moved, retarget it. Leaving it matching nothing would silently stop guarding the " +
+            "stale-write bug.");
+
+        // The deferred handler itself — the local function registered on Loaded. Scoped to the
+        // function body, not the enclosing branch: the branch also *publishes* the request
+        // (`PendingLabeledBy = labelId`), so a branch-wide search for the field name passes
+        // even with the handler's re-check deleted. Verified by mutation.
+        var handler = labeledBy!.Statement
+            .DescendantNodes()
+            .OfType<LocalFunctionStatementSyntax>()
+            .FirstOrDefault(fn => fn.ParameterList.Parameters.Count == 2);
+
+        Assert.True(
+            handler is not null,
+            "The LabeledBy set arm no longer declares a local Loaded handler. If deferral was " +
+            "removed entirely the stale-write bug is gone and this test should be deleted; if " +
+            "the handler merely moved or changed shape, retarget the test.");
+
+        var handlerBody = handler!.Body?.ToString() ?? handler.ExpressionBody?.ToString() ?? "";
+
+        Assert.True(
+            handlerBody.Contains("Loaded -=", StringComparison.Ordinal),
+            "The deferred LabeledBy handler no longer unsubscribes itself, so it can fire on " +
+            $"every later load. Handler body reads: {handlerBody}");
+
+        Assert.True(
+            handlerBody.Contains("PendingLabeledBy", StringComparison.Ordinal),
+            "The deferred LabeledBy handler no longer consults ReactorState.PendingLabeledBy. " +
+            "Without that re-check it writes the id captured at request time, so a LabeledBy " +
+            "dropped before the element loads gets re-applied after the unset arm cleared it " +
+            $"and stays pinned forever (issue #986). Handler body reads: {handlerBody}");
+
+        // The unset arm must retire the pending request, or cancelling is impossible however
+        // carefully the handler re-checks. Read from the else clause alone.
+        var unsetArm = labeledBy.Else!.Statement.ToString();
+
+        Assert.True(
+            unsetArm.Contains("ClearValue", StringComparison.Ordinal)
+            && unsetArm.Contains("LabeledByProperty", StringComparison.Ordinal),
+            "The LabeledBy unset arm no longer clears LabeledByProperty, so a dropped label " +
+            $"stays pinned on the control (issue #986). Arm reads: {unsetArm}");
+
+        Assert.True(
+            unsetArm.Contains("PendingLabeledBy", StringComparison.Ordinal),
+            "The LabeledBy unset arm clears the dependency property without also clearing " +
+            "ReactorState.PendingLabeledBy, so a parked Loaded handler will still consider its " +
+            $"request current and re-apply the dropped label (issue #986). Arm reads: {unsetArm}");
     }
 
     /// <summary>
@@ -329,7 +432,7 @@ public class ModifierUnsetClearValueTests
     {
         var arms = new List<(string, string, StatementSyntax)>();
 
-        foreach (var (method, bag, oldBag) in ScannedMethods)
+        foreach (var (method, bag, oldBag, _) in ScannedMethods)
         {
             foreach (var ifStatement in ReadIfStatements(method))
             {

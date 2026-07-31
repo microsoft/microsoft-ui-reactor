@@ -412,6 +412,18 @@ public sealed partial class Reconciler : IDisposable
         // (pool return / ClearCurrentEventHandlers / DetachReactorState) so a
         // stale arm can't suppress the first real event of a later lifecycle.
         public Func<object?, bool>? PendingEchoMatch;
+        // Issue #986 — the AutomationId a deferred LabeledBy resolution is still
+        // waiting to bind. ApplyAccessibilityModifiers can only resolve LabeledBy
+        // once the element is in the visual tree, so an unresolved request parks a
+        // Loaded handler. That handler outlives the render that created it, so it
+        // must not write blindly: by the time Loaded fires the modifier may have
+        // been dropped (reset arm) or retargeted at a different id, and a blind
+        // write would stomp the reset and re-pin the stale label forever. The
+        // handler therefore compares its captured id against this slot and no-ops
+        // on a mismatch. Cleared on resolve, on unset, and everywhere the echo
+        // state is cleared (pool return / ClearCurrentEventHandlers /
+        // DetachReactorState) so a stale arm can't fire into a later lifecycle.
+        public string? PendingLabeledBy;
         // Spec 042 Phase 1 — keyed-list reconciliation state. Set when the
         // host element is a templated items control (ListView/GridView/
         // ItemsRepeater). The internal ObservableCollection<ReactorRow> in
@@ -714,6 +726,7 @@ public sealed partial class Reconciler : IDisposable
             state.EchoSuppressCount = 0;
             state.EchoSuppressScopeDepth = 0;
             state.PendingEchoMatch = null;
+            state.PendingLabeledBy = null;
         }
     }
 
@@ -741,6 +754,7 @@ public sealed partial class Reconciler : IDisposable
         state.EchoSuppressCount = 0;
         state.EchoSuppressScopeDepth = 0;
         state.PendingEchoMatch = null;
+        state.PendingLabeledBy = null;
     }
 
     // ════════════════════════════════════════════════════════════════════
@@ -1022,6 +1036,7 @@ public sealed partial class Reconciler : IDisposable
                 rs.EchoSuppressCount = 0;
                 rs.EchoSuppressScopeDepth = 0;
                 rs.PendingEchoMatch = null;
+                rs.PendingLabeledBy = null;
                 rs.Element = null;
             }
             // Clear Reactor-set DataContext (FrameworkElement-only DP).
@@ -4311,15 +4326,26 @@ public sealed partial class Reconciler : IDisposable
             var target = FindByAutomationId(fe, a.LabeledBy);
             if (target is not null)
             {
+                // Resolved synchronously — retire any deferred request from an
+                // earlier render so its parked handler can't overwrite this one.
+                GetOrCreateReactorState(fe).PendingLabeledBy = null;
                 Microsoft.UI.Xaml.Automation.AutomationProperties.SetLabeledBy(fe, target);
             }
             else
             {
-                // Element not yet in visual tree — defer until Loaded.
+                // Element not yet in visual tree — defer until Loaded. The handler
+                // outlives this render, so publish the request first and have the
+                // handler re-check it: if LabeledBy is dropped or retargeted before
+                // Loaded fires, the stale handler must no-op rather than stomp the
+                // reset arm below (issue #986).
                 var labelId = a.LabeledBy;
+                GetOrCreateReactorState(fe).PendingLabeledBy = labelId;
                 void OnLoaded(object sender, RoutedEventArgs _)
                 {
                     fe.Loaded -= OnLoaded;
+                    if (!TryGetReactorState(fe, out var pending) || pending.PendingLabeledBy != labelId)
+                        return;
+                    pending.PendingLabeledBy = null;
                     var deferred = FindByAutomationId(fe, labelId);
                     if (deferred is not null)
                         Microsoft.UI.Xaml.Automation.AutomationProperties.SetLabeledBy(fe, deferred);
@@ -4329,6 +4355,10 @@ public sealed partial class Reconciler : IDisposable
         }
         else if (a?.LabeledBy is null && oldA?.LabeledBy is not null)
         {
+            // Cancel a still-parked deferred resolution before clearing, or it would
+            // re-apply the dropped label the moment the element loads.
+            if (TryGetReactorState(fe, out var pendingState))
+                pendingState.PendingLabeledBy = null;
             fe.ClearValue(Microsoft.UI.Xaml.Automation.AutomationProperties.LabeledByProperty);
         }
     }
