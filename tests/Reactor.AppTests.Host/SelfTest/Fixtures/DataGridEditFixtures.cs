@@ -733,6 +733,53 @@ internal static class DataGridEditFixtures
             await Task.Delay(50);
             H.Check("DataGrid_KeyReflect_TabMovesAndReopens", state.IsEditing && committed >= 2);
 
+            // ── Row mode (#853) ─────────────────────────────────────────────────────
+            // IsEditing is TRUE during a row edit too (BeginRowEdit sets _editingRowKey while
+            // leaving _editingColumnName null), so before the fix these keys fell into the
+            // single-CELL block above and ran CommitEdit() with a null column name.
+            state.CancelEdit();
+            var rowCommitted = 0;
+            var rowEl = el with
+            {
+                EditMode = EditMode.Row,
+                OnRowChanged = (_, _) =>
+                {
+                    rowCommitted++;
+                    return Task.CompletedTask;
+                },
+            };
+
+            state.SetFocus(2, 1); // Name — column 0 (Id) is read-only. Row 2 is untouched above.
+            state.BeginRowEdit(2);
+            state.UpdateRowEditValue("Name", "Row edited");
+            state.UpdateRowEditValue("Price", 42.0);
+
+            DataGridComponent<TestProduct>.HandleKeyDownForTests(
+                state, rowEl, global::Windows.System.VirtualKey.Tab);
+            await Task.Delay(50);
+
+            // Tab cycles the row's editors and must NOT commit — the pending values and the
+            // row-edit state both survive, and nothing was written through to the item.
+            H.Check("DataGrid_KeyReflect_RowEditTabKeepsRowEditing",
+                state.IsRowEditing && state.EditingRowKey is not null);
+            H.Check("DataGrid_KeyReflect_RowEditTabKeepsPendingValues",
+                (state.GetRowEditValue("Name") as string) == "Row edited"
+                && state.GetRowEditValue("Price") is 42.0);
+            H.Check($"DataGrid_KeyReflect_RowEditTabMovedInRow (col={state.FocusedColIndex}, row={state.FocusedRowIndex})",
+                state.FocusedColIndex == 2 && state.FocusedRowIndex == 2);
+            H.Check("DataGrid_KeyReflect_RowEditTabDidNotCommit",
+                state.GetItemAt(2)?.Name == "Product 2" && rowCommitted == 0);
+
+            // Enter runs the ROW commit — both pending columns land, which a single-cell
+            // commit could never do.
+            DataGridComponent<TestProduct>.HandleKeyDownForTests(
+                state, rowEl, global::Windows.System.VirtualKey.Enter);
+            await Task.Delay(50);
+            H.Check("DataGrid_KeyReflect_RowEditEnterCommitsWholeRow",
+                state.GetItemAt(2)?.Name == "Row edited" && state.GetItemAt(2)?.Price == 42.0);
+            H.Check("DataGrid_KeyReflect_RowEditEnterClearsState",
+                !state.IsRowEditing && !state.IsEditing && rowCommitted >= 1);
+
             var registry = new TypeRegistry();
             var cell = Invoke("RenderCell", columns[3], 12.5, registry);
             var editingCell = Invoke("RenderEditingCell", columns[1], state, registry);

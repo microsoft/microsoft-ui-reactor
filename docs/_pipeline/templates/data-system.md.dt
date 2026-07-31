@@ -176,6 +176,13 @@ Set `editable: true` to enable inline editing. Two edit modes are available:
 | `EditMode.Cell` | Edit one cell at a time; commits on blur/Enter |
 | `EditMode.Row` | Edit an entire row; explicit Save/Cancel buttons |
 
+Keyboard behavior differs by mode. In `EditMode.Cell`, <kbd>Tab</kbd> commits the
+current cell and opens the editor on the next one. In `EditMode.Row`, the row is
+the unit of work: <kbd>Enter</kbd> (or the Save button, or clicking away) commits
+every pending cell at once, <kbd>Esc</kbd> (or Cancel) discards them all, and
+<kbd>Tab</kbd> moves through the row's editable cells and its Save/Cancel buttons
+— read-only columns are skipped — without committing anything.
+
 Editing supports validation — attach validators via `Column<T>().Validate()`.
 The `onRowChanged` callback fires after a successful commit, receiving the
 `RowKey` and updated item. For mutable classes, the grid updates in place;
