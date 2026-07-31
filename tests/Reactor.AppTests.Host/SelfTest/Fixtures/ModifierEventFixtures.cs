@@ -516,6 +516,14 @@ internal static class ModifierEventFixtures
 
     internal class ModifierClearResets(Harness h) : SelfTestFixtureBase(h)
     {
+        /// <summary>
+        /// The <c>IsTabStop</c> value the phase-0 bag asks for. Named rather than repeated as
+        /// a literal so the "applied" and "released" checks below are visibly reading the same
+        /// value the bag wrote — the release check asserts the effective value has moved
+        /// <em>away from</em> it, deliberately not towards a guessed WinUI default.
+        /// </summary>
+        private const bool Phase0IsTabStop = false;
+
         public override async Task RunAsync()
         {
             var host = H.CreateHost();
@@ -552,7 +560,7 @@ internal static class ModifierEventFixtures
                         Foreground = brush,
                         AutomationName = "clear-name",
                         AutomationId = "clear-id",
-                        IsTabStop = false,
+                        IsTabStop = Phase0IsTabStop,
                         IsHitTestVisible = false,
                         TabIndex = 7,
                         AccessKey = "C",
@@ -608,7 +616,7 @@ internal static class ModifierEventFixtures
                 // the deliberately non-default one the phase-0 bag asked for.
                 H.Check("ModifierClear_Tier1Applied_IsTabStop",
                     initial.ReadLocalValue(UIElement.IsTabStopProperty) != DependencyProperty.UnsetValue
-                    && initial.IsTabStop == false);
+                    && initial.IsTabStop == Phase0IsTabStop);
                 H.Check("ModifierClear_Tier1Applied_TabIndex",
                     initial.ReadLocalValue(Control.TabIndexProperty) != DependencyProperty.UnsetValue
                     && initial.TabIndex == 7);
@@ -703,7 +711,7 @@ internal static class ModifierEventFixtures
                 // a false failure in this suite.
                 H.Check("ModifierClear_IsTabStopCleared",
                     button.ReadLocalValue(UIElement.IsTabStopProperty) == DependencyProperty.UnsetValue
-                    && button.IsTabStop != false);
+                    && button.IsTabStop != Phase0IsTabStop);
                 H.Check("ModifierClear_TabIndexCleared",
                     button.ReadLocalValue(Control.TabIndexProperty) == DependencyProperty.UnsetValue
                     && button.TabIndex != 7);

@@ -266,9 +266,13 @@ public class ModifierUnsetClearValueTests
 
         foreach (var (method, _, _, _) in ScannedMethods)
         {
-            foreach (var ifStatement in ReadIfStatements(method))
+            var gated = ReadIfStatements(method)
+                .Select(ifStatement => (ifStatement, Gate: ReadTypeGate(ifStatement)))
+                .Where(entry => entry.Gate is not null);
+
+            foreach (var (ifStatement, gate) in gated)
             {
-                if (!TryReadTypeGate(ifStatement, out var typeName, out var variable)) continue;
+                var (typeName, variable) = gate!.Value;
 
                 // The gate's own branch only. An `else if` chain nests the next gate inside
                 // this one's Else clause, so including the else would attribute every later
@@ -323,25 +327,19 @@ public class ModifierUnsetClearValueTests
     }
 
     /// <summary>
-    /// The <c>fe is WinUI.T v</c> shape used to gate a modifier write on the control type.
+    /// The <c>fe is WinUI.T v</c> shape used to gate a modifier write on the control type,
+    /// or null when the condition is not a type gate.
     /// </summary>
-    private static bool TryReadTypeGate(
-        IfStatementSyntax ifStatement,
-        out string typeName,
-        out string variable)
+    private static (string TypeName, string Variable)? ReadTypeGate(IfStatementSyntax ifStatement)
     {
-        typeName = "";
-        variable = "";
-
-        if (ifStatement.Condition is not IsPatternExpressionSyntax pattern) return false;
-        if (pattern.Expression is not IdentifierNameSyntax { Identifier.Text: "fe" }) return false;
-        if (pattern.Pattern is not DeclarationPatternSyntax declaration) return false;
-        if (declaration.Designation is not SingleVariableDesignationSyntax designation) return false;
+        if (ifStatement.Condition is not IsPatternExpressionSyntax pattern) return null;
+        if (pattern.Expression is not IdentifierNameSyntax { Identifier.Text: "fe" }) return null;
+        if (pattern.Pattern is not DeclarationPatternSyntax declaration) return null;
+        if (declaration.Designation is not SingleVariableDesignationSyntax designation) return null;
 
         var qualified = declaration.Type.ToString();
-        typeName = qualified[(qualified.LastIndexOf('.') + 1)..];
-        variable = designation.Identifier.Text;
-        return typeName.Length > 0;
+        var typeName = qualified[(qualified.LastIndexOf('.') + 1)..];
+        return typeName.Length == 0 ? null : (typeName, designation.Identifier.Text);
     }
 
     /// <summary>Properties assigned through <c>variable.Prop = …</c> inside the branch.</summary>
@@ -614,11 +612,10 @@ public class ModifierUnsetClearValueTests
         foreach (var ifStatement in ReadIfStatements(methodName))
         {
             var text = ifStatement.Condition.ToString();
-            foreach (var name in ModifierNames(ifStatement.Condition, bag, oldBag))
-            {
-                if (AbsentNow(text, bag, name) && PresentBefore(text, oldBag, name))
-                    names.Add(name);
-            }
+            var unset = ModifierNames(ifStatement.Condition, bag, oldBag)
+                .Where(name => AbsentNow(text, bag, name) && PresentBefore(text, oldBag, name));
+
+            foreach (var name in unset) names.Add(name);
 
             var implicitElse = ElseOfSetArmModifier(ifStatement, bag, oldBag);
             if (implicitElse is not null) names.Add(implicitElse);
@@ -639,15 +636,14 @@ public class ModifierUnsetClearValueTests
         foreach (var ifStatement in ReadIfStatements(methodName))
         {
             var text = ifStatement.Condition.ToString();
-            foreach (var name in ModifierNames(ifStatement.Condition, bag, oldBag))
-            {
+            var diffGuarded = ModifierNames(ifStatement.Condition, bag, oldBag)
                 // The unset arm itself names both bags too; excluding absence tests keeps this
                 // to the set arms, which are the ones that owe a reset.
-                if (AbsentNow(text, bag, name)) continue;
-                if (!MentionsCurrent(text, bag, name)) continue;
-                if (!PresentBefore(text, oldBag, name) && !MentionsDiff(text, oldBag, name)) continue;
-                names.Add(name);
-            }
+                .Where(name => !AbsentNow(text, bag, name))
+                .Where(name => MentionsCurrent(text, bag, name))
+                .Where(name => PresentBefore(text, oldBag, name) || MentionsDiff(text, oldBag, name));
+
+            foreach (var name in diffGuarded) names.Add(name);
         }
 
         return names;
