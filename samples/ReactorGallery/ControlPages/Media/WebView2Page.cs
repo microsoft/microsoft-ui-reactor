@@ -63,6 +63,7 @@ class WebView2Page : Component
                         WebView2(loadedUrl).Width(600).Height(400)
                     ),
                     sourceCode: @"
+// ── type members ──
 // new Uri(text) throws on half-typed input, and a throw out of Render() replaces the
 // whole page with the error boundary — so parse first and only commit what parses.
 static Uri? ParseWebUrl(string text) =>
@@ -73,6 +74,7 @@ static Uri? ParseWebUrl(string text) =>
 const string DefaultUrl = ""https://learn.microsoft.com/windows/apps/"";
 static readonly Uri DefaultUri = new Uri(DefaultUrl);
 
+// ── inside Render() ──
 var (urlText, setUrlText) = UseState(DefaultUrl);
 var (loadedUrl, setLoadedUrl) = UseState(DefaultUri);
 var target = ParseWebUrl(urlText);
@@ -94,9 +96,11 @@ VStack(8,
                         WebView2(presetUrl).Width(600).Height(300)
                     ),
                     sourceCode: @"
+// ── type members ──
 static readonly Uri LearnUri = new Uri(""https://learn.microsoft.com"");
 static readonly Uri BingUri = new Uri(""https://www.bing.com"");
 
+// ── inside Render() ──
 // Its own state slot: a card sharing one with its neighbour drives the neighbour too.
 var (presetUrl, setPresetUrl) = UseState(LearnUri);
 
