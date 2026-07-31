@@ -9,7 +9,7 @@ namespace WinUIGalleryReactor.ControlPages.Media;
 
 class WebView2Page : Component
 {
-    // One source of truth per card. `static readonly` matters for the two Uris: passing
+    // One source of truth per card. `static readonly` matters for the three Uris: passing
     // `new Uri(...)` straight to UseState re-allocates on every render for a value the hook
     // only reads on the first one (REACTOR_HOOKS_013).
     const string DefaultUrl = "https://learn.microsoft.com/windows/apps/";
