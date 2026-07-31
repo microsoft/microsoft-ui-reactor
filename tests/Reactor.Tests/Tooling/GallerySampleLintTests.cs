@@ -576,13 +576,17 @@ public sealed class GallerySampleLintTests
                 literals.Add(text);
             }
 
-            // `seen.Add` *is* the filter — it returns false for an already-visited name. The
-            // side effect is safe inside `Where` only because this sequence is enumerated
-            // exactly once, right here; do not hoist it to a variable or re-enumerate it.
+            // Deliberately an explicit loop rather than `.Where(name => seen.Add(name))`. A de-dup
+            // heuristic will suggest that refactor — one did — but `seen.Add` mutates, so the LINQ
+            // form is correct only while the sequence is enumerated exactly once. Hoisting it to a
+            // variable or enumerating it a second time silently yields nothing, because every name
+            // has already been added; nothing in the types or the compiler says so, and the bug
+            // would be a quiet under-report from a lint whose job is to catch omissions. The guard
+            // below carries no such precondition, so it stays.
             foreach (var name in expression.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>()
-                         .Select(id => id.Identifier.Text)
-                         .Where(name => seen.Add(name)))
+                         .Select(id => id.Identifier.Text))
             {
+                if (!seen.Add(name)) continue;
                 if (declarators.TryGetValue(name, out var initializer)) pending.Enqueue(initializer);
             }
         }
