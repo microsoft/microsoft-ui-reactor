@@ -967,6 +967,46 @@ internal static class DataGridEditFixtures
 
             state.CancelEdit();
             await Harness.Render();
+
+            // ── Native-Tab ordering: FocusManager moves focus BEFORE our handler runs ───
+            // Every Tab check above drives HandleKeyDownForTests directly, which models a Tab that
+            // did NOT already move XAML focus. Real Tab does: our KeyDown handler is registered
+            // handledEventsToo precisely because WinUI's focus navigation has run by the time it
+            // fires. If the grid merely re-focused whatever cell it thought was next, the checks
+            // above would still pass while real Tab did the wrong thing — so replicate the real
+            // ordering here, which is what the E2E tier exercises.
+            anchor.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            await Harness.WaitFor(() => ReferenceEquals(Focused(), anchor));
+
+            state.BeginRowEdit(1);
+            await Harness.WaitFor(() => Focused() is Microsoft.UI.Xaml.Controls.TextBox tb
+                                        && tb.Text == "Product 1");
+            var nativeStart = Focused() as Microsoft.UI.Xaml.Controls.TextBox;
+
+            // What WinUI does for Tab, before the grid ever sees the key. FindNextElement is the
+            // same lookup tab navigation uses; the parameterless TryMoveFocus overload throws
+            // "Catastrophic failure" in a desktop app, where the XamlRoot is ambiguous.
+            var next = Microsoft.UI.Xaml.Input.FocusManager.FindNextElement(
+                Microsoft.UI.Xaml.Input.FocusNavigationDirection.Next,
+                new Microsoft.UI.Xaml.Input.FindNextElementOptions { SearchRoot = xamlRoot.Content })
+                as Microsoft.UI.Xaml.UIElement;
+            var moved = next is not null && next.Focus(Microsoft.UI.Xaml.FocusState.Keyboard);
+            await Harness.Render();
+            var afterNative = Focused();
+            H.Check($"EditorFocus_NativeTab_MovedFocusOffTheEditor (moved={moved}, now='{(afterNative as Microsoft.UI.Xaml.Controls.TextBox)?.Text ?? afterNative?.GetType().Name ?? "null"}')",
+                moved && !ReferenceEquals(afterNative, nativeStart));
+
+            // Now the grid's handler runs, exactly as it would after the native move.
+            DataGridComponent<TestProduct>.HandleKeyDownForTests(
+                state, el, global::Windows.System.VirtualKey.Tab);
+            await Harness.Render(200);
+
+            var afterHandler = Focused() as Microsoft.UI.Xaml.Controls.TextBox;
+            H.Check($"EditorFocus_NativeTabThenHandler_LandsOnCategory (text='{afterHandler?.Text}', col={state.FocusedColIndex})",
+                afterHandler?.Text == "B" && state.FocusedColIndex == 2);
+
+            state.CancelRowEdit();
+            await Harness.Render();
         }
     }
 

@@ -1537,9 +1537,15 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                 case VirtualKey.Tab:
                     // Tab keeps the grid's own cell cursor inside the row's editable columns and
                     // leaves the row in edit mode — a row commits only on Enter, Save, or
-                    // click-away (spec 017 §6.7/§6.8). Real keyboard focus is WinUI's FocusManager
-                    // tab order, which already ran before this handledEventsToo handler; this only
-                    // syncs the logical index, exactly as the cell path's FocusNextCell does.
+                    // click-away (spec 017 §6.7/§6.8).
+                    //
+                    // #976: this moves REAL keyboard focus too, not just the logical index. Native
+                    // tab order alone is not enough — it walks on into Save/Cancel and then out of
+                    // the grid, which trips the LostFocus blur-commit. FocusNextRowEditColumn also
+                    // arms a one-shot focus request that the renderer honours on the cell it lands
+                    // on, so focus cycles among the row's editors. The move is dispatcher-deferred
+                    // (it has to land after WinUI's own tab navigation), so it is NOT complete when
+                    // this returns.
                     state.FocusNextRowEditColumn();
                     return;
             }

@@ -178,12 +178,15 @@ public class DataGridTests : AppTestBase
         BeginRowEditOnFirstRow();
 
         // Focus is in the FirstName editor. Tab → LastName, replace "Smith" with "Smythe".
+        WaitForFocus("RowEdit_FirstName", "row edit start");
         App.SendKeys(Keys.Tab, viaSendInput: true);
+        WaitForFocus("RowEdit_LastName", "Tab from FirstName");
         ReplaceFocusedEditorText("Smythe");
 
         // Tab again. LastName is the LAST editable column, so this is the wrap: focus must return
         // to the FirstName editor rather than continuing on to Save/Cancel and out of the grid.
         App.SendKeys(Keys.Tab, viaSendInput: true);
+        WaitForFocus("RowEdit_FirstName", "Tab from LastName (the wrap)");
         ReplaceFocusedEditorText("Alicia");
 
         // Nothing may have committed yet — the wrap must not have tripped a blur-commit.
@@ -222,8 +225,10 @@ public class DataGridTests : AppTestBase
 
         // Type into FirstName, Tab (arms the guard), then type into LastName — only reachable if
         // the Tab moved focus without committing.
+        WaitForFocus("RowEdit_FirstName", "row edit start");
         ReplaceFocusedEditorText("Alicia");
         App.SendKeys(Keys.Tab, viaSendInput: true);
+        WaitForFocus("RowEdit_LastName", "Tab from FirstName");
         ReplaceFocusedEditorText("Smythe");
 
         // Nothing may have committed yet.
@@ -242,6 +247,45 @@ public class DataGridTests : AppTestBase
         var log = FindById("RowEditLog").Text ?? "";
         Assert.AreEqual(1, log.Count(c => c == '['),
             $"Expected exactly one row commit; RowEditLog was '{log}'.");
+    }
+
+    /// <summary>
+    /// Block until real keyboard focus is on the editor with <paramref name="expectedAutomationId"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>Two jobs, and both matter.</para>
+    ///
+    /// <para><b>Synchronization.</b> The grid's focus move is deliberately deferred through
+    /// <c>DispatcherQueue.TryEnqueue</c> (it has to land after WinUI's own Tab navigation), so it is
+    /// NOT complete when <c>SendKeys(Tab)</c> returns. Typing straight after the Tab races that
+    /// dispatcher tick and lands the text in whichever editor still had focus — which is exactly how
+    /// this test previously "failed": it typed both values into FirstName and reported the product
+    /// broken. A real user's Tab-then-type has orders of magnitude more slack than a test harness.</para>
+    ///
+    /// <para><b>Oracle.</b> It asserts the DESTINATION of the focus move, not merely that focus
+    /// moved. "Focus left FirstName" is satisfied by landing on Save, on Cancel, or outside the grid
+    /// entirely, so a test phrased that way cannot fail when the direction inverts — the exact
+    /// vacuity trap called out in AGENTS.md § "Checks that actually prove something".</para>
+    ///
+    /// <para>Times out loudly with the observed AutomationId. <see cref="IUiaPropertyReader.GetFocusedAutomationId"/>
+    /// returns <c>""</c> when focus is unreadable or on an element with no id, so a broken instrument
+    /// surfaces as a failure naming what it saw, never as a silent pass.</para>
+    /// </remarks>
+    private static void WaitForFocus(string expectedAutomationId, string step, int timeoutMs = 5000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+        string actual;
+        do
+        {
+            actual = Uia.GetFocusedAutomationId();
+            if (actual == expectedAutomationId) return;
+            Thread.Sleep(50);
+        }
+        while (DateTime.UtcNow < deadline);
+
+        Assert.Fail(
+            $"After '{step}', keyboard focus should be on '{expectedAutomationId}' but was " +
+            $"'{(actual.Length == 0 ? "<none/unreadable>" : actual)}' after {timeoutMs}ms.");
     }
 
     /// <summary>

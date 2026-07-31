@@ -112,11 +112,22 @@ internal static class DataGridFixtures
 
             // Id is deliberately read-only so row-mode Tab has a column it must SKIP, and the two
             // editable columns are adjacent so a wrap is distinguishable from "stayed put".
+            //
+            // The editable columns carry an explicit editor for ONE reason: a stable AutomationId.
+            // The built-in editor is an anonymous TextBox, so "which editor has focus" is not
+            // observable over UIA, and the tests would have to type blind and infer focus from the
+            // resulting text — which cannot distinguish "focus moved to the right cell" from
+            // "focus never moved" until after the damage is done. `Uia.GetFocusedAutomationId()`
+            // turns focus into a directly pollable destination oracle. Shape-wise this is the same
+            // control the built-in path produces (TextBox → the `Control.Focus` arm of
+            // TryFocusEditor), so it is not a different code path under test.
             var columns = new FieldDescriptor[]
             {
                 Column<Employee>("Id", e => e.Id, width: 60),
-                Column<Employee>("FirstName", e => e.FirstName, editable: true, displayName: "First Name", width: 140),
-                Column<Employee>("LastName", e => e.LastName, editable: true, displayName: "Last Name", width: 140),
+                Column<Employee>("FirstName", e => e.FirstName, editable: true, displayName: "First Name", width: 140)
+                    .WithEditor((v, set) => TextBox(v?.ToString() ?? "", s => set(s)).AutomationId("RowEdit_FirstName")),
+                Column<Employee>("LastName", e => e.LastName, editable: true, displayName: "Last Name", width: 140)
+                    .WithEditor((v, set) => TextBox(v?.ToString() ?? "", s => set(s)).AutomationId("RowEdit_LastName")),
                 Column<Employee>("Salary", e => e.Salary, format: "C0", width: 100),
             };
 
