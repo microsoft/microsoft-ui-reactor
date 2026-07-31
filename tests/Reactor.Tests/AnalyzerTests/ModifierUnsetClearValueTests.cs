@@ -137,6 +137,27 @@ public class ModifierUnsetClearValueTests
         "FrameworkElement.RenderTransform",
         "FrameworkElement.FlowDirection",
         "Control.IsTabStop",
+        // Issue #985 — the receiver-gated chain that mirrors ApplyModifiers' Padding /
+        // CornerRadius / BorderThickness / BorderBrush / Background / IsEnabled writes.
+        // Pinned per receiver, not per property: dropping only the Border or only the Panel
+        // arm would leave the Control arm to satisfy a property-name-keyed list, and the leak
+        // would be invisible again for exactly the receivers that are hardest to notice.
+        "Control.Padding",
+        "Control.CornerRadius",
+        "Control.BorderThickness",
+        "Control.BorderBrush",
+        "Control.Background",
+        "Control.IsEnabled",
+        "Border.Padding",
+        "Border.CornerRadius",
+        "Border.BorderThickness",
+        "Border.BorderBrush",
+        "Border.Background",
+        "Panel.Background",
+        "StackPanel.Padding",
+        // The fourth Padding receiver in ModifierTable's control gate. It predates #985
+        // (it arrived with #950) but lived past the switch where no scanner reached it.
+        "TextBlock.Padding",
     ];
 
     [Fact]
@@ -343,9 +364,15 @@ public class ModifierUnsetClearValueTests
         var braceStart = source.IndexOf('{', signature.Index + signature.Length);
         Assert.True(braceStart > signature.Index, "CleanElement opening brace not found");
 
-        var switchStart = source.IndexOf($"switch ({paramName})", braceStart, StringComparison.Ordinal);
-        Assert.True(switchStart > braceStart, $"CleanElement layout changed — no 'switch ({paramName})' boundary found.");
+        // Anchored to the start of a line so a comment mentioning the type dispatch cannot
+        // masquerade as the boundary — see the matching note in
+        // PoolResetSetConsistencyTests.ReadCleanElementCommonBlock.
+        var switchStart = Regex.Match(
+            source[braceStart..],
+            $@"^\s*switch\s*\(\s*{Regex.Escape(paramName)}\s*\)",
+            RegexOptions.Multiline);
+        Assert.True(switchStart.Success, $"CleanElement layout changed — no 'switch ({paramName})' boundary found.");
 
-        return source[braceStart..switchStart];
+        return source.Substring(braceStart, switchStart.Index);
     }
 }

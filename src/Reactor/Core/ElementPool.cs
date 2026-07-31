@@ -256,6 +256,66 @@ public sealed class ElementPool : IDisposable
         fe.ClearValue(UIElement.IsHitTestVisibleProperty);
         if (fe is Control tabStopControl)
             tabStopControl.ClearValue(Control.IsTabStopProperty);
+
+        // Issue #985: six common modifiers are written by ApplyModifiers onto receivers
+        // this method never reset, so a pooled control handed its previous renter's local
+        // Padding / CornerRadius / BorderThickness / BorderBrush / Background / IsEnabled
+        // to the next one — and a local value outranks every Style setter (same precedence
+        // trap as #952, but caused by a *missing* reset rather than a wrong-shaped one).
+        //
+        // These live here, in the FE-common region, and not in the type-specific arms
+        // below: the pool/analyzer consistency invariants (PoolResetSetConsistencyTests)
+        // stop scanning at the type dispatch, so a clear placed after it is invisible to
+        // them and ModifierTable would keep claiming the property is not pool-reset.
+        // Placement is the fix, not an implementation detail.
+        //
+        // The chain mirrors ApplyModifiers' receiver types exactly (Reconciler.cs):
+        // Padding → Control | Border | StackPanel | TextBlock, IsEnabled → Control,
+        // CornerRadius/BorderBrush/BorderThickness → Control | Border,
+        // Background → Panel | Control | Border.
+        //
+        // Two claims live here and only the first is structural. Dispatch: Control, Border,
+        // Panel and TextBlock are pairwise disjoint, so `else if` selects exactly one arm —
+        // true regardless of what the gates say. Coverage is not: each arm clears a
+        // per-property allow-list, and the Panel arm clears Background for every Panel but
+        // Padding only for StackPanel, because Panel itself declares neither Padding nor
+        // CornerRadius. Any other Panel subclass added to one of those gates lands in this
+        // arm and gets no clear — the disjointness sentence stays true while the guarantee
+        // it implies quietly narrows. Widening a gate obliges you to widen the arm.
+        // The consistency invariant will not remind you: it checks reset ⇒ marked, never
+        // marked ⇒ reset on every gated receiver (see #1017).
+        if (fe is Control resetControl)
+        {
+            resetControl.ClearValue(Control.PaddingProperty);
+            resetControl.ClearValue(Control.CornerRadiusProperty);
+            resetControl.ClearValue(Control.BorderThicknessProperty);
+            resetControl.ClearValue(Control.BorderBrushProperty);
+            resetControl.ClearValue(Control.BackgroundProperty);
+            resetControl.ClearValue(Control.IsEnabledProperty);
+        }
+        else if (fe is WinUI.Border resetBorder)
+        {
+            resetBorder.ClearValue(WinUI.Border.PaddingProperty);
+            resetBorder.ClearValue(WinUI.Border.CornerRadiusProperty);
+            resetBorder.ClearValue(WinUI.Border.BorderThicknessProperty);
+            resetBorder.ClearValue(WinUI.Border.BorderBrushProperty);
+            resetBorder.ClearValue(WinUI.Border.BackgroundProperty);
+        }
+        else if (fe is WinUI.Panel resetPanel)
+        {
+            resetPanel.ClearValue(WinUI.Panel.BackgroundProperty);
+            if (resetPanel is WinUI.StackPanel resetStack)
+                resetStack.ClearValue(WinUI.StackPanel.PaddingProperty);
+        }
+        else if (fe is TextBlock resetText)
+        {
+            // TextBlock's padding reset predates #985 (it arrived with #950) but lived in
+            // the case arm below, where no scanner could see it — so ModifierTable's claim
+            // that Padding is pool-reset on TextBlock was the one receiver in the gate that
+            // nothing verified. Deleting the line used to break no test. Now it does.
+            resetText.ClearValue(TextBlock.PaddingProperty);
+        }
+
         // spec 059: clear the TitleBar.IsDragRegion attached prop so a pooled
         // control marked .IsDragRegion(...) can't poison the next renter.
         fe.ClearValue(WinUI.TitleBar.IsDragRegionProperty);
@@ -308,14 +368,8 @@ public sealed class ElementPool : IDisposable
                 break;
             case WinUI.Border border:
                 border.Child = null;
-                // ClearValue, not `= null` / `= default` — see the FE-common block above
-                // (issue #952). These five mirror common modifiers whose ApplyModifiers
-                // unset arms clear the same DPs.
-                border.ClearValue(WinUI.Border.BackgroundProperty);
-                border.ClearValue(WinUI.Border.BorderBrushProperty);
-                border.ClearValue(WinUI.Border.BorderThicknessProperty);
-                border.ClearValue(WinUI.Border.CornerRadiusProperty);
-                border.ClearValue(WinUI.Border.PaddingProperty);
+                // Border's five modifier-backed DPs are cleared in the FE-common block
+                // above (issue #985) so the consistency scan can see them.
                 break;
             case WinUI.ScrollViewer sv:
                 sv.Content = null;
@@ -343,13 +397,10 @@ public sealed class ElementPool : IDisposable
                 tb.ClearValue(TextBlock.TextTrimmingProperty);
                 tb.ClearValue(TextBlock.IsTextSelectionEnabledProperty);
                 tb.ClearValue(TextBlock.FontFamilyProperty);
-                // Issue #950 made ApplyModifiers write Padding to TextBlock, so a pooled
-                // TextBlock could otherwise hand its padding to the next element that sets
-                // none. Control/Border/StackPanel have the same leak and are NOT cleared
-                // anywhere — see #965; fixing those means moving the clears into the
-                // FE-common block above, which forces Padding to poolReset: true and
-                // escalates .Set(c => c.Padding = ...) to REACTOR_POOL_001.
-                tb.ClearValue(TextBlock.PaddingProperty);
+                // Padding moved to the FE-common chain above (issue #985) so the pool ⇄
+                // analyzer consistency scan can see it — ModifierTable's Padding row names
+                // TextBlock in its control gate, and a clear the scan cannot reach is a
+                // claim nothing verifies.
                 break;
             case WinUI.RichTextBlock rtb:
                 Reconciler.CancelInlineUiExtentPin(rtb);
@@ -382,7 +433,6 @@ public sealed class ElementPool : IDisposable
             // element from Tag at invocation time, so stale closures are harmless.
             case WinUI.Button button:
                 button.Content = null;
-                button.ClearValue(Control.IsEnabledProperty);
                 button.Flyout = null;
                 VisualStateManager.GoToState(button, "Normal", false);
                 break;
@@ -397,7 +447,6 @@ public sealed class ElementPool : IDisposable
                 break;
             case WinUI.ToggleSwitch toggle:
                 toggle.ClearValue(WinUI.ToggleSwitch.IsOnProperty);
-                toggle.ClearValue(Control.IsEnabledProperty);
                 toggle.OnContent = null;
                 toggle.OffContent = null;
                 toggle.Header = null;

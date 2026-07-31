@@ -253,23 +253,30 @@ internal static class ModifierTable
             { "AccessKey",           new ModifierInfo("AccessKey",           poolReset: true) },
             { "IsTabStop",           new ModifierInfo("IsTabStop",           poolReset: true) },
 
+            // Pool-reset but only on some receivers (issue #985). CleanElement clears these
+            // through a Control | Border | Panel/StackPanel chain that mirrors the receivers
+            // ApplyModifiers writes them to, so the control gates below still apply: the gate
+            // decides whether the modifier reaches the control at all, poolReset decides which
+            // rule id reports it. A .Set write to any of them is now unwound on pool return.
+            //
+            // WinUI declares most of these on Panel subclasses too, which ApplyModifiers
+            // skips, and the allow-lists genuinely differ: StackPanel and TextBlock take
+            // Padding but not CornerRadius; Grid takes Background but not Padding. IsEnabled
+            // needs no gate — WinUI declares it on Control, so if the .Set lambda compiles
+            // the receiver already qualifies.
+            { "IsEnabled",       new ModifierInfo("IsEnabled",       poolReset: true) },
+            { "Padding",         new ModifierInfo("Padding",         poolReset: true, controlGate: ControlBorderStackText) },
+            { "CornerRadius",    new ModifierInfo("CornerRadius",    poolReset: true, controlGate: ControlBorder) },
+            { "BorderThickness", new ModifierInfo("BorderThickness", poolReset: true, controlGate: ControlBorder) },
+            { "BorderBrush",     new ModifierInfo("BorderBrush",     poolReset: true, controlGate: ControlBorder) },
+            { "Background",      new ModifierInfo("Background",      poolReset: true, controlGate: PanelControlBorder) },
+
             // ── Generic modifier, no runtime gate (REACTOR_MOD_002, Info) ────────────
-            // IsEnabled and the content-alignment pair ARE Control-gated in ApplyModifiers,
-            // but WinUI declares those DPs only on Control — if the .Set lambda compiles the
-            // receiver already qualifies, so no predicate is needed.
-            { "IsEnabled",                  new ModifierInfo("IsEnabled") },
+            // The content-alignment pair IS Control-gated in ApplyModifiers, but WinUI
+            // declares those DPs only on Control — if the .Set lambda compiles the receiver
+            // already qualifies, so no predicate is needed.
             { "HorizontalContentAlignment", new ModifierInfo("HorizontalContentAlignment") },
             { "VerticalContentAlignment",   new ModifierInfo("VerticalContentAlignment") },
-
-            // ── Generic modifier, control-gated (REACTOR_MOD_002, Info) ──────────────
-            // WinUI declares these on Panel subclasses too, which ApplyModifiers skips. The
-            // allow-lists genuinely differ: StackPanel and TextBlock take Padding but not
-            // CornerRadius; Grid takes Background but not Padding.
-            { "Padding",         new ModifierInfo("Padding",         controlGate: ControlBorderStackText) },
-            { "CornerRadius",    new ModifierInfo("CornerRadius",    controlGate: ControlBorder) },
-            { "BorderThickness", new ModifierInfo("BorderThickness", controlGate: ControlBorder) },
-            { "BorderBrush",     new ModifierInfo("BorderBrush",     controlGate: ControlBorder) },
-            { "Background",      new ModifierInfo("Background",      controlGate: PanelControlBorder) },
 
             // Fonts have BOTH a generic modifier and type-specific overloads, and the two
             // cover different receivers — so the gates are OR'd (see ModifierInfo.ElementTypes).
@@ -360,7 +367,9 @@ internal static class ModifierTable
     /// <para>
     /// A null <see cref="ModifierInfo.ControlGate"/> is ambiguous between "the reconciler applies
     /// this unconditionally" and "the reconciler gates it, but this rule's direction cannot reach a
-    /// non-qualifying receiver anyway". <c>REACTOR_MOD_002</c> reads <c>.Set(x =&gt; x.IsEnabled = v)</c>,
+    /// non-qualifying receiver anyway". <see cref="PoolResetSetAnalyzer"/> reads
+    /// <c>.Set(x =&gt; x.IsEnabled = v)</c> (as <c>REACTOR_POOL_001</c> since issue #985 made the
+    /// pool clear it; <c>REACTOR_MOD_002</c> before that),
     /// where the lambda parameter is already a <c>Control</c> because WinUI declares the dependency
     /// property only there — so no predicate is needed. <see cref="NoOpModifierAnalyzer"/> reads
     /// <c>.IsEnabled(v)</c>, a generic modifier callable on <em>any</em> element, where the same

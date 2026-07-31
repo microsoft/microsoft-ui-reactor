@@ -125,6 +125,33 @@ Conventions for contributors:
 
 ### Fixed
 
+- **A pooled control no longer hands its previous renter's padding, background,
+  border or enabled state to the next one (issue #985).**
+  `Reconciler.ApplyModifiers` writes `Padding`, `CornerRadius`,
+  `BorderThickness`, `BorderBrush`, `Background` and `IsEnabled` onto `Control`,
+  `Border`, `Panel` and `StackPanel` receivers, but `ElementPool.CleanElement`
+  only ever reset the `Border` arm. On mount there is no previous element, so no
+  unset arm runs — a recycled `Button`, `ScrollViewer`, `Grid` or `VStack`
+  therefore started life carrying the *local* values the last renter had set, and
+  a local value outranks every `Style` setter in WinUI's dependency-property
+  precedence order. `Panel.Background` was the widest hole, since `VStack` /
+  `HStack` / `Grid` are all poolable. `CleanElement` now clears all six, in the
+  `FrameworkElement`-common region so the pool ⇄ analyzer consistency invariants
+  can see them. This is the pooling half of #952, whose fix corrected the *shape*
+  of the reset (`ClearValue` instead of assigning a default) but not its absence.
+  `TextBlock.Padding` — reset since #950, but from a case arm past the point the
+  scanners stop reading — moved into the same region, so all four of the
+  receivers `ApplyModifiers` writes `Padding` to are now covered by one chain and
+  verified by the same invariants.
+
+  User-visible fallout: those six properties are now marked `poolReset` in the
+  analyzer's modifier table, so `.Set(c => c.Padding = …)` and friends report
+  **`REACTOR_POOL_001` (Warning)** where they previously reported
+  `REACTOR_MOD_002` (Info). The suggested fix is unchanged — use the fluent
+  modifier (`.Padding(…)`) — and the provided code fix still applies it
+  automatically. Projects building with `TreatWarningsAsErrors` may need to
+  convert those call sites (or suppress the id) when upgrading.
+
 - **Unsetting a common modifier no longer permanently overrides the control's
   style (issue #952).** `Reconciler.ApplyModifiers` reset a dropped modifier by
   *assigning* the dependency property's default value (`fe.Margin =

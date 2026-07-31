@@ -412,6 +412,9 @@ internal static class SelfTestFixtureRegistry
         "ModifierEvent_StyleUnsetRestore",
         "ModifierEvent_PoolClearValueOnRent",
         "ModifierEvent_PoolClearValueControl",
+        "ModifierEvent_PoolClearValueControlPanel",
+        "ModifierEvent_PoolClearValueStackPadding",
+        "ModifierEvent_PoolClearValueTextPadding",
         "ModifierEvent_InlineMarginCarryForward",
         "ModifierEvent_InlineDropRestoresPhysical",
         // Rare control mount + update tests
@@ -2031,6 +2034,9 @@ internal static class SelfTestFixtureRegistry
         "ModifierEvent_StyleUnsetRestore" => new ModifierEventFixtures.ModifierStyleUnsetRestore(harness),
         "ModifierEvent_PoolClearValueOnRent" => new ModifierEventFixtures.ModifierPoolClearValueOnRent(harness),
         "ModifierEvent_PoolClearValueControl" => new ModifierEventFixtures.ModifierPoolClearValueControl(harness),
+        "ModifierEvent_PoolClearValueControlPanel" => new ModifierEventFixtures.ModifierPoolClearValueControlPanel(harness),
+        "ModifierEvent_PoolClearValueStackPadding" => new ModifierEventFixtures.ModifierPoolClearValueStackPadding(harness),
+        "ModifierEvent_PoolClearValueTextPadding" => new ModifierEventFixtures.ModifierPoolClearValueTextPadding(harness),
         "ModifierEvent_InlineMarginCarryForward" => new ModifierEventFixtures.ModifierInlineMarginCarryForward(harness),
         "ModifierEvent_InlineDropRestoresPhysical" => new ModifierEventFixtures.ModifierInlineDropRestoresPhysical(harness),
         // Rare control tests
