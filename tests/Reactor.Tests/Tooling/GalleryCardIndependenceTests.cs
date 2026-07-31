@@ -19,7 +19,7 @@ namespace Microsoft.UI.Reactor.Tests.Tooling;
 /// <para>This is not hypothetical. Issue #980 reported it against NumberBox — the "Basic
 /// NumberBox" and "NumberBox with Spin Buttons" cards shared <c>(value, setValue)</c>, so
 /// clicking Increase in one card moved the other's readout, confirmed live over UIA. A scan
-/// prompted by that report found the same defect on twelve further pages, which is why this
+/// prompted by that report found the same defect on thirteen further pages, which is why this
 /// exists as a gate rather than a one-page fix.</para>
 ///
 /// <para><b>What the rule keys on.</b> The slot must come from a state hook —
@@ -30,10 +30,26 @@ namespace Microsoft.UI.Reactor.Tests.Tooling;
 /// derived values and shared data are not per-card state, and reusing them across cards is
 /// normal.</para>
 ///
-/// <para><b>What it deliberately cannot catch.</b> A slot referenced only through a page-level
-/// helper that two cards call is attributed to neither card and is not reported. Catching it
-/// needs call-graph reasoning this tier does not have, and silence is the cheaper error: this
-/// lint has no allowlist, so a false positive is a blocked tree.</para>
+/// <para><b>What it deliberately cannot catch.</b> Attribution is by syntactic containment, so
+/// a slot reaches a card only when its name appears lexically inside that card's call. These
+/// escape, and all of them are absent from the gallery today:</para>
+/// <list type="bullet">
+/// <item>a slot referenced only through a page-level helper that two cards call;</item>
+/// <item>one <c>SampleCard</c> call executed more than once — by a <c>foreach</c>, a LINQ
+/// projection, or a helper invoked twice;</item>
+/// <item>a card element built into a local and then rendered in two places.</item>
+/// </list>
+/// <para>Each needs call-graph or data-flow reasoning this tier does not have, and silence is
+/// the cheaper error: this lint has no allowlist, so a false positive is a blocked tree. The
+/// one shape that errs the other way is two <em>mutually exclusive</em> cards — a
+/// <c>flag ? SampleCard(a) : SampleCard(b)</c> both naming one slot would be reported although
+/// only one ever renders. No gallery page builds a card conditionally; if one ever does, the
+/// fix is to give each branch its own slot, which is what the reader would expect anyway.</para>
+///
+/// <para>Note that lambda-parameter shadowing is <em>not</em> on this list. A lambda parameter
+/// cannot reuse the name of a local in an enclosing scope (CS0136), and every slot is a local
+/// of <c>Render</c>, so in code that compiles a shadowed name cannot exist to be misattributed.
+/// </para>
 ///
 /// <para>Roslyn parses the page sources directly — no gallery build, no WinUI objects — so this
 /// stays in the headless unit tier.</para>
@@ -71,33 +87,52 @@ public sealed class GalleryCardIndependenceTests
     static ExpressionSyntax Unwrap(ExpressionSyntax expression) =>
         expression is ParenthesizedExpressionSyntax paren ? Unwrap(paren.Expression) : expression;
 
+    static bool IsStateHook(ExpressionSyntax expression) =>
+        Unwrap(expression) is InvocationExpressionSyntax invocation
+        && GallerySources.InvokedName(invocation) is { } hook
+        && StateHooks.Contains(hook, global::System.StringComparer.Ordinal);
+
     /// <summary>
-    /// Every <c>var (x, setX) = UseState(...)</c> / <c>UseReducer(...)</c> on the page, as the
-    /// names it binds paired with the line it sits on. Discards are skipped — they bind nothing
-    /// and so can never be referenced from a card.
+    /// Every state hook call on the page, as the names it binds paired with the line it sits on.
+    /// Two spellings bind a slot and both are recognised:
+    /// <list type="bullet">
+    /// <item><c>var (x, setX) = UseState(...)</c> — the deconstruction the gallery uses.</item>
+    /// <item><c>var s = UseState(...)</c> — <see cref="Core.RenderContext.UseState"/> returns the
+    /// <em>named</em> tuple <c>(T Value, Action&lt;T&gt; Set)</c>, so <c>s.Value</c> / <c>s.Set</c>
+    /// is legal and drives a card exactly as the deconstructed pair does. Missing it would leave
+    /// the rule avoidable by rewriting one line.</item>
+    /// </list>
+    /// Discards are skipped — they bind nothing and so can never be referenced from a card.
+    /// Returned in source order, which is what <c>DescendantNodes</c> pre-order already gives.
     /// </summary>
     internal static IReadOnlyList<(IReadOnlyList<string> Names, int Line)> StateSlots(SyntaxNode pageRoot)
     {
         var slots = new List<(IReadOnlyList<string> Names, int Line)>();
 
-        foreach (var assignment in pageRoot.DescendantNodes().OfType<AssignmentExpressionSyntax>())
+        foreach (var node in pageRoot.DescendantNodes())
         {
-            if (!assignment.IsKind(SyntaxKind.SimpleAssignmentExpression)) continue;
-            if (assignment.Left is not DeclarationExpressionSyntax { Designation: ParenthesizedVariableDesignationSyntax designation }) continue;
-            if (Unwrap(assignment.Right) is not InvocationExpressionSyntax invocation) continue;
+            IReadOnlyList<string>? names = null;
 
-            var hook = GallerySources.InvokedName(invocation);
-            if (hook is null || !StateHooks.Contains(hook, global::System.StringComparer.Ordinal)) continue;
+            if (node is AssignmentExpressionSyntax assignment
+                && assignment.IsKind(SyntaxKind.SimpleAssignmentExpression)
+                && assignment.Left is DeclarationExpressionSyntax { Designation: ParenthesizedVariableDesignationSyntax designation }
+                && IsStateHook(assignment.Right))
+            {
+                names = designation.Variables
+                    .OfType<SingleVariableDesignationSyntax>()
+                    .Select(v => v.Identifier.Text)
+                    .Where(n => n.Length > 0)
+                    .ToList();
+            }
+            else if (node is VariableDeclaratorSyntax { Initializer: { } initializer } declarator
+                && IsStateHook(initializer.Value))
+            {
+                names = [declarator.Identifier.Text];
+            }
 
-            var names = designation.Variables
-                .OfType<SingleVariableDesignationSyntax>()
-                .Select(v => v.Identifier.Text)
-                .Where(n => n.Length > 0)
-                .ToList();
+            if (names is null || names.Count == 0) continue;
 
-            if (names.Count == 0) continue;
-
-            slots.Add((names, assignment.GetLocation().GetLineSpan().StartLinePosition.Line + 1));
+            slots.Add((names, node.GetLocation().GetLineSpan().StartLinePosition.Line + 1));
         }
 
         return slots;
@@ -133,6 +168,15 @@ public sealed class GalleryCardIndependenceTests
             ? literal.Token.ValueText
             : "(untitled)";
     }
+
+    /// <summary>
+    /// <c>nameof(value)</c> mentions the slot without reading it — no render depends on the
+    /// state, so it cannot couple two cards. Excluded so it can never convict on its own.
+    /// </summary>
+    static bool IsNameOfOperand(SyntaxNode reference) =>
+        reference.Ancestors().OfType<InvocationExpressionSyntax>().Any(i =>
+            i.Expression is IdentifierNameSyntax { Identifier.Text: "nameof" }
+            && i.ArgumentList.Arguments.Any(a => a.Span.Contains(reference.Span)));
 
     // ── the scan ─────────────────────────────────────────────────────────────
 
@@ -174,6 +218,7 @@ public sealed class GalleryCardIndependenceTests
             var name = reference.Identifier.Text;
             if (ambiguous.Contains(name)) continue;
             if (!slotOfName.TryGetValue(name, out var index)) continue;
+            if (IsNameOfOperand(reference)) continue;
 
             var card = OwningCard(reference, cards);
             if (card is null) continue;
@@ -220,7 +265,7 @@ public sealed class GalleryCardIndependenceTests
 
         // Floors rather than `> 0`: a loader that silently found one page, or a slot detector that
         // stopped recognising the deconstruction shape, would still clear `> 0` while inspecting
-        // almost nothing. These sit well under the current tree (94 pages / 214 cards / 128 slots)
+        // almost nothing. These sit well under the current tree (94 pages / 214 cards / 142 slots)
         // so ordinary gallery churn never trips them, but a collapse of any input fails here
         // instead of passing quietly.
         Assert.True(pages >= 80, $"only {pages} gallery pages were inspected — the lint is barely looking.");
@@ -252,6 +297,40 @@ public sealed class GalleryCardIndependenceTests
 
     static string[] Signatures(string body) =>
         ScanSource(Page(body)).Findings.Select(f => f.Signature()).ToArray();
+
+    /// <summary>
+    /// A slot that is unambiguously shared by two cards, appended to a fixture so the fixture
+    /// carries a finding the detector must produce. Declared after the fixture's own
+    /// <c>return</c>: unreachable, but this tier only parses, and keeping it last means its
+    /// finding is always the last one emitted.
+    /// </summary>
+    const string ProbeBody = """
+
+
+                var (__probe, set__probe) = UseState(0);
+                VStack(
+                    SampleCard("__ProbeCardA", NumberBox(__probe, v => set__probe(v)), sourceCode: @"x"),
+                    SampleCard("__ProbeCardB", TextBlock($"{__probe}"), sourceCode: @"x"));
+        """;
+
+    const string ProbeSignature = "(__probe, set__probe): __ProbeCardA | __ProbeCardB";
+
+    /// <summary>
+    /// Asserts a fixture's findings twice: once as written, and once with <see cref="ProbeBody"/>
+    /// appended.
+    ///
+    /// <para>The second call is what makes a <em>silent</em> expectation worth anything. "No
+    /// finding" is also what a detector that has stopped reporting produces, so a bare
+    /// <c>Assert.Empty</c> passes just as happily against a dead rule as against a correct one —
+    /// it cannot come out the other way. With the probe appended the case must report the probe
+    /// and nothing else, which fails if the detector went silent, fails if it never parsed the
+    /// fixture, and fails again if it over-reports on the shape the case is actually about.</para>
+    /// </summary>
+    static void AssertFindings(string label, string body, params string[] expected)
+    {
+        Assert.Equal(expected, Signatures(body));
+        Assert.Equal([.. expected, ProbeSignature], Signatures(body + ProbeBody));
+    }
 
     /// <summary>
     /// The known-positive: the exact shape NumberBoxPage shipped when #980 was filed. If a change
@@ -341,13 +420,16 @@ public sealed class GalleryCardIndependenceTests
                     SampleCard("Basic", NumberBox(value, v => setValue(v)), sourceCode: @"x"),
                     SampleCard("Spin", NumberBox(0.0), sourceCode: @"NumberBox(value, v => setValue(v))"));
         """)]
-    public void IndependentPages_AreNotReported(string label, string body)
-    {
-        var signatures = Signatures(body);
+    // `nameof` names the slot without reading it — no render depends on the state.
+    [InlineData("nameof mentions the slot without reading it", """
+                var (value, setValue) = UseState(0.0);
 
-        Assert.True(signatures.Length == 0,
-            $"{label}: expected no finding, got {string.Join("; ", signatures)}");
-    }
+                return VStack(
+                    SampleCard("Basic", NumberBox(value, v => setValue(v)), sourceCode: @"x"),
+                    SampleCard("Other", TextBlock(nameof(value)), sourceCode: @"x"));
+        """)]
+    public void IndependentPages_AreNotReported(string label, string body) =>
+        AssertFindings(label, body);
 
     /// <summary>
     /// Coupling across more than two cards is reported once, listing every card involved — the
@@ -414,11 +496,40 @@ public sealed class GalleryCardIndependenceTests
     /// </summary>
     [Fact]
     public void MemberNamesAndArgumentLabels_DoNotCountAsReferences() =>
-        Assert.Empty(Signatures("""
+        AssertFindings("member names and argument labels", """
                     var (value, setValue) = UseState(0.0);
 
                     return VStack(
                         SampleCard("Basic", NumberBox(value, v => setValue(v)), sourceCode: @"x"),
                         SampleCard("Other", Gauge(reading.value, value: 3), sourceCode: @"x"));
+        """);
+
+    /// <summary>
+    /// <c>UseState</c> returns the named tuple <c>(T Value, Action&lt;T&gt; Set)</c>, so a page can
+    /// hold the whole tuple in one local and drive cards through <c>s.Value</c> / <c>s.Set</c>
+    /// instead of deconstructing it. That is the same slot reaching the same two cards, and a rule
+    /// that only understood the deconstruction could be evaded by rewriting a single line.
+    /// </summary>
+    [Fact]
+    public void WholeTupleSlot_IsCoveredEvenThoughItIsNeverDeconstructed()
+    {
+        var signature = Assert.Single(Signatures("""
+                    var counter = UseState(0.0);
+
+                    return VStack(
+                        SampleCard("Basic", NumberBox(counter.Value, v => counter.Set(v)), sourceCode: @"x"),
+                        SampleCard("Readout", TextBlock($"{counter.Value}"), sourceCode: @"x"));
         """));
+
+        Assert.Equal("(counter): Basic | Readout", signature);
+    }
+
+    /// <summary>
+    /// The probe the silent cases lean on has to be worth leaning on: it must produce exactly one
+    /// finding when it stands alone. If this fails, every <see cref="AssertFindings"/> caller is
+    /// asserting against a probe that proves nothing.
+    /// </summary>
+    [Fact]
+    public void TheProbe_ReportsExactlyItself() =>
+        Assert.Equal([ProbeSignature], Signatures("return VStack();" + ProbeBody));
 }
