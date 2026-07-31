@@ -715,7 +715,17 @@ internal static class DataGridEditFixtures
             Key(global::Windows.System.VirtualKey.Home);
             Key(global::Windows.System.VirtualKey.End);
             Key(global::Windows.System.VirtualKey.Tab);
-            H.Check("DataGrid_KeyReflect_FocusMoved", state.FocusedRowIndex >= 0 && state.FocusedColIndex >= 0);
+
+            // GUARD, not a direction oracle. It passes whichever way focus went, so it cannot
+            // detect #987 and must not be read as if it could — the differentials below are the
+            // oracles. What it does catch, mutation-verified: focus starts at the -1 sentinel, so
+            // no-op'ing HandleKeyDownForTests fails this check. It is a liveness assertion on the
+            // seam, nothing more. Deliberately NOT range-bounded: removing SetFocus's Math.Clamp
+            // leaves this green, because nothing in the lead-in ever passes an out-of-range index,
+            // so bounds here would imply coverage that does not exist. If this fixture is ever
+            // trimmed, delete this one and keep the differentials.
+            H.Check("DataGrid_KeyReflect_SeamMovedFocusOffSentinel_Guard",
+                state.FocusedRowIndex >= 0 && state.FocusedColIndex >= 0);
 
             // Navigation-mode Shift+Tab walks BACKWARD (#987). Start on column 0 of row 1, where the
             // two directions land in different ROWS as well as different columns: backward wraps to
