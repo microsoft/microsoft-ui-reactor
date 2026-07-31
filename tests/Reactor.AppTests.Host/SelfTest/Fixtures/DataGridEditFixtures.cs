@@ -905,8 +905,10 @@ internal static class DataGridEditFixtures
                                         && !ReferenceEquals(tb, firstEditor));
 
             var secondEditor = Focused() as Microsoft.UI.Xaml.Controls.TextBox;
-            // Differential: "a TextBox is focused" would pass against a total no-op, because the
-            // first editor is already a focused TextBox at this point.
+            // Differential against a no-op only: the first editor is already a focused TextBox here,
+            // so "a TextBox is focused" would pass against a Tab that did nothing. It does NOT pin
+            // direction — a backward Tab also lands on a different editor. That is the next check's
+            // job, and the two teeth are kept separate so a failure says which one broke.
             H.Check($"EditorFocus_RowEditTab_MovedToADifferentEditor (text='{secondEditor?.Text}')",
                 secondEditor is not null && !ReferenceEquals(secondEditor, firstEditor));
             // Row 1 → Category "B". Naming the expected value catches a Tab that skipped a column
@@ -924,20 +926,26 @@ internal static class DataGridEditFixtures
                 state, el, global::Windows.System.VirtualKey.Tab);
             await Harness.WaitFor(() => !ReferenceEquals(Focused(), secondEditor));
             var priceEditor = Focused() as Microsoft.UI.Xaml.Controls.TextBox;
+            // Row 1's Price is 15, and naming it pins REAL focus to a specific cell. FocusedColIndex
+            // alone only pins the logical cursor, which is the thing that was already correct before
+            // #976 — a regression that moved the cursor without moving focus would still pass.
             H.Check($"EditorFocus_RowEditTab_ReachesLastEditor (text='{priceEditor?.Text}', col={state.FocusedColIndex})",
-                priceEditor is not null && state.FocusedColIndex == 3);
+                priceEditor?.Text == "15" && state.FocusedColIndex == 3);
 
+            var colBeforeWrap = state.FocusedColIndex;
             DataGridComponent<TestProduct>.HandleKeyDownForTests(
                 state, el, global::Windows.System.VirtualKey.Tab);
             await Harness.WaitFor(() => Focused() is Microsoft.UI.Xaml.Controls.TextBox tb
                                         && tb.Text == "Product 1");
 
             var wrapped = Focused() as Microsoft.UI.Xaml.Controls.TextBox;
-            // "Product 1" is the Name cell of row 1 and nothing else in the tree, so this pins the
-            // wrap to a specific column; the reference check rules out "focus never left Price".
-            H.Check($"EditorFocus_RowEditTab_WrapsToFirstEditor (text='{wrapped?.Text}', col={state.FocusedColIndex})",
-                wrapped?.Text == "Product 1" && !ReferenceEquals(wrapped, priceEditor)
-                && state.FocusedColIndex == 1);
+            // Asserting only the destination is direction-vacuous here: walking BACKWARD from
+            // Category also lands on Name/col 1, so "wrapped past the end" and "stepped back one"
+            // are indistinguishable by arrival alone. Pinning the origin column too (3 → 1) makes
+            // this fail for an inverted traversal, which is the mutation that matters.
+            H.Check($"EditorFocus_RowEditTab_WrapsToFirstEditor (col {colBeforeWrap}→{state.FocusedColIndex}, text='{wrapped?.Text}')",
+                colBeforeWrap == 3 && state.FocusedColIndex == 1
+                && wrapped?.Text == "Product 1" && !ReferenceEquals(wrapped, priceEditor));
             H.Check("EditorFocus_RowEditTab_WrapDidNotCommit",
                 state.IsRowEditing && state.GetItemAt(1)?.Name == "Product 1");
 
