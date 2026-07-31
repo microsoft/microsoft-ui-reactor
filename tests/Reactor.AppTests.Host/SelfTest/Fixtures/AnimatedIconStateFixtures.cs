@@ -93,9 +93,8 @@ internal static class AnimatedIconStateFixtures
                 var missing = new global::System.Collections.Generic.List<string>();
                 foreach (var from in GalleryStates)
                 {
-                    foreach (var to in GalleryStates)
+                    foreach (var to in GalleryStates.Where(to => to != from))
                     {
-                        if (from == to) continue;
                         if (!markers.ContainsKey($"{from}To{to}_Start")) missing.Add($"{from}To{to}_Start");
                         if (!markers.ContainsKey($"{from}To{to}_End")) missing.Add($"{from}To{to}_End");
                     }
@@ -115,9 +114,8 @@ internal static class AnimatedIconStateFixtures
                 var degenerate = new global::System.Collections.Generic.List<string>();
                 foreach (var from in GalleryStates)
                 {
-                    foreach (var to in GalleryStates)
+                    foreach (var to in GalleryStates.Where(to => to != from))
                     {
-                        if (from == to) continue;
                         if (!markers.TryGetValue($"{from}To{to}_Start", out var start)
                             || !markers.TryGetValue($"{from}To{to}_End", out var end))
                         {
@@ -125,7 +123,11 @@ internal static class AnimatedIconStateFixtures
                             continue;
                         }
 
-                        if (!(end > start)) degenerate.Add($"{from}To{to}=[{start:0.####}..{end:0.####}]");
+                        // NaN-explicit rather than `end <= start`: a NaN marker makes every
+                        // ordered comparison false, so `end <= start` would wave it through
+                        // and leave the degenerate-segment check silently unable to fail.
+                        if (double.IsNaN(start) || double.IsNaN(end) || end <= start)
+                            degenerate.Add($"{from}To{to}=[{start:0.####}..{end:0.####}]");
                     }
                 }
 

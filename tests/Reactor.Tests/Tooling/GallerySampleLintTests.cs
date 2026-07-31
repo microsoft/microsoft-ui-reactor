@@ -382,13 +382,12 @@ public sealed class GallerySampleLintTests
     {
         var reactive = new HashSet<string>(global::System.StringComparer.Ordinal);
 
-        foreach (var designation in root.DescendantNodes().OfType<ParenthesizedVariableDesignationSyntax>())
+        foreach (var designation in root.DescendantNodes().OfType<ParenthesizedVariableDesignationSyntax>()
+                     .Where(d => d.Parent is DeclarationExpressionSyntax decl
+                                 && decl.Parent is AssignmentExpressionSyntax assignment
+                                 && assignment.Right is InvocationExpressionSyntax init
+                                 && InvokedName(init) is "UseState" or "UseReducer"))
         {
-            if (designation.Parent is not DeclarationExpressionSyntax decl
-                || decl.Parent is not AssignmentExpressionSyntax assignment
-                || assignment.Right is not InvocationExpressionSyntax init
-                || InvokedName(init) is not ("UseState" or "UseReducer")) continue;
-
             foreach (var name in designation.Variables.OfType<SingleVariableDesignationSyntax>())
                 reactive.Add(name.Identifier.Text);
         }
@@ -402,10 +401,13 @@ public sealed class GallerySampleLintTests
         do
         {
             grew = false;
-            foreach (var declarator in declarators)
+            // Deferred execution matters here: the predicate reads `reactive`, which the body
+            // mutates, so each element is tested against the set as it stands at that moment —
+            // the same semantics the `continue` guards had.
+            foreach (var declarator in declarators
+                         .Where(d => !reactive.Contains(d.Identifier.Text)
+                                     && MentionsAny(d.Initializer!.Value, reactive)))
             {
-                if (reactive.Contains(declarator.Identifier.Text)) continue;
-                if (!MentionsAny(declarator.Initializer!.Value, reactive)) continue;
                 reactive.Add(declarator.Identifier.Text);
                 grew = true;
             }
@@ -521,14 +523,16 @@ public sealed class GallerySampleLintTests
         {
             var expression = pending.Dequeue();
 
-            foreach (var literal in expression.DescendantNodesAndSelf().OfType<LiteralExpressionSyntax>())
+            foreach (var text in expression.DescendantNodesAndSelf().OfType<LiteralExpressionSyntax>()
+                         .Select(literal => literal.Token.Value)
+                         .OfType<string>())
             {
-                if (literal.Token.Value is string text) literals.Add(text);
+                literals.Add(text);
             }
 
-            foreach (var id in expression.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>())
+            foreach (var name in expression.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>()
+                         .Select(id => id.Identifier.Text))
             {
-                var name = id.Identifier.Text;
                 if (!seen.Add(name)) continue;
                 if (declarators.TryGetValue(name, out var initializer)) pending.Enqueue(initializer);
             }
