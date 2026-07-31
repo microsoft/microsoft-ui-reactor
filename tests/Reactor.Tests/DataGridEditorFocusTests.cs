@@ -354,11 +354,11 @@ public class DataGridEditorFocusTests
         Assert.True(state.BeginRowEdit(1));
         Assert.True(state.TryConsumeEditorFocusRequest(Row(1), "Score"));
 
-        // BeginRowEdit leaves the column cursor at -1, so the FIRST Tab still moves it. Take that
-        // step so the second Tab is genuinely the wrap-onto-itself case this test is about.
-        Assert.True(state.FocusNextRowEditColumn());
+        // BeginRowEdit parks the cursor on the editor it focused, so with a single visible editable
+        // column the cursor is already on Score and every Tab from here is the wrap-onto-itself
+        // case. Asserting that first is what makes the wrap assertion below meaningful rather than
+        // a coincidence of where the cursor happened to start.
         Assert.Equal(ScoreCol, state.FocusedColIndex);
-        Assert.True(state.TryConsumeEditorFocusRequest(Row(1), "Score"));
 
         var versionBefore = state.FocusRequestVersion;
         Assert.True(state.FocusNextRowEditColumn());
