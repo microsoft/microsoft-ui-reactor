@@ -530,10 +530,13 @@ public sealed class GallerySampleLintTests
                 literals.Add(text);
             }
 
+            // `seen.Add` *is* the filter — it returns false for an already-visited name. The
+            // side effect is safe inside `Where` only because this sequence is enumerated
+            // exactly once, right here; do not hoist it to a variable or re-enumerate it.
             foreach (var name in expression.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>()
-                         .Select(id => id.Identifier.Text))
+                         .Select(id => id.Identifier.Text)
+                         .Where(name => seen.Add(name)))
             {
-                if (!seen.Add(name)) continue;
                 if (declarators.TryGetValue(name, out var initializer)) pending.Enqueue(initializer);
             }
         }

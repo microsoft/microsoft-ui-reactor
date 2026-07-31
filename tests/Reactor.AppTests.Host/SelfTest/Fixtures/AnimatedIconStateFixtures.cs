@@ -27,6 +27,25 @@ internal static class AnimatedIconStateFixtures
     /// </remarks>
     static readonly string[] GalleryStates = ["Normal", "PointerOver", "Pressed"];
 
+    /// <summary>
+    /// The one definition of "this marker pair plays something", shared by the duration oracle
+    /// and its negative control. Marker positions are exact constants baked into the visual
+    /// source rather than computed, so an exact comparison would in fact be safe here — but two
+    /// separately-written inline comparisons can drift into disagreeing about a value, which is
+    /// the failure the negative control exists to rule out. Deriving both from one band removes
+    /// that possibility: a pair is <see cref="Animated"/> above the band, <see cref="ZeroLength"/>
+    /// inside it, and <em>neither</em> below it or when unreadable — so an inverted pair (a broken
+    /// marker map) and a NaN pair fail both checks rather than quietly satisfying one of them.
+    /// </summary>
+    const double MinDuration = 1e-6;
+
+    static bool Animated(double start, double end) =>
+        !double.IsNaN(start) && !double.IsNaN(end) && end - start > MinDuration;
+
+    static bool ZeroLength(double start, double end) =>
+        !double.IsNaN(start) && !double.IsNaN(end)
+        && global::System.Math.Abs(end - start) <= MinDuration;
+
     // ════════════════════════════════════════════════════════════════════════
     //  1. Marker oracle — the state strings the page writes must name real transitions
     //     on the built-in sources it uses, *and* those transitions must span a non-zero
@@ -74,13 +93,14 @@ internal static class AnimatedIconStateFixtures
                             $"expected {transition} markers to exist; present [{string.Join(", ", markers.Keys)}]");
                     }
 
-                    // Require exact equality, not `end <= start`: an inverted pair
-                    // (end < start) is a broken marker map, not a valid zero-length
-                    // segment, and must not be able to satisfy the negative control.
-                    if (end != start)
+                    // `ZeroLength`, not `end == start`: shares its band with the duration
+                    // oracle so the two cannot disagree, and rejects both an inverted pair
+                    // (end < start — a broken marker map, not a valid zero-length segment)
+                    // and a NaN one, neither of which may satisfy the negative control.
+                    if (!ZeroLength(start, end))
                     {
                         offenders.Add($"{transition}=[{start:0.####}..{end:0.####}]"
-                            + (end < start ? " (inverted — broken marker map)" : string.Empty));
+                            + (end - start < -MinDuration ? " (inverted — broken marker map)" : string.Empty));
                     }
                 }
 
@@ -131,10 +151,11 @@ internal static class AnimatedIconStateFixtures
                             continue;
                         }
 
-                        // NaN-explicit rather than `end <= start`: a NaN marker makes every
-                        // ordered comparison false, so `end <= start` would wave it through
-                        // and leave the degenerate-segment check silently unable to fail.
-                        if (double.IsNaN(start) || double.IsNaN(end) || end <= start)
+                        // `Animated`, not `end <= start`: the NaN arm matters because a NaN
+                        // marker makes every ordered comparison false, so `end <= start`
+                        // would wave it through and leave this check unable to fail. Shares
+                        // its band with the negative control's `ZeroLength`.
+                        if (!Animated(start, end))
                             degenerate.Add($"{from}To{to}=[{start:0.####}..{end:0.####}]");
                     }
                 }
