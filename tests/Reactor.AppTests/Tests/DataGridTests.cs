@@ -235,6 +235,16 @@ public class DataGridTests : AppTestBase
         App.SendKeys("shift+tab", viaSendInput: true);
         WaitForTextContaining("EditLog", "[1:Alicia,Smith]", timeoutMs: 5000);
 
+        // This is the direction oracle, and it is why this test is not just a slower copy of its
+        // forward twin. The commit above lands identically whichever way the chord goes, but the
+        // LANDING does not: backward is read-only Id (no editor), forward is editable LastName (an
+        // editor reopens and stays open). Without this, dropping Shift still produces both EditLog
+        // entries below and the test would pass on the very bug it exists to catch.
+        AssertNoEditorSettles(
+            "An inline editor was open after the editing Shift+Tab. The chord moved FORWARD onto " +
+            "editable LastName instead of backward onto read-only Id — i.e. the modifier was " +
+            "dropped between the routed handler and the deferred dispatch (#987).");
+
         // Now edit a different row's cell and move focus OUT of the grid by clicking the anchor
         // button, firing the grid's "focus left the grid" LostFocus commit — the exact path the
         // guard suppresses. If the guard leaked from the Shift+Tab-into-read-only above, this
@@ -345,6 +355,37 @@ public class DataGridTests : AppTestBase
             Thread.Sleep(100);
         }
         throw new WinAppException("DataGrid inline editor (Edit control) did not appear after the cell tap.");
+    }
+
+    /// <summary>
+    /// Assert that no inline editor is open, and that this keeps being true. Used as the direction
+    /// oracle when a chord must land on a READ-ONLY cell: the commit it performs is the same in
+    /// either direction, so absence of an editor is what distinguishes them.
+    ///
+    /// <para>Allows a short grace period for the OUTGOING editor to tear down, then requires
+    /// absence across the whole settle window rather than at a single instant. A wrong-direction
+    /// move lands on an editable cell and reopens an editor that STAYS open, so it fails every
+    /// sample; sampling once could otherwise catch the momentary gap between the old editor
+    /// closing and the new one opening and wrongly pass.</para>
+    ///
+    /// <para>The probe cannot silently always-succeed: callers reach this only after
+    /// <see cref="TypeIntoFocusedEditor"/>, which drives the same
+    /// <c>FindFirstEditableSelector()</c> through <see cref="WaitForEditor"/> and throws if it
+    /// never finds an editor — so the instrument is proven positive earlier in the same test.</para>
+    /// </summary>
+    private void AssertNoEditorSettles(string because, int graceMs = 2000, int settleMs = 1200)
+    {
+        var graceDeadline = DateTime.UtcNow.AddMilliseconds(graceMs);
+        while (App.FindFirstEditableSelector() is not null && DateTime.UtcNow < graceDeadline)
+            Thread.Sleep(100);
+
+        var settleDeadline = DateTime.UtcNow.AddMilliseconds(settleMs);
+        do
+        {
+            Assert.IsNull(App.FindFirstEditableSelector(), because);
+            Thread.Sleep(150);
+        }
+        while (DateTime.UtcNow < settleDeadline);
     }
 
     private UiElement? WaitForName(string name, int timeoutMs = 5000)

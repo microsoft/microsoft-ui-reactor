@@ -134,8 +134,9 @@ Conventions for contributors:
   `EditMode.Row`). The handler now snapshots the modifiers synchronously,
   before the deferral, into an immutable `KeyChord` that is threaded through
   the dispatch, and each of the three Tab sites gained a backward arm. Cell
-  edits commit exactly what `Tab` commits and reopen on the previous cell; row
-  edits walk the editable ring backward and still commit nothing.
+  edits commit exactly what `Tab` commits and move to the previous cell,
+  reopening an editor there when that cell is editable; row edits walk the
+  editable ring backward and still commit nothing.
 
 - **Unsetting a common modifier no longer permanently overrides the control's
   style (issue #952).** `Reconciler.ApplyModifiers` reset a dropped modifier by
