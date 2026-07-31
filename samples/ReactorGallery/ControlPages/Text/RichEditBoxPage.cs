@@ -14,7 +14,6 @@ class RichEditBoxPage : Component
     {
         var (text, setText) = UseState("Type here to edit rich text content...");
         var (countedText, setCountedText) = UseState("Type here to edit rich text content...");
-        var (charCount, setCharCount) = UseState(0);
 
         return ScrollView(
             VStack(16,
@@ -30,13 +29,14 @@ class RichEditBoxPage : Component
 
                 SampleCard("With Character Count",
                     VStack(8,
-                        RichEditBox(countedText, s => { setCountedText(s); setCharCount(s.Length); })
+                        RichEditBox(countedText, setCountedText)
                             .Width(400).Height(120),
-                        TextBlock($"Characters: {charCount}").Foreground(Theme.SecondaryText).FontSize(12)
+                        TextBlock($"Characters: {countedText.Length}").Foreground(Theme.SecondaryText).FontSize(12)
                     ),
                     """
-                    RichEditBox(countedText, s => { setCountedText(s); setCharCount(s.Length); })
-                    Text($"Characters: {charCount}")
+                    var (countedText, setCountedText) = UseState("Type here...");
+                    RichEditBox(countedText, setCountedText).Width(400).Height(120)
+                    Text($"Characters: {countedText.Length}")
                     """)
             ).Margin(36, 24, 36, 36)
         );

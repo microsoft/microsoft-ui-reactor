@@ -118,6 +118,8 @@ public sealed class GalleryCardIndependenceTests
                 && assignment.Left is DeclarationExpressionSyntax { Designation: ParenthesizedVariableDesignationSyntax designation }
                 && IsStateHook(assignment.Right))
             {
+                // Discards are dropped structurally, not by the length filter: Roslyn parses `_`
+                // in a deconstruction as DiscardDesignationSyntax, which this OfType excludes.
                 names = designation.Variables
                     .OfType<SingleVariableDesignationSyntax>()
                     .Select(v => v.Identifier.Text)
@@ -503,6 +505,24 @@ public sealed class GalleryCardIndependenceTests
                         SampleCard("Basic", NumberBox(value, v => setValue(v)), sourceCode: @"x"),
                         SampleCard("Other", Gauge(reading.value, value: 3), sourceCode: @"x"));
         """);
+
+    /// <summary>
+    /// A page that only ever writes a slot can discard the value half. The discard binds nothing,
+    /// so it cannot be referenced from a card and has no business in the reported signature — and
+    /// leaving it in would be worse than untidy: <c>_</c> is the one name that can plausibly recur
+    /// across two slots, and a repeated name is treated as ambiguous and dropped, which would take
+    /// the real setter names down with it. Still a shared slot, still reported, named for the half
+    /// that actually binds.
+    /// </summary>
+    [Fact]
+    public void DiscardHalfOfASlot_IsNotPartOfTheSignature() =>
+        AssertFindings("discarded value half", """
+                    var (_, setValue) = UseState(0.0);
+
+                    return VStack(
+                        SampleCard("One", Button("a", () => setValue(1)), sourceCode: @"x"),
+                        SampleCard("Two", Button("b", () => setValue(2)), sourceCode: @"x"));
+        """, "(setValue): One | Two");
 
     /// <summary>
     /// <c>UseState</c> returns the named tuple <c>(T Value, Action&lt;T&gt; Set)</c>, so a page can
