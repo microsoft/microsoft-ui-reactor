@@ -257,6 +257,16 @@ public class DataGridKeyChordTests
         // DIFFER, carried by the cross-arm NotEqual below, the only assertion in this test that
         // compares two measured values; the specific indices are consequences of the fixture's
         // column set and may legitimately change with it.
+        //
+        // One consequence of that legitimate edit, because it falsifies the paragraph above: if a
+        // structural change moves where BeginRowEdit parks, the origin assertions below move with
+        // the constants — and then this test's NAME and this comment's opening premise both become
+        // false in the same commit. Neither can describe a start on read-only Id once the row edit
+        // no longer begins there, and a preserve-the-cursor rule cannot rescue it either, because
+        // read-only columns are excluded from the row-edit pending set (DataGridState.BeginRowEdit)
+        // and so are never a cursor the rule is allowed to preserve. Rename the test and rewrite
+        // that premise in the same change. A stale name is worse here than a missing one: a reader
+        // grepping for the read-only-origin case FINDS this test, sees it green, and stops looking.
         var back = await LoadedState();
         back.SetFocus(0, IdCol);
         Assert.True(back.BeginRowEdit(0));
