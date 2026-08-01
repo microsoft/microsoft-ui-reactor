@@ -271,6 +271,11 @@ public class ModifierUnsetClearValueTests
         }
 
         var poolableNames = poolable.Select(type => type.Name).ToHashSet(StringComparer.Ordinal);
+
+        // The next two asserts are the vacuity defence for this test, not preamble to the real
+        // one below: emptying PoolableTypes with ReadPoolableTypes' own empty check deleted
+        // still fails here, so these are the checks that stop a collapsed derivation reading as
+        // green. Neither is redundant with that check, which only improves the message.
         var derivedBySubclass = required
             .Where(pair => !poolableNames.Contains(pair[..pair.IndexOf('.')]))
             .ToList();
@@ -407,10 +412,19 @@ public class ModifierUnsetClearValueTests
     /// <c>ElementPool.PoolableTypes</c>, read reflectively because it is private.
     /// </summary>
     /// <remarks>
-    /// Throws on every failure path rather than returning an empty set. A reflective lookup
-    /// that degrades to empty makes every obligation derived from it disappear, so the caller
-    /// asserts over nothing and reports green — and a rename produces exactly that, which is
-    /// the failure mode most likely to happen and least likely to be noticed.
+    /// <para>
+    /// Throws on every failure path rather than returning an empty set, so a rename or a type
+    /// change fails here, naming the member, instead of surfacing downstream as a claim that
+    /// the gate intersection regressed to name equality — which misdescribes the cause.
+    /// </para>
+    /// <para>
+    /// This is fail-fast diagnosis, not the vacuity defence, and the distinction matters when
+    /// deciding what may be simplified away. Deleting the empty check and emptying the set
+    /// still reddens all three callers, because
+    /// <c>Every_Poolable_Gated_Receiver_Is_Released_By_CleanElement</c> asserts its own
+    /// derivation is non-degenerate before asserting anything about it. Those two checks, not
+    /// this one, are what stop an empty poolable set reading as green.
+    /// </para>
     /// </remarks>
     private static IReadOnlyList<Type> ReadPoolableTypes()
     {
@@ -423,8 +437,9 @@ public class ModifierUnsetClearValueTests
         {
             throw new InvalidOperationException(
                 $"ElementPool.{fieldName} was not found. It has been renamed or moved — point this " +
-                "test at the new member rather than letting the poolable set read as empty, which " +
-                "would make every clear obligation derived from it silently vanish.");
+                "test at the new member. The callers' own non-degeneracy asserts would catch the " +
+                "resulting empty set, but they would report it as a collapsed gate intersection, " +
+                "which names the wrong cause and sends the reader to the wrong file.");
         }
 
         if (field.GetValue(null) is not IEnumerable<Type> types)
@@ -440,7 +455,8 @@ public class ModifierUnsetClearValueTests
         {
             throw new InvalidOperationException(
                 $"ElementPool.{fieldName} is empty. Every receiver obligation is derived from it, " +
-                "so an empty set would make this test pass while checking nothing.");
+                "so the cause is reported here rather than downstream, where the callers' " +
+                "non-degeneracy asserts would describe it as a collapsed gate intersection.");
         }
 
         return poolable;
