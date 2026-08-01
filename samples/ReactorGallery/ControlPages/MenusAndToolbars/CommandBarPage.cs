@@ -55,6 +55,7 @@ class CommandBarPage : Component
                         TextBlock($"Last action: {commandAction}").Foreground(Theme.SecondaryText)
                     ),
                     @"var (commandAction, setCommandAction) = UseState(""(none)"");
+var (isBold, setIsBold) = UseState(false);
 
 VStack(8,
     CommandBar(
