@@ -54,8 +54,25 @@ public class DataGridKeyChordTests
         public DataSourceCapabilities Capabilities => DataSourceCapabilities.None;
     }
 
-    // Column 0 is READ-ONLY, which is what makes the row-edit direction tests below meaningful:
-    // it is the one start position from which forward and backward land on different columns.
+    // Column 0 is READ-ONLY, and that is what makes the row-edit direction tests below able to
+    // fail. Only two editable columns exist (Name, Score), so within the editable ring backward
+    // and forward are the SAME cell from every position: from Name both land on Score, from Score
+    // both land on Name. A direction test that starts on Name or Score therefore passes whether
+    // Shift+Tab walks backward or forward -- it cannot detect #987, which is precisely a
+    // wrong-direction bug.
+    //
+    // Exactly two start positions discriminate, and the tests below use both:
+    //
+    //     origin -1 (row edit begun from the Edit button, no prior cell focus)  back Score / fwd Name
+    //     origin  0 (IdCol, read-only -- holds focus but is not an edit target) back Score / fwd Name
+    //     origin  1 (NameCol)                                                  back Score / fwd Score
+    //     origin  2 (ScoreCol)                                                  back Name  / fwd Name
+    //
+    // Verified by mutation: negating the direction in MoveRowEditFocus fails 5 of these tests,
+    // every one reporting ScoreCol vs NameCol. THREE of those five start from the -1 sentinel, so
+    // the no-prior-focus tests are not a redundant variation of the read-only-column ones -- they
+    // carry the majority of the direction-detecting power. If you add a row-edit direction test,
+    // start it at IdCol or at -1; starting anywhere else yields a test that cannot fail.
     private const int IdCol = 0;
     private const int NameCol = 1;
     private const int ScoreCol = 2;
