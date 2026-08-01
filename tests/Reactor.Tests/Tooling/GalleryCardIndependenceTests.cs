@@ -76,11 +76,19 @@ public sealed class GalleryCardIndependenceTests
         /// <summary>Compact form the detector's own tests compare against.</summary>
         public string Signature() => $"{Slot}: {string.Join(" | ", Cards)}";
 
+        /// <remarks>
+        /// Only the first sentence is measured. This lint reads source and never renders, so it
+        /// observes the shared slot and <i>infers</i> the coupling; it also cannot tell a mistake
+        /// from a deliberate share. Both remedies are offered rather than the likelier one alone,
+        /// because a message that names a single cause pushes the reader toward a single fix — and
+        /// in the one case the lint cannot distinguish, that fix is the wrong one.
+        /// </remarks>
         public string Describe() =>
             $"the {Slot} state slot is wired into {Cards.Count} sample cards — " +
             string.Join(", ", Cards.Select(c => $"\"{c}\"")) + ". " +
-            "Each card is an independent demonstration, so driving one silently moves the others. " +
-            "Give every card its own state hook.";
+            "Cards are meant to be independent demonstrations, so this almost always means driving " +
+            "one silently moves the others. Give every card its own state hook — or, if the sharing " +
+            "is deliberate, fold them into a single card.";
     }
 
     internal sealed record PageScan(IReadOnlyList<Finding> Findings, int Cards, int Slots);
