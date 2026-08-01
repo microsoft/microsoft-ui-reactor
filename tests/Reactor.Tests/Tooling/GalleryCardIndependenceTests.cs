@@ -171,6 +171,14 @@ public sealed class GalleryCardIndependenceTests
     static SyntaxNode? DeclaringMember(SyntaxNode node) =>
         node.Ancestors().FirstOrDefault(a => a is MemberDeclarationSyntax or LocalFunctionStatementSyntax);
 
+    /// <summary>
+    /// A value-typed identity for a declaring member, so a scope can be part of a dictionary key
+    /// without relying on syntax-node reference identity. Two members cannot begin at the same
+    /// offset in one file, so the start of a member's span names it exactly; <c>-1</c> stands for
+    /// the file scope a node outside any member sits in.
+    /// </summary>
+    static int ScopeKey(SyntaxNode? scope) => scope?.SpanStart ?? -1;
+
     // ── attributing a reference to a card ────────────────────────────────────
 
     /// <summary>
@@ -225,19 +233,29 @@ public sealed class GalleryCardIndependenceTests
 
         var slots = StateSlots(pageRoot);
 
-        // One name can only speak for one slot. Two slots binding the same name would make an
-        // attribution ambiguous, so such a name is dropped rather than guessed at.
-        var slotOfName = new Dictionary<string, int>(global::System.StringComparer.Ordinal);
-        var ambiguous = new HashSet<string>(global::System.StringComparer.Ordinal);
+        // A name can only speak for a slot inside the member that declares it, so the lookup is
+        // keyed by (member, name). Scoping the key is load-bearing in *both* directions, and the
+        // second is the easy one to miss: a sibling member's identically-named local must not be
+        // mistaken for this slot, and it must not collide with it either — a file-wide key marks
+        // the name ambiguous and then drops a genuine finding in Render(), which is a silent miss
+        // of the very defect this gate exists to catch. CS0136 does not reach across member
+        // bodies, so two members each holding a `value` slot is ordinary compiling code.
+        //
+        // Ambiguity stays real *within* one member: two slots in non-overlapping blocks may both
+        // bind `value`, and there the scan genuinely cannot say which one a reference means.
+        var slotOfName = new Dictionary<(int Scope, string Name), int>();
+        var ambiguous = new HashSet<(int Scope, string Name)>();
 
         for (var index = 0; index < slots.Count; index++)
         {
             foreach (var name in slots[index].Names)
             {
-                if (slotOfName.TryGetValue(name, out var existing) && existing != index)
-                    ambiguous.Add(name);
+                var key = (ScopeKey(slots[index].Scope), name);
+
+                if (slotOfName.TryGetValue(key, out var existing) && existing != index)
+                    ambiguous.Add(key);
                 else
-                    slotOfName[name] = index;
+                    slotOfName[key] = index;
             }
         }
 
@@ -248,14 +266,13 @@ public sealed class GalleryCardIndependenceTests
         // and needs no special-casing: only the live half of a card is ever inspected here.
         foreach (var reference in GallerySnippetAgreementTests.ReferenceNames(pageRoot))
         {
-            var name = reference.Identifier.Text;
-            if (ambiguous.Contains(name)) continue;
-            if (!slotOfName.TryGetValue(name, out var index)) continue;
-            if (IsNameOfOperand(reference)) continue;
+            // The declaring member is part of the key, so a reference from another member simply
+            // fails to resolve and no separate containment check is needed after the lookup.
+            var key = (ScopeKey(DeclaringMember(reference)), reference.Identifier.Text);
 
-            // A slot is a local: only code in the member that declares it can read it. The same
-            // name in another member is another symbol, so it must not reach this slot.
-            if (DeclaringMember(reference) != slots[index].Scope) continue;
+            if (ambiguous.Contains(key)) continue;
+            if (!slotOfName.TryGetValue(key, out var index)) continue;
+            if (IsNameOfOperand(reference)) continue;
 
             var card = OwningCard(reference, cards);
             if (card is null) continue;
@@ -553,6 +570,52 @@ public sealed class GalleryCardIndependenceTests
         // contributes neither a slot of its own nor a second signature.
         Assert.Equal(["(kept, setKept): A | B"], scan.Findings.Select(f => f.Signature()));
         Assert.Equal(1, scan.Slots);
+    }
+
+    /// <summary>
+    /// The dual of <see cref="ALambdaParameterInAnotherMethod_DoesNotCountAsAReference"/>, and the
+    /// more dangerous direction. CS0136 does not reach across member bodies, so a page may legally
+    /// declare a <c>value</c> slot in <c>Render</c> <em>and</em> another in a sibling method. While
+    /// the name→slot map was keyed on the identifier alone, that collision marked <c>value</c>
+    /// ambiguous and dropped every reference to it — so a genuine two-card coupling in
+    /// <c>Render</c> went unreported.
+    ///
+    /// <para>Bounding attribution by <see cref="DeclaringMember"/> did not fix this: that check ran
+    /// <em>after</em> the lookup, by which point the name had already collapsed. The scope has to be
+    /// part of the key. A false negative is the worse failure for a gate than a false positive —
+    /// a blocked tree gets investigated, a silent one does not.</para>
+    /// </summary>
+    [Fact]
+    public void ASameNamedSlotInASiblingMember_DoesNotHideARealSharedSlot()
+    {
+        var scan = ScanSource("""
+            namespace Gallery;
+
+            class __Page : Component
+            {
+                public override Element Render()
+                {
+                    var (value, setValue) = UseState(0.0);
+
+                    return VStack(
+                        SampleCard("Basic", NumberBox(value, v => setValue(v)), sourceCode: @"x"),
+                        SampleCard("Spin", NumberBox(value, v => setValue(v)), sourceCode: @"x"));
+                }
+
+                static Element Aside()
+                {
+                    var (value, setValue) = UseState(0.0);
+                    return NumberBox(value, v => setValue(v));
+                }
+            }
+            """);
+
+        // The coupling in Render is still convicted, and named, despite the sibling's `value`.
+        Assert.Equal(["(value, setValue): Basic | Spin"], scan.Findings.Select(f => f.Signature()));
+
+        // Both slots were seen — so the finding above is the scan distinguishing them, not the
+        // scan having missed the sibling declaration altogether.
+        Assert.Equal(2, scan.Slots);
     }
 
     /// <summary>
