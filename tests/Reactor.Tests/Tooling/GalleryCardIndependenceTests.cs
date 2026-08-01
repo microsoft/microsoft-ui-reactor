@@ -65,14 +65,17 @@ namespace Microsoft.UI.Reactor.Tests.Tooling;
 /// <see cref="DeclaredNames"/> — a reference inside a narrower scope binding the same name reads
 /// that declaration, not the slot.</para>
 ///
-/// <para>The member bound is still load-bearing and is a separate rule: CS0136 says nothing about
-/// a lambda parameter in a <em>sibling</em> method, which compiles happily and — since this scan
-/// walks the file, not the <c>Render</c> node — would be read as a reference to the slot.
-/// Attribution therefore requires a reference to sit in the same member that declares the slot
-/// (see <see cref="DeclaringMember"/>). Pinned by
-/// <see cref="ALambdaParameterInAnotherMethod_DoesNotCountAsAReference"/>, which reported
-/// <c>(value, setValue): Basic | Extras</c> against a correct page before that bound existed.
-/// </para>
+/// <para>The member bound was a separate rule and is now a fast reject rather than the guarantee:
+/// CS0136 says nothing about a lambda parameter in a <em>sibling</em> method, which compiles
+/// happily and — since this scan walks the file, not the <c>Render</c> node — was read as a
+/// reference to the slot until <see cref="DeclaringMember"/> keyed it out. Region resolution
+/// arrived later and subsumes it, because two members' spans are disjoint and a reference in one
+/// cannot sit inside a region in the other. Measured, not assumed: making
+/// <see cref="DeclaringMember"/> return null throughout leaves the suite green.
+/// <see cref="ALambdaParameterInAnotherMethod_DoesNotCountAsAReference"/> still pins the
+/// <em>behaviour</em> — it reported <c>(value, setValue): Basic | Extras</c> against a correct page
+/// once — but it no longer pins that particular mechanism, and saying it did would credit a line
+/// with work another line is doing.</para>
 ///
 /// <para>Roslyn parses the page sources directly — no gallery build, no WinUI objects — so this
 /// stays in the headless unit tier.</para>
@@ -189,11 +192,18 @@ public sealed class GalleryCardIndependenceTests
     /// <summary>
     /// The member whose body a node sits in — the scope a local declared there can be read from.
     ///
-    /// <para>This is what bounds a slot's reach. A slot is a local, and a local is invisible
-    /// outside the member that declares it, so an identifier in a <em>different</em> member
-    /// spelling the same name is a different symbol by the language rules rather than by
-    /// guesswork. Without this bound the scan is file-wide and a lambda parameter, loop
-    /// variable, or local in a sibling method silently reads as a reference to the slot.</para>
+    /// <para>This keys attribution. A slot is a local, and a local is invisible outside the member
+    /// that declares it, so an identifier in a <em>different</em> member spelling the same name is a
+    /// different symbol by the language rules rather than by guesswork — and it was this bound that
+    /// first stopped a sibling method's lambda parameter reading as a reference to the slot.</para>
+    ///
+    /// <para>It is no longer what guarantees that. Region resolution subsumes it: two members' spans
+    /// are disjoint, so a reference in one member sits inside no region declared in another and
+    /// <c>Resolve</c> rejects it on containment alone. Measured rather than reasoned — making this
+    /// return null throughout leaves the suite green, so the member key is a cheap reject and a
+    /// dictionary key, not a correctness boundary. Recorded because a comment claiming otherwise
+    /// would send the next reader to defend a line nothing depends on, and would make a real
+    /// regression in region containment look like it had a second net under it.</para>
     ///
     /// <para>No local function is a boundary, <c>static</c> or not. An ordinary one captures the
     /// enclosing method's locals, so a card extracted into one still reads the very same slot, and
@@ -241,6 +251,15 @@ public sealed class GalleryCardIndependenceTests
     /// file root when it sits in no member either — the region a file-scope local is readable from.
     /// Widening the fallback keeps those references resolving exactly as they did before regions
     /// existed; narrowing it would drop them silently.</para>
+    ///
+    /// <para>Some statements own their declarations outright: a <c>for</c> initializer, a
+    /// <c>using</c>/<c>fixed</c> resource, a switch-expression arm's pattern, and both
+    /// <c>foreach</c> forms scope their variables to the statement rather than to the block around
+    /// it. Walking past them to the enclosing block hands back a region wider than the scope, and
+    /// the direction that error takes is <em>silent</em>: an over-wide shadower drops real
+    /// references after the statement, so a genuine two-card coupling simply stops being reported.
+    /// Measured — a deconstructing <c>foreach</c> re-binding a slot's name inside a lambda hid the
+    /// coupling that followed it.</para>
     /// </summary>
     static SyntaxNode DeclaringRegion(SyntaxNode declaration)
     {
@@ -248,12 +267,25 @@ public sealed class GalleryCardIndependenceTests
 
         foreach (var ancestor in declaration.Ancestors())
         {
-            if (ancestor is BlockSyntax or SwitchSectionSyntax) return ancestor;
+            if (ancestor is BlockSyntax or SwitchSectionSyntax
+                or CommonForEachStatementSyntax or ForStatementSyntax
+                or UsingStatementSyntax or FixedStatementSyntax
+                or SwitchExpressionArmSyntax) return ancestor;
+
             if (ancestor == member) break;
         }
 
         return member ?? declaration.SyntaxTree.GetRoot();
     }
+
+    /// <summary>
+    /// The query a range variable belongs to. <c>from</c>, <c>let</c>, <c>join … into</c> and a
+    /// query continuation each introduce a name that is readable across the query expression and
+    /// nowhere else, so — like a parameter — the construct that owns it is the scope, not whatever
+    /// block the query happens to sit in.
+    /// </summary>
+    static SyntaxNode QueryScope(SyntaxNode clause) =>
+        clause.Ancestors().FirstOrDefault(a => a is QueryExpressionSyntax) ?? clause;
 
     /// <summary>
     /// The scope a parameter is readable from: the lambda or local function it belongs to, or the
@@ -285,6 +317,15 @@ public sealed class GalleryCardIndependenceTests
     /// false positive on compiling code, and this gate has no allowlist to waive it with. No
     /// gallery page does it today; the shape is one rename away, which is exactly the reachability
     /// the switch-section arm has.</para>
+    ///
+    /// <para>Which makes this enumeration's completeness load-bearing rather than an optimisation:
+    /// every declaration form it does not model is a name handed silently to the enclosing slot.
+    /// Measured, not predicted — a LINQ range variable was missing, and
+    /// <c>from value in … select SampleCard(…)</c> written twice inside a <c>static</c> local
+    /// function reported the page's <c>value</c> slot as shared between two cards it never reaches.
+    /// The <c>static</c> is what makes it reachable: it severs capture, so the slot is invisible
+    /// inside the local function and the range variable is legal, where a lambda or a non-static
+    /// local function would be CS1931.</para>
     /// </summary>
     static IEnumerable<(string Name, SyntaxNode Scope)> DeclaredNames(SyntaxNode pageRoot)
     {
@@ -307,13 +348,36 @@ public sealed class GalleryCardIndependenceTests
                     yield return (designation.Identifier.ValueText, DeclaringRegion(designation));
                     break;
 
-                // A loop variable's scope is the loop, not the block around it.
+                // A loop variable's scope is the loop, not the block around it. The deconstructing
+                // form declares designations instead of an identifier and reaches DeclaringRegion,
+                // which stops at the same statement for the same reason.
                 case ForEachStatementSyntax loop:
                     yield return (loop.Identifier.ValueText, loop);
                     break;
 
                 case CatchDeclarationSyntax caught when caught.Parent is { } clause:
                     yield return (caught.Identifier.ValueText, clause);
+                    break;
+
+                // Range variables. Each is readable across its whole query and nowhere else.
+                case FromClauseSyntax from:
+                    yield return (from.Identifier.ValueText, QueryScope(from));
+                    break;
+
+                case LetClauseSyntax let:
+                    yield return (let.Identifier.ValueText, QueryScope(let));
+                    break;
+
+                case JoinClauseSyntax join:
+                    yield return (join.Identifier.ValueText, QueryScope(join));
+                    break;
+
+                case JoinIntoClauseSyntax into:
+                    yield return (into.Identifier.ValueText, QueryScope(into));
+                    break;
+
+                case QueryContinuationSyntax continuation:
+                    yield return (continuation.Identifier.ValueText, QueryScope(continuation));
                     break;
             }
         }
@@ -443,8 +507,9 @@ public sealed class GalleryCardIndependenceTests
         // and needs no special-casing: only the live half of a card is ever inspected here.
         foreach (var reference in GallerySnippetAgreementTests.ReferenceNames(pageRoot))
         {
-            // The declaring member is part of the key, so a reference from another member simply
-            // fails to resolve and no separate containment check is needed after the lookup.
+            // The declaring member is part of the key, which rejects a reference from another member
+            // before any region work. Region containment would reject it too — sibling members' spans
+            // are disjoint — so this is a cheap first pass, not the guarantee.
             var key = (ScopeKey(DeclaringMember(reference)), reference.Identifier.Text);
 
             if (IsNameOfOperand(reference)) continue;
@@ -561,10 +626,13 @@ public sealed class GalleryCardIndependenceTests
         Assert.True(cards >= 150, $"only {cards} SampleCard invocations were inspected — the lint is barely looking.");
         Assert.True(slots >= 100, $"only {slots} state slots were found — the slot detector has stopped recognising them.");
 
-        // The header counts findings, not shared slots. Most findings *are* a shared slot, but an
-        // unadjudicable one asserts the opposite — that the scan could not tell — so a header
-        // spelling every finding as a confirmed share would state the one thing that finding
-        // declines to. Each line below says which it is; this line only says how many there are.
+        // The header counts findings; each line below carries what was measured. That split is the
+        // point: `Describe()` states the share it measured and marks the runtime consequence it
+        // infers from it, and a header spelling the count as "shared slots" would flatten the two
+        // back together. (It also once had to accommodate a finding kind that reported an
+        // unresolvable name rather than a share; resolving by lexical region retired that kind, and
+        // every finding is now a confirmed share — but the reason for counting rather than
+        // characterising here survives it.)
         Assert.True(offenders.Count == 0,
             $"{offenders.Count} sample-card state independence finding(s) " +
             $"({pages} pages, {cards} cards, {slots} slots inspected):" +
@@ -956,9 +1024,8 @@ public sealed class GalleryCardIndependenceTests
             }
             """);
 
-        // "Alpha" and "Beta" are independent despite sharing a slot *name*, so neither the pair nor
-        // an unadjudicable notice appears — and the real coupling on `shared` is still convicted
-        // despite sitting in the same member as them.
+        // "Alpha" and "Beta" are independent despite sharing a slot *name*, so no finding names them
+        // — and the real coupling on `shared` is still convicted despite sitting in the same member.
         Assert.Equal(["(shared, setShared): Basic | Spin"], scan.Findings.Select(f => f.Signature()));
 
         // All three declarations were seen, so the silence about `value` is resolution telling the
@@ -1059,6 +1126,74 @@ public sealed class GalleryCardIndependenceTests
             scan.Findings.Select(f => f.Signature()));
 
         Assert.Equal(2, scan.Slots);
+    }
+
+    /// <summary>
+    /// A LINQ range variable spelled after the page's slot. <c>from value in …</c> introduces
+    /// <c>value</c> for the query, and the references inside the query read it rather than the
+    /// slot — so two cards built by two queries are independent.
+    ///
+    /// <para>Reachable only where the enclosing slot is out of scope, because a range variable
+    /// colliding with a visible local is CS1931. A <c>static</c> local function severs capture and
+    /// so provides exactly that: the slot is invisible inside it, the range variable is legal, and
+    /// the shape compiles. Found by cross-check, not by inspection.</para>
+    ///
+    /// <para>This is the case that makes <see cref="DeclaredNames"/>' coverage load-bearing rather
+    /// than an optimisation: a declaration form it does not model is a reference it hands to the
+    /// enclosing slot, which in a gate with no allowlist is a blocked tree on correct code.</para>
+    /// </summary>
+    [Fact]
+    public void ALinqRangeVariableNamedAfterASlot_IsNotAReferenceToIt()
+    {
+        AssertFindings("linq range variable", """
+                    var (value, setValue) = UseState(0.0);
+
+                    return VStack(
+                        NumberBox(value, v => setValue(v)),
+                        Extras());
+
+                    static Element Extras()
+                    {
+                        var first = from value in Titles
+                                    select SampleCard("First", TextBlock($"{value}"), sourceCode: @"x");
+
+                        var second = from value in Titles
+                                     select SampleCard("Second", TextBlock($"{value}"), sourceCode: @"x");
+
+                        return VStack(first.First(), second.First());
+                    }
+            """);
+    }
+
+    /// <summary>
+    /// A deconstructing <c>foreach</c> owns its variables: <c>foreach (var (value, other) in …)</c>
+    /// scopes both names to the loop, not to the block around it. A slot of the same name is
+    /// therefore live again after the loop, and two cards reading it there are genuinely coupled.
+    ///
+    /// <para>The shape compiles, and the failure it caused was silent: the designation was scoped
+    /// to the enclosing block, so it shadowed the slot over the whole lambda body and every
+    /// reference after the loop was dropped. A false <em>negative</em> — this gate's quiet
+    /// direction — which is why the expectation here is a conviction rather than a silence.</para>
+    /// </summary>
+    [Fact]
+    public void ADeconstructingForeachScopesItsVariablesToTheLoop_NotTheBlock()
+    {
+        AssertFindings("deconstructing foreach", """
+                    var (value, setValue) = UseState(0.0);
+
+                    Func<Element> inner = () =>
+                    {
+                        foreach (var (value, other) in Pairs)
+                            Log(value, other);
+
+                        return VStack(
+                            SampleCard("First", NumberBox(value, v => setValue(v)), sourceCode: @"x"),
+                            SampleCard("Second", TextBlock($"{value}"), sourceCode: @"x"));
+                    };
+
+                    return inner();
+            """,
+            "(value, setValue): First | Second");
     }
 
     /// <summary>
