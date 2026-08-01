@@ -301,6 +301,15 @@ public class DataGridKeyChordTests
         // A row edit started from the Edit button leaves FocusedColIndex at -1. Backward has to
         // treat that as one PAST the end and land on the last editable column; a naive
         // (-1 - 1) walk would start at Name and never reach Score.
+        //
+        // The two -1 assertions below are guards, not setup: nothing else here records where the
+        // row edit began. If BeginRowEdit ever parks the cursor on the first editable column, -1
+        // becomes Name and this test's NAME becomes false in the same commit — there IS prior cell
+        // focus at that point. Rename it then; do not merely repair the constant. The read-only-
+        // origin sibling above carries the fuller treatment and fails for the same structural
+        // reason. If both origins are repaired anyway, the backstop is the cross-arm NotEqual
+        // below: parking collapses both directions onto Score, and NotEqual(Score, Score) cannot
+        // be made green by any choice of origin constant.
         var back = await LoadedState();
         Assert.True(back.BeginRowEdit(0));
         Assert.Equal(-1, back.FocusedColIndex);
