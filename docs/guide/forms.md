@@ -83,7 +83,7 @@ class InputTypesDemo : Component
             ToggleSwitch(notify, setNotify,
                 header: "Notifications"),
             ComboBox(["Admin", "Editor", "Viewer"],
-                role, setRole),
+                role, setRole).Header("Role"),
             RadioButtons(["Low", "Medium", "High"],
                 priority, setPriority)
         ).Padding(24);
