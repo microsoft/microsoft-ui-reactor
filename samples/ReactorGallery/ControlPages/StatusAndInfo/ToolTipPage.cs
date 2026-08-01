@@ -30,11 +30,13 @@ Button(""Save"").ToolTip(""Save document (Ctrl+S)"")"),
                         TextBlock("Hover this text").Foreground(Theme.AccentText)
                             .ToolTip("Text elements can have tooltips too"),
                         CheckBox(false, label: "Enable").ToolTip("Enable the feature"),
-                        ToggleSwitch(false).ToolTip("Toggle dark mode")
+                        ToggleSwitch(false).AutomationName("Dark mode")
+                            .ToolTip("Toggle dark mode")
                     ),
-                    @"TextBlock(""Hover this text"").ToolTip(""Text tooltip"")
-CheckBox(false, label: ""Enable"").ToolTip(""Enable feature"")
-ToggleSwitch(false).ToolTip(""Toggle dark mode"")"),
+                    @"TextBlock(""Hover this text"").Foreground(Theme.AccentText)
+    .ToolTip(""Text elements can have tooltips too"")
+CheckBox(false, label: ""Enable"").ToolTip(""Enable the feature"")
+ToggleSwitch(false).AutomationName(""Dark mode"").ToolTip(""Toggle dark mode"")"),
 
                 SampleCard("Rich ToolTip",
                     Button("Rich Tooltip").WithToolTip(

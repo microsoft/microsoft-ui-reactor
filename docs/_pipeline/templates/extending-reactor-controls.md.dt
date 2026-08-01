@@ -280,6 +280,37 @@ So, when wrapping a control of your own with a self-mutating property:
   equals the value the control rests at after the user acts. A plain
   `bool` defaulting to the "showing" state fails both tests.
 
+#### Mount is not an edge — and a few controls need parenting first
+
+Edge semantics describe the *steady state*. At mount there is no previous
+element, so the declared value is always written. What can still go wrong
+is *when*: Reactor configures a control fully before its parent takes it,
+and a handful of WinUI controls quietly discard a state change made while
+they are unparented.
+
+`TeachingTip` is the built-in that does. An unparented tip holds a pending
+open only while nothing else is written to it, and a mount always writes
+something afterwards — later prop entries, setters, content slots, common
+modifiers. Ordering the entry last does not help, because most of those
+writes happen outside the descriptor. So its `IsOpen` entry defers a
+mount-time `true` to the control's `Loaded` event, the first moment the
+tip is parented into a live tree and an open is guaranteed to stick (issue
+949). Post-mount edges are unaffected: by then the control is loaded and
+the write goes straight through.
+
+If a control you are wrapping only presents once it is in a live tree, use
+the same shape — an `.Imperative` entry that defers to `Loaded`, paired
+with `.WithUnmount(...)` so the pending write is dropped if the control
+leaves the tree first, and a falling edge that arrives meanwhile disarms
+it — rather than trusting mount ordering.
+
+`.WithUnmount(...)` is the descriptor's teardown seam in general: the
+engine already dispatched unmount to hand-coded handlers, and this
+surfaces the same hook to descriptor authors. Reach for it only for state
+the pool reset contract cannot see — a pending deferred write, a one-shot
+lifecycle subscription, a disposable. It is explicitly *not* for event
+trampolines, which anchor to the control's lifetime by design.
+
 ### Reference properties
 
 Use reference entries when a native control property points at another
@@ -339,8 +370,11 @@ trampoline slot on the typed event-payload box, and the next Mount
 finds an empty slot and re-subscribes. Writing a real unsubscribe
 into the lambda double-frees the subscription when the control pools
 and is the most common source of "the event stops firing after a
-re-render" bugs. If your control genuinely needs explicit unsubscribe
-on unmount, override `IElementHandler.Unmount` and tear down there.
+re-render" bugs. If your control genuinely needs explicit teardown on
+unmount — a pending deferred write, a one-shot lifecycle subscription,
+a disposable — declare `.WithUnmount(...)` on the descriptor. Reach for
+a hand-coded `IElementHandler.Unmount` only when you also need to
+control the unmount disposition or to see the element.
 <!-- /ai:caveat -->
 
 ## Step 4 — Wire events (the non-DP case)

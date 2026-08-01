@@ -254,9 +254,12 @@ internal sealed class InfoBarEventPayload
 }
 
 /// <summary>Spec 047 §14 Phase 3 batch 9 — TeachingTip named-slot container
-/// payload. <c>IsOpen</c> is a plain <c>.OneWay</c> write (mirrors the
-/// legacy arm). <c>Closed</c> and <c>ActionButtonClick</c> are fire-only
-/// <c>.HandCodedEvent</c> trampolines.</summary>
+/// payload. <c>Closed</c> and <c>ActionButtonClick</c> are fire-only
+/// <c>.HandCodedEvent</c> trampolines. <c>IsOpen</c> is a bespoke
+/// <c>.Imperative</c> entry whose mount-time open is deferred to <c>Loaded</c>
+/// (issue #949); its two arm slots live here so the state is per native
+/// control — the attached-DP store the engine already keys by
+/// <c>ReactorState</c> — rather than in a side table keyed per RCW.</summary>
 internal sealed class TeachingTipEventPayload
 {
     public global::Windows.Foundation.TypedEventHandler<
@@ -265,6 +268,14 @@ internal sealed class TeachingTipEventPayload
     public global::Windows.Foundation.TypedEventHandler<
         Microsoft.UI.Xaml.Controls.TeachingTip,
         object>? ActionButtonClickTrampoline;
+
+    /// <summary>Issue #949 — a mount-time <c>IsOpen: true</c> is still wanted.
+    /// Cleared by a falling edge, by unmount, and by the deferred write itself.</summary>
+    public bool MountOpenWanted;
+
+    /// <summary>Issue #949 — the one-shot <c>Loaded</c> hook carrying the deferred
+    /// open, retained so a falling edge or unmount can unsubscribe it.</summary>
+    public Microsoft.UI.Xaml.RoutedEventHandler? MountOpenLoadedHandler;
 }
 
 /// <summary>Spec 047 §14 Phase 3 batch 11 — PipsPager SelectedPageIndex

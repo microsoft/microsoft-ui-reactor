@@ -13,6 +13,7 @@ class TeachingTipPage : Component
     public override Element Render()
     {
         var (showTip, setShowTip) = UseState(false);
+        var (showTitleOnlyTip, setShowTitleOnlyTip) = UseState(false);
         var (showTargetedTip, setShowTargetedTip) = UseState(false);
         var crossContainerTarget = this.UseElementRef<FrameworkElement>();
 
@@ -37,8 +38,19 @@ TeachingTip(""Welcome!"", ""Helpful guidance text."") with {
 }"),
 
                 SampleCard("TeachingTip (Title Only)",
-                    TeachingTip("Did you know?", "You can customize the title bar!"),
-                    @"TeachingTip(""Did you know?"", ""You can customize the title bar!"")"),
+                    VStack(8,
+                        Button("Show title-only tip", () => setShowTitleOnlyTip(true)),
+                        (TeachingTip("Did you know you can customize the title bar?") with
+                        {
+                            IsOpen = showTitleOnlyTip,
+                            OnClosed = () => setShowTitleOnlyTip(false),
+                        })
+                    ),
+                    @"Button(""Show title-only tip"", () => setShowTitleOnlyTip(true)),
+TeachingTip(""Did you know you can customize the title bar?"") with {
+    IsOpen = showTitleOnlyTip,
+    OnClosed = () => setShowTitleOnlyTip(false),
+}"),
 
                 SampleCard("TeachingTip targeting another subtree",
                     HStack(16,
