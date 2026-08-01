@@ -1776,6 +1776,7 @@ T DefaultValue { get; }
 new()
 AfterChildrenMountCallback<TElement, TControl> AfterChildrenMount { get; init; }
 ChildrenStrategy<TElement, TControl> Children { get; set; }
+DescriptorUnmountCallback<TControl> OnUnmount { get; init; }
 Func<TControl> Factory { get; init; }
 Func<TElement, Action<TControl>[]> GetSetters { get; init; }
 IReadOnlyList<PropEntry<TElement, TControl>> Properties { get; }
@@ -1798,6 +1799,7 @@ Reference(Func<TElement, ElementRef> get, Action<TControl, FrameworkElement> set
 Reference<TTarget>(Func<TElement, ElementRef<TTarget>> get, Action<TControl, TTarget> set) → ControlDescriptor<TElement, TControl>
 ReferenceList<TTarget>(Func<TElement, IReadOnlyList<ElementRef<TTarget>>> get, Action<TControl, IReadOnlyList<TTarget>> apply) → ControlDescriptor<TElement, TControl>
 WithAfterChildrenMount(AfterChildrenMountCallback<TElement, TControl> callback) → ControlDescriptor<TElement, TControl>
+WithUnmount(DescriptorUnmountCallback<TControl> callback) → ControlDescriptor<TElement, TControl>
 
 ### static class ControlRegistry
 Register<TElement, TControl>(Func<IElementHandler<TElement, TControl>> handlerFactory) → void
@@ -1905,6 +1907,7 @@ ChildrenStrategy<TElement, TControl> ChildrenForUnmount { get; }
 ControlDescriptor<TElement, TControl> Descriptor { get; }
 AfterChildrenMount(MountContext ctx, TElement element, TControl control) → void
 Mount(MountContext ctx, TElement el) → TControl
+Unmount(UnmountContext ctx, TControl control) → void
 Update(UpdateContext ctx, TElement oldEl, TElement newEl, TControl ctrl) → void
 
 ### record DevtoolsCliOptions

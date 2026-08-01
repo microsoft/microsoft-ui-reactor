@@ -94,6 +94,15 @@ public class DescriptorHandler<TElement, TControl> : IElementHandler<TElement, T
     {
         var ctrl = ctx.RentControl(_descriptor.PoolPolicy, _descriptor.Factory);
 
+        // A descriptor that declares teardown must actually receive it. The engine's unmount
+        // dispatch is tag-gated (Reconciler.UnmountRecursive only reaches the V1 handler when
+        // GetElementTag returns an element), and SetElementTagIfNeeded allocates ReactorState
+        // only for elements that carry callbacks, a key, extensions, or reference modifiers.
+        // Without this, OnUnmount would fire for some elements of a type and silently not for
+        // others — the callback-free ones — which is not a contract an author can reason about.
+        if (_descriptor.OnUnmount is not null)
+            Reconciler.GetOrCreateReactorState(ctrl);
+
         // §14 Phase 3-final: when the descriptor declares an ItemsHost,
         // populate the items collection BEFORE the prop loop. Initial writes
         // for selection-tracking props (SelectedIndex/SelectedItem) need the
@@ -133,6 +142,14 @@ public class DescriptorHandler<TElement, TControl> : IElementHandler<TElement, T
     /// callback. The adapter invokes this after every child has mounted.</summary>
     public void AfterChildrenMount(MountContext ctx, TElement element, TControl control)
         => _descriptor.AfterChildrenMount?.Invoke(in ctx, element, control);
+
+    /// <summary>Forwards to the descriptor's optional
+    /// <see cref="ControlDescriptor{TElement,TControl}.OnUnmount"/> hook. Without this the
+    /// descriptor path had no teardown seam at all, so control-scoped state a descriptor set up
+    /// during mount — most notably a one-shot <c>Loaded</c> subscription carrying a deferred
+    /// write — could outlive the mount that created it.</summary>
+    public void Unmount(UnmountContext ctx, TControl control)
+        => _descriptor.OnUnmount?.Invoke(in ctx, control);
 
     public void Update(UpdateContext ctx, TElement oldEl, TElement newEl, TControl ctrl)
     {
