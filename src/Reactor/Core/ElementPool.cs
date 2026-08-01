@@ -314,8 +314,14 @@ public sealed class ElementPool : IDisposable
         // the guarantee it implies quietly narrows. Widening a gate obliges you to widen the
         // arm, and that is not hypothetical: #1003 widened Padding/CornerRadius to the
         // concrete panels and this arm had to grow with it in the same merge.
-        // The consistency invariant will not remind you: it checks reset ⇒ marked, never
-        // marked ⇒ reset on every gated receiver (see #1017).
+        // Two tests in ModifierUnsetClearValueTests now make that reminder mechanical rather
+        // than a matter of vigilance, and each was measured firing alone: widening a
+        // poolResetGate the pool does not honour trips
+        // Every_Pool_Reset_Gate_Matches_The_Poolable_Intersection, and widening controlGate
+        // and poolResetGate together without growing this arm trips
+        // Every_Poolable_Gated_Receiver_Is_Released_By_CleanElement. Both range over
+        // gate ∩ PoolableTypes — the reachable subset of #1017, which remains open for the
+        // non-poolable receivers a gate may also admit.
         if (fe is Control resetControl)
         {
             resetControl.ClearValue(Control.PaddingProperty);
