@@ -703,28 +703,43 @@ internal static class ModifierEventFixtures
                 // here. Each check reads the same DP its set arm writes, so a reset that
                 // targeted a *different* identifier (Control.IsTabStopProperty vs
                 // UIElement.IsTabStopProperty, for instance) would still fail.
-                // The `ModifierClear_Tier1Applied_*` checks above prove the phase-0 write
-                // landed, so "released" is distinguishable from "never written".
-                // The companion effective-value clause compares against the phase-0 value
-                // rather than a guessed WinUI default: a default that a style happens to
-                // supply is not knowable from here, and guessing it once already produced
-                // a false failure in this suite.
+                //
+                // The release oracle is ReadLocalValue == UnsetValue and nothing else. The
+                // effective-value comparison used to be folded into the same check, but
+                // that conflated two different failures: a reconciler that failed to
+                // release, and a phase-0 bag value that happens to equal the control's
+                // default. Only the first is a product bug; the second means this fixture
+                // stopped proving anything and needs a different phase-0 value. Splitting
+                // them keeps the non-vacuity guard — without it a property whose default
+                // already equals the phase-0 value would satisfy the release oracle
+                // trivially — while making a failure self-attributing.
                 H.Check("ModifierClear_IsTabStopCleared",
-                    button.ReadLocalValue(UIElement.IsTabStopProperty) == DependencyProperty.UnsetValue
-                    && button.IsTabStop != Phase0IsTabStop);
+                    button.ReadLocalValue(UIElement.IsTabStopProperty) == DependencyProperty.UnsetValue);
                 H.Check("ModifierClear_TabIndexCleared",
-                    button.ReadLocalValue(Control.TabIndexProperty) == DependencyProperty.UnsetValue
-                    && button.TabIndex != 7);
+                    button.ReadLocalValue(Control.TabIndexProperty) == DependencyProperty.UnsetValue);
                 H.Check("ModifierClear_XYFocusKeyboardNavigationCleared",
-                    button.ReadLocalValue(UIElement.XYFocusKeyboardNavigationProperty) == DependencyProperty.UnsetValue
-                    && button.XYFocusKeyboardNavigation
-                       != Microsoft.UI.Xaml.Input.XYFocusKeyboardNavigationMode.Enabled);
+                    button.ReadLocalValue(UIElement.XYFocusKeyboardNavigationProperty) == DependencyProperty.UnsetValue);
                 H.Check("ModifierClear_ElementSoundModeCleared",
-                    button.ReadLocalValue(Control.ElementSoundModeProperty) == DependencyProperty.UnsetValue
-                    && button.ElementSoundMode != ElementSoundMode.Off);
+                    button.ReadLocalValue(Control.ElementSoundModeProperty) == DependencyProperty.UnsetValue);
                 H.Check("ModifierClear_HeadingLevelCleared",
-                    button.ReadLocalValue(AP.HeadingLevelProperty) == DependencyProperty.UnsetValue
-                    && AP.GetHeadingLevel(button) != APeers.AutomationHeadingLevel.Level2);
+                    button.ReadLocalValue(AP.HeadingLevelProperty) == DependencyProperty.UnsetValue);
+
+                // Non-vacuity. Read *after* the release, so each asserts "the value this
+                // control falls back to differs from the one phase 0 forced" — i.e. the
+                // phase-0 write was observable and the release above is a real transition
+                // rather than a no-op. A failure here is a fixture problem, not a
+                // regression: pick a phase-0 value that is not the control's default.
+                H.Check("ModifierClear_IsTabStopPhase0WasDistinct",
+                    button.IsTabStop != Phase0IsTabStop);
+                H.Check("ModifierClear_TabIndexPhase0WasDistinct",
+                    button.TabIndex != 7);
+                H.Check("ModifierClear_XYFocusKeyboardNavigationPhase0WasDistinct",
+                    button.XYFocusKeyboardNavigation
+                    != Microsoft.UI.Xaml.Input.XYFocusKeyboardNavigationMode.Enabled);
+                H.Check("ModifierClear_ElementSoundModePhase0WasDistinct",
+                    button.ElementSoundMode != ElementSoundMode.Off);
+                H.Check("ModifierClear_HeadingLevelPhase0WasDistinct",
+                    AP.GetHeadingLevel(button) != APeers.AutomationHeadingLevel.Level2);
             }
 
             var border = H.FindControl<Border>(b => b.Child is TextBlock tb && tb.Text == "ClearBorderChild");
@@ -1415,12 +1430,20 @@ internal static class ModifierEventFixtures
                     && applied.TabFocusNavigation == Microsoft.UI.Xaml.Input.KeyboardNavigationMode.Cycle);
 
                 // LabeledBy resolves an AutomationId against the visual tree, which can fail
-                // during mount and get deferred to Loaded — an eventual condition, false at
-                // t=0 and converging, which is the one shape WaitFor is sound for. Load-
-                // bearing for A11yClear_Phase1_LabeledByReleased below in the same way
+                // during mount and get deferred to Loaded — an eventual condition, which is
+                // the one shape WaitFor is sound for. But "eventual" requires the predicate
+                // to be false at t=0, and ReferenceEquals(null, null) is true: with the
+                // label source not yet discoverable *and* LabeledBy not yet resolved, the
+                // wait returns immediately at zero elapsed time and the check below then
+                // fails spuriously on a still-null source. Requiring the source inside the
+                // same lambda is what makes the wait actually wait.
+                // Load-bearing for A11yClear_Phase1_LabeledByReleased below in the same way
                 // Phase0_Applied is for the rest.
                 var resolved = await Harness.WaitFor(() =>
-                    ReferenceEquals(AP.GetLabeledBy(applied), labelSource()));
+                {
+                    var source = labelSource();
+                    return source is not null && ReferenceEquals(AP.GetLabeledBy(applied), source);
+                });
                 H.Check("A11yClear_Phase0_LabeledByResolved",
                     resolved && labelSource() is not null);
             }
