@@ -125,7 +125,8 @@ public class DiagramTests : IDisposable
     public void Broken_image_ref_raises_IMAGE_001()
     {
         var body = "Body.\n\n![diagram](images/arch/missing.svg)\n";
-        var findings = DiagramProcessor.ValidateImageRefs("topic.md.dt", body, _images);
+        var findings = DiagramProcessor.ValidateImageRefs(
+            "topic.md.dt", body, _images, Path.GetDirectoryName(_images)!);
         Assert.Contains(findings, f => f.Code == "REACTOR_DOC_IMAGE_001");
     }
 
@@ -135,7 +136,8 @@ public class DiagramTests : IDisposable
         Directory.CreateDirectory(Path.Combine(_images, "arch"));
         File.WriteAllText(Path.Combine(_images, "arch", "ok.svg"), "<svg/>");
         var body = "Body.\n\n![diagram](images/arch/ok.svg)\n";
-        var findings = DiagramProcessor.ValidateImageRefs("topic.md.dt", body, _images);
+        var findings = DiagramProcessor.ValidateImageRefs(
+            "topic.md.dt", body, _images, Path.GetDirectoryName(_images)!);
         Assert.DoesNotContain(findings, f => f.Code == "REACTOR_DOC_IMAGE_001");
     }
 
@@ -155,6 +157,63 @@ public class DiagramTests : IDisposable
         var ex = Assert.Throws<DocPipelineException>(() =>
             DiagramProcessor.ScaffoldDiagram(_diagrams, "arch", "overview"));
         Assert.Equal("REACTOR_DOC_DIAGRAM_002", ex.Code);
+    }
+
+    /// <summary>
+    /// Pins the *complete* set of files the diagram phase writes under the
+    /// images root, and that none of them is a <c>.png</c>.
+    /// </summary>
+    /// <remarks>
+    /// This is the executable form of a claim that is otherwise only prose, in
+    /// <c>docs/contributing/doc-pipeline.md</c> § "Screenshots and committed
+    /// images" and in the Phase 3 skip comment in <c>CompileCommand</c>: that
+    /// <c>--no-screenshots</c> guarantees committed *screenshots* are untouched,
+    /// while this phase still writes text files into the same directory whose
+    /// names cannot collide with a captured <c>.png</c>.
+    ///
+    /// Both of those comments originally enumerated two writers when there are
+    /// three. The missing one is the <c>mmdc</c> render, and it was missing for
+    /// a structural reason rather than by accident: it happens in a separate
+    /// process, so it appears in no <c>File.Write*</c>/<c>File.Copy</c> search
+    /// of this repository. An enumeration that can only be verified by reading
+    /// is one that drifts, hence this test.
+    ///
+    /// What makes it non-vacuous: the stub runner writes to whatever path it is
+    /// handed, so the <c>.svg</c> extension under assertion is the one the
+    /// production call site hard-codes, not one the double chose. Changing that
+    /// call site to <c>".png"</c> — which <c>mmdc</c> supports — fails this test.
+    /// The exact-set assertion is deliberate: adding a fourth writer breaks a
+    /// test that names both comments, instead of quietly outdating them.
+    /// </remarks>
+    [Fact]
+    public void Diagram_phase_writes_three_text_files_and_no_png()
+    {
+        WriteSvg("arch", "passthrough", "<svg>copied</svg>");
+        WriteMmd("arch", "rendered", "graph TD; A-->B;");
+
+        DiagramProcessor.Process(_diagrams, _images, new FakeMermaid(available: true));
+
+        var written = Directory.GetFiles(_images, "*", SearchOption.AllDirectories)
+            .Select(p => Path.GetRelativePath(_images, p).Replace('\\', '/'))
+            .OrderBy(p => p, StringComparer.Ordinal)
+            .ToArray();
+
+        // Non-vacuity guard. Every assertion below is satisfied by an empty
+        // directory for the wrong reason — "wrote nothing" and "wrote nothing
+        // that is a .png" are the same output otherwise, which is the exact
+        // collapse the gate under test exists to prevent.
+        Assert.NotEmpty(written);
+
+        Assert.Equal(
+            new[]
+            {
+                "arch/.rendered.mmd.sha256",  // cache sidecar
+                "arch/passthrough.svg",       // copied verbatim
+                "arch/rendered.svg",          // rendered by mmdc, extension fixed here
+            },
+            written);
+
+        Assert.DoesNotContain(written, p => p.EndsWith(".png", StringComparison.OrdinalIgnoreCase));
     }
 
     // ── Test double ───────────────────────────────────────────────────────
