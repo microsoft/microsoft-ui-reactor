@@ -19,6 +19,12 @@ internal static class DataGridEditFixtures
 {
     record TestProduct(int Id, string Name, string Category, double Price);
 
+    /// <summary>
+    /// A second row type, used only to instantiate <c>DataGridComponent&lt;TOther&gt;</c> so the
+    /// grid-root KeyDown wiring can be proved shared across closed generic types.
+    /// </summary>
+    record TestOtherRow(int Id, string Name);
+
     private static ListDataSource<TestProduct> CreateSource(int count = 20)
     {
         var items = Enumerable.Range(0, count).Select(i => new TestProduct(
@@ -1032,6 +1038,33 @@ internal static class DataGridEditFixtures
             var otherTarget = new Microsoft.UI.Xaml.Controls.Border();
             H.Check("EditorFocus_GridKeyDownWiring_IsPerControl",
                 !DataGridComponent<TestProduct>.WireGridKeyDown(otherTarget, state, wireRef));
+
+            // ── …and the registry is shared across closed generic types ─────────────────
+            // The two checks above pass whether the table is a static on the GENERIC
+            // DataGridComponent<T> (one table per closed T) or a single shared one, because both
+            // wire through DataGridComponent<TestProduct>. They therefore cannot see the defect
+            // this check exists for: ElementPool recycles by CLR type and Grid is on its poolable
+            // list, so the same grid root can be remounted under DataGridComponent<TOther>. With a
+            // per-instantiation table the TOther wiring sees no entry, displaces nothing, and
+            // leaves TestProduct's stale closure attached — two live handlers driving two
+            // different grids' state. Re-wiring the SAME control through a DIFFERENT closed
+            // generic type must still report a displacement.
+            var otherSource = new ListDataSource<TestOtherRow>(
+                [new TestOtherRow(0, "x")], r => (RowKey)r.Id);
+            var otherColumns = new FieldDescriptor[]
+            {
+                Column<TestOtherRow>("Id", r => r.Id, width: 60),
+                Column<TestOtherRow>("Name", r => r.Name, editable: true, width: 160),
+            };
+            var otherState = new DataGridState<TestOtherRow>(
+                otherSource, otherColumns, Microsoft.UI.Reactor.Controls.SelectionMode.Single);
+            var otherRef = new Ref<DataGridElement<TestOtherRow>>(
+                new DataGridElement<TestOtherRow> { Source = otherSource, Columns = otherColumns });
+
+            var displacedAcrossInstantiations =
+                DataGridComponent<TestOtherRow>.WireGridKeyDown(wireTarget, otherState, otherRef);
+            H.Check($"EditorFocus_GridKeyDownWiring_IsSharedAcrossClosedGenerics (displaced={displacedAcrossInstantiations})",
+                displacedAcrossInstantiations);
         }
     }
 
@@ -1185,5 +1218,110 @@ internal static class DataGridEditFixtures
             state.CancelEdit();
             await Harness.Render();
         }
+    }
+
+    /// <summary>
+    /// Issue #976 — the virtualized/real-grid counterpart to <see cref="EditorRealFocus"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para><see cref="EditorRealFocus"/> builds rows through <c>BuildRowForTests</c>, so its rows
+    /// are plain children of the fixture's own host. The shipping grid instead renders rows through
+    /// an <c>ItemsRepeater</c> + <c>ElementFactory</c>, which realizes, recycles and re-realizes row
+    /// containers. That is a materially different reconcile path for the very hooks this feature
+    /// depends on, and it is the path the E2E tier exercises — so a green
+    /// <c>BuildRowForTests</c> fixture is not evidence that the real grid focuses anything.</para>
+    /// <para>This mounts the REAL <c>DataGridElement</c> and drives it through the production
+    /// <c>OnStateReadyInternal</c> seam, so a regression that only exists under virtualization is
+    /// caught here — one tier below E2E, and in seconds rather than a CI round trip.</para>
+    /// </remarks>
+    internal class EditorRealFocusVirtualized(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            DataGridState<TestProduct>? state = null;
+            var anchorRef = new Microsoft.UI.Reactor.Input.ElementRef();
+
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var source = ctx.UseMemo(() => CreateSource(6));
+                var columns = CreateEditableColumns();
+
+                return VStack(
+                    Button("anchor", () => { }).Ref(anchorRef),
+                    Component<DataGridComponent<TestProduct>, DataGridElement<TestProduct>>(
+                        new DataGridElement<TestProduct>
+                        {
+                            Source = source,
+                            Columns = columns,
+                            Editable = true,
+                            SelectionMode = Microsoft.UI.Reactor.Controls.SelectionMode.Single,
+                            EditMode = EditMode.Row,
+                            RowHeight = 36,
+                            OnStateReadyInternal = s => state = s,
+                        }));
+            });
+
+            H.Check("EditorFocusVirt_Rendered",
+                await Harness.WaitFor(() => H.FindTextContaining("Product 1") is not null,
+                    maxPasses: 40, perPassMs: 25));
+
+            if (state is null) { H.Check("EditorFocusVirt_StateCaptured", false); return; }
+            H.Check("EditorFocusVirt_StateCaptured", true);
+
+            var anchor = anchorRef.Current as Microsoft.UI.Xaml.Controls.Button;
+            if (anchor is null) { H.Check("EditorFocusVirt_AnchorMounted", false); return; }
+            var xamlRoot = anchor.XamlRoot;
+            if (xamlRoot is null) { H.Check("EditorFocusVirt_XamlRootAvailable", false); return; }
+
+            object? Focused() => Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(xamlRoot);
+
+            // Positive control: if the window cannot report focus at all, every check below would
+            // pass or fail for reasons that have nothing to do with the grid. Skip loudly instead.
+            anchor.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            await Harness.Render(60);
+            if (!ReferenceEquals(Focused(), anchor))
+            {
+                H.Skip("EditorFocusVirt_PositiveControl",
+                    $"window cannot report focus (got '{Focused()?.GetType().Name ?? "null"}')");
+                return;
+            }
+            H.Check("EditorFocusVirt_PositiveControl", true);
+
+            // ── Row-edit entry focuses the first editor ─────────────────────────────────
+            state.BeginRowEdit(1);
+            await Harness.WaitFor(() => Focused() is Microsoft.UI.Xaml.Controls.TextBox,
+                maxPasses: 40, perPassMs: 25);
+
+            var firstEditor = Focused() as Microsoft.UI.Xaml.Controls.TextBox;
+            H.Check($"EditorFocusVirt_RowEdit_FocusesFirstEditor (text='{firstEditor?.Text ?? "<null>"}')",
+                firstEditor?.Text == "Product 1");
+
+            // ── Tab moves to the NEXT editor, under virtualization ──────────────────────
+            // Row 1: Name="Product 1", Category="B", Price=15. Naming the destination is what
+            // makes this non-vacuous — "focus moved" is satisfied by moving the wrong way, and a
+            // double-stepped Tab lands on Price rather than Category.
+            DataGridComponent<TestProduct>.HandleKeyDownForTests(
+                state, BuildProbeElement(), global::Windows.System.VirtualKey.Tab);
+            await Harness.WaitFor(() => Focused() is Microsoft.UI.Xaml.Controls.TextBox tb
+                                        && !ReferenceEquals(tb, firstEditor),
+                maxPasses: 60, perPassMs: 25);
+
+            var secondEditor = Focused() as Microsoft.UI.Xaml.Controls.TextBox;
+            H.Check($"EditorFocusVirt_RowEditTab_LandsOnNextColumn (text='{secondEditor?.Text ?? "<null>"}')",
+                secondEditor?.Text == "B");
+
+            state.CancelRowEdit();
+            await Harness.Render(60);
+        }
+
+        private static DataGridElement<TestProduct> BuildProbeElement() =>
+            new()
+            {
+                Source = CreateSource(6),
+                Columns = CreateEditableColumns(),
+                Editable = true,
+                EditMode = EditMode.Row,
+            };
     }
 }

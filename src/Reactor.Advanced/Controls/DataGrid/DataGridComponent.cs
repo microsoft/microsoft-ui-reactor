@@ -468,18 +468,6 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
     }
 
     /// <summary>
-    /// One-shot KeyDown wiring per grid-root control, so a recycled/remounted root does not
-    /// accumulate handlers. Mirrors the keyed-table pattern <c>DockTabTearOff</c> uses, and the
-    /// <c>ConditionalWeakTable</c> convention AGENTS.md documents for poolable event wiring.
-    /// </summary>
-    private sealed class KeyDownWiring
-    {
-        public Microsoft.UI.Xaml.Input.KeyEventHandler? Handler;
-    }
-
-    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<FrameworkElement, KeyDownWiring> s_keyDownWiring = new();
-
-    /// <summary>
     /// Attach the grid root's KeyDown handler, replacing any handler a previous mount of the same
     /// control left behind. Returns <c>true</c> when a stale handler was displaced.
     /// </summary>
@@ -490,7 +478,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
     internal static bool WireGridKeyDown(
         FrameworkElement fe, DataGridState<T> state, Ref<DataGridElement<T>> elRef)
     {
-        var wiring = s_keyDownWiring.GetOrCreateValue(fe);
+        var wiring = DataGridKeyDownWiring.GetOrCreate(fe);
         var displaced = wiring.Handler is not null;
         if (wiring.Handler is not null)
             fe.RemoveHandler(UIElement.KeyDownEvent, wiring.Handler);
@@ -1802,4 +1790,28 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
             }
         });
     }
+}
+
+/// <summary>
+/// Grid-root KeyDown wiring registry, keyed by the WinUI control instance.
+/// </summary>
+/// <remarks>
+/// Deliberately <b>non-generic</b>. <see cref="DataGridComponent{T}"/> is generic, so a static
+/// field declared on it would give every closed instantiation its own table. <c>ElementPool</c>
+/// recycles by CLR type (<c>Microsoft.UI.Xaml.Controls.Grid</c> is on its poolable list), so the
+/// same pooled grid root can be remounted under a <i>different</i> <c>DataGridComponent&lt;TOther&gt;</c>.
+/// A per-instantiation table would not see the handler the previous instantiation attached, so
+/// handlers would keep accumulating and a stale closure would keep driving the previous grid's
+/// state — the exact defect the wiring guard exists to prevent. One shared table closes that.
+/// </remarks>
+internal static class DataGridKeyDownWiring
+{
+    internal sealed class Entry
+    {
+        public Microsoft.UI.Xaml.Input.KeyEventHandler? Handler;
+    }
+
+    private static readonly global::System.Runtime.CompilerServices.ConditionalWeakTable<FrameworkElement, Entry> s_entries = new();
+
+    internal static Entry GetOrCreate(FrameworkElement fe) => s_entries.GetOrCreateValue(fe);
 }

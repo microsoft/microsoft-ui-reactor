@@ -405,6 +405,25 @@ public sealed class WinAppUi
     /// </summary>
     public void SendKeys(string keys, bool viaSendInput = false, string? target = null, long? hwnd = null)
     {
+        // This verb takes the winapp TOKEN grammar ("tab", "enter", "ctrl+a delete", "text=..."),
+        // not the private-use key constants in Keys. Those are a UiElement.SendKeys convenience —
+        // UiElement.ToSendKeysTokens translates them; this path does not. Passing one here used to
+        // forward the raw PUA character as literal text: the CLI typed an unmapped glyph, exited 0,
+        // and nothing moved. A no-op that reports success is the worst possible failure mode for an
+        // input primitive — an E2E built on it fails much later, somewhere else, claiming the
+        // product did not respond. Reject it loudly at the call instead, and name the fix.
+        foreach (var ch in keys)
+        {
+            if (ch is >= '\ue000' and <= '\uf8ff')
+            {
+                throw new global::System.ArgumentException(
+                    $"SendKeys received the private-use key constant U+{(int)ch:X4}. WinAppUi.SendKeys takes " +
+                    "winapp token syntax — pass \"tab\"/\"enter\"/\"esc\" directly, or run the string through " +
+                    "UiElement.ToSendKeysTokens first. Keys.* constants only work with UiElement.SendKeys.",
+                    nameof(keys));
+            }
+        }
+
         // send-input routes OS-wide and fails with ACCESS_DENIED off the interactive input desktop, just
         // like the click verb — surface that as Inconclusive (not Failed). post-message posts
         // straight to the window's message queue and needs no interactive desktop, so only guard send-input.

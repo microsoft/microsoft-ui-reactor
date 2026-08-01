@@ -187,9 +187,9 @@ public class DataGridTests : AppTestBase
         // DESTINATION of each move. Three editable columns make direction expressible: forward
         // from FirstName is MiddleName, backward is LastName, and a double-step is LastName too.
         WaitForFocus("RowEdit_FirstName", "row edit start");
-        App.SendKeys(Keys.Tab, viaSendInput: true);
+        App.SendKeys("tab", viaSendInput: true);
         WaitForFocus("RowEdit_MiddleName", "Tab from FirstName");
-        App.SendKeys(Keys.Tab, viaSendInput: true);
+        App.SendKeys("tab", viaSendInput: true);
         WaitForFocus("RowEdit_LastName", "Tab from MiddleName");
         ReplaceFocusedEditorText("Smythe");
 
@@ -197,7 +197,7 @@ public class DataGridTests : AppTestBase
         // to the FirstName editor rather than continuing on to Save/Cancel and out of the grid.
         // Native tab order cannot produce this — it walks on to Save — so this check is the one
         // that is specific to #976's focus seam.
-        App.SendKeys(Keys.Tab, viaSendInput: true);
+        App.SendKeys("tab", viaSendInput: true);
         WaitForFocus("RowEdit_FirstName", "Tab from LastName (the wrap)");
         ReplaceFocusedEditorText("Alicia");
 
@@ -206,7 +206,7 @@ public class DataGridTests : AppTestBase
         Assert.IsFalse(logSoFar.Contains('['),
             $"Row-mode Tab must not commit the row; RowEditLog was '{logSoFar}'.");
 
-        App.SendKeys(Keys.Enter, viaSendInput: true);
+        App.SendKeys("enter", viaSendInput: true);
 
         WaitForTextContaining("RowEditLog", "[1:Alicia,Marie,Smythe]", timeoutMs: 5000);
     }
@@ -240,7 +240,7 @@ public class DataGridTests : AppTestBase
         // the Tab moved focus without committing.
         WaitForFocus("RowEdit_FirstName", "row edit start");
         ReplaceFocusedEditorText("Alicia");
-        App.SendKeys(Keys.Tab, viaSendInput: true);
+        App.SendKeys("tab", viaSendInput: true);
         WaitForFocus("RowEdit_MiddleName", "Tab from FirstName");
         ReplaceFocusedEditorText("Quinn");
 

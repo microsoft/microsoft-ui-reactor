@@ -796,6 +796,7 @@ internal static class SelfTestFixtureRegistry
         "DataGrid_KeyboardAndPrivateRenderPaths",
         // DataGrid editor real XAML focus (issue #976)
         "DataGrid_EditorRealFocus",
+        "DataGrid_EditorRealFocusVirtualized",
         "DataGrid_EditorFocusCustomEditors",
         // DataGrid row-detail expansion (issue #919)
         "DataGrid_ExpandRowKeepsRealizedRow",
@@ -2409,6 +2410,7 @@ internal static class SelfTestFixtureRegistry
         "DataGrid_KeyboardAndPrivateRenderPaths" => new DataGridEditFixtures.KeyboardAndPrivateRenderPaths(harness),
         // DataGrid editor real XAML focus (issue #976)
         "DataGrid_EditorRealFocus" => new DataGridEditFixtures.EditorRealFocus(harness),
+        "DataGrid_EditorRealFocusVirtualized" => new DataGridEditFixtures.EditorRealFocusVirtualized(harness),
         "DataGrid_EditorFocusCustomEditors" => new DataGridEditFixtures.EditorFocusCustomEditors(harness),
         // DataGrid row-detail expansion (issue #919)
         "DataGrid_ExpandRowKeepsRealizedRow" => new DataGridExpandFixtures.ExpandRowKeepsRealizedRow(harness),
