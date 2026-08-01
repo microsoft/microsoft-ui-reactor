@@ -1170,9 +1170,20 @@ internal static class ModifierEventFixtures
 
             H.ClickButton("DropPoolCp");
             await Harness.Render();
+            // Load-bearing premise, one per carrier. Without the drop the reconciler could
+            // update in place, and the cleared checks below would be exercising
+            // ApplyModifiers' unset arm rather than CleanElement — passing for the wrong
+            // reason. The ReferenceEquals guards further down do not cover this: an in-place
+            // update reuses the instance too, so instance identity cannot tell a pool
+            // round-trip from an update. Both carriers need their own check, or the half
+            // that lacks one can silently go vacuous.
             H.Check("PoolCp_Phase1_Returned",
                 H.FindControl<ScrollViewer>(sv =>
                     sv.Content is TextBlock tb && tb.Text == "pool-cp-control") is null);
+            H.Check("PoolCp_Phase1_PanelReturned",
+                H.FindControl<Grid>(g =>
+                    g.Children.Count > 0 && g.Children[0] is TextBlock tb
+                    && tb.Text == "pool-cp-panel") is null);
 
             H.ClickButton("RemountPoolCp");
             await Harness.Render();
