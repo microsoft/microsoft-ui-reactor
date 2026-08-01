@@ -697,4 +697,97 @@ public class DataGridEditorFocusTests
         Assert.True(state.HasEditorFocusRequest(armedKey, "Score"));
         Assert.False(state.HasEditorFocusRequest(occupantKey, "Score"));
     }
+
+    /// <summary>
+    /// The grid's KeyDown wiring guard must keep its <c>ConditionalWeakTable</c> on a
+    /// <b>non-generic</b> holder, so that every closed <c>DataGridComponent&lt;T&gt;</c> shares one
+    /// table.
+    ///
+    /// <para><b>Why this is a real defect and not a style preference.</b> A <c>static</c> field on a
+    /// generic type gets one instance <i>per closed construction</i> — a language rule, not a design
+    /// choice. <c>ElementPool</c> recycles by CLR type and <c>Microsoft.UI.Xaml.Controls.Grid</c> is
+    /// on its poolable list (<c>ElementPool.cs:50</c>), so the very same pooled grid root can be
+    /// returned by <c>DataGridComponent&lt;Person&gt;</c> and then rented by
+    /// <c>DataGridComponent&lt;Order&gt;</c>. Were the table per-instantiation, the second
+    /// component's table would hold no entry for that element, the unwire path would have nothing to
+    /// remove, and KeyDown handlers would accumulate on the recycled root while a stale closure kept
+    /// driving the previous grid's state — precisely the defect the wiring guard exists to prevent.
+    /// The repo states this contract in <c>AGENTS.md</c> as one table; a <c>static</c> on a generic
+    /// silently makes it N.</para>
+    ///
+    /// <para><b>Relationship to the selftest.</b> The behaviour already has a twin one tier up —
+    /// <c>EditorFocus_GridKeyDownWiring_IsSharedAcrossClosedGenerics</c> in
+    /// <c>DataGridEditFixtures.cs</c> wires the same control through <c>DataGridComponent</c> closed
+    /// over two different row types and asserts the second call displaces the first. That is the
+    /// authoritative check, because it exercises the real wiring path. This one is deliberately
+    /// narrower and cheaper: it fails in the headless tier, without a WinUI window, and it fails on
+    /// the <i>cause</i> (the table moved onto a per-closed-T holder) rather than on the downstream
+    /// symptom, which is the difference between a one-line diagnosis and an investigation.</para>
+    ///
+    /// <para><b>Anti-vacuity.</b> The invariant is a negative, so it would pass for free against a
+    /// field this test failed to find — the anchor is therefore pinned before it runs. The predicate
+    /// is then exercised in both directions by two positive controls, including the case that looks
+    /// harmless: a non-generic class <i>nested inside</i> a generic one is still per-closed-T, so
+    /// merely moving the holder inside <c>DataGridComponent&lt;T&gt;</c> would reintroduce the
+    /// bug.</para>
+    /// </summary>
+    [Fact]
+    public void KeyDownWiringTable_IsSharedAcrossClosedGenerics_NotOnePerInstantiation()
+    {
+        var field = typeof(DataGridKeyDownWiring).GetField(
+            "s_entries",
+            global::System.Reflection.BindingFlags.NonPublic | global::System.Reflection.BindingFlags.Static);
+
+        Assert.True(
+            field is not null,
+            "Could not find the static ConditionalWeakTable backing DataGridKeyDownWiring. The "
+            + "assertion below is a negative and would pass vacuously against a field this test "
+            + "never located, so resolve the rename/removal before trusting any result from here.");
+
+        Assert.False(
+            IsPerClosedGeneric(field!.DeclaringType!),
+            $"The KeyDown wiring table now lives on '{field.DeclaringType}', which is generic or is "
+            + "nested inside a generic type. A static field on a generic gets one instance per closed "
+            + "construction, so DataGridComponent<Person> and DataGridComponent<Order> would each get "
+            + "their own table. ElementPool recycles by CLR type and Grid is poolable, so the same "
+            + "grid root can move between them: the second instantiation would not see the first's "
+            + "handler, handlers would accumulate, and a stale closure would keep driving the "
+            + "previous grid's state. Keep the table on a non-generic holder.");
+
+        // Both directions of the predicate, so a green above means the check looked and agreed
+        // rather than that it cannot say no. The second control is the one that matters: it is what
+        // "just move the helper inside DataGridComponent<T>" would produce, and it reads as
+        // non-generic at a glance.
+        Assert.True(IsPerClosedGeneric(typeof(DirectlyGenericHolder<int>)));
+        Assert.True(IsPerClosedGeneric(typeof(GenericOuter<int>.NonGenericInner)));
+    }
+
+    /// <summary>
+    /// Whether a static field declared on <paramref name="type"/> would be duplicated per closed
+    /// generic construction — true when the type itself is generic, or when any type it is nested
+    /// inside is.
+    /// </summary>
+    private static bool IsPerClosedGeneric(global::System.Type type)
+    {
+        for (global::System.Type? t = type; t is not null; t = t.DeclaringType)
+        {
+            if (t.IsGenericType || t.IsGenericTypeDefinition)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static class DirectlyGenericHolder<T>
+    {
+        internal static readonly object Marker = new();
+    }
+
+    private static class GenericOuter<T>
+    {
+        internal static class NonGenericInner
+        {
+            internal static readonly object Marker = new();
+        }
+    }
 }
