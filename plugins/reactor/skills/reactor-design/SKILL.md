@@ -353,7 +353,7 @@ Border(child).Margin(3)
 
 **Margin** pushes an element away from its neighbors. It works on every Reactor element.
 
-**Padding** adds space between a container's edge and its content. It works on `Border`, `Control`-based elements (`Button`, `TextBox`, etc.), `StackPanel`-based layout panels (`VStack`, `HStack`), and `TextBlock`-based text (`Text`, `TextBlock`, and the typography factories). `Grid` and `Image` do not support `.Padding()` — wrap their content in a `Border` if you need inner padding.
+**Padding** adds space between a container's edge and its content. It works on `Border`, `Control`-based elements (`Button`, `TextBox`, etc.), `Grid`, `StackPanel`-based layout panels (`VStack`, `HStack`), `RelativePanel`, and `TextBlock`-based text (`Text`, `TextBlock`, and the typography factories). `Image` does not support `.Padding()` — wrap it in a `Border` if you need inner padding. `Grid`, `VStack`/`HStack`, and `RelativePanel` also accept `.CornerRadius()` directly.
 
 | Element | `.Margin()` | `.Padding()` |
 |---------|-------------|-------------|
@@ -363,7 +363,8 @@ Border(child).Margin(3)
 | `TextBlock` | ✓ | ✓ |
 | `VStack` | ✓ | ✓ |
 | `HStack` | ✓ | ✓ |
-| `Grid` | ✓ | — |
+| `Grid` | ✓ | ✓ |
+| `RelativePanel` | ✓ | ✓ |
 | `Image` | ✓ | — |
 
 ```csharp
@@ -372,16 +373,12 @@ TextBlock("Hello").Margin(8)
 VStack(children).Margin(16)
 Border(child).Margin(12)
 
-// Padding — Border, Control, StackPanel and TextBlock
+// Padding — Border, Control, Grid, StackPanel, RelativePanel and TextBlock
 Border(child).Padding(16)          // ✓ works
 Button("Go").Padding(12)           // ✓ works
+Grid(columns, rows, cells).Padding(16)  // ✓ works
 VStack(8, items).Padding(16)       // ✓ works
 TextBlock("Hello").Padding(8)      // ✓ works
-
-// .Padding() is not applied to Grid — wrap in Border instead:
-Border(
-    Grid(columns, rows, cells)
-).Padding(16)  // ✓ padding applied to the Border
 ```
 
 Both `.Margin()` and `.Padding()` accept three overloads:

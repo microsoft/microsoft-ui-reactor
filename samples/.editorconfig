@@ -47,7 +47,7 @@
 ;
 ; REACTOR_MOD_003 is NOT in the list below. It is a correctness rule — a modifier the
 ; reconciler silently drops is an invisible control, not a style preference — so it stays
-; at `warning` across the sample tree, and a new one anywhere breaks the build. Its 26
+; at `warning` across the sample tree, and a new one anywhere breaks the build. Its 19
 ; remaining pre-existing hits are exempted by PATH instead, in the scoped section at the
 ; bottom of this file, exactly as the REACTOR_HOOKS_* debt is.
 ;
@@ -58,34 +58,30 @@
 ; comment previously predicted it would: the samples were always asking for padding that
 ; WinUI supports, and the reconciler was the thing in the wrong.
 ;
-; Re-measured on the #950 branch with `dotnet build Reactor.slnx -c Debug` and the scoped
+; Re-measured after widening the Grid/StackPanel/RelativePanel gates with
+; `dotnet build Reactor.slnx -c Debug` and the scoped
 ; severity at the bottom of this file temporarily flipped back to `warning`, deduplicated
 ; on file:line:col (MSBuild prints each diagnostic once per referencing project, and mixes
 ; absolute and relative paths — normalise before deduping):
 ;
 ;   18  .Padding(...)      on FlexElement          FlexPanel has Yoga padding semantics
 ;                                                  (11 carry a `.FlexPadding(...)` auto-fix)
-;    3  .CornerRadius(...) on StackElement         WinUI declares StackPanel.CornerRadius
-;    2  .CornerRadius(...) on GridElement          WinUI declares Grid.CornerRadius
-;    2  .Padding(...)      on GridElement          WinUI declares Grid.Padding
 ;    1  .Foreground(...)   on RichTextBlockElement missing ThemeRef overload
-;   ──  26 sites across 14 files, every one of them #950
+;   ──  19 sites across 9 files, every one of them #950
 ;
-; None of these is a sample bug. The property exists on the mounted control in every case,
-; but the ApplyModifiers gate is Control/Border/StackPanel/TextBlock, so the write is
-; skipped. Rewriting these call sites would be fixing the wrong layer and would have to be
-; reverted when the gate is widened further — as the TextBlock rows just demonstrated, the
-; rule simply stops firing on them and they disappear without a single sample edit. The
-; RichTextBlock one is the same shape one level up: the sample correctly passes a theme
-; token, and ElementExtensions has string and Brush overloads but no ThemeRef one, so the
-; call falls through to the gated generic modifier.
+; None of these is a sample bug. FlexPanel has distinct Yoga padding semantics, so these
+; calls need the framework-level FlexPadding migration tracked by #950. The RichTextBlock
+; one is the same shape one level up: the sample correctly passes a theme token, and
+; ElementExtensions has string and Brush overloads but no ThemeRef one, so the call falls
+; through to the gated generic modifier.
 ;
-; The Grid and StackPanel rows were originally filed as sample bugs in #961, on the premise
-; that WinUI does not declare those properties. It does: Microsoft.WinUI.xml (from
+; The now-cleared Grid and StackPanel rows were originally filed as sample bugs in #961, on
+; the premise that WinUI does not declare those properties. It does: Microsoft.WinUI.xml (from
 ; Microsoft.WindowsAppSDK.WinUI 2.3.0) declares Grid.Padding, Grid.CornerRadius,
 ; StackPanel.Padding and StackPanel.CornerRadius, and apps/regedit/Components/ValueList.cs
 ; already sets `g.Padding` imperatively on a Grid under a comment describing this exact
-; gate. Those 7 sites were therefore reclassified to #950 rather than rewritten.
+; gate. Those 7 sites were therefore reclassified to #950 and cleared by widening the
+; framework gate rather than rewriting the declarative calls.
 ;
 ; What #961 did fix, and why those five were different — Border, TextBlock and Rectangle do
 ; not declare the property at all, so no widening could ever have helped:
@@ -122,17 +118,17 @@ dotnet_diagnostic.REACTOR_HOOKS_011.severity = suggestion
 dotnet_diagnostic.REACTOR_HOOKS_013.severity = suggestion
 
 
-; REACTOR_MOD_003 debt, scoped to the 14 files that still carry it. Deliberately a file
+; REACTOR_MOD_003 debt, scoped to the 9 files that still carry it. Deliberately a file
 ; list and not a `**/*.cs` glob, matching the REACTOR_HOOKS_* treatment above: this is a
 ; correctness rule, so a silent modifier drop in any other sample — or in a new one — must
 ; still break the build. Delete a path once its file is clean; delete the whole section once
 ; the list is empty.
 ;
-; Every path below is now owned by #950 alone (see the triage above): all 26 remaining hits
+; Every path below is now owned by #950 alone (see the triage above): all 19 remaining hits
 ; are a reconciler/DSL gate gap that will clear WITHOUT editing any sample. It is scheduled
 ; work, not a standing exemption.
 ;
-; Pruned three times. PR #941 rewrote CanvasPage.cs's Rectangle().Background(...) calls to
+; Pruned four times. PR #941 rewrote CanvasPage.cs's Rectangle().Background(...) calls to
 ; .Fill(...), and ParallaxViewPage.cs came clean with it. Then #961 fixed the 5 genuine
 ; sample bugs and four more files went clean with them: command-palette-window/Program.cs,
 ; ReactorCharting.Gallery/Samples/WeeklyForecast.cs, GridViewPage.cs and SpacingPage.cs.
@@ -143,6 +139,9 @@ dotnet_diagnostic.REACTOR_HOOKS_013.severity = suggestion
 ; Program.cs, MultiLineChart.cs, RefreshContainerPage.cs, SemanticZoomPage.cs, FlyoutPage.cs,
 ; BorderPage.cs, GridPage.cs, RelativePanelPage.cs, ScrollViewPage.cs, NavigationViewPage.cs,
 ; PivotPage.cs, TabViewPage.cs and AcrylicPage.cs all went clean. Re-run the sweep after any
-; sample fix and drop whatever has gone clean, and measure rather than trusting a note.
-[{apps/animated-list-demo/App.cs,apps/chat/Chat.UI/InputBar.cs,apps/chat/Chat.UI/Sidebar.cs,apps/demo-script-tool/App/Components/StepCard.cs,apps/demo-script-tool/App/DemoScriptShell.cs,apps/headtrax/HeadTrax/Components/EmployeeGrid.cs,apps/minesweeper/Components/StatusPanel.cs,apps/monaco-editor/App.cs,apps/regedit/Components/ValueList.cs,apps/widget-creator/WidgetCreatorShell.cs,CommandingDemo/App.cs,Reactor.TestApp/Demos/TransitionsDemo.cs,StylingGallery/App.cs,TodoApp/Program.cs}]
+; sample fix and drop whatever has gone clean, and measure rather than trusting a note. This
+; branch widened the Grid/StackPanel/RelativePanel gates, clearing 7 hits and removing
+; StatusPanel.cs, ValueList.cs, CommandingDemo/App.cs, TransitionsDemo.cs and
+; StylingGallery/App.cs.
+[{apps/animated-list-demo/App.cs,apps/chat/Chat.UI/InputBar.cs,apps/chat/Chat.UI/Sidebar.cs,apps/demo-script-tool/App/Components/StepCard.cs,apps/demo-script-tool/App/DemoScriptShell.cs,apps/headtrax/HeadTrax/Components/EmployeeGrid.cs,apps/monaco-editor/App.cs,apps/widget-creator/WidgetCreatorShell.cs,TodoApp/Program.cs}]
 dotnet_diagnostic.REACTOR_MOD_003.severity = suggestion

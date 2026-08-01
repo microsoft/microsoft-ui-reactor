@@ -3730,7 +3730,16 @@ public sealed partial class Reconciler : IDisposable
         if (m.PaddingInlineStart.HasValue || m.PaddingInlineEnd.HasValue)
         {
             var isRtl = fe.FlowDirection == FlowDirection.RightToLeft;
-            var basePad = resolvedPadding ?? (fe is WinUI.Control pc ? pc.Padding : fe is WinUI.Border pb ? pb.Padding : fe is WinUI.StackPanel psp ? psp.Padding : fe is WinUI.TextBlock ptb ? ptb.Padding : new Thickness());
+            var basePad = resolvedPadding ?? fe switch
+            {
+                WinUI.Control pc => pc.Padding,
+                WinUI.Border pb => pb.Padding,
+                WinUI.StackPanel psp => psp.Padding,
+                WinUI.Grid pg => pg.Padding,
+                WinUI.RelativePanel prp => prp.Padding,
+                WinUI.TextBlock ptb => ptb.Padding,
+                _ => new Thickness(),
+            };
             var left = isRtl ? (m.PaddingInlineEnd ?? basePad.Left) : (m.PaddingInlineStart ?? basePad.Left);
             var right = isRtl ? (m.PaddingInlineStart ?? basePad.Right) : (m.PaddingInlineEnd ?? basePad.Right);
             resolvedPadding = new Thickness(left, basePad.Top, right, basePad.Bottom);
@@ -3743,6 +3752,8 @@ public sealed partial class Reconciler : IDisposable
             if (fe is WinUI.Control padCtrl) padCtrl.Padding = resolvedPadding.Value;
             else if (fe is WinUI.Border padBdr) padBdr.Padding = resolvedPadding.Value;
             else if (fe is WinUI.StackPanel padSp) padSp.Padding = resolvedPadding.Value;
+            else if (fe is WinUI.Grid padGrid) padGrid.Padding = resolvedPadding.Value;
+            else if (fe is WinUI.RelativePanel padRelative) padRelative.Padding = resolvedPadding.Value;
             else if (fe is WinUI.TextBlock padTb) padTb.Padding = resolvedPadding.Value;
         }
         else if (!wantsPadding && hadPadding)
@@ -3754,6 +3765,8 @@ public sealed partial class Reconciler : IDisposable
             if (fe is WinUI.Control padCtrl) padCtrl.ClearValue(WinUI.Control.PaddingProperty);
             else if (fe is WinUI.Border padBdr) padBdr.ClearValue(WinUI.Border.PaddingProperty);
             else if (fe is WinUI.StackPanel padSp) padSp.ClearValue(WinUI.StackPanel.PaddingProperty);
+            else if (fe is WinUI.Grid padGrid) padGrid.ClearValue(WinUI.Grid.PaddingProperty);
+            else if (fe is WinUI.RelativePanel padRelative) padRelative.ClearValue(WinUI.RelativePanel.PaddingProperty);
             else if (fe is WinUI.TextBlock padTb) padTb.ClearValue(WinUI.TextBlock.PaddingProperty);
         }
         if (m.Width.HasValue && m.Width != oldM?.Width) fe.Width = m.Width.Value;
@@ -3848,16 +3861,22 @@ public sealed partial class Reconciler : IDisposable
         else if (!m.IsEnabled.HasValue && oldM?.IsEnabled.HasValue == true && fe is WinUI.Control enCtrl2)
             enCtrl2.ClearValue(WinUI.Control.IsEnabledProperty);
 
-        // CornerRadius (on Control and Border)
+        // CornerRadius (on Control, Border, Grid, StackPanel, and RelativePanel)
         if (m.CornerRadius.HasValue && m.CornerRadius != oldM?.CornerRadius)
         {
             if (fe is WinUI.Control crCtrl) crCtrl.CornerRadius = m.CornerRadius.Value;
             else if (fe is WinUI.Border crBdr) crBdr.CornerRadius = m.CornerRadius.Value;
+            else if (fe is WinUI.Grid crGrid) crGrid.CornerRadius = m.CornerRadius.Value;
+            else if (fe is WinUI.StackPanel crStack) crStack.CornerRadius = m.CornerRadius.Value;
+            else if (fe is WinUI.RelativePanel crRelative) crRelative.CornerRadius = m.CornerRadius.Value;
         }
         else if (!m.CornerRadius.HasValue && oldM?.CornerRadius.HasValue == true)
         {
             if (fe is WinUI.Control crCtrl) crCtrl.ClearValue(WinUI.Control.CornerRadiusProperty);
             else if (fe is WinUI.Border crBdr) crBdr.ClearValue(WinUI.Border.CornerRadiusProperty);
+            else if (fe is WinUI.Grid crGrid) crGrid.ClearValue(WinUI.Grid.CornerRadiusProperty);
+            else if (fe is WinUI.StackPanel crStack) crStack.ClearValue(WinUI.StackPanel.CornerRadiusProperty);
+            else if (fe is WinUI.RelativePanel crRelative) crRelative.ClearValue(WinUI.RelativePanel.CornerRadiusProperty);
         }
 
         // BorderBrush / BorderThickness (on Control and Border)
