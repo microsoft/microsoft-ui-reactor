@@ -460,6 +460,11 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         // Tab went first → last → wrapped back to first and focus never appeared to move.
         // Re-wire rather than skip: a recycled control's stale closure captures the PREVIOUS
         // grid's state, so keeping it would drive the wrong state machine.
+        //
+        // WireGridKeyDown's bool ("did this displace a stale handler?") exists for the re-wire
+        // tests and is deliberately discarded here — production has nothing to do with it. The
+        // expression lambda still binds to OnMount's Action<FrameworkElement> because a method
+        // invocation is a statement expression, which C# converts to a void-returning delegate.
         grid = grid
             .IsTabStop(true)
             .OnMount(fe => WireGridKeyDown(fe, state, elRef));
