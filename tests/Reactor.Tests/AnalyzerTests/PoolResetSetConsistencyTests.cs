@@ -448,6 +448,17 @@ namespace Microsoft.UI.Reactor
             "Border",
             "Panel",
             "StackPanel",
+            // Grid arrived with #1003, which widened the Padding / CornerRadius gates to the
+            // concrete panels and added `resetGrid.ClearValue(WinUI.Grid.PaddingProperty)` one
+            // line above StackPanel's. It belongs here for exactly the reason Border and
+            // StackPanel do — Grid.PaddingProperty is an ordinary instance DP, not an attached
+            // one — but neither branch alone had both halves: #985 wrote this list, #1003 wrote
+            // those clears, and the union inherited the clears without the owner. Left out, the
+            // attached scan claims `Grid.Padding` / `Grid.CornerRadius` and they have to be
+            // silenced in DeliberatelyExcludedAttached, which is a suppression list, not a
+            // classification — so a genuinely attached `Grid.*` reset added later would land in
+            // the same bucket as these two and read as already-triaged.
+            "Grid",
             // TextBlock joins them because #985 also moved TextBlock.Padding (added by
             // #950) into the scanned block. Without it here, TextBlock.PaddingProperty
             // would be read as an *attached* property named TextBlock.Padding.

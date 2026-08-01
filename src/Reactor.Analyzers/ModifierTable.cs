@@ -576,6 +576,17 @@ internal static class ModifierTable
     /// <see cref="AttachedProperties"/>, with the reason. <c>PoolResetSetConsistencyTests</c>
     /// requires every attached reset with a same-named modifier to appear in one of the two.
     /// </summary>
+    /// <remarks>
+    /// Every entry must be a genuine attached property that the <c>Owner.SetPROP(x, v)</c> rule
+    /// cannot match. It is not a place to silence a property the attached scan claimed by
+    /// mistake: <c>Grid.Padding</c> and <c>Grid.CornerRadius</c> sat here after the #1003 union
+    /// with reasons that said, in as many words, "instance dependency property on Grid, not an
+    /// attached property" — which is a misclassification to fix at the source, not to record.
+    /// They are now declared instance properties via <c>InstancePropertyOwners</c>, so the scan
+    /// never claims them and nothing needs excluding. Suppressing that kind of entry here is
+    /// actively harmful, because a genuinely attached <c>Grid.*</c> reset added later would land
+    /// in the same bucket and read as already-triaged.
+    /// </remarks>
     public static readonly IReadOnlyDictionary<string, string> DeliberatelyExcludedAttached =
         new Dictionary<string, string>(System.StringComparer.Ordinal)
         {
@@ -588,8 +599,6 @@ internal static class ModifierTable
             ["AutomationProperties.DescribedBy"] = "No static setter — WinUI exposes GetDescribedBy(...) returning a mutable IList<DependencyObject>.",
             ["AutomationProperties.FlowsTo"] = "No static setter — WinUI exposes GetFlowsTo(...) returning a mutable IList<DependencyObject>.",
             ["AutomationProperties.FlowsFrom"] = "No static setter — WinUI exposes GetFlowsFrom(...) returning a mutable IList<DependencyObject>.",
-            ["Grid.Padding"] = "Instance dependency property on Grid, not an attached property with a static setter.",
-            ["Grid.CornerRadius"] = "Instance dependency property on Grid, not an attached property with a static setter.",
         };
 
     private static IReadOnlyDictionary<string, AttachedModifierInfo> BuildAttached(
