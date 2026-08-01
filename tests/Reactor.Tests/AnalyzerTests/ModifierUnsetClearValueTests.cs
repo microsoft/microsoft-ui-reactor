@@ -236,6 +236,16 @@ public class ModifierUnsetClearValueTests
     /// next run, with no edit to this file. See issue #1051 for the analyzer-side
     /// consequence of the same asymmetry.
     /// </para>
+    /// <para>
+    /// This is <i>not</i> redundant with <see cref="CleanElementRequiredClears"/>, and the
+    /// obvious experiment does not show that. Deleting <c>Control.Padding</c>'s
+    /// <c>ClearValue</c> from <c>CleanElement</c> reddens this test <b>and</b> the static-pin
+    /// test, so it cannot say which one is load-bearing. The discriminating mutation deletes
+    /// the clear <i>and</i> its row from the pin list, blinding the static test: measured on
+    /// <c>d26dcbd5</c>, that leaves 6 passed / 1 failed with this test as the <b>sole</b>
+    /// detector. Keep both — the pin list catches a reset that moves out of the FE-common
+    /// block, this catches an obligation that never had a row.
+    /// </para>
     /// </remarks>
     [Fact]
     public void Every_Poolable_Gated_Receiver_Is_Released_By_CleanElement()
