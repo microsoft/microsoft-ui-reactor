@@ -1207,7 +1207,7 @@ public static partial class ElementExtensions
     public static T Foreground<T>(this T el, ThemeRef theme) where T : Element =>
         ModifyTheme(el, "Foreground", theme);
 
-    // ── CornerRadius (on Control and Border) ────────────────────────
+    // ── CornerRadius (on Control, Border, Grid, StackPanel, and RelativePanel) ──
 
     public static T CornerRadius<T>(this T el, double radius) where T : Element =>
         ModifyVisual(el, new VisualModifiers { CornerRadius = new Microsoft.UI.Xaml.CornerRadius(radius) });
