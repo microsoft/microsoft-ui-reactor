@@ -23,9 +23,14 @@ namespace Microsoft.UI.Reactor.Tests;
 /// identically-prepared state. The two arms catch different wrong implementations: a Shift-blind one
 /// fails the backward arm's <c>Assert.Equal</c>, because it lands on the forward column; a
 /// direction-insensitive one that always lands on the backward expectation fails the forward arm's.
-/// The cross-arm <c>NotEqual</c> that follows compares the two measured values, so it survives an
-/// edit that collapses the two expected constants onto one another — but it is entailed by the
-/// per-arm assertions and is never what fails first.</para>
+/// The cross-arm <c>NotEqual</c> that follows compares the two measured values. In a healthy tree
+/// it is entailed by the per-arm assertions and never fires. It earns its place in one state only,
+/// and that state is reachable by the most reflexive repair there is: if the start position ever
+/// stops discriminating, both directions land on the same column, the forward arm fails on its
+/// constant, and updating that constant to the observed value makes both per-arm assertions pass.
+/// Measured, not assumed — under that exact edit the <c>NotEqual</c> is the sole surviving failure
+/// (<c>Expected: Not 2, Actual: 2</c>). It constrains the relationship the two constants must hold,
+/// which is a property of the test; the per-arm assertions constrain the run.</para>
 /// </summary>
 public class DataGridKeyChordTests
 {
@@ -233,15 +238,26 @@ public class DataGridKeyChordTests
         // Starting on read-only Id is the ONLY interior start where the two directions differ:
         // backward skips it to Score, forward to Name. From Name or Score the two-editor ring
         // wraps to the same place either way, and a Shift-blind implementation would pass.
+        //
+        // So the origin is a PRECONDITION of this test, not incidental setup, and it is asserted
+        // rather than assumed: BeginRowEdit is entitled to move the cursor, and if it ever parks
+        // the row edit on the first editable column instead, the two directions below collapse
+        // onto Score and the destination constants stop discriminating. That must fail HERE,
+        // naming the origin, rather than downstream on an expectation constant — a failure on the
+        // constant invites the reader to update it, which is precisely the edit that yields a
+        // green, direction-blind test. (Not redundant with any later assertion: nothing else in
+        // this test pins where the row edit began.)
         var back = await LoadedState();
         back.SetFocus(0, IdCol);
         Assert.True(back.BeginRowEdit(0));
+        Assert.Equal(IdCol, back.FocusedColIndex);
         back.UpdateRowEditValue("Name", "Edited");
         Tab(back, el, shift: true);
 
         var forward = await LoadedState();
         forward.SetFocus(0, IdCol);
         Assert.True(forward.BeginRowEdit(0));
+        Assert.Equal(IdCol, forward.FocusedColIndex);
         forward.UpdateRowEditValue("Name", "Edited");
         Tab(forward, el, shift: false);
 
