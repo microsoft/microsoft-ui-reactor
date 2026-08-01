@@ -44,8 +44,8 @@ namespace Microsoft.UI.Xaml.Controls
     using Microsoft.UI.Xaml;
     using Microsoft.UI.Xaml.Media;
 
-    // Padding/CornerRadius/Border* live on Control and Border in the reconciler's
-    // allow-list, and additionally on Panel subclasses in WinUI (which it skips).
+    // The common modifier allow-lists intentionally name only the concrete controls
+    // whose properties ApplyModifiers writes.
     public class Control : FrameworkElement
     {
         public Thickness Padding { get; set; }
@@ -69,7 +69,7 @@ namespace Microsoft.UI.Xaml.Controls
         public Brush Background { get; set; }
     }
 
-    // Grid is a Panel: Background applies, Padding/CornerRadius/Border* DO NOT.
+    // Grid is a Panel: Background, Padding, and CornerRadius apply; Border* do not.
     public class Grid : Panel
     {
         public Thickness Padding { get; set; }
@@ -77,8 +77,14 @@ namespace Microsoft.UI.Xaml.Controls
         public Thickness BorderThickness { get; set; }
     }
 
-    // StackPanel is in Padding's allow-list but NOT CornerRadius's.
+    // StackPanel is in both Padding's and CornerRadius's allow-lists.
     public class StackPanel : Panel
+    {
+        public Thickness Padding { get; set; }
+        public CornerRadius CornerRadius { get; set; }
+    }
+
+    public class RelativePanel : Panel
     {
         public Thickness Padding { get; set; }
         public CornerRadius CornerRadius { get; set; }
@@ -102,6 +108,7 @@ namespace Microsoft.UI.Reactor
     public record ButtonElement;
     public record GridElement;
     public record StackElement;
+    public record RelativePanelElement;
     public record BorderElement;
     public record TextBlockElement;
 
@@ -110,6 +117,7 @@ namespace Microsoft.UI.Reactor
         public static ButtonElement Set(this ButtonElement el, Action<Button> configure) => el;
         public static GridElement Set(this GridElement el, Action<Grid> configure) => el;
         public static StackElement Set(this StackElement el, Action<StackPanel> configure) => el;
+        public static RelativePanelElement Set(this RelativePanelElement el, Action<RelativePanel> configure) => el;
         public static BorderElement Set(this BorderElement el, Action<Border> configure) => el;
         public static TextBlockElement Set(this TextBlockElement el, Action<TextBlock> configure) => el;
 
@@ -173,15 +181,13 @@ class C
     }
 
     [Fact]
-    public async Task Does_Not_Fire_For_Padding_On_Grid()
+    public async Task Fires_For_Padding_On_Grid_And_RelativePanel()
     {
-        // ApplyModifiers applies Padding to Control/Border/StackPanel/TextBlock only. Grid is a
-        // Panel, so '.Padding(...)' would compile and silently do nothing — staying on .Set is
-        // correct here. This is the exact ValueList.cs regression.
         var source = Stubs + @"
 class C
 {
-    GridElement M(GridElement g) => g.Set(x => x.Padding = new Thickness(8));
+    GridElement G(GridElement g) => {|REACTOR_POOL_001:g.Set(x => x.Padding = new Thickness(8))|};
+    RelativePanelElement R(RelativePanelElement r) => {|REACTOR_POOL_001:r.Set(x => x.Padding = new Thickness(8))|};
 }";
         await new CSharpAnalyzerTest<PoolResetSetAnalyzer, DefaultVerifier>
         {
@@ -194,9 +200,8 @@ class C
     {
         // TextBlock is not a Control, yet ApplyModifiers has a dedicated Padding arm for it
         // (issue #950), so '.Padding(...)' really does reach the control and the rewrite is
-        // sound. Paired with Does_Not_Fire_For_Padding_On_Grid — same property, different
-        // receiver — this pins the gate to the four types rather than "anything that has a
-        // Padding property".
+        // sound. Together with the concrete-panel cases, this pins the gate to the supported
+        // types rather than "anything that has a Padding property".
         var source = Stubs + @"
 class C
 {
@@ -241,16 +246,15 @@ class C
     }
 
     [Fact]
-    public async Task Fires_For_Padding_On_StackPanel_But_Not_CornerRadius()
+    public async Task Fires_For_Padding_And_CornerRadius_On_Concrete_Panels()
     {
-        // StackPanel is in Padding's allow-list and not in CornerRadius's — the single
-        // most confusing asymmetry in ApplyModifiers, and the reason a shared predicate
-        // would be wrong.
         var source = Stubs + @"
 class C
 {
     StackElement A(StackElement s) => {|REACTOR_POOL_001:s.Set(x => x.Padding = new Thickness(4))|};
-    StackElement B(StackElement s) => s.Set(x => x.CornerRadius = new CornerRadius(4));
+    StackElement B(StackElement s) => {|REACTOR_POOL_001:s.Set(x => x.CornerRadius = new CornerRadius(4))|};
+    GridElement G(GridElement g) => {|REACTOR_POOL_001:g.Set(x => x.CornerRadius = new CornerRadius(4))|};
+    RelativePanelElement R(RelativePanelElement r) => {|REACTOR_POOL_001:r.Set(x => x.CornerRadius = new CornerRadius(4))|};
 }";
         await new CSharpAnalyzerTest<PoolResetSetAnalyzer, DefaultVerifier>
         {
@@ -1024,16 +1028,16 @@ class C
     public async Task CodeFix_Declines_Mixed_Block_With_A_Gated_Out_Statement()
     {
         // The subtle one. Both properties are in the modifier table, but the receiver is a
-        // Grid: Background applies to a Panel, Padding does not. Only Background is reported.
-        // The fix must not "helpfully" convert the Padding write as well — that is precisely
-        // the silent no-op the gating exists to prevent, and it is why the analyzer passes
-        // the reported property names through Diagnostic.Properties rather than letting the
-        // fix re-derive candidates from the table.
+        // Grid: Background applies to a Panel, BorderThickness does not. Only Background is
+        // reported. The fix must not "helpfully" convert the BorderThickness write as well —
+        // that is precisely the silent no-op the gating exists to prevent, and it is why the
+        // analyzer passes the reported property names through Diagnostic.Properties rather
+        // than letting the fix re-derive candidates from the table.
         var source = Stubs + @"
 class C
 {
     GridElement M(GridElement g, Microsoft.UI.Xaml.Media.Brush brush)
-        => {|REACTOR_POOL_001:g.Set(x => { x.Background = brush; x.Padding = new Thickness(4); })|};
+        => {|REACTOR_POOL_001:g.Set(x => { x.Background = brush; x.BorderThickness = new Thickness(4); })|};
 }";
         await new CSharpCodeFixTest<PoolResetSetAnalyzer, PoolResetSetCodeFix, DefaultVerifier>
         {
@@ -1042,4 +1046,3 @@ class C
         }.RunAsync(TestContext.Current.CancellationToken);
     }
 }
-

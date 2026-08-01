@@ -224,7 +224,8 @@ internal sealed class AttachedModifierInfo
 internal static class ModifierTable
 {
     // Type groups, named once so the intent is legible at each use site.
-    private static readonly string[] ControlBorderStackText = { "Control", "Border", "StackPanel", "TextBlock" };
+    private static readonly string[] ControlBorderGridStackRelativeText = { "Control", "Border", "Grid", "StackPanel", "RelativePanel", "TextBlock" };
+    private static readonly string[] ControlBorderGridStackRelative = { "Control", "Border", "Grid", "StackPanel", "RelativePanel" };
     private static readonly string[] ControlBorder = { "Control", "Border" };
     private static readonly string[] PanelControlBorder = { "Panel", "Control", "Border" };
     private static readonly string[] ControlOrTextBlock = { "Control", "TextBlock" };
@@ -259,14 +260,14 @@ internal static class ModifierTable
             // decides whether the modifier reaches the control at all, poolReset decides which
             // rule id reports it. A .Set write to any of them is now unwound on pool return.
             //
-            // WinUI declares most of these on Panel subclasses too, which ApplyModifiers
-            // skips, and the allow-lists genuinely differ: StackPanel and TextBlock take
-            // Padding but not CornerRadius; Grid takes Background but not Padding. IsEnabled
-            // needs no gate — WinUI declares it on Control, so if the .Set lambda compiles
-            // the receiver already qualifies.
+            // WinUI declares most of these on Panel subclasses too, and the allow-lists
+            // genuinely differ: Panel itself declares only Background; Grid, StackPanel, and
+            // RelativePanel each declare their own border-box properties, and TextBlock takes
+            // Padding but not CornerRadius. IsEnabled needs no gate — WinUI declares it on
+            // Control, so if the .Set lambda compiles the receiver already qualifies.
             { "IsEnabled",       new ModifierInfo("IsEnabled",       poolReset: true) },
-            { "Padding",         new ModifierInfo("Padding",         poolReset: true, controlGate: ControlBorderStackText) },
-            { "CornerRadius",    new ModifierInfo("CornerRadius",    poolReset: true, controlGate: ControlBorder) },
+            { "Padding",         new ModifierInfo("Padding",         poolReset: true, controlGate: ControlBorderGridStackRelativeText) },
+            { "CornerRadius",    new ModifierInfo("CornerRadius",    poolReset: true, controlGate: ControlBorderGridStackRelative) },
             { "BorderThickness", new ModifierInfo("BorderThickness", poolReset: true, controlGate: ControlBorder) },
             { "BorderBrush",     new ModifierInfo("BorderBrush",     poolReset: true, controlGate: ControlBorder) },
             { "Background",      new ModifierInfo("Background",      poolReset: true, controlGate: PanelControlBorder) },
@@ -405,7 +406,7 @@ internal static class ModifierTable
             // name written inside a .Set lambda — so mapping them there would add rows REACTOR_MOD_002
             // can never match. Covering them in REACTOR_MOD_003 needs a modifier-keyed gate table;
             // recorded here so the omission is deliberate rather than invisible.
-            ["PaddingInlineStart"] = "Reactor-only BiDi logical modifier; folds into the Padding write and inherits its Control/Border/StackPanel/TextBlock gate. Not a WinUI property name, so it has no home in Properties (which is keyed on those). REACTOR_MOD_003 coverage needs a modifier-keyed table.",
+            ["PaddingInlineStart"] = "Reactor-only BiDi logical modifier; folds into the Padding write and inherits its Control/Border/Grid/StackPanel/RelativePanel/TextBlock gate. Not a WinUI property name, so it has no home in Properties (which is keyed on those). REACTOR_MOD_003 coverage needs a modifier-keyed table.",
             ["PaddingInlineEnd"] = "Reactor-only BiDi logical modifier, the mirror of PaddingInlineStart; same guard, same gate, same reasoning.",
             ["BorderInlineStart"] = "Reactor-only BiDi logical modifier; folds into the BorderThickness write and inherits its Control/Border gate. Not a WinUI property name — same reasoning as PaddingInlineStart. (There is no BorderInlineEnd modifier.)",
         };
@@ -586,6 +587,8 @@ internal static class ModifierTable
             ["AutomationProperties.DescribedBy"] = "No static setter — WinUI exposes GetDescribedBy(...) returning a mutable IList<DependencyObject>.",
             ["AutomationProperties.FlowsTo"] = "No static setter — WinUI exposes GetFlowsTo(...) returning a mutable IList<DependencyObject>.",
             ["AutomationProperties.FlowsFrom"] = "No static setter — WinUI exposes GetFlowsFrom(...) returning a mutable IList<DependencyObject>.",
+            ["Grid.Padding"] = "Instance dependency property on Grid, not an attached property with a static setter.",
+            ["Grid.CornerRadius"] = "Instance dependency property on Grid, not an attached property with a static setter.",
         };
 
     private static IReadOnlyDictionary<string, AttachedModifierInfo> BuildAttached(

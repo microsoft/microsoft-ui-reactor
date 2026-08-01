@@ -34,12 +34,11 @@ internal sealed class ValueList : Component<ValueListProps>
             TextBlock(Strings.ColumnName).SemiBold().VAlign(VerticalAlignment.Center).Grid(row: 0, column: 0),
             TextBlock(Strings.ColumnType).SemiBold().VAlign(VerticalAlignment.Center).Grid(row: 0, column: 1),
             TextBlock(Strings.ColumnData).SemiBold().VAlign(VerticalAlignment.Center).Grid(row: 0, column: 2)
-        ).Set(g =>
+        ).Padding(8, 0, 8, 0)
+         .Set(g =>
          {
-             // Grid is not a Control/Border/StackPanel/TextBlock, so the .Padding()/.BorderThickness()
-             // modifiers silently no-op on it (see ApplyModifiers in Reconciler.cs) — these
-             // must stay imperative until the modifier path grows Grid support.
-             g.Padding = new Thickness(8, 0, 8, 0);
+             // BorderThickness/BorderBrush remain imperative until their modifier gates
+             // grow concrete Grid support.
              g.BorderThickness = new Thickness(0, 0, 0, 1);
              g.BorderBrush = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["DividerStrokeColorDefaultBrush"];
          });

@@ -303,9 +303,22 @@ public sealed class ElementPool : IDisposable
         }
         else if (fe is WinUI.Panel resetPanel)
         {
+            // Panel itself declares only Background; Padding and CornerRadius are declared by
+            // the concrete panel types, so they nest under this arm instead of forming a
+            // second receiver chain lower down. Both forms run and both sit above the type
+            // dispatch, but one chain keeps the receiver gating in a single place and avoids
+            // declaring resetStack twice in two scopes that must be kept in agreement.
             resetPanel.ClearValue(WinUI.Panel.BackgroundProperty);
-            if (resetPanel is WinUI.StackPanel resetStack)
+            if (resetPanel is WinUI.Grid resetGrid)
+            {
+                resetGrid.ClearValue(WinUI.Grid.PaddingProperty);
+                resetGrid.ClearValue(WinUI.Grid.CornerRadiusProperty);
+            }
+            else if (resetPanel is WinUI.StackPanel resetStack)
+            {
                 resetStack.ClearValue(WinUI.StackPanel.PaddingProperty);
+                resetStack.ClearValue(WinUI.StackPanel.CornerRadiusProperty);
+            }
         }
         else if (fe is TextBlock resetText)
         {

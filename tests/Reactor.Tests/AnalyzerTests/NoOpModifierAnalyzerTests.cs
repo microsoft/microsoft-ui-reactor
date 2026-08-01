@@ -56,6 +56,8 @@ namespace Microsoft.UI.Xaml.Controls
     public class Panel : FrameworkElement { }
     public class Grid : Panel { }
     public class StackPanel : Panel { }
+    public class RelativePanel : Panel { }
+    public class Canvas : Panel { }
     public class Button : Control { }
     public class TextBlock : FrameworkElement { }
     public class RichTextBlock : FrameworkElement { }
@@ -141,6 +143,12 @@ namespace Microsoft.UI.Reactor.Core
     [GenerateReactorDescriptor(typeof(WinUI.Grid))]
     public record GridElement : Element { }
 
+    [GenerateReactorDescriptor(typeof(WinUI.RelativePanel))]
+    public record RelativePanelElement : Element { }
+
+    [GenerateReactorDescriptor(typeof(WinUI.Canvas))]
+    public record CanvasElement : Element { }
+
     [GenerateReactorDescriptor(typeof(WinUI.Button))]
     public record ButtonElement : Element { }
 
@@ -186,6 +194,8 @@ namespace Microsoft.UI.Reactor.Core
         public static BorderElement Border() => new();
         public static StackPanelElement VStack() => new();
         public static GridElement Grid() => new();
+        public static RelativePanelElement RelativePanel() => new();
+        public static CanvasElement Canvas() => new();
         public static ButtonElement Button() => new();
         public static TextBlockElement Text(string s) => new();
         public static RichTextBlockElement RichTextBlock() => new();
@@ -227,6 +237,8 @@ namespace Microsoft.UI.Reactor
         public static BorderElement Set(this BorderElement el, Action<WinUI.Border> configure) => el;
         public static StackPanelElement Set(this StackPanelElement el, Action<WinUI.StackPanel> configure) => el;
         public static GridElement Set(this GridElement el, Action<WinUI.Grid> configure) => el;
+        public static RelativePanelElement Set(this RelativePanelElement el, Action<WinUI.RelativePanel> configure) => el;
+        public static CanvasElement Set(this CanvasElement el, Action<WinUI.Canvas> configure) => el;
         public static ButtonElement Set(this ButtonElement el, Action<WinUI.Button> configure) => el;
         public static TextBlockElement Set(this TextBlockElement el, Action<WinUI.TextBlock> configure) => el;
         public static RichTextBlockElement Set(this RichTextBlockElement el, Action<WinUI.RichTextBlock> configure) => el;
@@ -507,13 +519,11 @@ namespace TestApp
     }
 
     [Fact]
-    public async Task Fires_For_Padding_On_A_Grid()
+    public async Task Does_Not_Fire_For_Padding_On_Grid_Or_RelativePanel()
     {
-        // Padding's gate is Control/Border/StackPanel/TextBlock. A Grid is a Panel but not a
-        // StackPanel, so the write is dropped — the asymmetry REACTOR_MOD_002's table exists to
-        // record.
         var body = App(@"
-        internal static Element M() => Grid().{|REACTOR_MOD_003:Padding|}(16);");
+        internal static Element G() => Grid().Padding(16);
+        internal static Element R() => RelativePanel().Padding(16);");
 
         await MakeAnalyzerTest(body).RunAsync(TestContext.Current.CancellationToken);
     }
@@ -542,7 +552,7 @@ namespace TestApp
                 .WithArguments(
                     "Padding",
                     "FlexElement",
-                    "Control, Border, StackPanel, or TextBlock",
+                    "Control, Border, Grid, StackPanel, RelativePanel, or TextBlock",
                     ". 'FlexPadding' is the equivalent on FlexElement — did you mean '.FlexPadding(...)'?"));
 
         await test.RunAsync(TestContext.Current.CancellationToken);
@@ -560,7 +570,11 @@ namespace TestApp
         test.ExpectedDiagnostics.Add(
             AnalyzerVerifier.Diagnostic(NoOpModifierAnalyzer.DiagnosticId)
                 .WithLocation(0)
-                .WithArguments("CornerRadius", "RectangleElement", "Control or Border", ""));
+                .WithArguments(
+                    "CornerRadius",
+                    "RectangleElement",
+                    "Control, Border, Grid, StackPanel, or RelativePanel",
+                    ""));
 
         await test.RunAsync(TestContext.Current.CancellationToken);
     }
@@ -631,6 +645,27 @@ namespace TestApp
     {
         var body = App(@"
         internal static Element M() => VStack().Padding(16);");
+
+        await MakeAnalyzerTest(body).RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Does_Not_Fire_For_CornerRadius_On_Concrete_Border_Box_Panels()
+    {
+        var body = App(@"
+        internal static Element G() => Grid().CornerRadius(4);
+        internal static Element S() => VStack().CornerRadius(4);
+        internal static Element R() => RelativePanel().CornerRadius(4);");
+
+        await MakeAnalyzerTest(body).RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Still_Fires_For_Padding_And_CornerRadius_On_Other_Panel_Subclasses()
+    {
+        var body = App(@"
+        internal static Element P() => Canvas().{|REACTOR_MOD_003:Padding|}(8);
+        internal static Element R() => Canvas().{|REACTOR_MOD_003:CornerRadius|}(4);");
 
         await MakeAnalyzerTest(body).RunAsync(TestContext.Current.CancellationToken);
     }

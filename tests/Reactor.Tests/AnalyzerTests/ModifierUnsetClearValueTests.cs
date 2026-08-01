@@ -155,7 +155,10 @@ public class ModifierUnsetClearValueTests
         "Border.Background",
         "Panel.Background",
         "StackPanel.Padding",
-        // The fourth Padding receiver in ModifierTable's control gate. It predates #985
+        "StackPanel.CornerRadius",
+        "Grid.Padding",
+        "Grid.CornerRadius",
+        // TextBlock is a Padding receiver in ModifierTable's control gate. It predates #985
         // (it arrived with #950) but lived past the switch where no scanner reached it.
         "TextBlock.Padding",
     ];
