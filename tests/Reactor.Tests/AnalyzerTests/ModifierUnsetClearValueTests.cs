@@ -466,6 +466,45 @@ public class ModifierUnsetClearValueTests
             "The LabeledBy unset arm clears the dependency property without also clearing " +
             "ReactorState.PendingLabeledBy, so a parked Loaded handler will still consider its " +
             $"request current and re-apply the dropped label (issue #986). Arm reads: {unsetArm}");
+
+        // Ordering, not just presence. Two handlers can be parked on one element at once: the
+        // set arm's `a.LabeledBy != oldA?.LabeledBy` diff guard means the second park always
+        // carries a *different* labelId, so on Loaded the stale handler runs first and the live
+        // one second. The stale handler is harmless only because its staleness guard precedes
+        // the clear — it bails before touching a token that now belongs to the live request.
+        // Hoist the clear above that guard and the stale handler cancels the live one, which
+        // then no-ops and leaves the label unresolved forever. Nothing else pins this ordering.
+        //
+        // Located by syntax span, not by string index. Keying on the first `return` in the body
+        // is vacuous: the handler opens with an unrelated `TryGetReactorState` bail-out, so a
+        // clear hoisted above the *staleness* guard still sorts after that first return and the
+        // assertion passes while the bug is present. Verified by mutation.
+        var stalenessGuard = handler.Body?
+            .DescendantNodes()
+            .OfType<IfStatementSyntax>()
+            .FirstOrDefault(statement =>
+                statement.Condition.ToString().Contains("labelId", StringComparison.Ordinal));
+
+        var retire = handler.Body?
+            .DescendantNodes()
+            .OfType<AssignmentExpressionSyntax>()
+            .FirstOrDefault(assignment =>
+                assignment.Left.ToString().Contains("PendingLabeledBy", StringComparison.Ordinal)
+                && assignment.Right.ToString() == "null");
+
+        Assert.True(
+            stalenessGuard is not null && retire is not null,
+            "Could not locate both the labelId staleness guard and the `PendingLabeledBy = null` " +
+            "retirement in the deferred LabeledBy handler, so their ordering cannot be checked " +
+            $"and this assertion would pass vacuously. Handler body reads: {handlerBody}");
+
+        Assert.True(
+            stalenessGuard!.Span.End < retire!.SpanStart,
+            "The deferred LabeledBy handler retires ReactorState.PendingLabeledBy before the " +
+            "guard that returns when the captured labelId is no longer the current request. A " +
+            "handler parked by an earlier render would therefore cancel a *later* render's " +
+            "still-pending request before returning, and the live handler would then see a null " +
+            $"token, no-op, and leave the label unresolved (issue #986). Handler body reads: {handlerBody}");
     }
 
     /// <summary>
