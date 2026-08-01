@@ -291,13 +291,26 @@ public class ModifierUnsetClearValueTests
 
         // Non-vacuity floor. A matcher that stopped recognizing the `fe is WinUI.T v` gate
         // would collect nothing, find no asymmetry and pass — the failure mode this test
-        // exists to prevent. There are 14 type-gated write pairs today.
+        // exists to prevent. There are 28 type-gated write pairs today over 11 properties;
+        // the two longest chains are Padding (6 types) and CornerRadius (5).
+        //
+        // The floor is deliberately close to the real count, for the same reason MinArms is.
+        // A floor low enough to survive losing a whole chain does not protect the chains this
+        // test exists for: at 10 the scanner could drop Padding *and* CornerRadius entirely —
+        // the two properties #970, #986 and #1003 all widened — and still report 17, passing
+        // while blind to precisely the arms under active merge pressure. At 24 the loss of
+        // either chain trips it, with four arms of slack for a legitimate narrowing.
+        //
+        // Read this count out of the assertion message rather than re-deriving it by hand: a
+        // line-scoped text scan misses the writes nested inside a gate's block (it reports 22,
+        // silently dropping HorizontalContentAlignment and VerticalContentAlignment), and
+        // calibrating the floor against that number would sit it below the real population.
         var pairs = writes.Sum(entry => entry.Value.Count);
 
         Assert.True(
-            pairs >= 10,
+            pairs >= 24,
             $"Only {pairs} type-gated modifier write(s) were read out of the reconciler " +
-            "(expected at least 10). The `if (fe is WinUI.T v) v.Prop = …` shape has probably " +
+            "(expected at least 24). The `if (fe is WinUI.T v) v.Prop = …` shape has probably " +
             "changed, which would make this test pass without checking anything. Properties " +
             $"seen: [{string.Join(", ", writes.Keys)}]");
 
