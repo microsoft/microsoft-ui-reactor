@@ -1036,4 +1036,94 @@ class C
             FixedCode = code,
         }.RunAsync(TestContext.Current.CancellationToken);
     }
+
+    // ── Contravariance and the .Set lambda ────────────────────────────────────────────
+    //
+    // A review of this PR raised REACTOR_POOL_001 misclassifying a *contravariant* `.Set`
+    // lambda: because `Action<T>` is contravariant, the argument would ostensibly be free to
+    // declare a BASE type (an `Action<Control>` lambda passed to a `Set(Action<Button>)`
+    // overload), <see cref="PoolResetSetAnalyzer"/>'s receiver check would read `Control` off
+    // that parameter, and a genuinely pooled receiver would be downgraded to
+    // `REACTOR_MOD_002`.
+    //
+    // The premise does not hold, and the two tests below are the measurement rather than the
+    // argument. Variance governs *delegate conversions*, not *anonymous-function*
+    // conversions: C# requires an explicitly typed lambda's parameter types to match the
+    // delegate's exactly, so the claimed call site does not compile at all. The one argument
+    // shape that does convert contravariantly — a delegate-typed value — carries no lambda
+    // syntax, so `SetLambdaHelpers.GetSingleLambdaParameter` returns null and the analyzer
+    // returns before it classifies anything. Neither route reaches the receiver check with a
+    // base type, so neither can produce the downgrade.
+    //
+    // Both tests are written so the refutation can fail: if a future C# relaxed the parameter
+    // match, the first would report the expected compiler errors as absent rather than
+    // quietly pass.
+
+    [Fact]
+    public async Task Contravariance_Does_Not_Permit_A_Base_Typed_Set_Lambda()
+    {
+        // `object` is the strongest available vehicle for the claim — it is a base of every
+        // receiver type, so if variance did reach lambdas, this is the case that would
+        // succeed most readily.
+        var source = Stubs + @"
+class C
+{
+    void M()
+    {
+        var el = new FakeElement();
+
+        // The claimed call site. CS1678 (""declared as type 'object' but should be
+        // 'Button'"") and CS1661 (""the parameter types do not match the delegate parameter
+        // types"") are the compiler refusing it: there is no base-typed .Set lambda for the
+        // receiver check to misread.
+        el.Set((object {|CS1678:fe|}) {|CS1661:=>|} { });
+
+        // Positive control, same overload, same compilation: the contravariant conversion IS
+        // available here. Action<object> converts to Action<Button> and this raises nothing.
+        // So the line above is rejected for being a lambda, not for lacking the conversion —
+        // without this control the CS errors above would be equally consistent with variance
+        // simply being unavailable on FakeElement.Set.
+        Action<object> handler = o => { };
+        el.Set(handler);
+    }
+}";
+
+        await new CSharpAnalyzerTest<PoolResetSetAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Set_With_A_Delegate_Value_Is_Not_Classified_At_All()
+    {
+        // The delegate-typed value is the only argument shape a contravariant conversion can
+        // take. It is not lambda syntax, so GetSingleLambdaParameter returns null and the
+        // analyzer returns at the top of the .Set handler — before the receiver check, and
+        // before either REACTOR_POOL_001 or the REACTOR_MOD_002 downgrade is chosen. The
+        // claimed misclassification has no site at which to occur.
+        //
+        // The silent half is non-vacuous only because of the second .Set: the identical
+        // write, as a lambda, in the SAME compilation, still fires. Neuter the analyzer and
+        // that marker fails — so the silence above is a measured property of the
+        // delegate-value shape and not of an inert analyzer.
+        var source = Stubs + @"
+class C
+{
+    void M()
+    {
+        var el = new FakeElement();
+
+        Action<Microsoft.UI.Xaml.Controls.Button> handler = fe => fe.MaxHeight = 260;
+        el.Set(handler);
+
+        {|REACTOR_POOL_001:el.Set(fe => fe.MaxHeight = 260)|};
+    }
+}";
+
+        await new CSharpAnalyzerTest<PoolResetSetAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
 }

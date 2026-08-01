@@ -52,10 +52,11 @@ public sealed class ElementPool : IDisposable
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This list is mirrored by name in <c>ModifierTable.PoolableTypeNameSet</c>
+    /// This list is mirrored by name in <c>ModifierTable.PoolableTypeNames</c>
     /// (namespace <c>Microsoft.UI.Reactor.Analyzers</c>, assembly <c>Reactor.Analyzers</c>),
-    /// which <c>PoolResetSetAnalyzer</c> uses to decide whether <c>REACTOR_POOL_001</c> (the
-    /// receiver is recycled, so the write is unwound on pool return) or <c>REACTOR_MOD_002</c>
+    /// whose <c>ModifierTable.IsPoolableTypeName</c> membership test <c>PoolResetSetAnalyzer</c>
+    /// uses to decide whether <c>REACTOR_POOL_001</c> (the receiver is recycled, so the write
+    /// is unwound on pool return) or <c>REACTOR_MOD_002</c>
     /// (the receiver is not recycled, so the write is never unwound — it costs the element's
     /// structural skip, not the value) describes a <c>.Set</c> write. The analyzer targets
     /// <c>netstandard2.0</c> and cannot reference this assembly, hence the copy.
