@@ -571,6 +571,17 @@ public sealed class GalleryCardIndependenceTests
                              && region.Span.Contains(scope.Span)
                              && scope.Span.Contains(reference.Span));
 
+        // Records the card a reference sits in, at most once per card. Both halves of a slot — the
+        // value and the setter — normally appear in the same card, and either can appear more than
+        // once, so without the dedup a single card reaches the >= 2 test on its own and every
+        // correctly-written page is reported. The guard is what makes "reached from two cards" mean
+        // two cards rather than two references.
+        //
+        // It reads `into`, the list the next line appends to, so it is loop-carried state and not a
+        // predicate on the input: hoisted into a `Where` over the references it would be evaluated
+        // against a different state of the list than the sequential read sees. Explicit for that
+        // reason and not for style — the same distinction that keeps OwningCard a foreach while the
+        // pure projections in this file are LINQ.
         void RecordCard(List<InvocationExpressionSyntax> into, IdentifierNameSyntax reference)
         {
             var card = OwningCard(reference, cards);
