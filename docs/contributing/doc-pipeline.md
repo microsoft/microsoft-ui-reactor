@@ -145,6 +145,204 @@ mur docs render-diagrams --topic architecture-overview
 mur docs new-diagram architecture-overview overview
 ```
 
+### Screenshots and committed images
+
+Phase 3 (capture) is the **only** phase that writes a screenshot — the only
+binary writer in the pipeline. `--skip-screenshots` (alias `--no-screenshots`)
+skips it outright, so a compile with that flag leaves every committed screenshot
+byte-identical — the CI `docs-build` job proves this on every PR with
+`git status --porcelain -- docs/guide/images` immediately after the compile.
+
+It is *not* the only phase that writes under `docs/guide/images/`, and the
+distinction matters if you are reasoning about that directory rather than about
+screenshots. Phase 5.5 (diagrams) writes there **three** ways: it copies
+`docs/_pipeline/diagrams/<topic>/*.svg` into `docs/guide/images/<topic>/`, it
+renders each `<name>.mmd` to `<name>.svg` in that same directory via `mmdc`, and
+it writes a `.<name>.mmd.sha256` cache sidecar beside it. All three are text, all
+three have filenames disjoint from any captured `.png`, and none is skipped by
+`--no-screenshots` (use `--skip-diagrams` for that). So the guarantee is about
+screenshots, not about the directory. **The CI gate above is deliberately broader
+than the guarantee** — it watches the whole directory, so a diagram write on the
+skip path fails the build rather than being assumed away. Do not narrow the gate
+to `*.png` to "match" this paragraph.
+
+The mermaid render is the one to remember, because it is the one a source-level
+audit misses: `mmdc` is a separate process, so that write appears in **no**
+`File.Write*`/`File.Copy` search of this repo. The first version of this
+paragraph enumerated only the two managed writes for exactly that reason. What
+keeps the rendered file off the `.png` namespace is that its `.svg` destination
+is hard-coded at the call site in `DiagramProcessor` — it is not a property of
+`mmdc`, which will happily render PNG when asked. `DiagramTests` pins the full
+written set for that reason, so adding a fourth writer fails a test that names
+this paragraph rather than silently outdating it.
+
+`git status`, not `git diff`: `git diff` reports tracked modifications only, so
+it is blind to a *new* PNG appearing under `docs/guide/images/`. That is the
+shape the near-miss in [issue #989][i989] actually took, because `git add -A`
+stages precisely the untracked files `git diff` never reports.
+
+One check, not two — `git status --porcelain` **subsumes** `git diff --exit-code`
+rather than complementing it. Against a tracked modification it reports
+` M docs/guide/images/…`; against a new file it reports `?? docs/guide/images/…`;
+`git diff` catches the first and exits 0 on the second. So pairing them adds a
+second failure path and no coverage. The first version of this gate ran only
+`git diff` while the comment above it claimed *nothing may write a PNG* — the
+narrower half of a two-part claim, which is why the wording here is deliberately
+specific about which writes are caught.
+
+Capture itself needs an **interactive desktop**. It launches each doc app,
+waits for the preview capture server, and reads real frames over HTTP. In a
+headless, locked, or RDP-disconnected session the app window never paints and
+the capture server returns a solid-white surface. Historically that surface was
+written straight over the committed screenshot as a ~3 KB white rectangle, and
+the compile still exited 0 ([issue #989][i989]). Several guards now prevent that:
+
+- `ImageProcessor` raises `REACTOR_DOC_SHOT_001` for a contentless frame
+  **before** anything opens the output file, so the existing image is left
+  untouched and the failure is counted. "Contentless" is judged after
+  compositing against white, because an unrendered composition surface arrives
+  as transparent black — visually identical to the white stub once written, but
+  invisible to a naive RGB threshold.
+- A non-zero capture-failure count fails the compile **regardless of `--ci`**.
+  It describes an action the run just took: it was asked to refresh *N*
+  screenshots and refreshed fewer. Validation findings stay `--ci`-gated,
+  because they report pre-existing tree state an author may be part-way through
+  fixing.
+- Every compile re-checks the committed corpus and raises
+  `REACTOR_DOC_IMAGE_002` for any referenced screenshot whose interior is
+  blank, so a stub that reaches the tree from any source is caught on the next
+  compile rather than at review time. Full-size captures are scored with the
+  border/shadow chrome excluded; catalog thumbs (`<id>-thumb.<ext>`) carry no
+  chrome and are scored whole.
+- "Blank" means either *no pixel darker than near-white* or *one flat fill of
+  any colour*. The second clause matters because the first only recognises a
+  white stub: a themed window that painted its background but never its content
+  comes back uniformly dark, every pixel counts as content, and without the
+  uniformity test it would overwrite a committed screenshot and exit 0.
+  Uniformity rather than a minimum content-coverage ratio — the sparsest
+  interior in the committed corpus is 0.6084 % content pixels, so any coverage
+  floor able to catch a stub sits close enough to real assets to condemn them,
+  while no genuine screenshot is a single colour.
+- **Both clauses judge the composited pixel, through one shared function.**
+  They previously did not: the darkness test composited against white while the
+  uniformity test compared stored BGRA bytes. A frame reaching one flat colour
+  through mixed alpha — opaque white beside half-transparent white, which is
+  what a partially-composed surface produces — then read as *varied*, scored as
+  content, and would have been written over a committed screenshot. The two
+  predicates ask different questions but both ask them about the *visible*
+  pixel, so a second copy of that arithmetic is a second definition of "visible"
+  that can drift, and the drift fails open.
+- The capture poller waits for a frame using **that same definition**, not a
+  looser one. It has to: the poller decides when to stop waiting, so if it
+  accepted a frame the processor then rejects, capture would fail on the first
+  poll rather than waiting out a deadline that would have produced the real
+  frame. The uniformly-dark case is the only one that separates the two
+  predicates — a white or transparent frame fails the content scan on its own —
+  which is why it is pinned by a test rather than left to the reader.
+- Every guard above asks whether the frame was **painted**, never whether it is
+  the frame that was **requested**. Nothing downstream can tell a correct
+  screenshot of the wrong control from a correct one — it has real content, so
+  it passes cleanly. That gap is closed at the only point it can be: the
+  `POST /preview` component-switch body is JSON-*encoded* rather than
+  interpolated, so a manifest-authored component name is a value in that
+  request and cannot become part of its structure. It used to be able to: a
+  name shaped like `A", "component": "B` produced valid JSON with a duplicate
+  key, and `System.Text.Json` takes the last one — so the capture switched to
+  `B` while the manifest read as naming neither.
+- **Both** requests the capture client makes carry a token cancelled by their own
+  deadline, not just the frame poll. An unbounded `HttpClient` call falls back to
+  a 100-second default, and the loop condition around it is only tested between
+  iterations — so a server that accepts the connection and never answers is not
+  bounded by the deadline the code declares. The component switch matters more
+  than the poll here rather than less, because it runs *once per screenshot*:
+  removing its token and stalling the server holds a single switch for **100.03 s
+  against a 0.5 s timeout**, with the connection proven accepted rather than
+  refused. The failure direction was always safe — a cancelled request is counted
+  in `Failed`, never written — but the symptom of the unbounded form is a capture
+  pass that looks like it is working for hours instead of failing in seconds,
+  which is the same "no output is not evidence of no problem" shape as the rest of
+  this list.
+- A topic or screenshot id containing `:` is refused before it is joined to any
+  output root, and so is a `:` in a markdown image reference. Containment alone
+  does not cover it: on Windows `:` is a stream
+  and drive separator, so `<images>/topic:hidden` resolves to a path that
+  genuinely *is* under the images root — the containment check passes — while
+  the write lands in the alternate data stream `hidden` on a file named
+  `topic`. The directory then lists one `topic` of length 0 and the real bytes
+  are invisible to a listing, to `git`, and to any size check. Same shape as
+  everything else on this list: a guard that runs, returns a correct answer,
+  and answers the wrong question. None of the 194 committed `screenshot://`
+  references contain a `:`, so this rejects nothing that exists today.
+  The read side needs the same rule for the mirrored reason: `File.Exists`
+  answers **true** for an existing stream, so the blank gate would decode the
+  stream's bytes and pass a page whose rendered image is blank. Both sides call
+  one predicate — `DocPaths.HasStreamOrDriveSeparator` — because for a while
+  only the write side implemented the rule while the read side asserted in a
+  comment that it was handled there, at a call site that never called it.
+- A referenced image that clears the pre-decode caps but that the decoder
+  cannot read is reported as `REACTOR_DOC_IMAGE_003` rather than being scored.
+  The distinction is load-bearing: "could not decode" is not "not blank", and
+  spelling them the same way is what let a corrupt file pass the gate silently.
+  Note that a *truncated* PNG — the shape an interrupted capture leaves behind —
+  decodes rather than faulting, so it surfaces as `REACTOR_DOC_IMAGE_002`; the
+  `_003` path covers corruption that defeats the decoder outright. It also
+  covers a file that is intact but *unreadable at that moment* — locked by
+  another process, or permission-denied — because those raise `IOException` /
+  `UnauthorizedAccessException` from the same call and letting them escape would
+  kill the whole compile over one file handle. The gate cannot distinguish the
+  two, so the finding names both remedies rather than asserting corruption.
+- `_003` also covers a file that never reaches the decoder because it is not an
+  image at all: zero bytes, or bytes carrying no PNG/JPEG signature under a
+  `.png`/`.jpg` name. Both were once *skipped*, which meant an HTML error page,
+  a mislabelled SVG, or a Git-LFS pointer saved as `.png` produced **zero
+  findings**. The likely way to hit it is a checkout of an LFS-tracked repo made
+  without LFS: every image is a short text pointer, and the whole corpus passed
+  clean. The two guards that remain skips are the *caps* — an over-cap or
+  missing file — because those are decisions the gate makes about how much work
+  to do, not statements about the file. A missing file is already
+  `REACTOR_DOC_IMAGE_001`'s business.
+  This is also why the magic-bytes pre-check does *not* swallow those two
+  exceptions: it answers "is this a raster?" from the file's content, and a read
+  it could not perform is not an answer. It used to return `false` for them,
+  which the caller reads as "not a raster" and skips — so a locked file produced
+  a clean compile while this paragraph claimed otherwise. A gate that skips
+  analysis is a gate that passes.
+- The `-thumb` suffix is therefore **reserved**. A manifest entry whose `id`
+  ends in it without `kind: catalog-thumb` is rejected with
+  `REACTOR_DOC_SHOT_002` — otherwise a full-size screenshot could claim the
+  chrome-free scoring rule and hide a blank capture behind its own border.
+  The reservation deliberately **exempts** `kind: catalog-thumb`, since there the
+  suffix is correct rather than a collision — which is exactly why appending it
+  is done once, by `ImageProcessor.ThumbAwareFileBase`, and is idempotent. An id
+  of `widget-thumb` with `kind: catalog-thumb` otherwise produced
+  `widget-thumb-thumb.png`, and because the filename and the generated URL were
+  derived by two separate copies of the append they *agreed*, so links resolved
+  and no gate fired. One function, because the two callers must never diverge:
+  `ScreenshotCapture` chooses the file that is written and `DocAssembler` chooses
+  the URL that points at it, and a divergence surfaces as a broken image rather
+  than a compile error.
+- The reservation reads the **whole id**, via `ImageProcessor.IdHasThumbSuffix`.
+  This is not incidental: the sibling `HasThumbSuffix` is a *path* predicate that
+  strips from the last dot, and calling it with an id — which has no extension —
+  silently changed the subject. A dotted id such as `widget.v2-thumb` was read as
+  `widget`, passed the reservation, and still produced `widget.v2-thumb.png`,
+  which the gate then *did* score as a thumb. The two ends disagreed about one
+  screenshot, which is precisely the collision this rule claims to make
+  unrepresentable. One suffix rule, plus one adapter that adds filename
+  extraction for the case where the subject really is a path.
+- Image-reference validation runs on the *assembled* page, where `DocAssembler`
+  prefixes one `../` per level of topic nesting. References resolve **relative
+  to the page**, so nested topics (`recipes/*`) are checked like flat ones — and
+  a `../` run that doesn't match the page's own depth now lands outside
+  `docs/guide/images/` and is reported as `REACTOR_DOC_IMAGE_001` instead of
+  being silently accepted.
+
+If you are staging a docs change by hand, stage the specific `.md` / `.md.dt`
+paths rather than `git add -A`, and check `git status` for unexpected entries
+under `docs/guide/images/` before committing.
+
+[i989]: https://github.com/microsoft/microsoft-ui-reactor/issues/989
+
 ## 5. Tier-lint diagnostic codes
 
 The validator emits diagnostics from `mur docs compile --validate-only`
@@ -179,7 +377,12 @@ reference-generation codes.
 | `REACTOR_DOC_SNIPPET_003`  | Region opened without a matching close marker              |
 | `REACTOR_DOC_SNIPPET_004`  | Nested region with same name as outer region               |
 | `REACTOR_DOC_DIAGRAM_001`  | `mermaid-cli` not on PATH but the topic has `.mmd` files   |
-| `REACTOR_DOC_IMAGE_001`    | `![..](images/<topic>/...)` reference resolves to nothing  |
+| `REACTOR_DOC_IMAGE_001`    | `![..](images/<topic>/...)` doesn't resolve to a file inside `docs/guide/images/` — missing file, a `../` run that doesn't match the page's depth, a `:` in the reference (on Windows that names a drive or an alternate data stream, so the bytes read would not be the file the page appears to reference), or reference text that isn't a usable path at all |
+| `REACTOR_DOC_IMAGE_002`    | Referenced screenshot exists but its interior is blank — a failed capture overwrote it. Restore from git and re-capture on an interactive desktop |
+| `REACTOR_DOC_IMAGE_003`    | Referenced image cannot be scored as an image. Either it is not one — zero bytes, or no PNG/JPEG signature under a `.png`/`.jpg` name (a Git-LFS pointer, an HTML error page, a mislabelled SVG) — or it is corrupt and will not render (restore from git and re-capture), or it is intact but locked / permission-denied (clear that and re-run) |
+| `REACTOR_DOC_IMAGE_004`    | *(warning — does **not** fail `--ci`)* The blank-image gate could not run: `System.Drawing.Common` is Windows-only, so on any other platform there is no decoder. Emitted **once per page** — the condition is a property of the machine, not of any image, so one finding per screenshot would bury it. Nothing else is suppressed: reference validation (`_001`) and the decoder-free checks behind `_003` (zero-byte file, no PNG/JPEG signature) still run everywhere. Never fires on the supported configuration. It is the one non-fatal finding this gate emits, and deliberately so: it says the scan *could not run*, not that an image is bad, and it fires precisely on the platform that cannot decode — so breaking the build on it would fail a docs compile over a missing codec while nothing is wrong with the docs |
+| `REACTOR_DOC_SHOT_001`     | Captured frame was contentless; nothing was written and the existing screenshot was left untouched. The message names which clause fired — *no pixel below the threshold* or *one flat colour* — because for a dark fill the first wording states the opposite of what happened |
+| `REACTOR_DOC_SHOT_002`     | Manifest screenshot id ends in the reserved `-thumb` suffix without `kind: catalog-thumb`. Matched against the whole id, so a dotted id (`widget.v2-thumb`) is caught too |
 | `REACTOR_DOC_REGISTRY_W001`| Registry rule maps to a category with no `guide-pages`     |
 | `REACTOR_DOC_REGISTRY_W002`| Registry-declared guide page has no inbound `<!-- ref:Member -->` marker (doc-coverage gate, spec [041 §5.3](../specs/041-docs-comprehensive-uplift.md)) |
 

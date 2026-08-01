@@ -430,7 +430,7 @@
         {
           "header": "Basic ComboBox",
           "language": "csharp",
-          "code": "ComboBox(colors, selectedIndex, i => setSelectedIndex(i))"
+          "code": "ComboBox(colors, selectedIndex, i => setSelectedIndex(i)).Header(\"Colors\")"
         }
       ]
     },
@@ -2291,7 +2291,7 @@
         {
           "header": "Basic ToggleSwitch",
           "language": "csharp",
-          "code": "ToggleSwitch(isOn, v => setIsOn(v))"
+          "code": "ToggleSwitch(isOn, v => setIsOn(v)).AutomationName(\"Basic toggle\")"
         }
       ]
     },
@@ -2469,7 +2469,7 @@
         {
           "header": "Load URL",
           "language": "csharp",
-          "code": "WebView2(new Uri(\"https://learn.microsoft.com\"))\n    .Width(600).Height(400)"
+          "code": "// ── type members ──\n// new Uri(text) throws on half-typed input, and a throw out of Render() replaces the\n// whole page with the error boundary — so parse first and only commit what parses.\nstatic Uri? ParseWebUrl(string text) =>\n    Uri.TryCreate(text.Trim(), UriKind.Absolute, out var uri)\n    && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)\n        ? uri : null;\n\nconst string DefaultUrl = \"https://learn.microsoft.com/windows/apps/\";\nstatic readonly Uri DefaultUri = new Uri(DefaultUrl);\n\n// ── inside Render() ──\nvar (urlText, setUrlText) = UseState(DefaultUrl);\nvar (loadedUrl, setLoadedUrl) = UseState(DefaultUri);\nvar target = ParseWebUrl(urlText);\n\nVStack(8,\n    HStack(8,\n        TextBox(urlText, s => setUrlText(s), \"https://example.com\").Width(400).UrlInput(),\n        Button(\"Go\", () => { if (target is not null) setLoadedUrl(target); })\n            .IsEnabled(target is not null)\n            .VAlign(VerticalAlignment.Center)),\n    target is null\n        ? Caption(\"Enter an absolute http:// or https:// URL.\").Foreground(Theme.SystemCritical)\n        : Caption($\"Showing {loadedUrl}\").Foreground(Theme.SecondaryText),\n    WebView2(loadedUrl).Width(600).Height(400))"
         }
       ]
     },

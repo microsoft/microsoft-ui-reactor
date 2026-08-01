@@ -70,6 +70,26 @@ internal static class SelfTestRunner
     // a debugger). Also auto-disabled when Debugger.IsAttached.
     private static readonly TimeSpan HangTimeout = ResolveHangTimeout();
 
+    /// <summary>
+    /// TAP comment prefix for a fixture's wall-clock time: <c># Fixture time: &lt;name&gt; &lt;ms&gt;</c>.
+    /// Consumed by humans and by the ranking snippet in <c>TESTING.md</c>, not by the MSTest wrapper.
+    /// </summary>
+    internal const string FixtureTimeMarker = "# Fixture time: ";
+
+    /// <summary>
+    /// TAP comment for the whole suite's wall clock: <c># Suite elapsed: &lt;seconds&gt;</c>. This is the
+    /// Host's own measurement, so unlike the wrapper's it excludes process start and pipe-drain
+    /// overhead.
+    /// </summary>
+    /// <remarks>
+    /// <c>tests/Reactor.SelfTests/SelfTestBatch.cs</c> parses this string but cannot reference this
+    /// assembly (its ProjectReference sets <c>ReferenceOutputAssembly=false</c>), so the literal is
+    /// duplicated there. Change one, change both — and note both sides use the invariant culture,
+    /// because a comma-decimal locale would otherwise emit <c>312,4</c>, fail the parse, and
+    /// silently fall back to the wrapper's own timing with no indication anything was lost.
+    /// </remarks>
+    internal const string SuiteElapsedMarker = "# Suite elapsed: ";
+
     private static TimeSpan ResolveHangTimeout()
     {
         var env = Environment.GetEnvironmentVariable("REACTOR_SELFTEST_HANG_TIMEOUT_SECONDS");
@@ -250,6 +270,16 @@ internal static class SelfTestRunner
                     Console.WriteLine($"TAP version 14");
                     Console.WriteLine($"1..{fixtures.Length}");
 
+                    // Suite clock. The whole run shares one process budget in the
+                    // MSTest wrapper (SelfTestBatch.SelfTestTimeoutMs), and when it
+                    // expires the wrapper kills the Host and blames whichever fixture
+                    // was in flight — a POSITIONAL attribution that has been misread
+                    // as a fixture bug across several PRs (issue #988). Emitting the
+                    // elapsed time here gives the wrapper a duration it can gate on,
+                    // and gives a triager the one number that separates "the suite ran
+                    // out of budget" from "this fixture broke".
+                    var suiteStart = Stopwatch.GetTimestamp();
+
                     int testIndex = 0;
                     bool isAot = !RuntimeFeature.IsDynamicCodeSupported;
                     var aotSkipPatterns = GetAotSkipPatterns();
@@ -361,9 +391,22 @@ internal static class SelfTestRunner
                         Volatile.Write(ref _currentFixture, null);
                         harness.MarkFixtureResult(testIndex - 1,
                             !crashed && harness.Failures == failuresBefore);
+
+                        // Per-fixture wall clock, as a TAP comment. Comments are
+                        // inert to every consumer (SelfTestBatch.ParseTap keys only
+                        // on "# Running: " / "# Total failures:"; CI greps "^not ok ")
+                        // so this is purely additive. It turns "the suite is slow"
+                        // into a ranked list of who made it slow, which is what makes
+                        // trimming the suite targeted instead of a blind sweep.
+                        Console.WriteLine(FixtureTimeMarker + fixtureName + " " +
+                            Stopwatch.GetElapsedTime(fixtureStart).TotalMilliseconds
+                                .ToString("F0", global::System.Globalization.CultureInfo.InvariantCulture));
                     }
 
                     Console.WriteLine($"# Total failures: {harness.Failures}");
+                    Console.WriteLine(SuiteElapsedMarker +
+                        Stopwatch.GetElapsedTime(suiteStart).TotalSeconds
+                            .ToString("F1", global::System.Globalization.CultureInfo.InvariantCulture));
                     harness.FinalizeTaskbarProgress();
                 }
                 catch (Exception ex)
