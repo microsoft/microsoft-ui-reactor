@@ -56,9 +56,9 @@ public sealed class ElementPool : IDisposable
     /// (namespace <c>Microsoft.UI.Reactor.Analyzers</c>, assembly <c>Reactor.Analyzers</c>),
     /// which <c>PoolResetSetAnalyzer</c> uses to decide whether <c>REACTOR_POOL_001</c> (the
     /// receiver is recycled, so the write is unwound on pool return) or <c>REACTOR_MOD_002</c>
-    /// (the receiver is not recycled, so the write is merely dropped by the next render)
-    /// describes a <c>.Set</c> write. The analyzer targets <c>netstandard2.0</c> and cannot
-    /// reference this assembly, hence the copy.
+    /// (the receiver is not recycled, so the write is never unwound — it costs the element's
+    /// structural skip, not the value) describes a <c>.Set</c> write. The analyzer targets
+    /// <c>netstandard2.0</c> and cannot reference this assembly, hence the copy.
     /// </para>
     /// <para>
     /// Adding or removing a type here without updating that mirror fails

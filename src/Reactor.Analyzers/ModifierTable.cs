@@ -78,8 +78,9 @@ internal sealed class ModifierInfo
     /// is ever recycled and no write is ever unwound. Reporting <c>REACTOR_POOL_001</c> there
     /// states something false — and at Warning severity, which becomes a build break for
     /// consumers using <c>TreatWarningsAsErrors</c>. Narrowing to this list reports
-    /// <c>REACTOR_MOD_002</c> instead, which is the hazard such a receiver does have: the
-    /// write is dropped by the next render.
+    /// <c>REACTOR_MOD_002</c> instead, which keeps the modifier suggestion and drops only the
+    /// pool-return claim: the write lands and is <i>never</i> unwound, so what it costs is the
+    /// element's structural skip (<c>Element.SettersEqual</c>), not the value.
     /// </para>
     /// <para>
     /// This is a name-level mirror of <c>ControlGate ∩ ElementPool.PoolableTypes</c>, kept
@@ -295,8 +296,9 @@ internal static class ModifierTable
     /// else. Selecting <c>REACTOR_POOL_001</c> from a gate alone therefore asserts "reset on pool
     /// return" for receivers such as <c>CheckBox</c> and <c>RelativePanel</c> that are never
     /// pooled — at Warning severity, which is a build break for a consumer using
-    /// <c>TreatWarningsAsErrors</c>. Those receivers fall to <c>REACTOR_MOD_002</c>, which
-    /// describes the hazard they do have: the write is dropped by the next render.
+    /// <c>TreatWarningsAsErrors</c>. Those receivers fall to <c>REACTOR_MOD_002</c>, which drops
+    /// only the pool-return claim: the write lands and is <i>never</i> unwound, and the cost is
+    /// the element's structural skip (<c>Element.SettersEqual</c>) rather than the value.
     /// </para>
     /// <para>
     /// Matching the receiver's own type rather than its base chain costs no signal here, because
@@ -364,8 +366,9 @@ internal static class ModifierTable
             // these gates and admits every WinUI control, while the pool holds seven. Both
             // reported POOL_001 before issue #1051, asserting "reset on pool return" of a
             // receiver that is never pooled, at Warning severity — a build break for a consumer
-            // using TreatWarningsAsErrors. They fall to MOD_002 instead, which is the hazard they
-            // do have: the write is dropped by the next render.
+            // using TreatWarningsAsErrors. They fall to MOD_002 instead, which keeps the modifier
+            // suggestion and drops only the pool-return claim: the write lands and is never
+            // unwound, costing the element's structural skip rather than the value.
             //
             // Nothing here is hand-maintained. ModifierUnsetClearValueTests reads
             // ElementPool.PoolableTypes for (1) and derives the gated-receiver intersection for
