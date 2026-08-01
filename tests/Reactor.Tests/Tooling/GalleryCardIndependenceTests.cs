@@ -167,9 +167,18 @@ public sealed class GalleryCardIndependenceTests
     /// spelling the same name is a different symbol by the language rules rather than by
     /// guesswork. Without this bound the scan is file-wide and a lambda parameter, loop
     /// variable, or local in a sibling method silently reads as a reference to the slot.</para>
+    ///
+    /// <para>An ordinary local function is deliberately <em>not</em> a boundary. It captures the
+    /// enclosing method's locals, so a card extracted into one still reads the very same slot —
+    /// treating it as its own scope made that reference fail to resolve and hid real coupling.
+    /// Nothing can shadow the slot inside it either, since CS0136 does reach into a nested local
+    /// function body. A <c>static</c> local function is a boundary, because <c>static</c> is
+    /// precisely the modifier that severs capture.</para>
     /// </summary>
     static SyntaxNode? DeclaringMember(SyntaxNode node) =>
-        node.Ancestors().FirstOrDefault(a => a is MemberDeclarationSyntax or LocalFunctionStatementSyntax);
+        node.Ancestors().FirstOrDefault(a =>
+            a is MemberDeclarationSyntax
+            || (a is LocalFunctionStatementSyntax local && local.Modifiers.Any(SyntaxKind.StaticKeyword)));
 
     /// <summary>
     /// A value-typed identity for a declaring member, so a scope can be part of a dictionary key
@@ -616,6 +625,41 @@ public sealed class GalleryCardIndependenceTests
         // Both slots were seen — so the finding above is the scan distinguishing them, not the
         // scan having missed the sibling declaration altogether.
         Assert.Equal(2, scan.Slots);
+    }
+
+    /// <summary>
+    /// A card extracted into a local function. A local function <em>captures</em> the enclosing
+    /// method's locals, so the slot it reads there is the same slot — but while
+    /// <see cref="DeclaringMember"/> treated any local function as its own scope, that reference
+    /// failed to resolve and this page came back clean despite two cards sharing one slot.
+    ///
+    /// <para>The likely way to hit it is a refactor rather than fresh code: pulling a card body
+    /// out into a helper is a natural tidy-up, and it silently switched the gate off for that
+    /// card. Nothing about a green run would have said so.</para>
+    /// </summary>
+    [Fact]
+    public void ACardExtractedIntoALocalFunction_StillReachesTheEnclosingSlot()
+    {
+        var scan = ScanSource("""
+            namespace Gallery;
+
+            class __Page : Component
+            {
+                public override Element Render()
+                {
+                    var (value, setValue) = UseState(0.0);
+
+                    return VStack(
+                        SampleCard("Basic", NumberBox(value, v => setValue(v)), sourceCode: @"x"),
+                        Extra());
+
+                    Element Extra() =>
+                        SampleCard("Extra", NumberBox(value, v => setValue(v)), sourceCode: @"x");
+                }
+            }
+            """);
+
+        Assert.Equal(["(value, setValue): Basic | Extra"], scan.Findings.Select(f => f.Signature()));
     }
 
     /// <summary>
