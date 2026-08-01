@@ -1591,7 +1591,14 @@ internal static class DataGridEditFixtures
             {
                 detachedResult = DataGridComponent<TestProduct>.IsFocusInsideForTests(detached);
             }
+            // Excludes only the process-fatal pair, matching the house style in src/Reactor.
+            // Declining to catch is a safe no-op here: an escaping exception unwinds out of
+            // RunAsync and SelfTestRunner reports it as `not ok <fixture>_CRASH` plus a recorded
+            // failure, so a process-fatal condition is surfaced as a crash rather than
+            // misreported below as "the guard returned the wrong answer".
             catch (global::System.Exception ex)
+                when (ex is not global::System.OutOfMemoryException
+                      and not global::System.StackOverflowException)
             {
                 threw = $"{ex.GetType().Name}: {ex.Message}";
             }
