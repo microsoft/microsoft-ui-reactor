@@ -109,11 +109,21 @@ internal sealed class ModifierInfo
 /// <c>FlexPanel.SetMinWidth</c> writes <c>FlexMinWidthProperty</c>.
 /// </para>
 /// <para>
-/// Every entry is pool-reset by construction: <see cref="ModifierTable.AttachedProperties"/>
-/// only lists properties <c>ElementPool.CleanElement</c> clears, so they all report
-/// <c>REACTOR_POOL_001</c>. There is deliberately no attached equivalent of the Info tier
-/// (<c>REACTOR_MOD_002</c>) — the value is concentrated in "your write is silently
-/// discarded".
+/// Every entry is pool-reset <em>as a property</em> by construction:
+/// <see cref="ModifierTable.AttachedProperties"/> only lists properties
+/// <c>ElementPool.CleanElement</c> clears, so there is no per-entry <c>poolReset</c> flag
+/// and no attached analogue of <see cref="ModifierInfo.PoolResetGate"/>.
+/// </para>
+/// <para>
+/// That is not the same as "every attached write reports <c>REACTOR_POOL_001</c>".
+/// <c>CleanElement</c> only runs on a control the pool recycles, so
+/// <c>PoolResetSetAnalyzer</c> also requires the <c>.Set</c> lambda parameter's exact type
+/// to be in <see cref="ModifierTable.PoolableTypeNames"/>; on anything else the same write reports
+/// <c>REACTOR_MOD_002</c>, because the modifier still exists and the write is still dropped
+/// by the next render — it just is not the pool that drops it. The instance and attached
+/// halves resolve that one fact the same way and once per <c>.Set</c> body, so a body
+/// mixing both shapes on one receiver cannot report two different ids. See
+/// <c>Attached_Setter_Reports_ModifierAvailable_On_An_Unpooled_Receiver</c>.
 /// </para>
 /// </remarks>
 internal sealed class AttachedModifierInfo
