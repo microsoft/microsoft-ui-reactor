@@ -553,12 +553,20 @@ public sealed class GallerySampleLintTests
     /// Literals elsewhere on the page — a button caption's <c>open ? "Close" : "Menu"</c> — are
     /// never reached, because nothing in the state expression's dataflow names them.
     /// </summary>
+    /// <remarks>
+    /// Names resolve against the declarations <em>visible from the reference site</em>, not against
+    /// a whole-file "first declarator wins" map. Two members may each declare a local named
+    /// <c>state</c>; binding the wrong one traces the wrong dataflow, and the direction that costs
+    /// something is the quiet one — reaching a proven literal from an unproven expression is a
+    /// false pass on the gate that exists to keep issue #983 from coming back. Not resolving a name
+    /// is safe (the walk simply stops, and the <c>inspectedStates</c> guard still fires on a lint
+    /// that traced nothing); guessing between two candidates is not.
+    /// </remarks>
     static IEnumerable<string> StateLiteralsReaching(SyntaxNode root, ExpressionSyntax stateExpression)
     {
         var declarators = root.DescendantNodes().OfType<VariableDeclaratorSyntax>()
             .Where(d => d.Initializer is not null)
-            .GroupBy(d => d.Identifier.Text, global::System.StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => g.First().Initializer!.Value, global::System.StringComparer.Ordinal);
+            .ToLookup(d => d.Identifier.Text, global::System.StringComparer.Ordinal);
 
         var seen = new HashSet<string>(global::System.StringComparer.Ordinal);
         var literals = new List<string>();
@@ -587,11 +595,45 @@ public sealed class GallerySampleLintTests
                          .Select(id => id.Identifier.Text))
             {
                 if (!seen.Add(name)) continue;
-                if (declarators.TryGetValue(name, out var initializer)) pending.Enqueue(initializer);
+                var initializer = VisibleInitializer(declarators, name, expression);
+                if (initializer is not null) pending.Enqueue(initializer);
             }
         }
 
         return literals;
+    }
+
+    /// <summary>
+    /// The initializer of the declaration of <paramref name="name"/> that is actually visible from
+    /// <paramref name="reference"/>: among same-named declarators, the ones whose declaring scope
+    /// encloses the reference, innermost first. Returns null when none does, which is the correct
+    /// answer for a name declared in an unrelated member.
+    /// </summary>
+    static ExpressionSyntax? VisibleInitializer(
+        ILookup<string, VariableDeclaratorSyntax> declarators, string name, SyntaxNode reference) =>
+        declarators[name]
+            .Select(declarator => (Declarator: declarator, Scope: DeclaringScope(declarator)))
+            .Where(candidate => candidate.Scope.Span.Contains(reference.Span))
+            .OrderBy(candidate => candidate.Scope.Span.Length)
+            .Select(candidate => candidate.Declarator.Initializer!.Value)
+            .FirstOrDefault();
+
+    /// <summary>
+    /// The region over which a declarator's name is visible: the enclosing block for a local, and
+    /// the whole containing type for a field — a field's own <c>FieldDeclarationSyntax</c> span
+    /// covers only the declaration line, so using it directly would hide <c>States</c> from every
+    /// method that reads it.
+    /// </summary>
+    static SyntaxNode DeclaringScope(VariableDeclaratorSyntax declarator)
+    {
+        for (var node = declarator.Parent; node is not null; node = node.Parent)
+        {
+            if (node is BlockSyntax or SwitchSectionSyntax) return node;
+            if (node is BaseFieldDeclarationSyntax) return node.Parent ?? node;
+            if (node is TypeDeclarationSyntax or CompilationUnitSyntax) return node;
+        }
+
+        return declarator.SyntaxTree.GetRoot();
     }
 
     // ── ms-appx assets must exist AND be copied to the output folder ─────────
