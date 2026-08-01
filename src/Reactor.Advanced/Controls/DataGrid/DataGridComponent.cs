@@ -332,6 +332,26 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         if (useHookPaging && state.HookResource?.LoadState is LoadState.Error err)
             loadError = err.Exception;
 
+        // One-shot "this grid is owed focus" debt for the real-XAML-focus seam (#976).
+        //
+        // Non-null means: a blur-commit was suppressed on this grid because an editing Tab
+        // promised to reclaim focus, and that promise has not been settled yet. The LostFocus
+        // handler below opens the debt at the moment it consumes SuppressNextLostFocusCommit;
+        // ScheduleFocus.Apply settles it on the next focus attempt, and pulls focus back to the
+        // grid only if XAML refused the editor.
+        //
+        // It is deliberately NOT "the grid root, always". A plain pointer would make the fallback
+        // fire on any failed editor focus — including a programmatic BeginEdit() from a toolbar
+        // while focus sits outside the grid, where yanking focus to the grid root is an unrequested
+        // focus steal (see CustomEditorFocus_NonFocusableEditorLeavesFocusPut in the selftests,
+        // which asserts that case stays a quiet no-op). Gating on the debt keeps the repair to
+        // exactly the interaction that disarmed the blur-commit net.
+        //
+        // Declared here rather than beside the LostFocus refs below because RenderDataRows (end of
+        // the if/else chain) already needs it; it is unconditional, so hook order is unchanged
+        // every render.
+        var focusDebtRef = UseRef<FrameworkElement?>(null);
+
         Element dataContent;
         if (loadError is not null && itemCount == 0)
         {
@@ -347,7 +367,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         }
         else
         {
-            dataContent = RenderDataRows(state, columns, el, registry);
+            dataContent = RenderDataRows(state, columns, el, registry, focusDebtRef);
         }
         gridChildren.Add(dataContent.Grid(row: gridRow, column: 0));
 
@@ -394,8 +414,19 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                         if (state.SuppressNextLostFocusCommit)
                         {
                             state.SuppressNextLostFocusCommit = false;
+                            // The blur-commit net is now disarmed on the strength of a promise:
+                            // the editing Tab said it would move focus to the next editor. Record
+                            // the debt so that, if XAML then refuses that editor, ScheduleFocus can
+                            // pull focus back inside the grid instead of leaving the edit open with
+                            // focus outside and nothing left to commit it (#976).
+                            focusDebtRef.Current = g;
                             return;
                         }
+                        // An un-suppressed blur means the net is armed and will handle this
+                        // focus-out on its own, so no promise is outstanding. Clear any debt a
+                        // previous traversal left behind rather than letting it age into a later
+                        // unrelated focus attempt.
+                        focusDebtRef.Current = null;
                         if (!state.IsEditing && !state.IsRowEditing) return;
                         // Defer the entire check to the next tick. During DOM transitions
                         // (e.g., cell switching from TextBlock to TextBox), the old element
@@ -404,16 +435,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                         Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() =>
                         {
                             if (!state.IsEditing && !state.IsRowEditing) return;
-                            var focused = Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(g.XamlRoot);
-                            if (focused is DependencyObject dep)
-                            {
-                                var parent = dep;
-                                while (parent is not null)
-                                {
-                                    if (ReferenceEquals(parent, g)) return;
-                                    parent = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(parent);
-                                }
-                            }
+                            if (IsFocusInside(g)) return;
                             if (state.IsRowEditing)
                             {
                                 var origItem = state.EditingRowKey is not null
@@ -551,7 +573,8 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         DataGridState<T> state,
         IReadOnlyList<FieldDescriptor> columns,
         DataGridElement<T> el,
-        TypeRegistry registry)
+        TypeRegistry registry,
+        Ref<FrameworkElement?>? focusDebtRef = null)
     {
         var totalItems = state.ItemCount;
         var selectable = el.SelectionMode != SelectionMode.None;
@@ -577,7 +600,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
             itemCount: totalItems,
             renderItem: index =>
             {
-                return RenderRow(index, state, columns, el, registry, colWidths, gridDef);
+                return RenderRow(index, state, columns, el, registry, colWidths, gridDef, focusDebtRef);
             },
             itemHeight: hasExpandedRow ? null : el.RowHeight,
             estimatedItemHeight: hasExpandedRow
@@ -623,7 +646,8 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         DataGridElement<T> el,
         TypeRegistry registry,
         double[] colWidths,
-        GridDefinition gridDef)
+        GridDefinition gridDef,
+        Ref<FrameworkElement?>? focusDebtRef = null)
     {
         var item = state.GetItemAt(index);
         var keyStr = state.GetRowKeyAt(index);
@@ -683,12 +707,12 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
             if (isCellEditing)
             {
                 cellContent = WithEditorFocusRequest(
-                    RenderEditingCell(col, state, registry), state, rowKey, col.Name);
+                    RenderEditingCell(col, state, registry), state, rowKey, col.Name, focusDebtRef);
             }
             else if (isColInRowEdit)
             {
                 cellContent = WithEditorFocusRequest(
-                    RenderRowEditingCell(col, state, registry), state, rowKey, col.Name);
+                    RenderRowEditingCell(col, state, registry), state, rowKey, col.Name, focusDebtRef);
             }
             else if (!isPlaceholder && el.CellTemplate is not null)
             {
@@ -991,10 +1015,22 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
     /// focus onto Save/Cancel or out of the grid, and LostFocus enqueues its "is focus still inside
     /// the grid?" check BEFORE our focus request is enqueued, so it would see focus outside and
     /// commit the whole row — exactly the symptom #976 fixes. Gated on
-    /// <see cref="DataGridState{T}.HasRowEditFocusTarget"/> so we only claim a focus-out we are
-    /// actually going to cancel out by pulling focus back; claiming one when no editor will be
-    /// focused leaves the one-shot flag armed to swallow a later legitimate blur-commit (the bug
-    /// class <c>Interactive_DataGrid_EditingTabToReadOnly_DoesNotSuppressNextCommit</c> covers).</para>
+    /// <see cref="DataGridState{T}.HasRowEditFocusTarget"/> so we only claim a focus-out when there
+    /// is an editor to pull focus back to; claiming one otherwise leaves the one-shot flag armed to
+    /// swallow a later legitimate blur-commit (the bug class
+    /// <c>Interactive_DataGrid_EditingTabToReadOnly_DoesNotSuppressNextCommit</c> covers).</para>
+    ///
+    /// <para><b>Where the guarantee actually completes.</b> This gate is LOGICAL — it asks whether a
+    /// visible editable column exists, which is all that is knowable synchronously in KeyDown. It
+    /// cannot promise the PHYSICAL outcome: two dispatcher ticks later a custom
+    /// <c>col.Editor</c> whose whole subtree refuses focus makes <c>TryFocusEditor</c> return false,
+    /// and by then this claim has already been consumed by the routed LostFocus (which returned
+    /// early, scheduling no "is focus still inside?" check). The gap is closed by a one-shot
+    /// <i>focus debt</i>: the LostFocus handler records the grid root it disarmed itself on, and
+    /// <see cref="ScheduleFocus"/> repays that debt by pulling focus back to the root when — and
+    /// only when — its own focus attempt fails. That re-arms the blur-commit net. So the invariant
+    /// "a claimed focus-out is always cancelled out" is carried by the two together, never by this
+    /// predicate alone — do not read the gate as a guarantee on its own.</para>
     /// </remarks>
     internal static bool ShouldClaimNextLostFocus(DataGridState<T> state, VirtualKey key)
     {
@@ -1019,7 +1055,11 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
     /// OnUpdate only when it isn't (row-mode Tab between two already-mounted editors).
     /// </remarks>
     private static Element WithEditorFocusRequest(
-        Element editor, DataGridState<T> state, RowKey rowKey, string columnName)
+        Element editor,
+        DataGridState<T> state,
+        RowKey rowKey,
+        string columnName,
+        Ref<FrameworkElement?>? focusDebtRef = null)
     {
         if (!state.HasEditorFocusRequest(rowKey, columnName)) return editor;
 
@@ -1032,7 +1072,7 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
             // Stamp the generation the claim belongs to. The actual Focus() is deferred, and
             // between now and then the edit can end or a newer request can supersede this one;
             // ScheduleFocus re-checks both against this stamp before touching XAML.
-            ScheduleFocus(fe, state, rowKey, columnName, state.FocusRequestVersion);
+            ScheduleFocus(fe, state, rowKey, columnName, state.FocusRequestVersion, focusDebtRef);
         }
 
         return editor.OnMountAdd(Arm).OnUpdateAdd(Arm);
@@ -1078,9 +1118,17 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
     ///
     /// Both deferrals re-check <see cref="IsFocusRequestStillCurrent"/> at the moment they run,
     /// because either one can outlive the edit that armed the request.
+    ///
+    /// <paramref name="focusDebtRef"/> carries the grid root of a blur-commit that was suppressed
+    /// and not yet repaid — see the fallback inside <c>Apply</c>.
     /// </remarks>
     private static void ScheduleFocus(
-        FrameworkElement fe, DataGridState<T> state, RowKey rowKey, string columnName, int version)
+        FrameworkElement fe,
+        DataGridState<T> state,
+        RowKey rowKey,
+        string columnName,
+        int version,
+        Ref<FrameworkElement?>? focusDebtRef = null)
     {
         if (fe.IsLoaded)
         {
@@ -1100,8 +1148,34 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         {
             void Apply()
             {
-                if (IsFocusRequestStillCurrent(state, rowKey, columnName, version))
-                    TryFocusEditor(fe);
+                if (!IsFocusRequestStillCurrent(state, rowKey, columnName, version)) return;
+
+                // Settle any outstanding focus debt on this attempt, whatever the outcome. The
+                // debt is one-shot for the same reason SuppressNextLostFocusCommit is: a pointer
+                // that survives its own repayment would pull focus on some later, unrelated
+                // failed focus move.
+                var owed = focusDebtRef?.Current;
+                if (focusDebtRef is not null) focusDebtRef.Current = null;
+
+                if (TryFocusEditor(fe)) return;
+
+                // XAML refused the focus move. That only needs repairing when a blur-commit was
+                // actually suppressed on the strength of this traversal: the routed LostFocus
+                // consumed SuppressNextLostFocusCommit and returned WITHOUT scheduling the "is
+                // focus still inside the grid?" check, and no further LostFocus fires while focus
+                // is already outside. Nothing re-arms the blur-commit net until the next grid
+                // focus round-trip, so the row edit can sit open with focus outside the grid.
+                //
+                // Pulling focus back to the grid root re-arms it: the root is the element the
+                // LostFocus handler is wired to, so the next blur runs the deferred check and
+                // commits.
+                //
+                // Gated on an actually-suppressed blur rather than on any failed focus, which is
+                // what keeps a programmatic BeginEdit from stealing focus away from wherever the
+                // user was (a toolbar button, say) just because the editor refused it. With no
+                // debt there is nothing to repay and this is a quiet no-op.
+                if (owed is not null && !IsFocusInside(owed))
+                    owed.Focus(FocusState.Programmatic);
             }
 
             // Two ways the deferral can be unavailable, and both must fall back rather than drop:
@@ -1134,6 +1208,33 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         // so reach for the first focusable thing inside it — again without narrowing to Control.
         if (Microsoft.UI.Xaml.Input.FocusManager.FindFirstFocusableElement(fe) is Microsoft.UI.Xaml.UIElement inner)
             return inner.Focus(FocusState.Programmatic);
+
+        return false;
+    }
+
+    /// <summary>
+    /// Whether real keyboard focus currently sits on <paramref name="root"/> or anywhere in its
+    /// visual subtree.
+    /// </summary>
+    /// <remarks>
+    /// Shared by the LostFocus safety net (which must NOT commit while focus is still inside the
+    /// grid) and by <see cref="ScheduleFocus"/>'s fallback (which must NOT yank focus to the grid
+    /// root when it is already inside). Deliberately one implementation: the two callers ask the
+    /// same question, so a mutation that breaks one has to break both.
+    ///
+    /// A null focused element, or one that is not a <c>DependencyObject</c>, reports false — focus
+    /// that cannot be located is treated as outside, which is the safe direction for both callers.
+    /// </remarks>
+    private static bool IsFocusInside(FrameworkElement root)
+    {
+        if (Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(root.XamlRoot) is not DependencyObject focused)
+            return false;
+
+        for (DependencyObject? parent = focused; parent is not null;
+             parent = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(parent))
+        {
+            if (ReferenceEquals(parent, root)) return true;
+        }
 
         return false;
     }

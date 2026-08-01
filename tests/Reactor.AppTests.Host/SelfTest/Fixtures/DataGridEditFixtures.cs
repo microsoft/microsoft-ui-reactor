@@ -1324,4 +1324,188 @@ internal static class DataGridEditFixtures
                 EditMode = EditMode.Row,
             };
     }
+
+    /// <summary>
+    /// #976 — when a row-edit traversal cannot actually take focus, the blur-commit that was
+    /// suppressed on its behalf must be repaid by pulling focus back onto the grid root.
+    /// </summary>
+    /// <remarks>
+    /// The gap this covers is a mismatch of kinds: the grid arms
+    /// <c>SuppressNextLostFocusCommit</c> from a LOGICAL predicate (there is another editable
+    /// column to move to), but the claim is only sound if the move PHYSICALLY takes focus. With a
+    /// custom editor whose subtree refuses focus, the routed LostFocus consumes the claim and
+    /// returns early — no deferred "is focus still inside the grid?" check is scheduled — so
+    /// without the repayment focus would be left outside the grid with the row edit still open.
+    ///
+    /// This has to go through the real component mount, exactly as
+    /// <see cref="EditorRealFocusVirtualized"/> does, rather than the row-building test seam: the
+    /// debt is opened by the grid root's own LostFocus handler, and that seam has no grid root, so
+    /// no debt can exist there to repay.
+    /// </remarks>
+    internal class EditorFocusDebtRepaid(Harness h) : SelfTestFixtureBase(h)
+    {
+        public override async Task RunAsync()
+        {
+            DataGridState<TestProduct>? state = null;
+            var anchorRef = new Microsoft.UI.Reactor.Input.ElementRef();
+
+            var host = H.CreateHost();
+            host.Mount(ctx =>
+            {
+                var source = ctx.UseMemo(() => CreateSource(6));
+                var columns = BuildColumnsWithNonFocusableCategory();
+
+                return VStack(
+                    Button("anchor", () => { }).Ref(anchorRef),
+                    Component<DataGridComponent<TestProduct>, DataGridElement<TestProduct>>(
+                        new DataGridElement<TestProduct>
+                        {
+                            Source = source,
+                            Columns = columns,
+                            Editable = true,
+                            SelectionMode = Microsoft.UI.Reactor.Controls.SelectionMode.Single,
+                            EditMode = EditMode.Row,
+                            RowHeight = 36,
+                            OnStateReadyInternal = s => state = s,
+                        }));
+            });
+
+            H.Check("EditorFocusDebt_Rendered",
+                await Harness.WaitFor(() => H.FindTextContaining("Product 1") is not null,
+                    maxPasses: 40, perPassMs: 25));
+
+            if (state is null)
+            {
+                H.Check("EditorFocusDebt_StateCaptured", false);
+                return;
+            }
+            H.Check("EditorFocusDebt_StateCaptured", true);
+
+            var anchor = anchorRef.Current as Microsoft.UI.Xaml.Controls.Button;
+            if (anchor is null)
+            {
+                H.Check("EditorFocusDebt_AnchorMounted", false);
+                return;
+            }
+
+            var xamlRoot = anchor.XamlRoot;
+            if (xamlRoot is null)
+            {
+                H.Check("EditorFocusDebt_XamlRootAvailable", false);
+                return;
+            }
+
+            object? Focused() => Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(xamlRoot);
+
+            // Positive control: if this window cannot report focus at all, every assertion below
+            // would pass or fail for reasons that have nothing to do with the product.
+            anchor.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            await Harness.Render(60);
+            if (!ReferenceEquals(Focused(), anchor))
+            {
+                H.Skip("EditorFocusDebt_PositiveControl",
+                    $"window cannot report focus (got '{Focused()?.GetType().Name ?? "null"}')");
+                return;
+            }
+            H.Check("EditorFocusDebt_PositiveControl", true);
+
+            // ── Open a row edit. The cursor parks on Name, which has a real TextBox editor ──────
+            state.BeginRowEdit(1);
+            await Harness.WaitFor(() => Focused() is Microsoft.UI.Xaml.Controls.TextBox,
+                maxPasses: 40, perPassMs: 25);
+
+            var firstEditor = Focused() as Microsoft.UI.Xaml.Controls.TextBox;
+            H.Check($"EditorFocusDebt_RowEdit_FocusesFirstEditor (text='{firstEditor?.Text ?? "<null>"}')",
+                firstEditor?.Text == "Product 1");
+            if (firstEditor is null) return;
+
+            // ── Open the debt: a blur the grid suppresses instead of committing ─────────────────
+            // This is the state a row-edit Tab leaves behind. Native Tab moves focus out of the
+            // grid BEFORE the focus request is dispatched, so the routed LostFocus arrives first,
+            // consumes the claim and returns. Setting the flag directly reproduces that ordering
+            // without depending on the platform's tab-navigation timing.
+            state.SuppressNextLostFocusCommit = true;
+            anchor.Focus(Microsoft.UI.Xaml.FocusState.Programmatic);
+            await Harness.Render(60);
+
+            H.Check($"EditorFocusDebt_BlurSuppressed_RowStaysOpen (focused='{Focused()?.GetType().Name ?? "null"}', rowEditing={state.IsRowEditing})",
+                ReferenceEquals(Focused(), anchor) && state.IsRowEditing);
+
+            // ── Traverse onto the non-focusable editor. XAML refuses; the debt is repaid ────────
+            DataGridComponent<TestProduct>.HandleKeyDownForTests(
+                state, BuildProbeElement(), global::Windows.System.VirtualKey.Tab);
+            await Harness.WaitFor(() => !ReferenceEquals(Focused(), anchor),
+                maxPasses: 60, perPassMs: 25);
+            await Harness.Render(60);
+
+            // The Name editor must still be parented, or the ancestor oracle below is answering a
+            // different question — a detached element has no parent chain to walk at all.
+            H.Check("EditorFocusDebt_ProbeStillParented",
+                Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(firstEditor) is not null);
+
+            // Assert the DESTINATION, not the movement. Focus must land on something that CONTAINS
+            // the row's editors (the grid root) and does NOT contain the anchor. The host VStack
+            // and the window root contain both, so the second clause is what makes this tight
+            // without the fixture holding a direct reference to the grid. Under the mutation that
+            // deletes the repayment, focus stays on the anchor and the first clause fails.
+            var landed = Focused();
+            var containsEditors = IsAncestorOf(landed, firstEditor);
+            var containsAnchor = IsAncestorOf(landed, anchor);
+            H.Check($"EditorFocusDebt_RepaidOntoTheGrid (focused='{landed?.GetType().Name ?? "null"}', containsEditors={containsEditors}, containsAnchor={containsAnchor})",
+                containsEditors && !containsAnchor);
+
+            state.CancelRowEdit();
+            await Harness.Render(60);
+        }
+
+        /// <summary>
+        /// The default column set has no non-focusable editor, so this fixture builds its own:
+        /// Category renders a bare TextBlock, which has no focusable content anywhere in its
+        /// subtree and therefore makes <c>TryFocusEditor</c> ask XAML and be refused.
+        /// </summary>
+        private static FieldDescriptor[] BuildColumnsWithNonFocusableCategory()
+        {
+            var baseColumns = CreateEditableColumns();
+            return new FieldDescriptor[]
+            {
+                baseColumns[0], // Id — read-only, so the row-edit cursor never parks here.
+                baseColumns[1], // Name — a real TextBox editor; this is where BeginRowEdit lands.
+                baseColumns[2] with
+                {
+                    Editor = (value, _) => TextBlock(value?.ToString() ?? ""),
+                },
+                baseColumns[3],
+            };
+        }
+
+        private static DataGridElement<TestProduct> BuildProbeElement() =>
+            new()
+            {
+                Source = CreateSource(6),
+                Columns = BuildColumnsWithNonFocusableCategory(),
+                Editable = true,
+                EditMode = EditMode.Row,
+            };
+
+        /// <summary>
+        /// True when <paramref name="candidate"/> is a strict visual-tree ancestor of
+        /// <paramref name="descendant"/>. Deliberately structural: the fixture cannot get a
+        /// reference to the grid root through any public seam, but "contains the editors and does
+        /// not contain the anchor" identifies it uniquely within this host.
+        /// </summary>
+        private static bool IsAncestorOf(object? candidate, Microsoft.UI.Xaml.DependencyObject? descendant)
+        {
+            if (candidate is not Microsoft.UI.Xaml.DependencyObject ancestor || descendant is null)
+                return false;
+
+            for (var node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(descendant);
+                 node is not null;
+                 node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node))
+            {
+                if (ReferenceEquals(node, ancestor)) return true;
+            }
+
+            return false;
+        }
+    }
 }
