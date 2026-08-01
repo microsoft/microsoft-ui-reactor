@@ -271,23 +271,38 @@ public class DataGridRowEditKeyboardTests
         Assert.True(state.BeginRowEdit(0));
         state.SetFocus(0, IdCol);
 
-        // Backward off column 0 wraps to the LAST editable column, not the first.
+        // Backward off column 0 wraps to the LAST editable column, not the first. This is the
+        // step that carries the direction claim — one step from a shared origin, so it is the
+        // half of the differential below that can actually disagree with forward traversal.
         Assert.True(state.FocusPrevRowEditColumn());
         Assert.Equal(ScoreCol, state.FocusedColIndex);
+        var backAfterOneStep = state.FocusedColIndex;
 
         Assert.True(state.FocusPrevRowEditColumn());
         Assert.Equal(NameCol, state.FocusedColIndex);
-        Assert.NotEqual(IdCol, state.FocusedColIndex); // read-only column is skipped both ways
         Assert.Equal(0, state.FocusedRowIndex);
         Assert.True(state.IsRowEditing);
 
-        // Differential isolation: same grid, same start, only the direction differs.
+        // Differential isolation — and the pairing has to be step-matched to mean anything.
+        // Backward's SECOND step also lands on NameCol, so comparing the two arms' end states
+        // (NameCol both) discriminates nothing: with a 2-editable ring the directions converge
+        // after the step counts diverge. The oracle is one step against one step, i.e.
+        // backAfterOneStep (Score) against forward's first step (Name).
         var forward = await LoadedState();
         Assert.True(forward.BeginRowEdit(0));
         forward.SetFocus(0, IdCol);
         Assert.True(forward.FocusNextRowEditColumn());
         Assert.Equal(NameCol, forward.FocusedColIndex);
-        Assert.NotEqual(ScoreCol, forward.FocusedColIndex);
+
+        // Cross-arm, and deliberately kept even though the two Equal()s above already entail it
+        // while they hold distinct literals. Its job is not logical independence but EDIT
+        // robustness: it is the only line here that still fails when a future edit "repairs" both
+        // Equal()s to whatever a regressed tree reports, which is precisely how a direction test
+        // goes permanently green. The two NotEqual()s this replaces were single-arm — each
+        // compared against a distinct literal already pinned one line above, so no edit that
+        // broke the Equal could ever trip them, and no value of the field could satisfy one and
+        // fail the other (#1022).
+        Assert.NotEqual(backAfterOneStep, forward.FocusedColIndex);
     }
 
     /// <summary>
