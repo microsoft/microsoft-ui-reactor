@@ -176,6 +176,11 @@ jobs:
     needs: changes
     if: needs.changes.outputs.non-md == 'true'
     runs-on: windows-latest
+    # The suite's own process budget (SelfTestBatch.DefaultSelfTestTimeoutSeconds) is deliberately
+    # generous so that a healthy-but-slow run is never killed and blamed on an arbitrary fixture
+    # (issue #988). This job-level cap is the outer backstop for a genuinely wedged runner, so it
+    # must sit above that budget but well below the 360-minute default.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 

@@ -140,6 +140,70 @@ Rules of thumb:
 - **`host.WaitForIdleAsync()` for isolated hosts.** If you constructed your own `ReactorHost`, neither `Harness.Render` nor `Harness.WaitFor` knows about it.
 - **Save and restore `ReactorApp.ActiveHostInternal`** when using an isolated host so subsequent fixtures see the shared host they expect (`var prev = ReactorApp.ActiveHostInternal; try { … } finally { if (prev is not null) ReactorApp.ActiveHostInternal = prev; }`).
 
+### Suite duration budget — and why a single arbitrary fixture failure may not be about that fixture
+
+The whole `--self-test` subprocess runs under **one shared process budget**. When it expires, the wrapper kills the Host and attributes the kill to whichever fixture happened to be in flight. That attribution is **positional, not causal** — the named fixture is not shown to be at fault, and the name changes from run to run.
+
+This shape cost six separate investigations before it was diagnosed (issue #988), because the report looks exactly like a normal assertion failure. **Read the abort reason before debugging the named fixture:**
+
+| `_abortedReason` prefix | What actually happened | What to do |
+|---|---|---|
+| `Run aborted by dispatcher-starvation hang on fixture 'X'` | The Host's off-dispatcher watchdog saw no fixture progress for 60 s, named `X`, and fast-failed the process. **Causal** — `X` is the culprit. This is the ordinary hang path. | Debug `X`. `--filter X` reproduces it. Set `DOTNET_DbgEnableMiniDump=1` for a dump. |
+| `Run aborted by dispatcher-starvation hang on fixture 'X' (FailFast did not land; the wrapper's budget killed the process)` | Same signal, but the process would not die even under `FailFast`. **Still causal**, and the extra clause is the diagnosis: it points below the CLR — a native lock or a wedged UI thread. | Debug `X` as above, but expect a native cause. A dump is worth more than a managed stack here. |
+| `Run aborted: suite exceeded its <N>s budget with fixture 'X' in flight (POSITIONAL attribution…)` | The suite ran out of its shared budget with no hang signal. `X` was merely in flight. | Look at the reported elapsed-vs-budget, **not** at `X`. `--filter X` removes the other ~1400 fixtures that shared the budget — it removes the cause, so it passes whether or not `X` is healthy, in *either* direction. |
+| `Run aborted after fixture 'X'` / `Run aborted before fixture 'X'` — with ` (Host died mid-run with no '# Total failures:' trailer — NOT a budget kill; issue #978)` | The Host process stopped mid-fixture on its own (usually a native crash). **This is not #988**, and raising the budget does nothing for it. | Read the exit-code classification in the message first. Check the tail output and stderr for the native fault. |
+| Same prefixes, with ` (Host finished its run, then exited abnormally)` | The Host reached the end of its run — the trailer is present — and then failed to exit cleanly, **or** it ran to completion without ever naming the missing fixtures. | Look at teardown, not at `X`. Issue #680 (0xC0000005 at final process exit) is one known cause; the other is two-place fixture registration — a name `--list-fixtures` reports that the run's `Create()` switch does not produce. |
+
+> **Do not let the two "arbitrary victim" failures collapse into one.** A budget kill (#988) and a silent mid-run death (#978) look nearly identical from outside: one fixture blamed, everything after it missing, and the victim moving between runs. The discriminator is the **`# Total failures:` trailer** — a budget kill interrupts a Host that *would* have printed it, whereas a Host that dies mid-fixture never reaches it. Prefer the trailer over elapsed time: timing corroborates but cannot decide, because a slow machine and a fast crash produce overlapping durations. The abort reasons above state which one fired, so this is readable off any skipped fixture without a re-run.
+
+> **A third mode is deliberately absent from the table: an all-green run whose process still exits non-zero.** Every fixture reports `ok`, the trailer is present, nothing is skipped — and the Host then faults on the way out (`STATUS_STOWED_EXCEPTION` / `0xC000027B` is the usual one under WinUI). There is no `_abortedReason` for this and there should not be: nothing was interrupted and no fixture can be blamed, so a row keyed on an abort prefix would be unreachable. It surfaces as its own named failure instead — **`HostProcessExitsCleanly_NoTeardownCrash`** — which prints the exit code with its NTSTATUS interpretation. **If that test is the only red one, read the classified code and look at teardown: not at a fixture, and not at the budget.** Note this diagnosis does *not* reach the coverage leg: `tools/coverage/run-coverage.ps1` runs the Host directly under `dotnet-coverage` rather than through this wrapper, so the same fault there appears only as a non-zero exit from the collect step.
+
+Positional attribution means **unproven, not exonerated**. The absence of a `HANG_DETECTED` signal does not clear `X`: the watchdog can be disabled by env or by an attached debugger, and a pathologically slow or order-dependent fixture can pump the dispatcher often enough never to trip it. Start with suite duration; if duration looks normal, `X` becoming the suspect again is the one scenario that fits.
+
+> **The trailer states what the Host *got to do* — not *which binary did it*.** Every reading above assumes the Host you ran was built from the tree you are debugging, and `--no-build` does not check that. If the preceding build failed and an earlier binary is still on disk, the run proceeds against the stale one and emits a byte-identical trailer, exit code and TAP plan. Nothing in the output distinguishes it. Note the direction: this fails toward **a false green, which ends an investigation**, whereas the more familiar staleness traps produce a false red, which starts one. So whenever you pass `--no-build`, make the build a separate step that fails closed:
+>
+> ```powershell
+> dotnet build tests/Reactor.AppTests.Host -c Debug -p:Platform=x64
+> if ($LASTEXITCODE -ne 0) { throw "build failed - selftest output would be STALE" }
+> dotnet run --project tests/Reactor.AppTests.Host --no-build -c Debug -p:Platform=x64 -- --self-test --filter "<Prefix>"
+> ```
+
+Fixtures with no result are reported **Skipped (`Assert.Inconclusive`)**, not passed. A skipped fixture carries no information about itself.
+
+**The budget is a backstop, not the hang detector.** Two Host-side watchdogs detect hangs and both name a culprit: a per-fixture graceful timeout (emits `not ok <n> <fixture>_TIMEOUT`) and the 60 s off-dispatcher watchdog (emits `Bail out! HANG_DETECTED: <name>`). The wrapper cap only fires when both were unable to. So it is sized as *"the suite could not legitimately take this long"*, not *"the suite normally takes this long"* — raising it does not delay hang detection.
+
+| Knob | Default | Purpose |
+|---|---|---|
+| `REACTOR_SELFTEST_TIMEOUT_SECONDS` | 900 | Hard process budget. Malformed or non-positive values fall back to the default. |
+| `REACTOR_SELFTEST_HANG_TIMEOUT_SECONDS` | 60 | Host off-dispatcher hang watchdog. **`0` or negative disables it entirely** (useful when attaching a debugger, which also auto-disables it); malformed values fall back to 60. |
+| `REACTOR_SELFTEST_VIZ_PACING` | unset | Set to `1` to restore the human-observable pacing in the docking visual-demo fixtures. |
+
+**Keeping the margin.** The Host emits `# Suite elapsed: <seconds>` and `# Fixture time: <name> <ms>` as TAP comments (inert to `ParseTap` and to CI's `^not ok ` greps), and `SelfTestBatch.SuiteDuration_WithinBudget` reports elapsed / budget / % every run. Above `SuiteDurationWarnSeconds` it also reports Inconclusive — deliberately not a failure, since duration depends on runner speed and a hard gate here would itself be a flake. If you see that warning, trim suite time or raise the budget **deliberately**, rather than discovering the cap in an unrelated red PR.
+
+> **Where the number actually shows up on CI: the job summary, not the log.** Measured, because the obvious channel does not work: under `dotnet test` the tests run in a child `testhost` process whose stdout the runner does **not** forward. A probe writing a `::warning::` line via `Console.WriteLine` *and* via the raw standard-output handle produced neither marker at `console;verbosity=normal`, and `Assert.Inconclusive`'s message was not shown either — the run printed only `Skipped SuiteDuration_WithinBudget`. So the duration report is written to `$GITHUB_STEP_SUMMARY` (plain file I/O by the test process, immune to whatever the runner does with stdout) and renders on the run page. The console lines are kept for local `vstest`/IDE runs, where they *are* visible. If you add another diagnostic here, check which channel it lands in before trusting it — a report nobody receives is the same silent erosion this section exists to prevent.
+
+To find what to trim, rank the per-fixture times:
+
+```powershell
+Select-String -Path run.tap -Pattern '^# Fixture time: ' | ForEach-Object {
+  $p = $_.Line.Substring(16).Trim() -split '\s+'
+  [pscustomobject]@{ Name = $p[0]; Ms = [double]$p[1] }
+} | Sort-Object Ms -Descending | Select-Object -First 20
+```
+
+Before converting a fixed wait you find that way, re-read the `WaitFor` short-circuit rule above — several of the slowest fixtures spend their time on *stimulus* (repeated flips feeding a bounded-growth leak guard, framerate sampling), and shortening those silently weakens the assertion instead of speeding up the suite.
+
+> **Already tried and rejected: replacing `Harness.Render`'s `Task.Delay(16 + ms)` with a compositor-frame wait.** It is the obvious target — 2718 call sites all paying a fixed ~16 ms, nominally ≥43 s of the suite — so it will be proposed again. Measured, it does not pay:
+>
+> | arm | host-reported suite elapsed |
+> |---|---|
+> | `CompositionTarget.Rendering` frame signal, capped at 16 ms | 306.6 s, 293.4 s, + one run that died natively at fixture 1366/1401 |
+> | unconditional `Task.Delay(16 + ms)` (shipping behaviour) | 328.0 s (cold), 300.8 s, 300.3 s |
+>
+> Interleaved on one machine, alternating arms, three pairs: **≈0–3 %**, inside the run-to-run noise. The reason it doesn't pay is the same reason it looks attractive — subscribing to `CompositionTarget.Rendering` makes the UI thread produce frames continuously, so the frame arm buys back most of the delay it saves. And the delay is not arbitrary padding: it is a documented guard against fixture transitions outpacing the compositor and faulting natively, which is what the truncated run above looks like.
+>
+> An **earlier** measurement of the same change showed a 14.4 % win. It was wrong: the "legacy" arm it compared against still subscribed the frame counter before checking the opt-out flag, so the baseline carried the continuous-frame cost and the win was mostly the instrument. If you re-attempt this, verify the control arm is byte-for-byte the shipping path before believing any number it produces.
+
 ### Running selftests under NativeAOT
 
 The Host app supports an AOT-published build so the selftest suite doubles as Reactor's primary AOT regression gate. The framework itself is AOT-clean (see [`docs/aot-support.md`](docs/aot-support.md)) but a meaningful slice of selftest *fixtures* still trip over reflection paths the AOT compiler can't preserve. Those fixtures are pre-skipped via a baked-in pattern list so the run completes and the remaining failures are visible.
