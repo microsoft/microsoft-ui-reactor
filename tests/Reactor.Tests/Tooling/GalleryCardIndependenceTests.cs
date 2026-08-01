@@ -201,6 +201,11 @@ public sealed class GalleryCardIndependenceTests
         // identifier reference on every gallery page, and sorting to read one element allocated an
         // iterator and a sorted buffer each time. Strict `<` keeps the first of any equal-length
         // pair, which is what the stable OrderBy did.
+        //
+        // The condition is not a filter, which is why it stays a loop: the second conjunct reads
+        // `innermost`, so it depends on mutable loop state and cannot be hoisted into a Where.
+        // Only the containment half could move, and splitting the two would reintroduce the
+        // per-call allocation this exists to avoid without removing the `if`.
         InvocationExpressionSyntax? innermost = null;
 
         foreach (var card in cards)
@@ -268,10 +273,11 @@ public sealed class GalleryCardIndependenceTests
 
         for (var index = 0; index < slots.Count; index++)
         {
-            foreach (var name in slots[index].Names)
-            {
-                var key = (ScopeKey(slots[index].Scope), name);
+            // Loop-invariant across the slot's names, so it is read once rather than per name.
+            var scope = ScopeKey(slots[index].Scope);
 
+            foreach (var key in slots[index].Names.Select(name => (scope, name)))
+            {
                 if (slotOfName.TryGetValue(key, out var existing) && existing != index)
                     ambiguous.Add(key);
                 else
