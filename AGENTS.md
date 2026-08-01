@@ -178,7 +178,8 @@ Hard-won specifics that repeatedly cost sessions time. Prefer these exact comman
 - **A green Debug build does not clear the `Build solution` CI job.**
   `TreatWarningsAsErrors` is Release-only and CI builds Release, so verify with
   `dotnet build Reactor.slnx -c Release`. If `WMC0110` / `WMC1509` follows a C# error,
-  fix the earlier error; those markup errors are a cascade, not the root cause.
+  treat the markup errors as a likely cascade: fix the earlier error first, then confirm
+  they disappear before investigating them independently.
 - **Add `-p:SkipSignaturesGen=true` to local `tests/Reactor.Tests` builds** to avoid the
   XAML-markup/SignaturesGen race: `CSC error CS2012: Cannot open '...\obj\...\intermediatexaml\Reactor.dll' ... used by another process`. If it still races under
   parallel WinUI builds, prebuild `src/Reactor` alone first, then add `-m:1`

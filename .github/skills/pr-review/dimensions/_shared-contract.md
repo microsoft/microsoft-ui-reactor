@@ -71,8 +71,15 @@ Specifically, **drop**:
 Do not treat a comforting negative as evidence by itself. A no-match search,
 clean sweep, or deterministic pass is not a measurement until a positive control
 shows the probe could produce the opposite result. If the answer to "could this
-have come out the other way?" is "no -- it always passes", emit the finding; do
-not record that invariance as confirmation.
+have come out the other way?" is "no — it always passes", the probe is
+inconclusive. Fix the probe; emit a finding only when validated evidence exposes
+a defect in the reviewed diff.
+
+Treat fixes for review findings as new code. When new prose, comments, or docs
+assert facts about framework or repo behavior, require the in-repo test, call
+site, analyzer table, or other source that establishes the claim. If no such
+source can be found, flag the unsupported claim rather than accepting it at face
+value.
 
 **Keep**:
 
