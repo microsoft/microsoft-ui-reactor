@@ -115,14 +115,17 @@ style. Render a themed `Button` with `.Padding(24)` and then without
 `.Padding()` and you get the *themed* padding back, not `0`.
 
 > **Caveat:** The four transform modifiers are the current exception. `.Scale()`,
-> `.Rotation()`, `.Translation()` and `.CenterPoint()` write through the
-> element's composition visual rather than through the XAML property
-> system, so `ClearValue` has nothing to release and dropping one leaves
-> the last value on the element. Until that is fixed, reset them by writing
-> the identity value explicitly — `.Scale(1f)`, `.Rotation(0f)`,
-> `.Translation(0f, 0f, 0f)` and `.CenterPoint(Vector3.Zero)` — rather than
-> by omitting the call. Note `.CenterPoint()` takes only a `Vector3`, so it
-> has no component-wise overload to spell the identity with.
+> `.Rotation()`, `.Translation()` and `.CenterPoint()` have no unset arm yet,
+> so dropping one leaves the last value on the element. An un-animated write
+> goes straight to the XAML facade property, so a future fix can clear those
+> the usual way; but when an animation curve is in scope the value is driven
+> by a composition animation on the element's visual, which outranks the
+> property — releasing that case has to stop the animation as well, which is
+> why this is not simply a missing `ClearValue`. Until it is fixed, reset
+> these by writing the identity value explicitly — `.Scale(1f)`,
+> `.Rotation(0f)`, `.Translation(0f, 0f, 0f)` and `.CenterPoint(Vector3.Zero)`
+> — rather than by omitting the call. Note `.CenterPoint()` takes only a
+> `Vector3`, so it has no component-wise overload to spell the identity with.
 
 Reference modifiers are the exception to "just write this value" in the
 implementation, but not in the authoring model. `.Ref(cell)` binds the

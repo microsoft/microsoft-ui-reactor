@@ -79,13 +79,14 @@ public class ModifierUnsetClearValueTests
     private static readonly Dictionary<string, string> MissingUnsetArmExceptions =
         new(StringComparer.Ordinal)
         {
-            // Issue #1001. These four are XAML *facade* properties: the DP identifier is real,
-            // but the live value lives on the element's composition visual, and the set path
-            // (AnimationHelper.SetOrAnimate / SetOrAnimateVector3) calls visual.StartAnimation
-            // whenever a curve is ambient. A running composition animation outranks the DP and
-            // the XAML property was never assigned, so ClearValue has no local value to release
-            // — the mechanical arm every other modifier gets would be a reset that silently
-            // does nothing in the animated case. The fix needs a StopAnimation companion plus a
+            // Issue #1001. These four are XAML *facade* properties. With no ambient curve the
+            // set path (AnimationHelper.SetOrAnimate / SetOrAnimateVector3) falls through to
+            // SetVector3Direct and assigns the facade property, which a mechanical ClearValue
+            // arm would release normally. But when a curve *is* ambient the same path calls
+            // visual.StartAnimation instead, and a running composition animation outranks the
+            // DP while leaving no local value for ClearValue to release — so the mechanical
+            // arm every other modifier gets would silently do nothing in exactly the case
+            // that matters. The fix needs a StopAnimation companion plus a
             // selftest that actually exercises the animated path; deleting these four entries
             // is the first commit of #1001.
             ["ApplyModifiers.Scale"] = "Compositor-backed facade property — issue #1001.",

@@ -4251,8 +4251,9 @@ public sealed partial class Reconciler : IDisposable
     /// not). That is why there is no <c>a is null</c> early return any more: it swallowed
     /// exactly the transition it needed to handle, so dropping <c>.HelpText(...)</c> — or the
     /// entire accessibility bag — left every automation property pinned on the control forever
-    /// (issue #986). Every property is therefore read through <c>a?.X</c>, so the dropped-bag
-    /// case takes the same reset path as dropping one modifier from a surviving bag.
+    /// (issue #986). Every property is therefore null-tolerant on <paramref name="a"/> — set
+    /// arms guard with <c>a is not null &amp;&amp; a.X…</c>, reset arms read <c>a?.X</c> — so the
+    /// dropped-bag case takes the same reset path as dropping one modifier from a surviving bag.
     /// <para>
     /// Resets go through <c>ClearValue</c>, never through writing the property's default: a
     /// local value outranks every <c>Style</c> setter in WinUI's precedence order, so the
