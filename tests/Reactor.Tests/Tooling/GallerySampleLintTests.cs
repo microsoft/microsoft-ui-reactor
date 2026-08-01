@@ -594,16 +594,24 @@ public sealed class GallerySampleLintTests
             $"only {hooks.Count} hook name(s) were read back out of the StateSlots pattern — the " +
             "shape it is parsed with has changed, so this check no longer sees what it guards.");
 
-        var declaration = source.IndexOf("public void SampleCards_SharedStateDoesNotSpread()", global::System.StringComparison.Ordinal);
-        Assert.True(declaration >= 0, "Could not locate SampleCards_SharedStateDoesNotSpread — this check reads its doc and body.");
+        // The method's own span, taken from the syntax tree rather than from string offsets. The
+        // doc comment is leading trivia on the declaration, so ToFullString() carries both halves
+        // the message has to agree with. Searching for a literal "\r\n    }\r\n" instead would pin
+        // this check to one line-ending convention, and would stop at the first four-space `}` that
+        // happens to follow rather than at the end of the method.
+        var declarations = CSharpSyntaxTree
+            .ParseText(source, cancellationToken: TestContext.Current.CancellationToken)
+            .GetRoot(TestContext.Current.CancellationToken)
+            .DescendantNodes()
+            .OfType<MethodDeclarationSyntax>()
+            .Where(m => m.Identifier.ValueText == "SampleCards_SharedStateDoesNotSpread")
+            .ToList();
 
-        var docStart = source.LastIndexOf("/// <summary>", declaration, global::System.StringComparison.Ordinal);
-        Assert.True(docStart >= 0, "SampleCards_SharedStateDoesNotSpread has no doc comment to check.");
+        Assert.True(declarations.Count == 1,
+            $"expected exactly one SampleCards_SharedStateDoesNotSpread to read the doc and body " +
+            $"of, found {declarations.Count} — this check no longer reads the rule it guards.");
 
-        var bodyEnd = source.IndexOf("\r\n    }\r\n", declaration, global::System.StringComparison.Ordinal);
-        Assert.True(bodyEnd > declaration, "Could not find the end of SampleCards_SharedStateDoesNotSpread.");
-
-        var region = source[docStart..bodyEnd];
+        var region = declarations[0].ToFullString();
         var missing = hooks.Where(h => !region.Contains(h, global::System.StringComparison.Ordinal)).ToList();
 
         Assert.True(missing.Count == 0,
@@ -611,6 +619,7 @@ public sealed class GallerySampleLintTests
             "SampleCards_SharedStateDoesNotSpread never name them, so a slot shared through one " +
             "would be reported in words that exclude it:\n  " + string.Join("\n  ", missing));
     }
+
     /// <summary>The outermost <c>SampleCard(...)</c> calls — one per card the reader sees.</summary>
     static List<InvocationExpressionSyntax> SampleCards(SyntaxNode root) =>
         root.DescendantNodes()
