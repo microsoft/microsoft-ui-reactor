@@ -2,11 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.UI.Reactor.Analyzers;
 using Microsoft.UI.Reactor.Cli.Pack;
+using Microsoft.UI.Reactor.Core;
 using Xunit;
 
 namespace Microsoft.UI.Reactor.Tests.AnalyzerTests;
@@ -194,11 +197,7 @@ public class ModifierUnsetClearValueTests
     [Fact]
     public void CleanElement_Releases_Every_Modifier_Backed_Dependency_Property()
     {
-        var commonBlock = ReadCleanElementCommonBlock(out _);
-
-        var cleared = Regex.Matches(commonBlock, @"\b\w+\.ClearValue\(\s*(?:[\w.]+\.)?(\w+)\.(\w+)Property\s*\)")
-            .Select(match => match.Groups[1].Value + "." + match.Groups[2].Value)
-            .ToHashSet(StringComparer.Ordinal);
+        var cleared = ReadCleanElementClears();
 
         var missing = CleanElementRequiredClears
             .Where(required => !cleared.Contains(required))
@@ -212,7 +211,162 @@ public class ModifierUnsetClearValueTests
             "or intentionally dropped, update CleanElementRequiredClears with the reason.");
     }
 
+    /// <summary>
+    /// The dynamic counterpart to <see cref="CleanElementRequiredClears"/>. That list is a
+    /// hand-maintained snapshot of today's answer; this derives the same obligation from the
+    /// two sources that actually decide it — <c>ModifierTable</c>'s control gates and
+    /// <c>ElementPool</c>'s poolable set — so a receiver that becomes poolable later is
+    /// required to be released without anyone remembering to add a row.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The intersection is by <b>assignability</b>, not by name, and that is the whole
+    /// difficulty. <c>Control</c> is a gate receiver and is never itself in
+    /// <c>PoolableTypes</c> — <c>Button</c>, <c>TextBox</c>, <c>ToggleSwitch</c>,
+    /// <c>ScrollViewer</c>, <c>ProgressBar</c> and <c>ProgressRing</c> are. A name-based
+    /// intersection therefore derives no <c>Control.*</c> obligation at all and reports
+    /// success, which is the direction that reads as "no violation found". The
+    /// subclass-derivation assertion below exists to catch exactly that regression.
+    /// </para>
+    /// <para>
+    /// <c>RelativePanel</c> is in the <c>Padding</c> and <c>CornerRadius</c> gates and is
+    /// deliberately <i>not</i> required here, because nothing poolable is a
+    /// <c>RelativePanel</c> today. That exclusion is derived, not declared: adding
+    /// <c>RelativePanel</c> to <c>PoolableTypes</c> makes both clears mandatory here on the
+    /// next run, with no edit to this file. See issue #1051 for the analyzer-side
+    /// consequence of the same asymmetry.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void Every_Poolable_Gated_Receiver_Is_Released_By_CleanElement()
+    {
+        var poolable = ReadPoolableTypes();
+        var closure = ReadPoolableReceiverClosure(poolable);
+        var cleared = ReadCleanElementClears();
+
+        var required = new SortedSet<string>(StringComparer.Ordinal);
+
+        foreach (var (property, info) in ModifierTable.Properties)
+        {
+            if (!info.PoolReset || info.ControlGate is null) continue;
+
+            foreach (var gateName in info.ControlGate)
+            {
+                // Absent from the closure means no poolable type is a `gateName`, so the pool
+                // never recycles that receiver and owes it no reset.
+                if (!closure.TryGetValue(gateName, out var receiver)) continue;
+
+                required.Add(receiver.Name + "." + property);
+            }
+        }
+
+        var poolableNames = poolable.Select(type => type.Name).ToHashSet(StringComparer.Ordinal);
+        var derivedBySubclass = required
+            .Where(pair => !poolableNames.Contains(pair[..pair.IndexOf('.')]))
+            .ToList();
+
+        Assert.True(
+            derivedBySubclass.Count > 0,
+            "No gate receiver was matched through a subclass, so the intersection has regressed " +
+            "from assignability to name equality. `Control` is a gate receiver and never appears " +
+            "in PoolableTypes itself — Button, TextBox and ToggleSwitch do — so a name-based " +
+            "intersection silently drops every Control.* obligation and reports no violation.");
+
+        Assert.True(
+            required.Count >= 12,
+            $"Only {required.Count} poolable gated receiver/property pair(s) were derived from " +
+            "ModifierTable's control gates and ElementPool.PoolableTypes. The derivation has " +
+            "stopped matching, which would make the assertion below pass over an empty set.");
+
+        var missing = required.Where(pair => !cleared.Contains(pair)).ToList();
+
+        Assert.True(
+            missing.Count == 0,
+            "ElementPool.CleanElement does not release these dependency properties, even though " +
+            "ModifierTable's control gate writes each one to a receiver the pool recycles — so " +
+            "the next renter inherits the previous renter's local value, which outranks every " +
+            $"Style setter (issue #985): [{string.Join(", ", missing)}]. Add the ClearValue to " +
+            "CleanElement's FE-common block. This obligation is derived from the gate and the " +
+            "poolable set, so it cannot be silenced by editing a list.");
+    }
+
     // ── Source-scanning helpers ─────────────────────────────────────────────
+
+    /// <summary>
+    /// <c>ElementPool.PoolableTypes</c>, read reflectively because it is private.
+    /// </summary>
+    /// <remarks>
+    /// Throws on every failure path rather than returning an empty set. A reflective lookup
+    /// that degrades to empty makes every obligation derived from it disappear, so the caller
+    /// asserts over nothing and reports green — and a rename produces exactly that, which is
+    /// the failure mode most likely to happen and least likely to be noticed.
+    /// </remarks>
+    private static IReadOnlyList<Type> ReadPoolableTypes()
+    {
+        const string fieldName = "PoolableTypes";
+
+        var field = typeof(ElementPool).GetField(fieldName, BindingFlags.NonPublic | BindingFlags.Static)
+                    ?? typeof(ElementPool).GetField(fieldName, BindingFlags.Public | BindingFlags.Static);
+
+        if (field is null)
+        {
+            throw new InvalidOperationException(
+                $"ElementPool.{fieldName} was not found. It has been renamed or moved — point this " +
+                "test at the new member rather than letting the poolable set read as empty, which " +
+                "would make every clear obligation derived from it silently vanish.");
+        }
+
+        if (field.GetValue(null) is not IEnumerable<Type> types)
+        {
+            throw new InvalidOperationException(
+                $"ElementPool.{fieldName} is no longer an IEnumerable<Type>, so the poolable " +
+                "receivers can no longer be read and this test cannot check anything.");
+        }
+
+        var poolable = types.ToList();
+
+        if (poolable.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"ElementPool.{fieldName} is empty. Every receiver obligation is derived from it, " +
+                "so an empty set would make this test pass while checking nothing.");
+        }
+
+        return poolable;
+    }
+
+    /// <summary>
+    /// Every type some poolable type is assignable to — each pooled type's own base chain.
+    /// A control gate's receiver is poolable exactly when it appears here, which is
+    /// assignability expressed as set membership rather than as a string type lookup.
+    /// </summary>
+    private static Dictionary<string, Type> ReadPoolableReceiverClosure(IReadOnlyList<Type> poolable)
+    {
+        var closure = new Dictionary<string, Type>(StringComparer.Ordinal);
+
+        foreach (var pooled in poolable)
+        {
+            for (var type = pooled; type is not null; type = type.BaseType)
+            {
+                closure[type.Name] = type;
+            }
+        }
+
+        return closure;
+    }
+
+    /// <summary>
+    /// <c>Owner.Property</c> pairs released by <c>CleanElement</c>'s FE-common block, using the
+    /// same anchored boundary as the rest of this file so both callers agree on the region.
+    /// </summary>
+    private static HashSet<string> ReadCleanElementClears()
+    {
+        var commonBlock = ReadCleanElementCommonBlock(out _);
+
+        return Regex.Matches(commonBlock, @"\b\w+\.ClearValue\(\s*(?:[\w.]+\.)?(\w+)\.(\w+)Property\s*\)")
+            .Select(match => match.Groups[1].Value + "." + match.Groups[2].Value)
+            .ToHashSet(StringComparer.Ordinal);
+    }
 
     /// <summary>
     /// Every <c>else</c>-arm in <c>Reconciler.ApplyModifiers</c> guarded by an unset
