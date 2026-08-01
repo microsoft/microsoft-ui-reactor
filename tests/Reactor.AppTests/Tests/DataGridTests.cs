@@ -129,6 +129,16 @@ public class DataGridTests : AppTestBase
     /// real synchronous modifier read and the mounted handler wiring; the headless tests construct
     /// the chord themselves and cannot see either.
     ///
+    /// <para>Scope, because "the only tier" invites a wider reading than it earns. What this detects
+    /// is a modifier that is never captured at all — no timing involved, the chord is wrong on every
+    /// run. What it does NOT detect is the capture sinking BELOW the <c>TryEnqueue</c> deferral,
+    /// which is a timing defect: <c>viaSendInput</c> injects the whole chord microseconds apart, and
+    /// a posted dispatcher wake outranks the queued <c>WM_KEYUP(Shift)</c>, so the deferred read
+    /// most likely still sees Shift down. Whichever way that resolves, it resolves the same way
+    /// every run — so a green result here is evidence of nothing about capture position (#1049).
+    /// That regression is covered deterministically, in the only tier that can express it, by
+    /// <c>DataGridCaptureSiteTests</c>.</para>
+    ///
     /// <para>The oracle is the direction, not the commit: both directions commit the LastName edit
     /// identically, so the EditLog right after the chord cannot tell them apart. What differs is
     /// where the editor reopens — backward lands on FirstName (editable, editor reopens), forward
