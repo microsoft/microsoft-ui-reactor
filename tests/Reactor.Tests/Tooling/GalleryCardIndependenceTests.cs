@@ -560,17 +560,10 @@ public sealed class GalleryCardIndependenceTests
         // Strict on both halves: a scope as wide as the region is the slot's own declaration (or a
         // sibling that cannot enclose the reference anyway), and a scope that merely overlaps the
         // region without nesting inside it belongs to a different branch of the tree.
-        static bool IsShadowed(SyntaxNode reference, SyntaxNode region, List<SyntaxNode> scopes)
-        {
-            foreach (var scope in scopes)
-            {
-                if (scope.Span.Length >= region.Span.Length) continue;
-
-                if (region.Span.Contains(scope.Span) && scope.Span.Contains(reference.Span)) return true;
-            }
-
-            return false;
-        }
+        static bool IsShadowed(SyntaxNode reference, SyntaxNode region, List<SyntaxNode> scopes) =>
+            scopes.Any(scope => scope.Span.Length < region.Span.Length
+                             && region.Span.Contains(scope.Span)
+                             && scope.Span.Contains(reference.Span));
 
         void RecordCard(List<InvocationExpressionSyntax> into, IdentifierNameSyntax reference)
         {
