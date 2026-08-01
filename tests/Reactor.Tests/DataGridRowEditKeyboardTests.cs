@@ -174,7 +174,6 @@ public class DataGridRowEditKeyboardTests
         // column, and never down to the next row the way the cell-mode FocusNextCell would.
         Key(state, el, VirtualKey.Tab);
         Assert.Equal(NameCol, state.FocusedColIndex);
-        Assert.NotEqual(IdCol, state.FocusedColIndex);
         Assert.Equal(0, state.FocusedRowIndex);
         Assert.True(state.IsRowEditing);
     }
@@ -223,11 +222,10 @@ public class DataGridRowEditKeyboardTests
         Key(state, el, VirtualKey.Tab);
 
         // Name is the very next column and IS in _rowEditValues, so a traversal that ignored
-        // visibility would stop there. Landing on Score instead proves the hidden column was
-        // stepped over — and the move off IdCol proves the traversal ran at all.
+        // visibility would stop there. Landing on Score instead proves both that the hidden column
+        // was stepped over and that the traversal ran at all — Score is neither Name nor the IdCol
+        // it started on.
         Assert.Equal(ScoreCol, state.FocusedColIndex);
-        Assert.NotEqual(NameCol, state.FocusedColIndex);
-        Assert.NotEqual(IdCol, state.FocusedColIndex);
         Assert.Equal(0, state.FocusedRowIndex);
         Assert.True(state.IsRowEditing);
     }
@@ -271,9 +269,10 @@ public class DataGridRowEditKeyboardTests
         Assert.True(state.FocusPrevRowEditColumn());
         Assert.Equal(ScoreCol, state.FocusedColIndex);
 
+        // Landing on Name rather than Id is itself the proof that the read-only column is skipped
+        // going backward, just as it was going forward.
         Assert.True(state.FocusPrevRowEditColumn());
         Assert.Equal(NameCol, state.FocusedColIndex);
-        Assert.NotEqual(IdCol, state.FocusedColIndex); // read-only column is skipped both ways
         Assert.Equal(0, state.FocusedRowIndex);
         Assert.True(state.IsRowEditing);
 
@@ -283,7 +282,6 @@ public class DataGridRowEditKeyboardTests
         Assert.True(forward.BeginRowEdit(0));
         Assert.True(forward.FocusNextRowEditColumn());
         Assert.Equal(NameCol, forward.FocusedColIndex);
-        Assert.NotEqual(ScoreCol, forward.FocusedColIndex);
     }
 
     [Fact]

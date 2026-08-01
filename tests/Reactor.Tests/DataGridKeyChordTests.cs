@@ -20,7 +20,12 @@ namespace Microsoft.UI.Reactor.Tests;
 /// a test that starts in the wrong place passes against a wrong-direction implementation. Each
 /// direction assertion therefore starts where the two directions provably diverge (the read-only
 /// column, a row boundary, or no focus at all) and is paired with the forward chord run against an
-/// identically-prepared state, so a Shift-blind implementation fails on the <c>NotEqual</c>.</para>
+/// identically-prepared state. The two arms catch different wrong implementations: a Shift-blind one
+/// fails the backward arm's <c>Assert.Equal</c>, because it lands on the forward column; a
+/// direction-insensitive one that always lands on the backward expectation fails the forward arm's.
+/// The cross-arm <c>NotEqual</c> that follows compares the two measured values, so it survives an
+/// edit that collapses the two expected constants onto one another — but it is entailed by the
+/// per-arm assertions and is never what fails first.</para>
 /// </summary>
 public class DataGridKeyChordTests
 {
