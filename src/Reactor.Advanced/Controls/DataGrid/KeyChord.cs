@@ -39,11 +39,26 @@ internal readonly record struct KeyChord(VirtualKey Key, bool Shift, bool Ctrl)
     /// A chord for <paramref name="key"/> with no modifiers, built WITHOUT touching the keyboard.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// This is not a cheap stand-in for <see cref="Capture(VirtualKey)"/> — it reports no modifiers
     /// whether or not any are held. Use it only where the answer provably cannot depend on modifier
     /// state: the grid's KeyDown handler settles its modifier-blind claim
     /// (<c>DataGridComponent&lt;T&gt;.ShouldHandleKey</c>) with one of these, so that the keyboard is
     /// probed only for keys the grid actually owns and never for ordinary typing into an editor.
+    /// </para>
+    /// <para>
+    /// <b>Never pass one of these to <c>DataGridComponent&lt;T&gt;.HandleKeyDown</c>.</b> That
+    /// overload takes a <see cref="KeyChord"/>, so a conflict resolution that loses the captured
+    /// local raises <c>CS0103</c> at the dispatch — and this method is the nearest expression that
+    /// compiles, sitting a few lines above in the same handler with wording a hurried reader can
+    /// take as permission. The repair builds, keeps <see cref="Capture(VirtualKey)"/> in its correct
+    /// position, and silently restores issue #987 in full: the grid is modifier-blind on every
+    /// keystroke and Shift+Tab moves forward every time. Nothing else catches it — not the compiler,
+    /// which is satisfied; not an unused-variable warning, because the cell-edit guard still reads
+    /// the capture. Only
+    /// <c>DataGridCaptureSiteTests.DeferredDispatch_ReceivesTheCapturedChord</c> fails. Pass the
+    /// captured chord into the deferred work instead of rebuilding one at the dispatch.
+    /// </para>
     /// </remarks>
     internal static KeyChord Unmodified(VirtualKey key) => new(key, Shift: false, Ctrl: false);
 
