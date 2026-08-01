@@ -1099,9 +1099,17 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
                     TryFocusEditor(fe);
             }
 
+            // Two ways the deferral can be unavailable, and both must fall back rather than drop:
+            // no dispatcher at all (headless harnesses), and TryEnqueue refusing (queue shutting
+            // down). Dropping either would silently lose the focus request — which is precisely
+            // the "editor never got focus" symptom this whole seam exists to fix, reappearing in
+            // the one configuration nobody watches. Running inline is the weaker option (the
+            // control may not be parented yet, so Focus can fail) but it is strictly better than
+            // not asking at all, and IsFocusRequestStillCurrent still gates it. Mirrors
+            // ElementFactory.ScheduleReRealize, which handles both arms the same way.
             var queue = fe.DispatcherQueue ?? Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
-            if (queue is null) { Apply(); return; }
-            queue.TryEnqueue(Apply);
+            if (queue is null || !queue.TryEnqueue(Apply))
+                Apply();
         }
     }
 
