@@ -306,6 +306,71 @@ public class ModifierUnsetClearValueTests
     }
 
     /// <summary>
+    /// Every modifier <c>ModifierTable</c> declares <c>poolReset: true</c> must be released
+    /// somewhere in <c>CleanElement</c>'s FE-common block. Derived from the table, so it has no
+    /// list to edit and cannot be silenced by deleting a row.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This closes the gap left by <see cref="Every_Poolable_Gated_Receiver_Is_Released_By_CleanElement"/>,
+    /// which is receiver-granular but only ranges over rows carrying a <c>ControlGate</c> — 5 of
+    /// the 18 <c>poolReset: true</c> rows. The other 13, <c>Margin</c> through
+    /// <c>IsEnabled</c>, had no derived obligation at all: their only protection was a row in
+    /// <see cref="CleanElementRequiredClears"/>, and an allow-list is consumed as "every listed
+    /// entry must be cleared", so deleting a row removes the requirement and its detector in one
+    /// edit. <c>IsEnabled</c> is one of issue #985's own six, so five of that fix was derived and
+    /// the sixth was not.
+    /// </para>
+    /// <para>
+    /// The two derivations are complementary rather than layered, and the split is exact: the 5
+    /// gated properties are the same 5 cleared through more than one receiver, so this test can
+    /// only guarantee that <i>one</i> of their clears survives — the gated test pins each
+    /// receiver. The 13 ungated ones are each cleared exactly once, which makes a property-level
+    /// check receiver-strong for them by construction. Together they cover all 18 with no
+    /// hardcoded names; neither covers all 18 alone.
+    /// </para>
+    /// <para>
+    /// Non-vacuous, and not redundant with the pin list — but the obvious mutation cannot show
+    /// that, because deleting <c>Control.IsEnabled</c>'s <c>ClearValue</c> reddens this test and
+    /// the static-pin test together. The discriminating mutation deletes the clear <i>and</i> its
+    /// pin row, blinding the static test and leaving this one as the sole detector.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void Every_Pool_Reset_Modifier_Is_Cleared_By_CleanElement()
+    {
+        var clearedProperties = ReadCleanElementClears()
+            .Select(pair => pair[(pair.IndexOf('.') + 1)..])
+            .ToHashSet(StringComparer.Ordinal);
+
+        var required = ModifierTable.Properties
+            .Where(entry => entry.Value.PoolReset)
+            .Select(entry => entry.Key)
+            .ToList();
+
+        // Vacuity defence. A collapsed table makes `required` empty and the assertion below
+        // true over nothing; a collapsed scan makes `clearedProperties` empty, which fails
+        // loudly and needs no guard. Only the first direction is silent, so only it is floored.
+        Assert.True(
+            required.Count >= 12,
+            $"Only {required.Count} modifier(s) declare poolReset: true. ModifierTable has stopped " +
+            "being readable, which would make the assertion below pass over an empty set.");
+
+        var missing = required
+            .Where(property => !clearedProperties.Contains(property))
+            .OrderBy(property => property, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.True(
+            missing.Count == 0,
+            "ModifierTable declares these modifiers pool-reset, but CleanElement's FE-common " +
+            $"block never releases them: [{string.Join(", ", missing)}]. Either add the " +
+            "ClearValue, or drop poolReset from the row — REACTOR_POOL_001 tells users the value " +
+            "is reset on pool return, so leaving them disagreeing makes the analyzer state " +
+            "something false about the pool.");
+    }
+
+    /// <summary>
     /// <c>ModifierTable</c>'s <c>poolResetGate</c> lists are a name-level mirror of
     /// <c>ControlGate ∩ ElementPool.PoolableTypes</c>, needed because the analyzer targets
     /// <c>netstandard2.0</c> and cannot reference <c>src/Reactor</c>. This is the parity gate
