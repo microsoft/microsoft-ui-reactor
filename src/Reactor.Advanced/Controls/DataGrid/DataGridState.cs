@@ -1383,6 +1383,78 @@ public class DataGridState<T>
     }
 
     /// <summary>
+    /// Advance the grid's logical cell cursor to the next visible column taking part in the active
+    /// row edit, wrapping to the first one after the last. Row-mode Tab navigation stays inside the
+    /// row and never commits — a row commits only on Enter, Save, or click-away (spec 017 §6.7).
+    /// Returns false when no row edit is active, or when no visible column in the row has an editor.
+    /// </summary>
+    /// <remarks>
+    /// Like every other focus API on this type (<see cref="FocusNextCell"/>, <see cref="MoveFocus"/>,
+    /// …) this moves the grid's own <see cref="FocusedColIndex"/> bookkeeping only; it does not call
+    /// XAML <c>Focus</c>. Real keyboard focus between the row's editors is WinUI's FocusManager tab
+    /// order, which runs before the grid's <c>handledEventsToo</c> KeyDown handler.
+    /// </remarks>
+    public bool FocusNextRowEditColumn() => MoveRowEditFocus(+1);
+
+    /// <summary>
+    /// Move the grid's logical cell cursor back to the previous visible column taking part in the
+    /// active row edit, wrapping to the last one before the first. The Shift+Tab counterpart of
+    /// <see cref="FocusNextRowEditColumn"/>, with the same never-commit guarantee. Returns false
+    /// when no row edit is active, or when no visible column in the row has an editor.
+    /// </summary>
+    /// <remarks>
+    /// The grid's own KeyDown handler cannot call this today — it forwards only the raw key with no
+    /// modifier state, so it never sees Shift+Tab. That gap is tracked in #987; until it closes, this
+    /// is public for the same reason <see cref="FocusPrevCell"/> is: app authors driving custom
+    /// keyboard handling need both directions. The logical-cursor caveat on
+    /// <see cref="FocusNextRowEditColumn"/> applies here too.
+    /// </remarks>
+    public bool FocusPrevRowEditColumn() => MoveRowEditFocus(-1);
+
+    /// <summary>
+    /// Shared traversal for <see cref="FocusNextRowEditColumn"/> / <see cref="FocusPrevRowEditColumn"/>.
+    /// </summary>
+    /// <param name="direction">+1 to walk forward, -1 to walk backward.</param>
+    private bool MoveRowEditFocus(int direction)
+    {
+        if (!_isRowEditing || _rowEditValues is null) return false;
+
+        var colCount = _columns.Count;
+        if (colCount == 0) return false;
+
+        // _rowEditValues holds exactly the columns BeginRowEdit turned into editors (non-read-only
+        // with a SetValue), so this traversal skips read-only columns the same way the rendered
+        // editors do. BeginRowEdit snapshots from the full column list, so hidden columns can be
+        // in there without a rendered editor — skip those too. Indices are into the full _columns
+        // list, matching FocusNextCell and every other focus API.
+        //
+        // _focusedColIndex is -1 when the row edit began from the Edit button with no prior cell
+        // focus. Walking forward from -1 naturally lands on column 0; walking backward has to
+        // mirror that and land on the LAST column, so treat "no focus" as one position PAST the
+        // end in that direction. Without this, backward from -1 would start at colCount - 2 and
+        // never reach the last column at all.
+        var origin = _focusedColIndex < 0 && direction < 0 ? colCount : _focusedColIndex;
+
+        for (int step = 1; step <= colCount; step++)
+        {
+            var idx = ((origin + (step * direction)) % colCount + colCount) % colCount;
+            var name = _columns[idx].Name;
+            if (_rowEditValues.ContainsKey(name) && IsColumnVisible(name))
+            {
+                // A row with only one visible editable column wraps straight back to where we
+                // started. SetFocus always raises StateChanged, so calling it here would re-render
+                // the whole grid for a move that didn't move. Still report success — there IS a
+                // valid target column, Tab just had nowhere else to go.
+                if (idx != _focusedColIndex)
+                    SetFocus(_focusedRowIndex, idx);
+                return true;
+            }
+        }
+
+        return false; // Every editable column in this row is hidden
+    }
+
+    /// <summary>
     /// Get the row index for a given row key, or -1 if not found.
     /// Searches the key cache (legacy mode) or scans loaded cache blocks (paged mode).
     /// </summary>
@@ -1512,9 +1584,16 @@ public class DataGridState<T>
     /// Commit the current edit. Applies SetValue to produce the new item,
     /// updates the loaded items list, and returns the (row key, new item) for async commit.
     /// Returns null if no edit is active.
+    /// In row-edit mode this delegates to <see cref="CommitRowEdit"/> — mirroring
+    /// <see cref="CancelEdit"/>'s delegation to <see cref="CancelRowEdit"/>.
     /// </summary>
     public (RowKey Key, T NewItem)? CommitEdit()
     {
+        // Row mode keeps its pending values in _rowEditValues and leaves _editingColumnName null
+        // (the "row mode" signal) while IsEditing is still true, so the single-cell path below
+        // would commit with a null column name. Delegate instead, so EVERY caller — keyboard,
+        // row-pointer click, the blur safety-net, user code — lands on the right path. (#853)
+        if (_isRowEditing) return CommitRowEdit();
         if (!IsEditing) return null;
 
         // Block commit if there are validation errors

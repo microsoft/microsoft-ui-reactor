@@ -1335,6 +1335,12 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
 
     private static bool ShouldHandleKey(DataGridState<T> state, DataGridElement<T> el, VirtualKey key)
     {
+        // IsEditing is true in BOTH cell- and row-edit (BeginRowEdit also sets _editingRowKey), and
+        // both modes claim the same three keys. This gate runs in the grid root's handledEventsToo
+        // KeyDown handler, so the event has already bubbled up from the focused editor and WinUI's
+        // FocusManager has already moved focus for Tab: setting e.Handled here stops the key going
+        // further UP the tree, it does not stop the editor below from seeing it. HandleKeyDown is
+        // where the two modes diverge; keep the key set here in sync with it.
         if (state.IsEditing)
         {
             return key is VirtualKey.Enter or VirtualKey.Escape or VirtualKey.Tab;
@@ -1352,6 +1358,40 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
 
     private static void HandleKeyDown(DataGridState<T> state, DataGridElement<T> el, VirtualKey key)
     {
+        // Row-mode edit MUST be dispatched before the single-cell block below. IsEditing is true
+        // here too (BeginRowEdit sets _editingRowKey while leaving _editingColumnName null as the
+        // row-mode signal), so without this branch Enter and Tab fall into the cell path and commit
+        // with a null column name, leaving _isRowEditing set and the row's pending values dropped. (#853)
+        if (state.IsRowEditing)
+        {
+            switch (key)
+            {
+                case VirtualKey.Enter:
+                    {
+                        var editRowKey = state.EditingRowKey;
+                        var originalItem = editRowKey is not null ? GetOriginalItem(state, editRowKey.Value) : default;
+                        var rowResult = state.CommitRowEdit();
+                        if (rowResult is not null && el.OnRowChanged is not null)
+                            HandleAsyncCommit(state, el, rowResult.Value.Key, rowResult.Value.NewItem, originalItem!);
+                    }
+                    return;
+
+                case VirtualKey.Escape:
+                    state.CancelRowEdit();
+                    return;
+
+                case VirtualKey.Tab:
+                    // Tab keeps the grid's own cell cursor inside the row's editable columns and
+                    // leaves the row in edit mode — a row commits only on Enter, Save, or
+                    // click-away (spec 017 §6.7/§6.8). Real keyboard focus is WinUI's FocusManager
+                    // tab order, which already ran before this handledEventsToo handler; this only
+                    // syncs the logical index, exactly as the cell path's FocusNextCell does.
+                    state.FocusNextRowEditColumn();
+                    return;
+            }
+            return;
+        }
+
         if (state.IsEditing)
         {
             switch (key)
@@ -1413,6 +1453,21 @@ public class DataGridComponent<[DynamicallyAccessedMembers(DynamicallyAccessedMe
         var idx = state.GetRowIndex(key);
         return idx >= 0 ? state.GetItemAt(idx) : default;
     }
+
+    /// <summary>
+    /// Test seam (issue #853). Exposes the private key filter so the headless tests can pin which
+    /// keys the grid claims in each edit mode without fabricating a WinUI KeyRoutedEventArgs.
+    /// </summary>
+    internal static bool ShouldHandleKeyForTests(DataGridState<T> state, DataGridElement<T> el, VirtualKey key)
+        => ShouldHandleKey(state, el, key);
+
+    /// <summary>
+    /// Test seam (issue #853). Drives the private keyboard dispatcher so the headless tests can
+    /// assert the cell- vs row-edit branch split. Pass an element with a null <c>OnRowChanged</c>
+    /// to keep the async-commit (dispatcher) path out of a headless run.
+    /// </summary>
+    internal static void HandleKeyDownForTests(DataGridState<T> state, DataGridElement<T> el, VirtualKey key)
+        => HandleKeyDown(state, el, key);
 
     /// <summary>
     /// Default placeholder cell: a rounded gray bar that mimics a text shimmer.
