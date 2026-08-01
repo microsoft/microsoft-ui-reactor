@@ -247,6 +247,14 @@ the one that bites hardest, because a broken instrument is trusted by default.
   the other way?** If the answer is "no — it always passes", that is the finding, not
   confirmation. **A no-match result is not a measurement** until a positive control proves
   the same probe, wrapping, and file set can produce a match.
+- **Historical searches need historical vocabulary.** A rename or unit change makes a grep for
+  the current identifier/value structurally blind to earlier revisions. Before trusting a zero,
+  establish when the identifier first existed; use `git log --follow -p -- <file>` or pickaxe
+  searches over the changed value rather than projecting today's name backward through history.
+- **Self-consistency does not prove currency.** Counts from one stale checkout can corroborate
+  each other perfectly. Attach the commit OID and timestamp to measurements and compare against
+  a live remote ref when identity matters. `git rev-parse` identifies a commit; a tree OID only
+  identifies content and can remain unchanged after a message-only amend.
 - **Fixture registration is two-place.** Selftest: add to `AllFixtures` **and** the
   `Create()` switch in `tests/Reactor.AppTests.Host/SelfTest/SelfTestFixtureRegistry.cs`.
   E2E: add to `AllFixtures` **and** the `Build` switch in
