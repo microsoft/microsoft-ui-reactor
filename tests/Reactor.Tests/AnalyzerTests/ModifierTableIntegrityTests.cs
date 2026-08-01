@@ -1146,14 +1146,26 @@ public class ModifierTableIntegrityTests
                 if (guarded.Length == 0)
                     continue;
 
-                // Type tests on the FrameworkElement inside this branch (and its else clauses)
-                // are the gate: `fe is WinUI.Control padCtrl`.
-                var typeNames = ifStatement.DescendantNodes()
+                // Type patterns on the FrameworkElement inside this branch (and its else clauses)
+                // are the gate: `fe is WinUI.Control padCtrl` or
+                // `fe switch { WinUI.Control padCtrl => ... }`.
+                var isPatternTypeNames = ifStatement.DescendantNodes()
                     .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.IsPatternExpressionSyntax>()
                     .Where(p => p.Expression is Microsoft.CodeAnalysis.CSharp.Syntax.IdentifierNameSyntax { Identifier.Text: "fe" }
                                 && p.Pattern is Microsoft.CodeAnalysis.CSharp.Syntax.DeclarationPatternSyntax)
                     .Select(p => SimpleTypeName(((Microsoft.CodeAnalysis.CSharp.Syntax.DeclarationPatternSyntax)p.Pattern).Type))
                     .Where(typeName => typeName is not null);
+
+                var switchPatternTypeNames = ifStatement.DescendantNodes()
+                    .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.SwitchExpressionSyntax>()
+                    .Where(s => s.GoverningExpression is Microsoft.CodeAnalysis.CSharp.Syntax.IdentifierNameSyntax { Identifier.Text: "fe" })
+                    .SelectMany(s => s.Arms)
+                    .Select(arm => arm.Pattern)
+                    .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.DeclarationPatternSyntax>()
+                    .Select(pattern => SimpleTypeName(pattern.Type))
+                    .Where(typeName => typeName is not null);
+
+                var typeNames = isPatternTypeNames.Concat(switchPatternTypeNames);
 
                 foreach (var typeName in typeNames)
                 {
