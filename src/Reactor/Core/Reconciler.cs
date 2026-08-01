@@ -4328,7 +4328,12 @@ public sealed partial class Reconciler : IDisposable
             {
                 // Resolved synchronously — retire any deferred request from an
                 // earlier render so its parked handler can't overwrite this one.
-                GetOrCreateReactorState(fe).PendingLabeledBy = null;
+                // TryGet, not GetOrCreate: with no state there is no parked handler
+                // and nothing to retire, and this is the common path — allocating and
+                // attaching a ReactorState here would cost one per element that ever
+                // resolves a LabeledBy synchronously.
+                if (TryGetReactorState(fe, out var resolvedState))
+                    resolvedState.PendingLabeledBy = null;
                 Microsoft.UI.Xaml.Automation.AutomationProperties.SetLabeledBy(fe, target);
             }
             else

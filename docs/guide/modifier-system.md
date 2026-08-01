@@ -120,7 +120,9 @@ style. Render a themed `Button` with `.Padding(24)` and then without
 > system, so `ClearValue` has nothing to release and dropping one leaves
 > the last value on the element. Until that is fixed, reset them by writing
 > the identity value explicitly — `.Scale(1f)`, `.Rotation(0f)`,
-> `.Translation(0f, 0f, 0f)` — rather than by omitting the call.
+> `.Translation(0f, 0f, 0f)` and `.CenterPoint(Vector3.Zero)` — rather than
+> by omitting the call. Note `.CenterPoint()` takes only a `Vector3`, so it
+> has no component-wise overload to spell the identity with.
 
 Reference modifiers are the exception to "just write this value" in the
 implementation, but not in the authoring model. `.Ref(cell)` binds the
