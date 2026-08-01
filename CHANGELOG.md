@@ -147,10 +147,36 @@ Conventions for contributors:
   User-visible fallout: those six properties are now marked `poolReset` in the
   analyzer's modifier table, so `.Set(c => c.Padding = …)` and friends report
   **`REACTOR_POOL_001` (Warning)** where they previously reported
-  `REACTOR_MOD_002` (Info). The suggested fix is unchanged — use the fluent
-  modifier (`.Padding(…)`) — and the provided code fix still applies it
-  automatically. Projects building with `TreatWarningsAsErrors` may need to
-  convert those call sites (or suppress the id) when upgrading.
+  `REACTOR_MOD_002` (Info) — but only on a receiver `ElementPool` actually
+  recycles (see the receiver-aware selection entry below); a `CheckBox` or
+  `RelativePanel` keeps reporting `REACTOR_MOD_002`. The suggested fix is
+  unchanged — use the fluent modifier (`.Padding(…)`) — and the provided code fix
+  still applies it automatically. Projects building with `TreatWarningsAsErrors`
+  may need to convert those call sites (or suppress the id) when upgrading.
+
+- **`REACTOR_POOL_001` is no longer reported for receivers the pool does not
+  recycle (issue #1051).** Rule selection was `poolReset ? POOL_001 : MOD_002`,
+  decided per *property* and blind to the receiver, while the control gates it
+  reports through name inheritance roots — `Control` admits every WinUI control,
+  `Panel` admits every panel. `ElementPool` matches on the *exact* runtime type
+  (`PoolableTypes.Contains(element.GetType())`), so the two sets never agreed:
+  `.Set(cb => cb.IsEnabled = false)` on a `CheckBox`, or
+  `.Set(rp => rp.Background = brush)` on a `RelativePanel`, claimed *"is reset on
+  pool return"* for a control that is never pooled. `PoolResetSetAnalyzer` now
+  mirrors `ElementPool.PoolableTypes` exactly and falls back to
+  `REACTOR_MOD_002` (Info) outside it — the hazard those receivers really do
+  have, with the same advice and the same code fix. A parity test fails the build
+  if the mirror and `PoolableTypes` ever diverge in either direction. The change
+  is strictly de-escalating, and it also covers the twelve properties
+  (`Margin`, `Width`, `Height`, `Min`/`Max` sizes, alignments, `Opacity`,
+  `AccessKey`, `IsTabStop`) that had the same over-breadth before this release,
+  and the attached-property half of the rule
+  (`.Set(cb => AutomationProperties.SetName(cb, "Save"))`), which reported
+  `REACTOR_POOL_001` unconditionally. Both halves now resolve poolability once
+  from the `.Set` lambda parameter, so a body mixing an instance write with an
+  attached one cannot report two different ids for the same receiver.
+  Custom subclasses (`class MyButton : Button`) report `REACTOR_MOD_002` too,
+  matching the pool, which does not recycle them either.
 
 - **Unsetting a common modifier no longer permanently overrides the control's
   style (issue #952).** `Reconciler.ApplyModifiers` reset a dropped modifier by

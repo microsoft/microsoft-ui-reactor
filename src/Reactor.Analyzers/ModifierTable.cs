@@ -272,6 +272,48 @@ internal static class ModifierTable
     private static readonly string[] ControlBorderGridStack = { "Control", "Border", "Grid", "StackPanel" };
 
     /// <summary>
+    /// The exact WinUI control type names <c>ElementPool</c> recycles — a mirror of
+    /// <c>ElementPool.PoolableTypes</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The pool tests membership with <c>PoolableTypes.Contains(element.GetType())</c>: an
+    /// exact-type lookup, not an assignability walk. This mirror is matched the same way, and
+    /// that distinction is the whole reason it exists. A control gate names the base type an
+    /// <c>ApplyModifiers</c> arm dispatches on, so <c>Control</c> admits every WinUI control and
+    /// <c>Panel</c> admits every panel, while the pool recycles these fifteen types and nothing
+    /// else. Selecting <c>REACTOR_POOL_001</c> from a gate alone therefore asserts "reset on pool
+    /// return" for receivers such as <c>CheckBox</c> and <c>RelativePanel</c> that are never
+    /// pooled — at Warning severity, which is a build break for a consumer using
+    /// <c>TreatWarningsAsErrors</c>. Those receivers fall to <c>REACTOR_MOD_002</c>, which
+    /// describes the hazard they do have: the write is dropped by the next render.
+    /// </para>
+    /// <para>
+    /// Matching the receiver's own type rather than its base chain costs no signal here, because
+    /// every <c>.Set</c> overload in the DSL is declared per element type over the concrete
+    /// control (<c>ButtonElement</c> takes <c>Action&lt;Button&gt;</c>), so the receiver the
+    /// analyzer sees is the type the pool would key on.
+    /// </para>
+    /// <para>
+    /// Not hand-maintained: <c>ModifierUnsetClearValueTests</c> reads
+    /// <c>ElementPool.PoolableTypes</c> by reflection and fails if the two sets drift.
+    /// </para>
+    /// </remarks>
+    private static readonly HashSet<string> PoolableTypeNameSet =
+        new HashSet<string>(System.StringComparer.Ordinal)
+        {
+            "TextBlock", "RichTextBlock", "StackPanel", "Grid", "Border", "ScrollViewer",
+            "Canvas", "Viewbox", "ProgressBar", "ProgressRing", "Image", "InfoBadge",
+            "Button", "TextBox", "ToggleSwitch",
+        };
+
+    /// <summary>The mirrored poolable type names, for the parity test that keeps them honest.</summary>
+    public static IEnumerable<string> PoolableTypeNames => PoolableTypeNameSet;
+
+    /// <summary>True when <c>ElementPool</c> recycles exactly this type.</summary>
+    public static bool IsPoolableTypeName(string name) => PoolableTypeNameSet.Contains(name);
+
+    /// <summary>
     /// Property name → modifier mapping. Keyed by the WinUI property name as written inside
     /// the <c>.Set</c> lambda.
     /// </summary>
@@ -299,21 +341,34 @@ internal static class ModifierTable
             // apply: the gate decides whether the modifier reaches the control at all,
             // poolReset decides which rule id reports it.
             //
-            // poolReset is per-property but poolability is per-receiver, and Padding and
-            // CornerRadius are gated for RelativePanel, which ElementPool never recycles. On
-            // that receiver POOL_001's leading clause is simply false, and it is a Warning, so
-            // a consumer building with TreatWarningsAsErrors would fail on a hazard they do not
-            // have. poolResetGate narrows rule selection to the receivers the pool really
-            // resets; everything outside it falls to MOD_002, which is the hazard those
-            // receivers do have (the write is dropped by the next render). The lists are not
-            // hand-maintained — ModifierUnsetClearValueTests derives the same intersection from
-            // ElementPool.PoolableTypes and fails if either drifts. Closes issue #1051.
+            // poolReset is per-property but poolability is per-receiver, so POOL_001 needs two
+            // independent facts about the receiver and neither implies the other:
+            //
+            //   1. the pool recycles it at all      -> PoolableTypeNames, matched on the exact
+            //                                          type, exactly as the pool matches it
+            //   2. CleanElement clears THIS property -> poolResetGate, matched on the base chain,
+            //      once it is recycled                 exactly as CleanElement's `is` arms match
+            //
+            // RelativePanel fails (1) for every property: it is gated for Padding, CornerRadius
+            // and Background but never recycled. CheckBox fails (1) too — Control is in three of
+            // these gates and admits every WinUI control, while the pool holds seven. Both
+            // reported POOL_001 before issue #1051, asserting "reset on pool return" of a
+            // receiver that is never pooled, at Warning severity — a build break for a consumer
+            // using TreatWarningsAsErrors. They fall to MOD_002 instead, which is the hazard they
+            // do have: the write is dropped by the next render.
+            //
+            // Nothing here is hand-maintained. ModifierUnsetClearValueTests reads
+            // ElementPool.PoolableTypes for (1) and derives the gated-receiver intersection for
+            // (2), and fails if either drifts. Closes issue #1051.
             //
             // WinUI declares most of these on Panel subclasses too, and the allow-lists
             // genuinely differ: Panel itself declares only Background; Grid, StackPanel, and
             // RelativePanel each declare their own border-box properties, and TextBlock takes
             // Padding but not CornerRadius. IsEnabled needs no gate — WinUI declares it on
-            // Control, so if the .Set lambda compiles the receiver already qualifies.
+            // Control, so if the .Set lambda compiles the receiver already qualifies. The three
+            // rows without a poolResetGate need none: CleanElement clears Background for every
+            // Panel and both Border* for the whole Control and Border arms, so once (1) holds
+            // there is no gated receiver left for (2) to exclude.
             { "IsEnabled",       new ModifierInfo("IsEnabled",       poolReset: true) },
             { "Padding",         new ModifierInfo("Padding",         poolReset: true, controlGate: ControlBorderGridStackRelativeText, poolResetGate: ControlBorderGridStackText) },
             { "CornerRadius",    new ModifierInfo("CornerRadius",    poolReset: true, controlGate: ControlBorderGridStackRelative,     poolResetGate: ControlBorderGridStack) },

@@ -97,6 +97,10 @@ namespace Microsoft.UI.Xaml.Controls
     }
 
     public class Button : Control { }
+
+    // Not in ElementPool.PoolableTypes, unlike Button. Same base, so every control gate that
+    // names Control admits both — which is precisely why poolability cannot be read off a gate.
+    public class CheckBox : Control { }
 }
 
 namespace Microsoft.UI.Reactor
@@ -106,6 +110,7 @@ namespace Microsoft.UI.Reactor
     using Microsoft.UI.Xaml.Controls;
 
     public record ButtonElement;
+    public record CheckBoxElement;
     public record GridElement;
     public record StackElement;
     public record RelativePanelElement;
@@ -115,6 +120,7 @@ namespace Microsoft.UI.Reactor
     public static class Ext
     {
         public static ButtonElement Set(this ButtonElement el, Action<Button> configure) => el;
+        public static CheckBoxElement Set(this CheckBoxElement el, Action<CheckBox> configure) => el;
         public static GridElement Set(this GridElement el, Action<Grid> configure) => el;
         public static StackElement Set(this StackElement el, Action<StackPanel> configure) => el;
         public static RelativePanelElement Set(this RelativePanelElement el, Action<RelativePanel> configure) => el;
@@ -191,6 +197,45 @@ class C
 {
     GridElement G(GridElement g) => {|REACTOR_POOL_001:g.Set(x => x.Padding = new Thickness(8))|};
     RelativePanelElement R(RelativePanelElement r) => {|REACTOR_MOD_002:r.Set(x => x.Padding = new Thickness(8))|};
+}";
+        await new CSharpAnalyzerTest<PoolResetSetAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Fires_For_IsEnabled_On_Button_But_Not_On_Unpooled_CheckBox()
+    {
+        // IsEnabled declares no control gate at all, so nothing about the gates distinguishes
+        // these two receivers — both are Controls and both are written by ApplyModifiers. Only
+        // ElementPool.PoolableTypes separates them: Button is recycled, CheckBox is not. Without
+        // the poolable mirror both report POOL_001, and the Warning on CheckBox asserts that the
+        // write is unwound on pool return for a control the pool never touches.
+        var source = Stubs + @"
+class C
+{
+    ButtonElement B(ButtonElement b) => {|REACTOR_POOL_001:b.Set(c => c.IsEnabled = false)|};
+    CheckBoxElement K(CheckBoxElement k) => {|REACTOR_MOD_002:k.Set(c => c.IsEnabled = false)|};
+}";
+        await new CSharpAnalyzerTest<PoolResetSetAnalyzer, DefaultVerifier>
+        {
+            TestCode = source,
+        }.RunAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Fires_For_Background_On_Grid_But_Not_On_Unpooled_RelativePanel()
+    {
+        // Background's gate names Panel, and CleanElement really does clear Background for every
+        // Panel — so the arm-coverage gate cannot separate these two, and a poolResetGate listing
+        // base names could not either without misdescribing what the Panel arm does. RelativePanel
+        // is excluded because it is never recycled, which is a fact about the receiver's own type.
+        var source = Stubs + @"
+class C
+{
+    GridElement G(GridElement g, Microsoft.UI.Xaml.Media.Brush br) => {|REACTOR_POOL_001:g.Set(x => x.Background = br)|};
+    RelativePanelElement R(RelativePanelElement r, Microsoft.UI.Xaml.Media.Brush br) => {|REACTOR_MOD_002:r.Set(x => x.Background = br)|};
 }";
         await new CSharpAnalyzerTest<PoolResetSetAnalyzer, DefaultVerifier>
         {

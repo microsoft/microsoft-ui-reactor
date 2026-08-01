@@ -357,11 +357,18 @@ using Microsoft.UI.Reactor;
 
 #nullable enable
 
+namespace Microsoft.UI.Xaml.Controls
+{{
+    // The .Set receiver has to be a control ElementPool actually recycles: REACTOR_POOL_001
+    // claims the attached write is cleared on pool return, which is only true of one.
+    public class Button {{ }}
+}}
+
 namespace Microsoft.UI.Reactor
 {{
     public class FakeElement
     {{
-        public FakeElement Set(Action<FakeElement> configure) {{ configure(this); return this; }}
+        public FakeElement Set(Action<Microsoft.UI.Xaml.Controls.Button> configure) {{ configure(new Microsoft.UI.Xaml.Controls.Button()); return this; }}
     }}
 }}
 {declarations}
@@ -583,14 +590,21 @@ using Microsoft.UI.Xaml.Controls;
 namespace Microsoft.UI.Xaml.Controls
 {{
     public class Control {{ }}
+
+    // The .Set receiver has to be a control ElementPool actually recycles, because that is
+    // exactly what REACTOR_POOL_001 asserts. Button is in PoolableTypes and derives Control,
+    // so it also satisfies every control gate these trapped properties declare.
+    public class Button : Control
+    {{
+        {fields}
+    }}
 }}
 
 namespace Microsoft.UI.Reactor
 {{
-    public class FakeElement : Control
+    public class FakeElement
     {{
-        {fields}
-        public FakeElement Set(Action<FakeElement> configure) {{ configure(this); return this; }}
+        public FakeElement Set(Action<Button> configure) {{ configure(new Button()); return this; }}
     }}
 }}
 ";

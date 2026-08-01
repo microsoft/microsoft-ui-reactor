@@ -355,6 +355,42 @@ public class ModifierUnsetClearValueTests
             info => info.PoolReset && info.PoolResetGate is not null);
     }
 
+    /// <summary>
+    /// The analyzer's poolable-type mirror equals <c>ElementPool.PoolableTypes</c>.
+    /// </summary>
+    /// <remarks>
+    /// <c>Reactor.Analyzers</c> targets <c>netstandard2.0</c> and cannot reference
+    /// <c>src/Reactor</c>, so the poolable set has to be copied. Both drift directions are
+    /// checked because they fail in opposite ways and only one is loud: a name in the mirror
+    /// that the pool does not recycle makes REACTOR_POOL_001 assert "reset on pool return" of a
+    /// receiver that is never pooled — a false Warning, and a build break under
+    /// <c>TreatWarningsAsErrors</c> — while a name the pool recycles and the mirror omits
+    /// downgrades a genuine pooling hazard to Info, where nobody sees it.
+    /// </remarks>
+    [Fact]
+    public void Analyzer_Poolable_Type_Mirror_Matches_ElementPool()
+    {
+        var actual = ReadPoolableTypes().Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
+        var mirrored = ModifierTable.PoolableTypeNames.ToHashSet(StringComparer.Ordinal);
+
+        var missing = actual.Except(mirrored, StringComparer.Ordinal).OrderBy(x => x, StringComparer.Ordinal).ToList();
+        var extra = mirrored.Except(actual, StringComparer.Ordinal).OrderBy(x => x, StringComparer.Ordinal).ToList();
+
+        Assert.True(
+            extra.Count == 0,
+            $"ModifierTable's poolable mirror names [{string.Join(", ", extra)}], which " +
+            "ElementPool.PoolableTypes does not contain. REACTOR_POOL_001 would fire on those " +
+            "receivers claiming the write is unwound on pool return, at Warning severity, for a " +
+            "control that is never pooled. Remove them from the mirror, or add them to " +
+            "ElementPool.PoolableTypes if they really should be recycled.");
+
+        Assert.True(
+            missing.Count == 0,
+            $"ElementPool recycles [{string.Join(", ", missing)}] but ModifierTable's mirror omits " +
+            "them, so a .Set write that really is dropped on pool reuse reports as REACTOR_MOD_002 " +
+            "(Info) instead of REACTOR_POOL_001 (Warning). Add them to the mirror.");
+    }
+
     // ── Source-scanning helpers ─────────────────────────────────────────────
 
     /// <summary>
