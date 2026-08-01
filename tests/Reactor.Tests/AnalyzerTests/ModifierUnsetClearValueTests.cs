@@ -250,13 +250,13 @@ public class ModifierUnsetClearValueTests
         {
             if (!info.PoolReset || info.ControlGate is null) continue;
 
-            foreach (var gateName in info.ControlGate)
+            // A gate name absent from the closure means no poolable type is a `gateName`, so
+            // the pool never recycles that receiver and owes it no reset. Filtering explicitly
+            // rather than with a `continue` keeps that exclusion visible at the loop header,
+            // which is where a reader looks to find out what this derivation ranges over.
+            foreach (var gateName in info.ControlGate.Where(closure.ContainsKey))
             {
-                // Absent from the closure means no poolable type is a `gateName`, so the pool
-                // never recycles that receiver and owes it no reset.
-                if (!closure.TryGetValue(gateName, out var receiver)) continue;
-
-                required.Add(receiver.Name + "." + property);
+                required.Add(closure[gateName].Name + "." + property);
             }
         }
 
