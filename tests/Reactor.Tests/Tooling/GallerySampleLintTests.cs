@@ -459,6 +459,36 @@ public sealed class GallerySampleLintTests
             .Any(id => names.Contains(id.Identifier.Text));
 
     /// <summary>
+    /// <c>var (a, setA) = UseState(0);</c> is a deconstruction *declaration*, which Roslyn models
+    /// as an <see cref="AssignmentExpressionSyntax"/> whose left is a
+    /// <see cref="DeclarationExpressionSyntax"/> — <em>not</em> as a declarator with an
+    /// <c>EqualsValueClause</c> (that is the shape of a single <c>var x = e;</c>). Every gallery
+    /// hook is written this way, so if the match stopped recognising it, every hook-bound name
+    /// would drop out of the reactive set and <c>AnimatedIcons_HaveTheirStateDriven</c> would
+    /// report live state as constant after mount — a silent false pass, which is the direction
+    /// that matters. Pinned here because the shape is easy to misremember.
+    /// </summary>
+    [Theory]
+    [InlineData("var (a, setA) = UseState(0);", "a,setA")]
+    [InlineData("var (a, setA) = UseReducer(false);", "a,setA")]
+    [InlineData("var (a, setA) = UseState(0); var b = States[a];", "a,b,setA")]
+    [InlineData("var (a, setA) = SomethingElse(0);", "")]
+    [InlineData("var c = 1; var d = States[c];", "")]
+    public void ReactiveNames_RecognisesDeconstructionDeclarations(string body, string expected)
+    {
+        var tree = CSharpSyntaxTree.ParseText($"class C {{ void M() {{ {body} }} }}",
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // A snippet that does not parse would give this test an arbitrary tree to agree with.
+        Assert.Empty(tree.GetDiagnostics(TestContext.Current.CancellationToken));
+
+        var names = ReactiveNames(tree.GetRoot(TestContext.Current.CancellationToken));
+
+        Assert.Equal(expected,
+            string.Join(",", names.OrderBy(n => n, global::System.StringComparer.Ordinal)));
+    }
+
+    /// <summary>
     /// The states and visual sources <c>AnimatedIconStateFixtures.BuiltInSourceMarkers</c> proves
     /// actually animate. That selftest reads each source's real <c>Markers</c> and asserts every
     /// ordered pair of these states spans a non-zero timeline segment — something this headless

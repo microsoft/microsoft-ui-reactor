@@ -56,7 +56,8 @@ internal static class AnimatedIconStateFixtures
 
     static bool ZeroLength(double start, double end) =>
         !double.IsNaN(start) && !double.IsNaN(end)
-        && global::System.Math.Abs(end - start) <= MinDuration;
+        && end >= start
+        && end - start <= MinDuration;
 
     // ════════════════════════════════════════════════════════════════════════
     //  1. Marker oracle — the state strings the page writes must name real transitions
@@ -69,6 +70,21 @@ internal static class AnimatedIconStateFixtures
     {
         public override Task RunAsync()
         {
+            // The band's own behaviour, pinned before anything is measured with it. Both the
+            // MinDuration docstring and CheckStaticPair claim an inverted pair fails *both*
+            // predicates; that only holds if ZeroLength rejects `end < start` outright, since
+            // an inversion smaller than the band would otherwise read as "zero-length" and let
+            // a broken marker map satisfy the negative control instead of failing it.
+            H.Check("AnimIconBand_RejectsInvertedPairs",
+                !Animated(0.5, 0.4999995) && !ZeroLength(0.5, 0.4999995)
+                && !Animated(0.5, 0.1) && !ZeroLength(0.5, 0.1));
+
+            // Control for the check above, which a band that rejected everything would also
+            // pass: well-ordered pairs must still classify, and into opposite buckets.
+            H.Check("AnimIconBand_ClassifiesOrderedPairs",
+                Animated(0.0, 0.1125) && !ZeroLength(0.0, 0.1125)
+                && ZeroLength(0.25, 0.25) && !Animated(0.25, 0.25));
+
             // The three sources card 1 of the gallery page renders.
             CheckSource("Settings", new AnimatedSettingsVisualSource());
             CheckSource("Find", new AnimatedFindVisualSource());
@@ -112,7 +128,7 @@ internal static class AnimatedIconStateFixtures
                     if (!ZeroLength(start, end))
                     {
                         offenders.Add($"{transition}=[{start:0.####}..{end:0.####}]"
-                            + (end - start < -MinDuration ? " (inverted — broken marker map)" : string.Empty));
+                            + (end < start ? " (inverted — broken marker map)" : string.Empty));
                     }
                 }
 
