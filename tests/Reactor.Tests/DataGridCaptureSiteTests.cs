@@ -250,6 +250,17 @@ public class DataGridCaptureSiteTests
     ///
     /// <para>Measured, not assumed: applying that mutation leaves all 385 DataGrid unit tests green,
     /// including both position tests above.</para>
+    ///
+    /// <para><b>This check is deliberately conservative, and that has a cost worth naming.</b> It
+    /// accepts the capture expression itself or an identifier matching the capture's declarator —
+    /// nothing else. An intermediate alias (<c>var forDispatch = chord;</c>) therefore fails it even
+    /// though the dataflow is correct, and the failure message would be wrong about the cause. If
+    /// that ever happens the legitimate adjustment is to teach this check the alias; the
+    /// illegitimate one is to relax it until a dispatch that <i>rebuilds</i> the chord passes. The
+    /// two look similar at the diff and are opposites: the first preserves the invariant that the
+    /// value reaching the dispatch originated at the capture, the second discards it. Syntactic
+    /// matching is chosen over a semantic-model walk because this file parses one source text with
+    /// no compilation, and the alias case has never occurred here.</para>
     /// </summary>
     [Fact]
     public void DeferredDispatch_ReceivesTheCapturedChord()
