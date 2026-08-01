@@ -195,18 +195,18 @@ public sealed class GalleryCardIndependenceTests
     /// guesswork. Without this bound the scan is file-wide and a lambda parameter, loop
     /// variable, or local in a sibling method silently reads as a reference to the slot.</para>
     ///
-    /// <para>An ordinary local function is deliberately <em>not</em> a boundary. It captures the
-    /// enclosing method's locals, so a card extracted into one still reads the very same slot —
-    /// treating it as its own scope made that reference fail to resolve and hid real coupling. It
-    /// can still shadow the slot from the inside, which CS0136 does not prevent across a
-    /// local-function boundary; <see cref="DeclaredNames"/> handles that, not this bound. A
-    /// <c>static</c> local function is a boundary, because <c>static</c> is precisely the modifier
-    /// that severs capture.</para>
+    /// <para>No local function is a boundary, <c>static</c> or not. An ordinary one captures the
+    /// enclosing method's locals, so a card extracted into one still reads the very same slot, and
+    /// treating it as its own scope made that reference fail to resolve and hid real coupling. A
+    /// <c>static</c> one severs capture and so <em>was</em> a boundary here, until
+    /// <see cref="DeclaredNames"/> arrived: a declaration inside it now shadows the enclosing slot
+    /// over exactly its own body, which is the same verdict by a rule that also covers lambdas and
+    /// plain nested blocks. Keeping the carve-out as well left a branch no input could distinguish —
+    /// deleting it changed nothing in the suite or on the gallery, which is the measurement that
+    /// retired it.</para>
     /// </summary>
     static SyntaxNode? DeclaringMember(SyntaxNode node) =>
-        node.Ancestors().FirstOrDefault(a =>
-            a is MemberDeclarationSyntax
-            || (a is LocalFunctionStatementSyntax local && local.Modifiers.Any(SyntaxKind.StaticKeyword)));
+        node.Ancestors().FirstOrDefault(a => a is MemberDeclarationSyntax);
 
     /// <summary>
     /// A value-typed identity for a declaring member, so a scope can be part of a dictionary key
@@ -1128,11 +1128,15 @@ public sealed class GalleryCardIndependenceTests
     /// <para>That nesting is legal was measured rather than reasoned about, and the obvious
     /// reasoning is wrong: the same redeclaration in a plain nested block is CS0136, but across a
     /// lambda or non-static local-function boundary it compiles. An earlier comment on that
-    /// tie-break called it unreachable defence for a construct the language does not have. It is
-    /// live, and picking the outer slot instead would report the two cards as sharing one.</para>
+    /// tie-break called it unreachable defence for a construct the language does not have.</para>
     ///
-    /// <para><c>shared</c> is the conviction, for the same reason as in
-    /// <see cref="ReferencesOutsideEveryCandidateRegion_ReadSomethingElseAndAreNotReported"/>.</para>
+    /// <para>The <em>inner</em> slot carries the conviction, and that is the whole design of this
+    /// test. Asserting only that the outer slot stays out of the inner card is vacuous, because
+    /// resolving outward hands the reference to a region the inner declaration shadows, so
+    /// <see cref="DeclaredNames"/> drops it and the outer slot ends up just as unreported as if the
+    /// tie-break had worked. Both mechanisms keep the outer slot clean; only one of them also lets
+    /// the inner slot be <em>seen</em>. Sharing it across two cards is what separates them — the
+    /// mutant reports nothing where the tie-break reports a coupling.</para>
     /// </summary>
     [Fact]
     public void ASlotRedeclaredInANestedLambda_ResolvesToTheInnermostDeclaration()
@@ -1145,31 +1149,32 @@ public sealed class GalleryCardIndependenceTests
                 public override Element Render()
                 {
                     var (value, setValue) = UseState(1.0);
-                    var (shared, setShared) = UseState(9.0);
 
                     Func<Element> inner = () =>
                     {
                         var (value, setValue) = UseState(2.0);
-                        return SampleCard("Inner", NumberBox(value, v => setValue(v)), sourceCode: @"x");
+                        return VStack(
+                            SampleCard("Inner A", NumberBox(value, v => setValue(v)), sourceCode: @"x"),
+                            SampleCard("Inner B", NumberBox(value, v => setValue(v)), sourceCode: @"x"));
                     };
 
                     return VStack(
                         SampleCard("Outer", NumberBox(value, v => setValue(v)), sourceCode: @"x"),
-                        inner(),
-                        SampleCard("Third", NumberBox(shared, v => setShared(v)), sourceCode: @"x"),
-                        SampleCard("Fourth", NumberBox(shared, v => setShared(v)), sourceCode: @"x"));
+                        inner());
                 }
             }
             """);
 
-        // The inner card reads the inner slot and the outer card the outer one, so neither `value`
-        // slot reaches two cards. Resolving the inner reference outward instead yields the extra
-        // finding `(value, setValue): Outer | Inner` on a correct page.
+        // The inner slot is genuinely shared and must be convicted on its own two cards. Resolving
+        // the inner references outward instead loses them to the shadowing check and reports
+        // nothing; resolving them outward *and* keeping them would name "Outer" alongside. Both
+        // failures are visible here, and neither is visible without the inner coupling.
         Assert.Equal(
-            ["(shared, setShared): Third | Fourth"],
+            ["(value, setValue): Inner A | Inner B"],
             scan.Findings.Select(f => f.Signature()));
 
-        Assert.Equal(3, scan.Slots);
+        Assert.Equal(2, scan.Slots);
+        Assert.Equal(3, scan.Cards);
     }
 
     /// <summary>
@@ -1254,14 +1259,13 @@ public sealed class GalleryCardIndependenceTests
     }
 
     /// <summary>
-    /// The complement of the case above, and the reason <see cref="DeclaringMember"/> carves out
-    /// <c>static</c> rather than treating every local function alike. A <c>static</c> local
-    /// function cannot capture, so the enclosing method's locals are not in scope inside it — and
-    /// C# therefore permits it to declare a local of the same name. Verified by compiling the
-    /// shape, not by reading the rule: <c>static void Local() { int value = 2; }</c> nested in a
-    /// method holding its own <c>value</c> builds clean, 0 warnings. It joins a discard, a lambda
-    /// parameter in a sibling member, and a lambda or local-function body nested in the declaring
-    /// member on the list of places a slot's name legally reappears.
+    /// The complement of the case above. A <c>static</c> local function cannot capture, so the
+    /// enclosing method's locals are not in scope inside it — and C# therefore permits it to declare
+    /// a local of the same name. Verified by compiling the shape, not by reading the rule:
+    /// <c>static void Local() { int value = 2; }</c> nested in a method holding its own
+    /// <c>value</c> builds clean, 0 warnings. It joins a discard, a lambda parameter in a sibling
+    /// member, and a lambda or local-function body nested in the declaring member on the list of
+    /// places a slot's name legally reappears.
     ///
     /// <para>The obvious form of this test — a page with no coupling, asserting the scan stays
     /// silent — is <em>vacuous</em>, and was written that way first. So this is the
@@ -1269,14 +1273,14 @@ public sealed class GalleryCardIndependenceTests
     /// <c>Render</c> a <em>real</em> coupling, then require it to be convicted and named <em>and no
     /// wider</em> despite the static local functions beside it.</para>
     ///
-    /// <para><c>Aside</c> holds its own slot; <c>Bare</c> shadows the name with an ordinary local
-    /// that is not a slot at all, and that second one is what pins the carve-out. Deleting
-    /// <c>static</c> from the boundary rule keys <c>Bare</c>'s <c>value</c> to <c>Render</c>, where
-    /// exactly one slot binds that name and its block encloses the whole method — so the reference
-    /// resolves to <c>Render</c>'s slot and "Bare" joins the finding. <c>Aside</c> alone could not
-    /// show that: its <c>value</c> <em>is</em> a slot, so block resolution separates the two
-    /// declarations on its own and the mutation would pass unnoticed. The carve-out is load-bearing
-    /// precisely where no candidate declaration exists to resolve against.</para>
+    /// <para><c>Aside</c> holds its own slot, and <c>Bare</c> an ordinary local that is not a slot
+    /// at all. Both are resolved the same way — the declaration nearest the reference wins — and
+    /// neither needs a local-function carve-out to get there. An earlier version of this test
+    /// claimed <c>Bare</c> pinned exactly such a carve-out, on the reasoning that with no candidate
+    /// declaration to resolve against, only a scope boundary could stop the reference reaching
+    /// <c>Render</c>'s slot. <see cref="DeclaredNames"/> is that second way, so the carve-out became
+    /// unreachable and the claim false. The mutation ladder is what said so; nothing in the file
+    /// re-checks a paragraph.</para>
     ///
     /// <para>Each carve-out in the scope rule earns a test, because the rule is an approximation of
     /// name resolution and approximations fail silently; and each such test has to assert a
